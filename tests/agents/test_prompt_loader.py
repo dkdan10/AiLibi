@@ -13,14 +13,20 @@ seam introduced in :mod:`agents.strategic.prompts.loader`:
 * the per-set version registry (:data:`orchestrator.game.PROMPT_VERSION_SETS`)
   keeps the 9B set's recorded ``prompt_versions`` byte-identical.
 
-Task 19.6 adds :class:`TestBareEnvironmentFallbackIsLoud`: the default VALUE
-still resolves to ``qwen3_5_9b`` (byte-identity is the whole point of the owner
-decision), but taking it with no ``AILIBI_PROMPT_SET`` override now emits a
-one-line stderr notice naming the variable and the operational baseline set.
+The bare-environment notice is pinned by three classes. The default VALUE still
+resolves to ``qwen3_5_9b`` (byte-identity is the whole point of the owner
+decision), and taking it with no ``AILIBI_PROMPT_SET`` override emits a
+one-line stderr notice naming the variable and the operational baseline set —
+but only where that line describes a real risk:
+:class:`TestBareEnvironmentFallbackIsLoud` pins the notice under a real
+provider, :class:`TestNoticeIsProviderGated` pins the silence under the fake
+one (and the two gates' agreement with ``llm.provider``'s own selector over the
+env grid), and :class:`TestNoticeIsOncePerProcess` pins the de-duplication.
 """
 
 from __future__ import annotations
 
+from collections.abc import Iterator, Mapping
 from pathlib import Path
 
 import pytest
@@ -40,6 +46,18 @@ from agents.strategic.prompts.loader import (
     OPERATIONAL_BASELINE_PROMPT_SET,
     VOTE_BALLOT_TEMPLATE,
     _ENV,  # noqa: PLC2701
+    _notify_bare_prompt_set_fallback,  # noqa: PLC2701
+)
+from llm.fake_provider import FakeProvider
+from llm.provider import (
+    ENV_ANTHROPIC_API_KEY,
+    ENV_FEATHERLESS_API_KEY,
+    ENV_PROVIDER,
+    PROVIDER_ANTHROPIC,
+    PROVIDER_FAKE,
+    PROVIDER_FEATHERLESS,
+    PROVIDER_OLLAMA,
+    build_default_client,
 )
 from orchestrator.game import (
     DEFAULT_PROMPT_VERSIONS,
@@ -53,6 +71,68 @@ _TEMPLATE_NAMES = (
     ACCUSATION_ROUND_TEMPLATE,
     VOTE_BALLOT_TEMPLATE,
 )
+
+# The notice fires only under a real provider, so every assertion that expects
+# it resolves through one. Featherless is the canonical eval provider (AGENTS.md
+# §"Environment setup"); no client is ever constructed from this mapping, so no
+# credential is needed and nothing reaches the network.
+_REAL_PROVIDER_ENV = {ENV_PROVIDER: PROVIDER_FEATHERLESS}
+
+# The provider grid the loader's gate and ``llm.provider``'s selector must agree
+# on, each row (label, env mapping, expected silence). Credentials are supplied
+# for the two key-checked providers so the selector reaches its branch instead
+# of raising on a missing key; the constructors it then runs are pure.
+_PROVIDER_GRID: tuple[tuple[str, dict[str, str], bool], ...] = (
+    ("unset", {}, True),
+    ("fake", {ENV_PROVIDER: PROVIDER_FAKE}, True),
+    ("FAKE", {ENV_PROVIDER: "FAKE"}, True),
+    ("padded fake", {ENV_PROVIDER: " fake "}, True),
+    ("empty", {ENV_PROVIDER: ""}, False),
+    (
+        "anthropic",
+        {ENV_PROVIDER: PROVIDER_ANTHROPIC, ENV_ANTHROPIC_API_KEY: "test-key"},
+        False,
+    ),
+    ("ollama", {ENV_PROVIDER: PROVIDER_OLLAMA}, False),
+    (
+        "featherless",
+        {ENV_PROVIDER: PROVIDER_FEATHERLESS, ENV_FEATHERLESS_API_KEY: "test-key"},
+        False,
+    ),
+)
+
+
+@pytest.fixture(autouse=True)
+def _reset_bare_fallback_notice() -> Iterator[None]:
+    """Clear the loader's once-per-process notice memo around every test here.
+
+    The memo is process-wide and lives longer than any test: importing the
+    loader builds ``_ENV``, which resolves the prompt set, so in a shell that
+    exports a real provider the one allowed emission is already spent before
+    collection starts. Without this reset the notice assertions below would
+    observe silence and pass for the wrong reason — and would depend on
+    collection order among themselves. Clearing on the way out too keeps this
+    file from handing a primed memo to the rest of the suite.
+    """
+
+    _notify_bare_prompt_set_fallback.cache_clear()
+    yield
+    _notify_bare_prompt_set_fallback.cache_clear()
+
+
+def _selector_picks_the_fake(env: Mapping[str, str]) -> bool:
+    """Whether :func:`llm.provider.build_default_client` takes its fake branch.
+
+    A raise — an unrecognized provider value, a missing credential — is
+    decisively NOT the fake branch, so it answers ``False`` rather than
+    propagating: the question the grid asks is which branch the selector picks,
+    not whether the picked client could be constructed.
+    """
+
+    try:
+        return isinstance(build_default_client(env=dict(env)), FakeProvider)
+    except ValueError:
+        return False
 
 
 class TestResolvePromptSet:
@@ -76,21 +156,23 @@ class TestResolvePromptSet:
 
 
 class TestBareEnvironmentFallbackIsLoud:
-    """Task 19.6: the bare-environment fallback emits a one-line stderr notice.
+    """Under a real provider the bare fallback emits a one-line stderr notice.
 
     The default VALUE is unchanged and must stay unchanged — moving it would
     move committed prompt bytes (the byte-golden suite proves those stand).
-    What changes is the silence: a bare shell used to take the frozen 9B set
-    with no signal at all, two generations behind the
+    What the notice buys is the signal: a real-provider shell taking the frozen
+    9B set is sending a prompt family two generations behind the
     :data:`OPERATIONAL_BASELINE_PROMPT_SET` every report's recording env names.
-    The notice fires on exactly one path — no explicit argument AND no
-    ``AILIBI_PROMPT_SET`` override.
+    It fires on exactly one path — a real provider AND no explicit argument AND
+    no ``AILIBI_PROMPT_SET`` override — so every case here resolves through
+    :data:`_REAL_PROVIDER_ENV`; the fake-provider silence is
+    :class:`TestNoticeIsProviderGated`'s subject.
     """
 
     def test_fallback_emits_the_notice_on_stderr(
         self, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        assert resolve_prompt_set(env={}) == DEFAULT_PROMPT_SET
+        assert resolve_prompt_set(env=_REAL_PROVIDER_ENV) == DEFAULT_PROMPT_SET
         captured = capsys.readouterr()
         assert ENV_PROMPT_SET in captured.err
         assert OPERATIONAL_BASELINE_PROMPT_SET in captured.err
@@ -101,7 +183,7 @@ class TestBareEnvironmentFallbackIsLoud:
     def test_notice_is_exactly_one_line(
         self, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        resolve_prompt_set(env={})
+        resolve_prompt_set(env=_REAL_PROVIDER_ENV)
         assert len(capsys.readouterr().err.strip().splitlines()) == 1
 
     def test_blank_env_value_also_notifies(
@@ -109,24 +191,21 @@ class TestBareEnvironmentFallbackIsLoud:
     ) -> None:
         # Whitespace-only is "absent" for the fallback, so it is "absent" for
         # the notice too -- the two must not disagree.
-        assert resolve_prompt_set(env={ENV_PROMPT_SET: "   "}) == DEFAULT_PROMPT_SET
+        env = {**_REAL_PROVIDER_ENV, ENV_PROMPT_SET: "   "}
+        assert resolve_prompt_set(env=env) == DEFAULT_PROMPT_SET
         assert ENV_PROMPT_SET in capsys.readouterr().err
 
     def test_env_override_is_silent(self, capsys: pytest.CaptureFixture[str]) -> None:
-        assert (
-            resolve_prompt_set(env={ENV_PROMPT_SET: OPERATIONAL_BASELINE_PROMPT_SET})
-            == OPERATIONAL_BASELINE_PROMPT_SET
-        )
+        env = {**_REAL_PROVIDER_ENV, ENV_PROMPT_SET: OPERATIONAL_BASELINE_PROMPT_SET}
+        assert resolve_prompt_set(env=env) == OPERATIONAL_BASELINE_PROMPT_SET
         assert capsys.readouterr().err == ""
 
     def test_env_override_naming_the_default_set_is_silent(
         self, capsys: pytest.CaptureFixture[str]
     ) -> None:
         # Choosing the 9B set deliberately is a choice, not a fallback.
-        assert (
-            resolve_prompt_set(env={ENV_PROMPT_SET: DEFAULT_PROMPT_SET})
-            == DEFAULT_PROMPT_SET
-        )
+        env = {**_REAL_PROVIDER_ENV, ENV_PROMPT_SET: DEFAULT_PROMPT_SET}
+        assert resolve_prompt_set(env=env) == DEFAULT_PROMPT_SET
         assert capsys.readouterr().err == ""
 
     def test_explicit_argument_is_silent(
@@ -134,7 +213,8 @@ class TestBareEnvironmentFallbackIsLoud:
     ) -> None:
         # A caller pinning its own set (build_prompt_renderers, the runner's
         # one-resolution binding) has not fallen back to anything.
-        assert resolve_prompt_set(DEFAULT_PROMPT_SET, env={}) == DEFAULT_PROMPT_SET
+        resolved = resolve_prompt_set(DEFAULT_PROMPT_SET, env=_REAL_PROVIDER_ENV)
+        assert resolved == DEFAULT_PROMPT_SET
         assert capsys.readouterr().err == ""
 
     def test_operational_baseline_names_a_real_set(self) -> None:
@@ -150,6 +230,174 @@ class TestBareEnvironmentFallbackIsLoud:
         )
         assert set_dir.is_dir()
         build_environment(OPERATIONAL_BASELINE_PROMPT_SET)
+
+
+class TestNoticeIsProviderGated:
+    """The notice fires under a real provider and nowhere else.
+
+    The notice's claim is that the rendered prompt family is two model
+    generations behind the baseline one; the fake provider runs no model, so
+    under it the sentence has nothing to be about. (Its placeholder strings ARE
+    prompt-seeded, so the family does move the fake's bytes — but only where a
+    set was deliberately selected, and the notice fires solely where the
+    DEFAULT was taken, which is the configuration the committed goldens
+    reproduce.) That path is also every CI run and every first run of the
+    front-door commands, which is why the gate is worth having. The gate must
+    agree with the selector it mirrors:
+    :data:`_PROVIDER_GRID` pins loader silence against
+    :func:`llm.provider.build_default_client`'s own branch choice, value for
+    value.
+    """
+
+    def test_unset_provider_is_silent(self, capsys: pytest.CaptureFixture[str]) -> None:
+        # The front door: a bare shell resolves the fake and says nothing.
+        assert resolve_prompt_set(env={}) == DEFAULT_PROMPT_SET
+        assert capsys.readouterr().err == ""
+
+    def test_explicit_fake_provider_is_silent(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        env = {ENV_PROVIDER: PROVIDER_FAKE}
+        assert resolve_prompt_set(env=env) == DEFAULT_PROMPT_SET
+        assert capsys.readouterr().err == ""
+
+    @pytest.mark.parametrize(
+        "provider", [PROVIDER_ANTHROPIC, PROVIDER_OLLAMA, PROVIDER_FEATHERLESS]
+    )
+    def test_each_real_provider_still_notifies(
+        self, provider: str, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        assert resolve_prompt_set(env={ENV_PROVIDER: provider}) == DEFAULT_PROMPT_SET
+        assert len(capsys.readouterr().err.strip().splitlines()) == 1
+
+    @pytest.mark.parametrize(("label", "env", "expected_silent"), _PROVIDER_GRID)
+    def test_gate_agrees_with_the_client_selector(
+        self,
+        label: str,
+        env: Mapping[str, str],
+        expected_silent: bool,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        # Two readings of one variable that must never diverge: the loader's
+        # "is this the fake?" and the selector's "which client do I build?".
+        # ``" fake "`` and ``"FAKE"`` are the fake (both strip/lower to it);
+        # ``""`` is not (it raises in the selector), so the loader is loud.
+        assert resolve_prompt_set(env=env) == DEFAULT_PROMPT_SET
+        silent = capsys.readouterr().err == ""
+        assert silent is expected_silent, label
+        assert silent is _selector_picks_the_fake(env), label
+
+    def test_the_equivalence_catches_a_drifting_gate(self) -> None:
+        # The perturbation the grid exists to catch: a hand-rolled gate that
+        # skips .strip().lower() -- the drift a copied string literal invites,
+        # and the reason the loader imports PROVIDER_FAKE instead. It reads
+        # " fake " and "FAKE" as real providers, disagreeing with the selector
+        # on exactly the rows the real gate agrees on.
+        def drifted_gate_is_silent(env: Mapping[str, str]) -> bool:
+            return env.get(ENV_PROVIDER, PROVIDER_FAKE) == PROVIDER_FAKE
+
+        disagreements = [
+            label
+            for label, env, _ in _PROVIDER_GRID
+            if drifted_gate_is_silent(env) is not _selector_picks_the_fake(env)
+        ]
+        assert disagreements == ["FAKE", "padded fake"]
+
+    def test_provider_is_read_from_the_passed_mapping(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        # The mapping is authoritative in BOTH directions: a caller passing
+        # env= is never second-guessed against the ambient shell (which the
+        # suite's conftest pins to the fake provider).
+        monkeypatch.setenv(ENV_PROVIDER, PROVIDER_FEATHERLESS)
+        assert resolve_prompt_set(env={ENV_PROVIDER: PROVIDER_FAKE}) == (
+            DEFAULT_PROMPT_SET
+        )
+        assert capsys.readouterr().err == ""
+        monkeypatch.setenv(ENV_PROVIDER, PROVIDER_FAKE)
+        assert resolve_prompt_set(env=_REAL_PROVIDER_ENV) == DEFAULT_PROMPT_SET
+        assert capsys.readouterr().err != ""
+
+    def test_no_mapping_reads_the_process_environment(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        # The production path (build_default_meeting_runner calls it bare):
+        # with no mapping the provider comes from os.environ, same as the set.
+        monkeypatch.delenv(ENV_PROMPT_SET, raising=False)
+        monkeypatch.setenv(ENV_PROVIDER, PROVIDER_FEATHERLESS)
+        assert resolve_prompt_set() == DEFAULT_PROMPT_SET
+        assert len(capsys.readouterr().err.strip().splitlines()) == 1
+        monkeypatch.setenv(ENV_PROVIDER, PROVIDER_FAKE)
+        _notify_bare_prompt_set_fallback.cache_clear()
+        assert resolve_prompt_set() == DEFAULT_PROMPT_SET
+        assert capsys.readouterr().err == ""
+
+
+class TestNoticeIsOncePerProcess:
+    """The real-provider notice prints once per process, not once per game.
+
+    The resolution points are per-process and per-runner — the import-time
+    ``_ENV``, ``build_prompt_renderers``, and one per
+    ``orchestrator.game.build_default_meeting_runner`` — so a five-game
+    tournament printed the same line six times. Once is the message; six times
+    is noise. The de-duplication is a memo, not a mute: clearing it re-arms the
+    notice, which is what the autouse fixture above does around every test in
+    this file.
+    """
+
+    def test_three_resolutions_emit_one_line(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        for _ in range(3):
+            assert resolve_prompt_set(env=_REAL_PROVIDER_ENV) == DEFAULT_PROMPT_SET
+        assert len(capsys.readouterr().err.strip().splitlines()) == 1
+
+    def test_switching_real_providers_does_not_repeat_it(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        # "Once per process" means once, full stop -- the memo is keyed on the
+        # resolved SET, not the provider, so a process that resolves under
+        # three different real providers still gets one line. The notice says
+        # nothing about the provider, so a second copy would be noise.
+        for provider in (PROVIDER_FEATHERLESS, PROVIDER_OLLAMA, PROVIDER_ANTHROPIC):
+            assert resolve_prompt_set(env={ENV_PROVIDER: provider}) == (
+                DEFAULT_PROMPT_SET
+            )
+        assert len(capsys.readouterr().err.strip().splitlines()) == 1
+
+    def test_the_first_resolution_still_emits(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        # The half of "at most once" that can regress into silence: a memo
+        # primed at import (or a gate that swallowed everything) would make the
+        # count above 0 rather than 1, and this is the test that would fail.
+        resolve_prompt_set(env=_REAL_PROVIDER_ENV)
+        assert len(capsys.readouterr().err.strip().splitlines()) == 1
+
+    def test_clearing_the_memo_re_arms_the_notice(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        # The perturbation proving the suppression is a memo and the fixture's
+        # reset really resets: without the clear the second resolution is
+        # silent, with it the line comes back.
+        resolve_prompt_set(env=_REAL_PROVIDER_ENV)
+        capsys.readouterr()
+        resolve_prompt_set(env=_REAL_PROVIDER_ENV)
+        assert capsys.readouterr().err == ""
+        _notify_bare_prompt_set_fallback.cache_clear()
+        resolve_prompt_set(env=_REAL_PROVIDER_ENV)
+        assert len(capsys.readouterr().err.strip().splitlines()) == 1
+
+    def test_a_fake_resolution_does_not_consume_the_one_emission(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        # Gate first, dedupe second: the silent fake path must record nothing,
+        # or a process that resolves under the fake before switching to a real
+        # provider (a tournament script, a notebook) would lose its one line.
+        assert resolve_prompt_set(env={}) == DEFAULT_PROMPT_SET
+        assert capsys.readouterr().err == ""
+        assert resolve_prompt_set(env=_REAL_PROVIDER_ENV) == DEFAULT_PROMPT_SET
+        assert len(capsys.readouterr().err.strip().splitlines()) == 1
 
 
 class TestDefaultSetRendersByteIdentically:

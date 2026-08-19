@@ -42,15 +42,17 @@ byte-identical. An unknown set name (no matching subdirectory) raises
 fallbacks"). The ``*_TEMPLATE`` filename constants are shared across sets;
 only the directory varies.
 
-The default is byte-identity, not a recommendation (Task 19.6). Every
-operational surface runs :data:`OPERATIONAL_BASELINE_PROMPT_SET`
-(``qwen3_6_27b``, the bespoke set for the canonical Featherless model), so a
-bare environment taking the 9B default is running a prompt family two
-generations behind the reports. The default VALUE stays — moving it would
-move committed prompt bytes — but the fallback is no longer quiet:
-:func:`resolve_prompt_set` emits a one-line stderr notice naming
-``AILIBI_PROMPT_SET`` and the baseline set whenever it falls back with no
-override present.
+The default is byte-identity, not a recommendation. Every operational surface
+runs :data:`OPERATIONAL_BASELINE_PROMPT_SET` (``qwen3_6_27b``, the bespoke set
+for the canonical Featherless model), so a bare environment taking the 9B
+default is running a prompt family two generations behind the reports. The
+default VALUE stays — moving it would move committed prompt bytes — so
+:func:`resolve_prompt_set` says so instead: under a REAL provider a bare
+fallback emits one stderr line, once per process, naming
+``AILIBI_PROMPT_SET`` and the baseline set. Under the fake provider it is
+silent: the fake runs no model, so nothing there can be a generation behind
+anything, and a first-run warning that describes no risk is noise (Task 19.6
+introduced the notice, Task 20.5 aimed it).
 
 The module-level wrapper callables render through the import-time process
 default :data:`_ENV` (selected by ``AILIBI_PROMPT_SET`` at import). Each also
@@ -100,12 +102,13 @@ import os
 import sys
 from collections.abc import Mapping
 from dataclasses import dataclass
-from functools import partial
+from functools import lru_cache, partial
 from pathlib import Path
 from typing import Final
 
 from jinja2 import Environment, FileSystemLoader, StrictUndefined, TemplateNotFound
 
+from llm.provider import ENV_PROVIDER, PROVIDER_FAKE
 from meetings.render_contract import (
     ReportPromptRenderer,
     StatementPromptRenderer,
@@ -142,23 +145,44 @@ ENV_PROMPT_SET: Final[str] = "AILIBI_PROMPT_SET"
 OPERATIONAL_BASELINE_PROMPT_SET: Final[str] = "qwen3_6_27b"
 
 
-def _notify_bare_prompt_set_fallback() -> None:
-    """Emit the one-line bare-environment notice on stderr (Task 19.6).
+@lru_cache(maxsize=None)
+def _notify_bare_prompt_set_fallback(prompt_set: str) -> None:
+    """Emit the bare-environment prompt-set notice on stderr, once per process.
 
-    Called from :func:`resolve_prompt_set` on the fallback path only. It is
-    deliberately unconditional — no "warn once" flag, because that would be
-    module-level mutable state (AGENTS.md §"No global state") — and stderr, not
-    stdout, so it never contaminates the machine-readable stdout the CLI
-    surfaces emit. The resolution points it rides are per-process or per-runner
-    (the import-time :data:`_ENV`, ``build_prompt_renderers``,
-    ``orchestrator.game.build_default_meeting_runner``), not per-turn.
-    Historical note: a fourth resolution point, ``training.realpath``'s
-    recording-identity manifest stamp, retired with that module at Task 19.19.
+    The rule, in two halves. Under a REAL provider the notice is worth saying:
+    the bare default is :data:`DEFAULT_PROMPT_SET`, a different prompt family
+    from the :data:`OPERATIONAL_BASELINE_PROMPT_SET` every report and every
+    committed sample set was recorded against, and a prompt family written for
+    another model is a real difference in how that model behaves. Under the
+    deterministic FAKE provider the sentence has nothing to be about: the fake
+    fills the response schema with placeholder fields (their filler strings
+    seeded by a hash of the prompt, so the bytes do move) and runs no model at
+    all, so no generation exists for the prompt family to lag two behind. The
+    notice also fires only where the DEFAULT set was taken — under the fake,
+    the exact configuration the committed goldens reproduce.
+    :func:`resolve_prompt_set` owns that provider gate and never reaches this
+    function on the fake path; this function owns the once-per-process half.
+
+    The :func:`functools.lru_cache` memo is what collapses the repeats — the
+    resolution points are per-process and per-runner (the import-time
+    :data:`_ENV`, ``build_prompt_renderers``,
+    ``orchestrator.game.build_default_meeting_runner``), so a five-game
+    tournament used to print the same line six times. It is keyed on the
+    resolved set alone, so switching real providers mid-process does not repeat
+    a line that says nothing about the provider, and unbounded, so nothing is
+    ever evicted back into loudness. Its ``cache_clear()`` is the reset seam
+    tests drive. A de-duplication memo for a diagnostic is not the
+    module-level mutable state AGENTS.md §"No global state" forbids: no caller
+    reads a value back out of it, it changes no return value, and it is
+    resettable. stderr, never stdout, keeps the machine-readable stdout the CLI
+    surfaces emit uncontaminated.
+
+    Provenance: notice added at Task 19.6, provider-gated and deduped at 20.5.
     """
 
     print(
         f"agents.strategic.prompts.loader: {ENV_PROMPT_SET} is unset — falling "
-        f"back to the frozen reference set {DEFAULT_PROMPT_SET!r}, two "
+        f"back to the frozen reference set {prompt_set!r}, two "
         f"generations behind the operational baseline "
         f"{OPERATIONAL_BASELINE_PROMPT_SET!r}; export "
         f"{ENV_PROMPT_SET}={OPERATIONAL_BASELINE_PROMPT_SET} to run the "
@@ -179,16 +203,22 @@ def resolve_prompt_set(
     (the frozen 9B set) when unset or empty. The ``env`` argument lets tests
     select a set deterministically without mutating ``os.environ``.
 
-    The bare-environment path is LOUD (Task 19.6). The default value itself is
-    unchanged — it must stay :data:`DEFAULT_PROMPT_SET` for byte-identity with
-    every committed render — but taking it *without* an ``AILIBI_PROMPT_SET``
-    override now emits a one-line stderr notice naming the variable and
-    :data:`OPERATIONAL_BASELINE_PROMPT_SET`, because a bare shell otherwise
-    runs a prompt family two generations behind the operational baseline with
-    no signal at all. The notice fires on exactly one path: no explicit
-    ``prompt_set`` argument AND no non-empty ``AILIBI_PROMPT_SET``. An explicit
-    argument (a caller pinning its own set) and a set env var are both silent —
-    they are choices, not fallbacks.
+    The bare-environment path is loud where that means something. The default
+    value itself is unchanged — it must stay :data:`DEFAULT_PROMPT_SET` for
+    byte-identity with every committed render — but taking it under a real
+    provider, *without* an ``AILIBI_PROMPT_SET`` override, emits one stderr
+    line naming the variable and :data:`OPERATIONAL_BASELINE_PROMPT_SET`,
+    because that run is sending a prompt family two generations behind the one
+    every report was recorded against. Three paths are silent, each because it
+    is not that situation: an explicit ``prompt_set`` argument and a non-empty
+    ``AILIBI_PROMPT_SET`` are choices rather than fallbacks, and under the
+    deterministic fake provider (the default, and everything CI runs) there is
+    no model for the rendered family to be a generation behind. The provider is
+    read from the SAME mapping the set is — a test or
+    a caller passing ``env=`` is never second-guessed against the ambient
+    shell — using ``llm.provider``'s own constants and resolution expression so
+    the two cannot drift apart. The notice itself is once per process
+    (:func:`_notify_bare_prompt_set_fallback`).
     """
 
     if prompt_set is not None:
@@ -197,7 +227,11 @@ def resolve_prompt_set(
     selected = environment.get(ENV_PROMPT_SET, "").strip()
     if selected:
         return selected
-    _notify_bare_prompt_set_fallback()
+    # Gate first, dedupe second: the fake path records nothing in the memo, so
+    # a later real-provider resolution in the same process still gets its line.
+    provider = environment.get(ENV_PROVIDER, PROVIDER_FAKE).strip().lower()
+    if provider != PROVIDER_FAKE:
+        _notify_bare_prompt_set_fallback(DEFAULT_PROMPT_SET)
     return DEFAULT_PROMPT_SET
 
 
