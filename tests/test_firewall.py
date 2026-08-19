@@ -342,12 +342,6 @@ def test_import_linter_reports_a_planted_agents_to_engine_route(
 # can follow. This scan is what forbids it.
 _UNGRAPHED_PACKAGES = frozenset({"tests", "experiments", "audits", "design"})
 
-# Everything ``agents/`` may legally import. The transitive claim is only as good
-# as what these can reach, so the ungraphed-package ban applies across all four,
-# not to ``agents/`` alone. The graphed packages need no such treatment: a chain
-# through ``orchestrator``/``api``/``eval``/``scripts`` is walked by the linter.
-_AGENT_REACHABLE_ROOTS: tuple[str, ...] = ("agents", "observation", "llm", "meetings")
-
 # Top-level names that must not be imported anywhere under ``agents/``.
 #
 # numpy/torch: production inference under ``agents/`` is pure Python, because
@@ -444,17 +438,86 @@ def test_the_agents_source_scan_rejects_every_banned_import(
     assert (str(planted), [banned]) in offenders
 
 
+def _modules_agents_may_not_import() -> frozenset[str]:
+    """What the committed ``forbidden`` contracts put out of ``agents/``'s reach."""
+
+    parser = configparser.ConfigParser()
+    parser.read(_IMPORT_LINTER_CONFIG, encoding="utf-8")
+    forbidden: set[str] = set()
+    for section in parser.sections():
+        options = parser[section]
+        if options.get("type") != "forbidden":
+            continue
+        if "agents" not in options.get("source_modules", "").split():
+            continue
+        forbidden.update(options.get("forbidden_modules", "").split())
+    return frozenset(forbidden)
+
+
+def _reachable_roots(
+    root_packages: Iterable[str],
+    agent_forbidden: Collection[str],
+    banned: Collection[str],
+) -> tuple[str, ...]:
+    """The roots ``agents/`` may legally import, itself included.
+
+    A contract forbidding a submodule (``meetings.manager``) does not put its
+    root out of reach — ``agents/`` still imports ``meetings.schemas`` — so only
+    whole-root entries drop a package from the scan.
+    """
+
+    whole_roots = {module for module in agent_forbidden if "." not in module}
+    return tuple(
+        package
+        for package in root_packages
+        if package not in whole_roots and package not in banned
+    )
+
+
+def _agent_reachable_roots() -> tuple[str, ...]:
+    """:func:`_reachable_roots` over the committed configuration.
+
+    DERIVED, never listed: the covering assertion below promises that adding a
+    package to ``root_packages`` is enough to bring it under the firewall, and a
+    hand-written tuple here would quietly break that promise for the next root.
+    """
+
+    return _reachable_roots(
+        _configured_root_packages(),
+        _modules_agents_may_not_import(),
+        _FORBIDDEN_AGENT_IMPORTS,
+    )
+
+
 def _ungraphed_importers(tree_root: Path) -> list[tuple[str, list[str]]]:
     """Every agent-reachable file importing a package outside the import graph."""
 
     offenders: list[tuple[str, list[str]]] = []
-    for package in _AGENT_REACHABLE_ROOTS:
+    for package in _agent_reachable_roots():
         offenders.extend(
             _banned_importers(
                 _package_source_files(tree_root, package), _UNGRAPHED_PACKAGES
             )
         )
     return offenders
+
+
+def test_the_reachable_scan_set_follows_the_committed_configuration() -> None:
+    """A root added to ``.importlinter`` joins the scan; a banned one does not."""
+
+    reachable = _reachable_roots(
+        (*_configured_root_packages(), "_firewall_new_root"),
+        _modules_agents_may_not_import(),
+        _FORBIDDEN_AGENT_IMPORTS,
+    )
+    assert "_firewall_new_root" in reachable
+    # Whole-root contracts and the ban set both take a package out of reach...
+    assert "engine" not in reachable
+    assert "training" not in reachable
+    assert "orchestrator" not in reachable
+    # ...but a submodule contract does not: agents/ still imports meetings.schemas.
+    assert "meetings.manager" in _modules_agents_may_not_import()
+    assert "meetings" in reachable
 
 
 def test_agent_reachable_roots_import_no_ungraphed_package() -> None:
@@ -466,7 +529,7 @@ def test_agent_reachable_roots_import_no_ungraphed_package() -> None:
     )
 
 
-@pytest.mark.parametrize("package", _AGENT_REACHABLE_ROOTS)
+@pytest.mark.parametrize("package", _agent_reachable_roots())
 def test_the_reachable_root_scan_rejects_a_planted_bridge(
     package: str, firewall_tree: FirewallTree
 ) -> None:
