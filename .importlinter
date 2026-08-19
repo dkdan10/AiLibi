@@ -1,4 +1,10 @@
 [importlinter]
+# Every top-level package that ships or gates shipping. grimp builds nodes only
+# for these, and a traversal stops at the first hop into a package it does not
+# know — so a root left out here is a hole in the transitive claim below, not a
+# package the contracts merely ignore. `tests/` and `experiments/` stay out by
+# design (both import the inner packages freely); the agents/ source scan in
+# tests/test_firewall.py is the second layer that covers them.
 root_packages =
     agents
     engine
@@ -6,6 +12,10 @@ root_packages =
     meetings
     observation
     training
+    orchestrator
+    api
+    eval
+    scripts
 
 [importlinter:agents_must_not_import_engine]
 name = Agents must not import engine

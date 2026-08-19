@@ -57,9 +57,23 @@ bash scripts/setup_env.sh   # uv sync (incl. the dev group) + frontend deps
 bash scripts/check.sh       # the full gate: ruff, import-linter, mypy, pytest, frontend
 ```
 
-`scripts/check.sh` is the required gate and the one-command local truth: it runs
-the same checks CI runs. Targeted `uv run ...` commands are fine while you are
-iterating, but a change is not done until the whole script is green.
+`scripts/check.sh` is the required gate and the one-command local truth: ruff,
+import-linter, mypy, the task-doc and prompt generators, pytest, and the
+frontend lint, typecheck, unit-test and build legs.
+
+CI runs those same checks and one more the script deliberately leaves out: a
+Playwright browser journey over the real app and the real API
+(`.github/workflows/ci.yml`). It needs a browser and both dev servers running,
+which is minutes of setup for a gate that is otherwise dependency-free — run it
+on demand with `cd frontend && npm run e2e`. So a green `check.sh` predicts CI
+except for that one job.
+
+Neither the script nor CI's per-change jobs run the campaign tier: the frozen
+ML-campaign test families, selected with `uv run pytest -m campaign`. Those run
+weekly against `main` from `.github/workflows/campaign-tier.yml`.
+
+Targeted `uv run ...` commands are fine while you are iterating, but a change is
+not done until the whole script is green.
 
 Two notes on the environment:
 
