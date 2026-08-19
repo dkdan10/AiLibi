@@ -10,8 +10,10 @@ tautological.
 
 The scanner is a pure function of source text so it can be aimed at planted
 modules: the tests below prove it flags a committed walk (as a bare name, via
-``self``, through a module alias, and through a path factored across two
-constants) and that it leaves a ``tmp_path`` walk alone. A corrupted copy of a
+``self``, through a module alias, through a path factored across two steps, and
+through a directory built in a local variable) and that it leaves a ``tmp_path``
+walk alone. It resolves names per lexical scope, so a helper that reads committed
+bytes to BUILD a corrupted temp set does not taint its caller's argument. A corrupted copy of a
 committed set proves the second property — the cache is keyed by directory and
 cannot answer for bytes it never walked — and a walk of the five report graphs
 proves the third: sharing one instance cannot couple its readers, because every
@@ -96,41 +98,45 @@ def _referenced_names(node: ast.expr) -> frozenset[str]:
     return frozenset(names)
 
 
-def _constant_assignments(
+def _assignments_in_scope(
     node: ast.AST,
 ) -> Iterator[tuple[tuple[ast.expr, ...], ast.expr]]:
-    """Every module-level or class-level assignment under ``node``.
+    """Assignments belonging to ``node``'s OWN scope; nested defs excluded.
 
-    Function bodies are skipped deliberately. Set directories in this repo are
-    module constants or class attributes; a local inside a helper that copies
-    committed bytes into ``tmp_path`` is NOT a committed set, and taint that
-    escaped the function would flag exactly the fail-loud pins that build the
-    corrupted copy.
+    Class bodies ARE descended into, so a class attribute
+    (``_SET_DIR = ... / "replays" / ...``) belongs to the scope holding the
+    class — which is how ``self._SET_DIR`` resolves for this scanner.
     """
 
     for child in ast.iter_child_nodes(node):
-        if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda):
+        if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef):
             continue
         if isinstance(child, ast.Assign):
             yield tuple(child.targets), child.value
         elif isinstance(child, ast.AnnAssign) and child.value is not None:
             yield (child.target,), child.value
-        yield from _constant_assignments(child)
+        yield from _assignments_in_scope(child)
 
 
-def _names_bound_to_committed_bytes(tree: ast.Module) -> frozenset[str]:
-    """Constants that end up holding a path under ``replays/``.
+def _committed_names_in_scope(
+    node: ast.AST, inherited: frozenset[str]
+) -> frozenset[str]:
+    """Names holding a path under ``replays/`` as seen from ``node``'s scope.
 
-    Covers module constants (``_SAMPLES_9P2I = ...``) and class attributes
-    (``_SET_DIR = ...``) alike; both are ``ast.Name`` assignment targets. The
-    search runs to a fixed point so a path factored in steps —
-    ``_BASE = repo_root / "replays" / "samples"`` then ``_SET = _BASE / "9p2i"``
-    — taints every name along the chain, not only the one that spells
-    ``replays``.
+    ``inherited`` is what the enclosing scope already knows, so a test function
+    sees the module constants and a nested ``def`` sees its enclosing function's
+    locals — ordinary lexical scoping. The search runs to a fixed point, so a
+    path factored in steps (``_BASE = repo_root / "replays" / "samples"`` then
+    ``_SET = _BASE / "9p2i"``) taints every name along the chain, whether the
+    steps are module constants or locals inside one test.
+
+    Taint never escapes OUTWARD: a helper that reads committed bytes in order to
+    build a corrupted copy under ``tmp_path`` keeps that knowledge to itself, so
+    its caller's ``tmp_path`` argument still reads as the temp set it is.
     """
 
-    assignments = list(_constant_assignments(tree))
-    bound: set[str] = set()
+    bound = set(inherited)
+    assignments = list(_assignments_in_scope(node))
     growing = True
     while growing:
         growing = False
@@ -160,18 +166,19 @@ def _set_constants_imported_from_the_helper(tree: ast.Module) -> frozenset[str]:
     return frozenset(imported)
 
 
-def _calls_by_enclosing_def(
-    node: ast.AST, enclosing: str
-) -> Iterator[tuple[str, ast.Call]]:
-    """Every ``ast.Call`` under ``node``, tagged with the ``def`` it sits in."""
+def _calls_in_scope(
+    node: ast.AST, enclosing: str, committed_names: frozenset[str]
+) -> Iterator[tuple[str, ast.Call, frozenset[str]]]:
+    """Every ``ast.Call`` under ``node``, with its ``def`` and its scope's names."""
 
     for child in ast.iter_child_nodes(node):
         if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef):
-            yield from _calls_by_enclosing_def(child, child.name)
+            inner = _committed_names_in_scope(child, committed_names)
+            yield from _calls_in_scope(child, child.name, inner)
             continue
         if isinstance(child, ast.Call):
-            yield enclosing, child
-        yield from _calls_by_enclosing_def(child, enclosing)
+            yield enclosing, child, committed_names
+        yield from _calls_in_scope(child, enclosing, committed_names)
 
 
 def _walker_name(call: ast.Call) -> str | None:
@@ -246,12 +253,13 @@ def committed_walk_calls(source: str) -> tuple[WalkCall, ...]:
     """
 
     tree = ast.parse(source)
-    bound = _names_bound_to_committed_bytes(tree)
     imported = _set_constants_imported_from_the_helper(tree)
-    committed_names = bound | imported
+    module_names = _committed_names_in_scope(tree, imported)
 
     found: list[WalkCall] = []
-    for enclosing, call in _calls_by_enclosing_def(tree, "<module>"):
+    for enclosing, call, committed_names in _calls_in_scope(
+        tree, "<module>", module_names
+    ):
         walker = _walker_name(call)
         if walker is None:
             continue
@@ -369,6 +377,33 @@ def test_the_scanner_follows_a_path_factored_in_steps() -> None:
     )
     assert committed_walk_calls(planted) == (
         WalkCall("compute_information_funnel", "test_planted", 5),
+    )
+
+
+def test_the_scanner_flags_a_set_built_in_a_local_variable() -> None:
+    """The set need not be a module constant to be a duplicate walk."""
+
+    planted = (
+        "from tests._helpers.committed import repo_root\n"
+        "def test_planted() -> None:\n"
+        "    sample_dir = repo_root / 'replays' / 'samples' / '9p2i'\n"
+        "    compute_solvability_report(sample_dir)\n"
+    )
+    assert committed_walk_calls(planted) == (
+        WalkCall("compute_solvability_report", "test_planted", 4),
+    )
+
+
+def test_the_scanner_flags_a_local_set_factored_in_steps() -> None:
+    planted = (
+        "from pathlib import Path\n"
+        "def test_planted() -> None:\n"
+        "    base = Path('x') / 'replays' / 'samples'\n"
+        "    sample_dir = base / '4p1i'\n"
+        "    compute_kill_craft_report(sample_dir)\n"
+    )
+    assert committed_walk_calls(planted) == (
+        WalkCall("compute_kill_craft_report", "test_planted", 5),
     )
 
 
