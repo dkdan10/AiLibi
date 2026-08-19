@@ -3,11 +3,13 @@
 ``import-linter`` walks the import graph of every root package in
 ``.importlinter`` and proves the transitive claim — ``agents/`` reaches
 ``engine/`` by no route, however long. The AST source scan below is the second
-layer: it bans, at the source level, the top-level names that must not appear
-under ``agents/`` at all, including the packages no import graph covers
-(``tests/``, ``experiments/``) and the external ones grimp never sees
-(``numpy``, ``torch``). A covering assertion pins the pair, so a new top-level
-package must join one list or the other to land.
+layer, and it covers what the graph cannot: the external packages grimp never
+sees (``numpy``, ``torch``), and the packages deliberately left out of the graph
+(``tests``, ``experiments``, ``audits``, ``design``) — banned not only under
+``agents/`` but under every root ``agents/`` can legally reach, since a bridge
+planted in ``observation/`` would otherwise route to the engine unseen. A
+covering assertion pins the pair, so a new top-level package must join one list
+or the other to land.
 
 Every planted-failure leg writes into a throwaway copy of the source tree under
 ``tmp_path`` and runs the linter there. Nothing here writes inside the checkout:
@@ -331,6 +333,21 @@ def test_import_linter_reports_a_planted_agents_to_engine_route(
 # 2. The AST source scan over agents/ — the grimp-independent second layer.    #
 # --------------------------------------------------------------------------- #
 
+# The top-level packages that hold tracked Python and stay OUT of the import
+# graph on purpose: ``tests`` and ``experiments`` import the inner packages
+# freely, and ``audits`` and ``design`` hold one-off generators. grimp builds no
+# nodes for them, so a chain that passes through one is invisible to every
+# contract — ``tests._helpers.world_state`` imports ``engine``, which makes
+# ``agents -> observation -> tests._helpers -> engine`` a real route no linter
+# can follow. This scan is what forbids it.
+_UNGRAPHED_PACKAGES = frozenset({"tests", "experiments", "audits", "design"})
+
+# Everything ``agents/`` may legally import. The transitive claim is only as good
+# as what these can reach, so the ungraphed-package ban applies across all four,
+# not to ``agents/`` alone. The graphed packages need no such treatment: a chain
+# through ``orchestrator``/``api``/``eval``/``scripts`` is walked by the linter.
+_AGENT_REACHABLE_ROOTS: tuple[str, ...] = ("agents", "observation", "llm", "meetings")
+
 # Top-level names that must not be imported anywhere under ``agents/``.
 #
 # numpy/torch: production inference under ``agents/`` is pure Python, because
@@ -339,28 +356,15 @@ def test_import_linter_reports_a_planted_agents_to_engine_route(
 # ``math`` + lists. They are external packages, so no import-linter contract can
 # see them (``include_external_packages`` is unset); this scan is their only gate.
 #
-# The packages: ``orchestrator``, ``api``, ``eval``, ``scripts``,
-# ``experiments``, ``audits`` and ``tests`` all import ``engine`` directly, so
-# any one of them is a route around the firewall; ``design`` holds one-off
-# artifact generators that production code has no reason to reach for. The first
-# four are import-linter roots, so their chains are caught there too — the other
-# four are outside the graph by design and this scan is their only gate. It is
-# an AST scan rather than a substring one so a docstring that legitimately NAMES
-# a banned import (the encoder module documents this very ban) never
-# false-positives.
-_FORBIDDEN_AGENT_IMPORTS = frozenset(
-    {
-        "numpy",
-        "torch",
-        "orchestrator",
-        "api",
-        "eval",
-        "scripts",
-        "experiments",
-        "audits",
-        "design",
-        "tests",
-    }
+# ``orchestrator``, ``api``, ``eval`` and ``scripts`` all import ``engine``
+# directly, so any one of them is a route around the firewall. They are
+# import-linter roots, so their chains are caught there too — this is the
+# grimp-independent second reading of the same ban. It is an AST scan rather
+# than a substring one so a docstring that legitimately NAMES a banned import
+# (the encoder module documents this very ban) never false-positives.
+_FORBIDDEN_AGENT_IMPORTS = (
+    frozenset({"numpy", "torch", "orchestrator", "api", "eval", "scripts"})
+    | _UNGRAPHED_PACKAGES
 )
 
 # The productized learned champion is production inference, so it inherits the
@@ -389,8 +393,12 @@ def _imported_top_level_modules(source: str) -> set[str]:
     return roots
 
 
+def _package_source_files(tree_root: Path, package: str) -> list[Path]:
+    return sorted((tree_root / package).rglob("*.py"))
+
+
 def _agent_source_files(tree_root: Path) -> list[Path]:
-    return sorted((tree_root / "agents").rglob("*.py"))
+    return _package_source_files(tree_root, "agents")
 
 
 def _learned_package_source_files(tree_root: Path) -> list[Path]:
@@ -434,6 +442,72 @@ def test_the_agents_source_scan_rejects_every_banned_import(
         _agent_source_files(firewall_tree.root), _FORBIDDEN_AGENT_IMPORTS
     )
     assert (str(planted), [banned]) in offenders
+
+
+def _ungraphed_importers(tree_root: Path) -> list[tuple[str, list[str]]]:
+    """Every agent-reachable file importing a package outside the import graph."""
+
+    offenders: list[tuple[str, list[str]]] = []
+    for package in _AGENT_REACHABLE_ROOTS:
+        offenders.extend(
+            _banned_importers(
+                _package_source_files(tree_root, package), _UNGRAPHED_PACKAGES
+            )
+        )
+    return offenders
+
+
+def test_agent_reachable_roots_import_no_ungraphed_package() -> None:
+    offenders = _ungraphed_importers(_REPO_ROOT)
+    assert not offenders, (
+        "no package agents/ can reach may import "
+        f"{sorted(_UNGRAPHED_PACKAGES)} — that is a route to engine no "
+        f"import-linter contract can follow; offenders: {offenders}"
+    )
+
+
+@pytest.mark.parametrize("package", _AGENT_REACHABLE_ROOTS)
+def test_the_reachable_root_scan_rejects_a_planted_bridge(
+    package: str, firewall_tree: FirewallTree
+) -> None:
+    """A gate that cannot fail is not a gate — one bridge per reachable root."""
+
+    planted = firewall_tree.plant(
+        f"{package}/_firewall_ungraphed_bridge.py",
+        "import tests._helpers.world_state\n",
+    )
+    assert (str(planted), ["tests"]) in _ungraphed_importers(firewall_tree.root)
+
+
+def test_a_bridge_through_an_ungraphed_package_is_the_source_scans_job(
+    firewall_tree: FirewallTree,
+) -> None:
+    """The division of labour between the two layers, kept honest.
+
+    ``agents -> observation._bridge -> tests._helpers -> engine`` reaches the
+    engine, but ``tests`` is not a root package, so the graph traversal stops
+    there and the linter reports the tree clean. The scan above is the only gate
+    that sees this route; if it were ever relaxed, this leg would still pass and
+    the firewall would be open — which is why it asserts BOTH halves.
+    """
+
+    firewall_tree.plant(
+        "observation/_firewall_ungraphed_bridge.py",
+        "import tests._helpers.world_state\n",
+    )
+    firewall_tree.plant(
+        "agents/_firewall_bridge_consumer.py",
+        "import observation._firewall_ungraphed_bridge\n",
+    )
+
+    result = firewall_tree.lint()
+    assert result.returncode == 0, result.stdout
+    assert re.search(r"Contracts: \d+ kept, 0 broken", result.stdout), result.stdout
+
+    offenders = _ungraphed_importers(firewall_tree.root)
+    assert [path for path, names in offenders if names == ["tests"]] == [
+        str(firewall_tree.root / "observation" / "_firewall_ungraphed_bridge.py")
+    ]
 
 
 def test_learned_package_is_swept_by_the_agents_source_scan() -> None:
