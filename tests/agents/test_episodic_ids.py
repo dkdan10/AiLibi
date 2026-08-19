@@ -29,6 +29,8 @@ from bisect import bisect_left
 from pathlib import Path
 
 import pytest
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from agents.memory import episodic
 from agents.memory.episodic import (
@@ -545,7 +547,12 @@ class TestObservationIdsAreReconstructionStable:
 # The read path: recent() locates its window by bisection                     #
 # --------------------------------------------------------------------------- #
 
-_WINDOW_TRIALS = 1_000
+# Legal append sequences the equivalence property draws from: ticks are sorted
+# on the way in (``append`` requires non-decreasing), the small tick range makes
+# duplicates and gaps common, and the empty log is in range.
+_WINDOW_EXAMPLES = 1_000
+_LOG_TICKS = st.lists(st.integers(min_value=0, max_value=30), max_size=24)
+_SINCE_TICK = st.integers(min_value=-9, max_value=39)
 
 
 def _row(*, tick: int, index: int = 0) -> EpisodicEvent:
@@ -567,38 +574,14 @@ def _linear_recent(
     return tuple(event for event in events if event.tick >= since_tick)
 
 
-def _random_legal_log(rng: random.Random) -> tuple[EpisodicEvent, ...]:
-    """A legal append sequence — non-decreasing ticks, with duplicates and gaps."""
+def _store_of(ticks: list[int]) -> tuple[MemoryStore, tuple[EpisodicEvent, ...]]:
+    """A store filled with one legal (tick-sorted) append sequence, and its rows."""
 
-    tick = rng.randint(0, 4)
-    events: list[EpisodicEvent] = []
-    for index in range(rng.randint(0, 24)):
-        tick += rng.choice((0, 0, 0, 1, 2, 7))
-        events.append(_row(tick=tick, index=index))
-    return tuple(events)
-
-
-def _probe_ticks(
-    events: tuple[EpisodicEvent, ...], rng: random.Random
-) -> tuple[int, ...]:
-    """Window bounds worth asking for: negative, boundary, interior, past-the-end."""
-
-    ticks = [event.tick for event in events]
-    probes = {-9, -1, 0}
-    if ticks:
-        probes.update(
-            {
-                ticks[0] - 1,
-                ticks[0],
-                ticks[0] + 1,
-                ticks[len(ticks) // 2],
-                ticks[-1],
-                ticks[-1] + 1,
-                ticks[-1] + 9,
-            }
-        )
-    probes.add(rng.randint(-9, (ticks[-1] if ticks else 0) + 9))
-    return tuple(sorted(probes))
+    events = tuple(_row(tick=tick, index=index) for index, tick in enumerate(ticks))
+    store = MemoryStore()
+    for event in events:
+        store.append(event)
+    return store, events
 
 
 def _tick_index(store: MemoryStore) -> list[int]:
@@ -612,38 +595,37 @@ class TestRecentMatchesTheLinearReference:
 
     ``append`` keeps ticks non-decreasing, so ``tick >= since_tick`` always
     selects a suffix — the invariant that lets one bisection replace the scan.
-    This walks 1,000 random legal logs (duplicate ticks, gaps, empty logs)
-    against the reference filter at probe bounds that include negative and
-    past-the-end values.
+    The property runs over generated legal logs (duplicate ticks, gaps, the
+    empty log) and window bounds that include negative and past-the-end values.
     """
 
-    def test_a_thousand_random_logs_agree_event_for_event(self) -> None:
+    @settings(max_examples=_WINDOW_EXAMPLES)
+    @given(ticks=_LOG_TICKS, since_tick=_SINCE_TICK)
+    def test_generated_logs_agree_event_for_event(
+        self, ticks: list[int], since_tick: int
+    ) -> None:
+        store, events = _store_of(sorted(ticks))
+        assert store.recent(since_tick=since_tick) == _linear_recent(events, since_tick)
+
+    def test_all_three_window_shapes_are_covered(self) -> None:
+        # The property above is only worth its examples if they are not all one
+        # trivial shape: over the same generators, the three shapes a window can
+        # take (whole log, proper suffix, empty) all occur.
         rng = random.Random(2019)
-        mismatches: list[str] = []
-        whole = partial = empty = 0
-        for trial in range(_WINDOW_TRIALS):
-            events = _random_legal_log(rng)
-            store = MemoryStore()
-            for event in events:
-                store.append(event)
-            for since_tick in _probe_ticks(events, rng):
-                observed = store.recent(since_tick=since_tick)
-                expected = _linear_recent(events, since_tick)
-                if observed != expected:
-                    mismatches.append(
-                        f"trial {trial} since_tick={since_tick}: "
-                        f"{observed!r} != {expected!r}"
-                    )
-                if not observed:
-                    empty += 1
-                elif len(observed) == len(events):
-                    whole += 1
-                else:
-                    partial += 1
-        assert mismatches == []
-        # The grid really exercised all three window shapes, so agreement above
-        # is not agreement on one trivial case.
-        assert whole and partial and empty, (whole, partial, empty)
+        shapes: set[str] = set()
+        for _ in range(_WINDOW_EXAMPLES):
+            ticks = sorted(rng.randint(0, 30) for _ in range(rng.randint(0, 24)))
+            store, events = _store_of(ticks)
+            window = store.recent(since_tick=rng.randint(-9, 39))
+            if not events:
+                continue
+            if not window:
+                shapes.add("empty")
+            elif len(window) == len(events):
+                shapes.add("whole")
+            else:
+                shapes.add("partial")
+        assert shapes == {"whole", "partial", "empty"}
 
     def test_the_reference_disagrees_with_a_broken_window(self) -> None:
         # The comparison bites: an off-by-one window (the failure mode a
@@ -718,10 +700,15 @@ class TestWholeLogCacheIsInvalidatedOnWrite:
         rows = (_row(tick=3), _row(tick=7, index=1))
         for row in rows:
             store.append(row)
+        # Warm the cache first, so the post-rejection read is the SAME object:
+        # an invalidation that ran before the guard would rebuild an equal tuple
+        # and slip past an equality-only check.
+        warmed = store.recent(since_tick=0)
         with pytest.raises(ValueError, match="non-decreasing"):
             store.append(_row(tick=2, index=2))
         assert len(store) == 2
-        assert store.recent(since_tick=0) == rows
+        assert store.recent(since_tick=0) is warmed
+        assert warmed == rows
         assert _tick_index(store) == [3, 7]
         # The index is still aligned with the log, so a later legal append
         # windows correctly rather than off by the rejected row.
@@ -740,9 +727,12 @@ class TestWholeLogCacheIsInvalidatedOnWrite:
             observation_id=derive_observation_id(agent_id="p1", tick=2, seq=0),
         )
         store.append(first)
-        assert store.recent(since_tick=0) == (first,)
+        warmed = store.recent(since_tick=0)
         with pytest.raises(ValueError, match="duplicate observation id"):
             store.append(first)
         assert len(store) == 1
-        assert store.recent(since_tick=0) == (first,)
+        # Same object, not merely an equal one: the guard raised before any
+        # derived view moved.
+        assert store.recent(since_tick=0) is warmed
+        assert warmed == (first,)
         assert _tick_index(store) == [2]

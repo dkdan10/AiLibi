@@ -235,30 +235,27 @@ def resolve_prompt_set(
     return DEFAULT_PROMPT_SET
 
 
-@lru_cache(maxsize=None)
-def _environment_for_set(name: str, root: Path) -> Environment:
-    """The one strict-undefined environment serving a resolved set under ``root``.
+# How many distinct (prompt set, templates root) environments are held at once.
+# A run serves one root and a handful of sets, so the bound never evicts a live
+# one; it caps what a caller building against scratch roots (a test tree, the
+# byte-golden perturbation leg) can retain for the life of the process.
+_ENVIRONMENT_CACHE_SIZE: Final[int] = 32
 
-    An environment is a pure function of these two arguments — it holds the set's
-    template bytes and their compiled code, no game state and nothing per-runner —
-    so one per (set, root) is shared rather than rebuilt. Building one and
-    compiling the meeting templates costs ~15 ms, and
-    :func:`orchestrator.game.build_default_meeting_runner` builds a runner per
-    game, so before this memo a ten-game tournament paid it eleven times.
-    Deliberately keyed on set and root ALONE: the Task-18.10 impostor-roll-call
-    lever chooses template FILENAMES in :func:`build_prompt_renderers`, nothing
-    the environment carries. An unknown set raises here, and
-    :func:`functools.lru_cache` does not memoize a raise, so the failure fires on
-    every call. Task 20.19 (finding C-42).
+
+@lru_cache(maxsize=_ENVIRONMENT_CACHE_SIZE)
+def _environment_for_set(name: str, root: Path) -> Environment:
+    """The one strict-undefined environment serving set ``name`` under ``root``.
+
+    Keyed on the set and the root and nothing else: an environment holds that
+    set's template bytes and their compiled code — no game state, nothing
+    per-runner — and the Task-18.10 roll-call lever selects template FILENAMES
+    in :func:`build_prompt_renderers`, not anything the environment carries.
+    Reached only through :func:`build_environment`, which resolves the set name
+    and validates its directory first. Task 20.19 (finding C-42).
     """
 
-    directory = root / name
-    if not directory.is_dir():
-        raise ValueError(
-            f"Unknown prompt set {name!r}: no template directory at {directory}"
-        )
     return Environment(
-        loader=FileSystemLoader(directory),
+        loader=FileSystemLoader(root / name),
         autoescape=False,
         undefined=StrictUndefined,
         trim_blocks=True,
@@ -281,14 +278,21 @@ def build_environment(
     no-autoescape policy is identical across sets, so a content-preserving move
     of the 9B templates renders byte-identically.
 
-    Resolution happens on every call and the memo
-    (:func:`_environment_for_set`) sits strictly beneath it, so a caller that
-    changes ``AILIBI_PROMPT_SET`` in-process still gets its new set's
-    environment, and the bare-fallback notice fires exactly as often as it did
-    when every call built a fresh environment.
+    Both the resolution and the directory check run on every call, above the
+    memo that :func:`_environment_for_set` holds: a caller that changes
+    ``AILIBI_PROMPT_SET`` in-process still gets its new set, a set whose
+    directory is absent still fails loud however often it was built before, and
+    the bare-fallback notice fires exactly as often as it did when every call
+    built a fresh environment.
     """
 
-    return _environment_for_set(resolve_prompt_set(prompt_set, env=env), root)
+    name = resolve_prompt_set(prompt_set, env=env)
+    directory = root / name
+    if not directory.is_dir():
+        raise ValueError(
+            f"Unknown prompt set {name!r}: no template directory at {directory}"
+        )
+    return _environment_for_set(name, root)
 
 
 # The process-default environment, bound to the active set at import time. The

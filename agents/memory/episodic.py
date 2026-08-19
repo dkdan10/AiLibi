@@ -94,7 +94,7 @@ class MemoryStore:
         self._ticks: list[int] = []
         # The materialized whole-log view ``recent(since_tick=0)`` returns, held
         # until the next append invalidates it. ``None`` means "not built since
-        # the last write"; the whole log is what 29 of the 32 call sites ask for.
+        # the last write"; the whole log is what nearly every reader asks for.
         self._full_log: tuple[EpisodicEvent, ...] | None = None
         # Task 16.5: the set of stable observation ids already written into this
         # agent's store, for the fail-loud duplicate guard below. Downstream

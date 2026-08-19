@@ -649,6 +649,19 @@ class TestEnvironmentIsMemoizedPerSetAndRoot:
             with pytest.raises(ValueError, match="Unknown prompt set 'no_such_set'"):
                 build_environment("no_such_set")
 
+    def test_a_warmed_set_whose_directory_disappears_fails_loud(
+        self, tmp_path: Path
+    ) -> None:
+        # The validation stays above the memo: a warmed entry must not go on
+        # serving a set whose directory is gone (AGENTS.md "no silent
+        # fallbacks"), which is what a check moved inside the memo would do.
+        set_dir = tmp_path / "vanishing_set"
+        set_dir.mkdir()
+        assert build_environment("vanishing_set", root=tmp_path) is not None
+        set_dir.rmdir()
+        with pytest.raises(ValueError, match="Unknown prompt set 'vanishing_set'"):
+            build_environment("vanishing_set", root=tmp_path)
+
     def test_a_set_that_appears_later_still_loads(self, tmp_path: Path) -> None:
         # The other half of "no failure is cached": the failed lookup must not
         # poison the key it failed on.
