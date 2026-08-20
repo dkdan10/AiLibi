@@ -10,7 +10,7 @@ class the 19.1 sweep cleaned (a stale refresh date, a stale win rate, a stale
 ladder tip, a graduated lever still documented as a live knob) is exactly what
 regenerates silently otherwise.
 
-Thirteen checks. Each accumulates precise errors; all of them are reported
+Fourteen checks. Each accumulates precise errors; all of them are reported
 together, so one run names every drifted fact rather than the first.
 
 1. **Sample provenance.** ``replays/samples/<set>/MANIFEST.md`` owns each sample
@@ -90,7 +90,11 @@ together, so one run names every drifted fact rather than the first.
    whose source is cheap to read is recomputed instead: the replay count from
    the verifier's own file population, the citation figure from the committed
    instrument's pinned assertions, the vent headline as arithmetic over the
-   reading guide's cross-tab cells. The win rates are re-derived in check 1.
+   reading guide's cross-tab cells, and the proof-vs-inference conviction pair
+   as the column sums of the phase-19 close audit's own partition table — whose
+   proof-present innocent-ejection row must still be zero, because the README
+   row says every innocent ejection sits in the no-proof cell. The win rates are
+   re-derived in check 1.
 10. **The real-report example matches that report.** README.md hands a reader a
     populated eval report because the default fake provider produces an empty
     one; its ejection count and two rates come from that report's own
@@ -104,6 +108,15 @@ together, so one run names every drifted fact rather than the first.
 13. **Every relative link resolves.** Across README.md, docs/history.md,
     docs/glossary.md, audits/README.md and docs/reading-guide.md, each relative
     markdown target (fragment stripped) must name a path that exists.
+14. **The ML page's results table is re-derived from the finalist-eval JSONL.**
+    docs/ml-program.md publishes the program's headline table — per arm, its
+    wins, the same-seed comparator's wins, the paired exact-McNemar p, and the
+    referee verdict that decided adoption. Each is recomputed here from
+    ``training/reports/results-finalist-eval.jsonl``: the win cells and the p
+    through ``scripts/paired_stats.py``, the verdict from each row's own
+    ``watchability.referee_passed``. No published row is skipped and no
+    measured arm may be missing, so a moved cell, a flipped verdict, an
+    invented row and a quietly dropped arm all fail.
 
 ``--repo-root`` points the document and source reads at another tree (the unit
 tests perturb a copy); it defaults to this checkout. The lever registry ALWAYS
@@ -137,6 +150,7 @@ for _bootstrap_path in (_REPO_ROOT, _SCRIPTS_DIR):
 
 from _manifest_writer import parse_manifest  # noqa: E402
 from _verify_samples import sample_paths  # noqa: E402
+from paired_stats import compute_paired_stats  # noqa: E402
 
 from orchestrator.replay import (  # noqa: E402
     SUBSTRATE_FLAG_KEYS,
@@ -370,6 +384,65 @@ _CITATION_PIN_NAMES: Final[tuple[str, ...]] = (
 )
 _VENT_CLAIM: Final = "Correct 9p ejections riding an ejectee-specific vent sighting"
 _VENT_TABLE_HEADER: Final = "Meeting contains a vent flag"
+# The conviction partition: the phase-19 close audit's own per-set table, whose
+# four data columns sum to the pooled pair the README states.
+_PROOF_PARTITION_AUDIT: Final = "audits/audit-phase-19-close.md"
+_PROOF_CLAIM: Final = (
+    "Ejection accuracy with engine-certified proof of the ejectee's role, "
+    "against without"
+)
+_PROOF_TABLE_HEADER: Final = "cell"
+# The four rows read out of that table, by their own labels (emphasis stripped,
+# lowercased), so a reordered table derives the same figures and a renamed row
+# fails loud instead of deriving a silent half-sum.
+_PROOF_ROW: Final = "direct-proof accuracy"
+_NON_PROOF_ROW: Final = "non-direct accuracy"
+_INNOCENT_ROW: Final = "innocent ejections (all in the non-direct cell)"
+_PROOF_INNOCENT_ROW: Final = "proof-present innocent ejections"
+_PROOF_ROW_LABELS: Final[tuple[str, ...]] = (
+    _PROOF_ROW,
+    _NON_PROOF_ROW,
+    _INNOCENT_ROW,
+    _PROOF_INNOCENT_ROW,
+)
+_RATIO_CELL: Final = re.compile(r"(\d+)\s*/\s*(\d+)")
+_COUNT_CELL: Final = re.compile(r"(\d+)")
+_EMPHASIS: Final = re.compile(r"[*`]")
+# The injustice claim the proof row carries beside its two accuracies. Both
+# halves are required: the count AND where those ejections landed, because the
+# count alone is satisfied by a row that puts them in the wrong cell.
+_INJUSTICE_CLAIM: Final = (
+    "{count} of {count} innocent ejections sit in the no-proof cell"
+)
+
+# The ML page's results table and the committed measurement it is derived from.
+# The table is located by its own header cells, so renaming the section above it
+# does not disable the derivation.
+_ML_PAGE: Final = "docs/ml-program.md"
+_FINALIST_JSONL: Final = "training/reports/results-finalist-eval.jsonl"
+_ML_TABLE_HEADER: Final[tuple[str, str]] = ("policy", "impostor win")
+# Every row label opens with its identity in backticks — an arm's committed sha
+# prefix, or the comparator's entrant name. The identity is matched WHOLE (the
+# capture is anchored on the backticks), because a substring test would accept a
+# ``fake-p18-fsm-comparator`` row as the comparator.
+_ML_ROW_IDENTITY: Final = re.compile(r"`([^`]+)`")
+_ML_ARM_SHA: Final = re.compile(r"\A([0-9a-f]{6,})…\Z")
+_ML_ARM_ENTRANT: Final = "p18-imp-{sha}"
+_ML_COMPARATOR_LABEL: Final = "p18-fsm-comparator"
+# ``<k>/<n> = <rate>`` — the rate is checked at the precision the cell prints,
+# so a table may round as it likes but may not round to a different number.
+_ML_FRACTION: Final = re.compile(r"(\d+)\s*/\s*(\d+)\s*=\s*(\d*\.(\d+))")
+# The leading decimal of a p cell. Leading, because the Bonferroni alpha is
+# stated after the p on one row and must not be mistaken for it.
+_ML_P_VALUE: Final = re.compile(r"(\d*\.(\d+))")
+# The referee column's two verdicts, held to ``watchability.referee_passed`` in
+# the same committed JSONL — the adoption gate the whole page turns on. The cell
+# must BE one of these once markdown emphasis is stripped, not merely contain
+# one: "not a FAIL" contains FAIL and means the opposite.
+_ML_REFEREE_PASS: Final = "PASS"
+_ML_REFEREE_FAIL: Final = "FAIL"
+# The published width of the results table: policy, win, comparator, p, referee.
+_ML_TABLE_COLUMNS: Final = 5
 # The cross-tab's rows are read by their own label, flagged first, so a
 # reordered table cannot silently swap the two populations.
 _VENT_ROW_LABELS: Final[tuple[str, str]] = ("yes", "no")
@@ -425,6 +498,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         f"{_READING_GUIDE} carries no file:line citation; and every relative "
         f"link in {len(_LINKED_DOCUMENTS)} front-door documents resolves."
     )
+    print(
+        f"{_ML_PAGE} verified: every published arm's wins, comparator wins, "
+        f"paired exact-McNemar p and referee verdict recompute from "
+        f"{_FINALIST_JSONL}."
+    )
     return 0
 
 
@@ -447,6 +525,7 @@ def check_facts(repo_root: Path) -> list[str]:
     check_audits_index(repo_root, errors)
     check_guide_line_citations(repo_root, errors)
     check_relative_links(repo_root, errors)
+    check_ml_results_table(repo_root, errors)
     return errors
 
 
@@ -1363,7 +1442,11 @@ def check_result_sources(repo_root: Path, readme: str, errors: list[str]) -> Non
     * the citation-compliance figure, from the pinned assertions in the
       committed instrument test;
     * the vent-sighting headline, as arithmetic over the reading guide's own
-      cross-tab cells, so the headline cannot drift from the table under it.
+      cross-tab cells, so the headline cannot drift from the table under it;
+    * the proof-vs-inference conviction pair, as the column sums of the
+      phase-19 close audit's partition table — together with the injustice
+      claim riding in the same row, which holds only while that table's
+      proof-present innocent-ejection row is zero.
 
     What this check does NOT re-derive is deliberate: that the 100 replays
     still *reconstruct* is ``scripts/verify_samples.sh``'s answer, and the
@@ -1454,6 +1537,338 @@ def check_result_sources(repo_root: Path, readme: str, errors: list[str]) -> Non
                 errors,
             )
 
+    audit = read_document(repo_root, _PROOF_PARTITION_AUDIT, errors)
+    if audit is not None:
+        partition = proof_partition(audit)
+        if partition is None:
+            errors.append(
+                f"{_PROOF_PARTITION_AUDIT}: no conviction-partition table with a "
+                f"'{_PROOF_TABLE_HEADER}' header row and its four labelled rows "
+                f"— the {_README} proof-vs-inference figure has nothing to be "
+                "derived from."
+            )
+        else:
+            (proof, non_proof), innocent, proof_innocent = partition
+            expected = (
+                f"{proof[0]} / {proof[1]} = {proof[0] / proof[1]:.3f} vs "
+                f"{non_proof[0]} / {non_proof[1]} = {non_proof[0] / non_proof[1]:.3f}"
+            )
+            compare_result_figure(
+                _PROOF_CLAIM,
+                figures,
+                expected,
+                f"the partition table in {_PROOF_PARTITION_AUDIT}",
+                errors,
+            )
+            check_partition_arithmetic(
+                proof, non_proof, innocent, proof_innocent, errors
+            )
+            check_injustice_cell(readme, innocent, proof_innocent, errors)
+
+
+def check_partition_arithmetic(
+    proof: tuple[int, int],
+    non_proof: tuple[int, int],
+    innocent: int,
+    proof_innocent: int,
+    errors: list[str],
+) -> None:
+    """The partition table against itself, before either half is published.
+
+    An ejection is either correct or it convicted an innocent, so each accuracy
+    row already fixes its own injustice count: ``n - k``. The table states that
+    count separately, which makes the two rows checkable against each other —
+    and worth checking, because agreeing the front door with a drifted audit
+    would otherwise publish an internally contradictory table.
+    """
+
+    for label, (correct, total), stated in (
+        ("no-proof", non_proof, innocent),
+        ("proof-present", proof, proof_innocent),
+    ):
+        implied = total - correct
+        if implied != stated:
+            errors.append(
+                f"{_PROOF_PARTITION_AUDIT}: the {label} cell reads "
+                f"{correct}/{total}, so {implied} of its ejections convicted an "
+                f"innocent, but the table's own {label} innocent-ejection row "
+                f"totals {stated}."
+            )
+
+
+def check_injustice_cell(
+    readme: str, innocent: int, proof_innocent: int, errors: list[str]
+) -> None:
+    """The proof row's own injustice claim, held to the same partition table.
+
+    The row does not only state two accuracies: it states that every innocent
+    ejection landed in the cell without proof. That is a claim about a
+    different pair of table rows, so it is checked against them — an audit that
+    ever records a proof-present innocent ejection must not leave the front
+    door still saying there were none.
+
+    The required wording carries the placement, not just the count. A row
+    reading "79 of 79 innocent ejections sit in the proof-present cell" states
+    the same number and the opposite finding, so matching the count alone would
+    be a gate on shape rather than on meaning.
+    """
+
+    row = results_row(readme, _PROOF_CLAIM)
+    if row is None:
+        return  # compare_result_figure already reported the missing row
+    if proof_innocent:
+        errors.append(
+            f"{_README}: the results row {_PROOF_CLAIM!r} says every innocent "
+            f"ejection sits in the no-proof cell, but {_PROOF_PARTITION_AUDIT} "
+            f"records {proof_innocent} proof-present innocent ejection(s)."
+        )
+        return
+    stated = _INJUSTICE_CLAIM.format(count=innocent)
+    if stated not in " | ".join(row):
+        errors.append(
+            f"{_README}: the results row {_PROOF_CLAIM!r} does not state "
+            f"{stated!r} — {_PROOF_PARTITION_AUDIT}'s partition table counts "
+            f"{innocent} innocent ejections and zero proof-present ones, so "
+            "both the count and the cell they landed in have to be stated here."
+        )
+
+
+def check_ml_results_table(repo_root: Path, errors: list[str]) -> None:
+    """The ML page's results table, recomputed from the committed JSONL.
+
+    The page presents its table as reproducible from committed bytes by naming
+    the command that reproduces it. This runs that command's own library over
+    ``training/reports/results-finalist-eval.jsonl`` and holds every published
+    cell to it: each arm's wins, its same-seed comparator's wins, and the paired
+    exact-McNemar p. Rates are compared at the precision the cell prints, so the
+    table may round as it likes but may not round to a different number.
+
+    Coverage is checked in both directions, and no row is skipped. Every data
+    row must resolve to an entrant the JSONL carries, and every entrant the
+    JSONL carries must have a row — a losing arm quietly dropped, or a
+    flattering one invented, would otherwise pass.
+    """
+
+    page = read_document(repo_root, _ML_PAGE, errors)
+    if page is None:
+        return
+    rows = ml_results_rows(page)
+    if rows is None:
+        errors.append(
+            f"{_ML_PAGE}: no results table with a "
+            f"'{' | '.join(_ML_TABLE_HEADER)}' header row — the published arm "
+            "cells have nothing to be derived from."
+        )
+        return
+    try:
+        stats = {
+            row.entrant: row
+            for row in compute_paired_stats(repo_root / _FINALIST_JSONL)
+        }
+        verdicts = referee_verdicts(repo_root / _FINALIST_JSONL)
+    except (ValueError, OSError) as exc:
+        errors.append(f"{_FINALIST_JSONL}: unreadable as a finalist eval ({exc}).")
+        return
+
+    seen: set[str] = set()
+    comparator_rows = 0
+    widest = max(stats.values(), key=lambda row: row.n)
+    for cells in rows:
+        label = cells[0]
+        if len(cells) < _ML_TABLE_COLUMNS:
+            errors.append(
+                f"{_ML_PAGE}: the results row {label!r} holds {len(cells)} cells, "
+                f"not the {_ML_TABLE_COLUMNS} the table publishes — a row missing "
+                "a column states a figure nothing can be held to."
+            )
+            continue
+        identity = _ML_ROW_IDENTITY.search(label)
+        name = identity.group(1) if identity is not None else ""
+        if name == _ML_COMPARATOR_LABEL:
+            comparator_rows += 1
+            compare_ml_cell(
+                label, "impostor win", cells[1], widest.baseline_wins, widest.n, errors
+            )
+            compare_ml_referee(label, cells[4], verdicts, _ML_COMPARATOR_LABEL, errors)
+            continue
+        match = _ML_ARM_SHA.match(name)
+        if match is None:
+            errors.append(
+                f"{_ML_PAGE}: the results row {label!r} names neither the "
+                f"comparator nor an arm sha, so nothing in {_FINALIST_JSONL} "
+                "answers for it — every published row states a measured arm."
+            )
+            continue
+        entrant = _ML_ARM_ENTRANT.format(sha=match.group(1))
+        arm = stats.get(entrant)
+        if arm is None:
+            errors.append(
+                f"{_ML_PAGE}: the results row {label!r} names {entrant!r}, which "
+                f"{_FINALIST_JSONL} does not carry "
+                f"(entrants: {', '.join(sorted(stats))})."
+            )
+            continue
+        seen.add(entrant)
+        compare_ml_cell(label, "impostor win", cells[1], arm.arm_wins, arm.n, errors)
+        compare_ml_cell(label, "comparator", cells[2], arm.baseline_wins, arm.n, errors)
+        compare_ml_p(label, cells[3], arm.p_exact, errors)
+        compare_ml_referee(label, cells[4], verdicts, entrant, errors)
+
+    if comparator_rows != 1:
+        errors.append(
+            f"{_ML_PAGE}: the results table holds {comparator_rows} "
+            f"{_ML_COMPARATOR_LABEL!r} rows — every arm is measured against "
+            "exactly one comparator, so the table states exactly one."
+        )
+    for entrant in sorted(set(stats) - seen):
+        errors.append(
+            f"{_ML_PAGE}: {_FINALIST_JSONL} carries the arm {entrant!r}, which the "
+            "results table does not state — every measured arm is published, "
+            "including the ones that lost."
+        )
+
+
+def compare_ml_cell(
+    label: str, column: str, cell: str, wins: int, total: int, errors: list[str]
+) -> None:
+    """One ``<k>/<n> = <rate>`` cell, held to the recomputed pair."""
+
+    match = _ML_FRACTION.search(cell)
+    if match is None:
+        errors.append(
+            f"{_ML_PAGE}: the {column} cell of results row {label!r} reads "
+            f"{cell!r}, which holds no '<wins>/<games> = <rate>' figure to check "
+            f"against the recomputed {wins}/{total}."
+        )
+        return
+    stated = (int(match.group(1)), int(match.group(2)))
+    if stated != (wins, total):
+        errors.append(
+            f"{_ML_PAGE}: the {column} cell of results row {label!r} reads "
+            f"{stated[0]}/{stated[1]}, but {_FINALIST_JSONL} recomputes to "
+            f"{wins}/{total}."
+        )
+        return
+    rate, places = float(match.group(3)), len(match.group(4))
+    if round(wins / total, places) != rate:
+        errors.append(
+            f"{_ML_PAGE}: the {column} cell of results row {label!r} states the "
+            f"rate {match.group(3)}, but {wins}/{total} rounds to "
+            f"{round(wins / total, places)} at that precision."
+        )
+
+
+def compare_ml_p(label: str, cell: str, p_exact: float, errors: list[str]) -> None:
+    """One paired-p cell, held to the recomputed exact McNemar p."""
+
+    match = _ML_P_VALUE.search(cell)
+    if match is None:
+        errors.append(
+            f"{_ML_PAGE}: the p cell of results row {label!r} reads {cell!r}, "
+            f"which holds no p-value to check against the recomputed {p_exact}."
+        )
+        return
+    stated, places = float(match.group(1)), len(match.group(2))
+    if round(p_exact, places) != stated:
+        errors.append(
+            f"{_ML_PAGE}: the p cell of results row {label!r} states "
+            f"{match.group(1)}, but {_FINALIST_JSONL} recomputes the exact "
+            f"McNemar p to {round(p_exact, places)} at that precision."
+        )
+
+
+def compare_ml_referee(
+    label: str, cell: str, verdicts: dict[str, bool], entrant: str, errors: list[str]
+) -> None:
+    """One referee cell, held to ``watchability.referee_passed`` in the JSONL.
+
+    This column is the adoption gate: it is what "none became the default"
+    means. The cell must BE one of the two verdicts once markdown emphasis is
+    stripped, never merely contain one — "not a FAIL" contains FAIL and states
+    its opposite — and a cell that is neither fails as loudly as a wrong one.
+    """
+
+    passed = verdicts.get(entrant)
+    if passed is None:
+        errors.append(
+            f"{_ML_PAGE}: the referee cell of results row {label!r} has no "
+            f"{entrant!r} verdict in {_FINALIST_JSONL} to check against."
+        )
+        return
+    stated = _EMPHASIS.sub("", cell).strip().upper()
+    if stated not in (_ML_REFEREE_PASS, _ML_REFEREE_FAIL):
+        errors.append(
+            f"{_ML_PAGE}: the referee cell of results row {label!r} reads "
+            f"{cell!r}, which is neither {_ML_REFEREE_PASS} nor "
+            f"{_ML_REFEREE_FAIL} — this column carries a verdict, not prose."
+        )
+        return
+    recorded = _ML_REFEREE_PASS if passed else _ML_REFEREE_FAIL
+    if stated != recorded:
+        errors.append(
+            f"{_ML_PAGE}: the referee cell of results row {label!r} states "
+            f"{stated}, but {_FINALIST_JSONL} records "
+            f"watchability.referee_passed = {passed} ({recorded}) for {entrant!r}."
+        )
+
+
+def referee_verdicts(jsonl_path: Path) -> dict[str, bool]:
+    """Each entrant's ``watchability.referee_passed`` from the committed JSONL.
+
+    Read here rather than through :func:`compute_paired_stats`, which is about
+    the paired win test and carries no gate outcome. ``ValueError`` on a row
+    that answers neither question, because a silently skipped row would drop an
+    arm's verdict out of the comparison it is supposed to be held to.
+    """
+
+    verdicts: dict[str, bool] = {}
+    with jsonl_path.open(encoding="utf-8") as handle:
+        for number, line in enumerate(handle, start=1):
+            if not line.strip():
+                continue
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError as exc:
+                raise ValueError(f"line {number} is not JSON ({exc})") from exc
+            entrant = row.get("entrant")
+            watchability = row.get("watchability")
+            passed = (
+                watchability.get("referee_passed")
+                if isinstance(watchability, dict)
+                else None
+            )
+            if not isinstance(entrant, str) or not isinstance(passed, bool):
+                raise ValueError(
+                    f"line {number} carries no entrant + "
+                    "watchability.referee_passed pair"
+                )
+            verdicts[entrant] = passed
+    return verdicts
+
+
+def ml_results_rows(page: str) -> list[list[str]] | None:
+    """Every full row of the ML page's results table, in order.
+
+    Full rows, not the two compared cells :func:`results_rows` keeps: this
+    table's arm, comparator and p live in three different columns.
+    """
+
+    rows: list[list[str]] | None = None
+    for line in page.splitlines():
+        cells = table_cells(line)
+        if cells is None or len(cells) < 4:
+            if rows is not None:
+                break
+            continue
+        if rows is None:
+            if tuple(cells[:2]) == _ML_TABLE_HEADER:
+                rows = []
+            continue
+        if all(_TABLE_RULE_CELL.match(cell) for cell in cells):
+            continue
+        rows.append(cells)
+    return rows
+
 
 def compare_result_figure(
     claim: str,
@@ -1512,6 +1927,70 @@ def vent_crosstab(guide: str) -> tuple[tuple[int, int], tuple[int, int]] | None:
     if set(labelled) != set(_VENT_ROW_LABELS):
         return None
     return labelled[_VENT_ROW_LABELS[0]], labelled[_VENT_ROW_LABELS[1]]
+
+
+def proof_partition(
+    audit: str,
+) -> tuple[tuple[tuple[int, int], tuple[int, int]], int, int] | None:
+    """The conviction partition, pooled across the audit table's four sets.
+
+    Returns ``((proof_correct, proof_total), (other_correct, other_total))``
+    followed by the innocent-ejection total and the proof-present innocent
+    total. Each accuracy cell contributes its own ``k/n`` — the leading ratio
+    of the cell, ahead of any interval or advisory note — so a set that
+    recorded no cell at all (``0/0``) pools as the nothing it is. Rows are
+    keyed on their own labels, so reordering the table changes nothing while
+    renaming a row fails loud. ``None`` when the table is absent, mislabelled,
+    or a cell holds no number: format drift the caller reports rather than
+    pools a half-sum through.
+    """
+
+    rows: dict[str, list[str]] = {}
+    seen_header = False
+    for line in audit.splitlines():
+        cells = table_cells(line)
+        if cells is None or len(cells) < 5:
+            if seen_header and rows:
+                break
+            continue
+        if not seen_header:
+            seen_header = _EMPHASIS.sub("", cells[0]).strip() == _PROOF_TABLE_HEADER
+            continue
+        if all(_TABLE_RULE_CELL.match(cell) for cell in cells):
+            continue
+        label = _EMPHASIS.sub("", cells[0]).strip().lower()
+        if label in rows:
+            return None
+        rows[label] = cells[1:5]
+    if set(_PROOF_ROW_LABELS) - set(rows):
+        return None
+
+    def ratio(label: str) -> tuple[int, int] | None:
+        pooled = [0, 0]
+        for cell in rows[label]:
+            match = _RATIO_CELL.search(cell)
+            if match is None:
+                return None
+            pooled[0] += int(match.group(1))
+            pooled[1] += int(match.group(2))
+        return (pooled[0], pooled[1]) if pooled[1] else None
+
+    def total(label: str) -> int | None:
+        pooled = 0
+        for cell in rows[label]:
+            match = _COUNT_CELL.search(cell)
+            if match is None:
+                return None
+            pooled += int(match.group(1))
+        return pooled
+
+    proof, non_proof = ratio(_PROOF_ROW), ratio(_NON_PROOF_ROW)
+    innocent, proof_innocent = total(_INNOCENT_ROW), total(_PROOF_INNOCENT_ROW)
+    if proof is None or non_proof is None:
+        return None
+    if innocent is None or proof_innocent is None:
+        return None
+    return (proof, non_proof), innocent, proof_innocent
 
 
 def check_populated_report_example(
@@ -1725,6 +2204,20 @@ def results_rows(markdown: str) -> list[tuple[str, str]] | None:
             continue
         rows.append((cells[0], cells[1]))
     return rows
+
+
+def results_row(markdown: str, claim: str) -> list[str] | None:
+    """Every cell of the results row stating ``claim``, or ``None``.
+
+    :func:`results_rows` keeps only the two compared cells; a row whose source
+    column carries a claim of its own needs the whole row.
+    """
+
+    for line in markdown.splitlines():
+        cells = table_cells(line)
+        if cells is not None and cells and cells[0] == claim:
+            return cells
+    return None
 
 
 def table_cells(line: str) -> list[str] | None:

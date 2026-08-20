@@ -701,6 +701,17 @@ For scale (later phase): switch episodic store to SQLite per agent, add embeddin
 
 ### 6.6 Rendering memory for the LLM
 
+> **Target, not as built (2026-08-19) — two lines of the sample view below never render.**
+> The `p1: trust 0.70` line and the whole `## Open contradictions:` block are the intended
+> shape, not HEAD's output. `BeliefState.adjust_trust` has no caller outside `tests/`, so a
+> production trust score never moves off its initial value; and `apply_contradiction_rule`
+> calls `record_contradiction` on the derived `BeliefState` it returns rather than on the
+> agent's persistent store, so the contradictions block appeared in **0 of 1,656** replay
+> renders sampled by the 2026-08-19 review. Suspicion, the alibi map and the observations
+> block are as drawn. Read the rest of this section as the design; `docs/architecture.md`
+> and [`docs/adr/0001-three-load-bearing-decisions.md`](docs/adr/0001-three-load-bearing-decisions.md)
+> carry the as-built status.
+
 `memory/store.py::render_for_prompt(meeting_id)` produces a token-budgeted, structured view:
 
 ```

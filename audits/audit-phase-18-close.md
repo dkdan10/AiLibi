@@ -1246,3 +1246,61 @@ for name, kc, nc, ks, ns in CELLS:
 ``` The §1 evidence cells are read from the committed
 `training/reports/results-finalist-eval.jsonl` and `report-finalist-eval.md` §16.a, and the ruling
 itself from `audits/audit-phase-18-flip-emergence.md` §3–§13.
+
+## 11. Errata (coordination, 2026-08-19 — the Task 20.13 comparator-defect pass; additive, no in-place rewrites)
+
+Anchor: the 2026-08-19 three-track review — `audits/review-2026-08-19/B/verdicts.md` C-3
+(verdict **CONFIRMED and understated**) and `audits/review-2026-08-19/A/verdicts.md` G-12
+(verdict **CONFIRMED-BUG**) — whose rates Task 20.15 landed as committed pins:
+`tests/agents/test_impostor_policy.py::TestCommittedCorpusTargetingPins` over
+`eval/evidence_honesty.py`'s I-11 cells, with all four sets stated [VERIFIED] at
+`audits/audit-phase-20-preregistration.md:174-175`. Every item below is **additive**: no
+recorded byte, no table cell, no verdict and no hash above this section is rewritten, and
+the committed `training/reports/results-finalist-eval.jsonl` is read, never edited. **One
+reading does change, and it is named plainly** — items 1–2 make §1.1's win-edge column an
+upper bound rather than a point estimate. Item 3 records what these items do **not** touch.
+
+1. **The scripted comparator declines 45.8 % of its own free kills, and 168 of those are
+   the defect.** Over the 50 committed 9p2i seeds the policy declines
+   **190/415 = 45.8 %** of its legal, zero-witness kill opportunities. That census splits,
+   with nothing unattributed: **168** (**40.5 %** of all free kills) fall to the seam
+   defect — the kill path re-validates only `targets[0]`, and the ranking branch breaks an
+   exact-1.0 score tie by the lower player id — while the other **22** are the policy's own
+   named branches, **15** fellow-defer and **7** cover, which are deliberate and not a bug.
+   The defect-attributable figure is therefore 168/415, and 190/415 is the total decline
+   rate. Instrument:
+   `eval/evidence_honesty.py`'s I-11 free-kill cells, pinned by
+   `tests/agents/test_impostor_policy.py::TestCommittedCorpusTargetingPins`. The
+   reconstruction replays `decide()` against the recorded bytes, so this is the committed
+   comparator's own behaviour, not a model of it.
+
+2. **The same policy spends 8–12 % of its 9p2i decisions ranking a player already out of
+   the game.** The dead-set is built only from *seen* bodies, so an ejected player stays
+   targetable: **303/2461 = 12.3 %** on `replays/samples/9p2i` (222 of them ejected, 81
+   never-witnessed deaths) and **555/6663 = 8.3 %** on `replays/ml_corpus/9p2i`, against
+   **0/632** and **0/579** on the two 4p1i sets — a nine-player-roster phenomenon. 10,335
+   impostor decisions were re-run offline against the recorded action stream with **0
+   mismatches**, and one seed (36) is a demonstrably thrown game. Same instrument, same
+   pins.
+
+   **Direction of the confound, stated plainly.** Both defects **depress the comparator**:
+   they cost it kills and waste its decision budget. §1.1's `p18-fsm-comparator` cell
+   (13/50 = 0.26) is therefore a floor, and the four learned arms' win edges (**+0.12 to
+   +0.30**) are **upper bounds** on the real gap. So are the paired impostor-side McNemar
+   cells the Task-19.20 erratum added at `training/reports/report-finalist-eval.md` §18
+   item 1, which test those same edges against those same comparator rows. A corrected
+   comparator can only narrow them.
+
+3. **What items 1–2 do NOT touch.** The referee verdicts stand — the defects cost the
+   comparator wins, not evidence supply, and a stronger comparator would not have made a
+   learned arm more watchable, so the four referee FAILs are if anything understated. The
+   **NO-FLIP ruling stands** (it turns on the AND-criterion, and every candidate fails the
+   referee half outright). The fourteen pre-registered emergence rulings, the zero-EMERGENT
+   tally, and N1/N2's rate contrasts stand: they are witnessed-kill and co-present-kill
+   *rates*, measured per kill, not win-rate differences. This close's own McNemar cell is
+   the **crew** pair (§4, `0bf179b7…` gen-9 against its same-opponent gen-0 control,
+   exact p = 1.0) — a different comparison against a different control, untouched here.
+   The pre-registration ordering stands. **The repair is routed, not performed here:**
+   Task 20.32 fixes the mover and
+   Task 20.38 re-measures on corrected bytes. This erratum states the confound; it neither
+   repairs it nor re-measures anything.

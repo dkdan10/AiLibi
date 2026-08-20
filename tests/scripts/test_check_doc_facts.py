@@ -34,6 +34,7 @@ _COPIED = (
     "replays/samples/4p1i/MANIFEST.md",
     "replays/samples/9p2i/MANIFEST.md",
     "audits/audit-phase-18-close.md",
+    "audits/audit-phase-19-close.md",
     "eval/vote_correctness.py",
     "replays/samples/4p1i/tournament-eval-report.json",
     "replays/samples/9p2i/tournament-eval-report.json",
@@ -46,6 +47,8 @@ _COPIED = (
     "docs/reading-guide.md",
     "audits/README.md",
     "tests/eval/test_vj_instruments.py",
+    "docs/ml-program.md",
+    "training/reports/results-finalist-eval.jsonl",
 )
 
 # The front-door checks also ENUMERATE paths whose contents they never open:
@@ -81,6 +84,25 @@ _HISTORY = "docs/history.md"
 _READING_GUIDE = "docs/reading-guide.md"
 _CITATION_INSTRUMENT = "tests/eval/test_vj_instruments.py"
 _AUDITS_INDEX = "audits/README.md"
+_PROOF_AUDIT = "audits/audit-phase-19-close.md"
+_PROOF_ROW = (
+    "| **direct-proof accuracy** | **68/68 = 1.000** [0.947, 1.0] | "
+    "**213/213 = 1.000** [0.982, 1.0] | 9/9 = 1.000 | 20/20 = 1.000 |\n"
+)
+_NON_PROOF_ROW = (
+    "| **non-direct accuracy** | **10/33 = 0.303** [0.174, 0.473] | "
+    "**35/89 = 0.393** [0.298, 0.497] | 1/3 = 0.333 (advisory) | 0/0 — no cell |\n"
+)
+_INNOCENT_ROW = "| innocent ejections (all in the non-direct cell) | 23 | 54 | 2 | 0 |"
+_PROOF_INNOCENT_ROW = (
+    "| proof-present innocent ejections | **0** | **0** | **0** | **0** |"
+)
+_ML_PAGE = "docs/ml-program.md"
+_ML_ARM_ROW = "| `ea4bc955…` (put to the bar) | 26/50 = 0.52 | 13/50 = 0.26 |"
+_ML_DROPPED_ARM_ROW = (
+    "| `bfd145cb…` | 28/50 = 0.56 | 13/50 = 0.26 | **0.0041** | **FAIL** |\n"
+)
+_ML_COMPARATOR_ROW = "| `p18-fsm-comparator` (scripted) | 13/50 = 0.26 |"
 # The one dialect term the front door keeps, and the link that defines it.
 _BASELINE_LINK = "[baseline 6](docs/glossary.md#baseline-n-the-reference-recording)"
 _BASELINE_ANCHOR_HEADING = "### baseline N (the reference recording)"
@@ -945,6 +967,319 @@ def test_mislabelled_vent_crosstab_row_fails_loud(doc_tree: Path) -> None:
     assert "no vent cross-tab" in errors[0]
 
 
+def test_proof_partition_derived_from_the_close_audit(doc_tree: Path) -> None:
+    # The pair is the column sum of the audit's own partition table, so a
+    # moved cell there moves the front-door figure rather than being absorbed.
+    _substitute(doc_tree, _PROOF_AUDIT, "**68/68 = 1.000**", "**60/68 = 0.882**")
+    errors = check_doc_facts.check_facts(doc_tree)
+    figure = [error for error in errors if "310 / 310 = 1.000" in error]
+    assert len(figure) == 1
+    assert "'302 / 310 = 0.974 vs 46 / 125 = 0.368'" in figure[0]
+    # The arithmetic cross-check reads the same drift independently: eight of
+    # the proof-present cell's ejections would now have convicted an innocent,
+    # against a row that still totals zero.
+    assert len(errors) == 2
+    assert any("proof-present cell reads 302/310" in error for error in errors)
+
+
+def test_proof_partition_read_by_label_not_position(doc_tree: Path) -> None:
+    # Reading the rows by order would invert the claim on a reordered table.
+    # Keyed on the labels, reordering changes nothing...
+    text = _read(doc_tree, _PROOF_AUDIT)
+    assert _PROOF_ROW + _NON_PROOF_ROW in text
+    _write(
+        doc_tree,
+        _PROOF_AUDIT,
+        text.replace(_PROOF_ROW + _NON_PROOF_ROW, _NON_PROOF_ROW + _PROOF_ROW),
+    )
+    assert check_doc_facts.check_facts(doc_tree) == []
+
+
+def test_swapped_proof_partition_labels_detected(doc_tree: Path) -> None:
+    # ...while swapping which cell is the proof cell inverts the finding, and
+    # is caught: convictions would then be near-chance WITH proof.
+    text = _read(doc_tree, _PROOF_AUDIT)
+    assert _PROOF_ROW in text and _NON_PROOF_ROW in text
+    swapped = _PROOF_ROW.replace(
+        "**direct-proof accuracy**", "**non-direct accuracy**"
+    ) + _NON_PROOF_ROW.replace("**non-direct accuracy**", "**direct-proof accuracy**")
+    _write(doc_tree, _PROOF_AUDIT, text.replace(_PROOF_ROW + _NON_PROOF_ROW, swapped))
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert any("'46 / 125 = 0.368 vs 310 / 310 = 1.000'" in error for error in errors)
+    # And both injustice identities break with them, because the swap moves the
+    # 79 wrongful convictions into the cell that had none.
+    assert len(errors) == 3
+
+
+def test_proof_present_innocent_ejection_reaches_the_front_door(
+    doc_tree: Path,
+) -> None:
+    # The row claims every innocent ejection landed without proof. One
+    # proof-present innocent ejection makes that false, and it must fail here
+    # rather than sit on the front door.
+    _substitute(
+        doc_tree,
+        _PROOF_AUDIT,
+        _PROOF_INNOCENT_ROW,
+        "| proof-present innocent ejections | **1** | **0** | **0** | **0** |",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert any("1 proof-present innocent ejection(s)" in error for error in errors)
+    # The same row also contradicts its own accuracy cell, which recorded a
+    # perfect 310/310 and therefore no wrongful conviction at all.
+    assert len(errors) == 2
+    assert any("proof-present cell reads 310/310" in error for error in errors)
+
+
+def test_innocent_ejection_total_drift_detected(doc_tree: Path) -> None:
+    # The 79 of 79 is the same table's arithmetic, so it drifts with it.
+    _substitute(
+        doc_tree,
+        _PROOF_AUDIT,
+        _INNOCENT_ROW,
+        "| innocent ejections (all in the non-direct cell) | 25 | 54 | 2 | 0 |",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert any(
+        "'81 of 81 innocent ejections sit in the no-proof cell'" in error
+        for error in errors
+    )
+    # ...and the drifted total no longer matches its own accuracy row either.
+    assert len(errors) == 2
+    assert any("no-proof cell reads 46/125" in error for error in errors)
+
+
+def test_missing_proof_partition_table_fails_loud(doc_tree: Path) -> None:
+    # Losing the table must not read as "nothing to derive from".
+    _substitute(
+        doc_tree,
+        _PROOF_AUDIT,
+        "| cell | samples 9p2i |",
+        "| population | samples 9p2i |",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "no conviction-partition table" in errors[0]
+
+
+def test_renamed_proof_partition_row_fails_loud(doc_tree: Path) -> None:
+    # A row this derivation cannot identify must fail rather than pool a
+    # half-sum out of the rows it does recognize.
+    _substitute(
+        doc_tree, _PROOF_AUDIT, "| **direct-proof accuracy** |", "| **proof cell** |"
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "no conviction-partition table" in errors[0]
+
+
+def test_innocent_ejections_moved_to_the_wrong_cell_detected(doc_tree: Path) -> None:
+    # The count alone is not the claim. A row stating the same 79 of 79 but
+    # putting them in the proof-present cell states the opposite finding, so
+    # matching the number without the placement would gate shape, not meaning.
+    _substitute(
+        doc_tree,
+        _README,
+        "79 of 79 innocent ejections sit in the no-proof cell",
+        "79 of 79 innocent ejections sit in the proof-present cell",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "'79 of 79 innocent ejections sit in the no-proof cell'" in errors[0]
+
+
+def test_ml_arm_win_count_derived_from_the_finalist_jsonl(doc_tree: Path) -> None:
+    # The ML page publishes the program's headline table; every cell is
+    # recomputed from the committed measurement, not trusted as prose.
+    _substitute(doc_tree, _ML_PAGE, "| 26/50 = 0.52 |", "| 27/50 = 0.54 |")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "reads 27/50" in errors[0]
+    assert "recomputes to 26/50" in errors[0]
+
+
+def test_ml_p_value_drift_detected(doc_tree: Path) -> None:
+    _substitute(doc_tree, _ML_PAGE, "| **0.0072** |", "| **0.0100** |")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "states 0.0100" in errors[0]
+    assert "0.0072" in errors[0]
+
+
+def test_ml_rate_that_contradicts_its_own_fraction_detected(doc_tree: Path) -> None:
+    # The rate is checked at the precision the cell prints: the table may round
+    # as it likes, but it may not round to a different number.
+    _substitute(doc_tree, _ML_PAGE, "| 26/50 = 0.52 |", "| 26/50 = 0.60 |")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "states the rate 0.60" in errors[0]
+    assert "rounds to 0.52" in errors[0]
+
+
+def test_ml_comparator_row_drift_detected(doc_tree: Path) -> None:
+    _substitute(
+        doc_tree,
+        _ML_PAGE,
+        _ML_COMPARATOR_ROW,
+        "| `p18-fsm-comparator` (scripted) | 15/50 = 0.30 |",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "reads 15/50" in errors[0]
+    assert "recomputes to 13/50" in errors[0]
+
+
+def test_ml_dropped_arm_detected(doc_tree: Path) -> None:
+    # Publishing only the flattering arms is the failure mode a one-directional
+    # check would miss: every entrant the JSONL carries must have a row.
+    _substitute(doc_tree, _ML_PAGE, _ML_DROPPED_ARM_ROW, "")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "p18-imp-bfd145cb" in errors[0]
+    assert "the results table does not state" in errors[0]
+
+
+def test_ml_arm_absent_from_the_jsonl_fails_loud(doc_tree: Path) -> None:
+    # An arm nobody recorded must fail rather than be skipped as unmatched.
+    _substitute(doc_tree, _ML_PAGE, "`ea4bc955…`", "`deadbeef…`")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert any("'p18-imp-deadbeef'" in error for error in errors)
+
+
+def test_ml_referee_verdict_flip_detected(doc_tree: Path) -> None:
+    # The referee column IS the adoption gate — it is what "none became the
+    # default" means — so a FAIL flipped to PASS must not ship.
+    _substitute(
+        doc_tree,
+        _ML_PAGE,
+        "| **0.3075 — not significant** | **FAIL** |",
+        "| **0.3075 — not significant** | **PASS** |",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "states PASS" in errors[0]
+    assert "referee_passed = False" in errors[0]
+
+
+def test_ml_unreadable_referee_verdict_fails_loud(doc_tree: Path) -> None:
+    # A cell stating neither verdict is not a pass: the gate outcome has to be
+    # legible before it can be compared.
+    _substitute(
+        doc_tree,
+        _ML_PAGE,
+        "| **0.3075 — not significant** | **FAIL** |",
+        "| **0.3075 — not significant** | — |",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "is neither PASS nor FAIL" in errors[0]
+
+
+def test_ml_invented_arm_row_detected(doc_tree: Path) -> None:
+    # The reverse-coverage check proves every measured arm is published; this
+    # proves the converse, that nothing unmeasured is.
+    _substitute(
+        doc_tree,
+        _ML_PAGE,
+        _ML_DROPPED_ARM_ROW,
+        _ML_DROPPED_ARM_ROW
+        + "| `mystery-arm` | 50/50 = 1.00 | 13/50 = 0.26 | **0.0001** | PASS |\n",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "neither the comparator nor an arm sha" in errors[0]
+
+
+def test_ml_lookalike_comparator_row_detected(doc_tree: Path) -> None:
+    # The comparator identity is matched whole, not as a substring: a
+    # `fake-p18-fsm-comparator` row carrying the comparator's own cells would
+    # otherwise ride in as a second PASS.
+    _substitute(
+        doc_tree,
+        _ML_PAGE,
+        _ML_DROPPED_ARM_ROW,
+        _ML_DROPPED_ARM_ROW
+        + "| `fake-p18-fsm-comparator` | 13/50 = 0.26 | — | — | PASS |\n",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "neither the comparator nor an arm sha" in errors[0]
+
+
+def test_ml_duplicated_comparator_row_detected(doc_tree: Path) -> None:
+    # Every arm is measured against exactly one comparator, so the table states
+    # exactly one — two rows would leave the reader two baselines.
+    text = _read(doc_tree, _ML_PAGE)
+    row = "| `p18-fsm-comparator` (scripted) | 13/50 = 0.26 | — | — | PASS |\n"
+    assert row in text
+    _write(doc_tree, _ML_PAGE, text.replace(row, row + row, 1))
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "holds 2 'p18-fsm-comparator' rows" in errors[0]
+
+
+def test_ml_negated_referee_verdict_detected(doc_tree: Path) -> None:
+    # "not a FAIL" contains FAIL and states its opposite; the cell has to BE a
+    # verdict, not contain one.
+    _substitute(
+        doc_tree,
+        _ML_PAGE,
+        "| **0.3075 — not significant** | **FAIL** |",
+        "| **0.3075 — not significant** | not a FAIL |",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "this column carries a verdict, not prose" in errors[0]
+
+
+def test_ml_short_results_row_fails_loud(doc_tree: Path) -> None:
+    # A row missing the referee column must be reported alongside the other
+    # fact errors, never raise out of the gate.
+    _substitute(
+        doc_tree,
+        _ML_PAGE,
+        "| `bfd145cb…` | 28/50 = 0.56 | 13/50 = 0.26 | **0.0041** | **FAIL** |",
+        "| `bfd145cb…` | 28/50 = 0.56 | 13/50 = 0.26 | **0.0041** |",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 2
+    assert any("holds 4 cells, not the 5" in error for error in errors)
+    assert any("p18-imp-bfd145cb" in error for error in errors)
+
+
+def test_partition_innocent_total_contradicting_its_own_accuracy_detected(
+    doc_tree: Path,
+) -> None:
+    # An ejection is either correct or it convicted an innocent, so the
+    # non-direct row's own 46/125 fixes 79. Moving the innocent counts while
+    # updating the README to match must still fail: the audit would then be
+    # internally contradictory.
+    _substitute(
+        doc_tree,
+        _PROOF_AUDIT,
+        _INNOCENT_ROW,
+        "| innocent ejections (all in the non-direct cell) | 22 | 54 | 2 | 0 |",
+    )
+    _substitute(
+        doc_tree,
+        _README,
+        "79 of 79 innocent ejections sit in the no-proof cell",
+        "78 of 78 innocent ejections sit in the no-proof cell",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "the no-proof cell reads 46/125" in errors[0]
+    assert "totals 78" in errors[0]
+
+
+def test_missing_ml_results_table_fails_loud(doc_tree: Path) -> None:
+    # Losing the table must not read as "nothing to derive from".
+    _substitute(doc_tree, _ML_PAGE, "| policy | impostor win |", "| model | win |")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "no results table" in errors[0]
+
+
 def test_report_example_ejection_count_drift_detected(doc_tree: Path) -> None:
     # The example exists because the fake provider's report is empty; its
     # scalars come from the committed report, not from prose.
@@ -1035,10 +1370,13 @@ def test_indexed_audit_that_no_longer_exists_detected(doc_tree: Path) -> None:
     (doc_tree / "audits" / "audit-phase-19-close.md").unlink()
     errors = check_doc_facts.check_facts(doc_tree)
     assert any("indexes audit-phase-19-close.md" in error for error in errors)
-    # Every other error is the same deletion seen through the link check: the
-    # four front-door documents that pointed at the record now point at nothing.
+    # Every other error is the same deletion seen through another reader: the
+    # front-door documents that pointed at the record now point at nothing, and
+    # the conviction-partition figure loses the table it is derived from.
     assert all(
-        "indexes audit-phase-19-close.md" in error or "does not exist" in error
+        "indexes audit-phase-19-close.md" in error
+        or "does not exist" in error
+        or "unreadable" in error
         for error in errors
     )
 
@@ -1097,11 +1435,13 @@ def test_stubbed_results_table_detected(doc_tree: Path) -> None:
     # Agreement over a stub is not agreement: a gutted table must fail rather
     # than pass vacuously.
     text = _read(doc_tree, _README)
-    kept = [
-        line
-        for line in text.splitlines()
-        if not (line.startswith("| Impostor win rate") or line.startswith("| Eject "))
-    ]
+    gutted = (
+        "| Impostor win rate",
+        "| Eject ",
+        "| Ejection accuracy ",
+        "| Learned tactical policies ",
+    )
+    kept = [line for line in text.splitlines() if not line.startswith(gutted)]
     _write(doc_tree, _README, "\n".join(kept) + "\n")
     errors = check_doc_facts.check_facts(doc_tree)
     assert any("fewer than the 4 this check needs" in error for error in errors)
