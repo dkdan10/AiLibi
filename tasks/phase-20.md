@@ -2040,7 +2040,7 @@ also asked to keep.
 ### Task 20.13 — The results stated once: docs/ml-program.md, the README results table, and the comparator-defect errata
 **Branch:** `phase-20-results-page`
 **Depends on:** 20.12 (the front-door rewrite lands first — this task fills the results section and the ML paragraph that rewrite leaves anchored, and quotes the reading guide only after its trim); also after 20.11 (the engine-rule line both tasks add to the design record lands first)
-**Section refs:** audits/review-2026-08-19/C/collated-portfolio.md §A6 (state the results once — MUST for the research lead, GOOD for three more personas; the concrete fix names both halves, the README table and the ≤2-page page); audits/review-2026-08-19/C/p2-ml-research-lead.md §3 Weakest-1 ("no artifact tells the ML story in the standard research shape … `training/README.md` is a tier map, not that document") + §6 ("the single change that would most raise it") + §7 MUST-2; audits/review-2026-08-19/D/FINAL-synthesis.md §4 wave-1 rows 1.7 and 1.8 (the two roadmap items this task implements), §2 row 5 (the "(suspicion, trust, alibi)" claim graded UNDERMINED) and §2 row 9 (the win edge graded CAVEAT — "the method holds, one input is contaminated"); audits/review-2026-08-19/B/collated-findings.md C-72 (`trust` never written; `## Open contradictions` rendered in 0 of 1,656 replay renders); audits/review-2026-08-19/B/verdicts.md C-3 (CONFIRMED **and understated** — 190/415 = 45.8 % of free zero-witness kills declined over the 50 committed 9p2i seeds, 168/168 of them on an exact 1.0 score tie broken by the lower id; the reconstruction replays `decide()` against the recorded bytes with an empty `policy_would_kill_but_action_differs` bucket); audits/review-2026-08-19/A/verdicts.md G-12 (CONFIRMED-BUG — 10,335 impostor decisions re-run offline with 0 mismatches; ghost-top 303/2461 = 12.3 % on samples/9p2i, 555/6663 = 8.3 % on ml_corpus/9p2i, **0/100 across both 4p1i sets**; seed 36 provably thrown); README.md:78 (the "(suspicion, trust, alibi)" claim), :84 and :107 (the "+0.12 to +0.30" and "+0.16" win-edge sentences, both stated with no comparator caveat); docs/adr/0001-three-load-bearing-decisions.md:18 (decision 3 — "trust scores, alibi map, suspicion graph"); agents/memory/beliefs.py:1111 (`adjust_trust` — the definition is the only non-test occurrence in the tree; seven callers, all under `tests/`), :1493 (`record_contradiction` inside `apply_contradiction_rule` at :1340 — the write lands on the derived result, not the persistent store) with agents/memory/store.py:1811 (the `## Open contradictions:` block that renders); audits/audit-phase-19-close.md §4.1 (pooled 310/310 = 1.000 with direct proof vs 46/125 = 0.368 without; 79/79 of innocent ejections in the non-direct cell); audits/audit-phase-18-close.md:78-84 (the four-arm table: win 0.52 / 0.56 / 0.38 / 0.42857 vs the fresh same-seed `p18-fsm-comparator` 13/50 = 0.26, referee FAIL ×4), :105 ("+0.12 to +0.30"); audits/audit-phase-17-close.md:25 and :60 (`utility-es` win 0.52 = 26/50, Δ +0.16 over the same-seed FSM 0.36, referee FAIL on two gauges); audits/audit-phase-18-flip-emergence.md:466-481 (N1 witnessed-kill rate 30/197 = 0.15228 vs 8/174 = 0.04598, z = +3.370; N2 co-present kills 20/197 = 0.10152 vs 0/174, z = +4.321; both NOT-DEMONSTRATED because clause (c) is unsatisfiable by construction); docs/reading-guide.md:37-51 (§1 numbers table), :139-197 (§3 — the 165-meeting cross-tab 68/2 flagged vs 10/21 unflagged), :323-368 (§6 the honest ML story); training/README.md:1 (the title — a disposition ledger), :128-165 (§3 what the program positively learned); agents/tactical/learned/forward.py:14 (the 19-weight linear scorer, no numpy/torch), :111 (`ENCODER_VERSION = "impostor-option-features-v1"`), :114 (`GENOME_LENGTH` = 18 features + bias); training/env.py:1-40 (the rollout env drives the real `HeadlessGame`; the legal-action mask is derived from `engine/rules.py`); training/rewards.py:16-26 (the corrected shaping claim — telescoping is not invariance); eval/watchability.py:9-20 (SELECTION-ONLY — the referee is a champion gate and is NEVER a training reward); scripts/paired_stats.py:1-36 (stdlib-only exact McNemar + Wilson, written so a fresh clone reproduces the cells); training/reports/report-finalist-eval.md:2493 (the §18 errata form — additive, dated, nothing above it rewritten)
+**Section refs:** audits/review-2026-08-19/C/collated-portfolio.md §A6 (state the results once — MUST for the research lead, GOOD for three more personas; the concrete fix names both halves, the README table and the ≤2-page page); audits/review-2026-08-19/C/p2-ml-research-lead.md §3 Weakest-1 ("no artifact tells the ML story in the standard research shape … `training/README.md` is a tier map, not that document") + §6 ("the single change that would most raise it") + §7 MUST-2; audits/review-2026-08-19/D/FINAL-synthesis.md §4 wave-1 rows 1.7 and 1.8 (the two roadmap items this task implements), §2 row 5 (the "(suspicion, trust, alibi)" claim graded UNDERMINED) and §2 row 9 (the win edge graded CAVEAT — "the method holds, one input is contaminated"); audits/review-2026-08-19/B/collated-findings.md C-72 (`trust` never written; `## Open contradictions` rendered in 0 of 1,656 replay renders); audits/review-2026-08-19/B/verdicts.md C-3 (CONFIRMED **and understated** — 190/415 = 45.8 % of free zero-witness kills declined over the 50 committed 9p2i seeds, 168/168 of them on an exact 1.0 score tie broken by the lower id; the reconstruction replays `decide()` against the recorded bytes with an empty `policy_would_kill_but_action_differs` bucket); audits/review-2026-08-19/A/verdicts.md G-12 (CONFIRMED-BUG — 10,335 impostor decisions re-run offline with 0 mismatches; ghost-top 303/2461 = 12.3 % on samples/9p2i, 555/6663 = 8.3 % on ml_corpus/9p2i, 0/632 and 0/579 across the two 4p1i sets; seed 36 provably thrown) — **both rates are now committed pins**, landed by 20.15 (PR #365): tests/agents/test_impostor_policy.py:1812-1864 (`TestCommittedCorpusTargetingPins` — 190/415 with the 168 / 15 / 7 / 0 decline-reason split, ghost-top 303/2461, 555/6663, 0/632, 0/579, 222 ejected / 81 unseen on samples/9p2i, 0 reconstruction mismatches over 10,335 decisions) computed by eval/evidence_honesty.py's I-11 cells, with audits/audit-phase-20-preregistration.md:174-175 stating all four sets [VERIFIED]; README.md:83 (the belief-state sentence as 20.12 left it — the "(suspicion, trust, alibi)" wording is already gone, so this leg is verify-only), :88-96 (the "What the measurements said" section and table 20.12 built, whose 100/100, 520/520 and 87 % rows this task keeps), :100 (the marked anchor `<!-- ANCHOR: a later contract adds the ML program's paragraph, titled by its result, plus the table's before/after column. -->` this task fills), :107 (the numberless "Four learned tactical policies each beat the scripted one on wins" sentence — the "+0.12 to +0.30" and "+0.16" figures no longer appear in README and now live only in the two close audits); docs/adr/0001-three-load-bearing-decisions.md:18 (decision 3 — "trust scores, alibi map, suspicion graph"); agents/memory/beliefs.py:1111 (`adjust_trust` — the definition is the only non-test occurrence in the tree; seven callers, all under `tests/`), :1493 (`record_contradiction` inside `apply_contradiction_rule` at :1340 — the write lands on the derived result, not the persistent store) with agents/memory/store.py:1811 (the `## Open contradictions:` block that renders); audits/audit-phase-19-close.md §4.1 (pooled 310/310 = 1.000 with direct proof vs 46/125 = 0.368 without; 79/79 of innocent ejections in the non-direct cell); audits/audit-phase-18-close.md:78-84 (the four-arm table: win 0.52 / 0.56 / 0.38 / 0.42857 vs the fresh same-seed `p18-fsm-comparator` 13/50 = 0.26, referee FAIL ×4), :105 ("+0.12 to +0.30"); audits/audit-phase-17-close.md:25 and :60 (`utility-es` win 0.52 = 26/50, Δ +0.16 over the same-seed FSM 0.36, referee FAIL on two gauges); audits/audit-phase-18-flip-emergence.md:466-481 (N1 witnessed-kill rate 30/197 = 0.15228 vs 8/174 = 0.04598, z = +3.370; N2 co-present kills 20/197 = 0.10152 vs 0/174, z = +4.321; both NOT-DEMONSTRATED because clause (c) is unsatisfiable by construction); docs/reading-guide.md:11-22 (§1 "The numbers worth knowing" — the canonical numbers table after the 20.12 trim, rows at :15-22), :57-84 (§3 "What the corpus demonstrates — and what it does not", the 165-meeting cross-tab 68/2 flagged vs 10/21 unflagged at :74-77), :102 (the marked anchor `<!-- ANCHOR: a later contract adds the research-shaped ML page and links it here. -->`; the old §6 ML story was cut in the trim and the file now has five sections); training/README.md:1 (the title — a disposition ledger), :128-165 (§3 what the program positively learned); agents/tactical/learned/forward.py:14 (the 19-weight linear scorer, no numpy/torch), :111 (`ENCODER_VERSION = "impostor-option-features-v1"`), :114 (`GENOME_LENGTH` = 18 features + bias); training/env.py:1-40 (the rollout env drives the real `HeadlessGame`; the legal-action mask is derived from `engine/rules.py`); training/rewards.py:16-26 (the corrected shaping claim — telescoping is not invariance); eval/watchability.py:9-20 (SELECTION-ONLY — the referee is a champion gate and is NEVER a training reward); scripts/paired_stats.py:1-36 (stdlib-only exact McNemar + Wilson, written so a fresh clone reproduces the cells); training/reports/report-finalist-eval.md:2493 (the §18 errata form — additive, dated, nothing above it rewritten)
 **Complexity:** Medium
 **Record impact:** none (documentation and errata only — no rendered, detector, replay or report byte moves, so nothing here waits on the Phase-20 adopting record)
 **Measurement:** `uv run python scripts/paired_stats.py training/reports/results-finalist-eval.jsonl` reproduces every McNemar cell the results table states (ea4bc955 17/4 p=0.0072; bfd145cb 20/5 p=0.0041; shipped 6d327dcb 15/9 p=0.3075 n.s.; 7f73929d 12/3 p=0.0352, failing Bonferroni α=0.0125), output pasted into the PR Summary; `uv run python scripts/check_doc_facts.py` green; `uv run pytest tests/scripts/test_check_doc_facts.py -q` green; `wc -w docs/ml-program.md` ≤ ~1,400.
@@ -2082,28 +2082,31 @@ source and, where the number is volatile, its baseline and record date — plus 
 paragraph titled by its result rather than by its process.
 
 Two claims get corrected in the same pass because they are the ones a hostile reader breaks
-first. **The memory claim.** README.md:78 and `docs/adr/0001-three-load-bearing-decisions.md:18`
-advertise a three-channel belief state; `trust` has no production writer at HEAD
+first. **The memory claim.** `docs/adr/0001-three-load-bearing-decisions.md:18` still
+advertises a three-channel belief state (20.12 already removed the claim from README, whose
+:83 now reads "a belief state derived from it"); `trust` has no production writer at HEAD
 (`agents/memory/beliefs.py:1111` is the definition, and the only other callers in the tree are
 seven under `tests/`), and the contradictions block at `agents/memory/store.py:1811` rendered
 in 0 of 1,656 replay renders the review sampled — the `record_contradiction` call at
 `agents/memory/beliefs.py:1493` writes a derived state inside `apply_contradiction_rule`, and
 nothing persists it (`audits/review-2026-08-19/B/collated-findings.md` C-72;
 `audits/review-2026-08-19/D/FINAL-synthesis.md` §2 row 5 grades the claim UNDERMINED). The
-README is living documentation and is rewritten to say what is live and that `trust` is a
-present-but-unwritten channel; the ADR is a record of a 2026-05-01 decision and gets an
+README needed no further repair on this claim — 20.12 already dropped the three-channel
+wording, so this task only re-verifies it at HEAD; the ADR is a record of a 2026-05-01 decision and gets an
 additive dated note, never a rewrite.
 
-And **the comparator claim.** README.md:84 and `:107` state a "+0.12 to +0.30" and a "+0.16"
-win edge over the same-seed scripted FSM, and both close audits record the cells. The review found
+And **the comparator claim.** The "+0.12 to +0.30" and "+0.16" win edges over the same-seed
+scripted FSM no longer appear in README (20.12 cut the figures; :107 now states the edge in
+words), but both close audits record the cells and are the surface a reader reaches. The review found
 the comparator carries two identified target-selection defects, both 9p2i-only, both depressing
 the FSM: the kill seam re-validates only `targets[0]`, so **190/415 = 45.8 %** of free
-zero-witness kills are declined — 168/168 of the attributable misses on an exact 1.0 score tie
-broken by the lower player id (`audits/review-2026-08-19/B/verdicts.md` C-3, verdict CONFIRMED
+zero-witness kills are declined — 168 of the 190 in the ranking branch's exact-1.0 score tie
+broken by the lower player id, the other 22 in the named fellow-defer (15) and cover (7)
+branches with none unattributed (`audits/review-2026-08-19/B/verdicts.md` C-3, verdict CONFIRMED
 and understated); and the dead-set is built only from seen bodies, so an ejected player stays
 targetable and the mover spends **303/2461 = 12.3 %** (samples/9p2i) and **555/6663 = 8.3 %**
 (ml_corpus/9p2i) of its decisions topping its target list with someone the whole table watched
-get ejected — **0/100 across both 4p1i sets** — with seed 36 a demonstrably thrown game
+get ejected — **0/632 and 0/579 across the two 4p1i sets** — with seed 36 a demonstrably thrown game
 (`audits/review-2026-08-19/A/verdicts.md` G-12, verdict CONFIRMED-BUG; 10,335 decisions re-run
 offline with 0 mismatches against the recorded action stream). A project whose thesis is that it
 does not publish numbers it knows are confounded cannot leave this unstated: the honest paragraph
@@ -2122,11 +2125,12 @@ later contracts, and the errata say so.
 - scripts/check_doc_facts.py; (the results table's new numbers checked against their committed sources)
 - tests/scripts/test_check_doc_facts.py
 - DESIGN.md; (the §6.6 target-not-as-built caption only — historical content untouched)
+- docs/reading-guide.md; (TWO edits only: the numbers-table row(s) mirroring whatever this task adds to the README results table — `scripts/check_doc_facts.py::check_results_agreement` fails any README results row with no identical-figure match in the guide's canonical table — and the marked anchor at :102, replaced by a link to docs/ml-program.md; the 20.12 trim is not re-opened)
 
 **Files NOT in scope:**
 - training/ code and artifacts (nothing retrains and nothing is re-fit; every number is quoted from a committed report or audit and re-derived with `scripts/paired_stats.py`)
-- docs/reading-guide.md (the front-door rewrite owns the trim; this task quotes it, never edits it)
-- eval/ (no new instrument here — the review-measured comparator rates become committed pins in the honesty-instrument contract)
+- docs/reading-guide.md beyond the two edits named in scope (the 20.12 trim owns the rest of the file; this task quotes it, never re-shapes it)
+- eval/ (no new instrument here — 20.15 already landed the comparator rates as committed pins; this task quotes eval/evidence_honesty.py's I-11 cells, it does not extend them)
 - agents/tactical/impostor_policy.py (the defects are STATED, not repaired; the repair is a separate Wave-2 contract and the errata name it as routed)
 - docs/media/ and the architecture SVG (the architecture-exhibit contract owns that asset; this page's figure is inline)
 - replays/ and training/reports/*.jsonl (committed measurement bytes are read, never edited)
@@ -2135,10 +2139,10 @@ later contracts, and the errata say so.
 - [ ] `docs/ml-program.md` exists in research shape — problem, environment (with one inline figure; no new asset file), method, one results table, N1/N2, limitations, related work — at ≤2 pages (`wc -w` ≤ ~1,400, quoted in the PR), and every number in it carries an inline citation to a committed path with a line or section anchor.
 - [ ] The results table's four learned arms and the comparator match `audits/audit-phase-18-close.md:78-84` cell for cell, and each arm's paired p comes from `uv run python scripts/paired_stats.py training/reports/results-finalist-eval.jsonl` re-run in-session (output pasted into the PR), with the shipped champion's 15/9 p=0.3075 stated as not significant rather than elided.
 - [ ] N1 and N2 are stated with their cells (30/197 = 0.15228 vs 8/174 = 0.04598, z = +3.370; 20/197 = 0.10152 vs 0/174, z = +4.321), framed as specification gaming of the referee, AND with the NOT-DEMONSTRATED ruling and the clause-(c)-unsatisfiable reason in the same breath — the framing never upgrades the claim.
-- [ ] README's "What the measurements said" table states, each row with its committed source: 100/100 committed replays reconstruct byte-identically; 520/520 eject ballots carry a valid citation, followed by the one-sentence qualification that valid means resolvable, not supported; the proof-vs-inference cross-tab 310/310 = 1.000 against 46/125 = 0.368 with 79/79 innocent ejections in the non-direct cell; the 87 % vent-sighting cross-tab (68/78 correct 9p ejections; the 165-meeting 2×2 — 70 flagged → 68/2, 95 unflagged → 10/21) with "general social deduction: NOT demonstrated" as the row's own reading; and one ML paragraph whose title is its result (four learned arms beat the same-seed comparator on wins, none was adopted, and why the gate is right to say so).
+- [ ] README's "What the measurements said" table (built by 20.12 at README.md:88-96) states, each row with its committed source — the 100/100, 520/520 and 87 % rows already exist and are re-verified rather than rewritten, and every row this task ADDS is mirrored with an identical claim string and figure in docs/reading-guide.md's numbers table so `check_results_agreement` stays green: 100/100 committed replays reconstruct byte-identically; 520/520 eject ballots carry a valid citation, followed by the one-sentence qualification that valid means resolvable, not supported; the proof-vs-inference cross-tab 310/310 = 1.000 against 46/125 = 0.368 with 79/79 innocent ejections in the non-direct cell; the 87 % vent-sighting cross-tab (68/78 correct 9p ejections; the 165-meeting 2×2 — 70 flagged → 68/2, 95 unflagged → 10/21) with "general social deduction: NOT demonstrated" as the row's own reading; and one ML paragraph whose title is its result, written in place of the marked anchor at README.md:100 (four learned arms beat the same-seed comparator on wins, none was adopted, and why the gate is right to say so), with docs/reading-guide.md:102's anchor likewise replaced by a link to the new page.
 - [ ] Every volatile number the README table states carries its baseline and record date inline; the PR lists which rows are machine-checked by `scripts/check_doc_facts.py` today and which are stamped-only, so the unchecked set is recorded rather than silent.
-- [ ] README.md:78 no longer asserts a live three-channel belief state without qualification, and `docs/adr/0001-three-load-bearing-decisions.md` carries an additive dated note stating that `trust` is a present-but-unwritten channel at HEAD (the definition at `agents/memory/beliefs.py:1111`, callers only under `tests/`) and that the rendered contradictions block appeared in 0 of 1,656 sampled renders — with the grep and the render count quoted in the PR as the verify-then-fix step.
-- [ ] The comparator-defect paragraph exists in `docs/ml-program.md` and as an additive dated erratum in BOTH close audits, quoting 45.8 % (190/415 free zero-witness kills declined, 168/168 on the id tie-break) and the 8–12 % ghost-top band (303/2461 = 12.3 % samples/9p2i, 555/6663 = 8.3 % corpus/9p2i, 0/100 on 4p1i), naming the review's two measurement harnesses as the source, stating that the rates become committed pins in the honesty-instrument contract and the mover repair is a later contract, and saying plainly which direction the confound runs (the comparator is depressed, so the learned arms' win edge is an upper bound).
+- [ ] README's belief-state sentence (README.md:83, as 20.12 left it) is re-verified at HEAD as asserting no live three-channel state — no README edit is due here unless that re-verification finds one — and `docs/adr/0001-three-load-bearing-decisions.md` carries an additive dated note stating that `trust` is a present-but-unwritten channel at HEAD (the definition at `agents/memory/beliefs.py:1111`, callers only under `tests/`) and that the rendered contradictions block appeared in 0 of 1,656 sampled renders — with the grep and the render count quoted in the PR as the verify-then-fix step.
+- [ ] The comparator-defect paragraph exists in `docs/ml-program.md` and as an additive dated erratum in BOTH close audits, quoting 45.8 % (190/415 free zero-witness kills declined, 168 of them in the ranking branch's exact-1.0 id tie-break, 15 fellow-defer, 7 cover, 0 unattributed) and the 8–12 % ghost-top band (303/2461 = 12.3 % samples/9p2i, 555/6663 = 8.3 % corpus/9p2i, 0/632 and 0/579 on the two 4p1i sets), naming as the source the committed pins 20.15 landed — `tests/agents/test_impostor_policy.py::TestCommittedCorpusTargetingPins` over `eval/evidence_honesty.py`'s I-11 cells, with the 2026-08-19 review as their origin — and stating that the mover repair is Task 20.32 and the re-measurement Task 20.38, and saying plainly which direction the confound runs (the comparator is depressed, so the learned arms' win edge is an upper bound).
 - [ ] Both errata are additive and dated: `git diff` on the two audit files shows appended lines only, no verdict, table cell or hash above the erratum heading altered, and the PR quotes the diffstat.
 - [ ] `training/README.md` opens with the program summary and a pointer to `docs/ml-program.md`, with the tier map second and the reopening checklist last; the freeze-header coverage registry and every existing section body survive the reorder unchanged (verified by a word-level diff quoted in the PR).
 - [ ] `uv run mypy .` passes.
@@ -2152,7 +2156,7 @@ later contracts, and the errata say so.
 **Implementation hint:**
 
 Everything this page needs already exists in the tree; the job is selection and shape, not
-research. Write from `docs/reading-guide.md` §1 and §6, `training/README.md` §3,
+research. Write from `docs/reading-guide.md` §1 and §3 (the 20.12 trim cut the old §6 ML story), `training/README.md` §3,
 `audits/audit-phase-19-input-claude.md` §6 (the frank retrospective, including its own
 "roughly 20 % of the apparatus delivered ~90 % of the decision value" line — quoting the
 project's self-criticism is the credibility move, not a risk),
@@ -2185,8 +2189,12 @@ an upper bound and the referee failures are, if anything, understated).
 
 Step 5 — the README table rows the front-door rewrite already machine-checks stay as they
 are; for the rows this task adds, prefer a stamped quote with its committed path over an
-invented check. Record the split in the PR. If a row's number is cheap to check and the
-existing checker can take it without touching its file, say so in the PR as a routed
+invented check. Two merged checks bite here: a row added to the README table must also be
+added to `docs/reading-guide.md`'s numbers table with the identical claim string and figure or
+`check_results_agreement` fails, and any private-dialect term the new ML paragraph introduces
+must sit inside a `docs/glossary.md` link on its FIRST README occurrence
+(`check_dialect_terms`). Record the split in the PR. If a row's number is cheap to check and
+the existing checker can take it without touching its file, say so in the PR as a routed
 follow-up rather than editing a file outside this scope.
 
 Step 6 — `training/README.md` is a reorder plus a pointer, not a rewrite. Move §3 to the
@@ -3559,11 +3567,11 @@ shape; the corpus-4p1i non-direct cell is the obvious member, with no cell at al
 
 ### Task 20.23 — Completed-task memory comes from the engine event, not a pending-id flip
 **Branch:** `phase-20-completion-from-events`
-**Depends on:** 20.15 — the evidence-honesty instrument set must land first: this task's counterfactual pin IS that module's fabricated-completion cell, read under the lever ON, and its OFF reading is the number the pin moves away from.; also after 20.22 (no lever merges before the bars are ratified)
-**Section refs:** G-3 (audits/review-2026-08-19/A/collated-findings.md §G-3, severity P0, corroboration 5; audits/review-2026-08-19/A/verdicts.md §claim 3 — VERDICT CONFIRMED-BUG, with the four-set prevalence table, the 100% redistribution correlation and the three minted STRONG flags) and C-2 (audits/review-2026-08-19/B/collated-findings.md §C-2 row, severity P1; audits/review-2026-08-19/B/verdicts.md §claim 4 — VERDICT CONFIRMED, with the engine+ObservationService+ingest+render repro); audits/review-2026-08-19/D/FINAL-synthesis.md §1 RC3 (the root cause) and §4 wave-2 row 2.1 (the roadmap item this task implements); agents/memory/store.py:1155-1207 (the inference inside `_build_observations`), :1161-1168 (the false invariant comment), :1170-1177 (the PR #155 impostor-gate rationale), :1179 (the `role == "CREWMATE"` gate), :1189-1203 (the emit), :78 (`_SALIENCE_COMPLETED_TASK`); engine/tick.py:314-367 (`redistribute_dead_tasks`), :365-366 (the owned set GROWS), :401 (the kill-path call); orchestrator/game.py:1235 (the ejection-path call), :2026-2027 (dead players get no packet); engine/maps/canonical_1.yaml:45 (`dead_task_rule: redistribute`); observation/service.py:638-645 (the lexicographically-first pending pick), :647-691 (`_owned_task_ids_for_agent`, impostor branch :672-683); observation/packet.py:73 (`SelfView.owned_task_ids`, present since 15.22); agents/perception.py:326-361 (`_self_state_payload`, records no `owned_task_ids`); tests/agents/test_memory_rendering.py:835-852 (the pin that enshrines the wrong rule); tests/agents/test_perception.py:128-135 (the exact self-state payload assertion); the lever pattern — agents/strategic/prompts/loader.py:258-290 (the live default-OFF `*_enabled(env)` resolver) and orchestrator/replay.py:547-572 (`_TOGGLEABLE_LEVER_RESOLVERS`); the OFF-path instruments — tests/meetings/test_prompt_byte_golden.py:1-40 and scripts/verify_samples.sh:1-24
+**Depends on:** 20.15 — the evidence-honesty instrument set must land first: its committed I-5 fabricated-completion cell is the OFF number this task's ON path must drive to zero, and re-running it green is the proof that the perception widening moved no cell; the ON census over the committed games belongs to the offline-counterfactual task, which owns the only OFF/ON entry point (audits/audit-phase-20-preregistration.md §8).; also after 20.22 (no lever merges before the bars are ratified); also after 20.32 (the mover repair and its I-11 instrument-mode change land before any lever, so the levers’ counterfactual pins read one instrument shape and the comparator is repaired before the freeze)
+**Section refs:** G-3 (audits/review-2026-08-19/A/collated-findings.md §G-3, severity P0, corroboration 5; audits/review-2026-08-19/A/verdicts.md §claim 3 — VERDICT CONFIRMED-BUG, with the four-set prevalence table, the 100% redistribution correlation and the three minted STRONG flags) and C-2 (audits/review-2026-08-19/B/collated-findings.md §C-2 row, severity P1; audits/review-2026-08-19/B/verdicts.md §claim 4 — VERDICT CONFIRMED, with the engine+ObservationService+ingest+render repro); audits/review-2026-08-19/D/FINAL-synthesis.md §1 RC3 (the root cause) and §4 wave-2 row 2.1 (the roadmap item this task implements); agents/memory/store.py:1155-1207 (the inference inside `_build_observations`), :1161-1168 (the false invariant comment), :1170-1177 (the PR #155 impostor-gate rationale), :1179 (the `role == "CREWMATE"` gate), :1189-1203 (the emit), :78 (`_SALIENCE_COMPLETED_TASK`); engine/tick.py:314-367 (`redistribute_dead_tasks`), :365-366 (the owned set GROWS), :401 (the kill-path call); orchestrator/game.py:1235 (the ejection-path call), :2026-2027 (dead players get no packet); engine/maps/canonical_1.yaml:45 (`dead_task_rule: redistribute`); observation/service.py:638-645 (the lexicographically-first pending pick), :647-691 (`_owned_task_ids_for_agent`, impostor branch :672-683); observation/packet.py:73 (`SelfView.owned_task_ids`, present since 15.22); agents/perception.py:326-361 (`_self_state_payload`, records no `owned_task_ids`); tests/agents/test_memory_rendering.py:835-852 (the pin that enshrines the wrong rule); tests/agents/test_perception.py:128-135 (the exact self-state payload assertion); the lever pattern — agents/strategic/prompts/loader.py:321-364 (the live default-OFF `*_enabled(env)` resolver) and orchestrator/replay.py:547-572 (`_TOGGLEABLE_LEVER_RESOLVERS`); the OFF-path instruments — tests/meetings/test_prompt_byte_golden.py:1-40 and scripts/verify_samples.sh:1-24
 **Complexity:** Medium
 **Record impact:** lever-gated (default-OFF) until the Phase-20 adopting record
-**Measurement:** `uv run pytest tests/agents/test_memory_rendering.py tests/agents/test_perception.py tests/eval/test_evidence_honesty.py -q` green; `AILIBI_TASK_COMPLETION_FROM_EVENTS=1 uv run python scripts/measure_baseline.py --honesty replays/samples/9p2i` reports fabricated completions 0 where the same command without the export reports the committed OFF cell (the ratified pin 19/458 over rendered rows that reached a model; the review's offline re-render measured 53/529); the ON reading is 0 for all four committed sets, and `bash scripts/verify_samples.sh` plus the prompt byte-golden stay green with the lever unset.
+**Measurement:** `uv run pytest tests/agents/test_memory_rendering.py tests/agents/test_perception.py tests/eval/test_evidence_honesty.py -q` green; `uv run python scripts/measure_baseline.py --honesty replays/samples/9p2i` reports the committed OFF cell (the ratified pin 19/458 over rendered rows that reached a model; the review's offline re-render measured 53/529) with `AILIBI_TASK_COMPLETION_FROM_EVENTS=1` exported AND with it unset — the instrument scores I-5 off the recorded prompt bytes and exposes no lever slate by design (audits/audit-phase-20-preregistration.md §8), so the ON census over the 300 committed games is Task 20.34's `scripts/counterfactual_phase20.py` and the ON rule here is fixture-pinned in tests/agents/test_memory_rendering.py; and `bash scripts/verify_samples.sh` plus the prompt byte-golden stay green with the lever unset.
 
 The memory store mints first-hand completions that never happened. `agents/memory/store.py:1161-1166`
 justifies its inference on an invariant — "Its owned set only ever shrinks -- a task completes; none is
@@ -3623,7 +3631,7 @@ touches no prompt template (Task 20.31 owns the single prompt-set bump).
 - agents/memory/working.py; (only if the self-state model needs the field — the episodic payload is `Mapping[str, Any]`, so the expected diff is empty)
 - tests/agents/test_memory_rendering.py; (the wrong-rule pin replaced; OFF-path byte-identity; ON-path: a redistribution never mints a completion, a real completion still renders, a payload without the field renders nothing)
 - tests/agents/test_perception.py; (the exact-payload assertion at :128-135 gains `owned_task_ids`)
-- tests/eval/test_evidence_honesty.py; (the counterfactual pin: fabricated completion lines over the four committed sets under the lever ON = 0)
+- tests/eval/test_evidence_honesty.py; (the committed I-5 pins re-run unchanged after the perception widening — the instrument rebuilds memory through `agents.perception` — plus a lever-exported-ON re-read proving it is inert; the ON census is the offline-counterfactual task's)
 - observation/service.py; (the :63-66 comment only — the same false invariant in prose; no behaviour change)
 
 **Files NOT in scope:**
@@ -3642,7 +3650,7 @@ touches no prompt template (Task 20.31 owns the single prompt-set bump).
 - [ ] The `role == "CREWMATE"` asymmetry is gone: the ON path applies the same rule to both roles, and a test drives an impostor's rotating pretend `pending_task_id` over a constant camouflage window and asserts zero completion lines — the PR #155 property held by construction rather than by a role gate.
 - [ ] Fail-closed on missing evidence: a self-state payload without an `owned_task_ids` key (a hand-built fixture or a pre-widening row) mints NO completion under the lever ON, pinned by a test — the ON path never fabricates when it cannot see the set.
 - [ ] `tests/agents/test_memory_rendering.py:835-852 test_pending_rollover_to_next_map_id_emits_completion` no longer pins the any-change-emits rule; it is rewritten to pin the disappearance rule (or replaced by named ON/OFF tests) and its comment states why the old premise was false.
-- [ ] The counterfactual pin in `tests/eval/test_evidence_honesty.py`: the fabricated-completion cell evaluated with the lever ON via the resolver's `env` parameter reads 0 for samples/9p2i, samples/4p1i, ml_corpus/9p2i and ml_corpus/4p1i, with the OFF cell asserted in the same test as the perturbation — the gate can fail, and the PR quotes both columns.
+- [ ] `tests/eval/test_evidence_honesty.py::test_i5_fabricated_completion_pins` still reads 19/458, 40/1311, 15/61 and 14/58 — unchanged by the perception widening and unchanged with `AILIBI_TASK_COMPLETION_FROM_EVENTS=1` exported, because the instrument scores I-5 off the recorded prompt bytes and deliberately exposes no lever slate (audits/audit-phase-20-preregistration.md §8); the ON census over the four sets is Task 20.34's, and this PR quotes the OFF column beside the fixture-level ON proof.
 - [ ] The false invariant comment at `agents/memory/store.py:1161-1168` is deleted; the replacement states the true rule in one sentence plus one provenance line (no docstring history narration), and the impostor-gate rationale at :1170-1177 is rewritten to say the property now holds by construction.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
@@ -3657,14 +3665,14 @@ touches no prompt template (Task 20.31 owns the single prompt-set bump).
 Step 1 — the field. `_self_state_payload` (agents/perception.py:326-361) gains one key,
 `"owned_task_ids": self_state.owned_task_ids`, beside `pending_task_id`. It is a tuple of map ids; keep it
 a tuple (the payload already carries `fellow_impostor_ids` as one). Nothing else in production reads the
-self-state payload's shape — the tactical policies read named keys (agents/tactical/impostor_policy.py:408,
+self-state payload's shape — the tactical policies read named keys (agents/tactical/impostor_policy.py:467,
 agents/tactical/crewmate_policy.py:430) and the training features read `packet.self_state.owned_task_ids`
 directly (agents/tactical/learned/crew_forward.py:728) — so the blast radius is the one exact-dict
 assertion at tests/agents/test_perception.py:128-135. Grep before you widen.
 
 Step 2 — the resolver. Put it in agents/memory/store.py next to `observation_id_rendering_enabled`
 (:189-208), which is the same module's lever home, but copy the LIVE default-OFF shape from
-agents/strategic/prompts/loader.py:258-290 rather than the retired always-True bodies: an
+agents/strategic/prompts/loader.py:321-364 rather than the retired always-True bodies: an
 `ENV_TASK_COMPLETION_FROM_EVENTS` constant, a frozenset of truthy strings, `env if env is not None else
 os.environ`. Export both from `__all__` (:1886). `render_for_prompt` already takes `env` and already reads
 one lever this way at :275-285 — read yours in the same place and pass a plain `bool` into
@@ -3683,15 +3691,19 @@ nothing.
 Step 4 — the pins. The OFF-path proof already exists: tests/meetings/test_prompt_byte_golden.py
 reconstructs every committed meeting through the real render path
 (`api.replay_loader.ReplayLoader._walk` with `collect_memory=True`, then `render_for_prompt`), so an
-additive payload key that nothing reads under OFF is proven inert by running it. The ON-path
-counterfactual rides the same walk: the honesty instrument re-renders from reconstructed packets rather
-than parsing the recorded prompt text, which is what lets the same cell be read under either lever state.
+additive payload key that nothing reads under OFF is proven inert by running it. The ON path is
+proved by fixture, not by that instrument: the honesty module scores I-5 by matching its
+`_COMPLETED_LINE` regex against the recorded `LLMCallRecord.prompt` (eval/evidence_honesty.py:1496-1528)
+and takes no lever-slate parameter by design (audits/audit-phase-20-preregistration.md §8), so its cells
+cannot move under this lever — Task 20.34's `scripts/counterfactual_phase20.py` owns the OFF/ON census.
 Toggle through the `env` parameter, never `os.environ`, so the pins stay parallel-safe.
 
-Step 5 — the numbers. Quote the four OFF cells as review-measured over the committed baseline-6 bytes and
-re-pinned by the honesty instrument. Note in the PR that D/FINAL-synthesis.md §4 row 2.1 writes the
-samples figure as "65/594" while A/verdicts.md §claim 3's per-set table gives 53 + 15 = 68 over 529 + 65 =
-594; the instrument's re-derivation is the authority and the difference must be explained, not averaged.
+Step 5 — the numbers. Quote the four RATIFIED OFF cells — 19/458, 40/1311, 15/61, 14/58
+(audits/audit-phase-20-preregistration.md §3.1) — not the review's offline re-render (53/529, 140/1528,
+15/65, 14/64). §3.2 already rules on the divergence: the pin counts rendered rows that actually REACHED a
+model, the review re-rendered memory offline, and the review disagrees with itself on the samples-pooled
+total (68 vs 65; the instrument's own recount over the prompt population is 34). Cite that ruling in the
+PR; do not re-litigate it.
 
 **Public types introduced:**
 - `agents.memory.store.task_completion_from_events_enabled`
@@ -5102,7 +5114,7 @@ fix into a firewall breach.
 ### Task 20.32 — The impostor mover stops declining free kills and stalking ejected players
 **Branch:** `phase-20-impostor-fsm-repair`
 **Depends on:** 20.15 (the free-kill and ghost-top cells become committed instruments with pinned baseline values first, so this task re-derives them under the revised policy instead of inventing a second harness; the same task also makes the read-only reconstruction pass over the impostor policy module and its test file, and a read-only pass must land before a behaviour change to the same two files); also after 20.22 (the co-intervention is declared in the ratified memo before it lands)
-**Section refs:** C-3 [audits/review-2026-08-19/B/verdicts.md claim 5 — CONFIRMED and "understated"; the register row at audits/review-2026-08-19/B/collated-findings.md C-3 still quotes the pre-verification 387/233/126, superseded there by the verified 415/225/190]; C-4 [audits/review-2026-08-19/B/collated-findings.md C-4, measured in audits/review-2026-08-19/B/agents-tactical.md §2 F2 — reviewer-measured, NOT adversarially re-verified, so it is corroborated here by G-12 rather than relied on alone]; G-12 [audits/review-2026-08-19/A/verdicts.md claim 12 — CONFIRMED-BUG over 300 games / 10,335 impostor decisions with 0 mismatches against the recorded action stream]; audits/review-2026-08-19/D/FINAL-synthesis.md §4 row 2.12 (the two-line fix), §5 ruling R3 (defect-not-lever; pre-register as a named co-intervention), §4 row 1.8 and the caveat table row 9 (the ML comparator errata this repair retires); anchors re-verified at HEAD — agents/tactical/impostor_policy.py:354-394 (the kill seam; `best = targets[0]` at :355, the co-location re-validation at :372-375, the walk-toward-best fall-through at :388-392), :766-810 (`_kill_available_now`, the same `targets[0]`-only shape at :799), :813-839 (`_confirmed_dead_from_bodies`, `saw_body` only), :937-1009 (`_scored_targets`, the `(-score, player_id)` sort at :1008), :185 (`_STALENESS_THRESHOLD = 30`), :1216-1253 (`_idle`, the pretend-task blend the fall-through lands in); agents/memory/store.py:110 and :433-440 (the `meeting_boundary` episodic marker every living agent receives at the resume tick), :549-575 (`record_meeting_outcome`), :134 (`AgentMemory.meeting_history`); agents/memory/working.py:176-185 (`MeetingHistory.record`); agents/tactical/features.py:678-696 (the v3 encoder, today's only meeting-history consumer); orchestrator/game.py:2297-2306 (the per-living-agent post-meeting fold), :2644 (the policy is handed `memory.episodic` only); api/replay_loader.py:1291-1318 (the replay-side mirror of that fold — beliefs and testimony, never the meeting outcome); agents/perception.py:62-82 (no ejection event type exists); engine/visibility.py:98-127 (the impostor keeps `same_room_and_adjacent` at base visibility); engine/rules.py:56-98 (the engine kill backstop, `:62-76`); agents/tactical/learned/forward.py:404-413 and training/bakeoff/utility_es.py:426-430 (both option enumerators call the policy's private statics); orchestrator/replay.py:234 (`TacticalPolicyStamp`), :319 (`FSM_DEFAULT_POLICY_ID`)
+**Section refs:** C-3 [audits/review-2026-08-19/B/verdicts.md claim 5 — CONFIRMED and "understated"; the register row at audits/review-2026-08-19/B/collated-findings.md C-3 still quotes the pre-verification 387/233/126, superseded there by the verified 415/225/190]; C-4 [audits/review-2026-08-19/B/collated-findings.md C-4, measured in audits/review-2026-08-19/B/agents-tactical.md §2 F2 — reviewer-measured, NOT adversarially re-verified, so it is corroborated here by G-12 rather than relied on alone]; G-12 [audits/review-2026-08-19/A/verdicts.md claim 12 — CONFIRMED-BUG over 300 games / 10,335 impostor decisions with 0 mismatches against the recorded action stream]; audits/review-2026-08-19/D/FINAL-synthesis.md §4 row 2.12 (the two-line fix), §5 ruling R3 (defect-not-lever; pre-register as a named co-intervention), §4 row 1.8 and the caveat table row 9 (the ML comparator errata this repair retires); anchors re-verified at HEAD — agents/tactical/impostor_policy.py:413-453 (the kill seam; `best = targets[0]` at :414, the co-location re-validation at :431-434, the walk-toward-best fall-through at :447-451), :825-869 (`_kill_available_now`, the same `targets[0]`-only shape at :858), :872-898 (`_confirmed_dead_from_bodies`, `saw_body` only), :996-1068 (`_scored_targets`, the `(-score, player_id)` sort at :1067), :187 (`_STALENESS_THRESHOLD = 30`), :1275-1312 (`_idle`, the pretend-task blend the fall-through lands in); agents/memory/store.py:110 and :433-440 (the `meeting_boundary` episodic marker every living agent receives at the resume tick), :549-575 (`record_meeting_outcome`), :134 (`AgentMemory.meeting_history`); agents/memory/working.py:176-185 (`MeetingHistory.record`); agents/tactical/features.py:678-696 (the v3 encoder, today's only meeting-history consumer); orchestrator/game.py:2297-2306 (the per-living-agent post-meeting fold), :2644 (the policy is handed `memory.episodic` only); api/replay_loader.py:1352-1379 (the replay-side mirror of that fold — beliefs and testimony, never the meeting outcome); agents/perception.py:62-82 (no ejection event type exists); engine/visibility.py:98-127 (the impostor keeps `same_room_and_adjacent` at base visibility); engine/rules.py:56-107 (the engine kill backstop, `:71-85`, with Task 20.11's in-vent guard at `:60-68`); agents/tactical/learned/forward.py:404-413 and training/bakeoff/utility_es.py:426-430 (both option enumerators call the policy's private statics); orchestrator/replay.py:234 (`TacticalPolicyStamp`), :319 (`FSM_DEFAULT_POLICY_ID`)
 **Complexity:** Medium
 **Record impact:** none for committed bytes — reconstruction replays the recorded action stream and never re-invokes a policy, so every committed replay, hash chain and MANIFEST stands; the change is a declared co-intervention in the Phase-20 pre-registration and first reaches recorded bytes at the adopting record.
 **Measurement:** `uv run pytest tests/agents/test_impostor_policy.py tests/agents/test_learned_policy.py -q` green and `bash scripts/verify_samples.sh` 100/100; the committed-bytes counterfactual cells over the 50 samples/9p2i replays pasted into the PR's Summary with before beside after — free zero-witness kills declined 190/415 (45.8%) → 22/415 (5.3%), bar `< 10%`; ghost-top decisions 303/2461 (12.3%) → the 222 ejected-subject decisions 0 and the partner's-unseen-victim residual (≤ 81) quoted as measured; blocked kills 30 across 9/50 games → 0.
@@ -5110,7 +5122,7 @@ fix into a firewall breach.
 The impostor FSM declines almost half of its free kills for a string comparison. Over the
 50 committed `replays/samples/9p2i` replays the C-3 verification counted 2,461 impostor
 decisions, 415 of them carrying a legal zero-witness kill (the predicate derived from
-`engine/rules.py:56-98` and `:29-44`, not from the policy's own view), and 190 of those
+`engine/rules.py:56-107` and `:29-44`, not from the policy's own view), and 190 of those
 declined — 45.8%. 168 of the 190 are exact `1.0` score ties broken by the lexicographically
 lower player id: `_scored_targets` (`agents/tactical/impostor_policy.py:937-1009`) carries
 no proximity term at all, so a victim standing in the impostor's own room and one seen
@@ -5163,7 +5175,7 @@ inputs, and the behaviour first reaches recorded bytes at the adopting record.
 One design constraint dominates the implementation. `agents/tactical/learned/forward.py:404-413`
 and `training/bakeoff/utility_es.py:426-430` both call the policy's private statics
 (`_scored_targets`, `_confirmed_dead_from_bodies`, `_target_colocated_now`,
-`_defers_to_colocated_fellow` and five more) to build the ES champion's option menu, and
+`_defers_to_colocated_fellow` and six more) to build the ES champion's option menu, and
 `tests/agents/test_learned_policy.py:377-406` and `:462` pin the two enumerators bit-exact
 against each other. Those statics are frozen: every new behaviour in this task composes
 NEW private helpers inside `decide()` over the tuple `_scored_targets` already returns.
@@ -5176,13 +5188,16 @@ F1). This task moves the FSM onto the behaviour the learned menu has had all alo
 - agents/tactical/impostor_policy.py; (the kill seam and the sabotage guard re-validate co-location across ALL scored targets; the decision-time target set excludes players ejected at a concluded meeting; a refuted sighting — the room since entered and the subject absent — is dropped for good; proximity enters as a tie-break tier below the score; the shared statics both option enumerators call stay byte-identical)
 - tests/agents/test_impostor_policy.py; (the free co-located victim beside a higher-ranked remote one → KillIntent with the ids swapped both ways; an ejected target never ranks; the refuted-sighting drop; the two re-fixtured stalk-ordering tests; the committed-bytes counterfactual cells over samples/9p2i)
 - eval/determinism_test.py; (the scripted fixtures stay deterministic — expected to be a zero-line diff, since the fixtures are recorded action streams and no policy runs in this module)
+- eval/evidence_honesty.py; (ORCHESTRATOR RULING 2026-08-20 — the I-11 fold gains an explicit policy parameter defaulting to the live policy, and its fidelity guard applies only when the caller asserts it: the ratified I-11 baseline values become frozen constants measured at the pre-repair sha, quoted from the ratified memo, and the live-policy fold over the baseline-6 bytes becomes THIS repair's own counterfactual 'after' cell. I-11 is §5 secondary, observed-not-gated, so no ratified bar moves)
+- tests/eval/test_evidence_honesty.py; (the module fixture split so the I-2…I-10 pins never invoke the policy fold; the I-11 pin tests quote the ratified constants and add the repaired-policy 'after' cells)
+- tests/scripts/test_measure_baseline_cli.py; (the --honesty emitter labels the I-11 block by mode: ratified-baseline constants vs live-policy fold)
+- audits/audit-phase-20-preregistration.md; (§11 amendment log ONLY — one dated entry recording the I-11 instrument-mode change and that no bar rides I-11)
 
 **Files NOT in scope:**
 - agents/tactical/learned/ (the ES champion and its option menus are frozen; the parity gates stay green — if a shared option enumerator or any static it calls must change, STOP and report)
-- training/ (frozen; the comparator change is recorded in the pre-registration, not in training code — and `training/env.py:437` wraps the FSM as the surrogate's proposal, so a moved training-side value pin is a report, never a silent re-pin here)
+- training/ (frozen; the comparator change is recorded in the pre-registration, not in training code — and `training/env.py:441` wraps the FSM as the surrogate's proposal, so a moved training-side value pin is a report, never a silent re-pin here)
 - orchestrator/game.py (`:2644` hands the policy `memory.episodic` and this task does not widen that call; the ejection signal is derived from episodic memory instead)
 - agents/memory/ (no new memory channel and no new event type; the post-meeting marker is read, never written)
-- tests/eval/test_evidence_honesty.py (the honesty instrument's cells; its recorded-bytes cells cannot move, but its one policy-invoking cell can — if it does, STOP and report so the re-pin is routed rather than smuggled into this diff)
 - orchestrator/replay.py (the policy stamp id stays `fsm-default`; the record's MANIFEST git sha is the provenance of the revised FSM, stated in the record audit)
 - agents/strategic/prompts/ and every `.j2` (no template edit belongs in any task but the single prompt-set bump)
 
@@ -5190,10 +5205,10 @@ F1). This task moves the FSM onto the behaviour the learned menu has had all alo
 - [ ] The kill seam and the sabotage guard pick the kill target by scanning the ranked targets for the first co-located, zero-witness, non-deferred candidate instead of testing only `targets[0]`: a free co-located victim beside a higher-ranked remote one yields a `KillIntent` naming the victim, pinned in `tests/agents/test_impostor_policy.py` with the two ids swapped both ways, and the same shared helper backs `_kill_available_now` so SABOTAGE can no longer fire on a tick carrying a free kill (fixture-pinned both directions).
 - [ ] No player ejected at a concluded meeting can occupy the ranking on a later decision, derived from episodic memory alone: a sighting recorded before the most recent post-meeting marker cannot rank, pinned as a unit fixture and on the reconstructed seed-36 tick-50 state where the ejected `p-6` outranks the co-located, isolated, cooldown-0 `p-7` at HEAD.
 - [ ] A refuted sighting is dropped for good — once the agent has itself been in the sighting's room on a later tick without seeing the subject there, that subject stops driving STALK; pinned as a unit fixture and on the reconstructed seed-31 run (ticks 14-43, the ejected `p-1`), where the fall-through now settles into the pretend-task blend instead of alternating A↔B, asserted as a decision sequence with no room repeated in alternation.
-- [ ] Proximity enters the ranking as a tier BELOW the score (`(-score, proximity_rank, player_id)`, own room ahead of adjacent ahead of remote), never above it; `test_stalk_picks_alphabetically_first_id_when_scores_tie` (`tests/agents/test_impostor_policy.py:553`) and `test_stalk_prefers_more_isolated_target_over_witnessed_one` (`:573`) are re-fixtured to pin the new rule, with an equidistant pair still falling to the player id and an isolated remote target still beating a witnessed neighbour.
+- [ ] Proximity enters the ranking as a tier BELOW the score (`(-score, proximity_rank, player_id)`, own room ahead of adjacent ahead of remote), never above it; `test_stalk_picks_alphabetically_first_id_when_scores_tie` (`tests/agents/test_impostor_policy.py:555`) and `test_stalk_prefers_more_isolated_target_over_witnessed_one` (`:575`) are re-fixtured to pin the new rule, with an equidistant pair still falling to the player id and an isolated remote target still beating a witnessed neighbour.
 - [ ] The committed-bytes counterfactual is pinned in `tests/agents/test_impostor_policy.py`, computed per decision over the reconstructed inputs of the 50 committed samples/9p2i replays with no re-simulation, the harness first asserting 0 mismatches between `decide()` and the recorded action stream at HEAD: free zero-witness kills declined 190/415 (45.8%) → only the 22 legitimate misses (15 fellow-impostor defers, 7 COVER-body) = 22/415 (5.3%) against a `< 10%` bar; ghost-top decisions 303/2461 (12.3%) → the 222 ejected-subject decisions go to 0 and the partner's-unseen-victim residual (≤ 81, the half a kill-knowledge channel would be needed to close and the ruling excludes) is pinned as measured; blocked kills 30 across 9/50 games → 0. Every before value is quoted beside its after, and a measured value that differs from the prediction is explained, not re-barred.
 - [ ] No recorded kill is lost: at the 225 reconstructed states where the recorded impostor emitted a kill, the revised policy still emits the same `KillIntent`, asserted by the same harness.
-- [ ] The frozen learned path does not move: `agents/tactical/learned/forward.py` and `training/bakeoff/utility_es.py` still call `_scored_targets`, `_confirmed_dead_from_bodies`, `_target_colocated_now`, `_defers_to_colocated_fellow`, `_body_visible_rooms`, `_non_teammate_witness_present`, `_crew_near_task_win`, `_sabotage_window_open` and `_active_sabotage` with unchanged signatures and unchanged returns; `uv run pytest tests/agents/test_learned_policy.py tests/training -q` is green, the bit-exact Q4 parity gate included.
+- [ ] The frozen learned path does not move: `agents/tactical/learned/forward.py` and `training/bakeoff/utility_es.py` still call `_scored_targets`, `_confirmed_dead_from_bodies`, `_target_colocated_now`, `_defers_to_colocated_fellow`, `_body_visible_rooms`, `_non_teammate_witness_present`, `_crew_near_task_win`, `_sabotage_window_open`, `_active_sabotage` and `_vent_in_room` with unchanged signatures and unchanged returns; `uv run pytest tests/agents/test_learned_policy.py tests/training -q` is green, the bit-exact Q4 parity gate included.
 - [ ] Committed bytes are untouched: `bash scripts/verify_samples.sh` is 100/100 and `eval/determinism_test.py` carries a zero-line diff — reconstruction replays recorded actions and the determinism fixtures are scripted action streams, so neither can move; if either does, STOP and report rather than re-pinning.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
@@ -5206,7 +5221,7 @@ F1). This task moves the FSM onto the behaviour the learned menu has had all alo
 **Implementation hint:**
 
 Step 0 — blast radius before scope. Run `grep -rn "ImpostorPolicy\._" agents/ training/ experiments/`.
-It returns nine private statics consumed from outside the module by BOTH option enumerators
+It returns ten private statics consumed from outside the module by BOTH option enumerators
 (agents/tactical/learned/forward.py:404-413, training/bakeoff/utility_es.py:426-430). Treat
 all nine as frozen — same names, same signatures, same returns for the same inputs. Every
 new behaviour in this task belongs in NEW private helpers composed inside `decide()` over
@@ -5218,13 +5233,17 @@ Step 1 — reproduce the baseline BEFORE changing anything. Rebuild each imposto
 tick by tick over the 50 committed samples/9p2i replays: `eval/replay_walk.py` for the
 engine walk, `observation.service.ObservationService.build_packet` plus
 `agents.perception.ingest_packet` for perception, and at each `MeetingApplied` the SAME
-post-meeting fold the replay loader runs at api/replay_loader.py:1291-1318
+post-meeting fold the replay loader runs at api/replay_loader.py:1352-1379
 (`absorb_meeting_evidence` then `absorb_reported_testimony`, per living agent). That fold is
 load-bearing here, not cosmetic: the marker step 3 keys on is appended inside
 `absorb_meeting_evidence` (agents/memory/store.py:433-440), so a harness that skips the fold
-will silently measure the wrong thing. Assert 0 mismatches against the recorded action
-stream, re-derive the three baseline cells (190/415, 303/2461 split 222/81, 30 blocked
-kills), and only then edit.
+will silently measure the wrong thing. Task 20.15 already ships that reconstruction: `eval/evidence_honesty.py`'s I-11 fold runs
+the same walk, the same fold and the same 0-mismatch assertion, and
+`tests/agents/test_impostor_policy.py::TestCommittedCorpusTargetingPins` pins 190/415 with
+the 168 / 15 / 7 decline split and ghost-top 303/2461 split 222/81 across all four sets.
+Re-derive the baseline THROUGH that committed instrument rather than standing up a second
+harness; only the 30 blocked kills has no committed cell. Read the Watch items before
+editing anything.
 
 Step 2 — the kill seam. Add one helper returning the first co-located, zero-witness
 candidate in rank order, and use it in both `decide()` and `_kill_available_now` so the two
@@ -5237,13 +5256,13 @@ not decide which victim dies. Keep the branch order as it stands (vent exit, COV
 SABOTAGE with the corrected guard, kill / hold / stalk, idle) and keep the fellow-defer and
 witness-hold branches exactly as they are. Do NOT take the review's further suggestion to
 delete `_kill_available_now` and re-order the ladder — that moves sabotage semantics and
-the pins at tests/agents/test_impostor_policy.py:1385-1435, and it is a separate change.
+the pins at tests/agents/test_impostor_policy.py:1387-1437, and it is a separate change.
 
 Step 3 — the ejection barrier, derived from episodic memory only. There is no ejection
 event in perception (agents/perception.py:62-82) and `decide()` is handed `memory.episodic`
 alone (orchestrator/game.py:2644), so `memory.meeting_history` is not reachable from the
 policy without a caller change outside this task's files; worse, the replay loader never
-populates `meeting_history` at all (api/replay_loader.py:1291-1318 folds beliefs and
+populates `meeting_history` at all (api/replay_loader.py:1352-1379 folds beliefs and
 testimony, not the outcome), so a meeting-history-based fix would be invisible to every
 replay-driven measurement in this repo, including this task's own counterfactual. Use the
 signal that IS in episodic memory on both the live and the replay path: the
@@ -5276,9 +5295,18 @@ Step 6 — re-run the harness and pin the after cells beside the before cells. T
 residual is exactly the 22 legitimate declines; a different number means the harness or the
 implementation disagrees with the review, and the PR states which.
 
-Watch items. The honesty instrument's ghost-top cell re-invokes the live policy while its
-sibling cells read recorded bytes, so it moves with this change and its pin lives outside
-these files — report it, do not edit it. `training/env.py:437` wraps the FSM as the
+Watch items. BLOCKER, unresolved at dispatch — read this before starting.
+`eval/evidence_honesty.py`'s I-11 fold re-invokes `ImpostorPolicy.decide()` over the
+committed bytes and RAISES `EvidenceHonestyReconstructionError` on any mismatch against the
+recorded action stream, so this repair does not merely re-price one cell: it makes
+`compute_evidence_honesty` raise on every committed set, taking the module-scoped `reports`
+fixture in `tests/eval/test_evidence_honesty.py` (all of I-2…I-11),
+`tests/agents/test_impostor_policy.py::TestCommittedCorpusTargetingPins` and
+`tests/scripts/test_measure_baseline_cli.py::test_honesty_json_emits_array` down with it,
+and no committed instrument can then recompute the ratified pre-registration's I-11 before
+values. Where that baseline lives once the policy that produced the recorded bytes is no
+longer in the tree is an owner decision this contract does not make — STOP and report
+rather than widening scope into `eval/evidence_honesty.py`. `training/env.py:441` wraps the FSM as the
 surrogate's proposal, so a training-side value pin may move; `training/` is frozen here.
 Nothing in this task touches a prompt template or the prompt-set registry — the single
 prompt-set bump (Task 20.31) owns every template edit. Keep the docstring discipline: one
