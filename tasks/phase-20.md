@@ -110,15 +110,29 @@ published. 42 contracts across four waves; the close (20.42) routes the next dec
 
 ## Pre-registration
 
-`audits/audit-phase-20-preregistration.md` (provisional in this PR; pinned and ratified at
-20.22). The primary bars, stated once here and verbatim there: pooled non-direct-cell
-conviction accuracy 0.368 → ≥ 0.60 (with per-set cells); corpus innocent ejections 79 → < 35;
-false crew self-placement 20.5% → < 5%; sole-`alibi_vs_sighting` convicting precision 14.6% →
-≥ 50%; grounded sighting side → 100%; fabricated completion lines → 0; adjacent-room STRONG
-share 63.2% → ~0; pass/fail on each of the four 19.11 injustice fixtures; plus the secondary,
-observed-not-gated win split inside a pre-registered band, and the solvability y-axis
-(20.14). The decision rule (ADOPT vs FINDING), the co-intervention (20.32) and the record
-order (samples/9p2i → ml_corpus/9p2i → samples/4p1i → ml_corpus/4p1i) live in the memo.
+`audits/audit-phase-20-preregistration.md` — **ratified by the owner's merge of Task 20.22's
+PR, and from that merge the only normative statement of the bars, the instrument definitions,
+the decision rule (ADOPT vs FINDING), the secondary band, the co-intervention (20.32), the
+offline-counterfactual protocol and the record order.** 20.34 computes its OFF/ON table
+against the memo's cells and 20.36 reads its verdict off the memo's §4 and §6 VERBATIM;
+neither re-derives a target from this file, which carries an orientation summary and not a
+second copy of the contract. The shape, for a reader who needs it here: eight primary bars
+(the non-direct conviction cell, innocent ejections, false crew self-placement, sole-flag
+convicting precision, grounded sighting side, fabricated completion lines, the adjacent-room
+STRONG share, and pass/fail on each of the four 19.11 injustice fixtures), with the win split
+and the 20.14 solvability y-axis observed and reported but never gated, and the record order
+samples/9p2i → ml_corpus/9p2i → samples/4p1i → ml_corpus/4p1i.
+
+Every baseline cell in the ratified memo is quoted from a committed pin — `eval/solvability.py`
+(20.14), `eval/evidence_honesty.py` (20.15), `eval/deduction_metrics.py` (19.14) and the four
+19.11 injustice fixtures — so a stranger can re-run every "before" the phase is judged against.
+Where a pin disagrees with the 2026-08-19 review's figure the memo keeps both numbers, marks
+the pin authoritative and names the cause (§3.2), and the bar's TARGET does not move with it —
+false crew self-placement re-anchors from 20.5% to 21.0% while its `< 5%` target is unchanged.
+Any contract or generated prompt still quoting a superseded review figure is re-anchored to the
+memo at its pre-dispatch review, never treated as a second baseline. And no bar may be
+re-priced after that merge: a miss is reported as a miss, and any later change is a dated
+erratum in the memo's amendment log.
 
 ## The DAG
 
