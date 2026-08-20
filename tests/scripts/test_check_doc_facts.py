@@ -47,6 +47,8 @@ _COPIED = (
     "docs/reading-guide.md",
     "audits/README.md",
     "tests/eval/test_vj_instruments.py",
+    "docs/ml-program.md",
+    "training/reports/results-finalist-eval.jsonl",
 )
 
 # The front-door checks also ENUMERATE paths whose contents they never open:
@@ -95,6 +97,12 @@ _INNOCENT_ROW = "| innocent ejections (all in the non-direct cell) | 23 | 54 | 2
 _PROOF_INNOCENT_ROW = (
     "| proof-present innocent ejections | **0** | **0** | **0** | **0** |"
 )
+_ML_PAGE = "docs/ml-program.md"
+_ML_ARM_ROW = "| `ea4bc955…` (put to the bar) | 26/50 = 0.52 | 13/50 = 0.26 |"
+_ML_DROPPED_ARM_ROW = (
+    "| `bfd145cb…` | 28/50 = 0.56 | 13/50 = 0.26 | **0.0041** | **FAIL** |\n"
+)
+_ML_COMPARATOR_ROW = "| `p18-fsm-comparator` (scripted) | 13/50 = 0.26 |"
 # The one dialect term the front door keeps, and the link that defines it.
 _BASELINE_LINK = "[baseline 6](docs/glossary.md#baseline-n-the-reference-recording)"
 _BASELINE_ANCHOR_HEADING = "### baseline N (the reference recording)"
@@ -1023,7 +1031,7 @@ def test_innocent_ejection_total_drift_detected(doc_tree: Path) -> None:
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert "'81 of 81 innocent ejections'" in errors[0]
+    assert "'81 of 81 innocent ejections sit in the no-proof cell'" in errors[0]
 
 
 def test_missing_proof_partition_table_fails_loud(doc_tree: Path) -> None:
@@ -1048,6 +1056,87 @@ def test_renamed_proof_partition_row_fails_loud(doc_tree: Path) -> None:
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert "no conviction-partition table" in errors[0]
+
+
+def test_innocent_ejections_moved_to_the_wrong_cell_detected(doc_tree: Path) -> None:
+    # The count alone is not the claim. A row stating the same 79 of 79 but
+    # putting them in the proof-present cell states the opposite finding, so
+    # matching the number without the placement would gate shape, not meaning.
+    _substitute(
+        doc_tree,
+        _README,
+        "79 of 79 innocent ejections sit in the no-proof cell",
+        "79 of 79 innocent ejections sit in the proof-present cell",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "'79 of 79 innocent ejections sit in the no-proof cell'" in errors[0]
+
+
+def test_ml_arm_win_count_derived_from_the_finalist_jsonl(doc_tree: Path) -> None:
+    # The ML page publishes the program's headline table; every cell is
+    # recomputed from the committed measurement, not trusted as prose.
+    _substitute(doc_tree, _ML_PAGE, "| 26/50 = 0.52 |", "| 27/50 = 0.54 |")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "reads 27/50" in errors[0]
+    assert "recomputes to 26/50" in errors[0]
+
+
+def test_ml_p_value_drift_detected(doc_tree: Path) -> None:
+    _substitute(doc_tree, _ML_PAGE, "| **0.0072** |", "| **0.0100** |")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "states 0.0100" in errors[0]
+    assert "0.0072" in errors[0]
+
+
+def test_ml_rate_that_contradicts_its_own_fraction_detected(doc_tree: Path) -> None:
+    # The rate is checked at the precision the cell prints: the table may round
+    # as it likes, but it may not round to a different number.
+    _substitute(doc_tree, _ML_PAGE, "| 26/50 = 0.52 |", "| 26/50 = 0.60 |")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "states the rate 0.60" in errors[0]
+    assert "rounds to 0.52" in errors[0]
+
+
+def test_ml_comparator_row_drift_detected(doc_tree: Path) -> None:
+    _substitute(
+        doc_tree,
+        _ML_PAGE,
+        _ML_COMPARATOR_ROW,
+        "| `p18-fsm-comparator` (scripted) | 15/50 = 0.30 |",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "reads 15/50" in errors[0]
+    assert "recomputes to 13/50" in errors[0]
+
+
+def test_ml_dropped_arm_detected(doc_tree: Path) -> None:
+    # Publishing only the flattering arms is the failure mode a one-directional
+    # check would miss: every entrant the JSONL carries must have a row.
+    _substitute(doc_tree, _ML_PAGE, _ML_DROPPED_ARM_ROW, "")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "p18-imp-bfd145cb" in errors[0]
+    assert "the results table does not state" in errors[0]
+
+
+def test_ml_arm_absent_from_the_jsonl_fails_loud(doc_tree: Path) -> None:
+    # An arm nobody recorded must fail rather than be skipped as unmatched.
+    _substitute(doc_tree, _ML_PAGE, "`ea4bc955…`", "`deadbeef…`")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert any("'p18-imp-deadbeef'" in error for error in errors)
+
+
+def test_missing_ml_results_table_fails_loud(doc_tree: Path) -> None:
+    # Losing the table must not read as "nothing to derive from".
+    _substitute(doc_tree, _ML_PAGE, "| policy | impostor win |", "| model | win |")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "no results table" in errors[0]
 
 
 def test_report_example_ejection_count_drift_detected(doc_tree: Path) -> None:

@@ -526,9 +526,11 @@ upper bound. Item 2 records what this erratum does **not** touch.
    target-selection defects, both of which depress it.** The review found that
    `agents/tactical/impostor_policy.py` re-validates only the top-ranked target at the kill
    seam, and builds its dead-set only from *seen* bodies. Measured over the committed 9p2i
-   sets: **190/415 = 45.8 %** of legal zero-witness kill opportunities declined (**168** on
-   the ranking branch's exact-1.0 score tie broken by the lower player id, **15**
-   fellow-defer, **7** cover, **0 unattributed**), and **303/2461 = 12.3 %**
+   sets: **190/415 = 45.8 %** of legal zero-witness kill opportunities declined, of which
+   **168** (**40.5 %** of all free kills) fall to the seam defect — the ranking branch's
+   exact-1.0 score tie broken by the lower player id — while the other **22** are the
+   policy's own deliberate branches (**15** fellow-defer, **7** cover) and **0** are
+   unattributed; and **303/2461 = 12.3 %**
    (`replays/samples/9p2i`) / **555/6663 = 8.3 %** (`replays/ml_corpus/9p2i`) of impostor
    decisions topping the target list with a player already ejected — **0/632** and
    **0/579** on the two 4p1i sets, so it is a nine-player-roster phenomenon.

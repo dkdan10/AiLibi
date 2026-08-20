@@ -1260,12 +1260,15 @@ the committed `training/reports/results-finalist-eval.jsonl` is read, never edit
 reading does change, and it is named plainly** — items 1–2 make §1.1's win-edge column an
 upper bound rather than a point estimate. Item 3 records what these items do **not** touch.
 
-1. **The scripted comparator declines 45.8 % of its own free kills.** The kill seam
-   re-validates only `targets[0]`, so over the 50 committed 9p2i seeds
-   **190/415 = 45.8 %** of the policy's legal, zero-witness kill opportunities are
-   declined. The misses are fully attributed: **168** in the ranking branch's exact-1.0
-   score tie, broken by the lower player id; **15** in the named fellow-defer branch; **7**
-   in the cover branch; **0 unattributed**. Instrument:
+1. **The scripted comparator declines 45.8 % of its own free kills, and 168 of those are
+   the defect.** Over the 50 committed 9p2i seeds the policy declines
+   **190/415 = 45.8 %** of its legal, zero-witness kill opportunities. That census splits,
+   with nothing unattributed: **168** (**40.5 %** of all free kills) fall to the seam
+   defect — the kill path re-validates only `targets[0]`, and the ranking branch breaks an
+   exact-1.0 score tie by the lower player id — while the other **22** are the policy's own
+   named branches, **15** fellow-defer and **7** cover, which are deliberate and not a bug.
+   The defect-attributable figure is therefore 168/415, and 190/415 is the total decline
+   rate. Instrument:
    `eval/evidence_honesty.py`'s I-11 free-kill cells, pinned by
    `tests/agents/test_impostor_policy.py::TestCommittedCorpusTargetingPins`. The
    reconstruction replays `decide()` against the recorded bytes, so this is the committed

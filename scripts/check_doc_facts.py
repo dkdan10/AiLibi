@@ -10,7 +10,7 @@ class the 19.1 sweep cleaned (a stale refresh date, a stale win rate, a stale
 ladder tip, a graduated lever still documented as a live knob) is exactly what
 regenerates silently otherwise.
 
-Thirteen checks. Each accumulates precise errors; all of them are reported
+Fourteen checks. Each accumulates precise errors; all of them are reported
 together, so one run names every drifted fact rather than the first.
 
 1. **Sample provenance.** ``replays/samples/<set>/MANIFEST.md`` owns each sample
@@ -108,6 +108,13 @@ together, so one run names every drifted fact rather than the first.
 13. **Every relative link resolves.** Across README.md, docs/history.md,
     docs/glossary.md, audits/README.md and docs/reading-guide.md, each relative
     markdown target (fragment stripped) must name a path that exists.
+14. **The ML page's results table is re-derived from the finalist-eval JSONL.**
+    docs/ml-program.md publishes the program's headline table — per arm, its
+    wins, the same-seed comparator's wins, and the paired exact-McNemar p. Each
+    of those is recomputed here from
+    ``training/reports/results-finalist-eval.jsonl`` through
+    ``scripts/paired_stats.py``, and every arm the JSONL carries must appear in
+    the table, so neither a moved cell nor a quietly dropped arm can ship.
 
 ``--repo-root`` points the document and source reads at another tree (the unit
 tests perturb a copy); it defaults to this checkout. The lever registry ALWAYS
@@ -141,6 +148,7 @@ for _bootstrap_path in (_REPO_ROOT, _SCRIPTS_DIR):
 
 from _manifest_writer import parse_manifest  # noqa: E402
 from _verify_samples import sample_paths  # noqa: E402
+from paired_stats import compute_paired_stats  # noqa: E402
 
 from orchestrator.replay import (  # noqa: E402
     SUBSTRATE_FLAG_KEYS,
@@ -398,6 +406,30 @@ _PROOF_ROW_LABELS: Final[tuple[str, ...]] = (
 _RATIO_CELL: Final = re.compile(r"(\d+)\s*/\s*(\d+)")
 _COUNT_CELL: Final = re.compile(r"(\d+)")
 _EMPHASIS: Final = re.compile(r"[*`]")
+# The injustice claim the proof row carries beside its two accuracies. Both
+# halves are required: the count AND where those ejections landed, because the
+# count alone is satisfied by a row that puts them in the wrong cell.
+_INJUSTICE_CLAIM: Final = (
+    "{count} of {count} innocent ejections sit in the no-proof cell"
+)
+
+# The ML page's results table and the committed measurement it is derived from.
+# The table is located by its own header cells, so renaming the section above it
+# does not disable the derivation.
+_ML_PAGE: Final = "docs/ml-program.md"
+_FINALIST_JSONL: Final = "training/reports/results-finalist-eval.jsonl"
+_ML_TABLE_HEADER: Final[tuple[str, str]] = ("policy", "impostor win")
+# An arm row's label is its committed sha prefix in backticks; the entrant name
+# in the JSONL is that prefix behind the campaign's own arm prefix.
+_ML_ARM_LABEL: Final = re.compile(r"`([0-9a-f]{6,})…`")
+_ML_ARM_ENTRANT: Final = "p18-imp-{sha}"
+_ML_COMPARATOR_LABEL: Final = "p18-fsm-comparator"
+# ``<k>/<n> = <rate>`` — the rate is checked at the precision the cell prints,
+# so a table may round as it likes but may not round to a different number.
+_ML_FRACTION: Final = re.compile(r"(\d+)\s*/\s*(\d+)\s*=\s*(\d*\.(\d+))")
+# The leading decimal of a p cell. Leading, because the Bonferroni alpha is
+# stated after the p on one row and must not be mistaken for it.
+_ML_P_VALUE: Final = re.compile(r"(\d*\.(\d+))")
 # The cross-tab's rows are read by their own label, flagged first, so a
 # reordered table cannot silently swap the two populations.
 _VENT_ROW_LABELS: Final[tuple[str, str]] = ("yes", "no")
@@ -453,6 +485,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         f"{_READING_GUIDE} carries no file:line citation; and every relative "
         f"link in {len(_LINKED_DOCUMENTS)} front-door documents resolves."
     )
+    print(
+        f"{_ML_PAGE} verified: every published arm's wins, comparator wins and "
+        f"paired exact-McNemar p recompute from {_FINALIST_JSONL}."
+    )
     return 0
 
 
@@ -475,6 +511,7 @@ def check_facts(repo_root: Path) -> list[str]:
     check_audits_index(repo_root, errors)
     check_guide_line_citations(repo_root, errors)
     check_relative_links(repo_root, errors)
+    check_ml_results_table(repo_root, errors)
     return errors
 
 
@@ -1522,6 +1559,11 @@ def check_injustice_cell(
     different pair of table rows, so it is checked against them — an audit that
     ever records a proof-present innocent ejection must not leave the front
     door still saying there were none.
+
+    The required wording carries the placement, not just the count. A row
+    reading "79 of 79 innocent ejections sit in the proof-present cell" states
+    the same number and the opposite finding, so matching the count alone would
+    be a gate on shape rather than on meaning.
     """
 
     row = results_row(readme, _PROOF_CLAIM)
@@ -1534,14 +1576,156 @@ def check_injustice_cell(
             f"records {proof_innocent} proof-present innocent ejection(s)."
         )
         return
-    stated = f"{innocent} of {innocent} innocent ejections"
+    stated = _INJUSTICE_CLAIM.format(count=innocent)
     if stated not in " | ".join(row):
         errors.append(
             f"{_README}: the results row {_PROOF_CLAIM!r} does not state "
             f"{stated!r} — {_PROOF_PARTITION_AUDIT}'s partition table counts "
-            f"{innocent} innocent ejections, every one of them in the no-proof "
-            "cell, and the row is where the front door says so."
+            f"{innocent} innocent ejections and zero proof-present ones, so "
+            "both the count and the cell they landed in have to be stated here."
         )
+
+
+def check_ml_results_table(repo_root: Path, errors: list[str]) -> None:
+    """The ML page's results table, recomputed from the committed JSONL.
+
+    The page presents its table as reproducible from committed bytes by naming
+    the command that reproduces it. This runs that command's own library over
+    ``training/reports/results-finalist-eval.jsonl`` and holds every published
+    cell to it: each arm's wins, its same-seed comparator's wins, and the paired
+    exact-McNemar p. Rates are compared at the precision the cell prints, so the
+    table may round as it likes but may not round to a different number.
+
+    Coverage is checked in both directions. Every arm row must name an entrant
+    the JSONL carries, and every entrant the JSONL carries must have a row —
+    a losing arm quietly dropped from the table would otherwise pass.
+    """
+
+    page = read_document(repo_root, _ML_PAGE, errors)
+    if page is None:
+        return
+    rows = ml_results_rows(page)
+    if rows is None:
+        errors.append(
+            f"{_ML_PAGE}: no results table with a "
+            f"'{' | '.join(_ML_TABLE_HEADER)}' header row — the published arm "
+            "cells have nothing to be derived from."
+        )
+        return
+    try:
+        stats = {
+            row.entrant: row
+            for row in compute_paired_stats(repo_root / _FINALIST_JSONL)
+        }
+    except (ValueError, OSError) as exc:
+        errors.append(f"{_FINALIST_JSONL}: unreadable as a finalist eval ({exc}).")
+        return
+
+    seen: set[str] = set()
+    widest = max(stats.values(), key=lambda row: row.n)
+    for cells in rows:
+        label = cells[0]
+        if _ML_COMPARATOR_LABEL in label:
+            compare_ml_cell(
+                label, "impostor win", cells[1], widest.baseline_wins, widest.n, errors
+            )
+            continue
+        match = _ML_ARM_LABEL.search(label)
+        if match is None:
+            continue
+        entrant = _ML_ARM_ENTRANT.format(sha=match.group(1))
+        arm = stats.get(entrant)
+        if arm is None:
+            errors.append(
+                f"{_ML_PAGE}: the results row {label!r} names {entrant!r}, which "
+                f"{_FINALIST_JSONL} does not carry "
+                f"(entrants: {', '.join(sorted(stats))})."
+            )
+            continue
+        seen.add(entrant)
+        compare_ml_cell(label, "impostor win", cells[1], arm.arm_wins, arm.n, errors)
+        compare_ml_cell(label, "comparator", cells[2], arm.baseline_wins, arm.n, errors)
+        compare_ml_p(label, cells[3], arm.p_exact, errors)
+
+    for entrant in sorted(set(stats) - seen):
+        errors.append(
+            f"{_ML_PAGE}: {_FINALIST_JSONL} carries the arm {entrant!r}, which the "
+            "results table does not state — every measured arm is published, "
+            "including the ones that lost."
+        )
+
+
+def compare_ml_cell(
+    label: str, column: str, cell: str, wins: int, total: int, errors: list[str]
+) -> None:
+    """One ``<k>/<n> = <rate>`` cell, held to the recomputed pair."""
+
+    match = _ML_FRACTION.search(cell)
+    if match is None:
+        errors.append(
+            f"{_ML_PAGE}: the {column} cell of results row {label!r} reads "
+            f"{cell!r}, which holds no '<wins>/<games> = <rate>' figure to check "
+            f"against the recomputed {wins}/{total}."
+        )
+        return
+    stated = (int(match.group(1)), int(match.group(2)))
+    if stated != (wins, total):
+        errors.append(
+            f"{_ML_PAGE}: the {column} cell of results row {label!r} reads "
+            f"{stated[0]}/{stated[1]}, but {_FINALIST_JSONL} recomputes to "
+            f"{wins}/{total}."
+        )
+        return
+    rate, places = float(match.group(3)), len(match.group(4))
+    if round(wins / total, places) != rate:
+        errors.append(
+            f"{_ML_PAGE}: the {column} cell of results row {label!r} states the "
+            f"rate {match.group(3)}, but {wins}/{total} rounds to "
+            f"{round(wins / total, places)} at that precision."
+        )
+
+
+def compare_ml_p(label: str, cell: str, p_exact: float, errors: list[str]) -> None:
+    """One paired-p cell, held to the recomputed exact McNemar p."""
+
+    match = _ML_P_VALUE.search(cell)
+    if match is None:
+        errors.append(
+            f"{_ML_PAGE}: the p cell of results row {label!r} reads {cell!r}, "
+            f"which holds no p-value to check against the recomputed {p_exact}."
+        )
+        return
+    stated, places = float(match.group(1)), len(match.group(2))
+    if round(p_exact, places) != stated:
+        errors.append(
+            f"{_ML_PAGE}: the p cell of results row {label!r} states "
+            f"{match.group(1)}, but {_FINALIST_JSONL} recomputes the exact "
+            f"McNemar p to {round(p_exact, places)} at that precision."
+        )
+
+
+def ml_results_rows(page: str) -> list[list[str]] | None:
+    """Every full row of the ML page's results table, in order.
+
+    Full rows, not the two compared cells :func:`results_rows` keeps: this
+    table's arm, comparator and p live in three different columns.
+    """
+
+    rows: list[list[str]] | None = None
+    for line in page.splitlines():
+        cells = table_cells(line)
+        if cells is None or len(cells) < 4:
+            if rows is not None:
+                break
+            continue
+        if rows is None:
+            if tuple(cells[:2]) == _ML_TABLE_HEADER:
+                rows = []
+            continue
+        if all(_TABLE_RULE_CELL.match(cell) for cell in cells):
+            continue
+        rows.append(cells)
+    return rows
 
 
 def compare_result_figure(
