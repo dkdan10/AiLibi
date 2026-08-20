@@ -93,11 +93,17 @@ The system as built: [docs/architecture.md](docs/architecture.md).
 | Observation-firewall violations, all phases | zero | never breached in CI: the [import-linter contracts](.importlinter), the planted-leak test in [tests/test_firewall.py](tests/test_firewall.py), the recursive sweep in [eval/leak_scan.py](eval/leak_scan.py) |
 | Impostor win rate, committed samples | 34% (4p1i), 30% (9p2i) | reference recording 6, 2026-07-20 — [4p1i](replays/samples/4p1i/MANIFEST.md), [9p2i](replays/samples/9p2i/MANIFEST.md) |
 | Eject ballots carrying a valid citation, a turn or an observation id (9p2i) | 520 / 520, zero dangling | reference recording 6, 2026-07-20 — [instrument](tests/eval/test_vj_instruments.py) |
-| Correct 9p ejections riding an ejectee-specific vent sighting | 68 / 78 = 87% | reference recording 6, 2026-07-20 — [triage audit](audits/audit-phase-19-triage.md) |
+| Ejection accuracy with engine-certified proof of the ejectee's role, against without | 310 / 310 = 1.000 vs 46 / 125 = 0.368 | measured 2026-08-18 across all four committed recordings — [phase-19 close](audits/audit-phase-19-close.md) §4.1; 79 of 79 innocent ejections sit in the no-proof cell |
+| Correct 9p ejections riding an ejectee-specific vent sighting | 68 / 78 = 87% | reference recording 6, 2026-07-20 — [triage audit](audits/audit-phase-19-triage.md). Reading: general social deduction, **not** demonstrated |
+| Learned tactical policies that became the default | none, ruled twice | 2026-07-18 and 2026-08-01 — [phase 17](audits/audit-phase-17-close.md), [phase 18](audits/audit-phase-18-close.md) |
+
+*Valid* in the citation row means resolvable, not supported: each of those 520 ballots points at a transcript turn or an observation its voter really held, and nothing checks that the cited line bears out the accusation built on it.
 
 **The headline finding is a negative one, and that is the point.** Almost nine in ten of the crew's correct 9-player ejections ride an engine-certified vent sighting; without one, ejection accuracy is roughly chance and innocents go down two to one. So the corpus demonstrates LLM evidence-processing of certified facts, plus real deception on top — and *not* general social deduction. The cross-tab is in the [reading guide](docs/reading-guide.md).
 
-<!-- ANCHOR: a later contract adds the ML program's paragraph, titled by its result, plus the table's before/after column. -->
+**Four learned impostor policies beat the scripted one on wins; none of them shipped.** Two phases of evolutionary search over the impostor's tactical decisions produced policies that won more games than the same-seed scripted comparator, and every one of them failed an evidence-quality gate written down *before* the measurement that judged it — so both phases closed having adopted nothing. Two qualifications ride with that result, and they cut against it: the edge of the one policy this repo actually ships is not statistically significant at 50 games, and the scripted comparator carries two measured target-selection defects that depress it, so each edge is an upper bound. The whole account in research shape — problem, environment, method, results, limitations — is [the ML program page](docs/ml-program.md).
+
+<!-- ANCHOR: a later contract adds the results table's before/after column once the next reference recording lands. -->
 <!-- ANCHOR: a later contract adds "What I learned" and a lessons page. -->
 
 ## Project status

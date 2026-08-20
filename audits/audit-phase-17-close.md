@@ -509,3 +509,42 @@ computed from the CLI cells quoted beside them in §3. The §1 evidence cells ar
 committed `training/reports/results-finalist-eval.jsonl` + `report-finalist-eval.md` §3.a/§3.1a
 (recorded 2026-07-18, stamp-proven, $0), and the 17.16 FAIL-branch pins re-run green in
 `tests/scripts/test_champion_flip_ruling.py`.
+
+## 10. Errata (coordination, 2026-08-19 — the Task 20.13 comparator-defect pass; additive, no in-place rewrites)
+
+Anchor: the 2026-08-19 three-track review — `audits/review-2026-08-19/B/verdicts.md` C-3
+(verdict **CONFIRMED and understated**) and `audits/review-2026-08-19/A/verdicts.md` G-12
+(verdict **CONFIRMED-BUG**) — whose rates Task 20.15 landed as committed pins:
+`tests/agents/test_impostor_policy.py::TestCommittedCorpusTargetingPins` over
+`eval/evidence_honesty.py`'s I-11 cells, with all four sets stated [VERIFIED] at
+`audits/audit-phase-20-preregistration.md:174-175`. Every item below is **additive**: no
+recorded byte, no table cell, no verdict and no hash above this section is rewritten. **One
+reading does change, and it is named plainly** — item 1 makes §1's `utility-es` win edge an
+upper bound. Item 2 records what this erratum does **not** touch.
+
+1. **The same-seed scripted comparator this close measures against carries two identified
+   target-selection defects, both of which depress it.** The review found that
+   `agents/tactical/impostor_policy.py` re-validates only the top-ranked target at the kill
+   seam, and builds its dead-set only from *seen* bodies. Measured over the committed 9p2i
+   sets: **190/415 = 45.8 %** of legal zero-witness kill opportunities declined (**168** on
+   the ranking branch's exact-1.0 score tie broken by the lower player id, **15**
+   fellow-defer, **7** cover, **0 unattributed**), and **303/2461 = 12.3 %**
+   (`replays/samples/9p2i`) / **555/6663 = 8.3 %** (`replays/ml_corpus/9p2i`) of impostor
+   decisions topping the target list with a player already ejected — **0/632** and
+   **0/579** on the two 4p1i sets, so it is a nine-player-roster phenomenon.
+
+   **Scope of this item, honestly.** Those rates are measured on the committed sample and
+   corpus sets, **not** re-measured on this close's own finalist recordings (raw slate
+   off-repo, §7). What carries across is the *policy*: the FSM row §1 pairs against —
+   `baseline 5 (FSM, same seeds)`, win **0.36** — is the same scripted policy, so it plays
+   under the same two defects. Its 0.36 is therefore a floor, and `utility-es`'s
+   **Δ +0.16** is an **upper bound** on the real gap.
+
+2. **What item 1 does NOT touch.** The referee FAIL on `utility-es` stands: it failed on
+   flags/meeting 0.4255 < 0.50279 and testimony-backed conversion 0.3585 < 0.5601, gauges
+   about evidence supply rather than wins, and a comparator that killed more often would
+   not have raised them. The **NO-FLIP ruling stands** — locked decision 2's AND-criterion
+   fails on the referee half alone. `policy-es`'s Δ −0.34 collapse stands and is only made
+   worse by a stronger comparator. No recorded byte, no instrument read and no canary in
+   this close moves. **The repair is routed, not performed here:** Task 20.32 fixes the
+   mover and Task 20.38 re-measures on corrected bytes.

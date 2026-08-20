@@ -21,29 +21,50 @@ Three rules of use:
    markers by 19.27, the artifact prune by 19.22. Labels and docs only landed
    with this map — zero behavior bytes.
 
-## 1. The standard FROZEN header
+**Start here.** The ML program itself — problem, environment, method, one results
+table, the two behavioural findings, and the limitations — is
+[`docs/ml-program.md`](../docs/ml-program.md). This file is the disposition ledger
+for the surfaces that program left behind: what it positively learned (§1), the
+keep/freeze/retire map (§2), the freeze label and its coverage registry (§3, §5),
+and the checklist for reopening it (§7).
 
-One format, repeated verbatim (wrapped to the repo's 88-column width where
-needed — the key `FROZEN (Phase 19 tier map, training/README.md):` always
-stays on one line):
+## 1. What the program POSITIVELY learned (findings, not plumbing)
 
-```
-FROZEN (Phase 19 tier map, training/README.md): <one-line reason>. Bug fixes and
-evidence readers only; no new search.
-```
+Recorded here so the tier map preserves results, not just machinery:
 
-"Evidence readers" means code that reads the committed artifacts/reports
-(fidelity harnesses, verifiers, tests over committed bytes). "No new search"
-means no new training campaign, candidate search, floor change, or bar
-re-pricing rides on a frozen surface — the reopening checklist (§7) is the
-only door back in.
-
-Coverage proof (the §5 registry must equal this grep's file list, one header
-per file):
-
-```
-grep -rl "FROZEN (Phase 19 tier map" --include="*.py" --include="*.sh" .
-```
+- **N1 — the learned mover kills into witnesses at ~3.3× the scripted rate.**
+  Crew-witnessed-kill rate **30/197 = 0.15228** vs the FSM comparator's
+  **8/174 = 0.04598**, **z = +3.370**, sign-reproduced 3/3
+  (`audits/audit-phase-18-flip-emergence.md:466-471`; restated with the
+  per-tranche triples at `audits/audit-phase-18-close.md:732-743`, §6.1 L4).
+- **N2 — the learned mover emits a kill class the scripted FSM cannot:
+  co-present kills.** **20/197 = 0.10152 vs 0/174**, **z = +4.321**, 3/3; the
+  committed FSM kills only when alone — 0 co-present kills on all 863
+  corpus-pinned kills (same anchors).
+- Both are ruled **NOT-DEMONSTRATED under the registered discipline** — not
+  because the effects are doubtful (both are selected-for, present on all
+  eight learned-impostor arms) but because clause (c) is unsatisfiable by
+  construction: no campaign lever enables them, so no ablation can be named
+  (`audit-phase-18-flip-emergence.md:471-481`). A §6.c-satisfiable claim needs
+  a lever-scoped training contract in a future campaign (close §6.1 L4).
+- **The clean negatives, kept as results:** the crew stack's triple negative
+  (§2, FREEZE); the torch PPO probe (`experiments/lab/torch_probe/`); the
+  policy-ES real path (win edge collapsed to 0.02, Δ −0.34 —
+  `report-finalist-eval.md:268-271`); FO-6's always-SKIP collapse (25.7%
+  top-1 vs the 70.6% ceiling; binary accuracy 38.1% vs always-eject 78.4% —
+  `report-meeting-table.md:173-187`, `:227-229`).
+- **The statistical honesty note (19.20 owns the erratum):** the shipped
+  champion's paired edge is statistically unresolved at n=50 — exact McNemar
+  recomputed from `results-finalist-eval.jsonl`: ea4bc955 17/4 p=0.0072;
+  bfd145cb 20/5 p=0.0041; **shipped 6d327dcb 15/9 p=0.3075 (n.s.)**; 7f73929d
+  12/3 p=0.0352, fails Bonferroni α=0.0125
+  (`audits/audit-phase-19-triage.md:196`, §8 row 4 — the report itself
+  commits only the crew paired cell, `report-finalist-eval.md:1745-1761`).
+- **Red-Queen context (close §6.1 L10):** the cycling-detector signature is
+  PRESENT on the general-base impostor (flat anchor + oscillating
+  co-matchup); the owned-task crew reads progress while its impostor
+  plateaus — "Phase-19-visible context, not a contract"
+  (`audits/audit-phase-18-close.md:769-771`).
 
 ## 2. The tier map
 
@@ -125,43 +146,29 @@ no-op, not a failure (`audits/audit-phase-19-planning.md` §6 correction 2).
 | Unused `first_meeting` episode boundary | "every production caller passes `full_game` explicitly … `first_meeting` is exercised only in tests — a deliberate truncation mode with no live consumer" (`audits/audit-phase-18-close.md:1004`, §7 item 4) | `training/env.py` boundary; 19.19 verifies the caller list |
 | New-search machinery (one-shot probe/ops scaffolding) | Per 19.19's verified list: `scripts/record_meeting_gate_probe.py` (zero references), `llm/cache.py` (sole importer is a test), the stale crew-dir CLI advertisement in `scripts/run_tournament.py` | Consumer checks are mandatory; `eval/determinism_test.py` and the five bespoke prompt sets are NOT retired (both source-audit deletion candidacies REFUTED — `audits/audit-phase-19-planning.md` §6) |
 
-## 3. What the program POSITIVELY learned (findings, not plumbing)
+## 3. The standard FROZEN header
 
-Recorded here so the tier map preserves results, not just machinery:
+One format, repeated verbatim (wrapped to the repo's 88-column width where
+needed — the key `FROZEN (Phase 19 tier map, training/README.md):` always
+stays on one line):
 
-- **N1 — the learned mover kills into witnesses at ~3.3× the scripted rate.**
-  Crew-witnessed-kill rate **30/197 = 0.15228** vs the FSM comparator's
-  **8/174 = 0.04598**, **z = +3.370**, sign-reproduced 3/3
-  (`audits/audit-phase-18-flip-emergence.md:466-471`; restated with the
-  per-tranche triples at `audits/audit-phase-18-close.md:732-743`, §6.1 L4).
-- **N2 — the learned mover emits a kill class the scripted FSM cannot:
-  co-present kills.** **20/197 = 0.10152 vs 0/174**, **z = +4.321**, 3/3; the
-  committed FSM kills only when alone — 0 co-present kills on all 863
-  corpus-pinned kills (same anchors).
-- Both are ruled **NOT-DEMONSTRATED under the registered discipline** — not
-  because the effects are doubtful (both are selected-for, present on all
-  eight learned-impostor arms) but because clause (c) is unsatisfiable by
-  construction: no campaign lever enables them, so no ablation can be named
-  (`audit-phase-18-flip-emergence.md:471-481`). A §6.c-satisfiable claim needs
-  a lever-scoped training contract in a future campaign (close §6.1 L4).
-- **The clean negatives, kept as results:** the crew stack's triple negative
-  (§2, FREEZE); the torch PPO probe (`experiments/lab/torch_probe/`); the
-  policy-ES real path (win edge collapsed to 0.02, Δ −0.34 —
-  `report-finalist-eval.md:268-271`); FO-6's always-SKIP collapse (25.7%
-  top-1 vs the 70.6% ceiling; binary accuracy 38.1% vs always-eject 78.4% —
-  `report-meeting-table.md:173-187`, `:227-229`).
-- **The statistical honesty note (19.20 owns the erratum):** the shipped
-  champion's paired edge is statistically unresolved at n=50 — exact McNemar
-  recomputed from `results-finalist-eval.jsonl`: ea4bc955 17/4 p=0.0072;
-  bfd145cb 20/5 p=0.0041; **shipped 6d327dcb 15/9 p=0.3075 (n.s.)**; 7f73929d
-  12/3 p=0.0352, fails Bonferroni α=0.0125
-  (`audits/audit-phase-19-triage.md:196`, §8 row 4 — the report itself
-  commits only the crew paired cell, `report-finalist-eval.md:1745-1761`).
-- **Red-Queen context (close §6.1 L10):** the cycling-detector signature is
-  PRESENT on the general-base impostor (flat anchor + oscillating
-  co-matchup); the owned-task crew reads progress while its impostor
-  plateaus — "Phase-19-visible context, not a contract"
-  (`audits/audit-phase-18-close.md:769-771`).
+```
+FROZEN (Phase 19 tier map, training/README.md): <one-line reason>. Bug fixes and
+evidence readers only; no new search.
+```
+
+"Evidence readers" means code that reads the committed artifacts/reports
+(fidelity harnesses, verifiers, tests over committed bytes). "No new search"
+means no new training campaign, candidate search, floor change, or bar
+re-pricing rides on a frozen surface — the reopening checklist (§7) is the
+only door back in.
+
+Coverage proof (the §5 registry must equal this grep's file list, one header
+per file):
+
+```
+grep -rl "FROZEN (Phase 19 tier map" --include="*.py" --include="*.sh" .
+```
 
 ## 4. The Bash recorders and the engine note
 
@@ -172,7 +179,7 @@ byte-frozen.
 
 ## 5. The freeze-header coverage registry
 
-The grep in §1 must return exactly these files (one header occurrence each).
+The grep in §3 must return exactly these files (one header occurrence each).
 
 **training/ (13):** `training/composed_runner.py`, `training/scenarios.py`,
 `training/anchor_study.py`, `training/conviction/fidelity.py`,

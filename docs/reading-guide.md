@@ -16,6 +16,7 @@ page summarizes, the cited file wins. Private vocabulary is in the
 | Observation-firewall violations, all phases | zero | never breached in CI — the three mechanisms are named below |
 | Impostor win rate, committed samples | 34% (4p1i), 30% (9p2i) | reference recording 6, 2026-07-20 — [4p1i](../replays/samples/4p1i/MANIFEST.md), [9p2i](../replays/samples/9p2i/MANIFEST.md) |
 | Eject ballots carrying a valid citation, a turn or an observation id (9p2i) | 520 / 520, zero dangling | reference recording 6, 2026-07-20 — [instrument](../tests/eval/test_vj_instruments.py) |
+| Ejection accuracy with engine-certified proof of the ejectee's role, against without | 310 / 310 = 1.000 vs 46 / 125 = 0.368 | measured 2026-08-18 across all four committed recordings — [phase-19 close](../audits/audit-phase-19-close.md) §4.1 |
 | Correct 9p ejections riding an ejectee-specific vent sighting | 68 / 78 = 87% | reference recording 6, 2026-07-20 — [triage audit](../audits/audit-phase-19-triage.md) §8 |
 | Impostor ballots cast against a partner (9p2i) | 0 of 245 | enforced by the meeting layer, not shown by the model — §3 |
 | Pre-registered emergence rulings demonstrated, phase 18 | 0 of 14 | [close audit](../audits/audit-phase-18-close.md), derived in [the emergence reading](../audits/audit-phase-18-flip-emergence.md) |
@@ -99,7 +100,9 @@ are traced case by case in the first audit below.
 The commissioned audits are AI auditors, not third parties, and every gameplay
 and ML number here comes from one model on one prompt set at 50 games per set.
 
-<!-- ANCHOR: a later contract adds the research-shaped ML page and links it here. -->
+The ML program in research shape — problem, environment, method, one results
+table, the two behavioural findings, and what is wrong with the measurement — is
+[ml-program.md](ml-program.md).
 
 ## 5. Where to go next
 

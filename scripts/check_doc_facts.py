@@ -90,7 +90,11 @@ together, so one run names every drifted fact rather than the first.
    whose source is cheap to read is recomputed instead: the replay count from
    the verifier's own file population, the citation figure from the committed
    instrument's pinned assertions, the vent headline as arithmetic over the
-   reading guide's cross-tab cells. The win rates are re-derived in check 1.
+   reading guide's cross-tab cells, and the proof-vs-inference conviction pair
+   as the column sums of the phase-19 close audit's own partition table — whose
+   proof-present innocent-ejection row must still be zero, because the README
+   row says every innocent ejection sits in the no-proof cell. The win rates are
+   re-derived in check 1.
 10. **The real-report example matches that report.** README.md hands a reader a
     populated eval report because the default fake provider produces an empty
     one; its ejection count and two rates come from that report's own
@@ -370,6 +374,30 @@ _CITATION_PIN_NAMES: Final[tuple[str, ...]] = (
 )
 _VENT_CLAIM: Final = "Correct 9p ejections riding an ejectee-specific vent sighting"
 _VENT_TABLE_HEADER: Final = "Meeting contains a vent flag"
+# The conviction partition: the phase-19 close audit's own per-set table, whose
+# four data columns sum to the pooled pair the README states.
+_PROOF_PARTITION_AUDIT: Final = "audits/audit-phase-19-close.md"
+_PROOF_CLAIM: Final = (
+    "Ejection accuracy with engine-certified proof of the ejectee's role, "
+    "against without"
+)
+_PROOF_TABLE_HEADER: Final = "cell"
+# The four rows read out of that table, by their own labels (emphasis stripped,
+# lowercased), so a reordered table derives the same figures and a renamed row
+# fails loud instead of deriving a silent half-sum.
+_PROOF_ROW: Final = "direct-proof accuracy"
+_NON_PROOF_ROW: Final = "non-direct accuracy"
+_INNOCENT_ROW: Final = "innocent ejections (all in the non-direct cell)"
+_PROOF_INNOCENT_ROW: Final = "proof-present innocent ejections"
+_PROOF_ROW_LABELS: Final[tuple[str, ...]] = (
+    _PROOF_ROW,
+    _NON_PROOF_ROW,
+    _INNOCENT_ROW,
+    _PROOF_INNOCENT_ROW,
+)
+_RATIO_CELL: Final = re.compile(r"(\d+)\s*/\s*(\d+)")
+_COUNT_CELL: Final = re.compile(r"(\d+)")
+_EMPHASIS: Final = re.compile(r"[*`]")
 # The cross-tab's rows are read by their own label, flagged first, so a
 # reordered table cannot silently swap the two populations.
 _VENT_ROW_LABELS: Final[tuple[str, str]] = ("yes", "no")
@@ -1363,7 +1391,11 @@ def check_result_sources(repo_root: Path, readme: str, errors: list[str]) -> Non
     * the citation-compliance figure, from the pinned assertions in the
       committed instrument test;
     * the vent-sighting headline, as arithmetic over the reading guide's own
-      cross-tab cells, so the headline cannot drift from the table under it.
+      cross-tab cells, so the headline cannot drift from the table under it;
+    * the proof-vs-inference conviction pair, as the column sums of the
+      phase-19 close audit's partition table — together with the injustice
+      claim riding in the same row, which holds only while that table's
+      proof-present innocent-ejection row is zero.
 
     What this check does NOT re-derive is deliberate: that the 100 replays
     still *reconstruct* is ``scripts/verify_samples.sh``'s answer, and the
@@ -1454,6 +1486,63 @@ def check_result_sources(repo_root: Path, readme: str, errors: list[str]) -> Non
                 errors,
             )
 
+    audit = read_document(repo_root, _PROOF_PARTITION_AUDIT, errors)
+    if audit is not None:
+        partition = proof_partition(audit)
+        if partition is None:
+            errors.append(
+                f"{_PROOF_PARTITION_AUDIT}: no conviction-partition table with a "
+                f"'{_PROOF_TABLE_HEADER}' header row and its four labelled rows "
+                f"— the {_README} proof-vs-inference figure has nothing to be "
+                "derived from."
+            )
+        else:
+            (proof, non_proof), innocent, proof_innocent = partition
+            expected = (
+                f"{proof[0]} / {proof[1]} = {proof[0] / proof[1]:.3f} vs "
+                f"{non_proof[0]} / {non_proof[1]} = {non_proof[0] / non_proof[1]:.3f}"
+            )
+            compare_result_figure(
+                _PROOF_CLAIM,
+                figures,
+                expected,
+                f"the partition table in {_PROOF_PARTITION_AUDIT}",
+                errors,
+            )
+            check_injustice_cell(readme, innocent, proof_innocent, errors)
+
+
+def check_injustice_cell(
+    readme: str, innocent: int, proof_innocent: int, errors: list[str]
+) -> None:
+    """The proof row's own injustice claim, held to the same partition table.
+
+    The row does not only state two accuracies: it states that every innocent
+    ejection landed in the cell without proof. That is a claim about a
+    different pair of table rows, so it is checked against them — an audit that
+    ever records a proof-present innocent ejection must not leave the front
+    door still saying there were none.
+    """
+
+    row = results_row(readme, _PROOF_CLAIM)
+    if row is None:
+        return  # compare_result_figure already reported the missing row
+    if proof_innocent:
+        errors.append(
+            f"{_README}: the results row {_PROOF_CLAIM!r} says every innocent "
+            f"ejection sits in the no-proof cell, but {_PROOF_PARTITION_AUDIT} "
+            f"records {proof_innocent} proof-present innocent ejection(s)."
+        )
+        return
+    stated = f"{innocent} of {innocent} innocent ejections"
+    if stated not in " | ".join(row):
+        errors.append(
+            f"{_README}: the results row {_PROOF_CLAIM!r} does not state "
+            f"{stated!r} — {_PROOF_PARTITION_AUDIT}'s partition table counts "
+            f"{innocent} innocent ejections, every one of them in the no-proof "
+            "cell, and the row is where the front door says so."
+        )
+
 
 def compare_result_figure(
     claim: str,
@@ -1512,6 +1601,70 @@ def vent_crosstab(guide: str) -> tuple[tuple[int, int], tuple[int, int]] | None:
     if set(labelled) != set(_VENT_ROW_LABELS):
         return None
     return labelled[_VENT_ROW_LABELS[0]], labelled[_VENT_ROW_LABELS[1]]
+
+
+def proof_partition(
+    audit: str,
+) -> tuple[tuple[tuple[int, int], tuple[int, int]], int, int] | None:
+    """The conviction partition, pooled across the audit table's four sets.
+
+    Returns ``((proof_correct, proof_total), (other_correct, other_total))``
+    followed by the innocent-ejection total and the proof-present innocent
+    total. Each accuracy cell contributes its own ``k/n`` — the leading ratio
+    of the cell, ahead of any interval or advisory note — so a set that
+    recorded no cell at all (``0/0``) pools as the nothing it is. Rows are
+    keyed on their own labels, so reordering the table changes nothing while
+    renaming a row fails loud. ``None`` when the table is absent, mislabelled,
+    or a cell holds no number: format drift the caller reports rather than
+    pools a half-sum through.
+    """
+
+    rows: dict[str, list[str]] = {}
+    seen_header = False
+    for line in audit.splitlines():
+        cells = table_cells(line)
+        if cells is None or len(cells) < 5:
+            if seen_header and rows:
+                break
+            continue
+        if not seen_header:
+            seen_header = _EMPHASIS.sub("", cells[0]).strip() == _PROOF_TABLE_HEADER
+            continue
+        if all(_TABLE_RULE_CELL.match(cell) for cell in cells):
+            continue
+        label = _EMPHASIS.sub("", cells[0]).strip().lower()
+        if label in rows:
+            return None
+        rows[label] = cells[1:5]
+    if set(_PROOF_ROW_LABELS) - set(rows):
+        return None
+
+    def ratio(label: str) -> tuple[int, int] | None:
+        pooled = [0, 0]
+        for cell in rows[label]:
+            match = _RATIO_CELL.search(cell)
+            if match is None:
+                return None
+            pooled[0] += int(match.group(1))
+            pooled[1] += int(match.group(2))
+        return (pooled[0], pooled[1]) if pooled[1] else None
+
+    def total(label: str) -> int | None:
+        pooled = 0
+        for cell in rows[label]:
+            match = _COUNT_CELL.search(cell)
+            if match is None:
+                return None
+            pooled += int(match.group(1))
+        return pooled
+
+    proof, non_proof = ratio(_PROOF_ROW), ratio(_NON_PROOF_ROW)
+    innocent, proof_innocent = total(_INNOCENT_ROW), total(_PROOF_INNOCENT_ROW)
+    if proof is None or non_proof is None:
+        return None
+    if innocent is None or proof_innocent is None:
+        return None
+    return (proof, non_proof), innocent, proof_innocent
 
 
 def check_populated_report_example(
@@ -1725,6 +1878,20 @@ def results_rows(markdown: str) -> list[tuple[str, str]] | None:
             continue
         rows.append((cells[0], cells[1]))
     return rows
+
+
+def results_row(markdown: str, claim: str) -> list[str] | None:
+    """Every cell of the results row stating ``claim``, or ``None``.
+
+    :func:`results_rows` keeps only the two compared cells; a row whose source
+    column carries a claim of its own needs the whole row.
+    """
+
+    for line in markdown.splitlines():
+        cells = table_cells(line)
+        if cells is not None and cells and cells[0] == claim:
+            return cells
+    return None
 
 
 def table_cells(line: str) -> list[str] | None:

@@ -34,6 +34,7 @@ _COPIED = (
     "replays/samples/4p1i/MANIFEST.md",
     "replays/samples/9p2i/MANIFEST.md",
     "audits/audit-phase-18-close.md",
+    "audits/audit-phase-19-close.md",
     "eval/vote_correctness.py",
     "replays/samples/4p1i/tournament-eval-report.json",
     "replays/samples/9p2i/tournament-eval-report.json",
@@ -81,6 +82,19 @@ _HISTORY = "docs/history.md"
 _READING_GUIDE = "docs/reading-guide.md"
 _CITATION_INSTRUMENT = "tests/eval/test_vj_instruments.py"
 _AUDITS_INDEX = "audits/README.md"
+_PROOF_AUDIT = "audits/audit-phase-19-close.md"
+_PROOF_ROW = (
+    "| **direct-proof accuracy** | **68/68 = 1.000** [0.947, 1.0] | "
+    "**213/213 = 1.000** [0.982, 1.0] | 9/9 = 1.000 | 20/20 = 1.000 |\n"
+)
+_NON_PROOF_ROW = (
+    "| **non-direct accuracy** | **10/33 = 0.303** [0.174, 0.473] | "
+    "**35/89 = 0.393** [0.298, 0.497] | 1/3 = 0.333 (advisory) | 0/0 — no cell |\n"
+)
+_INNOCENT_ROW = "| innocent ejections (all in the non-direct cell) | 23 | 54 | 2 | 0 |"
+_PROOF_INNOCENT_ROW = (
+    "| proof-present innocent ejections | **0** | **0** | **0** | **0** |"
+)
 # The one dialect term the front door keeps, and the link that defines it.
 _BASELINE_LINK = "[baseline 6](docs/glossary.md#baseline-n-the-reference-recording)"
 _BASELINE_ANCHOR_HEADING = "### baseline N (the reference recording)"
@@ -945,6 +959,97 @@ def test_mislabelled_vent_crosstab_row_fails_loud(doc_tree: Path) -> None:
     assert "no vent cross-tab" in errors[0]
 
 
+def test_proof_partition_derived_from_the_close_audit(doc_tree: Path) -> None:
+    # The pair is the column sum of the audit's own partition table, so a
+    # moved cell there moves the front-door figure rather than being absorbed.
+    _substitute(doc_tree, _PROOF_AUDIT, "**68/68 = 1.000**", "**60/68 = 0.882**")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "'310 / 310 = 1.000 vs 46 / 125 = 0.368'" in errors[0]
+    assert "'302 / 310 = 0.974 vs 46 / 125 = 0.368'" in errors[0]
+
+
+def test_proof_partition_read_by_label_not_position(doc_tree: Path) -> None:
+    # Reading the rows by order would invert the claim on a reordered table.
+    # Keyed on the labels, reordering changes nothing...
+    text = _read(doc_tree, _PROOF_AUDIT)
+    assert _PROOF_ROW + _NON_PROOF_ROW in text
+    _write(
+        doc_tree,
+        _PROOF_AUDIT,
+        text.replace(_PROOF_ROW + _NON_PROOF_ROW, _NON_PROOF_ROW + _PROOF_ROW),
+    )
+    assert check_doc_facts.check_facts(doc_tree) == []
+
+
+def test_swapped_proof_partition_labels_detected(doc_tree: Path) -> None:
+    # ...while swapping which cell is the proof cell inverts the finding, and
+    # is caught: convictions would then be near-chance WITH proof.
+    text = _read(doc_tree, _PROOF_AUDIT)
+    assert _PROOF_ROW in text and _NON_PROOF_ROW in text
+    swapped = _PROOF_ROW.replace(
+        "**direct-proof accuracy**", "**non-direct accuracy**"
+    ) + _NON_PROOF_ROW.replace("**non-direct accuracy**", "**direct-proof accuracy**")
+    _write(doc_tree, _PROOF_AUDIT, text.replace(_PROOF_ROW + _NON_PROOF_ROW, swapped))
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "'46 / 125 = 0.368 vs 310 / 310 = 1.000'" in errors[0]
+
+
+def test_proof_present_innocent_ejection_reaches_the_front_door(
+    doc_tree: Path,
+) -> None:
+    # The row claims every innocent ejection landed without proof. One
+    # proof-present innocent ejection makes that false, and it must fail here
+    # rather than sit on the front door.
+    _substitute(
+        doc_tree,
+        _PROOF_AUDIT,
+        _PROOF_INNOCENT_ROW,
+        "| proof-present innocent ejections | **1** | **0** | **0** | **0** |",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "1 proof-present innocent ejection(s)" in errors[0]
+
+
+def test_innocent_ejection_total_drift_detected(doc_tree: Path) -> None:
+    # The 79 of 79 is the same table's arithmetic, so it drifts with it.
+    _substitute(
+        doc_tree,
+        _PROOF_AUDIT,
+        _INNOCENT_ROW,
+        "| innocent ejections (all in the non-direct cell) | 25 | 54 | 2 | 0 |",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "'81 of 81 innocent ejections'" in errors[0]
+
+
+def test_missing_proof_partition_table_fails_loud(doc_tree: Path) -> None:
+    # Losing the table must not read as "nothing to derive from".
+    _substitute(
+        doc_tree,
+        _PROOF_AUDIT,
+        "| cell | samples 9p2i |",
+        "| population | samples 9p2i |",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "no conviction-partition table" in errors[0]
+
+
+def test_renamed_proof_partition_row_fails_loud(doc_tree: Path) -> None:
+    # A row this derivation cannot identify must fail rather than pool a
+    # half-sum out of the rows it does recognize.
+    _substitute(
+        doc_tree, _PROOF_AUDIT, "| **direct-proof accuracy** |", "| **proof cell** |"
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "no conviction-partition table" in errors[0]
+
+
 def test_report_example_ejection_count_drift_detected(doc_tree: Path) -> None:
     # The example exists because the fake provider's report is empty; its
     # scalars come from the committed report, not from prose.
@@ -1035,10 +1140,13 @@ def test_indexed_audit_that_no_longer_exists_detected(doc_tree: Path) -> None:
     (doc_tree / "audits" / "audit-phase-19-close.md").unlink()
     errors = check_doc_facts.check_facts(doc_tree)
     assert any("indexes audit-phase-19-close.md" in error for error in errors)
-    # Every other error is the same deletion seen through the link check: the
-    # four front-door documents that pointed at the record now point at nothing.
+    # Every other error is the same deletion seen through another reader: the
+    # front-door documents that pointed at the record now point at nothing, and
+    # the conviction-partition figure loses the table it is derived from.
     assert all(
-        "indexes audit-phase-19-close.md" in error or "does not exist" in error
+        "indexes audit-phase-19-close.md" in error
+        or "does not exist" in error
+        or "unreadable" in error
         for error in errors
     )
 
@@ -1097,11 +1205,13 @@ def test_stubbed_results_table_detected(doc_tree: Path) -> None:
     # Agreement over a stub is not agreement: a gutted table must fail rather
     # than pass vacuously.
     text = _read(doc_tree, _README)
-    kept = [
-        line
-        for line in text.splitlines()
-        if not (line.startswith("| Impostor win rate") or line.startswith("| Eject "))
-    ]
+    gutted = (
+        "| Impostor win rate",
+        "| Eject ",
+        "| Ejection accuracy ",
+        "| Learned tactical policies ",
+    )
+    kept = [line for line in text.splitlines() if not line.startswith(gutted)]
     _write(doc_tree, _README, "\n".join(kept) + "\n")
     errors = check_doc_facts.check_facts(doc_tree)
     assert any("fewer than the 4 this check needs" in error for error in errors)

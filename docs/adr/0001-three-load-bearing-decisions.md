@@ -20,3 +20,25 @@ This ADR records the three load-bearing decisions from DESIGN.md §0 verbatim.
 ## Consequences
 
 All architecture and implementation work must conform to these decisions.
+
+## Note — 2026-08-19: what decision 3's belief state holds at HEAD
+
+Additive note on a 2026-05-01 record: nothing above is rewritten. Decision 3 names
+three channels; two are written in production and one is not, so a reader who
+quotes the parenthetical gets a claim the tree does not support.
+
+- **`trust` is present but never written outside tests.** `BeliefState.adjust_trust`
+  (`agents/memory/beliefs.py`) is defined and covered, and every caller of it in the
+  tree is under `tests/`. A live agent's trust score therefore never leaves its
+  initial value, and no rendered memory view has ever shown a moved one.
+- **The contradictions list is written, but not where it is read from.**
+  `apply_contradiction_rule` does call `record_contradiction` — on the derived
+  `BeliefState` it returns, not on the agent's persistent store — so the
+  `## Open contradictions:` block in `agents/memory/store.py` appeared in **0 of the
+  1,656 replay renders** the 2026-08-19 review sampled.
+- The **alibi map** is written in production (`agents.memory.store` calls
+  `record_alibi` from each public alibi claim), and the suspicion channel is the one
+  the deterministic fold carries between meetings.
+
+This note records the gap. Repairing the substrate is a separate contract; until one
+lands, "trust scores" above is a design intent, not a description of HEAD.
