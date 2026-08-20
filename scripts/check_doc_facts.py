@@ -421,9 +421,12 @@ _INJUSTICE_CLAIM: Final = (
 _ML_PAGE: Final = "docs/ml-program.md"
 _FINALIST_JSONL: Final = "training/reports/results-finalist-eval.jsonl"
 _ML_TABLE_HEADER: Final[tuple[str, str]] = ("policy", "impostor win")
-# An arm row's label is its committed sha prefix in backticks; the entrant name
-# in the JSONL is that prefix behind the campaign's own arm prefix.
-_ML_ARM_LABEL: Final = re.compile(r"`([0-9a-f]{6,})…`")
+# Every row label opens with its identity in backticks — an arm's committed sha
+# prefix, or the comparator's entrant name. The identity is matched WHOLE (the
+# capture is anchored on the backticks), because a substring test would accept a
+# ``fake-p18-fsm-comparator`` row as the comparator.
+_ML_ROW_IDENTITY: Final = re.compile(r"`([^`]+)`")
+_ML_ARM_SHA: Final = re.compile(r"\A([0-9a-f]{6,})…\Z")
 _ML_ARM_ENTRANT: Final = "p18-imp-{sha}"
 _ML_COMPARATOR_LABEL: Final = "p18-fsm-comparator"
 # ``<k>/<n> = <rate>`` — the rate is checked at the precision the cell prints,
@@ -433,9 +436,13 @@ _ML_FRACTION: Final = re.compile(r"(\d+)\s*/\s*(\d+)\s*=\s*(\d*\.(\d+))")
 # stated after the p on one row and must not be mistaken for it.
 _ML_P_VALUE: Final = re.compile(r"(\d*\.(\d+))")
 # The referee column's two verdicts, held to ``watchability.referee_passed`` in
-# the same committed JSONL — the adoption gate the whole page turns on.
+# the same committed JSONL — the adoption gate the whole page turns on. The cell
+# must BE one of these once markdown emphasis is stripped, not merely contain
+# one: "not a FAIL" contains FAIL and means the opposite.
 _ML_REFEREE_PASS: Final = "PASS"
 _ML_REFEREE_FAIL: Final = "FAIL"
+# The published width of the results table: policy, win, comparator, p, referee.
+_ML_TABLE_COLUMNS: Final = 5
 # The cross-tab's rows are read by their own label, flagged first, so a
 # reordered table cannot silently swap the two populations.
 _VENT_ROW_LABELS: Final[tuple[str, str]] = ("yes", "no")
@@ -1553,7 +1560,40 @@ def check_result_sources(repo_root: Path, readme: str, errors: list[str]) -> Non
                 f"the partition table in {_PROOF_PARTITION_AUDIT}",
                 errors,
             )
+            check_partition_arithmetic(
+                proof, non_proof, innocent, proof_innocent, errors
+            )
             check_injustice_cell(readme, innocent, proof_innocent, errors)
+
+
+def check_partition_arithmetic(
+    proof: tuple[int, int],
+    non_proof: tuple[int, int],
+    innocent: int,
+    proof_innocent: int,
+    errors: list[str],
+) -> None:
+    """The partition table against itself, before either half is published.
+
+    An ejection is either correct or it convicted an innocent, so each accuracy
+    row already fixes its own injustice count: ``n - k``. The table states that
+    count separately, which makes the two rows checkable against each other —
+    and worth checking, because agreeing the front door with a drifted audit
+    would otherwise publish an internally contradictory table.
+    """
+
+    for label, (correct, total), stated in (
+        ("no-proof", non_proof, innocent),
+        ("proof-present", proof, proof_innocent),
+    ):
+        implied = total - correct
+        if implied != stated:
+            errors.append(
+                f"{_PROOF_PARTITION_AUDIT}: the {label} cell reads "
+                f"{correct}/{total}, so {implied} of its ejections convicted an "
+                f"innocent, but the table's own {label} innocent-ejection row "
+                f"totals {stated}."
+            )
 
 
 def check_injustice_cell(
@@ -1631,16 +1671,27 @@ def check_ml_results_table(repo_root: Path, errors: list[str]) -> None:
         return
 
     seen: set[str] = set()
+    comparator_rows = 0
     widest = max(stats.values(), key=lambda row: row.n)
     for cells in rows:
         label = cells[0]
-        if _ML_COMPARATOR_LABEL in label:
+        if len(cells) < _ML_TABLE_COLUMNS:
+            errors.append(
+                f"{_ML_PAGE}: the results row {label!r} holds {len(cells)} cells, "
+                f"not the {_ML_TABLE_COLUMNS} the table publishes — a row missing "
+                "a column states a figure nothing can be held to."
+            )
+            continue
+        identity = _ML_ROW_IDENTITY.search(label)
+        name = identity.group(1) if identity is not None else ""
+        if name == _ML_COMPARATOR_LABEL:
+            comparator_rows += 1
             compare_ml_cell(
                 label, "impostor win", cells[1], widest.baseline_wins, widest.n, errors
             )
             compare_ml_referee(label, cells[4], verdicts, _ML_COMPARATOR_LABEL, errors)
             continue
-        match = _ML_ARM_LABEL.search(label)
+        match = _ML_ARM_SHA.match(name)
         if match is None:
             errors.append(
                 f"{_ML_PAGE}: the results row {label!r} names neither the "
@@ -1663,6 +1714,12 @@ def check_ml_results_table(repo_root: Path, errors: list[str]) -> None:
         compare_ml_p(label, cells[3], arm.p_exact, errors)
         compare_ml_referee(label, cells[4], verdicts, entrant, errors)
 
+    if comparator_rows != 1:
+        errors.append(
+            f"{_ML_PAGE}: the results table holds {comparator_rows} "
+            f"{_ML_COMPARATOR_LABEL!r} rows — every arm is measured against "
+            "exactly one comparator, so the table states exactly one."
+        )
     for entrant in sorted(set(stats) - seen):
         errors.append(
             f"{_ML_PAGE}: {_FINALIST_JSONL} carries the arm {entrant!r}, which the "
@@ -1726,8 +1783,9 @@ def compare_ml_referee(
     """One referee cell, held to ``watchability.referee_passed`` in the JSONL.
 
     This column is the adoption gate: it is what "none became the default"
-    means. A cell that states neither verdict fails as loudly as one that
-    states the wrong verdict — an unreadable gate outcome is not a pass.
+    means. The cell must BE one of the two verdicts once markdown emphasis is
+    stripped, never merely contain one — "not a FAIL" contains FAIL and states
+    its opposite — and a cell that is neither fails as loudly as a wrong one.
     """
 
     passed = verdicts.get(entrant)
@@ -1737,19 +1795,16 @@ def compare_ml_referee(
             f"{entrant!r} verdict in {_FINALIST_JSONL} to check against."
         )
         return
-    upper = cell.upper()
-    states_pass = _ML_REFEREE_PASS in upper
-    states_fail = _ML_REFEREE_FAIL in upper
-    if states_pass == states_fail:
+    stated = _EMPHASIS.sub("", cell).strip().upper()
+    if stated not in (_ML_REFEREE_PASS, _ML_REFEREE_FAIL):
         errors.append(
             f"{_ML_PAGE}: the referee cell of results row {label!r} reads "
-            f"{cell!r}, which states neither {_ML_REFEREE_PASS} nor "
-            f"{_ML_REFEREE_FAIL} unambiguously."
+            f"{cell!r}, which is neither {_ML_REFEREE_PASS} nor "
+            f"{_ML_REFEREE_FAIL} — this column carries a verdict, not prose."
         )
         return
-    if states_pass is not passed:
-        stated = _ML_REFEREE_PASS if states_pass else _ML_REFEREE_FAIL
-        recorded = _ML_REFEREE_PASS if passed else _ML_REFEREE_FAIL
+    recorded = _ML_REFEREE_PASS if passed else _ML_REFEREE_FAIL
+    if stated != recorded:
         errors.append(
             f"{_ML_PAGE}: the referee cell of results row {label!r} states "
             f"{stated}, but {_FINALIST_JSONL} records "
