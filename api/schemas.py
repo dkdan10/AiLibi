@@ -46,7 +46,12 @@ from pydantic import BaseModel, ConfigDict, Field
 # string (not semver) so a future minor revision ("1.1") is representable
 # without retyping the field. ``frontend/src/types/api.ts`` is generated from
 # these models (no hand-mirror), so DTO ↔ TS cannot drift.
-VIEW_MODEL_VERSION: Final[str] = "1"
+#
+# ``"2"`` widens :data:`CurrentAction` from seven values to eleven. A widened
+# value set is not an additive projection: a consumer that indexes the old seven
+# exhaustively (the map's glyph registry does) has no entry for the four new ones,
+# so a build on the old contract must fail loudly rather than render a hole.
+VIEW_MODEL_VERSION: Final[str] = "2"
 
 
 class _FrozenView(BaseModel):
@@ -222,6 +227,46 @@ class AgentVisibilityView(_FrozenView):
     audible_events: tuple[AudibleEventView, ...]
 
 
+CurrentAction: TypeAlias = Literal[
+    "IDLE",
+    "MOVING",
+    "TASK",
+    "KILL",
+    "VENT",
+    "REPORT",
+    "SABOTAGE",
+    "PRETEND_TASK",
+    "EMERGENCY",
+    "REPAIR",
+    "BLOCKED",
+]
+"""What an agent DID on one tick: its recorded intent and how the engine resolved it.
+
+The label describes THIS tick's submitted action and its outcome — never the last
+action the engine happened to accept, so it can never be inherited from an earlier
+tick. An agent that submitted nothing (dead, or the synthesized Start frame) is
+``IDLE``; every other value names an intent that was actually recorded for this
+tick.
+
+Four of the eleven values are about intents the engine did NOT carry out, which is
+where the spectator's picture used to diverge from the game:
+
+* ``PRETEND_TASK`` — an impostor submitted ``do_task``. An impostor owns no task
+  instance, so the engine always rejects it, yet a co-located crewmate witnesses
+  an agent working (``observation/service.py`` renders that same rejection as
+  ``action="task"``). This is the fake-task bluff: the two projections describe
+  ONE event and must move together.
+* ``BLOCKED`` — the intent did not happen: the engine rejected it, or a meeting
+  opened earlier in the same tick and it was never attempted at all.
+* ``EMERGENCY`` — an accepted emergency-button press, kept apart from ``REPORT``
+  (a body report), because they are different acts with different tells.
+* ``REPAIR`` — an accepted ``repair_sabotage``, kept apart from ``TASK``.
+
+Spectator-side only: this is a projection of already-recorded bytes, so no engine
+state, action row or ``state_hash`` is involved.
+"""
+
+
 class AgentTickStateView(_FrozenView):
     """The dynamic slice of one agent's ``engine.entities.PlayerState`` at one
     tick.
@@ -246,9 +291,7 @@ class AgentTickStateView(_FrozenView):
     is_alive: bool
     is_venting: bool
     task_progress: float | None
-    current_action: Literal[
-        "IDLE", "MOVING", "TASK", "KILL", "VENT", "REPORT", "SABOTAGE"
-    ]
+    current_action: CurrentAction
     visibility: AgentVisibilityView | None = None
 
 

@@ -23,7 +23,7 @@ import json
 import sys
 from collections.abc import Iterator, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, get_args
 
 import pytest
 from fastapi.testclient import TestClient
@@ -41,7 +41,7 @@ from api.replay_loader import (
     ReplayLoader,
     get_replay_loader,
 )
-from api.schemas import VIEW_MODEL_VERSION, BallotView, GateView
+from api.schemas import VIEW_MODEL_VERSION, BallotView, CurrentAction, GateView
 from engine.events import EngineEvent
 from engine.tick import advance_tick
 from engine.world import WorldState, load_canonical_map
@@ -145,6 +145,36 @@ def test_served_payload_carries_view_model_version(
     served = json.loads(replay.model_dump_json(by_alias=True))
     assert served["viewModelVersion"] == VIEW_MODEL_VERSION
     assert "view_model_version" not in served
+
+
+def test_contract_version_and_action_set_move_in_lockstep() -> None:
+    # The stamp is only a contract if both halves move together: the server
+    # stamps this string and `frontend/src/api/client.ts` rejects any payload
+    # carrying a different one, reading the value from the generated module. The
+    # assertions above compare each side to itself and so cannot see a Python
+    # bump that never reached the generated file; these pin the literal.
+    assert VIEW_MODEL_VERSION == "2"
+    generated = gen_frontend_types._OUT_TYPES.read_text(encoding="utf-8")
+    assert f'export const VIEW_MODEL_VERSION = "{VIEW_MODEL_VERSION}";' in generated
+
+    # Version "2" IS the widened action set, so it is pinned in the same breath:
+    # eleven values under ONE name on both sides, in one order.
+    assert get_args(CurrentAction) == (
+        "IDLE",
+        "MOVING",
+        "TASK",
+        "KILL",
+        "VENT",
+        "REPORT",
+        "SABOTAGE",
+        "PRETEND_TASK",
+        "EMERGENCY",
+        "REPAIR",
+        "BLOCKED",
+    )
+    alias = " | ".join(f'"{value}"' for value in get_args(CurrentAction))
+    assert f"export type CurrentAction = {alias};" in generated
+    assert "current_action: CurrentAction;" in generated
 
 
 def test_player_color_serves_playful_identity_palette(

@@ -19,10 +19,10 @@
 // differs from this, so a drifted contract fails loudly at the seam
 // instead of mis-rendering; client and server can only move together,
 // through this generated line.
-export const VIEW_MODEL_VERSION = "1";
+export const VIEW_MODEL_VERSION = "2";
 
 export type PlayerRole = "CREWMATE" | "IMPOSTOR";
-export type AgentAction = "IDLE" | "MOVING" | "TASK" | "KILL" | "VENT" | "REPORT" | "SABOTAGE";
+export type CurrentAction = "IDLE" | "MOVING" | "TASK" | "KILL" | "VENT" | "REPORT" | "SABOTAGE" | "PRETEND_TASK" | "EMERGENCY" | "REPAIR" | "BLOCKED";
 export type Winner = "CREWMATES" | "IMPOSTORS";
 export type TriggerKind = "body" | "emergency";
 export type MeetingOutcome = "EJECTED" | "SKIPPED";
@@ -113,7 +113,7 @@ export interface AgentTickStateView {
   is_alive: boolean;
   is_venting: boolean;
   task_progress: number | null;
-  current_action: AgentAction;
+  current_action: CurrentAction;
   visibility: AgentVisibilityView | null;
 }
 

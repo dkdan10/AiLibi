@@ -39,7 +39,7 @@ import sabotage from "./sabotage.svg?raw";
 import task from "./task.svg?raw";
 import vent from "./vent.svg?raw";
 
-import type { AgentAction } from "../../types/api";
+import type { CurrentAction } from "../../types/api";
 
 // Every glyph SVG shares one viewBox unit (the locked style-spec) — the painter
 // scales the parsed vector geometry from this grid into screen pixels.
@@ -63,10 +63,13 @@ export const GLYPH_SVG = {
 
 export type GlyphName = keyof typeof GLYPH_SVG;
 
-// The render-ready `current_action` → action glyph mapping (DESIGN.md §3.2: the
-// engine already collapses `report`/`emergency`→REPORT and `repair_sabotage`→TASK
-// before this DTO field, so the seven AgentAction values map 1:1 to a glyph).
-export const ACTION_GLYPH: Record<AgentAction, GlyphName> = {
+// The render-ready `current_action` → action glyph mapping. Exhaustive over
+// `CurrentAction` on purpose: adding a value to the DTO must fail this file's
+// compile rather than leave the map with a silent hole. The eleven values reuse
+// the eight committed glyphs — an act and the pretence of that act draw the same
+// picture (a fake task IS a task, to anyone watching), and BLOCKED — an intent
+// the tick never carried out — draws the idle mark.
+export const ACTION_GLYPH: Record<CurrentAction, GlyphName> = {
   IDLE: "idle",
   MOVING: "moving",
   TASK: "task",
@@ -74,6 +77,38 @@ export const ACTION_GLYPH: Record<AgentAction, GlyphName> = {
   VENT: "vent",
   REPORT: "report",
   SABOTAGE: "sabotage",
+  PRETEND_TASK: "task",
+  EMERGENCY: "report",
+  REPAIR: "task",
+  BLOCKED: "idle",
+};
+
+/**
+ * How an action chip is drawn.
+ *
+ * `"solid"` — a cream sticker: the engine carried the action out.
+ * `"hollow"` — a ghosted ring, no sticker: the agent INTENDED this and the tick
+ * did not deliver it. It keeps a fake task visually distinct from a real one
+ * without inventing a second glyph for the same act.
+ */
+export type ChipStyle = "solid" | "hollow";
+
+// Which chip each action draws, or `null` where the map draws nothing at all.
+// Exhaustive over `CurrentAction` for the same reason as `ACTION_GLYPH`. IDLE is
+// the only blank — a room of waiting agents stays calm. PRETEND_TASK and BLOCKED
+// are the hollow pair: both are intents the tick did not deliver.
+export const ACTION_CHIP: Record<CurrentAction, ChipStyle | null> = {
+  IDLE: null,
+  MOVING: "solid",
+  TASK: "solid",
+  KILL: "solid",
+  VENT: "solid",
+  REPORT: "solid",
+  SABOTAGE: "solid",
+  PRETEND_TASK: "hollow",
+  EMERGENCY: "solid",
+  REPAIR: "solid",
+  BLOCKED: "hollow",
 };
 
 // Re-parsing the SVG geometry on every @pixi/react redraw would be wasteful, so

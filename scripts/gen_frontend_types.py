@@ -91,7 +91,19 @@ _ROOTS: Final[tuple[type[BaseModel], ...]] = (
 # matches one of these emits the alias name; any other literal is inlined.
 _ENUM_ALIASES: Final[dict[str, tuple[str, ...]]] = {
     "PlayerRole": ("CREWMATE", "IMPOSTOR"),
-    "AgentAction": ("IDLE", "MOVING", "TASK", "KILL", "VENT", "REPORT", "SABOTAGE"),
+    "CurrentAction": (
+        "IDLE",
+        "MOVING",
+        "TASK",
+        "KILL",
+        "VENT",
+        "REPORT",
+        "SABOTAGE",
+        "PRETEND_TASK",
+        "EMERGENCY",
+        "REPAIR",
+        "BLOCKED",
+    ),
     "Winner": ("CREWMATES", "IMPOSTORS"),
     "TriggerKind": ("body", "emergency"),
     "MeetingOutcome": ("EJECTED", "SKIPPED"),

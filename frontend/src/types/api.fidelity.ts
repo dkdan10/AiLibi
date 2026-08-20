@@ -893,7 +893,7 @@ export const _fidelityReplay: ReplayView = {
       "tick": 2
     }
   ],
-  "viewModelVersion": "1"
+  "viewModelVersion": "2"
 };
 void _fidelityReplay;
 

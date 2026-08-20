@@ -11,7 +11,12 @@ from __future__ import annotations
 import json
 import logging
 import os
+from collections import Counter, defaultdict
+from collections.abc import Mapping
+from dataclasses import dataclass
+from functools import cache
 from pathlib import Path
+from typing import Literal, get_args
 
 import pytest
 from fastapi.testclient import TestClient
@@ -35,12 +40,18 @@ from api.replay_loader import (
     get_replay_loader,
 )
 from api.schemas import (
+    CurrentAction,
     FoundBodyObsView,
     KillEventView,
     MeetingTriggeredEventView,
     ReportBodyEventView,
 )
-from engine.world import load_canonical_map
+from engine.actions import Action
+from engine.entities import BodyState, PlayerState, TaskState
+from engine.events import ActionRejectedEvent
+from engine.rng import EngineRng
+from engine.tick import advance_tick
+from engine.world import WorldState, load_canonical_map
 from llm.fake_provider import FakeProvider
 from observation.service import ObservationService
 from orchestrator.game import (
@@ -51,6 +62,7 @@ from orchestrator.game import (
 from orchestrator.replay import (
     GameEndReplayEntry,
     LLMCallRecord,
+    ReplayEntry,
     ReplayLogEntry,
     read_all_entries,
     substrate_flag_snapshot,
@@ -1375,3 +1387,303 @@ def test_override_loader_is_silent_when_substrate_matches_stamp(
     assert not any(
         "Deliberate substrate mismatch" in rec.message for rec in caplog.records
     )
+
+
+# -- current_action fidelity: the recorded intent, never an inherited label ----
+#
+# ``current_action`` used to be read off the actor's ``last_action`` — the last
+# action the engine ACCEPTED — so a rejected or never-attempted intent left the
+# previous tick's label standing, and four whole classes of behaviour rendered as
+# something they were not. The tests below pin the replacement: the label is a
+# function of THIS tick's recorded intent and its outcome
+# (``api.replay_loader._current_action``).
+
+
+def _fidelity_state() -> WorldState:
+    """A minimal PLAY state in ADMIN: one impostor, two crewmates, one body.
+
+    ``p-2`` owns the only task instance, so ``p-3`` (the impostor) submitting
+    ``do_task`` for that map task is exactly the fake task the engine rejects and
+    a co-located crewmate witnesses as work.
+    """
+
+    def player(
+        pid: str,
+        role: Literal["CREWMATE", "IMPOSTOR"],
+        position: tuple[float, float],
+    ) -> PlayerState:
+        return PlayerState(
+            id=pid,
+            role=role,
+            alive=True,
+            room="ADMIN",
+            position=position,
+            last_action=None,
+            in_vent=False,
+        )
+
+    return WorldState(
+        tick=0,
+        phase="PLAY",
+        map="canonical_1",
+        players={
+            "p-1": player("p-1", "CREWMATE", (0.0, 0.0)),
+            "p-2": player("p-2", "CREWMATE", (1.0, 0.0)),
+            "p-3": player("p-3", "IMPOSTOR", (2.0, 0.0)),
+        },
+        bodies={
+            "body-p-9-0": BodyState(
+                id="body-p-9-0",
+                player_id="p-9",
+                room="ADMIN",
+                position=(3.0, 0.0),
+                killed_by="p-3",
+                discovered_by=None,
+            )
+        },
+        tasks={
+            "p-2:swipe_card": TaskState(
+                id="p-2:swipe_card",
+                owner="p-2",
+                map_task_id="swipe_card",
+                room="ADMIN",
+                progress=0,
+                required_ticks=1,
+                completed=False,
+            )
+        },
+        sabotage=None,
+        cooldowns={"p-3": 0},
+        emergency_uses={},
+        rng_state=EngineRng.from_seed(42).snapshot(),
+        seed=42,
+    )
+
+
+def _label_from_last_action(last_action: Action | None) -> str:
+    """The derivation this task replaced: the label read off ``last_action``.
+
+    Reproduced here — and nowhere in production — so the gate can prove it bites.
+    If the projection is ever reverted to reading the last ACCEPTED action, the
+    assertion comparing the two derivations fails instead of passing silently.
+    """
+
+    if last_action is None:
+        return "IDLE"
+    return {
+        "move": "MOVING",
+        "do_task": "TASK",
+        "kill": "KILL",
+        "vent": "VENT",
+        "report": "REPORT",
+        "emergency": "REPORT",
+        "sabotage": "SABOTAGE",
+        "repair_sabotage": "TASK",
+    }.get(last_action.type, "IDLE")
+
+
+def test_impostor_fake_task_reads_pretend_task_not_the_stale_label() -> None:
+    game_map = load_canonical_map()
+    # Tick 1: the impostor moves (to its own room, which the engine accepts), so
+    # its ``last_action`` is a move when the bluff lands on the next tick.
+    moved, _ = advance_tick(
+        _fidelity_state(),
+        replay_loader._deserialize_actions(
+            [{"type": "move", "actor": "p-3", "payload": {"to_room": "ADMIN"}}]
+        ),
+        game_map=game_map,
+    )
+    assert moved.players["p-3"].last_action is not None
+
+    # Tick 2: the impostor submits ``do_task``. It owns no instance of the map
+    # task, so the engine rejects it and never updates ``last_action``.
+    fake_task = replay_loader._deserialize_actions(
+        [{"type": "do_task", "actor": "p-3", "payload": {"task_id": "swipe_card"}}]
+    )
+    after, events = advance_tick(moved, fake_task, game_map=game_map)
+    assert any(
+        isinstance(event, ActionRejectedEvent) and event.actor == "p-3"
+        for event in events
+    )
+
+    intents = replay_loader._tick_intents(fake_task, events)
+    assert replay_loader._current_action(intents, "p-3", "IMPOSTOR") == "PRETEND_TASK"
+
+    # The gate bites: the label the replaced derivation produces here is a
+    # DIFFERENT one, so reverting the projection fails this test.
+    stale = _label_from_last_action(after.players["p-3"].last_action)
+    assert stale == "MOVING"
+    assert stale != replay_loader._current_action(intents, "p-3", "IMPOSTOR")
+
+
+def test_meeting_freezes_later_intents_into_blocked() -> None:
+    # ``advance_tick`` returns the moment a handler flips the phase to MEETING,
+    # so every action positioned after the trigger's was never attempted. Those
+    # agents did not idle and did not move — the tick foreclosed them.
+    game_map = load_canonical_map()
+    actions = replay_loader._deserialize_actions(
+        [
+            {"type": "move", "actor": "p-1", "payload": {"to_room": "ADMIN"}},
+            {"type": "report", "actor": "p-2", "payload": {"body_id": "body-p-9-0"}},
+            {"type": "do_task", "actor": "p-3", "payload": {"task_id": "swipe_card"}},
+        ]
+    )
+    state, events = advance_tick(_fidelity_state(), actions, game_map=game_map)
+    assert state.phase == "MEETING"
+
+    intents = replay_loader._tick_intents(actions, events)
+    # Before the trigger: judged on its merits.
+    assert replay_loader._current_action(intents, "p-1", "CREWMATE") == "MOVING"
+    # The trigger itself.
+    assert replay_loader._current_action(intents, "p-2", "CREWMATE") == "REPORT"
+    # After it: never attempted. BLOCKED outranks PRETEND_TASK — the impostor's
+    # fake task did not happen at all on this tick.
+    assert replay_loader._current_action(intents, "p-3", "IMPOSTOR") == "BLOCKED"
+
+
+def test_agent_with_no_recorded_intent_reads_idle() -> None:
+    # The inheritance channel, closed: an agent that submitted nothing this tick
+    # (a dead agent, the synthesized Start frame) has no label to carry forward,
+    # however busy it was a tick ago.
+    game_map = load_canonical_map()
+    state, events = advance_tick(
+        _fidelity_state(),
+        replay_loader._deserialize_actions(
+            [{"type": "move", "actor": "p-1", "payload": {"to_room": "ADMIN"}}]
+        ),
+        game_map=game_map,
+    )
+    assert _label_from_last_action(state.players["p-1"].last_action) == "MOVING"
+
+    no_intents = replay_loader._tick_intents([], ())
+    assert replay_loader._current_action(no_intents, "p-1", "CREWMATE") == "IDLE"
+
+
+@dataclass(frozen=True)
+class _ActionCensus:
+    """Every recorded intent in a committed set, by the label it renders."""
+
+    #: intent kind -> label -> count. Impostor ``do_task`` is counted apart from
+    #: a crewmate's: it is the fake task, and it is the class that used to lie.
+    by_intent: Mapping[str, Mapping[str, int]]
+    #: Labels on agent-ticks where that actor submitted nothing at all.
+    without_intent: Mapping[str, int]
+    #: Every non-null ``visibility.visible_players[].action`` seen in the walk —
+    #: the As-agent fog's OWN action channel, counted to keep it distinguishable
+    #: from the omniscient label.
+    fog_actions: Mapping[str, int]
+
+
+@cache
+def _committed_9p2i_action_census() -> _ActionCensus:
+    """Fold the committed 9p2i set once, cross-referencing intents to labels.
+
+    Re-derives nothing: it reads each replay's recorded ``actions`` rows and the
+    ``current_action`` the loader projected for that actor on that tick, so the
+    counts below are a property of the committed bytes and the served DTO.
+    """
+
+    loader = ReplayLoader(replay_dir=_COMMITTED_9P2I_DIR)
+    by_intent: dict[str, Counter[str]] = defaultdict(Counter)
+    without_intent: Counter[str] = Counter()
+    fog_actions: Counter[str] = Counter()
+    for meta in loader.list_replays():
+        replay = loader.load_replay(meta.game_id)
+        role = {player.agent_id: player.role for player in replay.players}
+        labels = {
+            tick.tick: {
+                agent.agent_id: agent.current_action for agent in tick.agent_states
+            }
+            for tick in replay.ticks
+        }
+        for tick_view in replay.ticks:
+            for agent in tick_view.agent_states:
+                if agent.visibility is None:
+                    continue
+                for seen in agent.visibility.visible_players:
+                    if seen.action is not None:
+                        fog_actions[seen.action] += 1
+        recorded: dict[int, dict[str, str]] = {}
+        path = _COMMITTED_9P2I_DIR / f"replay-seed-{meta.seed}.jsonl"
+        for entry in read_all_entries(path):
+            if isinstance(entry, ReplayEntry):
+                recorded[entry.tick] = {
+                    str(raw["actor"]): str(raw["type"]) for raw in entry.actions
+                }
+        for tick, per_agent in labels.items():
+            intents = recorded.get(tick, {})
+            for agent_id, label in per_agent.items():
+                kind = intents.get(agent_id)
+                if kind is None:
+                    without_intent[label] += 1
+                    continue
+                if kind == "do_task" and role[agent_id] == "IMPOSTOR":
+                    kind = "impostor_do_task"
+                by_intent[kind][label] += 1
+    return _ActionCensus(
+        by_intent={kind: dict(counts) for kind, counts in by_intent.items()},
+        without_intent=dict(without_intent),
+        fog_actions=dict(fog_actions),
+    )
+
+
+def test_committed_9p2i_fake_tasks_emergencies_and_repairs_are_named() -> None:
+    # The A-track census (audits/review-2026-08-19/A/s2-movement-positions.md
+    # §"BUG — B3") measured what the stale label cost over the committed sets;
+    # these are the same three intent classes, recomputed here from the same
+    # bytes under the fixed projection.
+    census = _committed_9p2i_action_census()
+
+    fake_tasks = census.by_intent["impostor_do_task"]
+    assert sum(fake_tasks.values()) == 415
+    # Not one of them still renders as a stale label.
+    assert fake_tasks.get("IDLE", 0) == 0
+    assert fake_tasks.get("MOVING", 0) == 0
+    assert fake_tasks.get("TASK", 0) == 0
+    # The 5 that read BLOCKED share a tick with an earlier meeting trigger, so
+    # the engine never attempted them at all.
+    assert fake_tasks["PRETEND_TASK"] == 410
+    assert fake_tasks["BLOCKED"] == 5
+
+    # 19 emergency intents: 14 pressed the button, 5 were foreclosed or refused.
+    assert census.by_intent["emergency"] == {"EMERGENCY": 14, "BLOCKED": 5}
+    # 114 repair intents: 83 landed.
+    assert census.by_intent["repair_sabotage"] == {"REPAIR": 83, "BLOCKED": 31}
+
+
+def test_committed_9p2i_labels_never_outlive_their_tick() -> None:
+    # The structural claim, checked over 50 games: a label describes the intent
+    # recorded for that actor on that tick, so it can name only an outcome that
+    # intent could have — and an agent that submitted nothing reads IDLE, whatever
+    # it was doing a tick earlier.
+    census = _committed_9p2i_action_census()
+    reachable = {
+        "move": {"MOVING", "BLOCKED"},
+        "do_task": {"TASK", "BLOCKED"},
+        "impostor_do_task": {"PRETEND_TASK", "BLOCKED"},
+        "kill": {"KILL", "BLOCKED"},
+        "vent": {"VENT", "BLOCKED"},
+        "report": {"REPORT", "BLOCKED"},
+        "emergency": {"EMERGENCY", "BLOCKED"},
+        "sabotage": {"SABOTAGE", "BLOCKED"},
+        "repair_sabotage": {"REPAIR", "BLOCKED"},
+        "wait": {"IDLE", "BLOCKED"},
+    }
+    assert set(census.by_intent) == set(reachable)
+    for kind, counts in census.by_intent.items():
+        assert set(counts) <= reachable[kind], kind
+    assert set(census.without_intent) == {"IDLE"}
+
+
+def test_fog_action_channel_keeps_its_own_vocabulary() -> None:
+    # The firewall question PRETEND_TASK raises: can an As-agent perspective
+    # reach it? No — the fog reads a DIFFERENT field. ``current_action`` is the
+    # omniscient spectator's label for the SELECTED agent's own token, and every
+    # other token under fog reads ``visibility.visible_players[].action``, whose
+    # vocabulary is disjoint from it. A co-located crewmate still witnesses the
+    # impostor's fake task, as ``"task"`` — which is exactly what it looks like
+    # from outside, and is the point of the bluff.
+    census = _committed_9p2i_action_census()
+    assert set(census.fog_actions) <= {"kill", "vent", "task"}
+    assert census.fog_actions["task"] > 0
+    assert not set(census.fog_actions) & set(get_args(CurrentAction))
