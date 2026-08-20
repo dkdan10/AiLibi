@@ -18,7 +18,7 @@ by **Daniel Keinan** · code by Claude Code agents, reviewed by Codex · [MIT](L
 
 ## Sixty seconds: what you are looking at
 
-Nine LLM agents walk a room graph, work their task lists, witness what they can actually see, and meet to argue about it. Two are impostors, told each other's names at the start; the other seven reason in the dark. The spectator opens any agent's mind at any tick — prompt, response, memory, beliefs — and every game replays from an action log and a per-tick hash, byte for byte. (*AiLibi*: an alibi, with the AI in front.)
+Nine LLM agents walk a room graph, work their task lists, witness what they can see, and meet to argue about it. Two are impostors, told each other's names at the start; the other seven reason in the dark. The spectator opens any agent's mind at any tick — prompt, response, memory, beliefs — and every game replays from an action log and a per-tick hash, byte for byte. (*AiLibi*: an alibi, with the AI in front.)
 
 ## At a glance
 
@@ -49,6 +49,14 @@ bash scripts/verify_samples.sh
 uv run python scripts/build_demo_bundle.py && python -m http.server -d frontend/dist/demo-bundle 8080
 ```
 
+### Three reproducibility scopes
+
+"Reproducible" is three claims here, kept apart rather than traded on the strongest.
+
+1. **Replay integrity** — committed replay bytes reconstruct through the engine's per-tick state hashes. Command 2 above, free and offline. **Verified strong.**
+2. **Same-runtime repeatability** — one seed, config, agent factory and set of provider responses produce byte-identical replays on one runtime. Command 1 above, under the fake provider. With a real provider, fresh generation is *not* deterministic: the recording reproduces, the seed does not.
+3. **Cross-platform optimizer portability** — independent hosts producing bit-identical learned-optimizer bytes. **Designed for, not yet confirmed.** The sampler uses only operations IEEE-754 requires to be correctly rounded, but has been observed on Linux/x86-64 alone; no caller should rely on it until a run on the recorded failure host reproduces the pinned digest.
+
 ## How it was built — who did what
 
 <!-- OWNER: confirm wording — first person, written from git evidence. -->
@@ -70,7 +78,7 @@ One contract and the prompt generated from it: [robust JSON extraction](tasks/ph
 
 A deterministic testbed for studying multi-agent reasoning under hidden information, not a game with AI players bolted on. Three decisions carry the weight. They are recorded verbatim in [ADR-0001](docs/adr/0001-three-load-bearing-decisions.md).
 
-1. **A deterministic engine behind a strict observation firewall.** The engine advances world state as a pure tick function — no wall clock, no unseeded randomness, no global state — so the same seed and the same inputs always produce the same bytes. Agents cannot import the engine, directly or transitively: an agent physically cannot read the state it must deduce. It sees an `ObservationPacket` and a `PublicMapView`, and emits an `ActionIntent`. The firewall covers the *agent* surface; the spectator is privileged by design.
+1. **A deterministic engine behind a strict observation firewall.** The engine advances world state as a pure tick function — no wall clock, no unseeded randomness, no global state — so the same seed and inputs always produce the same bytes. Agents cannot import the engine, directly or transitively: an agent physically cannot read the state it must deduce. It sees an `ObservationPacket` and a `PublicMapView`, and emits an `ActionIntent`. The firewall covers the *agent* surface; the spectator is privileged by design.
 2. **Two-tier reasoning.** Movement, tasks and venting are rule-based, every tick. Meeting speech, voting and suspicion updates call an LLM, only at meetings and triggers. Without that split, cost and latency make the system unviable.
 3. **Memory is structured first.** Each agent reasons from a typed event log and a belief state derived from it; the LLM sees a rendered view of that structure, never raw engine state.
 
@@ -136,13 +144,13 @@ uv run python scripts/run_tournament.py --num-games 50 --output-dir replays --ro
 
 The spectator API is an unauthenticated game-master view, so it is loopback-only and stays that way; the static bundle is the only sanctioned public artifact ([docs/deployment.md](docs/deployment.md)).
 
-**Providers.** `AILIBI_LLM_PROVIDER` selects one: `fake` (the default — deterministic, offline, $0, what CI runs), `anthropic`, `ollama` for a local open model, or `featherless` for the hosted model every recorded number came from. CI never selects a real provider and never reaches the network.
+**Providers.** `AILIBI_LLM_PROVIDER` selects one: `fake` (the default — deterministic, offline, $0, what CI runs), `anthropic`, `ollama` for a local open model, or `featherless` for the hosted model every recorded number came from. CI never selects a real provider.
 
 **The fake provider's report is empty on purpose.** Every fake ballot's vote target is a minted placeholder that the meeting layer normalizes to SKIP, so a fake tournament ejects nobody and its rates come out null. A real one is committed: [replays/samples/9p2i/tournament-eval-report.json](replays/samples/9p2i/tournament-eval-report.json) records 101 ejections, vote correctness 0.923, ejection accuracy 0.772.
 
 **The samples.** A fresh clone ships 100 sample replays under `replays/samples/`: two 50-game tournaments, one per roster preset (`4p1i` and `9p2i`), regenerated 2026-07-20 against `Qwen/Qwen3.6-27B` on the `qwen3_6_27b` `v3` prompt set, impostor win rates 34% (4p1i) and 30% (9p2i). Each set's `MANIFEST.md` is the row-by-row provenance record. Replays you generate into `replays/` override the bundled ones.
 
-**Cloning.** `git clone --filter=blob:none https://github.com/dkdan10/AiLibi.git` is the fast path — roughly the 256 MiB the working tree needs, not every blob version. A full clone still pays for the committed evidence; [docs/artifacts.md](docs/artifacts.md) holds the retention rules and the restore script.
+**Cloning.** `git clone --filter=blob:none https://github.com/dkdan10/AiLibi.git` is the fast path — roughly the 256 MiB the working tree needs, not every blob version. A full clone still pays for the committed evidence; [docs/artifacts.md](docs/artifacts.md) has the retention rules and the restore script.
 
 ---
 

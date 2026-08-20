@@ -10,7 +10,7 @@ class the 19.1 sweep cleaned (a stale refresh date, a stale win rate, a stale
 ladder tip, a graduated lever still documented as a live knob) is exactly what
 regenerates silently otherwise.
 
-Eleven checks. Each accumulates precise errors; all of them are reported
+Thirteen checks. Each accumulates precise errors; all of them are reported
 together, so one run names every drifted fact rather than the first.
 
 1. **Sample provenance.** ``replays/samples/<set>/MANIFEST.md`` owns each sample
@@ -84,14 +84,24 @@ together, so one run names every drifted fact rather than the first.
 8. **The results table agrees with the reading guide.** The numbers are stated
    once: every row of README.md's results table must appear in
    docs/reading-guide.md's numbers table with the SAME figure, so a later edit
-   cannot drift one from the other.
-9. **Volatile counts carry an as-of stamp.** A count that changes without any
-   commit touching the prose (merged pull requests, commits, tests) must be
-   stated with ``as of YYYY-MM-DD`` in its own sentence. The stamp's presence
-   and shape are checked, never its value: no doc check may reach the network.
-10. **The reading guide carries no ``file.ext:NN`` citations.** Line numbers rot
+   cannot drift one from the other, and neither table may state one claim twice.
+9. **The results figures are re-derived from their sources.** Agreement between
+   two documents cannot catch a figure edited identically in both, so every row
+   whose source is cheap to read is recomputed instead: the replay count from
+   the verifier's own file population, the citation figure from the committed
+   instrument's pinned assertions, the vent headline as arithmetic over the
+   reading guide's cross-tab cells. The win rates are re-derived in check 1.
+10. **The real-report example matches that report.** README.md hands a reader a
+    populated eval report because the default fake provider produces an empty
+    one; its ejection count and two rates come from that report's own
+    ``vote_correctness`` block, never from prose.
+11. **Volatile counts carry an as-of stamp.** A count that changes without any
+    commit touching the prose (merged pull requests, commits, tests) must be
+    stated with ``as of YYYY-MM-DD`` in its own sentence. The stamp's presence
+    and shape are checked, never its value: no doc check may reach the network.
+12. **The reading guide carries no ``file.ext:NN`` citations.** Line numbers rot
     on the next edit; the guide cites heading anchors and symbols instead.
-11. **Every relative link resolves.** Across README.md, docs/history.md,
+13. **Every relative link resolves.** Across README.md, docs/history.md,
     docs/glossary.md, audits/README.md and docs/reading-guide.md, each relative
     markdown target (fragment stripped) must name a path that exists.
 
@@ -126,6 +136,7 @@ for _bootstrap_path in (_REPO_ROOT, _SCRIPTS_DIR):
         sys.path.insert(0, str(_bootstrap_path))
 
 from _manifest_writer import parse_manifest  # noqa: E402
+from _verify_samples import sample_paths  # noqa: E402
 
 from orchestrator.replay import (  # noqa: E402
     SUBSTRATE_FLAG_KEYS,
@@ -359,6 +370,14 @@ _CITATION_PIN_NAMES: Final[tuple[str, ...]] = (
 )
 _VENT_CLAIM: Final = "Correct 9p ejections riding an ejectee-specific vent sighting"
 _VENT_TABLE_HEADER: Final = "Meeting contains a vent flag"
+# The cross-tab's rows are read by their own label, flagged first, so a
+# reordered table cannot silently swap the two populations.
+_VENT_ROW_LABELS: Final[tuple[str, str]] = ("yes", "no")
+
+# The committed report the README hands a reader instead of the empty one a
+# fake-provider run produces, and the phrase that anchors its paragraph.
+_POPULATED_REPORT: Final = "replays/samples/9p2i/tournament-eval-report.json"
+_EXAMPLE_ANCHOR: Final = "fake provider's report is empty on purpose"
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -400,10 +419,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         f"absent from {_README} or linked to {_GLOSSARY}; the phase table and "
         f"{_HISTORY} account for every {_TASKS_DIR}/{_PHASE_GLOB}; "
         f"{_AUDITS_INDEX} indexes every top-level {_AUDITS_DIR}/*.md once; the "
-        f"{_README} results figures equal {_READING_GUIDE}'s; every volatile "
-        f"count is as-of stamped; {_READING_GUIDE} carries no file:line "
-        f"citation; and every relative link in {len(_LINKED_DOCUMENTS)} "
-        "front-door documents resolves."
+        f"{_README} results figures are re-derived from their sources and equal "
+        f"{_READING_GUIDE}'s; the real-report example matches "
+        f"{_POPULATED_REPORT}; every volatile count is as-of stamped; "
+        f"{_READING_GUIDE} carries no file:line citation; and every relative "
+        f"link in {len(_LINKED_DOCUMENTS)} front-door documents resolves."
     )
     return 0
 
@@ -418,6 +438,7 @@ def check_facts(repo_root: Path) -> list[str]:
         check_dialect_terms(repo_root, readme, errors)
         check_results_agreement(repo_root, readme, errors)
         check_result_sources(repo_root, readme, errors)
+        check_populated_report_example(repo_root, readme, errors)
         check_volatile_stamps(readme, errors)
     check_ladder_tip(repo_root, errors)
     check_lever_registry(repo_root, errors)
@@ -1360,11 +1381,22 @@ def check_result_sources(repo_root: Path, readme: str, errors: list[str]) -> Non
         return  # check_results_agreement reports the missing table
     figures = dict(rows)
 
+    # The verifier's own population, not a glob of the directory: an audit
+    # sidecar or a hand-named debug file is a .jsonl that
+    # ``scripts/verify_samples.sh`` never reconstructs, and counting it would
+    # inflate the figure this row claims was verified.
     replays = sum(
-        len(list((repo_root / _SAMPLE_REPLAY_DIR.format(name=name)).glob("*.jsonl")))
+        len(sample_paths(repo_root / _SAMPLE_REPLAY_DIR.format(name=name)))
         for name in _SAMPLE_SETS
     )
-    if replays:
+    if not replays:
+        # A vacuous pass is the one outcome this check must not have: an empty
+        # corpus would otherwise let any replay figure stand.
+        errors.append(
+            "replays/samples/: no committed replays found, so the "
+            f"{_REPLAY_COUNT_CLAIM!r} figure cannot be re-derived."
+        )
+    else:
         compare_result_figure(
             _REPLAY_COUNT_CLAIM,
             figures,
@@ -1449,16 +1481,20 @@ def compare_result_figure(
 def vent_crosstab(guide: str) -> tuple[tuple[int, int], tuple[int, int]] | None:
     """The (impostor, innocent) ejection counts of the vent cross-tab's rows.
 
-    Flagged row first. ``None`` when the table is not there or its cells are
-    not a pair of integers apiece — format drift the caller reports.
+    Keyed on each row's own ``yes`` / ``no`` label rather than on its position:
+    reading the rows by order would silently swap the flagged and unflagged
+    populations if the table were ever reordered, and the derived headline
+    would then contradict the table it was derived from. Flagged row first.
+    ``None`` when the table is absent, mislabelled, or its cells are not a pair
+    of integers apiece — format drift the caller reports.
     """
 
-    counts: list[tuple[int, int]] = []
+    labelled: dict[str, tuple[int, int]] = {}
     seen_header = False
     for line in guide.splitlines():
         cells = table_cells(line)
         if cells is None or len(cells) < 3:
-            if seen_header and counts:
+            if seen_header and labelled:
                 break
             continue
         if not seen_header:
@@ -1466,13 +1502,66 @@ def vent_crosstab(guide: str) -> tuple[tuple[int, int], tuple[int, int]] | None:
             continue
         if all(_TABLE_RULE_CELL.match(cell) for cell in cells):
             continue
+        label = cells[0].split()[0].lower() if cells[0].split() else ""
+        if label not in _VENT_ROW_LABELS or label in labelled:
+            return None
         try:
-            counts.append((int(cells[1]), int(cells[2])))
+            labelled[label] = (int(cells[1]), int(cells[2]))
         except ValueError:
             return None
-    if len(counts) != 2:
+    if set(labelled) != set(_VENT_ROW_LABELS):
         return None
-    return counts[0], counts[1]
+    return labelled[_VENT_ROW_LABELS[0]], labelled[_VENT_ROW_LABELS[1]]
+
+
+def check_populated_report_example(
+    repo_root: Path, readme: str, errors: list[str]
+) -> None:
+    """The README's real-report example, held to that report's own numbers.
+
+    The front door hands a reader a populated report precisely because the
+    default fake provider produces an empty one. Copying its headline scalars
+    into prose would put them one re-record away from being someone else's
+    numbers, so each is re-derived from the report's own
+    ``vote_correctness`` block.
+    """
+
+    paragraph = next(
+        (
+            block
+            for block in readme.split("\n\n")
+            if _POPULATED_REPORT in block and _EXAMPLE_ANCHOR in block
+        ),
+        None,
+    )
+    if paragraph is None:
+        errors.append(
+            f"{_README}: no paragraph naming {_POPULATED_REPORT} beside "
+            f"'{_EXAMPLE_ANCHOR}' — the real-report example has no home to "
+            "check, so its numbers are unverified prose."
+        )
+        return
+    block = read_vote_correctness_block(repo_root, _POPULATED_REPORT, errors)
+    if block is None:
+        return
+    for label, key, expected in (
+        ("ejections", "total_ejections", "{value:d} ejections"),
+        ("vote correctness", "vote_correctness_rate", "vote correctness {value:.3f}"),
+        ("ejection accuracy", "ejection_accuracy", "ejection accuracy {value:.3f}"),
+    ):
+        value = block.get(key)
+        if not isinstance(value, (int, float)) or isinstance(value, bool):
+            errors.append(
+                f"{_POPULATED_REPORT}: {key} is {value!r}, not a number — the "
+                f"{_README} example's {label} claim cannot be re-derived."
+            )
+            continue
+        claim = expected.format(value=value)
+        if claim not in paragraph:
+            errors.append(
+                f"{_README}: the real-report example does not state "
+                f"{claim!r} — {_POPULATED_REPORT} records {key} as {value!r}."
+            )
 
 
 def reject_repeated_claims(

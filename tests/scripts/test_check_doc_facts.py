@@ -598,10 +598,14 @@ def test_eval_report_rate_drift_detected(doc_tree: Path) -> None:
         '"vote_correctness_rate": 0.99',
     )
     errors = check_doc_facts.check_facts(doc_tree)
-    assert len(errors) == 1
-    assert _EVAL_REPORT_9P2I in errors[0]
-    assert "0.99" in errors[0]
-    assert "72/78 = 0.9231" in errors[0]
+    # Twice over: the stamp check catches the rate contradicting its own
+    # counts, and the README's real-report example no longer matches the
+    # report it points a reader at.
+    assert len(errors) == 2
+    assert any(
+        _EVAL_REPORT_9P2I in error and "72/78 = 0.9231" in error for error in errors
+    )
+    assert any("vote correctness 0.990" in error for error in errors)
 
 
 def test_vote_correctness_provenance_drift_detected(doc_tree: Path) -> None:
@@ -737,12 +741,15 @@ def test_eval_report_without_vote_correctness_block_fails_loud(
     doc_tree: Path,
 ) -> None:
     # Format drift must not read as "nothing to check": a report with no
-    # vote_correctness block leaves the stamps sourceless.
+    # vote_correctness block leaves both the stamps and the README's
+    # real-report example sourceless.
     _write(doc_tree, _EVAL_REPORT_9P2I, "{}\n")
     errors = check_doc_facts.check_facts(doc_tree)
-    assert len(errors) == 1
-    assert _EVAL_REPORT_9P2I in errors[0]
-    assert '"vote_correctness":' in errors[0]
+    assert len(errors) == 2
+    assert all(
+        _EVAL_REPORT_9P2I in error and '"vote_correctness":' in error
+        for error in errors
+    )
 
 
 def test_unlinked_dialect_term_detected(doc_tree: Path) -> None:
@@ -824,6 +831,17 @@ def test_replay_count_figure_derived_from_the_committed_replays(
     assert "100 committed replays" in errors[0]
 
 
+def test_empty_replay_corpus_fails_loud(doc_tree: Path) -> None:
+    # An empty corpus must not read as "nothing to re-derive": that would let
+    # any replay figure stand.
+    for name in ("4p1i", "9p2i"):
+        for replay in (doc_tree / "replays" / "samples" / name).glob("*.jsonl"):
+            replay.unlink()
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "no committed replays found" in errors[0]
+
+
 def test_citation_figure_derived_from_the_committed_instrument(
     doc_tree: Path,
 ) -> None:
@@ -874,6 +892,95 @@ def test_vent_headline_derived_from_the_crosstab(doc_tree: Path) -> None:
     assert len(errors) == 1
     assert "'68 / 78 = 87%'" in errors[0]
     assert "'60 / 70 = 86%'" in errors[0]
+
+
+def test_non_replay_jsonl_is_not_counted(doc_tree: Path) -> None:
+    # The recorder writes a `<stem>.audit.jsonl` sidecar beside a replay, and
+    # verify_samples.sh reconstructs only canonical replay-seed-N.jsonl files.
+    # Counting a sidecar would inflate a figure claiming N of N were verified.
+    (doc_tree / "replays" / "samples" / "9p2i" / "scratch.audit.jsonl").touch()
+    assert check_doc_facts.check_facts(doc_tree) == []
+
+
+def test_vent_crosstab_read_by_label_not_position(doc_tree: Path) -> None:
+    # Reading the rows by position would derive 10 / 78 from a reordered
+    # table that says those ten ejections had NO vent flag. Keyed on the
+    # labels, reordering changes nothing...
+    text = _read(doc_tree, _READING_GUIDE)
+    flagged = "| yes (70 meetings) | 68 | 2 |\n"
+    unflagged = "| no (95 meetings) | 10 | 21 |\n"
+    assert flagged + unflagged in text
+    _write(
+        doc_tree,
+        _READING_GUIDE,
+        text.replace(flagged + unflagged, unflagged + flagged),
+    )
+    assert check_doc_facts.check_facts(doc_tree) == []
+
+
+def test_swapped_vent_crosstab_labels_detected(doc_tree: Path) -> None:
+    # ...while swapping which population is flagged does change the
+    # headline, and is caught: 10 of 78 correct ejections would then be
+    # the vent-backed ones.
+    text = _read(doc_tree, _READING_GUIDE)
+    flagged = "| yes (70 meetings) | 68 | 2 |\n"
+    unflagged = "| no (95 meetings) | 10 | 21 |\n"
+    assert flagged + unflagged in text
+    swapped = "| no (70 meetings) | 68 | 2 |\n| yes (95 meetings) | 10 | 21 |\n"
+    _write(doc_tree, _READING_GUIDE, text.replace(flagged + unflagged, swapped))
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "'68 / 78 = 87%'" in errors[0]
+    assert "'10 / 78 = 13%'" in errors[0]
+
+
+def test_mislabelled_vent_crosstab_row_fails_loud(doc_tree: Path) -> None:
+    # A row whose label is neither yes nor no leaves the two populations
+    # unidentifiable, which must fail rather than derive something.
+    _substitute(
+        doc_tree, _READING_GUIDE, "| yes (70 meetings) |", "| flagged (70 meetings) |"
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "no vent cross-tab" in errors[0]
+
+
+def test_report_example_ejection_count_drift_detected(doc_tree: Path) -> None:
+    # The example exists because the fake provider's report is empty; its
+    # scalars come from the committed report, not from prose.
+    _substitute(doc_tree, _README, "records 101 ejections", "records 99 ejections")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "'101 ejections'" in errors[0]
+    assert "total_ejections" in errors[0]
+
+
+def test_report_example_rate_drift_detected(doc_tree: Path) -> None:
+    _substitute(doc_tree, _README, "vote correctness 0.923", "vote correctness 0.950")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "'vote correctness 0.923'" in errors[0]
+
+
+def test_report_example_accuracy_drift_detected(doc_tree: Path) -> None:
+    _substitute(doc_tree, _README, "ejection accuracy 0.772", "ejection accuracy 0.800")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "'ejection accuracy 0.772'" in errors[0]
+
+
+def test_missing_report_example_paragraph_fails_loud(doc_tree: Path) -> None:
+    # Dropping the example must not read as "nothing to check": the front door
+    # would then be silent about what a fake-provider report looks like.
+    _substitute(
+        doc_tree,
+        _README,
+        "The fake provider's report is empty on purpose.",
+        "The fake provider's report is unusual.",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "no paragraph naming" in errors[0]
 
 
 def test_missing_vent_crosstab_fails_loud(doc_tree: Path) -> None:
