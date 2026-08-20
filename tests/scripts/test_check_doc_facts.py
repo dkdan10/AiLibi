@@ -41,6 +41,25 @@ _COPIED = (
     "replays/ml_corpus/9p2i/tournament-eval-report.json",
     "replays/ml_corpus/4p1i/MANIFEST.md",
     "replays/ml_corpus/9p2i/MANIFEST.md",
+    "docs/glossary.md",
+    "docs/history.md",
+    "docs/reading-guide.md",
+    "audits/README.md",
+    "tests/eval/test_vj_instruments.py",
+)
+
+# The front-door checks also ENUMERATE paths whose contents they never open:
+# the phase contracts, the audit corpus, and every relative link target. The
+# fixture stands those up as empty files (directories as directories) so the
+# tmp tree answers the same questions the checkout does, without copying the
+# ~5 MB of prose behind them into every test.
+_ENUMERATED_GLOBS = (
+    ("tasks", "phase-*.md"),
+    ("audits", "*.md"),
+    # The committed replays are counted, never opened: the results row saying
+    # 100 of 100 reconstruct is re-derived from how many there are.
+    ("replays/samples/4p1i", "*.jsonl"),
+    ("replays/samples/9p2i", "*.jsonl"),
 )
 
 # Above this size a fixture entry is symlinked rather than copied: the four
@@ -57,6 +76,20 @@ _VOTE_CORRECTNESS = "eval/vote_correctness.py"
 _EVAL_REPORT_9P2I = "replays/samples/9p2i/tournament-eval-report.json"
 _EVAL_REPORT_4P1I = "replays/samples/4p1i/tournament-eval-report.json"
 _ML_CORPUS_MANIFEST_9P2I = "replays/ml_corpus/9p2i/MANIFEST.md"
+_GLOSSARY = "docs/glossary.md"
+_HISTORY = "docs/history.md"
+_READING_GUIDE = "docs/reading-guide.md"
+_CITATION_INSTRUMENT = "tests/eval/test_vj_instruments.py"
+_AUDITS_INDEX = "audits/README.md"
+# The one dialect term the front door keeps, and the link that defines it.
+_BASELINE_LINK = "[baseline 6](docs/glossary.md#baseline-n-the-reference-recording)"
+_BASELINE_ANCHOR_HEADING = "### baseline N (the reference recording)"
+# "ladder tip" is private dialect too, so a planted ladder-tip sentence has to
+# carry its glossary link — otherwise the dialect check fires alongside the
+# ladder-tip check and the perturbation stops being about one thing.
+_LADDER_TIP_LINK = (
+    "[ladder tip](docs/glossary.md#the-ladder-tip-the-newest-reference-recording)"
+)
 
 
 @pytest.fixture
@@ -71,7 +104,44 @@ def doc_tree(tmp_path: Path) -> Path:
             destination.symlink_to(source)
         else:
             destination.write_bytes(source.read_bytes())
+    _stand_in_enumerated_paths(tmp_path)
     return tmp_path
+
+
+def _stand_in_enumerated_paths(root: Path) -> None:
+    """Empty stand-ins for the paths the checks stat but never read.
+
+    Derived from the checkout and from the checker's own link parser, so the
+    fixture cannot drift from what the checks look for: a link added to the
+    front door stands itself up here on the next run.
+    """
+
+    wanted: set[str] = set()
+    for directory, pattern in _ENUMERATED_GLOBS:
+        wanted.update(
+            f"{directory}/{path.name}"
+            for path in (_REPO_ROOT / directory).glob(pattern)
+        )
+    wanted.update(
+        f"audits/{child.name}/"
+        for child in (_REPO_ROOT / "audits").iterdir()
+        if child.is_dir()
+    )
+    for document in check_doc_facts._LINKED_DOCUMENTS:
+        text = (root / document).read_text(encoding="utf-8")
+        for _, resolved in check_doc_facts.relative_targets(_REPO_ROOT, document, text):
+            relative = resolved.relative_to(_REPO_ROOT).as_posix()
+            wanted.add(f"{relative}/" if resolved.is_dir() else relative)
+
+    for relative in sorted(wanted):
+        destination = root / relative.rstrip("/")
+        if relative.endswith("/"):
+            destination.mkdir(parents=True, exist_ok=True)
+            continue
+        if destination.exists():
+            continue
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.touch()
 
 
 def _read(root: Path, relative: str) -> str:
@@ -170,7 +240,7 @@ def test_stale_count_beside_correct_detected(doc_tree: Path) -> None:
     _substitute(
         doc_tree,
         _README,
-        "two full 50-game tournaments",
+        "two 50-game tournaments",
         "one stale 40-game tournament and one 50-game tournament",
     )
     errors = check_doc_facts.check_facts(doc_tree)
@@ -183,8 +253,8 @@ def test_wrong_recording_model_detected(doc_tree: Path) -> None:
     _substitute(
         doc_tree,
         _README,
-        "against the Featherless provider (`Qwen/Qwen3.6-27B`",
-        "against the Featherless provider (`Qwen/Qwen3-32B`",
+        "against `Qwen/Qwen3.6-27B`",
+        "against `Qwen/Qwen3-32B`",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
@@ -218,7 +288,7 @@ def test_wrong_win_rate_detected(doc_tree: Path) -> None:
     # (b) A win rate that no longer matches the manifest it is drawn from:
     # the paragraph misses the expected substring AND carries a claim that
     # contradicts the manifest — both are reported.
-    _substitute(doc_tree, _README, "34% (4p1i)", "30% (4p1i)")
+    _substitute(doc_tree, _README, "rates 34% (4p1i)", "rates 30% (4p1i)")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 2
     assert "'34% (4p1i)'" in errors[0]
@@ -231,7 +301,8 @@ def test_stale_ladder_tip_sentence_detected(doc_tree: Path) -> None:
     _write(
         doc_tree,
         _README,
-        _read(doc_tree, _README) + "\nThe baseline-5 sets remain the ladder tip.\n",
+        _read(doc_tree, _README)
+        + f"\nThe baseline-5 sets remain the {_LADDER_TIP_LINK}.\n",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
@@ -278,7 +349,7 @@ def test_long_ladder_tip_sentence_detected(doc_tree: Path) -> None:
         doc_tree,
         _README,
         _read(doc_tree, _README)
-        + f"\nThe baseline-5 sets, {filler}remain the ladder tip.\n",
+        + f"\nThe baseline-5 sets, {filler}remain the {_LADDER_TIP_LINK}.\n",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
@@ -291,7 +362,7 @@ def test_ladder_tip_sentence_without_baseline_detected(doc_tree: Path) -> None:
     _write(
         doc_tree,
         _README,
-        _read(doc_tree, _README) + "\nThese sets remain the ladder tip.\n",
+        _read(doc_tree, _README) + f"\nThese sets remain the {_LADDER_TIP_LINK}.\n",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
@@ -464,15 +535,16 @@ def test_toggle_example_outside_section_does_not_count(doc_tree: Path) -> None:
 def test_manifest_outcome_flip_detected(doc_tree: Path) -> None:
     # (g) The bytes move under the prose: one recorded winner cell flips, so
     # the re-derived rate slides 34% -> 32%; the README misses the new rate
-    # AND its now-stale 34% claim contradicts the manifest.
+    # AND its now-stale 34% claim contradicts the manifest in both of the
+    # two places the rewritten front door states it.
     text = _read(doc_tree, _MANIFEST_4P1I)
     assert "| IMPOSTORS |" in text
     _write(doc_tree, _MANIFEST_4P1I, text.replace("| IMPOSTORS |", "| CREWMATES |", 1))
     errors = check_doc_facts.check_facts(doc_tree)
-    assert len(errors) == 2
+    assert len(errors) == 3
     assert "'32% (4p1i)'" in errors[0]
     assert "16/50" in errors[0]
-    assert "claim '34% (4p1i)' disagrees" in errors[1]
+    assert all("claim '34% (4p1i)' disagrees" in error for error in errors[1:])
 
 
 def test_unparseable_manifest_fails_loud(doc_tree: Path) -> None:
@@ -526,10 +598,14 @@ def test_eval_report_rate_drift_detected(doc_tree: Path) -> None:
         '"vote_correctness_rate": 0.99',
     )
     errors = check_doc_facts.check_facts(doc_tree)
-    assert len(errors) == 1
-    assert _EVAL_REPORT_9P2I in errors[0]
-    assert "0.99" in errors[0]
-    assert "72/78 = 0.9231" in errors[0]
+    # Twice over: the stamp check catches the rate contradicting its own
+    # counts, and the README's real-report example no longer matches the
+    # report it points a reader at.
+    assert len(errors) == 2
+    assert any(
+        _EVAL_REPORT_9P2I in error and "72/78 = 0.9231" in error for error in errors
+    )
+    assert any("vote correctness 0.990" in error for error in errors)
 
 
 def test_vote_correctness_provenance_drift_detected(doc_tree: Path) -> None:
@@ -665,12 +741,427 @@ def test_eval_report_without_vote_correctness_block_fails_loud(
     doc_tree: Path,
 ) -> None:
     # Format drift must not read as "nothing to check": a report with no
-    # vote_correctness block leaves the stamps sourceless.
+    # vote_correctness block leaves both the stamps and the README's
+    # real-report example sourceless.
     _write(doc_tree, _EVAL_REPORT_9P2I, "{}\n")
     errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 2
+    assert all(
+        _EVAL_REPORT_9P2I in error and '"vote_correctness":' in error
+        for error in errors
+    )
+
+
+def test_unlinked_dialect_term_detected(doc_tree: Path) -> None:
+    # The one private-dialect term the front door keeps loses its glossary
+    # link: a reader now meets "baseline 6" with nowhere to look it up.
+    _substitute(doc_tree, _README, _BASELINE_LINK, "baseline 6")
+    errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert _EVAL_REPORT_9P2I in errors[0]
-    assert '"vote_correctness":' in errors[0]
+    assert "'baseline'" in errors[0]
+    assert "outside a glossary link" in errors[0]
+
+
+def test_missing_glossary_entry_detected(doc_tree: Path) -> None:
+    # The link survives, the entry it points at does not — the front door
+    # sends the reader to an anchor that lands nowhere.
+    _substitute(
+        doc_tree, _GLOSSARY, _BASELINE_ANCHOR_HEADING, "### the reference recording"
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert _GLOSSARY in errors[0]
+    assert "#baseline-n-the-reference-recording" in errors[0]
+
+
+def test_glossary_entry_for_an_unused_term_still_required(doc_tree: Path) -> None:
+    # The list is the set of words the front door may not use undefined, so the
+    # entry has to exist whether or not README uses the term today — otherwise
+    # deleting it quietly re-opens the door to the term.
+    _substitute(doc_tree, _GLOSSARY, "### referee (the selection gate)", "### the gate")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "#referee-the-selection-gate" in errors[0]
+    assert "whether or not README.md happens to use it" in errors[0]
+
+
+def test_repeated_results_claim_detected(doc_tree: Path) -> None:
+    # A stale row left beside a corrected one would otherwise satisfy the
+    # row-by-row comparison while the page shows a reader two numbers.
+    row = "| Committed sample replays that reconstruct byte-identically | 100 of 100 |"
+    text = _read(doc_tree, _README)
+    assert row in text
+    stale = row.replace("| 100 of 100 |", "| 99 of 100 |")
+    _write(
+        doc_tree, _README, text.replace(row, f"{stale} an earlier count |\n{row}", 1)
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 2
+    assert (
+        "states 'Committed sample replays that reconstruct byte-identically' twice"
+        in (errors[0])
+    )
+    assert "'99 of 100'" in errors[1]
+
+
+def test_new_undefined_dialect_term_detected(doc_tree: Path) -> None:
+    # A term that is defined nowhere in the tree walks back onto the front
+    # door — the drift class the glossary was written to end.
+    _write(
+        doc_tree,
+        _README,
+        _read(doc_tree, _README) + "\nEvery arm was priced by the referee.\n",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 2
+    assert any("'referee'" in error for error in errors)
+    assert any("'arm'" in error for error in errors)
+
+
+def test_replay_count_figure_derived_from_the_committed_replays(
+    doc_tree: Path,
+) -> None:
+    # Agreement between the two tables cannot catch a figure edited identically
+    # in both, so this row is recomputed from the replay files on disk.
+    _substitute(doc_tree, _README, "| 100 of 100 |", "| 96 of 96 |")
+    _substitute(doc_tree, _READING_GUIDE, "| 100 of 100 |", "| 96 of 96 |")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "'96 of 96'" in errors[0]
+    assert "100 committed replays" in errors[0]
+
+
+def test_empty_replay_corpus_fails_loud(doc_tree: Path) -> None:
+    # An empty corpus must not read as "nothing to re-derive": that would let
+    # any replay figure stand.
+    for name in ("4p1i", "9p2i"):
+        for replay in (doc_tree / "replays" / "samples" / name).glob("*.jsonl"):
+            replay.unlink()
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "no committed replays found" in errors[0]
+
+
+def test_citation_figure_derived_from_the_committed_instrument(
+    doc_tree: Path,
+) -> None:
+    # Same for the citation row: its source is the instrument's pinned
+    # assertions, not the other document's copy of the number.
+    _substitute(
+        doc_tree,
+        _README,
+        "| 520 / 520, zero dangling |",
+        "| 519 / 519, zero dangling |",
+    )
+    _substitute(
+        doc_tree,
+        _READING_GUIDE,
+        "| 520 / 520, zero dangling |",
+        "| 519 / 519, zero dangling |",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "'519 / 519, zero dangling'" in errors[0]
+    assert _CITATION_INSTRUMENT in errors[0]
+
+
+def test_instrument_pin_move_reaches_the_front_door(doc_tree: Path) -> None:
+    # The binding runs the other way too: a re-record that moves the pinned
+    # count must move the documents, rather than leaving them stale and green.
+    _substitute(
+        doc_tree,
+        _CITATION_INSTRUMENT,
+        "assert nine.turn_citations_dangling == 0",
+        "assert nine.turn_citations_dangling == 3",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "'520 / 520, 3 dangling'" in errors[0]
+
+
+def test_vent_headline_derived_from_the_crosstab(doc_tree: Path) -> None:
+    # The headline is arithmetic over the cross-tab under it, so the two cannot
+    # drift: 68 of 68 + 10 correct ejections rode a vent flag.
+    _substitute(
+        doc_tree,
+        _READING_GUIDE,
+        "| yes (70 meetings) | 68 | 2 |",
+        "| yes (70 meetings) | 60 | 2 |",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "'68 / 78 = 87%'" in errors[0]
+    assert "'60 / 70 = 86%'" in errors[0]
+
+
+def test_non_replay_jsonl_is_not_counted(doc_tree: Path) -> None:
+    # The recorder writes a `<stem>.audit.jsonl` sidecar beside a replay, and
+    # verify_samples.sh reconstructs only canonical replay-seed-N.jsonl files.
+    # Counting a sidecar would inflate a figure claiming N of N were verified.
+    (doc_tree / "replays" / "samples" / "9p2i" / "scratch.audit.jsonl").touch()
+    assert check_doc_facts.check_facts(doc_tree) == []
+
+
+def test_vent_crosstab_read_by_label_not_position(doc_tree: Path) -> None:
+    # Reading the rows by position would derive 10 / 78 from a reordered
+    # table that says those ten ejections had NO vent flag. Keyed on the
+    # labels, reordering changes nothing...
+    text = _read(doc_tree, _READING_GUIDE)
+    flagged = "| yes (70 meetings) | 68 | 2 |\n"
+    unflagged = "| no (95 meetings) | 10 | 21 |\n"
+    assert flagged + unflagged in text
+    _write(
+        doc_tree,
+        _READING_GUIDE,
+        text.replace(flagged + unflagged, unflagged + flagged),
+    )
+    assert check_doc_facts.check_facts(doc_tree) == []
+
+
+def test_swapped_vent_crosstab_labels_detected(doc_tree: Path) -> None:
+    # ...while swapping which population is flagged does change the
+    # headline, and is caught: 10 of 78 correct ejections would then be
+    # the vent-backed ones.
+    text = _read(doc_tree, _READING_GUIDE)
+    flagged = "| yes (70 meetings) | 68 | 2 |\n"
+    unflagged = "| no (95 meetings) | 10 | 21 |\n"
+    assert flagged + unflagged in text
+    swapped = "| no (70 meetings) | 68 | 2 |\n| yes (95 meetings) | 10 | 21 |\n"
+    _write(doc_tree, _READING_GUIDE, text.replace(flagged + unflagged, swapped))
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "'68 / 78 = 87%'" in errors[0]
+    assert "'10 / 78 = 13%'" in errors[0]
+
+
+def test_mislabelled_vent_crosstab_row_fails_loud(doc_tree: Path) -> None:
+    # A row whose label is neither yes nor no leaves the two populations
+    # unidentifiable, which must fail rather than derive something.
+    _substitute(
+        doc_tree, _READING_GUIDE, "| yes (70 meetings) |", "| flagged (70 meetings) |"
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "no vent cross-tab" in errors[0]
+
+
+def test_report_example_ejection_count_drift_detected(doc_tree: Path) -> None:
+    # The example exists because the fake provider's report is empty; its
+    # scalars come from the committed report, not from prose.
+    _substitute(doc_tree, _README, "records 101 ejections", "records 99 ejections")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "'101 ejections'" in errors[0]
+    assert "total_ejections" in errors[0]
+
+
+def test_report_example_rate_drift_detected(doc_tree: Path) -> None:
+    _substitute(doc_tree, _README, "vote correctness 0.923", "vote correctness 0.950")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "'vote correctness 0.923'" in errors[0]
+
+
+def test_report_example_accuracy_drift_detected(doc_tree: Path) -> None:
+    _substitute(doc_tree, _README, "ejection accuracy 0.772", "ejection accuracy 0.800")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "'ejection accuracy 0.772'" in errors[0]
+
+
+def test_missing_report_example_paragraph_fails_loud(doc_tree: Path) -> None:
+    # Dropping the example must not read as "nothing to check": the front door
+    # would then be silent about what a fake-provider report looks like.
+    _substitute(
+        doc_tree,
+        _README,
+        "The fake provider's report is empty on purpose.",
+        "The fake provider's report is unusual.",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "no paragraph naming" in errors[0]
+
+
+def test_missing_vent_crosstab_fails_loud(doc_tree: Path) -> None:
+    # Losing the table must not read as "nothing to derive from".
+    _substitute(
+        doc_tree, _READING_GUIDE, "| Meeting contains a vent flag |", "| Meetings |"
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "no vent cross-tab" in errors[0]
+
+
+def test_glossary_ladder_tip_drift_detected(doc_tree: Path) -> None:
+    # Every document that may state the tip is scanned, not only the README:
+    # the glossary defines the term, so a stale tip there is the same drift.
+    _substitute(
+        doc_tree,
+        _GLOSSARY,
+        "the newest — the ladder tip — is baseline 6",
+        "the newest — the ladder tip — is baseline 5",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert errors[0].startswith(_GLOSSARY)
+    assert "names baseline 5" in errors[0]
+
+
+def test_unaccounted_phase_contract_detected(doc_tree: Path) -> None:
+    # A new phase document that neither the phase table nor the history links:
+    # the front door would silently stop covering the project.
+    (doc_tree / "tasks" / "phase-99.md").write_text("# Phase 99\n", encoding="utf-8")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "tasks/phase-99.md" in errors[0]
+    assert _HISTORY in errors[0]
+
+
+def test_unindexed_audit_detected(doc_tree: Path) -> None:
+    # A new audit lands and nobody indexes it — the orphan state the index was
+    # written to end, reintroduced one file at a time.
+    (doc_tree / "audits" / "audit-phase-99-close.md").write_text(
+        "# Phase 99 close\n", encoding="utf-8"
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "audit-phase-99-close.md is not indexed" in errors[0]
+
+
+def test_indexed_audit_that_no_longer_exists_detected(doc_tree: Path) -> None:
+    # The other direction: an indexed record is deleted and the row becomes a
+    # dead link a reader follows.
+    (doc_tree / "audits" / "audit-phase-19-close.md").unlink()
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert any("indexes audit-phase-19-close.md" in error for error in errors)
+    # Every other error is the same deletion seen through the link check: the
+    # four front-door documents that pointed at the record now point at nothing.
+    assert all(
+        "indexes audit-phase-19-close.md" in error or "does not exist" in error
+        for error in errors
+    )
+
+
+def test_duplicated_audit_index_row_detected(doc_tree: Path) -> None:
+    # Two rows for one record are two descriptions to keep in step.
+    row = "- [audit-phase-19-close.md](audit-phase-19-close.md) — the phase close"
+    text = _read(doc_tree, _AUDITS_INDEX)
+    assert row in text
+    _write(doc_tree, _AUDITS_INDEX, text.replace(row, f"{row}\n{row}", 1))
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "audit-phase-19-close.md is indexed 2 times" in errors[0]
+
+
+def test_unnamed_audits_subdirectory_detected(doc_tree: Path) -> None:
+    # Sub-directories are indexed as units, but they ARE indexed: dropping the
+    # review directory's name leaves its dozens of files unreachable.
+    _substitute(doc_tree, _AUDITS_INDEX, "review-2026-08-19/", "the review/")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert any("does not name the review-2026-08-19/ directory" in e for e in errors)
+
+
+def test_results_figure_drift_detected(doc_tree: Path) -> None:
+    # The numbers are stated once: a figure edited in the README and not in the
+    # guide is two answers to the same question. The firewall row is the one
+    # with no countable source, so this exercises the agreement check alone.
+    _substitute(
+        doc_tree,
+        _README,
+        "| Observation-firewall violations, all phases | zero |",
+        "| Observation-firewall violations, all phases | one |",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "'one'" in errors[0]
+    assert "'zero'" in errors[0]
+
+
+def test_results_row_absent_from_the_guide_detected(doc_tree: Path) -> None:
+    # A README row the canonical table does not carry has no committed source
+    # behind it.
+    _substitute(
+        doc_tree,
+        _README,
+        "| Observation-firewall violations, all phases |",
+        "| Observation-firewall violations, ever |",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "'Observation-firewall violations, ever'" in errors[0]
+    assert _READING_GUIDE in errors[0]
+
+
+def test_stubbed_results_table_detected(doc_tree: Path) -> None:
+    # Agreement over a stub is not agreement: a gutted table must fail rather
+    # than pass vacuously.
+    text = _read(doc_tree, _README)
+    kept = [
+        line
+        for line in text.splitlines()
+        if not (line.startswith("| Impostor win rate") or line.startswith("| Eject "))
+    ]
+    _write(doc_tree, _README, "\n".join(kept) + "\n")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert any("fewer than the 4 this check needs" in error for error in errors)
+
+
+def test_unstamped_volatile_count_detected(doc_tree: Path) -> None:
+    # A merged-PR count stated without an as-of date is stale the week after
+    # it is written, and nothing in the repo can tell the reader that.
+    _write(
+        doc_tree,
+        _README,
+        _read(doc_tree, _README) + "\nThe project has 364 merged pull requests.\n",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "merged pull requests count '364 merged pull requests'" in errors[0]
+    assert "as of YYYY-MM-DD" in errors[0]
+
+
+def test_malformed_volatile_stamp_detected(doc_tree: Path) -> None:
+    # The stamp's SHAPE is what this check owns — the value cannot be checked
+    # without reaching the network, and a stamp that is not a date is drift.
+    _substitute(
+        doc_tree,
+        _README,
+        "snapshot of `main` as of 2026-08-19",
+        "snapshot of `main` as of 2026-13-45",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 3
+    assert all("is not a calendar date" in error for error in errors)
+
+
+def test_line_citation_in_the_reading_guide_detected(doc_tree: Path) -> None:
+    # A file:line citation is correct until the next edit of the file it names;
+    # the guide carried two dozen of them and now pins the zero.
+    _substitute(
+        doc_tree,
+        _READING_GUIDE,
+        "the recursive packet\nsweep in [eval/leak_scan.py](../eval/leak_scan.py)",
+        "the recursive packet\nsweep in eval/leak_scan.py:214",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "'eval/leak_scan.py:214'" in errors[0]
+    assert "cite a heading anchor" in errors[0]
+
+
+def test_broken_relative_link_detected(doc_tree: Path) -> None:
+    # The front door's relative links are 0-broken and stay that way.
+    _substitute(
+        doc_tree,
+        _README,
+        "[Architecture](docs/architecture.md)",
+        "[Architecture](docs/architecture-notes.md)",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "'docs/architecture-notes.md'" in errors[0]
+    assert "does not exist" in errors[0]
 
 
 def test_missing_document_reported(doc_tree: Path) -> None:
