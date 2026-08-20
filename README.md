@@ -2,8 +2,7 @@
 
 by **Daniel Keinan** · code by Claude Code agents, reviewed by Codex · [MIT](LICENSE) · [![CI](https://github.com/dkdan10/AiLibi/actions/workflows/ci.yml/badge.svg)](https://github.com/dkdan10/AiLibi/actions/workflows/ci.yml) ![Python 3.11](https://img.shields.io/badge/python-3.11-blue) · May–August 2026, solo
 
-**▶ Live demo** — the spectator as a static directory, no server behind it: `https://dkdan10.github.io/AiLibi/`
-<!-- OWNER: enable Pages, then confirm this URL resolves; plain text until it does. -->
+**▶ [Live demo](https://dkdan10.github.io/AiLibi/)** — the spectator as a static directory, no server behind it.
 
 [![Nine agents mid-meeting: the accusation chain beside every ballot](docs/media/spectator-meeting.png)](docs/media/spectator-meeting.png)
 
