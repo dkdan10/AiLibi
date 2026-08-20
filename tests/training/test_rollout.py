@@ -54,28 +54,33 @@ def test_descriptors_fixture_on_a_scripted_game() -> None:
     Every descriptor named in the task contract is pinned to its scripted value,
     so a regression in the reconstruction folds — or an upstream trajectory
     change — trips this fixture rather than silently shifting a fitness axis.
+
+    The values are the scripted trajectory of the FSM in the tree, and
+    ``training/env.py`` wraps that FSM as the surrogate's proposal, so the impostor
+    mover repair moved every kill-derived descriptor here (Task 20.32). No training
+    code changed.
     """
 
     rollout = _env().rollout(0)
     descriptors = rollout.descriptors
 
-    assert descriptors.kill_ticks == (5, 13, 18, 24, 27)  # kill-timing distribution
+    assert descriptors.kill_ticks == (5, 12, 43, 51, 56)  # kill-timing distribution
     assert descriptors.kill_count == 5
-    assert descriptors.median_kill_tick == 18.0
-    assert descriptors.witness_exposure_rate == pytest.approx(0.4)  # 2/5 witnessed
-    assert descriptors.vent_usage == 4
-    assert descriptors.meeting_count == 4
-    assert descriptors.meeting_trigger_rate == pytest.approx(4 / 27)
-    assert descriptors.do_task_emissions == 93  # includes impostor pretend do_task
-    assert descriptors.do_task_cadence == pytest.approx(93 / 27)
+    assert descriptors.median_kill_tick == 43.0
+    assert descriptors.witness_exposure_rate == pytest.approx(0.0)  # 0/5 witnessed
+    assert descriptors.vent_usage == 10
+    assert descriptors.meeting_count == 5
+    assert descriptors.meeting_trigger_rate == pytest.approx(5 / 56)
+    assert descriptors.do_task_emissions == 99  # includes impostor pretend do_task
+    assert descriptors.do_task_cadence == pytest.approx(99 / 56)
     assert descriptors.win_shape == "IMPOSTORS:IMPOSTOR_PARITY"
 
     # The QD feature vector projects the numeric descriptors in the fixed order.
     vector = descriptors.vector()
     assert vector.shape == (8,)
     assert vector[0] == 5.0  # kill_count
-    assert vector[2] == 4.0  # vent_usage
-    assert vector[-1] == 18.0  # median kill tick
+    assert vector[2] == 10.0  # vent_usage
+    assert vector[-1] == 43.0  # median kill tick
 
 
 def test_rollout_carries_roles_and_terminal_shape() -> None:

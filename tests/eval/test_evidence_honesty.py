@@ -32,6 +32,7 @@ from engine.world import load_canonical_map
 from eval import evidence_honesty
 from eval.evidence_honesty import (
     CELL_DEFINITIONS,
+    LIVE_POLICY_FOLD,
     AdjacentRoomFlagCells,
     EvidenceHonestyReconstructionError,
     EvidenceHonestyReport,
@@ -57,6 +58,7 @@ from eval.evidence_honesty import (
     _ResolvedFlag,
     _room_distances,
     _SelfLocations,
+    _TopRanked,
     _singular_persona_phrase,
     _Tallies,
     cell,
@@ -547,12 +549,35 @@ def test_ghost_top_splits_the_two_sub_populations_and_skips_the_living() -> None
     tallies = _Tallies()
     _fold_ghost_top(
         tallies=tallies,
-        ranked_first=[(20, "p-4"), (20, "p-5"), (20, "p-6")],
+        ranked_first=[
+            _TopRanked(20, "p-4", declined_free_kill=True),
+            _TopRanked(20, "p-5", declined_free_kill=True),
+            _TopRanked(20, "p-6", declined_free_kill=True),
+        ],
         death_tick={"p-4": 10, "p-5": 12, "p-6": 30},
         ejected_at={"p-4": 10},
     )
     assert tallies.ghost_top == 2
     assert (tallies.ghost_top_ejected, tallies.ghost_top_unseen) == (1, 1)
+    # Only the EJECTED ghost's decline is a blocked kill: the unseen-death half
+    # needs a kill-knowledge channel this repair deliberately does not add, and
+    # the living p-6 is no ghost at all.
+    assert tallies.kills_blocked_by_ghost_top == 1
+    assert tallies.games_with_a_blocked_kill == 1
+
+
+def test_a_ghost_top_decision_that_took_no_free_kill_is_not_a_blocked_kill() -> None:
+    # The perturbation that proves the blocked-kill cell is narrower than ghost-top.
+    tallies = _Tallies()
+    _fold_ghost_top(
+        tallies=tallies,
+        ranked_first=[_TopRanked(20, "p-4", declined_free_kill=False)],
+        death_tick={"p-4": 10},
+        ejected_at={"p-4": 10},
+    )
+    assert tallies.ghost_top_ejected == 1
+    assert tallies.kills_blocked_by_ghost_top == 0
+    assert tallies.games_with_a_blocked_kill == 0
 
 
 def _self_state(tick: int, room: str) -> EpisodicEvent:
@@ -613,7 +638,25 @@ def test_declined_kill_is_attributed_to_the_branch_that_swallowed_it() -> None:
         targets=(RankedTarget(player_id="p-9", room="ADMIN", co_present=0, score=1.0),),
         tallies=ranking_defect,
     )
+    # The seam scans the whole ranking, so "ranking" now means the victim is
+    # nowhere in it that the scan could find -- not merely that it is not first.
     assert ranking_defect.decline_ranking == 1
+
+    victim_ranked_second = _Tallies()
+    _classify_decline(
+        actor="p-4",
+        victim="p-1",
+        state=state,  # type: ignore[arg-type]
+        impostor_ids=impostors,
+        memory=_memory_with(_self_state(7, "LABS")),
+        targets=(
+            RankedTarget(player_id="p-9", room="ADMIN", co_present=0, score=1.0),
+            RankedTarget(player_id="p-1", room="LABS", co_present=0, score=1.0),
+        ),
+        tallies=victim_ranked_second,
+    )
+    assert victim_ranked_second.decline_ranking == 0
+    assert victim_ranked_second.decline_other == 1
 
     fellow_defer = _Tallies()
     _classify_decline(
@@ -653,7 +696,7 @@ def test_a_perturbed_agent_clock_fails_the_alignment_assertion(
         compute_evidence_honesty(_SAMPLES_4P1I)
 
 
-def test_a_planted_policy_mismatch_fails_before_any_cell_is_emitted(
+def test_a_planted_policy_mismatch_fails_when_fidelity_is_asserted(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from agents.tactical.impostor_policy import ImpostorPolicy
@@ -668,7 +711,31 @@ def test_a_planted_policy_mismatch_fails_before_any_cell_is_emitted(
     with pytest.raises(
         EvidenceHonestyReconstructionError, match="reconstructed a different action"
     ):
-        compute_evidence_honesty(_SAMPLES_4P1I)
+        compute_evidence_honesty(_SAMPLES_4P1I, assert_recorded_action_fidelity=True)
+
+
+def test_the_same_mismatch_is_counted_when_fidelity_is_not_asserted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The split that keeps I-2...I-10 off the policy's back: since the 20.32 mover
+    # repair the tree's policy is NOT the one the bytes were recorded with, so the
+    # default fold counts the disagreements instead of raising and every other
+    # instrument still reports. A wait-only policy disagrees on nearly every
+    # decision, and the false-whereabouts cell is unmoved by that.
+    from agents.tactical.impostor_policy import ImpostorPolicy
+    from observation.action_intent import WaitIntent
+
+    def _always_wait(
+        self: ImpostorPolicy, memory: object, public_map: object
+    ) -> object:
+        return WaitIntent(type="wait", actor=self.agent_id)
+
+    monkeypatch.setattr(ImpostorPolicy, "decide", _always_wait)
+    report = compute_evidence_honesty(_SAMPLES_4P1I)
+
+    assert report.impostor_targeting.reconstruction_mismatches > 0
+    assert report.impostor_targeting.policy_mode == LIVE_POLICY_FOLD
+    assert _counts(report.false_whereabouts.crew_false) == (10, 78)
 
 
 def test_a_directory_with_no_recordings_fails_loud(tmp_path: Path) -> None:

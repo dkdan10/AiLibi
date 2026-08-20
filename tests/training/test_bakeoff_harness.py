@@ -1287,12 +1287,15 @@ def test_anchor_seam_alternative_anchor_rekeys_ce_not_agreement(
     # silently re-anchor onto the alternative.
     assert wait_trace.agreement_hits == fsm_trace.agreement_hits
 
-    # The fitness delta is exactly the anchor-penalty term's re-keyed difference
-    # (same rollout ⇒ the shaped reward cancels bit-for-bit).
+    # The fitness delta is the anchor-penalty term's re-keyed difference and
+    # nothing else: the shaped reward is the same rollout's and cancels, leaving
+    # only the double-rounding of the two subtractions (~1e-15 on this trajectory).
     assert inner_episode_fitness(wait_rollout, wait_trace) - inner_episode_fitness(
         wait_rollout, fsm_trace
-    ) == -DEFAULT_ANCHOR_PENALTY_WEIGHT * (
-        wait_trace.mean_anchor_ce() - fsm_trace.mean_anchor_ce()
+    ) == pytest.approx(
+        -DEFAULT_ANCHOR_PENALTY_WEIGHT
+        * (wait_trace.mean_anchor_ce() - fsm_trace.mean_anchor_ce()),
+        abs=1e-12,
     )
 
 

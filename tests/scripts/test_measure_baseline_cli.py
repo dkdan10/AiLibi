@@ -15,6 +15,11 @@ from pathlib import Path
 import pytest
 
 import measure_baseline
+from eval.evidence_honesty import (
+    LIVE_POLICY_FOLD,
+    RATIFIED_BASELINE,
+    RATIFIED_I11_CELLS,
+)
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _NINE = _REPO_ROOT / "replays" / "samples" / "9p2i"
@@ -212,9 +217,14 @@ def test_honesty_human_rendering(capsys: pytest.CaptureFixture[str]) -> None:
     assert "I-8 marker contamination (turns): 0.0546  (53/971)" in out
     assert "I-9 singular-persona prompts: 1.0  (1956/1956)" in out
     assert "I-10 meetings with a venting participant: 0.097  (16/165)" in out
-    assert "I-11 free zero-witness kills declined: 0.4578  (190/415)" in out
-    assert "ghost-top decisions: 0.1231  (303/2461)" in out
-    assert "0 mismatches over 2461 decisions" in out
+    # I-11 is the one block the emitter no longer renders as a reproduction of
+    # the recorded policy: since the 20.32 mover repair the fold re-invokes the
+    # REPAIRED policy over the frozen bytes, so these are counterfactual cells and
+    # the mismatch count is the size of the behaviour change. The ratified
+    # "before" is quoted from eval.evidence_honesty.RATIFIED_I11_CELLS.
+    assert "I-11 free zero-witness kills declined: 0.0843  (35/415)" in out
+    assert "ghost-top decisions: 0.002  (5/2461)" in out
+    assert "419 mismatches over 2461 decisions" in out
     assert "render budget: mean rendered lines/snapshot 51.1" in out
 
 
@@ -247,7 +257,13 @@ def test_honesty_json_emits_array(capsys: pytest.CaptureFixture[str]) -> None:
         "wilson_high": pytest.approx(0.14119929366751957),
         "advisory": False,
     }
-    assert nine["impostor_targeting"]["reconstruction_mismatches"] == 0
+    # The JSON block labels its own mode, so a reader can tell the live fold from
+    # the ratified baseline constants without knowing which sha produced it.
+    assert nine["impostor_targeting"]["policy_mode"] == LIVE_POLICY_FOLD
+    assert RATIFIED_I11_CELLS["samples/9p2i"].policy_mode == RATIFIED_BASELINE
+    assert nine["impostor_targeting"]["reconstruction_mismatches"] == 419
+    assert nine["impostor_targeting"]["recorded_kill_decisions"] == 225
+    assert nine["impostor_targeting"]["recorded_kills_reproduced"] == 225
     assert four["singular_persona"]["applicable"] is False
     assert four["meeting_physicality"]["meetings"] == 39
 

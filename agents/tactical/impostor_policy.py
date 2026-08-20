@@ -18,6 +18,19 @@ For every player ever observed, the score is computed at that player's
 * ``witness_risk`` - ``co_present / (1 + co_present)`` (higher is riskier).
 * ``cooldown == 0`` contributes a binary ``1.0 / 0.0`` multiplier.
 
+Before the FSM acts on that scoring it drops the leads that cannot be real and
+breaks the remaining ties by distance (``_decision_targets``):
+
+* a subject whose freshest sighting predates the last ``meeting_boundary``
+  marker cannot rank — an ejected player's last sighting is necessarily
+  pre-meeting, so the whole ejected class disappears with the stale
+  cross-meeting leads;
+* a subject whose sighting room the impostor has since stood in without seeing
+  it there is refuted, permanently until it is seen again;
+* the survivors sort on ``(-score, proximity_rank, player_id)`` — own room ahead
+  of adjacent ahead of remote, as a tier strictly BELOW the score, so an
+  isolated remote target still beats a witnessed neighbour.
+
 The policy is stateless: every decision is a pure function of the
 agent's :class:`MemoryStore` and the :class:`PublicMapView`. Tie-
 breakers use sorted ids so replays are byte-identical, and no module
@@ -73,14 +86,18 @@ State derivation each tick (highest priority first):
   lower-id fellow) still out-prioritizes the lever (``_kill_available_now``):
   the impostor keeps hunting and the lever only pre-empts a stalk/idle. No RNG
   and no module state, so replays stay byte-identical.
-* ``KILL`` -- ``cooldown == 0`` AND the best-scoring target was seen
-  in our current room at the latest tick with no co-present
-  witnesses. Emit :class:`KillIntent` against the target. A fellow
-  impostor is never a candidate (see teammate-awareness below), so a
-  kill always targets a crewmate.
-* ``KILL_OPPORTUNITY`` -- ``cooldown == 0`` AND the best-scoring
-  target was seen in our current room at the latest tick but
-  co-present witnesses keep the score at zero. Hold position.
+* ``KILL`` -- ``cooldown == 0`` AND SOME ranked target was seen in our
+  current room at the latest tick with no co-present witnesses. Emit
+  :class:`KillIntent` against it. The whole ranking is scanned, not only
+  its head, so a higher-scoring remote lead can no longer veto a kill
+  standing in the room; at most one target can qualify (a second
+  co-located target would witness the first), so the scan finds the free
+  kill rather than choosing among several. A fellow impostor is never a
+  candidate (see teammate-awareness below), so a kill always targets a
+  crewmate.
+* ``KILL_OPPORTUNITY`` -- ``cooldown == 0``, no free kill, and the
+  best-scoring target was seen in our current room at the latest tick
+  with co-present witnesses. Hold position.
 
 Teammate-awareness (Phase 7 Task 7.9, audit gp-1/gp-3, DESIGN.md §3.4):
 
@@ -186,6 +203,13 @@ from observation.public_map import PublicMapView, RoomId, VentId
 # legitimate stalk targets, tight enough to kill the perpetual loop.
 _STALENESS_THRESHOLD: Final[int] = 30
 
+# The post-meeting episodic marker the policy dates a sighting against. Produced
+# per living agent at the resume tick by ``agents.memory.store`` (its
+# ``_EVENT_MEETING_BOUNDARY``, agents/memory/store.py:110) on both the live and
+# the replay path; mirrored here rather than imported so no private name crosses
+# a module boundary, with the two strings pinned equal in the policy's tests.
+_MEETING_BOUNDARY_EVENT: Final[str] = "meeting_boundary"
+
 # The task-gating sabotage the impostor emits (Task 11.5/11.7, DESIGN.md §3.4).
 # ``reactor`` is the only ``gates_tasks: true`` kind in the canonical map; it
 # stalls the task race and surfaces public repair rooms, so it is the lever that
@@ -277,14 +301,18 @@ class ImpostorPolicy:
     def agent_id(self) -> PlayerId:
         return self._agent_id
 
-    def ranked_targets(self, memory: MemoryStore) -> tuple[RankedTarget, ...]:
+    def ranked_targets(
+        self, memory: MemoryStore, public_map: PublicMapView
+    ) -> tuple[RankedTarget, ...]:
         """The kill/stalk ranking this policy would use now, in its own order.
 
         A pure read of ``memory``: no intent is emitted, nothing is written, and
         :meth:`decide` is untouched by its existence. It exists so an offline
         instrument can read WHICH target the FSM put first without re-deriving the
         scoring — the ranking is the thing measured, and a second implementation
-        of it would measure a different policy.
+        of it would measure a different policy. ``public_map`` is required because
+        the decision ranking carries the proximity tier, which is a fact about the
+        map rather than about the memory.
         """
 
         events = memory.recent(since_tick=0)
@@ -306,14 +334,19 @@ class ImpostorPolicy:
                 co_present=target.co_present,
                 score=target.score,
             )
-            for target in self._scored_targets(
-                events,
-                cooldown=cooldown,
-                current_tick=latest_tick,
-                confirmed_dead=self._confirmed_dead_from_bodies(events),
-                fellow_impostor_ids=self._fellow_impostor_ids_from_self_state(
-                    self_state
+            for target in self._decision_targets(
+                self._scored_targets(
+                    events,
+                    cooldown=cooldown,
+                    current_tick=latest_tick,
+                    confirmed_dead=self._confirmed_dead_from_bodies(events),
+                    fellow_impostor_ids=self._fellow_impostor_ids_from_self_state(
+                        self_state
+                    ),
                 ),
+                events=events,
+                public_map=public_map,
+                own_room=self._room_from_self_state(self_state),
             )
         )
 
@@ -349,12 +382,17 @@ class ImpostorPolicy:
 
         body_rooms = self._body_visible_rooms(latest_events)
         confirmed_dead = self._confirmed_dead_from_bodies(events)
-        targets = self._scored_targets(
-            events,
-            cooldown=cooldown,
-            current_tick=latest_tick,
-            confirmed_dead=confirmed_dead,
-            fellow_impostor_ids=fellow_impostor_ids,
+        targets = self._decision_targets(
+            self._scored_targets(
+                events,
+                cooldown=cooldown,
+                current_tick=latest_tick,
+                confirmed_dead=confirmed_dead,
+                fellow_impostor_ids=fellow_impostor_ids,
+            ),
+            events=events,
+            public_map=public_map,
+            own_room=own_room,
         )
 
         # VENT_EXIT (Task 11.1): an already-vented impostor takes the highest-
@@ -411,15 +449,15 @@ class ImpostorPolicy:
             return self._sabotage(kind=_REACTOR_SABOTAGE_KIND)
 
         if cooldown == 0 and targets:
-            best = targets[0]
-            # Kill-emission seam — re-validate the chosen target against THIS
+            # Kill-emission seam — SCAN the ranking for a free kill rather than
+            # testing only its head, then re-validate that candidate against THIS
             # tick's visibility before queuing (audit-2026-06-07-0717 gp-5,
-            # findings MECH-B-1 / A-A-3). ``_scored_targets`` ranks
-            # ``saw_player`` sightings from any tick in the staleness window,
-            # which is correct for the STALK/navigation branch below, but a
-            # kill must only fire when the freshest observation still places
-            # the target in our room this tick — otherwise the engine rejects
-            # it ("kill requires same room") and the impostor wastes the tick.
+            # findings MECH-B-1 / A-A-3). ``_scored_targets`` ranks ``saw_player``
+            # sightings from any tick in the staleness window, which is correct
+            # for the STALK/navigation branch below, but a kill must only fire
+            # when the freshest observation still places the target in our room
+            # this tick — otherwise the engine rejects it ("kill requires same
+            # room") and the impostor wastes the tick.
             #
             # This is producer-side waste removal, NOT the enforcement: per
             # DESIGN.md §3.4 intra-tick simultaneity is canonically id-ordered,
@@ -428,10 +466,10 @@ class ImpostorPolicy:
             # and the engine same-room guard stays the backstop; the producer
             # only guarantees it never *emits* against a stale/out-of-room
             # target.
-            in_own_room_now = self._target_colocated_now(
-                latest_events, target_id=best.player_id, own_room=own_room
+            victim = self._free_kill_target(
+                latest_events, targets=targets, own_room=own_room
             )
-            if in_own_room_now and best.co_present == 0:
+            if victim is not None:
                 if self._defers_to_colocated_fellow(
                     latest_events,
                     own_room=own_room,
@@ -441,8 +479,11 @@ class ImpostorPolicy:
                     # would also reach this kill; the lower id acts and we
                     # defer so two impostors never both kill on one tick.
                     return self._wait()
-                return self._kill(target_id=best.player_id)
-            if in_own_room_now:
+                return self._kill(target_id=victim)
+            best = targets[0]
+            if self._target_colocated_now(
+                latest_events, target_id=best.player_id, own_room=own_room
+            ):
                 return self._wait()
             if best.room != own_room and best.room in public_map.room_ids:
                 try:
@@ -822,6 +863,188 @@ class ImpostorPolicy:
                 return True
         return False
 
+    @staticmethod
+    def _free_kill_target(
+        latest_events: tuple[EpisodicEvent, ...],
+        *,
+        targets: tuple[_ScoredTarget, ...],
+        own_room: RoomId,
+    ) -> PlayerId | None:
+        """The first ranked target that is a free kill here and now, if any.
+
+        A free kill is a target co-located in ``own_room`` at the latest tick
+        (:meth:`_target_colocated_now`) with no co-present non-teammate witness.
+        Scanning the whole ranking rather than only its head is what stops a
+        higher-scoring REMOTE lead from vetoing a kill standing in the room
+        (2026-08-19 review C-3). At most one target can qualify: co-presence is
+        counted within the sighting's own tick-and-room bucket, so a second
+        co-located target lifts both counts above zero — the scan FINDS the free
+        kill, it never chooses between several, and the ranking order therefore
+        does not decide who dies.
+        """
+
+        for target in targets:
+            if target.co_present != 0:
+                continue
+            if ImpostorPolicy._target_colocated_now(
+                latest_events, target_id=target.player_id, own_room=own_room
+            ):
+                return target.player_id
+        return None
+
+    @staticmethod
+    def _proximity_rank(
+        *, public_map: PublicMapView, own_room: RoomId, room: RoomId
+    ) -> int:
+        """Rank a target's sighting room by distance: own 0, adjacent 1, else 2.
+
+        A tie-break TIER, never a score term: it orders targets the isolation
+        score cannot separate and can therefore never lift a witnessed neighbour
+        above an isolated remote target.
+        """
+
+        if room == own_room:
+            return 0
+        if room in public_map.room_neighbors.get(own_room, ()):
+            return 1
+        return 2
+
+    @staticmethod
+    def _pre_meeting_subjects(
+        events: tuple[EpisodicEvent, ...],
+    ) -> frozenset[PlayerId]:
+        """Players whose freshest sighting predates the last concluded meeting.
+
+        The ejection barrier (2026-08-19 review G-12). A player ejected at a
+        meeting is never seen again, so its last sighting necessarily predates the
+        ``meeting_boundary`` marker the post-meeting fold appends at the resume
+        tick — the only meeting signal that reaches episodic memory on both the
+        live and the replay path. Cross-meeting leads on living players are
+        dropped with it: a sighting the whole table has since re-gathered around
+        is not a lead either.
+        """
+
+        boundary: int | None = None
+        latest: dict[PlayerId, int] = {}
+        for event in events:
+            if event.type == _MEETING_BOUNDARY_EVENT:
+                boundary = event.tick
+            elif event.type == EVENT_SAW_PLAYER:
+                player_id = event.payload.get("player_id")
+                if not isinstance(player_id, str):
+                    raise ValueError(
+                        f"saw_player event missing string 'player_id': "
+                        f"{event.payload!r}"
+                    )
+                latest[player_id] = event.tick
+        if boundary is None:
+            return frozenset()
+        return frozenset(
+            player_id for player_id, tick in latest.items() if tick < boundary
+        )
+
+    @staticmethod
+    def _refuted_subjects(events: tuple[EpisodicEvent, ...]) -> frozenset[PlayerId]:
+        """Players whose latest sighting room the agent has since found empty.
+
+        The refuted-sighting drop (2026-08-19 review C-4). Own-room vision is the
+        floor under every visibility mode — a lights sabotage included — so an
+        agent standing in room R that records no sighting of X there has refuted
+        its lead on X in R, with no visibility model and no ``engine/`` import.
+        The drop holds until X is seen again: a refutation that lapsed the moment
+        the agent left the room would re-create the A↔B walk it exists to remove.
+        """
+
+        refuted: set[PlayerId] = set()
+        latest_room: dict[PlayerId, RoomId] = {}
+        index, total = 0, len(events)
+        while index < total:
+            tick = events[index].tick
+            own_room: RoomId | None = None
+            seen: dict[PlayerId, RoomId] = {}
+            while index < total and events[index].tick == tick:
+                event = events[index]
+                index += 1
+                if event.type == EVENT_SELF_STATE:
+                    own_room = ImpostorPolicy._room_from_self_state(event)
+                elif event.type == EVENT_SAW_PLAYER:
+                    seen[ImpostorPolicy._sighting_subject(event)] = (
+                        ImpostorPolicy._sighting_room(event)
+                    )
+            if own_room is not None:
+                here = frozenset(
+                    player_id for player_id, room in seen.items() if room == own_room
+                )
+                refuted.update(
+                    player_id
+                    for player_id, room in latest_room.items()
+                    if room == own_room and player_id not in here
+                )
+            for player_id, room in seen.items():
+                latest_room[player_id] = room
+                refuted.discard(player_id)
+        return frozenset(refuted)
+
+    @staticmethod
+    def _sighting_subject(event: EpisodicEvent) -> PlayerId:
+        """The ``player_id`` of a ``saw_player`` event (raises when malformed)."""
+
+        player_id = event.payload.get("player_id")
+        if not isinstance(player_id, str):
+            raise ValueError(
+                f"saw_player event missing string 'player_id': {event.payload!r}"
+            )
+        return player_id
+
+    @staticmethod
+    def _sighting_room(event: EpisodicEvent) -> RoomId:
+        """The ``room`` of a ``saw_player`` event (raises when malformed)."""
+
+        room = event.payload.get("room")
+        if not isinstance(room, str):
+            raise ValueError(
+                f"saw_player event missing string 'room': {event.payload!r}"
+            )
+        return room
+
+    @staticmethod
+    def _decision_targets(
+        targets: tuple[_ScoredTarget, ...],
+        *,
+        events: tuple[EpisodicEvent, ...],
+        public_map: PublicMapView,
+        own_room: RoomId,
+    ) -> tuple[_ScoredTarget, ...]:
+        """The ranking the FSM acts on: the scored snapshot, cleaned and re-sorted.
+
+        Two classes of lead that cannot be real are dropped —
+        :meth:`_pre_meeting_subjects` (anyone ejected at the last meeting, plus
+        every pre-meeting lead) and :meth:`_refuted_subjects` (a room the agent has
+        since stood in and found empty) — and the survivors are re-sorted on
+        ``(-score, proximity_rank, player_id)``: proximity is a tier strictly BELOW
+        the isolation score, so a witnessed neighbour never outranks an isolated
+        remote target, and an equidistant tie still falls to the player id.
+
+        ``_scored_targets`` itself is untouched: the ES champion's option
+        enumerators call it directly and are pinned bit-exact against each other.
+        """
+
+        dropped = ImpostorPolicy._pre_meeting_subjects(
+            events
+        ) | ImpostorPolicy._refuted_subjects(events)
+        return tuple(
+            sorted(
+                (target for target in targets if target.player_id not in dropped),
+                key=lambda target: (
+                    -target.score,
+                    ImpostorPolicy._proximity_rank(
+                        public_map=public_map, own_room=own_room, room=target.room
+                    ),
+                    target.player_id,
+                ),
+            )
+        )
+
     def _kill_available_now(
         self,
         *,
@@ -835,12 +1058,12 @@ class ImpostorPolicy:
 
         The SABOTAGE priority guard (Task 11.7): an available kill out-prioritizes
         sabotage so the impostor keeps hunting (definition of done). This is
-        exactly the kill block's *emission* condition -- ``cooldown == 0`` AND the
-        best-scoring target is co-located in our room THIS tick
-        (:meth:`_target_colocated_now`, the same freshest-observation
-        re-validation the kill seam uses) with no co-present non-teammate witness
-        (``co_present == 0``) AND this actor does NOT defer to a co-located
-        lower-id fellow (:meth:`_defers_to_colocated_fellow`).
+        exactly the kill block's *emission* condition, through the SAME
+        :meth:`_free_kill_target` scan the seam itself uses so the two copies of
+        the predicate cannot drift apart -- ``cooldown == 0`` AND some ranked
+        target is co-located in our room THIS tick with no co-present non-teammate
+        witness AND this actor does NOT defer to a co-located lower-id fellow
+        (:meth:`_defers_to_colocated_fellow`).
 
         The deferral exclusion is the fix for the Codex review: cooldowns are
         per-actor, so a deferred-to lower-id fellow may itself be on cooldown and
@@ -855,11 +1078,9 @@ class ImpostorPolicy:
 
         if cooldown != 0 or not targets:
             return False
-        best = targets[0]
-        if best.co_present != 0:
-            return False
-        if not self._target_colocated_now(
-            latest_events, target_id=best.player_id, own_room=own_room
+        if (
+            self._free_kill_target(latest_events, targets=targets, own_room=own_room)
+            is None
         ):
             return False
         return not self._defers_to_colocated_fellow(
