@@ -39,7 +39,7 @@ in play, the game's are **crewmate** and **impostor**.
 
 A numbered reference recording: one recording of the sample sets under a stated
 set of behavioural settings, which everything afterwards is measured against.
-Six exist. The newest is baseline 6, recorded 2026-07-20
+Six exist; the newest — the ladder tip — is baseline 6, recorded 2026-07-20
 ([`audits/audit-phase-18-baseline-6.md`](../audits/audit-phase-18-baseline-6.md)).
 
 ### adopting record (the recording that adopts a change)

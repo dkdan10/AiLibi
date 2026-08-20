@@ -154,6 +154,14 @@ _LINKED_DOCUMENTS: Final[tuple[str, ...]] = (
 )
 # The documents that between them must account for every phase contract.
 _PHASE_DOCUMENTS: Final[tuple[str, ...]] = (_README, _HISTORY)
+# Every document allowed to state which baseline the ladder stands at. All of
+# them are scanned, so a recording that moves the tip moves them together.
+_LADDER_TIP_DOCUMENTS: Final[tuple[str, ...]] = (
+    _README,
+    _GLOSSARY,
+    _HISTORY,
+    _READING_GUIDE,
+)
 _SAMPLE_SETS: Final[tuple[str, ...]] = ("4p1i", "9p2i")
 _MANIFEST_PATH: Final = "replays/samples/{name}/MANIFEST.md"
 
@@ -329,6 +337,29 @@ _RESULTS_TABLE_HEADER: Final[tuple[str, str]] = ("What", "Figure")
 _MIN_RESULT_ROWS: Final = 4
 _TABLE_RULE_CELL: Final = re.compile(r"\A:?-{2,}:?\Z")
 
+# The results rows whose figures are RE-DERIVED rather than compared between
+# the two tables: agreement catches a one-sided edit, not the same wrong figure
+# written into both. Each claim string is the row's first cell.
+_SAMPLE_REPLAY_DIR: Final = "replays/samples/{name}"
+_REPLAY_COUNT_CLAIM: Final = (
+    "Committed sample replays that reconstruct byte-identically"
+)
+_CITATION_INSTRUMENT: Final = "tests/eval/test_vj_instruments.py"
+_CITATION_CLAIM: Final = (
+    "Eject ballots carrying a valid citation, a turn or an observation id (9p2i)"
+)
+# The instrument's pinned assertions, read as the committed source of the
+# citation figure: ``assert nine.<field> == <n>``.
+_CITATION_PIN: Final = re.compile(r"^\s*assert nine\.(\w+) == (\d+)\s*$", re.MULTILINE)
+_CITATION_PIN_NAMES: Final[tuple[str, ...]] = (
+    "eject_ballots",
+    "cited_eject_ballots",
+    "turn_citations_dangling",
+    "observation_citations_dangling",
+)
+_VENT_CLAIM: Final = "Correct 9p ejections riding an ejectee-specific vent sighting"
+_VENT_TABLE_HEADER: Final = "Meeting contains a vent flag"
+
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
@@ -384,10 +415,11 @@ def check_facts(repo_root: Path) -> list[str]:
     readme = read_document(repo_root, _README, errors)
     if readme is not None:
         check_sample_provenance(repo_root, readme, errors)
-        check_ladder_tip(repo_root, readme, errors)
         check_dialect_terms(repo_root, readme, errors)
         check_results_agreement(repo_root, readme, errors)
+        check_result_sources(repo_root, readme, errors)
         check_volatile_stamps(readme, errors)
+    check_ladder_tip(repo_root, errors)
     check_lever_registry(repo_root, errors)
     check_vote_correctness_sentinel(repo_root, errors)
     check_phase_coverage(repo_root, errors)
@@ -585,37 +617,49 @@ def provenance_paragraph(readme: str) -> str | None:
     return matches[0]
 
 
-def check_ladder_tip(repo_root: Path, readme: str, errors: list[str]) -> None:
-    """No README "ladder tip" sentence may name a baseline other than the tip.
+def check_ladder_tip(repo_root: Path, errors: list[str]) -> None:
+    """No front-door "ladder tip" sentence may name a baseline but the tip.
 
     The tip itself is parsed from the phase-18 close audit, which is where the
     ladder's standing is recorded; whitespace is collapsed first because the
     audit wraps its prose mid-sentence.
+
+    Every document that may state the tip is scanned, not only README.md: the
+    glossary defines the term and the history narrates it, so a recording that
+    moves the tip has to move all of them together. Headings are skipped —
+    "the ladder tip" as a glossary heading is a label, not a claim about which
+    baseline is current.
     """
 
     tip = recorded_ladder_tip(repo_root, errors)
     if tip is None:
         return
-    for phrase in _LADDER_TIP_PHRASE.finditer(readme):
-        sentence = sentence_around(readme, phrase.start(), phrase.end())
-        mentions = _BASELINE_MENTION.findall(sentence)
-        if not mentions:
-            errors.append(
-                f"{_README}:{line_number(readme, phrase.start())}: a 'ladder "
-                "tip' sentence names no baseline at all — every ladder-tip "
-                f"claim must name baseline {tip} ({_LADDER_TIP_AUDIT}) — "
-                f"“{sentence.strip()}”."
-            )
+    for document in _LADDER_TIP_DOCUMENTS:
+        text = read_document(repo_root, document, errors)
+        if text is None:
             continue
-        for number in mentions:
-            if number == tip:
+        for phrase in _LADDER_TIP_PHRASE.finditer(text):
+            if text[text.rfind("\n", 0, phrase.start()) + 1 :].startswith("#"):
                 continue
-            errors.append(
-                f"{_README}:{line_number(readme, phrase.start())}: a 'ladder "
-                f"tip' sentence names baseline {number}, but "
-                f"{_LADDER_TIP_AUDIT} records the ladder tip at baseline "
-                f"{tip} — “{sentence.strip()}”."
-            )
+            sentence = sentence_around(text, phrase.start(), phrase.end())
+            mentions = _BASELINE_MENTION.findall(sentence)
+            if not mentions:
+                errors.append(
+                    f"{document}:{line_number(text, phrase.start())}: a 'ladder "
+                    "tip' sentence names no baseline at all — every ladder-tip "
+                    f"claim must name baseline {tip} ({_LADDER_TIP_AUDIT}) — "
+                    f"“{sentence.strip()}”."
+                )
+                continue
+            for number in mentions:
+                if number == tip:
+                    continue
+                errors.append(
+                    f"{document}:{line_number(text, phrase.start())}: a 'ladder "
+                    f"tip' sentence names baseline {number}, but "
+                    f"{_LADDER_TIP_AUDIT} records the ladder tip at baseline "
+                    f"{tip} — “{sentence.strip()}”."
+                )
 
 
 def recorded_ladder_tip(repo_root: Path, errors: list[str]) -> str | None:
@@ -1287,6 +1331,150 @@ def check_results_agreement(repo_root: Path, readme: str, errors: list[str]) -> 
             )
 
 
+def check_result_sources(repo_root: Path, readme: str, errors: list[str]) -> None:
+    """The results figures, re-derived from the bytes that own them.
+
+    Agreement between the two front-door tables catches a one-sided edit; it
+    cannot catch a figure edited identically in both. So each row whose source
+    is cheap to read is recomputed here instead of compared:
+
+    * the committed-replay count, from the replay files on disk;
+    * the citation-compliance figure, from the pinned assertions in the
+      committed instrument test;
+    * the vent-sighting headline, as arithmetic over the reading guide's own
+      cross-tab cells, so the headline cannot drift from the table under it.
+
+    What this check does NOT re-derive is deliberate: that the 100 replays
+    still *reconstruct* is ``scripts/verify_samples.sh``'s answer, and the
+    citation counts come from a full pass over the 9p2i corpus that
+    ``tests/eval/test_vj_instruments.py`` already makes. This module is the
+    cheap half — seconds, no engine playback — so it binds the document cells
+    to those instruments' own pins rather than repeating their work.
+
+    The impostor win rates are re-derived from the manifests by
+    :func:`check_sample_provenance`, file-wide, so they need nothing here.
+    """
+
+    rows = results_rows(readme)
+    if rows is None:
+        return  # check_results_agreement reports the missing table
+    figures = dict(rows)
+
+    replays = sum(
+        len(list((repo_root / _SAMPLE_REPLAY_DIR.format(name=name)).glob("*.jsonl")))
+        for name in _SAMPLE_SETS
+    )
+    if replays:
+        compare_result_figure(
+            _REPLAY_COUNT_CLAIM,
+            figures,
+            f"{replays} of {replays}",
+            f"the {replays} committed replays under replays/samples/",
+            errors,
+        )
+
+    instrument = read_document(repo_root, _CITATION_INSTRUMENT, errors)
+    if instrument is not None:
+        pins = {
+            match.group(1): int(match.group(2))
+            for match in _CITATION_PIN.finditer(instrument)
+        }
+        missing = [name for name in _CITATION_PIN_NAMES if name not in pins]
+        if missing:
+            errors.append(
+                f"{_CITATION_INSTRUMENT}: no pinned assertion for "
+                f"{', '.join(missing)} — the {_README} citation figure has no "
+                "committed source to re-derive it from."
+            )
+        else:
+            dangling = (
+                pins["turn_citations_dangling"] + pins["observation_citations_dangling"]
+            )
+            expected = f"{pins['cited_eject_ballots']} / {pins['eject_ballots']}, " + (
+                "zero dangling" if dangling == 0 else f"{dangling} dangling"
+            )
+            compare_result_figure(
+                _CITATION_CLAIM,
+                figures,
+                expected,
+                f"the pins in {_CITATION_INSTRUMENT}",
+                errors,
+            )
+
+    guide = read_document(repo_root, _READING_GUIDE, errors)
+    if guide is not None:
+        crosstab = vent_crosstab(guide)
+        if crosstab is None:
+            errors.append(
+                f"{_READING_GUIDE}: no vent cross-tab with a "
+                f"'{_VENT_TABLE_HEADER}' header row and its two outcome rows — "
+                f"the {_README} vent figure has nothing to be derived from."
+            )
+        else:
+            (flagged, _), (unflagged, _) = crosstab
+            correct = flagged + unflagged
+            expected = f"{flagged} / {correct} = {round(100 * flagged / correct)}%"
+            compare_result_figure(
+                _VENT_CLAIM,
+                figures,
+                expected,
+                f"the cross-tab in {_READING_GUIDE}",
+                errors,
+            )
+
+
+def compare_result_figure(
+    claim: str,
+    figures: dict[str, str],
+    expected: str,
+    source: str,
+    errors: list[str],
+) -> None:
+    """One results row, held to the figure its source recomputes to."""
+
+    stated = figures.get(claim)
+    if stated is None:
+        errors.append(
+            f"{_README}: the results table has no {claim!r} row — the figure "
+            f"{source} recomputes to ({expected!r}) has nowhere to be stated, "
+            "so nothing is being checked."
+        )
+    elif stated != expected:
+        errors.append(
+            f"{_README}: the results row {claim!r} reads {stated!r}, but "
+            f"{source} recomputes to {expected!r}."
+        )
+
+
+def vent_crosstab(guide: str) -> tuple[tuple[int, int], tuple[int, int]] | None:
+    """The (impostor, innocent) ejection counts of the vent cross-tab's rows.
+
+    Flagged row first. ``None`` when the table is not there or its cells are
+    not a pair of integers apiece — format drift the caller reports.
+    """
+
+    counts: list[tuple[int, int]] = []
+    seen_header = False
+    for line in guide.splitlines():
+        cells = table_cells(line)
+        if cells is None or len(cells) < 3:
+            if seen_header and counts:
+                break
+            continue
+        if not seen_header:
+            seen_header = cells[0].startswith(_VENT_TABLE_HEADER)
+            continue
+        if all(_TABLE_RULE_CELL.match(cell) for cell in cells):
+            continue
+        try:
+            counts.append((int(cells[1]), int(cells[2])))
+        except ValueError:
+            return None
+    if len(counts) != 2:
+        return None
+    return counts[0], counts[1]
+
+
 def reject_repeated_claims(
     document: str, rows: Sequence[tuple[str, str]], errors: list[str]
 ) -> dict[str, str]:
@@ -1503,22 +1691,26 @@ def env_var_for(key: str) -> str:
 def sentence_around(text: str, start: int, end: int) -> str:
     """The whole sentence containing ``text[start:end]``, however long.
 
-    Bounded first by the line (README paragraphs are single long lines, so a
-    sentence never spans one), then clipped to the nearest sentence boundary —
-    a period followed by whitespace — on each side. No length cap: a claim
-    hundreds of characters from its subject is still the same sentence, and
-    truncating would hide it.
+    Bounded first by the PARAGRAPH — a run of non-blank lines — then clipped to
+    the nearest sentence boundary, a period followed by whitespace, on each
+    side. The paragraph rather than the line, because the front door mixes
+    unwrapped prose (README.md, one line per paragraph) with hard-wrapped prose
+    (the glossary, the history), and a sentence broken across two wrapped lines
+    is still one sentence. No length cap: a claim hundreds of characters from
+    its subject is still the same sentence, and truncating would hide it.
     """
 
-    line_start = text.rfind("\n", 0, start) + 1
-    newline = text.find("\n", end)
-    line_end = len(text) if newline == -1 else newline
+    paragraph_start = 0
+    for blank in _BLANK_LINE.finditer(text, 0, start):
+        paragraph_start = blank.end()
+    following = _BLANK_LINE.search(text, end)
+    paragraph_end = len(text) if following is None else following.start()
 
-    left = text[line_start:start]
+    left = text[paragraph_start:start]
     boundaries = list(_SENTENCE_END.finditer(left))
     if boundaries:
         left = left[boundaries[-1].end() :]
-    right = text[end:line_end]
+    right = text[end:paragraph_end]
     boundary = _SENTENCE_END.search(right)
     if boundary is not None:
         right = right[: boundary.start()]

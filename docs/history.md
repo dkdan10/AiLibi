@@ -19,8 +19,9 @@ the firewall had a gate before it had an implementation.
 [Contract](../tasks/phase-0.md).
 
 **Phase 1 — the engine.** World state, rules, seeded RNG, visibility, the replay
-recorder and the leak test made to pass. The determinism property — one seed,
-one set of bytes — dates from here and has never been relaxed.
+recorder and the leak test made to pass. The determinism property — one seed and
+one set of inputs, one set of bytes — dates from here and has never been
+relaxed.
 [Contract](../tasks/phase-1.md).
 
 **Phase 2 — tactical agents.** Memory, perception, pathfinding, the
@@ -108,7 +109,8 @@ productization was authored. The learned impostor policy shipped opt-in.
 **Phase 16 — voice and judgment.** Citation-gated ballots (every eject ballot
 must cite a transcript turn or an observation id, and compliance reached 1.000
 at the close), information pooling via a roll-call round and vouching, and
-personas — all on the probe-locked model. Three settings graduated together at
+personas — all on one model, chosen by a probe and then frozen so that nothing
+else in the phase could be confused with a model change. Three settings graduated together at
 that close and became unconditional: the citation gate (`citation_gate`), the
 hard-evidence gate (`hard_evidence_gate`) and observation-id rendering
 (`observation_id_rendering`). Closed on reference recording 5; the absence prior

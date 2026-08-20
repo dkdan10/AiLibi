@@ -45,6 +45,7 @@ _COPIED = (
     "docs/history.md",
     "docs/reading-guide.md",
     "audits/README.md",
+    "tests/eval/test_vj_instruments.py",
 )
 
 # The front-door checks also ENUMERATE paths whose contents they never open:
@@ -52,7 +53,14 @@ _COPIED = (
 # fixture stands those up as empty files (directories as directories) so the
 # tmp tree answers the same questions the checkout does, without copying the
 # ~5 MB of prose behind them into every test.
-_ENUMERATED_GLOBS = (("tasks", "phase-*.md"), ("audits", "*.md"))
+_ENUMERATED_GLOBS = (
+    ("tasks", "phase-*.md"),
+    ("audits", "*.md"),
+    # The committed replays are counted, never opened: the results row saying
+    # 100 of 100 reconstruct is re-derived from how many there are.
+    ("replays/samples/4p1i", "*.jsonl"),
+    ("replays/samples/9p2i", "*.jsonl"),
+)
 
 # Above this size a fixture entry is symlinked rather than copied: the four
 # committed eval reports total >100 MB, and every test gets its own tree. Every
@@ -71,6 +79,7 @@ _ML_CORPUS_MANIFEST_9P2I = "replays/ml_corpus/9p2i/MANIFEST.md"
 _GLOSSARY = "docs/glossary.md"
 _HISTORY = "docs/history.md"
 _READING_GUIDE = "docs/reading-guide.md"
+_CITATION_INSTRUMENT = "tests/eval/test_vj_instruments.py"
 _AUDITS_INDEX = "audits/README.md"
 # The one dialect term the front door keeps, and the link that defines it.
 _BASELINE_LINK = "[baseline 6](docs/glossary.md#baseline-n-the-reference-recording)"
@@ -802,6 +811,96 @@ def test_new_undefined_dialect_term_detected(doc_tree: Path) -> None:
     assert any("'arm'" in error for error in errors)
 
 
+def test_replay_count_figure_derived_from_the_committed_replays(
+    doc_tree: Path,
+) -> None:
+    # Agreement between the two tables cannot catch a figure edited identically
+    # in both, so this row is recomputed from the replay files on disk.
+    _substitute(doc_tree, _README, "| 100 of 100 |", "| 96 of 96 |")
+    _substitute(doc_tree, _READING_GUIDE, "| 100 of 100 |", "| 96 of 96 |")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "'96 of 96'" in errors[0]
+    assert "100 committed replays" in errors[0]
+
+
+def test_citation_figure_derived_from_the_committed_instrument(
+    doc_tree: Path,
+) -> None:
+    # Same for the citation row: its source is the instrument's pinned
+    # assertions, not the other document's copy of the number.
+    _substitute(
+        doc_tree,
+        _README,
+        "| 520 / 520, zero dangling |",
+        "| 519 / 519, zero dangling |",
+    )
+    _substitute(
+        doc_tree,
+        _READING_GUIDE,
+        "| 520 / 520, zero dangling |",
+        "| 519 / 519, zero dangling |",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "'519 / 519, zero dangling'" in errors[0]
+    assert _CITATION_INSTRUMENT in errors[0]
+
+
+def test_instrument_pin_move_reaches_the_front_door(doc_tree: Path) -> None:
+    # The binding runs the other way too: a re-record that moves the pinned
+    # count must move the documents, rather than leaving them stale and green.
+    _substitute(
+        doc_tree,
+        _CITATION_INSTRUMENT,
+        "assert nine.turn_citations_dangling == 0",
+        "assert nine.turn_citations_dangling == 3",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "'520 / 520, 3 dangling'" in errors[0]
+
+
+def test_vent_headline_derived_from_the_crosstab(doc_tree: Path) -> None:
+    # The headline is arithmetic over the cross-tab under it, so the two cannot
+    # drift: 68 of 68 + 10 correct ejections rode a vent flag.
+    _substitute(
+        doc_tree,
+        _READING_GUIDE,
+        "| yes (70 meetings) | 68 | 2 |",
+        "| yes (70 meetings) | 60 | 2 |",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "'68 / 78 = 87%'" in errors[0]
+    assert "'60 / 70 = 86%'" in errors[0]
+
+
+def test_missing_vent_crosstab_fails_loud(doc_tree: Path) -> None:
+    # Losing the table must not read as "nothing to derive from".
+    _substitute(
+        doc_tree, _READING_GUIDE, "| Meeting contains a vent flag |", "| Meetings |"
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "no vent cross-tab" in errors[0]
+
+
+def test_glossary_ladder_tip_drift_detected(doc_tree: Path) -> None:
+    # Every document that may state the tip is scanned, not only the README:
+    # the glossary defines the term, so a stale tip there is the same drift.
+    _substitute(
+        doc_tree,
+        _GLOSSARY,
+        "the newest — the ladder tip — is baseline 6",
+        "the newest — the ladder tip — is baseline 5",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert errors[0].startswith(_GLOSSARY)
+    assert "names baseline 5" in errors[0]
+
+
 def test_unaccounted_phase_contract_detected(doc_tree: Path) -> None:
     # A new phase document that neither the phase table nor the history links:
     # the front door would silently stop covering the project.
@@ -858,12 +957,18 @@ def test_unnamed_audits_subdirectory_detected(doc_tree: Path) -> None:
 
 def test_results_figure_drift_detected(doc_tree: Path) -> None:
     # The numbers are stated once: a figure edited in the README and not in the
-    # guide is two answers to the same question.
-    _substitute(doc_tree, _README, "| 100 of 100 |", "| 99 of 100 |")
+    # guide is two answers to the same question. The firewall row is the one
+    # with no countable source, so this exercises the agreement check alone.
+    _substitute(
+        doc_tree,
+        _README,
+        "| Observation-firewall violations, all phases | zero |",
+        "| Observation-firewall violations, all phases | one |",
+    )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert "'99 of 100'" in errors[0]
-    assert "'100 of 100'" in errors[0]
+    assert "'one'" in errors[0]
+    assert "'zero'" in errors[0]
 
 
 def test_results_row_absent_from_the_guide_detected(doc_tree: Path) -> None:

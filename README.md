@@ -60,7 +60,7 @@ Every coding task follows the same five steps:
 1. **Author a contract** in `tasks/phase-N.md` — branch, dependencies, files in and out of scope, definition of done.
 2. **Generate the prompt** with `uv run python scripts/generate_prompts.py`, which refuses to let a prompt drift from its contract.
 3. **Dispatch an agent** against that prompt, in a fresh checkout.
-4. **Review the pull request.** CI is required on `main` ([the workflow](.github/workflows/ci.yml)) and `bash scripts/check.sh` runs the same gate locally, so anyone can reproduce the verdict. I review what a gate cannot judge.
+4. **Review the pull request.** CI is required on `main` ([the workflow](.github/workflows/ci.yml)); `bash scripts/check.sh` runs all of it locally except the Playwright browser journey, which CI runs as its own job (`cd frontend && npm run e2e`). I review what a gate cannot judge.
 5. **Checkpoint** before high-blast-radius work with a read-only audit.
 
 One contract and the prompt generated from it: [robust JSON extraction](tasks/phase-3.md), [its prompt](agent_prompts/task-3-19-robust-json-extraction-and-failure-recording.md).
