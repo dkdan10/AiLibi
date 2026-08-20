@@ -66,7 +66,8 @@ training and **never a training reward** (its SELECTION-ONLY DOCTRINE, owner-rat
 
 ## Results
 
-Nine arms × 50 seeds on the hosted eval model, recorded once. The win cells are quoted from
+Nine arms × 50 seeds on the hosted eval model, recorded once; the four impostor-side
+candidates and their comparator are the rows below. The win cells are quoted from
 [`audit-phase-18-close.md`](../audits/audit-phase-18-close.md) §1.1; the p-values are
 recomputed on a fresh clone by
 `uv run python scripts/paired_stats.py training/reports/results-finalist-eval.jsonl`.

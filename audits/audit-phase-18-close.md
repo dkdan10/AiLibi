@@ -1283,8 +1283,10 @@ upper bound rather than a point estimate. Item 3 records what these items do **n
    **Direction of the confound, stated plainly.** Both defects **depress the comparator**:
    they cost it kills and waste its decision budget. §1.1's `p18-fsm-comparator` cell
    (13/50 = 0.26) is therefore a floor, and the four learned arms' win edges (**+0.12 to
-   +0.30**, and the paired McNemar cells this close quotes) are **upper bounds** on the
-   real gap. A corrected comparator can only narrow them.
+   +0.30**) are **upper bounds** on the real gap. So are the paired impostor-side McNemar
+   cells the Task-19.20 erratum added at `training/reports/report-finalist-eval.md` §18
+   item 1, which test those same edges against those same comparator rows. A corrected
+   comparator can only narrow them.
 
 3. **What items 1–2 do NOT touch.** The referee verdicts stand — the defects cost the
    comparator wins, not evidence supply, and a stronger comparator would not have made a
@@ -1292,7 +1294,10 @@ upper bound rather than a point estimate. Item 3 records what these items do **n
    **NO-FLIP ruling stands** (it turns on the AND-criterion, and every candidate fails the
    referee half outright). The fourteen pre-registered emergence rulings, the zero-EMERGENT
    tally, and N1/N2's rate contrasts stand: they are witnessed-kill and co-present-kill
-   *rates*, measured per kill, not win-rate differences. The pre-registration ordering
-   stands. **The repair is routed, not performed here:** Task 20.32 fixes the mover and
+   *rates*, measured per kill, not win-rate differences. This close's own McNemar cell is
+   the **crew** pair (§4, `0bf179b7…` gen-9 against its same-opponent gen-0 control,
+   exact p = 1.0) — a different comparison against a different control, untouched here.
+   The pre-registration ordering stands. **The repair is routed, not performed here:**
+   Task 20.32 fixes the mover and
    Task 20.38 re-measures on corrected bytes. This erratum states the confound; it neither
    repairs it nor re-measures anything.
