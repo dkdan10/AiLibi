@@ -58,7 +58,8 @@ import { StatTile } from "./StatTile";
  * at, so the guidance that fits a local checkout is wrong there; the demo says
  * what it ships and where the rest lives instead.
  */
-const STATIC_BUNDLE_BUILD: boolean = import.meta.env.VITE_AILIBI_STATIC_DATA === "1";
+const STATIC_BUNDLE_BUILD: boolean =
+  import.meta.env.VITE_AILIBI_STATIC_DATA === "1";
 
 // ---------------------------------------------------------------------------
 // Formatting helpers (null-safe: a missing/undefined rate is "n/a", never NaN)
@@ -208,8 +209,14 @@ function BalanceSummary({
             { n: formatInt(seedsAttempted) },
           )}
         />
-        <StatTile label={DASHBOARD_COPY.balanceCrewWins} value={formatInt(crewWins)} />
-        <StatTile label={DASHBOARD_COPY.balanceImpostorWins} value={formatInt(impostorWins)} />
+        <StatTile
+          label={DASHBOARD_COPY.balanceCrewWins}
+          value={formatInt(crewWins)}
+        />
+        <StatTile
+          label={DASHBOARD_COPY.balanceImpostorWins}
+          value={formatInt(impostorWins)}
+        />
         <StatTile
           label={DASHBOARD_COPY.balanceTickBudget}
           value={formatInt(tickBudget)}
@@ -306,7 +313,11 @@ function VoteCorrectness({
 // Conversion — Wave-1 leads + the SKIP-ballot sentinels (typed by 12.2)
 // ---------------------------------------------------------------------------
 
-function ConversionSection({ report }: { report: TournamentEvalReport["conversion"] }) {
+function ConversionSection({
+  report,
+}: {
+  report: TournamentEvalReport["conversion"];
+}) {
   // `missed_skip_ballots` is not a down-is-good metric — it partitions into
   // impostor voters (adversarial play, working as intended), invalid targets
   // (normalized hallucinations) and threshold inversions (a crew voter
@@ -348,7 +359,10 @@ function ConversionSection({ report }: { report: TournamentEvalReport["conversio
             crewDeclined: formatInt(report.threshold_inversions),
           })}
           caveat={
-            <MetricCaveat tone="note" title={DASHBOARD_COPY.conversionMissedSkipsCaveatTitle}>
+            <MetricCaveat
+              tone="note"
+              title={DASHBOARD_COPY.conversionMissedSkipsCaveatTitle}
+            >
               {DASHBOARD_COPY.conversionMissedSkipsCaveat}
             </MetricCaveat>
           }
@@ -366,7 +380,9 @@ function ConversionSection({ report }: { report: TournamentEvalReport["conversio
                 {DASHBOARD_COPY.conversionInversionsCaveat}
               </MetricCaveat>
             ) : (
-              <MetricCaveat tone="note">{DASHBOARD_COPY.conversionInversionsNone}</MetricCaveat>
+              <MetricCaveat tone="note">
+                {DASHBOARD_COPY.conversionInversionsNone}
+              </MetricCaveat>
             )
           }
         />
@@ -412,7 +428,10 @@ function GateMetricsSection({
             whereaboutsSupplied: formatInt(scc.whereabouts_lie_supplied),
           })}
           caveat={
-            <MetricCaveat tone="note" title={DASHBOARD_COPY.gateSuppliedCaveatTitle}>
+            <MetricCaveat
+              tone="note"
+              title={DASHBOARD_COPY.gateSuppliedCaveatTitle}
+            >
               {DASHBOARD_COPY.gateSuppliedCaveat}
             </MetricCaveat>
           }
@@ -425,7 +444,10 @@ function GateMetricsSection({
             supplied: formatInt(gcc.supplied),
           })}
           caveat={
-            <MetricCaveat tone="note" title={DASHBOARD_COPY.gateGenuineCaveatTitle}>
+            <MetricCaveat
+              tone="note"
+              title={DASHBOARD_COPY.gateGenuineCaveatTitle}
+            >
               {DASHBOARD_COPY.gateGenuineCaveat}
             </MetricCaveat>
           }
@@ -449,7 +471,10 @@ function GateMetricsSection({
             unevidenced: formatInt(report.survivals_unevidenced),
           })}
           caveat={
-            <MetricCaveat tone="note" title={DASHBOARD_COPY.gateSurvivalsCaveatTitle}>
+            <MetricCaveat
+              tone="note"
+              title={DASHBOARD_COPY.gateSurvivalsCaveatTitle}
+            >
               {DASHBOARD_COPY.gateSurvivalsCaveat}
             </MetricCaveat>
           }
@@ -554,7 +579,8 @@ function DeductionSection({
   const coverage = report.public_response_coverage;
   const supply = report.witnessed_supply;
   const flaggedEjections =
-    meetingFlag.flagged_ejections_impostor + meetingFlag.flagged_ejections_innocent;
+    meetingFlag.flagged_ejections_impostor +
+    meetingFlag.flagged_ejections_innocent;
   const unflaggedEjections =
     meetingFlag.unflagged_ejections_impostor +
     meetingFlag.unflagged_ejections_innocent;
@@ -633,7 +659,8 @@ function DeductionSection({
             label={DASHBOARD_COPY.deductionProofShare}
             value={formatPct(
               ejecteeProof.ejections_total > 0
-                ? ejecteeProof.proof_present_ejections / ejecteeProof.ejections_total
+                ? ejecteeProof.proof_present_ejections /
+                    ejecteeProof.ejections_total
                 : null,
             )}
             hint={fmt(DASHBOARD_COPY.deductionProofShareHint, {
@@ -659,8 +686,12 @@ function DeductionSection({
             label={DASHBOARD_COPY.deductionConsistency}
             value={formatPct(report.turn_ballot_consistency.consistency_rate)}
             hint={fmt(DASHBOARD_COPY.deductionConsistencyHint, {
-              consistent: formatInt(report.turn_ballot_consistency.consistent_ballots),
-              accusing: formatInt(report.turn_ballot_consistency.accusing_ballots),
+              consistent: formatInt(
+                report.turn_ballot_consistency.consistent_ballots,
+              ),
+              accusing: formatInt(
+                report.turn_ballot_consistency.accusing_ballots,
+              ),
             })}
             caveat={
               <MetricCaveat
@@ -696,9 +727,13 @@ function DeductionSection({
             label={DASHBOARD_COPY.deductionRedirected}
             value={formatPct(report.redirected_ballots.redirected_ballot_share)}
             hint={fmt(DASHBOARD_COPY.deductionRedirectedHint, {
-              redirected: formatInt(report.redirected_ballots.redirected_ballots),
+              redirected: formatInt(
+                report.redirected_ballots.redirected_ballots,
+              ),
               total: formatInt(report.redirected_ballots.ballots_total),
-              ejected: formatInt(report.redirected_ballots.redirected_eject_ballots),
+              ejected: formatInt(
+                report.redirected_ballots.redirected_eject_ballots,
+              ),
             })}
           />
           <StatTile
@@ -802,7 +837,10 @@ function AlibiFabrication({
           label={DASHBOARD_COPY.alibiTotal}
           value={formatInt(report.total_impostor_alibis)}
         />
-        <StatTile label={DASHBOARD_COPY.alibiSurvived} value={formatInt(report.survived)} />
+        <StatTile
+          label={DASHBOARD_COPY.alibiSurvived}
+          value={formatInt(report.survived)}
+        />
       </div>
     </MetricSection>
   );
@@ -830,7 +868,9 @@ function InterestingnessHistogram({ rubric }: { rubric: RubricState }) {
       action={staleAction}
     >
       {rubric.status === "loading" ? (
-        <p className="text-sm text-ink-500">{DASHBOARD_COPY.interestingnessLoading}</p>
+        <p className="text-sm text-ink-500">
+          {DASHBOARD_COPY.interestingnessLoading}
+        </p>
       ) : rubric.status === "absent" ? (
         // Post-flip copy (Task 19.13, sweeping what Task 19.9's default flip
         // falsified). This panel used to say the DEFAULT-served set was 4p1i and
@@ -871,7 +911,9 @@ function HistogramBars({ view }: { view: RubricView }) {
 
   if (total === 0) {
     return (
-      <p className="text-sm text-ink-500">{DASHBOARD_COPY.interestingnessEmpty}</p>
+      <p className="text-sm text-ink-500">
+        {DASHBOARD_COPY.interestingnessEmpty}
+      </p>
     );
   }
 
@@ -904,7 +946,8 @@ function HistogramBars({ view }: { view: RubricView }) {
                 {BUCKET_LABEL[bucket]}
               </span>
               <span className="font-mono text-3xs text-ink-500">
-                {DASHBOARD_COPY.interestingnessScorePrefix} {BUCKET_RANGE[bucket]}
+                {DASHBOARD_COPY.interestingnessScorePrefix}{" "}
+                {BUCKET_RANGE[bucket]}
               </span>
             </a>
           );
@@ -932,13 +975,19 @@ function CostDashboardView({ dashboard }: { dashboard: CostDashboard }) {
       description={DASHBOARD_COPY.costDescription}
     >
       <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatTile label={DASHBOARD_COPY.costTotal} value={formatUsd(dashboard.total_cost_usd)} />
+        <StatTile
+          label={DASHBOARD_COPY.costTotal}
+          value={formatUsd(dashboard.total_cost_usd)}
+        />
         <StatTile
           label={DASHBOARD_COPY.costMean}
           value={formatUsd(dashboard.mean_cost_per_game)}
           hint={DASHBOARD_COPY.costMeanHint}
         />
-        <StatTile label={DASHBOARD_COPY.costGames} value={formatInt(dashboard.game_count)} />
+        <StatTile
+          label={DASHBOARD_COPY.costGames}
+          value={formatInt(dashboard.game_count)}
+        />
         <StatTile
           label={DASHBOARD_COPY.costTokens}
           value={`${formatInt(dashboard.total_input_tokens)} / ${formatInt(dashboard.total_output_tokens)}`}
@@ -949,13 +998,19 @@ function CostDashboardView({ dashboard }: { dashboard: CostDashboard }) {
         <div>
           <h4 className="mb-1 text-ink-900">{DASHBOARD_COPY.costPerModel}</h4>
           {byModel.length === 0 ? (
-            <p className="text-sm text-ink-500">{DASHBOARD_COPY.costPerModelEmpty}</p>
+            <p className="text-sm text-ink-500">
+              {DASHBOARD_COPY.costPerModelEmpty}
+            </p>
           ) : (
             <table className="w-full text-left text-sm">
               <thead className="text-xs uppercase tracking-wide text-ink-500">
                 <tr>
-                  <th className="py-1 pr-2 font-medium">{DASHBOARD_COPY.costColModel}</th>
-                  <th className="py-1 text-right font-medium">{DASHBOARD_COPY.costColCost}</th>
+                  <th className="py-1 pr-2 font-medium">
+                    {DASHBOARD_COPY.costColModel}
+                  </th>
+                  <th className="py-1 text-right font-medium">
+                    {DASHBOARD_COPY.costColCost}
+                  </th>
                 </tr>
               </thead>
               <tbody className="font-mono text-ink-900">
@@ -973,15 +1028,25 @@ function CostDashboardView({ dashboard }: { dashboard: CostDashboard }) {
         <div>
           <h4 className="mb-1 text-ink-900">{DASHBOARD_COPY.costPerPrompt}</h4>
           {dashboard.per_prompt_version.length === 0 ? (
-            <p className="text-sm text-ink-500">{DASHBOARD_COPY.costPerPromptEmpty}</p>
+            <p className="text-sm text-ink-500">
+              {DASHBOARD_COPY.costPerPromptEmpty}
+            </p>
           ) : (
             <table className="w-full text-left text-sm">
               <thead className="text-xs uppercase tracking-wide text-ink-500">
                 <tr>
-                  <th className="py-1 pr-2 font-medium">{DASHBOARD_COPY.costColTemplate}</th>
-                  <th className="py-1 pr-2 font-medium">{DASHBOARD_COPY.costColVersion}</th>
-                  <th className="py-1 text-right font-medium">{DASHBOARD_COPY.costColGames}</th>
-                  <th className="py-1 text-right font-medium">{DASHBOARD_COPY.costColCost}</th>
+                  <th className="py-1 pr-2 font-medium">
+                    {DASHBOARD_COPY.costColTemplate}
+                  </th>
+                  <th className="py-1 pr-2 font-medium">
+                    {DASHBOARD_COPY.costColVersion}
+                  </th>
+                  <th className="py-1 text-right font-medium">
+                    {DASHBOARD_COPY.costColGames}
+                  </th>
+                  <th className="py-1 text-right font-medium">
+                    {DASHBOARD_COPY.costColCost}
+                  </th>
                 </tr>
               </thead>
               <tbody className="font-mono text-ink-900">
@@ -992,8 +1057,12 @@ function CostDashboardView({ dashboard }: { dashboard: CostDashboard }) {
                   >
                     <td className="py-1 pr-2 break-all">{row.template_name}</td>
                     <td className="py-1 pr-2 break-all">{row.version}</td>
-                    <td className="py-1 text-right">{formatInt(row.game_count)}</td>
-                    <td className="py-1 text-right">{formatUsd(row.total_cost_usd)}</td>
+                    <td className="py-1 text-right">
+                      {formatInt(row.game_count)}
+                    </td>
+                    <td className="py-1 text-right">
+                      {formatUsd(row.total_cost_usd)}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -1064,15 +1133,23 @@ export function TournamentDashboardView({
         // answers a missing file with its own HTML error page — so printing the
         // message put a raw `<!DOCTYPE HTML PUBLIC …>` document inside the card.
         <div className="rounded-lg border-2 border-ink-900 bg-paper-0 px-4 py-6 shadow-chrome-1">
-          <p className="font-semibold text-ink-900">{DASHBOARD_COPY.noReportTitle}</p>
+          <p className="font-semibold text-ink-900">
+            {DASHBOARD_COPY.noReportTitle}
+          </p>
           {STATIC_BUNDLE_BUILD ? (
-            <p className="mt-1 text-sm text-ink-500">{DASHBOARD_COPY.noReportBundle}</p>
+            <p className="mt-1 text-sm text-ink-500">
+              {DASHBOARD_COPY.noReportBundle}
+            </p>
           ) : (
             <p className="mt-1 text-sm text-ink-500">
               {DASHBOARD_COPY.noReportLead}{" "}
-              <code className="font-mono text-xs">tournament-eval-report.json</code>{" "}
+              <code className="font-mono text-xs">
+                tournament-eval-report.json
+              </code>{" "}
               {DASHBOARD_COPY.noReportMiddle}{" "}
-              <code className="font-mono text-xs">scripts/run_tournament.py</code>{" "}
+              <code className="font-mono text-xs">
+                scripts/run_tournament.py
+              </code>{" "}
               {DASHBOARD_COPY.noReportTail}
             </p>
           )}
@@ -1137,7 +1214,17 @@ export function TournamentDashboard() {
           setRubric({ status: "absent" });
           return;
         }
-        const message = cause instanceof Error ? cause.message : String(cause);
+        // An HTTP failure is reported by STATUS, never by `ApiError.message`:
+        // that folds the response BODY in, and a file server answers with its
+        // own HTML error page — the same reason the no-report panel below
+        // refuses to print a transport error. Any other error (a view-model
+        // contract mismatch) is app-authored and says something useful.
+        const message =
+          cause instanceof ApiError
+            ? `rubric request failed (status ${cause.status})`
+            : cause instanceof Error
+              ? cause.message
+              : String(cause);
         setRubric({ status: "error", message });
       });
     return () => {

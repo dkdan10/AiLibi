@@ -23,7 +23,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import { getBeliefFrames } from "../api/client";
+import { ApiError, getBeliefFrames } from "../api/client";
 import { useReplayStore } from "../store/replayStore";
 import { useFocusTrap } from "../hooks/useFocusTrap";
 import type { BeliefFrameView } from "../types/api";
@@ -72,9 +72,21 @@ export function BeliefMatrix() {
         }
       })
       .catch((cause: unknown) => {
-        if (!cancelled) {
-          setError(cause instanceof Error ? cause.message : String(cause));
+        if (cancelled) {
+          return;
         }
+        // An HTTP failure is reported by STATUS, never by `ApiError.message`:
+        // that folds the response BODY in, and a static host answers a missing
+        // file with its own HTML error page, which would land in the panel
+        // verbatim. Any other error (a view-model contract mismatch) is
+        // app-authored and says something useful.
+        setError(
+          cause instanceof ApiError
+            ? `belief frames request failed (status ${cause.status})`
+            : cause instanceof Error
+              ? cause.message
+              : String(cause),
+        );
       });
     return () => {
       cancelled = true;
@@ -133,7 +145,9 @@ export function BeliefMatrix() {
   }
 
   // Roster order matches the loader's `sorted(...)` so the matrix axes are stable.
-  const players = [...replay.players].sort((a, b) => a.agent_id.localeCompare(b.agent_id));
+  const players = [...replay.players].sort((a, b) =>
+    a.agent_id.localeCompare(b.agent_id),
+  );
 
   // Per-meeting liveness from the replay tick state — the /beliefs DTO snapshots
   // dead players as observers too, so the panel can't infer liveness from rows

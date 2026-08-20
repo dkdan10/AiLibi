@@ -202,6 +202,25 @@ describe("the routes that used to build their own URL", () => {
     ).rejects.toBeInstanceOf(ViewModelVersionError);
   });
 
+  it("folds the response body into the error, so callers must render the status", async () => {
+    // Why both routed components report `status` instead of `message`: a static
+    // host answers a missing or broken route with its own HTML error page, and
+    // `ApiError` carries that body in its message. `status` and `body` are
+    // separate fields precisely so a UI can say what happened without printing
+    // a `<!DOCTYPE …>` document into a card.
+    stubFetch(
+      new Response("<!DOCTYPE HTML PUBLIC><h1>500</h1>", { status: 500 }),
+    );
+
+    const error = (await getRubric("9p2i").catch(
+      (caught: unknown) => caught,
+    )) as ApiError;
+
+    expect(error.status).toBe(500);
+    expect(error.body).toContain("<!DOCTYPE");
+    expect(error.message).toContain("<!DOCTYPE");
+  });
+
   it("surfaces a non-200 from the belief route as ApiError, not a bare Error", async () => {
     // The hand-rolled version threw `new Error("belief frames request failed
     // (status 500)")`, which no caller can branch on.
@@ -237,6 +256,11 @@ const FETCH_OWNER = "api/client.ts";
  * a dozen times, two components mention "the … fetch (…)" in a comment, and a
  * template could carry the word as content. This is what makes the scan below
  * about calls rather than about the word.
+ *
+ * JSX child text is NOT blanked — telling `<` apart from a comparison needs a
+ * parser. That is the safe direction for a guard: a component rendering the
+ * literal text `fetch(` would be over-reported, which fails loudly and is fixed
+ * by rewording; nothing is ever under-reported.
  */
 function codeOnly(source: string): string {
   // One nesting level: `"code"` is the file or a `${…}` hole, a quote character
