@@ -1097,9 +1097,11 @@ def check_dialect_terms(repo_root: Path, readme: str, errors: list[str]) -> None
     because that is where a reader meets it, and a definition offered after the
     fact is a definition the reader has already needed.
 
-    Both halves bite. An occurrence outside a glossary link fails, and a link
-    to a glossary heading that does not exist fails, so the entry cannot be
-    deleted out from under the link either.
+    Both halves bite. An occurrence outside a glossary link fails, and the
+    glossary entry is required for EVERY term on the list whether or not the
+    README currently uses it: the list is the set of words the front door may
+    not use undefined, so deleting an entry would quietly re-open the door to
+    the term it defines.
     """
 
     glossary = read_document(repo_root, _GLOSSARY, errors)
@@ -1110,15 +1112,16 @@ def check_dialect_terms(repo_root: Path, readme: str, errors: list[str]) -> None
     }
 
     for label, pattern, anchor in _DIALECT_TERMS:
-        first = re.search(pattern, readme, re.IGNORECASE)
-        if first is None:
-            continue
         if glossary is not None and anchor not in anchors:
             errors.append(
                 f"{_GLOSSARY}: no entry anchored '#{anchor}' for the "
-                f"private-dialect term {label!r}, which {_README} uses — the "
-                "link on the front door would land nowhere."
+                f"private-dialect term {label!r} — every term the front door "
+                "may not use undefined needs its definition to exist, whether "
+                f"or not {_README} happens to use it today."
             )
+        first = re.search(pattern, readme, re.IGNORECASE)
+        if first is None:
+            continue
         covering = [
             named
             for (start, end), named in links.items()
@@ -1240,7 +1243,9 @@ def check_results_agreement(repo_root: Path, readme: str, errors: list[str]) -> 
     The reading guide's numbers table is canonical and the README quotes from
     it. Matching row by row on the claim text means a figure edited in one file
     and not the other fails here rather than shipping as two answers to the
-    same question.
+    same question. A table that states one claim twice is rejected before the
+    comparison: a stale row left beside a corrected one would otherwise satisfy
+    the comparison while showing the reader two numbers.
     """
 
     guide = read_document(repo_root, _READING_GUIDE, errors)
@@ -1262,19 +1267,46 @@ def check_results_agreement(repo_root: Path, readme: str, errors: list[str]) -> 
             f"fewer than the {_MIN_RESULT_ROWS} this check needs to mean "
             "anything — agreement over a stub is not agreement."
         )
-    for claim, figure in readme_rows.items():
-        if claim not in guide_rows:
+    reject_repeated_claims(_README, readme_rows, errors)
+    guide_figures = reject_repeated_claims(_READING_GUIDE, guide_rows, errors)
+    # Over the rows, not the de-duplicated mapping: when a claim IS repeated,
+    # both copies are compared, so a stale duplicate is named twice over rather
+    # than hidden behind whichever copy happened to come last.
+    for claim, figure in readme_rows:
+        if claim not in guide_figures:
             errors.append(
                 f"{_README}: the results row {claim!r} has no matching row in "
                 f"{_READING_GUIDE}'s numbers table, which owns the canonical "
                 "statement of every figure."
             )
-        elif guide_rows[claim] != figure:
+        elif guide_figures[claim] != figure:
             errors.append(
                 f"{_README}: the results row {claim!r} reads {figure!r}, but "
-                f"{_READING_GUIDE} records {guide_rows[claim]!r} for the same "
-                "claim."
+                f"{_READING_GUIDE} records {guide_figures[claim]!r} for the "
+                "same claim."
             )
+
+
+def reject_repeated_claims(
+    document: str, rows: Sequence[tuple[str, str]], errors: list[str]
+) -> dict[str, str]:
+    """Claim -> figure for ``rows``, with every repeated claim reported.
+
+    The first figure wins the mapping, so a repeat is reported AND its copy is
+    still compared against the canonical table by the caller.
+    """
+
+    figures: dict[str, str] = {}
+    for claim, figure in rows:
+        if claim in figures:
+            errors.append(
+                f"{document}: the results table states {claim!r} twice "
+                f"({figures[claim]!r}, then {figure!r}) — one claim, one row, "
+                "or the page answers the same question two ways."
+            )
+            continue
+        figures[claim] = figure
+    return figures
 
 
 def check_volatile_stamps(readme: str, errors: list[str]) -> None:
@@ -1349,9 +1381,13 @@ def check_relative_links(repo_root: Path, errors: list[str]) -> None:
         for target, resolved in relative_targets(repo_root, document, text):
             if resolved.exists():
                 continue
+            shown = (
+                resolved.relative_to(repo_root)
+                if resolved.is_relative_to(repo_root)
+                else resolved
+            )
             errors.append(
-                f"{document}: the relative link {target!r} resolves to "
-                f"{resolved.relative_to(repo_root) if resolved.is_relative_to(repo_root) else resolved}"
+                f"{document}: the relative link {target!r} resolves to {shown}"
                 ", which does not exist."
             )
 
@@ -1387,15 +1423,17 @@ def heading_anchors(markdown: str) -> set[str]:
     }
 
 
-def results_rows(markdown: str) -> dict[str, str] | None:
-    """The ``What`` -> ``Figure`` rows of the document's results table.
+def results_rows(markdown: str) -> list[tuple[str, str]] | None:
+    """The ``What`` / ``Figure`` rows of the document's results table, in order.
 
     Located by its header cells rather than by the heading above it, so
-    renaming the section does not silently disable the agreement check.
-    ``None`` when no such table exists (format drift the caller reports).
+    renaming the section does not silently disable the agreement check. A list
+    rather than a mapping, because a repeated claim is itself a finding and
+    collapsing it here would erase the evidence for it. ``None`` when no such
+    table exists (format drift the caller reports).
     """
 
-    rows: dict[str, str] | None = None
+    rows: list[tuple[str, str]] | None = None
     for line in markdown.splitlines():
         cells = table_cells(line)
         if cells is None or len(cells) < 2:
@@ -1404,11 +1442,11 @@ def results_rows(markdown: str) -> dict[str, str] | None:
             continue
         if rows is None:
             if tuple(cells[:2]) == _RESULTS_TABLE_HEADER:
-                rows = {}
+                rows = []
             continue
         if all(_TABLE_RULE_CELL.match(cell) for cell in cells):
             continue
-        rows[cells[0]] = cells[1]
+        rows.append((cells[0], cells[1]))
     return rows
 
 

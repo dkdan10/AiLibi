@@ -1,6 +1,6 @@
 # AiLibi — LLM social deduction behind an observation firewall, built by directing AI coding agents
 
-by **Daniel Keinan** · code by Claude Code and Codex agents · [MIT](LICENSE) · [![CI](https://github.com/dkdan10/AiLibi/actions/workflows/ci.yml/badge.svg)](https://github.com/dkdan10/AiLibi/actions/workflows/ci.yml) ![Python 3.11](https://img.shields.io/badge/python-3.11-blue) · May–August 2026, solo
+by **Daniel Keinan** · code by Claude Code agents, reviewed by Codex · [MIT](LICENSE) · [![CI](https://github.com/dkdan10/AiLibi/actions/workflows/ci.yml/badge.svg)](https://github.com/dkdan10/AiLibi/actions/workflows/ci.yml) ![Python 3.11](https://img.shields.io/badge/python-3.11-blue) · May–August 2026, solo
 
 **▶ Live demo** — the spectator as a static directory, no server behind it: `https://dkdan10.github.io/AiLibi/`
 <!-- OWNER: enable Pages, then confirm this URL resolves; plain text until it does. -->
@@ -23,7 +23,7 @@ Nine LLM agents walk a room graph, work their task lists, witness what they can 
 ## At a glance
 
 - **Stack** — Python 3.11 · FastAPI · Pydantic · React + Vite + PixiJS · uv · `mypy --strict` · Hypothesis.
-- **Scale, counted as of 2026-08-19** — 903 commits · 364 merged pull requests · 363 generated agent prompts · 100 committed replays · 4,940 tests in the default gate.
+- **Scale** — a snapshot of `main` as of 2026-08-19: 903 commits · 364 merged pull requests · 363 generated agent prompts · 100 committed replays · 4,940 tests in the default gate.
 - **Status** — active; phases 0–19 closed, the last on 2026-08-18; phase 20 open.
 
 ## Verify it yourself in one minute
@@ -70,7 +70,7 @@ One contract and the prompt generated from it: [robust JSON extraction](tasks/ph
 
 A deterministic testbed for studying multi-agent reasoning under hidden information, not a game with AI players bolted on. Three decisions carry the weight. They are recorded verbatim in [ADR-0001](docs/adr/0001-three-load-bearing-decisions.md).
 
-1. **A deterministic engine behind a strict observation firewall.** The engine advances world state as a pure tick function — no wall clock, no unseeded randomness, no global state — so one seed always produces one set of bytes. Agents cannot import the engine, directly or transitively: an agent physically cannot read the state it must deduce. It sees an `ObservationPacket` and a `PublicMapView`, and emits an `ActionIntent`. The firewall covers the *agent* surface; the spectator is privileged by design.
+1. **A deterministic engine behind a strict observation firewall.** The engine advances world state as a pure tick function — no wall clock, no unseeded randomness, no global state — so the same seed and the same inputs always produce the same bytes. Agents cannot import the engine, directly or transitively: an agent physically cannot read the state it must deduce. It sees an `ObservationPacket` and a `PublicMapView`, and emits an `ActionIntent`. The firewall covers the *agent* surface; the spectator is privileged by design.
 2. **Two-tier reasoning.** Movement, tasks and venting are rule-based, every tick. Meeting speech, voting and suspicion updates call an LLM, only at meetings and triggers. Without that split, cost and latency make the system unviable.
 3. **Memory is structured first.** Each agent reasons from a typed event log and a belief state derived from it; the LLM sees a rendered view of that structure, never raw engine state.
 

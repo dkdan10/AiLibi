@@ -108,9 +108,13 @@ productization was authored. The learned impostor policy shipped opt-in.
 **Phase 16 — voice and judgment.** Citation-gated ballots (every eject ballot
 must cite a transcript turn or an observation id, and compliance reached 1.000
 at the close), information pooling via a roll-call round and vouching, and
-personas — all on the probe-locked model. Closed on reference recording 5; the
-absence prior stayed off at that close as a recorded ruling pending
-calibration, and graduated on later.
+personas — all on the probe-locked model. Three settings graduated together at
+that close and became unconditional: the citation gate (`citation_gate`), the
+hard-evidence gate (`hard_evidence_gate`) and observation-id rendering
+(`observation_id_rendering`). Closed on reference recording 5; the absence prior
+(`absence_prior`) stayed off there as a recorded ruling pending roll-call
+calibration, and graduated at the next recording. Reference recording 4, one
+phase earlier, was the model-only swap, isolated from every behavioural change.
 [Contract](../tasks/phase-16.md) ·
 [close audit](../audits/audit-phase-16-close.md).
 

@@ -758,6 +758,36 @@ def test_missing_glossary_entry_detected(doc_tree: Path) -> None:
     assert "#baseline-n-the-reference-recording" in errors[0]
 
 
+def test_glossary_entry_for_an_unused_term_still_required(doc_tree: Path) -> None:
+    # The list is the set of words the front door may not use undefined, so the
+    # entry has to exist whether or not README uses the term today — otherwise
+    # deleting it quietly re-opens the door to the term.
+    _substitute(doc_tree, _GLOSSARY, "### referee (the selection gate)", "### the gate")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "#referee-the-selection-gate" in errors[0]
+    assert "whether or not README.md happens to use it" in errors[0]
+
+
+def test_repeated_results_claim_detected(doc_tree: Path) -> None:
+    # A stale row left beside a corrected one would otherwise satisfy the
+    # row-by-row comparison while the page shows a reader two numbers.
+    row = "| Committed sample replays that reconstruct byte-identically | 100 of 100 |"
+    text = _read(doc_tree, _README)
+    assert row in text
+    stale = row.replace("| 100 of 100 |", "| 99 of 100 |")
+    _write(
+        doc_tree, _README, text.replace(row, f"{stale} an earlier count |\n{row}", 1)
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 2
+    assert (
+        "states 'Committed sample replays that reconstruct byte-identically' twice"
+        in (errors[0])
+    )
+    assert "'99 of 100'" in errors[1]
+
+
 def test_new_undefined_dialect_term_detected(doc_tree: Path) -> None:
     # A term that is defined nowhere in the tree walks back onto the front
     # door — the drift class the glossary was written to end.
@@ -883,7 +913,10 @@ def test_malformed_volatile_stamp_detected(doc_tree: Path) -> None:
     # The stamp's SHAPE is what this check owns — the value cannot be checked
     # without reaching the network, and a stamp that is not a date is drift.
     _substitute(
-        doc_tree, _README, "counted as of 2026-08-19", "counted as of 2026-13-45"
+        doc_tree,
+        _README,
+        "snapshot of `main` as of 2026-08-19",
+        "snapshot of `main` as of 2026-13-45",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 3
