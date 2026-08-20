@@ -110,11 +110,13 @@ together, so one run names every drifted fact rather than the first.
     markdown target (fragment stripped) must name a path that exists.
 14. **The ML page's results table is re-derived from the finalist-eval JSONL.**
     docs/ml-program.md publishes the program's headline table — per arm, its
-    wins, the same-seed comparator's wins, and the paired exact-McNemar p. Each
-    of those is recomputed here from
-    ``training/reports/results-finalist-eval.jsonl`` through
-    ``scripts/paired_stats.py``, and every arm the JSONL carries must appear in
-    the table, so neither a moved cell nor a quietly dropped arm can ship.
+    wins, the same-seed comparator's wins, the paired exact-McNemar p, and the
+    referee verdict that decided adoption. Each is recomputed here from
+    ``training/reports/results-finalist-eval.jsonl``: the win cells and the p
+    through ``scripts/paired_stats.py``, the verdict from each row's own
+    ``watchability.referee_passed``. No published row is skipped and no
+    measured arm may be missing, so a moved cell, a flipped verdict, an
+    invented row and a quietly dropped arm all fail.
 
 ``--repo-root`` points the document and source reads at another tree (the unit
 tests perturb a copy); it defaults to this checkout. The lever registry ALWAYS
@@ -430,6 +432,10 @@ _ML_FRACTION: Final = re.compile(r"(\d+)\s*/\s*(\d+)\s*=\s*(\d*\.(\d+))")
 # The leading decimal of a p cell. Leading, because the Bonferroni alpha is
 # stated after the p on one row and must not be mistaken for it.
 _ML_P_VALUE: Final = re.compile(r"(\d*\.(\d+))")
+# The referee column's two verdicts, held to ``watchability.referee_passed`` in
+# the same committed JSONL — the adoption gate the whole page turns on.
+_ML_REFEREE_PASS: Final = "PASS"
+_ML_REFEREE_FAIL: Final = "FAIL"
 # The cross-tab's rows are read by their own label, flagged first, so a
 # reordered table cannot silently swap the two populations.
 _VENT_ROW_LABELS: Final[tuple[str, str]] = ("yes", "no")
@@ -486,8 +492,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         f"link in {len(_LINKED_DOCUMENTS)} front-door documents resolves."
     )
     print(
-        f"{_ML_PAGE} verified: every published arm's wins, comparator wins and "
-        f"paired exact-McNemar p recompute from {_FINALIST_JSONL}."
+        f"{_ML_PAGE} verified: every published arm's wins, comparator wins, "
+        f"paired exact-McNemar p and referee verdict recompute from "
+        f"{_FINALIST_JSONL}."
     )
     return 0
 
@@ -1596,9 +1603,10 @@ def check_ml_results_table(repo_root: Path, errors: list[str]) -> None:
     exact-McNemar p. Rates are compared at the precision the cell prints, so the
     table may round as it likes but may not round to a different number.
 
-    Coverage is checked in both directions. Every arm row must name an entrant
-    the JSONL carries, and every entrant the JSONL carries must have a row —
-    a losing arm quietly dropped from the table would otherwise pass.
+    Coverage is checked in both directions, and no row is skipped. Every data
+    row must resolve to an entrant the JSONL carries, and every entrant the
+    JSONL carries must have a row — a losing arm quietly dropped, or a
+    flattering one invented, would otherwise pass.
     """
 
     page = read_document(repo_root, _ML_PAGE, errors)
@@ -1617,6 +1625,7 @@ def check_ml_results_table(repo_root: Path, errors: list[str]) -> None:
             row.entrant: row
             for row in compute_paired_stats(repo_root / _FINALIST_JSONL)
         }
+        verdicts = referee_verdicts(repo_root / _FINALIST_JSONL)
     except (ValueError, OSError) as exc:
         errors.append(f"{_FINALIST_JSONL}: unreadable as a finalist eval ({exc}).")
         return
@@ -1629,9 +1638,15 @@ def check_ml_results_table(repo_root: Path, errors: list[str]) -> None:
             compare_ml_cell(
                 label, "impostor win", cells[1], widest.baseline_wins, widest.n, errors
             )
+            compare_ml_referee(label, cells[4], verdicts, _ML_COMPARATOR_LABEL, errors)
             continue
         match = _ML_ARM_LABEL.search(label)
         if match is None:
+            errors.append(
+                f"{_ML_PAGE}: the results row {label!r} names neither the "
+                f"comparator nor an arm sha, so nothing in {_FINALIST_JSONL} "
+                "answers for it — every published row states a measured arm."
+            )
             continue
         entrant = _ML_ARM_ENTRANT.format(sha=match.group(1))
         arm = stats.get(entrant)
@@ -1646,6 +1661,7 @@ def check_ml_results_table(repo_root: Path, errors: list[str]) -> None:
         compare_ml_cell(label, "impostor win", cells[1], arm.arm_wins, arm.n, errors)
         compare_ml_cell(label, "comparator", cells[2], arm.baseline_wins, arm.n, errors)
         compare_ml_p(label, cells[3], arm.p_exact, errors)
+        compare_ml_referee(label, cells[4], verdicts, entrant, errors)
 
     for entrant in sorted(set(stats) - seen):
         errors.append(
@@ -1702,6 +1718,77 @@ def compare_ml_p(label: str, cell: str, p_exact: float, errors: list[str]) -> No
             f"{match.group(1)}, but {_FINALIST_JSONL} recomputes the exact "
             f"McNemar p to {round(p_exact, places)} at that precision."
         )
+
+
+def compare_ml_referee(
+    label: str, cell: str, verdicts: dict[str, bool], entrant: str, errors: list[str]
+) -> None:
+    """One referee cell, held to ``watchability.referee_passed`` in the JSONL.
+
+    This column is the adoption gate: it is what "none became the default"
+    means. A cell that states neither verdict fails as loudly as one that
+    states the wrong verdict — an unreadable gate outcome is not a pass.
+    """
+
+    passed = verdicts.get(entrant)
+    if passed is None:
+        errors.append(
+            f"{_ML_PAGE}: the referee cell of results row {label!r} has no "
+            f"{entrant!r} verdict in {_FINALIST_JSONL} to check against."
+        )
+        return
+    upper = cell.upper()
+    states_pass = _ML_REFEREE_PASS in upper
+    states_fail = _ML_REFEREE_FAIL in upper
+    if states_pass == states_fail:
+        errors.append(
+            f"{_ML_PAGE}: the referee cell of results row {label!r} reads "
+            f"{cell!r}, which states neither {_ML_REFEREE_PASS} nor "
+            f"{_ML_REFEREE_FAIL} unambiguously."
+        )
+        return
+    if states_pass is not passed:
+        stated = _ML_REFEREE_PASS if states_pass else _ML_REFEREE_FAIL
+        recorded = _ML_REFEREE_PASS if passed else _ML_REFEREE_FAIL
+        errors.append(
+            f"{_ML_PAGE}: the referee cell of results row {label!r} states "
+            f"{stated}, but {_FINALIST_JSONL} records "
+            f"watchability.referee_passed = {passed} ({recorded}) for {entrant!r}."
+        )
+
+
+def referee_verdicts(jsonl_path: Path) -> dict[str, bool]:
+    """Each entrant's ``watchability.referee_passed`` from the committed JSONL.
+
+    Read here rather than through :func:`compute_paired_stats`, which is about
+    the paired win test and carries no gate outcome. ``ValueError`` on a row
+    that answers neither question, because a silently skipped row would drop an
+    arm's verdict out of the comparison it is supposed to be held to.
+    """
+
+    verdicts: dict[str, bool] = {}
+    with jsonl_path.open(encoding="utf-8") as handle:
+        for number, line in enumerate(handle, start=1):
+            if not line.strip():
+                continue
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError as exc:
+                raise ValueError(f"line {number} is not JSON ({exc})") from exc
+            entrant = row.get("entrant")
+            watchability = row.get("watchability")
+            passed = (
+                watchability.get("referee_passed")
+                if isinstance(watchability, dict)
+                else None
+            )
+            if not isinstance(entrant, str) or not isinstance(passed, bool):
+                raise ValueError(
+                    f"line {number} carries no entrant + "
+                    "watchability.referee_passed pair"
+                )
+            verdicts[entrant] = passed
+    return verdicts
 
 
 def ml_results_rows(page: str) -> list[list[str]] | None:

@@ -1131,6 +1131,50 @@ def test_ml_arm_absent_from_the_jsonl_fails_loud(doc_tree: Path) -> None:
     assert any("'p18-imp-deadbeef'" in error for error in errors)
 
 
+def test_ml_referee_verdict_flip_detected(doc_tree: Path) -> None:
+    # The referee column IS the adoption gate — it is what "none became the
+    # default" means — so a FAIL flipped to PASS must not ship.
+    _substitute(
+        doc_tree,
+        _ML_PAGE,
+        "| **0.3075 — not significant** | **FAIL** |",
+        "| **0.3075 — not significant** | **PASS** |",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "states PASS" in errors[0]
+    assert "referee_passed = False" in errors[0]
+
+
+def test_ml_unreadable_referee_verdict_fails_loud(doc_tree: Path) -> None:
+    # A cell stating neither verdict is not a pass: the gate outcome has to be
+    # legible before it can be compared.
+    _substitute(
+        doc_tree,
+        _ML_PAGE,
+        "| **0.3075 — not significant** | **FAIL** |",
+        "| **0.3075 — not significant** | — |",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "states neither PASS nor FAIL" in errors[0]
+
+
+def test_ml_invented_arm_row_detected(doc_tree: Path) -> None:
+    # The reverse-coverage check proves every measured arm is published; this
+    # proves the converse, that nothing unmeasured is.
+    _substitute(
+        doc_tree,
+        _ML_PAGE,
+        _ML_DROPPED_ARM_ROW,
+        _ML_DROPPED_ARM_ROW
+        + "| `mystery-arm` | 50/50 = 1.00 | 13/50 = 0.26 | **0.0001** | PASS |\n",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "neither the comparator nor an arm sha" in errors[0]
+
+
 def test_missing_ml_results_table_fails_loud(doc_tree: Path) -> None:
     # Losing the table must not read as "nothing to derive from".
     _substitute(doc_tree, _ML_PAGE, "| policy | impostor win |", "| model | win |")
