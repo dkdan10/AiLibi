@@ -3723,10 +3723,10 @@ PR; do not re-litigate it.
 ### Task 20.24 — The self-location trail: an agent's memory says where it was
 **Branch:** `phase-20-self-location-trail`
 **Depends on:** 20.23 — the completed-task line must already be derived from the engine completion event before this task re-dates it and re-rooms it; both edits land in the same self-state loop of the memory store, and the evidence-honesty instrument arrives transitively along the same chain
-**Section refs:** G-1 [audits/review-2026-08-19/A/verdicts.md §"VERDICT: PARTIALLY-TRUE — mechanism is a CONFIRMED-BUG" — the 971-render line-shape census, the 843 completed-task instances, the 16.0% / 97.0% / 100% room-match triple, the 44.3% victim-caused / 21.5% witness-caused split]; audits/review-2026-08-19/A/collated-findings.md §G-1 (P0, corroboration 10, the s30-m3 and 4p1i-s10 exemplars); audits/review-2026-08-19/A/ideas-among-us-veteran.md §V8 (the render shape); audits/review-2026-08-19/D/FINAL-synthesis.md §1 RC1 + §4 wave-2 row 2.2 (the roadmap item this task implements); audits/audit-phase-20-preregistration.md §2 instrument I-2, §3 cell I-2 (148/723 = 20.5% samples/9p2i), §4 bar 3, §8 ("I-2 after the trail exists" is explicitly NOT predictable offline); agents/memory/store.py:1010 + :1024-1028 (`own_room_by_tick`, a LOCAL of `_collect_transitions`, consumed only at :1046 and :1063-1073 to scope OTHERS' sightings), :1178-1203 (the completed-task emission), :1204-1206 (the previous-iteration room roll-forward that mis-rooms it), :189-208 (the resolver signature to clone), :211-217 and :280 (`render_for_prompt`'s `env` thread and the resolve-once read site), :1778-1852 (`_assemble_view`'s block order and budget arithmetic); agents/strategic/prompts/qwen3_6_27b/accusation_round.j2:184 and :209, crewmate_report.j2:96 and :110 (the roll-call ask — "copied from your own record"); DESIGN.md:705 (the §6.6 worked example that specifies a tick RANGE, never built; historical design record per AGENTS.md:20-23); DESIGN.md:473 + orchestrator/game.py:1186-1190 (a meeting freezes movement); meetings/manager.py:2820-2859 (`_normalize_ballot_observation_id` nulls any id outside the voter's own set and splices a marker into `rationale_text`); AGENTS.md:76-110 craft rules 1, 2, 5, 6, 7
+**Section refs:** G-1 [audits/review-2026-08-19/A/verdicts.md §"VERDICT: PARTIALLY-TRUE — mechanism is a CONFIRMED-BUG" — the 971-render line-shape census, the 843 completed-task instances, the 16.0% / 97.0% / 100% room-match triple, the 44.3% victim-caused / 21.5% witness-caused split]; audits/review-2026-08-19/A/collated-findings.md §G-1 (P0, corroboration 10, the s30-m3 and 4p1i-s10 exemplars); audits/review-2026-08-19/A/ideas-among-us-veteran.md §V8 (the render shape); audits/review-2026-08-19/D/FINAL-synthesis.md §1 RC1 + §4 wave-2 row 2.2 (the roadmap item this task implements); audits/audit-phase-20-preregistration.md §2 instrument I-2, §3 cell I-2 (152/723 = 21.0% samples/9p2i — the review's 148/723 = 20.5% is superseded per §3.2), §4 bar 3, §8 ("I-2 after the trail exists" is explicitly NOT predictable offline); agents/memory/store.py:1051 + :1065-1069 (`own_room_by_tick`, a LOCAL of `_collect_transitions`, consumed only at :1087 and :1104-1114 to scope OTHERS' sightings), :1173-1190 + :1240-1283 (the completed-task emission — after 20.23 it is the `_completed_task_observation` helper plus the two lever branches that call it, both still passing `room=last_self_room`), :1284-1287 (the previous-iteration `last_self_room` roll-forward that mis-rooms it), :216-242 (`task_completion_from_events_enabled`, 20.23's default-OFF resolver in this same file — the shape to clone; the retired `observation_id_rendering_enabled` at :190-209 is signature-only), :245-251 and :317 (`render_for_prompt`'s `env` thread and the resolve-once read site), :1859-1933 (`_assemble_view`'s block order and budget arithmetic); agents/strategic/prompts/qwen3_6_27b/accusation_round.j2:184 and :209, crewmate_report.j2:96 and :110 (the roll-call ask — "copied from your own record"); DESIGN.md:724 (the §6.6 worked example that specifies a tick RANGE, never built; historical design record per AGENTS.md:20-23); DESIGN.md:481 + orchestrator/game.py:1186-1190 (a meeting freezes movement); meetings/manager.py:2820-2859 (`_normalize_ballot_observation_id` nulls any id outside the voter's own set and splices a marker into `rationale_text`); AGENTS.md:76-110 craft rules 1, 2, 5, 6, 7
 **Complexity:** Medium
 **Record impact:** lever-gated (default-OFF) until the Phase-20 adopting record
-**Measurement:** `uv run pytest tests/agents/test_memory_rendering.py tests/eval/test_evidence_honesty.py -q` green; with the lever unset the three committed render goldens are byte-identical and `bash scripts/verify_samples.sh` is 100/100 clean; with `AILIBI_SELF_LOCATION_TRAIL=1` the pinned self-placement coverage cell reads 100% of crew `whereabouts` claim ticks over each of the four committed sets (the OFF value recorded as measured beside it), and the completed-task room/tick agreement pin reads 843/843 over samples/9p2i
+**Measurement:** `uv run pytest tests/agents/test_memory_rendering.py tests/eval/test_evidence_honesty.py -q` green; with the lever unset the three committed render goldens are byte-identical and `bash scripts/verify_samples.sh` is 100/100 clean; with `AILIBI_SELF_LOCATION_TRAIL=1` set in-test through `monkeypatch.setenv` or the resolver's `env` parameter (Task 20.17's session-scoped `_hermetic_ailibi_env` guard in tests/conftest.py clears the whole `AILIBI_*` namespace, so a shell export is invisible under pytest) the pinned self-placement coverage cell reads 100% of crew `whereabouts` claim ticks over each of the four committed sets (the OFF value recorded as measured beside it), and the completed-task room/tick agreement pin reads 843/843 over samples/9p2i
 
 The agent has no record of itself. Across all 971 rendered memories in
 `replays/samples/9p2i` the review's line-shape census found 41 distinct "You"
@@ -3737,9 +3737,10 @@ Meanwhile every meeting prompt orders the speaker to answer the roll-call with
 "one room, one tick, copied from your own record" (`accusation_round.j2:184`,
 `:209`; `crewmate_report.j2:96`, `:110`). There is no such row to copy, so the
 model extrapolates: crew `whereabouts` answers name a room the speaker was in
-at neither the stated tick nor the tick before it 148/723 = 20.5% of the time
-in samples/9p2i and 402/2038 = 19.7% in the corpus (review-measured over the
-committed baseline-6 bytes; the same definition is pinned as instrument I-2).
+at neither the stated tick nor the tick before it 152/723 = 21.0% of the time
+in samples/9p2i and 409/2038 = 20.1% in the corpus (the committed I-2 pin over
+the baseline-6 bytes; the review's own 148/723 and 402/2038 are superseded per
+audits/audit-phase-20-preregistration.md §3.2).
 Those inventions are then stamped VERIFIED and convict: of the 79 innocent
 ejections corpus-wide, 44.3% are the victim mis-stating its own position and
 21.5% are a witness's mis-dated sighting, and games carrying at least one
@@ -3748,17 +3749,17 @@ without.
 
 The one anchor that does exist is itself mis-dated. For all 843 completed-task
 lines the agent's real room matches the stated tick only 16.0% of the time,
-matches at N−1 97.0%, and at N−2 100% — because `store.py:1204-1206` rolls the
-room forward from the PREVIOUS self-state iteration while `:1193-1197` stamps
-the CURRENT event's tick. One line, two clocks. `DESIGN.md:705` specified more
+matches at N−1 97.0%, and at N−2 100% — because `store.py:1285` rolls the
+room forward from the PREVIOUS self-state iteration while `:1186` stamps
+the CURRENT event's tick. One line, two clocks. `DESIGN.md:724` specified more
 than was ever built — `- [tick 380] You completed wiring_admin (you were in
 Admin tick 375-385).`, with a range — so the shipped shape is not the designed
 one.
 
-The data is already in the store: `store.py:1010` builds `own_room_by_tick`
-from the agent's own self-state events at `:1024-1028` and then uses it only
-to decide which of OTHERS' sightings happened in the observer's room (`:1046`,
-`:1063-1073`). This task is rendering, not modelling: no new perception, no
+The data is already in the store: `store.py:1051` builds `own_room_by_tick`
+from the agent's own self-state events at `:1065-1069` and then uses it only
+to decide which of OTHERS' sightings happened in the observer's room (`:1087`,
+`:1104-1114`). This task is rendering, not modelling: no new perception, no
 new engine read, no prompt-template edit (the roll-call ask is unchanged, and
 every game template is frozen until the single prompt-set bump task). It
 renders the trail the store already keeps as coalesced spans, and it makes the
@@ -3772,7 +3773,7 @@ offline is COVERAGE — whether the record the prompt orders the agent to copy
 from now exists at the tick under discussion — because whether the model then
 copies it is a behavioural question the pre-registration explicitly lists as
 not predictable offline (`audits/audit-phase-20-preregistration.md` §8); bar 3
-(I-2, 20.5% → < 5%) is judged on the recorded bytes. Two costs are stated
+(I-2, 21.0% → < 5% on samples/9p2i, every set < 8%) is judged on the recorded bytes. Two costs are stated
 rather than hidden: the block consumes token budget the observations block
 used to have, so its cap is pinned against measured claim ticks and its effect
 on higher-salience lines is measured; and the impostor gets the same truthful
@@ -3799,12 +3800,12 @@ to retrace its own route was never a balance mechanism.
 - [ ] `self_location_trail_enabled(env: Mapping[str, str] | None = None) -> bool` lives in `agents/memory/store.py`, reads `ENV_SELF_LOCATION_TRAIL` from `env` or the process environment against the repo's truthy set, and DEFAULTS OFF; it is resolved exactly ONCE in `render_for_prompt` beside the observation-id fold and the boolean is threaded down (no deeper environment read). Pinned in `tests/agents/test_memory_rendering.py` for unset, "0", "1" and a garbage value.
 - [ ] OFF-path byte-identity: with the lever unset and with it set to "0", the three committed fixtures (`crewmate_basic`, `tight_budget_drops_low_salience`, `impostor_minimal`) render byte-identically, `uv run pytest tests/meetings/test_prompt_byte_golden.py -q` is green, and `bash scripts/verify_samples.sh` is 100/100. The identity assertion ships with a perturbation case proving it bites (a deliberately altered expected byte fails the test), per craft rule 2.
 - [ ] ON-path shape: a `## Where you were:` block renders between the fixed role/tasks block and the observations block; consecutive ticks in the same room coalesce into one span, `- [ticks 12-16] You were in REACTOR.`, and a lone tick renders `- [tick 17] You were in ADMIN.`; spans are ordered oldest first so the block reads as a route. Pinned by a NEW golden fixture pair under `tests/fixtures/memory_rendering/` rendered with the lever ON, and by unit cases; the existing OFF-path golden parametrization keeps exactly its three names.
-- [ ] The trail never claims a tick it has no record for: a gap between recorded self-state ticks BREAKS a span (no interpolation), while a meeting-boundary tick does NOT break one, because the meeting freezes movement (DESIGN.md:473, `orchestrator/game.py:1186-1190`). A property test over generated event streams asserts the spans partition the recorded ticks exactly — no gaps invented, no overlaps, no tick outside the recorded set.
+- [ ] The trail never claims a tick it has no record for: a gap between recorded self-state ticks BREAKS a span (no interpolation), while a meeting-boundary tick does NOT break one, because the meeting freezes movement (DESIGN.md:481, `orchestrator/game.py:1186-1190`). A property test over generated event streams asserts the spans partition the recorded ticks exactly — no gaps invented, no overlaps, no tick outside the recorded set.
 - [ ] No synthetic citation ids: a trail line carries either the real `observation_id` of the self-state event that OPENS its span or no `[obs …]` prefix at all. A test asserts that every `[obs …]` id appearing anywhere in a rendered view is a member of the store's own id set — the same set `meetings/manager.py:2820-2859` validates a ballot citation against — so no rendered line can teach a model to cite an id the citation validator will null and prefix with a marker into spoken text.
 - [ ] The cap is documented and empirically justified: `SELF_LOCATION_TRAIL_MAX_SPANS` is a named module constant; when it binds, the OLDEST spans are dropped (the recent route survives) and the block states the truncation in one plain-English line carrying no ids or arithmetic (craft rule 4). Its value is chosen so the coverage pin below reads 100% on every committed set, and the PR quotes the measured distribution of (meeting tick − claimed whereabouts tick) that justifies it.
 - [ ] Budget interplay is measured, not assumed: the trail block is charged through the same `_estimate_tokens` arithmetic as every other block, and over the reconstructed memories of samples/9p2i at `DEFAULT_TOKEN_BUDGET` the ON path drops NO observation at or above `_SALIENCE_REPORTED_TESTIMONY` that the OFF path kept. The PR quotes the mean added lines and tokens per render. If the block cannot fit at all, trail lines are shed oldest-first BEFORE any observation is dropped.
-- [ ] The completed-task line takes its tick and its room from ONE event: the stated tick is the completion event's engine tick plus one (the agent clock the packet loop stamps) and the stated room is the agent's own recorded room at that same tick; the previous-iteration roll-forward at `store.py:1204-1206` no longer feeds the rendered line. Self-consistency leg: the room a completed-task line names equals the room the trail gives for the tick it states — asserted over the fixtures and as a property over generated streams.
-- [ ] Engine-agreement leg for the same line: over samples/9p2i, 843/843 completed-task lines name the agent's engine-truth room at the stated tick under the honesty instrument's documented clock alignment (agent tick minus one equals the engine tick), with any residual disagreement enumerated and explained in the test comment rather than rounded away.
+- [ ] The completed-task line takes its tick and its room from ONE event: the stated tick is the completion event's engine tick plus one (the agent clock the packet loop stamps) and the stated room is the agent's own recorded room at that same tick; the previous-iteration `last_self_room` roll-forward at `store.py:1284-1287` no longer feeds the rendered line. Self-consistency leg: the room a completed-task line names equals the room the trail gives for the tick it states — asserted over the fixtures and as a property over generated streams.
+- [ ] Engine-agreement leg for the same line: over samples/9p2i, 843/843 completed-task lines (the review's offline re-render census over all 971 rendered memories — not the honesty instrument's recorded-prompt population, which is 458 rows for this set per audits/audit-phase-20-preregistration.md §3.2) name the agent's engine-truth room at the stated tick under the honesty instrument's documented clock alignment (agent tick minus one equals the engine tick), with any residual disagreement enumerated and explained in the test comment rather than rounded away.
 - [ ] No role asymmetry: the trail renders for every role (the crew-only gate is the shape of the bug the upstream task just removed; it is not re-introduced here). An impostor's in-vent ticks render distinguishably inside the self channel, and `test_render_passes_canonical_leak_scanners` stays green with its planted-leak counterpart still failing as designed.
 - [ ] The offline coverage pin in `tests/eval/test_evidence_honesty.py`: with the lever ON, the share of crew `whereabouts` claim ticks covered by a span in the SPEAKER's own memory as rendered at THAT meeting is 100% over all four committed sets; the OFF-path value is recorded as measured beside it, never predicted. The pin's docstring states in one sentence that the false-placement rate itself (bar 3 / cell I-2) is judged at the adopting record because it depends on the model reading the line, quoting `audits/audit-phase-20-preregistration.md` §8.
 - [ ] `render_for_prompt`'s docstring documents the block, the span shape, the gap and meeting-boundary rules, the cap and the id rule in one paragraph, with at most one trailing provenance line and no history narration added anywhere in the file (craft rule 1).
@@ -3819,9 +3820,9 @@ to retrace its own route was never a balance mechanism.
 **Implementation hint:**
 
 Step 1 — verify the anchors before editing, then decide the seam.
-`own_room_by_tick` is a LOCAL of `_collect_transitions` (declared at :1010,
-filled at :1024-1028), not shared state; its only consumers today are the
-own-room sighting scope at :1046 and the adjacency walk at :1063-1073. Lift
+`own_room_by_tick` is a LOCAL of `_collect_transitions` (declared at :1051,
+filled at :1065-1069), not shared state; its only consumers today are the
+own-room sighting scope at :1087 and the adjacency walk at :1104-1114. Lift
 the per-tick map into one small module-level helper that both
 `_collect_transitions` and the new span builder call, so there is a single
 answer to "where was I at tick N". Grep every consumer first (craft rule 6):
@@ -3829,7 +3830,7 @@ that helper and the completed-task emission are the whole blast radius inside
 this file.
 
 Step 2 — the resolver. Clone the default-OFF shape already in the tree
-(`agents/strategic/prompts/loader.py:258-301` is the live example): a `Final`
+(`agents/memory/store.py:216-242` — 20.23's default-OFF sibling in this very file — and `agents/strategic/prompts/loader.py:321-364` are the live examples): a `Final`
 `ENV_SELF_LOCATION_TRAIL` constant, a module-level frozenset of truthy
 strings, `environment = env if env is not None else os.environ`. Resolve once
 in `render_for_prompt` next to the observation-id fold and pass the boolean
