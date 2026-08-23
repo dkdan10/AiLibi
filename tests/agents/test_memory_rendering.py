@@ -1902,7 +1902,9 @@ class TestSelfLocationTrailLever:
         assert not any(char.isdigit() for char in notice)
         assert "obs" not in notice
 
-    def test_a_tight_budget_sheds_trail_lines_before_any_observation(self) -> None:
+    def test_a_tight_budget_sheds_the_oldest_trail_lines_not_the_newest(
+        self,
+    ) -> None:
         memory = AgentMemory()
         for tick, room in ((10, "REACTOR"), (11, "ADMIN"), (12, "MEDBAY")):
             memory.episodic.append(
@@ -1915,21 +1917,55 @@ class TestSelfLocationTrailLever:
             )
         memory.episodic.append(_global_status_event(tick=12, completed=1, total=9))
 
-        for budget in range(30, 140, 5):
-            off = render_for_prompt(memory, token_budget=budget)
-            on = render_for_prompt(memory, token_budget=budget, env=_TRAIL_ON)
-            off_observations = [
-                line for line in off.splitlines() if line.startswith("- [tick ")
-            ]
-            on_observations = [
-                line
-                for line in on.splitlines()
-                if line.startswith("- [tick ") and _TRAIL_LINE.match(line) is None
-            ]
-            assert off_observations == on_observations, (
-                f"budget {budget}: the trail cost an observation\n{on}"
+        seen_shed = False
+        for budget in range(20, 200, 5):
+            view = render_for_prompt(memory, token_budget=budget, env=_TRAIL_ON)
+            # The block never overflows the budget onto anything else.
+            assert _estimate_tokens_of(view) <= budget
+            if _TRAIL_HEADER not in view:
+                continue
+            block = _trail_block(view)
+            lines = [line for line in block[1:] if line != _TRAIL_TRUNCATED]
+            # Whatever survives is the RECENT end of the route, and a shortened
+            # route always says so.
+            assert (
+                lines
+                == [
+                    "- [tick 10] You were in REACTOR.",
+                    "- [tick 11] You were in ADMIN.",
+                    "- [tick 12] You were in MEDBAY.",
+                ][3 - len(lines) :]
             )
-            assert _estimate_tokens_of(on) <= budget
+            if len(lines) < 3:
+                seen_shed = True
+                assert _TRAIL_TRUNCATED in block
+        # The gate bites only if the shedding branch was actually exercised.
+        assert seen_shed
+
+    def test_a_malformed_in_vent_row_raises_instead_of_placing_the_agent(
+        self,
+    ) -> None:
+        # AGENTS.md "no silent fallbacks", and the same boundary-contract rule the
+        # tactical reader applies: an absent flag means "not in a vent", a
+        # present-but-non-bool one is a wiring bug, not a room stay.
+        memory = AgentMemory()
+        memory.episodic.append(
+            _self_state_event(tick=5, room="ADMIN", agent_id="p-1", in_vent=True)
+        )
+        assert "a vent in ADMIN" in render_for_prompt(memory, env=_TRAIL_ON)
+
+        broken = AgentMemory()
+        broken.episodic.append(
+            EpisodicEvent(
+                tick=5,
+                type="self_state",
+                payload={"room": "ADMIN", "role": "CREWMATE", "in_vent": "yes"},
+                provenance="observed",
+            )
+        )
+
+        with pytest.raises(ValueError, match="non-bool in_vent"):
+            render_for_prompt(broken, env=_TRAIL_ON)
 
     def test_the_completed_task_line_is_dated_and_placed_by_one_row(self) -> None:
         memory = AgentMemory()

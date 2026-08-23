@@ -1272,6 +1272,7 @@ class _SelfPlacementCensus(NamedTuple):
     trail_lines: int
     added_tokens: int
     observations_lost: int
+    observations_lost_testimony: int
     completion_rows: int
     completion_agrees: int
 
@@ -1298,7 +1299,7 @@ def _self_placement_census(sample_dir: Path) -> _SelfPlacementCensus:
     )
     claims = in_record = rendered_on = rendered_off = 0
     renders = trail_lines = added_tokens = observations_lost = 0
-    completion_rows = completion_agrees = 0
+    observations_lost_testimony = completion_rows = completion_agrees = 0
 
     for seed in seeds_on_disk(sample_dir):
         roles = roles_by_game[seed]
@@ -1358,8 +1359,10 @@ def _self_placement_census(sample_dir: Path) -> _SelfPlacementCensus:
                         )
                         # The renderer's own 4-chars-per-token arithmetic.
                         added_tokens += (len(on) + 3) // 4 - (len(off) + 3) // 4
-                        observations_lost += len(
-                            _observation_rows(off) - _observation_rows(on)
+                        dropped = _observation_rows(off) - _observation_rows(on)
+                        observations_lost += len(dropped)
+                        observations_lost_testimony += sum(
+                            1 for row in dropped if "[meeting] CLAIM by " in row
                         )
                         for match in _COMPLETED_ROW.finditer(on):
                             completion_rows += 1
@@ -1392,6 +1395,7 @@ def _self_placement_census(sample_dir: Path) -> _SelfPlacementCensus:
         trail_lines=trail_lines,
         added_tokens=added_tokens,
         observations_lost=observations_lost,
+        observations_lost_testimony=observations_lost_testimony,
         completion_rows=completion_rows,
         completion_agrees=completion_agrees,
     )
@@ -1449,28 +1453,13 @@ def test_self_placement_coverage_pins(
     assert placement[_CORPUS_9P2I].crew_claims == 2038
     assert placement[_SAMPLES_4P1I].crew_claims == 78
     assert placement[_CORPUS_4P1I].crew_claims == 79
-    # What actually reaches the prompt at DEFAULT_TOKEN_BUDGET, measured rather
-    # than predicted. OFF renders no span at all, so its value is 0 everywhere.
-    # ON, the 4p1i sets carry the whole route; the 9p2i renders are budget-bound
-    # and the observations block outranks the trail, so a quarter of the claim
-    # ticks sit in the record without reaching that meeting's prompt. That
-    # residual is a budget question, not a record one.
-    assert (
-        placement[_SAMPLES_9P2I].rendered_off,
-        placement[_SAMPLES_9P2I].rendered_on,
-    ) == (0, 539)
-    assert (
-        placement[_CORPUS_9P2I].rendered_off,
-        placement[_CORPUS_9P2I].rendered_on,
-    ) == (0, 1573)
-    assert (
-        placement[_SAMPLES_4P1I].rendered_off,
-        placement[_SAMPLES_4P1I].rendered_on,
-    ) == (0, 78)
-    assert (
-        placement[_CORPUS_4P1I].rendered_off,
-        placement[_CORPUS_4P1I].rendered_on,
-    ) == (0, 79)
+    # And it reaches the PROMPT: the block is charged before the elastic
+    # observations and capped at 12 spans, so every claim tick is still rendered
+    # at DEFAULT_TOKEN_BUDGET. OFF renders no span at all, which is the OFF value
+    # measured rather than predicted.
+    for sample_dir in (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I):
+        census = placement[sample_dir]
+        assert (census.rendered_off, census.rendered_on) == (0, census.crew_claims)
     # The lever reads the mapping the render threads down, and the hermetic guard
     # clears the whole AILIBI_* namespace, so setting it inside the test is the
     # only way a shell export could ever be visible.
@@ -1480,20 +1469,32 @@ def test_self_placement_coverage_pins(
 
 
 @pytest.mark.slow
-def test_the_trail_costs_the_observations_block_nothing(
+def test_the_trail_s_budget_cost_is_measured_not_assumed(
     placement: Mapping[Path, _SelfPlacementCensus],
 ) -> None:
-    # The trail is charged from what the observations leave behind and sheds its
-    # own oldest spans first, so no observation the OFF path kept is dropped by
-    # turning the lever on -- over every committed set, not only the pinned one.
-    for sample_dir in (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I):
-        assert placement[sample_dir].observations_lost == 0
+    # The block occupies budget the observations block used to have, and the size
+    # of that is measured here rather than assumed away. On the 4p1i sets the
+    # salience budget never binds and the trail costs nothing; on the 9p2i sets it
+    # costs a mean 1.9 and 1.8 rendered rows per render, of which roughly half are
+    # the oldest reported-testimony rows and the rest the oldest sightings.
+    # Nothing here is rounded: the counts are the recount.
     samples = placement[_SAMPLES_9P2I]
-    assert samples.renders == 971
-    # The measured cost, carried rather than asserted away: 3373 route lines and
-    # 32571 estimated tokens over 971 renders -- 3.47 lines and 33.5 tokens each.
-    assert samples.trail_lines == 3373
-    assert samples.added_tokens == 32571
+    corpus = placement[_CORPUS_9P2I]
+    assert (samples.renders, samples.trail_lines, samples.added_tokens) == (
+        971,
+        6715,
+        31786,
+    )
+    assert (samples.observations_lost, samples.observations_lost_testimony) == (
+        1858,
+        863,
+    )
+    assert (corpus.observations_lost, corpus.observations_lost_testimony) == (
+        4791,
+        2205,
+    )
+    for sample_dir in (_SAMPLES_4P1I, _CORPUS_4P1I):
+        assert placement[sample_dir].observations_lost == 0
 
 
 @pytest.mark.slow
@@ -1510,11 +1511,11 @@ def test_the_completed_task_row_names_the_engine_truth_room(
         assert census.completion_agrees == census.completion_rows
     # The review's offline re-render census over the same 971 rendered memories
     # counted 843 completed-task instances [A/verdicts.md G-1]; this recount finds
-    # 859 over the same population. The review's script is not committed
-    # (audits/audit-phase-20-planning.md §4 item 4) and the count is
-    # budget-sensitive -- the salience cut decides how many of an agent's rows
-    # survive each prompt -- so the 16-row residual is carried, not smoothed.
-    assert placement[_SAMPLES_9P2I].completion_rows == 859
-    assert placement[_CORPUS_9P2I].completion_rows == 2488
+    # 842. The review's script is not committed (audits/audit-phase-20-planning.md
+    # §4 item 4) and the count is budget-sensitive -- the salience cut decides how
+    # many of an agent's rows survive each prompt -- so the one-row residual is
+    # carried, not smoothed.
+    assert placement[_SAMPLES_9P2I].completion_rows == 842
+    assert placement[_CORPUS_9P2I].completion_rows == 2442
     assert placement[_SAMPLES_4P1I].completion_rows == 61
     assert placement[_CORPUS_4P1I].completion_rows == 58

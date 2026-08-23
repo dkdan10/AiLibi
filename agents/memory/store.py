@@ -1107,6 +1107,10 @@ def _self_placement_by_tick(episodic: MemoryStore) -> dict[int, _SelfPlacement]:
     Ticks with no readable room are ABSENT rather than guessed, so every consumer
     can distinguish "recorded elsewhere" from "no record at all". The last row for
     a tick wins, matching the render's read-the-latest convention everywhere else.
+    An absent ``in_vent`` means "not in a vent" (pre-11.1 and engine-only rows
+    carry no such key); a present-but-non-bool one is a boundary-contract
+    violation and raises, mirroring
+    :meth:`agents.tactical.impostor_policy.ImpostorPolicy._in_vent_from_self_state`.
     """
 
     placements: dict[int, _SelfPlacement] = {}
@@ -1116,9 +1120,14 @@ def _self_placement_by_tick(episodic: MemoryStore) -> dict[int, _SelfPlacement]:
         room = event.payload.get("room")
         if not isinstance(room, str):
             continue
+        raw_in_vent = event.payload.get("in_vent")
+        if raw_in_vent is not None and not isinstance(raw_in_vent, bool):
+            raise ValueError(
+                f"self_state event has non-bool in_vent: {event.payload!r}"
+            )
         placements[event.tick] = _SelfPlacement(
             room=room,
-            in_vent=event.payload.get("in_vent") is True,
+            in_vent=bool(raw_in_vent),
         )
     return placements
 
@@ -1402,10 +1411,8 @@ def _build_observations(
             role = event.payload.get("role")
             self_room = room if isinstance(room, str) else None
             owned = _owned_task_ids(event.payload)
-            # The completion is dated by this row's tick and placed by the record
-            # for that SAME tick. Rolling the room forward from the PREVIOUS
-            # iteration stamped one line with two clocks, so the stated room was
-            # one the agent had already left.
+            # One row dates the completion and one record places it, and it is
+            # the record for that SAME tick -- so the line carries one clock.
             completion_room = last_self_room
             if self_location_trail:
                 placement = self_placements.get(event.tick)
@@ -2047,11 +2054,11 @@ def _assemble_view(
     Observations are the elastic section: they fill the remaining budget,
     dropped from lowest salience first if the budget is tight.
 
-    ``trail_lines`` (the self-location route, oldest first) is charged from what
-    the observations leave behind and sheds its own OLDEST lines when that is
-    tight, so the observations block never pays for the trail's overflow and the
-    lever cannot cost a render an observation. Whenever any span was dropped -- by
-    the cap upstream or by that shedding -- the block says so.
+    ``trail_lines`` (the self-location route, oldest first) is capped upstream and
+    charged before the observations, then shed OLDEST-first if even the capped
+    block does not fit, so the trail can never overflow the budget onto the
+    observations. Whenever any span was dropped -- by the cap or by that shedding
+    -- the block says so.
 
     The budget arithmetic charges every character that lands in the
     final output, including the Markdown separators (``"\\n\\n"`` between
@@ -2090,25 +2097,22 @@ def _assemble_view(
     header_cost = _estimate_tokens(header_with_separator)
 
     remaining = token_budget - non_elastic_cost
+    # The route is charged first, capped and shed oldest-first: it is the one
+    # block the meeting's roll-call is answered from, and the observations below
+    # it are the elastic section by construction.
+    trail_block, trail_cost = _select_trail_within_budget(
+        trail_lines=trail_lines,
+        truncated=trail_truncated,
+        budget=remaining,
+    )
+    remaining -= trail_cost
+
     kept: list[_Observation] = []
-    observations_cost = 0
     if remaining >= header_cost:
         kept = _select_within_budget(
             observations=observations,
             budget=remaining - header_cost,
         )
-        if kept:
-            observations_cost = header_cost + sum(
-                _estimate_tokens("\n- " + obs.line) for obs in kept
-            )
-    # The trail is charged AFTER the observations, from what they leave behind, so
-    # the ON path keeps every observation the OFF path kept and a tight budget
-    # sheds route spans instead.
-    trail_block = _select_trail_within_budget(
-        trail_lines=trail_lines,
-        truncated=trail_truncated,
-        budget=remaining - observations_cost,
-    )
 
     if not trail_block and not kept:
         return non_elastic_text
@@ -2133,18 +2137,18 @@ def _select_trail_within_budget(
     trail_lines: list[str],
     truncated: bool,
     budget: int,
-) -> list[str]:
+) -> tuple[list[str], int]:
     """The trail block that fits ``budget``, shedding OLDEST lines first.
 
     The recent route is the part a roll-call answer is copied from, so a tight
-    budget keeps it and drops the far end; an empty block is returned when not
-    even one span fits. Costs are charged piece by piece exactly as the
-    observations block charges its own header and bullets, so the two blocks
-    cannot disagree about what a line costs.
+    budget keeps it and drops the far end; an empty block costing nothing is
+    returned when not even one span fits. Costs are charged piece by piece exactly
+    as the observations block charges its own header and bullets, so the two
+    blocks cannot disagree about what a line costs.
     """
 
     if not trail_lines:
-        return []
+        return [], 0
     header_cost = _estimate_tokens("\n\n" + _TRAIL_HEADER)
     notice_cost = _estimate_tokens("\n- " + _TRAIL_TRUNCATED_LINE)
     line_costs = [_estimate_tokens("\n- " + line) for line in trail_lines]
@@ -2158,8 +2162,8 @@ def _select_trail_within_budget(
         if shed:
             block.append(f"- {_TRAIL_TRUNCATED_LINE}")
         block.extend(f"- {line}" for line in trail_lines[first:])
-        return block
-    return []
+        return block, cost
+    return [], 0
 
 
 def _select_within_budget(
