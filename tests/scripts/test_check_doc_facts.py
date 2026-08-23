@@ -18,6 +18,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+from xml.etree import ElementTree
 
 import pytest
 
@@ -1537,3 +1538,586 @@ def test_cli_entry_point_exits_zero() -> None:
     )
     assert proc.returncode == 0, proc.stdout + proc.stderr
     assert "Doc facts verified" in proc.stdout
+
+
+# --------------------------------------------------------------------------- #
+# The architecture exhibit: the committed picture, the note's size, and the
+# contract -> prompt -> pull-request triple on the front door.
+#
+# These pin COMMITTED BYTES rather than exercising the checker above, so each is
+# written as a pure function of the text it reads and every one runs twice: once
+# against the tree, once against a perturbation that has to make it fire. They
+# live here because the front door is what they guard.
+# --------------------------------------------------------------------------- #
+
+_ARCHITECTURE_SVG = "docs/media/architecture.svg"
+_ARCHITECTURE_NOTE = "docs/architecture.md"
+# Two printed pages of prose. The note was 1,089 words when the portfolio review
+# called it the document a reader wants first; the ceiling exists so its growth
+# fails a gate instead of a reader.
+_ARCHITECTURE_WORD_BUDGET = 1_300
+# A hand-authored diagram bigger than this is a raster export in disguise, or has
+# stopped being one picture.
+_SVG_BYTE_CEILING = 60_000
+
+# What the picture must SAY, not merely how it is built: the packages of the
+# layering, the protocol the reasoning layer reaches a model through, the
+# firewall contract by name, and the legend that stops arrows being read as
+# imports. Matched against the concatenated <text> content, so labels flattened
+# into outlined paths fail here too.
+_SVG_REQUIRED_LABELS = (
+    "engine/",
+    "observation/",
+    "agents/",
+    "meetings/",
+    "llm/",
+    "orchestrator/",
+    "eval/",
+    "api/",
+    "frontend/",
+    "LLMClient Protocol",
+    "ObservationPacket",
+    "ActionIntent",
+    "GENERATED",
+    "Agents must not",
+    "import engine",
+    "import-linter",
+    "Arrows are data flow",
+    "imports run the other way",
+)
+_DARK_THEME_BLOCK = "@media (prefers-color-scheme: dark)"
+_HEX_COLOUR = re.compile(r"#[0-9a-fA-F]{3,8}\b")
+_COLOUR_KEYWORD = re.compile(r"\b(?:black|white)\b", re.IGNORECASE)
+_CSS_URL = re.compile(r"url\(\s*['\"]?([^'\")]*)")
+
+# Legibility is a contrast ratio, not the absence of the two extreme colours: a
+# palette of two near-identical mid-tones is unreadable and contains neither.
+# The two `svg { … }` blocks are the light palette and the dark one the media
+# query swaps in; every ink is measured against every ground it is painted on.
+_PALETTE_BLOCK = re.compile(r"svg\s*\{([^}]*)\}")
+_CUSTOM_PROPERTY = re.compile(r"--([\w-]+)\s*:\s*(#[0-9a-fA-F]{3,8})\s*;")
+_CONTRAST_FLOOR = 4.5
+
+# The backdrop is deliberately translucent, so the ground under a label on it is
+# not the declared colour but the composite over whatever page carries the image
+# — and `prefers-color-scheme` follows the reader's OS while GitHub's own theme
+# does not have to, so both pages are live for both palettes. The mismatch case
+# (light palette on a dark page) is the one that decides legibility, and reading
+# the declared colour instead of the composite is what hid it (Codex, PR #374).
+_BACKDROP_OPACITY = re.compile(r'class="backdrop"[^>]*fill-opacity="([\d.]+)"')
+_PAGE_GROUNDS = (("a light page", "#ffffff"), ("a dark page", "#0d1117"))
+
+# Which ground each text class is painted on. The BINDING from a class to the
+# colour it inks with is read out of the stylesheet, never assumed, so
+# repointing `.body` at `--card` fails here instead of rendering invisibly
+# (Codex, PR #374). Only the layout — which class sits on which rect — is
+# pinned, and the covering assertion below makes that safe by default: a text
+# class that is not in this table is unaccounted for and fails.
+_TEXT_CLASS_GROUNDS: dict[str, tuple[str, ...]] = {
+    "title": ("backdrop",),
+    "subtitle": ("backdrop",),
+    "legend": ("backdrop",),
+    "flow-label": ("backdrop",),
+    "fire-label": ("backdrop",),
+    "fire-note": ("backdrop",),
+    "name": ("card-strong",),
+    "name-sm": ("card",),
+    "body": ("card", "card-strong"),
+}
+_CSS_RULE = re.compile(r"\.([\w-]+)\s*\{([^}]*)\}")
+_FILL_VARIABLE = re.compile(r"fill:\s*var\(--([\w-]+)\)")
+_TEXT_CLASS_ATTR = re.compile(r'<text[^>]*class="([\w-]+)"')
+
+# The artifacts the front-door exhibit quotes, in the order it quotes them. The
+# two markers share no prefix, so losing the opener cannot be mistaken for an
+# empty exhibit that happens to start at the closer.
+_EXHIBIT_OPEN = "<!-- EXHIBIT:"
+_EXHIBIT_CLOSE = "<!-- EXHIBIT-END -->"
+_EXHIBIT_SOURCES = (
+    "tasks/phase-19.md",
+    "agent_prompts/task-19-2-in-code-truth.md",
+)
+# A line the README elides rather than quotes. Every other line inside a fence is
+# a claim that those bytes are in the source file.
+_ELISION = "…"
+_FENCE = re.compile(r"^```[^\n]*\n(.*?)^```", re.MULTILINE | re.DOTALL)
+# The repository is captured, not assumed: a number reachable in THIS history
+# says nothing about a link that points at someone else's pull request.
+_EXHIBIT_REPO = "dkdan10/AiLibi"
+_PULL_REQUEST_URL = re.compile(r"https://github\.com/([\w.-]+/[\w.-]+)/pull/(\d+)")
+_PR_SUBJECT_SUFFIX = re.compile(r"\(#(\d+)\)\s*\Z")
+
+
+def _committed(name: str) -> str:
+    return (_REPO_ROOT / name).read_text(encoding="utf-8")
+
+
+def _channels(colour: str) -> tuple[int, int, int]:
+    digits = colour.lstrip("#")
+    if len(digits) in (3, 4):
+        digits = "".join(digit * 2 for digit in digits)
+    red, green, blue = (int(digits[index : index + 2], 16) for index in (0, 2, 4))
+    return red, green, blue
+
+
+def _relative_luminance(colour: str) -> float:
+    """WCAG relative luminance of a `#rgb` / `#rrggbb` colour."""
+
+    linear = [
+        value / 12.92 if value <= 0.03928 else ((value + 0.055) / 1.055) ** 2.4
+        for value in (channel / 255 for channel in _channels(colour))
+    ]
+    return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+
+
+def _contrast_ratio(ink: str, ground: str) -> float:
+    luminances = sorted((_relative_luminance(ink), _relative_luminance(ground)))
+    return (luminances[1] + 0.05) / (luminances[0] + 0.05)
+
+
+def _over(colour: str, page: str, alpha: float) -> str:
+    """`colour` at `alpha` composited over `page` — the ground a reader sees."""
+
+    return "#" + "".join(
+        f"{round(alpha * front + (1 - alpha) * back):02x}"
+        for front, back in zip(_channels(colour), _channels(page), strict=True)
+    )
+
+
+def _contrast_problems(text: str) -> list[str]:
+    """Every ink/ground pair, in both palettes, that falls under the floor."""
+
+    palettes = _PALETTE_BLOCK.findall(text)
+    if len(palettes) != 2:
+        return [
+            f"{_ARCHITECTURE_SVG}: found {len(palettes)} `svg {{ … }}` palette "
+            "blocks, not the light one and the dark one"
+        ]
+    light = dict(_CUSTOM_PROPERTY.findall(palettes[0]))
+    dark = {**light, **dict(_CUSTOM_PROPERTY.findall(palettes[1]))}
+
+    opacity = _BACKDROP_OPACITY.search(text)
+    if opacity is None or float(opacity.group(1)) >= 1.0:
+        return [
+            f"{_ARCHITECTURE_SVG}: the backdrop is opaque; it must let the "
+            "reader's page through, so that a light card is never painted flat "
+            "over a dark one"
+        ]
+    alpha = float(opacity.group(1))
+
+    problems: list[str] = []
+    used = set(_TEXT_CLASS_ATTR.findall(text))
+    unaccounted = used - _TEXT_CLASS_GROUNDS.keys()
+    unused = _TEXT_CLASS_GROUNDS.keys() - used
+    if unaccounted or unused:
+        problems.append(
+            f"{_ARCHITECTURE_SVG}: the text classes and the ground table "
+            f"disagree — unaccounted {sorted(unaccounted)}, "
+            f"unused {sorted(unused)}"
+        )
+
+    inks = {
+        name: match.group(1)
+        for name, body in _CSS_RULE.findall(text)
+        if (match := _FILL_VARIABLE.search(body)) is not None
+    }
+    for name in sorted(used & _TEXT_CLASS_GROUNDS.keys()):
+        if name not in inks:
+            problems.append(
+                f"{_ARCHITECTURE_SVG}: .{name} inks with no `fill: var(--…)`, "
+                "so nothing here can measure what it renders as"
+            )
+            continue
+        ink = inks[name]
+        for theme, palette in (("light", light), ("dark", dark)):
+            for ground_name in _TEXT_CLASS_GROUNDS[name]:
+                if ink not in palette or ground_name not in palette:
+                    problems.append(
+                        f"{_ARCHITECTURE_SVG}: the {theme} palette defines no "
+                        f"--{ink} on --{ground_name} pair"
+                    )
+                    continue
+                if ground_name != "backdrop":
+                    # Cards are painted opaque, so their fill IS the ground.
+                    ratio = _contrast_ratio(palette[ink], palette[ground_name])
+                    if ratio < _CONTRAST_FLOOR:
+                        problems.append(
+                            f"{_ARCHITECTURE_SVG}: .{name} (--{ink}) on "
+                            f"--{ground_name} in the {theme} palette contrasts "
+                            f"{ratio:.1f}:1, under the {_CONTRAST_FLOOR}:1 floor"
+                        )
+                    continue
+                for where, page in _PAGE_GROUNDS:
+                    ground = _over(palette["backdrop"], page, alpha)
+                    ratio = _contrast_ratio(palette[ink], ground)
+                    if ratio < _CONTRAST_FLOOR:
+                        problems.append(
+                            f"{_ARCHITECTURE_SVG}: .{name} (--{ink}) on the "
+                            f"{theme} backdrop over {where} ({ground}) contrasts "
+                            f"{ratio:.1f}:1, under the {_CONTRAST_FLOOR}:1 floor"
+                        )
+    return problems
+
+
+def _svg_problems(text: str) -> list[str]:
+    """Every way the committed picture stops being hand-authored, legible text."""
+
+    try:
+        root = ElementTree.fromstring(text)
+    except ElementTree.ParseError as exc:
+        return [f"{_ARCHITECTURE_SVG}: does not parse as XML ({exc})"]
+
+    problems: list[str] = []
+    size = len(text.encode("utf-8"))
+    if size > _SVG_BYTE_CEILING:
+        problems.append(
+            f"{_ARCHITECTURE_SVG}: {size} bytes, over the {_SVG_BYTE_CEILING}-byte "
+            "ceiling for a hand-authored diagram"
+        )
+
+    tags = {element.tag.rsplit("}", 1)[-1] for element in root.iter()}
+    problems.extend(
+        f"{_ARCHITECTURE_SVG}: carries <{banned}>; the picture must be "
+        "hand-authored SVG, not an embedded raster or a foreign document"
+        for banned in ("image", "foreignObject")
+        if banned in tags
+    )
+    if any(
+        name.rsplit("}", 1)[-1] == "href"
+        for element in root.iter()
+        for name in element.attrib
+    ):
+        problems.append(
+            f"{_ARCHITECTURE_SVG}: an element carries an href; the picture must "
+            "reference nothing outside itself"
+        )
+    if "@font-face" in text or "data:" in text:
+        problems.append(
+            f"{_ARCHITECTURE_SVG}: declares a downloaded or embedded asset; "
+            "system font families and inline shapes only"
+        )
+    problems.extend(
+        f"{_ARCHITECTURE_SVG}: url({target!r}) points outside the file"
+        for target in _CSS_URL.findall(text)
+        if not target.startswith("#")
+    )
+
+    for token in _HEX_COLOUR.findall(text):
+        digits = token[1:]
+        if len(digits) in (3, 4):
+            digits = "".join(digit * 2 for digit in digits)
+        if digits[:6].lower() in {"000000", "ffffff"}:
+            problems.append(
+                f"{_ARCHITECTURE_SVG}: uses {token}; pure black and pure white "
+                "read as damage in one of the two GitHub themes"
+            )
+    keyword = _COLOUR_KEYWORD.search(text)
+    if keyword is not None:
+        problems.append(
+            f"{_ARCHITECTURE_SVG}: uses the colour keyword {keyword.group(0)!r}; "
+            "pure black and pure white read as damage in one of the two themes"
+        )
+    if _DARK_THEME_BLOCK not in text:
+        problems.append(
+            f"{_ARCHITECTURE_SVG}: has no {_DARK_THEME_BLOCK} block, so it cannot "
+            "follow the reader's theme"
+        )
+    problems.extend(_contrast_problems(text))
+
+    spoken = "\n".join(
+        element.text or ""
+        for element in root.iter()
+        if element.tag.rsplit("}", 1)[-1] == "text"
+    )
+    if not spoken.strip():
+        problems.append(
+            f"{_ARCHITECTURE_SVG}: holds no <text>; a diagram of outlined paths is "
+            "neither searchable nor diffable"
+        )
+    problems.extend(
+        f"{_ARCHITECTURE_SVG}: never says {label!r}"
+        for label in _SVG_REQUIRED_LABELS
+        if label not in spoken
+    )
+    return problems
+
+
+def _word_budget_problems(text: str) -> list[str]:
+    """The architecture note against the two-page ceiling it is held to."""
+
+    words = len(text.split())
+    if words <= _ARCHITECTURE_WORD_BUDGET:
+        return []
+    return [
+        f"{_ARCHITECTURE_NOTE}: {words} words, over the "
+        f"{_ARCHITECTURE_WORD_BUDGET}-word ceiling — it is the page a reader is "
+        "sent to first, and it has to stay readable in one sitting"
+    ]
+
+
+def _verbatim_runs(block: str) -> list[str]:
+    """A fenced excerpt split into the runs it claims are verbatim."""
+
+    runs: list[str] = []
+    current: list[str] = []
+    for line in block.splitlines():
+        if line.startswith(_ELISION):
+            if current:
+                runs.append("\n".join(current))
+                current = []
+            continue
+        current.append(line)
+    if current:
+        runs.append("\n".join(current))
+    return [run for run in runs if run.strip()]
+
+
+def _pull_request_numbers(repo_root: Path) -> set[int] | None:
+    """Every ``(#N)`` merged onto this branch, or ``None`` with no full history.
+
+    ``None`` on a shallow clone as well as on a missing git: hosted CI checks out
+    depth 1, and a truncated log would report every pull request as unreachable.
+    Callers report that as a skip, never as a pass — the ``in_tree_inventory``
+    precedent in ``scripts/verify_ml_evidence.py``.
+    """
+
+    try:
+        shallow = subprocess.run(
+            ["git", "rev-parse", "--is-shallow-repository"],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if shallow.returncode != 0 or shallow.stdout.strip() != "false":
+            return None
+        log = subprocess.run(
+            ["git", "log", "--format=%s"],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return None
+    if log.returncode != 0:
+        return None
+    numbers: set[int] = set()
+    for subject in log.stdout.splitlines():
+        match = _PR_SUBJECT_SUFFIX.search(subject)
+        if match is not None:
+            numbers.add(int(match.group(1)))
+    return numbers
+
+
+def _exhibit_problems(
+    readme: str, repo_root: Path, pull_requests: set[int]
+) -> list[str]:
+    """Every way the contract -> prompt -> pull-request exhibit stops resolving."""
+
+    start = readme.find(_EXHIBIT_OPEN)
+    end = readme.find(_EXHIBIT_CLOSE)
+    if start < 0 or end < start:
+        return [f"{_README}: the exhibit's {_EXHIBIT_OPEN} … marker pair is gone"]
+    region = readme[start:end]
+
+    problems: list[str] = []
+    quoted = _FENCE.findall(region)
+    if len(quoted) != len(_EXHIBIT_SOURCES):
+        return [
+            f"{_README}: the exhibit quotes {len(quoted)} sources, not "
+            f"{len(_EXHIBIT_SOURCES)} — the contract, then the prompt made from it"
+        ]
+
+    for source, block in zip(_EXHIBIT_SOURCES, quoted, strict=True):
+        if f"]({source})" not in readme:
+            problems.append(f"{_README}: the exhibit no longer links {source}")
+        path = repo_root / source
+        if not path.is_file():
+            problems.append(f"{_README}: the exhibit quotes {source}, which is gone")
+            continue
+        original = path.read_text(encoding="utf-8")
+        problems.extend(
+            f"{_README}: the excerpt beginning {run.splitlines()[0]!r} is no longer "
+            f"a verbatim run of {source}"
+            for run in _verbatim_runs(block)
+            if run not in original
+        )
+
+    links = _PULL_REQUEST_URL.findall(region)
+    if len(links) != 1:
+        problems.append(
+            f"{_README}: the exhibit names {len(links)} pull requests, not one"
+        )
+    for repository, number in links:
+        if repository != _EXHIBIT_REPO:
+            problems.append(
+                f"{_README}: the exhibit points at a pull request in "
+                f"{repository}, not {_EXHIBIT_REPO}"
+            )
+        elif int(number) not in pull_requests:
+            problems.append(
+                f"{_README}: pull request #{number} closed nothing reachable from "
+                "HEAD — no commit subject ends in its number"
+            )
+    return problems
+
+
+def test_the_committed_picture_is_hand_authored_legible_text() -> None:
+    assert _svg_problems(_committed(_ARCHITECTURE_SVG)) == []
+
+
+@pytest.mark.parametrize(
+    ("original", "planted"),
+    [
+        ('<rect class="backdrop"', '<image href="shot.png" class="backdrop"'),
+        ("<defs>", '<foreignObject width="1" height="1"/><defs>'),
+        ("--ink: #1f2b36;", "--ink: #000000;"),
+        ("--card: #f8fafb;", "--card: white;"),
+        (_DARK_THEME_BLOCK, "@media (min-width: 900px)"),
+        ("ui-sans-serif", "url(https://fonts.example/f.woff2), ui-sans-serif"),
+        (">frontend/<", ">the web app<"),
+        # The leading ">" keeps these off the <desc>, whose copy of the same
+        # words is not what a reader of the picture sees.
+        (">Arrows are data flow;", ">Boxes and lines,"),
+        (">Agents must not<", ">Nothing may<"),
+    ],
+)
+def test_a_perturbed_picture_is_rejected(original: str, planted: str) -> None:
+    """One defect at a time, each of which has to make the pin fire."""
+
+    committed = _committed(_ARCHITECTURE_SVG)
+    perturbed = committed.replace(original, planted, 1)
+    assert perturbed != committed, original
+    assert _svg_problems(perturbed), planted
+
+
+def test_an_oversized_picture_is_rejected() -> None:
+    bloated = _committed(_ARCHITECTURE_SVG).replace(
+        "</svg>", f"<!-- {'p' * _SVG_BYTE_CEILING} -->\n</svg>", 1
+    )
+    assert any("over the" in problem for problem in _svg_problems(bloated))
+
+
+def test_an_unparseable_picture_is_rejected() -> None:
+    problems = _svg_problems("<svg><rect></svg>")
+    assert problems and "does not parse" in problems[0]
+
+
+def test_the_architecture_note_stays_inside_two_pages() -> None:
+    assert _word_budget_problems(_committed(_ARCHITECTURE_NOTE)) == []
+
+
+def test_an_architecture_note_that_outgrows_two_pages_is_rejected() -> None:
+    padded = _committed(_ARCHITECTURE_NOTE) + " word" * _ARCHITECTURE_WORD_BUDGET
+    problems = _word_budget_problems(padded)
+    assert problems and "word ceiling" in problems[0]
+
+
+def test_the_front_door_exhibit_resolves() -> None:
+    pull_requests = _pull_request_numbers(_REPO_ROOT)
+    if pull_requests is None:
+        pytest.skip("no full git history here; the exhibit's PR cannot be resolved")
+    assert _exhibit_problems(_committed(_README), _REPO_ROOT, pull_requests) == []
+
+
+def test_an_exhibit_excerpt_that_drifted_from_its_source_is_rejected() -> None:
+    """The point of the pin: a contract edit cannot silently falsify the quote."""
+
+    drifted = _committed(_README).replace(
+        "- meetings/transcript.py; (same)", "- meetings/transcript.py; (unchanged)", 1
+    )
+    problems = _exhibit_problems(drifted, _REPO_ROOT, {328})
+    assert any("verbatim run" in problem for problem in problems), problems
+
+
+def test_an_exhibit_pull_request_absent_from_history_is_rejected() -> None:
+    problems = _exhibit_problems(_committed(_README), _REPO_ROOT, {1})
+    assert any("reachable from HEAD" in problem for problem in problems), problems
+
+
+def test_an_exhibit_pull_request_in_another_repository_is_rejected() -> None:
+    """A number this history can reach says nothing about someone else's repo."""
+
+    elsewhere = _committed(_README).replace(
+        f"https://github.com/{_EXHIBIT_REPO}/pull/",
+        "https://github.com/someone-else/a-fork/pull/",
+        1,
+    )
+    problems = _exhibit_problems(elsewhere, _REPO_ROOT, {328})
+    assert any("someone-else/a-fork" in problem for problem in problems), problems
+
+
+def test_a_low_contrast_palette_is_rejected() -> None:
+    """The legibility gate measures contrast, not the absence of the extremes."""
+
+    washed_out = _committed(_ARCHITECTURE_SVG).replace(
+        "--muted: #485560;", "--muted: #e6eaee;", 1
+    )
+    problems = _svg_problems(washed_out)
+    assert any("under the 4.5:1 floor" in problem for problem in problems), problems
+    assert all("pure black" not in problem for problem in problems), problems
+
+
+def test_an_ink_that_only_fails_composited_is_rejected() -> None:
+    """The ground is the composite, not the declared backdrop.
+
+    `#a8452a` clears the floor against the declared `#eef1f5` and falls under it
+    once the 90%-opaque backdrop is composited over a dark page — the exact hole
+    a check that read the declared colour could not see.
+    """
+
+    flat_only = _committed(_ARCHITECTURE_SVG).replace(
+        "--fire: #973b21;", "--fire: #a8452a;", 1
+    )
+    assert _contrast_ratio("#a8452a", "#eef1f5") >= _CONTRAST_FLOOR
+    problems = _svg_problems(flat_only)
+    assert any("over a dark page" in problem for problem in problems), problems
+
+
+def test_an_opaque_backdrop_is_rejected() -> None:
+    """An opaque light card over a dark page is the failure mode being avoided."""
+
+    painted_flat = _committed(_ARCHITECTURE_SVG).replace(
+        'fill-opacity="0.9"', 'fill-opacity="1"', 1
+    )
+    problems = _svg_problems(painted_flat)
+    assert any("backdrop is opaque" in problem for problem in problems), problems
+
+
+def test_a_text_class_repointed_at_its_own_ground_is_rejected() -> None:
+    """The ink of a class is read from the stylesheet, never assumed.
+
+    An ordinary-looking style edit — `.body` inking with the card colour it is
+    painted on — renders every card label invisible while changing no palette
+    value, so a checker holding hard-coded pairs would see nothing.
+    """
+
+    invisible = _committed(_ARCHITECTURE_SVG).replace(
+        ".body { fill: var(--muted);", ".body { fill: var(--card);", 1
+    )
+    problems = _svg_problems(invisible)
+    assert any(".body (--card)" in problem for problem in problems), problems
+
+
+def test_a_text_class_missing_from_the_ground_table_is_rejected() -> None:
+    """A class nothing accounts for cannot be reported as legible."""
+
+    renamed = _committed(_ARCHITECTURE_SVG).replace(
+        '<text class="legend"', '<text class="footnote"', 1
+    )
+    problems = _svg_problems(renamed)
+    assert any("ground table" in problem for problem in problems), problems
+
+
+def test_an_exhibit_that_stopped_linking_its_source_is_rejected() -> None:
+    unlinked = _committed(_README).replace("](tasks/phase-19.md)", "](tasks/)", 1)
+    problems = _exhibit_problems(unlinked, _REPO_ROOT, {328})
+    assert any("no longer links" in problem for problem in problems), problems
+
+
+def test_a_deleted_exhibit_is_rejected() -> None:
+    problems = _exhibit_problems(
+        _committed(_README).replace(_EXHIBIT_OPEN, "<!-- gone:", 1), _REPO_ROOT, {328}
+    )
+    assert any("marker pair is gone" in problem for problem in problems), problems

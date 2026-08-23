@@ -1,23 +1,37 @@
-# docs/media — the committed captures
+# docs/media — the committed pictures
 
-Two files, both shown at the top of the repository [README](../../README.md):
+Three pictures, all of them shown in the repository
+[README](../../README.md) — this note is the directory's fourth file:
 
 | File | What it is |
 | --- | --- |
 | `spectator-journey.gif` | 15 s, 8 fps, 640 px wide — the featured 9p2i journey end to end |
 | `spectator-meeting.png` | 1440×900 — mid-deliberation: accusation chain, ballots, mind inspector |
+| `architecture.svg` | The layering as built — hand-authored, not captured: the packages, the data-flow arrows, and the barred import the observation firewall forbids |
 
-Both are captures of the **static demo bundle**
+The GIF and the PNG are captures of the **static demo bundle**
 (`scripts/build_demo_bundle.py`), not of a dev server. That is deliberate: the
 picture in the README is then a picture of the artifact a reader can build and
 run themselves in one command, and it cannot drift into showing a surface the
 bundle does not ship.
 
-Nothing regenerates these automatically. They are committed bytes, refreshed by
-hand when the surface changes enough that they misrepresent it — a screenshot is
-a claim about the product, and a stale one is a false claim.
+`architecture.svg` is not a capture at all: it is hand-written SVG text — real
+`<text>`, no raster, no external font — so it diffs line by line and reads in
+both GitHub themes, which its internal `prefers-color-scheme` block handles. The
+rule for changing it: edit the file whenever the layering in
+[`docs/architecture.md`](../architecture.md) moves, and keep the two saying the
+same thing. `tests/scripts/test_check_doc_facts.py` pins the parse, the size
+ceiling, the labels the picture has to carry, and the contrast of every ink
+against the ground it really sits on — the backdrop composited over a light page
+and over a dark one, because the picture's theme follows the reader's system and
+the page around it need not. A silent drift into a raster export, a lost package
+name or a washed-out palette fails the gate.
 
-## Recipe
+Nothing regenerates any of the three automatically. They are committed bytes,
+refreshed by hand when the surface changes enough that they misrepresent it — a
+screenshot is a claim about the product, and a stale one is a false claim.
+
+## Recipe (the GIF and the PNG)
 
 The capture harness is intentionally NOT committed: it is a dozen lines of
 throwaway Playwright driving the same journey `frontend/e2e/bundle.spec.ts`

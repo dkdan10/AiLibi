@@ -70,8 +70,44 @@ Every coding task follows the same five steps:
 4. **Review the pull request.** CI is required on `main` ([the workflow](.github/workflows/ci.yml)); `bash scripts/check.sh` runs all of it locally except the Playwright browser journey, which CI runs as its own job (`cd frontend && npm run e2e`). I review what a gate cannot judge.
 5. **Checkpoint** before high-blast-radius work with a read-only audit.
 
-One contract and the prompt generated from it: [robust JSON extraction](tasks/phase-3.md), [its prompt](agent_prompts/task-3-19-robust-json-extraction-and-failure-recording.md).
-<!-- ANCHOR: a later contract shows a contract, its prompt and the merged pull request inline. -->
+Here is one of those tasks end to end — what I wrote, what the generator made of it, and what came back.
+
+<!-- EXHIBIT: both excerpts below are byte-checked against their sources by tests/scripts/test_check_doc_facts.py. -->
+
+**1 — the contract I wrote**, from [`tasks/phase-19.md`](tasks/phase-19.md). Two runs of it, verbatim:
+
+```markdown
+### Task 19.2 — The in-code truth sweep: docstrings match the bytes
+**Branch:** `phase-19-in-code-truth`
+**Depends on:** none (root)
+…  the section-reference line — a paragraph of anchors into the code — elided here
+**Files in scope:**
+- agents/memory/beliefs.py; (docstring/comment lines only)
+- meetings/transcript.py; (same)
+- meetings/manager.py; (same)
+- orchestrator/game.py; (the :12-13 module-docstring claim only)
+
+**Files NOT in scope:**
+- agents/memory/store.py (the live path is evidence, not an edit target)
+- meetings/constants.py; (the resolver homes already state "now always True")
+- any resolver body or lever mechanism (behavior untouched)
+
+**Definition of done:**
+…  and the checklist, ending in: bash scripts/check.sh passes locally
+```
+
+**2 — the prompt the generator produced from it**, [`agent_prompts/task-19-2-in-code-truth.md`](agent_prompts/task-19-2-in-code-truth.md). It carries the contract in verbatim, and `uv run python scripts/generate_prompts.py --check` fails the gate the moment the two disagree:
+
+```markdown
+# Agent Prompt — 19.2 The in-code truth sweep: docstrings match the bytes
+
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-19.md.
+```
+
+**3 — the pull request it produced**: [#328](https://github.com/dkdan10/AiLibi/pull/328), reviewed and merged; on `main` it is the squash commit whose subject ends `(#328)`.
+<!-- EXHIBIT-END -->
+
+Rather than take the paragraph above on trust, read the authorship out of git yourself. `git log --author=Claude` on `main` lists what the agents committed and `git log --grep='Co-Authored-By: Claude'` finds the trailer that names the model, but a squashed merge like #328 carries me as its author — the trailer and the model name live on the pull request's own branch commits, not on the squash commit. `git ls-remote --heads origin 'claude/*'` lists the branches those commits arrived on.
 
 ## What it is
 
@@ -82,7 +118,10 @@ A deterministic testbed for studying multi-agent reasoning under hidden informat
 3. **Memory is structured first.** Each agent reasons from a typed event log and a belief state derived from it; the LLM sees a rendered view of that structure, never raw engine state.
 
 The system as built: [docs/architecture.md](docs/architecture.md).
-<!-- ANCHOR: a later contract inlines the as-built layering diagram here. -->
+
+[![The layering as built: engine, the observation firewall, agents and meetings with llm beside them, the orchestrator, and the privileged readers](docs/media/architecture.svg)](docs/architecture.md)
+
+*Arrows are data flow; imports run the other way. The barred one is the firewall — `agents/` may not import `engine/`, by an import-linter contract of that name, checked in CI on every pull request and every push to `main`.*
 
 ## What the measurements said
 

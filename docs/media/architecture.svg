@@ -1,0 +1,166 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 748" width="1000" height="748" role="img" aria-labelledby="svg-title svg-desc">
+  <title id="svg-title">AiLibi — the layering as built</title>
+  <desc id="svg-desc">Layers stacked top to bottom: engine; observation, the firewall; the reasoning layer of agents and meetings, with llm beside it; orchestrator, which dispatches into that layer and takes ActionIntent back from agents and MeetingResult back from meetings; then the two privileged readers, eval and api. The frontend is not privileged: it sits downstream of api, running on types generated from the api DTOs. A barred arrow on the left runs from the reasoning layer up towards engine and is cut where the firewall sits; it is labelled with the import-linter contract "Agents must not import engine". Arrows are data flow; imports run the other way.</desc>
+
+  <style>
+    svg {
+      --backdrop: #eef1f5;
+      --card: #f8fafb;
+      --card-strong: #e3e9ef;
+      --ink: #1f2b36;
+      --muted: #485560;
+      --rule: #8a97a3;
+      --flow: #2f5b76;
+      --fire: #973b21;
+      --fire-soft: #834324;
+    }
+    @media (prefers-color-scheme: dark) {
+      svg {
+        --backdrop: #161c22;
+        --card: #222b34;
+        --card-strong: #2c3742;
+        --ink: #dee5eb;
+        --muted: #a3b0bc;
+        --rule: #64717d;
+        --flow: #7db3d0;
+        --fire: #ee9d7e;
+        --fire-soft: #d79b81;
+      }
+    }
+    .backdrop { fill: var(--backdrop); }
+    .card { fill: var(--card); stroke: var(--rule); stroke-width: 1.2; }
+    .card-strong { fill: var(--card-strong); stroke: var(--rule); stroke-width: 1.2; }
+    .name { fill: var(--ink); font-size: 17px; font-weight: 700; }
+    .name-sm { fill: var(--ink); font-size: 15px; font-weight: 700; }
+    .body { fill: var(--muted); font-size: 11px; }
+    .flow-label { fill: var(--flow); font-size: 11px; }
+    .flow-line { stroke: var(--flow); stroke-width: 1.6; fill: none; }
+    .fire-line { stroke: var(--fire); stroke-width: 1.8; fill: none; stroke-dasharray: 7 5; }
+    .fire-bar { stroke: var(--fire); stroke-width: 2.6; stroke-linecap: round; }
+    .flow-head { fill: var(--flow); }
+    .fire-head { fill: var(--fire); }
+    .fire-label { fill: var(--fire); font-size: 12.5px; font-weight: 700; }
+    .fire-note { fill: var(--fire-soft); font-size: 10.5px; }
+    .title { fill: var(--ink); font-size: 20px; font-weight: 700; }
+    .subtitle { fill: var(--muted); font-size: 11.5px; }
+    .legend { fill: var(--muted); font-size: 11px; }
+    text { font-family: ui-sans-serif, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
+  </style>
+
+  <defs>
+    <marker id="flow-head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="flow-head" d="M 0 1 L 9 5 L 0 9 z"/>
+    </marker>
+    <marker id="fire-head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="fire-head" d="M 0 1 L 9 5 L 0 9 z"/>
+    </marker>
+  </defs>
+
+  <rect class="backdrop" x="0" y="0" width="1000" height="748" rx="16" fill-opacity="0.9"/>
+
+  <text class="title" x="28" y="44">AiLibi — the layering as built</text>
+  <text class="subtitle" x="28" y="65">The packages, the data flow between them, and the one import the firewall forbids. The note behind this picture is docs/architecture.md.</text>
+
+  <!-- engine/ -->
+  <rect class="card-strong" x="228" y="84" width="456" height="74" rx="9"/>
+  <text class="name" x="248" y="112">engine/</text>
+  <text class="body" x="248" y="133">Pure deterministic tick — a function of state and actions.</text>
+  <text class="body" x="248" y="149">Owns ALL hidden state: roles, kill attribution, vents, the seeded RNG.</text>
+
+  <line class="flow-line" x1="456" y1="158" x2="456" y2="190" marker-end="url(#flow-head)"/>
+  <text class="flow-label" x="472" y="180">world state</text>
+
+  <!-- observation/ -->
+  <rect class="card-strong" x="228" y="194" width="456" height="82" rx="9"/>
+  <text class="name" x="248" y="222">observation/</text>
+  <text class="body" x="248" y="243">THE FIREWALL. Builds each player's ObservationPacket from engine state,</text>
+  <text class="body" x="248" y="259">strips every hidden field, appends the packet to an on-disk audit log.</text>
+
+  <line class="flow-line" x1="456" y1="276" x2="456" y2="308" marker-end="url(#flow-head)"/>
+  <text class="flow-label" x="472" y="298">ObservationPacket · PublicMapView</text>
+
+  <!-- the barred import, cut where the firewall sits -->
+  <line class="fire-line" x1="202" y1="312" x2="202" y2="164" marker-end="url(#fire-head)"/>
+  <line class="fire-bar" x1="192" y1="245" x2="212" y2="225"/>
+  <line class="fire-bar" x1="192" y1="225" x2="212" y2="245"/>
+  <text class="fire-label" x="176" y="206" text-anchor="end">THE FIREWALL</text>
+  <text class="fire-label" x="176" y="228" text-anchor="end">Agents must not</text>
+  <text class="fire-label" x="176" y="245" text-anchor="end">import engine</text>
+  <text class="fire-note" x="176" y="266" text-anchor="end">enforced by import-linter</text>
+  <text class="fire-note" x="176" y="280" text-anchor="end">in CI, not by convention</text>
+
+  <!-- agents/ -->
+  <rect class="card" x="228" y="312" width="224" height="124" rx="9"/>
+  <text class="name-sm" x="246" y="339">agents/</text>
+  <text class="body" x="246" y="360">Two-tier reasoning: rule-based</text>
+  <text class="body" x="246" y="375">tactics every tick, an LLM only</text>
+  <text class="body" x="246" y="390">at meetings and triggers.</text>
+  <text class="body" x="246" y="410">A typed event log and a belief</text>
+  <text class="body" x="246" y="425">state; the model sees a render.</text>
+
+  <!-- meetings/ -->
+  <rect class="card" x="460" y="312" width="224" height="124" rx="9"/>
+  <text class="name-sm" x="478" y="339">meetings/</text>
+  <text class="body" x="478" y="360">The protocol state machine:</text>
+  <text class="body" x="478" y="375">opening turn, accusation chain,</text>
+  <text class="body" x="478" y="390">voting, resolution.</text>
+  <text class="body" x="478" y="410">Never mutates engine state — it</text>
+  <text class="body" x="478" y="425">returns a MeetingResult.</text>
+
+  <line class="flow-line" x1="688" y1="374" x2="712" y2="374" marker-start="url(#flow-head)" marker-end="url(#flow-head)"/>
+
+  <!-- llm/ -->
+  <rect class="card" x="716" y="312" width="264" height="124" rx="9"/>
+  <text class="name-sm" x="734" y="339">llm/</text>
+  <text class="body" x="734" y="360">Beside the reasoning layer, behind the</text>
+  <text class="body" x="734" y="375">LLMClient Protocol: four adapters —</text>
+  <text class="body" x="734" y="390">fake (deterministic, offline, what CI</text>
+  <text class="body" x="734" y="405">runs), anthropic, ollama, featherless.</text>
+  <text class="body" x="734" y="425">A leaf: it imports nothing else here.</text>
+
+  <line class="flow-line" x1="250" y1="480" x2="250" y2="440" marker-end="url(#flow-head)"/>
+  <text class="flow-label" x="260" y="466">dispatch</text>
+  <line class="flow-line" x1="400" y1="440" x2="400" y2="480" marker-end="url(#flow-head)"/>
+  <text class="flow-label" x="410" y="466">ActionIntent</text>
+  <line class="flow-line" x1="560" y1="440" x2="560" y2="480" marker-end="url(#flow-head)"/>
+  <text class="flow-label" x="570" y="466">MeetingResult</text>
+
+  <!-- orchestrator/ -->
+  <rect class="card-strong" x="228" y="484" width="456" height="80" rx="9"/>
+  <text class="name" x="248" y="512">orchestrator/</text>
+  <text class="body" x="248" y="533">The privileged wiring layer: runs the tick loop, dispatches meetings,</text>
+  <text class="body" x="248" y="549">translates ActionIntent → Action, writes the replay JSONL.</text>
+
+  <line class="flow-line" x1="456" y1="564" x2="456" y2="596" marker-end="url(#flow-head)"/>
+  <text class="flow-label" x="472" y="586">replay JSONL · per-tick state hash</text>
+
+  <!-- eval/ -->
+  <rect class="card" x="228" y="600" width="224" height="86" rx="9"/>
+  <text class="name-sm" x="246" y="627">eval/</text>
+  <text class="body" x="246" y="648">A privileged reader: the eval</text>
+  <text class="body" x="246" y="663">harness over one typed report.</text>
+  <text class="body" x="246" y="678">Determinism and leak tests too.</text>
+
+  <!-- api/ -->
+  <rect class="card" x="460" y="600" width="224" height="86" rx="9"/>
+  <text class="name-sm" x="478" y="627">api/</text>
+  <text class="body" x="478" y="648">A privileged reader: FastAPI over</text>
+  <text class="body" x="478" y="663">sanitized DTOs — a post-game view,</text>
+  <text class="body" x="478" y="678">role and kills shown on purpose.</text>
+
+  <line class="flow-line" x1="688" y1="643" x2="712" y2="643" marker-end="url(#flow-head)"/>
+
+  <!-- frontend/ -->
+  <rect class="card" x="716" y="600" width="264" height="86" rx="9"/>
+  <text class="name-sm" x="734" y="627">frontend/</text>
+  <text class="body" x="734" y="648">React + Vite + PixiJS, running on types</text>
+  <text class="body" x="734" y="663">GENERATED from the api DTOs — an</text>
+  <text class="body" x="734" y="678">unregenerated DTO change fails CI.</text>
+
+  <!-- legend -->
+  <line class="fire-line" x1="28" y1="710" x2="58" y2="710" marker-end="url(#fire-head)"/>
+  <line class="fire-bar" x1="38" y1="716" x2="48" y2="704"/>
+  <line class="fire-bar" x1="38" y1="704" x2="48" y2="716"/>
+  <text class="legend" x="72" y="714">an import the firewall forbids, checked by import-linter in CI.</text>
+  <text class="legend" x="28" y="734">Arrows are data flow; imports run the other way — orchestrator/ is the wiring layer nothing behind the firewall imports.</text>
+</svg>
