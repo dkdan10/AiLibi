@@ -247,6 +247,45 @@ rewrites the indexed sighting's ROOM only: the event id, the speaker and every
 id-keyed downstream surface are untouched.
 This is the movement-driven contradiction rule Task 13.5.4 deferred when it
 shipped the render (tasks/phase-13-5.md:271).
+
+Grounded prosecution (:func:`grounded_prosecution_enabled`, DEFAULT-OFF)
+=======================================================================
+
+A spoken vent grounds against the speaker's own record before it can mint a
+flag, and a spoken sighting grounds against the speaker's own record before it
+can earn its subject the -0.05 vouch. The PROSECUTORIAL half of the sighting
+channel was never checked: any spoken
+:class:`~meetings.schemas.SawPlayerObservation` could mint a STRONG
+``alibi_vs_sighting`` flag on the strength of speech alone. This lever installs
+three rules on that ONE kind, gated on ONE predicate -- the resolver is ON and
+the caller supplied a ``sighting_records`` mapping:
+
+* **grounding** -- a spoken sighting is GROUNDED iff the speaker holds a
+  matching own :class:`~meetings.schemas.SightingRecord`
+  (:func:`_sighting_observation_matches_record`, the vouch channel's predicate
+  verbatim). An ungrounded sighting still mints its flag -- flags are
+  information (DESIGN.md §5.4) -- but never a STRONG one. A placement the
+  movement chokepoint produced is grounded by construction (it required the
+  speaker's own :class:`~meetings.schemas.MoveWitnessRecord`) and is exempt:
+  the two episodic channels are disjoint, so a witness who saw a DEPARTURE
+  holds no ``SightingRecord`` at the destination.
+* **two sources** -- a STRONG ``alibi_vs_sighting`` needs
+  :data:`meetings.constants.GROUNDED_PROSECUTION_MIN_SOURCES` distinct grounded
+  SPEAKERS contradicting one subject over one claim, or one grounded speaker
+  plus a physical anchor (a ``vent_sighting`` or ``alibi_vs_physical`` flag
+  naming that subject in this meeting).
+* **single-tick endpoint** -- the degenerate ``from_tick == to_tick``
+  self-placement is no longer adjudicated as its own interior, so it keeps the
+  narrow-window / endpoint band.
+
+Two rulings are superseded while the lever is ON, and stand untouched OFF (and
+for any caller supplying no mapping):
+
+* the 2026-06-22 LONE-STRONG relaxation (tasks/phase-13.md:700, "a
+  single-witness ``alibi_vs_sighting`` contradiction MAY cross the gate") --
+  superseded by rule two;
+* the Task 18.9 endpoint-band whereabouts exemption, which promoted roll-call
+  answers to STRONG -- superseded by rule three.
 """
 
 from __future__ import annotations
@@ -257,6 +296,7 @@ from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Final, Literal
 
+from meetings.constants import GROUNDED_PROSECUTION_MIN_SOURCES
 from meetings.schemas import (
     AccusationClaim,
     AlibiClaim,
@@ -649,6 +689,18 @@ WEAK_REASON_LONE_PHYSICAL: Final[str] = "single-voice physical contradiction"
 # :data:`WEAK_REASON_LONE_PHYSICAL` only to name the kill-scene origin in the
 # rendered flag; both are read identically by :func:`is_weak_contradiction`.
 WEAK_REASON_KILL_SCENE: Final[str] = "single-voice kill-scene placement"
+
+# The two bands the grounded-prosecution lever adds to ``alibi_vs_sighting``
+# (:func:`grounded_prosecution_enabled`, DEFAULT-OFF). Ungrounded: the sighting
+# side is speech the speaker's own typed record does not support, so it informs
+# but cannot convict. Lone grounded source: the sighting side IS grounded, but
+# one speaker is the whole prosecution -- below
+# :data:`meetings.constants.GROUNDED_PROSECUTION_MIN_SOURCES` and with no
+# physical anchor naming the subject. Both are read by
+# :func:`is_weak_contradiction` exactly like their siblings above; they are
+# appended in this order when a flag earns both.
+WEAK_REASON_UNGROUNDED_SIGHTING: Final[str] = "ungrounded sighting"
+WEAK_REASON_LONE_GROUNDED_SOURCE: Final[str] = "single grounded source"
 
 # Task 13.4 (report-phase-b-plan B3/B4): the minimum number of DISTINCT
 # independent CO-PRESENCE voices that must place a subject OUTSIDE their own
@@ -1483,6 +1535,46 @@ def movement_claim_shape_enabled(env: Mapping[str, str] | None = None) -> bool:
     )
 
 
+# The grounded-prosecution lever -- DEFAULT-OFF, live. Not registered in
+# ``orchestrator.replay._TOGGLEABLE_LEVER_RESOLVERS``: Task 20.33 wires the whole
+# Phase-20 slate into the substrate stamp at once.
+ENV_GROUNDED_PROSECUTION: Final[str] = "AILIBI_GROUNDED_PROSECUTION"
+_GROUNDED_PROSECUTION_FLAG_TRUE: Final[frozenset[str]] = frozenset(
+    {"1", "true", "yes", "on"}
+)
+
+
+def grounded_prosecution_enabled(env: Mapping[str, str] | None = None) -> bool:
+    """Whether a spoken sighting must be grounded to convict. DEFAULT OFF.
+
+    Reads :data:`ENV_GROUNDED_PROSECUTION` from ``env`` (defaulting to the
+    process environment), accepting ``1/true/yes/on`` case-insensitively;
+    passing ``env`` lets a caller toggle the lever without mutating
+    ``os.environ``.
+
+    ON -- and only when the caller also supplies the per-speaker
+    ``sighting_records`` mapping :func:`detect_contradictions` grounds against
+    -- three rules apply to ``alibi_vs_sighting`` alone: an ungrounded sighting
+    side bands the flag WEAK
+    (:data:`WEAK_REASON_UNGROUNDED_SIGHTING`), a lone grounded speaker with no
+    physical anchor bands it WEAK
+    (:data:`WEAK_REASON_LONE_GROUNDED_SOURCE`), and a degenerate single-tick
+    self-placement keeps the narrow-window / endpoint band instead of being
+    adjudicated as its own interior. Every other flag kind is untouched, and no
+    flag's ``contradiction_id``, ``kind``, event ids or ``subjects`` move -- a
+    demotion rewrites the description only.
+
+    Phase 20 G-2 / C-11 (audits/review-2026-08-19/D/FINAL-synthesis.md §4 row
+    2.4).
+    """
+
+    environment = env if env is not None else os.environ
+    return (
+        environment.get(ENV_GROUNDED_PROSECUTION, "").strip().lower()
+        in _GROUNDED_PROSECUTION_FLAG_TRUE
+    )
+
+
 def detect_contradictions(
     transcript: MeetingTranscript,
     *,
@@ -1492,6 +1584,7 @@ def detect_contradictions(
     | None = None,
     move_witness_records: Mapping[PlayerId, tuple[MoveWitnessRecord, ...]]
     | None = None,
+    sighting_records: Mapping[PlayerId, tuple[SightingRecord, ...]] | None = None,
     env: Mapping[str, str] | None = None,
 ) -> tuple[ContradictionRef, ...]:
     """Flag incompatible alibi and saw-player claims (DESIGN.md §5.4, §6.4).
@@ -1632,6 +1725,25 @@ def detect_contradictions(
     nothing is re-read and a spoken ``saw_move`` is ignored -- so committed
     transcripts re-derive byte-identically either way.
 
+    Grounded prosecution (:func:`grounded_prosecution_enabled`, DEFAULT-OFF).
+    ``sighting_records`` is the per-speaker
+    :class:`~meetings.schemas.SightingRecord` channel -- the SAME rows the
+    grounded-vouch path reads (:func:`grounded_vouch_subjects`), keyed by
+    speaker id exactly like the two channels above; the live path threads each
+    participant's ``sighting_records_for_meeting()`` output. The lever's three
+    rules apply only when the resolver is ON **and** this mapping is non-empty:
+    a caller that supplies no records (the record-free re-derivers in ``eval/``
+    and ``audits/workflows/``, legacy unit tests) keeps the pre-lever rules by
+    construction rather than reading every spoken sighting as fabricated. ON,
+    an ``alibi_vs_sighting`` whose sighting side the speaker's own records do
+    not support bands WEAK, one that no
+    :data:`meetings.constants.GROUNDED_PROSECUTION_MIN_SOURCES` distinct
+    grounded speakers (or one grounded speaker plus a ``vent_sighting`` /
+    ``alibi_vs_physical`` anchor on the same subject) support bands WEAK, and a
+    degenerate single-tick self-placement loses the 18.9 interior exemption.
+    Only descriptions move: ids, kinds, event pairs and subjects are stable, so
+    every ballot citation and the detector's sort survive a demotion.
+
     The function is pure: it does not mutate the transcript and has no
     side effects.
     """
@@ -1643,6 +1755,11 @@ def detect_contradictions(
     vent_placement_contradictions = vent_placement_contradictions_enabled(env)
     # The movement lever is read ONCE here too and threaded down as a boolean.
     movement_claim_shape = movement_claim_shape_enabled(env)
+    # ONE predicate gates all three grounded-prosecution rules: the lever is ON
+    # AND this caller handed us the records to ground against. A caller with no
+    # mapping keeps the pre-lever rules, which is what makes the record-free
+    # re-derivers safe and the OFF-path byte pin trivially true.
+    grounded_prosecution = grounded_prosecution_enabled(env) and bool(sighting_records)
 
     effective_roster = _NO_ROSTER if roster is None else roster
     indexed_alibis = tuple(
@@ -1677,6 +1794,7 @@ def detect_contradictions(
                 alibis=indexed_alibis, sightings=sightings
             ),
             whereabouts_interior_flags=whereabouts_interior_flags,
+            grounded_prosecution=grounded_prosecution,
         )
     )
     # Task 13.4 (B3/B4): the inferential physical path.
@@ -1729,9 +1847,8 @@ def detect_contradictions(
             body_rooms=body_rooms,
         )
     )
-    guarded = _apply_proxy_intra_turn_guard(
-        flags, event_speakers=_event_speaker_index(transcript)
-    )
+    event_speakers = _event_speaker_index(transcript)
+    guarded = _apply_proxy_intra_turn_guard(flags, event_speakers=event_speakers)
     # Task 15.4: grounded vent flags join AFTER the proxy-intra-turn guard --
     # deliberately, not incidentally. Both of a vent flag's event ids resolve
     # to the one spoken observation (same speaker, subject a third party), so
@@ -1765,6 +1882,16 @@ def detect_contradictions(
                     roster=effective_roster,
                 )
             )
+    if grounded_prosecution:
+        # LAST, so the physical-anchor set is complete: the vent flags above
+        # are part of it, and a demotion must never be re-read by an earlier
+        # pass as a fresh flag.
+        guarded = _apply_grounded_prosecution(
+            guarded,
+            sightings=sightings,
+            sighting_records=sighting_records or {},
+            event_speakers=event_speakers,
+        )
     return tuple(sorted(guarded, key=lambda flag: flag.contradiction_id))
 
 
@@ -2200,12 +2327,20 @@ class _IndexedSighting:
     (:func:`canonical_rooms`) -- the model occasionally emits compound or
     case-variant sighting rooms too, so both sides of every comparison
     canonicalise identically (Task 10.1).
+
+    ``movement_grounded`` marks a placement :func:`_apply_movement_claim_shape`
+    produced from the speaker's own :class:`~meetings.schemas.MoveWitnessRecord`
+    -- either arm. Such a placement is grounded in a channel DISJOINT from the
+    ``saw_player`` records the grounded-prosecution lever checks (a witness who
+    saw a departure holds no sighting record at the destination), so the lever
+    reads it as grounded rather than as unsupported speech.
     """
 
     event_id: str
     speaker: PlayerId
     observation: SawPlayerObservation
     rooms: frozenset[str]
+    movement_grounded: bool = False
 
 
 def _iter_alibis(
@@ -2343,6 +2478,7 @@ def _resolve_movement_sighting(
         speaker=sighting.speaker,
         observation=sighting.observation.model_copy(update={"room": destination}),
         rooms=canonical_rooms(destination),
+        movement_grounded=True,
     )
 
 
@@ -2492,6 +2628,7 @@ def _iter_move_placements(
                     room=observation.to_room,
                 ),
                 rooms=canonical_rooms(observation.to_room),
+                movement_grounded=True,
             )
 
 
@@ -2699,6 +2836,7 @@ def _detect_alibi_vs_sightings(
     sightings: tuple[_IndexedSighting, ...],
     subject_accounts: Mapping[PlayerId, tuple[_SubjectAccount, ...]],
     whereabouts_interior_flags: bool = False,
+    grounded_prosecution: bool = False,
 ) -> Iterator[ContradictionRef]:
     for alibi in alibis:
         if not alibi.rooms:
@@ -2724,9 +2862,19 @@ def _detect_alibi_vs_sightings(
         # so production ALWAYS takes the exemption; the ``False`` parameter branch
         # (byte-identical to the pre-18.9 path) survives only for direct callers
         # of this private helper.
-        interior_exempt = whereabouts_interior_flags and (
-            alibi.claim.from_tick == alibi.claim.to_tick
-            and alibi.speaker == alibi.claim.subject
+        #
+        # Rule (c) of the grounded-prosecution lever rides that same branch: ON,
+        # the degenerate single-tick self-placement is no longer adjudicated as
+        # its own interior, so it takes the pre-18.9 narrow-window / endpoint
+        # band. That knowingly supersedes the 18.9 exemption while the lever is
+        # ON (tasks/phase-18.md Task 18.9); OFF it is untouched.
+        interior_exempt = (
+            whereabouts_interior_flags
+            and not grounded_prosecution
+            and (
+                alibi.claim.from_tick == alibi.claim.to_tick
+                and alibi.speaker == alibi.claim.subject
+            )
         )
         # Task 13.14: the sighting path no longer down-weights a self-stated
         # alibi (the owner LONE-STRONG reversal of audit-9.7) -- a self-stated
@@ -3760,6 +3908,155 @@ def _fold_proxy_intra_turn(flag: ContradictionRef) -> ContradictionRef:
     )
 
 
+def _apply_grounded_prosecution(
+    flags: Sequence[ContradictionRef],
+    *,
+    sightings: tuple[_IndexedSighting, ...],
+    sighting_records: Mapping[PlayerId, tuple[SightingRecord, ...]],
+    event_speakers: Mapping[str, PlayerId],
+) -> list[ContradictionRef]:
+    """Band an ``alibi_vs_sighting`` WEAK unless grounded testimony carries it.
+
+    Rules (a) and (b) of :func:`grounded_prosecution_enabled`, applied as a
+    post-pass over the finished flag set so the physical-anchor set is complete.
+    A flag survives STRONG only when its own sighting side is GROUNDED in the
+    speaker's own records AND either
+    :data:`~meetings.constants.GROUNDED_PROSECUTION_MIN_SOURCES` distinct
+    grounded speakers contradict that subject over that claim, or a
+    ``vent_sighting`` / ``alibi_vs_physical`` flag already names the subject in
+    this meeting.
+
+    Independence is by SPEAKER ID: one speaker holding two matching records, or
+    speaking two sightings in one turn, is ONE source, and neither the subject
+    nor the alibi's own speaker is ever a source. Only descriptions move --
+    every flag keeps its id, kind, event pair and subjects, so citations and the
+    detector's sort are unaffected. Flags of another kind, and flags already
+    banded weak by an earlier rule, pass through untouched (a weak flag is
+    already banded; re-marking it would double-count).
+    """
+
+    indexed = {sighting.event_id: sighting for sighting in sightings}
+    grounded = {
+        sighting.event_id: _sighting_is_grounded(
+            sighting, records=sighting_records.get(sighting.speaker, ())
+        )
+        for sighting in sightings
+    }
+    anchored = {
+        subject
+        for flag in flags
+        if flag.kind in ("vent_sighting", "alibi_vs_physical")
+        for subject in flag.subjects
+    }
+
+    # Pass 1: resolve each candidate to (claim, sighting) and collect, per
+    # (subject, claim), the DISTINCT grounded speakers prosecuting it.
+    resolved: dict[str, tuple[tuple[PlayerId, str], str]] = {}
+    sources: dict[tuple[PlayerId, str], set[PlayerId]] = {}
+    for flag in flags:
+        if flag.kind != "alibi_vs_sighting" or is_weak_contradiction(flag):
+            continue
+        sides = _grounded_prosecution_sides(flag, sightings=indexed)
+        if sides is None:
+            continue
+        claim_id, sighting_id = sides
+        subject = flag.subjects[0]
+        key = (subject, claim_id)
+        resolved[flag.contradiction_id] = (key, sighting_id)
+        sources.setdefault(key, set())
+        speaker = indexed[sighting_id].speaker
+        if grounded[sighting_id] and speaker not in (
+            subject,
+            event_speakers.get(claim_id),
+        ):
+            sources[key].add(speaker)
+
+    # Pass 2: re-band. Reason order is fixed so the rendered marker is stable.
+    banded: list[ContradictionRef] = []
+    for flag in flags:
+        candidate = resolved.get(flag.contradiction_id)
+        if candidate is None:
+            banded.append(flag)
+            continue
+        key, sighting_id = candidate
+        reasons: list[str] = []
+        if not grounded[sighting_id]:
+            reasons.append(WEAK_REASON_UNGROUNDED_SIGHTING)
+        elif (
+            len(sources[key]) < GROUNDED_PROSECUTION_MIN_SOURCES
+            and key[0] not in anchored
+        ):
+            reasons.append(WEAK_REASON_LONE_GROUNDED_SOURCE)
+        banded.append(
+            flag if not reasons else _demote_prosecution(flag, reasons=tuple(reasons))
+        )
+    return banded
+
+
+def _grounded_prosecution_sides(
+    flag: ContradictionRef, *, sightings: Mapping[str, _IndexedSighting]
+) -> tuple[str, str] | None:
+    """``(claim event id, sighting event id)`` of one flag, or ``None``.
+
+    Read by TYPE, never by position: ``_build_contradiction`` sorts the event
+    pair, so which of ``event_a_id`` / ``event_b_id`` is the sighting depends on
+    the turn ids. An alibi side is a claim / whereabouts id and a sighting side
+    an observation id, so exactly one of the two is in the sighting index;
+    anything else (a flag whose sighting was not indexed, a subject-less flag)
+    is left for the caller to pass through untouched.
+    """
+
+    if len(flag.subjects) != 1:
+        return None
+    a_indexed = flag.event_a_id in sightings
+    b_indexed = flag.event_b_id in sightings
+    if a_indexed == b_indexed:
+        return None
+    if a_indexed:
+        return flag.event_b_id, flag.event_a_id
+    return flag.event_a_id, flag.event_b_id
+
+
+def _sighting_is_grounded(
+    sighting: _IndexedSighting, *, records: tuple[SightingRecord, ...]
+) -> bool:
+    """Whether the speaker's own typed memory supports this spoken placement.
+
+    A movement-derived placement is grounded by construction -- it exists only
+    because the speaker's own :class:`~meetings.schemas.MoveWitnessRecord`
+    confirmed the transition -- and its channel is disjoint from the
+    ``saw_player`` rows below, so it is exempted rather than searched for a
+    record it could not hold. Everything else grounds through the vouch
+    channel's predicate, unchanged.
+    """
+
+    if sighting.movement_grounded:
+        return True
+    return any(
+        _sighting_observation_matches_record(sighting.observation, record)
+        for record in records
+    )
+
+
+def _demote_prosecution(
+    flag: ContradictionRef, *, reasons: tuple[str, ...]
+) -> ContradictionRef:
+    # Rebuild through the shared marker format: the factual base text is
+    # PRESERVED (the claim and the sighting are still information, §5.4) and the
+    # new reasons append after any the flag already carries. The event-id pair
+    # and subjects are reused verbatim, so :func:`_build_contradiction`
+    # recomputes the identical ``contradiction_id``.
+    base, existing = _split_weak_marker(flag.description)
+    merged = (*existing, *(r for r in reasons if r not in existing))
+    return _build_contradiction(
+        kind=flag.kind,
+        event_a_id=flag.event_a_id,
+        event_b_id=flag.event_b_id,
+        subjects=flag.subjects,
+        description=(f"{base} {WEAK_CONTRADICTION_MARKER_PREFIX}{'; '.join(merged)}]"),
+    )
+
+
 def _split_weak_marker(description: str) -> tuple[str, tuple[str, ...]]:
     """Split a description into its base text and its weak-signal reasons.
 
@@ -3807,6 +4104,7 @@ def _ranges_overlap(a_from: int, a_to: int, b_from: int, b_to: int) -> bool:
 
 __all__ = [
     "CANONICAL_ROOMS",
+    "ENV_GROUNDED_PROSECUTION",
     "ENV_MOVEMENT_CLAIM_SHAPE",
     "ENV_VENT_PLACEMENT_CONTRADICTIONS",
     "ENV_WHEREABOUTS_INTERIOR_FLAGS",
@@ -3821,12 +4119,14 @@ __all__ = [
     "WEAK_REASON_BOUNDARY_OVERLAP",
     "WEAK_REASON_ENDPOINT_TICK",
     "WEAK_REASON_KILL_SCENE",
+    "WEAK_REASON_LONE_GROUNDED_SOURCE",
     "WEAK_REASON_LONE_PHYSICAL",
     "WEAK_REASON_NARROW_WINDOW",
     "WEAK_REASON_PROXY_INTRA_TURN",
     "WEAK_REASON_RETARGETED_PROXY",
     "WEAK_REASON_SELF_PAIR",
     "WEAK_REASON_SELF_STATED",
+    "WEAK_REASON_UNGROUNDED_SIGHTING",
     "ChainStep",
     "ChainTermination",
     "ChainWalk",
@@ -3838,6 +4138,7 @@ __all__ = [
     "contradiction_lift_key",
     "detect_contradictions",
     "detect_corroborations",
+    "grounded_prosecution_enabled",
     "grounded_vent_subjects_from_flags",
     "grounded_vouch_subjects",
     "independent_voices",

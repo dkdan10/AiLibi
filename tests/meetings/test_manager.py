@@ -107,12 +107,16 @@ from meetings.schemas import (
     PlayerId,
     SawPlayerObservation,
     SawVentObservation,
+    SightingRecord,
     VentWitnessRecord,
     VoteBallot,
 )
 from meetings.transcript import (
+    ENV_GROUNDED_PROSECUTION,
     WEAK_CONTRADICTION_MARKER_PREFIX,
+    WEAK_REASON_LONE_GROUNDED_SOURCE,
     WEAK_REASON_SELF_STATED,
+    WEAK_REASON_UNGROUNDED_SIGHTING,
     detect_contradictions,
     detect_corroborations,
     independent_voices,
@@ -7150,3 +7154,185 @@ class TestVentSceneOptInEligibility:
             for turn in result.transcript.turns
             if turn.turn_kind == "opt_in"
         ] == ["p-2", "p-4"]
+
+
+# --- Task 20.26: the sighting channel reaches every detection ---------------
+
+
+def _grounded_prosecution_responder() -> Callable[[str, type[BaseModel] | None], str]:
+    """A three-turn chain whose alibi and sighting land on turns 0 and 1.
+
+    p-1 self-states a wide alibi and accuses p-2; p-2 sights p-1 elsewhere
+    inside that window and accuses p-3; p-3 replies without accusing, ending
+    the chain. The pair is therefore complete BEFORE p-3's turn prompt is
+    rendered, so the mid-chain derivation and the final recorded one both see
+    it — which is what makes the comparison below meaningful.
+    """
+
+    return _make_responder(
+        accusations={"p-1": "p-2", "p-2": "p-3", "p-3": None},
+        claims_by={
+            "p-1": (
+                AlibiClaim(
+                    type="alibi",
+                    subject="p-1",
+                    from_tick=100,
+                    to_tick=200,
+                    room="CAFETERIA",
+                ),
+            ),
+        },
+        observations={
+            "p-2": (
+                SawPlayerObservation(
+                    type="saw_player", subject="p-1", room="EAST_HALL", tick=150
+                ),
+            ),
+        },
+    )
+
+
+def _prosecution_participants(
+    records: Mapping[str, tuple[SightingRecord, ...]],
+) -> tuple[MeetingParticipant, ...]:
+    return tuple(
+        MeetingParticipant(
+            agent_id=agent_id,
+            role="CREWMATE",
+            rendered_memory=f"## Your role: CREWMATE\n{agent_id} memory",
+            sighting_records=records.get(agent_id, ()),
+        )
+        for agent_id in ("p-1", "p-2", "p-3", "p-4")
+    )
+
+
+def _run_prosecution_meeting(
+    records: Mapping[str, tuple[SightingRecord, ...]],
+) -> tuple[MeetingResult, dict[PlayerId, tuple[ContradictionRef, ...]]]:
+    """Run the meeting, capturing the flags each MID-CHAIN turn prompt received.
+
+    The stub statement renderer prints only a flag COUNT, so the capture is what
+    lets these tests compare the mid-chain derivation with the recorded one.
+    """
+
+    seen: dict[PlayerId, tuple[ContradictionRef, ...]] = {}
+
+    def _capturing_statement_prompt(
+        *,
+        agent_id: PlayerId,
+        rendered_memory: str,
+        transcript: MeetingTranscript,
+        contradictions: tuple[ContradictionRef, ...],
+        prior_turn: MeetingTurn | None,
+        turn_kind: str,
+        fellow_impostor_ids: tuple[PlayerId, ...] = (),
+        living_ids: tuple[PlayerId, ...] = (),
+        dead_ids: tuple[PlayerId, ...] = (),
+        is_impostor: bool = False,
+        is_body_report: bool = False,
+        persona: str = "",
+        suspicion_provenance: tuple[SuspicionEntry, ...] = (),
+    ) -> str:
+        seen[agent_id] = contradictions
+        return _statement_prompt(
+            agent_id=agent_id,
+            rendered_memory=rendered_memory,
+            transcript=transcript,
+            contradictions=contradictions,
+            prior_turn=prior_turn,
+            turn_kind=turn_kind,
+            fellow_impostor_ids=fellow_impostor_ids,
+            living_ids=living_ids,
+            dead_ids=dead_ids,
+            is_impostor=is_impostor,
+            is_body_report=is_body_report,
+            persona=persona,
+            suspicion_provenance=suspicion_provenance,
+        )
+
+    manager = MeetingManager(
+        llm_client=_ScriptedLLMClient(responder=_grounded_prosecution_responder()),
+        crewmate_report_prompt=_crewmate_report_prompt,
+        impostor_report_prompt=_impostor_report_prompt,
+        statement_prompt=_capturing_statement_prompt,
+        vote_prompt=_vote_prompt,
+    )
+    result = _run(
+        manager.run(
+            meeting_id="m-1",
+            trigger=_default_trigger(),
+            participants=_prosecution_participants(records),
+        )
+    )
+    return result, seen
+
+
+class TestGroundedProsecutionWiring:
+    """``MeetingParticipant.sighting_records`` reaches ALL FOUR detector calls.
+
+    The lever (:func:`meetings.transcript.grounded_prosecution_enabled`) is
+    DEFAULT-OFF, so the wiring is inert at rest; these tests turn it on and read
+    the same meeting several ways. The mid-chain turn derivation and the
+    recorded flag set must agree — one grounding source per meeting, the 15.4
+    threading convention.
+    """
+
+    _MATCHING_RECORD = SightingRecord(subject="p-1", room="EAST_HALL", tick=150)
+
+    def test_the_flag_is_strong_with_the_lever_off(self) -> None:
+        result, seen = _run_prosecution_meeting({"p-2": (self._MATCHING_RECORD,)})
+        (flag,) = result.contradictions
+        assert flag.kind == "alibi_vs_sighting"
+        assert WEAK_CONTRADICTION_MARKER_PREFIX not in flag.description
+        assert seen["p-3"] == (flag,)
+
+    def test_a_lone_grounded_speaker_bands_weak_on_every_call(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv(ENV_GROUNDED_PROSECUTION, "1")
+        result, seen = _run_prosecution_meeting({"p-2": (self._MATCHING_RECORD,)})
+        (flag,) = result.contradictions
+        assert WEAK_REASON_LONE_GROUNDED_SOURCE in flag.description
+        # The mid-chain derivation agrees with the recorded one, byte for byte.
+        assert seen["p-3"] == (flag,)
+
+    def test_a_speaker_with_no_record_bands_ungrounded(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # p-4's unrelated record keeps the MAPPING non-empty (so the lever is
+        # live) while the sighting's own speaker holds nothing.
+        monkeypatch.setenv(ENV_GROUNDED_PROSECUTION, "1")
+        result, seen = _run_prosecution_meeting(
+            {"p-4": (SightingRecord(subject="p-3", room="LABS", tick=10),)}
+        )
+        (flag,) = result.contradictions
+        assert WEAK_REASON_UNGROUNDED_SIGHTING in flag.description
+        assert seen["p-3"] == (flag,)
+
+    def test_no_participant_records_leaves_the_lever_inert(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The predicate's second half, through the production path: with the
+        # lever ON but no participant carrying records, the manager builds an
+        # empty mapping and the pre-lever rules stand.
+        monkeypatch.setenv(ENV_GROUNDED_PROSECUTION, "1")
+        result, seen = _run_prosecution_meeting({})
+        (flag,) = result.contradictions
+        assert WEAK_CONTRADICTION_MARKER_PREFIX not in flag.description
+        assert seen["p-3"] == (flag,)
+
+    def test_the_recorded_flags_equal_a_direct_re_derivation(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The fourth call site is the recorded one: re-deriving over the final
+        # transcript with the same mapping must reproduce it exactly, which is
+        # what proves the mapping was threaded there and not dropped.
+        monkeypatch.setenv(ENV_GROUNDED_PROSECUTION, "1")
+        records = {"p-2": (self._MATCHING_RECORD,)}
+        result, _seen = _run_prosecution_meeting(records)
+        assert result.contradictions == detect_contradictions(
+            result.transcript,
+            roster=frozenset({"p-1", "p-2", "p-3", "p-4"}),
+            trigger_kind="report",
+            sighting_records=records,
+        )
