@@ -1369,9 +1369,6 @@ def _build_observations(
 ) -> list[_Observation]:
     observations: list[_Observation] = []
     seen_body_ids: set[str] = set()
-    # The trail and the completed-task line must not disagree about one tick, so
-    # both read the same per-tick record instead of each keeping its own.
-    self_placements = _self_placement_by_tick(episodic) if self_location_trail else {}
     last_pending_task: str | None = None
     last_self_room: str | None = None
     last_owned_task_ids: frozenset[TaskId] | None = None
@@ -1411,12 +1408,10 @@ def _build_observations(
             role = event.payload.get("role")
             self_room = room if isinstance(room, str) else None
             owned = _owned_task_ids(event.payload)
-            # One row dates the completion and one record places it, and it is
-            # the record for that SAME tick -- so the line carries one clock.
-            completion_room = last_self_room
-            if self_location_trail:
-                placement = self_placements.get(event.tick)
-                completion_room = placement.room if placement is not None else None
+            # One row dates the completion, places it and stamps its citation:
+            # the row this iteration is reading. The line therefore carries one
+            # clock, and its ``[obs ...]`` handle names the row it is placed by.
+            completion_room = self_room if self_location_trail else last_self_room
             if completion_from_events:
                 # An id LEAVING a living agent's owned set is a completion it
                 # performed: only completion removes an id, while redistribution

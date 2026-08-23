@@ -2011,6 +2011,49 @@ class TestSelfLocationTrailLever:
 
         assert "[tick 21] You completed wiring (you were in ADMIN)." in view
 
+    def test_the_completion_row_is_placed_by_the_row_that_stamps_its_citation(
+        self,
+    ) -> None:
+        # Same-tick rows are not a production shape (perception writes one
+        # self_state per packet), but if one ever reaches the store the line must
+        # still name the room of the row whose observation_id it carries -- never a
+        # sibling row's.
+        memory = AgentMemory()
+        memory.episodic.append(
+            _self_state_event(
+                tick=1,
+                room="EAST_HALL",
+                pending_task_id="wiring",
+                observation_id="p-1:1:0",
+            )
+        )
+        memory.episodic.append(
+            _self_state_event(
+                tick=2,
+                room="ADMIN",
+                pending_task_id="swipe_card",
+                observation_id="p-1:2:0",
+            )
+        )
+        memory.episodic.append(
+            _self_state_event(
+                tick=2,
+                room="MEDBAY",
+                pending_task_id="submit_scan",
+                observation_id="p-1:2:1",
+            )
+        )
+
+        view = render_for_prompt(memory, env=_TRAIL_ON)
+
+        assert (
+            "[obs p-1:2:0] [tick 2] You completed wiring (you were in ADMIN)." in view
+        )
+        assert (
+            "[obs p-1:2:1] [tick 2] You completed swipe_card (you were in MEDBAY)."
+            in view
+        )
+
     def test_the_completed_task_room_agrees_with_the_trail_for_its_tick(self) -> None:
         fixture, _ = _load_fixture("self_location_trail")
         memory = _build_memory_from_fixture(fixture)
@@ -2081,12 +2124,17 @@ def _assert_completions_agree_with_the_trail(view: str) -> None:
         )
 
 
+# One ``self_state`` row per tick is the production invariant: perception writes
+# exactly one per ingested packet (``agents.perception.ingest_packet``), which is
+# what lets the trail's per-tick record and the completion line's own row be the
+# same answer.
 _TRAIL_TICKS = st.lists(
     st.tuples(
         st.integers(min_value=0, max_value=40),
         st.sampled_from(["REACTOR", "ADMIN", "MEDBAY", "EAST_HALL"]),
     ),
     max_size=24,
+    unique_by=lambda row: row[0],
 )
 
 
