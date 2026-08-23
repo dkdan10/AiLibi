@@ -1115,8 +1115,10 @@ def _self_placement_by_tick(episodic: MemoryStore) -> dict[int, _SelfPlacement]:
     """The one answer to "where was I at tick N", read off the own self channel.
 
     Ticks with no readable room are ABSENT rather than guessed, so every consumer
-    can distinguish "recorded elsewhere" from "no record at all". The last row for
-    a tick wins, matching the render's read-the-latest convention everywhere else.
+    can distinguish "recorded elsewhere" from "no record at all". A tick holds ONE
+    placement: two rows that disagree about it raise, because the route has no
+    sub-tick step to render them as, and a completion line placed by its own row
+    would then contradict the route the same prompt shows.
     An ABSENT ``in_vent`` key means "not in a vent" (pre-11.1 and engine-only rows
     carry none); a key that IS present must hold a bool, and anything else --
     including an explicit null -- is a boundary-contract violation and raises
@@ -1138,7 +1140,14 @@ def _self_placement_by_tick(episodic: MemoryStore) -> dict[int, _SelfPlacement]:
                     f"self_state event has non-bool in_vent: {event.payload!r}"
                 )
             in_vent = raw_in_vent
-        placements[event.tick] = _SelfPlacement(room=room, in_vent=in_vent)
+        placement = _SelfPlacement(room=room, in_vent=in_vent)
+        recorded = placements.get(event.tick)
+        if recorded is not None and recorded != placement:
+            raise ValueError(
+                f"self_state events disagree about tick {event.tick}: "
+                f"{recorded} then {placement}"
+            )
+        placements[event.tick] = placement
     return placements
 
 

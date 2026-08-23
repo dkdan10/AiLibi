@@ -1229,6 +1229,10 @@ _TRAIL_TRUNCATED_NOTICE: Final[str] = "Earlier parts of your route are not liste
 _COMPLETED_ROW: Final[re.Pattern[str]] = re.compile(
     r"\[tick (?P<tick>\d+)\] You completed \S+ \(you were in (?P<room>[^)]+)\)\."
 )
+# Just the room a completion row names -- the one part the lever moves on purpose.
+_COMPLETED_ROOM: Final[re.Pattern[str]] = re.compile(
+    r"(?<= \(you were in )[^)]+(?=\)\.)"
+)
 
 
 def _rendered_trail_steps(view: str) -> list[tuple[int, int]]:
@@ -1263,19 +1267,22 @@ def _rendered_trail_ticks(view: str) -> frozenset[int]:
 
 
 def _observation_rows(view: str) -> frozenset[str]:
-    """The rendered observation bullets, excluding the trail and the completions.
+    """The rendered observation bullets, keyed so ON and OFF rows are comparable.
 
-    Completion rows are excluded because the lever deliberately re-rooms them;
-    everything else must survive the trail untouched.
+    Completion rows sit at ``_SALIENCE_COMPLETED_TASK`` (30), ABOVE
+    ``_SALIENCE_REPORTED_TESTIMONY`` (25), so they are inside the protected band
+    the displacement census measures and must be counted. The lever deliberately
+    re-rooms them, so the room is masked out and the rest of the row -- its
+    citation id, tick and task -- is the key: a row that survives compares equal,
+    and only a row the budget actually dropped counts as displaced (Codex review).
     """
 
     return frozenset(
-        line
+        _COMPLETED_ROOM.sub("<placed>", line)
         for line in view.splitlines()
         if line.startswith("- ")
         and not line.startswith(_TRAIL_ROUTE_PREFIX)
         and line != f"- {_TRAIL_TRUNCATED_NOTICE}"
-        and "You completed " not in line
     )
 
 
@@ -1291,6 +1298,7 @@ class _SelfPlacementCensus(NamedTuple):
     added_tokens: int
     observations_lost: int
     observations_lost_testimony: int
+    observations_lost_completed: int
     completion_rows: int
     completion_agrees: int
 
@@ -1317,7 +1325,8 @@ def _self_placement_census(sample_dir: Path) -> _SelfPlacementCensus:
     )
     claims = in_record = rendered_on = rendered_off = 0
     renders = trail_steps = added_tokens = observations_lost = 0
-    observations_lost_testimony = completion_rows = completion_agrees = 0
+    observations_lost_testimony = observations_lost_completed = 0
+    completion_rows = completion_agrees = 0
 
     for seed in seeds_on_disk(sample_dir):
         roles = roles_by_game[seed]
@@ -1378,6 +1387,9 @@ def _self_placement_census(sample_dir: Path) -> _SelfPlacementCensus:
                         observations_lost_testimony += sum(
                             1 for row in dropped if "[meeting] CLAIM by " in row
                         )
+                        observations_lost_completed += sum(
+                            1 for row in dropped if "You completed " in row
+                        )
                         for match in _COMPLETED_ROW.finditer(on):
                             completion_rows += 1
                             engine_tick = int(match.group("tick")) - AGENT_CLOCK_OFFSET
@@ -1410,6 +1422,7 @@ def _self_placement_census(sample_dir: Path) -> _SelfPlacementCensus:
         added_tokens=added_tokens,
         observations_lost=observations_lost,
         observations_lost_testimony=observations_lost_testimony,
+        observations_lost_completed=observations_lost_completed,
         completion_rows=completion_rows,
         completion_agrees=completion_agrees,
     )
@@ -1492,16 +1505,18 @@ def test_the_trail_s_budget_cost_is_measured_not_assumed(
     placement: Mapping[Path, _SelfPlacementCensus],
 ) -> None:
     # The block occupies budget the observations block used to have, and the size
-    # of that is measured here rather than assumed away. This is the FALSIFIED
-    # half of the contract's budget item: full coverage and zero displacement
-    # cannot both hold, because the 9p2i meetings already saturate
-    # DEFAULT_TOKEN_BUDGET, so the route is paid for out of the elastic block. On
-    # the 4p1i sets the budget never binds and the trail costs nothing; on the
-    # 9p2i sets it costs a mean 1.1 and 1.0 rendered rows per render, of which
-    # roughly half are the oldest reported-testimony rows and the rest the oldest
-    # sightings. Chaining the route onto one line is what halved that: the same
-    # 6715 steps rendered as one bullet each displaced 1858 rows (863 testimony)
-    # on samples/9p2i and 4791 (2205) on the corpus. Nothing here is rounded.
+    # of that is measured here rather than assumed away. This is the FALSIFIED half
+    # of the contract's budget item: full coverage and zero displacement cannot
+    # both hold, because the 9p2i meetings already saturate DEFAULT_TOKEN_BUDGET,
+    # so the route is paid for out of the elastic block. The count spans the whole
+    # protected band -- reported testimony (salience 25) AND completed-task rows
+    # (30) -- with the room masked out of a completion row so only a row the budget
+    # really dropped counts. On the 4p1i sets the budget never binds and the trail
+    # costs nothing; on the 9p2i sets it costs a mean 1.1 and 1.0 rendered rows per
+    # render. Chaining the route onto one line is what cut that by 43%: the same
+    # 6715 steps rendered as one bullet each displaced 1875 rows (863 testimony,
+    # 17 completions) on samples/9p2i and 4837 (2205, 46) on the corpus, recounted
+    # over the same bytes. Nothing here is rounded.
     samples = placement[_SAMPLES_9P2I]
     corpus = placement[_CORPUS_9P2I]
     assert (samples.renders, samples.trail_steps, samples.added_tokens) == (
@@ -1509,14 +1524,16 @@ def test_the_trail_s_budget_cost_is_measured_not_assumed(
         6715,
         20734,
     )
-    assert (samples.observations_lost, samples.observations_lost_testimony) == (
-        1060,
-        494,
-    )
-    assert (corpus.observations_lost, corpus.observations_lost_testimony) == (
-        2721,
-        1263,
-    )
+    assert (
+        samples.observations_lost,
+        samples.observations_lost_testimony,
+        samples.observations_lost_completed,
+    ) == (1071, 494, 11)
+    assert (
+        corpus.observations_lost,
+        corpus.observations_lost_testimony,
+        corpus.observations_lost_completed,
+    ) == (2748, 1263, 27)
     for sample_dir in (_SAMPLES_4P1I, _CORPUS_4P1I):
         assert placement[sample_dir].observations_lost == 0
 

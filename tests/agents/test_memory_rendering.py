@@ -2040,9 +2040,9 @@ class TestSelfLocationTrailLever:
         self,
     ) -> None:
         # Same-tick rows are not a production shape (perception writes one
-        # self_state per packet), but if one ever reaches the store the line must
-        # still name the room of the row whose observation_id it carries -- never a
-        # sibling row's.
+        # self_state per packet). Where they agree about the room, each completion
+        # still names the room of the row whose observation_id it carries, and the
+        # route says the same thing.
         memory = AgentMemory()
         memory.episodic.append(
             _self_state_event(
@@ -2063,7 +2063,7 @@ class TestSelfLocationTrailLever:
         memory.episodic.append(
             _self_state_event(
                 tick=2,
-                room="MEDBAY",
+                room="ADMIN",
                 pending_task_id="submit_scan",
                 observation_id="p-1:2:1",
             )
@@ -2075,9 +2075,39 @@ class TestSelfLocationTrailLever:
             "[obs p-1:2:0] [tick 2] You completed wiring (you were in ADMIN)." in view
         )
         assert (
-            "[obs p-1:2:1] [tick 2] You completed swipe_card (you were in MEDBAY)."
+            "[obs p-1:2:1] [tick 2] You completed swipe_card (you were in ADMIN)."
             in view
         )
+        _assert_completions_agree_with_the_trail(view)
+
+    def test_same_tick_rows_that_disagree_raise_instead_of_splitting_the_evidence(
+        self,
+    ) -> None:
+        # The route has no sub-tick step, so two rows that put the agent in two
+        # rooms at one tick cannot both be rendered: collapsing them would let a
+        # completion placed by its own row name ADMIN while the route says MEDBAY,
+        # in the same prompt (AGENTS.md "no silent fallbacks").
+        memory = AgentMemory()
+        memory.episodic.append(
+            _self_state_event(
+                tick=2,
+                room="ADMIN",
+                pending_task_id="swipe_card",
+                observation_id="p-1:2:0",
+            )
+        )
+        memory.episodic.append(
+            _self_state_event(
+                tick=2,
+                room="MEDBAY",
+                pending_task_id="submit_scan",
+                observation_id="p-1:2:1",
+            )
+        )
+
+        for env in (_TRAIL_ON, None):
+            with pytest.raises(ValueError, match="disagree about tick 2"):
+                render_for_prompt(memory, env=env)
 
     def test_the_completed_task_room_agrees_with_the_trail_for_its_tick(self) -> None:
         fixture, _ = _load_fixture("self_location_trail")
