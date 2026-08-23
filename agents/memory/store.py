@@ -355,7 +355,7 @@ def render_for_prompt(
     ``[obs ...]`` prefix -- a span is coalesced from several rows rather than being
     one citable observation -- so it cannot teach a model to cite an id the ballot
     validator would null. The same lever takes the completed-task line's room from
-    the row that dates it, instead of from the previous self-state iteration.
+    the row that dates it, so that line carries one clock.
 
     Raises :class:`ValueError` if ``token_budget`` is non-positive or
     if no ``self_state`` event has been recorded. A render call before
@@ -1107,10 +1107,10 @@ def _self_placement_by_tick(episodic: MemoryStore) -> dict[int, _SelfPlacement]:
     Ticks with no readable room are ABSENT rather than guessed, so every consumer
     can distinguish "recorded elsewhere" from "no record at all". The last row for
     a tick wins, matching the render's read-the-latest convention everywhere else.
-    An absent ``in_vent`` means "not in a vent" (pre-11.1 and engine-only rows
-    carry no such key); a present-but-non-bool one is a boundary-contract
-    violation and raises, mirroring
-    :meth:`agents.tactical.impostor_policy.ImpostorPolicy._in_vent_from_self_state`.
+    An ABSENT ``in_vent`` key means "not in a vent" (pre-11.1 and engine-only rows
+    carry none); a key that IS present must hold a bool, and anything else --
+    including an explicit null -- is a boundary-contract violation and raises
+    rather than quietly rendering an ordinary room stay.
     """
 
     placements: dict[int, _SelfPlacement] = {}
@@ -1120,15 +1120,15 @@ def _self_placement_by_tick(episodic: MemoryStore) -> dict[int, _SelfPlacement]:
         room = event.payload.get("room")
         if not isinstance(room, str):
             continue
-        raw_in_vent = event.payload.get("in_vent")
-        if raw_in_vent is not None and not isinstance(raw_in_vent, bool):
-            raise ValueError(
-                f"self_state event has non-bool in_vent: {event.payload!r}"
-            )
-        placements[event.tick] = _SelfPlacement(
-            room=room,
-            in_vent=bool(raw_in_vent),
-        )
+        in_vent = False
+        if "in_vent" in event.payload:
+            raw_in_vent = event.payload["in_vent"]
+            if not isinstance(raw_in_vent, bool):
+                raise ValueError(
+                    f"self_state event has non-bool in_vent: {event.payload!r}"
+                )
+            in_vent = raw_in_vent
+        placements[event.tick] = _SelfPlacement(room=room, in_vent=in_vent)
     return placements
 
 

@@ -1954,18 +1954,25 @@ class TestSelfLocationTrailLever:
         )
         assert "a vent in ADMIN" in render_for_prompt(memory, env=_TRAIL_ON)
 
-        broken = AgentMemory()
-        broken.episodic.append(
-            EpisodicEvent(
-                tick=5,
-                type="self_state",
-                payload={"room": "ADMIN", "role": "CREWMATE", "in_vent": "yes"},
-                provenance="observed",
+        # An absent key is the pre-11.1 shape and means "not in a vent"; a
+        # present one must be a bool, explicit null included.
+        for malformed in ("yes", None, 1):
+            broken = AgentMemory()
+            broken.episodic.append(
+                EpisodicEvent(
+                    tick=5,
+                    type="self_state",
+                    payload={
+                        "room": "ADMIN",
+                        "role": "CREWMATE",
+                        "in_vent": malformed,
+                    },
+                    provenance="observed",
+                )
             )
-        )
 
-        with pytest.raises(ValueError, match="non-bool in_vent"):
-            render_for_prompt(broken, env=_TRAIL_ON)
+            with pytest.raises(ValueError, match="non-bool in_vent"):
+                render_for_prompt(broken, env=_TRAIL_ON)
 
     def test_the_completed_task_line_is_dated_and_placed_by_one_row(self) -> None:
         memory = AgentMemory()
