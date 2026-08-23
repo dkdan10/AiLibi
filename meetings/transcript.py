@@ -270,10 +270,11 @@ the caller supplied a ``sighting_records`` mapping:
   the two episodic channels are disjoint, so a witness who saw a DEPARTURE
   holds no ``SightingRecord`` at the destination.
 * **two sources** -- a STRONG ``alibi_vs_sighting`` needs
-  :data:`meetings.constants.GROUNDED_PROSECUTION_MIN_SOURCES` distinct grounded
-  SPEAKERS contradicting one subject over one claim, or one grounded speaker
-  plus a physical anchor (a ``vent_sighting`` or ``alibi_vs_physical`` flag
-  naming that subject in this meeting).
+  :data:`meetings.constants.GROUNDED_PROSECUTION_MIN_SOURCES` distinct SPEAKERS
+  behind the case: grounded speakers contradicting one subject over one claim,
+  plus the speakers behind any ``vent_sighting`` / ``alibi_vs_physical`` flag
+  naming that subject in this meeting. One narrator counts once however many
+  channels they speak through.
 * **single-tick endpoint** -- the degenerate ``from_tick == to_tick``
   self-placement is no longer adjudicated as its own interior, so it keeps the
   narrow-window / endpoint band.
@@ -1736,11 +1737,12 @@ def detect_contradictions(
     and ``audits/workflows/``, legacy unit tests) keeps the pre-lever rules by
     construction rather than reading every spoken sighting as fabricated. ON,
     an ``alibi_vs_sighting`` whose sighting side the speaker's own records do
-    not support bands WEAK, one that no
+    not support bands WEAK, one that fewer than
     :data:`meetings.constants.GROUNDED_PROSECUTION_MIN_SOURCES` distinct
-    grounded speakers (or one grounded speaker plus a ``vent_sighting`` /
-    ``alibi_vs_physical`` anchor on the same subject) support bands WEAK, and a
-    degenerate single-tick self-placement loses the 18.9 interior exemption.
+    speakers stand behind -- grounded contradicting speakers plus the speakers
+    behind any ``vent_sighting`` / ``alibi_vs_physical`` flag on the same
+    subject -- bands WEAK, and a degenerate single-tick self-placement loses the
+    18.9 interior exemption.
     Only descriptions move: ids, kinds, event pairs and subjects are stable, so
     every ballot citation and the detector's sort survive a demotion.
 
@@ -3920,18 +3922,22 @@ def _apply_grounded_prosecution(
     Rules (a) and (b) of :func:`grounded_prosecution_enabled`, applied as a
     post-pass over the finished flag set so the physical-anchor set is complete.
     A flag survives STRONG only when its own sighting side is GROUNDED in the
-    speaker's own records AND either
+    speaker's own records AND
     :data:`~meetings.constants.GROUNDED_PROSECUTION_MIN_SOURCES` distinct
-    grounded speakers contradict that subject over that claim, or a
-    ``vent_sighting`` / ``alibi_vs_physical`` flag already names the subject in
-    this meeting.
+    CARRIERS stand behind the case against that subject.
 
-    Independence is by SPEAKER ID: one speaker holding two matching records, or
-    speaking two sightings in one turn, is ONE source, and neither the subject
-    nor the alibi's own speaker is ever a source. A speaker whose own flag is
-    already banded weak (an endpoint-tick or narrow-window sighting) still
-    COUNTS as a source -- the earlier bands price that one account's fuzz, not
-    the speaker's existence -- but is never re-banded here.
+    A carrier is a SPEAKER ID, counted once however many times they speak: a
+    grounded speaker contradicting that subject over that claim, or the speaker
+    behind a ``vent_sighting`` / ``alibi_vs_physical`` flag naming the subject
+    in this meeting (the two channels grounded by construction). Neither the
+    subject nor the alibi's own speaker is ever a carrier, and one narrator who
+    supplies both a direct sighting and a co-presence placement is still ONE --
+    the anchor substitutes for a second WITNESS, never for a second account by
+    the same one.
+
+    A speaker whose own flag is already banded weak (an endpoint-tick or
+    narrow-window sighting) still carries -- the earlier bands price that one
+    account's fuzz, not the speaker's existence -- but is never re-banded here.
 
     Only descriptions move: every flag keeps its id, kind, event pair and
     subjects, so citations and the detector's sort are unaffected. Flags of
@@ -3945,12 +3951,21 @@ def _apply_grounded_prosecution(
         )
         for sighting in sightings
     }
-    anchored = {
-        subject
-        for flag in flags
-        if flag.kind in ("vent_sighting", "alibi_vs_physical")
-        for subject in flag.subjects
-    }
+    # Per subject, the SPEAKERS behind the grounded-by-construction flags naming
+    # them. Keeping the identity (not just the subject) is what stops one
+    # narrator supplying both halves of the two-carrier bar -- a direct sighting
+    # plus their own co-presence placement of the same subject.
+    anchors: dict[PlayerId, set[PlayerId]] = {}
+    for flag in flags:
+        if flag.kind not in ("vent_sighting", "alibi_vs_physical"):
+            continue
+        speakers = {
+            speaker
+            for event_id in (flag.event_a_id, flag.event_b_id)
+            if (speaker := event_speakers.get(event_id)) is not None
+        }
+        for subject in flag.subjects:
+            anchors.setdefault(subject, set()).update(speakers - {subject})
 
     # Pass 1: resolve each flag of this kind to (claim, sighting) and collect,
     # per (subject, claim), the DISTINCT grounded speakers prosecuting it.
@@ -3988,13 +4003,11 @@ def _apply_grounded_prosecution(
             banded.append(flag)
             continue
         key, sighting_id = candidate
+        carriers = sources[key] | anchors.get(key[0], set())
         reasons: list[str] = []
         if not grounded[sighting_id]:
             reasons.append(WEAK_REASON_UNGROUNDED_SIGHTING)
-        elif (
-            len(sources[key]) < GROUNDED_PROSECUTION_MIN_SOURCES
-            and key[0] not in anchored
-        ):
+        elif len(carriers) < GROUNDED_PROSECUTION_MIN_SOURCES:
             reasons.append(WEAK_REASON_LONE_GROUNDED_SOURCE)
         banded.append(
             flag if not reasons else _demote_prosecution(flag, reasons=tuple(reasons))

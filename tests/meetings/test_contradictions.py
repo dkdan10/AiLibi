@@ -2873,31 +2873,49 @@ class TestGroundedProsecutionRuleTwoSources:
         interior = next(f for f in alone if "tick 6" in f.description)
         assert WEAK_REASON_LONE_GROUNDED_SOURCE in interior.description
 
-    def test_a_vent_anchor_carries_a_lone_grounded_source(self) -> None:
-        tx = MeetingTranscript(
-            turns=(
-                _turn(
-                    turn_index=0,
-                    speaker="p-3",
-                    claims=(
-                        _alibi(subject="p-3", from_tick=4, to_tick=8, room="MEDBAY"),
-                    ),
-                ),
-                _turn(
-                    turn_index=1,
-                    speaker="p-9",
-                    turn_kind="reply",
-                    observations=(
-                        _saw(tick=6, subject="p-3", room="LABS"),
-                        # The vent sits INSIDE p-3's own claimed room, so the
-                        # 18.9 vent-placement variant mints nothing and this
-                        # fixture isolates the vent_sighting anchor.
-                        _saw_vent(tick=6, subject="p-3", room="MEDBAY"),
-                    ),
+    def _vent_anchor_transcript(self, *, venter_witness: str) -> MeetingTranscript:
+        # p-3 self-states an alibi; p-9 sights p-3 elsewhere inside it; and
+        # ``venter_witness`` speaks a vent of p-3 INSIDE p-3's own claimed room
+        # (so the 18.9 vent-placement variant mints nothing and this fixture
+        # isolates the vent_sighting anchor).
+        vent_turn = _turn(
+            turn_index=2,
+            speaker=venter_witness,
+            turn_kind="opt_in",
+            observations=(_saw_vent(tick=6, subject="p-3", room="MEDBAY"),),
+        )
+        sighting_turn = _turn(
+            turn_index=1,
+            speaker="p-9",
+            turn_kind="reply",
+            observations=(_saw(tick=6, subject="p-3", room="LABS"),),
+        )
+        if venter_witness == "p-9":
+            # One narrator, both channels: fold the vent onto p-9's own turn.
+            sighting_turn = _turn(
+                turn_index=1,
+                speaker="p-9",
+                turn_kind="reply",
+                observations=(
+                    _saw(tick=6, subject="p-3", room="LABS"),
+                    _saw_vent(tick=6, subject="p-3", room="MEDBAY"),
                 ),
             )
-        )
-        vents = {"p-9": (_vent_record(tick=6, subject="p-3", room="MEDBAY"),)}
+        turns = [
+            _turn(
+                turn_index=0,
+                speaker="p-3",
+                claims=(_alibi(subject="p-3", from_tick=4, to_tick=8, room="MEDBAY"),),
+            ),
+            sighting_turn,
+        ]
+        if venter_witness != "p-9":
+            turns.append(vent_turn)
+        return MeetingTranscript(turns=tuple(turns))
+
+    def test_a_vent_anchor_from_another_speaker_carries_a_lone_source(self) -> None:
+        tx = self._vent_anchor_transcript(venter_witness="p-5")
+        vents = {"p-5": (_vent_record(tick=6, subject="p-3", room="MEDBAY"),)}
         flags = detect_contradictions(
             tx,
             roster=_ROSTER_4,
@@ -2919,10 +2937,36 @@ class TestGroundedProsecutionRuleTwoSources:
         assert [f.kind for f in unanchored] == ["alibi_vs_sighting"]
         assert WEAK_REASON_LONE_GROUNDED_SOURCE in unanchored[0].description
 
-    def test_a_physical_anchor_carries_a_lone_grounded_source(self) -> None:
+    def test_one_narrator_cannot_anchor_their_own_sighting(self) -> None:
+        # The anchor substitutes for a second WITNESS, never for a second
+        # channel spoken by the same one: p-9 supplying both the sighting and
+        # the vent is still one carrier, so the flag stays weak. Byte-for-byte
+        # the same evidence as the passing case above, minus the second speaker.
+        tx = self._vent_anchor_transcript(venter_witness="p-9")
+        vents = {"p-9": (_vent_record(tick=6, subject="p-3", room="MEDBAY"),)}
+        flags = detect_contradictions(
+            tx,
+            roster=_ROSTER_4,
+            vent_witness_records=vents,
+            sighting_records=_grounding_records("p-9"),
+            env=_GROUNDED_ON,
+        )
+        kinds = {flag.kind: flag for flag in flags}
+        assert set(kinds) == {"alibi_vs_sighting", "vent_sighting"}
+        assert is_weak_contradiction(kinds["alibi_vs_sighting"]) is True
+        assert (
+            WEAK_REASON_LONE_GROUNDED_SOURCE in kinds["alibi_vs_sighting"].description
+        )
+        # The vent flag itself is untouched -- a different channel, grounded by
+        # construction.
+        assert is_weak_contradiction(kinds["vent_sighting"]) is False
+
+    def test_a_physical_anchor_from_another_speaker_carries_a_lone_source(
+        self,
+    ) -> None:
         # p-5's CO-PRESENCE places p-3 in LABS inside p-3's own window: an
         # alibi_vs_physical flag on p-3, the second grounded-by-construction
-        # channel. p-9 stays the only sighting speaker.
+        # channel, spoken by someone other than the sighting witness p-9.
         tx = MeetingTranscript(
             turns=(
                 _turn(
@@ -2957,6 +3001,41 @@ class TestGroundedProsecutionRuleTwoSources:
         kinds = {flag.kind: flag for flag in flags}
         assert set(kinds) == {"alibi_vs_sighting", "alibi_vs_physical"}
         assert is_weak_contradiction(kinds["alibi_vs_sighting"]) is False
+
+    def test_one_narrator_cannot_anchor_with_their_own_co_presence(self) -> None:
+        # The same shape with ONE narrator: p-9 speaks both the direct sighting
+        # of p-3 and a co-presence placing p-3 in LABS. The co-presence mints a
+        # lone-voice alibi_vs_physical, but its speaker is the sighting witness,
+        # so the case still rests on one person and the sighting flag stays weak.
+        tx = MeetingTranscript(
+            turns=(
+                _turn(
+                    turn_index=0,
+                    speaker="p-3",
+                    claims=(
+                        _alibi(subject="p-3", from_tick=4, to_tick=8, room="MEDBAY"),
+                    ),
+                ),
+                _turn(
+                    turn_index=1,
+                    speaker="p-9",
+                    turn_kind="reply",
+                    observations=(
+                        _saw(tick=6, subject="p-3", room="LABS"),
+                        _saw(tick=6, subject="p-7", room="LABS", co_present=("p-3",)),
+                    ),
+                ),
+            )
+        )
+        flags = detect_contradictions(
+            tx,
+            roster=_ROSTER_4,
+            sighting_records=_grounding_records("p-9"),
+            env=_GROUNDED_ON,
+        )
+        sighting = next(f for f in flags if f.kind == "alibi_vs_sighting")
+        assert "alibi_vs_physical" in {f.kind for f in flags}
+        assert WEAK_REASON_LONE_GROUNDED_SOURCE in sighting.description
 
 
 class TestGroundedProsecutionRuleSingleTickEndpoint:
@@ -3822,7 +3901,7 @@ class TestGroundedProsecutionCommittedCensus:
         self, census: dict[str, _GroundedSetCensus]
     ) -> None:
         # Ground EVERY spoken sighting -- the most generous reading the lever can
-        # be given -- and 234 STRONG flags still come out as 23: the rest fall to
+        # be given -- and 234 STRONG flags still come out as 22: the rest fall to
         # rule (b) (one speaker is the whole prosecution) or rule (c) (the
         # one-tick self-placement is an edge again).
         strong = sum(
@@ -3833,9 +3912,9 @@ class TestGroundedProsecutionCommittedCensus:
             cell.bands_grounded.get("alibi_vs_sighting:weak", 0)
             for cell in census.values()
         )
-        assert (strong, weak) == (23, 290)
+        assert (strong, weak) == (22, 291)
         assert census["samples/9p2i"].bands_grounded["alibi_vs_sighting:strong"] == 2
-        assert census["ml_corpus/9p2i"].bands_grounded["alibi_vs_sighting:strong"] == 21
+        assert census["ml_corpus/9p2i"].bands_grounded["alibi_vs_sighting:strong"] == 20
         for set_name in ("samples/4p1i", "ml_corpus/4p1i"):
             assert (
                 census[set_name].bands_grounded.get("alibi_vs_sighting:strong", 0) == 0
