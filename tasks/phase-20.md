@@ -3133,7 +3133,7 @@ clock.
 ### Task 20.20 — The as-built architecture picture and the contract → prompt → PR exhibit
 **Branch:** `phase-20-architecture-exhibit`
 **Depends on:** 20.13 — the front door's results section lands first, so this task edits a README whose sections already sit in their rewritten shape and only adds the picture and the workflow exhibit on top of it, rather than racing the rewrite for the same paragraphs; also after 20.17 (the artifacts registry row both tasks touch is ordered behind the hermeticity fix)
-**Section refs:** audits/review-2026-08-19/C/collated-portfolio.md §(B) items B4 and B5 [B4 raised by P1 G, P2 G, P4 G, X2 G, X1 N; B5 by X1 G, X2 fold, P3 N, P1 M-3 fold]; audits/review-2026-08-19/C/p1-backend-hiring-manager.md §2 "12:00–14:00 — docs/architecture.md" [VERIFIED 146 lines — "This is the document I wanted first"] + §7 GOOD 4 (one click from the top) + §7 GOOD 10 (file size will be asked about); audits/review-2026-08-19/C/x1-front-door-reproduction.md §3.4 (architecture.md "is not linked from the README's first screen — only in 'What this is' and the footer"; 1,089 words per §6), §4 "Other builders" ("the workflow artifacts (task contract → prompt) are linked once and never shown"), §5 GOOD 7 (a 15-line contract excerpt + the matching prompt header + the PR it produced, branch `claude/…`, gate green) + §5 NICE 14; audits/review-2026-08-19/C/x2-narrative-and-positioning.md §4 gap row "Architecture diagram (image) — ASCII only; `DESIGN.md` §1.1 diagram is the *target* arch" + §6 proposal 7 (an as-built SVG of the layering plus the firewall arrow); audits/review-2026-08-19/D/FINAL-synthesis.md §4 wave 1 row 1.14 (C/B4 + C/B5, size S, measurement "three links resolve; a reader verifies agent authorship in git in 30 s"); audits/review-2026-08-19/D/synth-ambition.md §FM-6 (the contract→prompt→PR triple shown, not linked); README.md:41 (`## What this is`), :45 (the architecture link, mid-paragraph), :53 (`## How this is being built`), :63-66 (the two workflow artifacts, linked and never shown), :248 (the footer link); docs/architecture.md:11-21 (the ASCII layering block), :51-56 (the `meetings/` paragraph), :89-91 (the generated `frontend/src/types/api.ts`), :104-118 ("Enforced boundaries" — the four contracts and their backing tests), 146 lines at HEAD; .importlinter:10-16 (`[importlinter:agents_must_not_import_engine]`, `name = Agents must not import engine`); DESIGN.md:7-12 (the Task 19.1 demotion banner), :49 (§1.1 Component diagram — the target architecture); `wc -l` at HEAD: meetings/manager.py 3,989, orchestrator/game.py 3,193; audits/audit-phase-19-planning.md:170-174 (the monolith decompositions on the recorded backlog); docs/media/README.md:1-10 (the two-row asset table); docs/artifacts.md:96 (the `docs/media/` registry row promises "1.7 MB / 3 files"); scripts/verify_ml_evidence.py:2110 + :2163 + :2171 (`_STATED_FILES`) + :2174-2202 (`inventory_problems`) and tests/scripts/test_verify_ml_evidence.py:1400-1418 (the row-count gate a fourth file under `docs/media/` turns red); agent_prompts/task-19-2-in-code-truth.md:1-16 (the generated prompt header shape) against tasks/phase-19.md:314-361 (its contract) and the merged PR https://github.com/dkdan10/AiLibi/pull/328
+**Section refs:** audits/review-2026-08-19/C/collated-portfolio.md §(B) items B4 and B5 [B4 raised by P1 G, P2 G, P4 G, X2 G, X1 N; B5 by X1 G, X2 fold, P3 N, P1 M-3 fold]; audits/review-2026-08-19/C/p1-backend-hiring-manager.md §2 "12:00–14:00 — docs/architecture.md" [VERIFIED 146 lines — "This is the document I wanted first"] + §7 GOOD 4 (one click from the top) + §7 GOOD 10 (file size will be asked about); audits/review-2026-08-19/C/x1-front-door-reproduction.md §3.4 (architecture.md "is not linked from the README's first screen — only in 'What this is' and the footer"; 1,089 words per §6), §4 "Other builders" ("the workflow artifacts (task contract → prompt) are linked once and never shown"), §5 GOOD 7 (a 15-line contract excerpt + the matching prompt header + the PR it produced, branch `claude/…`, gate green) + §5 NICE 14; audits/review-2026-08-19/C/x2-narrative-and-positioning.md §4 gap row "Architecture diagram (image) — ASCII only; `DESIGN.md` §1.1 diagram is the *target* arch" + §6 proposal 7 (an as-built SVG of the layering plus the firewall arrow); audits/review-2026-08-19/D/FINAL-synthesis.md §4 wave 1 row 1.14 (C/B4 + C/B5, size S, measurement "three links resolve; a reader verifies agent authorship in git in 30 s"); audits/review-2026-08-19/D/synth-ambition.md §FM-6 (the contract→prompt→PR triple shown, not linked); README.md:76 (`## What it is`), :84 (the architecture link, now a one-line pointer), :85 (20.12's reserved `<!-- ANCHOR: … inlines the as-built layering diagram here. -->`), :59 (`## How it was built — who did what`), :73 (the one workflow-artifact line, linked and never shown), :74 (20.12's reserved `<!-- ANCHOR: … shows a contract, its prompt and the merged pull request inline. -->`), :62 (the owner-ratified authorship paragraph), :162 (the footer link); docs/architecture.md:11-21 (the ASCII layering block), :51-56 (the `meetings/` paragraph), :89-91 (the generated `frontend/src/types/api.ts`), :104-118 ("Enforced boundaries" — the four contracts and their backing tests), 146 lines at HEAD; .importlinter:20-26 (`[importlinter:agents_must_not_import_engine]`, `name = Agents must not import engine`); DESIGN.md:7-12 (the Task 19.1 demotion banner), :49 (§1.1 Component diagram — the target architecture); `wc -l` at HEAD: meetings/manager.py 3,989, orchestrator/game.py 3,193; audits/audit-phase-19-planning.md:170-174 (the monolith decompositions on the recorded backlog); docs/media/README.md:1-10 (the two-row asset table); docs/artifacts.md:108 (the `docs/media/` registry row promises "1.7 MB / 3 files"); scripts/verify_ml_evidence.py:2110 + :2163 + :2171 (`_STATED_FILES`) + :2174-2202 (`inventory_problems`) and tests/scripts/test_verify_ml_evidence.py:1402-1420 (the row-count gate a fourth file under `docs/media/` turns red); agent_prompts/task-19-2-in-code-truth.md:1-16 (the generated prompt header shape) against tasks/phase-19.md:314-361 (its contract) and the merged PR https://github.com/dkdan10/AiLibi/pull/328
 **Complexity:** Small
 **Record impact:** none
 **Measurement:** `xmllint --noout docs/media/architecture.svg` is silent and `wc -c docs/media/architecture.svg` is under 60,000; `uv run python scripts/check_doc_facts.py` exits 0; `uv run pytest tests/scripts/test_check_doc_facts.py tests/scripts/test_verify_ml_evidence.py -q` green — the new exhibit link-check resolves all three targets (the contract file, the generated prompt file, and the PR number as a `(#N)` commit-subject suffix reachable from HEAD), the SVG parses under `xml.etree.ElementTree`, docs/architecture.md is under its stated word budget, and the `docs/media/` registry row now reads 4 files against a 4-file index.
@@ -3146,17 +3146,19 @@ manager read it at minute 12 and wrote "This is the document I wanted first"
 reviewer called it the best single technical page in the repo. Four of the six
 personas asked for it one click from the top
 (`audits/review-2026-08-19/C/collated-portfolio.md` §(B) B4). Today it is reachable
-only from the middle of a paragraph at `README.md:45` and from the footer at
-`README.md:248` — a placement X1 measured and named in
-`audits/review-2026-08-19/C/x1-front-door-reproduction.md` §3.4. There is also no
+only from a one-line pointer at `README.md:84` and from the footer at
+`README.md:162` — a placement X1 measured and named in
+`audits/review-2026-08-19/C/x1-front-door-reproduction.md` §3.4 (X1 read the
+pre-20.12 README, where those two routes sat at :45 and :248). There is also no
 picture of the system anywhere a reader lands: the only component diagram in the
 repo, `DESIGN.md:49` §1.1, draws the *target* architecture of a demoted historical
 record (`DESIGN.md:7-12` carries the Task 19.1 banner), so the one diagram a reader
 can find is the one that is not the system.
 
-The workflow has the same shape of defect: asserted, never shown. `README.md:63-66`
-offers "Two representative artifacts to skim" — a link to Task 3.19's contract and a
-link to its generated prompt — and that is the whole exhibit. X1 recorded the
+The workflow has the same shape of defect: asserted, never shown. `README.md:73`
+offers "One contract and the prompt generated from it" — a link to Task 3.19's contract
+and a link to its generated prompt — and that is the whole exhibit; 20.12 left this
+task's insertion point as the HTML comment at `README.md:74`. X1 recorded the
 consequence for the audience the project fits best: "the workflow artifacts (task
 contract → prompt) are linked once and never shown; no diagram, no excerpt, no 'here
 is one contract and the PR it produced'" (§4, "Other builders"). The fix both X1 §5
@@ -3171,10 +3173,10 @@ the recommended pick: contract at `tasks/phase-19.md:314-361`, prompt at
 
 The authorship sentence that ships beside the exhibit must be verifiable-shaped, and
 the true mechanics are slightly more interesting than the review assumed. At HEAD,
-`main` holds 877 commits; `git log --author=Claude` returns 310 of them (the 35%
-`audits/review-2026-08-19/D/synth-ambition.md` §FM-6 quotes) and a
-`--grep='Co-Authored-By: Claude'` walk returns 270; `origin` still carries 282
-`claude/…` branch heads. But the squash commit for a merged PR carries the human as author with
+`main` holds 910 commits; `git log --author=Claude` returns 310 of them (the 35%
+`audits/review-2026-08-19/D/synth-ambition.md` §FM-6 quotes, measured on a smaller
+`main`) and a `--grep='Co-Authored-By: Claude'` walk returns 299; `origin` still
+carries 282 `claude/…` branch heads. But the squash commit for a merged PR carries the human as author with
 no trailer — `ac162041` ("task 19.2: … (#328)") is authored by `dkdan10` — while the
 trailer and the model name live on the pre-squash branch commit (`8344d025`,
 `Co-Authored-By: Claude Fable 5`), reachable through the PR. The README sentence
@@ -3194,8 +3196,8 @@ interviewer will ask for; and the asset row in `docs/media/README.md`. Nothing b
 the firewall moves, no recording is touched, and no prompt template is edited — the
 single Phase-20 prompt-set bump is Task 20.31's alone, and this task must not touch
 `agents/strategic/prompts/` or `scripts/prompt_template.md.j2`. One non-obvious
-coupling the blast-radius grep found: `docs/artifacts.md:96` promises `docs/media/`
-holds "1.7 MB / 3 files", and `tests/scripts/test_verify_ml_evidence.py:1400-1418`
+coupling the blast-radius grep found: `docs/artifacts.md:108` promises `docs/media/`
+holds "1.7 MB / 3 files", and `tests/scripts/test_verify_ml_evidence.py:1402-1420`
 compares that promise against the git index, so a fourth committed file under
 `docs/media/` turns the evidence command red until the row is corrected in the same
 PR.
@@ -3217,15 +3219,15 @@ PR.
 
 **Definition of done:**
 - [ ] `docs/media/architecture.svg` exists, is hand-authored text (no embedded raster, no `<foreignObject>`, no external font or image reference, real `<text>` rather than outlined paths), parses under `xml.etree.ElementTree`, and is under 60,000 bytes — the parse and the size ceiling pinned in `tests/scripts/test_check_doc_facts.py`.
-- [ ] The picture shows the as-built layering that `docs/architecture.md:11-21` states in text — engine → observation → agents/meetings ← orchestrator, `llm/` sitting beside the reasoning layer behind the `LLMClient` Protocol, `eval/` and `api/` as privileged readers, `frontend/` running on types generated from the DTOs (`docs/architecture.md:89-91`) — plus the observation firewall drawn as an arrow labelled with its import-linter contract name, `Agents must not import engine` (`.importlinter:10-16`), and a legend line stating that arrows are data flow while imports run the other way.
+- [ ] The picture shows the as-built layering that `docs/architecture.md:11-21` states in text — engine → observation → agents/meetings ← orchestrator, `llm/` sitting beside the reasoning layer behind the `LLMClient` Protocol, `eval/` and `api/` as privileged readers, `frontend/` running on types generated from the DTOs (`docs/architecture.md:89-91`) — plus the observation firewall drawn as an arrow labelled with its import-linter contract name, `Agents must not import engine` (`.importlinter:20-26`), and a legend line stating that arrows are data flow while imports run the other way.
 - [ ] The SVG is legible in both GitHub themes: it declares no opaque light backdrop, uses no pure-black or pure-white stroke/text fills, and carries an internal `@media (prefers-color-scheme: dark)` block; the PR body records the README rendered in both GitHub themes as the evidence for the rendering claim.
 - [ ] `docs/architecture.md` embeds the SVG near the top of its layering section, keeps the ASCII block as the text-only fallback, and stays inside two pages — pinned as a word budget (≤ 1,300 words; 1,089 at HEAD per `audits/review-2026-08-19/C/x1-front-door-reproduction.md` §6) asserted in `tests/scripts/test_check_doc_facts.py`, so growth fails the gate rather than the reviewer.
 - [ ] `docs/architecture.md` carries one sentence naming `meetings/manager.py` and `orchestrator/game.py` as the two large modules, why they are one unit each, and that the decomposition is on the recorded backlog at `audits/audit-phase-19-planning.md:170-174`; the line counts are not written into the prose as numbers.
-- [ ] The README's "what it is" section embeds the same SVG with a one-line caption and a link to `docs/architecture.md`; the mid-paragraph link at `README.md:45` and the footer link at `README.md:248` survive as links but are no longer the only routes to the page.
-- [ ] The README's "how it was built" section shows the triple inline: a ~15-line verbatim excerpt of one real contract, the first lines of the prompt the generator produced from it, and a link to the merged PR that closed it — recommended pick Task 19.2 (`tasks/phase-19.md:314-361`, `agent_prompts/task-19-2-in-code-truth.md`, PR #328); the excerpt and the prompt lines are byte-identical substrings of their sources, asserted in `tests/scripts/test_check_doc_facts.py` so a future contract edit cannot silently falsify the exhibit.
-- [ ] One sentence beside the exhibit tells a reader how to verify agent authorship in git and where each signal lives: `git log --author=Claude` and `git log --grep='Co-Authored-By: Claude'` on `main`, the `Co-Authored-By` trailer naming the model on the PR's own branch commits rather than on the squash commit, and the `claude/…` branch heads on `origin`. Commands and locations only — no commit counts written into prose.
+- [ ] The README's `## What it is` section (`README.md:76`) embeds the same SVG with a one-line caption and a link to `docs/architecture.md`, in place of 20.12's reserved comment at `README.md:85`; the pointer line at `README.md:84` and the footer link at `README.md:162` survive as links but are no longer the only routes to the page.
+- [ ] The README's `## How it was built — who did what` section (`README.md:59`) shows the triple inline, in place of 20.12's reserved comment at `README.md:74`: a ~15-line verbatim excerpt of one real contract, the first lines of the prompt the generator produced from it, and a link to the merged PR that closed it — recommended pick Task 19.2 (`tasks/phase-19.md:314-361`, `agent_prompts/task-19-2-in-code-truth.md`, PR #328); the excerpt and the prompt lines are byte-identical substrings of their sources, asserted in `tests/scripts/test_check_doc_facts.py` so a future contract edit cannot silently falsify the exhibit.
+- [ ] One sentence beside the exhibit tells a reader how to verify agent authorship in git and where each signal lives: `git log --author=Claude` and `git log --grep='Co-Authored-By: Claude'` on `main`, the `Co-Authored-By` trailer naming the model on the PR's own branch commits rather than on the squash commit, and the `claude/…` branch heads on `origin`. It ADDS the commands and the squash-vs-branch mechanic to 20.12's owner-ratified authorship paragraph at `README.md:62`, which already names all three signals; that paragraph sits inside an `<!-- OWNER: … -->` block and its as-of-stamped trailer count stays exactly as merged (`check_volatile_stamps` in `scripts/check_doc_facts.py` gates the stamp's shape). This task's own sentence adds no new commit count to prose.
 - [ ] A link-check in `tests/scripts/test_check_doc_facts.py` fails when any of the three exhibit targets stops resolving: the contract path and the prompt path must exist on disk, and the PR number in the README URL must appear as a `(#N)` suffix on a commit subject reachable from HEAD (skipped, not passed, when git is unavailable — the `in_tree_inventory` precedent).
-- [ ] `docs/media/README.md` lists the SVG in its asset table with what it is, that it is hand-authored rather than captured, and the rule for changing it; `docs/artifacts.md:96`'s `docs/media/` row states the new file count and size, and `uv run python scripts/verify_ml_evidence.py` reports the row OK against the index.
+- [ ] `docs/media/README.md` lists the SVG in its asset table with what it is, that it is hand-authored rather than captured, and the rule for changing it; `docs/artifacts.md:108`'s `docs/media/` row states the new file count and size, and `uv run python scripts/verify_ml_evidence.py` reports the row OK against the index.
 - [ ] docs/architecture.md's firewall paragraph states the plant location and the analysed-package set the import-contracts task recorded (the temp-tree plant; the widened root_packages), so no sentence in it is stale at this merge.
 - [ ] docs/artifacts.md's docs/media/ row count equals the git index after the SVG lands (tests/scripts/test_verify_ml_evidence.py green).
 - [ ] `uv run mypy .` passes.
@@ -3267,9 +3269,15 @@ installed on the CI image. Check the rendering the way a reader will: open the r
 browser with the OS appearance toggled both ways, and open the README preview in both GitHub
 themes.
 
-Step 4 — the exhibit. Pick the excerpt for readability, not for completeness: Task 19.2's
-Complexity line plus its first WHY paragraph, or its Files-in-scope block, both read well at
-~15 lines. Quote bytes, do not retype — the test asserts the excerpt is a substring of
+Step 4 — the exhibit. Pick the excerpt for readability, not for completeness, and test the
+pick against the front door's dialect gate first: Task 19.2's Files-in-scope and
+Files-NOT-in-scope blocks through the `**Definition of done:**` line that follows
+(`tasks/phase-19.md:329-341`) read well at ~13 lines and are clean. Do NOT quote its WHY
+paragraph (`:320-328`) — it uses "graduated" and "graduation", and 20.12's
+`check_dialect_terms` in `scripts/check_doc_facts.py` fires on the FIRST README occurrence
+of a gated term outside a glossary link; it does not exempt code fences, README carries no
+`graduat*` today, and a byte-identical excerpt cannot carry a link, so that pick turns this
+task's own `check_doc_facts.py` measurement red. Quote bytes, do not retype — the test asserts the excerpt is a substring of
 `tasks/phase-19.md`, and a retyped em-dash or a re-wrapped line will fail it. For the prompt
 side, the first ~10 lines of `agent_prompts/task-19-2-in-code-truth.md` are the interesting
 part: the generated title, the AGENTS.md routing line, and the "Exact section reference"
@@ -3277,7 +3285,7 @@ paragraph the generator materializes from the contract. Say in one clause that t
 gated (`scripts/generate_prompts.py --check`) rather than asserting it.
 
 Step 5 — the registry row. Run `git ls-files docs/media | wc -l` and `du -sh docs/media`
-after the SVG is staged and write those into `docs/artifacts.md:96`; then run
+after the SVG is staged and write those into `docs/artifacts.md:108`; then run
 `uv run pytest tests/scripts/test_verify_ml_evidence.py -q` and confirm the in-tree family
 inventory row reads OK. Doing this last, after the SVG is final, avoids re-editing the row
 for a size that changed while you were still drawing.
