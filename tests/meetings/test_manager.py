@@ -34,6 +34,7 @@ import asyncio
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
+from types import MappingProxyType
 
 import pytest
 from pydantic import BaseModel, ValidationError
@@ -7194,12 +7195,18 @@ def _grounded_prosecution_responder() -> Callable[[str, type[BaseModel] | None],
 
 def _prosecution_participants(
     records: Mapping[str, tuple[SightingRecord, ...]],
+    *,
+    impostors: Mapping[str, tuple[PlayerId, ...]] = MappingProxyType({}),
 ) -> tuple[MeetingParticipant, ...]:
     return tuple(
         MeetingParticipant(
             agent_id=agent_id,
-            role="CREWMATE",
-            rendered_memory=f"## Your role: CREWMATE\n{agent_id} memory",
+            role="IMPOSTOR" if agent_id in impostors else "CREWMATE",
+            rendered_memory=(
+                f"## Your role: {'IMPOSTOR' if agent_id in impostors else 'CREWMATE'}\n"
+                f"{agent_id} memory"
+            ),
+            fellow_impostor_ids=impostors.get(agent_id, ()),
             sighting_records=records.get(agent_id, ()),
         )
         for agent_id in ("p-1", "p-2", "p-3", "p-4")
@@ -7208,6 +7215,8 @@ def _prosecution_participants(
 
 def _run_prosecution_meeting(
     records: Mapping[str, tuple[SightingRecord, ...]],
+    *,
+    impostors: Mapping[str, tuple[PlayerId, ...]] = MappingProxyType({}),
 ) -> tuple[MeetingResult, dict[PlayerId, tuple[ContradictionRef, ...]]]:
     """Run the meeting, capturing the flags each MID-CHAIN turn prompt received.
 
@@ -7261,7 +7270,7 @@ def _run_prosecution_meeting(
         manager.run(
             meeting_id="m-1",
             trigger=_default_trigger(),
-            participants=_prosecution_participants(records),
+            participants=_prosecution_participants(records, impostors=impostors),
         )
     )
     return result, seen
@@ -7320,6 +7329,34 @@ class TestGroundedProsecutionWiring:
         (flag,) = result.contradictions
         assert WEAK_CONTRADICTION_MARKER_PREFIX not in flag.description
         assert seen["p-3"] == (flag,)
+
+    def test_an_impostors_record_naming_a_teammate_does_not_ground(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The §4.7 firewall the manager re-applies when it builds the mapping.
+        # The accessor keeps an impostor's rows naming a fellow impostor because
+        # its only consumer corroborates; a PROSECUTING consumer must not, so a
+        # row the §6.6 render hides from p-2 cannot ground a flag against p-1.
+        monkeypatch.setenv(ENV_GROUNDED_PROSECUTION, "1")
+        result, _seen = _run_prosecution_meeting(
+            {
+                "p-2": (self._MATCHING_RECORD,),
+                # Keeps the MAPPING non-empty so the lever is live either way.
+                "p-4": (SightingRecord(subject="p-3", room="LABS", tick=10),),
+            },
+            impostors={"p-2": ("p-1",)},
+        )
+        (flag,) = result.contradictions
+        assert WEAK_REASON_UNGROUNDED_SIGHTING in flag.description
+        # The perturbation: the same record, the same speaker, no teammate link.
+        crew_result, _crew_seen = _run_prosecution_meeting(
+            {
+                "p-2": (self._MATCHING_RECORD,),
+                "p-4": (SightingRecord(subject="p-3", room="LABS", tick=10),),
+            }
+        )
+        (crew_flag,) = crew_result.contradictions
+        assert WEAK_REASON_UNGROUNDED_SIGHTING not in crew_flag.description
 
     def test_the_recorded_flags_equal_a_direct_re_derivation(
         self, monkeypatch: pytest.MonkeyPatch

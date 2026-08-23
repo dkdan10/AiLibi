@@ -2191,16 +2191,27 @@ _UNTOUCHED_BANDS: Final[tuple[str, ...]] = (
 )
 
 
-def _sighting_witness_records(memory: MemoryStore) -> tuple[SightingRecord, ...]:
-    """One speaker's first-hand sightings, the way the live accessor reads them.
+def _sighting_witness_records(
+    memory: MemoryStore, *, speaker: PlayerId, roles: Mapping[PlayerId, str]
+) -> tuple[SightingRecord, ...]:
+    """One speaker's first-hand sightings, as the prosecution channel gets them.
 
     ``MeetingAwareAgent.sighting_records_for_meeting``: first-hand ``saw_player``
     rows minus the INCRIMINATING actions (a witnessed vent or kill names its
     subject an impostor and belongs to its own channel), with the co-presence
-    projection the record carries. No teammate guard — the live accessor applies
-    none here.
+    projection the record carries — then the §4.7 teammate guard
+    :class:`meetings.manager.MeetingManager` applies when it builds the mapping,
+    so this census measures the channel production actually feeds rather than a
+    wider one.
     """
 
+    fellows = (
+        frozenset(
+            pid for pid, role in roles.items() if role == "IMPOSTOR" and pid != speaker
+        )
+        if roles.get(speaker) == "IMPOSTOR"
+        else frozenset()
+    )
     rows: list[tuple[str, str, int]] = []
     co_present: dict[tuple[int, str], set[str]] = {}
     for event in memory.recent(since_tick=0):
@@ -2222,6 +2233,7 @@ def _sighting_witness_records(memory: MemoryStore) -> tuple[SightingRecord, ...]
             co_present=tuple(sorted(co_present.get((tick, room), set()) - {subject})),
         )
         for subject, room, tick in rows
+        if subject not in fellows
     )
 
 
@@ -2360,7 +2372,10 @@ def _grounded_census(sample_dir: Path) -> _GroundedCensus:
                         for pid in living
                     }
                     sights = {
-                        pid: _sighting_witness_records(memories[pid]) for pid in living
+                        pid: _sighting_witness_records(
+                            memories[pid], speaker=pid, roles=roles
+                        )
+                        for pid in living
                     }
                     vents = {pid: rows for pid, rows in vents.items() if rows}
                     moves = {pid: rows for pid, rows in moves.items() if rows}
@@ -2557,7 +2572,28 @@ def test_the_sighting_channel_drops_the_incriminating_rows() -> None:
                 provenance=PROVENANCE_OBSERVED,
             )
         )
-    assert [record.tick for record in _sighting_witness_records(memory)] == [3]
+    crew = {"p-1": "CREWMATE", "p-2": "CREWMATE"}
+    records = _sighting_witness_records(memory, speaker="p-1", roles=crew)
+    assert [record.tick for record in records] == [3]
+
+
+def test_the_sighting_channel_drops_an_impostors_teammate_rows() -> None:
+    # The §4.7 guard the manager applies when it builds the prosecution mapping:
+    # an impostor's row naming a fellow impostor never reaches the detector, so
+    # the census must not measure a wider channel than production feeds. The
+    # SAME memory read by a crewmate keeps the row — that is the perturbation.
+    memory = MemoryStore()
+    memory.append(
+        EpisodicEvent(
+            tick=3,
+            type=EVENT_SAW_PLAYER,
+            payload={"player_id": "p-2", "room": "MEDBAY"},
+            provenance=PROVENANCE_OBSERVED,
+        )
+    )
+    roles = {"p-1": "IMPOSTOR", "p-2": "IMPOSTOR", "p-3": "CREWMATE"}
+    assert _sighting_witness_records(memory, speaker="p-1", roles=roles) == ()
+    assert len(_sighting_witness_records(memory, speaker="p-3", roles=roles)) == 1
 
 
 def test_the_grounded_reading_bites_on_a_sighting_no_record_supports() -> None:
@@ -2599,18 +2635,18 @@ def test_the_grounded_lever_prices_the_prosecution_class(
     """What the STRONG ``alibi_vs_sighting`` class becomes, in both directions."""
 
     sets = (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I)
-    # Direction 1 — what stops being minted. 234 STRONG flags survive as 13.
+    # Direction 1 — what stops being minted. 234 STRONG flags survive as 14.
     per_set = [grounded[d].strong_grounded for d in sets]
-    assert per_set == [0, 13, 0, 0]
-    assert sum(per_set) == 13
+    assert per_set == [1, 13, 0, 0]
+    assert sum(per_set) == 14
     # Direction 2 — what the class looks like after: every surviving sighting
     # side is supported by the speaker's own recorded perception.
     sides = sum(grounded[d].surviving_sides for d in sets)
-    assert (sides, sum(grounded[d].surviving_sides_grounded for d in sets)) == (13, 13)
+    assert (sides, sum(grounded[d].surviving_sides_grounded for d in sets)) == (14, 14)
     # The pre-record proxy for precision, QUOTED not gated: the class named 33
     # impostors out of 192 distinct subjects (17.2%, below the 25.3% base rate of
-    # living voters); the 6 subjects it still names are all crewmates. n=6 is far
-    # too small to read as precision — the record is what measures that.
+    # living voters); of the 7 subjects it still names, 1 is an impostor. n=7 is
+    # far too small to read as precision — the record is what measures that.
     assert (
         sum(grounded[d].off_subjects for d in sets),
         sum(grounded[d].off_subject_impostors for d in sets),
@@ -2618,7 +2654,7 @@ def test_the_grounded_lever_prices_the_prosecution_class(
     assert (
         sum(grounded[d].grounded_subjects for d in sets),
         sum(grounded[d].grounded_subject_impostors for d in sets),
-    ) == (6, 0)
+    ) == (7, 1)
     # The scope firewall: only alibi_vs_sighting moves.
     for sample_dir in sets:
         cell = grounded[sample_dir]
@@ -2642,22 +2678,22 @@ def test_the_grounded_lever_composed_with_the_movement_lever(
     """The slate the record runs: both Phase-20 detector levers together."""
 
     sets = (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I)
-    # 268 STRONG with the movement lever alone; 15 with both. The two extra
-    # survivors over the grounded-alone 13 are movement-derived placements the
-    # speaker's own MoveWitnessRecord confirms — the grounded-by-construction
-    # exemption is what keeps them.
-    assert sum(grounded[d].strong_both for d in sets) == 15
-    assert sum(grounded[d].strong_grounded for d in sets) == 13
+    # 268 STRONG with the movement lever alone; 17 with both. The three extra
+    # survivors over the grounded-alone 14 rest on placements the movement lever
+    # re-read to their destination — the grounded-by-construction exemption is
+    # what keeps them rather than demoting the lever's own dependency.
+    assert sum(grounded[d].strong_both for d in sets) == 17
+    assert sum(grounded[d].strong_grounded for d in sets) == 14
     both_sides = sum(grounded[d].both_surviving_sides for d in sets)
     both_grounded = sum(grounded[d].both_surviving_sides_grounded for d in sets)
-    # Every one of the 15 spoken sighting sides is supported by the speaker's own
-    # perception record; the two the grounded-alone leg does not carry are flags
-    # the movement lever mints, on placements it re-read to the destination.
-    assert (both_sides, both_grounded) == (15, 15)
+    # Every one of the 17 spoken sighting sides is supported by the speaker's own
+    # perception record; the three the grounded-alone leg does not carry are
+    # flags the movement lever mints on placements it re-read to the destination.
+    assert (both_sides, both_grounded) == (17, 17)
     assert (
         sum(grounded[d].both_subjects for d in sets),
         sum(grounded[d].both_subject_impostors for d in sets),
-    ) == (7, 0)
+    ) == (9, 1)
     for sample_dir in sets:
         cell = grounded[sample_dir]
         for band in _UNTOUCHED_BANDS:

@@ -2815,6 +2815,64 @@ class TestGroundedProsecutionRuleTwoSources:
         off = detect_contradictions(tx, roster=_ROSTER_4)
         assert [is_weak_contradiction(f) for f in off] == [False, False]
 
+    def test_a_weak_banded_speaker_is_still_a_source(self) -> None:
+        # An endpoint-tick sighting is transit fuzz as its OWN flag, but it is
+        # still a second honest account of the same claim (the 10.1 "an endpoint
+        # mismatch can still be a real signal once corroborated" band). Counting
+        # sources only over already-STRONG flags would demote the interior
+        # witness as if they stood alone.
+        tx = MeetingTranscript(
+            turns=(
+                _turn(
+                    turn_index=0,
+                    speaker="p-3",
+                    claims=(
+                        _alibi(subject="p-3", from_tick=4, to_tick=8, room="MEDBAY"),
+                    ),
+                ),
+                _turn(
+                    turn_index=1,
+                    speaker="p-9",
+                    turn_kind="reply",
+                    observations=(_saw(tick=6, subject="p-3", room="LABS"),),
+                ),
+                _turn(
+                    turn_index=2,
+                    speaker="p-5",
+                    turn_kind="opt_in",
+                    # Tick 4 is the window's EDGE: weak before this lever ever runs.
+                    observations=(_saw(tick=4, subject="p-3", room="LABS"),),
+                ),
+            )
+        )
+        records = {
+            "p-9": (_sighting_record(tick=6, subject="p-3", room="LABS"),),
+            "p-5": (_sighting_record(tick=4, subject="p-3", room="LABS"),),
+        }
+        flags = detect_contradictions(
+            tx, roster=_ROSTER_4, sighting_records=records, env=_GROUNDED_ON
+        )
+        by_tick = {
+            "interior" if "tick 6" in flag.description else "endpoint": flag
+            for flag in flags
+        }
+        assert set(by_tick) == {"interior", "endpoint"}
+        # The interior witness convicts: two distinct grounded speakers.
+        assert is_weak_contradiction(by_tick["interior"]) is False
+        # The endpoint witness keeps its OWN band and gains no new reason.
+        assert WEAK_REASON_ENDPOINT_TICK in by_tick["endpoint"].description
+        assert WEAK_REASON_LONE_GROUNDED_SOURCE not in by_tick["endpoint"].description
+        # The perturbation: drop the endpoint speaker's record. They stop being a
+        # source, and the interior witness is alone again.
+        alone = detect_contradictions(
+            tx,
+            roster=_ROSTER_4,
+            sighting_records=_grounding_records("p-9"),
+            env=_GROUNDED_ON,
+        )
+        interior = next(f for f in alone if "tick 6" in f.description)
+        assert WEAK_REASON_LONE_GROUNDED_SOURCE in interior.description
+
     def test_a_vent_anchor_carries_a_lone_grounded_source(self) -> None:
         tx = MeetingTranscript(
             turns=(
@@ -3764,7 +3822,7 @@ class TestGroundedProsecutionCommittedCensus:
         self, census: dict[str, _GroundedSetCensus]
     ) -> None:
         # Ground EVERY spoken sighting -- the most generous reading the lever can
-        # be given -- and 234 STRONG flags still come out as 21: the rest fall to
+        # be given -- and 234 STRONG flags still come out as 23: the rest fall to
         # rule (b) (one speaker is the whole prosecution) or rule (c) (the
         # one-tick self-placement is an edge again).
         strong = sum(
@@ -3775,9 +3833,9 @@ class TestGroundedProsecutionCommittedCensus:
             cell.bands_grounded.get("alibi_vs_sighting:weak", 0)
             for cell in census.values()
         )
-        assert (strong, weak) == (21, 292)
+        assert (strong, weak) == (23, 290)
         assert census["samples/9p2i"].bands_grounded["alibi_vs_sighting:strong"] == 2
-        assert census["ml_corpus/9p2i"].bands_grounded["alibi_vs_sighting:strong"] == 19
+        assert census["ml_corpus/9p2i"].bands_grounded["alibi_vs_sighting:strong"] == 21
         for set_name in ("samples/4p1i", "ml_corpus/4p1i"):
             assert (
                 census[set_name].bands_grounded.get("alibi_vs_sighting:strong", 0) == 0

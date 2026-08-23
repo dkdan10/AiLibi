@@ -1085,15 +1085,29 @@ class MeetingManager:
             for participant in ordered_participants
             if participant.move_witness_records
         }
-        # The grounded-prosecution lever's channel -- the SAME first-hand
-        # sighting rows the grounded-vouch path reads, now also threaded into
-        # detection so a spoken sighting can be checked against the speaker's
-        # own record before it convicts. Inert while the lever is off.
-        sighting_records: Mapping[PlayerId, tuple[SightingRecord, ...]] = {
-            participant.agent_id: participant.sighting_records
-            for participant in ordered_participants
-            if participant.sighting_records
-        }
+        # The grounded-prosecution lever's channel -- the same first-hand
+        # sighting rows the grounded-vouch path reads, threaded into detection
+        # so a spoken sighting can be checked against the speaker's own record
+        # before it convicts. Inert while the lever is off.
+        #
+        # The §4.7 TEAMMATE firewall is applied HERE, not inherited: the
+        # accessor keeps an impostor's rows naming a fellow impostor because
+        # its only consumer CORROBORATES, and says a prosecuting consumer must
+        # re-apply the suppression. This is that consumer, so a row the §6.6
+        # render hides from its own holder cannot ground a flag against the
+        # teammate it names. The vouch seam is unaffected (it reads the
+        # participant field, not this mapping) -- the movement channel draws
+        # the same line at its accessor.
+        sighting_records: dict[PlayerId, tuple[SightingRecord, ...]] = {}
+        for participant in ordered_participants:
+            fellows = frozenset(participant.fellow_impostor_ids)
+            rows = tuple(
+                record
+                for record in participant.sighting_records
+                if record.subject not in fellows
+            )
+            if rows:
+                sighting_records[participant.agent_id] = rows
 
         # Phase 1: opening turn (turn 0, role-dispatched). The opening is a
         # single point of failure for the whole meeting -- an empty opening

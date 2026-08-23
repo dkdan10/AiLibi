@@ -3928,11 +3928,14 @@ def _apply_grounded_prosecution(
 
     Independence is by SPEAKER ID: one speaker holding two matching records, or
     speaking two sightings in one turn, is ONE source, and neither the subject
-    nor the alibi's own speaker is ever a source. Only descriptions move --
-    every flag keeps its id, kind, event pair and subjects, so citations and the
-    detector's sort are unaffected. Flags of another kind, and flags already
-    banded weak by an earlier rule, pass through untouched (a weak flag is
-    already banded; re-marking it would double-count).
+    nor the alibi's own speaker is ever a source. A speaker whose own flag is
+    already banded weak (an endpoint-tick or narrow-window sighting) still
+    COUNTS as a source -- the earlier bands price that one account's fuzz, not
+    the speaker's existence -- but is never re-banded here.
+
+    Only descriptions move: every flag keeps its id, kind, event pair and
+    subjects, so citations and the detector's sort are unaffected. Flags of
+    another kind pass through untouched.
     """
 
     indexed = {sighting.event_id: sighting for sighting in sightings}
@@ -3949,12 +3952,17 @@ def _apply_grounded_prosecution(
         for subject in flag.subjects
     }
 
-    # Pass 1: resolve each candidate to (claim, sighting) and collect, per
-    # (subject, claim), the DISTINCT grounded speakers prosecuting it.
+    # Pass 1: resolve each flag of this kind to (claim, sighting) and collect,
+    # per (subject, claim), the DISTINCT grounded speakers prosecuting it.
+    # ALREADY-WEAK flags contribute a source too: an endpoint-tick sighting is
+    # transit fuzz on its own but a second honest account of the same claim
+    # (the 10.1 "an endpoint mismatch can still be a real signal once
+    # corroborated" band). They are excluded from RE-BANDING below, not from
+    # the count.
     resolved: dict[str, tuple[tuple[PlayerId, str], str]] = {}
     sources: dict[tuple[PlayerId, str], set[PlayerId]] = {}
     for flag in flags:
-        if flag.kind != "alibi_vs_sighting" or is_weak_contradiction(flag):
+        if flag.kind != "alibi_vs_sighting":
             continue
         sides = _grounded_prosecution_sides(flag, sightings=indexed)
         if sides is None:
@@ -3962,8 +3970,9 @@ def _apply_grounded_prosecution(
         claim_id, sighting_id = sides
         subject = flag.subjects[0]
         key = (subject, claim_id)
-        resolved[flag.contradiction_id] = (key, sighting_id)
         sources.setdefault(key, set())
+        if not is_weak_contradiction(flag):
+            resolved[flag.contradiction_id] = (key, sighting_id)
         speaker = indexed[sighting_id].speaker
         if grounded[sighting_id] and speaker not in (
             subject,
