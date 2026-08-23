@@ -1,6 +1,7 @@
 # docs/media — the committed pictures
 
-Three files, all of them shown in the repository [README](../../README.md):
+Three pictures, all of them shown in the repository
+[README](../../README.md) — this note is the directory's fourth file:
 
 | File | What it is |
 | --- | --- |

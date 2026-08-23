@@ -59,7 +59,7 @@
   <rect class="backdrop" x="0" y="0" width="1000" height="748" rx="16" fill-opacity="0.9"/>
 
   <text class="title" x="28" y="44">AiLibi — the layering as built</text>
-  <text class="subtitle" x="28" y="65">Ten packages, four enforced boundaries. The note behind this picture is docs/architecture.md.</text>
+  <text class="subtitle" x="28" y="65">The packages, the data flow between them, and the one import the firewall forbids. The note behind this picture is docs/architecture.md.</text>
 
   <!-- engine/ -->
   <rect class="card-strong" x="228" y="84" width="456" height="74" rx="9"/>
