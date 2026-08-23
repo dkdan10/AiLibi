@@ -171,6 +171,24 @@ class _Breadcrumb:
     current_room: str
 
 
+@dataclass(frozen=True)
+class _SelfPlacement:
+    """Where the agent's own ``self_state`` record puts it at one recorded tick."""
+
+    room: str
+    in_vent: bool
+
+
+@dataclass(frozen=True)
+class _SelfLocationSpan:
+    """One coalesced run of adjacent recorded ticks the agent spent in one place."""
+
+    start_tick: int
+    end_tick: int
+    room: str
+    in_vent: bool
+
+
 # Task 16.5 observation-id render lever — UNCONDITIONAL since the Task-16.17
 # baseline-5 record (the graduation slate, audits/audit-phase-16-close.md §0.1.2).
 # The lever was adopted by the baseline-5 re-record, so — mirroring the
@@ -242,6 +260,45 @@ def task_completion_from_events_enabled(env: Mapping[str, str] | None = None) ->
     )
 
 
+# Self-location trail lever -- DEFAULT-OFF, live (the sibling shape above). It is
+# not registered in ``orchestrator.replay._TOGGLEABLE_LEVER_RESOLVERS``: Task 20.33
+# wires the whole Phase-20 slate into the substrate stamp at once.
+ENV_SELF_LOCATION_TRAIL: Final[str] = "AILIBI_SELF_LOCATION_TRAIL"
+_SELF_LOCATION_TRAIL_FLAG_TRUE: Final[frozenset[str]] = frozenset(
+    {"1", "true", "yes", "on"}
+)
+
+# Most spans the trail block renders; past it the OLDEST are dropped and the block
+# says so. Sized from the committed sets: the furthest back a crew ``whereabouts``
+# answer ever reaches is 10 spans on both 9p2i sets and 4 on both 4p1i sets, so 12
+# holds every recorded claim's tick while keeping a long game's route bounded.
+SELF_LOCATION_TRAIL_MAX_SPANS: Final[int] = 12
+
+_TRAIL_HEADER: Final[str] = "## Where you were:"
+_TRAIL_TRUNCATED_LINE: Final[str] = "Earlier parts of your route are not listed."
+
+
+def self_location_trail_enabled(env: Mapping[str, str] | None = None) -> bool:
+    """Whether the agent's own room-by-tick trail renders. DEFAULT OFF.
+
+    Reads :data:`ENV_SELF_LOCATION_TRAIL` from ``env`` (defaulting to the process
+    environment), accepting ``1/true/yes/on`` case-insensitively; passing ``env``
+    lets a caller toggle the lever without mutating ``os.environ``.
+
+    ON adds the ``## Where you were:`` block and takes the completed-task line's
+    room from the SAME self-state row that dates it. OFF renders neither, which is
+    what the committed recordings and the prompt byte-golden hold.
+
+    Phase 20 G-1 (audits/review-2026-08-19/D/FINAL-synthesis.md §1 RC1).
+    """
+
+    environment = env if env is not None else os.environ
+    return (
+        environment.get(ENV_SELF_LOCATION_TRAIL, "").strip().lower()
+        in _SELF_LOCATION_TRAIL_FLAG_TRUE
+    )
+
+
 def render_for_prompt(
     memory: AgentMemory,
     *,
@@ -285,6 +342,21 @@ def render_for_prompt(
     completed-task line comes from the agent's own ``owned_task_ids`` losing an id
     instead of from a ``pending_task_id`` change.
 
+    :func:`self_location_trail_enabled` (default-OFF) adds a ``## Where you were:``
+    block between the fixed lines and the observations, so the agent can answer the
+    meeting's roll-call from its own record instead of extrapolating: the ticks its
+    ``self_state`` channel recorded, coalesced oldest-first into
+    ``[ticks a-b] You were in ROOM.`` spans (a lone tick renders ``[tick a]``, and a
+    tick spent in a vent renders as such). A tick with no recorded row BREAKS a
+    span -- the trail never interpolates across a gap -- while a meeting boundary
+    does not, because a meeting freezes movement (DESIGN.md §5.1). At most
+    :data:`SELF_LOCATION_TRAIL_MAX_SPANS` spans render; past that the oldest are
+    dropped and the block says so in one plain line. A trail line carries no
+    ``[obs ...]`` prefix -- a span is coalesced from several rows rather than being
+    one citable observation -- so it cannot teach a model to cite an id the ballot
+    validator would null. The same lever takes the completed-task line's room from
+    the row that dates it, instead of from the previous self-state iteration.
+
     Raises :class:`ValueError` if ``token_budget`` is non-positive or
     if no ``self_state`` event has been recorded. A render call before
     perception has run is a wiring bug, not a normal state, so we
@@ -318,11 +390,14 @@ def render_for_prompt(
     # Resolve the completed-task lever ONCE here too, and thread the plain bool
     # down: the observation loop never consults an environment.
     completion_from_events = task_completion_from_events_enabled(env)
+    # Same rule for the self-location trail: one read here, a plain bool below.
+    trail_on = self_location_trail_enabled(env)
     observations = _build_observations(
         memory.episodic,
         own_agent_id=own_agent_id,
         teammate_ids=teammate_ids,
         completion_from_events=completion_from_events,
+        self_location_trail=trail_on,
     )
     if ids_on:
         # Fold each first-hand observation's stable id into its line BEFORE the
@@ -371,6 +446,14 @@ def render_for_prompt(
         env=env,
     )
     contradiction_lines = _build_contradiction_lines(memory.beliefs, roster=roster)
+    trail_lines: list[str] = []
+    trail_truncated = False
+    if trail_on:
+        spans = _collect_self_location_spans(memory.episodic)
+        trail_truncated = len(spans) > SELF_LOCATION_TRAIL_MAX_SPANS
+        trail_lines = [
+            _trail_line(span) for span in spans[-SELF_LOCATION_TRAIL_MAX_SPANS:]
+        ]
 
     return _assemble_view(
         role=role,
@@ -378,6 +461,8 @@ def render_for_prompt(
         observations=observations,
         beliefs_lines=beliefs_lines,
         contradiction_lines=contradiction_lines,
+        trail_lines=trail_lines,
+        trail_truncated=trail_truncated,
         token_budget=token_budget,
     )
 
@@ -1016,6 +1101,82 @@ def _co_presence_suffix(
     return " (with " + ", ".join(sorted(companions)) + ")"
 
 
+def _self_placement_by_tick(episodic: MemoryStore) -> dict[int, _SelfPlacement]:
+    """The one answer to "where was I at tick N", read off the own self channel.
+
+    Ticks with no readable room are ABSENT rather than guessed, so every consumer
+    can distinguish "recorded elsewhere" from "no record at all". The last row for
+    a tick wins, matching the render's read-the-latest convention everywhere else.
+    """
+
+    placements: dict[int, _SelfPlacement] = {}
+    for event in episodic.recent(since_tick=0):
+        if event.type != _EVENT_SELF_STATE:
+            continue
+        room = event.payload.get("room")
+        if not isinstance(room, str):
+            continue
+        placements[event.tick] = _SelfPlacement(
+            room=room,
+            in_vent=event.payload.get("in_vent") is True,
+        )
+    return placements
+
+
+def _collect_self_location_spans(episodic: MemoryStore) -> list[_SelfLocationSpan]:
+    """Coalesce the agent's own recorded ticks into an oldest-first route.
+
+    A run extends only while the next recorded tick is ADJACENT and the placement
+    is unchanged, so a tick the agent holds no row for BREAKS the span instead of
+    being interpolated across -- the trail may only claim ticks it has a record
+    for. A meeting boundary does NOT break a span: the meeting freezes movement
+    (DESIGN.md §5.1), so one room really does cover both sides of it. That is the
+    single place this walk differs from :func:`_collect_transitions`, which must
+    break there because OTHERS change discontinuously across a meeting.
+    """
+
+    spans: list[_SelfLocationSpan] = []
+    placements = _self_placement_by_tick(episodic)
+    for tick in sorted(placements):
+        placement = placements[tick]
+        if spans:
+            open_span = spans[-1]
+            if (
+                open_span.end_tick + 1 == tick
+                and open_span.room == placement.room
+                and open_span.in_vent == placement.in_vent
+            ):
+                spans[-1] = replace(open_span, end_tick=tick)
+                continue
+        spans.append(
+            _SelfLocationSpan(
+                start_tick=tick,
+                end_tick=tick,
+                room=placement.room,
+                in_vent=placement.in_vent,
+            )
+        )
+    return spans
+
+
+def _trail_line(span: _SelfLocationSpan) -> str:
+    """Render one route span; a lone tick states one tick, a run states a range.
+
+    The line carries no ``[obs ...]`` prefix: a span is coalesced from several
+    self-state rows rather than being one citable observation, and the roll-call
+    asks for a room and a tick, not a citation. That also keeps the line short,
+    which is what lets the route survive the token budget.
+    """
+
+    where = f"a vent in {span.room}" if span.in_vent else span.room
+    stamp = (
+        f"[tick {span.start_tick}]"
+        if span.start_tick == span.end_tick
+        else f"[ticks {span.start_tick}-{span.end_tick}]"
+    )
+    return f"{stamp} You were in {where}."
+
+
 def _collect_transitions(
     episodic: MemoryStore,
     *,
@@ -1048,7 +1209,10 @@ def _collect_transitions(
     the ``saw_body`` line carries the truthful testimony.
     """
 
-    own_room_by_tick: dict[int, str] = {}
+    own_room_by_tick: dict[int, str] = {
+        tick: placement.room
+        for tick, placement in _self_placement_by_tick(episodic).items()
+    }
     seen_in_own_room: dict[int, set[str]] = {}
     # Resume ticks of concluded meetings (recorded by ``absorb_meeting_evidence``).
     # The world changes DISCONTINUOUSLY across a meeting -- a player can be ejected
@@ -1063,11 +1227,7 @@ def _collect_transitions(
     # happened (Codex review): a death in place is not a movement.
     body_victims_by_tick: dict[int, set[tuple[str, str]]] = {}
     for event in episodic.recent(since_tick=0):
-        if event.type == _EVENT_SELF_STATE:
-            room = event.payload.get("room")
-            if isinstance(room, str):
-                own_room_by_tick[event.tick] = room
-        elif event.type == _EVENT_SAW_BODY:
+        if event.type == _EVENT_SAW_BODY:
             victim_id = event.payload.get("victim_id")
             body_room = event.payload.get("room")
             if isinstance(victim_id, str) and isinstance(body_room, str):
@@ -1196,9 +1356,13 @@ def _build_observations(
     own_agent_id: str | None = None,
     teammate_ids: frozenset[str] = frozenset(),
     completion_from_events: bool = False,
+    self_location_trail: bool = False,
 ) -> list[_Observation]:
     observations: list[_Observation] = []
     seen_body_ids: set[str] = set()
+    # The trail and the completed-task line must not disagree about one tick, so
+    # both read the same per-tick record instead of each keeping its own.
+    self_placements = _self_placement_by_tick(episodic) if self_location_trail else {}
     last_pending_task: str | None = None
     last_self_room: str | None = None
     last_owned_task_ids: frozenset[TaskId] | None = None
@@ -1236,7 +1400,16 @@ def _build_observations(
             pending = pending_raw if isinstance(pending_raw, str) else None
             room = event.payload.get("room")
             role = event.payload.get("role")
+            self_room = room if isinstance(room, str) else None
             owned = _owned_task_ids(event.payload)
+            # The completion is dated by this row's tick and placed by the record
+            # for that SAME tick. Rolling the room forward from the PREVIOUS
+            # iteration stamped one line with two clocks, so the stated room was
+            # one the agent had already left.
+            completion_room = last_self_room
+            if self_location_trail:
+                placement = self_placements.get(event.tick)
+                completion_room = placement.room if placement is not None else None
             if completion_from_events:
                 # An id LEAVING a living agent's owned set is a completion it
                 # performed: only completion removes an id, while redistribution
@@ -1255,7 +1428,7 @@ def _build_observations(
                         _completed_task_observation(
                             tick=event.tick,
                             task_id=task_id,
-                            room=last_self_room,
+                            room=completion_room,
                             observation_id=event.observation_id,
                         )
                         for task_id in sorted(last_owned_task_ids - owned)
@@ -1277,12 +1450,12 @@ def _build_observations(
                     _completed_task_observation(
                         tick=event.tick,
                         task_id=last_pending_task,
-                        room=last_self_room,
+                        room=completion_room,
                         observation_id=event.observation_id,
                     )
                 )
             last_pending_task = pending
-            last_self_room = room if isinstance(room, str) else None
+            last_self_room = self_room
             last_owned_task_ids = owned
             first_self_state = False
             continue
@@ -1863,6 +2036,8 @@ def _assemble_view(
     observations: list[_Observation],
     beliefs_lines: list[str],
     contradiction_lines: list[str],
+    trail_lines: list[str],
+    trail_truncated: bool,
     token_budget: int,
 ) -> str:
     """Assemble the final Markdown view, enforcing token budget on observations.
@@ -1871,6 +2046,12 @@ def _assemble_view(
     treated as fixed (always rendered) because they are essential context.
     Observations are the elastic section: they fill the remaining budget,
     dropped from lowest salience first if the budget is tight.
+
+    ``trail_lines`` (the self-location route, oldest first) is charged from what
+    the observations leave behind and sheds its own OLDEST lines when that is
+    tight, so the observations block never pays for the trail's overflow and the
+    lever cannot cost a render an observation. Whenever any span was dropped -- by
+    the cap upstream or by that shedding -- the block says so.
 
     The budget arithmetic charges every character that lands in the
     final output, including the Markdown separators (``"\\n\\n"`` between
@@ -1909,27 +2090,76 @@ def _assemble_view(
     header_cost = _estimate_tokens(header_with_separator)
 
     remaining = token_budget - non_elastic_cost
-    if remaining < header_cost:
-        return non_elastic_text
-
-    kept = _select_within_budget(
-        observations=observations,
-        budget=remaining - header_cost,
+    kept: list[_Observation] = []
+    observations_cost = 0
+    if remaining >= header_cost:
+        kept = _select_within_budget(
+            observations=observations,
+            budget=remaining - header_cost,
+        )
+        if kept:
+            observations_cost = header_cost + sum(
+                _estimate_tokens("\n- " + obs.line) for obs in kept
+            )
+    # The trail is charged AFTER the observations, from what they leave behind, so
+    # the ON path keeps every observation the OFF path kept and a tight budget
+    # sheds route spans instead.
+    trail_block = _select_trail_within_budget(
+        trail_lines=trail_lines,
+        truncated=trail_truncated,
+        budget=remaining - observations_cost,
     )
 
-    if not kept:
+    if not trail_block and not kept:
         return non_elastic_text
 
     blocks: list[list[str]] = [fixed_lines]
-    observation_block = [observations_header]
-    observation_block.extend(f"- {obs.line}" for obs in kept)
-    blocks.append(observation_block)
+    if trail_block:
+        blocks.append(trail_block)
+    if kept:
+        observation_block = [observations_header]
+        observation_block.extend(f"- {obs.line}" for obs in kept)
+        blocks.append(observation_block)
     if beliefs_block:
         blocks.append(beliefs_block)
     if contradictions_block:
         blocks.append(contradictions_block)
 
     return "\n\n".join("\n".join(block) for block in blocks) + "\n"
+
+
+def _select_trail_within_budget(
+    *,
+    trail_lines: list[str],
+    truncated: bool,
+    budget: int,
+) -> list[str]:
+    """The trail block that fits ``budget``, shedding OLDEST lines first.
+
+    The recent route is the part a roll-call answer is copied from, so a tight
+    budget keeps it and drops the far end; an empty block is returned when not
+    even one span fits. Costs are charged piece by piece exactly as the
+    observations block charges its own header and bullets, so the two blocks
+    cannot disagree about what a line costs.
+    """
+
+    if not trail_lines:
+        return []
+    header_cost = _estimate_tokens("\n\n" + _TRAIL_HEADER)
+    notice_cost = _estimate_tokens("\n- " + _TRAIL_TRUNCATED_LINE)
+    line_costs = [_estimate_tokens("\n- " + line) for line in trail_lines]
+    for first in range(len(trail_lines)):
+        # Any span dropped -- by the cap upstream or by this shedding -- is stated.
+        shed = truncated or first > 0
+        cost = header_cost + (notice_cost if shed else 0) + sum(line_costs[first:])
+        if cost > budget:
+            continue
+        block = [_TRAIL_HEADER]
+        if shed:
+            block.append(f"- {_TRAIL_TRUNCATED_LINE}")
+        block.extend(f"- {line}" for line in trail_lines[first:])
+        return block
+    return []
 
 
 def _select_within_budget(
@@ -1971,6 +2201,7 @@ __all__ = [
     "ContradictionRef",
     "DEFAULT_TOKEN_BUDGET",
     "ENV_OBSERVATION_ID_RENDERING",
+    "ENV_SELF_LOCATION_TRAIL",
     "ENV_TASK_COMPLETION_FROM_EVENTS",
     "EpisodicEvent",
     "MeetingHistory",
@@ -1979,6 +2210,7 @@ __all__ = [
     "PlayerId",
     "ReportedStatement",
     "RoomId",
+    "SELF_LOCATION_TRAIL_MAX_SPANS",
     "TaskId",
     "WorkingMemory",
     "absorb_meeting_evidence",
@@ -1986,5 +2218,6 @@ __all__ = [
     "observation_id_rendering_enabled",
     "record_meeting_outcome",
     "render_for_prompt",
+    "self_location_trail_enabled",
     "task_completion_from_events_enabled",
 ]

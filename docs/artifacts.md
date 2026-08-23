@@ -96,7 +96,7 @@ than its output preserved.
 | `replays/samples/` — the baseline-6 adopting record (100 replays + per-set `MANIFEST.md`) | (a) + (b) | in git | 61 MB / 107 files |
 | `replays/ml_corpus/` — the committed ML corpus | (a) | in git | 161 MB / 209 files |
 | `agents/tactical/learned/{weights,crew_weights}.json` + `.sha256` — the **shipped inference weights** the live tactical factories load | (a) + (b) | in git | 4 files |
-| `tests/fixtures/` — golden fixtures (rendered memory views and their inputs) | (a) | in git | 2.1 MB / 19 files |
+| `tests/fixtures/` — golden fixtures (rendered memory views and their inputs) | (a) | in git | 2.1 MB / 21 files |
 | `data/personas.json` — the canonical persona set | (a) | in git | 12 KB |
 | `training/artifacts/impostor/`, `crew/`, `anchor_study/` — the **canonical learned genomes** (`weights.json` + `config.json` + `stamp.json` + `weights.json.sha256`) | (a) + (b) | in git | 1.5 MB / 105 files |
 | `training/artifacts/surrogate/`, `conviction/`, `composed/` — the ballot surrogate, the conviction model and the composed-runner verdict, with their sidecars | (a) + (b) | in git | 52 KB / 10 files |

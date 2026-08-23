@@ -20,21 +20,31 @@ The impostor-targeting pins (free kills declined; ghost-top decisions) live in
 from __future__ import annotations
 
 import re
+import tempfile
 from collections.abc import Mapping
 from pathlib import Path
 from types import MappingProxyType
+from typing import Final, NamedTuple
 
 import pytest
 
 from agents.memory.episodic import EpisodicEvent, MemoryStore
 from agents.memory.store import (
+    DEFAULT_TOKEN_BUDGET,
+    ENV_SELF_LOCATION_TRAIL,
     ENV_TASK_COMPLETION_FROM_EVENTS,
+    AgentMemory,
+    _collect_self_location_spans,
+    render_for_prompt,
+    self_location_trail_enabled,
     task_completion_from_events_enabled,
 )
 from agents.tactical.impostor_policy import RankedTarget
+from engine.entities import PlayerId, RoomId
 from engine.world import load_canonical_map
 from eval import evidence_honesty
 from eval.evidence_honesty import (
+    AGENT_CLOCK_OFFSET,
     CELL_DEFINITIONS,
     CUSTOM_POLICY_FOLD,
     LIVE_POLICY_FOLD,
@@ -58,7 +68,9 @@ from eval.evidence_honesty import (
     _fold_ghost_top,
     _fold_turns,
     _fold_whereabouts,
+    _fold_meeting_into_memories,
     _marker_prefixes,
+    _perceive_tick,
     _resolve_flag,
     _ResolvedFlag,
     _room_distances,
@@ -66,6 +78,7 @@ from eval.evidence_honesty import (
     _TopRanked,
     _singular_persona_phrase,
     _Tallies,
+    _WALK_CONFIG,
     cell,
     compute_evidence_honesty,
 )
@@ -78,6 +91,15 @@ from meetings.schemas import (
     SawPlayerObservation,
     WhereaboutsClaim,
 )
+from eval.replay_walk import (
+    MeetingApplied,
+    MeetingOpened,
+    TickAdvanced,
+    TickOpened,
+    walk_replay,
+)
+from eval.validity import resolve_roster_knobs, roles_by_seed, seeds_on_disk
+from observation.service import ObservationService
 from orchestrator.replay import LLMCallRecord
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -749,7 +771,6 @@ def test_a_caller_supplied_policy_is_never_reported_as_the_live_fold() -> None:
     # default — the same call with the argument omitted — still reports the live
     # one, which is the pair that proves the label is derived and not constant.
     from agents.tactical.impostor_policy import ImpostorPolicy
-    from engine.entities import PlayerId
 
     def _explicit(agent_id: PlayerId) -> ImpostorPolicy:
         return ImpostorPolicy(agent_id=agent_id)
@@ -1195,3 +1216,305 @@ def test_the_report_is_json_stable_and_leaks_no_identifiers(
     # Count-only block: no player ids, no room ids, no transcript text.
     assert re.search(r"\bp-\d\b", text) is None
     assert "CAFETERIA" not in text
+
+
+# --------------------------------------------------------------------------- #
+# Layer 4 — the self-location trail's offline counterfactual (Task 20.24).     #
+# --------------------------------------------------------------------------- #
+
+_TRAIL_ON: Mapping[str, str] = MappingProxyType({ENV_SELF_LOCATION_TRAIL: "1"})
+_TRAIL_LINE: Final[re.Pattern[str]] = re.compile(
+    r"^- \[ticks? (?P<start>\d+)(?:-(?P<end>\d+))?\] You were in "
+)
+_COMPLETED_ROW: Final[re.Pattern[str]] = re.compile(
+    r"\[tick (?P<tick>\d+)\] You completed \S+ \(you were in (?P<room>[^)]+)\)\."
+)
+
+
+def _rendered_trail_ticks(view: str) -> frozenset[int]:
+    """Every tick a rendered ``## Where you were:`` block places the agent at."""
+
+    ticks: set[int] = set()
+    for line in view.splitlines():
+        match = _TRAIL_LINE.match(line)
+        if match is None:
+            continue
+        start = int(match.group("start"))
+        end = int(match.group("end")) if match.group("end") else start
+        ticks.update(range(start, end + 1))
+    return frozenset(ticks)
+
+
+def _observation_rows(view: str) -> frozenset[str]:
+    """The rendered observation bullets, excluding the trail and the completions.
+
+    Completion rows are excluded because the lever deliberately re-rooms them;
+    everything else must survive the trail untouched.
+    """
+
+    return frozenset(
+        line
+        for line in view.splitlines()
+        if line.startswith("- ")
+        and _TRAIL_LINE.match(line) is None
+        and "You completed " not in line
+    )
+
+
+class _SelfPlacementCensus(NamedTuple):
+    """One committed set's self-location counts, recounted from the bytes."""
+
+    crew_claims: int
+    in_record: int
+    rendered_on: int
+    rendered_off: int
+    renders: int
+    trail_lines: int
+    added_tokens: int
+    observations_lost: int
+    completion_rows: int
+    completion_agrees: int
+
+
+def _self_placement_census(sample_dir: Path) -> _SelfPlacementCensus:
+    """Re-render every meeting's memories with the trail ON and score them.
+
+    The same walk the instrument runs, stopped at each ``MeetingOpened`` so the
+    speaker's memory is the one it actually held there. Four things are counted:
+    whether the RECORD holds a span covering each spoken crew ``whereabouts``
+    tick, whether the RENDER at ``DEFAULT_TOKEN_BUDGET`` still shows it, whether
+    the trail cost the observations block a row, and whether each completed-task
+    row names the agent's engine-truth room at the tick it states.
+    """
+
+    num_players, num_impostors, tasks_per_crewmate = resolve_roster_knobs(sample_dir)
+    game_map = load_canonical_map()
+    roles_by_game = roles_by_seed(
+        sample_dir,
+        num_players=num_players,
+        num_impostors=num_impostors,
+        tasks_per_crewmate=tasks_per_crewmate,
+        game_map=game_map,
+    )
+    claims = in_record = rendered_on = rendered_off = 0
+    renders = trail_lines = added_tokens = observations_lost = 0
+    completion_rows = completion_agrees = 0
+
+    for seed in seeds_on_disk(sample_dir):
+        roles = roles_by_game[seed]
+        memories: dict[PlayerId, MemoryStore] = {pid: MemoryStore() for pid in roles}
+        composites = {pid: AgentMemory(episodic=s) for pid, s in memories.items()}
+        room_at: dict[int, Mapping[PlayerId, RoomId]] = {}
+        audit_dir = tempfile.TemporaryDirectory(prefix="ailibi-trail-")
+        service = ObservationService(
+            game_map=game_map, audit_log_path=Path(audit_dir.name) / "audit.jsonl"
+        )
+        try:
+            for walk_event in walk_replay(
+                sample_dir / f"replay-seed-{seed}.jsonl",
+                seed=seed,
+                num_players=num_players,
+                num_impostors=num_impostors,
+                tasks_per_crewmate=tasks_per_crewmate,
+                game_map=game_map,
+                config=_WALK_CONFIG,
+            ):
+                if isinstance(walk_event, TickOpened):
+                    _perceive_tick(walk_event, service=service, memories=memories)
+                elif isinstance(walk_event, TickAdvanced):
+                    room_at[walk_event.entry.tick] = {
+                        pid: player.room
+                        for pid, player in walk_event.state.players.items()
+                    }
+                elif isinstance(walk_event, MeetingOpened):
+                    living = frozenset(
+                        pid
+                        for pid, player in walk_event.state.players.items()
+                        if player.alive
+                    )
+                    on_ticks: dict[PlayerId, frozenset[int]] = {}
+                    off_ticks: dict[PlayerId, frozenset[int]] = {}
+                    record_ticks: dict[PlayerId, frozenset[int]] = {}
+                    for pid in sorted(living):
+                        composite = AgentMemory(episodic=memories[pid])
+                        off = render_for_prompt(
+                            composite, token_budget=DEFAULT_TOKEN_BUDGET
+                        )
+                        on = render_for_prompt(
+                            composite, token_budget=DEFAULT_TOKEN_BUDGET, env=_TRAIL_ON
+                        )
+                        renders += 1
+                        on_ticks[pid] = _rendered_trail_ticks(on)
+                        off_ticks[pid] = _rendered_trail_ticks(off)
+                        record_ticks[pid] = frozenset(
+                            tick
+                            for span in _collect_self_location_spans(memories[pid])
+                            for tick in range(span.start_tick, span.end_tick + 1)
+                        )
+                        trail_lines += sum(
+                            1
+                            for line in on.splitlines()
+                            if _TRAIL_LINE.match(line) is not None
+                        )
+                        # The renderer's own 4-chars-per-token arithmetic.
+                        added_tokens += (len(on) + 3) // 4 - (len(off) + 3) // 4
+                        observations_lost += len(
+                            _observation_rows(off) - _observation_rows(on)
+                        )
+                        for match in _COMPLETED_ROW.finditer(on):
+                            completion_rows += 1
+                            engine_tick = int(match.group("tick")) - AGENT_CLOCK_OFFSET
+                            truth = room_at.get(engine_tick, {}).get(pid)
+                            completion_agrees += int(truth == match.group("room"))
+                    for turn in walk_event.entry.transcript.turns:
+                        speaker = turn.speaker
+                        if speaker not in living or roles.get(speaker) != "CREWMATE":
+                            continue
+                        for observation in turn.observations:
+                            if not isinstance(observation, WhereaboutsClaim):
+                                continue
+                            claims += 1
+                            in_record += observation.tick in record_ticks[speaker]
+                            rendered_on += observation.tick in on_ticks[speaker]
+                            rendered_off += observation.tick in off_ticks[speaker]
+                elif isinstance(walk_event, MeetingApplied):
+                    _fold_meeting_into_memories(walk_event, composites=composites)
+        finally:
+            service.close()
+            audit_dir.cleanup()
+
+    return _SelfPlacementCensus(
+        crew_claims=claims,
+        in_record=in_record,
+        rendered_on=rendered_on,
+        rendered_off=rendered_off,
+        renders=renders,
+        trail_lines=trail_lines,
+        added_tokens=added_tokens,
+        observations_lost=observations_lost,
+        completion_rows=completion_rows,
+        completion_agrees=completion_agrees,
+    )
+
+
+@pytest.fixture(scope="module")
+def placement() -> Mapping[Path, _SelfPlacementCensus]:
+    """One self-location census per committed set, computed once for the module."""
+
+    return MappingProxyType(
+        {
+            sample_dir: _self_placement_census(sample_dir)
+            for sample_dir in (
+                _SAMPLES_9P2I,
+                _CORPUS_9P2I,
+                _SAMPLES_4P1I,
+                _CORPUS_4P1I,
+            )
+        }
+    )
+
+
+def test_the_coverage_reading_bites_on_a_trail_that_omits_the_tick() -> None:
+    # The gate the pins below rest on, exercised directly: a rendered route that
+    # skips a tick must not be read as covering it, and one that spans it must.
+    covering = "## Where you were:\n- [ticks 4-6] You were in REACTOR.\n"
+    omitting = "## Where you were:\n- [ticks 4-5] You were in REACTOR.\n"
+    assert _rendered_trail_ticks(covering) == frozenset({4, 5, 6})
+    assert 6 not in _rendered_trail_ticks(omitting)
+    assert _rendered_trail_ticks("## Where you were:\n") == frozenset()
+
+
+@pytest.mark.slow
+def test_self_placement_coverage_pins(
+    placement: Mapping[Path, _SelfPlacementCensus],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """I-2's counterfactual half: does the record the roll-call asks for exist?
+
+    Coverage is a property of the RENDER and is therefore computable offline; the
+    false-placement rate itself (bar 3 / cell I-2) is NOT, because it depends on
+    the model reading the line, so it is judged at the adopting record
+    (audits/audit-phase-20-preregistration.md §8).
+    """
+
+    # The record now holds a covering span for EVERY spoken crew whereabouts tick,
+    # on every committed set. This is the counterfactual the task can pin: before
+    # the trail no rendered line placed the agent at any tick at all, so the model
+    # had nothing to copy and extrapolated (G-1).
+    for sample_dir in (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I):
+        census = placement[sample_dir]
+        assert census.crew_claims > 0
+        assert census.in_record == census.crew_claims
+    assert placement[_SAMPLES_9P2I].crew_claims == 723
+    assert placement[_CORPUS_9P2I].crew_claims == 2038
+    assert placement[_SAMPLES_4P1I].crew_claims == 78
+    assert placement[_CORPUS_4P1I].crew_claims == 79
+    # What actually reaches the prompt at DEFAULT_TOKEN_BUDGET, measured rather
+    # than predicted. OFF renders no span at all, so its value is 0 everywhere.
+    # ON, the 4p1i sets carry the whole route; the 9p2i renders are budget-bound
+    # and the observations block outranks the trail, so a quarter of the claim
+    # ticks sit in the record without reaching that meeting's prompt. That
+    # residual is a budget question, not a record one.
+    assert (
+        placement[_SAMPLES_9P2I].rendered_off,
+        placement[_SAMPLES_9P2I].rendered_on,
+    ) == (0, 539)
+    assert (
+        placement[_CORPUS_9P2I].rendered_off,
+        placement[_CORPUS_9P2I].rendered_on,
+    ) == (0, 1573)
+    assert (
+        placement[_SAMPLES_4P1I].rendered_off,
+        placement[_SAMPLES_4P1I].rendered_on,
+    ) == (0, 78)
+    assert (
+        placement[_CORPUS_4P1I].rendered_off,
+        placement[_CORPUS_4P1I].rendered_on,
+    ) == (0, 79)
+    # The lever reads the mapping the render threads down, and the hermetic guard
+    # clears the whole AILIBI_* namespace, so setting it inside the test is the
+    # only way a shell export could ever be visible.
+    assert self_location_trail_enabled() is False
+    monkeypatch.setenv(ENV_SELF_LOCATION_TRAIL, "1")
+    assert self_location_trail_enabled() is True
+
+
+@pytest.mark.slow
+def test_the_trail_costs_the_observations_block_nothing(
+    placement: Mapping[Path, _SelfPlacementCensus],
+) -> None:
+    # The trail is charged from what the observations leave behind and sheds its
+    # own oldest spans first, so no observation the OFF path kept is dropped by
+    # turning the lever on -- over every committed set, not only the pinned one.
+    for sample_dir in (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I):
+        assert placement[sample_dir].observations_lost == 0
+    samples = placement[_SAMPLES_9P2I]
+    assert samples.renders == 971
+    # The measured cost, carried rather than asserted away: 3373 route lines and
+    # 32571 estimated tokens over 971 renders -- 3.47 lines and 33.5 tokens each.
+    assert samples.trail_lines == 3373
+    assert samples.added_tokens == 32571
+
+
+@pytest.mark.slow
+def test_the_completed_task_row_names_the_engine_truth_room(
+    placement: Mapping[Path, _SelfPlacementCensus],
+) -> None:
+    # G-1's second half: one line, one clock. Every completed-task row rendered
+    # with the lever ON names the agent's engine room at the tick it states, under
+    # the documented alignment (agent tick - 1 = engine tick). No row disagrees on
+    # any set, so there is no residual to enumerate.
+    for sample_dir in (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I):
+        census = placement[sample_dir]
+        assert census.completion_rows > 0
+        assert census.completion_agrees == census.completion_rows
+    # The review's offline re-render census over the same 971 rendered memories
+    # counted 843 completed-task instances [A/verdicts.md G-1]; this recount finds
+    # 859 over the same population. The review's script is not committed
+    # (audits/audit-phase-20-planning.md §4 item 4) and the count is
+    # budget-sensitive -- the salience cut decides how many of an agent's rows
+    # survive each prompt -- so the 16-row residual is carried, not smoothed.
+    assert placement[_SAMPLES_9P2I].completion_rows == 859
+    assert placement[_CORPUS_9P2I].completion_rows == 2488
+    assert placement[_SAMPLES_4P1I].completion_rows == 61
+    assert placement[_CORPUS_4P1I].completion_rows == 58
