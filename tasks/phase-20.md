@@ -3208,6 +3208,7 @@ PR.
 - README.md; (the 'What it is' section embeds the SVG; the 'How it was built' section shows a ~15-line contract excerpt beside its generated prompt header and links the PR it produced)
 - docs/media/README.md; (the asset list)
 - docs/artifacts.md; (the docs/media/ registry row count — verify_ml_evidence compares it against the git index)
+- tests/scripts/test_check_doc_facts.py; (ORCHESTRATOR RULING 2026-08-23 on PR #374: an authoring omission — the DoD names this file five times and the Measurement runs it; the new pins are pytest-side and live here)
 
 **Files NOT in scope:**
 - DESIGN.md (the diagram there stays as the historical target; a caption is 19.1's demoted-record convention — not touched here)
