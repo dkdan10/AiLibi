@@ -30,6 +30,7 @@ from eval.balance_eval import run_tournament_eval
 from orchestrator.game import (
     HeadlessGame,
     build_default_agent_factory,
+    build_default_meeting_runner,
 )
 from orchestrator.replay import (
     FSM_DEFAULT_POLICY_ID,
@@ -64,9 +65,12 @@ _CHAMPION = TacticalPolicyStamp(
     anchor_policy="fsm-default",
 )
 
-# A seed that reaches a decisive GAME_OVER under the default agents with no
-# meeting runner within a generous tick budget, so a game_over row (carrying the
-# stamp) is written. Probed at HEAD: seed 0 -> IMPOSTORS.
+# A seed that reaches a decisive GAME_OVER under the default agents within a
+# generous tick budget, so a game_over row (carrying the stamp) is written. The
+# production seam runs it the way every public entry point does — with the
+# default meeting runner attached — because a reported body otherwise parks the
+# game at MEETING_PHASE_REACHED and no game_over row exists to read the stamp
+# from. Probed at HEAD with that runner: seed 0 -> IMPOSTORS (tick 15).
 _DECISIVE_SEED = 0
 _DECISIVE_MAX_TICKS = 200
 
@@ -262,6 +266,7 @@ class TestProductionSeam:
             agent_factory=build_default_agent_factory(),
             replay_path=path,
             scheduler=TickScheduler(max_ticks=_DECISIVE_MAX_TICKS),
+            meeting_runner=build_default_meeting_runner(),
             tactical_policy_stamp=_CHAMPION,
         ).run()
 
@@ -276,6 +281,7 @@ class TestProductionSeam:
             agent_factory=build_default_agent_factory(),
             replay_path=path,
             scheduler=TickScheduler(max_ticks=_DECISIVE_MAX_TICKS),
+            meeting_runner=build_default_meeting_runner(),
         ).run()
 
         assert read_tactical_policy_stamp(path) is None

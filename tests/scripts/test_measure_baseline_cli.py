@@ -222,7 +222,13 @@ def test_honesty_human_rendering(capsys: pytest.CaptureFixture[str]) -> None:
     # REPAIRED policy over the frozen bytes, so these are counterfactual cells and
     # the mismatch count is the size of the behaviour change. The ratified
     # "before" is quoted from eval.evidence_honesty.RATIFIED_I11_CELLS.
-    assert "I-11 free zero-witness kills declined: 0.0843  (35/415)" in out
+    assert (
+        f"I-11 [{LIVE_POLICY_FOLD}] free zero-witness kills declined: 0.0843  (35/415)"
+        in out
+    )
+    # The label is what separates the two modes on the human surface; the ratified
+    # "before" is a different string and must never render as this one.
+    assert f"I-11 [{RATIFIED_BASELINE}]" not in out
     assert "ghost-top decisions: 0.002  (5/2461)" in out
     assert "419 mismatches over 2461 decisions" in out
     assert "render budget: mean rendered lines/snapshot 51.1" in out

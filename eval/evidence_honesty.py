@@ -221,9 +221,12 @@ def live_impostor_policy(agent_id: PlayerId) -> ImpostorPolicy:
 
 # How an I-11 block was produced. The live fold re-invokes the policy in the tree
 # over the frozen baseline-6 bytes; the ratified baseline is the frozen measurement
-# of the policy those bytes were RECORDED with, which is no longer in the tree.
+# of the policy those bytes were RECORDED with, which is no longer in the tree; a
+# custom fold re-invokes some other caller-supplied policy over the same bytes and
+# must never be read as either of the two named ones.
 LIVE_POLICY_FOLD: Final[str] = "live-policy-fold"
 RATIFIED_BASELINE: Final[str] = "ratified-baseline"
+CUSTOM_POLICY_FOLD: Final[str] = "custom-policy-fold"
 
 
 class _TopRanked(NamedTuple):
@@ -598,7 +601,8 @@ class ImpostorTargetingCells(_FrozenModel):
     a lower-id target may dodge in the same tick.
 
     ``policy_mode`` names what produced the block: the live fold over the frozen
-    bytes, or the frozen ratified baseline (:data:`RATIFIED_I11_CELLS`).
+    bytes, a caller-supplied policy's fold over them, or the frozen ratified
+    baseline (:data:`RATIFIED_I11_CELLS`).
     ``reconstruction_mismatches`` counts the decisions the folded policy does not
     reproduce against the recorded action stream — zero for the policy the bytes
     were recorded with, and the size of the behaviour change for any other.
@@ -908,6 +912,11 @@ def compute_evidence_honesty(
         num_impostors=num_impostors,
         tasks_per_crewmate=tasks_per_crewmate,
         games_total=len(seeds),
+        policy_mode=(
+            LIVE_POLICY_FOLD
+            if impostor_policy is live_impostor_policy
+            else CUSTOM_POLICY_FOLD
+        ),
         tallies=tallies,
     )
 
@@ -919,6 +928,7 @@ def _report(
     num_impostors: int,
     tasks_per_crewmate: int,
     games_total: int,
+    policy_mode: str,
     tallies: _Tallies,
 ) -> EvidenceHonestyReport:
     """Assemble the frozen report from the folded counters."""
@@ -1013,7 +1023,7 @@ def _report(
             ),
         ),
         impostor_targeting=ImpostorTargetingCells(
-            policy_mode=LIVE_POLICY_FOLD,
+            policy_mode=policy_mode,
             decisions_reconstructed=tallies.decisions,
             reconstruction_mismatches=tallies.mismatches,
             in_vent_decisions=tallies.in_vent_decisions,

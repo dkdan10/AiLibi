@@ -32,6 +32,7 @@ from engine.world import load_canonical_map
 from eval import evidence_honesty
 from eval.evidence_honesty import (
     CELL_DEFINITIONS,
+    CUSTOM_POLICY_FOLD,
     LIVE_POLICY_FOLD,
     AdjacentRoomFlagCells,
     EvidenceHonestyReconstructionError,
@@ -736,6 +737,29 @@ def test_the_same_mismatch_is_counted_when_fidelity_is_not_asserted(
     assert report.impostor_targeting.reconstruction_mismatches > 0
     assert report.impostor_targeting.policy_mode == LIVE_POLICY_FOLD
     assert _counts(report.false_whereabouts.crew_false) == (10, 78)
+
+
+def test_a_caller_supplied_policy_is_never_reported_as_the_live_fold() -> None:
+    # ``policy_mode`` is the block's provenance, so it has to follow the policy
+    # actually folded: a caller-supplied factory reports the custom mode, and the
+    # default — the same call with the argument omitted — still reports the live
+    # one, which is the pair that proves the label is derived and not constant.
+    from agents.tactical.impostor_policy import ImpostorPolicy
+    from engine.entities import PlayerId
+
+    def _explicit(agent_id: PlayerId) -> ImpostorPolicy:
+        return ImpostorPolicy(agent_id=agent_id)
+
+    custom = compute_evidence_honesty(_SAMPLES_4P1I, impostor_policy=_explicit)
+    default = compute_evidence_honesty(_SAMPLES_4P1I)
+
+    assert custom.impostor_targeting.policy_mode == CUSTOM_POLICY_FOLD
+    assert default.impostor_targeting.policy_mode == LIVE_POLICY_FOLD
+    # The label is provenance only — the folded cells themselves are identical,
+    # because ``_explicit`` builds the very same policy the default does.
+    assert custom.impostor_targeting.model_dump(
+        exclude={"policy_mode"}
+    ) == default.impostor_targeting.model_dump(exclude={"policy_mode"})
 
 
 def test_a_directory_with_no_recordings_fails_loud(tmp_path: Path) -> None:
