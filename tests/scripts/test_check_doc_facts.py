@@ -1606,15 +1606,27 @@ _CONTRAST_FLOOR = 4.5
 # the declared colour instead of the composite is what hid it (Codex, PR #374).
 _BACKDROP_OPACITY = re.compile(r'class="backdrop"[^>]*fill-opacity="([\d.]+)"')
 _PAGE_GROUNDS = (("a light page", "#ffffff"), ("a dark page", "#0d1117"))
-_INKS_ON_BACKDROP = ("ink", "muted", "flow", "fire", "fire-soft")
-# The cards are painted opaque over the backdrop, so their fills need no
-# compositing — what they carry sits on exactly the declared colour.
-_INKS_ON_CARDS = (
-    ("ink", "card"),
-    ("muted", "card"),
-    ("ink", "card-strong"),
-    ("muted", "card-strong"),
-)
+
+# Which ground each text class is painted on. The BINDING from a class to the
+# colour it inks with is read out of the stylesheet, never assumed, so
+# repointing `.body` at `--card` fails here instead of rendering invisibly
+# (Codex, PR #374). Only the layout — which class sits on which rect — is
+# pinned, and the covering assertion below makes that safe by default: a text
+# class that is not in this table is unaccounted for and fails.
+_TEXT_CLASS_GROUNDS: dict[str, tuple[str, ...]] = {
+    "title": ("backdrop",),
+    "subtitle": ("backdrop",),
+    "legend": ("backdrop",),
+    "flow-label": ("backdrop",),
+    "fire-label": ("backdrop",),
+    "fire-note": ("backdrop",),
+    "name": ("card-strong",),
+    "name-sm": ("card",),
+    "body": ("card", "card-strong"),
+}
+_CSS_RULE = re.compile(r"\.([\w-]+)\s*\{([^}]*)\}")
+_FILL_VARIABLE = re.compile(r"fill:\s*var\(--([\w-]+)\)")
+_TEXT_CLASS_ATTR = re.compile(r'<text[^>]*class="([\w-]+)"')
 
 # The artifacts the front-door exhibit quotes, in the order it quotes them. The
 # two markers share no prefix, so losing the opener cannot be mistaken for an
@@ -1694,36 +1706,56 @@ def _contrast_problems(text: str) -> list[str]:
     alpha = float(opacity.group(1))
 
     problems: list[str] = []
-    for theme, palette in (("light", light), ("dark", dark)):
-        missing = [
-            name
-            for name in (*_INKS_ON_BACKDROP, "backdrop", "card", "card-strong")
-            if name not in palette
-        ]
-        if missing:
+    used = set(_TEXT_CLASS_ATTR.findall(text))
+    unaccounted = used - _TEXT_CLASS_GROUNDS.keys()
+    unused = _TEXT_CLASS_GROUNDS.keys() - used
+    if unaccounted or unused:
+        problems.append(
+            f"{_ARCHITECTURE_SVG}: the text classes and the ground table "
+            f"disagree — unaccounted {sorted(unaccounted)}, "
+            f"unused {sorted(unused)}"
+        )
+
+    inks = {
+        name: match.group(1)
+        for name, body in _CSS_RULE.findall(text)
+        if (match := _FILL_VARIABLE.search(body)) is not None
+    }
+    for name in sorted(used & _TEXT_CLASS_GROUNDS.keys()):
+        if name not in inks:
             problems.append(
-                f"{_ARCHITECTURE_SVG}: the {theme} palette defines no "
-                f"{', '.join('--' + name for name in missing)}"
+                f"{_ARCHITECTURE_SVG}: .{name} inks with no `fill: var(--…)`, "
+                "so nothing here can measure what it renders as"
             )
             continue
-        for where, page in _PAGE_GROUNDS:
-            ground = _over(palette["backdrop"], page, alpha)
-            for ink in _INKS_ON_BACKDROP:
-                ratio = _contrast_ratio(palette[ink], ground)
-                if ratio < _CONTRAST_FLOOR:
+        ink = inks[name]
+        for theme, palette in (("light", light), ("dark", dark)):
+            for ground_name in _TEXT_CLASS_GROUNDS[name]:
+                if ink not in palette or ground_name not in palette:
                     problems.append(
-                        f"{_ARCHITECTURE_SVG}: --{ink} on the {theme} backdrop "
-                        f"over {where} ({ground}) contrasts {ratio:.1f}:1, under "
-                        f"the {_CONTRAST_FLOOR}:1 floor"
+                        f"{_ARCHITECTURE_SVG}: the {theme} palette defines no "
+                        f"--{ink} on --{ground_name} pair"
                     )
-        for ink, card in _INKS_ON_CARDS:
-            ratio = _contrast_ratio(palette[ink], palette[card])
-            if ratio < _CONTRAST_FLOOR:
-                problems.append(
-                    f"{_ARCHITECTURE_SVG}: --{ink} on --{card} in the {theme} "
-                    f"palette contrasts {ratio:.1f}:1, under the "
-                    f"{_CONTRAST_FLOOR}:1 floor"
-                )
+                    continue
+                if ground_name != "backdrop":
+                    # Cards are painted opaque, so their fill IS the ground.
+                    ratio = _contrast_ratio(palette[ink], palette[ground_name])
+                    if ratio < _CONTRAST_FLOOR:
+                        problems.append(
+                            f"{_ARCHITECTURE_SVG}: .{name} (--{ink}) on "
+                            f"--{ground_name} in the {theme} palette contrasts "
+                            f"{ratio:.1f}:1, under the {_CONTRAST_FLOOR}:1 floor"
+                        )
+                    continue
+                for where, page in _PAGE_GROUNDS:
+                    ground = _over(palette["backdrop"], page, alpha)
+                    ratio = _contrast_ratio(palette[ink], ground)
+                    if ratio < _CONTRAST_FLOOR:
+                        problems.append(
+                            f"{_ARCHITECTURE_SVG}: .{name} (--{ink}) on the "
+                            f"{theme} backdrop over {where} ({ground}) contrasts "
+                            f"{ratio:.1f}:1, under the {_CONTRAST_FLOOR}:1 floor"
+                        )
     return problems
 
 
@@ -2051,6 +2083,31 @@ def test_an_opaque_backdrop_is_rejected() -> None:
     )
     problems = _svg_problems(painted_flat)
     assert any("backdrop is opaque" in problem for problem in problems), problems
+
+
+def test_a_text_class_repointed_at_its_own_ground_is_rejected() -> None:
+    """The ink of a class is read from the stylesheet, never assumed.
+
+    An ordinary-looking style edit — `.body` inking with the card colour it is
+    painted on — renders every card label invisible while changing no palette
+    value, so a checker holding hard-coded pairs would see nothing.
+    """
+
+    invisible = _committed(_ARCHITECTURE_SVG).replace(
+        ".body { fill: var(--muted);", ".body { fill: var(--card);", 1
+    )
+    problems = _svg_problems(invisible)
+    assert any(".body (--card)" in problem for problem in problems), problems
+
+
+def test_a_text_class_missing_from_the_ground_table_is_rejected() -> None:
+    """A class nothing accounts for cannot be reported as legible."""
+
+    renamed = _committed(_ARCHITECTURE_SVG).replace(
+        '<text class="legend"', '<text class="footnote"', 1
+    )
+    problems = _svg_problems(renamed)
+    assert any("ground table" in problem for problem in problems), problems
 
 
 def test_an_exhibit_that_stopped_linking_its_source_is_rejected() -> None:

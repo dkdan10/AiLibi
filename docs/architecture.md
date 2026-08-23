@@ -130,7 +130,9 @@ directory, plants a bad import *there* and asserts `lint-imports` rejects it —
 nothing synthetic is ever written inside the checkout, so a concurrent run cannot
 see a planted violation; `tests/observation/test_leak_property.py` runs
 every packet from Hypothesis-generated games recursively through the
-`eval/leak_test.py` scanners; `mypy --strict` runs repo-wide; and
+`eval/leak_scan.py` scanners (`eval/leak_test.py` is the pytest wrapper that
+owns the scripted sweeps and the planted-leak self-tests); `mypy --strict` runs
+repo-wide; and
 `eval/determinism_test.py` replays every scripted fixture twice, byte for byte.
 
 ## Determinism and the substrate ladder
