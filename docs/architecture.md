@@ -8,6 +8,10 @@ shape. Written from the code under Task 19.1; **current as of Phase 19 (2026-08)
 
 ## Layering
 
+![The layering as built: engine, the observation firewall, agents and meetings with llm beside them, the orchestrator, and the privileged readers](media/architecture.svg)
+
+The same layering in text, for anywhere the picture does not render:
+
 ```text
   engine/             pure deterministic tick; owns ALL hidden state
     v
@@ -101,6 +105,12 @@ default mover; learned arms stay opt-in.
 Only the spikes listed in `pyproject.toml`'s `[tool.mypy] exclude` skip the
 strict gate (along with `design/`, the one-off design-artifact generators).
 
+`meetings/manager.py` and `orchestrator/game.py` are the two large modules here:
+each is a single state machine whose steps share one piece of mutable run state,
+so splitting either before it has characterization tests would trade a long file
+for a wrong one — the decomposition is on the recorded backlog
+(`audits/audit-phase-19-planning.md` §5), not overlooked.
+
 ## Enforced boundaries
 
 Four `import-linter` contracts (`.importlinter`, run by `uv run lint-imports` in
@@ -109,10 +119,16 @@ firewall, direct or transitive); **agents must not import training** (keeps
 `numpy` off the inference path); **agents must not import meetings.manager**
 (agents may use meeting schemas and constants, never the runner); and
 **observation must not import agents, meetings, or llm**. `meetings/` and `llm/`
-are engine-free in fact, without a contract of their own.
+are engine-free in fact, without a contract of their own. Every root package
+that ships is on `.importlinter`'s `root_packages` list, so a route out of
+`agents/` through `orchestrator/`, `api/`, `eval/` or `scripts/` is walked to its
+end; a package left off that list is a hole in the transitive claim, not an
+exemption from it.
 
-Backing them: `tests/test_firewall.py` plants a bad import in `agents/` and
-asserts `lint-imports` rejects it; `tests/observation/test_leak_property.py` runs
+Backing them: `tests/test_firewall.py` copies the source tree into a throwaway
+directory, plants a bad import *there* and asserts `lint-imports` rejects it —
+nothing synthetic is ever written inside the checkout, so a concurrent run cannot
+see a planted violation; `tests/observation/test_leak_property.py` runs
 every packet from Hypothesis-generated games recursively through the
 `eval/leak_test.py` scanners; `mypy --strict` runs repo-wide; and
 `eval/determinism_test.py` replays every scripted fixture twice, byte for byte.
