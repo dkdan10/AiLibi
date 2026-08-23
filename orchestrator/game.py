@@ -56,6 +56,7 @@ from agents.memory.store import (
 from agents.perception import (
     EVENT_SAW_BODY,
     EVENT_SAW_PLAYER,
+    EVENT_SAW_PLAYER_MOVE,
     EVENT_SELF_STATE,
     PROVENANCE_OBSERVED,
     ingest_packet,
@@ -102,6 +103,7 @@ from meetings.manager import (
 from meetings.schemas import (
     FoundBodyObservation,
     MeetingResult,
+    MoveWitnessRecord,
     ObservationId,
     ReportedStatement,
     SightingRecord,
@@ -647,6 +649,28 @@ class ReportedTestimonyAgent(Protocol):
 
 
 @runtime_checkable
+class MoveWitnessAgent(Protocol):
+    """Agent that exposes its OWN witnessed room→room transitions.
+
+    The grounding feed behind the meeting layer's default-OFF movement-claim
+    lever (:func:`meetings.transcript.movement_claim_shape_enabled`): a spoken
+    placement is only ever re-read at a destination the SPEAKER's own record
+    already holds, so the channel is what keeps the lever unable to rewrite
+    testimony nobody made. Firewall-clean -- an agent reporting its own
+    witnessed events leaks nothing, and the packet the rows derive from is
+    witness-gated by the engine (``eval/leak_test.py``).
+
+    OPTIONAL, like :class:`BeliefPersistingAgent`, rather than a member of
+    :class:`MeetingAwareAgent`: an agent without the channel simply grounds
+    nothing, and a spoken placement of theirs is read exactly as spoken --
+    the same no-op the lever's OFF path produces, so a scripted /
+    packet-recording test agent needs no movement bookkeeping to run a meeting.
+    """
+
+    def move_witness_records_for_meeting(self) -> tuple[MoveWitnessRecord, ...]: ...
+
+
+@runtime_checkable
 class MeetingPacingAgent(Protocol):
     """Agent that bookkeeps meeting-end pacing facts (Task 10.8, 18.22).
 
@@ -1079,6 +1103,14 @@ def _build_participants(
                 # Task 16.7: the vent channel's sighting sibling -- the
                 # grounded-vouch input, same meeting-open snapshot discipline.
                 sighting_records=agent.sighting_records_for_meeting(),
+                # The movement-claim lever's grounding channel, same snapshot
+                # discipline. An agent without the optional capability grounds
+                # nothing, which is the lever's own OFF behaviour.
+                move_witness_records=(
+                    agent.move_witness_records_for_meeting()
+                    if isinstance(agent, MoveWitnessAgent)
+                    else ()
+                ),
                 # Task 16.5 (C8): the voter's OWN stable observation-id set --
                 # the valid-citation universe the manager validates
                 # ``primary_reason_observation_id`` against, same self-channel
@@ -2852,6 +2884,54 @@ class TacticalAgent:
             for player_id, room, tick in sightings
         )
 
+    def move_witness_records_for_meeting(self) -> tuple[MoveWitnessRecord, ...]:
+        """The agent's OWN witnessed room→room transitions, typed.
+
+        Implements :class:`MoveWitnessAgent`. A straight read of the episodic
+        log -- first-hand (``provenance == "observed"``) ``saw_player_move``
+        rows -- projected into :class:`~meetings.schemas.MoveWitnessRecord`
+        rows. These are the SAME rows the §6.6 renderer turns into "You saw
+        {player} move from {from_room} to {to_room}." lines, so the typed
+        channel the meeting layer grounds against and the prose the model speaks
+        from cannot drift.
+
+        Firewall-clean: every row was witness-gated by the engine before it
+        reached this agent's packet (``eval/leak_test.py``), and the accessor
+        reports only this agent's own log. Unlike the §6.6 render this applies
+        no teammate suppression, which is safe for the one consumer: grounding
+        can only ever re-read a placement the speaker already stated, never mint
+        a flag of its own, and a record never reaches a prompt or the recorded
+        ``MeetingResult``. Payload reads are defensive per the store convention
+        -- a malformed row contributes nothing. Append order is non-decreasing
+        in tick (the episodic-store invariant), so the returned tuple is
+        deterministic and tick-sorted.
+        """
+
+        records: list[MoveWitnessRecord] = []
+        for event in self._memory.episodic.recent(since_tick=0):
+            if event.type != EVENT_SAW_PLAYER_MOVE:
+                continue
+            if event.provenance != PROVENANCE_OBSERVED:
+                continue
+            player_id = event.payload.get("player_id")
+            from_room = event.payload.get("from_room")
+            to_room = event.payload.get("to_room")
+            if (
+                not isinstance(player_id, str)
+                or not isinstance(from_room, str)
+                or not isinstance(to_room, str)
+            ):
+                continue
+            records.append(
+                MoveWitnessRecord(
+                    subject=player_id,
+                    from_room=from_room,
+                    to_room=to_room,
+                    tick=event.tick,
+                )
+            )
+        return tuple(records)
+
     def _fellow_impostor_ids_from_store(self) -> frozenset[str]:
         """The agent's OWN fellow-impostor set, read from its ``self_state`` log.
 
@@ -3176,6 +3256,7 @@ __all__ = [
     "MeetingArtifacts",
     "MeetingAwareAgent",
     "MeetingPacingAgent",
+    "MoveWitnessAgent",
     "MeetingRunner",
     "Outcome",
     "PROMPT_VERSION_SETS",

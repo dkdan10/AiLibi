@@ -16,6 +16,26 @@ contract satisfiable (audit post-phase-14-pause §3, import contracts):
 imports these back and re-exports them, so every existing
 ``from meetings.manager import ...`` call site keeps working.
 
+Observation shapes a turn may answer with
+========================================
+
+The renderers above show the transcript and take the model's structured turn
+back, so the shapes a turn may carry are part of this contract:
+:class:`~meetings.schemas.SawPlayerObservation` (a player at a room and tick),
+:class:`~meetings.schemas.SawMoveObservation` (a witnessed transition -- that
+player moved from one room to another, arriving at the tick),
+:class:`~meetings.schemas.CompletedTaskObservation`,
+:class:`~meetings.schemas.FoundBodyObservation`,
+:class:`~meetings.schemas.SawVentObservation` and
+:class:`~meetings.schemas.WhereaboutsClaim` (the speaker's own placement).
+
+The turn schema accepts a transition unconditionally, but no template names it
+yet: until the prompt set lists it the model cannot answer with one, and the
+meeting layer reads a witnessed transition through its default-OFF lever
+(:func:`meetings.transcript.movement_claim_shape_enabled`) instead. A renderer
+that starts offering the shape must therefore ship with that lever, or a turn
+will state a transition nothing reads.
+
 Keep this module a leaf: import only from :mod:`meetings.schemas` and the
 stdlib. It must never import :mod:`meetings.manager` (that would re-create
 the cycle the split exists to break).
