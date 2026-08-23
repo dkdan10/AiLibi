@@ -2,10 +2,7 @@
 ## Tasks completed (global): 3 / 14
 
 ## Where you were:
-- [ticks 4-6] You were in REACTOR.
-- [tick 8] You were in EAST_HALL.
-- [ticks 9-10] You were in ADMIN.
-- [tick 12] You were in MEDBAY.
+- Your route (t = tick): REACTOR t4-6 -> (no record) -> EAST_HALL t8 -> ADMIN t9-10 -> (no record) -> MEDBAY t12
 
 ## Recent observations (most salient first):
 - [tick 9] You saw p-4 task in ADMIN.

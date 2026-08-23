@@ -1223,26 +1223,43 @@ def test_the_report_is_json_stable_and_leaks_no_identifiers(
 # --------------------------------------------------------------------------- #
 
 _TRAIL_ON: Mapping[str, str] = MappingProxyType({ENV_SELF_LOCATION_TRAIL: "1"})
-_TRAIL_LINE: Final[re.Pattern[str]] = re.compile(
-    r"^- \[ticks? (?P<start>\d+)(?:-(?P<end>\d+))?\] You were in "
-)
+_TRAIL_ROUTE_PREFIX: Final[str] = "- Your route (t = tick): "
+_TRAIL_GAP_STEP: Final[str] = "(no record)"
+_TRAIL_TRUNCATED_NOTICE: Final[str] = "Earlier parts of your route are not listed."
 _COMPLETED_ROW: Final[re.Pattern[str]] = re.compile(
     r"\[tick (?P<tick>\d+)\] You completed \S+ \(you were in (?P<room>[^)]+)\)\."
 )
 
 
+def _rendered_trail_steps(view: str) -> list[tuple[int, int]]:
+    """The tick range of every step the rendered route line places the agent at.
+
+    Read the way the speaker would read it: split the chain, then take each
+    step's trailing tick stamp. ``(no record)`` steps claim no tick.
+    """
+
+    steps: list[tuple[int, int]] = []
+    for line in view.splitlines():
+        if not line.startswith(_TRAIL_ROUTE_PREFIX):
+            continue
+        for step in line[len(_TRAIL_ROUTE_PREFIX) :].split(" -> "):
+            if step == _TRAIL_GAP_STEP:
+                continue
+            ticks = step.rpartition(" ")[2]
+            assert ticks.startswith("t"), f"unreadable route step {step!r}"
+            start, _, end = ticks[1:].partition("-")
+            steps.append((int(start), int(end or start)))
+    return steps
+
+
 def _rendered_trail_ticks(view: str) -> frozenset[int]:
     """Every tick a rendered ``## Where you were:`` block places the agent at."""
 
-    ticks: set[int] = set()
-    for line in view.splitlines():
-        match = _TRAIL_LINE.match(line)
-        if match is None:
-            continue
-        start = int(match.group("start"))
-        end = int(match.group("end")) if match.group("end") else start
-        ticks.update(range(start, end + 1))
-    return frozenset(ticks)
+    return frozenset(
+        tick
+        for start, end in _rendered_trail_steps(view)
+        for tick in range(start, end + 1)
+    )
 
 
 def _observation_rows(view: str) -> frozenset[str]:
@@ -1256,7 +1273,8 @@ def _observation_rows(view: str) -> frozenset[str]:
         line
         for line in view.splitlines()
         if line.startswith("- ")
-        and _TRAIL_LINE.match(line) is None
+        and not line.startswith(_TRAIL_ROUTE_PREFIX)
+        and line != f"- {_TRAIL_TRUNCATED_NOTICE}"
         and "You completed " not in line
     )
 
@@ -1269,7 +1287,7 @@ class _SelfPlacementCensus(NamedTuple):
     rendered_on: int
     rendered_off: int
     renders: int
-    trail_lines: int
+    trail_steps: int
     added_tokens: int
     observations_lost: int
     observations_lost_testimony: int
@@ -1298,7 +1316,7 @@ def _self_placement_census(sample_dir: Path) -> _SelfPlacementCensus:
         game_map=game_map,
     )
     claims = in_record = rendered_on = rendered_off = 0
-    renders = trail_lines = added_tokens = observations_lost = 0
+    renders = trail_steps = added_tokens = observations_lost = 0
     observations_lost_testimony = completion_rows = completion_agrees = 0
 
     for seed in seeds_on_disk(sample_dir):
@@ -1352,11 +1370,7 @@ def _self_placement_census(sample_dir: Path) -> _SelfPlacementCensus:
                             for span in _collect_self_location_spans(memories[pid])
                             for tick in range(span.start_tick, span.end_tick + 1)
                         )
-                        trail_lines += sum(
-                            1
-                            for line in on.splitlines()
-                            if _TRAIL_LINE.match(line) is not None
-                        )
+                        trail_steps += len(_rendered_trail_steps(on))
                         # The renderer's own 4-chars-per-token arithmetic.
                         added_tokens += (len(on) + 3) // 4 - (len(off) + 3) // 4
                         dropped = _observation_rows(off) - _observation_rows(on)
@@ -1392,7 +1406,7 @@ def _self_placement_census(sample_dir: Path) -> _SelfPlacementCensus:
         rendered_on=rendered_on,
         rendered_off=rendered_off,
         renders=renders,
-        trail_lines=trail_lines,
+        trail_steps=trail_steps,
         added_tokens=added_tokens,
         observations_lost=observations_lost,
         observations_lost_testimony=observations_lost_testimony,
@@ -1421,10 +1435,15 @@ def placement() -> Mapping[Path, _SelfPlacementCensus]:
 def test_the_coverage_reading_bites_on_a_trail_that_omits_the_tick() -> None:
     # The gate the pins below rest on, exercised directly: a rendered route that
     # skips a tick must not be read as covering it, and one that spans it must.
-    covering = "## Where you were:\n- [ticks 4-6] You were in REACTOR.\n"
-    omitting = "## Where you were:\n- [ticks 4-5] You were in REACTOR.\n"
-    assert _rendered_trail_ticks(covering) == frozenset({4, 5, 6})
-    assert 6 not in _rendered_trail_ticks(omitting)
+    # The gap step is the case that matters -- it sits between two steps and
+    # claims nothing, so the ticks it stands for must not be read as covered.
+    covering = f"## Where you were:\n{_TRAIL_ROUTE_PREFIX}REACTOR t4-6 -> ADMIN t7\n"
+    omitting = (
+        f"## Where you were:\n{_TRAIL_ROUTE_PREFIX}"
+        "REACTOR t4-5 -> (no record) -> ADMIN t7\n"
+    )
+    assert _rendered_trail_ticks(covering) == frozenset({4, 5, 6, 7})
+    assert _rendered_trail_ticks(omitting) == frozenset({4, 5, 7})
     assert _rendered_trail_ticks("## Where you were:\n") == frozenset()
 
 
@@ -1473,25 +1492,30 @@ def test_the_trail_s_budget_cost_is_measured_not_assumed(
     placement: Mapping[Path, _SelfPlacementCensus],
 ) -> None:
     # The block occupies budget the observations block used to have, and the size
-    # of that is measured here rather than assumed away. On the 4p1i sets the
-    # salience budget never binds and the trail costs nothing; on the 9p2i sets it
-    # costs a mean 1.9 and 1.8 rendered rows per render, of which roughly half are
-    # the oldest reported-testimony rows and the rest the oldest sightings.
-    # Nothing here is rounded: the counts are the recount.
+    # of that is measured here rather than assumed away. This is the FALSIFIED
+    # half of the contract's budget item: full coverage and zero displacement
+    # cannot both hold, because the 9p2i meetings already saturate
+    # DEFAULT_TOKEN_BUDGET, so the route is paid for out of the elastic block. On
+    # the 4p1i sets the budget never binds and the trail costs nothing; on the
+    # 9p2i sets it costs a mean 1.1 and 1.0 rendered rows per render, of which
+    # roughly half are the oldest reported-testimony rows and the rest the oldest
+    # sightings. Chaining the route onto one line is what halved that: the same
+    # 6715 steps rendered as one bullet each displaced 1858 rows (863 testimony)
+    # on samples/9p2i and 4791 (2205) on the corpus. Nothing here is rounded.
     samples = placement[_SAMPLES_9P2I]
     corpus = placement[_CORPUS_9P2I]
-    assert (samples.renders, samples.trail_lines, samples.added_tokens) == (
+    assert (samples.renders, samples.trail_steps, samples.added_tokens) == (
         971,
         6715,
-        31786,
+        20734,
     )
     assert (samples.observations_lost, samples.observations_lost_testimony) == (
-        1858,
-        863,
+        1060,
+        494,
     )
     assert (corpus.observations_lost, corpus.observations_lost_testimony) == (
-        4791,
-        2205,
+        2721,
+        1263,
     )
     for sample_dir in (_SAMPLES_4P1I, _CORPUS_4P1I):
         assert placement[sample_dir].observations_lost == 0
@@ -1511,11 +1535,12 @@ def test_the_completed_task_row_names_the_engine_truth_room(
         assert census.completion_agrees == census.completion_rows
     # The review's offline re-render census over the same 971 rendered memories
     # counted 843 completed-task instances [A/verdicts.md G-1]; this recount finds
-    # 842. The review's script is not committed (audits/audit-phase-20-planning.md
-    # §4 item 4) and the count is budget-sensitive -- the salience cut decides how
-    # many of an agent's rows survive each prompt -- so the one-row residual is
-    # carried, not smoothed.
-    assert placement[_SAMPLES_9P2I].completion_rows == 842
-    assert placement[_CORPUS_9P2I].completion_rows == 2442
+    # 848. The review's script is not committed (audits/audit-phase-20-planning.md
+    # §4 item 4) and the population is budget-sensitive -- the salience cut decides
+    # how many of an agent's rows survive each prompt, so a cheaper route block
+    # leaves room for more of them (the per-span route this one replaced rendered
+    # 842 here and 2442 on the corpus). The residual is carried, not smoothed.
+    assert placement[_SAMPLES_9P2I].completion_rows == 848
+    assert placement[_CORPUS_9P2I].completion_rows == 2461
     assert placement[_SAMPLES_4P1I].completion_rows == 61
     assert placement[_CORPUS_4P1I].completion_rows == 58

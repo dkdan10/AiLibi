@@ -276,6 +276,15 @@ SELF_LOCATION_TRAIL_MAX_SPANS: Final[int] = 12
 
 _TRAIL_HEADER: Final[str] = "## Where you were:"
 _TRAIL_TRUNCATED_LINE: Final[str] = "Earlier parts of your route are not listed."
+# The route renders as ONE chained line rather than one line per span. A step
+# carries the same room and the same tick range a per-span line did, at roughly
+# half the budget, so more of the observations block survives beside a full route
+# (the displacement both shapes cost is pinned in tests/eval/test_evidence_honesty).
+_TRAIL_ROUTE_PREFIX: Final[str] = "Your route (t = tick): "
+_TRAIL_STEP_JOIN: Final[str] = " -> "
+# A tick the agent holds no row for is stated, never bridged: the arrow between
+# two steps means "and then", so an unrecorded stretch needs its own step.
+_TRAIL_GAP_STEP: Final[str] = "(no record)"
 
 
 def self_location_trail_enabled(env: Mapping[str, str] | None = None) -> bool:
@@ -345,13 +354,16 @@ def render_for_prompt(
     :func:`self_location_trail_enabled` (default-OFF) adds a ``## Where you were:``
     block between the fixed lines and the observations, so the agent can answer the
     meeting's roll-call from its own record instead of extrapolating: the ticks its
-    ``self_state`` channel recorded, coalesced oldest-first into
-    ``[ticks a-b] You were in ROOM.`` spans (a lone tick renders ``[tick a]``, and a
-    tick spent in a vent renders as such). A tick with no recorded row BREAKS a
-    span -- the trail never interpolates across a gap -- while a meeting boundary
-    does not, because a meeting freezes movement (DESIGN.md §5.1). At most
+    ``self_state`` channel recorded, coalesced oldest-first into spans and chained
+    onto ONE line, ``ROOM t{a}-{b} -> ROOM t{c} -> ...`` (a lone tick states one
+    tick, and a tick spent in a vent says so). Chaining is what makes the route
+    affordable: it costs about half the per-span shape, so the whole route reaches
+    the prompt beside the observations rather than displacing them. A tick with no
+    recorded row BREAKS a span and renders its own ``(no record)`` step -- the
+    trail never interpolates across a gap -- while a meeting boundary does not,
+    because a meeting freezes movement (DESIGN.md §5.1). At most
     :data:`SELF_LOCATION_TRAIL_MAX_SPANS` spans render; past that the oldest are
-    dropped and the block says so in one plain line. A trail line carries no
+    dropped and the block says so in one plain line. The route line carries no
     ``[obs ...]`` prefix -- a span is coalesced from several rows rather than being
     one citable observation -- so it cannot teach a model to cite an id the ballot
     validator would null. The same lever takes the completed-task line's room from
@@ -446,14 +458,12 @@ def render_for_prompt(
         env=env,
     )
     contradiction_lines = _build_contradiction_lines(memory.beliefs, roster=roster)
-    trail_lines: list[str] = []
+    trail_spans: list[_SelfLocationSpan] = []
     trail_truncated = False
     if trail_on:
         spans = _collect_self_location_spans(memory.episodic)
         trail_truncated = len(spans) > SELF_LOCATION_TRAIL_MAX_SPANS
-        trail_lines = [
-            _trail_line(span) for span in spans[-SELF_LOCATION_TRAIL_MAX_SPANS:]
-        ]
+        trail_spans = spans[-SELF_LOCATION_TRAIL_MAX_SPANS:]
 
     return _assemble_view(
         role=role,
@@ -461,7 +471,7 @@ def render_for_prompt(
         observations=observations,
         beliefs_lines=beliefs_lines,
         contradiction_lines=contradiction_lines,
-        trail_lines=trail_lines,
+        trail_spans=trail_spans,
         trail_truncated=trail_truncated,
         token_budget=token_budget,
     )
@@ -1168,22 +1178,39 @@ def _collect_self_location_spans(episodic: MemoryStore) -> list[_SelfLocationSpa
     return spans
 
 
-def _trail_line(span: _SelfLocationSpan) -> str:
-    """Render one route span; a lone tick states one tick, a run states a range.
-
-    The line carries no ``[obs ...]`` prefix: a span is coalesced from several
-    self-state rows rather than being one citable observation, and the roll-call
-    asks for a room and a tick, not a citation. That also keeps the line short,
-    which is what lets the route survive the token budget.
-    """
+def _trail_step(span: _SelfLocationSpan) -> str:
+    """One step of the route: where the agent was, then the ticks it was there."""
 
     where = f"a vent in {span.room}" if span.in_vent else span.room
-    stamp = (
-        f"[tick {span.start_tick}]"
+    ticks = (
+        f"t{span.start_tick}"
         if span.start_tick == span.end_tick
-        else f"[ticks {span.start_tick}-{span.end_tick}]"
+        else f"t{span.start_tick}-{span.end_tick}"
     )
-    return f"{stamp} You were in {where}."
+    return f"{where} {ticks}"
+
+
+def _trail_route_line(spans: Sequence[_SelfLocationSpan]) -> str:
+    """Chain the spans into one oldest-first route line, stating every gap.
+
+    Steps are joined by an arrow meaning "and then"; a stretch of ticks the agent
+    holds no row for gets its own ``(no record)`` step, so the line never reads as
+    a claim about a tick the record does not cover.
+
+    The line carries no ``[obs ...]`` prefix: a step is coalesced from several
+    self-state rows rather than being one citable observation, and the roll-call
+    asks for a room and a tick, not a citation. Chaining is also what keeps the
+    whole route affordable — one header and one bullet for the entire route.
+    """
+
+    steps: list[str] = []
+    previous_end: int | None = None
+    for span in spans:
+        if previous_end is not None and span.start_tick != previous_end + 1:
+            steps.append(_TRAIL_GAP_STEP)
+        steps.append(_trail_step(span))
+        previous_end = span.end_tick
+    return _TRAIL_ROUTE_PREFIX + _TRAIL_STEP_JOIN.join(steps)
 
 
 def _collect_transitions(
@@ -2038,7 +2065,7 @@ def _assemble_view(
     observations: list[_Observation],
     beliefs_lines: list[str],
     contradiction_lines: list[str],
-    trail_lines: list[str],
+    trail_spans: Sequence[_SelfLocationSpan],
     trail_truncated: bool,
     token_budget: int,
 ) -> str:
@@ -2049,11 +2076,11 @@ def _assemble_view(
     Observations are the elastic section: they fill the remaining budget,
     dropped from lowest salience first if the budget is tight.
 
-    ``trail_lines`` (the self-location route, oldest first) is capped upstream and
-    charged before the observations, then shed OLDEST-first if even the capped
-    block does not fit, so the trail can never overflow the budget onto the
-    observations. Whenever any span was dropped -- by the cap or by that shedding
-    -- the block says so.
+    ``trail_spans`` (the self-location route, oldest first) is capped upstream and
+    charged before the observations as ONE chained line, then shed OLDEST-first if
+    even the capped route does not fit, so the trail can never overflow the budget
+    onto the observations. Whenever any span was dropped -- by the cap or by that
+    shedding -- the block says so.
 
     The budget arithmetic charges every character that lands in the
     final output, including the Markdown separators (``"\\n\\n"`` between
@@ -2096,7 +2123,7 @@ def _assemble_view(
     # block the meeting's roll-call is answered from, and the observations below
     # it are the elastic section by construction.
     trail_block, trail_cost = _select_trail_within_budget(
-        trail_lines=trail_lines,
+        spans=trail_spans,
         truncated=trail_truncated,
         budget=remaining,
     )
@@ -2129,11 +2156,11 @@ def _assemble_view(
 
 def _select_trail_within_budget(
     *,
-    trail_lines: list[str],
+    spans: Sequence[_SelfLocationSpan],
     truncated: bool,
     budget: int,
 ) -> tuple[list[str], int]:
-    """The trail block that fits ``budget``, shedding OLDEST lines first.
+    """The trail block that fits ``budget``, shedding OLDEST spans first.
 
     The recent route is the part a roll-call answer is copied from, so a tight
     budget keeps it and drops the far end; an empty block costing nothing is
@@ -2142,21 +2169,25 @@ def _select_trail_within_budget(
     blocks cannot disagree about what a line costs.
     """
 
-    if not trail_lines:
+    if not spans:
         return [], 0
     header_cost = _estimate_tokens("\n\n" + _TRAIL_HEADER)
     notice_cost = _estimate_tokens("\n- " + _TRAIL_TRUNCATED_LINE)
-    line_costs = [_estimate_tokens("\n- " + line) for line in trail_lines]
-    for first in range(len(trail_lines)):
+    for first in range(len(spans)):
         # Any span dropped -- by the cap upstream or by this shedding -- is stated.
         shed = truncated or first > 0
-        cost = header_cost + (notice_cost if shed else 0) + sum(line_costs[first:])
+        route = _trail_route_line(spans[first:])
+        cost = (
+            header_cost
+            + (notice_cost if shed else 0)
+            + _estimate_tokens("\n- " + route)
+        )
         if cost > budget:
             continue
         block = [_TRAIL_HEADER]
         if shed:
             block.append(f"- {_TRAIL_TRUNCATED_LINE}")
-        block.extend(f"- {line}" for line in trail_lines[first:])
+        block.append(f"- {route}")
         return block, cost
     return [], 0
 

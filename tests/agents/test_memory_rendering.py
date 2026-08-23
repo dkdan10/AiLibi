@@ -1656,7 +1656,8 @@ _TRAIL_ON: Mapping[str, str] = {ENV_SELF_LOCATION_TRAIL: "1"}
 _TRAIL_OFF: Mapping[str, str] = {ENV_SELF_LOCATION_TRAIL: "0"}
 _TRAIL_HEADER = "## Where you were:"
 _TRAIL_TRUNCATED = "- Earlier parts of your route are not listed."
-_TRAIL_LINE = re.compile(r"^- \[ticks? (?P<start>\d+)(?:-(?P<end>\d+))?\] You were in ")
+_TRAIL_ROUTE_PREFIX = "- Your route (t = tick): "
+_TRAIL_GAP_STEP = "(no record)"
 _OBS_ID_IN_VIEW = re.compile(r"\[obs ([^\]]+)\]")
 
 
@@ -1669,18 +1670,35 @@ def _meeting_boundary_event(*, tick: int) -> EpisodicEvent:
     )
 
 
+def _trail_steps(view: str) -> list[tuple[int, int, str]]:
+    """The rendered route parsed back into ``(start, end, where)`` steps.
+
+    Reading the line the way a model would -- split the chain, then read each
+    step's place and tick range -- is what makes the assertions below check the
+    route's SEMANTICS rather than one formatting string. ``(no record)`` steps
+    claim nothing and are dropped here.
+    """
+
+    steps: list[tuple[int, int, str]] = []
+    for line in view.splitlines():
+        if not line.startswith(_TRAIL_ROUTE_PREFIX):
+            continue
+        for step in line[len(_TRAIL_ROUTE_PREFIX) :].split(" -> "):
+            if step == _TRAIL_GAP_STEP:
+                continue
+            where, _, ticks = step.rpartition(" ")
+            assert ticks.startswith("t"), f"unreadable route step {step!r}"
+            start, _, end = ticks[1:].partition("-")
+            steps.append((int(start), int(end or start), where))
+    return steps
+
+
 def _trail_ticks(view: str) -> list[int]:
     """Every tick the rendered trail claims, oldest first."""
 
-    ticks: list[int] = []
-    for line in view.splitlines():
-        match = _TRAIL_LINE.match(line)
-        if match is None:
-            continue
-        start = int(match.group("start"))
-        end = int(match.group("end")) if match.group("end") else start
-        ticks.extend(range(start, end + 1))
-    return ticks
+    return [
+        tick for start, end, _ in _trail_steps(view) for tick in range(start, end + 1)
+    ]
 
 
 def _trail_block(view: str) -> list[str]:
@@ -1772,21 +1790,21 @@ class TestSelfLocationTrailLever:
 
         assert _trail_block(view) == [
             _TRAIL_HEADER,
-            "- [ticks 12-14] You were in REACTOR.",
-            "- [tick 17] You were in ADMIN.",
+            "- Your route (t = tick): REACTOR t12-14 -> (no record) -> ADMIN t17",
         ]
+        assert _trail_steps(view) == [(12, 14, "REACTOR"), (17, 17, "ADMIN")]
 
     def test_a_gap_in_the_record_breaks_a_span(self) -> None:
-        # Tick 14 was never recorded, so the trail may not claim it: two spans,
-        # not one 13-15 range across a tick the agent has no row for.
+        # Tick 14 was never recorded, so the trail may not claim it: two steps
+        # with the gap stated between them, not one 13-15 range across a tick the
+        # agent has no row for.
         memory = _walk((13, "REACTOR"), (15, "REACTOR"))
 
         view = render_for_prompt(memory, env=_TRAIL_ON)
 
         assert _trail_block(view) == [
             _TRAIL_HEADER,
-            "- [tick 13] You were in REACTOR.",
-            "- [tick 15] You were in REACTOR.",
+            "- Your route (t = tick): REACTOR t13 -> (no record) -> REACTOR t15",
         ]
         assert 14 not in _trail_ticks(view)
 
@@ -1801,7 +1819,7 @@ class TestSelfLocationTrailLever:
 
         assert _trail_block(view) == [
             _TRAIL_HEADER,
-            "- [ticks 13-14] You were in REACTOR.",
+            "- Your route (t = tick): REACTOR t13-14",
         ]
         assert "p-" not in _trail_block(view)[1]
 
@@ -1840,12 +1858,15 @@ class TestSelfLocationTrailLever:
 
         for view in (crew, impostor):
             # Entering the vent breaks the span: the two ticks are not the same
-            # placement, and an in-vent tick says so rather than reading as an
-            # ordinary room stay.
+            # placement, and an in-vent step says so inline rather than reading as
+            # an ordinary room stay.
             assert _trail_block(view) == [
                 _TRAIL_HEADER,
-                "- [tick 6] You were in ELECTRICAL.",
-                "- [tick 7] You were in a vent in ELECTRICAL.",
+                "- Your route (t = tick): ELECTRICAL t6 -> a vent in ELECTRICAL t7",
+            ]
+            assert _trail_steps(view) == [
+                (6, 6, "ELECTRICAL"),
+                (7, 7, "a vent in ELECTRICAL"),
             ]
 
     def test_trail_lines_carry_no_ids_and_every_rendered_id_is_the_store_s(
@@ -1894,19 +1915,22 @@ class TestSelfLocationTrailLever:
         block = _trail_block(view)
         notice = _TRAIL_TRUNCATED
         assert block[1] == notice
-        assert len(block) == SELF_LOCATION_TRAIL_MAX_SPANS + 2
+        assert len(block) == 3
+        steps = _trail_steps(view)
+        assert len(steps) == SELF_LOCATION_TRAIL_MAX_SPANS
         # The RECENT route survives; the far end is what went.
-        assert block[-1] == "- [tick 39] You were in ROOM_39."
-        assert "- [tick 0] You were in ROOM_0." not in block
+        assert steps[-1] == (39, 39, "ROOM_39")
+        assert (0, 0, "ROOM_0") not in steps
         # Craft rule 4: the truncation line carries no ids and no arithmetic.
         assert not any(char.isdigit() for char in notice)
         assert "obs" not in notice
 
-    def test_a_tight_budget_sheds_the_oldest_trail_lines_not_the_newest(
+    def test_a_tight_budget_sheds_the_oldest_trail_steps_not_the_newest(
         self,
     ) -> None:
+        walk = [(tick, f"ROOM_{tick}") for tick in range(10, 22)]
         memory = AgentMemory()
-        for tick, room in ((10, "REACTOR"), (11, "ADMIN"), (12, "MEDBAY")):
+        for tick, room in walk:
             memory.episodic.append(
                 _self_state_event(tick=tick, room=room, agent_id="p-1")
             )
@@ -1915,28 +1939,22 @@ class TestSelfLocationTrailLever:
                     tick=tick, player_id=f"p-{tick}", room=room, action=None
                 )
             )
-        memory.episodic.append(_global_status_event(tick=12, completed=1, total=9))
+        memory.episodic.append(_global_status_event(tick=21, completed=1, total=9))
+        full = [(tick, tick, room) for tick, room in walk]
 
         seen_shed = False
-        for budget in range(20, 200, 5):
+        for budget in range(20, 260):
             view = render_for_prompt(memory, token_budget=budget, env=_TRAIL_ON)
             # The block never overflows the budget onto anything else.
             assert _estimate_tokens_of(view) <= budget
             if _TRAIL_HEADER not in view:
                 continue
             block = _trail_block(view)
-            lines = [line for line in block[1:] if line != _TRAIL_TRUNCATED]
+            steps = _trail_steps(view)
             # Whatever survives is the RECENT end of the route, and a shortened
             # route always says so.
-            assert (
-                lines
-                == [
-                    "- [tick 10] You were in REACTOR.",
-                    "- [tick 11] You were in ADMIN.",
-                    "- [tick 12] You were in MEDBAY.",
-                ][3 - len(lines) :]
-            )
-            if len(lines) < 3:
+            assert steps == full[len(full) - len(steps) :]
+            if len(steps) < len(full):
                 seen_shed = True
                 assert _TRAIL_TRUNCATED in block
         # The gate bites only if the shedding branch was actually exercised.
@@ -2106,15 +2124,9 @@ def _assert_completions_agree_with_the_trail(view: str) -> None:
     """Every completion line names the room the trail gives for the tick it states."""
 
     rooms_by_tick: dict[int, str] = {}
-    for line in view.splitlines():
-        match = _TRAIL_LINE.match(line)
-        if match is None:
-            continue
-        start = int(match.group("start"))
-        end = int(match.group("end")) if match.group("end") else start
-        room = line.split(" You were in ", 1)[1].rstrip(".")
+    for start, end, where in _trail_steps(view):
         for tick in range(start, end + 1):
-            rooms_by_tick[tick] = room
+            rooms_by_tick[tick] = where
     for match in _COMPLETED_LINE.finditer(view):
         tick = int(match.group("tick"))
         stated = rooms_by_tick.get(tick)
@@ -2173,15 +2185,8 @@ class TestSelfLocationTrailProperties:
         # Nothing may go missing unless the render SAID the route was cut.
         if _TRAIL_TRUNCATED not in view:
             assert set(claimed) == set(recorded)
-        for line in _trail_block(view)[1:]:
-            if line == _TRAIL_TRUNCATED:
-                continue
-            match = _TRAIL_LINE.match(line)
-            assert match is not None
-            start = int(match.group("start"))
-            end = int(match.group("end")) if match.group("end") else start
-            room = line.split(" You were in ", 1)[1].rstrip(".")
-            assert {recorded[tick] for tick in range(start, end + 1)} == {room}
+        for start, end, where in _trail_steps(view):
+            assert {recorded[tick] for tick in range(start, end + 1)} == {where}
 
     @settings(max_examples=120)
     @given(rows=_TRAIL_TICKS)
