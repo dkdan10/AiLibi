@@ -8,11 +8,11 @@
       --card: #f8fafb;
       --card-strong: #e3e9ef;
       --ink: #1f2b36;
-      --muted: #4f5d6a;
+      --muted: #485560;
       --rule: #8a97a3;
-      --flow: #35637f;
-      --fire: #a8452a;
-      --fire-soft: #93502f;
+      --flow: #2f5b76;
+      --fire: #973b21;
+      --fire-soft: #834324;
     }
     @media (prefers-color-scheme: dark) {
       svg {
@@ -23,7 +23,7 @@
         --muted: #a3b0bc;
         --rule: #64717d;
         --flow: #7db3d0;
-        --fire: #e28a6b;
+        --fire: #ee9d7e;
         --fire-soft: #d79b81;
       }
     }

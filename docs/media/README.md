@@ -21,8 +21,11 @@ both GitHub themes, which its internal `prefers-color-scheme` block handles. The
 rule for changing it: edit the file whenever the layering in
 [`docs/architecture.md`](../architecture.md) moves, and keep the two saying the
 same thing. `tests/scripts/test_check_doc_facts.py` pins the parse, the size
-ceiling and the labels the picture has to carry, so a silent drift into a raster
-export or a lost package name fails the gate.
+ceiling, the labels the picture has to carry, and the contrast of every ink
+against the ground it really sits on — the backdrop composited over a light page
+and over a dark one, because the picture's theme follows the reader's system and
+the page around it need not. A silent drift into a raster export, a lost package
+name or a washed-out palette fails the gate.
 
 Nothing regenerates any of the three automatically. They are committed bytes,
 refreshed by hand when the surface changes enough that they misrepresent it — a
