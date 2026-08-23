@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import re
 import tempfile
+from collections import Counter
 from collections.abc import Mapping
 from pathlib import Path
 from types import MappingProxyType
@@ -38,6 +39,12 @@ from agents.memory.store import (
     render_for_prompt,
     self_location_trail_enabled,
     task_completion_from_events_enabled,
+)
+from agents.memory.beliefs import OBSERVED_VENT_ACTION
+from agents.perception import (
+    EVENT_SAW_PLAYER,
+    EVENT_SAW_PLAYER_MOVE,
+    PROVENANCE_OBSERVED,
 )
 from agents.tactical.impostor_policy import RankedTarget
 from engine.entities import PlayerId, RoomId
@@ -88,8 +95,17 @@ from meetings.schemas import (
     ContradictionRef,
     MeetingTranscript,
     MeetingTurn,
+    MoveWitnessRecord,
+    SawMoveObservation,
     SawPlayerObservation,
+    VentWitnessRecord,
     WhereaboutsClaim,
+)
+from meetings.transcript import (
+    ENV_MOVEMENT_CLAIM_SHAPE,
+    canonical_rooms,
+    detect_contradictions,
+    is_weak_contradiction,
 )
 from eval.replay_walk import (
     MeetingApplied,
@@ -1575,3 +1591,572 @@ def test_the_completed_task_row_names_the_engine_truth_room(
     assert placement[_CORPUS_9P2I].completion_rows == 2412
     assert placement[_SAMPLES_4P1I].completion_rows == 61
     assert placement[_CORPUS_4P1I].completion_rows == 58
+
+
+# --------------------------------------------------------------------------- #
+# The movement-claim lever's committed-bytes counterfactual (I-7, both ways).   #
+# --------------------------------------------------------------------------- #
+#
+# I-7 counts the flags a witness manufactured by speaking the ORIGIN half of a
+# transition their own memory holds. This census re-runs the detector over the
+# committed bytes twice -- lever OFF and lever ON, with each speaker's movement
+# channel rebuilt from the memory they actually held -- and prices BOTH
+# directions: the origin flags that stop minting, and the flags that newly mint
+# because a resolved destination placement now contradicts a subject who was
+# agreeing with the mis-spoken origin.
+
+_MOVEMENT_ON: Final[Mapping[str, str]] = {ENV_MOVEMENT_CLAIM_SHAPE: "1"}
+
+
+def _move_witness_records(
+    memory: MemoryStore, *, speaker: PlayerId, roles: Mapping[PlayerId, str]
+) -> tuple[MoveWitnessRecord, ...]:
+    """One speaker's witnessed transitions, the way the live accessor reads them.
+
+    Including the §4.7 teammate guard the accessor applies
+    (``TacticalAgent.move_witness_records_for_meeting``): an impostor's records
+    naming a fellow impostor never reach the meeting layer, so this census
+    measures the channel production actually feeds rather than a wider one.
+    """
+
+    fellows = (
+        frozenset(
+            pid for pid, role in roles.items() if role == "IMPOSTOR" and pid != speaker
+        )
+        if roles.get(speaker) == "IMPOSTOR"
+        else frozenset()
+    )
+    records: list[MoveWitnessRecord] = []
+    for event in memory.recent(since_tick=0):
+        if (
+            event.type != EVENT_SAW_PLAYER_MOVE
+            or event.provenance != PROVENANCE_OBSERVED
+        ):
+            continue
+        if event.payload.get("player_id") in fellows:
+            continue
+        subject = event.payload.get("player_id")
+        from_room = event.payload.get("from_room")
+        to_room = event.payload.get("to_room")
+        if (
+            isinstance(subject, str)
+            and isinstance(from_room, str)
+            and isinstance(to_room, str)
+        ):
+            records.append(
+                MoveWitnessRecord(
+                    subject=subject,
+                    from_room=from_room,
+                    to_room=to_room,
+                    tick=event.tick,
+                )
+            )
+    return tuple(records)
+
+
+def _vent_witness_records(memory: MemoryStore) -> tuple[VentWitnessRecord, ...]:
+    """One speaker's witnessed vents — the channel the recorded flags were minted with."""
+
+    records: list[VentWitnessRecord] = []
+    for event in memory.recent(since_tick=0):
+        if event.type != EVENT_SAW_PLAYER or event.provenance != PROVENANCE_OBSERVED:
+            continue
+        if event.payload.get("action") != OBSERVED_VENT_ACTION:
+            continue
+        subject = event.payload.get("player_id")
+        room = event.payload.get("room")
+        if isinstance(subject, str) and isinstance(room, str):
+            records.append(
+                VentWitnessRecord(subject=subject, room=room, tick=event.tick)
+            )
+    return tuple(records)
+
+
+def _move_backed_reading(
+    resolved: _ResolvedFlag, memory: MemoryStore
+) -> tuple[str, str] | None:
+    """``(origin, destination)`` when the flag's sighting spoke the ORIGIN half.
+
+    The I-7 reading: the SPEAKER's own memory holds a transition of that subject
+    at that exact tick whose origin is the room they named and whose destination
+    is not. ``None`` covers every other flag — no move row, or a placement
+    already at the destination, which is the truthful half and is left alone.
+    """
+
+    rows = [
+        event
+        for event in memory.recent(since_tick=0)
+        if event.type == EVENT_SAW_PLAYER_MOVE
+        and event.tick == resolved.sighting.tick
+        and event.payload.get("player_id") == resolved.sighting.subject
+    ]
+    if not rows:
+        return None
+    row = rows[-1]
+    origin = row.payload.get("from_room")
+    destination = row.payload.get("to_room")
+    if not isinstance(origin, str) or not isinstance(destination, str):
+        return None
+    spoken = canonical_rooms(resolved.sighting.room)
+    if canonical_rooms(destination) & spoken:
+        return None
+    if not (canonical_rooms(origin) & spoken):
+        return None
+    return origin, destination
+
+
+def _sighting_clause(*, subject: str, room: str, tick: int) -> str:
+    """The substring a flag's description uses to quote the placement it compared."""
+
+    return f"{subject} in {room} at tick {tick}"
+
+
+class _MovementCensus(NamedTuple):
+    """One committed set's OFF→ON movement-lever counts, recounted from the bytes."""
+
+    meetings: int
+    off_matches_recorded: int
+    # Direction 1 — the I-7 class, priced OFF and followed into the ON output.
+    origin_flags: int
+    resolved_sighting_flags: int
+    origin_strong: int
+    origin_dissolved: int
+    origin_survives_naming_destination: int
+    origin_survives_naming_origin: int
+    # Every ON flag whose speaker's own record moved the subject out of the room
+    # they spoke: the detector must have compared the DESTINATION, never the origin.
+    on_move_backed: int
+    on_move_backed_naming_origin: int
+    # Direction 2 — the price: flags that newly mint under the lever.
+    new_flags: int
+    new_flags_strong: int
+    new_subject_crewmate: int
+    new_subject_impostor: int
+    new_destination_engine_true: int
+    # The bands the review's bar reads.
+    strong_alibi_vs_sighting_off: int
+    strong_alibi_vs_sighting_on: int
+    kinds_off: frozenset[str]
+    kinds_on: frozenset[str]
+    spoken_transitions: int
+
+
+def _movement_census(sample_dir: Path) -> _MovementCensus:
+    """Re-derive every committed meeting's flags with the lever OFF and ON.
+
+    The same walk the instrument runs, stopped at each ``MeetingOpened`` so each
+    speaker's movement channel is the memory they actually held there. The OFF
+    leg is checked against the recorded flags, so the ON leg is a counterfactual
+    on the real substrate and not on a drifted re-derivation.
+    """
+
+    num_players, num_impostors, tasks_per_crewmate = resolve_roster_knobs(sample_dir)
+    game_map = load_canonical_map()
+    roles_by_game = roles_by_seed(
+        sample_dir,
+        num_players=num_players,
+        num_impostors=num_impostors,
+        tasks_per_crewmate=tasks_per_crewmate,
+        game_map=game_map,
+    )
+    counts: Counter[str] = Counter()
+    kinds_off: set[str] = set()
+    kinds_on: set[str] = set()
+
+    for seed in seeds_on_disk(sample_dir):
+        roles = roles_by_game[seed]
+        memories: dict[PlayerId, MemoryStore] = {pid: MemoryStore() for pid in roles}
+        composites = {pid: AgentMemory(episodic=s) for pid, s in memories.items()}
+        room_at: dict[int, Mapping[PlayerId, RoomId]] = {}
+        audit_dir = tempfile.TemporaryDirectory(prefix="ailibi-movement-")
+        service = ObservationService(
+            game_map=game_map, audit_log_path=Path(audit_dir.name) / "audit.jsonl"
+        )
+        try:
+            for walk_event in walk_replay(
+                sample_dir / f"replay-seed-{seed}.jsonl",
+                seed=seed,
+                num_players=num_players,
+                num_impostors=num_impostors,
+                tasks_per_crewmate=tasks_per_crewmate,
+                game_map=game_map,
+                config=_WALK_CONFIG,
+            ):
+                if isinstance(walk_event, TickOpened):
+                    _perceive_tick(walk_event, service=service, memories=memories)
+                elif isinstance(walk_event, TickAdvanced):
+                    room_at[walk_event.entry.tick] = {
+                        pid: player.room
+                        for pid, player in walk_event.state.players.items()
+                    }
+                elif isinstance(walk_event, MeetingOpened):
+                    entry = walk_event.entry
+                    living = frozenset(
+                        pid
+                        for pid, player in walk_event.state.players.items()
+                        if player.alive
+                    )
+                    roster = frozenset(ballot.voter for ballot in entry.ballots)
+                    moves = {
+                        pid: _move_witness_records(
+                            memories[pid], speaker=pid, roles=roles
+                        )
+                        for pid in living
+                    }
+                    vents = {
+                        pid: _vent_witness_records(memories[pid]) for pid in living
+                    }
+                    moves = {pid: rows for pid, rows in moves.items() if rows}
+                    vents = {pid: rows for pid, rows in vents.items() if rows}
+                    off = detect_contradictions(
+                        entry.transcript, roster=roster, vent_witness_records=vents
+                    )
+                    on = detect_contradictions(
+                        entry.transcript,
+                        roster=roster,
+                        vent_witness_records=vents,
+                        move_witness_records=moves,
+                        env=_MOVEMENT_ON,
+                    )
+                    counts["meetings"] += 1
+                    counts["off_matches_recorded"] += int(
+                        tuple(off) == tuple(entry.contradictions)
+                    )
+                    counts["spoken_transitions"] += sum(
+                        1
+                        for turn in entry.transcript.turns
+                        for observation in turn.observations
+                        if isinstance(observation, SawMoveObservation)
+                    )
+                    kinds_off.update(flag.kind for flag in off)
+                    kinds_on.update(flag.kind for flag in on)
+                    index = _event_index(entry.transcript)
+                    on_by_id = {flag.contradiction_id: flag for flag in on}
+                    off_ids = {flag.contradiction_id for flag in off}
+
+                    for flag in off:
+                        if (
+                            flag.kind == "alibi_vs_sighting"
+                            and not is_weak_contradiction(flag)
+                        ):
+                            counts["strong_alibi_vs_sighting_off"] += 1
+                        # I-7's own scope: the class is defined over the flags
+                        # that pair one spoken sighting with one alibi.
+                        if flag.kind != "alibi_vs_sighting":
+                            continue
+                        resolved = _resolve_flag(flag, index=index)
+                        if resolved is None:
+                            continue
+                        memory = memories.get(resolved.speaker)
+                        if memory is None:
+                            continue
+                        counts["resolved_sighting_flags"] += 1
+                        reading = _move_backed_reading(resolved, memory)
+                        if reading is None:
+                            continue
+                        origin, destination = reading
+                        counts["origin_flags"] += 1
+                        counts["origin_strong"] += int(resolved.strong)
+                        survivor = on_by_id.get(flag.contradiction_id)
+                        if survivor is None:
+                            counts["origin_dissolved"] += 1
+                            continue
+                        clause = _sighting_clause(
+                            subject=resolved.sighting.subject,
+                            room=destination,
+                            tick=resolved.sighting.tick,
+                        )
+                        counts["origin_survives_naming_destination"] += int(
+                            clause in survivor.description
+                        )
+                        counts["origin_survives_naming_origin"] += int(
+                            _sighting_clause(
+                                subject=resolved.sighting.subject,
+                                room=origin,
+                                tick=resolved.sighting.tick,
+                            )
+                            in survivor.description
+                        )
+
+                    for flag in on:
+                        strong = not is_weak_contradiction(flag)
+                        if flag.kind == "alibi_vs_sighting" and strong:
+                            counts["strong_alibi_vs_sighting_on"] += 1
+                        resolved = (
+                            _resolve_flag(flag, index=index)
+                            if flag.kind == "alibi_vs_sighting"
+                            else None
+                        )
+                        memory = (
+                            memories.get(resolved.speaker)
+                            if resolved is not None
+                            else None
+                        )
+                        reading = (
+                            _move_backed_reading(resolved, memory)
+                            if resolved is not None and memory is not None
+                            else None
+                        )
+                        if reading is not None and resolved is not None:
+                            origin, destination = reading
+                            counts["on_move_backed"] += 1
+                            counts["on_move_backed_naming_origin"] += int(
+                                _sighting_clause(
+                                    subject=resolved.sighting.subject,
+                                    room=origin,
+                                    tick=resolved.sighting.tick,
+                                )
+                                in flag.description
+                            )
+                        if flag.contradiction_id in off_ids:
+                            continue
+                        counts["new_flags"] += 1
+                        counts["new_flags_strong"] += int(strong)
+                        for subject in flag.subjects:
+                            role = roles.get(subject)
+                            if role == "CREWMATE":
+                                counts["new_subject_crewmate"] += 1
+                            elif role == "IMPOSTOR":
+                                counts["new_subject_impostor"] += 1
+                        if reading is None or resolved is None:
+                            continue
+                        _origin, destination = reading
+                        engine_tick = resolved.sighting.tick - AGENT_CLOCK_OFFSET
+                        truth = room_at.get(engine_tick, {}).get(
+                            resolved.sighting.subject
+                        )
+                        counts["new_destination_engine_true"] += int(
+                            truth == destination
+                        )
+                elif isinstance(walk_event, MeetingApplied):
+                    _fold_meeting_into_memories(walk_event, composites=composites)
+        finally:
+            service.close()
+            audit_dir.cleanup()
+
+    return _MovementCensus(
+        meetings=counts["meetings"],
+        off_matches_recorded=counts["off_matches_recorded"],
+        origin_flags=counts["origin_flags"],
+        resolved_sighting_flags=counts["resolved_sighting_flags"],
+        origin_strong=counts["origin_strong"],
+        origin_dissolved=counts["origin_dissolved"],
+        origin_survives_naming_destination=counts["origin_survives_naming_destination"],
+        origin_survives_naming_origin=counts["origin_survives_naming_origin"],
+        on_move_backed=counts["on_move_backed"],
+        on_move_backed_naming_origin=counts["on_move_backed_naming_origin"],
+        new_flags=counts["new_flags"],
+        new_flags_strong=counts["new_flags_strong"],
+        new_subject_crewmate=counts["new_subject_crewmate"],
+        new_subject_impostor=counts["new_subject_impostor"],
+        new_destination_engine_true=counts["new_destination_engine_true"],
+        strong_alibi_vs_sighting_off=counts["strong_alibi_vs_sighting_off"],
+        strong_alibi_vs_sighting_on=counts["strong_alibi_vs_sighting_on"],
+        kinds_off=frozenset(kinds_off),
+        kinds_on=frozenset(kinds_on),
+        spoken_transitions=counts["spoken_transitions"],
+    )
+
+
+@pytest.fixture(scope="module")
+def movement() -> Mapping[Path, _MovementCensus]:
+    """One movement-lever census per committed set, computed once for the module."""
+
+    return MappingProxyType(
+        {
+            sample_dir: _movement_census(sample_dir)
+            for sample_dir in (
+                _SAMPLES_9P2I,
+                _CORPUS_9P2I,
+                _SAMPLES_4P1I,
+                _CORPUS_4P1I,
+            )
+        }
+    )
+
+
+def test_the_movement_channel_drops_an_impostors_teammate_transitions() -> None:
+    # The §4.7 guard the live accessor applies, mirrored here so the census
+    # measures the channel production feeds. Re-indexing can mint a flag, so a
+    # transition the render hides from an impostor must not place its partner
+    # through this channel instead. Crew keep every row.
+    memory = MemoryStore()
+    for seq, subject in enumerate(("p-2", "p-3")):
+        memory.append(
+            EpisodicEvent(
+                tick=3,
+                type=EVENT_SAW_PLAYER_MOVE,
+                payload={
+                    "player_id": subject,
+                    "from_room": "MEDBAY",
+                    "to_room": "LABS",
+                },
+                provenance=PROVENANCE_OBSERVED,
+                observation_id=f"p-1:3:{seq}",
+            )
+        )
+    roles = {"p-1": "IMPOSTOR", "p-2": "IMPOSTOR", "p-3": "CREWMATE"}
+
+    impostor = _move_witness_records(memory, speaker="p-1", roles=roles)
+    assert [record.subject for record in impostor] == ["p-3"]
+    crewmate = _move_witness_records(memory, speaker="p-3", roles=roles)
+    assert [record.subject for record in crewmate] == ["p-2", "p-3"]
+
+
+def test_the_origin_reading_bites_on_a_destination_spoken_flag() -> None:
+    # The gate the pins below rest on, exercised directly: the reading must
+    # separate the half that was already false when the witness saw it from the
+    # half that was true. A placement at the destination, or at a tick the
+    # speaker holds no transition for, is NOT the manufactured class.
+    memory = MemoryStore()
+    memory.append(
+        EpisodicEvent(
+            tick=3,
+            type=EVENT_SAW_PLAYER_MOVE,
+            payload={"player_id": "p-3", "from_room": "MEDBAY", "to_room": "LABS"},
+            provenance=PROVENANCE_OBSERVED,
+            observation_id="p-9:3:0",
+        )
+    )
+
+    def _flag(*, room: str, tick: int) -> _ResolvedFlag:
+        return _ResolvedFlag(
+            flag=ContradictionRef(
+                contradiction_id="contra:alibi_vs_sighting:a|b",
+                kind="alibi_vs_sighting",
+                event_a_id="a",
+                event_b_id="b",
+                subjects=("p-3",),
+                description="",
+            ),
+            strong=True,
+            subject="p-3",
+            speaker="p-9",
+            sighting=SawPlayerObservation(
+                type="saw_player", tick=tick, subject="p-3", room=room
+            ),
+            alibi_room="ADMIN",
+            from_tick=tick,
+            to_tick=tick,
+        )
+
+    assert _move_backed_reading(_flag(room="MEDBAY", tick=3), memory) == (
+        "MEDBAY",
+        "LABS",
+    )
+    assert _move_backed_reading(_flag(room="LABS", tick=3), memory) is None
+    assert _move_backed_reading(_flag(room="MEDBAY", tick=2), memory) is None
+    assert _move_backed_reading(_flag(room="MEDBAY", tick=3), MemoryStore()) is None
+
+
+@pytest.mark.slow
+def test_the_off_leg_is_the_recorded_substrate(
+    movement: Mapping[Path, _MovementCensus],
+) -> None:
+    # The counterfactual is only worth reading if its baseline IS the committed
+    # record: every meeting on all four sets re-derives byte-identically with the
+    # lever off, so the ON leg below is a change to the real substrate.
+    for sample_dir in (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I):
+        cell = movement[sample_dir]
+        assert cell.off_matches_recorded == cell.meetings
+    assert (
+        sum(
+            movement[d].meetings
+            for d in (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I)
+        )
+        == 707
+    )
+    # No committed turn states a transition (no template offers the shape yet),
+    # so the whole counterfactual below is the RESOLUTION arm's doing.
+    assert (
+        sum(
+            movement[d].spoken_transitions
+            for d in (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I)
+        )
+        == 0
+    )
+
+
+@pytest.mark.slow
+def test_the_origin_spoken_flags_stop_minting(
+    movement: Mapping[Path, _MovementCensus],
+) -> None:
+    """Direction 1: the 38 flags I-7 counts, followed into the ON output."""
+
+    per_set = [
+        (movement[d].origin_flags, movement[d].resolved_sighting_flags)
+        for d in (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I)
+    ]
+    # The OFF leg reproduces I-7's own pin (7/76, 30/233, 0/3, 1/1) — the same
+    # class, counted here off a live re-derivation rather than the recorded flags.
+    assert per_set == [(7, 76), (30, 233), (0, 3), (1, 1)]
+    origin = sum(n for n, _ in per_set)
+    assert (origin, sum(d for _, d in per_set)) == (38, 313)
+    assert (
+        sum(
+            movement[d].origin_strong
+            for d in (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I)
+        )
+        == 32
+    )
+    # ON: 28 of the 38 stop minting outright; the other 10 keep their event pair
+    # but now quote the room the witness actually saw the subject enter — the
+    # subject's account contradicts the DESTINATION too, so the flag is earned.
+    dissolved = sum(
+        movement[d].origin_dissolved
+        for d in (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I)
+    )
+    survives_destination = sum(
+        movement[d].origin_survives_naming_destination
+        for d in (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I)
+    )
+    assert (dissolved, survives_destination) == (28, 10)
+    assert dissolved + survives_destination == origin
+    # The bar itself: ZERO flags in the ON output rest on an origin placement.
+    assert (
+        sum(
+            movement[d].origin_survives_naming_origin
+            for d in (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I)
+        )
+        == 0
+    )
+    move_backed = sum(
+        movement[d].on_move_backed
+        for d in (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I)
+    )
+    naming_origin = sum(
+        movement[d].on_move_backed_naming_origin
+        for d in (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I)
+    )
+    # Every ON flag the speaker's own record could re-read — 88 of them, the 10
+    # survivors plus the 78 newly minted — quotes the destination, not the origin.
+    assert (move_backed, naming_origin) == (88, 0)
+
+
+@pytest.mark.slow
+def test_the_price_of_the_lever_in_the_other_direction(
+    movement: Mapping[Path, _MovementCensus],
+) -> None:
+    """Direction 2: the flags that newly mint, and the bands they move."""
+
+    sets = (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I)
+    per_set = [movement[d].new_flags for d in sets]
+    assert per_set == [25, 53, 0, 0]
+    new_flags = sum(per_set)
+    assert new_flags == 78
+    assert sum(movement[d].new_flags_strong for d in sets) == 58
+    # By SUBJECT role — the honest half of the price: most of the recovered
+    # contradictions name crewmates, because crewmates misplace themselves too.
+    assert sum(movement[d].new_subject_crewmate for d in sets) == 57
+    assert sum(movement[d].new_subject_impostor for d in sets) == 21
+    # None of them is manufactured: every newly minted flag rests on a placement
+    # the ENGINE agrees with — the subject really was in that room at that tick.
+    assert sum(movement[d].new_destination_engine_true for d in sets) == 78
+    # The STRONG alibi_vs_sighting band the 13.14 lone-strong ruling can eject on.
+    assert sum(movement[d].strong_alibi_vs_sighting_off for d in sets) == 234
+    assert sum(movement[d].strong_alibi_vs_sighting_on for d in sets) == 268
+    # "No new flag class in their place": the ON kinds are a subset of the OFF
+    # kinds on every set — the lever re-reads placements, it invents no rule.
+    for sample_dir in sets:
+        cell = movement[sample_dir]
+        assert cell.kinds_on <= cell.kinds_off

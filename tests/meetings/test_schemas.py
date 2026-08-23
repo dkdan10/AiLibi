@@ -27,9 +27,12 @@ from meetings.schemas import (
     MeetingResult,
     MeetingTranscript,
     MeetingTurn,
+    MoveWitnessRecord,
+    SawMoveObservation,
     SawPlayerObservation,
     VoteBallot,
 )
+from meetings.transcript import detect_contradictions
 
 
 def _opening_turn(**overrides: object) -> MeetingTurn:
@@ -461,3 +464,101 @@ class TestMeetingResult:
                     "transcript": {"turns": []},
                 }
             )
+
+
+class TestSawMoveObservation:
+    """The witnessed-transition shape: accepted unconditionally, read only by the
+    default-OFF movement lever."""
+
+    def test_a_turn_carries_a_transition_and_round_trips(self) -> None:
+        turn = _opening_turn(
+            observations=(
+                SawMoveObservation(
+                    type="saw_move",
+                    tick=380,
+                    subject="p-5",
+                    from_room="MEDBAY",
+                    to_room="LABS",
+                ),
+            )
+        )
+        observation = turn.observations[0]
+        assert isinstance(observation, SawMoveObservation)
+        assert (observation.from_room, observation.to_room) == ("MEDBAY", "LABS")
+        assert MeetingTurn.model_validate(turn.model_dump(mode="json")) == turn
+
+    def test_the_discriminator_selects_the_shape(self) -> None:
+        # Parsing is by the ``type`` tag, so a transition never degrades into a
+        # static placement (which would put the subject in ONE of its two rooms).
+        turn = MeetingTurn.model_validate(
+            {
+                "turn_id": "m-7:turn-0",
+                "turn_index": 0,
+                "speaker": "p-3",
+                "turn_kind": "opening",
+                "reply_to": None,
+                "observations": [
+                    {
+                        "type": "saw_move",
+                        "tick": 380,
+                        "subject": "p-5",
+                        "from_room": "MEDBAY",
+                        "to_room": "LABS",
+                    }
+                ],
+                "claims": [],
+                "free_text": "p-5 walked out of MedBay into Labs.",
+            }
+        )
+        assert isinstance(turn.observations[0], SawMoveObservation)
+
+    def test_a_transition_missing_a_half_is_rejected(self) -> None:
+        with pytest.raises(ValidationError):
+            SawMoveObservation.model_validate(
+                {"type": "saw_move", "tick": 380, "subject": "p-5", "room": "MEDBAY"}
+            )
+
+    def test_the_default_off_detector_ignores_the_shape(self) -> None:
+        # Acceptance does not depend on the lever, and neither does silence: with
+        # the lever off a spoken transition is ordinary testimony, even when the
+        # speaker's own record confirms it.
+        transcript = MeetingTranscript(
+            turns=(
+                _opening_turn(
+                    speaker="p-3",
+                    observations=(
+                        SawMoveObservation(
+                            type="saw_move",
+                            tick=380,
+                            subject="p-5",
+                            from_room="MEDBAY",
+                            to_room="LABS",
+                        ),
+                    ),
+                    claims=(
+                        AlibiClaim(
+                            type="alibi",
+                            subject="p-5",
+                            from_tick=380,
+                            to_tick=380,
+                            room="ADMIN",
+                        ),
+                    ),
+                ),
+            )
+        )
+        records = {
+            "p-3": (
+                MoveWitnessRecord(
+                    subject="p-5", from_room="MEDBAY", to_room="LABS", tick=380
+                ),
+            )
+        }
+        assert (
+            detect_contradictions(
+                transcript,
+                roster=frozenset({"p-3", "p-5"}),
+                move_witness_records=records,
+            )
+            == ()
+        )

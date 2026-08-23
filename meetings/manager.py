@@ -135,6 +135,7 @@ from meetings.schemas import (
     MeetingResult,
     MeetingTranscript,
     MeetingTurn,
+    MoveWitnessRecord,
     ObservationClaim,
     ObservationId,
     PlayerId,
@@ -664,6 +665,19 @@ class MeetingParticipant:
     speaker grounds nothing": a spoken sighting from such a participant
     records as ordinary testimony and exculpates no one.
 
+    ``move_witness_records`` is the vent channel's movement sibling: the
+    participant's OWN typed witnessed-transition channel, the grounding input
+    behind the default-OFF movement-claim lever
+    (:func:`meetings.transcript.movement_claim_shape_enabled`). The
+    orchestrator populates it from
+    ``MoveWitnessAgent.move_witness_records_for_meeting()`` (episodic memory,
+    self-channel only, so it is firewall-clean); the manager threads the
+    per-speaker mapping into every
+    :func:`meetings.transcript.detect_contradictions` call and NOTHING else
+    reads it -- in particular it never reaches a prompt surface. The default
+    ``()`` keeps every existing construction site valid and means "this speaker
+    grounds nothing": their spoken placements are read exactly as spoken.
+
     ``observation_ids`` (Task 16.5, C8) is the participant's OWN stable
     episodic observation-id set -- the valid-citation universe for a ballot's
     ``primary_reason_observation_id``. The orchestrator populates it from
@@ -697,6 +711,7 @@ class MeetingParticipant:
     rerender_memory: Callable[[Mapping[PlayerId, float]], str] | None = None
     vent_witness_records: tuple[VentWitnessRecord, ...] = ()
     sighting_records: tuple[SightingRecord, ...] = ()
+    move_witness_records: tuple[MoveWitnessRecord, ...] = ()
     observation_ids: tuple[ObservationId, ...] = ()
     persona: str = ""
 
@@ -1062,6 +1077,13 @@ class MeetingManager:
             for participant in ordered_participants
             if participant.vent_witness_records
         }
+        # The movement-claim lever's grounding channel, threaded the same way:
+        # one source for every detection below. Inert while the lever is off.
+        move_witness_records: Mapping[PlayerId, tuple[MoveWitnessRecord, ...]] = {
+            participant.agent_id: participant.move_witness_records
+            for participant in ordered_participants
+            if participant.move_witness_records
+        }
 
         # Phase 1: opening turn (turn 0, role-dispatched). The opening is a
         # single point of failure for the whole meeting -- an empty opening
@@ -1115,6 +1137,7 @@ class MeetingManager:
                 transcript_so_far,
                 roster=roster,
                 vent_witness_records=vent_witness_records,
+                move_witness_records=move_witness_records,
             )
             reply_turn = await self._collect_turn(
                 meeting_id=meeting_id,
@@ -1147,6 +1170,7 @@ class MeetingManager:
                 transcript_so_far,
                 roster=roster,
                 vent_witness_records=vent_witness_records,
+                move_witness_records=move_witness_records,
             )
             opt_in_turn = await self._collect_turn(
                 meeting_id=meeting_id,
@@ -1189,6 +1213,7 @@ class MeetingManager:
                     transcript_so_far,
                     roster=roster,
                     vent_witness_records=vent_witness_records,
+                    move_witness_records=move_witness_records,
                 )
                 roll_call_turn = await self._collect_turn(
                     meeting_id=meeting_id,
@@ -1231,6 +1256,7 @@ class MeetingManager:
             roster=roster,
             trigger_kind=meeting_trigger_kind,
             vent_witness_records=vent_witness_records,
+            move_witness_records=move_witness_records,
         )
         # Task 16.7 note: ``MeetingParticipant.sighting_records`` (the
         # grounded-vouch channel) is deliberately NOT threaded into this

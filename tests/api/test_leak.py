@@ -528,6 +528,9 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "flags_total",
         "format_version",
         "free_text",
+        # A witnessed transition's two rooms (SawMoveObservation) — public
+        # testimony inside a recorded turn, the same class as a sighting's room.
+        "from_room",
         "from_tick",
         "game_count",
         "game_id",
@@ -661,6 +664,7 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "template_name",
         "threshold_inversions",
         "tick",
+        "to_room",
         "to_tick",
         "total_cost_usd",
         "total_ejections",

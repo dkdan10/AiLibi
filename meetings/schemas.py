@@ -139,12 +139,44 @@ class WhereaboutsClaim(_FrozenModel):
     room: RoomId
 
 
+class SawMoveObservation(_FrozenModel):
+    """First-hand witnessed transition: "``subject`` moved ``from_room`` →
+    ``to_room``, arriving at ``tick``".
+
+    The sayable form of what a witness's memory already holds. A witnessed
+    transition asserts two placements — the subject stood in ``from_room`` at
+    ``tick - 1`` and in ``to_room`` at ``tick`` — and until this shape existed a
+    witness had to re-encode it as one static
+    :class:`SawPlayerObservation`, where naming the origin room places the
+    subject at a tick they had already left.
+
+    Under :func:`meetings.transcript.movement_claim_shape_enabled` the shape
+    contributes EXACTLY ONE placement, the destination "``subject`` in
+    ``to_room`` at ``tick``", and only when the SPEAKER's own typed
+    :class:`MoveWitnessRecord` channel holds the same transition. The origin
+    half is deliberately not placed at ``tick - 1``: a second placement per
+    shape re-opens the off-by-one class this shape closes, because a spoken
+    tick is the model's transcription of a rendered one and an inferred
+    ``tick - 1`` compounds that slip into a claim nobody made. The turn schema
+    accepts the shape unconditionally, so parsing never depends on the lever;
+    with the lever off the detector ignores it and it records as ordinary
+    testimony.
+    """
+
+    type: Literal["saw_move"]
+    tick: int
+    subject: PlayerId
+    from_room: RoomId
+    to_room: RoomId
+
+
 ObservationClaim: TypeAlias = Annotated[
     SawPlayerObservation
     | CompletedTaskObservation
     | FoundBodyObservation
     | SawVentObservation
-    | WhereaboutsClaim,
+    | WhereaboutsClaim
+    | SawMoveObservation,
     Field(discriminator="type"),
 ]
 
@@ -213,6 +245,34 @@ class SightingRecord(_FrozenModel):
     room: RoomId
     tick: int
     co_present: tuple[PlayerId, ...] = ()
+
+
+class MoveWitnessRecord(_FrozenModel):
+    """One of an agent's OWN witnessed room→room transitions, typed.
+
+    The vent and sighting channels' third sibling: the speaker's first-hand
+    ``saw_player_move`` episodic rows, projected into the shape
+    :func:`meetings.transcript.detect_contradictions` grounds a movement claim
+    against. ``tick`` is the agent-clock tick the transition RESOLVED at — the
+    subject stood in ``from_room`` at ``tick - 1`` and in ``to_room`` at
+    ``tick``, which is exactly what the rendered "You saw p-3 move from X to Y"
+    line asserts, so the typed channel and the prose the model speaks from
+    cannot drift.
+
+    Grounding is the whole firewall for the movement lever: a spoken placement
+    with no matching record in the SPEAKER's own channel is never re-read, so
+    the lever can only ever re-index testimony the speaker demonstrably held.
+    Firewall-clean by construction — an agent reporting its own witnessed
+    events leaks nothing, and the packet the rows derive from is witness-gated
+    by the engine (``eval/leak_test.py``). Deliberately NOT a widening of
+    :class:`SightingRecord`: that channel feeds the exculpatory vouch path, and
+    a transition is not a vouch.
+    """
+
+    subject: PlayerId
+    from_room: RoomId
+    to_room: RoomId
+    tick: int
 
 
 # ---------------------------------------------------------------------------
@@ -544,12 +604,14 @@ __all__ = [
     "MeetingResult",
     "MeetingTranscript",
     "MeetingTurn",
+    "MoveWitnessRecord",
     "ObservationClaim",
     "ObservationId",
     "PlayerId",
     "ReportedStatement",
     "ReportedStatementKind",
     "RoomId",
+    "SawMoveObservation",
     "SawPlayerObservation",
     "SawVentObservation",
     "SightingRecord",

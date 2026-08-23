@@ -35,13 +35,17 @@ from meetings.schemas import (
     FoundBodyObservation,
     MeetingTranscript,
     MeetingTurn,
+    MoveWitnessRecord,
     ObservationClaim,
+    SawMoveObservation,
     SawPlayerObservation,
     SawVentObservation,
     VentWitnessRecord,
     WhereaboutsClaim,
 )
 from meetings.transcript import (
+    CANONICAL_ROOMS,
+    ENV_MOVEMENT_CLAIM_SHAPE,
     ENV_VENT_PLACEMENT_CONTRADICTIONS,
     ENV_WHEREABOUTS_INTERIOR_FLAGS,
     WEAK_CONTRADICTION_MARKER_PREFIX,
@@ -51,10 +55,15 @@ from meetings.transcript import (
     WEAK_REASON_KILL_SCENE,
     WEAK_REASON_NARROW_WINDOW,
     WEAK_REASON_SELF_PAIR,
+    _event_speaker_index,
     _turn_observation_id,
     _turn_whereabouts_id,
+    absent_players,
+    canonical_rooms,
     detect_contradictions,
     is_weak_contradiction,
+    movement_claim_shape_enabled,
+    reconstruct_stated_paths,
     vent_placement_contradictions_enabled,
     whereabouts_interior_flags_enabled,
 )
@@ -118,6 +127,31 @@ def _saw_vent(*, tick: int, subject: str, room: str) -> SawVentObservation:
 
 def _vent_record(*, tick: int, subject: str, room: str) -> VentWitnessRecord:
     return VentWitnessRecord(subject=subject, room=room, tick=tick)
+
+
+def _saw_move(
+    *, tick: int, subject: str, from_room: str, to_room: str
+) -> SawMoveObservation:
+    # A spoken transition: the subject was in ``from_room`` at ``tick - 1`` and
+    # in ``to_room`` at ``tick``.
+    return SawMoveObservation(
+        type="saw_move",
+        tick=tick,
+        subject=subject,
+        from_room=from_room,
+        to_room=to_room,
+    )
+
+
+def _move_record(
+    *, tick: int, subject: str, from_room: str, to_room: str
+) -> MoveWitnessRecord:
+    return MoveWitnessRecord(
+        subject=subject, from_room=from_room, to_room=to_room, tick=tick
+    )
+
+
+_MOVEMENT_ON = {ENV_MOVEMENT_CLAIM_SHAPE: "1"}
 
 
 # --- Empty / non-contradictory transcripts ---------------------------------
@@ -2068,33 +2102,439 @@ class TestBothLeversCompose:
         assert is_weak_contradiction(by_kind["alibi_vs_physical"]) is False
 
 
-# --- Task 18.12: live-detector committed-samples byte-identity pin ----------
+# --- The movement-claim lever (default-OFF) --------------------------------
 #
-# The 18.12 graduation made lever 1 (whereabouts-interior exemption) and lever 2
-# (grounded vent-placement) UNCONDITIONAL, and the record re-recorded the two
-# SAMPLE sets on that baseline-6 substrate. The graduated detector therefore
-# re-derives the recorded SAMPLE bytes byte-identically -- but it can no longer
-# reproduce the ``replays/ml_corpus`` bytes, which are still baseline-5
-# (levers OFF at record time; the corpus re-record is deferred to Task 18.13).
-# So this walk (and the census below) spans the two committed SAMPLE sets only;
-# ml_corpus re-derivation returns when 18.13 re-records it on baseline 6.
+# A witness who saw "p-3 move from MEDBAY to LABS at tick 3" holds two facts and
+# may speak only one room. Speaking the ORIGIN states a placement that was
+# already false, and the detector then prosecutes the subject's truthful answer
+# for disagreeing with it. The lever re-reads such a placement at the
+# DESTINATION, grounded on the speaker's own record, and lets a turn state the
+# transition outright.
+
+_ROSTER_3 = frozenset({"p-3", "p-5", "p-9"})
+
+
+class TestMovementClaimShapeResolver:
+    def test_defaults_off_with_no_environment(self) -> None:
+        assert movement_claim_shape_enabled({}) is False
+
+    def test_reads_the_documented_true_values(self) -> None:
+        for value in ("1", "true", "TRUE", "yes", "on", " On "):
+            assert movement_claim_shape_enabled({ENV_MOVEMENT_CLAIM_SHAPE: value})
+
+    def test_any_other_value_is_off(self) -> None:
+        for value in ("", "0", "false", "no", "off", "maybe"):
+            assert (
+                movement_claim_shape_enabled({ENV_MOVEMENT_CLAIM_SHAPE: value}) is False
+            )
+
+
+def _origin_spoken_transcript(
+    *,
+    witness: str = "p-9",
+    subject: str = "p-3",
+    origin: str = "MEDBAY",
+    destination: str = "LABS",
+    tick: int = 3,
+    answer_room: str | None = None,
+    answer_tick: int | None = None,
+) -> MeetingTranscript:
+    """The G-9 shape: the witness speaks the origin, the subject answers truthfully.
+
+    Turn 0 is the witness's origin-half sighting; turn 1 is the subject's
+    roll-call answer, by default the destination room at the same tick (the
+    truthful reading of the transition the witness holds).
+    """
+
+    return MeetingTranscript(
+        turns=(
+            _turn(
+                turn_index=0,
+                speaker=witness,
+                observations=(_saw(tick=tick, subject=subject, room=origin),),
+            ),
+            _turn(
+                turn_index=1,
+                speaker=subject,
+                turn_kind="opt_in",
+                observations=(
+                    _whereabouts(
+                        tick=tick if answer_tick is None else answer_tick,
+                        room=destination if answer_room is None else answer_room,
+                    ),
+                ),
+            ),
+        )
+    )
+
+
+class TestMovementResolutionArm:
+    """ON, a spoken placement the SPEAKER's own record moved the subject out of
+    is read at the destination -- so the manufactured contradiction never mints."""
+
+    def test_seed_12_shape_mints_off_and_dissolves_on(self) -> None:
+        # samples/9p2i seed 12 meeting-0, recomputed from the committed bytes:
+        # p-9 holds MEDBAY->LABS at tick 3 about p-3, speaks MEDBAY at tick 3,
+        # p-3 answers LABS at tick 3 -- and the table ejected p-3 (a crewmate)
+        # 6-0-1 on the flag below.
+        tx = _origin_spoken_transcript()
+        records = {
+            "p-9": (
+                _move_record(tick=3, subject="p-3", from_room="MEDBAY", to_room="LABS"),
+            )
+        }
+        off = detect_contradictions(tx, roster=_ROSTER_3)
+        assert [f.kind for f in off] == ["alibi_vs_sighting"]
+        assert is_weak_contradiction(off[0]) is False
+        assert off[0].subjects == ("p-3",)
+        on = detect_contradictions(
+            tx, roster=_ROSTER_3, move_witness_records=records, env=_MOVEMENT_ON
+        )
+        assert on == ()
+
+    def test_seed_39_shape_mints_off_and_dissolves_on(self) -> None:
+        # samples/9p2i seed 39 meeting-0: the witness holds EAST_HALL->CAFETERIA
+        # at tick 8 about p-1, speaks EAST_HALL, p-1 answers CAFETERIA -- the
+        # meeting's ONLY flag, and it ejected p-1 (a crewmate) 7-1.
+        tx = _origin_spoken_transcript(
+            origin="EAST_HALL", destination="CAFETERIA", tick=8
+        )
+        records = {
+            "p-9": (
+                _move_record(
+                    tick=8, subject="p-3", from_room="EAST_HALL", to_room="CAFETERIA"
+                ),
+            )
+        }
+        assert len(detect_contradictions(tx, roster=_ROSTER_3)) == 1
+        assert (
+            detect_contradictions(
+                tx, roster=_ROSTER_3, move_witness_records=records, env=_MOVEMENT_ON
+            )
+            == ()
+        )
+
+    def test_a_spoken_destination_is_untouched(self) -> None:
+        # The 86 flags the review found speaking the destination are already the
+        # placement the witness meant: ON must leave them exactly as spoken.
+        tx = _origin_spoken_transcript(origin="LABS", answer_room="MEDBAY")
+        records = {
+            "p-9": (
+                _move_record(tick=3, subject="p-3", from_room="MEDBAY", to_room="LABS"),
+            )
+        }
+        off = detect_contradictions(tx, roster=_ROSTER_3)
+        on = detect_contradictions(
+            tx, roster=_ROSTER_3, move_witness_records=records, env=_MOVEMENT_ON
+        )
+        assert on == off
+        assert "LABS" in on[0].description
+
+    def test_the_origin_at_the_previous_tick_is_untouched(self) -> None:
+        # "p-3 was in MEDBAY at tick 2" is TRUE under the agent clock -- the
+        # transition resolved at tick 3 -- so the exact-tick conjunction must
+        # leave it alone rather than re-time it to the destination.
+        tx = _origin_spoken_transcript(tick=2, answer_tick=2, answer_room="ADMIN")
+        records = {
+            "p-9": (
+                _move_record(tick=3, subject="p-3", from_room="MEDBAY", to_room="LABS"),
+            )
+        }
+        off = detect_contradictions(tx, roster=_ROSTER_3)
+        on = detect_contradictions(
+            tx, roster=_ROSTER_3, move_witness_records=records, env=_MOVEMENT_ON
+        )
+        assert on == off
+        assert "MEDBAY" in on[0].description
+
+    def test_an_ungrounded_sighting_is_never_rewritten(self) -> None:
+        # The firewall: the record belongs to ANOTHER speaker, so this witness
+        # grounds nothing and their testimony reads exactly as spoken.
+        tx = _origin_spoken_transcript()
+        records = {
+            "p-5": (
+                _move_record(tick=3, subject="p-3", from_room="MEDBAY", to_room="LABS"),
+            )
+        }
+        off = detect_contradictions(tx, roster=_ROSTER_3)
+        on = detect_contradictions(
+            tx, roster=_ROSTER_3, move_witness_records=records, env=_MOVEMENT_ON
+        )
+        assert on == off
+        assert on != ()
+
+    def test_two_destinations_at_one_tick_leave_the_placement_alone(self) -> None:
+        # Engine truth forbids it; picking a side would invent testimony.
+        tx = _origin_spoken_transcript()
+        records = {
+            "p-9": (
+                _move_record(tick=3, subject="p-3", from_room="MEDBAY", to_room="LABS"),
+                _move_record(
+                    tick=3, subject="p-3", from_room="MEDBAY", to_room="ADMIN"
+                ),
+            )
+        }
+        assert detect_contradictions(
+            tx, roster=_ROSTER_3, move_witness_records=records, env=_MOVEMENT_ON
+        ) == detect_contradictions(tx, roster=_ROSTER_3)
+
+    def test_a_conflicting_record_blocks_the_rewrite_from_any_room(self) -> None:
+        # The ambiguity guard is adjudicated over every record naming the subject
+        # at that tick, not only the ones whose origin matches the spoken room:
+        # a channel that has the subject landing twice on one tick is wrong about
+        # something, so nothing in it may pick a destination.
+        tx = _origin_spoken_transcript()
+        records = {
+            "p-9": (
+                _move_record(tick=3, subject="p-3", from_room="MEDBAY", to_room="LABS"),
+                _move_record(
+                    tick=3, subject="p-3", from_room="ADMIN", to_room="REACTOR"
+                ),
+            )
+        }
+        assert detect_contradictions(
+            tx, roster=_ROSTER_3, move_witness_records=records, env=_MOVEMENT_ON
+        ) == detect_contradictions(tx, roster=_ROSTER_3)
+        # Two records that AGREE on the destination are not ambiguous, so the
+        # guard does not swallow the ordinary case.
+        agreeing = {
+            "p-9": (
+                _move_record(tick=3, subject="p-3", from_room="MEDBAY", to_room="LABS"),
+                _move_record(tick=3, subject="p-3", from_room="MEDBAY", to_room="LABS"),
+            )
+        }
+        assert (
+            detect_contradictions(
+                tx, roster=_ROSTER_3, move_witness_records=agreeing, env=_MOVEMENT_ON
+            )
+            == ()
+        )
+        # A conflict at a DIFFERENT tick is a different transition and is none of
+        # this placement's business.
+        other_tick = {
+            "p-9": (
+                _move_record(tick=3, subject="p-3", from_room="MEDBAY", to_room="LABS"),
+                _move_record(
+                    tick=4, subject="p-3", from_room="ADMIN", to_room="REACTOR"
+                ),
+            )
+        }
+        assert (
+            detect_contradictions(
+                tx, roster=_ROSTER_3, move_witness_records=other_tick, env=_MOVEMENT_ON
+            )
+            == ()
+        )
+
+    def test_a_genuine_conflict_still_mints_at_the_destination(self) -> None:
+        # The perturbation that shows the rule bites: the subject claims a THIRD
+        # room, so the resolved destination still contradicts them -- STRONG, and
+        # the flag now quotes the room the witness actually saw them enter.
+        tx = _origin_spoken_transcript(answer_room="ADMIN")
+        records = {
+            "p-9": (
+                _move_record(tick=3, subject="p-3", from_room="MEDBAY", to_room="LABS"),
+            )
+        }
+        off = detect_contradictions(tx, roster=_ROSTER_3)
+        on = detect_contradictions(
+            tx, roster=_ROSTER_3, move_witness_records=records, env=_MOVEMENT_ON
+        )
+        assert [f.kind for f in on] == ["alibi_vs_sighting"]
+        assert is_weak_contradiction(on[0]) is False
+        assert "LABS" in on[0].description and "MEDBAY" not in on[0].description
+        # Id invariance: only the ROOM is re-read. Every id-keyed surface
+        # downstream -- the citation, the lift key, the spectator view -- sees the
+        # same flag it saw before.
+        assert on[0].contradiction_id == off[0].contradiction_id
+        assert (on[0].event_a_id, on[0].event_b_id) == (
+            off[0].event_a_id,
+            off[0].event_b_id,
+        )
+        assert on[0].subjects == off[0].subjects
+
+    def test_the_resolution_touches_no_id_keyed_surface(self) -> None:
+        # "Only the room is re-read" is what leaves every id-keyed surface
+        # untouched, so it is asserted rather than assumed: the flag's two ids
+        # still resolve to their speakers, the public path reconstruction still
+        # reads the room the witness SPOKE (the re-read lives inside the pairing
+        # step, not in the transcript), and the absent set does not move.
+        tx = _origin_spoken_transcript(answer_room="ADMIN")
+        records = {
+            "p-9": (
+                _move_record(tick=3, subject="p-3", from_room="MEDBAY", to_room="LABS"),
+            )
+        }
+        on = detect_contradictions(
+            tx, roster=_ROSTER_3, move_witness_records=records, env=_MOVEMENT_ON
+        )
+        speakers = _event_speaker_index(tx)
+        assert speakers[on[0].event_a_id] == "p-9"
+        assert speakers[on[0].event_b_id] == "p-3"
+        placements = reconstruct_stated_paths(tx, roster=_ROSTER_3)
+        assert [
+            (placement.tick, sorted(placement.rooms), placement.speaker)
+            for placement in placements["p-3"]
+        ] == [(3, ["ADMIN"], "p-3"), (3, ["MEDBAY"], "p-9")]
+        # p-9 spoke, but placed only p-3: answering nothing about yourself
+        # leaves you absent, and the re-read does not change that either.
+        assert absent_players(tx, roster=_ROSTER_3) == ("p-5", "p-9")
+
+    def test_records_are_inert_while_the_lever_is_off(self) -> None:
+        # The whole OFF-path guarantee in one assertion: a live channel changes
+        # nothing until the lever is on.
+        tx = _origin_spoken_transcript()
+        records = {
+            "p-9": (
+                _move_record(tick=3, subject="p-3", from_room="MEDBAY", to_room="LABS"),
+            )
+        }
+        assert detect_contradictions(
+            tx, roster=_ROSTER_3, move_witness_records=records
+        ) == detect_contradictions(tx, roster=_ROSTER_3)
+
+
+class TestMovementShapeArm:
+    """ON, a grounded spoken transition participates as ONE destination placement."""
+
+    def _transcript(self, *, answer_room: str, answer_tick: int) -> MeetingTranscript:
+        return MeetingTranscript(
+            turns=(
+                _turn(
+                    turn_index=0,
+                    speaker="p-9",
+                    observations=(
+                        _saw_move(
+                            tick=3,
+                            subject="p-3",
+                            from_room="MEDBAY",
+                            to_room="LABS",
+                        ),
+                    ),
+                ),
+                _turn(
+                    turn_index=1,
+                    speaker="p-3",
+                    turn_kind="opt_in",
+                    observations=(_whereabouts(tick=answer_tick, room=answer_room),),
+                ),
+            )
+        )
+
+    def test_a_grounded_transition_places_the_subject_at_the_destination(self) -> None:
+        tx = self._transcript(answer_room="ADMIN", answer_tick=3)
+        records = {
+            "p-9": (
+                _move_record(tick=3, subject="p-3", from_room="MEDBAY", to_room="LABS"),
+            )
+        }
+        flags = detect_contradictions(
+            tx, roster=_ROSTER_3, move_witness_records=records, env=_MOVEMENT_ON
+        )
+        assert [f.kind for f in flags] == ["alibi_vs_sighting"]
+        assert flags[0].subjects == ("p-3",)
+        assert "LABS" in flags[0].description
+
+    def test_the_origin_half_places_nobody(self) -> None:
+        # Deliberate: the shape asserts ONE placement. A claim about the ORIGIN
+        # tick raises no flag, because inferring "in MEDBAY at tick 2" from a
+        # spoken tick would re-open the off-by-one class this shape closes.
+        tx = self._transcript(answer_room="ADMIN", answer_tick=2)
+        records = {
+            "p-9": (
+                _move_record(tick=3, subject="p-3", from_room="MEDBAY", to_room="LABS"),
+            )
+        }
+        assert (
+            detect_contradictions(
+                tx, roster=_ROSTER_3, move_witness_records=records, env=_MOVEMENT_ON
+            )
+            == ()
+        )
+
+    def test_an_ungrounded_transition_places_nobody(self) -> None:
+        tx = self._transcript(answer_room="ADMIN", answer_tick=3)
+        records = {
+            "p-9": (
+                _move_record(
+                    tick=3, subject="p-3", from_room="REACTOR", to_room="STORAGE"
+                ),
+            )
+        }
+        assert (
+            detect_contradictions(
+                tx, roster=_ROSTER_3, move_witness_records=records, env=_MOVEMENT_ON
+            )
+            == ()
+        )
+
+    def test_the_off_detector_ignores_the_shape_entirely(self) -> None:
+        tx = self._transcript(answer_room="ADMIN", answer_tick=3)
+        records = {
+            "p-9": (
+                _move_record(tick=3, subject="p-3", from_room="MEDBAY", to_room="LABS"),
+            )
+        }
+        assert (
+            detect_contradictions(tx, roster=_ROSTER_3, move_witness_records=records)
+            == ()
+        )
+
+    def test_the_roster_gate_bites_on_the_placement(self) -> None:
+        tx = self._transcript(answer_room="ADMIN", answer_tick=3)
+        records = {
+            "p-9": (
+                _move_record(tick=3, subject="p-3", from_room="MEDBAY", to_room="LABS"),
+            )
+        }
+        assert (
+            len(
+                detect_contradictions(
+                    tx,
+                    roster=_ROSTER_3,
+                    move_witness_records=records,
+                    env=_MOVEMENT_ON,
+                )
+            )
+            == 1
+        )
+        assert (
+            detect_contradictions(
+                tx,
+                roster=frozenset({"p-5", "p-9"}),
+                move_witness_records=records,
+                env=_MOVEMENT_ON,
+            )
+            == ()
+        )
+
+
+# --- The live detector re-derives the committed bytes -----------------------
+#
+# The graduated detector (levers 1 and 2 unconditional since the Task-18.12
+# baseline-6 record) re-derives every recorded flag byte-identically over ALL
+# FOUR committed sets -- 707 meetings. ml_corpus was re-grounded on baseline 6
+# by Task 18.13 (both MANIFESTs carry the same lever slate), so the walk is no
+# longer samples-only.
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _COMMITTED_SETS = (
     _REPO_ROOT / "replays" / "samples" / "9p2i",
     _REPO_ROOT / "replays" / "samples" / "4p1i",
+    _REPO_ROOT / "replays" / "ml_corpus" / "9p2i",
+    _REPO_ROOT / "replays" / "ml_corpus" / "4p1i",
 )
+_COMMITTED_MEETINGS = 707
 
 
 @functools.cache
 def _committed_meeting_entries() -> tuple[tuple[str, int, MeetingReplayEntry], ...]:
-    """Every committed meeting entry across both SAMPLE sets (set, seed, entry).
+    """Every committed meeting entry across all four sets (set, seed, entry).
 
     Cached so the byte-identity pin AND the live-detector census below read the
-    195-meeting samples corpus off ONE walk (the "do not walk twice" rule): the
-    file read happens once per session, and each consumer runs its own detector
-    re-derivations over the shared, already-parsed entries. ml_corpus is excluded
-    until Task 18.13 re-records it on baseline 6 (see the module comment above).
+    707-meeting corpus off ONE walk (the "do not walk twice" rule): the file read
+    happens once per session, and each consumer runs its own detector
+    re-derivations over the shared, already-parsed entries.
     """
 
     collected: list[tuple[str, int, MeetingReplayEntry]] = []
@@ -2178,21 +2618,55 @@ def _flags_match(
     return True
 
 
+def _planted_move_channel(
+    entry: MeetingReplayEntry,
+) -> dict[str, tuple[MoveWitnessRecord, ...]]:
+    """A movement channel that WOULD re-read every spoken placement, if read.
+
+    Each speaker gets one record per sighting they spoke, moving that subject out
+    of the room they named at the tick they named into a room they did not: the
+    exact conjunction :func:`_movement_destination` resolves on. It is the
+    planted case behind the OFF pin -- with the lever OFF this channel must move
+    nothing, and the companion test proves the plant is live by turning the lever
+    on and watching the corpus change.
+    """
+
+    records: dict[str, list[MoveWitnessRecord]] = {}
+    for turn in entry.transcript.turns:
+        for observation in turn.observations:
+            if not isinstance(observation, SawPlayerObservation):
+                continue
+            spoken = canonical_rooms(observation.room)
+            if not spoken:
+                continue
+            elsewhere = sorted(CANONICAL_ROOMS - spoken)[0]
+            records.setdefault(turn.speaker, []).append(
+                MoveWitnessRecord(
+                    subject=observation.subject,
+                    from_room=observation.room,
+                    to_room=elsewhere,
+                    tick=observation.tick,
+                )
+            )
+    return {speaker: tuple(rows) for speaker, rows in records.items()}
+
+
 class TestLiveDetectorCommittedBytesByteIdentity:
-    """DoD(a): the graduated ``detect_contradictions`` re-derives the recorded
-    flags byte-identically over every committed SAMPLE meeting (baseline 6).
+    """The graduated ``detect_contradictions`` re-derives the recorded flags
+    byte-identically over every committed meeting, all four sets (baseline 6).
 
     Coverage beyond the ``test_transcript.py`` re-derivation pin: this walk
     includes ``vent_sighting`` (via records rebuilt from the recorded verdicts)
-    across both sample sets exhaustively (195 meetings, ~0.5 s). Since baseline 6,
-    levers 1 and 2 are UNCONDITIONAL, so the detector ignores its ``env`` -- env
-    absent and env={} must agree -- and both reproduce the recorded (ON) census.
-    ml_corpus is excluded (still baseline-5 OFF bytes; re-record deferred to 18.13).
+    across all four sets exhaustively (707 meetings). Levers 1 and 2 are
+    UNCONDITIONAL, so the detector ignores its ``env`` for them -- env absent and
+    env={} must agree -- while the movement lever is DEFAULT-OFF, so a live
+    movement channel must leave every recorded flag exactly where it is.
     """
 
     def test_re_derivation_equals_recorded_on_every_committed_meeting(self) -> None:
         entries = _committed_meeting_entries()
-        assert len(entries) > 150  # guard: the samples walk actually loaded
+        # Guard: a thinned checkout or a glob typo fails here, not vacuously.
+        assert len(entries) == _COMMITTED_MEETINGS
         mismatches: list[str] = []
         for set_name, seed, entry in entries:
             roster = _living_roster(entry)
@@ -2224,6 +2698,45 @@ class TestLiveDetectorCommittedBytesByteIdentity:
                     f"{len(rederived)} re-derived vs {len(entry.contradictions)} recorded"
                 )
         assert mismatches == []
+
+    def test_a_live_movement_channel_moves_nothing_while_the_lever_is_off(
+        self,
+    ) -> None:
+        mismatches: list[str] = []
+        for set_name, seed, entry in _committed_meeting_entries():
+            roster = _living_roster(entry)
+            vents = _vent_records_from_recorded_flags(entry)
+            baseline = detect_contradictions(
+                entry.transcript, roster=roster, vent_witness_records=vents
+            )
+            with_channel = detect_contradictions(
+                entry.transcript,
+                roster=roster,
+                vent_witness_records=vents,
+                move_witness_records=_planted_move_channel(entry),
+            )
+            if baseline != with_channel:
+                mismatches.append(f"{set_name} seed {seed} {entry.meeting_id}")
+        assert mismatches == []
+
+    def test_the_planted_channel_is_live_when_the_lever_is_on(self) -> None:
+        # The OFF pin above would pass vacuously if the plant grounded nothing.
+        moved = 0
+        for _set_name, _seed, entry in _committed_meeting_entries():
+            roster = _living_roster(entry)
+            vents = _vent_records_from_recorded_flags(entry)
+            baseline = detect_contradictions(
+                entry.transcript, roster=roster, vent_witness_records=vents
+            )
+            on = detect_contradictions(
+                entry.transcript,
+                roster=roster,
+                vent_witness_records=vents,
+                move_witness_records=_planted_move_channel(entry),
+                env=_MOVEMENT_ON,
+            )
+            moved += int(baseline != on)
+        assert moved > 0
 
 
 # --- Task 18.12: the committed-samples lever census (the graduated substrate) ---

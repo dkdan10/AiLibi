@@ -226,10 +226,32 @@ is INCLUSIVE here (endpoint band prices coarse spoken recollection fuzz between
 two testimonies, but the record side is typed engine truth). No corroboration
 suppression and no adversarial-pair guard: engine truth beats forgeable
 testimony, mirroring kill_scene's "can only CONTRADICT, never corroborate".
+
+Movement claims (:func:`movement_claim_shape_enabled`, DEFAULT-OFF)
+==================================================================
+
+A witnessed transition is two facts -- the subject was in A at ``T-1`` and in B
+at ``T`` -- and a witness with only the static
+:class:`~meetings.schemas.SawPlayerObservation` to speak with must pick one
+room. Picking the ORIGIN states a placement that was already false when the
+witness saw it, and the detector then prosecutes the SUBJECT's truthful answer
+for disagreeing with it. The lever closes that in two arms, both grounded on the
+SPEAKER'S OWN typed :class:`~meetings.schemas.MoveWitnessRecord` channel: a
+spoken placement the speaker's own record moved the subject OUT of at that exact
+tick is re-read at the DESTINATION before pairing, and a spoken
+:class:`~meetings.schemas.SawMoveObservation` participates as the destination
+placement. Grounding is the firewall -- an UNGROUNDED spoken sighting is never
+rewritten, so the lever can only re-read testimony the speaker demonstrably
+held and can never launder a fabrication into a different room. The resolution
+rewrites the indexed sighting's ROOM only: the event id, the speaker and every
+id-keyed downstream surface are untouched.
+This is the movement-driven contradiction rule Task 13.5.4 deferred when it
+shipped the render (tasks/phase-13-5.md:271).
 """
 
 from __future__ import annotations
 
+import os
 import re
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
@@ -244,7 +266,10 @@ from meetings.schemas import (
     FoundBodyObservation,
     MeetingTranscript,
     MeetingTurn,
+    MoveWitnessRecord,
     PlayerId,
+    RoomId,
+    SawMoveObservation,
     SawPlayerObservation,
     SawVentObservation,
     SightingRecord,
@@ -664,6 +689,17 @@ VENT_GROUNDING_TICK_TOLERANCE: Final[int] = 2
 # constant precisely so the Task 16.17 measurement can retune the vouch
 # window independently of the vent one.
 SIGHTING_GROUNDING_TICK_TOLERANCE: Final[int] = 2
+
+# The tick tolerance of the MOVEMENT grounding chokepoint: zero, unlike its two
+# siblings above. A spoken placement grounds against one of the SPEAKER'S OWN
+# :class:`~meetings.schemas.MoveWitnessRecord` rows only when the spoken tick
+# EQUALS the record's tick. A window is unsafe here because the record names a
+# transition rather than a position: a subject who crossed two rooms in
+# consecutive ticks has two records, and a +-1 window would let a placement
+# resolve to the wrong transition's destination -- re-reading testimony as a
+# room the speaker never claimed. Exactness costs nothing the siblings' windows
+# buy: the rendered movement line quotes the tick the placement must reuse.
+MOVE_GROUNDING_TICK_TOLERANCE: Final[int] = 0
 
 # The map's canonical room ids -- a frozen ALLOWLIST (Task 10.6; audit
 # gp-1 C-C-5). The 10.1 placeholder DENYLIST ("VARIOUS", "UNKNOWN", ...)
@@ -1411,12 +1447,50 @@ def vent_placement_contradictions_enabled(env: Mapping[str, str] | None = None) 
     return True
 
 
+# The movement-claim lever -- DEFAULT-OFF, live. Not registered in
+# ``orchestrator.replay._TOGGLEABLE_LEVER_RESOLVERS``: Task 20.33 wires the whole
+# Phase-20 slate into the substrate stamp at once.
+ENV_MOVEMENT_CLAIM_SHAPE: Final[str] = "AILIBI_MOVEMENT_CLAIM_SHAPE"
+_MOVEMENT_CLAIM_SHAPE_FLAG_TRUE: Final[frozenset[str]] = frozenset(
+    {"1", "true", "yes", "on"}
+)
+
+
+def movement_claim_shape_enabled(env: Mapping[str, str] | None = None) -> bool:
+    """Whether a movement claim carries its origin. DEFAULT OFF.
+
+    Reads :data:`ENV_MOVEMENT_CLAIM_SHAPE` from ``env`` (defaulting to the
+    process environment), accepting ``1/true/yes/on`` case-insensitively;
+    passing ``env`` lets a caller toggle the lever without mutating
+    ``os.environ``.
+
+    ON, both arms of the movement channel apply, each grounded on the SPEAKER'S
+    OWN :class:`~meetings.schemas.MoveWitnessRecord` rows: a spoken
+    ``saw_player`` placement the speaker's own record moved the subject OUT of
+    at that exact tick is re-read at the record's ``to_room`` before
+    contradiction pairing, and a spoken
+    :class:`~meetings.schemas.SawMoveObservation` participates as one
+    destination placement. OFF, neither arm applies and a spoken ``saw_move``
+    is ignored entirely, which is what the committed recordings hold.
+
+    Phase 20 G-9(a) (audits/review-2026-08-19/D/FINAL-synthesis.md §4 row 2.3).
+    """
+
+    environment = env if env is not None else os.environ
+    return (
+        environment.get(ENV_MOVEMENT_CLAIM_SHAPE, "").strip().lower()
+        in _MOVEMENT_CLAIM_SHAPE_FLAG_TRUE
+    )
+
+
 def detect_contradictions(
     transcript: MeetingTranscript,
     *,
     roster: frozenset[PlayerId] | None = None,
     trigger_kind: MeetingTriggerKind | None = None,
     vent_witness_records: Mapping[PlayerId, tuple[VentWitnessRecord, ...]]
+    | None = None,
+    move_witness_records: Mapping[PlayerId, tuple[MoveWitnessRecord, ...]]
     | None = None,
     env: Mapping[str, str] | None = None,
 ) -> tuple[ContradictionRef, ...]:
@@ -1544,6 +1618,20 @@ def detect_contradictions(
     now-unconditional resolvers ignore it), so the read-site and the substrate
     stamp share one source of truth.
 
+    Movement claims (:func:`movement_claim_shape_enabled`, DEFAULT-OFF).
+    ``move_witness_records`` is the per-speaker
+    :class:`~meetings.schemas.MoveWitnessRecord` channel, keyed by speaker id
+    exactly like ``vent_witness_records`` -- the live path threads each
+    participant's ``move_witness_records_for_meeting()`` output. ON, the indexed
+    sightings pass one chokepoint before pairing
+    (:func:`_apply_movement_claim_shape`): a spoken placement the SPEAKER's own
+    record moved the subject OUT of at that exact tick is re-read at the
+    record's ``to_room``, and a spoken
+    :class:`~meetings.schemas.SawMoveObservation` joins as one destination
+    placement. ``None`` / an absent speaker entry grounds nothing, and OFF
+    nothing is re-read and a spoken ``saw_move`` is ignored -- so committed
+    transcripts re-derive byte-identically either way.
+
     The function is pure: it does not mutate the transcript and has no
     side effects.
     """
@@ -1553,6 +1641,8 @@ def detect_contradictions(
     # lever). Both resolvers return True since the Task-18.12 baseline-6 record.
     whereabouts_interior_flags = whereabouts_interior_flags_enabled(env)
     vent_placement_contradictions = vent_placement_contradictions_enabled(env)
+    # The movement lever is read ONCE here too and threaded down as a boolean.
+    movement_claim_shape = movement_claim_shape_enabled(env)
 
     effective_roster = _NO_ROSTER if roster is None else roster
     indexed_alibis = tuple(
@@ -1566,6 +1656,15 @@ def detect_contradictions(
         for indexed in _iter_sightings(transcript)
         if _subject_in_roster(indexed.observation.subject, effective_roster)
     )
+    if movement_claim_shape:
+        # ONE chokepoint, before the sightings reach any detector: the placements
+        # every consumer below sees are the ones the witnesses meant.
+        sightings = _apply_movement_claim_shape(
+            transcript,
+            sightings=sightings,
+            move_witness_records=move_witness_records or {},
+            roster=effective_roster,
+        )
 
     accusation_pairs = _accusation_pairs(transcript)
     flags: list[ContradictionRef] = []
@@ -1980,7 +2079,11 @@ def _carries_relevant_observation(
     """
 
     for observation in turn.observations:
-        if isinstance(observation, WhereaboutsClaim):
+        # A roll-call self-placement locates only the speaker (above), and a
+        # movement claim carries no single room to gate on: it participates
+        # ONLY as the lever's grounded destination placement
+        # (:func:`_iter_move_placements`) and backs no accusation here.
+        if isinstance(observation, (WhereaboutsClaim, SawMoveObservation)):
             continue
         rooms = canonical_rooms(observation.room)
         if not rooms:
@@ -2177,6 +2280,219 @@ def _iter_sightings(transcript: MeetingTranscript) -> Iterator[_IndexedSighting]
                     observation=observation,
                     rooms=canonical_rooms(observation.room),
                 )
+
+
+def _apply_movement_claim_shape(
+    transcript: MeetingTranscript,
+    *,
+    sightings: tuple[_IndexedSighting, ...],
+    move_witness_records: Mapping[PlayerId, tuple[MoveWitnessRecord, ...]],
+    roster: frozenset[PlayerId],
+) -> tuple[_IndexedSighting, ...]:
+    """Read every spoken placement as the room the witness's own record left them in.
+
+    The movement lever's one chokepoint (:func:`movement_claim_shape_enabled`),
+    applied to the indexed sightings before any detector sees them, so the
+    contradiction path, the subject-account index and the direct-sighting
+    exclusion set all read ONE set of placements. Two arms:
+
+    * **resolution** -- a spoken ``saw_player`` whose SPEAKER's own
+      :class:`~meetings.schemas.MoveWitnessRecord` moved the subject OUT of that
+      room at that exact tick is re-read at the record's ``to_room``
+      (:func:`_resolve_movement_sighting`);
+    * **shape** -- a spoken :class:`~meetings.schemas.SawMoveObservation` the
+      speaker's own records confirm joins as ONE destination placement
+      (:func:`_iter_move_placements`).
+
+    A speaker with no records grounds nothing, so their testimony is untouched.
+    The resolution rewrites only the room: the event id, the speaker and the
+    tick are preserved, which is what keeps every id-keyed surface downstream --
+    the direct-sighting exclusion set, the proxy-intra-turn guard,
+    :func:`reconstruct_stated_paths`, the absent-set derivation -- unable to
+    notice the rewrite.
+    """
+
+    resolved = tuple(
+        _resolve_movement_sighting(
+            sighting, records=move_witness_records.get(sighting.speaker, ())
+        )
+        for sighting in sightings
+    )
+    return resolved + tuple(
+        _iter_move_placements(
+            transcript, move_witness_records=move_witness_records, roster=roster
+        )
+    )
+
+
+def _resolve_movement_sighting(
+    sighting: _IndexedSighting, *, records: tuple[MoveWitnessRecord, ...]
+) -> _IndexedSighting:
+    """Re-index one spoken placement at its destination, or return it untouched."""
+
+    destination = _movement_destination(
+        subject=sighting.observation.subject,
+        tick=sighting.observation.tick,
+        spoken_rooms=sighting.rooms,
+        records=records,
+    )
+    if destination is None:
+        return sighting
+    return _IndexedSighting(
+        event_id=sighting.event_id,
+        speaker=sighting.speaker,
+        observation=sighting.observation.model_copy(update={"room": destination}),
+        rooms=canonical_rooms(destination),
+    )
+
+
+def _movement_destination(
+    *,
+    subject: PlayerId,
+    tick: int,
+    spoken_rooms: frozenset[str],
+    records: tuple[MoveWitnessRecord, ...],
+) -> RoomId | None:
+    """The room a spoken placement re-reads as, or ``None`` to leave it alone.
+
+    The stated conjunction, and only it: one of the speaker's records names this
+    ``subject``, its tick EQUALS the spoken tick
+    (:data:`MOVE_GROUNDING_TICK_TOLERANCE`), its ``from_room`` canonically
+    intersects the spoken room and its ``to_room`` is canonically disjoint from
+    it. Disjointness is what confines the rewrite to the origin half: a
+    placement already naming the destination intersects ``to_room`` and is left
+    exactly as spoken.
+
+    Ambiguity is adjudicated BEFORE the conjunction, over every record naming
+    this subject at this tick: if any two disagree about the destination the
+    placement is left untouched, whatever room they came from. Engine truth
+    forbids a subject having two transitions land on one tick, so such a channel
+    is not describing the transition the speaker meant; narrowing to the record
+    whose origin happens to match the spoken room would pick a destination out
+    of a channel already known to be wrong.
+    """
+
+    if not spoken_rooms:
+        return None
+    at_tick = _records_at_tick(records, subject=subject, tick=tick)
+    if _destinations_conflict(at_tick):
+        return None
+    destinations: dict[frozenset[str], RoomId] = {}
+    for record in at_tick:
+        if not (canonical_rooms(record.from_room) & spoken_rooms):
+            continue
+        to_rooms = canonical_rooms(record.to_room)
+        if not to_rooms or (to_rooms & spoken_rooms):
+            continue
+        destinations.setdefault(to_rooms, record.to_room)
+    if len(destinations) != 1:
+        return None
+    return next(iter(destinations.values()))
+
+
+def _records_at_tick(
+    records: tuple[MoveWitnessRecord, ...], *, subject: PlayerId, tick: int
+) -> tuple[MoveWitnessRecord, ...]:
+    """The speaker's records naming ``subject`` at ``tick``."""
+
+    return tuple(
+        record
+        for record in records
+        if record.subject == subject
+        and abs(record.tick - tick) <= MOVE_GROUNDING_TICK_TOLERANCE
+    )
+
+
+def _destinations_conflict(records: tuple[MoveWitnessRecord, ...]) -> bool:
+    """Whether these records disagree about where the subject landed.
+
+    Engine truth forbids two transitions of one subject landing on one tick, so
+    a channel that says otherwise is wrong about something and neither arm may
+    take a destination from it. Both arms consult this BEFORE matching, so an
+    invalid channel cannot resolve through whichever record happens to fit the
+    spoken rooms.
+    """
+
+    return len({canonical_rooms(record.to_room) for record in records}) > 1
+
+
+def _move_observation_matches_record(
+    observation: SawMoveObservation,
+    record: MoveWitnessRecord,
+) -> bool:
+    """Whether one spoken transition matches one typed record.
+
+    The vent / sighting grounding predicates' movement sibling: same
+    ``subject``, canonically intersecting rooms on BOTH halves of the
+    transition, and an EXACT tick match
+    (:data:`MOVE_GROUNDING_TICK_TOLERANCE`). Pure function of its two
+    arguments -- no prose parsing, no LLM judgment.
+    """
+
+    if observation.subject != record.subject:
+        return False
+    if abs(observation.tick - record.tick) > MOVE_GROUNDING_TICK_TOLERANCE:
+        return False
+    spoken_from = canonical_rooms(observation.from_room)
+    spoken_to = canonical_rooms(observation.to_room)
+    if not spoken_from or not spoken_to:
+        return False
+    return bool(
+        canonical_rooms(record.from_room) & spoken_from
+        and canonical_rooms(record.to_room) & spoken_to
+    )
+
+
+def _iter_move_placements(
+    transcript: MeetingTranscript,
+    *,
+    move_witness_records: Mapping[PlayerId, tuple[MoveWitnessRecord, ...]],
+    roster: frozenset[PlayerId],
+) -> Iterator[_IndexedSighting]:
+    """Index each GROUNDED spoken transition as its ONE destination placement.
+
+    "``subject`` in ``to_room`` at ``tick``" -- the arrival the transition
+    asserts, carried on the observation's own event id so it resolves to its
+    speaker exactly like any other observation. The origin half is deliberately
+    not placed at ``tick - 1``; see
+    :class:`~meetings.schemas.SawMoveObservation`. An UNGROUNDED transition (no
+    matching record in the speaker's own channel) is ordinary testimony and
+    places nobody, and a channel whose records disagree about the destination
+    (:func:`_destinations_conflict`) grounds nothing here either -- the same
+    adjudication the resolution arm applies, so one invalid channel cannot be
+    trusted by one arm and distrusted by the other.
+    """
+
+    for turn in transcript.turns:
+        records = move_witness_records.get(turn.speaker, ())
+        if not records:
+            continue
+        for index, observation in enumerate(turn.observations):
+            if not isinstance(observation, SawMoveObservation):
+                continue
+            if not _subject_in_roster(observation.subject, roster):
+                continue
+            at_tick = _records_at_tick(
+                records, subject=observation.subject, tick=observation.tick
+            )
+            if _destinations_conflict(at_tick):
+                continue
+            if not any(
+                _move_observation_matches_record(observation, record)
+                for record in at_tick
+            ):
+                continue
+            yield _IndexedSighting(
+                event_id=_turn_observation_id(turn=turn, index=index),
+                speaker=turn.speaker,
+                observation=SawPlayerObservation(
+                    type="saw_player",
+                    tick=observation.tick,
+                    subject=observation.subject,
+                    room=observation.to_room,
+                ),
+                rooms=canonical_rooms(observation.to_room),
+            )
 
 
 def _dedupe_echo_alibis(
@@ -3491,8 +3807,10 @@ def _ranges_overlap(a_from: int, a_to: int, b_from: int, b_to: int) -> bool:
 
 __all__ = [
     "CANONICAL_ROOMS",
+    "ENV_MOVEMENT_CLAIM_SHAPE",
     "ENV_VENT_PLACEMENT_CONTRADICTIONS",
     "ENV_WHEREABOUTS_INTERIOR_FLAGS",
+    "MOVE_GROUNDING_TICK_TOLERANCE",
     "NARROW_ALIBI_WINDOW_TICKS",
     "PHYSICAL_CONTRADICTION_MIN_VOICES",
     "SIGHTING_GROUNDING_TICK_TOLERANCE",
@@ -3526,6 +3844,7 @@ __all__ = [
     "is_canonically_ordered",
     "is_relevant_sighting",
     "is_weak_contradiction",
+    "movement_claim_shape_enabled",
     "next_chain_step",
     "reconstruct_stated_paths",
     "self_refuted_alibi_claim_ids",
