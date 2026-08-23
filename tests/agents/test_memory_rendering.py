@@ -20,8 +20,10 @@ from agents.memory.beliefs import ContradictionRef
 from agents.memory.episodic import EpisodicEvent
 from agents.memory.store import (
     DEFAULT_TOKEN_BUDGET,
+    ENV_TASK_COMPLETION_FROM_EVENTS,
     AgentMemory,
     render_for_prompt,
+    task_completion_from_events_enabled,
 )
 from eval.leak_test import (
     JsonValue,
@@ -30,6 +32,9 @@ from eval.leak_test import (
 )
 
 _FIXTURE_DIR = Path("tests/fixtures/memory_rendering")
+# The completed-task lever, toggled through ``render_for_prompt(env=...)`` so no
+# test mutates ``os.environ`` (the suite runs parallel).
+_LEVER_ON: Mapping[str, str] = {ENV_TASK_COMPLETION_FROM_EVENTS: "1"}
 _ROLE_LINE_PATTERN = re.compile(r"^## Your role: .+$\n?", re.MULTILINE)
 _ROLE_VALUE_PATTERN = re.compile(r"^## Your role: (.+)$", re.MULTILINE)
 
@@ -64,12 +69,18 @@ def _self_state_event(
     pending_task_id: str | None = None,
     agent_id: str | None = None,
     fellow_impostor_ids: tuple[str, ...] | None = None,
+    owned_task_ids: tuple[str, ...] | None = None,
+    observation_id: str | None = None,
 ) -> EpisodicEvent:
     payload: dict[str, Any] = {
         "room": room,
         "role": role,
         "pending_task_id": pending_task_id,
     }
+    # ``owned_task_ids`` is added only when supplied, so a fixture can still
+    # express a pre-widening row that carries no set at all.
+    if owned_task_ids is not None:
+        payload["owned_task_ids"] = owned_task_ids
     # ``agent_id`` / ``fellow_impostor_ids`` drive the Task 9.3 render guards
     # (DESIGN.md §4.7). They are only added to the payload when supplied, so
     # existing fixtures/tests that omit them render byte-identically.
@@ -82,6 +93,7 @@ def _self_state_event(
         type="self_state",
         payload=payload,
         provenance="observed",
+        observation_id=observation_id,
     )
 
 
@@ -832,11 +844,14 @@ class TestCompletedTaskInference:
 
         assert "You completed" not in view
 
-    def test_pending_rollover_to_next_map_id_emits_completion(self) -> None:
-        # Multi-task 9p/2i loadout: completing the first task rolls
-        # ``pending_task_id`` from one map id to the NEXT (not to ``None``). The
-        # finished task's completion alibi must still render -- the pending id
-        # changes only when the previous pending task completed (PR #109 review).
+    def test_pending_rollover_still_emits_the_recorded_completion(self) -> None:
+        # The OFF rule as the committed recordings render it -- pinned as bytes,
+        # not as a true statement about completion. Its premise ("a crewmate's
+        # owned set only ever shrinks, so a pending change IS a completion") is
+        # false under the canonical ``dead_task_rule: redistribute``: a victim's
+        # unfinished instances are re-keyed onto a survivor, so an inherited
+        # earlier-sorting task displaces the pending id with nothing completed.
+        # The truthful rule is pinned in ``TestCompletedTaskFromEventsLever``.
         memory = AgentMemory()
         memory.episodic.append(
             _self_state_event(tick=100, room="ADMIN", pending_task_id="swipe_card")
@@ -886,6 +901,324 @@ class TestCompletedTaskInference:
         view = render_for_prompt(memory)
 
         assert "You completed" not in view
+
+
+class TestCompletedTaskFromEventsLever:
+    """The completed-task line read off ``owned_task_ids`` (default-OFF lever).
+
+    A living agent's owned set loses a map id only when that instance completes;
+    redistribution only ADDS one. Every test here toggles the lever through the
+    ``env`` mapping, never ``os.environ``.
+    """
+
+    def test_lever_defaults_off_and_reads_the_env_mapping(self) -> None:
+        assert task_completion_from_events_enabled() is False
+        assert task_completion_from_events_enabled({}) is False
+        for falsy in ("", "0", "off", "no", "maybe"):
+            assert (
+                task_completion_from_events_enabled(
+                    {ENV_TASK_COMPLETION_FROM_EVENTS: falsy}
+                )
+                is False
+            )
+        for truthy in ("1", "true", "TRUE", "Yes", " on "):
+            assert (
+                task_completion_from_events_enabled(
+                    {ENV_TASK_COMPLETION_FROM_EVENTS: truthy}
+                )
+                is True
+            )
+
+    def test_recording_the_owned_set_does_not_move_the_off_path_bytes(self) -> None:
+        # The perception widening is additive: with the lever unset the extra key
+        # is unread, so the same history renders byte-identically with and without
+        # it.
+        def _memory(*, owned: bool) -> AgentMemory:
+            memory = AgentMemory()
+            memory.episodic.append(
+                _self_state_event(
+                    tick=100,
+                    room="ADMIN",
+                    pending_task_id="swipe_card",
+                    owned_task_ids=("submit_scan", "swipe_card") if owned else None,
+                )
+            )
+            memory.episodic.append(
+                _self_state_event(
+                    tick=130,
+                    room="MEDBAY",
+                    pending_task_id="submit_scan",
+                    owned_task_ids=("submit_scan",) if owned else None,
+                )
+            )
+            return memory
+
+        assert render_for_prompt(_memory(owned=True)) == render_for_prompt(
+            _memory(owned=False)
+        )
+
+    def test_redistributed_task_displacing_pending_mints_no_completion(self) -> None:
+        # The confirmed defect's shape: a crewmate holding ``upload_logs`` inherits
+        # a victim's ``align_engine_output``, which sorts first and takes over
+        # ``pending_task_id`` -- while ``upload_logs`` is still owned and unfinished.
+        memory = AgentMemory()
+        memory.episodic.append(
+            _self_state_event(
+                tick=12,
+                room="MEDBAY",
+                pending_task_id="upload_logs",
+                owned_task_ids=("upload_logs",),
+            )
+        )
+        memory.episodic.append(
+            _self_state_event(
+                tick=13,
+                room="MEDBAY",
+                pending_task_id="align_engine_output",
+                owned_task_ids=("align_engine_output", "upload_logs"),
+            )
+        )
+
+        view = render_for_prompt(memory, env=_LEVER_ON)
+
+        assert "You completed" not in view
+        # The gate bites: the OFF rule mints exactly the fabricated line.
+        assert (
+            "[tick 13] You completed upload_logs (you were in MEDBAY)."
+            in render_for_prompt(memory)
+        )
+
+    def test_genuine_rollover_renders_the_same_bytes_as_the_off_path(self) -> None:
+        memory = AgentMemory()
+        memory.episodic.append(
+            _self_state_event(
+                tick=100,
+                room="ADMIN",
+                pending_task_id="swipe_card",
+                owned_task_ids=("submit_scan", "swipe_card"),
+                observation_id="p-1:100:0",
+            )
+        )
+        memory.episodic.append(
+            _self_state_event(
+                tick=130,
+                room="MEDBAY",
+                pending_task_id="submit_scan",
+                owned_task_ids=("submit_scan",),
+                observation_id="p-1:130:0",
+            )
+        )
+
+        view = render_for_prompt(memory, env=_LEVER_ON)
+
+        assert (
+            "[obs p-1:130:0] [tick 130] You completed swipe_card (you were in ADMIN)."
+            in view
+        )
+        assert "You completed submit_scan" not in view
+        # Same tick, room and observation id as the OFF path: this task does not
+        # re-date or re-room a genuine completion.
+        assert view == render_for_prompt(memory)
+
+    def test_final_clear_renders_the_completion(self) -> None:
+        memory = AgentMemory()
+        memory.episodic.append(
+            _self_state_event(
+                tick=100,
+                room="ADMIN",
+                pending_task_id="swipe_card",
+                owned_task_ids=("swipe_card",),
+            )
+        )
+        memory.episodic.append(
+            _self_state_event(
+                tick=160,
+                room="MEDBAY",
+                pending_task_id=None,
+                owned_task_ids=(),
+            )
+        )
+
+        view = render_for_prompt(memory, env=_LEVER_ON)
+
+        assert "[tick 160] You completed swipe_card (you were in ADMIN)." in view
+        assert view == render_for_prompt(memory)
+
+    def test_completion_behind_an_inherited_task_renders(self) -> None:
+        # The case the OFF rule DROPS: the agent finishes ``upload_logs`` on a tick
+        # when ``pending_task_id`` is already held by the inherited earlier-sorting
+        # ``align_engine_output``, so nothing about the pending id changes.
+        memory = AgentMemory()
+        memory.episodic.append(
+            _self_state_event(
+                tick=12,
+                room="MEDBAY",
+                pending_task_id="upload_logs",
+                owned_task_ids=("upload_logs",),
+            )
+        )
+        memory.episodic.append(
+            _self_state_event(
+                tick=13,
+                room="MEDBAY",
+                pending_task_id="align_engine_output",
+                owned_task_ids=("align_engine_output", "upload_logs"),
+            )
+        )
+        memory.episodic.append(
+            _self_state_event(
+                tick=14,
+                room="STORAGE",
+                pending_task_id="align_engine_output",
+                owned_task_ids=("align_engine_output",),
+            )
+        )
+
+        view = render_for_prompt(memory, env=_LEVER_ON)
+
+        assert "[tick 14] You completed upload_logs (you were in MEDBAY)." in view
+        # The OFF path reports the same task one tick early, on the tick it was
+        # merely displaced, and reports nothing when it actually completed.
+        off_view = render_for_prompt(memory)
+        assert "[tick 13] You completed upload_logs (you were in MEDBAY)." in off_view
+        assert "[tick 14] You completed" not in off_view
+
+    def test_impostor_pretend_rotation_mints_no_completion(self) -> None:
+        # The impostor's ``owned_task_ids`` is a CONSTANT per-seat camouflage
+        # window while ``pending_task_id`` rotates through it, so the rule mints
+        # nothing for an impostor without any role gate.
+        window = ("fuel_reserves", "submit_scan", "swipe_card")
+        memory = AgentMemory()
+        for tick, pretend in (
+            (10, "swipe_card"),
+            (20, "submit_scan"),
+            (30, "fuel_reserves"),
+        ):
+            memory.episodic.append(
+                _self_state_event(
+                    tick=tick,
+                    role="IMPOSTOR",
+                    room="ELECTRICAL",
+                    pending_task_id=pretend,
+                    owned_task_ids=window,
+                )
+            )
+
+        assert "You completed" not in render_for_prompt(memory, env=_LEVER_ON)
+
+    def test_a_shrinking_impostor_window_would_mint(self) -> None:
+        # The perturbation that proves the test above is not vacuous: the ON rule
+        # is role-BLIND -- it reads the set, and the impostor is protected only by
+        # that set being constant.
+        memory = AgentMemory()
+        memory.episodic.append(
+            _self_state_event(
+                tick=10,
+                role="IMPOSTOR",
+                room="ELECTRICAL",
+                pending_task_id="swipe_card",
+                owned_task_ids=("submit_scan", "swipe_card"),
+            )
+        )
+        memory.episodic.append(
+            _self_state_event(
+                tick=20,
+                role="IMPOSTOR",
+                room="ELECTRICAL",
+                pending_task_id="submit_scan",
+                owned_task_ids=("submit_scan",),
+            )
+        )
+
+        view = render_for_prompt(memory, env=_LEVER_ON)
+
+        assert "[tick 20] You completed swipe_card (you were in ELECTRICAL)." in view
+
+    def test_two_departed_ids_render_one_line_each(self) -> None:
+        # Both completions are reported, in a fixed (sorted) order.
+        memory = AgentMemory()
+        memory.episodic.append(
+            _self_state_event(
+                tick=40,
+                room="LABS",
+                pending_task_id="fuel_reserves",
+                owned_task_ids=("fuel_reserves", "swipe_card"),
+            )
+        )
+        memory.episodic.append(
+            _self_state_event(
+                tick=41,
+                room="LABS",
+                pending_task_id=None,
+                owned_task_ids=(),
+            )
+        )
+
+        view = render_for_prompt(memory, env=_LEVER_ON, token_budget=8000)
+
+        assert "[tick 41] You completed fuel_reserves (you were in LABS)." in view
+        assert "[tick 41] You completed swipe_card (you were in LABS)." in view
+        assert view.index("You completed fuel_reserves") < view.index(
+            "You completed swipe_card"
+        )
+
+    def test_rows_without_the_owned_set_mint_nothing(self) -> None:
+        # Fail-closed: a pre-widening recording or a hand-built fixture carries no
+        # set, so the ON path has no evidence and mints nothing -- even though the
+        # OFF rule would.
+        memory = AgentMemory()
+        memory.episodic.append(
+            _self_state_event(tick=100, room="ADMIN", pending_task_id="swipe_card")
+        )
+        memory.episodic.append(
+            _self_state_event(tick=130, room="MEDBAY", pending_task_id=None)
+        )
+
+        assert "You completed" not in render_for_prompt(memory, env=_LEVER_ON)
+        assert (
+            "[tick 130] You completed swipe_card (you were in ADMIN)."
+            in render_for_prompt(memory)
+        )
+
+    def test_one_row_without_the_owned_set_mints_nothing(self) -> None:
+        # The set has to be readable on BOTH rows: a gap in the evidence is not a
+        # completion.
+        memory = AgentMemory()
+        memory.episodic.append(
+            _self_state_event(
+                tick=100,
+                room="ADMIN",
+                pending_task_id="swipe_card",
+                owned_task_ids=("swipe_card",),
+            )
+        )
+        memory.episodic.append(
+            _self_state_event(tick=130, room="MEDBAY", pending_task_id=None)
+        )
+        memory.episodic.append(
+            _self_state_event(
+                tick=160,
+                room="MEDBAY",
+                pending_task_id=None,
+                owned_task_ids=(),
+            )
+        )
+
+        assert "You completed" not in render_for_prompt(memory, env=_LEVER_ON)
+
+    def test_unchanged_owned_set_mints_nothing(self) -> None:
+        memory = AgentMemory()
+        for tick in (100, 130, 160):
+            memory.episodic.append(
+                _self_state_event(
+                    tick=tick,
+                    room="ADMIN",
+                    pending_task_id="swipe_card",
+                    owned_task_ids=("submit_scan", "swipe_card"),
+                )
+            )
+
+        assert "You completed" not in render_for_prompt(memory, env=_LEVER_ON)
 
 
 class TestSawBodyDeduplication:
