@@ -2363,21 +2363,27 @@ def _movement_destination(
     placement already naming the destination intersects ``to_room`` and is left
     exactly as spoken.
 
-    When two records would resolve the same placement to DIFFERENT destinations
-    the placement is left untouched rather than resolved to one of them: engine
-    truth forbids a subject having two transitions land on one tick, so the
-    ambiguity means the channel is not describing the transition the speaker
-    meant, and picking a side would invent testimony.
+    Ambiguity is adjudicated BEFORE the conjunction, over every record naming
+    this subject at this tick: if any two disagree about the destination the
+    placement is left untouched, whatever room they came from. Engine truth
+    forbids a subject having two transitions land on one tick, so such a channel
+    is not describing the transition the speaker meant; narrowing to the record
+    whose origin happens to match the spoken room would pick a destination out
+    of a channel already known to be wrong.
     """
 
     if not spoken_rooms:
         return None
+    at_tick = tuple(
+        record
+        for record in records
+        if record.subject == subject
+        and abs(record.tick - tick) <= MOVE_GROUNDING_TICK_TOLERANCE
+    )
+    if len({canonical_rooms(record.to_room) for record in at_tick}) > 1:
+        return None
     destinations: dict[frozenset[str], RoomId] = {}
-    for record in records:
-        if record.subject != subject:
-            continue
-        if abs(record.tick - tick) > MOVE_GROUNDING_TICK_TOLERANCE:
-            continue
+    for record in at_tick:
         if not (canonical_rooms(record.from_room) & spoken_rooms):
             continue
         to_rooms = canonical_rooms(record.to_room)

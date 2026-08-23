@@ -2278,6 +2278,54 @@ class TestMovementResolutionArm:
             tx, roster=_ROSTER_3, move_witness_records=records, env=_MOVEMENT_ON
         ) == detect_contradictions(tx, roster=_ROSTER_3)
 
+    def test_a_conflicting_record_blocks_the_rewrite_from_any_room(self) -> None:
+        # The ambiguity guard is adjudicated over every record naming the subject
+        # at that tick, not only the ones whose origin matches the spoken room:
+        # a channel that has the subject landing twice on one tick is wrong about
+        # something, so nothing in it may pick a destination.
+        tx = _origin_spoken_transcript()
+        records = {
+            "p-9": (
+                _move_record(tick=3, subject="p-3", from_room="MEDBAY", to_room="LABS"),
+                _move_record(
+                    tick=3, subject="p-3", from_room="ADMIN", to_room="REACTOR"
+                ),
+            )
+        }
+        assert detect_contradictions(
+            tx, roster=_ROSTER_3, move_witness_records=records, env=_MOVEMENT_ON
+        ) == detect_contradictions(tx, roster=_ROSTER_3)
+        # Two records that AGREE on the destination are not ambiguous, so the
+        # guard does not swallow the ordinary case.
+        agreeing = {
+            "p-9": (
+                _move_record(tick=3, subject="p-3", from_room="MEDBAY", to_room="LABS"),
+                _move_record(tick=3, subject="p-3", from_room="MEDBAY", to_room="LABS"),
+            )
+        }
+        assert (
+            detect_contradictions(
+                tx, roster=_ROSTER_3, move_witness_records=agreeing, env=_MOVEMENT_ON
+            )
+            == ()
+        )
+        # A conflict at a DIFFERENT tick is a different transition and is none of
+        # this placement's business.
+        other_tick = {
+            "p-9": (
+                _move_record(tick=3, subject="p-3", from_room="MEDBAY", to_room="LABS"),
+                _move_record(
+                    tick=4, subject="p-3", from_room="ADMIN", to_room="REACTOR"
+                ),
+            )
+        }
+        assert (
+            detect_contradictions(
+                tx, roster=_ROSTER_3, move_witness_records=other_tick, env=_MOVEMENT_ON
+            )
+            == ()
+        )
+
     def test_a_genuine_conflict_still_mints_at_the_destination(self) -> None:
         # The perturbation that shows the rule bites: the subject claims a THIRD
         # room, so the resolved destination still contradicts them -- STRONG, and
