@@ -621,8 +621,13 @@ def _render_honesty_human(report: EvidenceHonestyReport) -> str:
                 physicality.reporter_killed_within_three,
             )
             + f"  [{physicality.body_triggered_meetings} body-triggered]",
+            # The mode is part of the I-11 label, not a footnote: these cells are
+            # produced by whichever policy was folded over the frozen bytes, and an
+            # operator reading a fold of today's policy must not take it for the
+            # ratified pre-registration baseline.
             _solvability_line(
-                "I-11 free zero-witness kills declined", targeting.free_kills_declined
+                f"I-11 [{targeting.policy_mode}] free zero-witness kills declined",
+                targeting.free_kills_declined,
             )
             + f"  [ranking {targeting.decline_reason_ranking};"
             f" fellow-defer {targeting.decline_reason_fellow_defer};"

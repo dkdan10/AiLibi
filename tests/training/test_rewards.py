@@ -453,7 +453,12 @@ def test_shaped_reward_values_on_seed_zero_are_byte_identical() -> None:
     off the deterministic engine, so the guard is the diff-proof that the docstring
     correction was prose-only. They are exact IEEE doubles from a byte-deterministic
     rollout, so they are compared with ``==`` — never ``pytest.approx``, which would
-    let a real drift in Φ, the dense terms, or the weighting slip through."""
+    let a real drift in Φ, the dense terms, or the weighting slip through.
+
+    The literals are seed 0's trajectory under the FSM in the tree, which
+    ``training/env.py`` wraps as the surrogate's proposal, so the impostor mover
+    repair re-priced the kill-derived terms (Task 20.32). No training code and no
+    reward definition changed."""
 
     rollout = _env().rollout(0)
 
@@ -461,14 +466,14 @@ def test_shaped_reward_values_on_seed_zero_are_byte_identical() -> None:
     assert impostor.terminal_reward == 1.0
     assert impostor.dense_terms == {
         "kills": 5.0,
-        "unwitnessed_kills": 3.0,
+        "unwitnessed_kills": 5.0,
         "survival": 1.0,
-        "meetings_survived": 4.0,
+        "meetings_survived": 5.0,
     }
     assert impostor.shaping_sum == 5.0
     assert impostor.potential_initial == 0.0
     assert impostor.potential_terminal == 5.0
-    assert impostor.total() == 19.0
+    assert impostor.total() == 22.0
 
     crew = compute_shaped_reward(rollout, "CREWMATE")
     assert crew.terminal_reward == -1.0
@@ -476,9 +481,9 @@ def test_shaped_reward_values_on_seed_zero_are_byte_identical() -> None:
         "task_progress": 0.8571428571428571,
         "survival": 0.2857142857142857,
         "correct_reports": 0.0,
-        "patrol_coverage": 0.782608695652174,
+        "patrol_coverage": 0.6862745098039216,
     }
     assert crew.shaping_sum == 12.0
     assert crew.potential_initial == 0.0
     assert crew.potential_terminal == 12.0
-    assert crew.total() == 12.925465838509316
+    assert crew.total() == 12.829131652661065

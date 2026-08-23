@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from collections.abc import Iterable, Iterator
 from pathlib import Path
-from typing import TypeAlias
+from typing import Final, TypeAlias
 
 import pytest
 
@@ -11,7 +11,7 @@ from pydantic import TypeAdapter
 
 from agents.base import AgentInterface
 from engine.entities import PlayerId, Role
-from engine.world import load_canonical_map
+from engine.world import Map, load_canonical_map
 from eval.balance_eval import (
     _DEFAULT_MAX_COST_USD,
     BalanceReport,
@@ -281,36 +281,85 @@ def test_leak_scanner_allows_self_state_role() -> None:
     _assert_packet_has_no_leaks(legitimate)
 
 
-def test_canonical_balance_keeps_both_sides_alive(tmp_path: Path) -> None:
-    """Fast canary for Task 2.10.5 Phase 2 tournament balance (DESIGN.md §3.5).
+# The fake-provider outcome of the canonical DROP config, pinned seed by seed as
+# ``(seed, winner, reason, final_tick)``. Under the fake provider the crew never
+# deduces, so out-tasking is its only win path; the split below is a fact about
+# the tactical mover on these ten seeds, NOT a balance reading. Balance is judged
+# only on the real-provider record (audits/audit-phase-20-preregistration.md §5
+# secondary band, where §7 declares the mover repair a co-intervention).
+_CANONICAL_DROP_SEEDS: Final[tuple[int, ...]] = tuple(range(10))
+_CANONICAL_DROP_MAX_TICKS: Final[int] = 1000
+_CANONICAL_DROP_OUTCOMES: Final[tuple[tuple[int, str | None, str, int | None], ...]] = (
+    (0, "IMPOSTORS", "IMPOSTOR_PARITY", 15),
+    (1, "IMPOSTORS", "IMPOSTOR_PARITY", 11),
+    (2, "IMPOSTORS", "IMPOSTOR_PARITY", 11),
+    (3, "IMPOSTORS", "IMPOSTOR_PARITY", 15),
+    (4, "IMPOSTORS", "IMPOSTOR_PARITY", 11),
+    (5, "IMPOSTORS", "IMPOSTOR_PARITY", 13),
+    (6, "IMPOSTORS", "IMPOSTOR_PARITY", 18),
+    (7, "IMPOSTORS", "IMPOSTOR_PARITY", 14),
+    (8, "IMPOSTORS", "IMPOSTOR_PARITY", 13),
+    (9, "IMPOSTORS", "IMPOSTOR_PARITY", 11),
+)
 
-    A 10-game tournament against the canonical config with the default
-    agents must produce at least one ``CREWMATES`` and at least one
-    ``IMPOSTORS`` decisive outcome. This is a small-N regression test
-    on the canonical ``kill_cooldown_ticks`` tuning, not the full
-    100-game merge gate — the merge gate lives in
-    ``tasks/phase-2.md`` Merge Criteria and is exercised by
-    ``scripts/run_tournament.py``.
 
-    Task 13.12 flipped the canonical default to ``redistribute``, which removes
-    the FAKE crew-win path (no deduction -> the crew can only win by out-tasking,
-    which redistribute's constant burden denies). This canary isolates the
-    ``kill_cooldown_ticks`` tuning, NOT the dead-task rule, so it runs on an
-    explicit DROP config where both sides can be decisive in fake. (The real
-    redistribute balance is the owner-accepted ~84%-impostor gate result, measured
-    on real-Ollama, not this fake canary.)
-    """
+def _canonical_drop_map() -> Map:
+    """The canonical map with the dead-task rule forced to ``drop``."""
 
-    seeds = tuple(range(10))
-    report = run_balance_eval(
-        seeds=seeds,
-        output_dir=tmp_path,
-        game_map=load_canonical_map().model_copy(update={"dead_task_rule": "drop"}),
-        max_ticks=1000,
+    return load_canonical_map().model_copy(update={"dead_task_rule": "drop"})
+
+
+def _drop_config_outcomes(
+    output_dir: Path, *, game_map: Map
+) -> tuple[tuple[int, str | None, str, int | None], ...]:
+    report = run_tournament_eval(
+        seeds=_CANONICAL_DROP_SEEDS,
+        output_dir=output_dir,
+        game_map=game_map,
+        max_ticks=_CANONICAL_DROP_MAX_TICKS,
+    )
+    return tuple(
+        (game.seed, game.winner, game.reason, game.final_tick) for game in report.games
     )
 
-    assert report.crew_wins > 0
-    assert report.impostor_wins > 0
+
+def test_canonical_drop_config_reproduces_its_pinned_outcomes(tmp_path: Path) -> None:
+    """Determinism canary over the canonical ``kill_cooldown_ticks`` tuning.
+
+    A 10-game fake-provider tournament on an explicit DROP config must reproduce
+    the pinned per-seed outcome exactly, so any change to the tactical mover (or
+    to the tuning it runs against) moves this gate and has to be re-derived
+    deliberately. It is not a balance bar: the fake provider gives the crew no
+    deduction, so the one-sided split is the truthful outcome of a mover that no
+    longer declines its free kills, and balance is read only from the
+    real-provider record.
+    """
+
+    assert (
+        _drop_config_outcomes(tmp_path, game_map=_canonical_drop_map())
+        == _CANONICAL_DROP_OUTCOMES
+    )
+
+
+def test_canonical_drop_outcomes_move_when_the_kill_cooldown_moves(
+    tmp_path: Path,
+) -> None:
+    """The perturbation proving the canary bites (AGENTS.md "a gate must fail").
+
+    Lengthening the kill cooldown by five ticks — the one tuning knob this canary
+    exists to hold still — changes the pinned cells and restores crew wins, so
+    the pin above is measuring the mover and its tuning, not a constant.
+    """
+
+    base = _canonical_drop_map()
+    perturbed = base.model_copy(
+        update={"kill_cooldown_ticks": base.kill_cooldown_ticks + 5}
+    )
+
+    observed = _drop_config_outcomes(tmp_path, game_map=perturbed)
+
+    assert observed != _CANONICAL_DROP_OUTCOMES
+    assert sum(1 for row in observed if row[1] == "CREWMATES") > 0
 
 
 def test_run_tournament_eval_threads_roster_and_task_config(tmp_path: Path) -> None:
@@ -428,12 +477,14 @@ def test_run_balance_eval_reuses_headless_game_outcomes(tmp_path: Path) -> None:
 # tournament gate stays a local-only check (see ``tasks/phase-2.md`` Merge
 # Criteria); this test enforces that *at least one* of a small, fixed seed
 # set produces a decisive ``CREWMATES`` / ``IMPOSTORS`` outcome under the
-# default agents. Probed at current HEAD with max_ticks=200:
-#   seed 0  -> CREWMATES (tick 11)
-#   seed 1  -> CREWMATES (tick  9)
-#   seed 2  -> CREWMATES (tick  7)
-#   seed 7  -> CREWMATES (tick  7)
-#   seed 42 -> CREWMATES (tick  8)
+# default agents, running through the production meeting runner so a game that
+# reports a body resumes instead of parking at ``MEETING_PHASE_REACHED``.
+# Probed at current HEAD with max_ticks=200 and that runner attached:
+#   seed 0  -> IMPOSTORS (tick 15)
+#   seed 1  -> IMPOSTORS (tick 11)
+#   seed 2  -> IMPOSTORS (tick 16)
+#   seed 7  -> IMPOSTORS (tick 14)
+#   seed 42 -> IMPOSTORS (tick 12)
 # See ``audits/audit-2026-05-15-0225-reconciled.md`` §R-11 / Task 2.10's R-2
 # sweep.
 _R11_CI_GUARD_SEEDS = (0, 1, 2, 7, 42)
@@ -446,6 +497,12 @@ def test_default_agent_sweep_reaches_at_least_one_decisive_outcome(
     """R-11 CI floor: after Task 2.10 the small seed sweep must yield at
     least one decisive outcome. If this test fails, the Phase 2 tactical
     fixes (R-1 / R-2 / R-3) have regressed; investigate before reverting.
+
+    Each game runs with the production meeting runner attached, the way every
+    public entry point wires it (``eval/balance_eval.py`` and
+    ``scripts/run_game.py``): without one a reported body parks the game at
+    ``MEETING_PHASE_REACHED``, which measures the absence of a handler rather
+    than liveness.
     """
 
     game_map = load_canonical_map()
@@ -458,6 +515,7 @@ def test_default_agent_sweep_reaches_at_least_one_decisive_outcome(
             agent_factory=factory,
             replay_path=tmp_path / f"r-{seed}.jsonl",
             scheduler=TickScheduler(max_ticks=_R11_CI_GUARD_MAX_TICKS),
+            meeting_runner=build_default_meeting_runner(),
         ).run()
         if result.outcome in {"CREWMATES", "IMPOSTORS"}:
             decisive += 1

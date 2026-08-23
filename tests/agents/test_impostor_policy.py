@@ -16,8 +16,19 @@ from agents.perception import (
     PROVENANCE_INFERRED,
     PROVENANCE_OBSERVED,
 )
-from agents.tactical.impostor_policy import ImpostorPolicy
-from eval.evidence_honesty import ImpostorTargetingCells, compute_evidence_honesty
+from agents.memory.store import _EVENT_MEETING_BOUNDARY
+from agents.tactical.impostor_policy import (
+    _MEETING_BOUNDARY_EVENT,
+    ImpostorPolicy,
+)
+from eval.evidence_honesty import (
+    LIVE_POLICY_FOLD,
+    RATIFIED_BASELINE,
+    RATIFIED_I11_CELLS,
+    ImpostorTargetingCells,
+    compute_evidence_honesty,
+    reconstruct_impostor_decisions,
+)
 from observation.action_intent import (
     DoTaskIntent,
     KillIntent,
@@ -170,6 +181,55 @@ def _global_status_event(
         payload=payload,
         provenance=PROVENANCE_INFERRED,
     )
+
+
+def _meeting_boundary_event(*, tick: int) -> EpisodicEvent:
+    # Mirrors agents.memory.store.absorb_meeting_evidence, which appends this
+    # marker per living agent at the resume tick on the live and the replay path.
+    return EpisodicEvent(
+        tick=tick,
+        type=_EVENT_MEETING_BOUNDARY,
+        payload={},
+        provenance=PROVENANCE_INFERRED,
+    )
+
+
+_REPLAYS = Path(__file__).resolve().parents[2] / "replays"
+_SAMPLES_9P2I = _REPLAYS / "samples/9p2i"
+
+
+def _frozen_static_ranking(memory: MemoryStore) -> tuple[Any, ...]:
+    """``_scored_targets`` as the ES option enumerators call it, unrepaired.
+
+    The repair composes new helpers over this static instead of changing it, so a
+    pin that reads it is reading the defect the review measured.
+    """
+
+    events = memory.recent(since_tick=0)
+    self_state = [event for event in events if event.type == EVENT_SELF_STATE][-1]
+    latest = events[-1].tick
+    cooldown = [
+        event
+        for event in events
+        if event.type == EVENT_COOLDOWN_STATUS and event.tick == latest
+    ][-1]
+    return ImpostorPolicy._scored_targets(
+        events,
+        cooldown=int(cooldown.payload["cooldown"]),
+        current_tick=latest,
+        confirmed_dead=ImpostorPolicy._confirmed_dead_from_bodies(events),
+        fellow_impostor_ids=ImpostorPolicy._fellow_impostor_ids_from_self_state(
+            self_state
+        ),
+    )
+
+
+def _own_room(memory: MemoryStore) -> str:
+    events = memory.recent(since_tick=0)
+    self_state = [event for event in events if event.type == EVENT_SELF_STATE][-1]
+    room = self_state.payload["room"]
+    assert isinstance(room, str)
+    return room
 
 
 def _store_with(*events: EpisodicEvent) -> MemoryStore:
@@ -553,8 +613,9 @@ class TestImpostorStalk:
         assert intent.payload.to_room == "CAFETERIA"
 
     def test_stalk_picks_alphabetically_first_id_when_scores_tie(self) -> None:
-        # Both players last seen alone in different rooms (score == 1.0
-        # each). Tie-break on sorted player_id chooses "alpha" over "beta".
+        # Both players last seen alone (score == 1.0) one hop from CAFETERIA, so
+        # score AND proximity tie and the player id is the only tier left: "alpha"
+        # over "beta".
         store = _store_with(
             _self_state_event(tick=5, room="CAFETERIA"),
             _cooldown_event(tick=5, cooldown=0),
@@ -567,30 +628,59 @@ class TestImpostorStalk:
         )
         policy = ImpostorPolicy(agent_id="imp")
 
+        ranking = policy.ranked_targets(store, _public_map())
         intent = policy.decide(store, _public_map())
 
+        assert [target.player_id for target in ranking] == ["alpha", "beta"]
         assert isinstance(intent, MoveIntent)
         assert intent.payload.to_room == "MEDBAY"
 
-    def test_stalk_prefers_more_isolated_target_over_witnessed_one(self) -> None:
-        # alpha was alone in ELECTRICAL at tick 5; beta was seen in MEDBAY
-        # at tick 8 alongside gamma, so beta has lower isolation. Even
-        # though beta's sighting is more recent, alpha's higher score wins.
+    def test_stalk_prefers_the_nearer_target_when_score_and_id_would_split(
+        self,
+    ) -> None:
+        # The proximity tier, proved by perturbing only distance: "beta" is one
+        # hop away and "alpha" is two, both alone. The id tier alone would take
+        # "alpha"; the tier below the score takes the nearer "beta".
+        # ELECTRICAL neighbours CAFETERIA only, so beta is one hop out and alpha
+        # (in ADMIN) is two; both are alone, so the scores tie at 1.0.
         store = _store_with(
-            _self_state_event(tick=5, room="CAFETERIA"),
+            _self_state_event(tick=5, room="ELECTRICAL"),
             _cooldown_event(tick=5, cooldown=0),
-            _saw_player_event(tick=5, player_id="alpha", room="ELECTRICAL"),
-            _self_state_event(tick=8, room="CAFETERIA"),
-            _cooldown_event(tick=8, cooldown=0),
-            _saw_player_event(tick=8, player_id="beta", room="MEDBAY"),
-            _saw_player_event(tick=8, player_id="gamma", room="MEDBAY"),
-            _self_state_event(tick=10, room="CAFETERIA"),
+            _saw_player_event(tick=5, player_id="alpha", room="ADMIN"),
+            _saw_player_event(tick=5, player_id="beta", room="CAFETERIA"),
+            _self_state_event(tick=10, room="ELECTRICAL"),
             _cooldown_event(tick=10, cooldown=0),
         )
         policy = ImpostorPolicy(agent_id="imp")
 
+        ranking = policy.ranked_targets(store, _public_map())
+
+        assert [target.score for target in ranking] == [1.0, 1.0]
+        assert [target.player_id for target in ranking] == ["beta", "alpha"]
+        intent = policy.decide(store, _public_map())
+        assert isinstance(intent, MoveIntent)
+        assert intent.payload.to_room == "CAFETERIA"
+
+    def test_stalk_prefers_more_isolated_target_over_witnessed_one(self) -> None:
+        # alpha was alone in ELECTRICAL at tick 5; beta and gamma are together in
+        # the impostor's OWN room right now, so proximity favours them as far as it
+        # can. It cannot reach above the score: alpha's 1.0 beats their 0.25 and the
+        # FSM walks out of an occupied room to hunt the isolated target.
+        store = _store_with(
+            _self_state_event(tick=5, room="CAFETERIA"),
+            _cooldown_event(tick=5, cooldown=0),
+            _saw_player_event(tick=5, player_id="alpha", room="ELECTRICAL"),
+            _self_state_event(tick=10, room="CAFETERIA"),
+            _cooldown_event(tick=10, cooldown=0),
+            _saw_player_event(tick=10, player_id="beta", room="CAFETERIA"),
+            _saw_player_event(tick=10, player_id="gamma", room="CAFETERIA"),
+        )
+        policy = ImpostorPolicy(agent_id="imp")
+
+        ranking = policy.ranked_targets(store, _public_map())
         intent = policy.decide(store, _public_map())
 
+        assert ranking[0].player_id == "alpha" and ranking[0].score == 1.0
         assert isinstance(intent, MoveIntent)
         # CAFETERIA neighbors ELECTRICAL directly, so the first step is
         # ELECTRICAL itself.
@@ -1775,14 +1865,16 @@ class TestRankedTargetsAccessor:
         ):
             memory.append(event)
 
-        ranking = policy.ranked_targets(memory)
+        ranking = policy.ranked_targets(memory, _public_map())
 
-        assert [target.player_id for target in ranking] == ["p-1", "p-6"]
+        # Proximity is a tier below the score, so the co-located p-6 now heads a
+        # 1.0/1.0 tie the id alone used to give to the remote p-1 -- and the intent
+        # decide emits is the kill, read off the same accessor an instrument reads.
+        assert [target.player_id for target in ranking] == ["p-6", "p-1"]
         assert ranking[0].score == 1.0 and ranking[0].co_present == 0
-        # The id tie-break puts the remote p-1 first, so the co-located p-6 is
-        # walked away from rather than killed -- the C-3 defect, read off the
-        # accessor and confirmed against the intent decide actually emits.
-        assert isinstance(policy.decide(memory, _public_map()), MoveIntent)
+        intent = policy.decide(memory, _public_map())
+        assert isinstance(intent, KillIntent)
+        assert intent.payload.target == "p-6"
 
     def test_ranking_drops_a_fellow_and_a_confirmed_corpse(self) -> None:
         policy = ImpostorPolicy(agent_id="p-4")
@@ -1798,67 +1890,392 @@ class TestRankedTargetsAccessor:
         ):
             memory.append(event)
 
-        assert policy.ranked_targets(memory) == ()
+        assert policy.ranked_targets(memory, _public_map()) == ()
 
     def test_ranking_is_empty_without_the_rows_decide_requires(self) -> None:
         policy = ImpostorPolicy(agent_id="p-4")
-        assert policy.ranked_targets(MemoryStore()) == ()
+        assert policy.ranked_targets(MemoryStore(), _public_map()) == ()
 
         no_cooldown = MemoryStore()
         no_cooldown.append(_self_state_event(tick=3, room="ADMIN"))
-        assert policy.ranked_targets(no_cooldown) == ()
+        assert policy.ranked_targets(no_cooldown, _public_map()) == ()
+
+
+class TestImpostorFreeKillScan:
+    """The kill seam scans the ranking instead of testing only its head (C-3)."""
+
+    @staticmethod
+    def _store(*, remote: str, victim: str) -> MemoryStore:
+        # ``remote`` is alone in ELECTRICAL and ``victim`` is alone in the
+        # impostor's own room: both score 1.0, so before the repair whichever id
+        # sorted first took the ranking and a remote head walked the kill away.
+        return _store_with(
+            _self_state_event(tick=9, room="ADMIN"),
+            _cooldown_event(tick=9, cooldown=0),
+            _saw_player_event(tick=9, player_id=remote, room="ELECTRICAL"),
+            _saw_player_event(tick=9, player_id=victim, room="ADMIN"),
+        )
+
+    @pytest.mark.parametrize(("remote", "victim"), [("p-1", "p-6"), ("p-6", "p-1")])
+    def test_a_free_co_located_victim_is_killed_from_either_id_order(
+        self, remote: str, victim: str
+    ) -> None:
+        policy = ImpostorPolicy(agent_id="p-4")
+
+        intent = policy.decide(self._store(remote=remote, victim=victim), _public_map())
+
+        assert isinstance(intent, KillIntent)
+        assert intent.payload.target == victim
+
+    def test_a_witnessed_co_located_target_is_still_not_killed(self) -> None:
+        # The scan is a FREE-kill scan, not an any-co-located scan: two crewmates
+        # in our room witness each other, so the seam finds nothing and holds.
+        store = _store_with(
+            _self_state_event(tick=9, room="ADMIN"),
+            _cooldown_event(tick=9, cooldown=0),
+            _saw_player_event(tick=9, player_id="p-1", room="ADMIN"),
+            _saw_player_event(tick=9, player_id="p-6", room="ADMIN"),
+        )
+        policy = ImpostorPolicy(agent_id="p-4")
+
+        assert isinstance(policy.decide(store, _public_map()), WaitIntent)
+
+    @pytest.mark.parametrize(("remote", "victim"), [("p-1", "p-6"), ("p-6", "p-1")])
+    def test_sabotage_never_fires_on_a_tick_carrying_a_free_kill(
+        self, remote: str, victim: str
+    ) -> None:
+        # The crew is one instance from a task win, so the reactor lever is armed;
+        # the shared free-kill scan backs the guard, so the kill still wins the
+        # tick whichever way the two 1.0-scoring ids sort.
+        store = _store_with(
+            _self_state_event(tick=9, room="ADMIN"),
+            _cooldown_event(tick=9, cooldown=0),
+            _global_status_event(tick=9, tasks_completed=13, tasks_total=14),
+            _saw_player_event(tick=9, player_id=remote, room="ELECTRICAL"),
+            _saw_player_event(tick=9, player_id=victim, room="ADMIN"),
+        )
+        policy = ImpostorPolicy(agent_id="p-4")
+
+        intent = policy.decide(store, _public_map())
+
+        assert isinstance(intent, KillIntent)
+        assert intent.payload.target == victim
+
+    def test_sabotage_still_fires_when_the_ranking_carries_no_free_kill(self) -> None:
+        # The perturbation that proves the guard is a guard and not a blanket
+        # suppression: move the victim out of our room and the lever fires.
+        store = _store_with(
+            _self_state_event(tick=9, room="ADMIN"),
+            _cooldown_event(tick=9, cooldown=0),
+            _global_status_event(tick=9, tasks_completed=13, tasks_total=14),
+            _saw_player_event(tick=9, player_id="p-1", room="ELECTRICAL"),
+            _saw_player_event(tick=9, player_id="p-6", room="MEDBAY"),
+        )
+        policy = ImpostorPolicy(agent_id="p-4")
+
+        assert isinstance(policy.decide(store, _public_map()), SabotageIntent)
+
+
+class TestImpostorEjectionBarrier:
+    """No player ejected at a concluded meeting can occupy the ranking (G-12)."""
+
+    def test_the_marker_string_matches_its_producer(self) -> None:
+        # The policy mirrors the store's constant rather than importing it; this
+        # is the pin that keeps the mirror honest.
+        assert _MEETING_BOUNDARY_EVENT == _EVENT_MEETING_BOUNDARY
+
+    def test_a_sighting_before_the_marker_cannot_rank(self) -> None:
+        store = _store_with(
+            _self_state_event(tick=5, room="CAFETERIA"),
+            _cooldown_event(tick=5, cooldown=0),
+            _saw_player_event(tick=5, player_id="ejected", room="MEDBAY"),
+            _meeting_boundary_event(tick=6),
+            _self_state_event(tick=6, room="CAFETERIA"),
+            _cooldown_event(tick=6, cooldown=0),
+        )
+        policy = ImpostorPolicy(agent_id="imp")
+
+        assert policy.ranked_targets(store, _public_map()) == ()
+        assert isinstance(policy.decide(store, _public_map()), WaitIntent)
+
+    def test_the_same_sighting_ranks_without_the_marker(self) -> None:
+        # The planted counter-case: drop the marker and the identical lead is a
+        # live stalk target, so the barrier is what removed it.
+        store = _store_with(
+            _self_state_event(tick=5, room="CAFETERIA"),
+            _cooldown_event(tick=5, cooldown=0),
+            _saw_player_event(tick=5, player_id="ejected", room="MEDBAY"),
+            _self_state_event(tick=6, room="CAFETERIA"),
+            _cooldown_event(tick=6, cooldown=0),
+        )
+        policy = ImpostorPolicy(agent_id="imp")
+
+        intent = policy.decide(store, _public_map())
+
+        assert isinstance(intent, MoveIntent)
+        assert intent.payload.to_room == "MEDBAY"
+
+    def test_a_sighting_at_or_after_the_marker_still_ranks(self) -> None:
+        store = _store_with(
+            _self_state_event(tick=5, room="CAFETERIA"),
+            _cooldown_event(tick=5, cooldown=0),
+            _saw_player_event(tick=5, player_id="survivor", room="MEDBAY"),
+            _meeting_boundary_event(tick=6),
+            _self_state_event(tick=6, room="CAFETERIA"),
+            _cooldown_event(tick=6, cooldown=0),
+            _saw_player_event(tick=6, player_id="survivor", room="MEDBAY"),
+        )
+        policy = ImpostorPolicy(agent_id="imp")
+
+        ranking = policy.ranked_targets(store, _public_map())
+
+        assert [target.player_id for target in ranking] == ["survivor"]
+
+    @pytest.mark.slow
+    def test_seed_36_tick_50_kills_instead_of_ranking_the_ejected_player(self) -> None:
+        # The demonstrable case (A/verdicts.md claim 12): p-6 was ejected at the
+        # tick-35 meeting boundary and its tick-24 sighting still heads the FROZEN
+        # scoring static -- the one the ES option enumerators call, which this
+        # repair does not touch. The decision ranking drops it and the co-located,
+        # isolated, cooldown-0 p-7 is killed instead.
+        decision = next(
+            row
+            for row in reconstruct_impostor_decisions(_SAMPLES_9P2I, seed=36)
+            if row.tick == 50 and row.actor == "p-2"
+        )
+        frozen = _frozen_static_ranking(decision.memory)
+
+        assert frozen[0].player_id == "p-6"
+        assert [target.player_id for target in decision.ranked] == ["p-7", "p-9"]
+        assert isinstance(decision.intent, KillIntent)
+        assert decision.intent.payload.target == "p-7"
+        # The recording walked away instead; that is the kill the defect cost.
+        assert decision.recorded["type"] == "move"
+
+    @pytest.mark.slow
+    def test_seed_31_never_ranks_the_ejected_p1_after_its_meeting(self) -> None:
+        # The window the review attributed to a dead subject (C-4 / G-12): p-1
+        # heads p-5's ranking up to the meeting and never appears in one again.
+        rows = [
+            row
+            for row in reconstruct_impostor_decisions(_SAMPLES_9P2I, seed=31)
+            if row.actor == "p-5"
+        ]
+        headed = [
+            row.tick for row in rows if row.ranked and row.ranked[0].player_id == "p-1"
+        ]
+        after = [
+            row.tick
+            for row in rows
+            if row.tick >= 14 and any(t.player_id == "p-1" for t in row.ranked)
+        ]
+
+        assert headed and max(headed) < 14
+        assert after == []
+
+
+class TestImpostorRefutedSighting:
+    """A sighting the impostor has since stood in and disproved is dropped (C-4)."""
+
+    def test_standing_in_the_room_without_the_subject_drops_the_lead(self) -> None:
+        store = _store_with(
+            _self_state_event(tick=5, room="CAFETERIA"),
+            _cooldown_event(tick=5, cooldown=0),
+            _saw_player_event(tick=5, player_id="ghost", room="MEDBAY"),
+            _self_state_event(tick=8, room="MEDBAY", pending_task_id="swipe_card"),
+            _cooldown_event(tick=8, cooldown=0),
+        )
+        policy = ImpostorPolicy(agent_id="imp")
+
+        assert policy.ranked_targets(store, _public_map()) == ()
+        # The fall-through lands in the pretend-task blend, not another walk back.
+        intent = policy.decide(store, _public_map())
+        assert isinstance(intent, MoveIntent)
+        assert intent.payload.to_room == "CAFETERIA"
+
+    def test_the_same_lead_survives_a_visit_to_a_different_room(self) -> None:
+        # The planted counter-case: only the sighting's OWN room refutes it.
+        store = _store_with(
+            _self_state_event(tick=5, room="CAFETERIA"),
+            _cooldown_event(tick=5, cooldown=0),
+            _saw_player_event(tick=5, player_id="ghost", room="MEDBAY"),
+            _self_state_event(tick=8, room="ELECTRICAL"),
+            _cooldown_event(tick=8, cooldown=0),
+        )
+        policy = ImpostorPolicy(agent_id="imp")
+
+        ranking = policy.ranked_targets(store, _public_map())
+
+        assert [target.player_id for target in ranking] == ["ghost"]
+
+    def test_the_drop_survives_leaving_the_room(self) -> None:
+        # Permanence is the whole point: a refutation that lapsed on leaving would
+        # re-create the A-B pendulum it exists to remove.
+        store = _store_with(
+            _self_state_event(tick=5, room="CAFETERIA"),
+            _cooldown_event(tick=5, cooldown=0),
+            _saw_player_event(tick=5, player_id="ghost", room="MEDBAY"),
+            _self_state_event(tick=8, room="MEDBAY"),
+            _cooldown_event(tick=8, cooldown=0),
+            _self_state_event(tick=9, room="CAFETERIA"),
+            _cooldown_event(tick=9, cooldown=0),
+            _self_state_event(tick=12, room="CAFETERIA"),
+            _cooldown_event(tick=12, cooldown=0),
+        )
+        policy = ImpostorPolicy(agent_id="imp")
+
+        assert policy.ranked_targets(store, _public_map()) == ()
+
+    def test_seeing_the_subject_again_clears_the_refutation(self) -> None:
+        store = _store_with(
+            _self_state_event(tick=5, room="CAFETERIA"),
+            _cooldown_event(tick=5, cooldown=0),
+            _saw_player_event(tick=5, player_id="ghost", room="MEDBAY"),
+            _self_state_event(tick=8, room="MEDBAY"),
+            _cooldown_event(tick=8, cooldown=0),
+            _self_state_event(tick=9, room="CAFETERIA"),
+            _cooldown_event(tick=9, cooldown=0),
+            _saw_player_event(tick=9, player_id="ghost", room="ELECTRICAL"),
+            _self_state_event(tick=10, room="CAFETERIA"),
+            _cooldown_event(tick=10, cooldown=0),
+        )
+        policy = ImpostorPolicy(agent_id="imp")
+
+        ranking = policy.ranked_targets(store, _public_map())
+
+        assert [target.player_id for target in ranking] == ["ghost"]
+
+    @pytest.mark.slow
+    def test_seed_7_refutes_a_living_lead_and_keeps_it_dropped(self) -> None:
+        # The demonstrable case for the LIVING half of C-4, the half the ejection
+        # barrier does not cover: p-2 stands in WEST_HALL at tick 13 without seeing
+        # p-1 there, so p-1 leaves the ranking -- and stays out at tick 14, after
+        # p-2 has moved on to ADMIN.
+        rows = {
+            row.tick: row
+            for row in reconstruct_impostor_decisions(_SAMPLES_9P2I, seed=7)
+            if row.actor == "p-2" and row.tick in (13, 14)
+        }
+        for tick in (13, 14):
+            frozen = _frozen_static_ranking(rows[tick].memory)
+            assert frozen[0].player_id == "p-1" and frozen[0].room == "WEST_HALL"
+            assert all(target.player_id != "p-1" for target in rows[tick].ranked)
+        assert _own_room(rows[13].memory) == "WEST_HALL"
+        assert _own_room(rows[14].memory) == "ADMIN"
 
 
 class TestCommittedCorpusTargetingPins:
-    """The I-11 co-intervention cells over the committed bytes.
+    """The I-11 co-intervention cells over the committed bytes, before and after.
 
-    These pin what Task 20.32's mover repair is priced against: how much of the
-    policy's own legal, zero-witness kill opportunity it declines, and how much
-    of its decision budget it spends ranking a player already out of the game.
-    They live here -- beside the policy the repair edits -- so the repair updates
-    one pin set, and they are computed by ``eval.evidence_honesty`` so the before
-    and the after come from one definition.
-
-    Every cell reproduces the 2026-08-19 review exactly: free kills declined
-    190/415 with the 168 / 15 / 7 miss-reason split (B/verdicts.md C-3), and
-    ghost-top decisions 303/2461, 555/6663, 0/632, 0/579 with the 222 ejected /
-    81 unseen split on samples/9p2i (A/verdicts.md G-12) -- over 10,335
-    reconstructed decisions and zero mismatches against the recorded actions.
+    The "before" is frozen (``eval.evidence_honesty.RATIFIED_I11_CELLS``): it is the
+    measurement of the policy the recorded bytes were produced with, and that policy
+    left the tree with this repair, so nothing can recompute it. The "after" is the
+    live fold over the SAME frozen bytes -- a per-decision counterfactual, no
+    re-simulation -- which is why its ``reconstruction_mismatches`` is non-zero and
+    is itself the size of the behaviour change. No ratified bar rides I-11; it is a
+    secondary, observed-not-gated cell (memo section 11, 2026-08-20).
     """
 
     @staticmethod
     def _targeting(name: str) -> ImpostorTargetingCells:
-        root = Path(__file__).resolve().parents[2] / "replays"
-        return compute_evidence_honesty(root / name).impostor_targeting
+        return compute_evidence_honesty(_REPLAYS / name).impostor_targeting
 
     @pytest.mark.slow
     def test_free_zero_witness_kills_declined_pins(self) -> None:
-        cells = self._targeting("samples/9p2i")
-        declined = cells.free_kills_declined
+        before = RATIFIED_I11_CELLS["samples/9p2i"]
+        after = self._targeting("samples/9p2i")
 
-        assert (declined.numerator, declined.denominator) == (190, 415)
-        assert cells.decline_reason_ranking == 168
-        assert cells.decline_reason_fellow_defer == 15
-        assert cells.decline_reason_cover == 7
-        # No unattributed miss: every declined free kill lands in a named branch.
-        assert cells.decline_reason_other == 0
-        assert cells.in_vent_decisions == 130
+        # Before: 190/415 = 45.8% of the policy's own legal, zero-witness kill
+        # opportunities declined, 168 of them purely on the id tie-break.
+        assert (before.free_kills_declined, before.free_kill_opportunities) == (
+            190,
+            415,
+        )
+        assert before.decline_reason_ranking == 168
+        assert before.decline_reason_fellow_defer == 15
+        assert before.decline_reason_cover == 7
+        # After: 35/415 = 8.4%, under the < 10% bar, and every survivor lands in a
+        # named legitimate branch -- 28 fellow-impostor defers and 7 COVER bodies.
+        # The contract predicted 22 (15 + 7). The 13-decision difference is the
+        # fellow-defer population the OLD seam never reached: those declines were
+        # attributed to the ranking because the ranking's head was not the victim,
+        # and with the head no longer deciding they resolve to the deliberate defer
+        # they always were. Predicted residual and measured residual differ; the
+        # measured one is the pin.
+        assert (
+            after.free_kills_declined.numerator,
+            after.free_kills_declined.denominator,
+        ) == (35, 415)
+        assert after.free_kills_declined.rate is not None
+        assert after.free_kills_declined.rate < 0.10
+        assert after.decline_reason_ranking == 0
+        assert after.decline_reason_other == 0
+        assert after.decline_reason_fellow_defer == 28
+        assert after.decline_reason_cover == 7
+        # The reconstruction still walks every decision the recording holds.
+        assert after.decisions_reconstructed == before.decisions_reconstructed == 2461
+        assert after.in_vent_decisions == before.in_vent_decisions == 130
+
+    @pytest.mark.slow
+    def test_no_recorded_kill_is_lost(self) -> None:
+        # The loss guard: a repair that gains free kills must not silently drop one
+        # the recording made. Every recorded kill state re-emits the same intent.
+        for name, recorded_kills in (
+            ("samples/9p2i", 225),
+            ("ml_corpus/9p2i", 640),
+            ("samples/4p1i", 64),
+            ("ml_corpus/4p1i", 57),
+        ):
+            cells = self._targeting(name)
+            assert cells.recorded_kill_decisions == recorded_kills
+            assert cells.recorded_kills_reproduced == recorded_kills
 
     @pytest.mark.slow
     def test_ghost_top_decisions_pin_on_every_set(self) -> None:
         names = ("samples/9p2i", "ml_corpus/9p2i", "samples/4p1i", "ml_corpus/4p1i")
-        cells = {name: self._targeting(name) for name in names}
+        before = {name: RATIFIED_I11_CELLS[name] for name in names}
+        after = {name: self._targeting(name) for name in names}
 
-        ghost = [
-            (cells[name].ghost_top.numerator, cells[name].ghost_top.denominator)
+        # Before: 303/2461, 555/6663, 0/632, 0/579 over 10,335 decisions.
+        assert [
+            (before[name].ghost_top, before[name].decisions_reconstructed)
             for name in names
-        ]
-        assert ghost == [(303, 2461), (555, 6663), (0, 632), (0, 579)]
-        assert sum(denominator for _, denominator in ghost) == 10_335
-        assert all(entry.reconstruction_mismatches == 0 for entry in cells.values())
-        # The two sub-populations, stated separately: an ejected target the FSM's
-        # dead-set never learns about, and one whose death it never witnessed.
-        assert cells["samples/9p2i"].ghost_top_ejected == 222
-        assert cells["samples/9p2i"].ghost_top_unseen_death == 81
-        # 4p1i is clean on both sets: the defect is a 9p2i-roster phenomenon.
-        assert cells["samples/4p1i"].ghost_top_ejected == 0
+        ] == [(303, 2461), (555, 6663), (0, 632), (0, 579)]
+        assert sum(before[name].decisions_reconstructed for name in names) == 10_335
+        assert before["samples/9p2i"].ghost_top_ejected == 222
+        assert before["samples/9p2i"].ghost_top_unseen_death == 81
+        # After: the whole ejected sub-population is gone on both 9p2i sets, and
+        # the partner's-unseen-victim residual the ruling excludes a kill-knowledge
+        # channel for falls with it because a cross-meeting lead cannot rank either.
+        assert [
+            (after[name].ghost_top.numerator, after[name].ghost_top.denominator)
+            for name in names
+        ] == [(5, 2461), (14, 6663), (0, 632), (0, 579)]
+        assert after["samples/9p2i"].ghost_top_ejected == 0
+        assert after["samples/9p2i"].ghost_top_unseen_death == 5
+        assert after["ml_corpus/9p2i"].ghost_top_ejected == 0
+        # 4p1i was clean on both sets before and stays clean: the defect was a
+        # 9p2i-roster phenomenon, which is to say it biased the eval baseline.
+        assert after["samples/4p1i"].ghost_top_ejected == 0
+
+    @pytest.mark.slow
+    def test_ghost_top_no_longer_blocks_a_kill(self) -> None:
+        before = RATIFIED_I11_CELLS["samples/9p2i"]
+        after = self._targeting("samples/9p2i")
+
+        # Before: 30 legal zero-witness kills declined while an already-ejected
+        # player headed the ranking (A/verdicts.md claim 12).
+        assert before.kills_blocked_by_ghost_top == 30
+        assert after.kills_blocked_by_ghost_top == 0
+        assert after.games_with_a_blocked_kill == 0
+
+    @pytest.mark.slow
+    def test_the_counterfactual_labels_itself_and_counts_its_own_size(self) -> None:
+        # The fold is no longer a reproduction of the recorded policy and says so:
+        # the block carries the mode that produced it and the mismatch count IS the
+        # behaviour change, not a broken recording.
+        after = self._targeting("samples/9p2i")
+
+        assert after.policy_mode == LIVE_POLICY_FOLD
+        assert RATIFIED_I11_CELLS["samples/9p2i"].policy_mode == RATIFIED_BASELINE
+        assert after.reconstruction_mismatches == 419

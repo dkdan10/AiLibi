@@ -115,9 +115,19 @@ This is an instrument over recorded bytes. The meeting rows carry the transcript
 the detector's own ``ContradictionRef`` flags and the verbatim
 ``LLMCallRecord.prompt`` text; everything else is reconstructed by the
 hash-verifying :func:`eval.replay_walk.walk_replay` walk plus the real
-``ObservationService`` / ``agents.perception`` / ``ImpostorPolicy`` code paths. It
-reads baseline-6 behaviour exactly as it is, bugs included: a cell computed against
-a quietly repaired code path would make the phase's before/after meaningless.
+``ObservationService`` / ``agents.perception`` / ``agents.memory.store`` /
+``ImpostorPolicy`` code paths. Cells I-2…I-10 read baseline-6 behaviour exactly as
+it is, bugs included: a cell computed against a quietly repaired code path would
+make the phase's before/after meaningless.
+
+I-11 is the one cell family where that is no longer possible, and it says so rather
+than pretending otherwise. Its fold re-invokes the impostor policy over the frozen
+bytes, and the 20.32 mover repair deleted the policy those bytes were recorded
+with, so the fold now measures the REPAIRED mover's counterfactual and
+``reconstruction_mismatches`` counts the decisions the repair changed. The ratified
+"before" is frozen in :data:`RATIFIED_I11_CELLS` instead of recomputed, every block
+carries the ``policy_mode`` that produced it, and no ratified bar rides I-11 — it is
+a §5 secondary cell (memo §11 amendment, 2026-08-20).
 
 Purity: offline, no network, no ``AILIBI_*`` env read, no LLM call. Two runs over
 the same bytes produce identical reports.
@@ -135,14 +145,20 @@ from __future__ import annotations
 import re
 import tempfile
 from collections import Counter, deque
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Final, NoReturn
+from types import MappingProxyType
+from typing import Final, NamedTuple, NoReturn
 
 from pydantic import BaseModel, ConfigDict
 
 from agents.memory.episodic import MemoryStore
+from agents.memory.store import (
+    AgentMemory,
+    absorb_meeting_evidence,
+    absorb_reported_testimony,
+)
 from agents.perception import (
     EVENT_SAW_BODY,
     EVENT_SAW_PLAYER,
@@ -172,6 +188,8 @@ from meetings.manager import (
     INVALID_ACCUSATION_TARGET_MARKER,
     INVALID_ALIBI_SUBJECT_MARKER,
     INVALID_CORROBORATION_SUPPORTS_MARKER,
+    derive_reported_testimony,
+    extract_belief_evidence,
 )
 from meetings.schemas import (
     AlibiClaim,
@@ -181,6 +199,7 @@ from meetings.schemas import (
     WhereaboutsClaim,
 )
 from meetings.transcript import canonical_rooms, is_weak_contradiction
+from observation.action_intent import ActionIntent
 from observation.public_map import PublicMapView
 from observation.service import ObservationService
 from orchestrator.boundary import public_map_from_engine_map, translate_action_intent
@@ -189,6 +208,39 @@ from orchestrator.replay import LLMCallRecord, MeetingReplayEntry
 # The agent memory frame runs one ahead of the engine/replay frame: a row stamped
 # ``[tick T]`` describes engine tick ``T - 1``.
 AGENT_CLOCK_OFFSET: Final[int] = 1
+
+ImpostorPolicyFactory = Callable[[PlayerId], ImpostorPolicy]
+"""Builds the policy the I-11 reconstruction re-invokes over the recorded bytes."""
+
+
+def live_impostor_policy(agent_id: PlayerId) -> ImpostorPolicy:
+    """The policy in the tree — the I-11 fold's default and its counterfactual arm."""
+
+    return ImpostorPolicy(agent_id=agent_id)
+
+
+# How an I-11 block was produced. The live fold re-invokes the policy in the tree
+# over the frozen baseline-6 bytes; the ratified baseline is the frozen measurement
+# of the policy those bytes were RECORDED with, which is no longer in the tree; a
+# custom fold re-invokes some other caller-supplied policy over the same bytes and
+# must never be read as either of the two named ones.
+LIVE_POLICY_FOLD: Final[str] = "live-policy-fold"
+RATIFIED_BASELINE: Final[str] = "ratified-baseline"
+CUSTOM_POLICY_FOLD: Final[str] = "custom-policy-fold"
+
+
+class _TopRanked(NamedTuple):
+    """One decision's top-ranked target, scored once the death table is complete.
+
+    ``declined_free_kill`` marks a decision that also let a legal zero-witness kill
+    go on the ranking, so a ghost at the head of the list can be priced as a lost
+    victim rather than only as a wasted tick.
+    """
+
+    tick: int
+    target: PlayerId
+    declined_free_kill: bool
+
 
 # The prompt-set whose recorded bytes the committed sets carry.
 _RECORDED_PROMPT_SET: Final[str] = "qwen3_6_27b"
@@ -315,9 +367,10 @@ class EvidenceHonestyReconstructionError(RuntimeError):
     or missing meeting row, meeting pre/post hash mismatch, a replay ending before
     GAME_OVER, rows trailing the terminal tick, a missing ``game_over`` row, or a
     replay-set directory with no ``replay-seed-*.jsonl`` files), on a discriminating
-    sighting that does not sit at ``obs.tick - 1``, and on an impostor decision the
-    reconstructed policy does not reproduce. Under-measuring a broken recording is
-    worse than failing loudly (AGENTS.md "no silent fallbacks").
+    sighting that does not sit at ``obs.tick - 1``, and — when the caller passes
+    ``assert_recorded_action_fidelity`` — on an impostor decision the reconstructed
+    policy does not reproduce. Under-measuring a broken recording is worse than
+    failing loudly (AGENTS.md "no silent fallbacks").
     """
 
 
@@ -547,15 +600,21 @@ class ImpostorTargetingCells(_FrozenModel):
     from; it does NOT measure whether the declined kill would have landed, because
     a lower-id target may dodge in the same tick.
 
-    ``decisions_reconstructed`` / ``reconstruction_mismatches`` are the
-    precondition's own witness: the walk RAISES on the first decision the rebuilt
-    memory + real ``ImpostorPolicy.decide`` does not reproduce, so a report that
-    exists at all carries ``reconstruction_mismatches == 0`` — the field is here
-    because the memo quotes the pair ("0 mismatches over N decisions") and the
-    denominator moves when the corpus does. ``ghost_top_ejected`` / ``ghost_top_unseen_death`` split the
-    ghost-top population into the two sub-populations that cause it.
+    ``policy_mode`` names what produced the block: the live fold over the frozen
+    bytes, a caller-supplied policy's fold over them, or the frozen ratified
+    baseline (:data:`RATIFIED_I11_CELLS`).
+    ``reconstruction_mismatches`` counts the decisions the folded policy does not
+    reproduce against the recorded action stream — zero for the policy the bytes
+    were recorded with, and the size of the behaviour change for any other.
+    ``recorded_kill_decisions`` / ``recorded_kills_reproduced`` are the loss guard:
+    a repair that gains free kills must not silently drop one the recording made.
+    ``ghost_top_ejected`` / ``ghost_top_unseen_death`` split the ghost-top
+    population into the two sub-populations that cause it, and
+    ``kills_blocked_by_ghost_top`` is the subset that cost a legal zero-witness
+    kill rather than only a tick.
     """
 
+    policy_mode: str
     decisions_reconstructed: int
     reconstruction_mismatches: int
     in_vent_decisions: int
@@ -568,6 +627,78 @@ class ImpostorTargetingCells(_FrozenModel):
     ghost_top: WilsonRateCell
     ghost_top_ejected: int
     ghost_top_unseen_death: int
+    kills_blocked_by_ghost_top: int
+    games_with_a_blocked_kill: int
+    recorded_kill_decisions: int
+    recorded_kills_reproduced: int
+
+
+class RatifiedTargetingBaseline(_FrozenModel):
+    """One set's I-11 cells as ratified, frozen at the pre-repair commit.
+
+    Nothing recomputes these: the policy the committed bytes were recorded with
+    left the tree with the 20.32 mover repair, so the live fold over those same
+    bytes is now the repair's counterfactual "after" rather than the baseline.
+    Every stated field is quoted from
+    ``audits/audit-phase-20-preregistration.md`` §3.1 and the pin class that memo
+    names; ``None`` marks a field the ratified set never stated for that roster.
+    ``kills_blocked_by_ghost_top`` is the one figure with no committed cell — it is
+    the 2026-08-19 review's own count (A/verdicts.md claim 12).
+    """
+
+    policy_mode: str = RATIFIED_BASELINE
+    decisions_reconstructed: int
+    free_kill_opportunities: int
+    free_kills_declined: int
+    ghost_top: int
+    in_vent_decisions: int | None = None
+    decline_reason_ranking: int | None = None
+    decline_reason_fellow_defer: int | None = None
+    decline_reason_cover: int | None = None
+    decline_reason_other: int | None = None
+    ghost_top_ejected: int | None = None
+    ghost_top_unseen_death: int | None = None
+    kills_blocked_by_ghost_top: int | None = None
+
+
+RATIFIED_I11_CELLS: Final[Mapping[str, RatifiedTargetingBaseline]] = MappingProxyType(
+    {
+        "samples/9p2i": RatifiedTargetingBaseline(
+            decisions_reconstructed=2461,
+            free_kill_opportunities=415,
+            free_kills_declined=190,
+            ghost_top=303,
+            in_vent_decisions=130,
+            decline_reason_ranking=168,
+            decline_reason_fellow_defer=15,
+            decline_reason_cover=7,
+            decline_reason_other=0,
+            ghost_top_ejected=222,
+            ghost_top_unseen_death=81,
+            kills_blocked_by_ghost_top=30,
+        ),
+        "ml_corpus/9p2i": RatifiedTargetingBaseline(
+            decisions_reconstructed=6663,
+            free_kill_opportunities=1053,
+            free_kills_declined=413,
+            ghost_top=555,
+        ),
+        "samples/4p1i": RatifiedTargetingBaseline(
+            decisions_reconstructed=632,
+            free_kill_opportunities=80,
+            free_kills_declined=16,
+            ghost_top=0,
+            ghost_top_ejected=0,
+        ),
+        "ml_corpus/4p1i": RatifiedTargetingBaseline(
+            decisions_reconstructed=579,
+            free_kill_opportunities=75,
+            free_kills_declined=18,
+            ghost_top=0,
+        ),
+    }
+)
+"""The ratified I-11 "before", keyed by replay-set directory under ``replays/``."""
 
 
 class RenderBudgetCells(_FrozenModel):
@@ -701,6 +832,10 @@ class _Tallies:
     ghost_top: int = 0
     ghost_top_ejected: int = 0
     ghost_top_unseen: int = 0
+    kills_blocked_by_ghost_top: int = 0
+    games_with_a_blocked_kill: int = 0
+    recorded_kills: int = 0
+    recorded_kills_reproduced: int = 0
 
     snapshots: int = 0
     rendered_lines: int = 0
@@ -708,16 +843,30 @@ class _Tallies:
     testimony_by_bucket: Counter[str] = field(default_factory=Counter)
 
 
-def compute_evidence_honesty(sample_dir: Path) -> EvidenceHonestyReport:
+def compute_evidence_honesty(
+    sample_dir: Path,
+    *,
+    impostor_policy: ImpostorPolicyFactory = live_impostor_policy,
+    assert_recorded_action_fidelity: bool = False,
+) -> EvidenceHonestyReport:
     """Compute the evidence-honesty cells over one committed replay set.
 
     Pure + offline: resolve the roster, recover per-seed role ground truth by
     re-seeding, walk every committed game once under the referee-grade profile
-    (rebuilding each living agent's memory through the real perception path), and
-    fold every cell from the recorded transcripts, flags and prompts. Fails loud
-    (:class:`EvidenceHonestyReconstructionError`) on any reconstruction
-    disagreement, on a clock-offset exception, or on a policy decision the
-    reconstruction cannot reproduce.
+    (rebuilding each living agent's memory through the real perception path and the
+    real post-meeting fold), and fold every cell from the recorded transcripts,
+    flags and prompts. Fails loud (:class:`EvidenceHonestyReconstructionError`) on
+    any reconstruction disagreement and on a clock-offset exception.
+
+    ``impostor_policy`` builds the policy the I-11 cells re-invoke; it defaults to
+    the one in the tree, which since the 20.32 mover repair is NOT the policy the
+    committed bytes were recorded with. ``assert_recorded_action_fidelity`` is
+    therefore opt-in: a caller that asserts its policy IS the recorded one gets a
+    raise on the first disagreeing decision, and every other caller reads the
+    disagreements as ``impostor_targeting.reconstruction_mismatches`` — the size of
+    the counterfactual. The ratified pre-repair I-11 cells live in
+    :data:`RATIFIED_I11_CELLS`; nothing recomputes them, because the policy that
+    produced them is deleted.
     """
 
     num_players, num_impostors, tasks_per_crewmate = resolve_roster_knobs(sample_dir)
@@ -752,6 +901,8 @@ def compute_evidence_honesty(sample_dir: Path) -> EvidenceHonestyReport:
             public_map=public_map,
             distances=distances,
             persona_phrase=persona_phrase,
+            impostor_policy=impostor_policy,
+            assert_recorded_action_fidelity=assert_recorded_action_fidelity,
             tallies=tallies,
         )
 
@@ -761,6 +912,11 @@ def compute_evidence_honesty(sample_dir: Path) -> EvidenceHonestyReport:
         num_impostors=num_impostors,
         tasks_per_crewmate=tasks_per_crewmate,
         games_total=len(seeds),
+        policy_mode=(
+            LIVE_POLICY_FOLD
+            if impostor_policy is live_impostor_policy
+            else CUSTOM_POLICY_FOLD
+        ),
         tallies=tallies,
     )
 
@@ -772,6 +928,7 @@ def _report(
     num_impostors: int,
     tasks_per_crewmate: int,
     games_total: int,
+    policy_mode: str,
     tallies: _Tallies,
 ) -> EvidenceHonestyReport:
     """Assemble the frozen report from the folded counters."""
@@ -866,6 +1023,7 @@ def _report(
             ),
         ),
         impostor_targeting=ImpostorTargetingCells(
+            policy_mode=policy_mode,
             decisions_reconstructed=tallies.decisions,
             reconstruction_mismatches=tallies.mismatches,
             in_vent_decisions=tallies.in_vent_decisions,
@@ -880,6 +1038,10 @@ def _report(
             ghost_top=cell(tallies.ghost_top, tallies.decisions),
             ghost_top_ejected=tallies.ghost_top_ejected,
             ghost_top_unseen_death=tallies.ghost_top_unseen,
+            kills_blocked_by_ghost_top=tallies.kills_blocked_by_ghost_top,
+            games_with_a_blocked_kill=tallies.games_with_a_blocked_kill,
+            recorded_kill_decisions=tallies.recorded_kills,
+            recorded_kills_reproduced=tallies.recorded_kills_reproduced,
         ),
         render_budget=RenderBudgetCells(
             snapshots=tallies.snapshots,
@@ -994,6 +1156,158 @@ class _MeetingFacts:
     body_triggered: bool
 
 
+@dataclass(frozen=True)
+class ReconstructedDecision:
+    """One impostor decision rebuilt from committed bytes, with its inputs.
+
+    ``memory`` is a snapshot store holding exactly the episodic rows the policy
+    saw at that decision, so a pin can re-run the policy — or a perturbed one —
+    over the frozen state without re-walking the recording. ``recorded`` is the
+    action the recording actually holds for that actor at that tick.
+    """
+
+    tick: int
+    actor: PlayerId
+    memory: MemoryStore
+    ranked: tuple[RankedTarget, ...]
+    intent: ActionIntent
+    recorded: Mapping[str, object]
+
+
+def reconstruct_impostor_decisions(
+    sample_dir: Path,
+    *,
+    seed: int,
+    impostor_policy: ImpostorPolicyFactory = live_impostor_policy,
+) -> tuple[ReconstructedDecision, ...]:
+    """Rebuild one committed game's impostor decisions, in tick order.
+
+    The same walk, the same perception path and the same post-meeting fold the
+    I-11 cells run, exposed per decision so a named seed and tick can be pinned as
+    a demonstrable case rather than only as an aggregate. Pure and offline; it
+    re-invokes the policy but never re-simulates, so the recorded bytes are read
+    exactly as committed.
+    """
+
+    num_players, num_impostors, tasks_per_crewmate = resolve_roster_knobs(sample_dir)
+    game_map = load_canonical_map()
+    roles = roles_by_seed(
+        sample_dir,
+        num_players=num_players,
+        num_impostors=num_impostors,
+        tasks_per_crewmate=tasks_per_crewmate,
+        game_map=game_map,
+    )[seed]
+    public_map = public_map_from_engine_map(game_map)
+    impostor_ids = frozenset(pid for pid, role in roles.items() if role == "IMPOSTOR")
+    memories: dict[PlayerId, MemoryStore] = {pid: MemoryStore() for pid in roles}
+    composites = {pid: AgentMemory(episodic=store) for pid, store in memories.items()}
+    policies = {pid: impostor_policy(pid) for pid in sorted(impostor_ids)}
+    decisions: list[ReconstructedDecision] = []
+
+    audit_dir = tempfile.TemporaryDirectory(prefix="ailibi-honesty-")
+    service = ObservationService(
+        game_map=game_map, audit_log_path=Path(audit_dir.name) / "audit.jsonl"
+    )
+    try:
+        for walk_event in walk_replay(
+            sample_dir / f"replay-seed-{seed}.jsonl",
+            seed=seed,
+            num_players=num_players,
+            num_impostors=num_impostors,
+            tasks_per_crewmate=tasks_per_crewmate,
+            game_map=game_map,
+            config=_WALK_CONFIG,
+        ):
+            if isinstance(walk_event, TickOpened):
+                _perceive_tick(walk_event, service=service, memories=memories)
+                recorded = {
+                    str(raw["actor"]): raw
+                    for raw in walk_event.entry.actions
+                    if isinstance(raw.get("actor"), str)
+                }
+                for pid in sorted(impostor_ids):
+                    raw_action = recorded.get(pid)
+                    if raw_action is None or not walk_event.state.players[pid].alive:
+                        continue
+                    decisions.append(
+                        ReconstructedDecision(
+                            tick=walk_event.entry.tick,
+                            actor=pid,
+                            memory=_snapshot(memories[pid]),
+                            ranked=policies[pid].ranked_targets(
+                                memories[pid], public_map
+                            ),
+                            intent=policies[pid].decide(memories[pid], public_map),
+                            recorded=dict(raw_action),
+                        )
+                    )
+            elif isinstance(walk_event, MeetingApplied):
+                _fold_meeting_into_memories(walk_event, composites=composites)
+    finally:
+        service.close()
+        audit_dir.cleanup()
+    return tuple(decisions)
+
+
+def _snapshot(memory: MemoryStore) -> MemoryStore:
+    """A detached copy of ``memory`` as it stands, for a per-decision pin."""
+
+    copy = MemoryStore()
+    for event in memory.recent(since_tick=0):
+        copy.append(event)
+    return copy
+
+
+def _perceive_tick(
+    walk_event: TickOpened,
+    *,
+    service: ObservationService,
+    memories: Mapping[PlayerId, MemoryStore],
+) -> None:
+    """Ingest this tick's real observation packet for every living agent."""
+
+    state = walk_event.state
+    for pid in sorted(state.players):
+        if not state.players[pid].alive:
+            continue
+        ingest_packet(
+            packet=service.build_packet(
+                world_state=state,
+                agent_id=pid,
+                engine_events=walk_event.last_events,
+            ),
+            memory=memories[pid],
+        )
+
+
+def _fold_meeting_into_memories(
+    walk_event: MeetingApplied,
+    *,
+    composites: Mapping[PlayerId, AgentMemory],
+) -> None:
+    """Run the per-living-agent post-meeting fold the live loop and replay run.
+
+    It lands the meeting's belief evidence, its reported testimony and — the
+    reason the policy reconstruction needs it — the ``meeting_boundary`` marker
+    every living agent receives at the resume tick. A walk that skipped it would
+    hand the policy a memory no live agent ever holds.
+    """
+
+    evidence = extract_belief_evidence(walk_event.result)
+    statements = derive_reported_testimony(walk_event.result)
+    for pid in sorted(walk_event.state.players):
+        if not walk_event.state.players[pid].alive:
+            continue
+        absorb_meeting_evidence(
+            composites[pid],
+            accused=evidence.accused,
+            corroborated=evidence.corroborated,
+            contradicted=evidence.contradicted,
+        )
+        absorb_reported_testimony(composites[pid], statements=statements)
+
+
 def _fold_game(
     replay_path: Path,
     *,
@@ -1006,6 +1320,8 @@ def _fold_game(
     public_map: PublicMapView,
     distances: Mapping[RoomId, Mapping[RoomId, int]],
     persona_phrase: str,
+    impostor_policy: ImpostorPolicyFactory,
+    assert_recorded_action_fidelity: bool,
     tallies: _Tallies,
 ) -> None:
     """Walk one recording once and fold every cell it contributes to."""
@@ -1013,7 +1329,12 @@ def _fold_game(
     game_id = f"headless-seed-{seed}"
     impostor_ids = frozenset(pid for pid, role in roles.items() if role == "IMPOSTOR")
     memories: dict[PlayerId, MemoryStore] = {pid: MemoryStore() for pid in roles}
-    policies = {pid: ImpostorPolicy(agent_id=pid) for pid in sorted(impostor_ids)}
+    # The composites wrap the SAME episodic stores, so the post-meeting fold and
+    # the perception path write to one memory per agent.
+    composites: dict[PlayerId, AgentMemory] = {
+        pid: AgentMemory(episodic=store) for pid, store in memories.items()
+    }
+    policies = {pid: impostor_policy(pid) for pid in sorted(impostor_ids)}
     # Engine frame: ``room_at[T]`` is the state after tick ``T``'s recorded
     # actions resolved — the frame the replay row's ``state_hash`` covers and the
     # frame the loader serves as "tick T". A memory row at agent tick ``T``
@@ -1026,7 +1347,7 @@ def _fold_game(
     meetings: list[_MeetingFacts] = []
     # Top-ranked targets, deferred until the death table is complete: a target can
     # be ejected at a meeting later than the decision that ranked it.
-    ranked_first: list[tuple[int, PlayerId]] = []
+    ranked_first: list[_TopRanked] = []
 
     audit_dir = tempfile.TemporaryDirectory(prefix="ailibi-honesty-")
     service = ObservationService(
@@ -1043,18 +1364,7 @@ def _fold_game(
             config=_WALK_CONFIG,
         ):
             if isinstance(walk_event, TickOpened):
-                state = walk_event.state
-                for pid in sorted(state.players):
-                    if not state.players[pid].alive:
-                        continue
-                    ingest_packet(
-                        packet=service.build_packet(
-                            world_state=state,
-                            agent_id=pid,
-                            engine_events=walk_event.last_events,
-                        ),
-                        memory=memories[pid],
-                    )
+                _perceive_tick(walk_event, service=service, memories=memories)
                 _fold_impostor_decisions(
                     game_id=game_id,
                     walk_event=walk_event,
@@ -1062,6 +1372,7 @@ def _fold_game(
                     memories=memories,
                     policies=policies,
                     public_map=public_map,
+                    assert_recorded_action_fidelity=(assert_recorded_action_fidelity),
                     ranked_first=ranked_first,
                     tallies=tallies,
                 )
@@ -1096,6 +1407,7 @@ def _fold_game(
                 if entry.outcome == "EJECTED" and entry.ejected_player_id is not None:
                     ejected_at.setdefault(entry.ejected_player_id, entry.tick)
                     death_tick.setdefault(entry.ejected_player_id, entry.tick)
+                _fold_meeting_into_memories(walk_event, composites=composites)
     finally:
         service.close()
         audit_dir.cleanup()
@@ -1131,15 +1443,19 @@ def _fold_impostor_decisions(
     memories: Mapping[PlayerId, MemoryStore],
     policies: Mapping[PlayerId, ImpostorPolicy],
     public_map: PublicMapView,
-    ranked_first: list[tuple[int, PlayerId]],
+    assert_recorded_action_fidelity: bool,
+    ranked_first: list[_TopRanked],
     tallies: _Tallies,
 ) -> None:
     """Reconstruct this tick's impostor decisions and fold the I-11 counters.
 
     The recorded action for an actor is the ground truth: a decision is counted
     only for an impostor the recording asked to act this tick, and every
-    reconstructed intent is compared against the recorded action before any cell
-    reads the ranking.
+    reconstructed intent is compared against the recorded action. A caller that
+    asserts its policy IS the one the recording ran gets that comparison as a
+    hard gate; a counterfactual caller gets it as the
+    ``reconstruction_mismatches`` count, which is the size of the behaviour
+    change it is measuring.
     """
 
     state = walk_event.state
@@ -1159,38 +1475,50 @@ def _fold_impostor_decisions(
         if player.in_vent:
             tallies.in_vent_decisions += 1
         intent = policies[pid].decide(memories[pid], public_map)
-        if translate_action_intent(intent).model_dump(mode="python") != dict(
+        reproduced = translate_action_intent(intent).model_dump(mode="python") == dict(
             raw_action
-        ):
+        )
+        if not reproduced:
             tallies.mismatches += 1
-            raise EvidenceHonestyReconstructionError(
-                f"{game_id}: tick {walk_event.entry.tick} impostor {pid} "
-                "reconstructed a different action than the recording holds — the "
-                "targeting cells would price a policy the recording never ran"
-            )
+            if assert_recorded_action_fidelity:
+                raise EvidenceHonestyReconstructionError(
+                    f"{game_id}: tick {walk_event.entry.tick} impostor {pid} "
+                    "reconstructed a different action than the recording holds — "
+                    "the targeting cells would price a policy the recording never "
+                    "ran"
+                )
+        if raw_action.get("type") == "kill":
+            tallies.recorded_kills += 1
+            if reproduced:
+                tallies.recorded_kills_reproduced += 1
 
-        targets = policies[pid].ranked_targets(memories[pid])
-        if targets:
-            ranked_first.append((walk_event.entry.tick, targets[0].player_id))
+        targets = policies[pid].ranked_targets(memories[pid], public_map)
 
         victim = _free_kill_victim(
             state=state, actor=pid, impostor_ids=impostor_ids, cooldown=state.cooldowns
         )
-        if victim is None:
-            continue
-        tallies.free_kill_opportunities += 1
-        if intent.type == "kill":
-            continue
-        tallies.free_kills_declined += 1
-        _classify_decline(
-            actor=pid,
-            victim=victim,
-            state=state,
-            impostor_ids=impostor_ids,
-            memory=memories[pid],
-            targets=targets,
-            tallies=tallies,
-        )
+        declined_free_kill = False
+        if victim is not None:
+            tallies.free_kill_opportunities += 1
+            if intent.type != "kill":
+                tallies.free_kills_declined += 1
+                declined_free_kill = _classify_decline(
+                    actor=pid,
+                    victim=victim,
+                    state=state,
+                    impostor_ids=impostor_ids,
+                    memory=memories[pid],
+                    targets=targets,
+                    tallies=tallies,
+                ) not in ("cover", "fellow")
+        if targets:
+            ranked_first.append(
+                _TopRanked(
+                    tick=walk_event.entry.tick,
+                    target=targets[0].player_id,
+                    declined_free_kill=declined_free_kill,
+                )
+            )
 
 
 def _free_kill_victim(
@@ -1233,14 +1561,15 @@ def _classify_decline(
     memory: MemoryStore,
     targets: Sequence[RankedTarget],
     tallies: _Tallies,
-) -> None:
+) -> str:
     """Attribute one declined free kill to the branch that swallowed it.
 
     Branch order mirrors ``ImpostorPolicy.decide``: a body in the impostor's own
-    room takes the COVER branch before any kill logic; otherwise the kill seam only
-    re-validates ``targets[0]``, so a top-ranked target that is not the co-located
-    victim is the ranking defect; a co-located lower-id fellow is the Task-7.9
-    deliberate defer.
+    room takes the COVER branch before any kill logic; then the kill seam scans the
+    ranking for a co-located zero-witness candidate, so a ranking that carries the
+    victim nowhere it can be found is the ranking defect; a co-located lower-id
+    fellow is the Task-7.9 deliberate defer. Returns the branch name so the caller
+    can tell a ranking-blocked kill from a deliberate one.
     """
 
     own_room = state.players[actor].room
@@ -1253,10 +1582,12 @@ def _classify_decline(
     )
     if body_here:
         tallies.decline_cover += 1
-        return
-    if not targets or targets[0].player_id != victim or targets[0].co_present != 0:
+        return "cover"
+    if not any(
+        target.player_id == victim and target.co_present == 0 for target in targets
+    ):
         tallies.decline_ranking += 1
-        return
+        return "ranking"
     if any(
         pid < actor
         and pid in impostor_ids
@@ -1266,33 +1597,46 @@ def _classify_decline(
         for pid, other in state.players.items()
     ):
         tallies.decline_fellow += 1
-        return
+        return "fellow"
     tallies.decline_other += 1
+    return "other"
 
 
 def _fold_ghost_top(
     *,
     tallies: _Tallies,
-    ranked_first: Sequence[tuple[int, PlayerId]],
+    ranked_first: Sequence[_TopRanked],
     death_tick: Mapping[PlayerId, int],
     ejected_at: Mapping[PlayerId, int],
 ) -> None:
     """Score the deferred top-ranked targets once the death table is complete.
 
     A ghost-top decision ranks first a player already removed from the game at the
-    decision tick: ejected at an earlier meeting (the sub-population the dead-set
-    repair closes) or killed with a body this impostor never had to see.
+    decision tick: ejected at an earlier meeting (the sub-population the ejection
+    barrier closes) or killed with a body this impostor never had to see. A
+    ghost-top decision that ALSO declined a free kill on the ranking is a blocked
+    kill — the ghost cost the impostor a victim, not merely a tick.
     """
 
-    for tick, target in ranked_first:
-        died = death_tick.get(target)
-        if died is None or died >= tick:
+    blocked_here = 0
+    for decision in ranked_first:
+        died = death_tick.get(decision.target)
+        if died is None or died >= decision.tick:
             continue
         tallies.ghost_top += 1
-        if target in ejected_at and ejected_at[target] < tick:
+        ejected_earlier = (
+            decision.target in ejected_at
+            and ejected_at[decision.target] < decision.tick
+        )
+        if ejected_earlier:
             tallies.ghost_top_ejected += 1
         else:
             tallies.ghost_top_unseen += 1
+        if ejected_earlier and decision.declined_free_kill:
+            blocked_here += 1
+    tallies.kills_blocked_by_ghost_top += blocked_here
+    if blocked_here:
+        tallies.games_with_a_blocked_kill += 1
 
 
 def _assert_clock_alignment(

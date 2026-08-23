@@ -544,7 +544,7 @@ in §11.
 
 | date | what changed | why | ratification vehicle |
 |---|---|---|---|
-| — | (none) | — | — |
+| 2026-08-20 | I-11 instrument mode. `eval/evidence_honesty.py`'s I-11 fold takes an explicit policy parameter (default: the policy in the tree) and applies its recorded-action fidelity guard only when the caller asserts it. The §3.1 I-11 baseline values are now FROZEN CONSTANTS at the pre-repair sha (`eval.evidence_honesty.RATIFIED_I11_CELLS`, quoted from this memo), and the live-policy fold over the same baseline-6 bytes is Task 20.32's own counterfactual "after" cell. **No ratified bar rides I-11** — it is a §5 secondary, observed-not-gated cell — so no bar, no decision-rule input and no I-1…I-10 cell moves. Read the §12 reader's two I-11 rows from the frozen constants, not from the live fold. | Task 20.32 repairs the impostor mover, so the policy the committed bytes were recorded with is no longer in the tree and the I-11 fold can no longer recompute its own "before" (orchestrator ruling, coordination commit `c24db41c`). | Task 20.32 PR (owner-merged) |
 
 Convention: an amendment is any change to the §10-ratified set (instrument list, definitions,
 baseline cells, bars, decision rule, secondary list, co-intervention declaration, protocol,
