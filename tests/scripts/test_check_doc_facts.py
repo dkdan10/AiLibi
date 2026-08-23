@@ -1590,6 +1590,25 @@ _HEX_COLOUR = re.compile(r"#[0-9a-fA-F]{3,8}\b")
 _COLOUR_KEYWORD = re.compile(r"\b(?:black|white)\b", re.IGNORECASE)
 _CSS_URL = re.compile(r"url\(\s*['\"]?([^'\")]*)")
 
+# Legibility is a contrast ratio, not the absence of the two extreme colours: a
+# palette of two near-identical mid-tones is unreadable and contains neither.
+# The two `svg { … }` blocks are the light palette and the dark one the media
+# query swaps in; every ink is measured against every ground it is painted on.
+_PALETTE_BLOCK = re.compile(r"svg\s*\{([^}]*)\}")
+_CUSTOM_PROPERTY = re.compile(r"--([\w-]+)\s*:\s*(#[0-9a-fA-F]{3,8})\s*;")
+_CONTRAST_FLOOR = 4.5
+_CONTRAST_PAIRS = (
+    ("ink", "backdrop"),
+    ("muted", "backdrop"),
+    ("flow", "backdrop"),
+    ("fire", "backdrop"),
+    ("fire-soft", "backdrop"),
+    ("ink", "card"),
+    ("muted", "card"),
+    ("ink", "card-strong"),
+    ("muted", "card-strong"),
+)
+
 # The artifacts the front-door exhibit quotes, in the order it quotes them. The
 # two markers share no prefix, so losing the opener cannot be mistaken for an
 # empty exhibit that happens to start at the closer.
@@ -1603,12 +1622,65 @@ _EXHIBIT_SOURCES = (
 # a claim that those bytes are in the source file.
 _ELISION = "…"
 _FENCE = re.compile(r"^```[^\n]*\n(.*?)^```", re.MULTILINE | re.DOTALL)
-_PULL_REQUEST_URL = re.compile(r"https://github\.com/[\w.-]+/[\w.-]+/pull/(\d+)")
+# The repository is captured, not assumed: a number reachable in THIS history
+# says nothing about a link that points at someone else's pull request.
+_EXHIBIT_REPO = "dkdan10/AiLibi"
+_PULL_REQUEST_URL = re.compile(r"https://github\.com/([\w.-]+/[\w.-]+)/pull/(\d+)")
 _PR_SUBJECT_SUFFIX = re.compile(r"\(#(\d+)\)\s*\Z")
 
 
 def _committed(name: str) -> str:
     return (_REPO_ROOT / name).read_text(encoding="utf-8")
+
+
+def _relative_luminance(colour: str) -> float:
+    """WCAG relative luminance of a `#rgb` / `#rrggbb` colour."""
+
+    digits = colour.lstrip("#")
+    if len(digits) in (3, 4):
+        digits = "".join(digit * 2 for digit in digits)
+    channels = [int(digits[index : index + 2], 16) / 255 for index in (0, 2, 4)]
+    linear = [
+        value / 12.92 if value <= 0.03928 else ((value + 0.055) / 1.055) ** 2.4
+        for value in channels
+    ]
+    return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+
+
+def _contrast_ratio(ink: str, ground: str) -> float:
+    luminances = sorted((_relative_luminance(ink), _relative_luminance(ground)))
+    return (luminances[1] + 0.05) / (luminances[0] + 0.05)
+
+
+def _contrast_problems(text: str) -> list[str]:
+    """Every ink/ground pair, in both palettes, that falls under the floor."""
+
+    palettes = _PALETTE_BLOCK.findall(text)
+    if len(palettes) != 2:
+        return [
+            f"{_ARCHITECTURE_SVG}: found {len(palettes)} `svg {{ … }}` palette "
+            "blocks, not the light one and the dark one"
+        ]
+    light = dict(_CUSTOM_PROPERTY.findall(palettes[0]))
+    dark = {**light, **dict(_CUSTOM_PROPERTY.findall(palettes[1]))}
+
+    problems: list[str] = []
+    for theme, palette in (("light", light), ("dark", dark)):
+        for ink, ground in _CONTRAST_PAIRS:
+            if ink not in palette or ground not in palette:
+                problems.append(
+                    f"{_ARCHITECTURE_SVG}: the {theme} palette defines no "
+                    f"--{ink} on --{ground} pair"
+                )
+                continue
+            ratio = _contrast_ratio(palette[ink], palette[ground])
+            if ratio < _CONTRAST_FLOOR:
+                problems.append(
+                    f"{_ARCHITECTURE_SVG}: --{ink} on --{ground} in the {theme} "
+                    f"palette contrasts {ratio:.1f}:1, under the "
+                    f"{_CONTRAST_FLOOR}:1 floor"
+                )
+    return problems
 
 
 def _svg_problems(text: str) -> list[str]:
@@ -1674,6 +1746,7 @@ def _svg_problems(text: str) -> list[str]:
             f"{_ARCHITECTURE_SVG}: has no {_DARK_THEME_BLOCK} block, so it cannot "
             "follow the reader's theme"
         )
+    problems.extend(_contrast_problems(text))
 
     spoken = "\n".join(
         element.text or ""
@@ -1795,17 +1868,22 @@ def _exhibit_problems(
             if run not in original
         )
 
-    numbers = [int(found) for found in _PULL_REQUEST_URL.findall(region)]
-    if len(numbers) != 1:
+    links = _PULL_REQUEST_URL.findall(region)
+    if len(links) != 1:
         problems.append(
-            f"{_README}: the exhibit names {len(numbers)} pull requests, not one"
+            f"{_README}: the exhibit names {len(links)} pull requests, not one"
         )
-    problems.extend(
-        f"{_README}: pull request #{number} closed nothing reachable from HEAD — "
-        "no commit subject ends in its number"
-        for number in numbers
-        if number not in pull_requests
-    )
+    for repository, number in links:
+        if repository != _EXHIBIT_REPO:
+            problems.append(
+                f"{_README}: the exhibit points at a pull request in "
+                f"{repository}, not {_EXHIBIT_REPO}"
+            )
+        elif int(number) not in pull_requests:
+            problems.append(
+                f"{_README}: pull request #{number} closed nothing reachable from "
+                "HEAD — no commit subject ends in its number"
+            )
     return problems
 
 
@@ -1880,6 +1958,29 @@ def test_an_exhibit_excerpt_that_drifted_from_its_source_is_rejected() -> None:
 def test_an_exhibit_pull_request_absent_from_history_is_rejected() -> None:
     problems = _exhibit_problems(_committed(_README), _REPO_ROOT, {1})
     assert any("reachable from HEAD" in problem for problem in problems), problems
+
+
+def test_an_exhibit_pull_request_in_another_repository_is_rejected() -> None:
+    """A number this history can reach says nothing about someone else's repo."""
+
+    elsewhere = _committed(_README).replace(
+        f"https://github.com/{_EXHIBIT_REPO}/pull/",
+        "https://github.com/someone-else/a-fork/pull/",
+        1,
+    )
+    problems = _exhibit_problems(elsewhere, _REPO_ROOT, {328})
+    assert any("someone-else/a-fork" in problem for problem in problems), problems
+
+
+def test_a_low_contrast_palette_is_rejected() -> None:
+    """The legibility gate measures contrast, not the absence of the extremes."""
+
+    washed_out = _committed(_ARCHITECTURE_SVG).replace(
+        "--muted: #4f5d6a;", "--muted: #e6eaee;", 1
+    )
+    problems = _svg_problems(washed_out)
+    assert any("under the 4.5:1 floor" in problem for problem in problems), problems
+    assert all("pure black" not in problem for problem in problems), problems
 
 
 def test_an_exhibit_that_stopped_linking_its_source_is_rejected() -> None:

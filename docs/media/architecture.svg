@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 748" width="1000" height="748" role="img" aria-labelledby="svg-title svg-desc">
   <title id="svg-title">AiLibi — the layering as built</title>
-  <desc id="svg-desc">Six layers stacked top to bottom: engine, observation (the firewall), the reasoning layer of agents and meetings with llm beside it, orchestrator, and the privileged readers eval, api and frontend. A barred arrow on the left runs from the reasoning layer up towards engine and is cut where the firewall sits; it is labelled with the import-linter contract "Agents must not import engine". Arrows are data flow; imports run the other way.</desc>
+  <desc id="svg-desc">Layers stacked top to bottom: engine; observation, the firewall; the reasoning layer of agents and meetings, with llm beside it; orchestrator, which dispatches into that layer and takes ActionIntent back from agents and MeetingResult back from meetings; then the two privileged readers, eval and api. The frontend is not privileged: it sits downstream of api, running on types generated from the api DTOs. A barred arrow on the left runs from the reasoning layer up towards engine and is cut where the firewall sits; it is labelled with the import-linter contract "Agents must not import engine". Arrows are data flow; imports run the other way.</desc>
 
   <style>
     svg {
@@ -118,10 +118,12 @@
   <text class="body" x="734" y="405">runs), anthropic, ollama, featherless.</text>
   <text class="body" x="734" y="425">A leaf: it imports nothing else here.</text>
 
-  <line class="flow-line" x1="372" y1="480" x2="372" y2="440" marker-end="url(#flow-head)"/>
-  <text class="flow-label" x="364" y="466" text-anchor="end">dispatch</text>
-  <line class="flow-line" x1="540" y1="440" x2="540" y2="480" marker-end="url(#flow-head)"/>
-  <text class="flow-label" x="550" y="466">ActionIntent · MeetingResult</text>
+  <line class="flow-line" x1="250" y1="480" x2="250" y2="440" marker-end="url(#flow-head)"/>
+  <text class="flow-label" x="260" y="466">dispatch</text>
+  <line class="flow-line" x1="400" y1="440" x2="400" y2="480" marker-end="url(#flow-head)"/>
+  <text class="flow-label" x="410" y="466">ActionIntent</text>
+  <line class="flow-line" x1="560" y1="440" x2="560" y2="480" marker-end="url(#flow-head)"/>
+  <text class="flow-label" x="570" y="466">MeetingResult</text>
 
   <!-- orchestrator/ -->
   <rect class="card-strong" x="228" y="484" width="456" height="80" rx="9"/>

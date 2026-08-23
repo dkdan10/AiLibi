@@ -121,7 +121,7 @@ The system as built: [docs/architecture.md](docs/architecture.md).
 
 [![The layering as built: engine, the observation firewall, agents and meetings with llm beside them, the orchestrator, and the privileged readers](docs/media/architecture.svg)](docs/architecture.md)
 
-*Arrows are data flow; imports run the other way. The barred one is the firewall — `agents/` may not import `engine/`, by an import-linter contract of that name, checked in CI on every push.*
+*Arrows are data flow; imports run the other way. The barred one is the firewall — `agents/` may not import `engine/`, by an import-linter contract of that name, checked in CI on every pull request and every push to `main`.*
 
 ## What the measurements said
 
