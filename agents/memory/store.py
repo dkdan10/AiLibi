@@ -1238,23 +1238,18 @@ def _build_observations(
             role = event.payload.get("role")
             owned = _owned_task_ids(event.payload)
             if completion_from_events:
-                # A living agent's owned set loses a map task id only when that
-                # instance completes: redistribution only ADDS a dead player's
-                # unfinished instances to a survivor, and the victim receives no
-                # further packet -- so a departed id is a completion the agent
-                # itself performed, while a ``pending_task_id`` change is not.
+                # An id LEAVING a living agent's owned set is a completion it
+                # performed: only completion removes an id, while redistribution
+                # merely ADDS a dead player's unfinished instances to a survivor
+                # and the victim receives no further packet. One line per departed
+                # id, sorted, so a genuine completion is not dropped when an
+                # inherited earlier-sorting task already holds the pending id, and
+                # ties render in a fixed order. Role-blind: an impostor's
+                # ``owned_task_ids`` is a CONSTANT per-seat camouflage window
+                # (observation/service.py), so its rotating pretend id never leaves
+                # the set. Both rows must carry the set -- a payload without it is
+                # no evidence, so nothing is minted.
                 # G-3 / C-2, audits/review-2026-08-19/D/FINAL-synthesis.md §1 RC3.
-                #
-                # One line per departed id, sorted, so a genuine completion is not
-                # dropped when an inherited earlier-sorting task already holds the
-                # pending id, and ties render in a fixed order. The rule is
-                # role-blind by construction: an impostor's ``owned_task_ids`` is a
-                # CONSTANT per-seat camouflage window (observation/service.py), so
-                # its rotating pretend id never leaves the set and mints nothing --
-                # the property the crewmate gate used to buy (PR #155).
-                #
-                # Both rows must carry the set: a payload without it is no
-                # evidence, so nothing is minted.
                 if last_owned_task_ids is not None and owned is not None:
                     observations.extend(
                         _completed_task_observation(
@@ -1276,7 +1271,8 @@ def _build_observations(
                 # recordings were rendered under. It over-mints whenever a
                 # redistributed instance displaces the pending id, and is gated to
                 # crewmates because an impostor's pretend id rotates without ever
-                # completing (PR #155).
+                # completing.
+                # PR #155.
                 observations.append(
                     _completed_task_observation(
                         tick=event.tick,
