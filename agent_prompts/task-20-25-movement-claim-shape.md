@@ -64,6 +64,8 @@ recording — the 18.9 counterfactual pattern, and the honest price of the chang
 - orchestrator/game.py; (a move-witness records accessor on the meeting-aware agent, beside the sighting/vent accessors — the LIVE feed for the movement channel)
 - meetings/manager.py; (the call site that passes the move records into detection — call-site only)
 
+Recorded deviation at merge (PR #377, orchestrator-ratified): two names (from_room/to_room) added to EXPECTED_EVAL_REPORT_FIELDS in tests/api/test_leak.py — forced by SawMoveObservation joining the ObservationClaim union; FORBIDDEN_EVAL_ENGINE_FIELDS untouched. A prose record, not a scope entry.
+
 **Files NOT in scope:**
 - agents/strategic/prompts/ (the schema line in the templates lands in 20.31's single bump; until then the model cannot emit saw_move and the detector-side resolution carries the lever)
 - agents/memory/ (the move line render is unchanged)
