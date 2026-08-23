@@ -3639,11 +3639,11 @@ touches no prompt template (Task 20.31 owns the single prompt-set bump).
 - agents/memory/working.py; (only if the self-state model needs the field — the episodic payload is `Mapping[str, Any]`, so the expected diff is empty)
 - tests/agents/test_memory_rendering.py; (the wrong-rule pin replaced; OFF-path byte-identity; ON-path: a redistribution never mints a completion, a real completion still renders, a payload without the field renders nothing)
 - tests/agents/test_perception.py; (the exact-payload assertion at :128-135 gains `owned_task_ids`)
-- tests/eval/test_evidence_honesty.py; (the committed I-5 pins re-run unchanged after the perception widening — the instrument rebuilds memory through `agents.perception` — plus a lever-exported-ON re-read proving it is inert; the ON census is the offline-counterfactual task's)
+- tests/eval/test_evidence_honesty.py; (the committed I-5 pins re-run unchanged after the perception widening — the instrument rebuilds memory through `agents.perception` — plus a lever-ON re-read (set through `monkeypatch.setenv`, not a shell export — the 20.17 hermetic guard clears `AILIBI_*` at session start) proving it is inert; the ON census is the offline-counterfactual task's)
 - observation/service.py; (the :63-66 comment only — the same false invariant in prose; no behaviour change)
 
 **Files NOT in scope:**
-- engine/ (redistribution is correct engine behaviour and DESIGN.md §3.5's sanctioned variant; nothing about the rule changes)
+- engine/ (redistribution is correct engine behaviour — the Task-13.10 variant `engine/maps/canonical_1.yaml:45` selects; DESIGN.md §3.5 still documents only the older drop rule, per A/verdicts.md §claim 3's design check; nothing about the rule changes)
 - orchestrator/replay.py (Task 20.33 registers this lever in `_TOGGLEABLE_LEVER_RESOLVERS` and the substrate stamp, together with the other Phase-20 levers; this task registers nothing)
 - agents/strategic/prompts/ (Task 20.31 owns the single prompt-set bump; no template may move here)
 - the line's tick and room (the self-location trail task owns the re-dating and the room-at-that-tick; this task must not shift a genuine completion's tick or room relative to the OFF path)
@@ -3658,7 +3658,7 @@ touches no prompt template (Task 20.31 owns the single prompt-set bump).
 - [ ] The `role == "CREWMATE"` asymmetry is gone: the ON path applies the same rule to both roles, and a test drives an impostor's rotating pretend `pending_task_id` over a constant camouflage window and asserts zero completion lines — the PR #155 property held by construction rather than by a role gate.
 - [ ] Fail-closed on missing evidence: a self-state payload without an `owned_task_ids` key (a hand-built fixture or a pre-widening row) mints NO completion under the lever ON, pinned by a test — the ON path never fabricates when it cannot see the set.
 - [ ] `tests/agents/test_memory_rendering.py:835-852 test_pending_rollover_to_next_map_id_emits_completion` no longer pins the any-change-emits rule; it is rewritten to pin the disappearance rule (or replaced by named ON/OFF tests) and its comment states why the old premise was false.
-- [ ] `tests/eval/test_evidence_honesty.py::test_i5_fabricated_completion_pins` still reads 19/458, 40/1311, 15/61 and 14/58 — unchanged by the perception widening and unchanged with `AILIBI_TASK_COMPLETION_FROM_EVENTS=1` exported, because the instrument scores I-5 off the recorded prompt bytes and deliberately exposes no lever slate (audits/audit-phase-20-preregistration.md §8); the ON census over the four sets is Task 20.34's, and this PR quotes the OFF column beside the fixture-level ON proof.
+- [ ] `tests/eval/test_evidence_honesty.py::test_i5_fabricated_completion_pins` still reads 19/458, 40/1311, 15/61 and 14/58 — unchanged by the perception widening and unchanged with `AILIBI_TASK_COMPLETION_FROM_EVENTS=1` set inside the test via `monkeypatch.setenv` (Task 20.17's session-scoped `_hermetic_ailibi_env` guard in tests/conftest.py clears the whole `AILIBI_*` namespace, so a shell export is invisible under pytest), because the instrument scores I-5 off the recorded prompt bytes and deliberately exposes no lever slate (audits/audit-phase-20-preregistration.md §8); the ON census over the four sets is Task 20.34's, and this PR quotes the OFF column beside the fixture-level ON proof.
 - [ ] The false invariant comment at `agents/memory/store.py:1161-1168` is deleted; the replacement states the true rule in one sentence plus one provenance line (no docstring history narration), and the impostor-gate rationale at :1170-1177 is rewritten to say the property now holds by construction.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
@@ -3673,7 +3673,7 @@ touches no prompt template (Task 20.31 owns the single prompt-set bump).
 Step 1 — the field. `_self_state_payload` (agents/perception.py:326-361) gains one key,
 `"owned_task_ids": self_state.owned_task_ids`, beside `pending_task_id`. It is a tuple of map ids; keep it
 a tuple (the payload already carries `fellow_impostor_ids` as one). Nothing else in production reads the
-self-state payload's shape — the tactical policies read named keys (agents/tactical/impostor_policy.py:467,
+self-state payload's shape — the tactical policies read named keys (agents/tactical/impostor_policy.py:566,
 agents/tactical/crewmate_policy.py:430) and the training features read `packet.self_state.owned_task_ids`
 directly (agents/tactical/learned/crew_forward.py:728) — so the blast radius is the one exact-dict
 assertion at tests/agents/test_perception.py:128-135. Grep before you widen.
@@ -3701,7 +3701,7 @@ reconstructs every committed meeting through the real render path
 (`api.replay_loader.ReplayLoader._walk` with `collect_memory=True`, then `render_for_prompt`), so an
 additive payload key that nothing reads under OFF is proven inert by running it. The ON path is
 proved by fixture, not by that instrument: the honesty module scores I-5 by matching its
-`_COMPLETED_LINE` regex against the recorded `LLMCallRecord.prompt` (eval/evidence_honesty.py:1496-1528)
+`_COMPLETED_LINE` regex against the recorded `LLMCallRecord.prompt` (eval/evidence_honesty.py:1840-1872)
 and takes no lever-slate parameter by design (audits/audit-phase-20-preregistration.md §8), so its cells
 cannot move under this lever — Task 20.34's `scripts/counterfactual_phase20.py` owns the OFF/ON census.
 Toggle through the `env` parameter, never `os.environ`, so the pins stay parallel-safe.
