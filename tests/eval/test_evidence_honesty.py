@@ -1233,6 +1233,10 @@ _COMPLETED_ROW: Final[re.Pattern[str]] = re.compile(
 _COMPLETED_ROOM: Final[re.Pattern[str]] = re.compile(
     r"(?<= \(you were in )[^)]+(?=\)\.)"
 )
+# The one rendered band below _SALIENCE_REPORTED_TESTIMONY: cooldown status (10).
+_COOLDOWN_ROW: Final[re.Pattern[str]] = re.compile(
+    r"\bYour kill cooldown is \d+ ticks\."
+)
 
 
 def _rendered_trail_steps(view: str) -> list[tuple[int, int]]:
@@ -1266,15 +1270,16 @@ def _rendered_trail_ticks(view: str) -> frozenset[int]:
     )
 
 
-def _observation_rows(view: str) -> frozenset[str]:
-    """The rendered observation bullets, keyed so ON and OFF rows are comparable.
+def _protected_rows(view: str) -> frozenset[str]:
+    """The rendered rows at or above ``_SALIENCE_REPORTED_TESTIMONY``, comparably keyed.
 
-    Completion rows sit at ``_SALIENCE_COMPLETED_TASK`` (30), ABOVE
-    ``_SALIENCE_REPORTED_TESTIMONY`` (25), so they are inside the protected band
-    the displacement census measures and must be counted. The lever deliberately
-    re-rooms them, so the room is masked out and the rest of the row -- its
-    citation id, tick and task -- is the key: a row that survives compares equal,
-    and only a row the budget actually dropped counts as displaced (Codex review).
+    This is the band the displacement census claims to measure, so the rows below
+    it are excluded by their rendered shape: the only band under 25 that reaches a
+    prompt is ``_SALIENCE_COOLDOWN_STATUS`` (10), the impostor's own kill-cooldown
+    row. Completion rows sit at ``_SALIENCE_COMPLETED_TASK`` (30) and stay in; the
+    lever deliberately re-rooms them, so the room is masked out and the rest of the
+    row -- its citation id, tick and task -- is the key, and only a row the budget
+    actually dropped counts as displaced (Codex review).
     """
 
     return frozenset(
@@ -1283,6 +1288,7 @@ def _observation_rows(view: str) -> frozenset[str]:
         if line.startswith("- ")
         and not line.startswith(_TRAIL_ROUTE_PREFIX)
         and line != f"- {_TRAIL_TRUNCATED_NOTICE}"
+        and _COOLDOWN_ROW.search(line) is None
     )
 
 
@@ -1364,7 +1370,13 @@ def _self_placement_census(sample_dir: Path) -> _SelfPlacementCensus:
                     off_ticks: dict[PlayerId, frozenset[int]] = {}
                     record_ticks: dict[PlayerId, frozenset[int]] = {}
                     for pid in sorted(living):
-                        composite = AgentMemory(episodic=memories[pid])
+                        # The memory the speaker actually held: the RETAINED
+                        # composite, beliefs folded from earlier meetings included.
+                        # Those blocks are non-elastic, so rendering a fresh one
+                        # would measure a budget no agent ever had
+                        # (TacticalAgent.render_memory_for_meeting passes the same
+                        # retained composite).
+                        composite = composites[pid]
                         off = render_for_prompt(
                             composite, token_budget=DEFAULT_TOKEN_BUDGET
                         )
@@ -1382,7 +1394,7 @@ def _self_placement_census(sample_dir: Path) -> _SelfPlacementCensus:
                         trail_steps += len(_rendered_trail_steps(on))
                         # The renderer's own 4-chars-per-token arithmetic.
                         added_tokens += (len(on) + 3) // 4 - (len(off) + 3) // 4
-                        dropped = _observation_rows(off) - _observation_rows(on)
+                        dropped = _protected_rows(off) - _protected_rows(on)
                         observations_lost += len(dropped)
                         observations_lost_testimony += sum(
                             1 for row in dropped if "[meeting] CLAIM by " in row
@@ -1508,32 +1520,33 @@ def test_the_trail_s_budget_cost_is_measured_not_assumed(
     # of that is measured here rather than assumed away. This is the FALSIFIED half
     # of the contract's budget item: full coverage and zero displacement cannot
     # both hold, because the 9p2i meetings already saturate DEFAULT_TOKEN_BUDGET,
-    # so the route is paid for out of the elastic block. The count spans the whole
-    # protected band -- reported testimony (salience 25) AND completed-task rows
-    # (30) -- with the room masked out of a completion row so only a row the budget
-    # really dropped counts. On the 4p1i sets the budget never binds and the trail
-    # costs nothing; on the 9p2i sets it costs a mean 1.1 and 1.0 rendered rows per
-    # render. Chaining the route onto one line is what cut that by 43%: the same
-    # 6715 steps rendered as one bullet each displaced 1875 rows (863 testimony,
-    # 17 completions) on samples/9p2i and 4837 (2205, 46) on the corpus, recounted
-    # over the same bytes. Nothing here is rounded.
+    # so the route is paid for out of the elastic block. The count spans exactly the
+    # protected band -- reported testimony (salience 25) and completed-task rows
+    # (30), with the kill-cooldown band (10) excluded -- and the room is masked out
+    # of a completion row so only a row the budget really dropped counts. On the
+    # 4p1i sets the budget never binds and the trail costs nothing; on the 9p2i sets
+    # it costs a mean 1.2 and 1.0 rendered rows per render. Chaining the route onto
+    # one line is what cut that by 43%: the same 6715 steps rendered as one bullet
+    # each displaced 1959 rows (842 testimony, 26 completions) on samples/9p2i and
+    # 4879 (2177, 50) on the corpus, recounted over the same bytes with the same
+    # reader. Nothing here is rounded.
     samples = placement[_SAMPLES_9P2I]
     corpus = placement[_CORPUS_9P2I]
     assert (samples.renders, samples.trail_steps, samples.added_tokens) == (
         971,
         6715,
-        20734,
+        19884,
     )
     assert (
         samples.observations_lost,
         samples.observations_lost_testimony,
         samples.observations_lost_completed,
-    ) == (1071, 494, 11)
+    ) == (1117, 479, 14)
     assert (
         corpus.observations_lost,
         corpus.observations_lost_testimony,
         corpus.observations_lost_completed,
-    ) == (2748, 1263, 27)
+    ) == (2736, 1239, 32)
     for sample_dir in (_SAMPLES_4P1I, _CORPUS_4P1I):
         assert placement[sample_dir].observations_lost == 0
 
@@ -1552,12 +1565,13 @@ def test_the_completed_task_row_names_the_engine_truth_room(
         assert census.completion_agrees == census.completion_rows
     # The review's offline re-render census over the same 971 rendered memories
     # counted 843 completed-task instances [A/verdicts.md G-1]; this recount finds
-    # 848. The review's script is not committed (audits/audit-phase-20-planning.md
+    # 829. The review's script is not committed (audits/audit-phase-20-planning.md
     # §4 item 4) and the population is budget-sensitive -- the salience cut decides
-    # how many of an agent's rows survive each prompt, so a cheaper route block
-    # leaves room for more of them (the per-span route this one replaced rendered
-    # 842 here and 2442 on the corpus). The residual is carried, not smoothed.
-    assert placement[_SAMPLES_9P2I].completion_rows == 848
-    assert placement[_CORPUS_9P2I].completion_rows == 2461
+    # how many of an agent's rows survive each prompt, and this recount renders the
+    # RETAINED composite the speaker held, whose non-elastic belief block leaves
+    # less room than a fresh one (the per-span route this one replaced renders 817
+    # here and 2394 on the corpus). The residual is carried, not smoothed.
+    assert placement[_SAMPLES_9P2I].completion_rows == 829
+    assert placement[_CORPUS_9P2I].completion_rows == 2412
     assert placement[_SAMPLES_4P1I].completion_rows == 61
     assert placement[_CORPUS_4P1I].completion_rows == 58
