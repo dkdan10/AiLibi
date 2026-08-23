@@ -27,6 +27,10 @@ from types import MappingProxyType
 import pytest
 
 from agents.memory.episodic import EpisodicEvent, MemoryStore
+from agents.memory.store import (
+    ENV_TASK_COMPLETION_FROM_EVENTS,
+    task_completion_from_events_enabled,
+)
 from agents.tactical.impostor_policy import RankedTarget
 from engine.world import load_canonical_map
 from eval import evidence_honesty
@@ -950,6 +954,7 @@ def test_i4_grounded_sighting_side_pins(
 @pytest.mark.slow
 def test_i5_fabricated_completion_pins(
     reports: Mapping[Path, EvidenceHonestyReport],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # Review [A/verdicts.md G-3]: 53/529, 140/1528, 15/65, 14/64. This instrument
     # counts the rendered rows that actually REACHED a model — the recorded
@@ -984,6 +989,16 @@ def test_i5_fabricated_completion_pins(
         46,
         46,
     )
+    # The completed-task lever cannot move a cell here: I-5 is scored off the
+    # RECORDED prompt bytes, and this instrument exposes no lever slate by design
+    # (audits/audit-phase-20-preregistration.md §8) -- the ON census over the
+    # committed sets belongs to the offline counterfactual. Set the gate inside the
+    # test: the session-scoped hermetic guard clears the whole ``AILIBI_*``
+    # namespace, so a shell export is invisible under pytest.
+    monkeypatch.setenv(ENV_TASK_COMPLETION_FROM_EVENTS, "1")
+    assert task_completion_from_events_enabled() is True
+    lever_on = compute_evidence_honesty(_SAMPLES_4P1I)
+    assert _counts(lever_on.fabricated_completions.fabricated) == (15, 61)
 
 
 @pytest.mark.slow

@@ -78,6 +78,7 @@ def _packet(
     role: str = "CREWMATE",
     room: str = "CAFETERIA",
     pending_task_id: str | None = "swipe_card",
+    owned_task_ids: tuple[str, ...] = (),
     fellow_impostor_ids: tuple[str, ...] = (),
     visible_players: tuple[PlayerView, ...] = (),
     visible_bodies: tuple[BodyView, ...] = (),
@@ -93,6 +94,7 @@ def _packet(
             room=room,
             role=role,  # type: ignore[arg-type]
             pending_task_id=pending_task_id,
+            owned_task_ids=owned_task_ids,
             fellow_impostor_ids=fellow_impostor_ids,
         ),
         visible_players=visible_players,
@@ -130,7 +132,61 @@ class TestIngestPacketSelfAndGlobal:
             "room": "ADMIN",
             "role": "IMPOSTOR",
             "pending_task_id": None,
+            "owned_task_ids": (),
             "fellow_impostor_ids": (),
+            "in_vent": False,
+        }
+
+    def test_crewmate_self_state_payload_carries_owned_task_ids_verbatim(self) -> None:
+        # The §6.6 completed-task rule reads the SET, so the recorded tuple must be
+        # the packet's own. The fixture's ids are deliberately NOT in sorted order:
+        # a payload that re-sorted or filtered them fails this assertion.
+        store = MemoryStore()
+
+        ingest_packet(
+            packet=_packet(
+                role="CREWMATE",
+                pending_task_id="align_engine_output",
+                owned_task_ids=("upload_logs", "align_engine_output"),
+            ),
+            memory=store,
+        )
+
+        self_event = store.recent(since_tick=0)[0]
+        assert self_event.payload == {
+            "agent_id": "p1",
+            "room": "CAFETERIA",
+            "role": "CREWMATE",
+            "pending_task_id": "align_engine_output",
+            "owned_task_ids": ("upload_logs", "align_engine_output"),
+            "fellow_impostor_ids": (),
+            "in_vent": False,
+        }
+
+    def test_impostor_self_state_payload_carries_the_camouflage_window(self) -> None:
+        # An impostor's ``owned_task_ids`` is its pretend-task window, recorded the
+        # same way and in the same key: the payload carries no role bit beyond the
+        # ``role`` field itself.
+        store = MemoryStore()
+
+        ingest_packet(
+            packet=_packet(
+                role="IMPOSTOR",
+                pending_task_id="submit_scan",
+                owned_task_ids=("swipe_card", "submit_scan", "fuel_reserves"),
+                fellow_impostor_ids=("p-2",),
+            ),
+            memory=store,
+        )
+
+        self_event = store.recent(since_tick=0)[0]
+        assert self_event.payload == {
+            "agent_id": "p1",
+            "room": "CAFETERIA",
+            "role": "IMPOSTOR",
+            "pending_task_id": "submit_scan",
+            "owned_task_ids": ("swipe_card", "submit_scan", "fuel_reserves"),
+            "fellow_impostor_ids": ("p-2",),
             "in_vent": False,
         }
 

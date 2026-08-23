@@ -337,12 +337,19 @@ def _self_state_payload(
     #
     # ``pending_task_id`` is the agent's own next MAP task id (DESIGN.md §3.2) --
     # never the per-player instance id and never another player's task. It rides
-    # through verbatim as an opaque string: the memory reader
-    # (``agents/memory/store.py``) infers completion from it clearing to ``None``,
-    # and the tactical policies resolve it against the map-keyed ``task_locations``
-    # and submit it back as the ``do_task`` payload. The render/field/reader legs
-    # all treat it as the same map id, so the engine advances the actor's own
-    # instance. ``fellow_impostor_ids`` rides the same privileged self-state payload
+    # through verbatim as an opaque string: the tactical policies resolve it
+    # against the map-keyed ``task_locations`` and submit it back as the
+    # ``do_task`` payload. The render/field/reader legs all treat it as the same
+    # map id, so the engine advances the actor's own instance.
+    #
+    # ``owned_task_ids`` is the agent's own unfinished MAP task ids, recorded
+    # verbatim -- same order, nothing filtered -- so the §6.6 renderer can read a
+    # completion off the set LOSING an id rather than infer one from a
+    # ``pending_task_id`` change (a redistributed instance also changes that id).
+    # It rides the same self channel as ``pending_task_id`` and carries no role
+    # bit: an impostor's tuple is the camouflage window.
+    #
+    # ``fellow_impostor_ids`` rides the same privileged self-state payload
     # that already carries ``role`` (Task 7.2): the impostor policy/prompt layer
     # reads its teammates from here in Wave 2 (J-5). It is ``()`` for crewmates
     # and serializes to a list in the prompt JSON, like other tuple fields.
@@ -356,6 +363,7 @@ def _self_state_payload(
         "room": self_state.room,
         "role": self_state.role,
         "pending_task_id": self_state.pending_task_id,
+        "owned_task_ids": self_state.owned_task_ids,
         "fellow_impostor_ids": self_state.fellow_impostor_ids,
         "in_vent": self_state.in_vent,
     }

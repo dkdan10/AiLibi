@@ -11,9 +11,10 @@ through (audit R-6, `audits/audit-2026-05-15-0225-reconciled.md`).
 
 from __future__ import annotations
 
+import os
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
-from typing import Final, TypeAlias
+from typing import Any, Final, TypeAlias
 
 from agents.memory.beliefs import (
     BODY_PROXIMITY_WINDOW_TICKS,
@@ -208,6 +209,39 @@ def observation_id_rendering_enabled(env: Mapping[str, str] | None = None) -> bo
     return True
 
 
+# Completed-task-from-events lever -- DEFAULT-OFF, live (the
+# ``agents.strategic.prompts.loader.impostor_roll_call_enabled`` shape). It is not
+# registered in ``orchestrator.replay._TOGGLEABLE_LEVER_RESOLVERS``: Task 20.33
+# wires the whole Phase-20 slate into the substrate stamp at once.
+ENV_TASK_COMPLETION_FROM_EVENTS: Final[str] = "AILIBI_TASK_COMPLETION_FROM_EVENTS"
+_TASK_COMPLETION_FROM_EVENTS_FLAG_TRUE: Final[frozenset[str]] = frozenset(
+    {"1", "true", "yes", "on"}
+)
+
+
+def task_completion_from_events_enabled(env: Mapping[str, str] | None = None) -> bool:
+    """Whether completed-task memory is read off the owned set. DEFAULT OFF.
+
+    Reads :data:`ENV_TASK_COMPLETION_FROM_EVENTS` from ``env`` (defaulting to the
+    process environment), accepting ``1/true/yes/on`` case-insensitively; passing
+    ``env`` lets a caller toggle the lever without mutating ``os.environ``.
+
+    OFF infers a completion from any change of a crewmate's ``pending_task_id``,
+    which is what the committed recordings and the prompt byte-golden render. ON
+    emits one for every map task id that LEAVES the agent's ``owned_task_ids``:
+    a redistributed instance can displace the pending id but can only ADD to a
+    living agent's owned set, so the ON rule mints nothing it did not observe.
+
+    Phase 20 G-3 / C-2 (audits/review-2026-08-19/D/FINAL-synthesis.md §1 RC3).
+    """
+
+    environment = env if env is not None else os.environ
+    return (
+        environment.get(ENV_TASK_COMPLETION_FROM_EVENTS, "").strip().lower()
+        in _TASK_COMPLETION_FROM_EVENTS_FLAG_TRUE
+    )
+
+
 def render_for_prompt(
     memory: AgentMemory,
     *,
@@ -246,7 +280,10 @@ def render_for_prompt(
     salience sort). Both levers were GRADUATED to unconditional at the Task-16.17
     baseline-5 record, so the argument is accepted and ignored by those resolvers
     (retained without a signature churn; the committed baseline-5 bytes were
-    recorded with both ON and reconstruct BARE).
+    recorded with both ON and reconstruct BARE). The live default-OFF
+    :func:`task_completion_from_events_enabled` reads the same ``env``: ON, the
+    completed-task line comes from the agent's own ``owned_task_ids`` losing an id
+    instead of from a ``pending_task_id`` change.
 
     Raises :class:`ValueError` if ``token_budget`` is non-positive or
     if no ``self_state`` event has been recorded. A render call before
@@ -278,10 +315,14 @@ def render_for_prompt(
     # pattern). Unconditional since the 16.17 graduation — the committed baseline-5
     # bytes carry the ids, so the fold is the byte-identical reconstruction path.
     ids_on = observation_id_rendering_enabled(env)
+    # Resolve the completed-task lever ONCE here too, and thread the plain bool
+    # down: the observation loop never consults an environment.
+    completion_from_events = task_completion_from_events_enabled(env)
     observations = _build_observations(
         memory.episodic,
         own_agent_id=own_agent_id,
         teammate_ids=teammate_ids,
+        completion_from_events=completion_from_events,
     )
     if ids_on:
         # Fold each first-hand observation's stable id into its line BEFORE the
@@ -1114,16 +1155,53 @@ def _latest_tasks_summary(episodic: MemoryStore) -> str | None:
     return summary
 
 
+def _owned_task_ids(payload: Mapping[str, Any]) -> frozenset[TaskId] | None:
+    """The self-state row's own unfinished map task ids, or ``None`` if unreadable.
+
+    ``None`` means the row carries no usable ``owned_task_ids`` -- a pre-widening
+    recording or a hand-built fixture -- and the caller must then mint nothing.
+    """
+
+    raw = payload.get("owned_task_ids")
+    if not isinstance(raw, (tuple, list, frozenset, set)):
+        return None
+    if not all(isinstance(task_id, str) for task_id in raw):
+        return None
+    return frozenset(str(task_id) for task_id in raw)
+
+
+def _completed_task_observation(
+    *,
+    tick: int,
+    task_id: TaskId,
+    room: str | None,
+    observation_id: str | None,
+) -> _Observation:
+    """One rendered completion line, placed where the agent was when it finished."""
+
+    completed_room = room if room is not None else "an unknown room"
+    return _Observation(
+        salience=_SALIENCE_COMPLETED_TASK,
+        tick=tick,
+        line=f"[tick {tick}] You completed {task_id} (you were in {completed_room}).",
+        # The self_state row the completion was read off: one id-stamped row, so
+        # the rendered line is citable.
+        observation_id=observation_id,
+    )
+
+
 def _build_observations(
     episodic: MemoryStore,
     *,
     own_agent_id: str | None = None,
     teammate_ids: frozenset[str] = frozenset(),
+    completion_from_events: bool = False,
 ) -> list[_Observation]:
     observations: list[_Observation] = []
     seen_body_ids: set[str] = set()
     last_pending_task: str | None = None
-    last_pending_task_room: str | None = None
+    last_self_room: str | None = None
+    last_owned_task_ids: frozenset[TaskId] | None = None
     first_self_state = True
     body_sightings = _collect_body_sightings(episodic)
     own_kill_victims = _collect_own_kill_victims(episodic)
@@ -1158,51 +1236,54 @@ def _build_observations(
             pending = pending_raw if isinstance(pending_raw, str) else None
             room = event.payload.get("room")
             role = event.payload.get("role")
-            # For a CREWMATE, ``pending_task_id`` is the lexicographically-first
-            # owned, UNFINISHED map task (observation/service.py). Its owned set
-            # only ever shrinks -- a task completes; none is added mid-game -- so
-            # the pending id changes if and only if the previous pending task
-            # completed, whether it clears to ``None`` (the final task) OR rolls to
-            # the next map id (an intermediate task in a multi-task 9p/2i loadout).
-            # Infer completion on ANY change away from a non-None pending task so an
-            # intermediate completion is not dropped from rendered memory (PR #109).
-            #
-            # An IMPOSTOR's pending_task_id is a fabricated BLEND target (Task
-            # 10.14) that the engine always rejects and that never completes; it
-            # rotates through a per-seat set tick-to-tick. A change in it is NOT a
-            # completion, so the inference is GATED to crewmates -- otherwise the
-            # blend would mint fictitious "You completed ..." memory that could
-            # become a fabricated ``completed_task`` alibi and corrupt the
-            # meeting/eval evidence (Codex review, PR #155). The impostor's memory
-            # stays accurate; alibi fabrication is the LLM's job (DESIGN.md §4.7).
-            if (
+            owned = _owned_task_ids(event.payload)
+            if completion_from_events:
+                # An id LEAVING a living agent's owned set is a completion it
+                # performed: only completion removes an id, while redistribution
+                # merely ADDS a dead player's unfinished instances to a survivor
+                # and the victim receives no further packet. One line per departed
+                # id, sorted, so a genuine completion is not dropped when an
+                # inherited earlier-sorting task already holds the pending id, and
+                # ties render in a fixed order. Role-blind: an impostor's
+                # ``owned_task_ids`` is a CONSTANT per-seat camouflage window
+                # (observation/service.py), so its rotating pretend id never leaves
+                # the set. Both rows must carry the set -- a payload without it is
+                # no evidence, so nothing is minted.
+                # G-3 / C-2, audits/review-2026-08-19/D/FINAL-synthesis.md §1 RC3.
+                if last_owned_task_ids is not None and owned is not None:
+                    observations.extend(
+                        _completed_task_observation(
+                            tick=event.tick,
+                            task_id=task_id,
+                            room=last_self_room,
+                            observation_id=event.observation_id,
+                        )
+                        for task_id in sorted(last_owned_task_ids - owned)
+                    )
+            elif (
                 role == "CREWMATE"
                 and not first_self_state
                 and isinstance(last_pending_task, str)
                 and pending != last_pending_task
             ):
-                completed_room = (
-                    last_pending_task_room
-                    if isinstance(last_pending_task_room, str)
-                    else "an unknown room"
-                )
+                # Lever OFF: a completion is inferred from ANY change of a
+                # crewmate's ``pending_task_id`` -- the rule the committed
+                # recordings were rendered under. It over-mints whenever a
+                # redistributed instance displaces the pending id, and is gated to
+                # crewmates because an impostor's pretend id rotates without ever
+                # completing.
+                # PR #155.
                 observations.append(
-                    _Observation(
-                        salience=_SALIENCE_COMPLETED_TASK,
+                    _completed_task_observation(
                         tick=event.tick,
-                        line=(
-                            f"[tick {event.tick}] You completed "
-                            f"{last_pending_task} (you were in "
-                            f"{completed_room})."
-                        ),
-                        # The self_state event whose pending change was inferred
-                        # (Task 16.5): the completion is derived from this single
-                        # id-stamped row, so it is citable.
+                        task_id=last_pending_task,
+                        room=last_self_room,
                         observation_id=event.observation_id,
                     )
                 )
             last_pending_task = pending
-            last_pending_task_room = room if isinstance(room, str) else None
+            last_self_room = room if isinstance(room, str) else None
+            last_owned_task_ids = owned
             first_self_state = False
             continue
 
@@ -1890,6 +1971,7 @@ __all__ = [
     "ContradictionRef",
     "DEFAULT_TOKEN_BUDGET",
     "ENV_OBSERVATION_ID_RENDERING",
+    "ENV_TASK_COMPLETION_FROM_EVENTS",
     "EpisodicEvent",
     "MeetingHistory",
     "MemoryStore",
@@ -1904,4 +1986,5 @@ __all__ = [
     "observation_id_rendering_enabled",
     "record_meeting_outcome",
     "render_for_prompt",
+    "task_completion_from_events_enabled",
 ]

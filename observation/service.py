@@ -60,18 +60,17 @@ from observation.packet import (
 # single fixed room is BOTH a weaker blend and, empirically, a degenerate balance
 # shift (a systematic ambush in the same rooms every game), so the roam is kept.
 #
-# The rotation is reconciled with the memory renderer (Codex review, PR #155).
-# ``agents/memory/store.py`` infers a "You completed {task}" observation on ANY
-# change of ``pending_task_id`` away from a non-None value — correct for a
-# crewmate (its owned set only shrinks, so a change IS a completion) but a lie for
-# the impostor, whose pretend tasks never complete. Rather than freeze the blend
-# (which costs the roam AND balance), the renderer's completion inference is
-# role-GATED to crewmates, so a rotating impostor pretend id mints NO fictitious
-# completed-task memory and cannot become a fabricated ``completed_task`` alibi —
-# the impostor's memory stays accurate; the alibi fabrication is the LLM's job at
-# the meeting (DESIGN.md §4.7). Seats are taken over ALL role==IMPOSTOR players
-# (alive or dead — ejection marks ``alive=False`` but never removes the player),
-# so a seat never shifts mid-game when a teammate is ejected.
+# The rotation is reconciled with the memory renderer: ``agents/memory/store.py``
+# must never render a "You completed {task}" observation for a pretend id, so the
+# impostor's memory stays accurate and alibi fabrication is the LLM's job at the
+# meeting (DESIGN.md §4.7). Its default rule infers a completion from any change
+# of ``pending_task_id`` and is role-GATED to crewmates for exactly that reason;
+# under ``agents.memory.store.task_completion_from_events_enabled`` it instead
+# reads a completion off an id LEAVING ``owned_task_ids``, which the constant
+# camouflage window below never does — the property then holds for both roles by
+# construction. Seats are taken over ALL role==IMPOSTOR players (alive or dead —
+# ejection marks ``alive=False`` but never removes the player), so a seat never
+# shifts mid-game when a teammate is ejected.
 IMPOSTOR_PRETEND_TASK_SET_SIZE: Final[int] = 3
 # How many ticks the impostor dwells on one pretend task before the deterministic
 # rotation advances to the next in its per-seat set. Anchored above the map
