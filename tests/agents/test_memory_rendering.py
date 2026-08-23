@@ -15,14 +15,19 @@ from pathlib import Path
 from typing import Any, cast
 
 import pytest
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from agents.memory.beliefs import ContradictionRef
 from agents.memory.episodic import EpisodicEvent
 from agents.memory.store import (
     DEFAULT_TOKEN_BUDGET,
+    ENV_SELF_LOCATION_TRAIL,
     ENV_TASK_COMPLETION_FROM_EVENTS,
+    SELF_LOCATION_TRAIL_MAX_SPANS,
     AgentMemory,
     render_for_prompt,
+    self_location_trail_enabled,
     task_completion_from_events_enabled,
 )
 from eval.leak_test import (
@@ -71,12 +76,17 @@ def _self_state_event(
     fellow_impostor_ids: tuple[str, ...] | None = None,
     owned_task_ids: tuple[str, ...] | None = None,
     observation_id: str | None = None,
+    in_vent: bool | None = None,
 ) -> EpisodicEvent:
     payload: dict[str, Any] = {
         "room": room,
         "role": role,
         "pending_task_id": pending_task_id,
     }
+    # ``in_vent`` rides the same privileged self channel; only added when supplied
+    # so every existing fixture renders byte-identically.
+    if in_vent is not None:
+        payload["in_vent"] = in_vent
     # ``owned_task_ids`` is added only when supplied, so a fixture can still
     # express a pre-widening row that carries no set at all.
     if owned_task_ids is not None:
@@ -1636,3 +1646,596 @@ class TestMovementPerceptionRender:
         view = render_for_prompt(memory)
 
         _scan_rendered_view(view)
+
+
+# --------------------------------------------------------------------------- #
+# The self-location trail (AILIBI_SELF_LOCATION_TRAIL, default-OFF).           #
+# --------------------------------------------------------------------------- #
+
+_TRAIL_ON: Mapping[str, str] = {ENV_SELF_LOCATION_TRAIL: "1"}
+_TRAIL_OFF: Mapping[str, str] = {ENV_SELF_LOCATION_TRAIL: "0"}
+_TRAIL_HEADER = "## Where you were:"
+_TRAIL_TRUNCATED = "- Earlier parts of your route are not listed."
+_TRAIL_ROUTE_PREFIX = "- Your route (t = tick): "
+_TRAIL_GAP_STEP = "(no record)"
+_OBS_ID_IN_VIEW = re.compile(r"\[obs ([^\]]+)\]")
+
+
+def _meeting_boundary_event(*, tick: int) -> EpisodicEvent:
+    return EpisodicEvent(
+        tick=tick,
+        type="meeting_boundary",
+        payload={},
+        provenance="inferred",
+    )
+
+
+def _trail_steps(view: str) -> list[tuple[int, int, str]]:
+    """The rendered route parsed back into ``(start, end, where)`` steps.
+
+    Reading the line the way a model would -- split the chain, then read each
+    step's place and tick range -- is what makes the assertions below check the
+    route's SEMANTICS rather than one formatting string. ``(no record)`` steps
+    claim nothing and are dropped here.
+    """
+
+    steps: list[tuple[int, int, str]] = []
+    for line in view.splitlines():
+        if not line.startswith(_TRAIL_ROUTE_PREFIX):
+            continue
+        for step in line[len(_TRAIL_ROUTE_PREFIX) :].split(" -> "):
+            if step == _TRAIL_GAP_STEP:
+                continue
+            where, _, ticks = step.rpartition(" ")
+            assert ticks.startswith("t"), f"unreadable route step {step!r}"
+            start, _, end = ticks[1:].partition("-")
+            steps.append((int(start), int(end or start), where))
+    return steps
+
+
+def _trail_ticks(view: str) -> list[int]:
+    """Every tick the rendered trail claims, oldest first."""
+
+    return [
+        tick for start, end, _ in _trail_steps(view) for tick in range(start, end + 1)
+    ]
+
+
+def _trail_block(view: str) -> list[str]:
+    lines = view.splitlines()
+    start = lines.index(_TRAIL_HEADER)
+    end = start + 1
+    while end < len(lines) and lines[end].startswith("- "):
+        end += 1
+    return lines[start:end]
+
+
+def _walk(*rows: tuple[int, str]) -> AgentMemory:
+    """A memory holding one ``self_state`` row per (tick, room) pair."""
+
+    memory = AgentMemory()
+    for tick, room in rows:
+        memory.episodic.append(_self_state_event(tick=tick, room=room, agent_id="p-1"))
+    return memory
+
+
+class TestSelfLocationTrailLever:
+    """The agent's own route, rendered from its own record (default-OFF lever).
+
+    Every test toggles the lever through the ``env`` mapping rather than
+    ``os.environ``, so the suite stays parallel-safe.
+    """
+
+    def test_lever_defaults_off_and_reads_the_env_mapping(self) -> None:
+        assert self_location_trail_enabled() is False
+        assert self_location_trail_enabled({}) is False
+        for falsy in ("", "0", "off", "no", "maybe", "trail"):
+            assert (
+                self_location_trail_enabled({ENV_SELF_LOCATION_TRAIL: falsy}) is False
+            )
+        for truthy in ("1", "true", "TRUE", "Yes", " on "):
+            assert (
+                self_location_trail_enabled({ENV_SELF_LOCATION_TRAIL: truthy}) is True
+            )
+
+    @pytest.mark.parametrize(
+        "fixture_name",
+        ["crewmate_basic", "tight_budget_drops_low_salience", "impostor_minimal"],
+    )
+    def test_off_path_fixtures_are_byte_identical(self, fixture_name: str) -> None:
+        fixture, expected = _load_fixture(fixture_name)
+        memory = _build_memory_from_fixture(fixture)
+        budget = int(fixture["token_budget"])
+
+        for env in (None, {}, _TRAIL_OFF):
+            rendered = render_for_prompt(memory, token_budget=budget, env=env)
+            assert rendered == expected, f"{fixture_name} moved with env={env!r}"
+
+    def test_the_off_path_identity_assertion_bites(self) -> None:
+        # The perturbation craft rule 2 asks for: one altered byte in the
+        # expectation must fail the comparison the test above makes.
+        fixture, expected = _load_fixture("crewmate_basic")
+        memory = _build_memory_from_fixture(fixture)
+        perturbed = expected.replace("## Your role:", "## Your ROLE:", 1)
+
+        assert perturbed != expected
+        assert (
+            render_for_prompt(memory, token_budget=int(fixture["token_budget"]))
+            != perturbed
+        )
+
+    def test_render_matches_the_trail_golden(self) -> None:
+        fixture, expected = _load_fixture("self_location_trail")
+        memory = _build_memory_from_fixture(fixture)
+
+        rendered = render_for_prompt(
+            memory, token_budget=int(fixture["token_budget"]), env=_TRAIL_ON
+        )
+
+        assert rendered == expected, (
+            f"---- expected ----\n{expected}---- rendered ----\n{rendered}"
+        )
+        # The gate bites: the same fixture rendered with the lever OFF is a
+        # different document, and it is the one that mis-rooms the completion.
+        off = render_for_prompt(memory, token_budget=int(fixture["token_budget"]))
+        assert off != expected
+        assert "[tick 9] You completed start_reactor (you were in EAST_HALL)." in off
+
+    def test_adjacent_ticks_in_one_room_coalesce_and_a_lone_tick_stands_alone(
+        self,
+    ) -> None:
+        memory = _walk((12, "REACTOR"), (13, "REACTOR"), (14, "REACTOR"), (17, "ADMIN"))
+
+        view = render_for_prompt(memory, env=_TRAIL_ON)
+
+        assert _trail_block(view) == [
+            _TRAIL_HEADER,
+            "- Your route (t = tick): REACTOR t12-14 -> (no record) -> ADMIN t17",
+        ]
+        assert _trail_steps(view) == [(12, 14, "REACTOR"), (17, 17, "ADMIN")]
+
+    def test_a_gap_in_the_record_breaks_a_span(self) -> None:
+        # Tick 14 was never recorded, so the trail may not claim it: two steps
+        # with the gap stated between them, not one 13-15 range across a tick the
+        # agent has no row for.
+        memory = _walk((13, "REACTOR"), (15, "REACTOR"))
+
+        view = render_for_prompt(memory, env=_TRAIL_ON)
+
+        assert _trail_block(view) == [
+            _TRAIL_HEADER,
+            "- Your route (t = tick): REACTOR t13 -> (no record) -> REACTOR t15",
+        ]
+        assert 14 not in _trail_ticks(view)
+
+    def test_a_meeting_boundary_does_not_break_a_span(self) -> None:
+        # A meeting freezes movement (DESIGN.md §5.1), so the resume tick's room
+        # continues the pre-meeting span -- the one place this walk deliberately
+        # differs from the OTHERS-sighting transition walk, which must break here.
+        memory = _walk((13, "REACTOR"), (14, "REACTOR"))
+        memory.episodic.append(_meeting_boundary_event(tick=14))
+
+        view = render_for_prompt(memory, env=_TRAIL_ON)
+
+        assert _trail_block(view) == [
+            _TRAIL_HEADER,
+            "- Your route (t = tick): REACTOR t13-14",
+        ]
+        assert "p-" not in _trail_block(view)[1]
+
+    def test_the_block_sits_between_the_fixed_lines_and_the_observations(self) -> None:
+        memory = _walk((4, "REACTOR"))
+        memory.episodic.append(_global_status_event(tick=4, completed=1, total=9))
+        memory.episodic.append(
+            _saw_player_event(tick=4, player_id="p-3", room="REACTOR", action=None)
+        )
+
+        view = render_for_prompt(memory, env=_TRAIL_ON)
+
+        assert view.startswith("## Your role: CREWMATE\n")
+        assert view.index("## Tasks completed") < view.index(_TRAIL_HEADER)
+        assert view.index(_TRAIL_HEADER) < view.index("## Recent observations")
+
+    def test_the_trail_renders_for_every_role_and_marks_vent_ticks(self) -> None:
+        def _memory(role: str) -> AgentMemory:
+            memory = AgentMemory()
+            memory.episodic.append(
+                _self_state_event(tick=6, role=role, room="ELECTRICAL", agent_id="p-1")
+            )
+            memory.episodic.append(
+                _self_state_event(
+                    tick=7,
+                    role=role,
+                    room="ELECTRICAL",
+                    agent_id="p-1",
+                    in_vent=True,
+                )
+            )
+            return memory
+
+        crew = render_for_prompt(_memory("CREWMATE"), env=_TRAIL_ON)
+        impostor = render_for_prompt(_memory("IMPOSTOR"), env=_TRAIL_ON)
+
+        for view in (crew, impostor):
+            # Entering the vent breaks the span: the two ticks are not the same
+            # placement, and an in-vent step says so inline rather than reading as
+            # an ordinary room stay.
+            assert _trail_block(view) == [
+                _TRAIL_HEADER,
+                "- Your route (t = tick): ELECTRICAL t6 -> a vent in ELECTRICAL t7",
+            ]
+            assert _trail_steps(view) == [
+                (6, 6, "ELECTRICAL"),
+                (7, 7, "a vent in ELECTRICAL"),
+            ]
+
+    def test_trail_lines_carry_no_ids_and_every_rendered_id_is_the_store_s(
+        self,
+    ) -> None:
+        memory = AgentMemory()
+        memory.episodic.append(
+            _self_state_event(
+                tick=3, room="ADMIN", agent_id="p-1", observation_id="p-1:3:0"
+            )
+        )
+        memory.episodic.append(
+            _self_state_event(
+                tick=4, room="MEDBAY", agent_id="p-1", observation_id="p-1:4:0"
+            )
+        )
+        memory.episodic.append(
+            EpisodicEvent(
+                tick=4,
+                type="saw_player",
+                payload={"player_id": "p-3", "room": "MEDBAY", "action": None},
+                provenance="observed",
+                observation_id="p-1:4:1",
+            )
+        )
+
+        view = render_for_prompt(memory, env=_TRAIL_ON)
+
+        own_ids = {
+            event.observation_id
+            for event in memory.episodic.recent(since_tick=0)
+            if event.observation_id is not None
+        }
+        rendered_ids = set(_OBS_ID_IN_VIEW.findall(view))
+        # The same set ``meetings.manager._normalize_ballot_observation_id``
+        # validates a ballot citation against: nothing rendered may fall outside it.
+        assert rendered_ids and rendered_ids <= own_ids
+        assert all("[obs " not in line for line in _trail_block(view)[1:])
+
+    def test_the_cap_drops_the_oldest_spans_and_says_so_in_plain_english(self) -> None:
+        rows = [(tick, f"ROOM_{tick}") for tick in range(40)]
+        memory = _walk(*rows)
+
+        view = render_for_prompt(memory, env=_TRAIL_ON, token_budget=8000)
+
+        block = _trail_block(view)
+        notice = _TRAIL_TRUNCATED
+        assert block[1] == notice
+        assert len(block) == 3
+        steps = _trail_steps(view)
+        assert len(steps) == SELF_LOCATION_TRAIL_MAX_SPANS
+        # The RECENT route survives; the far end is what went.
+        assert steps[-1] == (39, 39, "ROOM_39")
+        assert (0, 0, "ROOM_0") not in steps
+        # Craft rule 4: the truncation line carries no ids and no arithmetic.
+        assert not any(char.isdigit() for char in notice)
+        assert "obs" not in notice
+
+    def test_a_tight_budget_sheds_the_oldest_trail_steps_not_the_newest(
+        self,
+    ) -> None:
+        walk = [(tick, f"ROOM_{tick}") for tick in range(10, 22)]
+        memory = AgentMemory()
+        for tick, room in walk:
+            memory.episodic.append(
+                _self_state_event(tick=tick, room=room, agent_id="p-1")
+            )
+            memory.episodic.append(
+                _saw_player_event(
+                    tick=tick, player_id=f"p-{tick}", room=room, action=None
+                )
+            )
+        memory.episodic.append(_global_status_event(tick=21, completed=1, total=9))
+        full = [(tick, tick, room) for tick, room in walk]
+
+        seen_shed = False
+        for budget in range(20, 260):
+            view = render_for_prompt(memory, token_budget=budget, env=_TRAIL_ON)
+            # The block never overflows the budget onto anything else.
+            assert _estimate_tokens_of(view) <= budget
+            if _TRAIL_HEADER not in view:
+                continue
+            block = _trail_block(view)
+            steps = _trail_steps(view)
+            # Whatever survives is the RECENT end of the route, and a shortened
+            # route always says so.
+            assert steps == full[len(full) - len(steps) :]
+            if len(steps) < len(full):
+                seen_shed = True
+                assert _TRAIL_TRUNCATED in block
+        # The gate bites only if the shedding branch was actually exercised.
+        assert seen_shed
+
+    def test_a_malformed_in_vent_row_raises_instead_of_placing_the_agent(
+        self,
+    ) -> None:
+        # AGENTS.md "no silent fallbacks", and the same boundary-contract rule the
+        # tactical reader applies: an absent flag means "not in a vent", a
+        # present-but-non-bool one is a wiring bug, not a room stay.
+        memory = AgentMemory()
+        memory.episodic.append(
+            _self_state_event(tick=5, room="ADMIN", agent_id="p-1", in_vent=True)
+        )
+        assert "a vent in ADMIN" in render_for_prompt(memory, env=_TRAIL_ON)
+
+        # An absent key is the pre-11.1 shape and means "not in a vent"; a
+        # present one must be a bool, explicit null included.
+        for malformed in ("yes", None, 1):
+            broken = AgentMemory()
+            broken.episodic.append(
+                EpisodicEvent(
+                    tick=5,
+                    type="self_state",
+                    payload={
+                        "room": "ADMIN",
+                        "role": "CREWMATE",
+                        "in_vent": malformed,
+                    },
+                    provenance="observed",
+                )
+            )
+
+            with pytest.raises(ValueError, match="non-bool in_vent"):
+                render_for_prompt(broken, env=_TRAIL_ON)
+
+    def test_the_completed_task_line_is_dated_and_placed_by_one_row(self) -> None:
+        memory = AgentMemory()
+        memory.episodic.append(
+            _self_state_event(tick=20, room="EAST_HALL", pending_task_id="wiring")
+        )
+        memory.episodic.append(
+            _self_state_event(tick=21, room="ADMIN", pending_task_id="swipe_card")
+        )
+
+        on = render_for_prompt(memory, env=_TRAIL_ON)
+        off = render_for_prompt(memory)
+
+        assert "[tick 21] You completed wiring (you were in ADMIN)." in on
+        # The gate bites: the roll-forward names the room the agent had left.
+        assert "[tick 21] You completed wiring (you were in EAST_HALL)." in off
+
+    def test_the_owned_set_branch_is_placed_by_the_same_row(self) -> None:
+        # The 20.23 lever's branch reads the same room, so the two completion
+        # rules cannot disagree about where the agent was.
+        memory = AgentMemory()
+        memory.episodic.append(
+            _self_state_event(
+                tick=20,
+                room="EAST_HALL",
+                pending_task_id="wiring",
+                owned_task_ids=("swipe_card", "wiring"),
+            )
+        )
+        memory.episodic.append(
+            _self_state_event(
+                tick=21,
+                room="ADMIN",
+                pending_task_id="swipe_card",
+                owned_task_ids=("swipe_card",),
+            )
+        )
+
+        view = render_for_prompt(
+            memory,
+            env={ENV_SELF_LOCATION_TRAIL: "1", ENV_TASK_COMPLETION_FROM_EVENTS: "1"},
+        )
+
+        assert "[tick 21] You completed wiring (you were in ADMIN)." in view
+
+    def test_the_completion_row_is_placed_by_the_row_that_stamps_its_citation(
+        self,
+    ) -> None:
+        # Same-tick rows are not a production shape (perception writes one
+        # self_state per packet). Where they agree about the room, each completion
+        # still names the room of the row whose observation_id it carries, and the
+        # route says the same thing.
+        memory = AgentMemory()
+        memory.episodic.append(
+            _self_state_event(
+                tick=1,
+                room="EAST_HALL",
+                pending_task_id="wiring",
+                observation_id="p-1:1:0",
+            )
+        )
+        memory.episodic.append(
+            _self_state_event(
+                tick=2,
+                room="ADMIN",
+                pending_task_id="swipe_card",
+                observation_id="p-1:2:0",
+            )
+        )
+        memory.episodic.append(
+            _self_state_event(
+                tick=2,
+                room="ADMIN",
+                pending_task_id="submit_scan",
+                observation_id="p-1:2:1",
+            )
+        )
+
+        view = render_for_prompt(memory, env=_TRAIL_ON)
+
+        assert (
+            "[obs p-1:2:0] [tick 2] You completed wiring (you were in ADMIN)." in view
+        )
+        assert (
+            "[obs p-1:2:1] [tick 2] You completed swipe_card (you were in ADMIN)."
+            in view
+        )
+        _assert_completions_agree_with_the_trail(view)
+
+    def test_same_tick_rows_that_disagree_raise_instead_of_splitting_the_evidence(
+        self,
+    ) -> None:
+        # The route has no sub-tick step, so two rows that put the agent in two
+        # rooms at one tick cannot both be rendered: collapsing them would let a
+        # completion placed by its own row name ADMIN while the route says MEDBAY,
+        # in the same prompt (AGENTS.md "no silent fallbacks").
+        memory = AgentMemory()
+        memory.episodic.append(
+            _self_state_event(
+                tick=2,
+                room="ADMIN",
+                pending_task_id="swipe_card",
+                observation_id="p-1:2:0",
+            )
+        )
+        memory.episodic.append(
+            _self_state_event(
+                tick=2,
+                room="MEDBAY",
+                pending_task_id="submit_scan",
+                observation_id="p-1:2:1",
+            )
+        )
+
+        for env in (_TRAIL_ON, None):
+            with pytest.raises(ValueError, match="disagree about tick 2"):
+                render_for_prompt(memory, env=env)
+
+    def test_the_completed_task_room_agrees_with_the_trail_for_its_tick(self) -> None:
+        fixture, _ = _load_fixture("self_location_trail")
+        memory = _build_memory_from_fixture(fixture)
+
+        view = render_for_prompt(memory, env=_TRAIL_ON)
+
+        _assert_completions_agree_with_the_trail(view)
+
+    def test_the_trail_view_passes_the_canonical_leak_scanners(self) -> None:
+        memory = AgentMemory()
+        memory.episodic.append(
+            _self_state_event(
+                tick=6, role="IMPOSTOR", room="ELECTRICAL", agent_id="p-1"
+            )
+        )
+        memory.episodic.append(
+            _self_state_event(
+                tick=7, role="IMPOSTOR", room="ELECTRICAL", agent_id="p-1", in_vent=True
+            )
+        )
+        memory.beliefs.adjust_suspicion("p-3", delta=0.4)
+
+        view = render_for_prompt(memory, env=_TRAIL_ON)
+
+        assert _TRAIL_HEADER in view
+        _scan_rendered_view(view)
+
+
+def _estimate_tokens_of(text: str) -> int:
+    """Mirror ``agents.memory.store._estimate_tokens`` (the budget arithmetic)."""
+
+    if not text:
+        return 0
+    return (len(text) + 3) // 4
+
+
+_COMPLETED_LINE = re.compile(
+    r"\[tick (?P<tick>\d+)\] You completed \S+ \(you were in (?P<room>[^)]+)\)\."
+)
+
+
+def _assert_completions_agree_with_the_trail(view: str) -> None:
+    """Every completion line names the room the trail gives for the tick it states."""
+
+    rooms_by_tick: dict[int, str] = {}
+    for start, end, where in _trail_steps(view):
+        for tick in range(start, end + 1):
+            rooms_by_tick[tick] = where
+    for match in _COMPLETED_LINE.finditer(view):
+        tick = int(match.group("tick"))
+        stated = rooms_by_tick.get(tick)
+        if stated is None:
+            # The route was cut back past this tick (and the block says so, or
+            # the budget took the whole block): showing nothing is not a
+            # contradiction, and the line is still placed by its own row.
+            assert _TRAIL_TRUNCATED in view or _TRAIL_HEADER not in view, (
+                f"the trail is silent about tick {tick} without saying so:\n{view}"
+            )
+            continue
+        assert stated == match.group("room"), (
+            f"completion at tick {tick} disagrees with the trail:\n{view}"
+        )
+
+
+# One ``self_state`` row per tick is the production invariant: perception writes
+# exactly one per ingested packet (``agents.perception.ingest_packet``), which is
+# what lets the trail's per-tick record and the completion line's own row be the
+# same answer.
+_TRAIL_TICKS = st.lists(
+    st.tuples(
+        st.integers(min_value=0, max_value=40),
+        st.sampled_from(["REACTOR", "ADMIN", "MEDBAY", "EAST_HALL"]),
+    ),
+    max_size=24,
+    unique_by=lambda row: row[0],
+)
+
+
+class TestSelfLocationTrailProperties:
+    """Generated event streams: the spans partition exactly the recorded ticks."""
+
+    @settings(max_examples=120)
+    @given(rows=_TRAIL_TICKS)
+    def test_spans_partition_the_recorded_ticks_exactly(
+        self, rows: list[tuple[int, str]]
+    ) -> None:
+        memory = AgentMemory()
+        recorded: dict[int, str] = {}
+        for tick, room in sorted(rows):
+            memory.episodic.append(
+                _self_state_event(tick=tick, room=room, agent_id="p-1")
+            )
+            recorded[tick] = room
+        if not recorded:
+            return
+
+        view = render_for_prompt(memory, env=_TRAIL_ON, token_budget=8000)
+
+        claimed = _trail_ticks(view)
+        # No overlap, oldest first, and nothing outside the recorded set.
+        assert claimed == sorted(claimed)
+        assert len(claimed) == len(set(claimed))
+        assert set(claimed) <= set(recorded)
+        # Nothing may go missing unless the render SAID the route was cut.
+        if _TRAIL_TRUNCATED not in view:
+            assert set(claimed) == set(recorded)
+        for start, end, where in _trail_steps(view):
+            assert {recorded[tick] for tick in range(start, end + 1)} == {where}
+
+    @settings(max_examples=120)
+    @given(rows=_TRAIL_TICKS)
+    def test_a_completion_line_never_disagrees_with_the_trail(
+        self, rows: list[tuple[int, str]]
+    ) -> None:
+        if not rows:
+            return
+        memory = AgentMemory()
+        for index, (tick, room) in enumerate(sorted(rows)):
+            memory.episodic.append(
+                _self_state_event(
+                    tick=tick,
+                    room=room,
+                    pending_task_id=f"task_{index % 3}",
+                    agent_id="p-1",
+                )
+            )
+
+        view = render_for_prompt(memory, env=_TRAIL_ON, token_budget=8000)
+
+        _assert_completions_agree_with_the_trail(view)
