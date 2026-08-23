@@ -1608,15 +1608,32 @@ def test_the_completed_task_row_names_the_engine_truth_room(
 _MOVEMENT_ON: Final[Mapping[str, str]] = {ENV_MOVEMENT_CLAIM_SHAPE: "1"}
 
 
-def _move_witness_records(memory: MemoryStore) -> tuple[MoveWitnessRecord, ...]:
-    """One speaker's witnessed transitions, the way the live accessor reads them."""
+def _move_witness_records(
+    memory: MemoryStore, *, speaker: PlayerId, roles: Mapping[PlayerId, str]
+) -> tuple[MoveWitnessRecord, ...]:
+    """One speaker's witnessed transitions, the way the live accessor reads them.
 
+    Including the §4.7 teammate guard the accessor applies
+    (``TacticalAgent.move_witness_records_for_meeting``): an impostor's records
+    naming a fellow impostor never reach the meeting layer, so this census
+    measures the channel production actually feeds rather than a wider one.
+    """
+
+    fellows = (
+        frozenset(
+            pid for pid, role in roles.items() if role == "IMPOSTOR" and pid != speaker
+        )
+        if roles.get(speaker) == "IMPOSTOR"
+        else frozenset()
+    )
     records: list[MoveWitnessRecord] = []
     for event in memory.recent(since_tick=0):
         if (
             event.type != EVENT_SAW_PLAYER_MOVE
             or event.provenance != PROVENANCE_OBSERVED
         ):
+            continue
+        if event.payload.get("player_id") in fellows:
             continue
         subject = event.payload.get("player_id")
         from_room = event.payload.get("from_room")
@@ -1781,7 +1798,10 @@ def _movement_census(sample_dir: Path) -> _MovementCensus:
                     )
                     roster = frozenset(ballot.voter for ballot in entry.ballots)
                     moves = {
-                        pid: _move_witness_records(memories[pid]) for pid in living
+                        pid: _move_witness_records(
+                            memories[pid], speaker=pid, roles=roles
+                        )
+                        for pid in living
                     }
                     vents = {
                         pid: _vent_witness_records(memories[pid]) for pid in living
@@ -1953,6 +1973,34 @@ def movement() -> Mapping[Path, _MovementCensus]:
             )
         }
     )
+
+
+def test_the_movement_channel_drops_an_impostors_teammate_transitions() -> None:
+    # The §4.7 guard the live accessor applies, mirrored here so the census
+    # measures the channel production feeds. Re-indexing can mint a flag, so a
+    # transition the render hides from an impostor must not place its partner
+    # through this channel instead. Crew keep every row.
+    memory = MemoryStore()
+    for seq, subject in enumerate(("p-2", "p-3")):
+        memory.append(
+            EpisodicEvent(
+                tick=3,
+                type=EVENT_SAW_PLAYER_MOVE,
+                payload={
+                    "player_id": subject,
+                    "from_room": "MEDBAY",
+                    "to_room": "LABS",
+                },
+                provenance=PROVENANCE_OBSERVED,
+                observation_id=f"p-1:3:{seq}",
+            )
+        )
+    roles = {"p-1": "IMPOSTOR", "p-2": "IMPOSTOR", "p-3": "CREWMATE"}
+
+    impostor = _move_witness_records(memory, speaker="p-1", roles=roles)
+    assert [record.subject for record in impostor] == ["p-3"]
+    crewmate = _move_witness_records(memory, speaker="p-3", roles=roles)
+    assert [record.subject for record in crewmate] == ["p-2", "p-3"]
 
 
 def test_the_origin_reading_bites_on_a_destination_spoken_flag() -> None:

@@ -2895,18 +2895,32 @@ class TacticalAgent:
         channel the meeting layer grounds against and the prose the model speaks
         from cannot drift.
 
+        The §4.7 TEAMMATE firewall is applied here, not inherited. Re-indexing a
+        placement can mint a contradiction the meeting did not have, so a
+        transition the §6.6 render deliberately hides from an impostor -- a
+        teammate's transit at a kill room/tick, dropped by
+        ``_sighting_is_suppressed`` so the impostor cannot narrate its own
+        partner at the scene -- must not reach the meeting layer through this
+        channel and place that partner anyway. The guard here is broader than
+        the render's kill-window rule: an impostor's records naming a FELLOW
+        IMPOSTOR are dropped outright (the same shape
+        :meth:`kill_witness_records_for_meeting` uses), which contains the
+        own-goal class without this accessor having to reconstruct the render's
+        body-sighting inputs, and costs nothing real -- a dropped record only
+        means that placement is read exactly as the impostor spoke it. The
+        fellow set is this agent's own
+        (:meth:`_fellow_impostor_ids_from_store`); it is empty for every
+        crewmate and a sole impostor, so the crew path drops nothing.
+
         Firewall-clean: every row was witness-gated by the engine before it
         reached this agent's packet (``eval/leak_test.py``), and the accessor
-        reports only this agent's own log. Unlike the §6.6 render this applies
-        no teammate suppression, which is safe for the one consumer: grounding
-        can only ever re-read a placement the speaker already stated, never mint
-        a flag of its own, and a record never reaches a prompt or the recorded
-        ``MeetingResult``. Payload reads are defensive per the store convention
-        -- a malformed row contributes nothing. Append order is non-decreasing
-        in tick (the episodic-store invariant), so the returned tuple is
-        deterministic and tick-sorted.
+        reports only this agent's own log. Payload reads are defensive per the
+        store convention -- a malformed row contributes nothing. Append order is
+        non-decreasing in tick (the episodic-store invariant), so the returned
+        tuple is deterministic and tick-sorted.
         """
 
+        fellows = self._fellow_impostor_ids_from_store()
         records: list[MoveWitnessRecord] = []
         for event in self._memory.episodic.recent(since_tick=0):
             if event.type != EVENT_SAW_PLAYER_MOVE:
@@ -2914,6 +2928,8 @@ class TacticalAgent:
             if event.provenance != PROVENANCE_OBSERVED:
                 continue
             player_id = event.payload.get("player_id")
+            if player_id in fellows or player_id == self.agent_id:
+                continue
             from_room = event.payload.get("from_room")
             to_room = event.payload.get("to_room")
             if (

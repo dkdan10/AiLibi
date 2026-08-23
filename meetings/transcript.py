@@ -2374,13 +2374,8 @@ def _movement_destination(
 
     if not spoken_rooms:
         return None
-    at_tick = tuple(
-        record
-        for record in records
-        if record.subject == subject
-        and abs(record.tick - tick) <= MOVE_GROUNDING_TICK_TOLERANCE
-    )
-    if len({canonical_rooms(record.to_room) for record in at_tick}) > 1:
+    at_tick = _records_at_tick(records, subject=subject, tick=tick)
+    if _destinations_conflict(at_tick):
         return None
     destinations: dict[frozenset[str], RoomId] = {}
     for record in at_tick:
@@ -2393,6 +2388,32 @@ def _movement_destination(
     if len(destinations) != 1:
         return None
     return next(iter(destinations.values()))
+
+
+def _records_at_tick(
+    records: tuple[MoveWitnessRecord, ...], *, subject: PlayerId, tick: int
+) -> tuple[MoveWitnessRecord, ...]:
+    """The speaker's records naming ``subject`` at ``tick``."""
+
+    return tuple(
+        record
+        for record in records
+        if record.subject == subject
+        and abs(record.tick - tick) <= MOVE_GROUNDING_TICK_TOLERANCE
+    )
+
+
+def _destinations_conflict(records: tuple[MoveWitnessRecord, ...]) -> bool:
+    """Whether these records disagree about where the subject landed.
+
+    Engine truth forbids two transitions of one subject landing on one tick, so
+    a channel that says otherwise is wrong about something and neither arm may
+    take a destination from it. Both arms consult this BEFORE matching, so an
+    invalid channel cannot resolve through whichever record happens to fit the
+    spoken rooms.
+    """
+
+    return len({canonical_rooms(record.to_room) for record in records}) > 1
 
 
 def _move_observation_matches_record(
@@ -2436,7 +2457,10 @@ def _iter_move_placements(
     not placed at ``tick - 1``; see
     :class:`~meetings.schemas.SawMoveObservation`. An UNGROUNDED transition (no
     matching record in the speaker's own channel) is ordinary testimony and
-    places nobody.
+    places nobody, and a channel whose records disagree about the destination
+    (:func:`_destinations_conflict`) grounds nothing here either -- the same
+    adjudication the resolution arm applies, so one invalid channel cannot be
+    trusted by one arm and distrusted by the other.
     """
 
     for turn in transcript.turns:
@@ -2448,9 +2472,14 @@ def _iter_move_placements(
                 continue
             if not _subject_in_roster(observation.subject, roster):
                 continue
+            at_tick = _records_at_tick(
+                records, subject=observation.subject, tick=observation.tick
+            )
+            if _destinations_conflict(at_tick):
+                continue
             if not any(
                 _move_observation_matches_record(observation, record)
-                for record in records
+                for record in at_tick
             ):
                 continue
             yield _IndexedSighting(
