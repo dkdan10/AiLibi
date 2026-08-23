@@ -2635,18 +2635,18 @@ def test_the_grounded_lever_prices_the_prosecution_class(
     """What the STRONG ``alibi_vs_sighting`` class becomes, in both directions."""
 
     sets = (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I)
-    # Direction 1 — what stops being minted. 234 STRONG flags survive as 13.
+    # Direction 1 — what stops being minted. 234 STRONG flags survive as 10.
     per_set = [grounded[d].strong_grounded for d in sets]
-    assert per_set == [1, 12, 0, 0]
-    assert sum(per_set) == 13
+    assert per_set == [0, 10, 0, 0]
+    assert sum(per_set) == 10
     # Direction 2 — what the class looks like after: every surviving sighting
     # side is supported by the speaker's own recorded perception.
     sides = sum(grounded[d].surviving_sides for d in sets)
-    assert (sides, sum(grounded[d].surviving_sides_grounded for d in sets)) == (13, 13)
+    assert (sides, sum(grounded[d].surviving_sides_grounded for d in sets)) == (10, 10)
     # The pre-record proxy for precision, QUOTED not gated: the class named 33
     # impostors out of 192 distinct subjects (17.2%, below the 25.3% base rate of
-    # living voters); of the 6 subjects it still names, 1 is an impostor. n=6 is
-    # far too small to read as precision — the record is what measures that.
+    # living voters); the 4 subjects it still names are all crewmates. n=4 is far
+    # too small to read as precision — the record is what measures that.
     assert (
         sum(grounded[d].off_subjects for d in sets),
         sum(grounded[d].off_subject_impostors for d in sets),
@@ -2654,7 +2654,7 @@ def test_the_grounded_lever_prices_the_prosecution_class(
     assert (
         sum(grounded[d].grounded_subjects for d in sets),
         sum(grounded[d].grounded_subject_impostors for d in sets),
-    ) == (6, 1)
+    ) == (4, 0)
     # The scope firewall: only alibi_vs_sighting moves.
     for sample_dir in sets:
         cell = grounded[sample_dir]
@@ -2678,22 +2678,22 @@ def test_the_grounded_lever_composed_with_the_movement_lever(
     """The slate the record runs: both Phase-20 detector levers together."""
 
     sets = (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I)
-    # 268 STRONG with the movement lever alone; 16 with both. The three extra
-    # survivors over the grounded-alone 13 rest on placements the movement lever
+    # 268 STRONG with the movement lever alone; 12 with both. The two extra
+    # survivors over the grounded-alone 10 rest on placements the movement lever
     # re-read to their destination — the grounded-by-construction exemption is
     # what keeps them rather than demoting the lever's own dependency.
-    assert sum(grounded[d].strong_both for d in sets) == 16
-    assert sum(grounded[d].strong_grounded for d in sets) == 13
+    assert sum(grounded[d].strong_both for d in sets) == 12
+    assert sum(grounded[d].strong_grounded for d in sets) == 10
     both_sides = sum(grounded[d].both_surviving_sides for d in sets)
     both_grounded = sum(grounded[d].both_surviving_sides_grounded for d in sets)
-    # Every one of the 16 spoken sighting sides is supported by the speaker's own
-    # perception record; the three the grounded-alone leg does not carry are
-    # flags the movement lever mints on placements it re-read to the destination.
-    assert (both_sides, both_grounded) == (16, 16)
+    # Every one of the 12 spoken sighting sides is supported by the speaker's own
+    # perception record; the two the grounded-alone leg does not carry are flags
+    # the movement lever mints on placements it re-read to the destination.
+    assert (both_sides, both_grounded) == (12, 12)
     assert (
         sum(grounded[d].both_subjects for d in sets),
         sum(grounded[d].both_subject_impostors for d in sets),
-    ) == (8, 1)
+    ) == (5, 0)
     for sample_dir in sets:
         cell = grounded[sample_dir]
         for band in _UNTOUCHED_BANDS:
@@ -2713,7 +2713,7 @@ def test_the_sole_flag_wrongful_ejections_lose_their_strong_flag(
     # alone, 12 of them impostors — so 70 crewmates.
     assert (victims, impostors) == (82, 12)
     assert victims - impostors == 70
-    # Under the lever, 4 of those 70 innocents still carry a STRONG flag of this
-    # class; 66 do not. With the movement lever also on, 5 do.
-    assert sum(grounded[d].sole_crewmate_still_strong_grounded for d in sets) == 4
-    assert sum(grounded[d].sole_crewmate_still_strong_both for d in sets) == 5
+    # Under the lever, 3 of those 70 innocents still carry a STRONG flag of this
+    # class; 67 do not. With the movement lever also on, 4 do.
+    assert sum(grounded[d].sole_crewmate_still_strong_grounded for d in sets) == 3
+    assert sum(grounded[d].sole_crewmate_still_strong_both for d in sets) == 4

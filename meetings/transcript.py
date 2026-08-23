@@ -4002,8 +4002,16 @@ def _apply_grounded_prosecution(
         if candidate is None:
             banded.append(flag)
             continue
-        key, sighting_id = candidate
-        carriers = sources[key] | anchors.get(key[0], set())
+        subject, claim_id = key
+        _, sighting_id = candidate
+        # The alibi's own author is a party to the dispute, not a witness to it:
+        # excluded from the anchor half exactly as from the source half above.
+        claim_speaker = event_speakers.get(claim_id)
+        carriers = sources[key] | {
+            speaker
+            for speaker in anchors.get(subject, set())
+            if speaker != claim_speaker
+        }
         reasons: list[str] = []
         if not grounded[sighting_id]:
             reasons.append(WEAK_REASON_UNGROUNDED_SIGHTING)

@@ -2961,6 +2961,74 @@ class TestGroundedProsecutionRuleTwoSources:
         # construction.
         assert is_weak_contradiction(kinds["vent_sighting"]) is False
 
+    def _proxy_alibi_transcript(self, *, vent_speaker: str) -> MeetingTranscript:
+        # p-5 states a PROXY alibi for p-3, p-9 (grounded) contradicts it, and
+        # ``vent_speaker`` supplies a grounded vent of p-3 inside the claimed
+        # room (so only the vent_sighting anchor is in play).
+        return MeetingTranscript(
+            turns=(
+                _turn(
+                    turn_index=0,
+                    speaker="p-5",
+                    claims=(
+                        _alibi(subject="p-3", from_tick=4, to_tick=8, room="MEDBAY"),
+                    ),
+                    observations=(
+                        (_saw_vent(tick=6, subject="p-3", room="MEDBAY"),)
+                        if vent_speaker == "p-5"
+                        else ()
+                    ),
+                ),
+                _turn(
+                    turn_index=1,
+                    speaker="p-9",
+                    turn_kind="reply",
+                    observations=(_saw(tick=6, subject="p-3", room="LABS"),),
+                ),
+                _turn(
+                    turn_index=2,
+                    speaker="p-7",
+                    turn_kind="opt_in",
+                    observations=(
+                        (_saw_vent(tick=6, subject="p-3", room="MEDBAY"),)
+                        if vent_speaker == "p-7"
+                        else ()
+                    ),
+                ),
+            )
+        )
+
+    def test_the_contradicted_alibis_author_is_not_a_carrier(self) -> None:
+        # The author of the alibi under attack is a party to the dispute, not a
+        # witness to it — the same reason they are excluded from the source half.
+        tx = self._proxy_alibi_transcript(vent_speaker="p-5")
+        vents = {"p-5": (_vent_record(tick=6, subject="p-3", room="MEDBAY"),)}
+        flags = detect_contradictions(
+            tx,
+            roster=_ROSTER_4,
+            vent_witness_records=vents,
+            sighting_records=_grounding_records("p-9"),
+            env=_GROUNDED_ON,
+        )
+        kinds = {flag.kind: flag for flag in flags}
+        assert set(kinds) == {"alibi_vs_sighting", "vent_sighting"}
+        assert (
+            WEAK_REASON_LONE_GROUNDED_SOURCE in kinds["alibi_vs_sighting"].description
+        )
+        # The perturbation: the identical vent, spoken by an uninvolved player.
+        tx_third_party = self._proxy_alibi_transcript(vent_speaker="p-7")
+        third_party = detect_contradictions(
+            tx_third_party,
+            roster=_ROSTER_4,
+            vent_witness_records={
+                "p-7": (_vent_record(tick=6, subject="p-3", room="MEDBAY"),)
+            },
+            sighting_records=_grounding_records("p-9"),
+            env=_GROUNDED_ON,
+        )
+        sighting = next(f for f in third_party if f.kind == "alibi_vs_sighting")
+        assert is_weak_contradiction(sighting) is False
+
     def test_a_physical_anchor_from_another_speaker_carries_a_lone_source(
         self,
     ) -> None:
@@ -3901,7 +3969,7 @@ class TestGroundedProsecutionCommittedCensus:
         self, census: dict[str, _GroundedSetCensus]
     ) -> None:
         # Ground EVERY spoken sighting -- the most generous reading the lever can
-        # be given -- and 234 STRONG flags still come out as 22: the rest fall to
+        # be given -- and 234 STRONG flags still come out as 15: the rest fall to
         # rule (b) (one speaker is the whole prosecution) or rule (c) (the
         # one-tick self-placement is an edge again).
         strong = sum(
@@ -3912,9 +3980,12 @@ class TestGroundedProsecutionCommittedCensus:
             cell.bands_grounded.get("alibi_vs_sighting:weak", 0)
             for cell in census.values()
         )
-        assert (strong, weak) == (22, 291)
-        assert census["samples/9p2i"].bands_grounded["alibi_vs_sighting:strong"] == 2
-        assert census["ml_corpus/9p2i"].bands_grounded["alibi_vs_sighting:strong"] == 20
+        assert (strong, weak) == (15, 298)
+        assert (
+            census["samples/9p2i"].bands_grounded.get("alibi_vs_sighting:strong", 0)
+            == 0
+        )
+        assert census["ml_corpus/9p2i"].bands_grounded["alibi_vs_sighting:strong"] == 15
         for set_name in ("samples/4p1i", "ml_corpus/4p1i"):
             assert (
                 census[set_name].bands_grounded.get("alibi_vs_sighting:strong", 0) == 0
