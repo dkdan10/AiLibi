@@ -19,6 +19,7 @@ The impostor-targeting pins (free kills declined; ghost-top decisions) live in
 
 from __future__ import annotations
 
+import json
 import re
 import tempfile
 from collections import Counter
@@ -122,8 +123,11 @@ from eval.replay_walk import (
     TickOpened,
     walk_replay,
 )
+from eval.balance_eval import run_balance_eval
 from eval.validity import resolve_roster_knobs, roles_by_seed, seeds_on_disk
 from observation.service import ObservationService
+from agents.strategic.prompts.loader import ENV_PROMPT_SET
+from orchestrator.game import DEFAULT_TASKS_PER_CREWMATE
 from orchestrator.replay import LLMCallRecord, MeetingReplayEntry, read_all_entries
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -3337,3 +3341,67 @@ def test_the_band_change_not_the_fold_is_what_costs_first_hand_coverage(
     assert fold_only.covered_on == 39_012
     assert fold_only.covered_on > fold_only.covered_off
     assert render_budget.covered_on < fold_only.covered_on
+
+
+# ---------------------------------------------------------------------------
+# I-9 under the v4 prompt set (Task 20.31)
+# ---------------------------------------------------------------------------
+
+
+def _fresh_9p2i_replay_set(tmp_path: Path) -> Path:
+    """Record a small fake-provider 9p2i tournament and return its replay set.
+
+    The tournament writes ``replay-seed-N.jsonl`` alongside
+    ``replay-seed-N.audit.jsonl``; the fold reads a set directory whose only
+    seed files are replays, so the two are separated here. ``roster.json``
+    states the same knobs the run used, which is what lets the fold re-seed
+    and re-hash the games.
+    """
+
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    run_balance_eval(seeds=(0, 1), output_dir=raw, num_players=9, num_impostors=2)
+    replay_set = tmp_path / "fresh-9p2i"
+    replay_set.mkdir()
+    for path in sorted(raw.glob("replay-seed-*.jsonl")):
+        if path.name.endswith(".audit.jsonl"):
+            continue
+        (replay_set / path.name).write_bytes(path.read_bytes())
+    (replay_set / "roster.json").write_text(
+        json.dumps(
+            {
+                "num_players": 9,
+                "num_impostors": 2,
+                "tasks_per_crewmate": DEFAULT_TASKS_PER_CREWMATE,
+            }
+        ),
+        encoding="utf-8",
+    )
+    return replay_set
+
+
+def test_i9_singular_persona_is_zero_under_the_v4_prompt_set(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The committed baseline-6 bytes read 1956/1956 (the pin above): every
+    # recorded 9p2i prompt told a nine-player, TWO-impostor table that there
+    # was "a hidden impostor". Under the v4 set (Task 20.31) the persona is
+    # parameterised by the game's impostor count, so a freshly recorded 9p2i
+    # tournament reads 0/N on the same instrument, over the same phrase read
+    # out of the same committed templates.
+    monkeypatch.setenv(ENV_PROMPT_SET, "qwen3_6_27b")
+    report = compute_evidence_honesty(_fresh_9p2i_replay_set(tmp_path))
+    numerator, denominator = _counts(
+        report.singular_persona.prompts_with_singular_persona
+    )
+    assert report.singular_persona.applicable is True
+    assert denominator > 0, "the fresh tournament rendered no meeting prompts"
+    assert numerator == 0
+    # The zero is a measurement, not a broken reader: the phrase is still
+    # found in the committed templates (the two frozen *_roll_call bodies keep
+    # it), and the SAME instrument reads 1956/1956 on the committed bytes in
+    # ``test_i9_singular_persona_pins`` above.
+    phrase = _singular_persona_phrase()
+    assert phrase == "a hidden impostor"
+    archive = _REPO_ROOT / "tests" / "fixtures" / "prompt_archive" / "qwen3_6_27b_v3"
+    assert phrase in (archive / "crewmate_report.j2").read_text(encoding="utf-8")

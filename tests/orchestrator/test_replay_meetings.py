@@ -36,7 +36,12 @@ from agents.base import AgentInterface
 from engine.entities import BodyState, PlayerId, Role
 from engine.world import Map, WorldState, load_canonical_map
 from llm.client import CallKind, LLMResponse, TokenUsage
-from meetings.manager import MeetingConfig, MeetingDeadlines, SuspicionEntry
+from meetings.manager import (
+    MeetingConfig,
+    MeetingDeadlines,
+    PromptRenderInputs,
+    SuspicionEntry,
+)
 from meetings.schemas import (
     AccusationClaim,
     ContradictionRef,
@@ -172,6 +177,7 @@ def _crewmate_prompt(
     dead_ids: tuple[PlayerId, ...] = (),
     persona: str = "",  # Task 16.3: widened contract kwarg (inert)
     suspicion_provenance: tuple[SuspicionEntry, ...] = (),  # Task 16.3
+    render_inputs: PromptRenderInputs | None = None,  # Task 20.31
 ) -> str:
     return f"CR:{agent_id}:{current_tick}"
 
@@ -188,6 +194,7 @@ def _impostor_prompt(
     dead_ids: tuple[PlayerId, ...] = (),
     persona: str = "",  # Task 16.3: widened contract kwarg (inert)
     suspicion_provenance: tuple[SuspicionEntry, ...] = (),  # Task 16.3
+    render_inputs: PromptRenderInputs | None = None,  # Task 20.31
 ) -> str:
     return f"IM:{agent_id}:{current_tick}"
 
@@ -207,6 +214,7 @@ def _statement_prompt(
     is_body_report: bool = False,
     persona: str = "",  # Task 16.3: widened contract kwarg (inert)
     suspicion_provenance: tuple[SuspicionEntry, ...] = (),  # Task 16.3
+    render_inputs: PromptRenderInputs | None = None,  # Task 20.31
 ) -> str:
     return f"ST:{agent_id}:{turn_kind}:{len(transcript.turns)}"
 
@@ -224,6 +232,7 @@ def _vote_prompt(
     reporter_id: PlayerId | None = None,  # Task 15.5: widened contract kwarg
     persona: str = "",  # Task 16.3: widened contract kwarg (inert)
     suspicion_provenance: tuple[SuspicionEntry, ...] = (),  # Task 16.3
+    render_inputs: PromptRenderInputs | None = None,  # Task 20.31
 ) -> str:
     return f"VO:{voter_id}:{','.join(candidate_targets)}"
 

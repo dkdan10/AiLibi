@@ -36,6 +36,7 @@ The reconstructed meeting context mirrors ``test_bespoke_prompt_sets.py``
 from __future__ import annotations
 
 import asyncio
+import pathlib
 from collections.abc import Mapping
 from dataclasses import replace
 
@@ -44,11 +45,13 @@ import pytest
 from agents.strategic.prompts.loader import (
     ACCUSATION_ROUND_ROLL_CALL_TEMPLATE,
     ACCUSATION_ROUND_TEMPLATE,
+    CANONICAL_MAP_CARD,
     ENV_IMPOSTOR_ROLL_CALL,
     ENV_PROMPT_SET,
     IMPOSTOR_REPORT_ROLL_CALL_TEMPLATE,
     IMPOSTOR_REPORT_TEMPLATE,
     PromptRenderers,
+    accusation_round_prompt,
     build_environment,
     build_prompt_renderers,
     impostor_report_prompt,
@@ -56,7 +59,7 @@ from agents.strategic.prompts.loader import (
 )
 from engine.entities import Role
 from engine.world import WorldState, load_canonical_map
-from meetings.manager import MeetingTrigger, SuspicionEntry
+from meetings.manager import MeetingTrigger, PromptRenderInputs, SuspicionEntry
 from meetings.schemas import (
     AccusationClaim,
     ContradictionRef,
@@ -93,6 +96,19 @@ _OFF: dict[str, str] = {}
 # the template component naming the variant FILE on its own v1 lineage).
 _VARIANT_IMPOSTOR_STAMP = "impostor_report_roll_call.qwen3_6_27b.v1"
 _VARIANT_ACCUSATION_STAMP = "accusation_round_roll_call.qwen3_6_27b.v1"
+
+# The BASE the two variant bodies were authored against: the v3 default
+# templates, archived byte-for-byte at the Task-20.31 bump
+# (tests/fixtures/prompt_archive/qwen3_6_27b_v3/). The variant arm is
+# unrecorded and default-OFF, so its bodies stay frozen on their v1 lineage
+# while the default set advances — which means "the variant swaps ONLY the
+# impostor surfaces" is now a statement about this base, not about the live
+# v4 files. Point the comparisons back onto one lineage when an adopting
+# re-record retires the archive.
+_ARCHIVED_BASE_SET = "qwen3_6_27b_v3"
+_ARCHIVED_BASE_ROOT = (
+    pathlib.Path(__file__).resolve().parents[1] / "fixtures" / "prompt_archive"
+)
 
 # A small reconstructed body-report meeting context (a found body + an
 # accusation chain) — the ``test_bespoke_prompt_sets.py`` shape, enough to
@@ -339,11 +355,13 @@ class TestImpostorRollCallResolver:
 class TestDefaultPathRendersByteIdentically:
     """Lever OFF: the routed path serves the committed default files, byte-for-byte.
 
-    The pin bypasses the routing entirely — a direct
-    ``build_environment(set).get_template(<default name>)`` render is what the
-    pre-task loader produced — and compares the lever-OFF bundle against it
-    across the fixture sweep, for EVERY registered set (the variant must not
-    move a single committed byte anywhere while OFF).
+    The pin bypasses the ROUTING — each comparison render names the default
+    template FILE explicitly (``template_name=``), which no lever can change —
+    and compares the lever-OFF bundle against it across the fixture sweep, for
+    EVERY registered set (the variant must not move a single committed byte
+    anywhere while OFF). The construction-bound map card is passed explicitly
+    for the same reason: it is what the bundle binds, so a difference here can
+    only come from the filename.
     """
 
     def test_off_bundle_equals_direct_default_template_render(
@@ -357,9 +375,10 @@ class TestDefaultPathRendersByteIdentically:
             "p-2 called an emergency meeting at tick 410",
         ):
             tag = "body" if "reported" in trig else "emergency"
-            direct[f"impostor_report/{tag}"] = environment.get_template(
-                IMPOSTOR_REPORT_TEMPLATE
-            ).render(
+            direct[f"impostor_report/{tag}"] = impostor_report_prompt(
+                environment=environment,
+                template_name=IMPOSTOR_REPORT_TEMPLATE,
+                map_card=CANONICAL_MAP_CARD,
                 agent_id="p-3",
                 current_tick=410,
                 meeting_trigger=trig,
@@ -371,9 +390,10 @@ class TestDefaultPathRendersByteIdentically:
                 persona="",
                 suspicion_provenance=(),
             )
-        direct["impostor_report/body/sole"] = environment.get_template(
-            IMPOSTOR_REPORT_TEMPLATE
-        ).render(
+        direct["impostor_report/body/sole"] = impostor_report_prompt(
+            environment=environment,
+            template_name=IMPOSTOR_REPORT_TEMPLATE,
+            map_card=CANONICAL_MAP_CARD,
             agent_id="p-3",
             current_tick=410,
             meeting_trigger="p-2 reported body of p-7 at tick 410",
@@ -387,9 +407,10 @@ class TestDefaultPathRendersByteIdentically:
         )
         for is_imp in (True, False):
             for is_body in (True, False):
-                direct[f"reply/imp={is_imp}/body={is_body}"] = environment.get_template(
-                    ACCUSATION_ROUND_TEMPLATE
-                ).render(
+                direct[f"reply/imp={is_imp}/body={is_body}"] = accusation_round_prompt(
+                    environment=environment,
+                    template_name=ACCUSATION_ROUND_TEMPLATE,
+                    map_card=CANONICAL_MAP_CARD,
                     agent_id="p-3",
                     rendered_memory=_MEMORY,
                     transcript=_TRANSCRIPT,
@@ -405,9 +426,10 @@ class TestDefaultPathRendersByteIdentically:
                     suspicion_provenance=(),
                 )
         for is_imp in (True, False):
-            direct[f"opt_in/imp={is_imp}"] = environment.get_template(
-                ACCUSATION_ROUND_TEMPLATE
-            ).render(
+            direct[f"opt_in/imp={is_imp}"] = accusation_round_prompt(
+                environment=environment,
+                template_name=ACCUSATION_ROUND_TEMPLATE,
+                map_card=CANONICAL_MAP_CARD,
                 agent_id="p-3",
                 rendered_memory=_MEMORY,
                 transcript=_TRANSCRIPT,
@@ -422,9 +444,10 @@ class TestDefaultPathRendersByteIdentically:
                 persona="",
                 suspicion_provenance=(),
             )
-        direct["reply/imp=True/persona"] = environment.get_template(
-            ACCUSATION_ROUND_TEMPLATE
-        ).render(
+        direct["reply/imp=True/persona"] = accusation_round_prompt(
+            environment=environment,
+            template_name=ACCUSATION_ROUND_TEMPLATE,
+            map_card=CANONICAL_MAP_CARD,
             agent_id="p-3",
             rendered_memory=_MEMORY,
             transcript=_TRANSCRIPT,
@@ -461,6 +484,15 @@ class TestVariantRendersSelfPlacementContract:
 
     def _off(self) -> dict[str, str]:
         return _render_sweep(build_prompt_renderers(_VARIANT_SET, env=_OFF))
+
+    def _base(self) -> dict[str, str]:
+        """The v3 default bodies the two variant files were authored against."""
+
+        return _render_sweep(
+            build_prompt_renderers(
+                _ARCHIVED_BASE_SET, root=_ARCHIVED_BASE_ROOT, env=_OFF
+            )
+        )
 
     def test_every_branch_renders_non_empty_under_strict_undefined(self) -> None:
         # StrictUndefined raises on a missing / typo'd kwarg, so a clean render
@@ -528,16 +560,52 @@ class TestVariantRendersSelfPlacementContract:
         assert "## Your turn: a reply" in rendered["reply/imp=True/body=True"]
         assert "## Your turn: an info-share" in rendered["opt_in/imp=True"]
 
-    def test_crew_branches_render_byte_identically_on_vs_off(self) -> None:
+    def test_crew_branches_are_byte_identical_to_the_variant_base(self) -> None:
         # The variant file swaps ONLY impostor surfaces: every crew-rendered
-        # accusation_round branch is byte-identical between lever states.
-        on, off = self._on(), self._off()
+        # accusation_round branch is byte-identical to the BASE the variant was
+        # authored against. That base is the archived v3 default, not the live
+        # v4 one — the Task-20.31 bump moved the default set and deliberately
+        # left this unrecorded, default-OFF arm frozen on its v1 lineage, so
+        # the live files differ by the whole v4 batch and comparing against
+        # them would assert a divergence the arm intends.
+        on, base = self._on(), self._base()
         for label in (
             "reply/imp=False/body=True",
             "reply/imp=False/body=False",
             "opt_in/imp=False",
         ):
-            assert on[label] == off[label], label
+            assert on[label] == base[label], label
+
+    def test_the_variant_arm_has_diverged_from_the_live_default_set(self) -> None:
+        # The deferral, stated as a gate: the variant bodies do NOT carry the
+        # v4 batch, so a crew branch rendered through the variant differs from
+        # the live default, and the variant's persona still hard-codes ONE
+        # hidden impostor where the default now says how many there are.
+        # Delete this test when the arm is re-authored onto the current
+        # lineage (or retired).
+        on, off = self._on(), self._off()
+        assert on["reply/imp=False/body=True"] != off["reply/imp=False/body=True"]
+        two = PromptRenderInputs(impostor_count=2)
+        opening_kwargs = dict(
+            agent_id="p-3",
+            current_tick=410,
+            meeting_trigger="p-2 reported body of p-7 at tick 410",
+            rendered_memory=_MEMORY,
+            public_transcript="",
+            fellow_impostor_ids=("p-9",),
+            living_ids=("p-2", "p-5"),
+            dead_ids=("p-7",),
+            render_inputs=two,
+        )
+        variant = build_prompt_renderers(_VARIANT_SET, env=_ON).impostor_report(
+            **opening_kwargs  # type: ignore[arg-type]
+        )
+        default = build_prompt_renderers(_VARIANT_SET, env=_OFF).impostor_report(
+            **opening_kwargs  # type: ignore[arg-type]
+        )
+        assert "a hidden impostor" in variant
+        assert "two hidden impostors" in default
+        assert "a hidden impostor" not in default
 
     def test_unrouted_templates_render_byte_identically_on_vs_off(self) -> None:
         # crewmate_report and vote_ballot are not routed by the lever at all.
@@ -574,11 +642,11 @@ class TestVariantRendersSelfPlacementContract:
         # firewall must cover the opt-in whereabouts answer too) — the
         # info-share branch itself (the 18.8 roll-call round's ask surface) is
         # untouched.
-        on, off = self._on(), self._off()
-        assert _PERSONA_DEFAULT in off["opt_in/imp=True"]
+        on, base = self._on(), self._base()
+        assert _PERSONA_DEFAULT in base["opt_in/imp=True"]
         assert _PERSONA_VARIANT in on["opt_in/imp=True"]
         assert _TEAMMATE_FIREWALL in _flat(on["opt_in/imp=True"])
-        assert on["opt_in/imp=True"] == off["opt_in/imp=True"].replace(
+        assert on["opt_in/imp=True"] == base["opt_in/imp=True"].replace(
             _PERSONA_DEFAULT, _PERSONA_VARIANT
         ).replace(_FELLOWS_DEFAULT, _FELLOWS_VARIANT)
 
@@ -648,10 +716,10 @@ class TestVariantVersionStamps:
 
     def test_lever_on_serves_the_variant_registry_entry(self) -> None:
         assert dict(prompt_versions_for_set(_VARIANT_SET, env=_ON)) == {
-            "crewmate_report": "crewmate_report.qwen3_6_27b.v3",
+            "crewmate_report": "crewmate_report.qwen3_6_27b.v4",
             "impostor_report": _VARIANT_IMPOSTOR_STAMP,
             "accusation_round": _VARIANT_ACCUSATION_STAMP,
-            "vote_ballot": "vote_ballot.qwen3_6_27b.v3",
+            "vote_ballot": "vote_ballot.qwen3_6_27b.v4",
         }
 
     def test_lever_off_serves_the_default_registry_byte_identically(self) -> None:

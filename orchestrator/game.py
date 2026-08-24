@@ -378,9 +378,18 @@ PROMPT_VERSION_SETS: Final[Mapping[str, Mapping[str, str]]] = {
     # — each participant's persona card renders as a guarded <voice> block in
     # all four templates' instruction preambles (empty persona = the exact v2
     # bytes), so the voice layer is its own attributable prompt layer at the
-    # 16.17 re-record, separable from the elicitation batch. The committed
-    # samples keep stamping *.qwen3_6_27b.v1 through the same archive walk.
-    "qwen3_6_27b": _bespoke_versions("qwen3_6_27b", version="v3"),
+    # 16.17 re-record, separable from the elicitation batch.
+    # Task 20.31 (the evidence-honesty batch): v3 -> v4 — the flag block speaks
+    # the committed evidence taxonomy (proof vs conflicting accounts, weak
+    # signals subordinate) with no "VERIFIED evidence" framing, the persona and
+    # win condition are parameterised by the game's impostor count, the
+    # vent-first mandate exempts a dead or ejected subject, the ballot's
+    # threshold arithmetic leaves the agent's voice, and every meeting template
+    # shows the room-and-doorway card. The committed sample sets still stamp
+    # *.qwen3_6_27b.v3 and re-render through the archived v3 bodies
+    # (tests/fixtures/prompt_archive/qwen3_6_27b_v3/) until the adopting
+    # record retires that entry.
+    "qwen3_6_27b": _bespoke_versions("qwen3_6_27b", version="v4"),
 }
 
 
@@ -389,8 +398,11 @@ PROMPT_VERSION_SETS: Final[Mapping[str, Mapping[str, str]]] = {
 # ``impostor_roll_call_enabled`` lever is ON. The variant swaps the two
 # impostor-facing templates for their ``*_roll_call.j2`` siblings (authored
 # only in the ``qwen3_6_27b`` set), so exactly those two keys carry variant
-# stamps; ``crewmate_report`` / ``vote_ballot`` render the same committed v3
-# bodies and keep their v3 stamps. The variant stamps follow the
+# stamps; ``crewmate_report`` / ``vote_ballot`` render the default bodies and
+# inherit whatever version the default registry above serves. The two variant
+# BODIES are byte-untouched by the Task-20.31 bump — an unrecorded, default-OFF
+# arm, so they keep their own v1 lineage (and, deliberately, the singular
+# persona the default set has now dropped). The variant stamps follow the
 # ``<template>.<set>.<version>`` convention with the template component naming
 # the actual variant FILE (``impostor_report_roll_call``) on its OWN v1
 # lineage: a variant body can never share a stamp with any default
@@ -403,7 +415,7 @@ PROMPT_VERSION_SETS: Final[Mapping[str, Mapping[str, str]]] = {
 # through it byte-identically.
 IMPOSTOR_ROLL_CALL_PROMPT_VERSION_SETS: Final[Mapping[str, Mapping[str, str]]] = {
     "qwen3_6_27b": {
-        **_bespoke_versions("qwen3_6_27b", version="v3"),
+        **_bespoke_versions("qwen3_6_27b", version="v4"),
         "impostor_report": "impostor_report_roll_call.qwen3_6_27b.v1",
         "accusation_round": "accusation_round_roll_call.qwen3_6_27b.v1",
     },
@@ -855,12 +867,22 @@ class DefaultMeetingRunner:
                 if not player.alive
             )
         )
+        # The game's own impostor count (Task 20.31), derived from the same
+        # world state and threaded the same render-only way: the templates say
+        # how many hidden impostors there are and state the win condition with
+        # the right arithmetic instead of hard-coding one. It is the SEEDED
+        # count, not the living one -- the roster preset's public setting, so
+        # it never moves mid-game and an ejection reveals nothing through it.
+        impostor_count = sum(
+            1 for player in state.players.values() if player.role == "IMPOSTOR"
+        )
         try:
             result = await self._manager.run(
                 meeting_id=meeting_id,
                 trigger=trigger,
                 participants=participants,
                 dead_ids=dead_ids,
+                impostor_count=impostor_count,
             )
         except BaseException as exc:
             # On failure, drop the partial captures so a retry against

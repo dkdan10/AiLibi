@@ -143,16 +143,17 @@ DEFAULT_FEATHERLESS_BASE_URL="https://api.featherless.ai/v1"
 # carried unmoved through the Task-18.12 lever graduation). A featherless run with
 # any other set would SILENTLY record the wrong substrate.
 REQUIRED_PROMPT_SET="qwen3_6_27b"
-# The locked baseline-6 per-template prompt versions the set must resolve to (all
-# four templates at v3: 16.13's bespoke port carried v1, 16.15's elicitation batch
-# bumped v1->v2, 16.16's persona voice layer bumped v2->v3; baseline 6 graduated
-# LEVERS, not templates, so the v3 map is unchanged). The set NAME alone is
-# not a version pin — the registry entry can be bumped by a later task — so the
+# The per-template prompt versions the set must resolve to (all four at v4 since
+# Task 20.31's evidence-honesty bump; the lineage is v1 bespoke port -> v2
+# elicitation batch -> v3 persona voice -> v4). The set NAME alone is not a
+# version pin — the registry entry can be bumped by a later task — so the
 # preflight asserts orchestrator.game.PROMPT_VERSION_SETS still resolves
 # $REQUIRED_PROMPT_SET to exactly this map, and the finalize refuses to freeze a
 # set whose MANIFEST rows carry any other version string. Sorted, comma+space-
-# joined (the MANIFEST cell rendering).
-REQUIRED_PROMPT_VERSIONS="accusation_round.qwen3_6_27b.v3, crewmate_report.qwen3_6_27b.v3, impostor_report.qwen3_6_27b.v3, vote_ballot.qwen3_6_27b.v3"
+# joined (the MANIFEST cell rendering). A corpus recorded before this constant
+# moved carries the older stamps in its own MANIFEST; re-locking it is an owner
+# decision (re-record + re-freeze), which is what a stamp mismatch here forces.
+REQUIRED_PROMPT_VERSIONS="accusation_round.qwen3_6_27b.v4, crewmate_report.qwen3_6_27b.v4, impostor_report.qwen3_6_27b.v4, vote_ballot.qwen3_6_27b.v4"
 # The 15.9 tactical-policy stamp for the canonical scripted FSMs. Every corpus
 # game is FSM-default (no learned mover exists yet); the stamp makes that explicit
 # provenance rather than the absent = FSM-default default, so the MANIFEST policy

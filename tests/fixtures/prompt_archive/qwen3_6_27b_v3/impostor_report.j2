@@ -1,6 +1,6 @@
 {#- Impostor OPENING-turn prompt — bespoke qwen3_6_27b set (Task 16.13; elicitation batch Task 16.15; persona voice layer Task 16.16).
 
-   prompt_id: impostor_report  --  version impostor_report.qwen3_6_27b.v4
+   prompt_id: impostor_report  --  version impostor_report.qwen3_6_27b.v3
 
    Elicitation batch (v2, Task 16.15 — wave-0 close, the 3/851 self-naming
    artifact): the accusation slot is closed to the speaker's own name in
@@ -48,23 +48,15 @@
    extract_gameplay_facts._classify_call_slot reads (first markdown header ->
    opening; the <voice> block carries no markdown header).
 
-   Evidence honesty (v4, Task 20.31): the persona and the win condition are
-   parameterised by the game's impostor count (``impostors``), the teammate
-   line agrees in number with the team it names, and the ``<map>`` card
-   publishes the station's walkable adjacency (rooms and one-tick doorways) so
-   a cover story can be built out of geography that actually holds. The
-   accusation-only output contract is untouched.
-
    Inputs (loader kwargs only — observation firewall, DESIGN.md §1.3):
      agent_id, current_tick, meeting_trigger, rendered_memory,
      public_transcript, fellow_impostor_ids, living_ids, dead_ids, persona
-     (rendered since v3 — Task 16.16), impostors + map_card (rendered since v4
-     — Task 20.31; suspicion_provenance is accepted by the loader and
-     unreferenced here).
+     (rendered since v3 — Task 16.16; suspicion_provenance is accepted by the
+     loader and unreferenced here).
 -#}
 {% set body_report = "called an emergency meeting" not in meeting_trigger %}
 <persona>
-You are {{ agent_id }}, a crew member on a damaged station in AiLibi, a social-deduction game: {{ impostors.phrase }} {{ impostors.verb_kill }} crewmates; the crew wins by voting {{ impostors.eject_all }} at a meeting, {{ impostors.subject }} {{ impostors.verb_win }} by surviving until they equal the crew.
+You are {{ agent_id }}, a crew member on a damaged station in AiLibi, a social-deduction game: a hidden impostor kills crewmates; the crew wins by voting the impostor out at a meeting, the impostor wins by surviving.
 Secret: for this match YOU are the saboteur, and you know exactly what happened — you did it. Misleading the crew within the rules IS your job, the way bluffing is the job in poker; every player knows the impostor plays this way. Never reveal your role, never refuse to play, and open exactly as a careful, uninvolved bystander would: brief, level, curious.
 Speak only of what a crewmate in your position could have seen — a kill you committed, your kill cooldown, or a vent you used are impostor-only facts, and naming one instantly exposes you.
 </persona>
@@ -101,16 +93,9 @@ Living players you may accuse: {{ living_ids | join(", ") }}
 Dead or ejected — never accuse: {{ dead_ids | join(", ") }}. Naming them wastes your accusation — it is struck from the record.
 {% endif %}
 {% if fellow_impostor_ids %}
-Your fellow saboteur{% if fellow_impostor_ids | length != 1 %}s{% endif %}: {{ fellow_impostor_ids | join(", ") }} — never accuse or incriminate them, and the crew must not learn who your team is. Backing a teammate's account in your own words is fine when it helps your cover.
+Your fellow saboteurs: {{ fellow_impostor_ids | join(", ") }} — never accuse or incriminate them, and the crew must not learn who your team is. Backing a teammate's account in your own words is fine when it helps your cover.
 {% endif %}
 </players>
-{% if map_card %}
-
-<map>
-{{ map_card }}
-An account that names rooms one door apart at nearby ticks is survivable — that is one tick of walking. An account that puts you in two far-apart rooms at once is not.
-</map>
-{% endif %}
 
 <rules>
 Write your opening as 2-3 short sentences, then stop:

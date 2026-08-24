@@ -100,16 +100,17 @@ from __future__ import annotations
 
 import os
 import sys
-from collections.abc import Mapping
-from dataclasses import dataclass
+from collections.abc import Iterable, Mapping
+from dataclasses import dataclass, replace
 from functools import lru_cache, partial
 from pathlib import Path
-from typing import Final
+from typing import Final, Literal
 
 from jinja2 import Environment, FileSystemLoader, StrictUndefined, TemplateNotFound
 
 from llm.provider import ENV_PROVIDER, PROVIDER_FAKE
 from meetings.render_contract import (
+    PromptRenderInputs,
     ReportPromptRenderer,
     StatementPromptRenderer,
     SuspicionEntry,
@@ -122,6 +123,8 @@ from meetings.schemas import (
     PlayerId,
     TurnKind,
 )
+from meetings.transcript import CANONICAL_ROOM_NEIGHBORS, is_weak_contradiction
+from observation.public_map import PublicMapView
 
 # Root holding the per-model prompt-set subdirectories (Task 14.2). The four
 # ``.j2`` templates no longer live flat next to this module; each set is a
@@ -364,6 +367,197 @@ def impostor_roll_call_enabled(env: Mapping[str, str] | None = None) -> bool:
     )
 
 
+# --------------------------------------------------------------------------- #
+# v4 render inputs: the map card, the evidence split, the impostor count       #
+# --------------------------------------------------------------------------- #
+
+
+def _map_card_from_neighbors(neighbors: Mapping[str, Iterable[str]]) -> str:
+    """Render the room-and-doorway card from a walkable-room adjacency table."""
+
+    lines = [
+        "Rooms and doors. Every door below is ONE tick of walking, so two "
+        "players in rooms that share a door can be one tick apart:"
+    ]
+    for room in sorted(neighbors):
+        lines.append(f"- {room}: {', '.join(sorted(neighbors[room]))}")
+    return "\n".join(lines)
+
+
+def render_map_card(map_view: PublicMapView) -> str:
+    """Render the compact adjacency card the v4 meeting templates show.
+
+    One header line stating the one-tick doorway fact, then one line per
+    walkable room naming the rooms it shares a door with. Reads
+    :attr:`PublicMapView.room_neighbors` and nothing else: ``vent_graph`` and
+    ``vent_rooms`` are impostor-only knowledge the same public view happens to
+    carry, and publishing them to the table would turn a legibility fix into a
+    firewall breach.
+    """
+
+    return _map_card_from_neighbors(map_view.room_neighbors)
+
+
+# The card every meeting renders. Built from
+# :data:`meetings.transcript.CANONICAL_ROOM_NEIGHBORS` -- the same frozen table
+# the contradiction detector arbitrates one-tick adjacency with, and the only
+# room graph reachable from ``agents/`` without crossing the §1.3 observation
+# firewall into ``engine/``. A test cross-pins it against
+# ``render_map_card(public_map_from_engine_map(load_canonical_map()))``, so the
+# agents' card, the detector's table and the engine map cannot disagree.
+CANONICAL_MAP_CARD: Final[str] = _map_card_from_neighbors(CANONICAL_ROOM_NEIGHBORS)
+
+
+PromptEvidenceCategory = Literal["role_proof", "cross_statement", "weak_signal"]
+"""What kind of evidence a flag is, in the words the prompt groups it under."""
+
+# The role-proving kinds: a grounded vent sighting names an impostor outright.
+_ROLE_PROOF_KINDS: Final[frozenset[str]] = frozenset({"vent_sighting"})
+# Two DIFFERENT public statements that cannot both be true. Whether such a flag
+# reads as a conflict or as a weak signal is the detector's own weak stamp.
+_CROSS_STATEMENT_KINDS: Final[frozenset[str]] = frozenset(
+    {"alibi_conflict", "alibi_vs_sighting", "alibi_vs_physical"}
+)
+
+
+def classify_flag_for_prompt(flag: ContradictionRef) -> PromptEvidenceCategory:
+    """Classify one flag into the group the prompt shows it under.
+
+    The rule table is ``api.schemas.classify_evidence``'s, re-implemented here
+    rather than imported: this is agent-facing render code and ``agents/`` does
+    not import ``api/``. A test asserts the two derivations produce identical
+    per-category counts over every flag of both committed sample sets, which is
+    evidence precisely because neither side calls the other. The weak predicate
+    is NOT re-implemented -- :func:`meetings.transcript.is_weak_contradiction`
+    is imported, so the marker reader stays beside the marker writer.
+
+    An unrecognised kind raises rather than bucketing (AGENTS.md "no silent
+    fallbacks"). ``ContradictionRef.kind`` is a closed ``Literal`` today, so the
+    raise is unreachable until a new kind lands -- which is exactly when a
+    prompt that silently called it a conflict would start lying.
+    """
+
+    if flag.kind not in _ROLE_PROOF_KINDS and flag.kind not in _CROSS_STATEMENT_KINDS:
+        raise ValueError(
+            f"unclassifiable flag kind {flag.kind!r} "
+            f"(contradiction_id={flag.contradiction_id!r}); the prompt evidence "
+            "taxonomy has no group for it — add the rule rather than widening a "
+            "bucket"
+        )
+    if flag.kind in _ROLE_PROOF_KINDS or flag.event_a_id == flag.event_b_id:
+        return "role_proof"
+    if is_weak_contradiction(flag):
+        return "weak_signal"
+    return "cross_statement"
+
+
+@dataclass(frozen=True)
+class _FlagGroups:
+    """The three flag groups a template loops over, computed in Python."""
+
+    proof: tuple[ContradictionRef, ...] = ()
+    conflicting: tuple[ContradictionRef, ...] = ()
+    weak: tuple[ContradictionRef, ...] = ()
+
+
+def _group_flags(flags: Iterable[ContradictionRef]) -> _FlagGroups:
+    """Split flags into proof / conflicting accounts / weak signals, in order."""
+
+    buckets: dict[PromptEvidenceCategory, list[ContradictionRef]] = {
+        "role_proof": [],
+        "cross_statement": [],
+        "weak_signal": [],
+    }
+    for flag in flags:
+        buckets[classify_flag_for_prompt(flag)].append(flag)
+    return _FlagGroups(
+        proof=tuple(buckets["role_proof"]),
+        conflicting=tuple(buckets["cross_statement"]),
+        weak=tuple(buckets["weak_signal"]),
+    )
+
+
+# What a render assumes when no caller threaded the game's impostor count: the
+# four-player preset's single impostor, i.e. the wording every template carried
+# before the count was threadable.
+DEFAULT_IMPOSTOR_COUNT: Final[int] = 1
+
+_COUNT_WORDS: Final[tuple[str, ...]] = (
+    "no",
+    "one",
+    "two",
+    "three",
+    "four",
+    "five",
+    "six",
+)
+
+
+@dataclass(frozen=True)
+class _ImpostorWording:
+    """The persona sentence's parts, agreeing in number with the roster."""
+
+    count: int
+    phrase: str  # "a hidden impostor" / "two hidden impostors"
+    verb_be: str  # "is" / "are"
+    verb_kill: str  # "kills" / "kill"
+    subject: str  # "the impostor" / "the impostors"
+    verb_win: str  # "wins" / "win"
+    eject_all: str  # "the impostor out" / "both impostors out"
+    one_of_them: str  # "the impostor" / "an impostor"
+
+
+def _impostor_wording(count: int | None) -> _ImpostorWording:
+    """Build the number-agreeing persona wording for ``count`` impostors."""
+
+    resolved = DEFAULT_IMPOSTOR_COUNT if count is None else count
+    if resolved < 1:
+        raise ValueError(f"impostor_count must be at least 1, got {resolved}")
+    if resolved == 1:
+        return _ImpostorWording(
+            count=1,
+            phrase="a hidden impostor",
+            verb_be="is",
+            verb_kill="kills",
+            subject="the impostor",
+            verb_win="wins",
+            eject_all="the impostor out",
+            one_of_them="the impostor",
+        )
+    word = _COUNT_WORDS[resolved] if resolved < len(_COUNT_WORDS) else str(resolved)
+    return _ImpostorWording(
+        count=resolved,
+        phrase=f"{word} hidden impostors",
+        verb_be="are",
+        verb_kill="kill",
+        subject="the impostors",
+        verb_win="win",
+        eject_all=(
+            "both impostors out" if resolved == 2 else f"all {word} impostors out"
+        ),
+        one_of_them="an impostor",
+    )
+
+
+def _render_inputs_for(
+    render_inputs: PromptRenderInputs | None, *, map_card: str
+) -> PromptRenderInputs:
+    """Compose the per-render facts, splitting the two inputs by lifetime.
+
+    The impostor count is per-GAME and arrives per call (the manager threads it
+    the way it threads ``dead_ids``); the map card is a constant of the map and
+    is bound onto each renderer at construction. A card supplied explicitly on
+    ``render_inputs`` wins, so a caller rendering an alternative topology is
+    never overridden by the bound one.
+    """
+
+    if render_inputs is None:
+        return PromptRenderInputs(map_card=map_card)
+    if render_inputs.map_card:
+        return render_inputs
+    return replace(render_inputs, map_card=map_card)
+
+
 def crewmate_report_prompt(
     *,
     agent_id: PlayerId,
@@ -376,7 +570,9 @@ def crewmate_report_prompt(
     dead_ids: tuple[PlayerId, ...] = (),
     persona: str = "",
     suspicion_provenance: tuple[SuspicionEntry, ...] = (),
+    render_inputs: PromptRenderInputs | None = None,
     environment: Environment | None = None,
+    map_card: str = "",
 ) -> str:
     """Render the Phase-1 crewmate report prompt (DESIGN.md §5.3).
 
@@ -407,6 +603,7 @@ def crewmate_report_prompt(
     seam is landed once here so 16.15/16.16 edit ONLY the template.
     """
 
+    inputs = _render_inputs_for(render_inputs, map_card=map_card)
     return (
         (environment or _ENV)
         .get_template(CREWMATE_REPORT_TEMPLATE)
@@ -420,6 +617,8 @@ def crewmate_report_prompt(
             dead_ids=dead_ids,
             persona=persona,
             suspicion_provenance=suspicion_provenance,
+            map_card=inputs.map_card,
+            impostors=_impostor_wording(inputs.impostor_count),
         )
     )
 
@@ -436,8 +635,10 @@ def impostor_report_prompt(
     dead_ids: tuple[PlayerId, ...] = (),
     persona: str = "",
     suspicion_provenance: tuple[SuspicionEntry, ...] = (),
+    render_inputs: PromptRenderInputs | None = None,
     environment: Environment | None = None,
     template_name: str | None = None,
+    map_card: str = "",
 ) -> str:
     """Render the Phase-1 impostor report prompt (DESIGN.md §4.5, §5.3).
 
@@ -488,6 +689,7 @@ def impostor_report_prompt(
             else IMPOSTOR_REPORT_TEMPLATE
         )
     )
+    inputs = _render_inputs_for(render_inputs, map_card=map_card)
     return (
         (environment or _ENV)
         .get_template(resolved_template)
@@ -502,6 +704,8 @@ def impostor_report_prompt(
             dead_ids=dead_ids,
             persona=persona,
             suspicion_provenance=suspicion_provenance,
+            map_card=inputs.map_card,
+            impostors=_impostor_wording(inputs.impostor_count),
         )
     )
 
@@ -521,8 +725,10 @@ def accusation_round_prompt(
     is_body_report: bool = False,
     persona: str = "",
     suspicion_provenance: tuple[SuspicionEntry, ...] = (),
+    render_inputs: PromptRenderInputs | None = None,
     environment: Environment | None = None,
     template_name: str | None = None,
+    map_card: str = "",
 ) -> str:
     """Render a reactive ``reply`` / ``opt_in`` turn prompt (DESIGN.md §5.2).
 
@@ -608,6 +814,7 @@ def accusation_round_prompt(
             else ACCUSATION_ROUND_TEMPLATE
         )
     )
+    inputs = _render_inputs_for(render_inputs, map_card=map_card)
     return (
         (environment or _ENV)
         .get_template(resolved_template)
@@ -625,6 +832,9 @@ def accusation_round_prompt(
             is_body_report=is_body_report,
             persona=persona,
             suspicion_provenance=suspicion_provenance,
+            map_card=inputs.map_card,
+            impostors=_impostor_wording(inputs.impostor_count),
+            flag_groups=_group_flags(contradictions),
         )
     )
 
@@ -642,7 +852,9 @@ def vote_ballot_prompt(
     reporter_id: PlayerId | None = None,
     persona: str = "",
     suspicion_provenance: tuple[SuspicionEntry, ...] = (),
+    render_inputs: PromptRenderInputs | None = None,
     environment: Environment | None = None,
+    map_card: str = "",
 ) -> str:
     """Render a vote-ballot prompt (DESIGN.md §5.5).
 
@@ -672,6 +884,7 @@ def vote_ballot_prompt(
     so 16.15 edits only the template.
     """
 
+    inputs = _render_inputs_for(render_inputs, map_card=map_card)
     return (
         (environment or _ENV)
         .get_template(VOTE_BALLOT_TEMPLATE)
@@ -687,6 +900,9 @@ def vote_ballot_prompt(
             reporter_id=reporter_id,
             persona=persona,
             suspicion_provenance=suspicion_provenance,
+            map_card=inputs.map_card,
+            impostors=_impostor_wording(inputs.impostor_count),
+            flag_groups=_group_flags(contradiction_flags),
         )
     )
 
@@ -758,25 +974,37 @@ def build_prompt_renderers(
                     "variant-capable set"
                 ) from exc
     return PromptRenderers(
-        crewmate_report=partial(crewmate_report_prompt, environment=environment),
+        crewmate_report=partial(
+            crewmate_report_prompt,
+            environment=environment,
+            map_card=CANONICAL_MAP_CARD,
+        ),
         impostor_report=partial(
             impostor_report_prompt,
             environment=environment,
             template_name=impostor_report_template,
+            map_card=CANONICAL_MAP_CARD,
         ),
         statement=partial(
             accusation_round_prompt,
             environment=environment,
             template_name=statement_template,
+            map_card=CANONICAL_MAP_CARD,
         ),
-        vote=partial(vote_ballot_prompt, environment=environment),
+        vote=partial(
+            vote_ballot_prompt,
+            environment=environment,
+            map_card=CANONICAL_MAP_CARD,
+        ),
     )
 
 
 __all__ = [
     "ACCUSATION_ROUND_ROLL_CALL_TEMPLATE",
     "ACCUSATION_ROUND_TEMPLATE",
+    "CANONICAL_MAP_CARD",
     "CREWMATE_REPORT_TEMPLATE",
+    "DEFAULT_IMPOSTOR_COUNT",
     "DEFAULT_PROMPT_SET",
     "ENV_IMPOSTOR_ROLL_CALL",
     "ENV_PROMPT_SET",
@@ -784,13 +1012,16 @@ __all__ = [
     "IMPOSTOR_REPORT_TEMPLATE",
     "OPERATIONAL_BASELINE_PROMPT_SET",
     "VOTE_BALLOT_TEMPLATE",
+    "PromptEvidenceCategory",
     "PromptRenderers",
     "accusation_round_prompt",
     "build_environment",
     "build_prompt_renderers",
+    "classify_flag_for_prompt",
     "crewmate_report_prompt",
     "impostor_report_prompt",
     "impostor_roll_call_enabled",
+    "render_map_card",
     "resolve_prompt_set",
     "vote_ballot_prompt",
 ]

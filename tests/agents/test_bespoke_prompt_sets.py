@@ -24,11 +24,14 @@ from __future__ import annotations
 import pytest
 
 from agents.strategic.prompts.loader import (
+    CANONICAL_MAP_CARD,
     DEFAULT_PROMPT_SET,
     build_prompt_renderers,
+    render_map_card,
     resolve_prompt_set,
 )
-from meetings.manager import SuspicionEntry
+from engine.world import load_canonical_map
+from meetings.manager import PromptRenderInputs, SuspicionEntry
 from meetings.schemas import (
     AccusationClaim,
     ContradictionRef,
@@ -39,6 +42,8 @@ from meetings.schemas import (
     SawVentObservation,
     VoteBallot,
 )
+from meetings.transcript import CANONICAL_ROOM_NEIGHBORS
+from orchestrator.boundary import public_map_from_engine_map
 from orchestrator.game import (
     DEFAULT_PROMPT_VERSIONS,
     PROMPT_VERSION_SETS,
@@ -497,40 +502,41 @@ class TestQwen332bV5VentElicitation:
                 assert self._SHAPE_MARKER not in text, set_name
 
 
-class TestQwen3627bV3PersonaVoice:
-    """Task 16.16 version pin: the persona voice layer's single set-level bump.
+class TestQwen3627bV4EvidenceHonesty:
+    """Version pin for the locked set's current lineage.
 
-    The locked set has advanced twice since the baseline-4 record: v1 -> v2 at
-    Task 16.15 (the elicitation batch — J2a provenance surface, J3
-    citation-required confidence, roll-call, the vent tail, the
-    self-accusation fix) and v2 -> v3 at Task 16.16 (the persona voice layer —
-    the guarded <voice> preamble block in all four templates), each exactly
-    one registry entry so every prompt layer is separately attributable at the
-    16.17 re-record. No two of the three bodies can share a version stamp (the
-    committed baseline-4 samples keep stamping *.qwen3_6_27b.v1 until 16.17
-    re-records). The per-ask mechanism fixtures live in
+    Each layer is exactly one registry entry, so every prompt change is
+    separately attributable at the record that adopts it: v1 the baseline-4
+    bespoke port, v2 the 16.15 elicitation batch, v3 the 16.16 persona voice
+    layer, v4 the Task-20.31 evidence-honesty batch (the proof/conflict flag
+    split, the impostor count, the dead-subject vent exemption, the threshold
+    arithmetic leaving the voter's voice, the map card). No two bodies can
+    share a stamp: the committed sample sets stamp *.qwen3_6_27b.v3 and
+    re-render through the archived v3 bytes until the adopting re-record. The
+    per-ask mechanism fixtures live in
     ``tests/meetings/test_elicitation_fixtures.py``; the persona render
     fixtures in ``tests/meetings/test_persona_render.py``; this pin holds the
     stamp.
     """
 
-    def test_registry_stamps_all_four_templates_v3(self) -> None:
+    def test_registry_stamps_all_four_templates_v4(self) -> None:
         versions = prompt_versions_for_set("qwen3_6_27b")
         assert versions == {
-            "crewmate_report": "crewmate_report.qwen3_6_27b.v3",
-            "impostor_report": "impostor_report.qwen3_6_27b.v3",
-            "accusation_round": "accusation_round.qwen3_6_27b.v3",
-            "vote_ballot": "vote_ballot.qwen3_6_27b.v3",
+            "crewmate_report": "crewmate_report.qwen3_6_27b.v4",
+            "impostor_report": "impostor_report.qwen3_6_27b.v4",
+            "accusation_round": "accusation_round.qwen3_6_27b.v4",
+            "vote_ballot": "vote_ballot.qwen3_6_27b.v4",
         }
 
     def test_bumped_stamps_never_collide_with_prior_bodies(self) -> None:
-        # The committed baseline-4 recordings stamp *.qwen3_6_27b.v1 and the
-        # 16.15 elicitation bodies stamped .v2; the bumped registry must never
-        # re-mint either stamp for the persona-bearing bodies.
+        # Every earlier lineage stamp is still worn by committed bytes (the
+        # sample sets stamp .v3; the ML corpus stamps its own). The bumped
+        # registry must never re-mint one for the v4 bodies.
         for value in prompt_versions_for_set("qwen3_6_27b").values():
-            assert value.endswith(".qwen3_6_27b.v3")
+            assert value.endswith(".qwen3_6_27b.v4")
             assert ".v1" not in value
             assert ".v2" not in value
+            assert ".v3" not in value
 
 
 def test_cross_set_parse_invariant_is_shared() -> None:
@@ -572,3 +578,183 @@ class TestBespokeSetRegistration:
     def test_registered_set_is_not_the_default(self, set_name: str) -> None:
         assert set_name in PROMPT_VERSION_SETS
         assert set_name != DEFAULT_PROMPT_SET
+
+
+class TestQwen3627bV4RenderPins:
+    """Task 20.31 render pins for the locked set's v4 bodies.
+
+    The committed bytes still stamp v3 and re-render through the archive, so
+    the prompt-byte golden does not exercise these bodies during the
+    bump-in-flight window. These renders are what guards them instead.
+    """
+
+    def _render(self, *, impostor_count: int) -> dict[str, str]:
+        r = build_prompt_renderers("qwen3_6_27b")
+        inputs = PromptRenderInputs(impostor_count=impostor_count)
+        return {
+            "crewmate_report": r.crewmate_report(
+                agent_id="p-2",
+                current_tick=410,
+                meeting_trigger="p-2 reported body of p-7 at tick 410",
+                rendered_memory=_MEMORY,
+                public_transcript="",
+                living_ids=("p-3", "p-5"),
+                dead_ids=("p-7",),
+                render_inputs=inputs,
+            ),
+            "impostor_report": r.impostor_report(
+                agent_id="p-3",
+                current_tick=410,
+                meeting_trigger="p-3 reported body of p-7 at tick 410",
+                rendered_memory=_MEMORY,
+                public_transcript="",
+                fellow_impostor_ids=("p-9",),
+                living_ids=("p-2", "p-5"),
+                dead_ids=("p-7",),
+                render_inputs=inputs,
+            ),
+            "accusation_round": r.statement(
+                agent_id="p-3",
+                rendered_memory=_MEMORY,
+                transcript=_TRANSCRIPT,
+                contradictions=_CONTRAS,
+                prior_turn=_PRIOR,
+                turn_kind="reply",
+                fellow_impostor_ids=(),
+                living_ids=("p-2", "p-5"),
+                dead_ids=("p-7",),
+                is_impostor=False,
+                is_body_report=True,
+                render_inputs=inputs,
+            ),
+            "vote_ballot": r.vote(
+                voter_id="p-2",
+                rendered_memory=_MEMORY,
+                transcript=_TRANSCRIPT,
+                contradiction_flags=_CONTRAS,
+                suspicion_graph=_SUSP,
+                candidate_targets=("p-3", "p-5"),
+                skip_confidence_threshold=0.6,
+                fellow_impostor_ids=(),
+                render_inputs=inputs,
+            ),
+        }
+
+    def test_persona_and_win_condition_follow_the_impostor_count(self) -> None:
+        # Verdicts claim 11 (b): all six templates hard-coded ONE hidden
+        # impostor and a parity sentence that is arithmetically wrong for two.
+        # A two-impostor render now says two and states the parity condition;
+        # a one-impostor render keeps the singular wording it always had.
+        one, two = self._render(impostor_count=1), self._render(impostor_count=2)
+        for label in ("crewmate_report", "impostor_report", "accusation_round"):
+            assert "a hidden impostor" in one[label], label
+            assert "two hidden impostors" in two[label], label
+            assert "a hidden impostor" not in two[label], label
+            assert "voting the impostor out" in one[label], label
+            assert "voting both impostors out" in two[label], label
+        # The ballot words the same facts for a voter rather than a speaker.
+        assert "a hidden impostor kills crewmates" in one["vote_ballot"]
+        assert "two hidden impostors kill crewmates" in two["vote_ballot"]
+        # The parity condition -- impostors win at alive_impostors >=
+        # alive_crewmates (engine/win_conditions.py) -- is stated in BOTH.
+        for rendered in (*one.values(), *two.values()):
+            assert "by surviving until they equal the crew" in rendered
+
+    def test_a_zero_or_negative_impostor_count_fails_loud(self) -> None:
+        # The gate can fail: an impossible roster is a wiring bug, not a
+        # wording default (AGENTS.md "no silent fallbacks").
+        with pytest.raises(ValueError, match="at least 1"):
+            self._render(impostor_count=0)
+
+    def test_teammate_line_agrees_in_number(self) -> None:
+        r = build_prompt_renderers("qwen3_6_27b")
+        inputs = PromptRenderInputs(impostor_count=3)
+        for fellows, singular, plural in (
+            (("p-9",), True, False),
+            (("p-9", "p-8"), False, True),
+        ):
+            opening = r.impostor_report(
+                agent_id="p-3",
+                current_tick=410,
+                meeting_trigger="p-3 reported body of p-7 at tick 410",
+                rendered_memory=_MEMORY,
+                public_transcript="",
+                fellow_impostor_ids=fellows,
+                living_ids=("p-2", "p-5"),
+                dead_ids=("p-7",),
+                render_inputs=inputs,
+            )
+            assert ("Your fellow saboteur:" in opening) is singular, fellows
+            assert ("Your fellow saboteurs:" in opening) is plural, fellows
+            ballot = r.vote(
+                voter_id="p-3",
+                rendered_memory=_MEMORY,
+                transcript=_TRANSCRIPT,
+                contradiction_flags=_CONTRAS,
+                suspicion_graph=_SUSP,
+                candidate_targets=("p-2", "p-5"),
+                skip_confidence_threshold=0.6,
+                fellow_impostor_ids=fellows,
+                render_inputs=inputs,
+            )
+            assert ("is your fellow saboteur." in ballot) is singular, fellows
+            assert ("are your fellow saboteurs." in ballot) is plural, fellows
+
+    def test_map_card_renders_in_every_meeting_template(self) -> None:
+        # R12: 0 of 7,458 recorded prompts carried any room list, adjacency or
+        # travel time, while 148 of 234 STRONG alibi_vs_sighting flags named
+        # rooms one doorway apart.
+        card_lines = CANONICAL_MAP_CARD.splitlines()
+        assert len(card_lines) <= 12
+        assert CANONICAL_MAP_CARD.count("ONE tick of walking") == 1
+        for label, rendered in self._render(impostor_count=2).items():
+            assert CANONICAL_MAP_CARD in rendered, label
+
+    def test_map_card_is_the_engine_map_and_the_detectors_table(self) -> None:
+        # One adjacency graph, not three: the rendered card, the detector's
+        # frozen table, and the engine map must agree, so a prompt can never
+        # promise a reconciliation rule the detector does not apply.
+        engine_view = public_map_from_engine_map(load_canonical_map())
+        assert render_map_card(engine_view) == CANONICAL_MAP_CARD
+        rooms = sorted(CANONICAL_ROOM_NEIGHBORS)
+        assert len(rooms) == 10
+        for room in rooms:
+            neighbours = ", ".join(sorted(CANONICAL_ROOM_NEIGHBORS[room]))
+            assert f"- {room}: {neighbours}" in CANONICAL_MAP_CARD
+        # The gate can fail: drop one doorway and the card stops matching.
+        thinned = engine_view.model_copy(
+            update={
+                "room_neighbors": {
+                    room: tuple(n for n in neighbours if n != "MEDBAY")
+                    for room, neighbours in engine_view.room_neighbors.items()
+                }
+            }
+        )
+        assert render_map_card(thinned) != CANONICAL_MAP_CARD
+
+    def test_map_card_never_publishes_vent_topology(self) -> None:
+        # Vents are impostor-only knowledge the same public view carries;
+        # publishing them to the table would convert a legibility fix into a
+        # firewall breach. Name every vent id so a widened card cannot pass.
+        engine_view = public_map_from_engine_map(load_canonical_map())
+        vent_ids = sorted(engine_view.vent_rooms)
+        assert vent_ids == [
+            "ADMIN_VENT",
+            "ENGINEERING_VENT",
+            "LABS_VENT",
+            "MEDBAY_VENT",
+            "REACTOR_VENT",
+            "STORAGE_VENT",
+        ]
+        for label, rendered in self._render(impostor_count=2).items():
+            for vent_id in vent_ids:
+                assert vent_id not in rendered, (label, vent_id)
+
+    def test_movement_observation_shape_is_offered_by_the_turn_templates(self) -> None:
+        # The shape the upstream movement lever reads; a speaker cannot answer
+        # with a claim no template names.
+        rendered = self._render(impostor_count=2)
+        for label in ("crewmate_report", "accusation_round"):
+            assert '"type": "saw_move"' in rendered[label], label
+            assert '"from_room"' in rendered[label], label
+            assert '"to_room"' in rendered[label], label

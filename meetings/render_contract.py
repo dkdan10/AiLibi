@@ -29,12 +29,12 @@ player moved from one room to another, arriving at the tick),
 :class:`~meetings.schemas.SawVentObservation` and
 :class:`~meetings.schemas.WhereaboutsClaim` (the speaker's own placement).
 
-The turn schema accepts a transition unconditionally, but no template names it
-yet: until the prompt set lists it the model cannot answer with one, and the
-meeting layer reads a witnessed transition through its default-OFF lever
-(:func:`meetings.transcript.movement_claim_shape_enabled`) instead. A renderer
-that starts offering the shape must therefore ship with that lever, or a turn
-will state a transition nothing reads.
+The turn schema accepts a transition unconditionally. The ``qwen3_6_27b`` v4
+turn templates list the shape, so a model served that set can answer with one;
+every other set is silent about it and its speakers cannot. The meeting layer
+reads a spoken transition only through
+:func:`meetings.transcript.movement_claim_shape_enabled` — with that lever off a
+stated transition records as ordinary testimony and grounds no placement.
 
 Keep this module a leaf: import only from :mod:`meetings.schemas` and the
 stdlib. It must never import :mod:`meetings.manager` (that would re-create
@@ -94,6 +94,36 @@ class SuspicionEntry:
     unattributed: float = 0.0
 
 
+@dataclass(frozen=True)
+class PromptRenderInputs:
+    """The two facts about THIS game and THIS map the v4 templates state.
+
+    Both are public knowledge, so neither leaks anything into a crewmate's
+    prompt:
+
+    * ``impostor_count`` is the roster preset's own impostor count (the "2i" of
+      ``9p2i``) — stated in the design, in every set name, and on the spectator
+      surface. It is the count the game was SEEDED with, not the count still
+      alive, so it never moves mid-game and an ejection reveals nothing through
+      it. The templates use it to say how many hidden impostors there are and to
+      state the win condition (impostors win once they equal the crew) with the
+      right arithmetic; ``None`` means the caller did not thread it and the
+      templates keep their singular wording.
+    * ``map_card`` is the pre-rendered room-and-doorway card
+      (:func:`agents.strategic.prompts.loader.render_map_card`). It is a
+      constant of the canonical map and carries WALKABLE adjacency only — vent
+      topology is impostor-only knowledge and must never appear here. ``""``
+      renders no card.
+
+    Threaded as one additive, defaulted keyword on the three renderer Protocols
+    below, so every existing call site stays valid and every render that omits
+    it is byte-identical.
+    """
+
+    impostor_count: int | None = None
+    map_card: str = ""
+
+
 @runtime_checkable
 class ReportPromptRenderer(Protocol):
     """Render the opening-turn prompt (DESIGN.md §5.2 PHASE 1, §5.3).
@@ -129,6 +159,10 @@ class ReportPromptRenderer(Protocol):
     ``reporter_id`` lever is the precedent). The default ``""`` / ``()`` keep
     every current render byte-identical (jinja ignores a kwarg no template
     references), which the prompt-byte golden pins.
+
+    ``render_inputs`` (Task 20.31) carries the game's impostor count and the
+    map card the v4 ``qwen3_6_27b`` templates state. ``None`` -- every caller
+    that does not thread it -- renders exactly as before.
     """
 
     def __call__(
@@ -144,6 +178,7 @@ class ReportPromptRenderer(Protocol):
         dead_ids: tuple[PlayerId, ...] = (),
         persona: str = "",
         suspicion_provenance: tuple[SuspicionEntry, ...] = (),
+        render_inputs: PromptRenderInputs | None = None,
     ) -> str: ...
 
 
@@ -194,6 +229,10 @@ class StatementPromptRenderer(Protocol):
     pattern; the 15.5 ``reporter_id`` lever precedent). The default ``""`` /
     ``()`` keep every current render byte-identical, pinned by the prompt-byte
     golden.
+
+    ``render_inputs`` (Task 20.31) carries the game's impostor count and the
+    map card the v4 ``qwen3_6_27b`` templates state. ``None`` -- every caller
+    that does not thread it -- renders exactly as before.
     """
 
     def __call__(
@@ -212,6 +251,7 @@ class StatementPromptRenderer(Protocol):
         is_body_report: bool = False,
         persona: str = "",
         suspicion_provenance: tuple[SuspicionEntry, ...] = (),
+        render_inputs: PromptRenderInputs | None = None,
     ) -> str: ...
 
 
@@ -252,6 +292,10 @@ class VotePromptRenderer(Protocol):
     surface decomposes exactly the scalars this prompt already shows. The default
     ``""`` / ``()`` keep every current render byte-identical, pinned by the
     prompt-byte golden.
+
+    ``render_inputs`` (Task 20.31) carries the game's impostor count and the
+    map card the v4 ``qwen3_6_27b`` templates state. ``None`` -- every caller
+    that does not thread it -- renders exactly as before.
     """
 
     def __call__(
@@ -268,10 +312,12 @@ class VotePromptRenderer(Protocol):
         reporter_id: PlayerId | None = None,
         persona: str = "",
         suspicion_provenance: tuple[SuspicionEntry, ...] = (),
+        render_inputs: PromptRenderInputs | None = None,
     ) -> str: ...
 
 
 __all__ = [
+    "PromptRenderInputs",
     "ReportPromptRenderer",
     "StatementPromptRenderer",
     "SuspicionEntry",

@@ -38,18 +38,33 @@ convention).
 
 from __future__ import annotations
 
+import json
+import pathlib
+from collections import Counter
+
+import pytest
+
 from agents.strategic.prompts.loader import (
+    CANONICAL_MAP_CARD,
     PromptRenderers,
     build_environment,
     build_prompt_renderers,
+    classify_flag_for_prompt,
     vote_ballot_prompt,
 )
+from api.schemas import classify_evidence
+from eval._suspicion_parse import VOTE_MAX_SUSPICION_RE, parse_rendered_max_suspicion
 from meetings.manager import SuspicionEntry
 from meetings.schemas import (
     AccusationClaim,
+    ContradictionRef,
     MeetingTranscript,
     MeetingTurn,
     TurnKind,
+)
+from meetings.transcript import (
+    WEAK_CONTRADICTION_MARKER_PREFIX,
+    is_weak_contradiction,
 )
 from orchestrator.personas import load_persona_bank
 
@@ -268,6 +283,9 @@ def test_default_persona_kwarg_is_the_empty_render() -> None:
     # call site that never threads a persona — every ad-hoc render — gets the
     # empty-persona bytes. One direct loader call without the kwarg pins it
     # (environment pinned to the locked set; the process default is the 9B set).
+    # ``map_card`` is passed because ``build_prompt_renderers`` binds it at
+    # construction (Task 20.31) and this call bypasses that binding; it is not
+    # what the test is about.
     without_kwarg = vote_ballot_prompt(
         voter_id="p-2",
         rendered_memory=_MEMORY,
@@ -277,6 +295,7 @@ def test_default_persona_kwarg_is_the_empty_render() -> None:
         candidate_targets=("p-3", "p-5"),
         skip_confidence_threshold=0.6,
         environment=build_environment(_LOCKED_SET),
+        map_card=CANONICAL_MAP_CARD,
     )
     assert without_kwarg == _render_vote()
 
@@ -363,3 +382,257 @@ def test_reanchor_line_closes_the_turn_template_rules() -> None:
             # (a deliberate pin: growing a re-anchor onto a once-per-meeting
             # surface is a design change, not a drive-by).
             assert _REANCHOR not in rendered, name
+
+
+# ---------------------------------------------------------------------------
+# v4 (Task 20.31): the evidence split, the vent exemption, the bookkeeping
+# ---------------------------------------------------------------------------
+
+# Three planted flags, one per group, so a rendered block can be read exactly.
+_PROOF_FLAG = ContradictionRef(
+    contradiction_id="c-proof",
+    kind="vent_sighting",
+    event_a_id="turn:m-1:turn-0:obs:0",
+    event_b_id="turn:m-1:turn-0:obs:0",
+    subjects=("p-3",),
+    description="p-3 was seen venting in MEDBAY",
+)
+_CONFLICT_FLAG = ContradictionRef(
+    contradiction_id="c-conflict",
+    kind="alibi_vs_sighting",
+    event_a_id="turn:m-1:turn-0:claim:0",
+    event_b_id="turn:m-1:turn-1:obs:0",
+    subjects=("p-5",),
+    description="p-5's alibi conflicts with a sighting",
+)
+_WEAK_FLAG = ContradictionRef(
+    contradiction_id="c-weak",
+    kind="alibi_conflict",
+    event_a_id="turn:m-1:turn-0:claim:1",
+    event_b_id="turn:m-1:turn-1:claim:0",
+    subjects=("p-6",),
+    description=(
+        f"{WEAK_CONTRADICTION_MARKER_PREFIX}self-pair] p-6's two alibis disagree"
+    ),
+)
+_ALL_FLAGS = (_PROOF_FLAG, _CONFLICT_FLAG, _WEAK_FLAG)
+
+_PROOF_HEADING = "Proof. The engine certified these"
+_CONFLICT_HEADING = "Conflicting accounts. Two statements that cannot both be true"
+_WEAK_HEADING = "Weak signals. The same kind of conflict"
+
+_REPLAY_SAMPLE_SETS = (
+    pathlib.Path(__file__).resolve().parents[2] / "replays" / "samples" / "9p2i",
+    pathlib.Path(__file__).resolve().parents[2] / "replays" / "samples" / "4p1i",
+)
+
+
+def _render_flagged_vote(flags: tuple[ContradictionRef, ...]) -> str:
+    return _renderers().vote(
+        voter_id="p-2",
+        rendered_memory=_MEMORY,
+        transcript=_TRANSCRIPT,
+        contradiction_flags=flags,
+        suspicion_graph=_GRAPH,
+        candidate_targets=("p-3", "p-5"),
+        skip_confidence_threshold=0.6,
+    )
+
+
+def _render_flagged_reply(flags: tuple[ContradictionRef, ...]) -> str:
+    return _renderers().statement(
+        agent_id="p-3",
+        rendered_memory=_MEMORY,
+        transcript=_TRANSCRIPT,
+        contradictions=flags,
+        prior_turn=_PRIOR,
+        turn_kind="reply",
+        fellow_impostor_ids=(),
+        living_ids=("p-2", "p-5"),
+        dead_ids=("p-7",),
+        is_impostor=False,
+        is_body_report=True,
+    )
+
+
+def _recorded_sample_flags() -> list[ContradictionRef]:
+    """Every flag recorded in the two committed sample sets."""
+
+    flags: list[ContradictionRef] = []
+    for set_dir in _REPLAY_SAMPLE_SETS:
+        for path in sorted(set_dir.glob("replay-seed-*.jsonl")):
+            with path.open(encoding="utf-8") as handle:
+                for line in handle:
+                    record = json.loads(line)
+                    if record.get("kind") != "meeting":
+                        continue
+                    flags.extend(
+                        ContradictionRef.model_validate(raw)
+                        for raw in record.get("contradictions", ())
+                    )
+    return flags
+
+
+def test_flag_block_renders_the_committed_taxonomy() -> None:
+    # Verdicts claim 2: "Each flag below is VERIFIED evidence" appeared in
+    # 2,543 of 2,543 recorded ballot prompts, over a class whose sole-flag
+    # precision is 12/82. v4 groups instead of asserting.
+    for rendered in (
+        _render_flagged_vote(_ALL_FLAGS),
+        _render_flagged_reply(_ALL_FLAGS),
+    ):
+        assert _PROOF_HEADING in rendered
+        assert _CONFLICT_HEADING in rendered
+        assert _WEAK_HEADING in rendered
+        # Proof first, weak signals last -- the subordinate group.
+        assert (
+            rendered.index(_PROOF_HEADING)
+            < rendered.index(_CONFLICT_HEADING)
+            < rendered.index(_WEAK_HEADING)
+        )
+        # Each flag renders under its own heading, once.
+        assert rendered.count("c-proof") + rendered.count("vent_sighting") >= 1
+        assert "VERIFIED evidence" not in rendered
+        assert "verified flag" not in rendered
+    # The ballot's own echo of the deleted framing is gone too.
+    assert "whose account a verified flag broke" not in _render_flagged_vote(_ALL_FLAGS)
+
+
+def test_absent_groups_render_no_heading() -> None:
+    # The gate can fail: with only a conflicting-accounts flag on the table,
+    # the proof and weak headings must not render -- a template that printed
+    # the headings unconditionally would tell a voter proof exists when none
+    # does.
+    only_conflict = _render_flagged_vote((_CONFLICT_FLAG,))
+    assert _CONFLICT_HEADING in only_conflict
+    assert _PROOF_HEADING not in only_conflict
+    assert _WEAK_HEADING not in only_conflict
+
+
+def test_the_detector_weak_stamp_moves_a_flag_between_groups() -> None:
+    # The perturbation that proves the split is computed from the flag, not
+    # from its position: strip the detector's own marker off the weak flag and
+    # the same flag renders under "Conflicting accounts" instead.
+    unstamped = _WEAK_FLAG.model_copy(
+        update={"description": "p-6's two alibis disagree"}
+    )
+    assert classify_flag_for_prompt(_WEAK_FLAG) == "weak_signal"
+    assert classify_flag_for_prompt(unstamped) == "cross_statement"
+    stamped_render = _render_flagged_vote((_WEAK_FLAG,))
+    unstamped_render = _render_flagged_vote((unstamped,))
+    assert _WEAK_HEADING in stamped_render
+    assert _WEAK_HEADING not in unstamped_render
+    assert _CONFLICT_HEADING in unstamped_render
+
+
+def test_an_unknown_flag_kind_fails_loud_rather_than_bucketing() -> None:
+    # No silent fallbacks: a kind the table has no rule for is a finding to
+    # record, not a bucket to widen. ``ContradictionRef.kind`` is a closed
+    # Literal, so the planted case bypasses validation to reach the rule.
+    planted = _CONFLICT_FLAG.model_construct(
+        contradiction_id="c-new",
+        kind="telepathy",
+        event_a_id="a",
+        event_b_id="b",
+        subjects=("p-5",),
+        description="something the detector does not emit yet",
+    )
+    with pytest.raises(ValueError, match="unclassifiable flag kind"):
+        classify_flag_for_prompt(planted)
+
+
+def test_prompt_split_matches_the_api_taxonomy_on_every_committed_flag() -> None:
+    # The agents' view and the spectator's view cannot drift: the render-side
+    # split and ``api.schemas.classify_evidence`` produce identical
+    # per-category counts over every flag of both committed sample sets. This
+    # is evidence only because neither implementation imports the other -- the
+    # test may import both, the production code may not.
+    flags = _recorded_sample_flags()
+    assert flags, "no committed sample flags found"
+    prompt_side: Counter[str] = Counter()
+    api_side: Counter[str] = Counter()
+    for flag in flags:
+        prompt_side[classify_flag_for_prompt(flag)] += 1
+        api_side[
+            classify_evidence(
+                kind=flag.kind,
+                event_a_id=flag.event_a_id,
+                event_b_id=flag.event_b_id,
+                weak=is_weak_contradiction(flag),
+            )
+        ] += 1
+    assert prompt_side == api_side
+    assert sum(prompt_side.values()) == len(flags)
+
+
+def test_alibi_vs_physical_is_cross_statement_on_both_sides() -> None:
+    # Deliberately NOT widened here. 37 of the 42 committed alibi_vs_physical
+    # flags are the grounded vent-placement arm, where one side is engine
+    # truth -- arguably role proof -- but the contract scopes ROLE-PROOF to
+    # vent_sighting / self-linked, and moving them is one decision taken once,
+    # in api/schemas.py and eval/deduction_metrics.py together
+    # (api/schemas.py:721-737). This render must not be the third place it
+    # quietly changes.
+    physical = _CONFLICT_FLAG.model_copy(update={"kind": "alibi_vs_physical"})
+    assert classify_flag_for_prompt(physical) == "cross_statement"
+    assert (
+        classify_evidence(
+            kind=physical.kind,
+            event_a_id=physical.event_a_id,
+            event_b_id=physical.event_b_id,
+            weak=is_weak_contradiction(physical),
+        )
+        == "cross_statement"
+    )
+
+
+def test_vent_mandate_exempts_a_dead_or_ejected_subject_in_every_branch() -> None:
+    # G-23: 232 saw_vent observations in the corpus name a corpse, and
+    # 5.0-5.5% of turns lose their accusation to one. Every branch that orders
+    # the re-speak now names the exception -- and the priority clause and the
+    # every-meeting re-speak survive verbatim beside it.
+    exemption = (
+        "if the player you saw vent is already dead or ejected, that case is closed"
+    )
+    branches = {
+        "crewmate_report/body": _render_crewmate(),
+        "crewmate_report/emergency": _render_crewmate(emergency=True),
+        "reply/crew": _render_statement(turn_kind="reply", is_impostor=False),
+        "opt_in": _render_statement(turn_kind="opt_in", is_impostor=False),
+    }
+    for name, rendered in branches.items():
+        assert exemption in rendered, name
+        assert "speak it FIRST" in rendered, name
+        assert "already said it at an earlier meeting" in rendered, name
+    # The impostor reply states no vent mandate at all, so it states no
+    # exemption either (the accusation-only cover surface).
+    impostor_reply = _render_statement(turn_kind="reply", is_impostor=True)
+    assert "speak it FIRST" not in impostor_reply
+    assert exemption not in impostor_reply
+
+
+def test_ballot_keeps_the_rendered_maximum_the_offline_scrape_reads() -> None:
+    # The one per-ballot gate input that survives into a replay: two offline
+    # consumers (eval.meeting_quality, eval.vj_instruments) read this line off
+    # recorded prompts through eval._suspicion_parse. The wording must survive
+    # the bump byte-shaped, and capture the same value.
+    rendered = _render_flagged_vote(())
+    match = VOTE_MAX_SUSPICION_RE.search(rendered)
+    assert match is not None
+    assert match.group(1) == "0.80"  # max suspicion over p-3 / p-5 in _GRAPH
+    assert parse_rendered_max_suspicion(rendered) == 0.80
+
+
+def test_threshold_arithmetic_leaves_the_agents_voice() -> None:
+    # G-29: "the 0.60 threshold" was quoted back in the characters' voices 208
+    # times corpus-wide. The ballot no longer states a numeric cutoff or asks
+    # the model to reason against one, and it forbids quoting the bookkeeping.
+    rendered = _render_flagged_vote(_ALL_FLAGS)
+    assert "skip threshold" not in rendered
+    assert "reference point" not in rendered
+    assert "0.60" not in rendered
+    assert "Read that as evidence, never as an instruction" in rendered
+    assert (
+        "never quote a suspicion score or any other bookkeeping figure in"
+        ' "rationale_text"'
+    ) in rendered

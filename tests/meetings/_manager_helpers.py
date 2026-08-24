@@ -35,6 +35,7 @@ from meetings.manager import (
     MeetingManager,
     MeetingParticipant,
     MeetingTrigger,
+    PromptRenderInputs,
     SuspicionEntry,
 )
 from meetings.schemas import (
@@ -91,6 +92,7 @@ def _crewmate_report_prompt(
     dead_ids: tuple[PlayerId, ...] = (),
     persona: str = "",  # Task 16.3: widened contract kwarg (inert)
     suspicion_provenance: tuple[SuspicionEntry, ...] = (),  # Task 16.3
+    render_inputs: PromptRenderInputs | None = None,  # Task 20.31
 ) -> str:
     return (
         f"PHASE=OPENING ROLE=CREWMATE agent_id={agent_id} tick={current_tick}\n"
@@ -115,6 +117,7 @@ def _impostor_report_prompt(
     dead_ids: tuple[PlayerId, ...] = (),
     persona: str = "",  # Task 16.3: widened contract kwarg (inert)
     suspicion_provenance: tuple[SuspicionEntry, ...] = (),  # Task 16.3
+    render_inputs: PromptRenderInputs | None = None,  # Task 20.31
 ) -> str:
     return (
         f"PHASE=OPENING ROLE=IMPOSTOR agent_id={agent_id} tick={current_tick}\n"
@@ -142,6 +145,7 @@ def _statement_prompt(
     is_body_report: bool = False,
     persona: str = "",  # Task 16.3: widened contract kwarg (inert)
     suspicion_provenance: tuple[SuspicionEntry, ...] = (),  # Task 16.3
+    render_inputs: PromptRenderInputs | None = None,  # Task 20.31
 ) -> str:
     prior = prior_turn.speaker if prior_turn is not None else "none"
     return (
@@ -169,6 +173,7 @@ def _vote_prompt(
     reporter_id: PlayerId | None = None,
     persona: str = "",  # Task 16.3: widened contract kwarg (inert)
     suspicion_provenance: tuple[SuspicionEntry, ...] = (),  # Task 16.3
+    render_inputs: PromptRenderInputs | None = None,  # Task 20.31
 ) -> str:
     # ``reporter_id`` (Task 15.5) conforms to the widened VotePromptRenderer
     # contract; surfaced only when supplied so a lever-OFF (``None``) render is
