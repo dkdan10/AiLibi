@@ -247,3 +247,6 @@ recorded measurements, not prose.
 - [audit-phase-20-counterfactual.md](audit-phase-20-counterfactual.md) — the
   offline counterfactual: every predictable bar predicted on frozen bytes, and
   the cells no offline instrument can reach, published before the record.
+- [audit-phase-20-smoke.md](audit-phase-20-smoke.md) — the smoke record: live
+  seeds at the full slate into a scratch directory, the validity gate, the
+  observed lever coverage, and the GO/ABANDON call before the record starts.
