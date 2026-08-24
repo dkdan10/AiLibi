@@ -32,18 +32,22 @@ from agents.memory.store import (
     self_location_trail_enabled,
     task_completion_from_events_enabled,
 )
-from engine.world import load_canonical_map
+from engine.world import WorldState, load_canonical_map
 from eval.leak_test import (
     JsonValue,
     _assert_no_recursive_hidden_fields,
     _assert_no_role_bearing_values,
 )
 from llm.budget import GameBudget
-from meetings.manager import _normalize_ballot_observation_id
+from meetings.manager import MeetingTrigger, _normalize_ballot_observation_id
 from meetings.schemas import VoteBallot
+from agents.base import AgentInterface
 from orchestrator.game import (
     DEFAULT_TASKS_PER_CREWMATE,
+    DefaultMeetingRunner,
     HeadlessGame,
+    MeetingArtifacts,
+    MeetingAwareAgent,
     build_default_agent_factory,
     build_default_meeting_runner,
 )
@@ -2682,12 +2686,51 @@ class TestCoalescedMemoryRenderLever:
 
 
 _SPAN_IN_PROMPT = re.compile(
-    r"^- \[obs [^\]]+\] You saw \S+ (?:\w+ )?in [A-Z_]+ ticks \d+-\d+", re.MULTILINE
-)
-_SPAWN_IN_PROMPT = re.compile(
-    r"^- \[obs [^\]]+\] (?:\[tick 0\] )?You saw every other player in [A-Z_]+",
+    r"^- \[obs (?P<id>[^\]]+)\] You saw \S+ (?:\w+ )?in [A-Z_]+ ticks \d+-\d+",
     re.MULTILINE,
 )
+_SPAWN_IN_PROMPT = re.compile(
+    r"^- \[obs (?P<id>[^\]]+)\] (?:\[tick 0\] )?You saw every other player in [A-Z_]+",
+    re.MULTILINE,
+)
+
+
+class _UniverseCapturingRunner:
+    """A meeting runner that records each voter's stored citation universe.
+
+    The universe is read through ``observation_ids_for_meeting()`` -- the same
+    accessor ``orchestrator.game`` threads onto ``MeetingParticipant.observation_ids``
+    and the manager validates a ballot against -- so the assertions below hold the
+    render to the agent's OWN STORE rather than to the ids the render printed.
+    """
+
+    def __init__(self, inner: DefaultMeetingRunner) -> None:
+        self._inner = inner
+        self.universes: list[dict[str, frozenset[str]]] = []
+
+    async def run_meeting(
+        self,
+        *,
+        meeting_id: str,
+        trigger: MeetingTrigger,
+        state: WorldState,
+        agents: Mapping[str, AgentInterface],
+    ) -> MeetingArtifacts:
+        self.universes.append(
+            {
+                player_id: frozenset(agent.observation_ids_for_meeting())
+                for player_id, agent in agents.items()
+                if state.players[player_id].alive
+                and isinstance(agent, MeetingAwareAgent)
+            }
+        )
+        return await self._inner.run_meeting(
+            meeting_id=meeting_id, trigger=trigger, state=state, agents=agents
+        )
+
+
+def _cited_ids(pattern: re.Pattern[str], prompt: str) -> list[str]:
+    return [match.group("id") for match in pattern.finditer(prompt)]
 
 
 @pytest.mark.slow
@@ -2697,14 +2740,19 @@ def test_a_lever_on_game_carries_its_coalesced_citations_through_the_meeting(
     """A fake-provider 9p2i game with the lever ON, read end to end.
 
     The unit pins above prove the fold's shapes; this proves the shapes reach a
-    real meeting. The lever is set in the process environment, so the production
-    render seam (``TacticalAgent.render_memory_for_meeting``) resolves it exactly
-    as a recorded game would, and every ``[obs ...]`` the coalesced prompts carry
-    is checked against the rule the ballot validator enforces -- the id must be one
-    of the VOTER'S OWN observations -- and then through the validator itself.
+    real meeting and that what they cite is real. The lever is set in the process
+    environment, so the production render seam
+    (``TacticalAgent.render_memory_for_meeting``) resolves it exactly as a recorded
+    game would; the runner wrapper captures each voter's STORED observation-id set
+    as participant construction reads it, and every ``[obs ...]`` the coalesced
+    prompts carry -- the spans' and the spawn summary's included -- is checked
+    against that set and then through the production ballot validator.
     """
 
     monkeypatch.setenv(ENV_COALESCED_MEMORY_RENDER, "1")
+    runner = _UniverseCapturingRunner(
+        build_default_meeting_runner(budget=GameBudget(max_cost_usd=1.00))
+    )
     game = HeadlessGame(
         seed=3,
         game_map=load_canonical_map(),
@@ -2715,9 +2763,7 @@ def test_a_lever_on_game_carries_its_coalesced_citations_through_the_meeting(
         num_impostors=2,
         tasks_per_crewmate=DEFAULT_TASKS_PER_CREWMATE,
         scheduler=TickScheduler(max_ticks=200),
-        meeting_runner=build_default_meeting_runner(
-            budget=GameBudget(max_cost_usd=1.00)
-        ),
+        meeting_runner=runner,
     )
 
     result = game.run()
@@ -2728,23 +2774,31 @@ def test_a_lever_on_game_carries_its_coalesced_citations_through_the_meeting(
         if isinstance(entry, MeetingReplayEntry)
     ]
     assert meetings, "the seed must reach a meeting for this to test anything"
+    assert len(runner.universes) == len(meetings)
     spans = spawn_rows = cited = 0
-    for entry in meetings:
+    for entry, universes in zip(meetings, runner.universes, strict=True):
         for call in entry.llm_calls:
-            spans += len(_SPAN_IN_PROMPT.findall(call.prompt))
-            spawn_rows += len(_SPAWN_IN_PROMPT.findall(call.prompt))
-            own = frozenset(_OBS_ID_IN_VIEW.findall(call.prompt))
-            cited += len(own)
-            if not own:
+            span_ids = _cited_ids(_SPAN_IN_PROMPT, call.prompt)
+            spawn_ids = _cited_ids(_SPAWN_IN_PROMPT, call.prompt)
+            spans += len(span_ids)
+            spawn_rows += len(spawn_ids)
+            rendered = frozenset(_OBS_ID_IN_VIEW.findall(call.prompt))
+            cited += len(rendered)
+            if not rendered:
                 continue
             agent_id = call.agent_id
             assert agent_id is not None, "a prompt citing observations names its agent"
-            # The validator's universe rule, read off the bytes: every id a
-            # coalesced prompt offers the voter is one of that voter's own rows.
-            assert all(
-                observation_id.startswith(f"{agent_id}:") for observation_id in own
-            ), f"{agent_id} was offered another agent's id: {sorted(own)}"
-            for observation_id in sorted(own):
+            universe = universes[agent_id]
+            assert universe, f"{agent_id} entered the meeting with no citable ids"
+            # The authority is the voter's STORE, not the render: every id the
+            # coalesced prompt offers -- coalesced rows included -- must be one
+            # participant construction would accept.
+            assert rendered <= universe, (
+                f"{agent_id} was offered ids it does not hold: "
+                f"{sorted(rendered - universe)}"
+            )
+            assert frozenset(span_ids) | frozenset(spawn_ids) <= universe
+            for observation_id in sorted(rendered):
                 ballot = VoteBallot(
                     voter=agent_id,
                     target="SKIP",
@@ -2754,7 +2808,7 @@ def test_a_lever_on_game_carries_its_coalesced_citations_through_the_meeting(
                     primary_reason_observation_id=observation_id,
                 )
                 kept = _normalize_ballot_observation_id(
-                    ballot=ballot, valid_observation_ids=own
+                    ballot=ballot, valid_observation_ids=universe
                 )
                 assert kept.primary_reason_observation_id == observation_id
             # The gate bites: an id the voter does not hold is nulled, so this
@@ -2767,9 +2821,10 @@ def test_a_lever_on_game_carries_its_coalesced_citations_through_the_meeting(
                 primary_reason_id=None,
                 primary_reason_observation_id="p-99:999:0",
             )
+            assert "p-99:999:0" not in universe
             assert (
                 _normalize_ballot_observation_id(
-                    ballot=fabricated, valid_observation_ids=own
+                    ballot=fabricated, valid_observation_ids=universe
                 ).primary_reason_observation_id
                 is None
             )

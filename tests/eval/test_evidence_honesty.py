@@ -3173,8 +3173,11 @@ def _render_budget_census(sample_dir: Path) -> _RenderBudgetCensus:
                     )
                     for pid in living:
                         composite = composites[pid]
+                        # Both legs pass an explicit mapping: the counterfactual
+                        # must not read whatever the process environment happens
+                        # to export.
                         off = render_for_prompt(
-                            composite, token_budget=DEFAULT_TOKEN_BUDGET
+                            composite, token_budget=DEFAULT_TOKEN_BUDGET, env={}
                         )
                         on = render_for_prompt(
                             composite,
