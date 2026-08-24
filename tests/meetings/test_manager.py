@@ -7571,6 +7571,43 @@ class TestStructuredTurnMarkersResolver:
         assert structured_turn_markers_enabled() is True
 
 
+class TestTurnAnnotationRecordShape:
+    """The annotation channel is the manager's, and stays off the wire."""
+
+    def test_the_provider_facing_schema_is_unchanged(self) -> None:
+        # ``MeetingTurn`` doubles as the structured-output schema every provider
+        # receives (``llm.ollama_client`` / ``llm.featherless_client`` send
+        # ``model_json_schema()`` verbatim). ``annotations`` is manager-authored,
+        # so it must not appear there -- otherwise the lever would change what a
+        # real provider is asked for even with the lever OFF.
+        properties = MeetingTurn.model_json_schema()["properties"]
+        assert "annotations" not in properties
+        assert sorted(properties) == [
+            "claims",
+            "free_text",
+            "observations",
+            "reply_to",
+            "speaker",
+            "turn_id",
+            "turn_index",
+            "turn_kind",
+        ]
+
+    def test_an_annotation_payload_must_match_its_kind(self) -> None:
+        # The three claim-drop kinds carry their dropped value; the other two
+        # carry none. A hand-authored replay row that breaks either half fails
+        # loud rather than surfacing a chip whose original is missing.
+        assert (
+            TurnAnnotation(kind="invalid_alibi_subject", original="ghost-1").original
+            == "ghost-1"
+        )
+        assert TurnAnnotation(kind="fabricated_opening").original is None
+        with pytest.raises(ValidationError):
+            TurnAnnotation(kind="invalid_alibi_subject")
+        with pytest.raises(ValidationError):
+            TurnAnnotation(kind="fabricated_opening", original="ghost-1")
+
+
 class TestStructuredTurnMarkersOff:
     """OFF, every guard still splices its marker into the spoken text."""
 

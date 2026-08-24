@@ -42,6 +42,7 @@ from pydantic import (
     model_serializer,
     model_validator,
 )
+from pydantic.json_schema import SkipJsonSchema
 
 PlayerId: TypeAlias = str
 RoomId: TypeAlias = str
@@ -380,6 +381,16 @@ position. The spectator surface renders exactly this vocabulary as chips.
 """
 
 
+_CLAIM_DROP_ANNOTATION_KINDS: frozenset[TurnAnnotationKind] = frozenset(
+    {
+        "invalid_accusation_target",
+        "invalid_alibi_subject",
+        "invalid_corroboration_supports",
+    }
+)
+"""The annotation kinds that name a dropped claim field and quote its value."""
+
+
 class TurnAnnotation(_FrozenModel):
     """One manager-authored note about what a guard changed on this turn.
 
@@ -396,6 +407,27 @@ class TurnAnnotation(_FrozenModel):
 
     kind: TurnAnnotationKind
     original: str | None = None
+
+    @model_validator(mode="after")
+    def _validate_payload_matches_kind(self) -> TurnAnnotation:
+        """The three claim-drop kinds carry their dropped value; the other two do not.
+
+        Fail loud rather than surface a dropped-claim chip whose original the
+        record promised and does not hold (AGENTS.md "no silent fallbacks").
+        """
+
+        if self.kind in _CLAIM_DROP_ANNOTATION_KINDS:
+            if self.original is None:
+                raise ValueError(
+                    f"TurnAnnotation kind={self.kind!r} must carry the dropped "
+                    "value in 'original'"
+                )
+        elif self.original is not None:
+            raise ValueError(
+                f"TurnAnnotation kind={self.kind!r} drops no value, so "
+                f"'original' must be None (got {self.original!r})"
+            )
+        return self
 
 
 class MeetingTurn(_FrozenModel):
@@ -424,7 +456,11 @@ class MeetingTurn(_FrozenModel):
     observations: tuple[ObservationClaim, ...] = ()
     claims: tuple[Claim, ...] = ()
     free_text: str
-    annotations: tuple[TurnAnnotation, ...] = ()
+    # Manager-authored, never model-authored -- so it is kept OUT of the JSON
+    # schema this model doubles as (the structured-output contract a provider
+    # receives on the wire). The model is asked for the same eight fields it
+    # always was; :meth:`MeetingManager._collect_turn` writes this one.
+    annotations: SkipJsonSchema[tuple[TurnAnnotation, ...]] = ()
 
     @model_serializer(mode="wrap")
     def _serialize(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:

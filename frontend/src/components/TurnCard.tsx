@@ -338,8 +338,10 @@ export function TurnCard({
           t{meetingTick} · {TURN_KIND_LABELS[turn.turn_kind]}
         </span>
         {turn.fabricated_opening && <AnnotationChip label="fabricated_opening" />}
-        {annotationChips(turn).map((label) => (
-          <AnnotationChip key={label} label={label} />
+        {annotationChips(turn).map((label, index) => (
+          // Keyed by position: one turn can drop two claims of the same kind,
+          // so the label alone is not a unique key.
+          <AnnotationChip key={`${label}-${index}`} label={label} />
         ))}
         {target !== null && (
           // distrust-strong is the channel for the accusation EDGE (the arrow);
