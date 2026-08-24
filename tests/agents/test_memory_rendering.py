@@ -12,11 +12,12 @@ import json
 import re
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Final, cast
 
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
+from pydantic import BaseModel
 
 from agents.memory.beliefs import ContradictionRef
 from agents.memory.episodic import EpisodicEvent
@@ -39,7 +40,9 @@ from eval.leak_test import (
     _assert_no_role_bearing_values,
 )
 from llm.budget import GameBudget
-from meetings.manager import MeetingTrigger, _normalize_ballot_observation_id
+from llm.client import CallKind, LLMResponse
+from llm.fake_provider import FakeProvider
+from meetings.manager import INVALID_OBSERVATION_ID_MARKER, MeetingTrigger
 from meetings.schemas import VoteBallot
 from agents.base import AgentInterface
 from orchestrator.game import (
@@ -2693,6 +2696,8 @@ _SPAWN_IN_PROMPT = re.compile(
     r"^- \[obs (?P<id>[^\]]+)\] (?:\[tick 0\] )?You saw every other player in [A-Z_]+",
     re.MULTILINE,
 )
+# An id no agent can hold: the shape is valid, the owner does not exist.
+_FABRICATED_OBSERVATION_ID: Final[str] = "p-99:999:0"
 
 
 class _UniverseCapturingRunner:
@@ -2729,32 +2734,85 @@ class _UniverseCapturingRunner:
         )
 
 
+class _CitingFakeProvider:
+    """The deterministic fake, except that its ballots cite a coalesced row.
+
+    :class:`~llm.fake_provider.FakeProvider` builds a MINIMAL valid instance of
+    the schema, so every ballot it returns carries a null
+    ``primary_reason_observation_id`` -- which leaves the production citation
+    path (participant construction -> the manager's validator -> the recorded
+    ballot) unexercised by any fake-provider game. This answers exactly as the
+    fake does except on a :class:`VoteBallot` call, where it copies the FIRST
+    coalesced row the voter's own prompt offers into that field, or
+    ``fabricated_id`` when one is given -- the perturbation that proves the
+    production path validates rather than passes ids through.
+    """
+
+    def __init__(self, *, fabricated_id: str | None = None) -> None:
+        self._inner = FakeProvider()
+        self._fabricated_id = fabricated_id
+        self.citations_offered = 0
+
+    async def complete(
+        self,
+        *,
+        prompt: str,
+        schema: type[BaseModel] | None,
+        max_tokens: int,
+        temperature: float,
+        call_kind: CallKind = "meeting",
+        model: str | None = None,
+        agent_id: str | None = None,
+    ) -> LLMResponse:
+        response = await self._inner.complete(
+            prompt=prompt,
+            schema=schema,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            call_kind=call_kind,
+            model=model,
+            agent_id=agent_id,
+        )
+        if schema is not VoteBallot or agent_id is None:
+            return response
+        coalesced = _coalesced_ids(prompt)
+        if not coalesced:
+            return response
+        payload = cast(dict[str, Any], json.loads(response.text))
+        payload["primary_reason_observation_id"] = (
+            self._fabricated_id if self._fabricated_id is not None else coalesced[0]
+        )
+        self.citations_offered += 1
+        return LLMResponse(
+            text=json.dumps(payload),
+            usage=response.usage,
+            cost_usd=response.cost_usd,
+            model=response.model,
+        )
+
+
 def _cited_ids(pattern: re.Pattern[str], prompt: str) -> list[str]:
     return [match.group("id") for match in pattern.finditer(prompt)]
 
 
-@pytest.mark.slow
-def test_a_lever_on_game_carries_its_coalesced_citations_through_the_meeting(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """A fake-provider 9p2i game with the lever ON, read end to end.
+def _coalesced_ids(prompt: str) -> list[str]:
+    """The ids the FOLDED rows carry: every span, then the spawn summaries."""
 
-    The unit pins above prove the fold's shapes; this proves the shapes reach a
-    real meeting and that what they cite is real. The lever is set in the process
-    environment, so the production render seam
-    (``TacticalAgent.render_memory_for_meeting``) resolves it exactly as a recorded
-    game would; the runner wrapper captures each voter's STORED observation-id set
-    as participant construction reads it, and every ``[obs ...]`` the coalesced
-    prompts carry -- the spans' and the spawn summary's included -- is checked
-    against that set and then through the production ballot validator.
-    """
+    return _cited_ids(_SPAN_IN_PROMPT, prompt) + _cited_ids(_SPAWN_IN_PROMPT, prompt)
 
-    monkeypatch.setenv(ENV_COALESCED_MEMORY_RENDER, "1")
+
+def _run_lever_on_game(
+    *, tmp_path: Path, client: _CitingFakeProvider, seed: int = 3
+) -> tuple[list[MeetingReplayEntry], list[dict[str, frozenset[str]]]]:
+    """Play one fake-provider 9p2i game and return its meetings + universes."""
+
     runner = _UniverseCapturingRunner(
-        build_default_meeting_runner(budget=GameBudget(max_cost_usd=1.00))
+        build_default_meeting_runner(
+            llm_client=client, budget=GameBudget(max_cost_usd=1.00)
+        )
     )
     game = HeadlessGame(
-        seed=3,
+        seed=seed,
         game_map=load_canonical_map(),
         agent_factory=build_default_agent_factory(),
         replay_path=tmp_path / "replay.jsonl",
@@ -2765,9 +2823,7 @@ def test_a_lever_on_game_carries_its_coalesced_citations_through_the_meeting(
         scheduler=TickScheduler(max_ticks=200),
         meeting_runner=runner,
     )
-
     result = game.run()
-
     meetings = [
         entry
         for entry in read_all_entries(result.replay_path)
@@ -2775,8 +2831,36 @@ def test_a_lever_on_game_carries_its_coalesced_citations_through_the_meeting(
     ]
     assert meetings, "the seed must reach a meeting for this to test anything"
     assert len(runner.universes) == len(meetings)
+    return meetings, runner.universes
+
+
+@pytest.mark.slow
+def test_a_lever_on_game_carries_its_coalesced_citations_through_the_meeting(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A fake-provider 9p2i game with the lever ON, read end to end.
+
+    The unit pins above prove the fold's shapes; this proves the shapes reach a
+    real meeting, that what they cite is real, and that a coalesced citation
+    survives the PRODUCTION ballot path into the recorded result. The lever is
+    set in the process environment, so the production render seam
+    (``TacticalAgent.render_memory_for_meeting``) resolves it exactly as a
+    recorded game would; the runner wrapper captures each voter's STORED
+    observation-id set as participant construction reads it; and the ballots the
+    replay carries are the manager's own output, validated against the
+    participant the orchestrator wired, not against anything this test built.
+    """
+
+    monkeypatch.setenv(ENV_COALESCED_MEMORY_RENDER, "1")
+    client = _CitingFakeProvider()
+    meetings, universes_per_meeting = _run_lever_on_game(
+        tmp_path=tmp_path, client=client
+    )
+
     spans = spawn_rows = cited = 0
-    for entry, universes in zip(meetings, runner.universes, strict=True):
+    landed = 0
+    for entry, universes in zip(meetings, universes_per_meeting, strict=True):
+        offered_by_voter: dict[str, frozenset[str]] = {}
         for call in entry.llm_calls:
             span_ids = _cited_ids(_SPAN_IN_PROMPT, call.prompt)
             spawn_ids = _cited_ids(_SPAWN_IN_PROMPT, call.prompt)
@@ -2797,38 +2881,64 @@ def test_a_lever_on_game_carries_its_coalesced_citations_through_the_meeting(
                 f"{agent_id} was offered ids it does not hold: "
                 f"{sorted(rendered - universe)}"
             )
-            assert frozenset(span_ids) | frozenset(spawn_ids) <= universe
-            for observation_id in sorted(rendered):
-                ballot = VoteBallot(
-                    voter=agent_id,
-                    target="SKIP",
-                    confidence=0.0,
-                    rationale_text="cited",
-                    primary_reason_id=None,
-                    primary_reason_observation_id=observation_id,
-                )
-                kept = _normalize_ballot_observation_id(
-                    ballot=ballot, valid_observation_ids=universe
-                )
-                assert kept.primary_reason_observation_id == observation_id
-            # The gate bites: an id the voter does not hold is nulled, so this
-            # is checking entitlement rather than shape.
-            fabricated = VoteBallot(
-                voter=agent_id,
-                target="SKIP",
-                confidence=0.0,
-                rationale_text="cited",
-                primary_reason_id=None,
-                primary_reason_observation_id="p-99:999:0",
+            offered = frozenset(span_ids) | frozenset(spawn_ids)
+            assert offered <= universe
+            offered_by_voter[agent_id] = offered_by_voter.get(
+                agent_id, frozenset()
+            ) | frozenset(offered)
+
+        # The production path, end to end: the manager validated these ballots
+        # against the participant the orchestrator wired, so a coalesced id in
+        # the RECORDED result is one the voter's own store entitled it to.
+        for ballot in entry.ballots:
+            observation_id = ballot.primary_reason_observation_id
+            if observation_id is None:
+                continue
+            landed += 1
+            assert observation_id in offered_by_voter[ballot.voter], (
+                f"{ballot.voter} cited {observation_id}, which no folded row offered"
             )
-            assert "p-99:999:0" not in universe
+            assert observation_id in universes[ballot.voter]
             assert (
-                _normalize_ballot_observation_id(
-                    ballot=fabricated, valid_observation_ids=universe
-                ).primary_reason_observation_id
-                is None
+                INVALID_OBSERVATION_ID_MARKER.format(observation_id=observation_id)
+                not in ballot.rationale_text
             )
+
     # The lever really reached the live render: both folded shapes are in the
-    # recorded prompts, and the meeting still produced ballots.
+    # recorded prompts, the meeting still produced ballots, and a folded row's
+    # citation is what the recorded ballots carry.
     assert spans > 0 and spawn_rows > 0 and cited > 0
     assert all(entry.ballots for entry in meetings)
+    assert client.citations_offered > 0
+    assert landed > 0, "no coalesced citation reached a recorded ballot"
+
+
+@pytest.mark.slow
+def test_a_fabricated_citation_does_not_survive_the_same_meeting_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The perturbation for the gate above: the same game, the same wiring, but
+    # every ballot cites an id no agent holds. If the production path let
+    # citations through unvalidated, the fabrication would land exactly like a
+    # coalesced id does -- instead every recorded ballot comes back nulled and
+    # marked, so the test above is checking entitlement, not shape.
+    monkeypatch.setenv(ENV_COALESCED_MEMORY_RENDER, "1")
+    client = _CitingFakeProvider(fabricated_id=_FABRICATED_OBSERVATION_ID)
+    meetings, universes_per_meeting = _run_lever_on_game(
+        tmp_path=tmp_path, client=client
+    )
+
+    marker = INVALID_OBSERVATION_ID_MARKER.format(
+        observation_id=_FABRICATED_OBSERVATION_ID
+    )
+    marked = 0
+    for entry, universes in zip(meetings, universes_per_meeting, strict=True):
+        for universe in universes.values():
+            assert _FABRICATED_OBSERVATION_ID not in universe
+        for ballot in entry.ballots:
+            assert ballot.primary_reason_observation_id is None
+            if marker in ballot.rationale_text:
+                marked += 1
+
+    assert client.citations_offered > 0, "the perturbation never cited anything"
+    assert marked > 0, "the nulled citation left no audit marker"
