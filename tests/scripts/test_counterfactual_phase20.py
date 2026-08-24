@@ -733,19 +733,17 @@ _PER_SET_RENDER_ROW: Final[re.Pattern[str]] = re.compile(
 )
 
 
-def test_the_memo_per_set_render_rows_are_the_scripts_own(
-    full_payload: Mapping[str, object],
-) -> None:
-    """§5's per-set render rows must not sit on a different slate from §4.
+def _per_set_render_mismatches(
+    text: str, sets: Mapping[str, Mapping[str, object]]
+) -> list[str]:
+    """Re-derive every §5 render figure — BOTH sides of each ``OFF → ON`` cell.
 
-    The pooled headline moved to the full eight; a per-set breakdown left on the
-    withheld-lever leg would silently stop being a like-for-like comparison for
-    the smoke and record audits. Every stated figure is re-derived here.
+    The OFF half is the RECONSTRUCTED leg, which §5 uses on purpose for its
+    apples-to-apples comparison against a reconstructed ON, so a stale OFF value
+    is drift exactly like a stale ON one.
     """
 
-    sets = full_payload["sets"]
-    assert isinstance(sets, dict)
-    stated = list(_PER_SET_RENDER_ROW.finditer(_MEMO.read_text(encoding="utf-8")))
+    stated = list(_PER_SET_RENDER_ROW.finditer(text))
     assert len(stated) == 4, "§5's four render rows did not parse — the table moved"
     mismatches: list[str] = []
     for match in stated:
@@ -760,24 +758,66 @@ def test_the_memo_per_set_render_rows_are_the_scripts_own(
         ]
         assert len(cells) == len(cf.CANONICAL_SETS)
         for set_name, cell_text in zip(cf.CANONICAL_SETS, cells, strict=True):
+            block = sets[set_name]["rows"]
+            assert isinstance(block, list)
             row = next(
                 candidate
-                for candidate in sets[set_name]["rows"]
+                for candidate in block
                 if candidate["cell"] == "R" and candidate["label"] == label
             )
-            _, on_text = (part.strip() for part in cell_text.split("→"))
-            num, den = row["on"]
-            if row["display"] == "mean":
-                computed = f"{num / den:.2f}"
-            else:
-                share = (100 * num / den) if den else 0.0
-                computed = "0%" if share == 0 else f"{share:.1f}%"
-            if on_text != computed:
-                mismatches.append(
-                    f"{set_name} {label}: memo states {on_text}, script computes "
-                    f"{computed}"
-                )
+            off_text, on_text = (part.strip() for part in cell_text.split("\u2192"))
+            for column, stated_text, pair in (
+                ("OFF", off_text, row["reconstructed_off"]),
+                ("ON", on_text, row["on"]),
+            ):
+                computed = _render_figure(pair, display=row["display"])
+                if stated_text != computed:
+                    mismatches.append(
+                        f"{set_name} {label} {column}: memo states {stated_text}, "
+                        f"script computes {computed}"
+                    )
+    return mismatches
+
+
+def _render_figure(pair: Sequence[int], *, display: str) -> str:
+    """One §5 render figure, formatted the way the memo's table prints it."""
+
+    num, den = pair
+    if display == "mean":
+        return f"{num / den:.2f}"
+    share = (100 * num / den) if den else 0.0
+    return "0%" if share == 0 else f"{share:.1f}%"
+
+
+def test_the_memo_per_set_render_rows_are_the_scripts_own(
+    full_payload: Mapping[str, object],
+) -> None:
+    """§5's per-set render rows must not sit on a different slate from §4.
+
+    The pooled headline moved to the full eight; a per-set breakdown left on the
+    withheld-lever leg would silently stop being a like-for-like comparison for
+    the smoke and record audits. Every stated figure is re-derived here — the OFF
+    half as well as the ON one.
+    """
+
+    sets = full_payload["sets"]
+    assert isinstance(sets, dict)
+    mismatches = _per_set_render_mismatches(_MEMO.read_text(encoding="utf-8"), sets)
     assert not mismatches, "\n".join(mismatches)
+
+
+def test_a_perturbed_per_set_off_figure_is_caught(
+    full_payload: Mapping[str, object],
+) -> None:
+    """The §5 gate bites on the OFF half, not only on the ON half."""
+
+    sets = full_payload["sets"]
+    assert isinstance(sets, dict)
+    text = _MEMO.read_text(encoding="utf-8")
+    perturbed = text.replace("| 51.13 \u2192 40.77 |", "| 51.14 \u2192 40.77 |", 1)
+    assert perturbed != text, "the §5 render OFF figure moved — re-anchor this gate"
+    mismatches = _per_set_render_mismatches(perturbed, sets)
+    assert any("51.14" in line for line in mismatches), mismatches
 
 
 def _check_cell(

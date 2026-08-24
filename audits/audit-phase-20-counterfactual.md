@@ -203,9 +203,21 @@ changed digit is caught (a planted `148/234` → `149/234` is the perturbation t
 | testimony retained, less lever 7 | 18.3% → 45.9% | 18.3% → 42.6% | 0% → 0% | 0% → 0% |
 | innocent ejections still STRONG | 19/23 → 0/23 | 50/54 → 3/54 | 1/2 → 0/2 | 0/0 → 0/0 |
 
-Three of the four per-set ON cells for I-6 have a denominator of 0 or 1. Under §4.1's granularity
-rule those RATE cells are ADVISORY by an enormous margin and take no part in any verdict, in either
-direction; they are printed because a suppressed denominator must never be left implicit.
+**The per-set I-6 ON cells, classified with §4.1's own arithmetic rather than by eye.** The
+granularity test is `1/n > |target − baseline|`; bar 7 asks ≤ 5% against a pooled baseline of
+63.2%, so the margin is `|0.05 − 0.632| = 0.582`, and §4.1 requires an advisory cell to be published
+with its rate, its Wilson 95% interval and this arithmetic:
+
+| set | I-6 ON | 1/n | vs margin 0.582 | rate and Wilson 95% | classification |
+|---|---|---|---|---|---|
+| samples/9p2i | 0/1 | 1.0000 | **greater** | 0.0% [0.0%, 79.3%] | **ADVISORY** |
+| ml_corpus/9p2i | 6/11 | 0.0909 | smaller | 54.5% [28.0%, 78.7%] | not advisory by this test |
+| samples/4p1i | 0/0 | — | — | no rate exists | no classification (empty denominator) |
+| ml_corpus/4p1i | 0/0 | — | — | no rate exists | no classification (empty denominator) |
+
+The one ADVISORY cell takes no part in any verdict, in either direction; the two empty cells are
+printed because a suppressed denominator must never be left implicit, and an empty denominator has no
+rate for the granularity test to reach.
 
 **I-4 is deliberately NOT covered by that sentence.** §4.1 registers bars 5 and 6 as COUNT bars and
 says in terms that the granularity test does not reach them: their target is zero occurrences and
@@ -371,10 +383,13 @@ ejection census is *negative by one*, and no reading of this table should claim 
   the SLATE's and this memo does not assign it to this lever. Only the three detector levers carry a
   leave-one-out leg here (each is a flag cell); no render-lever ablation was run, and a spot check is
   enough to show why the attribution would be wrong — with only coalescing withheld, samples/9p2i
-  renders **96,565/1,956 = 49.37** rows per snapshot against a reconstructed OFF of 51.13, so part of
-  the compression belongs to the other render levers and coalescing's own marginal is 49.37 → 40.77
-  rather than the whole 51.13 → 40.77. The census is a §5 secondary cell and no bar rides it, so the
-  per-render-lever
+  renders **96,565/1,956 = 49.3686** rows per snapshot against a reconstructed OFF of 51.1314, so
+  part of the compression belongs to the other render levers and coalescing's own marginal is
+  49.37 → 40.77 rather than the whole 51.13 → 40.77. That spot check is not a number nobody can
+  re-derive: it is one committed command,
+  `uv run python scripts/counterfactual_phase20.py --sets samples/9p2i --withhold coalesced_memory_render`
+  (6.7 s), and `--withhold` accepts any lever in the slate. The census is a §5 secondary cell and no
+  bar rides it, so the per-render-lever
   decomposition is left to the record audit rather than half-asserted here.
 
 **No graduation subset is proposed.** The ratified §6 rules that partial adoption yields a published
@@ -436,11 +451,14 @@ rather than patched.
 
 ## 11. Reproduction
 
-Everything above is recomputed from committed bytes by two commands, both offline and $0:
+Everything above is recomputed from committed bytes by these commands, all offline and $0:
 
 ```bash
 uv run python scripts/counterfactual_phase20.py --sets all
 uv run pytest -q tests/scripts/test_counterfactual_phase20.py
+# the §8 spot check: any single render lever's own ablation, headline still at all eight
+uv run python scripts/counterfactual_phase20.py --sets samples/9p2i \
+    --withhold coalesced_memory_render
 ```
 
 The pytest file asserts the OFF column against the committed 20.15 / 20.14 pins, the enumeration

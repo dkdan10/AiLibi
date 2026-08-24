@@ -42,6 +42,12 @@ Scope, stated before any number:
   companion; **I-6 is ``adjacent_room_flags.adjacent``** with the un-gated
   ``adjacent_any_gap`` reported beside it, never in place of it (memo §10).
 
+The render census carries a second, DECOMPOSITION row beside its headline: the
+same census with one lever withheld. ``--withhold`` names that lever (default
+``meeting_outcome_memory``, the leg the memo publishes), so any render lever's own
+ablation is a committed command rather than a number nobody can re-derive. The
+headline column is always the full eight.
+
 Purity: offline, no network, no LLM call, no replay written, no ``os.environ``
 assignment.
 """
@@ -177,6 +183,41 @@ LEVER_7_DECOMPOSITION_SLATE: Final[Mapping[str, str]] = MappingProxyType(
 )
 LEVER_7_DECOMPOSITION_LABEL: Final[str] = "seven-ON (less meeting_outcome_memory)"
 FULL_SLATE_LABEL: Final[str] = "all-eight-ON"
+# The lever the decomposition leg withholds by default: the one the memo
+# publishes beside the headline. ``--withhold`` re-points it.
+LEVER_7_WITHHELD: Final[str] = "meeting_outcome_memory"
+
+
+def decomposition_label(withhold: str) -> str:
+    """The ON-slate label a decomposition row prints, naming its withheld lever."""
+
+    return f"seven-ON (less {withhold})"
+
+
+def decomposition_row_suffix(withhold: str) -> str:
+    """The row-label suffix, kept as 'lever 7' for the memo's published leg."""
+
+    return ", less lever 7" if withhold == LEVER_7_WITHHELD else f", less {withhold}"
+
+
+def decomposition_slate(withhold: str) -> Mapping[str, str]:
+    """The full slate less one named lever — the census's decomposition leg.
+
+    ``--withhold`` re-points that leg at any lever in the slate, so a render-lever
+    ablation the memo quotes is a committed command rather than a number nobody
+    can re-derive. The default is ``meeting_outcome_memory``, the leg the memo
+    publishes beside the headline.
+    """
+
+    if withhold not in PHASE_20_LEVERS:
+        raise SystemExit(
+            f"--withhold {withhold!r} is not a Phase-20 lever; choose one of: "
+            + ", ".join(PHASE_20_LEVERS)
+        )
+    return MappingProxyType(
+        {env_var_for_lever(key): "1" for key in PHASE_20_LEVERS if key != withhold}
+    )
+
 
 # The leave-one-out legs: the full slate with one detector lever withheld. A
 # render lever takes no leg here — it moves no flag, so its leave-one-out on every
@@ -492,7 +533,12 @@ def _fold_meeting_both_ways(
         )
 
 
-def walk_set(sample_dir: Path, *, set_name: str) -> _SetWalk:
+def walk_set(
+    sample_dir: Path,
+    *,
+    set_name: str,
+    decomposition: Mapping[str, str] = LEVER_7_DECOMPOSITION_SLATE,
+) -> _SetWalk:
     """Reconstruct one committed set once and fold every lever slate from it.
 
     One walk per game: the observation packet is built once and ingested into both
@@ -538,6 +584,7 @@ def walk_set(sample_dir: Path, *, set_name: str) -> _SetWalk:
             roles=per_seed_roles[seed],
             distances=distances,
             legs=legs,
+            decomposition=decomposition,
             walk=walk,
         )
     return walk
@@ -554,6 +601,7 @@ def _walk_game(
     roles: Mapping[PlayerId, Role],
     distances: Mapping[RoomId, Mapping[RoomId, int]],
     legs: Mapping[str, Mapping[str, str]],
+    decomposition: Mapping[str, str],
     walk: _SetWalk,
 ) -> None:
     """Walk one recording once and fold every slate's cells from it."""
@@ -648,6 +696,7 @@ def _walk_game(
                     on_memories=on_memories,
                     completions=completions,
                     seen_rows=seen_rows,
+                    decomposition=decomposition,
                     walk=walk,
                 )
             elif isinstance(walk_event, MeetingApplied):
@@ -850,6 +899,7 @@ def _render_one_meeting(
     on_memories: Mapping[PlayerId, AgentMemory],
     completions: Mapping[PlayerId, set[int]],
     seen_rows: Mapping[str, set[tuple[PlayerId, str]]],
+    decomposition: Mapping[str, str],
     walk: _SetWalk,
 ) -> None:
     """Render every living agent's memory on three slates and fold the cells.
@@ -878,7 +928,7 @@ def _render_one_meeting(
         for leg, memories, budget in (
             ("off", off_memories, SLATE_OFF),
             ("on", on_memories, SLATE_ON),
-            ("seven_on", on_memories, LEVER_7_DECOMPOSITION_SLATE),
+            ("seven_on", on_memories, decomposition),
         ):
             view = render_for_prompt(
                 memories[pid], token_budget=DEFAULT_TOKEN_BUDGET, env=budget
@@ -945,8 +995,13 @@ def build_rows(
     walk: _SetWalk,
     recorded: EvidenceHonestyReport,
     solvability: SolvabilityReport,
+    withheld: str = LEVER_7_WITHHELD,
 ) -> list[Row]:
-    """Assemble one set's printed rows from its three readings."""
+    """Assemble one set's printed rows from its three readings.
+
+    ``withheld`` names the lever the decomposition leg dropped, so a run under
+    ``--withhold`` labels its own rows instead of borrowing lever 7's.
+    """
 
     off = walk.legs["off"].tallies
     on = walk.legs["on"].tallies
@@ -1121,7 +1176,10 @@ def build_rows(
     rows.append(
         Row(
             cell_id="R",
-            label="rendered memory rows per snapshot (mean), less lever 7",
+            label=(
+                "rendered memory rows per snapshot (mean)"
+                + decomposition_row_suffix(withheld)
+            ),
             population="render",
             recorded_off=(
                 recorded.render_budget.rendered_lines_total,
@@ -1130,11 +1188,11 @@ def build_rows(
             reconstructed_off=(walk.rendered_rows_off, walk.snapshots),
             on=(walk.rendered_rows_seven_on, walk.snapshots),
             display="mean",
-            on_slate=LEVER_7_DECOMPOSITION_LABEL,
+            on_slate=decomposition_label(withheld),
             note=(
                 "the DECOMPOSITION of the row above, not a competing headline: "
-                "the same census with meeting_outcome_memory withheld, so the "
-                "record audit can read how much of the move is lever 7's"
+                f"the same census with {withheld} withheld, so the record audit "
+                "can price that lever against the rest of the render slate"
             ),
         )
     )
@@ -1155,7 +1213,9 @@ def build_rows(
     rows.append(
         Row(
             cell_id="R",
-            label="reported-testimony rows retained, less lever 7",
+            label=(
+                "reported-testimony rows retained" + decomposition_row_suffix(withheld)
+            ),
             population="render",
             recorded_off=(
                 recorded.render_budget.testimony_rows_total,
@@ -1163,8 +1223,10 @@ def build_rows(
             ),
             reconstructed_off=(walk.testimony_rows_off, walk.rendered_rows_off),
             on=(walk.testimony_rows_seven_on, walk.rendered_rows_seven_on),
-            on_slate=LEVER_7_DECOMPOSITION_LABEL,
-            note="the decomposition of the row above, same withheld lever",
+            on_slate=decomposition_label(withheld),
+            note=(
+                f"the decomposition of the row above, same withheld lever ({withheld})"
+            ),
         )
     )
     for cell_id, label, attribute in (
@@ -1344,13 +1406,22 @@ def _assert_ambient_slate_is_off(when: str) -> None:
         )
 
 
-def run(set_names: Sequence[str]) -> dict[str, object]:
-    """Compute the whole table for the named sets, plus the pooled column."""
+def run(
+    set_names: Sequence[str], *, withhold: str = LEVER_7_WITHHELD
+) -> dict[str, object]:
+    """Compute the whole table for the named sets, plus the pooled column.
+
+    ``withhold`` names the lever the census's decomposition leg drops. It defaults
+    to the leg the memo publishes; any other Phase-20 lever makes this command the
+    reproduction for that lever's own render ablation.
+    """
 
     _assert_ambient_slate_is_off("at start")
+    decomposition = decomposition_slate(withhold)
     payload: dict[str, object] = {
         "slate_on": dict(SLATE_ON),
         "levers": list(PHASE_20_LEVERS),
+        "decomposition_withholds": withhold,
         "sets": {},
     }
     pooled: Counter[str] = Counter()
@@ -1358,7 +1429,7 @@ def run(set_names: Sequence[str]) -> dict[str, object]:
     per_set: dict[str, object] = {}
     for set_name in set_names:
         sample_dir = Path("replays") / set_name
-        walk = walk_set(sample_dir, set_name=set_name)
+        walk = walk_set(sample_dir, set_name=set_name, decomposition=decomposition)
         expected = COMMITTED_INNOCENT_EJECTIONS.get(set_name)
         if expected is not None and walk.innocent_ejections != expected:
             raise SystemExit(
@@ -1377,7 +1448,12 @@ def run(set_names: Sequence[str]) -> dict[str, object]:
             )
         recorded = compute_evidence_honesty(sample_dir)
         solvability = compute_solvability_report(sample_dir)
-        rows = build_rows(walk=walk, recorded=recorded, solvability=solvability)
+        rows = build_rows(
+            walk=walk,
+            recorded=recorded,
+            solvability=solvability,
+            withheld=withhold,
+        )
         disagreeing = [row for row in rows if not row.agrees]
         if disagreeing:
             names = ", ".join(f"{row.cell_id} {row.label}" for row in disagreeing)
@@ -1578,12 +1654,23 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="emit the same table machine-readably for the record audit",
     )
+    parser.add_argument(
+        "--withhold",
+        default=LEVER_7_WITHHELD,
+        choices=list(PHASE_20_LEVERS),
+        help=(
+            "the lever the render census's DECOMPOSITION leg drops (default: "
+            f"{LEVER_7_WITHHELD}, the leg the memo publishes beside the headline). "
+            "Any other Phase-20 lever makes this command that lever's own render "
+            "ablation — the headline column is always the full eight"
+        ),
+    )
     args = parser.parse_args(argv)
     set_names = (
         list(CANONICAL_SETS) if args.sets == "all" else [str(args.sets).strip("/")]
     )
     started = time.monotonic()
-    payload = run(set_names)
+    payload = run(set_names, withhold=str(args.withhold))
     elapsed = time.monotonic() - started
     if args.json:
         print(json.dumps(payload, indent=2))
