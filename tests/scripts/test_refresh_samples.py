@@ -1682,11 +1682,12 @@ def test_lock_fails_loud_when_a_dead_owner_stays_the_owner(tmp_path: Path) -> No
 
 
 def test_lock_tolerates_a_release_racing_the_dead_owner_probe(tmp_path: Path) -> None:
-    # The CI flake this pins (task 20.21 follow-up; seen on PRs #369/#372/#378):
-    # the waiter observes a dead owner pid, but the pid is dead because its
-    # process RELEASED the lock and finished. Here the waiter provably probes the
-    # dead owner first (gated on the xtrace showing kill -0), then the lock is
-    # released out from under it; it must acquire, not fail the refresh.
+    # A dead owner pid may belong to a holder that RELEASED the lock and
+    # finished between the waiter's cat and its kill -0 -- a clean handoff, not
+    # a corpse, and it must not fail the refresh. The waiter here provably
+    # probes the dead owner first (gated on the xtrace showing kill -0), then
+    # the lock is released out from under it; the waiter must acquire and flag
+    # nothing. (Pins the task 20.21 CI flake seen on PRs #369/#372/#378.)
     stage = tmp_path / "stage"
     lockdir = stage / ".lock"
     lockdir.mkdir(parents=True)

@@ -1024,11 +1024,9 @@ record_set() {
   # audit-phase-18-close.md §7 item 5 — the recorder lock-race): the Bash-3.2
   # dead-owner degradation recorded below is the known limitation; frozen as-is.
   # Portable mkdir mutex with DEAD-OWNER detection: the holder records its PID; a
-  # waiter that finds the lock owned by a dead process — stably, across repeated
-  # polls, so a holder observed mid-release is never mistaken for a corpse —
-  # marks the run failed (the half-written MANIFEST is unsafe to freeze) and
-  # gives up. Returns non-zero when the lock was NOT acquired — callers must not
-  # enter the critical section then.
+  # waiter that finds the lock owned by a dead process marks the run failed (the
+  # half-written MANIFEST is unsafe to freeze) and gives up. Returns non-zero when
+  # the lock was NOT acquired — callers must not enter the critical section then.
   # The owner PID uses $BASHPID (the WORKER subshell's own PID) when available, and
   # falls back to $$ on macOS's stock Bash 3.2, which predates $BASHPID (the ${:-}
   # form is exempt from `set -u`, so an undefined $BASHPID never fatally aborts the
@@ -1037,38 +1035,18 @@ record_set() {
   # correctly; only the rare "a worker was SIGKILLed mid-critical-section" safety
   # net is lost. Install a newer bash (`brew install bash`) to restore it.
   acquire_lock() {
-    local owner last_dead_owner dead_polls
+    local owner
     [[ -e "$stage_dir/.failed" ]] && return 1
-    last_dead_owner=""
-    dead_polls=0
     while ! mkdir "$lockdir" 2>/dev/null; do
       if [[ -e "$stage_dir/.failed" ]]; then
         return 1
       fi
       owner="$(cat "$lockdir/owner" 2>/dev/null || true)"
       if [[ -n "$owner" ]] && ! kill -0 "$owner" 2>/dev/null; then
-        # One dead probe is a race, not a verdict: the holder may have released
-        # and exited between this waiter's cat and its kill -0 (a worker
-        # draining the queue, or a seed-claim command-substitution subshell). A
-        # holder that truly died mid-critical-section leaves the owner file
-        # frozen -- only a release removes it -- so the same dead pid must stay
-        # the recorded owner across 10 consecutive polls (~1s) before the run
-        # is failed; a benign race can't sustain the streak.
-        if [[ "$owner" == "$last_dead_owner" ]]; then
-          dead_polls=$((dead_polls + 1))
-        else
-          last_dead_owner="$owner"
-          dead_polls=1
-        fi
-        if [[ "$dead_polls" -ge 10 ]]; then
-          echo "ERROR: corpus lock owner (pid $owner) died holding the lock" \
-            "(killed/crashed mid critical section); the set is incomplete." >&2
-          touch "$stage_dir/.failed"
-          return 1
-        fi
-      else
-        last_dead_owner=""
-        dead_polls=0
+        echo "ERROR: corpus lock owner (pid $owner) died holding the lock" \
+          "(killed/crashed mid critical section); the set is incomplete." >&2
+        touch "$stage_dir/.failed"
+        return 1
       fi
       sleep 0.1
     done
