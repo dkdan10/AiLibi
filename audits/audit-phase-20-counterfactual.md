@@ -116,7 +116,7 @@ rather than invented: **[VERIFIED]** recomputed from committed bytes by the comm
 | R | rendered memory rows per snapshot (mean) | 386907/7932 | 309625/7932 | 48.78 → 39.03 rows at the FULL eight-lever slate |
 | R | rendered memory rows per snapshot (mean), less lever 7 | 386907/7932 | 312761/7932 | 39.43 rows with `meeting_outcome_memory` withheld: the decomposition, not a second headline |
 | R | reported-testimony rows retained | 69535/386907 | 137996/309625 | 18.0% → 44.6%; testimony outranks routine co-presence |
-| R | reported-testimony rows retained, less lever 7 | 69535/386907 | 133489/312761 | 42.7% with lever 7 withheld: the frame re-tagging is worth +1.9 points, not the gain |
+| R | reported-testimony rows retained, less lever 7 | 69535/386907 | 133489/312761 | 42.7% with lever 7 withheld: the WHOLE lever is worth +1.9 points, not the gain |
 | I-12 | containment (killer in the candidate set) | 544/626 | 544/626 | LEVER-INVARIANT by construction |
 | I-12 | singleton candidate sets | 126/626 | 126/626 | LEVER-INVARIANT by construction |
 | I-12 | singleton correct | 114/126 | 114/126 | LEVER-INVARIANT by construction |
@@ -171,8 +171,14 @@ changed digit is caught (a planted `148/234` → `149/234` is the perturbation t
   **18,319 bare frames and zero tagged ones** — exactly the committed `testimony_rows_total` pin — so
   no recorded cell can move. The headline census is therefore the slate the record ships, and the
   withheld-lever leg is kept as its **decomposition**: 39.03 rows/snapshot at eight against 39.43 at
-  seven, and 44.6% testimony retention against 42.7%. Lever 7's frame re-tagging is worth about two
-  points of retention — the rest of the move belongs to the other render levers.
+  seven, and 44.6% testimony retention against 42.7%. **Read that ±1.9 points as the WHOLE lever's
+  marginal contribution, not as the frame tag's.** Once the patterns count `[meeting]` and
+  `[meeting N]` identically the tag itself moves no count; what the withheld leg removes is all of
+  `meeting_outcome_memory` at once — the retained `saw_vent` testimony content *and* the non-elastic
+  `## Meetings so far:` block, which sits above the observations and displaces elastic rows under a
+  tight budget (`agents/memory/store.py:512-530`). No offline instrument separates those three, and
+  this memo does not pretend one does; a tag-only ablation would be a new instrument, not a reading
+  of this one.
 * **The testimony rows are reported per living-roster bucket, never blended.** The registered
   census splits them `≤4` / `5-6` / `≥7` because budget pressure differs across those populations
   and a retention gain confined to one band would otherwise hide inside an aggregate. It is not
@@ -191,13 +197,21 @@ changed digit is caught (a planted `148/234` → `149/234` is the perturbation t
 | I-6 adjacent, OFF → ON | 38/58 → 0/1 | 108/173 → 6/11 | 1/2 → 0/0 | 1/1 → 0/0 |
 | I-5 fabricated, OFF → ON | 19/458 → 0/347 | 40/1311 → 0/1045 | 15/61 → 0/46 | 14/58 → 0/44 |
 | I-8 turns, OFF → ON | 53/971 → 0/971 | 139/2726 → 0/2726 | 0/117 → 0/117 | 0/120 → 0/120 |
-| render rows/snapshot (7-lever ON) | 51.13 → 41.33 | 50.84 → 41.08 | 15.47 → 12.17 | 15.99 → 12.64 |
-| testimony retained | 18.3% → 45.9% | 18.3% → 42.6% | 0% → 0% | 0% → 0% |
+| render rows/snapshot, all eight ON | 51.13 → 40.77 | 50.84 → 40.71 | 15.47 → 12.17 | 15.99 → 12.64 |
+| render rows/snapshot, less lever 7 | 51.13 → 41.33 | 50.84 → 41.08 | 15.47 → 12.17 | 15.99 → 12.64 |
+| testimony retained, all eight ON | 18.3% → 47.9% | 18.3% → 44.5% | 0% → 0% | 0% → 0% |
+| testimony retained, less lever 7 | 18.3% → 45.9% | 18.3% → 42.6% | 0% → 0% | 0% → 0% |
 | innocent ejections still STRONG | 19/23 → 0/23 | 50/54 → 3/54 | 1/2 → 0/2 | 0/0 → 0/0 |
 
 Three of the four per-set ON cells for I-4 and I-6 have a denominator of 0 or 1. Under §4.1's
 granularity rule those are ADVISORY by an enormous margin and take no part in any verdict, in either
 direction; they are printed because a suppressed denominator must never be left implicit.
+
+The two render rows carry the same headline-plus-decomposition pair as the pooled table, so a per-set
+comparison at the record is like-for-like; their OFF column is the RECONSTRUCTED leg (51.13, not the
+recorded 51.10), which is the apples-to-apples reading against a reconstructed ON. Both 4p1i sets
+render zero reported-testimony rows on either slate, so the two slates coincide there exactly — which
+is the same fact the pooled bucket rows carry, and the reason the census is never one blended number.
 
 ### 5.1 The four I-13 injustice fixtures — the FLAG half, which IS computable offline
 

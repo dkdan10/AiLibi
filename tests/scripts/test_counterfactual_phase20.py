@@ -642,6 +642,60 @@ def test_the_memo_table_equals_the_scripts_output(
     assert not mismatches, "\n".join(mismatches)
 
 
+_PER_SET_RENDER_ROW: Final[re.Pattern[str]] = re.compile(
+    r"^\| (?P<label>render rows/snapshot|testimony retained), "
+    r"(?P<slate>all eight ON|less lever 7) \|(?P<cells>.+)\|$",
+    re.MULTILINE,
+)
+
+
+def test_the_memo_per_set_render_rows_are_the_scripts_own(
+    full_payload: Mapping[str, object],
+) -> None:
+    """§5's per-set render rows must not sit on a different slate from §4.
+
+    The pooled headline moved to the full eight; a per-set breakdown left on the
+    withheld-lever leg would silently stop being a like-for-like comparison for
+    the smoke and record audits. Every stated figure is re-derived here.
+    """
+
+    sets = full_payload["sets"]
+    assert isinstance(sets, dict)
+    stated = list(_PER_SET_RENDER_ROW.finditer(_MEMO.read_text(encoding="utf-8")))
+    assert len(stated) == 4, "§5's four render rows did not parse — the table moved"
+    mismatches: list[str] = []
+    for match in stated:
+        suffix = "" if match.group("slate") == "all eight ON" else ", less lever 7"
+        label = (
+            "rendered memory rows per snapshot (mean)"
+            if match.group("label") == "render rows/snapshot"
+            else "reported-testimony rows retained"
+        ) + suffix
+        cells = [
+            cell.strip() for cell in match.group("cells").split("|") if cell.strip()
+        ]
+        assert len(cells) == len(cf.CANONICAL_SETS)
+        for set_name, cell_text in zip(cf.CANONICAL_SETS, cells, strict=True):
+            row = next(
+                candidate
+                for candidate in sets[set_name]["rows"]
+                if candidate["cell"] == "R" and candidate["label"] == label
+            )
+            _, on_text = (part.strip() for part in cell_text.split("→"))
+            num, den = row["on"]
+            if row["display"] == "mean":
+                computed = f"{num / den:.2f}"
+            else:
+                share = (100 * num / den) if den else 0.0
+                computed = "0%" if share == 0 else f"{share:.1f}%"
+            if on_text != computed:
+                mismatches.append(
+                    f"{set_name} {label}: memo states {on_text}, script computes "
+                    f"{computed}"
+                )
+    assert not mismatches, "\n".join(mismatches)
+
+
 def _check_cell(
     label: str,
     column: str,
