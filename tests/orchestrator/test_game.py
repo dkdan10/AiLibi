@@ -20,6 +20,7 @@ from meetings.manager import (
     SuspicionEntry,
 )
 from meetings.schemas import (
+    AuthoredTurn,
     MeetingResult,
     MeetingTranscript,
     MeetingTurn,
@@ -1108,7 +1109,7 @@ class _InvalidTurnClient:
         model: str | None = None,
         agent_id: str | None = None,
     ) -> LLMResponse:
-        if schema is MeetingTurn:
+        if schema is AuthoredTurn:
             text = "{}"  # missing required fields -> MeetingTurn validation fails
         elif schema is VoteBallot:
             text = VoteBallot(
@@ -1212,7 +1213,7 @@ class _ProviderRaisesTurnClient:
         model: str | None = None,
         agent_id: str | None = None,
     ) -> LLMResponse:
-        if schema is MeetingTurn:
+        if schema is AuthoredTurn:
             try:
                 MeetingTurn.model_validate_json("{}")
             except ValidationError as exc:
@@ -1503,7 +1504,7 @@ class _RaiseFirstTurnThenSucceedClient:
         model: str | None = None,
         agent_id: str | None = None,
     ) -> LLMResponse:
-        if schema is MeetingTurn:
+        if schema is AuthoredTurn:
             self._turn_calls += 1
             if self._turn_calls == 1:
                 try:

@@ -126,8 +126,11 @@ from meetings.render_contract import (
     VotePromptRenderer,
 )
 from meetings.schemas import (
+    MARKER_QUOTED_ORIGINAL_MAX_CHARS,
+    MARKER_TRUNCATION_SUFFIX,
     AccusationClaim,
     AlibiClaim,
+    AuthoredTurn,
     Claim,
     ContradictionRef,
     CorroborationClaim,
@@ -532,15 +535,9 @@ EMERGENCY_BODY_STRIP_MARKER: Final[str] = (
     "[emergency opening: fabricated found_body stripped] "
 )
 
-# Bound on the quoted-original inside every per-claim drop marker (Task
-# 10.6; audit gp-6 H-H-4). The markers quote the invalid value verbatim
-# for the audit trail; seed 35 m1's opener hallucinated a 3499-char
-# reasoning blob AS the alibi subject, and the unbounded quote spliced
-# the whole blob mid-``free_text`` -- a Frankenstein turn record. A
-# value longer than this many chars is truncated with a trailing "..."
-# before quoting; the marker stays greppable (prefix and "dropped]"
-# suffix unchanged) and the original's head stays auditable.
-MARKER_QUOTED_ORIGINAL_MAX_CHARS: Final[int] = 60
+# The quoted-original bound is homed in :mod:`meetings.schemas` beside
+# :class:`~meetings.schemas.TurnAnnotation`, which enforces it at the record
+# boundary; re-exported here for the marker call sites and their importers.
 
 # Matches the trailing ``:turn-{k}`` ordinal of a turn id. A
 # ``primary_reason_id`` whose ordinal exists in THIS meeting but whose
@@ -1519,7 +1516,7 @@ class MeetingManager:
                     _isolate_provider_timeout(
                         self._llm_client.complete(
                             prompt=prompt,
-                            schema=MeetingTurn,
+                            schema=AuthoredTurn,
                             max_tokens=self._config.turn_max_tokens,
                             temperature=self._config.turn_temperature,
                             call_kind="meeting",
@@ -2854,7 +2851,7 @@ def _bounded_original(value: str) -> str:
 
     if len(value) <= MARKER_QUOTED_ORIGINAL_MAX_CHARS:
         return value
-    return value[:MARKER_QUOTED_ORIGINAL_MAX_CHARS] + "..."
+    return value[:MARKER_QUOTED_ORIGINAL_MAX_CHARS] + MARKER_TRUNCATION_SUFFIX
 
 
 def _opening_takes_position(
@@ -4111,6 +4108,7 @@ __all__ = [
     "INVALID_REASON_ID_MARKER",
     "INVALID_VOTE_TARGET_MARKER",
     "MARKER_QUOTED_ORIGINAL_MAX_CHARS",
+    "MARKER_TRUNCATION_SUFFIX",
     "OPENING_RETRY_FEEDBACK_DEAD_TARGET",
     "OPENING_RETRY_FEEDBACK_DEMAND",
     "OPENING_RETRY_FEEDBACK_HEADER",

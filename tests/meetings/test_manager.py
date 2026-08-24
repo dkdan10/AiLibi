@@ -106,8 +106,10 @@ from meetings.manager import (
     structured_turn_markers_enabled,
 )
 from meetings.schemas import (
+    MARKER_TRUNCATION_SUFFIX,
     AccusationClaim,
     AlibiClaim,
+    AuthoredTurn,
     Claim,
     ContradictionRef,
     CorroborationClaim,
@@ -7458,7 +7460,7 @@ def _planted_responder(
             None,
         )
         assert speaker is not None, f"no participant memory in prompt: {prompt[:200]!r}"
-        if schema is VoteBallot:
+        if schema is not AuthoredTurn:
             return _vote_json(voter=speaker, target="SKIP")
         if speaker == participants[0].agent_id:
             return _turn_json(
@@ -7574,24 +7576,48 @@ class TestStructuredTurnMarkersResolver:
 class TestTurnAnnotationRecordShape:
     """The annotation channel is the manager's, and stays off the wire."""
 
-    def test_the_provider_facing_schema_is_unchanged(self) -> None:
-        # ``MeetingTurn`` doubles as the structured-output schema every provider
-        # receives (``llm.ollama_client`` / ``llm.featherless_client`` send
-        # ``model_json_schema()`` verbatim). ``annotations`` is manager-authored,
-        # so it must not appear there -- otherwise the lever would change what a
-        # real provider is asked for even with the lever OFF.
-        properties = MeetingTurn.model_json_schema()["properties"]
-        assert "annotations" not in properties
-        assert sorted(properties) == [
-            "claims",
-            "free_text",
-            "observations",
-            "reply_to",
-            "speaker",
-            "turn_id",
-            "turn_index",
-            "turn_kind",
-        ]
+    _AUTHORED_FIELDS = [
+        "claims",
+        "free_text",
+        "observations",
+        "reply_to",
+        "speaker",
+        "turn_id",
+        "turn_index",
+        "turn_kind",
+    ]
+
+    def test_the_provider_is_asked_only_for_what_a_model_authors(self) -> None:
+        # ``AuthoredTurn`` is the structured-output schema the manager hands the
+        # provider (``llm.ollama_client`` puts ``model_json_schema()`` on the
+        # wire verbatim). ``annotations`` is manager-authored, so asking a model
+        # for it would change the OFF-path request payload -- and a model that
+        # volunteered one would parse instead of failing validation.
+        schema = AuthoredTurn.model_json_schema()
+        assert sorted(schema["properties"]) == self._AUTHORED_FIELDS
+        assert "annotations" not in schema["properties"]
+        with pytest.raises(ValidationError):
+            AuthoredTurn.model_validate(
+                {
+                    "turn_id": "m-1:turn-0",
+                    "turn_index": 0,
+                    "speaker": "p-1",
+                    "turn_kind": "opening",
+                    "reply_to": None,
+                    "free_text": "unsure",
+                    "annotations": [{"kind": "fabricated_opening"}],
+                }
+            )
+
+    def test_the_recorded_turn_keeps_annotations_on_its_served_schema(self) -> None:
+        # The other half: ``MeetingTurn`` IS served (it is reachable from the
+        # ``/eval/tournament-report`` surface), so the field must stay visible to
+        # the recursive field tripwires in ``tests/api/test_leak.py`` rather than
+        # be hidden from schema generation while still serializing.
+        schema = MeetingTurn.model_json_schema()
+        assert sorted(schema["properties"]) == sorted(
+            [*self._AUTHORED_FIELDS, "annotations"]
+        )
 
     def test_an_annotation_payload_must_match_its_kind(self) -> None:
         # The three claim-drop kinds carry their dropped value; the other two
@@ -7606,6 +7632,23 @@ class TestTurnAnnotationRecordShape:
             TurnAnnotation(kind="invalid_alibi_subject")
         with pytest.raises(ValidationError):
             TurnAnnotation(kind="fabricated_opening", original="ghost-1")
+
+    def test_an_annotation_original_is_bounded(self) -> None:
+        # The gp-6 H-H-4 bound holds at the record boundary, not only where the
+        # manager truncates: a hand-authored row carrying the whole 3499-char
+        # blob is rejected.
+        bound = MARKER_QUOTED_ORIGINAL_MAX_CHARS + len(MARKER_TRUNCATION_SUFFIX)
+        assert (
+            len(
+                TurnAnnotation(
+                    kind="invalid_alibi_subject", original="x" * bound
+                ).original
+                or ""
+            )
+            == bound
+        )
+        with pytest.raises(ValidationError):
+            TurnAnnotation(kind="invalid_alibi_subject", original="x" * (bound + 1))
 
 
 class TestStructuredTurnMarkersOff:

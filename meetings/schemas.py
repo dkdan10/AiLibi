@@ -32,7 +32,7 @@ shape stop validating and are re-recorded in Task 8.12.
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal, TypeAlias
+from typing import Annotated, Any, Final, Literal, TypeAlias
 
 from pydantic import (
     BaseModel,
@@ -42,7 +42,6 @@ from pydantic import (
     model_serializer,
     model_validator,
 )
-from pydantic.json_schema import SkipJsonSchema
 
 PlayerId: TypeAlias = str
 RoomId: TypeAlias = str
@@ -391,6 +390,17 @@ _CLAIM_DROP_ANNOTATION_KINDS: frozenset[TurnAnnotationKind] = frozenset(
 """The annotation kinds that name a dropped claim field and quote its value."""
 
 
+# Bound on a quoted original -- the value a dropped claim named. The markers and
+# the structured annotations quote it verbatim for the audit trail, and seed 35
+# m1's opener hallucinated a 3499-char reasoning blob AS an alibi subject: an
+# unbounded quote balloons the recorded turn. A longer value is truncated to this
+# many chars plus :data:`MARKER_TRUNCATION_SUFFIX` before it is quoted
+# (:func:`meetings.manager._bounded_original`), and :class:`TurnAnnotation`
+# rejects anything longer, so the bound holds at the record boundary too.
+MARKER_QUOTED_ORIGINAL_MAX_CHARS: Final[int] = 60
+MARKER_TRUNCATION_SUFFIX: Final[str] = "..."
+
+
 class TurnAnnotation(_FrozenModel):
     """One manager-authored note about what a guard changed on this turn.
 
@@ -400,9 +410,9 @@ class TurnAnnotation(_FrozenModel):
     speaker's prompt.
 
     ``original`` carries the dropped value for the three claim-field kinds,
-    bounded by :data:`meetings.manager.MARKER_QUOTED_ORIGINAL_MAX_CHARS` so a
-    hallucinated mega-value cannot balloon the record; it is ``None`` for the
-    two kinds that drop no value.
+    bounded by :data:`MARKER_QUOTED_ORIGINAL_MAX_CHARS` so a hallucinated
+    mega-value cannot balloon the record; it is ``None`` for the two kinds that
+    drop no value.
     """
 
     kind: TurnAnnotationKind
@@ -422,6 +432,13 @@ class TurnAnnotation(_FrozenModel):
                     f"TurnAnnotation kind={self.kind!r} must carry the dropped "
                     "value in 'original'"
                 )
+            bound = MARKER_QUOTED_ORIGINAL_MAX_CHARS + len(MARKER_TRUNCATION_SUFFIX)
+            if len(self.original) > bound:
+                raise ValueError(
+                    f"TurnAnnotation 'original' is {len(self.original)} chars, "
+                    f"over the {bound}-char bound; quote the truncated head "
+                    "instead"
+                )
         elif self.original is not None:
             raise ValueError(
                 f"TurnAnnotation kind={self.kind!r} drops no value, so "
@@ -430,22 +447,21 @@ class TurnAnnotation(_FrozenModel):
         return self
 
 
-class MeetingTurn(_FrozenModel):
-    """One entry in the ordered ``transcript.turns`` list (DESIGN.md §5.2).
+class AuthoredTurn(_FrozenModel):
+    """Exactly what a model is asked to author for one turn.
 
-    A turn carries the speaker's structured ``observations`` (with tick
-    references) and ``claims`` (alibi / accusation / corroboration) plus
-    the free-text argument shown to spectators and to later speakers.
+    The structured-output schema the provider receives
+    (:meth:`meetings.manager.MeetingManager._collect_turn` passes this class,
+    and ``model_json_schema()`` goes on the wire verbatim). It is the turn
+    MINUS everything the manager authors about the turn, so a manager-side
+    field can never become something the model is asked for.
 
     ``turn_id`` is ``"{meeting_id}:turn-{turn_index}"`` -- unique even
     when a player speaks twice -- and is what
     :attr:`VoteBallot.primary_reason_id` references. ``reply_to`` is the
     ``turn_id`` this turn answers (set on a ``reply``; ``None`` on
-    ``opening`` and on a volunteering ``opt_in``).
-
-    The reporter's ``found_body`` / ``saw_player`` observations live on
-    the ``opening`` turn (turn 0); :mod:`eval.vote_correctness` reads
-    them from there.
+    ``opening`` and on a volunteering ``opt_in``). The manager is
+    authoritative for those identity fields and overwrites them.
     """
 
     turn_id: TurnId
@@ -456,11 +472,26 @@ class MeetingTurn(_FrozenModel):
     observations: tuple[ObservationClaim, ...] = ()
     claims: tuple[Claim, ...] = ()
     free_text: str
-    # Manager-authored, never model-authored -- so it is kept OUT of the JSON
-    # schema this model doubles as (the structured-output contract a provider
-    # receives on the wire). The model is asked for the same eight fields it
-    # always was; :meth:`MeetingManager._collect_turn` writes this one.
-    annotations: SkipJsonSchema[tuple[TurnAnnotation, ...]] = ()
+
+
+class MeetingTurn(AuthoredTurn):
+    """One entry in the ordered ``transcript.turns`` list (DESIGN.md §5.2).
+
+    The recorded turn: what the model authored (:class:`AuthoredTurn`) plus
+    ``annotations``, the manager's typed note of what its guards changed
+    before recording. Both halves are served, so both stay visible to the
+    spectator DTO surface's field tripwires.
+
+    A turn carries the speaker's structured ``observations`` (with tick
+    references) and ``claims`` (alibi / accusation / corroboration) plus
+    the free-text argument shown to spectators and to later speakers.
+
+    The reporter's ``found_body`` / ``saw_player`` observations live on
+    the ``opening`` turn (turn 0); :mod:`eval.vote_correctness` reads
+    them from there.
+    """
+
+    annotations: tuple[TurnAnnotation, ...] = ()
 
     @model_serializer(mode="wrap")
     def _serialize(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
@@ -689,6 +720,7 @@ class MeetingResult(_FrozenModel):
 __all__ = [
     "AccusationClaim",
     "AlibiClaim",
+    "AuthoredTurn",
     "BodyId",
     "Claim",
     "CompletedTaskObservation",
@@ -696,6 +728,8 @@ __all__ = [
     "ContradictionRef",
     "CorroborationClaim",
     "FoundBodyObservation",
+    "MARKER_QUOTED_ORIGINAL_MAX_CHARS",
+    "MARKER_TRUNCATION_SUFFIX",
     "MeetingOutcome",
     "MeetingResult",
     "MeetingTranscript",

@@ -38,6 +38,7 @@ from engine.world import Map, WorldState, load_canonical_map
 from llm.client import CallKind, LLMResponse, TokenUsage
 from meetings.manager import MeetingConfig, MeetingDeadlines, SuspicionEntry
 from meetings.schemas import (
+    AuthoredTurn,
     AccusationClaim,
     ContradictionRef,
     MeetingTranscript,
@@ -94,7 +95,7 @@ class _DeterministicLLMClient:
     responses from Pydantic introspection. The stub here is simpler and
     easier to reason about for the long-horizon replay test.
 
-    Turn calls (``schema is MeetingTurn``) are dispatched off the prompt
+    Turn calls (``schema is AuthoredTurn``) are dispatched off the prompt
     prefix rendered by the stub prompt callables below: an opening prompt
     (``CR:`` / ``IM:``) yields a turn accusing :data:`_ACCUSED`, which
     hands the chain to that player; a reply / opt-in prompt (``ST:``)
@@ -118,7 +119,7 @@ class _DeterministicLLMClient:
         model: str | None = None,
         agent_id: str | None = None,
     ) -> LLMResponse:
-        if schema is MeetingTurn:
+        if schema is AuthoredTurn:
             claims = (
                 (
                     AccusationClaim(
