@@ -274,7 +274,8 @@ the caller supplied a ``sighting_records`` mapping:
   behind the case: grounded speakers contradicting one subject over one claim,
   plus the speakers behind any ``vent_sighting`` / ``alibi_vs_physical`` flag
   naming that subject in this meeting. One narrator counts once however many
-  channels they speak through.
+  channels they speak through, and the two parties to the dispute -- the
+  subject and the author of the contradicted claim -- never count at all.
 * **single-tick endpoint** -- the degenerate ``from_tick == to_tick``
   self-placement is no longer adjudicated as its own interior, so it keeps the
   narrow-window / endpoint band.
@@ -1741,8 +1742,8 @@ def detect_contradictions(
     :data:`meetings.constants.GROUNDED_PROSECUTION_MIN_SOURCES` distinct
     speakers stand behind -- grounded contradicting speakers plus the speakers
     behind any ``vent_sighting`` / ``alibi_vs_physical`` flag on the same
-    subject -- bands WEAK, and a degenerate single-tick self-placement loses the
-    18.9 interior exemption.
+    subject, neither party to the dispute counting -- bands WEAK, and a
+    degenerate single-tick self-placement loses the 18.9 interior exemption.
     Only descriptions move: ids, kinds, event pairs and subjects are stable, so
     every ballot citation and the detector's sort survive a demotion.
 
