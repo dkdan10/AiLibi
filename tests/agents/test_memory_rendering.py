@@ -12,29 +12,50 @@ import json
 import re
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Final, cast
 
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
+from pydantic import BaseModel
 
 from agents.memory.beliefs import ContradictionRef
 from agents.memory.episodic import EpisodicEvent
 from agents.memory.store import (
     DEFAULT_TOKEN_BUDGET,
+    ENV_COALESCED_MEMORY_RENDER,
     ENV_SELF_LOCATION_TRAIL,
     ENV_TASK_COMPLETION_FROM_EVENTS,
     SELF_LOCATION_TRAIL_MAX_SPANS,
     AgentMemory,
+    coalesced_memory_render_enabled,
     render_for_prompt,
     self_location_trail_enabled,
     task_completion_from_events_enabled,
 )
+from engine.world import WorldState, load_canonical_map
 from eval.leak_test import (
     JsonValue,
     _assert_no_recursive_hidden_fields,
     _assert_no_role_bearing_values,
 )
+from llm.budget import GameBudget
+from llm.client import CallKind, LLMResponse
+from llm.fake_provider import FakeProvider
+from meetings.manager import INVALID_OBSERVATION_ID_MARKER, MeetingTrigger
+from meetings.schemas import VoteBallot
+from agents.base import AgentInterface
+from orchestrator.game import (
+    DEFAULT_TASKS_PER_CREWMATE,
+    DefaultMeetingRunner,
+    HeadlessGame,
+    MeetingArtifacts,
+    MeetingAwareAgent,
+    build_default_agent_factory,
+    build_default_meeting_runner,
+)
+from orchestrator.replay import MeetingReplayEntry, read_all_entries
+from orchestrator.scheduler import TickScheduler
 
 _FIXTURE_DIR = Path("tests/fixtures/memory_rendering")
 # The completed-task lever, toggled through ``render_for_prompt(env=...)`` so no
@@ -2239,3 +2260,685 @@ class TestSelfLocationTrailProperties:
         view = render_for_prompt(memory, env=_TRAIL_ON, token_budget=8000)
 
         _assert_completions_agree_with_the_trail(view)
+
+
+# --------------------------------------------------------------------------- #
+# The coalesced render (AILIBI_COALESCED_MEMORY_RENDER, default-OFF).          #
+# --------------------------------------------------------------------------- #
+
+_COALESCE_ON: Mapping[str, str] = {ENV_COALESCED_MEMORY_RENDER: "1"}
+_COALESCE_OFF: Mapping[str, str] = {ENV_COALESCED_MEMORY_RENDER: "0"}
+_SPAN_ROW = re.compile(
+    r"^- (?:\[obs [^\]]+\] )?(?:\[tick (?P<tick>\d+)\] )?You saw (?P<subject>p-\d+) "
+    r"(?:(?P<action>task|report) )?in (?P<room>[A-Z_]+)"
+    r"(?: ticks (?P<start>\d+)-(?P<end>\d+))?"
+    r"(?: \(with (?P<with>[^)]+)\))?"
+)
+_SPAWN_ROW = re.compile(
+    r"^- (?:\[obs [^\]]+\] )?(?:\[tick 0\] )?You saw every other player in "
+    r"(?P<room>[A-Z_]+)(?: ticks 0-(?P<end>\d+))?: (?P<subjects>.+)\.$"
+)
+_TESTIMONY_ROW = "[meeting] CLAIM by "
+_OBSERVATIONS_HEADER = "## Recent observations (most salient first):"
+
+
+def _observation_rows(view: str) -> list[str]:
+    """The rendered observation bullets, in the order the model reads them."""
+
+    lines = view.splitlines()
+    if _OBSERVATIONS_HEADER not in lines:
+        return []
+    start = lines.index(_OBSERVATIONS_HEADER) + 1
+    end = start
+    while end < len(lines) and lines[end].startswith("- "):
+        end += 1
+    return lines[start:end]
+
+
+def _sighting_facts(view: str) -> set[tuple[int, str, str, str | None, frozenset[str]]]:
+    """Every ``(tick, subject, room, action, companions)`` the render claims.
+
+    A span is expanded back to one entry per tick it names and the spawn summary to
+    one per subject it lists, so a coalesced render and a per-row render can be
+    compared as the SETS OF FACTS they state rather than as strings.
+    """
+
+    facts: set[tuple[int, str, str, str | None, frozenset[str]]] = set()
+    for row in _observation_rows(view):
+        spawn = _SPAWN_ROW.match(row)
+        if spawn is not None:
+            subjects = [part.strip() for part in spawn.group("subjects").split(",")]
+            for tick in range(int(spawn.group("end") or 0) + 1):
+                for subject in subjects:
+                    facts.add(
+                        (
+                            tick,
+                            subject,
+                            spawn.group("room"),
+                            None,
+                            frozenset(subjects) - {subject},
+                        )
+                    )
+            continue
+        match = _SPAN_ROW.match(row)
+        if match is None:
+            continue
+        companions = frozenset(
+            part.strip() for part in (match.group("with") or "").split(",") if part
+        )
+        if match.group("start") is not None:
+            ticks = range(int(match.group("start")), int(match.group("end")) + 1)
+        else:
+            ticks = range(int(match.group("tick")), int(match.group("tick")) + 1)
+        for tick in ticks:
+            facts.add(
+                (
+                    tick,
+                    match.group("subject"),
+                    match.group("room"),
+                    match.group("action"),
+                    companions,
+                )
+            )
+    return facts
+
+
+def _seen(*rows: tuple[int, str, str]) -> AgentMemory:
+    """A memory for ``p-1`` holding one ``saw_player`` row per (tick, subject, room)."""
+
+    memory = AgentMemory()
+    by_tick: dict[int, list[EpisodicEvent]] = {}
+    for tick in sorted({tick for tick, _, _ in rows}):
+        by_tick[tick] = [_self_state_event(tick=tick, room="CAFETERIA", agent_id="p-1")]
+    for tick, player_id, room in rows:
+        by_tick[tick].append(
+            _saw_player_event(tick=tick, player_id=player_id, room=room)
+        )
+    for tick in sorted(by_tick):
+        for event in by_tick[tick]:
+            memory.episodic.append(event)
+    return memory
+
+
+class TestCoalescedMemoryRenderLever:
+    """Routine sightings fold into spans and testimony outranks them (default-OFF).
+
+    Every test toggles the lever through the ``env`` mapping rather than
+    ``os.environ``, so the suite stays parallel-safe.
+    """
+
+    def test_lever_defaults_off_and_reads_the_env_mapping(self) -> None:
+        assert coalesced_memory_render_enabled() is False
+        assert coalesced_memory_render_enabled({}) is False
+        for falsy in ("", "0", "off", "no", "maybe", "coalesce"):
+            assert (
+                coalesced_memory_render_enabled({ENV_COALESCED_MEMORY_RENDER: falsy})
+                is False
+            )
+        for truthy in ("1", "true", "TRUE", "Yes", " on "):
+            assert (
+                coalesced_memory_render_enabled({ENV_COALESCED_MEMORY_RENDER: truthy})
+                is True
+            )
+
+    @pytest.mark.parametrize(
+        "fixture_name",
+        ["crewmate_basic", "tight_budget_drops_low_salience", "impostor_minimal"],
+    )
+    def test_off_path_fixtures_are_byte_identical(self, fixture_name: str) -> None:
+        fixture, expected = _load_fixture(fixture_name)
+        memory = _build_memory_from_fixture(fixture)
+        budget = int(fixture["token_budget"])
+
+        for env in (None, {}, _COALESCE_OFF):
+            rendered = render_for_prompt(memory, token_budget=budget, env=env)
+            assert rendered == expected, f"{fixture_name} moved with env={env!r}"
+
+    def test_the_off_path_pin_can_fail_because_the_lever_is_not_inert(self) -> None:
+        # The three OFF goldens hold no foldable run, no full-roster spawn group and
+        # no heard claim, so their byte-identity would pass with the lever doing
+        # nothing at all. The gate is the fourth committed fixture: the same memory,
+        # rendered both ways, must be two different documents.
+        fixture, _ = _load_fixture("coalesced_memory_render")
+        memory = _build_memory_from_fixture(fixture)
+        budget = int(fixture["token_budget"])
+
+        off = render_for_prompt(memory, token_budget=budget)
+        on = render_for_prompt(memory, token_budget=budget, env=_COALESCE_ON)
+
+        assert on != off
+        assert render_for_prompt(memory, token_budget=budget, env=_COALESCE_OFF) == off
+
+    def test_render_matches_the_coalesced_golden(self) -> None:
+        fixture, expected = _load_fixture("coalesced_memory_render")
+        memory = _build_memory_from_fixture(fixture)
+        budget = int(fixture["token_budget"])
+
+        rendered = render_for_prompt(memory, token_budget=budget, env=_COALESCE_ON)
+
+        assert rendered == expected, (
+            f"---- expected ----\n{expected}---- rendered ----\n{rendered}"
+        )
+        # The gate bites: the same fixture rendered OFF is a different document, and
+        # it is the one that spends eighteen rows on eleven rows' worth of facts.
+        off = render_for_prompt(memory, token_budget=budget)
+        assert off != expected
+        assert len(_observation_rows(off)) > len(_observation_rows(rendered))
+
+    def test_consecutive_identical_sightings_become_one_span(self) -> None:
+        memory = _seen(
+            (1, "p-9", "CAFETERIA"),
+            (1, "p-8", "CAFETERIA"),
+            (2, "p-9", "CAFETERIA"),
+            (2, "p-8", "CAFETERIA"),
+            (3, "p-9", "CAFETERIA"),
+            (3, "p-8", "CAFETERIA"),
+        )
+
+        rows = _observation_rows(render_for_prompt(memory, env=_COALESCE_ON))
+
+        assert "- You saw p-9 in CAFETERIA ticks 1-3 (with p-8)." in rows
+        assert "- You saw p-8 in CAFETERIA ticks 1-3 (with p-9)." in rows
+
+    def test_a_new_room_breaks_the_run(self) -> None:
+        memory = _seen(
+            (1, "p-9", "CAFETERIA"),
+            (2, "p-9", "ADMIN"),
+            (3, "p-9", "ADMIN"),
+            (4, "p-9", "ADMIN"),
+        )
+
+        rows = _observation_rows(render_for_prompt(memory, env=_COALESCE_ON))
+
+        assert "- [tick 1] You saw p-9 in CAFETERIA." in rows
+        assert any(row.startswith("- You saw p-9 in ADMIN ticks 2-4") for row in rows)
+
+    def test_the_span_carries_the_terminal_breadcrumb(self) -> None:
+        # The "moved from …" suffix lands on a subject's most-recent sighting only
+        # and describes the whole stay, so it rides the span rather than splitting
+        # a tick off the end of it.
+        memory = _seen(
+            (1, "p-9", "CAFETERIA"),
+            (2, "p-9", "ADMIN"),
+            (3, "p-9", "ADMIN"),
+            (4, "p-9", "ADMIN"),
+        )
+
+        rows = _observation_rows(render_for_prompt(memory, env=_COALESCE_ON))
+
+        assert (
+            "- You saw p-9 in ADMIN ticks 2-4 "
+            "(moved from CAFETERIA, last seen there at tick 1)." in rows
+        )
+
+    def test_a_new_action_breaks_the_run(self) -> None:
+        memory = _seen((1, "p-9", "ADMIN"), (2, "p-9", "ADMIN"))
+        memory.episodic.append(
+            _saw_player_event(tick=3, player_id="p-9", room="ADMIN", action="task")
+        )
+
+        rows = _observation_rows(render_for_prompt(memory, env=_COALESCE_ON))
+
+        assert "- You saw p-9 in ADMIN ticks 1-2." in rows
+        assert "- [tick 3] You saw p-9 task in ADMIN." in rows
+
+    def test_a_changed_companion_set_breaks_the_run(self) -> None:
+        # p-8 leaves at tick 3, so who p-9 was standing with is NEW information and
+        # may not be folded into the earlier span.
+        memory = _seen(
+            (1, "p-9", "ADMIN"),
+            (1, "p-8", "ADMIN"),
+            (2, "p-9", "ADMIN"),
+            (2, "p-8", "ADMIN"),
+            (3, "p-9", "ADMIN"),
+        )
+
+        rows = _observation_rows(render_for_prompt(memory, env=_COALESCE_ON))
+
+        assert "- You saw p-9 in ADMIN ticks 1-2 (with p-8)." in rows
+        assert "- [tick 3] You saw p-9 in ADMIN." in rows
+
+    def test_a_tick_the_agent_holds_no_row_for_breaks_the_run(self) -> None:
+        memory = _seen((1, "p-9", "ADMIN"), (2, "p-9", "ADMIN"), (4, "p-9", "ADMIN"))
+
+        rows = _observation_rows(render_for_prompt(memory, env=_COALESCE_ON))
+
+        assert "- You saw p-9 in ADMIN ticks 1-2." in rows
+        assert "- [tick 4] You saw p-9 in ADMIN." in rows
+        assert not any("ticks 1-4" in row for row in rows)
+
+    def test_a_lone_sighting_renders_exactly_as_it_does_off(self) -> None:
+        memory = _seen((4, "p-9", "ADMIN"))
+
+        on = render_for_prompt(memory, env=_COALESCE_ON)
+
+        assert "- [tick 4] You saw p-9 in ADMIN." in _observation_rows(on)
+
+    def test_a_full_roster_tick_zero_group_collapses_to_one_line(self) -> None:
+        memory = _seen(
+            (0, "p-2", "CAFETERIA"),
+            (0, "p-3", "CAFETERIA"),
+            (0, "p-4", "CAFETERIA"),
+            (1, "p-2", "ADMIN"),
+        )
+
+        rows = _observation_rows(render_for_prompt(memory, env=_COALESCE_ON))
+
+        assert (
+            "- [tick 0] You saw every other player in CAFETERIA: p-2, p-3, p-4." in rows
+        )
+        assert not any("[tick 0] You saw p-2 in CAFETERIA" in row for row in rows)
+
+    def test_a_partial_tick_zero_view_keeps_its_rows(self) -> None:
+        # p-4 is a known roster id (the agent saw it later) but was NOT in the
+        # spawn room, and that absence is real information: no summary line.
+        memory = _seen(
+            (0, "p-2", "CAFETERIA"),
+            (0, "p-3", "CAFETERIA"),
+            (1, "p-4", "ADMIN"),
+        )
+
+        rows = _observation_rows(render_for_prompt(memory, env=_COALESCE_ON))
+
+        assert not any("every other player" in row for row in rows)
+        assert "- [tick 0] You saw p-2 in CAFETERIA (with p-3)." in rows
+        assert "- [tick 0] You saw p-3 in CAFETERIA (with p-2)." in rows
+
+    def test_a_roster_that_stayed_together_summarises_its_whole_span(self) -> None:
+        memory = _seen(
+            (0, "p-2", "CAFETERIA"),
+            (0, "p-3", "CAFETERIA"),
+            (1, "p-2", "CAFETERIA"),
+            (1, "p-3", "CAFETERIA"),
+        )
+
+        rows = _observation_rows(render_for_prompt(memory, env=_COALESCE_ON))
+
+        assert "- You saw every other player in CAFETERIA ticks 0-1: p-2, p-3." in rows
+
+    def test_the_summary_covers_only_the_ticks_the_whole_group_shared(self) -> None:
+        # p-2 starts a task at tick 1 while p-3 stands there unchanged. The group
+        # was still whole at tick 0, so it still collapses -- the summary covers the
+        # shared tick only, and what each subject did afterwards keeps its own row.
+        memory = _seen(
+            (0, "p-2", "CAFETERIA"),
+            (0, "p-3", "CAFETERIA"),
+            (1, "p-3", "CAFETERIA"),
+        )
+        memory.episodic.append(
+            _saw_player_event(tick=1, player_id="p-2", room="CAFETERIA", action="task")
+        )
+
+        rows = _observation_rows(render_for_prompt(memory, env=_COALESCE_ON))
+
+        assert "- [tick 0] You saw every other player in CAFETERIA: p-2, p-3." in rows
+        assert "- [tick 1] You saw p-2 task in CAFETERIA (with p-3)." in rows
+        assert "- [tick 1] You saw p-3 in CAFETERIA (with p-2)." in rows
+        assert not any("[tick 0] You saw p-3 in CAFETERIA" in row for row in rows)
+
+    def test_testimony_outranks_bare_co_presence_and_hard_evidence_outranks_it(
+        self,
+    ) -> None:
+        memory = _seen((4, "p-9", "ADMIN"))
+        memory.episodic.append(
+            _saw_player_event(tick=5, player_id="p-8", room="ADMIN", action="vent")
+        )
+        memory.episodic.append(
+            EpisodicEvent(
+                tick=6,
+                type="reported_testimony",
+                payload={
+                    "speaker": "p-3",
+                    "subject": "p-9",
+                    "kind": "saw_player",
+                    "room": "STORAGE",
+                    "from_tick": 2,
+                },
+                provenance="reported",
+            )
+        )
+
+        rows = _observation_rows(render_for_prompt(memory, env=_COALESCE_ON))
+        order = [
+            next(index for index, row in enumerate(rows) if "vent in ADMIN" in row),
+            next(index for index, row in enumerate(rows) if _TESTIMONY_ROW in row),
+            next(
+                index for index, row in enumerate(rows) if "You saw p-9 in ADMIN" in row
+            ),
+        ]
+
+        assert order == sorted(order)
+        # OFF the last two run in the opposite order: the band change is what this
+        # asserts, not the render's shape.
+        off_rows = _observation_rows(render_for_prompt(memory))
+        testimony_off = next(row for row in off_rows if _TESTIMONY_ROW in row)
+        sighting_off = next(row for row in off_rows if "You saw p-9 in ADMIN" in row)
+        assert off_rows.index(testimony_off) > off_rows.index(sighting_off)
+
+    def test_salience_is_a_sort_key_not_a_filter(self) -> None:
+        # At an unbounded budget the ON render must state the SAME facts as the OFF
+        # render -- the same subjects, rooms, ticks and companions, re-shaped.
+        fixture, _ = _load_fixture("coalesced_memory_render")
+        memory = _build_memory_from_fixture(fixture)
+
+        off = render_for_prompt(memory, token_budget=8000)
+        on = render_for_prompt(memory, token_budget=8000, env=_COALESCE_ON)
+
+        assert _sighting_facts(on) == _sighting_facts(off)
+        assert _sighting_facts(on)
+
+    def test_a_dropped_fact_fails_the_same_comparison(self) -> None:
+        # The gate bites: a render missing one tick of a span is not the same set.
+        full = f"{_OBSERVATIONS_HEADER}\n- You saw p-9 in ADMIN ticks 1-3 (with p-8).\n"
+        short = full.replace("ticks 1-3", "ticks 1-2")
+
+        assert _sighting_facts(full) != _sighting_facts(short)
+        assert len(_sighting_facts(full)) == 3
+
+    def test_every_rendered_citation_id_is_one_the_agent_stores(self) -> None:
+        memory = AgentMemory()
+        for tick in range(6):
+            memory.episodic.append(
+                _self_state_event(
+                    tick=tick,
+                    room="CAFETERIA",
+                    agent_id="p-1",
+                    observation_id=f"p-1:{tick}:0",
+                )
+            )
+            for index, subject in enumerate(("p-2", "p-3"), start=1):
+                memory.episodic.append(
+                    EpisodicEvent(
+                        tick=tick,
+                        type="saw_player",
+                        payload={
+                            "player_id": subject,
+                            "room": "CAFETERIA",
+                            "action": None,
+                        },
+                        provenance="observed",
+                        observation_id=f"p-1:{tick}:{index}",
+                    )
+                )
+
+        view = render_for_prompt(memory, env=_COALESCE_ON, token_budget=8000)
+
+        stored = {
+            event.observation_id for event in memory.episodic.recent(since_tick=0)
+        }
+        cited = set(_OBS_ID_IN_VIEW.findall(view))
+        assert cited
+        assert cited <= stored
+
+    def test_the_reported_band_survives_a_budget_that_sheds_it_off(self) -> None:
+        memory = _seen(*[(tick, "p-9", "ADMIN") for tick in range(1, 12)])
+        memory.episodic.append(
+            EpisodicEvent(
+                tick=12,
+                type="reported_testimony",
+                payload={"speaker": "p-3", "subject": "p-9", "kind": "accusation"},
+                provenance="reported",
+            )
+        )
+
+        tight = 90
+        assert _TESTIMONY_ROW not in render_for_prompt(memory, token_budget=tight)
+        assert _TESTIMONY_ROW in render_for_prompt(
+            memory, token_budget=tight, env=_COALESCE_ON
+        )
+
+
+_SPAN_IN_PROMPT = re.compile(
+    r"^- \[obs (?P<id>[^\]]+)\] You saw \S+ (?:\w+ )?in [A-Z_]+ ticks \d+-\d+",
+    re.MULTILINE,
+)
+_SPAWN_IN_PROMPT = re.compile(
+    r"^- \[obs (?P<id>[^\]]+)\] (?:\[tick 0\] )?You saw every other player in [A-Z_]+",
+    re.MULTILINE,
+)
+# An id no agent can hold: the shape is valid, the owner does not exist.
+_FABRICATED_OBSERVATION_ID: Final[str] = "p-99:999:0"
+
+
+class _UniverseCapturingRunner:
+    """A meeting runner that records each voter's stored citation universe.
+
+    The universe is read through ``observation_ids_for_meeting()`` -- the same
+    accessor ``orchestrator.game`` threads onto ``MeetingParticipant.observation_ids``
+    and the manager validates a ballot against -- so the assertions below hold the
+    render to the agent's OWN STORE rather than to the ids the render printed.
+    """
+
+    def __init__(self, inner: DefaultMeetingRunner) -> None:
+        self._inner = inner
+        self.universes: list[dict[str, frozenset[str]]] = []
+
+    async def run_meeting(
+        self,
+        *,
+        meeting_id: str,
+        trigger: MeetingTrigger,
+        state: WorldState,
+        agents: Mapping[str, AgentInterface],
+    ) -> MeetingArtifacts:
+        self.universes.append(
+            {
+                player_id: frozenset(agent.observation_ids_for_meeting())
+                for player_id, agent in agents.items()
+                if state.players[player_id].alive
+                and isinstance(agent, MeetingAwareAgent)
+            }
+        )
+        return await self._inner.run_meeting(
+            meeting_id=meeting_id, trigger=trigger, state=state, agents=agents
+        )
+
+
+class _CitingFakeProvider:
+    """The deterministic fake, except that its ballots cite a coalesced row.
+
+    :class:`~llm.fake_provider.FakeProvider` builds a MINIMAL valid instance of
+    the schema, so every ballot it returns carries a null
+    ``primary_reason_observation_id`` -- which leaves the production citation
+    path (participant construction -> the manager's validator -> the recorded
+    ballot) unexercised by any fake-provider game. This answers exactly as the
+    fake does except on a :class:`VoteBallot` call, where it copies the FIRST
+    coalesced row the voter's own prompt offers into that field, or
+    ``fabricated_id`` when one is given -- the perturbation that proves the
+    production path validates rather than passes ids through.
+    """
+
+    def __init__(self, *, fabricated_id: str | None = None) -> None:
+        self._inner = FakeProvider()
+        self._fabricated_id = fabricated_id
+        self.citations_offered = 0
+
+    async def complete(
+        self,
+        *,
+        prompt: str,
+        schema: type[BaseModel] | None,
+        max_tokens: int,
+        temperature: float,
+        call_kind: CallKind = "meeting",
+        model: str | None = None,
+        agent_id: str | None = None,
+    ) -> LLMResponse:
+        response = await self._inner.complete(
+            prompt=prompt,
+            schema=schema,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            call_kind=call_kind,
+            model=model,
+            agent_id=agent_id,
+        )
+        if schema is not VoteBallot or agent_id is None:
+            return response
+        coalesced = _coalesced_ids(prompt)
+        if not coalesced:
+            return response
+        payload = cast(dict[str, Any], json.loads(response.text))
+        payload["primary_reason_observation_id"] = (
+            self._fabricated_id if self._fabricated_id is not None else coalesced[0]
+        )
+        self.citations_offered += 1
+        return LLMResponse(
+            text=json.dumps(payload),
+            usage=response.usage,
+            cost_usd=response.cost_usd,
+            model=response.model,
+        )
+
+
+def _cited_ids(pattern: re.Pattern[str], prompt: str) -> list[str]:
+    return [match.group("id") for match in pattern.finditer(prompt)]
+
+
+def _coalesced_ids(prompt: str) -> list[str]:
+    """The ids the FOLDED rows carry: every span, then the spawn summaries."""
+
+    return _cited_ids(_SPAN_IN_PROMPT, prompt) + _cited_ids(_SPAWN_IN_PROMPT, prompt)
+
+
+def _run_lever_on_game(
+    *, tmp_path: Path, client: _CitingFakeProvider, seed: int = 3
+) -> tuple[list[MeetingReplayEntry], list[dict[str, frozenset[str]]]]:
+    """Play one fake-provider 9p2i game and return its meetings + universes."""
+
+    runner = _UniverseCapturingRunner(
+        build_default_meeting_runner(
+            llm_client=client, budget=GameBudget(max_cost_usd=1.00)
+        )
+    )
+    game = HeadlessGame(
+        seed=seed,
+        game_map=load_canonical_map(),
+        agent_factory=build_default_agent_factory(),
+        replay_path=tmp_path / "replay.jsonl",
+        audit_log_path=tmp_path / "audit.jsonl",
+        num_players=9,
+        num_impostors=2,
+        tasks_per_crewmate=DEFAULT_TASKS_PER_CREWMATE,
+        scheduler=TickScheduler(max_ticks=200),
+        meeting_runner=runner,
+    )
+    result = game.run()
+    meetings = [
+        entry
+        for entry in read_all_entries(result.replay_path)
+        if isinstance(entry, MeetingReplayEntry)
+    ]
+    assert meetings, "the seed must reach a meeting for this to test anything"
+    assert len(runner.universes) == len(meetings)
+    return meetings, runner.universes
+
+
+@pytest.mark.slow
+def test_a_lever_on_game_carries_its_coalesced_citations_through_the_meeting(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A fake-provider 9p2i game with the lever ON, read end to end.
+
+    The unit pins above prove the fold's shapes; this proves the shapes reach a
+    real meeting, that what they cite is real, and that a coalesced citation
+    survives the PRODUCTION ballot path into the recorded result. The lever is
+    set in the process environment, so the production render seam
+    (``TacticalAgent.render_memory_for_meeting``) resolves it exactly as a
+    recorded game would; the runner wrapper captures each voter's STORED
+    observation-id set as participant construction reads it; and the ballots the
+    replay carries are the manager's own output, validated against the
+    participant the orchestrator wired, not against anything this test built.
+    """
+
+    monkeypatch.setenv(ENV_COALESCED_MEMORY_RENDER, "1")
+    client = _CitingFakeProvider()
+    meetings, universes_per_meeting = _run_lever_on_game(
+        tmp_path=tmp_path, client=client
+    )
+
+    spans = spawn_rows = cited = 0
+    landed = 0
+    for entry, universes in zip(meetings, universes_per_meeting, strict=True):
+        offered_by_voter: dict[str, frozenset[str]] = {}
+        for call in entry.llm_calls:
+            span_ids = _cited_ids(_SPAN_IN_PROMPT, call.prompt)
+            spawn_ids = _cited_ids(_SPAWN_IN_PROMPT, call.prompt)
+            spans += len(span_ids)
+            spawn_rows += len(spawn_ids)
+            rendered = frozenset(_OBS_ID_IN_VIEW.findall(call.prompt))
+            cited += len(rendered)
+            if not rendered:
+                continue
+            agent_id = call.agent_id
+            assert agent_id is not None, "a prompt citing observations names its agent"
+            universe = universes[agent_id]
+            assert universe, f"{agent_id} entered the meeting with no citable ids"
+            # The authority is the voter's STORE, not the render: every id the
+            # coalesced prompt offers -- coalesced rows included -- must be one
+            # participant construction would accept.
+            assert rendered <= universe, (
+                f"{agent_id} was offered ids it does not hold: "
+                f"{sorted(rendered - universe)}"
+            )
+            offered = frozenset(span_ids) | frozenset(spawn_ids)
+            assert offered <= universe
+            offered_by_voter[agent_id] = offered_by_voter.get(
+                agent_id, frozenset()
+            ) | frozenset(offered)
+
+        # The production path, end to end: the manager validated these ballots
+        # against the participant the orchestrator wired, so a coalesced id in
+        # the RECORDED result is one the voter's own store entitled it to.
+        for ballot in entry.ballots:
+            observation_id = ballot.primary_reason_observation_id
+            if observation_id is None:
+                continue
+            landed += 1
+            assert observation_id in offered_by_voter[ballot.voter], (
+                f"{ballot.voter} cited {observation_id}, which no folded row offered"
+            )
+            assert observation_id in universes[ballot.voter]
+            assert (
+                INVALID_OBSERVATION_ID_MARKER.format(observation_id=observation_id)
+                not in ballot.rationale_text
+            )
+
+    # The lever really reached the live render: both folded shapes are in the
+    # recorded prompts, the meeting still produced ballots, and a folded row's
+    # citation is what the recorded ballots carry.
+    assert spans > 0 and spawn_rows > 0 and cited > 0
+    assert all(entry.ballots for entry in meetings)
+    assert client.citations_offered > 0
+    assert landed > 0, "no coalesced citation reached a recorded ballot"
+
+
+@pytest.mark.slow
+def test_a_fabricated_citation_does_not_survive_the_same_meeting_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The perturbation for the gate above: the same game, the same wiring, but
+    # every ballot cites an id no agent holds. If the production path let
+    # citations through unvalidated, the fabrication would land exactly like a
+    # coalesced id does -- instead every recorded ballot comes back nulled and
+    # marked, so the test above is checking entitlement, not shape.
+    monkeypatch.setenv(ENV_COALESCED_MEMORY_RENDER, "1")
+    client = _CitingFakeProvider(fabricated_id=_FABRICATED_OBSERVATION_ID)
+    meetings, universes_per_meeting = _run_lever_on_game(
+        tmp_path=tmp_path, client=client
+    )
+
+    marker = INVALID_OBSERVATION_ID_MARKER.format(
+        observation_id=_FABRICATED_OBSERVATION_ID
+    )
+    marked = 0
+    for entry, universes in zip(meetings, universes_per_meeting, strict=True):
+        for universe in universes.values():
+            assert _FABRICATED_OBSERVATION_ID not in universe
+        for ballot in entry.ballots:
+            assert ballot.primary_reason_observation_id is None
+            if marker in ballot.rationale_text:
+                marked += 1
+
+    assert client.citations_offered > 0, "the perturbation never cited anything"
+    assert marked > 0, "the nulled citation left no audit marker"

@@ -82,13 +82,20 @@ _SALIENCE_SAW_PLAYER: Final[int] = 50
 # so a tight budget keeps the primary sightings and sheds transitions first.
 _SALIENCE_TRANSITION: Final[int] = 48
 _SALIENCE_COMPLETED_TASK: Final[int] = 30
-# Reported testimony (Task 13.5.2): a meeting speaker's public CLAIM, rendered
-# self-framed as unverified. Strictly BELOW every first-hand sighting band
-# (``_SALIENCE_SAW_PLAYER``=50 and above) and below own completed-task memory,
-# above routine cooldown status -- so a budget-tight render sheds reported rows
-# BEFORE any first-hand observation (the load-bearing band invariant: testimony
-# the model WEIGHS, never ground truth it acts on as if witnessed).
+# Reported testimony: a meeting speaker's public CLAIM, rendered self-framed as
+# unverified. The band it sits in is lever-conditional, and both readings hold the
+# same rule -- testimony is something the model WEIGHS, never ground truth it acts
+# on as if witnessed.
+# OFF (:data:`_SALIENCE_REPORTED_TESTIMONY`): strictly BELOW every first-hand
+# sighting band and below own completed-task memory, so a budget-tight render sheds
+# every reported row before any first-hand observation.
+# ON (:data:`_SALIENCE_REPORTED_TESTIMONY_COALESCED`, under
+# :func:`coalesced_memory_render_enabled`): above bare co-presence and below every
+# first-hand HARD-evidence row (body, own kill, witnessed kill, witnessed vent,
+# heard vent, heard sabotage), so the budget sheds routine sightings before it
+# sheds the game's only cross-meeting social memory.
 _SALIENCE_REPORTED_TESTIMONY: Final[int] = 25
+_SALIENCE_REPORTED_TESTIMONY_COALESCED: Final[int] = 60
 _SALIENCE_COOLDOWN_STATUS: Final[int] = 10
 
 # Per-subject cap on rendered reported alibis (Task 13.5.2, Codex P2). The §6.6
@@ -149,12 +156,36 @@ class _Observation:
     is inert unless the observation-id render lever
     (:func:`observation_id_rendering_enabled`) is ON, in which case
     :func:`render_for_prompt` folds it into the line as an ``[obs {id}]`` prefix.
+
+    ``sighting`` carries the span key of a bare co-presence row and is ``None`` for
+    every other class; it is what :func:`_coalesce_sightings` folds runs on.
+    ``sighting_suffix`` is that row's directional breadcrumb, carried beside the key
+    rather than inside it -- it lands on a subject's most-recent sighting only, so
+    it must not split the run it terminates. Both are inert unless
+    :func:`coalesced_memory_render_enabled` is ON.
     """
 
     salience: int
     tick: int
     line: str
     observation_id: str | None = None
+    sighting: _SightingKey | None = None
+    sighting_suffix: str = ""
+
+
+@dataclass(frozen=True)
+class _SightingKey:
+    """What two bare sightings must share to belong to one coalesced span.
+
+    A run folds only when its rows say the same thing about the same subject --
+    same room, same action, the same companions -- so the span line states exactly
+    what the rows it replaces stated.
+    """
+
+    subject: str
+    room: str
+    action: str | None
+    companions: frozenset[str]
 
 
 @dataclass(frozen=True)
@@ -348,6 +379,44 @@ def meeting_outcome_memory_enabled(env: Mapping[str, str] | None = None) -> bool
     )
 
 
+# Coalesced-render lever -- DEFAULT-OFF, live (the sibling shape above). It is not
+# registered in ``orchestrator.replay._TOGGLEABLE_LEVER_RESOLVERS``: Task 20.33
+# wires the whole Phase-20 slate into the substrate stamp at once.
+ENV_COALESCED_MEMORY_RENDER: Final[str] = "AILIBI_COALESCED_MEMORY_RENDER"
+_COALESCED_MEMORY_RENDER_FLAG_TRUE: Final[frozenset[str]] = frozenset(
+    {"1", "true", "yes", "on"}
+)
+
+# The one-line summary that replaces a full-roster tick-0 sighting group. It names
+# every subject it stands for, so the fold costs a line instead of a roster.
+_SPAWN_GROUP_PREFIX: Final[str] = "You saw every other player in "
+
+
+def coalesced_memory_render_enabled(env: Mapping[str, str] | None = None) -> bool:
+    """Whether routine sightings coalesce and testimony outranks them. DEFAULT OFF.
+
+    Reads :data:`ENV_COALESCED_MEMORY_RENDER` from ``env`` (defaulting to the
+    process environment), accepting ``1/true/yes/on`` case-insensitively; passing
+    ``env`` lets a caller toggle the lever without mutating ``os.environ``.
+
+    ON folds three changes under one key: a run of same-subject, same-room,
+    same-action sightings with an unchanged companion set renders as ONE line
+    carrying its tick range; a tick-0 group that names the whole known roster
+    renders as one summary line; and reported testimony ranks above bare
+    co-presence so a budget-tight render sheds routine rows first. OFF renders
+    one line per sighting and sheds testimony first, which is what the committed
+    recordings and the prompt byte-golden hold.
+
+    Phase 20 G-34 / C-73 (audits/review-2026-08-19/D/FINAL-synthesis.md §4 row 2.11).
+    """
+
+    environment = env if env is not None else os.environ
+    return (
+        environment.get(ENV_COALESCED_MEMORY_RENDER, "").strip().lower()
+        in _COALESCED_MEMORY_RENDER_FLAG_TRUE
+    )
+
+
 def _impostors_remaining_clause(remaining: int | None) -> str:
     """The trailing parity sentence, or "" when the count is underivable."""
 
@@ -478,6 +547,22 @@ def render_for_prompt(
     validator would null. The same lever takes the completed-task line's room from
     the row that dates it, so that line carries one clock.
 
+    :func:`coalesced_memory_render_enabled` (default-OFF) spends the observations
+    budget on what discriminates. A run of consecutive sightings of one subject in
+    one room, same action and an unchanged companion set, renders as ONE line
+    stating its tick range (``You saw p-9 in CAFETERIA ticks 0-4 (with p-8).``); any
+    change of room, action or companions -- and any tick the agent holds no row for
+    -- breaks the run, so a span never claims a tick its rows did not. A tick-0
+    group that names the whole known roster minus the observer collapses to one
+    summary line naming those subjects, over the stretch they all shared, because
+    "everyone started together" is one fact and a partial view is not (a player
+    absent at spawn is real information, so that view keeps its rows). The span
+    carries its FIRST row's
+    ``observation_id``, so every id a ballot can cite off the render is still one of
+    the agent's own stored ids. The same lever lifts reported testimony above bare
+    co-presence in the salience ladder, so the budget sheds routine sightings before
+    it sheds the game's only cross-meeting social memory.
+
     Raises :class:`ValueError` if ``token_budget`` is non-positive or
     if no ``self_state`` event has been recorded. A render call before
     perception has run is a wiring bug, not a normal state, so we
@@ -516,6 +601,9 @@ def render_for_prompt(
     # And for the meeting record: one read, then the plain bool reaches both the
     # ``## Meetings so far:`` block and the reported-testimony frame.
     meetings_on = meeting_outcome_memory_enabled(env)
+    # And for the coalesced render: one read, then the plain bool reaches the
+    # reported-testimony band below and the span fold above the salience sort.
+    coalesce_on = coalesced_memory_render_enabled(env)
     observations = _build_observations(
         memory.episodic,
         own_agent_id=own_agent_id,
@@ -523,7 +611,26 @@ def render_for_prompt(
         completion_from_events=completion_from_events,
         self_location_trail=trail_on,
         meeting_outcome_memory=meetings_on,
+        coalesced_memory_render=coalesce_on,
     )
+    # §6.6 roster filter (Task 10.2, audit gp-6 C-C-8): belief rows AND
+    # open-contradiction lines render only for engine-witnessed player
+    # ids, so a garbage subject that somehow reached the store (the
+    # seed-12 m2 turn-id-as-player rows) cannot render into any prompt
+    # through either section. Gated on the same 9.3 self channel as the
+    # guards above: with no recorded ``agent_id`` (pre-9.3 fixtures) the
+    # roster is underivable and the render is byte-identical to today --
+    # production perception has recorded the id on every tick since
+    # Task 9.3. The span fold reads the same set, so "everyone" in its
+    # tick-0 summary means the same roster the belief rows are filtered by.
+    roster = _known_roster_ids(memory.episodic) if own_agent_id is not None else None
+    if coalesce_on:
+        # Fold the runs BEFORE the id prefix and the sort: the fold works on the
+        # built observations, so every firewall suppression, co-presence suffix
+        # and breadcrumb is already settled and a span cites a real stored id.
+        observations = _coalesce_sightings(
+            observations, roster=roster, own_agent_id=own_agent_id
+        )
     if ids_on:
         # Fold each first-hand observation's stable id into its line BEFORE the
         # salience sort, so ordering, tie-breaks and the token-budget arithmetic all
@@ -542,16 +649,6 @@ def render_for_prompt(
         observations,
         key=lambda obs: (-obs.salience, -obs.tick, obs.line),
     )
-    # §6.6 roster filter (Task 10.2, audit gp-6 C-C-8): belief rows AND
-    # open-contradiction lines render only for engine-witnessed player
-    # ids, so a garbage subject that somehow reached the store (the
-    # seed-12 m2 turn-id-as-player rows) cannot render into any prompt
-    # through either section. Gated on the same 9.3 self channel as the
-    # guards above: with no recorded ``agent_id`` (pre-9.3 fixtures) the
-    # roster is underivable and the render is byte-identical to today --
-    # production perception has recorded the id on every tick since
-    # Task 9.3.
-    roster = _known_roster_ids(memory.episodic) if own_agent_id is not None else None
     # Fill ``working.last_seen`` ← perceived movement (Task 13.5.4), read by the
     # belief-line suffix below (the R-6 composite-memory gate: render reads all
     # three stores). Idempotent across repeated renders and firewall-suppressed
@@ -1257,23 +1354,31 @@ def _collect_co_presence(
     return {key: frozenset(members) for key, members in groups.items()}
 
 
-def _co_presence_suffix(
+def _co_presence_members(
     co_presence: dict[tuple[int, str], frozenset[str]] | None,
     *,
     player_id: str,
     tick: int,
     room: str,
-) -> str:
-    """The "(with …)" companion suffix for one ``saw_player`` line (Task 13.9).
+) -> frozenset[str]:
+    """The OTHER (non-suppressed) subjects seen in this room on this tick.
 
-    Empty unless the observer saw at least one OTHER (non-suppressed) subject in
-    the same room on the same tick, so a solitary sighting renders byte-identically
-    to the pre-13.9 output. Companions are sorted for replay determinism.
+    The companion set the sighting line's suffix is written from and the span fold
+    groups on, so both read one answer to "who else was there".
     """
 
     if co_presence is None:
-        return ""
-    companions = co_presence.get((tick, room), frozenset()) - {player_id}
+        return frozenset()
+    return co_presence.get((tick, room), frozenset()) - {player_id}
+
+
+def _co_presence_suffix(companions: frozenset[str]) -> str:
+    """The "(with …)" companion suffix for one ``saw_player`` line (Task 13.9).
+
+    Empty for a solitary subject, so that render is byte-identical to the pre-13.9
+    output. Companions are sorted for replay determinism.
+    """
+
     if not companions:
         return ""
     return " (with " + ", ".join(sorted(companions)) + ")"
@@ -1571,6 +1676,7 @@ def _build_observations(
     completion_from_events: bool = False,
     self_location_trail: bool = False,
     meeting_outcome_memory: bool = False,
+    coalesced_memory_render: bool = False,
 ) -> list[_Observation]:
     observations: list[_Observation] = []
     seen_body_ids: set[str] = set()
@@ -1749,6 +1855,7 @@ def _build_observations(
             obs = _render_reported_testimony(
                 event,
                 meeting_outcome_memory=meeting_outcome_memory,
+                coalesced_memory_render=coalesced_memory_render,
             )
             if obs is not None:
                 observations.append(obs)
@@ -1790,6 +1897,150 @@ def _build_observations(
                 )
 
     return observations
+
+
+def _coalesce_sightings(
+    observations: Sequence[_Observation],
+    *,
+    roster: frozenset[str] | None,
+    own_agent_id: str | None,
+) -> list[_Observation]:
+    """Fold runs of sightings that differ only by their tick into span lines.
+
+    Bare co-presence rows are the bulk of a rendered memory and most of them
+    restate the previous tick verbatim. Rows sharing a :class:`_SightingKey` on
+    CONSECUTIVE ticks become one line carrying the tick range; a gap in the ticks
+    or any change of room, action or companions starts a new span, so a span never
+    claims a tick its rows did not. The stretch from tick 0 over which the whole
+    known roster stood together becomes one summary line, and whatever each subject
+    did after it keeps its own span. Every other observation class -- vents, kills,
+    bodies, transitions, testimony, own rows -- passes through untouched.
+    """
+
+    grouped: dict[_SightingKey, list[_Observation]] = {}
+    passthrough: list[_Observation] = []
+    for obs in observations:
+        if obs.sighting is None:
+            passthrough.append(obs)
+        else:
+            grouped.setdefault(obs.sighting, []).append(obs)
+
+    runs: list[tuple[_SightingKey, list[_Observation]]] = []
+    for key, rows in grouped.items():
+        run: list[_Observation] = []
+        for row in sorted(rows, key=lambda obs: obs.tick):
+            if run and row.tick != run[-1].tick + 1:
+                runs.append((key, run))
+                run = []
+            run.append(row)
+        runs.append((key, run))
+
+    spawn_indices = _spawn_group_indices(runs, roster=roster, own_agent_id=own_agent_id)
+    folded: list[_Observation] = []
+    spawn_end = -1
+    if spawn_indices:
+        # The summary covers only the ticks EVERY member shares, so it never
+        # outlives the group it stands for; each member's remaining ticks stay
+        # its own span.
+        spawn_end = min(runs[index][1][-1].tick for index in spawn_indices)
+        folded.append(_spawn_group_observation(runs, spawn_indices, end_tick=spawn_end))
+    consumed = frozenset(spawn_indices)
+    for index, (key, rows) in enumerate(runs):
+        if index in consumed:
+            rows = [row for row in rows if row.tick > spawn_end]
+            if not rows:
+                continue
+        folded.append(_span_observation(key, rows))
+    return passthrough + folded
+
+
+def _span_observation(key: _SightingKey, rows: list[_Observation]) -> _Observation:
+    """One span line for a run, or the run's single row unchanged.
+
+    The span sorts by its LAST tick -- a run is as current as its most recent row
+    -- and cites its FIRST row's ``observation_id``, so the id a ballot can copy off
+    the render is one the agent's own store holds. It carries the LAST row's
+    directional breadcrumb: only a subject's most-recent sighting has one, and it
+    describes the whole stay in that room.
+    """
+
+    if len(rows) == 1:
+        return rows[0]
+    first, last = rows[0], rows[-1]
+    action = f"{key.action} " if key.action is not None else ""
+    return _Observation(
+        salience=first.salience,
+        tick=last.tick,
+        line=(
+            f"You saw {key.subject} {action}in {key.room} "
+            f"ticks {first.tick}-{last.tick}"
+            f"{_co_presence_suffix(key.companions)}{last.sighting_suffix}."
+        ),
+        observation_id=first.observation_id,
+        sighting=key,
+        sighting_suffix=last.sighting_suffix,
+    )
+
+
+def _spawn_group_indices(
+    runs: Sequence[tuple[_SightingKey, list[_Observation]]],
+    *,
+    roster: frozenset[str] | None,
+    own_agent_id: str | None,
+) -> list[int]:
+    """The tick-0 runs that together say "everyone started in one room".
+
+    Empty unless the runs beginning at tick 0 name the full known roster minus the
+    observer, in ONE room, each listing the rest of that roster as its companions --
+    the one fact the summary line states. A partial view, a split room or a subject
+    the observer did not see at spawn is real information and keeps its own rows.
+    How far past tick 0 the summary reaches is the caller's shared-tick arithmetic,
+    not a condition on collapsing at all.
+    """
+
+    if roster is None or own_agent_id is None:
+        return []
+    expected = roster - {own_agent_id}
+    if not expected:
+        return []
+    indices = [
+        index
+        for index, (key, rows) in enumerate(runs)
+        if rows[0].tick == 0 and key.action is None and not rows[0].sighting_suffix
+    ]
+    keys = [runs[index][0] for index in indices]
+    if len(indices) != len(expected) or {key.subject for key in keys} != expected:
+        return []
+    if len({key.room for key in keys}) != 1:
+        return []
+    if any(key.companions != expected - {key.subject} for key in keys):
+        return []
+    return indices
+
+
+def _spawn_group_observation(
+    runs: Sequence[tuple[_SightingKey, list[_Observation]]],
+    indices: Sequence[int],
+    *,
+    end_tick: int,
+) -> _Observation:
+    """The single line a full-roster spawn group renders as.
+
+    It names every subject it stands for, so the fold costs a line instead of a
+    roster and loses nothing; it cites the first-listed subject's tick-0 row.
+    """
+
+    rows_by_subject = {runs[index][0].subject: runs[index][1] for index in indices}
+    subjects = sorted(rows_by_subject)
+    room = runs[indices[0]][0].room
+    prefix = "[tick 0] " if end_tick == 0 else ""
+    span = "" if end_tick == 0 else f" ticks 0-{end_tick}"
+    return _Observation(
+        salience=_SALIENCE_SAW_PLAYER,
+        tick=end_tick,
+        line=(f"{prefix}{_SPAWN_GROUP_PREFIX}{room}{span}: {', '.join(subjects)}."),
+        observation_id=rows_by_subject[subjects[0]][0].observation_id,
+    )
 
 
 def _render_saw_player(
@@ -1840,11 +2091,20 @@ def _render_saw_player(
     # lists the other subjects seen in the same room on the same tick; the
     # breadcrumb states the subject's most-recent prior room. Both are empty for a
     # solitary, non-moving subject, so that render is byte-identical to pre-13.6/9.
-    co_present = _co_presence_suffix(
+    companions = _co_presence_members(
         co_presence, player_id=player_id, tick=event.tick, room=room
     )
+    co_present = _co_presence_suffix(companions)
     suffix = _movement_suffix_for(
         breadcrumbs, player_id=player_id, tick=event.tick, room=room
+    )
+    # The span key travels with the row so the coalesced render can fold runs
+    # without re-reading the line it already built; it is ignored on the OFF path.
+    key = _SightingKey(
+        subject=player_id,
+        room=room,
+        action=action_str if action_str in _ACTIVE_PLAYER_ACTIONS else None,
+        companions=companions,
     )
     if action_str in _ACTIVE_PLAYER_ACTIONS:
         return _Observation(
@@ -1855,12 +2115,16 @@ def _render_saw_player(
                 f"{action_str} in {room}{co_present}{suffix}."
             ),
             observation_id=event.observation_id,
+            sighting=key,
+            sighting_suffix=suffix,
         )
     return _Observation(
         salience=_SALIENCE_SAW_PLAYER,
         tick=event.tick,
         line=f"[tick {event.tick}] You saw {player_id} in {room}{co_present}{suffix}.",
         observation_id=event.observation_id,
+        sighting=key,
+        sighting_suffix=suffix,
     )
 
 
@@ -1923,6 +2187,7 @@ def _render_reported_testimony(
     event: EpisodicEvent,
     *,
     meeting_outcome_memory: bool = False,
+    coalesced_memory_render: bool = False,
 ) -> _Observation | None:
     """Render one ``reported_testimony`` row as a self-framed unverified claim.
 
@@ -1931,8 +2196,10 @@ def _render_reported_testimony(
     testimony as a third party's assertion rather than treating a reported
     sighting as something it witnessed. The line states the claim's own tick(s)
     / room, while the :class:`_Observation` sorts by ``event.tick`` (the
-    meeting-boundary tick) at :data:`_SALIENCE_REPORTED_TESTIMONY` -- strictly
-    below first-hand, so a tight budget sheds it first.
+    meeting-boundary tick) in the reported band -- below first-hand by default, so
+    a tight budget sheds it first; ``coalesced_memory_render`` ON raises it to
+    :data:`_SALIENCE_REPORTED_TESTIMONY_COALESCED`, above bare co-presence and
+    still below every hard-evidence row.
 
     ``meeting_outcome_memory`` ON tags the frame with WHICH meeting the claim
     was spoken at (``[meeting 1]``) and renders a ``saw_vent`` sighting with its
@@ -1989,7 +2256,11 @@ def _render_reported_testimony(
     else:
         return None
     return _Observation(
-        salience=_SALIENCE_REPORTED_TESTIMONY,
+        salience=(
+            _SALIENCE_REPORTED_TESTIMONY_COALESCED
+            if coalesced_memory_render
+            else _SALIENCE_REPORTED_TESTIMONY
+        ),
         tick=event.tick,
         line=f"{prefix} {body}.",
         # A reported-testimony event carries no observation id (it is not first-hand
@@ -2448,6 +2719,7 @@ __all__ = [
     "BeliefState",
     "ContradictionRef",
     "DEFAULT_TOKEN_BUDGET",
+    "ENV_COALESCED_MEMORY_RENDER",
     "ENV_MEETING_OUTCOME_MEMORY",
     "ENV_OBSERVATION_ID_RENDERING",
     "ENV_SELF_LOCATION_TRAIL",
@@ -2464,6 +2736,7 @@ __all__ = [
     "WorkingMemory",
     "absorb_meeting_evidence",
     "absorb_reported_testimony",
+    "coalesced_memory_render_enabled",
     "meeting_outcome_memory_enabled",
     "observation_id_rendering_enabled",
     "record_meeting_outcome",

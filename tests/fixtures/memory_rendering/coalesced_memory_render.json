@@ -1,0 +1,168 @@
+{
+  "name": "coalesced_memory_render",
+  "description": "Crewmate whose routine sightings are folded by the AILIBI_COALESCED_MEMORY_RENDER lever. Exercises every fold at once: the tick-0 group names the whole known roster and collapses to one summary line; p-2 and p-3 hold ADMIN together over ticks 1-3 and coalesce into spans; p-3 leaving at tick 4 changes p-2's companion set and breaks the run; p-2 starting a task at tick 5 breaks it again on the action; p-4 is seen at ticks 7-8 and again at 10, and the unrecorded tick 9 breaks that run; and the heard CLAIM sorts above every bare sighting because the lever raises the reported band. Rendered with the lever ON.",
+  "token_budget": 1500,
+  "events": [
+    {
+      "tick": 0,
+      "type": "self_state",
+      "payload": {"room": "CAFETERIA", "role": "CREWMATE", "pending_task_id": "swipe_card", "agent_id": "p-1"},
+      "provenance": "observed"
+    },
+    {
+      "tick": 0,
+      "type": "global_status",
+      "payload": {"tasks_completed": 2, "tasks_total": 10},
+      "provenance": "inferred"
+    },
+    {
+      "tick": 0,
+      "type": "saw_player",
+      "payload": {"player_id": "p-2", "room": "CAFETERIA", "action": null},
+      "provenance": "observed"
+    },
+    {
+      "tick": 0,
+      "type": "saw_player",
+      "payload": {"player_id": "p-3", "room": "CAFETERIA", "action": null},
+      "provenance": "observed"
+    },
+    {
+      "tick": 0,
+      "type": "saw_player",
+      "payload": {"player_id": "p-4", "room": "CAFETERIA", "action": null},
+      "provenance": "observed"
+    },
+    {
+      "tick": 1,
+      "type": "self_state",
+      "payload": {"room": "ADMIN", "role": "CREWMATE", "pending_task_id": "swipe_card", "agent_id": "p-1"},
+      "provenance": "observed"
+    },
+    {
+      "tick": 1,
+      "type": "saw_player",
+      "payload": {"player_id": "p-2", "room": "ADMIN", "action": null},
+      "provenance": "observed"
+    },
+    {
+      "tick": 1,
+      "type": "saw_player",
+      "payload": {"player_id": "p-3", "room": "ADMIN", "action": null},
+      "provenance": "observed"
+    },
+    {
+      "tick": 2,
+      "type": "self_state",
+      "payload": {"room": "ADMIN", "role": "CREWMATE", "pending_task_id": "swipe_card", "agent_id": "p-1"},
+      "provenance": "observed"
+    },
+    {
+      "tick": 2,
+      "type": "saw_player",
+      "payload": {"player_id": "p-2", "room": "ADMIN", "action": null},
+      "provenance": "observed"
+    },
+    {
+      "tick": 2,
+      "type": "saw_player",
+      "payload": {"player_id": "p-3", "room": "ADMIN", "action": null},
+      "provenance": "observed"
+    },
+    {
+      "tick": 3,
+      "type": "self_state",
+      "payload": {"room": "ADMIN", "role": "CREWMATE", "pending_task_id": "swipe_card", "agent_id": "p-1"},
+      "provenance": "observed"
+    },
+    {
+      "tick": 3,
+      "type": "saw_player",
+      "payload": {"player_id": "p-2", "room": "ADMIN", "action": null},
+      "provenance": "observed"
+    },
+    {
+      "tick": 3,
+      "type": "saw_player",
+      "payload": {"player_id": "p-3", "room": "ADMIN", "action": null},
+      "provenance": "observed"
+    },
+    {
+      "tick": 4,
+      "type": "self_state",
+      "payload": {"room": "ADMIN", "role": "CREWMATE", "pending_task_id": "swipe_card", "agent_id": "p-1"},
+      "provenance": "observed"
+    },
+    {
+      "tick": 4,
+      "type": "saw_player",
+      "payload": {"player_id": "p-2", "room": "ADMIN", "action": null},
+      "provenance": "observed"
+    },
+    {
+      "tick": 5,
+      "type": "self_state",
+      "payload": {"room": "ADMIN", "role": "CREWMATE", "pending_task_id": "swipe_card", "agent_id": "p-1"},
+      "provenance": "observed"
+    },
+    {
+      "tick": 5,
+      "type": "saw_player",
+      "payload": {"player_id": "p-2", "room": "ADMIN", "action": "task"},
+      "provenance": "observed"
+    },
+    {
+      "tick": 7,
+      "type": "self_state",
+      "payload": {"room": "ADMIN", "role": "CREWMATE", "pending_task_id": "swipe_card", "agent_id": "p-1"},
+      "provenance": "observed"
+    },
+    {
+      "tick": 7,
+      "type": "saw_player",
+      "payload": {"player_id": "p-4", "room": "ADMIN", "action": null},
+      "provenance": "observed"
+    },
+    {
+      "tick": 8,
+      "type": "self_state",
+      "payload": {"room": "ADMIN", "role": "CREWMATE", "pending_task_id": "swipe_card", "agent_id": "p-1"},
+      "provenance": "observed"
+    },
+    {
+      "tick": 8,
+      "type": "saw_player",
+      "payload": {"player_id": "p-4", "room": "ADMIN", "action": null},
+      "provenance": "observed"
+    },
+    {
+      "tick": 10,
+      "type": "self_state",
+      "payload": {"room": "ADMIN", "role": "CREWMATE", "pending_task_id": "swipe_card", "agent_id": "p-1"},
+      "provenance": "observed"
+    },
+    {
+      "tick": 10,
+      "type": "saw_player",
+      "payload": {"player_id": "p-4", "room": "ADMIN", "action": null},
+      "provenance": "observed"
+    },
+    {
+      "tick": 11,
+      "type": "reported_testimony",
+      "payload": {"speaker": "p-3", "subject": "p-4", "kind": "saw_player", "room": "STORAGE", "from_tick": 6, "co_present": []},
+      "provenance": "reported"
+    },
+    {
+      "tick": 11,
+      "type": "self_state",
+      "payload": {"room": "ADMIN", "role": "CREWMATE", "pending_task_id": "swipe_card", "agent_id": "p-1"},
+      "provenance": "observed"
+    }
+  ],
+  "beliefs": [
+    {"player_id": "p-4", "suspicion": 0.6, "trust": 0.5}
+  ],
+  "contradictions": [],
+  "last_seen": []
+}
