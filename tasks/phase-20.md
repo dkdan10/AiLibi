@@ -5704,7 +5704,7 @@ what was measured.
 ### Task 20.35 — The smoke record (operator): 3–5 seeds, STOP-and-report, with the abandon branch
 **Branch:** `phase-20-smoke-record`
 **Depends on:** 20.34 — the offline counterfactual memo must be committed before the first live seed: it fixes the abandon criteria this smoke rules against, and its published predictions are what the smoke's directional read is compared to.
-**Section refs:** audits/review-2026-08-19/D/FINAL-synthesis.md §4 wave 2 (the pre-record protocol — the $0 offline counterfactual "de-risks a 23 h event"; the record order; the primary bars) + §6 fact 2 ("The record itself runs on 917 lines of untested Bash (C-74). Harden that first … or the 23 h is at risk"); audits/review-2026-08-19/B/collated-findings.md C-74 (P1: `refresh_samples.sh` = 917 lines of worker pool + mkdir mutex + per-seed retry, `tests/scripts/test_refresh_samples.py` = 915 lines / 59 all-`--dry-run` tests, none touching `run_worker`/`_acquire_lock`/`record_one_seed` — re-verified at HEAD: the wrapper is 917 lines, `_acquire_lock` at scripts/refresh_samples.sh:639, `record_one_seed` at :689, `run_worker` at :801, and the test file is 915 lines / 59 tests); scripts/refresh_samples.sh:36-37 (`AILIBI_SAMPLE_DIR`, and `AILIBI_MANIFEST` defaulting under it), :442 (`REQUIRED_PROMPT_SET="qwen3_6_27b"`), :461 (`REQUIRED_SET_OWNER_MODEL="Qwen/Qwen3.6-27B"`), :497-534 (the substrate-lever preflight, today hard-pinned to the baseline-6 slate), :551-555 (the pre-spend roster descriptor write), :611 (the stage dir created under `dirname "$SAMPLE_DIR"`); scripts/verify_samples.sh:16-23 (a bare invocation walks EVERY set under the samples root); scripts/validity_gate.py:73-85 (`--expected-model` / `--require-zero-cost`); eval/validity.py:26-54 (the ten named checks; :47 `cost_and_provenance_exact`, :52 `byte_identical_reconstruction`); orchestrator/replay.py:570 (`_TOGGLEABLE_LEVER_RESOLVERS`), :584-588 (`SUBSTRATE_FLAG_KEYS`), :590 (`substrate_flag_snapshot`); tasks/phase-18.md:941-944 (the standing record watch item — the `cost_and_provenance_exact` blindness around the `(deadline_default)` synthetic marker, and "a seed whose opening defaults is a FAILED recording and re-records"); audits/audit-phase-16-baseline-4.md §7 (the precedent: 9p2i seed 5 re-recorded after a `(deadline_default)` phantom, its MANIFEST row stamped honestly); tasks/phase-10.md:1133 (the 5-seed smoke that covered no emergency meeting — the full run then crashed on the uncovered path), :668-680 (smoke-first STOP-for-go and the smoke-abandon evidence branch); audits/audit-phase-20-preregistration.md and audits/audit-phase-20-counterfactual.md (the ratified bars, the decision rule, and the abandon criteria this smoke executes rather than invents)
+**Section refs:** audits/review-2026-08-19/D/FINAL-synthesis.md §4 wave 2 (the pre-record protocol — the $0 offline counterfactual "de-risks a 23 h event"; the record order; the primary bars) + §6 fact 2 ("The record itself runs on 917 lines of untested Bash (C-74). Harden that first … or the 23 h is at risk"); audits/review-2026-08-19/B/collated-findings.md C-74 (P1: `refresh_samples.sh` = 917 lines of worker pool + mkdir mutex + per-seed retry, `tests/scripts/test_refresh_samples.py` = 915 lines / 59 all-`--dry-run` tests, none touching `run_worker`/`_acquire_lock`/`record_one_seed` — CLOSED at HEAD by Task 20.21, PR #359: the wrapper is now 1,052 lines with `_acquire_lock` at scripts/refresh_samples.sh:774, `record_one_seed` at :824, `run_worker` at :936, and tests/scripts/test_refresh_samples.py is 1,610 lines / 80 tests carrying a hermetic fake-provider RECORDING family (:1053 onward) that drives `run_worker` / `claim_next_seed` / `record_one_seed` / `_acquire_lock` end to end, asserted by name off a `bash -x` trace at :1355-1361); scripts/refresh_samples.sh:36-37 (`AILIBI_SAMPLE_DIR`, and `AILIBI_MANIFEST` defaulting under it), :566 (`REQUIRED_PROMPT_SET="qwen3_6_27b"`), :588 (`REQUIRED_SET_OWNER_MODEL="Qwen/Qwen3.6-27B"`), :289-326 (the substrate-lever preflight — since Task 20.33 a POSITIVE whole-slate equality against the operator-declared `--expect-levers`, delegating the comparison to `orchestrator.replay.substrate_slate_mismatches`; NOT the baseline-6 blacklist this contract was authored against), :55 + :61-65 (the `--expect-levers` usage block) and :248-260 (its argument parse, an explicitly empty value meaning the bare slate), :524-526 and :649-652 (the preflight's TWO call sites — the dry-run path refuses as well as the real path), :669-673 (the pre-spend roster descriptor write, after `mkdir -p "$SAMPLE_DIR"` at :660), :737 (the stage dir created under `dirname "$SAMPLE_DIR"`); scripts/verify_samples.sh:16-23 (a bare invocation walks EVERY set under the samples root); scripts/validity_gate.py:78-85 (`--expected-model`) and :86-93 (`--require-zero-cost`); eval/validity.py:26-56 (the ten named checks — still exactly ten; :49 `cost_and_provenance_exact`, which since Task 20.33 ALSO requires every game's substrate-flag stamp to equal the canonical snapshot with the canonical key set, and :54 `byte_identical_reconstruction`); orchestrator/replay.py:587-599 (`_TOGGLEABLE_LEVER_RESOLVERS` — nine keys at HEAD: `impostor_roll_call` plus the eight Phase-20 levers, in registration order), :607-609 (`TOGGLEABLE_SUBSTRATE_FLAG_KEYS`), :614-618 (`SUBSTRATE_FLAG_KEYS`), :620 (`substrate_flag_snapshot`), :652 (`substrate_slate_mismatches` — the one comparison the wrapper preflight, the record and this report must all use rather than re-derive); tasks/phase-18.md:941-944 (the standing record watch item — the `cost_and_provenance_exact` blindness around the `(deadline_default)` synthetic marker, and "a seed whose opening defaults is a FAILED recording and re-records"); audits/audit-phase-16-baseline-4.md §7 (the precedent: 9p2i seed 5 re-recorded after a `(deadline_default)` phantom, its MANIFEST row stamped honestly); tasks/phase-10.md:1133 (the 5-seed smoke that covered no emergency meeting — the full run then crashed on the uncovered path), :668-680 (smoke-first STOP-for-go and the smoke-abandon evidence branch); audits/audit-phase-20-preregistration.md and audits/audit-phase-20-counterfactual.md (the ratified bars, the decision rule, and the abandon criteria this smoke executes rather than invents)
 **Complexity:** Small
 **Record impact:** the record itself — the first live seeds of the Phase-20 recording window; the bytes land in a scratch directory and never enter the tree.
 **Measurement:** `uv run python scripts/validity_gate.py "$SMOKE_DIR" --expected-model Qwen/Qwen3.6-27B --require-zero-cost` PASS (all ten checks green, quoted in the report); `bash scripts/verify_samples.sh "$SMOKE_DIR"` reconstructs every smoke seed byte-identically; `uv run python scripts/measure_baseline.py --honesty "$SMOKE_DIR"` prints the cells the report quotes with denominators; and the committed sets are untouched — `bash scripts/verify_samples.sh` (bare) clean and `git status --porcelain replays/` empty.
@@ -5715,8 +5715,10 @@ operator wall across four sets (audits/review-2026-08-19/D/FINAL-synthesis.md §
 which prices the record at "~23 h operator wall, $0 flat-rate"), and the review named the
 hazard on the way in: the recorder is 917 lines of Bash whose worker pool, mkdir mutex and
 per-seed retry had zero automated coverage (C-74 in
-audits/review-2026-08-19/B/collated-findings.md; the recorder-coverage contract closes that
-before this task runs). This is the cheap proof — five seeds, an hour, $0 — that the whole
+audits/review-2026-08-19/B/collated-findings.md). Task 20.21 CLOSED that before this task —
+PR #359, merged: the wrapper is 1,052 lines and its test file 1,610 lines / 80 tests, with a
+fake-provider family that records into a scratch dir and drives `run_worker`,
+`claim_next_seed`, `record_one_seed` and `_acquire_lock` for real. This is the cheap proof — five seeds, an hour, $0 — that the whole
 stack is live and coherent before the expensive event starts: the lever slate, the v4 prompt
 set, the recorder's real worker path, the substrate stamp, the validity gate, and the
 honesty instruments reading a freshly recorded set rather than committed bytes.
@@ -5726,10 +5728,10 @@ The slate under test is the phase's, exactly: all eight Phase-20 levers ON,
 `Qwen/Qwen3.6-27B` non-thinking, 9p2i roster. Two independent things must agree and the
 smoke is where the disagreement is cheap to find. First, the wrapper's substrate-lever
 preflight refuses a stale `AILIBI_*` export before any seed stages
-(scripts/refresh_samples.sh:497-534) — the guard that exists because a mis-substrated
+(scripts/refresh_samples.sh:289-326, called at :524-526 on the dry-run path and :649-652 on the real one) — the guard that exists because a mis-substrated
 multi-hour record only reveals itself in the MANIFEST afterwards. Second, the recorded
-bytes self-describe: `substrate_flag_snapshot` (orchestrator/replay.py:590) folds
-`_TOGGLEABLE_LEVER_RESOLVERS` (:570) into the `SUBSTRATE_FLAG_KEYS` ordering (:584-588) and
+bytes self-describe: `substrate_flag_snapshot` (orchestrator/replay.py:620) folds
+`_TOGGLEABLE_LEVER_RESOLVERS` (:587-599) into the `SUBSTRATE_FLAG_KEYS` ordering (:614-618) and
 stamps it into every `game_over` row, so the report reads the slate out of the recorded
 games rather than out of the shell it was launched from. A slate that disagrees between
 those two reads is an ABANDON, not a footnote.
@@ -5754,13 +5756,17 @@ record starts on frozen source. ABANDON means the defect is described concretely
 author a follow-up contract, the routing is named, and the record does not start. Unlike the
 phase-10 attempt-1 evidence branch — closed UNMERGED because its deliverable was the record —
 the deliverable here IS the report, so this PR merges on both branches: a smoke that found
-something is the smoke working. The freeze begins at GO (the standing rule that builds freeze
-during measurement windows): no merge into `agents/`, `meetings/`, `observation/` or the
-prompt set between this report and the record, and a routed fix reopens the window — the
+something is the smoke working. The freeze is ALREADY in force and this task adds nothing to it: the ratified
+pre-registration §9 declares the freeze AT THE 20.33 MERGE (fc5cf719, merged), covering
+`agents/`, `meetings/`, `observation/`, `orchestrator/` and the prompt set — so this smoke runs
+inside the window rather than opening it, and no merge into those trees may land
+between this report and the record, and a routed fix reopens the window — the
 smoke then runs again from zero, on the changed source, with every number re-derived.
 
 **Files in scope:**
 - audits/audit-phase-20-smoke.md; (new: the smoke report — per-seed outcome, validity gate, the honesty cells on the smoke seeds, any guard trip, the GO/ABANDON call)
+- audits/README.md; (one index row for the new audit — `scripts/check_doc_facts.py::check_audits_index` (:1322) errors on any un-indexed top-level `audits/*.md`, and `tests/scripts/test_check_doc_facts.py:191` runs `check_facts` against the REAL repo, so without this row the DoD's `uv run pytest` and `bash scripts/check.sh` lines cannot pass. Task 20.34 recorded the same two files at merge)
+- docs/artifacts.md; (:107, the `audits/` in-tree inventory row — `scripts/verify_ml_evidence.py::inventory_problems` (:2174, reached from `run_availability` at :2558) compares the stated `N files` against `git ls-files audits`, pinned on the real repo by `tests/scripts/test_verify_ml_evidence.py:1411-1413`. `git ls-files audits` = 151 at HEAD and the row reads `151 files`; the smoke audit makes it 152)
 
 **Files NOT in scope:**
 - replays/samples/, replays/ml_corpus/ (the smoke records into a scratch directory that is NOT committed; committed bytes do not move at this task)
@@ -5775,7 +5781,7 @@ smoke then runs again from zero, on the changed source, with every number re-der
 - [ ] The honesty cells are computed on the smoke seeds and quoted with numerators and denominators beside the counterfactual memo's predicted direction, each labelled directional-only at this n; no pre-registered bar is declared met or missed on five seeds, and the report says so in those words.
 - [ ] Lever coverage is reported as OBSERVED on the smoke bytes (which levers actually fired, with counts), and any lever the slate never exercised is named as untested.
 - [ ] Operating data for the record's re-plan is recorded: per-seed wall clock, tokens per call and per meeting, worker occupancy, and every retry or transport blip the run absorbed — so the roughly 23 h projection is re-derived from measured tokens before the adopting record starts.
-- [ ] GO or ABANDON is recorded verbatim against the abandon criteria in `audits/audit-phase-20-counterfactual.md` — no criterion invented here; a seed whose opening defaults follows the standing rule (a FAILED recording that re-records, stamped honestly), and a repeat of that class across seeds is a class defect, not a re-record.
+- [ ] GO or ABANDON is recorded verbatim against the abandon criteria in `audits/audit-phase-20-counterfactual.md` — no criterion invented here; a seed whose opening defaults is a STOP per the ratified memos (counterfactual §9 item 2, pre-registration §8) — the report records it and the go/no-go on restarting is the owner's; the phase-18 standing rule (tasks/phase-18.md:944) is SUPERSEDED for this window (orchestrator ruling 2026-08-24: ratified text beats a contract clause).
 - [ ] On ABANDON: the defect is described with symptom, seed, suspected file and a reproduction; the follow-up is named as a routing slot for the owner to land; and the report states plainly that the adopting record does not start.
 - [ ] Committed bytes untouched: `bash scripts/verify_samples.sh` (bare) still verifies every committed set clean, and no file under `replays/` differs from HEAD.
 - [ ] `uv run mypy .` passes.
@@ -5794,8 +5800,10 @@ criteria. This task executes them. Where the smoke's reading and a memo disagree
 wins and the disagreement is the finding.
 
 Step 2 — Pick the seeds by coverage. Draw candidates from the counterfactual memo's
-enumerated meetings first (a seed whose baseline-6 game is in the wrongful-ejection census
-gives the strongest before/after read), then top up so the slate covers, at minimum: several
+enumerated meetings first — the memo enumerates per seed only at §5.1 (the four I-13 anchored
+fixtures), whose two samples/9p2i entries are seed 23 M1 and seed 12 M0; the 79-innocent-ejection
+census is published pooled, not per seed, so there is no fuller list to draw from — then top up
+so the slate covers, at minimum: several
 `alibi_vs_sighting` rows, at least one `vent_sighting`, at least one `alibi_conflict`, at
 least one multi-ejection game, and a game that ends by task completion rather than ejection.
 The HEAD census above is the shopping list — for instance seeds 31 and 13 are the two
@@ -5816,15 +5824,20 @@ Step 4 — Put `$SMOKE_DIR` at an absolute path OUTSIDE the repo. Two reasons, b
 a bare `bash scripts/verify_samples.sh` walks EVERY set under the samples root
 (scripts/verify_samples.sh:16-23), so a scratch set parked under `replays/samples/` would
 silently join the committed gate; and the per-refresh stage is created under
-`dirname "$SAMPLE_DIR"` (:611), so an out-of-tree sample dir keeps the staging out of tree
-too. The wrapper creates the dir and writes its `roster.json` before any spend (:551-555),
+`dirname "$SAMPLE_DIR"` (scripts/refresh_samples.sh:737), so an out-of-tree sample dir keeps the staging out of tree
+too. The wrapper creates the dir (:660) and writes its `roster.json` before any spend (:669-673),
 failing loud if an existing descriptor disagrees.
 
-Step 5 — Preflight, then record. Run `bash scripts/refresh_samples.sh --seeds <slate> --dry-run`
+Step 5 — Preflight, then record. Run
+`bash scripts/refresh_samples.sh --seeds <slate> --expect-levers <the eight keys> --dry-run`
 first: it touches nothing and echoes the resolved provider, prompt set, roster, sample dir,
-worker count, retry budget and the preflights it would run — paste that block into the
-report as the recorded configuration. Then run the same command with the lever-slate
-expectation the stamp-registration work added (`--expect-levers`), without `--dry-run`.
+worker count (2 parallel at HEAD), retry budget (4 attempts per seed) and the preflights it
+would run — paste that block into the report as the recorded configuration. `--expect-levers`
+is required on the DRY RUN too, not only on the real one: since Task 20.33 the substrate-lever
+preflight runs on the dry-run path as well (scripts/refresh_samples.sh:524-526) and defaults to
+the bare slate, so a bare `--dry-run` under this phase's exports exits 1 naming all eight levers
+— verified at HEAD, and the dry run still wrote nothing. Then run the same command without
+`--dry-run`.
 The preflight refusing to start is a SUCCESS of this task, not a failure: it means a stale
 export was caught before the 23 h event.
 
