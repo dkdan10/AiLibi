@@ -195,6 +195,7 @@ from meetings.schemas import (
     AlibiClaim,
     ContradictionRef,
     MeetingTranscript,
+    SawMoveObservation,
     SawPlayerObservation,
     WhereaboutsClaim,
 )
@@ -1981,6 +1982,57 @@ class _ResolvedFlag:
     to_tick: int
 
 
+def _dedupe_flags(
+    flags: tuple[ContradictionRef, ...],
+    *,
+    index: Mapping[str, tuple[PlayerId, object]],
+) -> tuple[ContradictionRef, ...]:
+    """Collapse one witness's one placement, spoken twice, back to one flag.
+
+    A subject stands in exactly one room at a tick, so one speaker's two
+    placements of one subject at one tick are one perception said two ways, and
+    the contradiction they raise against one alibi account is one piece of
+    evidence. The recorder can still carry it twice: a witness who states both
+    "I saw X in A" and "I saw X move A -> B" at the same tick puts two placements
+    on the record, and every cell here counts evidence rather than sentences, so
+    the fold keeps the first and drops the rest.
+
+    The key carries the SPEAKER on purpose. Two DIFFERENT witnesses contradicting
+    the same alibi are two independent pieces of evidence and stay two flags,
+    however identically the detector words them.
+
+    Only the resolvable ``alibi_vs_sighting`` class is keyed; every other flag,
+    and any flag whose sides do not resolve, passes through untouched so the
+    caller's guard still sees it.
+    """
+
+    seen: set[tuple[object, ...]] = set()
+    kept: list[ContradictionRef] = []
+    for flag in flags:
+        resolved = (
+            _resolve_flag(flag, index=index)
+            if flag.kind == "alibi_vs_sighting"
+            else None
+        )
+        if resolved is None:
+            kept.append(flag)
+            continue
+        identity = (
+            flag.kind,
+            resolved.speaker,
+            resolved.subject,
+            resolved.sighting.tick,
+            resolved.alibi_room,
+            resolved.from_tick,
+            resolved.to_tick,
+        )
+        if identity in seen:
+            continue
+        seen.add(identity)
+        kept.append(flag)
+    return tuple(kept)
+
+
 def _fold_flags(
     *,
     game_id: str,
@@ -1995,7 +2047,8 @@ def _fold_flags(
 
     entry = facts.entry
     index = _event_index(entry.transcript)
-    strong_flags = [f for f in entry.contradictions if not is_weak_contradiction(f)]
+    flags = _dedupe_flags(entry.contradictions, index=index)
+    strong_flags = [f for f in flags if not is_weak_contradiction(f)]
 
     # I-3, per-meeting: alibi_vs_sighting is the meeting's ONLY strong evidence.
     if strong_flags and all(f.kind == "alibi_vs_sighting" for f in strong_flags):
@@ -2035,7 +2088,7 @@ def _fold_flags(
             1 for pid in facts.living if roles.get(pid) == "IMPOSTOR"
         )
 
-    for flag in entry.contradictions:
+    for flag in flags:
         if flag.kind != "alibi_vs_sighting":
             continue
         resolved = _resolve_flag(flag, index=index)
@@ -2080,6 +2133,37 @@ def _event_index(
     return index
 
 
+def _sighting_placement(artifact: object) -> SawPlayerObservation | None:
+    """The placement one spoken artifact puts on the record, or ``None``.
+
+    Two sayable shapes place another player, and the detector reads both as one
+    placement, so this instrument must too:
+
+    * a ``saw_player`` places the subject in the room it names;
+    * a ``saw_move`` "``subject`` moved A -> B, arriving at ``tick``" places the
+      subject at the DESTINATION, ``to_room`` at ``tick``, and nowhere else --
+      the origin half is deliberately not placed at ``tick - 1``
+      (``meetings.transcript::_iter_move_placements``, which builds exactly this
+      ``SawPlayerObservation`` from the transition before any detector sees it).
+
+    Reading the destination is what lets I-4's grounding, I-6's geometry and
+    I-7's origin classification measure the side the flag was actually minted
+    from; reading the origin, or refusing the shape, would price a flag against
+    a room nobody was accused of being in.
+    """
+
+    if isinstance(artifact, SawPlayerObservation):
+        return artifact
+    if isinstance(artifact, SawMoveObservation):
+        return SawPlayerObservation(
+            type="saw_player",
+            tick=artifact.tick,
+            subject=artifact.subject,
+            room=artifact.to_room,
+        )
+    return None
+
+
 def _resolve_flag(
     flag: ContradictionRef, *, index: Mapping[str, tuple[PlayerId, object]]
 ) -> _ResolvedFlag | None:
@@ -2088,6 +2172,8 @@ def _resolve_flag(
     The two ids are read by TYPE, not by position: the detector emits the alibi in
     ``event_a_id`` on the direct path and in ``event_b_id`` on the re-targeted
     proxy path, so keying on position would silently drop a fifth of the class.
+    The sighting side is whichever artifact places another player
+    (:func:`_sighting_placement`) -- a static sighting or a spoken transition.
     """
 
     first = index.get(flag.event_a_id)
@@ -2095,12 +2181,13 @@ def _resolve_flag(
     if first is None or second is None:
         return None
     sides = [(flag.event_a_id, first), (flag.event_b_id, second)]
-    sightings = [
-        (speaker, artifact)
-        for event_id, (speaker, artifact) in sides
-        if isinstance(artifact, SawPlayerObservation)
-        and ":whereabouts:" not in event_id
-    ]
+    sightings: list[tuple[PlayerId, SawPlayerObservation]] = []
+    for event_id, (speaker, artifact) in sides:
+        if ":whereabouts:" in event_id:
+            continue
+        placement = _sighting_placement(artifact)
+        if placement is not None:
+            sightings.append((speaker, placement))
     alibis = [
         artifact
         for event_id, (_, artifact) in sides
@@ -2111,8 +2198,6 @@ def _resolve_flag(
         return None
     speaker, sighting = sightings[0]
     alibi = alibis[0]
-    if not isinstance(sighting, SawPlayerObservation):
-        return None
     if isinstance(alibi, AlibiClaim):
         alibi_room, from_tick, to_tick = alibi.room, alibi.from_tick, alibi.to_tick
     elif isinstance(alibi, WhereaboutsClaim):
