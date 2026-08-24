@@ -153,7 +153,7 @@ from typing import Final, NamedTuple, NoReturn
 
 from pydantic import BaseModel, ConfigDict
 
-from agents.memory.episodic import MemoryStore
+from agents.memory.episodic import EpisodicEvent, MemoryStore
 from agents.memory.store import (
     AgentMemory,
     absorb_meeting_evidence,
@@ -1970,7 +1970,14 @@ def _fold_whereabouts(
 
 @dataclass(frozen=True)
 class _ResolvedFlag:
-    """One recorded ``alibi_vs_sighting`` flag, resolved back to its two events."""
+    """One recorded ``alibi_vs_sighting`` flag, resolved back to its two events.
+
+    ``movement_sided`` marks a ``sighting`` this module built from a spoken
+    transition rather than read from a static ``saw_player``. The placement is
+    identical either way — the destination room at the arrival tick — but the
+    speaker's own perception of it lives in a DIFFERENT memory channel, which
+    I-4's grounding has to read (:func:`_supports_placement`).
+    """
 
     flag: ContradictionRef
     strong: bool
@@ -1980,6 +1987,21 @@ class _ResolvedFlag:
     alibi_room: RoomId
     from_tick: int
     to_tick: int
+    movement_sided: bool = False
+
+
+def _account_key(resolved: _ResolvedFlag) -> tuple[object, ...]:
+    """One speaker's account of one subject at one tick, against one alibi."""
+
+    return (
+        resolved.flag.kind,
+        resolved.speaker,
+        resolved.subject,
+        resolved.sighting.tick,
+        resolved.alibi_room,
+        resolved.from_tick,
+        resolved.to_tick,
+    )
 
 
 def _dedupe_flags(
@@ -1987,45 +2009,55 @@ def _dedupe_flags(
     *,
     index: Mapping[str, tuple[PlayerId, object]],
 ) -> tuple[ContradictionRef, ...]:
-    """Collapse one witness's one placement, spoken twice, back to one flag.
+    """Collapse one witnessed event a speaker stated twice back to one flag.
 
-    A subject stands in exactly one room at a tick, so one speaker's two
-    placements of one subject at one tick are one perception said two ways, and
-    the contradiction they raise against one alibi account is one piece of
-    evidence. The recorder can still carry it twice: a witness who states both
-    "I saw X in A" and "I saw X move A -> B" at the same tick puts two placements
-    on the record, and every cell here counts evidence rather than sentences, so
-    the fold keeps the first and drops the rest.
+    Every cell here counts evidence, not sentences, so one perception put on the
+    record twice must count once. Two shapes of that, and nothing else:
 
-    The key carries the SPEAKER on purpose. Two DIFFERENT witnesses contradicting
-    the same alibi are two independent pieces of evidence and stay two flags,
-    however identically the detector words them.
+    * **a transition and one of its endpoints.** "X moved A -> B at t" and
+      "I saw X in A at t" (or in B) from ONE speaker against ONE alibi account
+      are one witnessed event said two ways, and the detector places both, so it
+      mints two flags. The TRANSITION survives: it is the fuller statement, and
+      it is the placement the flag was priced from.
+    * **the same placement twice** -- identical speaker, subject, tick, room and
+      alibi account. The same sentence said twice.
+
+    What is deliberately NOT deduplicated: one speaker placing the subject in
+    two DIFFERENT rooms at one tick with two static sightings. A witness who
+    contradicts themselves has made two statements, and dropping one would
+    understate the class census. Nor are two DIFFERENT witnesses ever collapsed
+    -- every key carries the speaker -- however identically the detector words
+    the two flags.
 
     Only the resolvable ``alibi_vs_sighting`` class is keyed; every other flag,
     and any flag whose sides do not resolve, passes through untouched so the
     caller's guard still sees it.
     """
 
-    seen: set[tuple[object, ...]] = set()
-    kept: list[ContradictionRef] = []
-    for flag in flags:
-        resolved = (
+    resolved_flags = [
+        (
+            flag,
             _resolve_flag(flag, index=index)
             if flag.kind == "alibi_vs_sighting"
-            else None
+            else None,
         )
+        for flag in flags
+    ]
+    spoken_transitions = {
+        _account_key(resolved)
+        for _, resolved in resolved_flags
+        if resolved is not None and resolved.movement_sided
+    }
+    seen: set[tuple[object, ...]] = set()
+    kept: list[ContradictionRef] = []
+    for flag, resolved in resolved_flags:
         if resolved is None:
             kept.append(flag)
             continue
-        identity = (
-            flag.kind,
-            resolved.speaker,
-            resolved.subject,
-            resolved.sighting.tick,
-            resolved.alibi_room,
-            resolved.from_tick,
-            resolved.to_tick,
-        )
+        account = _account_key(resolved)
+        if not resolved.movement_sided and account in spoken_transitions:
+            continue
+        identity = account + (resolved.sighting.room,)
         if identity in seen:
             continue
         seen.add(identity)
@@ -2181,13 +2213,15 @@ def _resolve_flag(
     if first is None or second is None:
         return None
     sides = [(flag.event_a_id, first), (flag.event_b_id, second)]
-    sightings: list[tuple[PlayerId, SawPlayerObservation]] = []
+    sightings: list[tuple[PlayerId, SawPlayerObservation, bool]] = []
     for event_id, (speaker, artifact) in sides:
         if ":whereabouts:" in event_id:
             continue
         placement = _sighting_placement(artifact)
         if placement is not None:
-            sightings.append((speaker, placement))
+            sightings.append(
+                (speaker, placement, isinstance(artifact, SawMoveObservation))
+            )
     alibis = [
         artifact
         for event_id, (_, artifact) in sides
@@ -2196,7 +2230,7 @@ def _resolve_flag(
     ]
     if len(sightings) != 1 or len(alibis) != 1:
         return None
-    speaker, sighting = sightings[0]
+    speaker, sighting, movement_sided = sightings[0]
     alibi = alibis[0]
     if isinstance(alibi, AlibiClaim):
         alibi_room, from_tick, to_tick = alibi.room, alibi.from_tick, alibi.to_tick
@@ -2213,6 +2247,7 @@ def _resolve_flag(
         alibi_room=alibi_room,
         from_tick=from_tick,
         to_tick=to_tick,
+        movement_sided=movement_sided,
     )
 
 
@@ -2255,6 +2290,34 @@ def _fold_geometry(
     # treats as CONSISTENT and never flags; it is counted in no geometry bucket.
 
 
+def _supports_placement(
+    event: EpisodicEvent, resolved: _ResolvedFlag, *, spoken: frozenset[str]
+) -> bool:
+    """Whether one memory row is the speaker's own perception of the placement.
+
+    A static sighting is supported by a ``saw_player`` row naming the room it
+    spoke. A MOVEMENT-sided placement is the arrival half of a transition, and
+    the speaker's channel for THAT is ``saw_player_move``: a witness who saw a
+    departure holds no ``saw_player`` row at the destination, which is the same
+    channel disjointness the detector relies on when it treats such a placement
+    as grounded (``meetings.transcript::_IndexedSighting.movement_grounded``).
+    Only a movement-sided placement reads the move channel, so a static side's
+    cell is exactly what it always was.
+    """
+
+    if event.payload.get("player_id") != resolved.sighting.subject:
+        return False
+    if event.type == EVENT_SAW_PLAYER:
+        room = event.payload.get("room")
+        return isinstance(room, str) and bool(canonical_rooms(room) & spoken)
+    if resolved.movement_sided and event.type == EVENT_SAW_PLAYER_MOVE:
+        destination = event.payload.get("to_room")
+        return isinstance(destination, str) and bool(
+            canonical_rooms(destination) & spoken
+        )
+    return False
+
+
 def _fold_grounding(
     resolved: _ResolvedFlag,
     *,
@@ -2274,10 +2337,7 @@ def _fold_grounding(
     gaps = [
         abs(event.tick - resolved.sighting.tick)
         for event in memory.recent(since_tick=0)
-        if event.type == EVENT_SAW_PLAYER
-        and event.payload.get("player_id") == resolved.sighting.subject
-        and isinstance(event.payload.get("room"), str)
-        and canonical_rooms(str(event.payload["room"])) & spoken
+        if _supports_placement(event, resolved, spoken=spoken)
     ]
     if not gaps:
         return
