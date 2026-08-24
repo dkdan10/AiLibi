@@ -11,12 +11,19 @@ partial adoption is a per-lever VERDICT, never a partial graduation).
 
 ## 0. The headline, in one sentence
 
-On the frozen baseline-6 bytes the eight-lever slate strips the convicting STRONG evidence from
-**76 of the 79 innocent ejections** (70/79 still carried one OFF → 3/79 ON) and collapses the STRONG
-`alibi_vs_sighting` class from **234 flags to 12**, but it does **not** reach bar 5 (10/12 = 83.3%
-grounded at tick, against a target of 100%) or bar 7 (6/12 = 50.0% adjacent, against ≤ 5%) **as
-rates** — the denominator falls faster than the numerator — so the offline table predicts
-**FINDING**, not ADOPTED, and names exactly which two bars it expects to miss and why.
+Of the 79 innocent ejections, **70 convicted on a STRONG flag naming the victim** and nine carried
+none. On the frozen baseline-6 bytes the eight-lever slate strips that evidence from **67 of those
+70** (95.7%), mints a new STRONG flag against **0 of the nine** that had none, and collapses the
+STRONG `alibi_vs_sighting` class from **234 flags to 12** — but it does **not** reach bar 5
+(10/12 = 83.3% grounded at tick, against a target of 100%) or bar 7 (6/12 = 50.0% adjacent, against
+≤ 5%) **as rates**, because the denominator falls faster than the numerator. The offline table
+therefore predicts **FINDING**, not ADOPTED, and names exactly which two bars it expects to miss and
+why.
+
+The 67 is a **per-meeting OFF/ON join**, not `79 − 3`: a wrongful ejection that carried no STRONG
+flag cannot lose one, and a detector lever can mint one where there was none, so the subtraction
+would be the wrong arithmetic in both directions. The script computes both directions and publishes
+each with its own denominator (`E` rows in §4).
 
 ## 1. What this instrument is, and what it is not
 
@@ -92,11 +99,13 @@ rather than invented: **[VERIFIED]** recomputed from committed bytes by the comm
 
 | cell | measure | OFF (baseline 6) | ON (all eight) | reading |
 |---|---|---|---|---|
-| I-3 | sole-flag convicting precision (per victim) | 12/82 | 1/4 | 14.6% → 25.0%; the denominator falls below 20, which is §6's class-closed waiver |
+| I-3 | sole-flag convicting precision (per victim) | 12/82 | 1/4 | 14.6% → 25.0%; bar 4 asks ≥ 50% — a MISS, with §6's class-closed waiver applying separately (denominator 4 < 20) |
 | I-3 | class impostor share (STRONG alibi_vs_sighting, dedup subjects) | 33/192 | 1/6 | 17.2% → 16.7% against a base rate of 22.9%; the class stays below chance |
 | I-3 | living-voter base rate at those meetings | 255/1017 | 8/35 | 25.1% → 22.9%; the comparison base for the row above |
 | I-4 | grounded sighting side (at tick) | 124/234 | 10/12 | 53.0% → 83.3%; bar 5 asks 100% — predicted MISS by two sides |
 | I-4 | grounded sighting side (within +/-1 tick) | 154/234 | 12/12 | 65.8% → 100%; reported beside bar 5, never the bar |
+| I-4 | grounded sighting side (within +/-2 ticks) | 160/234 | 12/12 | 68.4% → 100%; the production grounding tolerance, and the reason two survivors miss bar 5 |
+| I-4 | resolvable sighting sides (of all STRONG sides) | 234/234 | 12/12 | every side resolves on both slates; the unresolvable remainder is zero |
 | I-6 | adjacent-room STRONG share | 148/234 | 6/12 | 63.2% → 50.0%; bar 7 asks ≤ 5% — predicted MISS as a rate, though the count falls 148 → 6 |
 | I-6 | adjacent-room STRONG share (un-gated adjacent_any_gap) | 148/234 | 6/12 | the two readings have NOT separated on this slate |
 | I-7 | movement-origin flags | 38/313 | 88/363 | 12.1% → 24.2%; the class GROWS — the lever's price, §5 secondary, no bar |
@@ -110,8 +119,13 @@ rather than invented: **[VERIFIED]** recomputed from committed bytes by the comm
 | I-12 | singleton candidate sets | 126/626 | 126/626 | LEVER-INVARIANT by construction |
 | I-12 | singleton correct | 114/126 | 114/126 | LEVER-INVARIANT by construction |
 | I-12 | ejections on an already-cleared player | 83/354 | 83/354 | LEVER-INVARIANT by construction |
-| E | innocent ejections still carrying a STRONG flag | 70/79 | 3/79 | 88.6% → 3.8%; **76 of the 79 lose the evidence they convicted on** |
+| R | reported-testimony rows, <=4 living | 10890/69535 | 18519/65944 | 5,388 → 18,519 rows on the reconstruction: the band gains most |
+| R | reported-testimony rows, 5-6 living | 47623/69535 | 39948/65944 | 23,390 → 39,948 rows |
+| R | reported-testimony rows, >=7 living | 11022/69535 | 7477/65944 | 5,453 → 7,477 rows |
+| E | innocent ejections still carrying a STRONG flag | 70/79 | 3/79 | 88.6% → 3.8% |
 | E | innocent ejections whose STRONG flags were all alibi_vs_sighting | 70/79 | 3/79 | the kind-sole conviction bar 4 prices |
+| E | innocent ejections that LOSE the STRONG flag they convicted on | 0/70 | 67/70 | **95.7% of the convictions that had evidence lose it** — a per-meeting join |
+| E | innocent ejections that NEWLY carry a STRONG flag | 0/9 | 0/9 | the other direction: no lever mints a conviction where there was none |
 
 <!-- POOLED-TABLE-END -->
 
@@ -137,6 +151,12 @@ changed digit is caught (a planted `148/234` → `149/234` is the perturbation t
   exactly how a memo and a record end up disagreeing about what was measured. The census therefore
   runs on the slate the committed patterns can read, states that on the row, and the full-slate
   render census is **routed as a finding** (§10), not recounted here.
+* **The testimony rows are reported per living-roster bucket, never blended.** The registered
+  census splits them `≤4` / `5-6` / `≥7` because budget pressure differs across those populations
+  and a retention gain confined to one band would otherwise hide inside an aggregate. It is not
+  confined: on the reconstruction all three bands rise in absolute rows (5,388 → 18,519;
+  23,390 → 39,948; 5,453 → 7,477), with the small-roster band gaining most. Both 4p1i sets carry
+  zero testimony rows on either slate, which is why the census is never one blended number.
 * **I-12 is lever-invariant by construction, not by measurement.** The solvability oracle reads the
   engine's kill and visibility record and the recorded ballots. No lever in the slate writes either
   offline, so ON equals OFF identically. It is reported because §8 names it, not because it moved.
@@ -157,6 +177,34 @@ Three of the four per-set ON cells for I-4 and I-6 have a denominator of 0 or 1.
 granularity rule those are ADVISORY by an enormous margin and take no part in any verdict, in either
 direction; they are printed because a suppressed denominator must never be left implicit.
 
+### 5.1 The four I-13 injustice fixtures — the FLAG half, which IS computable offline
+
+Bar 8 is four individual verdicts, and a fixture FLIPS when the meeting no longer exhibits its
+injustice. Half of that question is frozen-byte arithmetic and is published here; the other half (the
+ejection that followed) is not, and §7 says so. Anchors are the committed ones
+(`tests/api/fixtures/evidence_mechanisms.py`); the 4p1i seed-41 meeting anchors two of the four.
+
+| fixture | anchor | STRONG flags OFF → ON | STRONG flags naming the ejectee OFF → ON |
+|---|---|---|---|
+| (a) provenance-impossible sighting | samples/9p2i seed 23, M1 | 1 → 0 | 1 → 0 |
+| (b) content-vs-own-memory miss | samples/9p2i seed 12, M0 | 1 → 0 | 1 → 0 |
+| (c) one-tick interval artifact | samples/4p1i seed 49, M0 | 0 → 0 | 0 → 0 |
+| (c) + (d) one-tick artifact / equal-weight conflict | samples/4p1i seed 41, M0 | 2 → 1 | 1 → 0 |
+
+**Read them one at a time, as §4 bar 8 requires.** (a) and (b) lose their only STRONG flag outright:
+the sighting that convicted an innocent no longer stands. (c)'s seed-49 anchor already carried **no**
+STRONG flag OFF — its two recorded flags were WEAK — so the lever slate has nothing to remove there
+and the fixture's flag half cannot move; whether it flips is entirely the ejection half. The seed-41
+meeting is the interesting one and the best single exhibit in this memo: it goes 2 STRONG → 1, and
+the survivor is **not** the flag against the ejected crewmate (1 → 0). That is fixture (d)'s
+equal-weight conflict resolving in the intended direction — the grounded vent flag naming the real
+impostor keeps its band while the sighting flag against the innocent loses it — which is exactly what
+"equal weight" was the defect of.
+
+**Prediction:** the flag half of (a), (b) and (d) moves the right way on frozen bytes; (c)'s flag
+half cannot move at all. No fixture is predicted to FLIP on this evidence, because a flip is defined
+on the meeting's outcome and the outcome is the half no offline instrument reaches.
+
 ## 6. The predicted verdict, bar by bar
 
 Predictions, not summaries. Each row states the direction, the offline value with its denominator
@@ -165,17 +213,27 @@ where the instrument computes one, and the bar it is predicted against.
 | bar | target (§4, ratified) | prediction | value, offline |
 |---|---|---|---|
 | 1 | I-1 non-direct accuracy 0.368 → ≥ 0.60 pooled | **NOT PREDICTABLE OFFLINE** | — |
-| 2 | I-1 innocent ejections 79 → < 35 pooled | direction DOWN, magnitude **NOT PREDICTABLE** | the *evidence* under 76 of the 79 is gone (70/79 → 3/79); the ballots are not |
+| 2 | I-1 innocent ejections 79 → < 35 pooled | direction DOWN, magnitude **NOT PREDICTABLE** | the *evidence* under 67 of the 70 that had any is gone; the ballots are not |
 | 3 | I-2 false self-placement 21.0% → < 5% | **NOT PREDICTABLE OFFLINE** | — |
-| 4 | I-3 precision 14.6% → ≥ 50% pooled, class share above base rate | **MET, via §6's class-closed waiver** | precision 1/4 = 25.0%; the pooled denominator falls to 4, below the waiver's 20 |
+| 4 | I-3 precision 14.6% → ≥ 50% pooled, class share above base rate | **MISS** on both halves — §6's class-closed waiver applies to the DECISION RULE, and does not turn the miss into a pass | precision 1/4 = 25.0% (target ≥ 50%); class share 1/6 = 16.7% against a base rate of 8/35 = 22.9%; the pooled denominator falls to 4, below the waiver's 20 |
 | 5 | I-4 grounded sighting side → 100% at tick | **MISS**, by two sides | 10/12 = 83.3% (within ±1: 12/12 = 100%) |
 | 6 | I-5 fabricated completion lines → 0 on every set | **MET**, on all four sets | 0/347, 0/1045, 0/46, 0/44 |
 | 7 | I-6 adjacent-room STRONG share → ≤ 5% pooled | **MISS** as a rate, though the count falls 96% | 6/12 = 50.0%; 148 flags → 6 |
-| 8 | I-13 four fixtures, individually | flag census computable, the **ejection is not** | see §7 |
+| 8 | I-13 four fixtures, individually | flag half published per fixture (§5.1); the **ejection half is not predictable** | (a) 1→0, (b) 1→0, (c) 0→0 (nothing to remove), (d) 2→1 with the innocent's flag the one that goes |
+
+**Why bar 4 misses, and what §6 does with that.** Bar 4's own target is conjunctive — precision
+≥ 50% pooled AND the class impostor share above the living-voter base rate — and the counterfactual
+misses both (25.0% precision; 16.7% share against a 22.9% base rate). §10 requires a miss to be
+reported as a miss, so it is reported as one. Separately, §6's decision rule accepts its bar-4 clause
+when the pooled denominator of `per_victim_precision` has fallen below 20, and it falls to 4 — the
+class has closed. Those are two different statements and this memo keeps them apart: **the bar is
+MISSED; the decision rule's bar-4 clause is nevertheless satisfied by the class-closed waiver.**
+Nothing here re-prices bar 4.
 
 **Why bar 5 is predicted to miss.** `grounded_prosecution` bands an ungrounded sighting WEAK using
 a ±2-tick grounding window; bar 5 reads the AT-TICK cell (`nearest == 0`). Two of the twelve
-survivors are grounded at ±1 or ±2 and therefore stand STRONG while failing the bar's own cell. This
+survivors are grounded at ±1 (the ±1 and ±2 readings are both 12/12) and therefore stand STRONG
+while failing the bar's own cell. This
 is a mechanism/bar mismatch, published as a prediction. §10 forbids re-pricing a bar after
 ratification and this memo does not: the ±1 reading (12/12) is reported *beside* the bar, exactly as
 §4 bar 5 instructs, and never in place of it.
@@ -190,8 +248,9 @@ honest statement is the one made here: bar 7 is predicted to miss on the rate, a
 adjacent-flag count is predicted to fall from 148 to single digits.
 
 **The composite reading.** §6 makes ADOPTED conjunctive on bars 1, 2, 3, 5, 6 and 7 plus three of
-four fixtures plus bar 4. Two of those six are predicted to miss offline, so **this memo's
-prediction for the record is FINDING**. That prediction is falsifiable in the useful direction: the
+four fixtures plus bar 4 (or its class-closed waiver). Bars 5 and 7 are predicted to miss offline and
+bar 4 is predicted to miss on its own terms, so **this memo's prediction for the record is
+FINDING**. That prediction is falsifiable in the useful direction: the
 record mints its flags in live meetings under the new substrate, where the surviving-STRONG
 population is not the frozen twelve. If bar 5 or bar 7 is MET at the record, the difference is
 attributable to what the new substrate made agents *say*, and the record audit should say so.
@@ -210,9 +269,10 @@ overreach this phase exists to demonstrate against.
   changes what the model can *read*. There is no offline projection from the old prompts to the new
   answers, and the trail's coverage (does the record the roll-call asks for exist?) is a different
   cell from the rate.
-* **The model-dependent halves of the four I-13 injustice fixtures (bar 8).** The flag census at each
-  anchored meeting is computable from frozen bytes; the ejection that followed it is not. A fixture
-  FLIPS when the meeting no longer exhibits its injustice, and "no longer exhibits" includes the vote.
+* **The EJECTION half of the four I-13 injustice fixtures (bar 8).** The flag census at each anchored
+  meeting IS computable from frozen bytes and is published in §5.1; the ejection that followed it is
+  not. A fixture FLIPS when the meeting no longer exhibits its injustice, and "no longer exhibits"
+  includes the vote.
 * **The win split (§5 secondary).** Downstream of every one of the above, and un-attributable by
   construction while the mover repair rides the same record (§7 of the pre-registration).
 * **The full-slate render census.** Not a model-behaviour limit but an instrument one — see §4.1 and

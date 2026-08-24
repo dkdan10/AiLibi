@@ -131,6 +131,8 @@ def test_the_off_column_equals_the_committed_pins_on_the_fast_set(
         "I-3|living-voter base rate at those meetings": [2, 6],
         "I-4|grounded sighting side (at tick)": [1, 2],
         "I-4|grounded sighting side (within +/-1 tick)": [1, 2],
+        "I-4|grounded sighting side (within +/-2 ticks)": [1, 2],
+        "I-4|resolvable sighting sides (of all STRONG sides)": [2, 2],
         "I-6|adjacent-room STRONG share": [1, 2],
         "I-6|adjacent-room STRONG share (un-gated adjacent_any_gap)": [1, 2],
         "I-7|movement-origin flags": [0, 3],
@@ -200,6 +202,96 @@ def test_the_pooled_off_column_equals_the_ratified_baseline_cells(
     ]
     # And the whole point of the memo: the slate clears all but three.
     assert pooled["E|innocent ejections still carrying a STRONG flag|on"] == [3, 79]
+
+
+def test_the_cleared_census_is_a_join_and_not_a_subtraction(
+    full_payload: Mapping[str, object],
+) -> None:
+    """79 - 3 is the wrong arithmetic, in both directions, and the rows say so."""
+
+    pooled = _pooled(full_payload)
+    survivors = pooled["E|innocent ejections still carrying a STRONG flag|on"]
+    cleared = pooled[
+        "E|innocent ejections that LOSE the STRONG flag they convicted on|on"
+    ]
+    minted = pooled["E|innocent ejections that NEWLY carry a STRONG flag|on"]
+    # The two denominators partition the 79: those that had a STRONG flag to lose
+    # and those that never had one.
+    assert cleared[1] + minted[1] == 79
+    assert cleared[1] == 70
+    # 67 of the 70 lose it; none of the nine gains one. The naive 79 - 3 = 76 is
+    # NINE larger than the population that could possibly have lost anything.
+    assert cleared[0] == 67
+    assert minted[0] == 0
+    assert cleared[1] - cleared[0] + minted[0] == survivors[0]
+    assert 79 - survivors[0] != cleared[0]
+
+
+def test_the_testimony_buckets_partition_the_testimony_total(
+    full_payload: Mapping[str, object],
+) -> None:
+    """The registered census is per living-roster bucket and never blended."""
+
+    pooled = _pooled(full_payload)
+    total_off = pooled["R|reported-testimony rows retained|recorded_off"]
+    buckets = [
+        pooled[f"R|reported-testimony rows, {bucket} living|recorded_off"]
+        for bucket in ("<=4", "5-6", ">=7")
+    ]
+    assert sum(pair[0] for pair in buckets) == total_off[0]
+    # Every bucket shares one denominator: the leg's own testimony total.
+    assert {pair[1] for pair in buckets} == {total_off[0]}
+    # The ON leg gains in ALL THREE bands, so the published aggregate is not one
+    # band's gain wearing a blended figure's clothes.
+    on_buckets = [
+        pooled[f"R|reported-testimony rows, {bucket} living|on"]
+        for bucket in ("<=4", "5-6", ">=7")
+    ]
+    reconstructed = [
+        pooled[f"R|reported-testimony rows, {bucket} living|reconstructed_off"]
+        for bucket in ("<=4", "5-6", ">=7")
+    ]
+    for on_pair, off_pair in zip(on_buckets, reconstructed, strict=True):
+        assert on_pair[0] > off_pair[0]
+
+
+def test_the_i13_anchored_fixtures_publish_their_flag_half(
+    full_payload: Mapping[str, object],
+) -> None:
+    """Bar 8's computable half: the four committed anchors, OFF and ON."""
+
+    sets = full_payload["sets"]
+    assert isinstance(sets, dict)
+    anchors = {
+        f"{name} {key}": cells
+        for name, block in sets.items()
+        for key, cells in block["i13_anchors"].items()
+    }
+    assert set(anchors) == {
+        "samples/9p2i 23:1",
+        "samples/9p2i 12:0",
+        "samples/4p1i 49:0",
+        "samples/4p1i 41:0",
+    }
+    # (a) and (b) lose their only STRONG flag; the ejectee's goes with it.
+    for key in ("samples/9p2i 23:1", "samples/9p2i 12:0"):
+        assert anchors[key] == {
+            "strong_off": 1,
+            "strong_on": 0,
+            "victim_strong_off": 1,
+            "victim_strong_on": 0,
+        }
+    # (c)'s seed-49 anchor carried NO strong flag OFF, so its flag half cannot
+    # move at all — the memo says so rather than claiming a flip.
+    assert anchors["samples/4p1i 49:0"]["strong_off"] == 0
+    assert anchors["samples/4p1i 49:0"]["strong_on"] == 0
+    # (d)'s equal-weight conflict resolves the right way: one of the two STRONG
+    # flags survives and it is NOT the one against the ejected crewmate.
+    seed41 = anchors["samples/4p1i 41:0"]
+    assert seed41["strong_off"] == 2
+    assert seed41["strong_on"] == 1
+    assert seed41["victim_strong_off"] == 1
+    assert seed41["victim_strong_on"] == 0
 
 
 def test_a_perturbed_innocent_pin_fails_the_enumeration_gate(

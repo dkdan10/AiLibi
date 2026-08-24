@@ -94,6 +94,7 @@ from eval.evidence_honesty import (  # noqa: E402
     EvidenceHonestyReport,
     _fold_completion_rows,
     _fold_flags,
+    _living_bucket,
     _MeetingFacts,
     _report,
     _room_distances,
@@ -200,6 +201,17 @@ COMMITTED_INNOCENT_EJECTIONS: Final[Mapping[str, int]] = MappingProxyType(
     }
 )
 
+# The four 19.11 injustice fixtures' anchored meetings, by set and
+# ``seed:meeting_index`` (tests/api/fixtures/evidence_mechanisms.py; the 4p1i
+# seed-41 meeting anchors two of the four). The FLAG half of bar 8 is computable
+# offline and is published here; the ejection half is not (§7 of the memo).
+I13_ANCHORS: Final[Mapping[str, tuple[str, ...]]] = MappingProxyType(
+    {
+        "samples/9p2i": ("23:1", "12:0"),
+        "samples/4p1i": ("49:0", "41:0"),
+    }
+)
+
 Population = Literal["flag", "turn", "render", "prompt", "oracle"]
 
 # How a cell's RECONSTRUCTED-OFF reading relates to its RECORDED-OFF one, and
@@ -233,6 +245,14 @@ class SlateFlagCounts:
         self.innocent_any_strong = 0
         self.innocent_sole_kind = 0
         self.strong_alibi_vs_sighting = 0
+        # The identity-level join, not a subtraction: a meeting that carried a
+        # STRONG flag naming the ejectee OFF and carries none on this leg. The
+        # nine wrongful ejections that never had one cannot LOSE one, and a
+        # detector lever can also MINT one, so 79 - survivors is the wrong
+        # arithmetic and this counter is the right question.
+        self.innocent_cleared = 0
+        # The other direction: no STRONG flag on the ejectee OFF, one on this leg.
+        self.innocent_newly_strong = 0
 
 
 @dataclass
@@ -262,6 +282,14 @@ class _SetWalk:
     # The render census's own ON leg: the seven-lever, pattern-readable slate.
     rendered_rows_census_on: int = 0
     testimony_rows_census_on: int = 0
+    # Reported-testimony rows split by living-roster bucket, the way the
+    # registered census reports them — budget pressure differs by roster size, so
+    # a blended figure can hide a gain confined to one band.
+    testimony_by_bucket_off: Counter[str] = field(default_factory=Counter)
+    testimony_by_bucket_on: Counter[str] = field(default_factory=Counter)
+    # The four I-13 injustice fixtures' anchored meetings, keyed by
+    # ``seed:meeting_index``: the flag half of bar 8, which IS computable offline.
+    i13_anchors: dict[str, dict[str, int]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -526,7 +554,8 @@ def _walk_game(
     room_at: dict[int, Mapping[PlayerId, RoomId]] = {}
     completions: dict[PlayerId, set[int]] = {pid: set() for pid in roles}
     seen_rows: dict[str, set[tuple[PlayerId, str]]] = {"off": set(), "on": set()}
-    pending: list[tuple[_MeetingFacts, frozenset[PlayerId]]] = []
+    # The per-game meeting index the I-13 fixture anchors are stated in.
+    meeting_index = 0
 
     audit_dir = tempfile.TemporaryDirectory(prefix="ailibi-counterfactual-")
     service = ObservationService(
@@ -584,8 +613,10 @@ def _walk_game(
                     room_at=room_at,
                     distances=distances,
                     legs=legs,
+                    anchor_key=f"{seed}:{meeting_index}",
                     walk=walk,
                 )
+                meeting_index += 1
                 _render_one_meeting(
                     living=living,
                     off_memories=off_memories,
@@ -594,7 +625,6 @@ def _walk_game(
                     seen_rows=seen_rows,
                     walk=walk,
                 )
-                pending.append((facts, roster))
             elif isinstance(walk_event, MeetingApplied):
                 _fold_meeting_both_ways(walk_event, off=off_memories, on=on_memories)
     finally:
@@ -612,6 +642,7 @@ def _fold_one_meeting(
     room_at: Mapping[int, Mapping[PlayerId, RoomId]],
     distances: Mapping[RoomId, Mapping[RoomId, int]],
     legs: Mapping[str, Mapping[str, str]],
+    anchor_key: str,
     walk: _SetWalk,
 ) -> None:
     """Re-detect one meeting's flags on every slate and fold each leg's cells.
@@ -652,8 +683,10 @@ def _fold_one_meeting(
         if clean.startswith(_MARKER_PREFIXES):
             walk.marker_turns_on += 1
 
-    for name, slate in legs.items():
-        flags = detect_contradictions(
+    # Every leg's flags first, so the innocent-ejection census is an
+    # identity-level OFF/ON join rather than a subtraction between two totals.
+    flags_by_leg = {
+        name: detect_contradictions(
             entry.transcript,
             roster=roster,
             vent_witness_records=vents,
@@ -661,8 +694,26 @@ def _fold_one_meeting(
             sighting_records=sightings,
             env=slate,
         )
-        if name == "off" and tuple(flags) == tuple(entry.contradictions):
-            walk.off_flags_match_recorded += 1
+        for name, slate in legs.items()
+    }
+    if tuple(flags_by_leg["off"]) == tuple(entry.contradictions):
+        walk.off_flags_match_recorded += 1
+    off_victim_strong = _victim_strong_flags(
+        flags_by_leg["off"], ejectee=entry.ejected_player_id
+    )
+    if anchor_key in I13_ANCHORS.get(walk.set_name, ()):
+        walk.i13_anchors[anchor_key] = {
+            "strong_off": _strong_count(flags_by_leg["off"]),
+            "strong_on": _strong_count(flags_by_leg["on"]),
+            "victim_strong_off": len(off_victim_strong),
+            "victim_strong_on": len(
+                _victim_strong_flags(
+                    flags_by_leg["on"], ejectee=entry.ejected_player_id
+                )
+            ),
+        }
+
+    for name, flags in flags_by_leg.items():
         counts = walk.legs[name]
         _fold_flags(
             game_id=game_id,
@@ -684,7 +735,12 @@ def _fold_one_meeting(
             if flag.kind == "alibi_vs_sighting" and not is_weak_contradiction(flag)
         )
         if innocent_ejection:
-            _fold_innocent_census(flags, ejectee=entry.ejected_player_id, counts=counts)
+            _fold_innocent_census(
+                flags,
+                ejectee=entry.ejected_player_id,
+                off_victim_strong=bool(off_victim_strong),
+                counts=counts,
+            )
 
 
 def _is_innocent_ejection(entry: object, *, roles: Mapping[PlayerId, Role]) -> bool:
@@ -713,25 +769,52 @@ def _is_innocent_ejection(entry: object, *, roles: Mapping[PlayerId, Role]) -> b
     return ejectee not in proven
 
 
-def _fold_innocent_census(
-    flags: Sequence[ContradictionRef],
-    *,
-    ejectee: PlayerId | None,
-    counts: SlateFlagCounts,
-) -> None:
-    """Follow one wrongful ejection's conviction evidence into this slate."""
+def _victim_strong_flags(
+    flags: Sequence[ContradictionRef], *, ejectee: PlayerId | None
+) -> list[ContradictionRef]:
+    """The STRONG flags naming the ejected player, on one slate."""
 
     if ejectee is None:
-        return
-    on_victim = [
+        return []
+    return [
         flag
         for flag in flags
         if not is_weak_contradiction(flag) and ejectee in flag.subjects
     ]
+
+
+def _strong_count(flags: Sequence[ContradictionRef]) -> int:
+    """How many STRONG flags this meeting carries on one slate."""
+
+    return sum(1 for flag in flags if not is_weak_contradiction(flag))
+
+
+def _fold_innocent_census(
+    flags: Sequence[ContradictionRef],
+    *,
+    ejectee: PlayerId | None,
+    off_victim_strong: bool,
+    counts: SlateFlagCounts,
+) -> None:
+    """Follow one wrongful ejection's conviction evidence into this slate.
+
+    ``off_victim_strong`` is the SAME meeting read on the OFF slate, so "lost the
+    evidence it convicted on" is a per-meeting join and never a difference between
+    two aggregates: nine of the 79 carried no STRONG flag to lose, and a detector
+    lever can mint one where there was none.
+    """
+
+    if ejectee is None:
+        return
+    on_victim = _victim_strong_flags(flags, ejectee=ejectee)
     if on_victim:
         counts.innocent_any_strong += 1
         if all(flag.kind == "alibi_vs_sighting" for flag in on_victim):
             counts.innocent_sole_kind += 1
+        if not off_victim_strong:
+            counts.innocent_newly_strong += 1
+    elif off_victim_strong:
+        counts.innocent_cleared += 1
 
 
 def _render_one_meeting(
@@ -767,11 +850,15 @@ def _render_one_meeting(
                 for line in view.splitlines()
                 if _TESTIMONY_ROW.match(line) is not None
             )
+            bucket = _living_bucket(len(living))
             if leg == "census_on":
                 # The render census only: no completion fold, no dedup state.
                 walk.rendered_rows_census_on += rows
                 walk.testimony_rows_census_on += testimony
+                walk.testimony_by_bucket_on[bucket] += testimony
                 continue
+            if leg == "off":
+                walk.testimony_by_bucket_off[bucket] += testimony
             tallies = _Tallies()
             _fold_completion_rows(
                 call=LLMCallRecord(
@@ -881,6 +968,26 @@ def build_rows(
         "I-4",
         "grounded sighting side (within +/-1 tick)",
         "grounded_sighting.grounded_within_1",
+    )
+    flag_row(
+        "I-4",
+        "grounded sighting side (within +/-2 ticks)",
+        "grounded_sighting.grounded_within_2",
+        "the production grounding tolerance, which is why two survivors miss bar 5",
+    )
+    rows.append(
+        Row(
+            cell_id="I-4",
+            label="resolvable sighting sides (of all STRONG sides)",
+            population="flag",
+            recorded_off=(
+                recorded.grounded_sighting.resolvable_sides,
+                recorded.grounded_sighting.strong_sides,
+            ),
+            reconstructed_off=(off.resolvable_sides, off.strong_sides),
+            on=(on.resolvable_sides, on.strong_sides),
+            note="the split the I-4 denominators rest on; unresolvable is the remainder",
+        )
     )
     flag_row(
         "I-6",
@@ -1015,6 +1122,34 @@ def build_rows(
                 ),
             )
         )
+    for bucket in ("<=4", "5-6", ">=7"):
+        rows.append(
+            Row(
+                cell_id="R",
+                label=f"reported-testimony rows, {bucket} living",
+                population="render",
+                recorded_off=(
+                    recorded.render_budget.testimony_rows_by_living_bucket.get(
+                        bucket, 0
+                    ),
+                    recorded.render_budget.testimony_rows_total,
+                ),
+                reconstructed_off=(
+                    walk.testimony_by_bucket_off[bucket],
+                    walk.testimony_rows_off,
+                ),
+                on=(
+                    walk.testimony_by_bucket_on[bucket],
+                    walk.testimony_rows_census_on,
+                ),
+                on_slate=RENDER_CENSUS_SLATE_LABEL,
+                note=(
+                    "the registered census reports testimony per living-roster "
+                    "bucket and never blended: budget pressure differs by roster "
+                    "size, so a retention gain confined to one band must be visible"
+                ),
+            )
+        )
     rows.append(
         Row(
             cell_id="E",
@@ -1047,6 +1182,37 @@ def build_rows(
             ),
             on=(walk.legs["on"].innocent_sole_kind, walk.innocent_ejections),
             note="the kind-sole conviction bar 4 prices",
+        )
+    )
+    off_strong_population = walk.legs["off"].innocent_any_strong
+    rows.append(
+        Row(
+            cell_id="E",
+            label="innocent ejections that LOSE the STRONG flag they convicted on",
+            population="flag",
+            recorded_off=(0, off_strong_population),
+            reconstructed_off=(0, off_strong_population),
+            on=(walk.legs["on"].innocent_cleared, off_strong_population),
+            note=(
+                "an identity-level per-meeting OFF/ON join, never 79 minus the "
+                "survivors: the wrongful ejections that carried no STRONG flag "
+                "cannot lose one, and the denominator here is the population that "
+                "had one to lose"
+            ),
+        )
+    )
+    rows.append(
+        Row(
+            cell_id="E",
+            label="innocent ejections that NEWLY carry a STRONG flag",
+            population="flag",
+            recorded_off=(0, walk.innocent_ejections - off_strong_population),
+            reconstructed_off=(0, walk.innocent_ejections - off_strong_population),
+            on=(
+                walk.legs["on"].innocent_newly_strong,
+                walk.innocent_ejections - off_strong_population,
+            ),
+            note="the other direction of the same join: a lever can MINT a flag",
         )
     )
     return rows
@@ -1156,6 +1322,7 @@ def run(set_names: Sequence[str]) -> dict[str, object]:
             "innocent_ejections": walk.innocent_ejections,
             "rows": [row.payload() for row in rows],
             "leave_one_out": leave_one_out_table(walk),
+            "i13_anchors": dict(sorted(walk.i13_anchors.items())),
         }
         for row in rows:
             key = f"{row.cell_id}|{row.label}"
@@ -1230,6 +1397,21 @@ def _print_table(
         print(header, file=out)
         for row in block["rows"]:
             _print_row(row, out=out)
+        anchors = block["i13_anchors"]
+        assert isinstance(anchors, dict)
+        if anchors:
+            print(
+                "   I-13 anchored fixtures (STRONG flags OFF -> ON; on the "
+                "ejectee OFF -> ON) — the FLAG half of bar 8:",
+                file=out,
+            )
+            for key, cells in anchors.items():
+                print(
+                    f"     seed {key:<8} {cells['strong_off']:>3} -> "
+                    f"{cells['strong_on']:<3}   {cells['victim_strong_off']:>3} -> "
+                    f"{cells['victim_strong_on']:<3}",
+                    file=out,
+                )
         print(
             "   leave-one-out (innocent ejections still STRONG / kind-sole / "
             "STRONG alibi_vs_sighting):",
@@ -1274,9 +1456,10 @@ def _print_reading_rules(pooled: Sequence[object], *, out: TextIO) -> None:
         print(f"  {label}{slate}: {row['note']}", file=out)
     print(
         "  I-1 (non-direct conviction accuracy, innocent ejections), I-2 (false "
-        "crew self-placement), the model-dependent halves of the four I-13 "
-        "fixtures and the win split carry NO ON column at all: a flag that stops "
-        "being minted is not a vote that changes.",
+        "crew self-placement), the EJECTION half of the four I-13 fixtures (their "
+        "FLAG half is the per-set anchor block above) and the win split carry NO "
+        "ON column at all: a flag that stops being minted is not a vote that "
+        "changes.",
         file=out,
     )
     print(
