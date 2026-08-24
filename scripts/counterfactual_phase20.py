@@ -159,22 +159,23 @@ SLATE_ON: Final[Mapping[str, str]] = MappingProxyType(
     {env_var_for_lever(key): "1" for key in PHASE_20_LEVERS}
 )
 
-# The render census's ON slate, and the reason it is not the full one.
-# ``meeting_outcome_memory`` ON re-tags a rendered testimony frame ``[meeting N]``
-# (agents/memory/store.py::_render_reported_testimony), which the instrument's
-# OFF-shaped ``_TESTIMONY_ROW`` / ``_RENDERED_ROW`` patterns do not match. Counting
-# that render with a widened pattern would put a second definition of the render
-# cell in this script, so the census runs on the seven-lever slate the committed
-# patterns can read and the full-slate figure is declared unmeasurable and ROUTED
-# rather than recounted here.
-RENDER_CENSUS_SLATE: Final[Mapping[str, str]] = MappingProxyType(
+# The render census runs at the FULL eight — the slate the record will ship — and
+# carries a second, seven-lever reading BESIDE it that withholds
+# ``meeting_outcome_memory``. That lever re-tags the rendered testimony frame
+# ``[meeting N]`` (agents/memory/store.py::_render_reported_testimony); the
+# instrument's row patterns were OFF-shaped and could not read it, so Task 20.34
+# widened them ONCE, in ``eval/evidence_honesty.py``, the single home of that
+# definition (pre-registration §11, 2026-08-24). The withheld-lever leg is kept
+# because it decomposes the headline: it isolates how much of the census move is
+# lever 7's frame re-tagging rather than the other five render levers.
+LEVER_7_DECOMPOSITION_SLATE: Final[Mapping[str, str]] = MappingProxyType(
     {
         env_var_for_lever(key): "1"
         for key in PHASE_20_LEVERS
         if key != "meeting_outcome_memory"
     }
 )
-RENDER_CENSUS_SLATE_LABEL: Final[str] = "seven-ON (less meeting_outcome_memory)"
+LEVER_7_DECOMPOSITION_LABEL: Final[str] = "seven-ON (less meeting_outcome_memory)"
 FULL_SLATE_LABEL: Final[str] = "all-eight-ON"
 
 # The leave-one-out legs: the full slate with one detector lever withheld. A
@@ -279,9 +280,10 @@ class _SetWalk:
     completion_rows_on: int = 0
     fabricated_rows_off: int = 0
     fabricated_rows_on: int = 0
-    # The render census's own ON leg: the seven-lever, pattern-readable slate.
-    rendered_rows_census_on: int = 0
-    testimony_rows_census_on: int = 0
+    # The lever-7 decomposition leg: the same census with meeting_outcome_memory
+    # withheld, printed beside the full-slate headline rather than in place of it.
+    rendered_rows_seven_on: int = 0
+    testimony_rows_seven_on: int = 0
     # Reported-testimony rows split by living-roster bucket, the way the
     # registered census reports them — budget pressure differs by roster size, so
     # a blended figure can hide a gain confined to one band.
@@ -850,12 +852,15 @@ def _render_one_meeting(
     seen_rows: Mapping[str, set[tuple[PlayerId, str]]],
     walk: _SetWalk,
 ) -> None:
-    """Render every living agent's memory twice and fold the render cells.
+    """Render every living agent's memory on three slates and fold the cells.
 
-    Both legs pass an explicit mapping: the counterfactual must not read whatever
-    the process environment happens to export. Rows are counted with the
-    instrument's own patterns and the completion rows through the instrument's own
-    fold, so the OFF leg is directly comparable to the recorded-prompt cell.
+    The three legs are OFF, the full eight-lever slate the record will ship, and
+    the same slate less ``meeting_outcome_memory`` — the lever-7 decomposition,
+    published beside the headline rather than in place of it. Every leg passes an
+    explicit mapping: the counterfactual must not read whatever the process
+    environment happens to export. Rows are counted with the instrument's own
+    patterns and the completion rows through the instrument's own fold, so the OFF
+    leg is directly comparable to the recorded-prompt cell.
 
     The render census is weighted by ``call_weights`` — the recorded number of LLM
     calls this meeting made for each agent — because the registered census's unit
@@ -873,7 +878,7 @@ def _render_one_meeting(
         for leg, memories, budget in (
             ("off", off_memories, SLATE_OFF),
             ("on", on_memories, SLATE_ON),
-            ("census_on", on_memories, RENDER_CENSUS_SLATE),
+            ("seven_on", on_memories, LEVER_7_DECOMPOSITION_SLATE),
         ):
             view = render_for_prompt(
                 memories[pid], token_budget=DEFAULT_TOKEN_BUDGET, env=budget
@@ -885,14 +890,16 @@ def _render_one_meeting(
                 if _TESTIMONY_ROW.match(line) is not None
             )
             bucket = _living_bucket(len(living))
-            if leg == "census_on":
-                # The render census only: no completion fold, no dedup state.
-                walk.rendered_rows_census_on += rows * weight
-                walk.testimony_rows_census_on += testimony * weight
-                walk.testimony_by_bucket_on[bucket] += testimony * weight
+            if leg == "seven_on":
+                # The decomposition leg only: no completion fold, no dedup state,
+                # and no bucket counters — the buckets are the headline's.
+                walk.rendered_rows_seven_on += rows * weight
+                walk.testimony_rows_seven_on += testimony * weight
                 continue
             if leg == "off":
                 walk.testimony_by_bucket_off[bucket] += testimony * weight
+            else:
+                walk.testimony_by_bucket_on[bucket] += testimony * weight
             tallies = _Tallies()
             _fold_completion_rows(
                 call=LLMCallRecord(
@@ -1101,14 +1108,33 @@ def build_rows(
                 recorded.render_budget.snapshots,
             ),
             reconstructed_off=(walk.rendered_rows_off, walk.snapshots),
-            on=(walk.rendered_rows_census_on, walk.snapshots),
+            on=(walk.rendered_rows_on, walk.snapshots),
             display="mean",
-            on_slate=RENDER_CENSUS_SLATE_LABEL,
             note=(
-                "the budget every render lever spends against; the ON leg drops "
-                "meeting_outcome_memory because that lever re-tags the testimony "
-                "frame '[meeting N]' and the instrument's row patterns are "
-                "OFF-shaped - the full-slate census is ROUTED, not recounted here"
+                "the budget every render lever spends against, at the full slate "
+                "the record ships: the instrument's row patterns read the "
+                "'[meeting N]' frame meeting_outcome_memory renders since Task "
+                "20.34 widened them once, in eval/evidence_honesty.py"
+            ),
+        )
+    )
+    rows.append(
+        Row(
+            cell_id="R",
+            label="rendered memory rows per snapshot (mean), less lever 7",
+            population="render",
+            recorded_off=(
+                recorded.render_budget.rendered_lines_total,
+                recorded.render_budget.snapshots,
+            ),
+            reconstructed_off=(walk.rendered_rows_off, walk.snapshots),
+            on=(walk.rendered_rows_seven_on, walk.snapshots),
+            display="mean",
+            on_slate=LEVER_7_DECOMPOSITION_LABEL,
+            note=(
+                "the DECOMPOSITION of the row above, not a competing headline: "
+                "the same census with meeting_outcome_memory withheld, so the "
+                "record audit can read how much of the move is lever 7's"
             ),
         )
     )
@@ -1122,12 +1148,23 @@ def build_rows(
                 recorded.render_budget.rendered_lines_total,
             ),
             reconstructed_off=(walk.testimony_rows_off, walk.rendered_rows_off),
-            on=(walk.testimony_rows_census_on, walk.rendered_rows_census_on),
-            on_slate=RENDER_CENSUS_SLATE_LABEL,
-            note=(
-                "same slate caveat as the row above: the OFF-shaped testimony "
-                "pattern cannot read a '[meeting N]'-tagged frame"
+            on=(walk.testimony_rows_on, walk.rendered_rows_on),
+            note="the share of the budget heard testimony holds, at the full slate",
+        )
+    )
+    rows.append(
+        Row(
+            cell_id="R",
+            label="reported-testimony rows retained, less lever 7",
+            population="render",
+            recorded_off=(
+                recorded.render_budget.testimony_rows_total,
+                recorded.render_budget.rendered_lines_total,
             ),
+            reconstructed_off=(walk.testimony_rows_off, walk.rendered_rows_off),
+            on=(walk.testimony_rows_seven_on, walk.rendered_rows_seven_on),
+            on_slate=LEVER_7_DECOMPOSITION_LABEL,
+            note="the decomposition of the row above, same withheld lever",
         )
     )
     for cell_id, label, attribute in (
@@ -1174,9 +1211,8 @@ def build_rows(
                 ),
                 on=(
                     walk.testimony_by_bucket_on[bucket],
-                    walk.testimony_rows_census_on,
+                    walk.testimony_rows_on,
                 ),
-                on_slate=RENDER_CENSUS_SLATE_LABEL,
                 note=(
                     "the registered census reports testimony per living-roster "
                     "bucket and never blended: budget pressure differs by roster "

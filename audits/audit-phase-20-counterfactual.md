@@ -113,15 +113,17 @@ rather than invented: **[VERIFIED]** recomputed from committed bytes by the comm
 | I-8 | marker contamination (prompts) | 917/7932 | — | PROMPT-SET-COUPLED: a prompt re-renders only under a Jinja set |
 | I-9 | singular-persona prompts | 7932/7932 | — | PROMPT-SET-COUPLED: the persona block is template bytes |
 | I-5 | fabricated completion lines | 88/1888 | 0/1482 | 4.7% → 0 on every set; a predicted-exactly-zero cell, and a §9 tripwire |
-| R | rendered memory rows per snapshot (mean) | 386907/7932 | 312761/7932 | 48.78 → 39.43 rows; ON slate is SEVEN levers (see §4.1) |
-| R | reported-testimony rows retained | 69535/386907 | 133489/312761 | 18.0% → 42.7%; testimony outranks routine co-presence |
+| R | rendered memory rows per snapshot (mean) | 386907/7932 | 309625/7932 | 48.78 → 39.03 rows at the FULL eight-lever slate |
+| R | rendered memory rows per snapshot (mean), less lever 7 | 386907/7932 | 312761/7932 | 39.43 rows with `meeting_outcome_memory` withheld: the decomposition, not a second headline |
+| R | reported-testimony rows retained | 69535/386907 | 137996/309625 | 18.0% → 44.6%; testimony outranks routine co-presence |
+| R | reported-testimony rows retained, less lever 7 | 69535/386907 | 133489/312761 | 42.7% with lever 7 withheld: the frame re-tagging is worth +1.9 points, not the gain |
 | I-12 | containment (killer in the candidate set) | 544/626 | 544/626 | LEVER-INVARIANT by construction |
 | I-12 | singleton candidate sets | 126/626 | 126/626 | LEVER-INVARIANT by construction |
 | I-12 | singleton correct | 114/126 | 114/126 | LEVER-INVARIANT by construction |
 | I-12 | ejections on an already-cleared player | 83/354 | 83/354 | LEVER-INVARIANT by construction |
-| R | reported-testimony rows, <=4 living | 10890/69535 | 37262/133489 | 10,913 → 37,262 rows on the reconstruction: the band gains most |
-| R | reported-testimony rows, 5-6 living | 47623/69535 | 81116/133489 | 47,719 → 81,116 rows |
-| R | reported-testimony rows, >=7 living | 11022/69535 | 15111/133489 | 11,040 → 15,111 rows |
+| R | reported-testimony rows, <=4 living | 10890/69535 | 38084/137996 | 10,913 → 38,084 rows on the reconstruction: the band gains most |
+| R | reported-testimony rows, 5-6 living | 47623/69535 | 84568/137996 | 47,719 → 84,568 rows |
+| R | reported-testimony rows, >=7 living | 11022/69535 | 15344/137996 | 11,040 → 15,344 rows |
 | E | innocent ejections still carrying a STRONG flag | 70/79 | 3/79 | 88.6% → 3.8% |
 | E | innocent ejections whose STRONG flags were all alibi_vs_sighting | 70/79 | 3/79 | the kind-sole conviction bar 4 prices |
 | E | innocent ejections that LOSE the STRONG flag they convicted on | 0/70 | 67/70 | **95.7% of the convictions that had evidence lose it** — a per-meeting join |
@@ -134,7 +136,7 @@ the table above back out and asserts every row against the script's own JSON —
 memo row the script does not compute and a computed row the memo drops are both failures. One
 changed digit is caught (a planted `148/234` → `149/234` is the perturbation that proves it bites).
 
-### 4.1 The three rows that do not carry a plain ON, and why
+### 4.1 The rows that carry a reading rule, and why
 
 * **I-8 (prompts) and I-9 are PROMPT-SET-COUPLED.** Both cells read whole prompt bytes. A prompt
   re-renders only under a Jinja prompt set, and the default set at HEAD is the frozen `qwen3_5_9b`
@@ -155,18 +157,27 @@ changed digit is caught (a planted `148/234` → `149/234` is the perturbation t
   completion fold is deliberately NOT weighted: it deduplicates by `(agent, observation_id)` across
   the whole game, so a repeated prompt is one row either way, and its OFF leg reproduces the recorded
   cell exactly (88/1888).
-* **The two render rows run on SEVEN levers, not eight.** `meeting_outcome_memory` ON re-tags a
-  rendered testimony frame `[meeting N]` (`agents/memory/store.py::_render_reported_testimony`),
-  which the instrument's OFF-shaped `_TESTIMONY_ROW` / `_RENDERED_ROW` patterns do not match.
-  Widening a pattern here would put a second definition of the render cell inside a script, which is
-  exactly how a memo and a record end up disagreeing about what was measured. The census therefore
-  runs on the slate the committed patterns can read, states that on the row, and the full-slate
-  render census is **routed as a finding** (§10), not recounted here.
+* **The render census IS the full eight-lever slate, with the seven-lever reading beside it.**
+  `meeting_outcome_memory` ON re-tags a rendered testimony frame `[meeting N]`
+  (`agents/memory/store.py::_render_reported_testimony`), which the instrument's OFF-shaped
+  `_TESTIMONY_ROW` / `_RENDERED_ROW` patterns could not match — a tagged row silently left the
+  budget. The fix landed in `eval/evidence_honesty.py`, the single home of that definition (the
+  patterns now read `[meeting]` or `[meeting N]`, and nothing else changed), under the ratified scope
+  amendment logged at pre-registration §11, **2026-08-24**. OFF-neutrality is proven rather than
+  argued: the pre-widening patterns are re-stated inside
+  `tests/eval/test_evidence_honesty.py::test_the_widened_meeting_frame_is_off_neutral` and asserted to
+  count an OFF-shaped block identically (planted near-misses still rejected), and
+  `test_no_committed_prompt_carries_a_tagged_meeting_frame` shows the committed 9p2i bytes carry
+  **18,319 bare frames and zero tagged ones** — exactly the committed `testimony_rows_total` pin — so
+  no recorded cell can move. The headline census is therefore the slate the record ships, and the
+  withheld-lever leg is kept as its **decomposition**: 39.03 rows/snapshot at eight against 39.43 at
+  seven, and 44.6% testimony retention against 42.7%. Lever 7's frame re-tagging is worth about two
+  points of retention — the rest of the move belongs to the other render levers.
 * **The testimony rows are reported per living-roster bucket, never blended.** The registered
   census splits them `≤4` / `5-6` / `≥7` because budget pressure differs across those populations
   and a retention gain confined to one band would otherwise hide inside an aggregate. It is not
-  confined: on the reconstruction all three bands rise in absolute rows (10,913 → 37,262;
-  47,719 → 81,116; 11,040 → 15,111), with the small-roster band gaining most. Both 4p1i sets carry
+  confined: on the reconstruction all three bands rise in absolute rows (10,913 → 38,084;
+  47,719 → 84,568; 11,040 → 15,344), with the small-roster band gaining most. Both 4p1i sets carry
   zero testimony rows on either slate, which is why the census is never one blended number.
 * **I-12 is lever-invariant by construction, not by measurement.** The solvability oracle reads the
   engine's kill and visibility record and the recorded ballots. No lever in the slate writes either
@@ -287,8 +298,6 @@ overreach this phase exists to demonstrate against.
   includes the vote.
 * **The win split (§5 secondary).** Downstream of every one of the above, and un-attributable by
   construction while the mover repair rides the same record (§7 of the pre-registration).
-* **The full-slate render census.** Not a model-behaviour limit but an instrument one — see §4.1 and
-  the routed finding in §10.
 * **I-8's prompt half and I-9.** Prompt-set-coupled — see §4.1.
 
 ## 8. Per-lever predictions (leave-one-out), and what no offline instrument supports
@@ -321,13 +330,18 @@ ejection census is *negative by one*, and no reading of this table should claim 
 * `structured_turn_markers` — the turn half IS measured here (192/3934 → 0/3934), but the prompt half
   is prompt-set-coupled and the downstream effect (does a model reason better when audit strings stop
   appearing inside quoted dialogue?) is a model question.
-* `meeting_outcome_memory` — supported for the *ingest* seam (the ON memory lineage carries the
-  testimony rows the OFF lineage drops) but not for the render census, per §4.1 and §10.
+* `meeting_outcome_memory` — supported on both seams. The *ingest* seam is the ON memory lineage
+  carrying the testimony rows the OFF lineage drops; the *render* seam is now measurable too, and the
+  decomposition rows price it: withholding this one lever moves the census 39.03 → 39.43
+  rows/snapshot and testimony retention 44.6% → 42.7%. What it does NOT support is the downstream
+  question — whether a model votes differently once a claim says which meeting it came from.
 * `task_completion_from_events` — fully supported: I-5 falls to 0 on every set, on a denominator that
   is 78.5% of its baseline value (1482 of 1888), so §4.1's SUPPRESSED-NOT-FIXED threshold (below 10%
   of baseline) is nowhere near reached. The lever grounds the row rather than suppressing it.
-* `coalesced_memory_render` — supported on the seven-lever census: 48.82 → 39.43 rendered rows per
-  snapshot with reported testimony rising from 18.0% to 42.7% of the surviving rows.
+* `coalesced_memory_render` — supported on the census: 48.82 → 39.03 rendered rows per snapshot at
+  the full slate, with reported testimony rising from 18.0% to 44.6% of the surviving rows. The
+  compression is this lever's; the retention shift is shared with the other render levers, which is
+  why the census is a §5 secondary cell and no bar rides it.
 
 **No graduation subset is proposed.** The ratified §6 rules that partial adoption yields a published
 per-lever VERDICT and never a partial graduation, because a subset slate matches neither committed
@@ -361,19 +375,26 @@ and reports; the go/no-go on restarting is the owner's.
    offline (§6). A prediction that comes true is evidence, not a stop condition; a prediction that
    comes true is exactly what makes the FINDING verdict readable.
 
-## 10. Findings routed, not patched here
+## 10. The one instrument repair this task made, and the observation it did not
 
 This task toggles the lever modules and never edits them (files-not-in-scope), and never re-implements
-an instrument cell. Two things surfaced that belong to a named fix task rather than to this script:
+an instrument cell. One instrument defect had to be repaired at its source before the census could be
+published at the slate the record ships; one further observation is recorded for the record audit
+rather than patched.
 
-1. **The render census's row patterns are OFF-shaped.** `eval.evidence_honesty._TESTIMONY_ROW` and
-   `_RENDERED_ROW` match the untagged `[meeting] CLAIM by` frame only. With `meeting_outcome_memory`
-   ON the frame becomes `[meeting N]`, so both patterns silently stop counting the row — the full
-   eight-lever census reads far below the seven-lever slate's 39.43 rows/snapshot, and the whole
-   difference is uncounted testimony rather than shed rows. The fix is one widened pattern in the
-   instrument module (its single home for the definition), plus a pin proving the widened pattern
-   still counts the OFF shape identically. **Until it lands, the full-slate render census is
-   UNMEASURABLE and this memo says so rather than printing a number it cannot defend.**
+1. **The render census's row patterns were OFF-shaped — repaired in the instrument, under a ratified
+   scope amendment.** `eval.evidence_honesty._TESTIMONY_ROW` and `_RENDERED_ROW` matched the untagged
+   `[meeting] CLAIM by` frame only, so with `meeting_outcome_memory` ON — where the frame becomes
+   `[meeting N]` — both patterns silently stopped counting the row and the eight-lever census read
+   far below the seven-lever one, the whole difference being *uncounted* testimony rather than shed
+   rows. Publishing a seven-lever number in the record's place would have defeated §8's purpose, so
+   the owner-delegated ruling widened the patterns **once, in the instrument module** (the single home
+   of that definition), and nothing else; the amendment is logged at pre-registration §11,
+   **2026-08-24**. The conditions it rode with are all met: OFF-neutrality proven by re-stating the
+   pre-widening patterns in a test and asserting an identical count on an OFF-shaped block with
+   planted near-misses, plus a byte-level scan showing the committed 9p2i recordings carry 18,319 bare
+   frames and **zero** tagged ones; the full eight-lever census published as the §4.1 headline; and
+   the seven-lever reading kept beside it as the lever-7 decomposition. No committed cell moved.
 2. **`adjacent` and `adjacent_any_gap` do not separate on this slate** (both 6/12). §10 registered
    bar 7 on `adjacent` precisely because the two *can* separate once a lever moves the flags; on the
    frozen bytes under the full slate they still coincide. Not a defect — an observation the record

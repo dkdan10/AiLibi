@@ -110,13 +110,18 @@ def test_the_slate_is_the_registrys_eight_phase_20_levers() -> None:
         assert len(leg) == len(cf.SLATE_ON) - 1
 
 
-def test_the_render_census_slate_names_the_lever_it_withholds() -> None:
-    # The census runs on seven levers because the eighth re-tags the rendered
-    # testimony frame past the instrument's OFF-shaped row pattern. The slate is
-    # derived, so the withheld lever cannot silently become two.
-    assert env_var_for_lever("meeting_outcome_memory") not in cf.RENDER_CENSUS_SLATE
-    assert len(cf.RENDER_CENSUS_SLATE) == len(cf.SLATE_ON) - 1
-    assert "meeting_outcome_memory" in cf.RENDER_CENSUS_SLATE_LABEL
+def test_the_lever_7_decomposition_slate_names_the_lever_it_withholds() -> None:
+    # The census headline runs at the FULL eight (Task 20.34 widened the
+    # instrument's row patterns so they read the '[meeting N]' frame lever 7
+    # renders). The seven-lever leg survives only as the decomposition printed
+    # beside it, and its slate is derived, so the withheld lever cannot silently
+    # become two.
+    assert (
+        env_var_for_lever("meeting_outcome_memory")
+        not in cf.LEVER_7_DECOMPOSITION_SLATE
+    )
+    assert len(cf.LEVER_7_DECOMPOSITION_SLATE) == len(cf.SLATE_ON) - 1
+    assert "meeting_outcome_memory" in cf.LEVER_7_DECOMPOSITION_LABEL
 
 
 # --------------------------------------------------------------------------- #
@@ -259,6 +264,52 @@ def test_the_render_census_population_is_the_recorded_prompt_count(
     assert rebuilt[1] != 3934
 
 
+def test_the_render_census_headline_is_the_full_eight_lever_slate(
+    full_payload: Mapping[str, object],
+) -> None:
+    """The census the record reads against is the slate the record ships.
+
+    Task 20.34 widened the instrument's row patterns once, in
+    ``eval/evidence_honesty.py``, so a ``[meeting N]``-tagged testimony frame is
+    counted. The headline census therefore runs at all eight, and the seven-lever
+    reading survives only BESIDE it, labelled as the lever-7 decomposition.
+    """
+
+    pooled = full_payload["pooled"]
+    assert isinstance(pooled, list)
+    by_label = {f"{row['cell']}|{row['label']}": row for row in pooled}
+    for label in (
+        "R|rendered memory rows per snapshot (mean)",
+        "R|reported-testimony rows retained",
+        "R|reported-testimony rows, <=4 living",
+        "R|reported-testimony rows, 5-6 living",
+        "R|reported-testimony rows, >=7 living",
+    ):
+        assert by_label[label]["on_slate"] == cf.FULL_SLATE_LABEL, label
+    for label in (
+        "R|rendered memory rows per snapshot (mean), less lever 7",
+        "R|reported-testimony rows retained, less lever 7",
+    ):
+        assert by_label[label]["on_slate"] == cf.LEVER_7_DECOMPOSITION_LABEL, label
+    # The decomposition is a real second measurement, not a copy: withholding the
+    # lever moves both cells. If these ever coincide the leg has stopped toggling.
+    full_rows = by_label["R|rendered memory rows per snapshot (mean)"]["on"]
+    seven_rows = by_label["R|rendered memory rows per snapshot (mean), less lever 7"][
+        "on"
+    ]
+    assert full_rows[1] == seven_rows[1]
+    assert full_rows[0] != seven_rows[0]
+    full_testimony = by_label["R|reported-testimony rows retained"]["on"]
+    seven_testimony = by_label["R|reported-testimony rows retained, less lever 7"]["on"]
+    assert full_testimony[0] > seven_testimony[0]
+    # And the widening bites where it was supposed to: at the full slate the
+    # census counts MORE testimony rows than the seven-lever leg, which is the
+    # tagged frame the OFF-shaped pattern used to drop.
+    assert full_testimony[0] / full_testimony[1] > (
+        seven_testimony[0] / seven_testimony[1]
+    )
+
+
 def test_the_testimony_buckets_partition_the_testimony_total(
     full_payload: Mapping[str, object],
 ) -> None:
@@ -285,6 +336,11 @@ def test_the_testimony_buckets_partition_the_testimony_total(
     ]
     for on_pair, off_pair in zip(on_buckets, reconstructed, strict=True):
         assert on_pair[0] > off_pair[0]
+    # The ON buckets partition the ON total too, on the full-slate leg: the
+    # headline census and its bands are one measurement, not two.
+    total_on = pooled["R|reported-testimony rows retained|on"]
+    assert sum(pair[0] for pair in on_buckets) == total_on[0]
+    assert {pair[1] for pair in on_buckets} == {total_on[0]}
 
 
 def test_the_i13_anchored_fixtures_publish_their_flag_half(

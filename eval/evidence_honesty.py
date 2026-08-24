@@ -269,15 +269,25 @@ _COMPLETED_LINE: Final[re.Pattern[str]] = re.compile(
     r"You completed (?P<task>\S+) \(you were in (?P<room>[^)]+)\)\.$",
     re.MULTILINE,
 )
+# The meeting frame a reported-testimony row carries. The committed baseline-6
+# bytes render the bare ``[meeting]`` tag; ``meeting_outcome_memory`` ON stamps
+# WHICH meeting the claim was spoken at, ``[meeting 1]``
+# (``agents/memory/store.py::_render_reported_testimony``). Both are the same
+# rendered row — the tag names the meeting, it does not make the line a different
+# kind of memory — so the census reads either and the committed OFF counts are
+# unchanged by the widening (Task 20.34, pre-registration §11 2026-08-24).
+_MEETING_FRAME: Final[str] = r"\[meeting(?: \d+)?\]"
 # The two rendered MEMORY row shapes, and only those: a first-hand observation
 # carries an ``[obs …]`` handle, heard testimony a ``[tick N] [meeting] CLAIM``
 # stamp. The prompt templates also format transcript turns and contradiction flags
 # as ``- […]`` bullets, which are not memory and must not enter the budget.
 _RENDERED_ROW: Final[re.Pattern[str]] = re.compile(
-    r"^- (?:\[obs [^\]]+\] |\[tick \d+\] \[meeting\] CLAIM by )", re.MULTILINE
+    rf"^- (?:\[obs [^\]]+\] |\[tick \d+\] {_MEETING_FRAME} CLAIM by )", re.MULTILINE
 )
 # The reported-testimony row shape (``agents.memory.store`` renders heard claims).
-_TESTIMONY_ROW: Final[re.Pattern[str]] = re.compile(r"^- \[.*\[meeting\] CLAIM by ")
+_TESTIMONY_ROW: Final[re.Pattern[str]] = re.compile(
+    rf"^- \[.*{_MEETING_FRAME} CLAIM by "
+)
 
 CELL_DEFINITIONS: Final[Mapping[str, str]] = {
     "I-2": (
