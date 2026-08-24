@@ -228,27 +228,32 @@ def _assert_no_role_bearing_values(packet_dump: JsonValue) -> None:
 # gate rather than prose.
 # --------------------------------------------------------------------------- #
 
-#: Role VALUES as every render writes them — uppercase, exactly as
+#: A role VALUE as every render writes one — uppercase, exactly as
 #: ``## Your role: CREWMATE`` does. Lowercase prose about the rules ("venting is
 #: impostor-only", the wording open-contradiction summaries carry) states no
 #: player's role and is not a disclosure.
-_MEMORY_ROLE_TOKENS: Sequence[str] = ("IMPOSTOR", "CREWMATE")
+_MEMORY_ROLE_TOKEN = re.compile(r"IMPOSTOR|CREWMATE")
 
-#: The two SELF-attributed forms a render writes: the ``## Your role:`` header
-#: and the own-kill line's ``You (IMPOSTOR) killed …``. An agent is always
-#: entitled to its own role, and both forms name the reader rather than a third
-#: party, which is what distinguishes them from a disclosure.
-_OWN_ROLE_FORMS = (
-    re.compile(r"^## Your role: (?:IMPOSTOR|CREWMATE)$"),
-    re.compile(r"\bYou \((?:IMPOSTOR|CREWMATE)\)"),
+#: The two SELF-attributed forms, matched WHOLE-LINE. An agent is always
+#: entitled to its own role, and both name the reader rather than a third party.
+#: Whole-line matching is the load-bearing part: a line may carry the entitled
+#: form and nothing else, so ``You (IMPOSTOR) killed p-2 (CREWMATE)`` is refused
+#: rather than exempted by its entitled half.
+_OWN_ROLE_LINES = (
+    re.compile(r"## Your role: (?:IMPOSTOR|CREWMATE)"),
+    re.compile(
+        r"(?:- )?(?:\[obs [^\]]+\] )?\[tick \d+\] "
+        r"You \((?:IMPOSTOR|CREWMATE)\) killed \S+ in \S+\."
+    ),
 )
 
-#: The one entitled disclosure grammar. The back-reference is load-bearing: the
-#: role must be announced for the SAME player the tally ejected, so a line that
-#: ejects one player and reveals another's role fails.
+#: The one entitled disclosure grammar, likewise matched WHOLE-LINE. The
+#: back-reference is load-bearing too: the role must be announced for the SAME
+#: player the tally ejected, so a line that ejects one player and reveals
+#: another's role fails.
 _ENTITLED_EJECTION_LINE = re.compile(
-    r"^- Meeting \d+ \(tick \d+\): (?P<player>\S+) EJECTED(?: \d+-\d+)? — "
-    r"(?P=player) was an? (?:IMPOSTOR|CREWMATE)\."
+    r"(?:- )?Meeting \d+ \(tick \d+\): (?P<player>\S+) EJECTED(?: \d+-\d+)? — "
+    r"(?P=player) was an? (?:IMPOSTOR|CREWMATE)\.(?: \d+ impostors? remains?\.)?"
 )
 
 
@@ -265,20 +270,27 @@ def assert_memory_render_role_disclosure_is_entitled(
     (a KILLED player is absent — a kill reveals nothing); ``render_tick`` is the
     tick the render was taken at.
 
-    Every uppercase role token in ``render`` must sit on either a SELF-attributed
-    form (the agent's own ``## Your role:`` header, or the own-kill line's
-    ``You (IMPOSTOR) …``) or an entitled ``## Meetings so far:`` ejection line —
-    one naming a player in ``ejection_ticks`` whose ejection tick is at or before
-    ``render_tick``. Anything else raises ``AssertionError`` quoting the
-    offending line.
+    A line carrying a role token must match ONE allowed grammar in full: a
+    SELF-attributed form (the agent's own ``## Your role:`` header, or the
+    own-kill line's ``You (IMPOSTOR) killed …``), or an entitled
+    ``## Meetings so far:`` ejection line naming a player in ``ejection_ticks``
+    whose ejection tick is at or before ``render_tick``. Each allowed grammar
+    admits exactly ONE role token, so a line cannot buy an exemption for a
+    smuggled second disclosure with an entitled first one. Anything else raises
+    ``AssertionError`` quoting the offending line.
     """
 
     for line in render.splitlines():
-        if not any(token in line for token in _MEMORY_ROLE_TOKENS):
+        tokens = _MEMORY_ROLE_TOKEN.findall(line)
+        if not tokens:
             continue
-        if any(form.search(line) for form in _OWN_ROLE_FORMS):
+        assert len(tokens) == 1, (
+            f"line states {len(tokens)} roles; every allowed grammar states one, "
+            f"at tick {render_tick}: {line!r}"
+        )
+        if any(form.fullmatch(line) for form in _OWN_ROLE_LINES):
             continue
-        match = _ENTITLED_EJECTION_LINE.match(line)
+        match = _ENTITLED_EJECTION_LINE.fullmatch(line)
         assert match is not None, (
             f"role disclosed outside the entitled grammar at tick {render_tick}: "
             f"{line!r}"

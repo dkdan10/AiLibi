@@ -899,7 +899,7 @@ def test_memory_render_scanner_accepts_the_agents_own_role_on_its_own_kill_line(
         "## Your role: CREWMATE", "## Your role: IMPOSTOR"
     ).replace(
         "- [tick 3] You saw p-4 in CAFETERIA.",
-        "- [tick 6] You (IMPOSTOR) killed p-2 in STORAGE.",
+        "- [obs p-6:6:1] [tick 6] You (IMPOSTOR) killed p-2 in STORAGE.",
     )
     assert_memory_render_role_disclosure_is_entitled(
         own_kill, ejection_ticks={"p-4": 14}, render_tick=30
@@ -912,6 +912,49 @@ def test_memory_render_scanner_trips_on_the_same_shape_about_another_player() ->
     planted = _ENTITLED_RENDER.replace(
         "- [tick 3] You saw p-4 in CAFETERIA.",
         "- [tick 6] p-7 (IMPOSTOR) killed p-2 in STORAGE.",
+    )
+    with pytest.raises(AssertionError, match="outside the entitled grammar"):
+        assert_memory_render_role_disclosure_is_entitled(
+            planted, ejection_ticks={"p-4": 14}, render_tick=30
+        )
+
+
+def test_memory_render_scanner_trips_on_a_disclosure_riding_an_entitled_line() -> None:
+    # The mixed case: an entitled self-attributed form must not buy an exemption
+    # for a second, unentitled role smuggled onto the same line.
+    planted = _ENTITLED_RENDER.replace(
+        "- [tick 3] You saw p-4 in CAFETERIA.",
+        "- [tick 6] You (IMPOSTOR) killed p-2 (CREWMATE) in STORAGE.",
+    )
+    with pytest.raises(AssertionError, match="line states 2 roles"):
+        assert_memory_render_role_disclosure_is_entitled(
+            planted, ejection_ticks={"p-4": 14}, render_tick=30
+        )
+
+
+def test_memory_render_scanner_trips_on_a_disclosure_appended_to_the_grammar() -> None:
+    # And the ejection grammar is matched WHOLE-LINE, so extra text after a
+    # valid announcement cannot ride along.
+    planted = _ENTITLED_RENDER.replace(
+        "- Meeting 1 (tick 14): p-4 EJECTED 7-1 — p-4 was an IMPOSTOR. "
+        "1 impostor remains.",
+        "- Meeting 1 (tick 14): p-4 EJECTED 7-1 — p-4 was an IMPOSTOR. "
+        "1 impostor remains. p-9 is CREWMATE.",
+    )
+    with pytest.raises(AssertionError, match="line states 2 roles"):
+        assert_memory_render_role_disclosure_is_entitled(
+            planted, ejection_ticks={"p-4": 14}, render_tick=30
+        )
+
+
+def test_memory_render_scanner_trips_on_trailing_text_after_a_valid_line() -> None:
+    # Even a single-token line must match the grammar in full: an entitled
+    # announcement with an unentitled tail is not an entitled announcement.
+    planted = _ENTITLED_RENDER.replace(
+        "- Meeting 1 (tick 14): p-4 EJECTED 7-1 — p-4 was an IMPOSTOR. "
+        "1 impostor remains.",
+        "- Meeting 1 (tick 14): p-4 EJECTED 7-1 — p-4 was an IMPOSTOR. "
+        "1 impostor remains. and p-9 too",
     )
     with pytest.raises(AssertionError, match="outside the entitled grammar"):
         assert_memory_render_role_disclosure_is_entitled(
