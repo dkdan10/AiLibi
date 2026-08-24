@@ -645,15 +645,13 @@ class TestSubstrateFlagStamp:
     def test_impostor_roll_call_on_recording_round_trips_the_stamp(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        # With the sole remaining live toggle exported, ``record_game_end`` stamps
-        # it ON and the file reader round-trips it — the recording self-describes
-        # the substrate it ran under (the shape a FUTURE gate that ships the
-        # impostor arm would graduate; the MANIFEST ``flags`` cell renders from this
-        # same ``read_substrate_flags`` value). The thirteen retired levers stay ON
-        # alongside it — an impostor-ON recording is NOT byte-identical to the
-        # baseline-6 (impostor-OFF) stamp, so it fails loud against a committed OFF
-        # stamp under ``_assert_substrate_matches`` unless the loader opts into the
-        # mismatch.
+        # With the impostor-answer toggle exported, ``record_game_end`` stamps it
+        # ON and the file reader round-trips it — the recording self-describes the
+        # substrate it ran under, and the MANIFEST ``flags`` cell renders from this
+        # same ``read_substrate_flags`` value. The graduated levers stay ON
+        # alongside it, and an impostor-ON recording is NOT byte-identical to the
+        # committed (impostor-OFF) stamp, so it fails loud under
+        # ``_assert_substrate_matches`` unless the loader opts into the mismatch.
         monkeypatch.setenv(ENV_IMPOSTOR_ROLL_CALL, "1")
         path = tmp_path / "impostor-on.jsonl"
         ReplayLog(path, game_id="g-impostor").record_game_end(
@@ -685,14 +683,13 @@ class TestSubstrateFlagStamp:
         flag_key: str,
         resolver: object,
     ) -> None:
-        # Task 18.10's impostor_roll_call is the SOLE remaining live DEFAULT-OFF
-        # toggle after the 18.12 graduation of the other three meeting-layer levers:
+        # The impostor-answer arm is DEFAULT-OFF like every other live toggle:
         # unset / bare / unrecognised stamps False (byte-identical to the committed
-        # baseline-6 set, which predates the key having any effect), and a truthy
+        # set, which predates the key having any effect), and a truthy
         # AILIBI_IMPOSTOR_ROLL_CALL export flips it True — the seam a future gate
-        # that ships the impostor arm would drive. The snapshot key is bound to its
-        # local mirror resolver BY IDENTITY. (Parametrised for parallelism with the
-        # graduated-lever test above, though only one toggle remains.)
+        # that ships the arm would drive. It is the ONE toggle bound to a local
+        # MIRROR rather than by identity (the eight Phase-20 levers bind their home
+        # resolvers directly), which is why it keeps its own case here.
         assert dict(_TOGGLEABLE_LEVER_RESOLVERS)[flag_key] is resolver
         assert substrate_flag_snapshot({})[flag_key] is False
         assert substrate_flag_snapshot({env_var: "nope"})[flag_key] is False

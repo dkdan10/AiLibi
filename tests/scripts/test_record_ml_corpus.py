@@ -261,13 +261,22 @@ def test_dry_run_echo_names_the_levers_the_operator_declared() -> None:
     )
 
 
-def test_expect_levers_requires_a_value() -> None:
-    # A bare --expect-levers is an operator typo, not "the empty slate".
+def test_expect_levers_requires_an_argument() -> None:
+    # A --expect-levers with NOTHING after it is an operator typo.
     proc = _run("--dry-run", "--expect-levers")
     assert proc.returncode != 0
     assert "--expect-levers requires a comma-separated lever list" in (
         proc.stdout + proc.stderr
     )
+
+
+def test_an_explicitly_empty_expect_levers_is_the_bare_slate() -> None:
+    # An empty STRING is a declaration, not a typo: automation can pass
+    # --expect-levers "$LEVERS" unconditionally and get the bare slate.
+    proc = _run("--dry-run", "--expect-levers", "")
+    out = proc.stdout + proc.stderr
+    assert proc.returncode == 0, out
+    assert _BARE_SLATE_ECHO in proc.stdout
 
 
 def test_preflight_refuses_a_declared_lever_that_is_not_exported(

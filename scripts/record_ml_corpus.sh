@@ -230,13 +230,17 @@ while [[ $# -gt 0 ]]; do
     --dry-run) dry_run=1 ;;
     --splits-only) splits_only=1 ;;
     --expect-levers)
+      # An explicitly EMPTY value is the bare slate (every live toggle OFF), so
+      # automation can pass "$LEVERS" unconditionally; only a MISSING argument is
+      # an error, which is why this counts what is left rather than testing the
+      # string.
       shift
-      expect_levers="${1:-}"
-      if [[ -z "$expect_levers" ]]; then
-        echo "Error: --expect-levers requires a comma-separated lever list." >&2
+      if [[ $# -eq 0 ]]; then
+        echo "Error: --expect-levers requires a comma-separated lever list (pass an empty string for the bare slate)." >&2
         usage
         exit 1
       fi
+      expect_levers="$1"
       ;;
     -h | --help)
       usage

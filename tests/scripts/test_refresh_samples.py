@@ -258,15 +258,26 @@ def test_dry_run_echo_names_the_levers_the_operator_declared(provider: str) -> N
     )
 
 
-def test_expect_levers_requires_a_value() -> None:
-    # A bare --expect-levers is an operator typo, not "the empty slate": accepting
-    # it would silently record the bare substrate under a flag that claims
-    # otherwise.
+def test_expect_levers_requires_an_argument() -> None:
+    # A --expect-levers with NOTHING after it is an operator typo: the value was
+    # meant to be there and got lost, so refusing beats silently recording the
+    # bare substrate under a flag that claims otherwise.
     proc = _run("--seeds", "0", "--dry-run", "--expect-levers")
     assert proc.returncode != 0
     assert "--expect-levers requires a comma-separated lever list" in (
         proc.stdout + proc.stderr
     )
+
+
+def test_an_explicitly_empty_expect_levers_is_the_bare_slate() -> None:
+    # An empty STRING is a declaration, not a typo: automation can pass
+    # --expect-levers "$LEVERS" unconditionally and get the bare slate when the
+    # variable is unset. The two cases are distinguished by whether an argument
+    # follows the flag at all.
+    proc = _run("--seeds", "0", "--dry-run", "--expect-levers", "", env=_clean_env())
+    out = proc.stdout + proc.stderr
+    assert proc.returncode == 0, out
+    assert "Substrate slate OK: expected levers ON = (none" in out
 
 
 def test_preflight_refuses_a_declared_lever_that_is_not_exported() -> None:
@@ -1138,6 +1149,13 @@ def test_fake_refresh_skips_the_key_preflight_but_keeps_the_substrate_one(
     assert "ANTHROPIC_API_KEY must be set" not in out
     assert "Using API key prefix" not in out
     assert "Substrate slate OK: expected levers ON = (none" in out
+    # The real run's provenance echo renders the SAME resolved slate the preview
+    # and the gate name, so an operator can never read three different substrates.
+    assert (
+        "Substrate flags: expected levers ON = (none — the bare slate: every "
+        "live toggle OFF); every other live toggle OFF; the graduated levers "
+        "unconditional ON" in out
+    )
     assert "Attributing no-meeting seeds to model: fake-meeting" in out
     assert (set_dir / "replay-seed-0.jsonl").is_file()
 

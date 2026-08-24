@@ -246,13 +246,17 @@ while [[ $# -gt 0 ]]; do
       ;;
     --dry-run) dry_run=1 ;;
     --expect-levers)
+      # An explicitly EMPTY value is the bare slate (every live toggle OFF), so
+      # automation can pass "$LEVERS" unconditionally; only a MISSING argument is
+      # an error, which is why this counts what is left rather than testing the
+      # string.
       shift
-      expect_levers="${1:-}"
-      if [[ -z "$expect_levers" ]]; then
-        echo "Error: --expect-levers requires a comma-separated lever list." >&2
+      if [[ $# -eq 0 ]]; then
+        echo "Error: --expect-levers requires a comma-separated lever list (pass an empty string for the bare slate)." >&2
         usage
         exit 1
       fi
+      expect_levers="$1"
       ;;
     -h | --help)
       usage
@@ -710,16 +714,14 @@ elif [[ -z "$active_model" ]]; then
   fi
 fi
 echo "Attributing no-meeting seeds to model: $active_model"
-# Echo the substrate provenance the recorded replays self-stamp (Task 14.7), so
-# the operator can confirm the ruled slate is in effect and the substrate is
-# never silent (AGENTS.md "no silent fallbacks"). The game reads the prompt set
-# from the ambient env; the substrate levers (the meeting-layer levers graduated
-# unconditional ON at Task 18.12 beside the earlier graduations, with
-# impostor_roll_call default-OFF) are stamped into each replay's game_over record +
-# the MANIFEST flags column; this script does not set them (the substrate-lever
-# preflight above already refused any stale AILIBI_* lever export).
+# Echo the substrate provenance the recorded replays self-stamp, so the operator
+# can confirm the slate in effect and the substrate is never silent (AGENTS.md "no
+# silent fallbacks"). The game reads the prompt set from the ambient env; the lever
+# slate is stamped into each replay's game_over record + the MANIFEST flags column.
+# This script sets no lever -- it echoes the slate the preflight above verified, so
+# the real run and the dry-run preview can never describe different substrates.
 echo "Prompt set: ${AILIBI_PROMPT_SET:-(default qwen3_5_9b)}"
-echo "Substrate flags: baseline-6 slate — meeting-layer levers unconditional ON (roll_call_round, whereabouts_interior_flags, vent_placement_contradictions, absence_prior), impostor_roll_call default-OFF"
+echo "Substrate flags: expected levers ON = $expect_levers_desc; every other live toggle OFF; the graduated levers unconditional ON"
 
 # Stage each per-seed run in a temp dir on the same filesystem as the sample dir
 # so the replay can be moved into place atomically, and only after the run
