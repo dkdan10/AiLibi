@@ -73,8 +73,20 @@ def citation_gate_enabled(env: Mapping[str, str] | None = None) -> bool:
     return True
 
 
+# The minimum number of DISTINCT SPEAKERS that must stand behind the case
+# against one subject before an ``alibi_vs_sighting`` flag may band STRONG under
+# :func:`meetings.transcript.grounded_prosecution_enabled`. A speaker counts
+# once however many records they hold, sightings they speak, or channels they
+# speak through: a ``vent_sighting`` or ``alibi_vs_physical`` flag naming the
+# same subject substitutes for a second WITNESS, never for a second account by
+# the same one. Homed in this leaf so the pre-registration memo and the audit
+# workflows can cite the threshold without importing the 3-KLoC detector.
+GROUNDED_PROSECUTION_MIN_SOURCES: Final[int] = 2
+
+
 __all__ = [
     "DEFAULT_SKIP_CONFIDENCE_THRESHOLD",
     "ENV_CITATION_GATE",
+    "GROUNDED_PROSECUTION_MIN_SOURCES",
     "citation_gate_enabled",
 ]

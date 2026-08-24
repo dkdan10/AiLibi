@@ -645,25 +645,26 @@ class MeetingParticipant:
     participant records as ordinary testimony and raises no flag.
 
     ``sighting_records`` (Task 16.7) is the vent channel's polarity-inverted
-    sibling: the participant's OWN typed first-hand-sighting channel -- the
-    grounding input behind the GROUNDED VOUCH corroboration feed. The
+    sibling: the participant's OWN typed first-hand-sighting channel. The
     orchestrator populates it from
     ``MeetingAwareAgent.sighting_records_for_meeting()`` (episodic memory,
-    self-channel only, so it is firewall-clean). Carried INERT today, the
-    widen-the-contract-inert pattern ``persona`` below also follows: the
-    consuming seam is the ``sighting_records`` parameter of
-    :func:`derive_belief_evidence` (which routes it through
-    :func:`meetings.transcript.grounded_vouch_subjects` into the existing
-    relevance-gated ``corroborated`` set -- fixture-pinned), but the
-    production :meth:`MeetingManager.run` does not pass the mapping yet:
-    committed transcripts already carry speaker-groundable sightings, so a
-    live feed would move committed ballot-prompt bytes, and the phase's
-    lever doctrine requires every behavioral change to be byte-identical
-    at rest -- the graduating task connects the one call. It never reaches
-    a prompt surface and never mints a contradiction flag. The default
-    ``()`` keeps every existing construction site valid and means "this
-    speaker grounds nothing": a spoken sighting from such a participant
-    records as ordinary testimony and exculpates no one.
+    self-channel only, so it is firewall-clean). It has two consuming seams,
+    at different stages of graduation. The manager threads the per-speaker
+    mapping into every
+    :func:`meetings.transcript.detect_contradictions` call, where the
+    grounded-prosecution lever
+    (:func:`meetings.transcript.grounded_prosecution_enabled`, DEFAULT-OFF)
+    checks a spoken sighting against the speaker's own record before it can
+    band an ``alibi_vs_sighting`` flag STRONG; with the lever off the mapping
+    is read by nothing. The VOUCH seam -- the ``sighting_records`` parameter of
+    :func:`derive_belief_evidence`, which routes the same rows through
+    :func:`meetings.transcript.grounded_vouch_subjects` into the
+    relevance-gated ``corroborated`` set -- stays fixture-pinned and unfed,
+    because feeding it moves committed ballot-prompt bytes at rest. The
+    channel never reaches a prompt surface. The default ``()`` keeps every
+    existing construction site valid and means "this speaker grounds nothing":
+    their spoken sightings are ordinary testimony that exculpates no one and,
+    under the lever, convicts no one.
 
     ``move_witness_records`` is the vent channel's movement sibling: the
     participant's OWN typed witnessed-transition channel, the grounding input
@@ -1084,6 +1085,29 @@ class MeetingManager:
             for participant in ordered_participants
             if participant.move_witness_records
         }
+        # The grounded-prosecution lever's channel -- the same first-hand
+        # sighting rows the grounded-vouch path reads, threaded into detection
+        # so a spoken sighting can be checked against the speaker's own record
+        # before it convicts. Inert while the lever is off.
+        #
+        # The §4.7 TEAMMATE firewall is applied HERE, not inherited: the
+        # accessor keeps an impostor's rows naming a fellow impostor because
+        # its only consumer CORROBORATES, and says a prosecuting consumer must
+        # re-apply the suppression. This is that consumer, so a row the §6.6
+        # render hides from its own holder cannot ground a flag against the
+        # teammate it names. The vouch seam is unaffected (it reads the
+        # participant field, not this mapping) -- the movement channel draws
+        # the same line at its accessor.
+        sighting_records: dict[PlayerId, tuple[SightingRecord, ...]] = {}
+        for participant in ordered_participants:
+            fellows = frozenset(participant.fellow_impostor_ids)
+            rows = tuple(
+                record
+                for record in participant.sighting_records
+                if record.subject not in fellows
+            )
+            if rows:
+                sighting_records[participant.agent_id] = rows
 
         # Phase 1: opening turn (turn 0, role-dispatched). The opening is a
         # single point of failure for the whole meeting -- an empty opening
@@ -1138,6 +1162,7 @@ class MeetingManager:
                 roster=roster,
                 vent_witness_records=vent_witness_records,
                 move_witness_records=move_witness_records,
+                sighting_records=sighting_records,
             )
             reply_turn = await self._collect_turn(
                 meeting_id=meeting_id,
@@ -1171,6 +1196,7 @@ class MeetingManager:
                 roster=roster,
                 vent_witness_records=vent_witness_records,
                 move_witness_records=move_witness_records,
+                sighting_records=sighting_records,
             )
             opt_in_turn = await self._collect_turn(
                 meeting_id=meeting_id,
@@ -1214,6 +1240,7 @@ class MeetingManager:
                     roster=roster,
                     vent_witness_records=vent_witness_records,
                     move_witness_records=move_witness_records,
+                    sighting_records=sighting_records,
                 )
                 roll_call_turn = await self._collect_turn(
                     meeting_id=meeting_id,
@@ -1257,18 +1284,18 @@ class MeetingManager:
             trigger_kind=meeting_trigger_kind,
             vent_witness_records=vent_witness_records,
             move_witness_records=move_witness_records,
+            sighting_records=sighting_records,
         )
-        # Task 16.7 note: ``MeetingParticipant.sighting_records`` (the
-        # grounded-vouch channel) is deliberately NOT threaded into this
-        # derivation yet. The mechanism is complete behind the
-        # ``sighting_records`` parameter of :func:`derive_belief_evidence`
-        # (fixture-pinned), but connecting the live per-speaker mapping here
-        # moves committed ballot-prompt bytes -- committed transcripts already
-        # carry speaker-groundable sightings (9p2i seed-0 meeting-0: p-5/p-6
-        # mutual grounded vouches) -- and the phase's lever doctrine requires
-        # every behavioral change to be byte-identical at rest. The graduating
-        # task turns the feed on by passing the mapping (the
-        # widen-the-contract-inert pattern; the 16.3 persona precedent).
+        # The VOUCH half of the sighting channel is still not threaded here.
+        # Detection above now receives the per-speaker mapping (the
+        # grounded-prosecution lever grounds a spoken sighting before it can
+        # convict, and reads nothing while the lever is off), but passing the
+        # same mapping into :func:`derive_belief_evidence` would feed the -0.05
+        # exculpation channel and move committed ballot-prompt bytes at rest --
+        # committed transcripts already carry speaker-groundable sightings
+        # (9p2i seed-0 meeting-0: p-5/p-6 mutual grounded vouches). That feed
+        # graduates behind its own lever (Task 16.7's mechanism is complete and
+        # fixture-pinned behind the parameter).
         evidence = derive_belief_evidence(
             transcript, contradictions=contradictions, roster=roster
         )
