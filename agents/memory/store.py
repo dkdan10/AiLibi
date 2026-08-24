@@ -740,8 +740,13 @@ def absorb_reported_testimony(
 
     Each row also carries the 1-based ``meeting_index`` it was spoken at, counted
     from the ``meeting_boundary`` markers :func:`absorb_meeting_evidence` has
-    already appended for this meeting. The live orchestrator and the replay
-    loader both run that fold first, so the index is the same on either path.
+    already appended for this meeting — the agent's OWN record of how many
+    meetings it has taken evidence from, so the tag and the ``## Meetings so far:``
+    block number the same meetings. The live orchestrator and the replay loader
+    both run that fold first, so the index is the same on either path. An agent
+    that folds no meeting evidence holds no such record: the index is then
+    UNDERIVABLE and the row carries none, so the render states the untagged
+    ``[meeting]`` frame rather than a fabricated ordinal.
 
     Raises :class:`ValueError` when no ``self_state`` event carrying the agent's
     own id has been recorded -- the own-statement guard cannot run without it,
@@ -764,11 +769,14 @@ def absorb_reported_testimony(
     boundary_tick = last_perceived_tick + 1
     roster = _known_roster_ids(memory.episodic)
     vents_are_content = meeting_outcome_memory_enabled(env)
-    meeting_index = sum(
+    boundaries = sum(
         1
         for event in memory.episodic.recent(since_tick=0)
         if event.type == _EVENT_MEETING_BOUNDARY
     )
+    # No boundary record means this agent folds no meeting evidence, so which
+    # meeting this is cannot be known -- state nothing rather than guess.
+    meeting_index = boundaries if boundaries > 0 else None
     for statement in statements:
         if statement.speaker == own_agent_id:
             continue

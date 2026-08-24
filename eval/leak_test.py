@@ -962,6 +962,20 @@ def test_memory_render_scanner_trips_on_trailing_text_after_a_valid_line() -> No
         )
 
 
+def test_memory_render_scanner_trips_on_a_back_dated_announcement() -> None:
+    # The disclosure is TRUE and the player really was ejected, but the line
+    # attributes it to a meeting at tick 5 — before the role became public at
+    # tick 14. Checking only the ledger tick against the render tick would clear
+    # it, so the announcement's own tick is bound to the ledger.
+    planted = _ENTITLED_RENDER.replace(
+        "- Meeting 1 (tick 14): p-4 EJECTED", "- Meeting 1 (tick 5): p-4 EJECTED"
+    )
+    with pytest.raises(AssertionError, match="against a meeting at tick 5"):
+        assert_memory_render_role_disclosure_is_entitled(
+            planted, ejection_ticks={"p-4": 14}, render_tick=30
+        )
+
+
 def test_memory_render_scanner_trips_when_the_tally_and_the_role_disagree() -> None:
     # A line that ejects one player and announces ANOTHER's role fails the
     # back-reference: the disclosure must belong to the ejection that carried it.

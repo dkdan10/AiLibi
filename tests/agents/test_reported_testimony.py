@@ -654,6 +654,19 @@ class TestVentSightingSurvivesAsContent:
             "- [tick 15] [meeting] CLAIM by p-3 (unverified): accused p-2."
         ]
 
+    def test_an_agent_with_no_boundary_record_gets_the_untagged_frame(self) -> None:
+        # An agent that folds no meeting evidence holds no meeting-boundary
+        # record, so WHICH meeting this is cannot be known. The frame states
+        # nothing rather than a fabricated "[meeting 0]".
+        memory = _memory_at_meeting(0)
+        absorb_reported_testimony(memory, statements=(_VENT_SIGHTING,), env=_ON)
+
+        (line,) = _testimony_lines(render_for_prompt(memory, env=_ON))
+        assert "[meeting]" in line
+        assert "[meeting 0]" not in line
+        # The content still survives — only the ordinal is withheld.
+        assert "saw p-4 VENT in ENGINEERING @ tick 11." in line
+
 
 class TestVentSightingDerivation:
     def test_a_spoken_vent_reduces_to_a_saw_vent_statement(self) -> None:

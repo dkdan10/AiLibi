@@ -247,12 +247,15 @@ _OWN_ROLE_LINES = (
     ),
 )
 
-#: The one entitled disclosure grammar, likewise matched WHOLE-LINE. The
-#: back-reference is load-bearing too: the role must be announced for the SAME
-#: player the tally ejected, so a line that ejects one player and reveals
-#: another's role fails.
+#: The one entitled disclosure grammar, likewise matched WHOLE-LINE. Two capture
+#: groups carry the entitlement: the back-reference requires the role to be
+#: announced for the SAME player the tally ejected, and ``tick`` is the meeting
+#: the announcement claims to come from, checked against the ledger so a
+#: disclosure cannot be back-dated to a meeting at which the role was not yet
+#: public.
 _ENTITLED_EJECTION_LINE = re.compile(
-    r"(?:- )?Meeting \d+ \(tick \d+\): (?P<player>\S+) EJECTED(?: \d+-\d+)? — "
+    r"(?:- )?Meeting \d+ \(tick (?P<tick>\d+)\): (?P<player>\S+) "
+    r"EJECTED(?: \d+-\d+)? — "
     r"(?P=player) was an? (?:IMPOSTOR|CREWMATE)\.(?: \d+ impostors? remains?\.)?"
 )
 
@@ -266,15 +269,19 @@ def assert_memory_render_role_disclosure_is_entitled(
     """Assert every role a rendered memory states is one this agent may know.
 
     ``render`` is the output of ``agents.memory.store.render_for_prompt``;
-    ``ejection_ticks`` maps a player id to the tick the table ejected them at
-    (a KILLED player is absent — a kill reveals nothing); ``render_tick`` is the
-    tick the render was taken at.
+    ``ejection_ticks`` maps a player id to the tick the table ejected them at —
+    the meeting's resume tick, which is what the block renders (a KILLED player
+    is absent: a kill reveals nothing); ``render_tick`` is the tick the render
+    was taken at.
 
     A line carrying a role token must match ONE allowed grammar in full: a
     SELF-attributed form (the agent's own ``## Your role:`` header, or the
     own-kill line's ``You (IMPOSTOR) killed …``), or an entitled
-    ``## Meetings so far:`` ejection line naming a player in ``ejection_ticks``
-    whose ejection tick is at or before ``render_tick``. Each allowed grammar
+    ``## Meetings so far:`` ejection line naming a player in ``ejection_ticks``,
+    dated at that player's own ejection tick, which must be at or before
+    ``render_tick``. Binding the line's own tick to the ledger is what stops a
+    true disclosure being back-dated to a meeting at which the role was not yet
+    public — the ledger tick alone would clear it. Each allowed grammar
     admits exactly ONE role token, so a line cannot buy an exemption for a
     smuggled second disclosure with an entitled first one. Anything else raises
     ``AssertionError`` quoting the offending line.
@@ -300,6 +307,12 @@ def assert_memory_render_role_disclosure_is_entitled(
         assert ejected_at is not None, (
             f"role disclosed for {player!r}, who the table never ejected, "
             f"at tick {render_tick}: {line!r}"
+        )
+        announced_at = int(match.group("tick"))
+        assert announced_at == ejected_at, (
+            f"role disclosed for {player!r} against a meeting at tick "
+            f"{announced_at}, but the table ejected them at tick {ejected_at}: "
+            f"{line!r}"
         )
         assert ejected_at <= render_tick, (
             f"role disclosed for {player!r} at tick {render_tick}, before their "

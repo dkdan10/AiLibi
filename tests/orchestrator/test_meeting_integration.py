@@ -3127,7 +3127,10 @@ class TestMeetingOutcomeAnnouncementPayload:
             # nothing else, dated at or after the meeting that ejected them.
             assert_memory_render_role_disclosure_is_entitled(
                 render,
-                ejection_ticks={"p-4": 0},
+                # The ledger carries the ejection's own resume tick, which is
+                # what the block renders — an announcement dated anywhere else
+                # would not be entitled.
+                ejection_ticks=({"p-4": outcomes[-1].end_tick} if outcomes else {}),
                 render_tick=outcomes[-1].end_tick if outcomes else 0,
             )
 
