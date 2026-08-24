@@ -31,22 +31,43 @@ from agents.memory.beliefs import (
     ENV_REPORTER_EXCULPATION,
     absence_prior_enabled,
 )
-from agents.memory.store import ENV_OBSERVATION_ID_RENDERING
-from meetings.constants import ENV_CITATION_GATE
-from orchestrator.replay import (
-    ENV_IMPOSTOR_ROLL_CALL,
-    _impostor_roll_call_enabled,
+from agents.memory.store import (
+    ENV_COALESCED_MEMORY_RENDER,
+    ENV_MEETING_OUTCOME_MEMORY,
+    ENV_OBSERVATION_ID_RENDERING,
+    ENV_SELF_LOCATION_TRAIL,
+    ENV_TASK_COMPLETION_FROM_EVENTS,
+    AgentMemory,
+    coalesced_memory_render_enabled,
+    meeting_outcome_memory_enabled,
+    self_location_trail_enabled,
+    task_completion_from_events_enabled,
 )
-from meetings.manager import ENV_ROLL_CALL_ROUND, roll_call_round_enabled
+from meetings.constants import ENV_CITATION_GATE
+from meetings.manager import (
+    ENV_ROLL_CALL_ROUND,
+    ENV_STRUCTURED_TURN_MARKERS,
+    roll_call_round_enabled,
+    structured_turn_markers_enabled,
+)
+from meetings.schemas import MeetingResult, MeetingTranscript, VoteBallot
 from meetings.transcript import (
+    ENV_GROUNDED_PROSECUTION,
+    ENV_MAP_AWARE_ARBITRATION,
+    ENV_MOVEMENT_CLAIM_SHAPE,
     ENV_VENT_PLACEMENT_CONTRADICTIONS,
     ENV_WHEREABOUTS_INTERIOR_FLAGS,
+    grounded_prosecution_enabled,
+    map_aware_arbitration_enabled,
+    movement_claim_shape_enabled,
     vent_placement_contradictions_enabled,
     whereabouts_interior_flags_enabled,
 )
 from orchestrator.replay import (
+    ENV_IMPOSTOR_ROLL_CALL,
     SUBSTRATE_FLAG_KEYS,
     TOGGLEABLE_SUBSTRATE_FLAG_KEYS,
+    _impostor_roll_call_enabled,
     _TOGGLEABLE_LEVER_RESOLVERS,
     FailedCallReplayEntry,
     GameEndReplayEntry,
@@ -54,12 +75,16 @@ from orchestrator.replay import (
     ReplayEntry,
     ReplayLog,
     compute_cost_usd,
+    env_var_for_lever,
+    fold_meeting_outcome_into_memories,
     read_all_entries,
     read_failed_call_entries,
     read_game_outcome,
     read_substrate_flags,
     substrate_flag_snapshot,
+    substrate_slate_mismatches,
 )
+from engine.world import WorldState
 from tests._helpers.world_state import scripted_initial_world_state
 
 # The Task-14.10 lever's snapshot key (retired to ``_RETIRED_ALWAYS_ON_LEVERS``
@@ -114,6 +139,76 @@ ENV_ROLL_CALL_ROUND_KEY = "roll_call_round"
 ENV_WHEREABOUTS_INTERIOR_FLAGS_KEY = "whereabouts_interior_flags"
 ENV_VENT_PLACEMENT_CONTRADICTIONS_KEY = "vent_placement_contradictions"
 ENV_IMPOSTOR_ROLL_CALL_KEY = "impostor_roll_call"
+
+# The eight Phase-20 belief-substrate levers, in registration order: snapshot key,
+# ``AILIBI_*`` variable, and the HOME-MODULE resolver the registry must be bound
+# to. Written out rather than derived from the registry so this table is an
+# independent statement of what should be registered -- a registry that lost or
+# renamed an entry fails against it instead of agreeing with itself.
+_PHASE20_LEVERS: tuple[tuple[str, str, object], ...] = (
+    (
+        "task_completion_from_events",
+        ENV_TASK_COMPLETION_FROM_EVENTS,
+        task_completion_from_events_enabled,
+    ),
+    ("self_location_trail", ENV_SELF_LOCATION_TRAIL, self_location_trail_enabled),
+    ("movement_claim_shape", ENV_MOVEMENT_CLAIM_SHAPE, movement_claim_shape_enabled),
+    ("grounded_prosecution", ENV_GROUNDED_PROSECUTION, grounded_prosecution_enabled),
+    ("map_aware_arbitration", ENV_MAP_AWARE_ARBITRATION, map_aware_arbitration_enabled),
+    (
+        "structured_turn_markers",
+        ENV_STRUCTURED_TURN_MARKERS,
+        structured_turn_markers_enabled,
+    ),
+    (
+        "meeting_outcome_memory",
+        ENV_MEETING_OUTCOME_MEMORY,
+        meeting_outcome_memory_enabled,
+    ),
+    (
+        "coalesced_memory_render",
+        ENV_COALESCED_MEMORY_RENDER,
+        coalesced_memory_render_enabled,
+    ),
+)
+
+# The substrate stamp every committed recording carries: the thirteen graduated
+# levers ON, the impostor-answer arm OFF. Written as a literal because it is the
+# thing the committed bytes assert -- deriving it from the registry would make the
+# pin agree with any drift.
+_BASELINE6_STAMP: dict[str, bool] = {
+    "testimony_as_content": True,
+    "witnessed_kill_evidence": True,
+    "movement_perception": True,
+    "unfreeze_memory": True,
+    "evidence_quality_lift": True,
+    "reporter_exculpation": True,
+    "hard_evidence_gate": True,
+    "observation_id_rendering": True,
+    "citation_gate": True,
+    "absence_prior": True,
+    "roll_call_round": True,
+    "whereabouts_interior_flags": True,
+    "vent_placement_contradictions": True,
+    "impostor_roll_call": False,
+}
+
+# What a BARE environment stamps now: the committed baseline-6 stamp with the
+# eight Phase-20 keys appended OFF. Every committed replay omits those keys, and
+# the missing-key-reads-False rule makes both sides agree, so no committed byte
+# moves.
+_BARE_STAMP: dict[str, bool] = {
+    **_BASELINE6_STAMP,
+    **{key: False for key, _, _ in _PHASE20_LEVERS},
+}
+
+
+def _clear_lever_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Strip every ``AILIBI_*`` lever export so the process env is a bare slate."""
+
+    for key in SUBSTRATE_FLAG_KEYS:
+        monkeypatch.delenv(env_var_for_lever(key), raising=False)
+
 
 # The committed 9p2i sample set the gp-4 audit measured; read-only here (the
 # re-record itself is Task 9.11).
@@ -238,10 +333,9 @@ class TestSubstrateFlagStamp:
         # three Phase-16 levers graduated at 16.17, or a stray export of any of the
         # four meeting-layer levers graduated at the Task-18.12 baseline-6 record
         # (absence_prior / roll_call_round / whereabouts_interior_flags /
-        # vent_placement_contradictions) all read identically. The ONLY lever that
-        # still reads env is Task 18.10's default-OFF impostor_roll_call (the single
-        # entry in _TOGGLEABLE_LEVER_RESOLVERS), scoped out here so this pin stays
-        # about the always-on set.
+        # vent_placement_contradictions) all read identically. The nine live
+        # toggles in _TOGGLEABLE_LEVER_RESOLVERS are the levers that still read env;
+        # they are scoped out here so this pin stays about the always-on set.
         retired = tuple(
             key
             for key in SUBSTRATE_FLAG_KEYS
@@ -279,7 +373,10 @@ class TestSubstrateFlagStamp:
             "whereabouts_interior_flags",
             "vent_placement_contradictions",
         }
-        assert TOGGLEABLE_SUBSTRATE_FLAG_KEYS == ("impostor_roll_call",)
+        assert TOGGLEABLE_SUBSTRATE_FLAG_KEYS == (
+            ENV_IMPOSTOR_ROLL_CALL_KEY,
+            *(key for key, _, _ in _PHASE20_LEVERS),
+        )
 
     def test_reporter_exculpation_graduated_unconditional_on(self) -> None:
         # Graduated to unconditional-ON at the Task-15.7 baseline-3 record: the
@@ -384,25 +481,33 @@ class TestSubstrateFlagStamp:
         assert substrate_flag_snapshot()[ENV_CITATION_GATE_KEY] is True
 
     def test_live_toggle_registrations(self) -> None:
-        # Registration pin (the Task-18.12 graduation flip): ONE live toggle left in
-        # ``_TOGGLEABLE_LEVER_RESOLVERS`` now — 18.10's ``impostor_roll_call``, the
-        # arm the CREW-ONLY ruling did NOT ship (audits/audit-phase-18-meeting-gate.md
-        # §9). The four meeting-layer levers registered at the 18.11 gate
-        # (``absence_prior`` / ``roll_call_round`` / ``whereabouts_interior_flags`` /
-        # ``vent_placement_contradictions``) graduated into
-        # ``_RETIRED_ALWAYS_ON_LEVERS`` at the baseline-6 record (as 16.4/16.5/16.6
-        # graduated at 16.17), so they no longer appear here. ``SUBSTRATE_FLAG_KEYS``
-        # appends the sole live key after the thirteen retired always-on keys;
-        # ``TOGGLEABLE_SUBSTRATE_FLAG_KEYS`` is exactly that one-element live subset
-        # the loader's mismatch-remediation hint branches on.
-        assert len(_TOGGLEABLE_LEVER_RESOLVERS) == 1
-        assert dict(_TOGGLEABLE_LEVER_RESOLVERS) == {
-            ENV_IMPOSTOR_ROLL_CALL_KEY: _impostor_roll_call_enabled,
-        }
-        assert tuple(key for key, _ in _TOGGLEABLE_LEVER_RESOLVERS) == (
+        # Registration pin: NINE live toggles, every one DEFAULT-OFF -- the
+        # impostor-answer arm plus the eight Phase-20 belief-substrate levers,
+        # registered here BEFORE the phase's adopting record so a recording made
+        # with any of them ON self-describes its slate. The graduated levers are
+        # not here: they moved into ``_RETIRED_ALWAYS_ON_LEVERS`` at the records
+        # that adopted them and their env gates are gone.
+        assert len(_TOGGLEABLE_LEVER_RESOLVERS) == 9
+        registry = dict(_TOGGLEABLE_LEVER_RESOLVERS)
+        assert registry[ENV_IMPOSTOR_ROLL_CALL_KEY] is _impostor_roll_call_enabled
+        for key, _env_var, resolver in _PHASE20_LEVERS:
+            # BY IDENTITY: the stamp reads the SAME function object the lever's
+            # own read-site calls, so the two cannot drift apart. (The impostor
+            # arm above is the one exception -- a local mirror with its own
+            # equivalence pin -- because importing the prompt loader would run a
+            # prompt-set-sensitive Jinja build in every replay-only consumer.)
+            assert registry[key] is resolver, key
+        # Registration order, newest last: the order is documentary (the tuple is
+        # never mutated), and appending keeps every earlier key's index in
+        # SUBSTRATE_FLAG_KEYS fixed, so a new lever is a pure append rather than a
+        # reshuffle of already-recorded stamps.
+        assert TOGGLEABLE_SUBSTRATE_FLAG_KEYS == (
             ENV_IMPOSTOR_ROLL_CALL_KEY,
+            *(key for key, _, _ in _PHASE20_LEVERS),
         )
-        assert TOGGLEABLE_SUBSTRATE_FLAG_KEYS == (ENV_IMPOSTOR_ROLL_CALL_KEY,)
+        # The full stamp key order: thirteen graduated levers in graduation order,
+        # then the nine live toggles in registration order. Each half only grows at
+        # its own end.
         assert SUBSTRATE_FLAG_KEYS == (
             "testimony_as_content",
             "witnessed_kill_evidence",
@@ -418,7 +523,54 @@ class TestSubstrateFlagStamp:
             "whereabouts_interior_flags",
             "vent_placement_contradictions",
             "impostor_roll_call",
+            "task_completion_from_events",
+            "self_location_trail",
+            "movement_claim_shape",
+            "grounded_prosecution",
+            "map_aware_arbitration",
+            "structured_turn_markers",
+            "meeting_outcome_memory",
+            "coalesced_memory_render",
         )
+
+    def test_env_var_for_lever_derives_the_documented_variable(self) -> None:
+        # The one derivation .env.example, the recorders' diagnostics and
+        # scripts/check_doc_facts.py all rely on: a registry key uppercases into
+        # its AILIBI_* variable. Pinned against the lever table's own literals, so
+        # a key renamed without its variable fails here.
+        assert env_var_for_lever(ENV_IMPOSTOR_ROLL_CALL_KEY) == ENV_IMPOSTOR_ROLL_CALL
+        for key, env_var, _ in _PHASE20_LEVERS:
+            assert env_var_for_lever(key) == env_var, key
+
+    @pytest.mark.parametrize(("key", "env_var", "resolver"), _PHASE20_LEVERS)
+    def test_each_phase20_lever_flips_exactly_its_own_key(
+        self, key: str, env_var: str, resolver: object
+    ) -> None:
+        # Independent stampability (the whole point of registering them one key
+        # each): exporting ONE lever flips ONE snapshot entry and leaves the other
+        # twenty-one exactly as a bare environment left them, so a recording's
+        # stamp reads back as the slate it actually ran under rather than a
+        # phase-shaped lump.
+        assert substrate_flag_snapshot({})[key] is False
+        assert substrate_flag_snapshot({env_var: "nope"})[key] is False
+        for truthy in ("1", "true", "YES", " on "):
+            flipped = substrate_flag_snapshot({env_var: truthy})
+            assert flipped[key] is True, truthy
+            assert flipped == {**_BARE_STAMP, key: True}, truthy
+
+    def test_bare_snapshot_is_the_committed_stamp_plus_the_phase20_keys_off(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # A bare environment stamps the committed baseline-6 substrate with the
+        # eight new keys appended OFF. Every committed replay omits those keys and
+        # ``_assert_substrate_matches`` reads a missing key as False on both sides,
+        # so registering them moves no committed byte and no MANIFEST cell.
+        _clear_lever_env(monkeypatch)
+        assert substrate_flag_snapshot({}) == _BARE_STAMP
+        assert substrate_flag_snapshot() == _BARE_STAMP
+        assert {
+            key: value for key, value in _BARE_STAMP.items() if key in _BASELINE6_STAMP
+        } == _BASELINE6_STAMP
 
     @pytest.mark.parametrize(
         ("env_var", "flag_key", "resolver"),
@@ -474,43 +626,20 @@ class TestSubstrateFlagStamp:
     def test_every_recording_stamps_the_full_snapshot(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        # Recording under a bare environment stamps all thirteen retired levers ON
-        # (byte-identical to the committed baseline-6 set — the earlier graduations
-        # plus the four meeting-layer levers graduated at the Task-18.12 baseline-6
-        # record need no env export) and the ONE remaining live default-OFF toggle
-        # (Task 18.10's impostor_roll_call) OFF. The four meeting-layer keys stamp
-        # True on a fresh bare recording, exactly the baseline-6 substrate.
-        monkeypatch.delenv(ENV_REPORTER_EXCULPATION, raising=False)
-        monkeypatch.delenv(ENV_HARD_EVIDENCE_GATE, raising=False)
-        monkeypatch.delenv(ENV_OBSERVATION_ID_RENDERING, raising=False)
-        monkeypatch.delenv(ENV_CITATION_GATE, raising=False)
-        monkeypatch.delenv(ENV_ABSENCE_PRIOR, raising=False)
-        monkeypatch.delenv(ENV_ROLL_CALL_ROUND, raising=False)
-        monkeypatch.delenv(ENV_WHEREABOUTS_INTERIOR_FLAGS, raising=False)
-        monkeypatch.delenv(ENV_VENT_PLACEMENT_CONTRADICTIONS, raising=False)
-        monkeypatch.delenv(ENV_IMPOSTOR_ROLL_CALL, raising=False)
+        # Recording under a bare environment stamps the thirteen graduated levers
+        # ON and all nine live toggles OFF -- the committed baseline-6 substrate
+        # with the eight Phase-20 keys appended, which is what ``_BARE_STAMP``
+        # spells out. Every key is stamped: the stamp is a whole-slate statement,
+        # so a recording can never be silent about a lever it ran under.
+        _clear_lever_env(monkeypatch)
         path = tmp_path / "on.jsonl"
         ReplayLog(path, game_id="g-on").record_game_end(
             winner="IMPOSTORS", reason="IMPOSTOR_PARITY", tick=41
         )
         entry = read_all_entries(path)[0]
         assert isinstance(entry, GameEndReplayEntry)
-        assert entry.substrate_flags == {
-            "testimony_as_content": True,
-            "witnessed_kill_evidence": True,
-            "movement_perception": True,
-            "unfreeze_memory": True,
-            "evidence_quality_lift": True,
-            "reporter_exculpation": True,
-            "hard_evidence_gate": True,
-            "observation_id_rendering": True,
-            "citation_gate": True,
-            "absence_prior": True,
-            "roll_call_round": True,
-            "whereabouts_interior_flags": True,
-            "vent_placement_contradictions": True,
-            "impostor_roll_call": False,
-        }
+        assert entry.substrate_flags == _BARE_STAMP
+        assert set(entry.substrate_flags) == set(SUBSTRATE_FLAG_KEYS)
         assert read_substrate_flags(path) == dict(entry.substrate_flags)
 
     def test_impostor_roll_call_on_recording_round_trips_the_stamp(
@@ -632,17 +761,17 @@ class TestSubstrateFlagStamp:
         assert result.returncode == 0, result.stderr
         assert "impostor_roll_call" in result.stdout
 
-    def test_impostor_on_recording_stamps_every_lever_on(
+    def test_a_whole_slate_export_stamps_every_lever_on(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        # A recording made with the sole live toggle exported stamps every one of
-        # the fourteen levers ON — the four meeting-layer levers (absence_prior,
-        # roll_call_round, whereabouts_interior_flags, vent_placement_contradictions)
-        # are unconditional since the Task-18.12 baseline-6 record regardless of
-        # env, and the impostor_roll_call export adds the last one. This is the
-        # would-be shape a future gate that ships the impostor arm records; it is
-        # NOT the baseline-6 substrate (which keeps impostor_roll_call OFF).
+        # The other end of the range: with EVERY live toggle exported, all
+        # twenty-two keys stamp ON. This is the shape an adopting record that
+        # shipped the whole slate would carry, and it is emphatically NOT the
+        # baseline-6 substrate -- which is exactly why the loader refuses to serve
+        # one recording's bytes under the other's environment.
         monkeypatch.setenv(ENV_IMPOSTOR_ROLL_CALL, "1")
+        for _key, env_var, _resolver in _PHASE20_LEVERS:
+            monkeypatch.setenv(env_var, "1")
         # These exports are no-ops now (the levers ignore env), pinned to prove it.
         monkeypatch.delenv(ENV_ABSENCE_PRIOR, raising=False)
         monkeypatch.delenv(ENV_VENT_PLACEMENT_CONTRADICTIONS, raising=False)
@@ -700,8 +829,8 @@ class TestSubstrateFlagStamp:
         flags = read_substrate_flags(path)
         assert flags is not None
         assert flags[ENV_REPORTER_EXCULPATION_KEY] is True
-        # The retired always-on levers stay ON; Task 16.8's live default-OFF
-        # absence_prior is scoped out (it is the only non-retired lever).
+        # The graduated levers stay ON; the nine live toggles are scoped out of
+        # this assertion (a bare recording stamps every one of them OFF).
         assert all(
             flags[key]
             for key in SUBSTRATE_FLAG_KEYS
@@ -723,8 +852,8 @@ class TestSubstrateFlagStamp:
         flags = read_substrate_flags(path)
         assert flags is not None
         assert flags[ENV_EVIDENCE_QUALITY_LIFT_KEY] is True
-        # The retired always-on levers stay ON; Task 16.8's live default-OFF
-        # absence_prior is scoped out (it is the only non-retired lever).
+        # The graduated levers stay ON; the nine live toggles are scoped out of
+        # this assertion (a bare recording stamps every one of them OFF).
         assert all(
             flags[key]
             for key in SUBSTRATE_FLAG_KEYS
@@ -1157,3 +1286,274 @@ class TestReadSideDoubledFileDetection:
         entries = read_all_entries(path)
 
         assert len(entries) == 3
+
+
+# --------------------------------------------------------------------------- #
+# The shared slate comparison + the shared meeting-outcome fold                #
+# --------------------------------------------------------------------------- #
+
+
+class TestSubstrateSlateMismatches:
+    """The one comparison both recorders' pre-spend gates run."""
+
+    def test_a_matching_slate_reports_nothing(self) -> None:
+        assert substrate_slate_mismatches([], env={}) == []
+        assert (
+            substrate_slate_mismatches(
+                ["grounded_prosecution"], env={ENV_GROUNDED_PROSECUTION: "1"}
+            )
+            == []
+        )
+
+    def test_an_expected_lever_left_unexported_is_named(self) -> None:
+        # The failure a blacklist of variable names cannot catch, and the reason
+        # the check is a positive whole-slate equality: the operator declared a
+        # lever the shell never exported, so the record would silently be made on
+        # the OLD substrate.
+        problems = substrate_slate_mismatches(["grounded_prosecution"], env={})
+        assert problems == [
+            "grounded_prosecution must be ON but the live slate reads OFF "
+            "(AILIBI_GROUNDED_PROSECUTION)"
+        ]
+
+    def test_an_unexpected_export_is_named(self) -> None:
+        # The mirror failure: a stale export from an earlier probe session that
+        # nobody declared would ship an unruled arm into the record.
+        problems = substrate_slate_mismatches([], env={ENV_MEETING_OUTCOME_MEMORY: "1"})
+        assert problems == [
+            "meeting_outcome_memory must be OFF but the live slate reads ON "
+            "(AILIBI_MEETING_OUTCOME_MEMORY)"
+        ]
+
+    def test_both_directions_are_reported_together(self) -> None:
+        # A half-set export names BOTH deviations in one refusal, so the operator
+        # fixes the environment once instead of discovering the second failure on
+        # the next attempt.
+        problems = substrate_slate_mismatches(
+            ["grounded_prosecution", "self_location_trail"],
+            env={ENV_SELF_LOCATION_TRAIL: "1", ENV_MOVEMENT_CLAIM_SHAPE: "1"},
+        )
+        assert problems == [
+            "movement_claim_shape must be OFF but the live slate reads ON "
+            "(AILIBI_MOVEMENT_CLAIM_SHAPE)",
+            "grounded_prosecution must be ON but the live slate reads OFF "
+            "(AILIBI_GROUNDED_PROSECUTION)",
+        ]
+
+    def test_a_typo_in_the_expectation_fails_loud(self) -> None:
+        # A misspelled key must never be silently ignored: an expectation nobody
+        # checks is worse than no expectation, because the echo still claims it.
+        assert substrate_slate_mismatches(["grounded_prosecutions"], env={}) == [
+            "'grounded_prosecutions' is not a lever in the registry"
+        ]
+
+    def test_a_graduated_lever_cannot_be_named_as_a_toggle(self) -> None:
+        # Naming a graduated lever is the same class of error: its env gate is
+        # gone, so an operator who expects to control it is mistaken about what
+        # this build can produce.
+        assert substrate_slate_mismatches(["absence_prior"], env={}) == [
+            "'absence_prior' is a graduated lever (unconditionally ON, no env "
+            "gate) and cannot be named as an expected toggle"
+        ]
+
+
+class TestMeetingOutcomeFold:
+    """The one reconstruction-side fold the three replay mirrors share."""
+
+    @staticmethod
+    def _result(*, ejected: str | None) -> MeetingResult:
+        ballots = tuple(
+            VoteBallot(
+                voter=voter,
+                target=target,
+                confidence=0.6,
+                primary_reason_id=None,
+                rationale_text="because",
+            )
+            for voter, target in (
+                ("p-1", ejected or "SKIP"),
+                ("p-2", ejected or "SKIP"),
+                ("p-4", "SKIP"),
+            )
+        )
+        return MeetingResult(
+            meeting_id="g:meeting-0",
+            triggered_by="p-1",
+            trigger_tick=5,
+            outcome="EJECTED" if ejected is not None else "SKIPPED",
+            ejected_player_id=ejected,
+            ballots=ballots,
+            transcript=MeetingTranscript(),
+        )
+
+    @staticmethod
+    def _post_meeting_state(*, ejected: str | None, tick: int) -> WorldState:
+        from dataclasses import replace
+
+        state = scripted_initial_world_state(seed=3)
+        players = dict(state.players)
+        if ejected is not None:
+            players[ejected] = replace(players[ejected], alive=False)
+        return replace(state, tick=tick, players=players)
+
+    def test_the_fold_records_the_announced_outcome_for_every_living_agent(
+        self,
+    ) -> None:
+        # Everything the table heard, and only that: the resume tick, the ejected
+        # player with the confirm-ejects role, the tally, and the roster impostor
+        # count stated at game start. The ejected player is dead in the
+        # post-meeting state, so nothing is written into their memory.
+        state = self._post_meeting_state(ejected="p-3", tick=11)
+        result = self._result(ejected="p-3")
+        memories = {pid: AgentMemory() for pid in state.players}
+
+        fold_meeting_outcome_into_memories(result, state=state, memories=memories)
+
+        assert memories["p-3"].meeting_history.outcomes == ()
+        for pid in ("p-1", "p-2", "p-4"):
+            outcomes = memories[pid].meeting_history.outcomes
+            assert len(outcomes) == 1, pid
+            recorded = outcomes[0]
+            assert recorded.end_tick == 11
+            assert recorded.ejected_id == "p-3"
+            assert recorded.revealed_role == "IMPOSTOR"
+            assert recorded.votes_for_ejected == 2
+            assert recorded.skip_votes == 1
+            assert recorded.roster_impostor_count == 1
+
+    def test_a_skipped_meeting_reveals_no_role(self) -> None:
+        # A skip discloses nothing about anyone, so the role field stays empty --
+        # the same rule that keeps a KILLED player's role out of memory.
+        state = self._post_meeting_state(ejected=None, tick=7)
+        result = self._result(ejected=None)
+        memories = {pid: AgentMemory() for pid in state.players}
+
+        fold_meeting_outcome_into_memories(result, state=state, memories=memories)
+
+        recorded = memories["p-1"].meeting_history.outcomes[0]
+        assert recorded.ejected_id is None
+        assert recorded.revealed_role is None
+        assert recorded.votes_for_ejected == 0
+        assert recorded.skip_votes == 3
+
+    def test_the_fold_equals_the_live_post_meeting_notification(self) -> None:
+        # The parity claim the three reconstruction mirrors rest on: folding a
+        # recorded meeting through the shared helper produces the SAME
+        # meeting-history rows the live orchestrator wrote while recording it.
+        # Drive both against one state/result pair and compare -- if the helper
+        # ever derived a field differently (a tick, a tally, the role), the two
+        # sides would diverge here.
+        from orchestrator.game import TacticalAgent, _notify_meeting_concluded
+        from meetings.manager import derive_meeting_outcome_summary
+        from agents.tactical.crewmate_policy import CrewmatePolicy
+        from agents.tactical.impostor_policy import ImpostorPolicy
+
+        state = self._post_meeting_state(ejected="p-3", tick=13)
+        result = self._result(ejected="p-3")
+        agents = {
+            pid: TacticalAgent(
+                agent_id=pid,
+                policy=(
+                    ImpostorPolicy(agent_id=pid)
+                    if state.players[pid].role == "IMPOSTOR"
+                    else CrewmatePolicy(agent_id=pid)
+                ),
+                role=state.players[pid].role,
+                memory=None,
+            )
+            for pid in state.players
+        }
+        _notify_meeting_concluded(
+            state=state,
+            agents=agents,
+            emergency_caller_id=None,
+            outcome=derive_meeting_outcome_summary(result),
+            roster_impostor_count=1,
+        )
+
+        memories = {pid: AgentMemory() for pid in state.players}
+        fold_meeting_outcome_into_memories(result, state=state, memories=memories)
+
+        for pid in state.players:
+            assert (
+                memories[pid].meeting_history.outcomes
+                == agents[pid].memory.meeting_history.outcomes
+            ), pid
+        assert memories["p-1"].meeting_history.outcomes != ()
+
+    def test_a_missing_memory_fails_loud(self) -> None:
+        # No silent fallback: a living player with no memory in the mapping is a
+        # wiring bug in the walk, not a player to skip.
+        state = self._post_meeting_state(ejected=None, tick=4)
+        result = self._result(ejected=None)
+        memories = {pid: AgentMemory() for pid in state.players if pid != "p-2"}
+
+        with pytest.raises(KeyError):
+            fold_meeting_outcome_into_memories(result, state=state, memories=memories)
+
+
+class TestSubstrateMismatchOnAPhase20Lever:
+    def test_a_stamped_off_lever_is_refused_under_a_live_export(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The guard this registration exists to arm: a recording whose stamp says
+        # a Phase-20 lever was OFF cannot be reconstructed in a shell that turns
+        # it ON -- the re-derived memory would not be the memory the recording
+        # was made from. The remediation hint must name the key under the
+        # TOGGLEABLE branch (match the environment to the stamp), never the
+        # retired one (whose OFF derivation no longer exists).
+        from api.replay_loader import (
+            ReplaySubstrateMismatchError,
+            _assert_substrate_matches,
+        )
+
+        _clear_lever_env(monkeypatch)
+        monkeypatch.setenv(ENV_GROUNDED_PROSECUTION, "1")
+        stamped_off = GameEndReplayEntry(
+            game_id="g-stamped-off",
+            tick=21,
+            winner="CREWMATES",
+            reason="TASKS",
+            substrate_flags=dict(_BARE_STAMP),
+        )
+        with pytest.raises(ReplaySubstrateMismatchError) as excinfo:
+            _assert_substrate_matches("g-stamped-off", [stamped_off])
+        message = str(excinfo.value)
+        assert "grounded_prosecution" in message
+        assert "AILIBI_GROUNDED_PROSECUTION" in message
+
+    def test_the_same_stamp_reconstructs_once_the_export_is_gone(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The other half of the gate (a guard that always raised would be prose):
+        # with the environment back to the slate the stamp records, the same
+        # recording passes.
+        from api.replay_loader import _assert_substrate_matches
+
+        _clear_lever_env(monkeypatch)
+        stamped_off = GameEndReplayEntry(
+            game_id="g-stamped-off",
+            tick=21,
+            winner="CREWMATES",
+            reason="TASKS",
+            substrate_flags=dict(_BARE_STAMP),
+        )
+        _assert_substrate_matches("g-stamped-off", [stamped_off])
+
+    def test_a_committed_stamp_without_the_new_keys_still_reconstructs(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The neutrality half: every committed replay predates these keys, and the
+        # missing-key-reads-False rule makes both sides agree, so registering them
+        # refuses nothing that used to serve.
+        from api.replay_loader import _assert_substrate_matches
+
+        _clear_lever_env(monkeypatch)
+        legacy = GameEndReplayEntry(
+            game_id="g-legacy",
+            tick=30,
+            winner="CREWMATES",
+            reason="TASKS",
+            substrate_flags=dict(_BASELINE6_STAMP),
+        )
+        _assert_substrate_matches("g-legacy", [legacy])

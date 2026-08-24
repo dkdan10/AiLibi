@@ -226,26 +226,93 @@ def test_dry_run_announces_endpoint_and_prompt_version_locks() -> None:
     )
 
 
-def test_dry_run_announces_baseline6_substrate_and_lever_preflight() -> None:
-    # Task 18.13: the plan names the ruled baseline-6 lever slate AND the
-    # substrate-lever preflight that enforces it, so an operator previewing a
-    # ~18–20h run can confirm the substrate before spending. Mirrors the Task-18.12
-    # echo in scripts/refresh_samples.sh (tests/scripts/test_refresh_samples.py).
+# The two dry-run lines that describe the substrate, mirroring
+# scripts/refresh_samples.sh so both recorders preview the slate identically.
+_BARE_SLATE_ECHO = (
+    "[dry-run] substrate flags: expected levers ON = (none — the bare slate: "
+    "every live toggle OFF); every other live toggle OFF; the graduated levers "
+    "unconditional ON"
+)
+_PREFLIGHT_ECHO = (
+    "[dry-run] substrate-lever preflight: would require the live lever slate to "
+    "equal that expectation exactly and refuse before any seed stages"
+)
+
+
+def test_dry_run_announces_the_expected_slate_and_the_lever_preflight() -> None:
+    # The plan names the lever slate this record expects AND the preflight that
+    # enforces it, so an operator previewing a ~22-23h run can confirm the
+    # substrate before spending.
     proc = _run("--dry-run")
     assert proc.returncode == 0
+    assert _BARE_SLATE_ECHO in proc.stdout
+    assert _PREFLIGHT_ECHO in proc.stdout
+
+
+def test_dry_run_echo_names_the_levers_the_operator_declared() -> None:
+    # The echo quotes the RESOLVED slate, so the preview and the gate can never
+    # describe different substrates.
+    env = dict(_clean_env(), AILIBI_GROUNDED_PROSECUTION="1")
+    proc = _run("--dry-run", "--expect-levers", "grounded_prosecution", env=env)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
     assert (
-        "[dry-run] substrate flags: baseline-6 slate — the meeting-layer levers "
-        "unconditional ON (roll_call_round, whereabouts_interior_flags, "
-        "vent_placement_contradictions, absence_prior graduated at Task 18.12, "
-        "beside the earlier graduations), impostor_roll_call default-OFF "
-        "(CREW-ONLY ruling)" in proc.stdout
+        "[dry-run] substrate flags: expected levers ON = grounded_prosecution"
+        in proc.stdout
     )
-    assert (
-        "[dry-run] substrate-lever preflight: would require the live lever slate "
-        "to equal the ruled baseline-6 state (thirteen retired levers ON, "
-        "impostor_roll_call OFF) and refuse a stale AILIBI_* export before any "
-        "seed stages" in proc.stdout
+
+
+def test_expect_levers_requires_a_value() -> None:
+    # A bare --expect-levers is an operator typo, not "the empty slate".
+    proc = _run("--dry-run", "--expect-levers")
+    assert proc.returncode != 0
+    assert "--expect-levers requires a comma-separated lever list" in (
+        proc.stdout + proc.stderr
     )
+
+
+def test_preflight_refuses_a_declared_lever_that_is_not_exported(
+    tmp_path: Path,
+) -> None:
+    # Direction 1: the operator declared a lever the shell never exported, so the
+    # whole corpus would be recorded on the OLD substrate. A blacklist of variable
+    # names cannot catch this; a positive whole-slate equality can.
+    corpus_root = tmp_path / "ml_corpus"
+    env = dict(
+        _clean_env(),
+        AILIBI_LLM_PROVIDER="featherless",
+        FEATHERLESS_API_KEY="test-key-unused",
+        AILIBI_PROMPT_SET="qwen3_6_27b",
+        AILIBI_ML_CORPUS_ROOT=str(corpus_root),
+    )
+    proc = _run("--set", "4p1i", "--expect-levers", "grounded_prosecution", env=env)
+    out = proc.stdout + proc.stderr
+    assert proc.returncode != 0
+    assert "does not match --expect-levers" in out
+    assert "grounded_prosecution must be ON" in out
+    assert not corpus_root.exists()  # refused before any record
+
+
+def test_preflight_accepts_the_declared_slate_when_the_environment_matches(
+    tmp_path: Path,
+) -> None:
+    # The gate must be passable: with exactly the declared lever exported the
+    # lever rung passes and the run proceeds to the next preflight rung.
+    corpus_root = tmp_path / "ml_corpus"
+    env = dict(
+        _clean_env(),
+        AILIBI_LLM_PROVIDER="featherless",
+        FEATHERLESS_API_KEY="test-key-unused",
+        AILIBI_PROMPT_SET="qwen3_6_27b",
+        AILIBI_GROUNDED_PROSECUTION="1",
+        AILIBI_LLM_MEETING_MODEL="some-other/Model-7B",  # stops the run one rung on
+        AILIBI_ML_CORPUS_ROOT=str(corpus_root),
+    )
+    proc = _run("--set", "4p1i", "--expect-levers", "grounded_prosecution", env=env)
+    out = proc.stdout + proc.stderr
+    assert "Substrate slate OK: expected levers ON = grounded_prosecution" in out
+    assert "does not match --expect-levers" not in out
+    assert proc.returncode != 0  # stopped at the MODEL guard, not the lever guard
+    assert "locked baseline-6 model" in out
 
 
 def test_dry_run_stamps_fsm_default_policy() -> None:
@@ -468,9 +535,9 @@ def test_preflight_refuses_impostor_roll_call_export(
     proc = _run("--set", "4p1i", env=env)
     assert proc.returncode != 0
     out = proc.stdout + proc.stderr
-    assert "does not equal the ruled baseline-6 state" in out
+    assert "does not match --expect-levers" in out
     assert "impostor_roll_call must be OFF" in out
-    assert "Unset any stale AILIBI_* lever export" in out
+    assert "unset every other AILIBI_*" in out
     assert not corpus_root.exists()  # refused before any record
 
 
@@ -493,7 +560,7 @@ def test_preflight_accepts_explicitly_off_impostor_roll_call(tmp_path: Path) -> 
     proc = _run("--set", "4p1i", env=env)
     out = proc.stdout + proc.stderr
     assert "Locked substrate OK" in out
-    assert "does not equal the ruled baseline-6 state" not in out
+    assert "does not match --expect-levers" not in out
     assert proc.returncode != 0  # stopped at the MODEL guard, not the lever guard
     assert "locked baseline-6 model" in out
 
@@ -745,7 +812,7 @@ def test_record_path_refuses_stale_baseline5_substrate_slate(tmp_path: Path) -> 
     assert proc.returncode != 0
     out = proc.stdout + proc.stderr
     assert "check_replay_provenance" in out
-    assert "disagrees with the baseline-6 lever slate" in out
+    assert "disagrees with the declared lever slate" in out
     # The four missing meeting-layer graduations are named — the substrate axis
     # this re-record discharges.
     assert "roll_call_round" in out
@@ -787,8 +854,83 @@ def test_record_path_refuses_impostor_roll_call_on_in_recorded_slate(
     assert proc.returncode != 0
     out = proc.stdout + proc.stderr
     assert "check_replay_provenance" in out
-    assert "disagrees with the baseline-6 lever slate" in out
+    assert "disagrees with the declared lever slate" in out
     assert "impostor_roll_call" in out
+
+
+def _on_slate_env(corpus_root: Path) -> dict[str, str]:
+    """A locked-substrate env with ONE Phase-20 lever exported."""
+
+    return dict(
+        _clean_env(),
+        AILIBI_LLM_PROVIDER="featherless",
+        FEATHERLESS_API_KEY="test-key-unused",
+        AILIBI_PROMPT_SET="qwen3_6_27b",
+        AILIBI_GROUNDED_PROSECUTION="1",
+        AILIBI_ML_CORPUS_ROOT=str(corpus_root),
+    )
+
+
+def test_record_path_accepts_a_replay_stamped_with_the_declared_slate(
+    tmp_path: Path,
+) -> None:
+    # The freeze guard judges recorded stamps against the slate the operator
+    # DECLARED, not against a frozen bare snapshot -- otherwise a lever-ON record
+    # would be refused seed by seed by its own recorder. A replay whose stamp
+    # carries the declared lever passes; the run then stops at the roster
+    # conflict, the step AFTER the guard.
+    corpus_root = tmp_path / "ml_corpus"
+    set_dir = corpus_root / "4p1i"
+    set_dir.mkdir(parents=True)
+    on_slate = dict(_BASELINE6_SUBSTRATE_SLATE)
+    on_slate["grounded_prosecution"] = True
+    (set_dir / "replay-seed-1000.jsonl").write_text(
+        _rewrite_game_over_substrate(_baseline6_corpus_replay_text(), on_slate),
+        encoding="utf-8",
+    )
+    (set_dir / "roster.json").write_text(
+        json.dumps({"num_players": 9, "num_impostors": 2, "tasks_per_crewmate": 2})
+    )
+    proc = _run(
+        "--set",
+        "4p1i",
+        "--expect-levers",
+        "grounded_prosecution",
+        env=_on_slate_env(corpus_root),
+        timeout=120,
+    )
+    out = proc.stdout + proc.stderr
+    assert "Substrate slate OK: expected levers ON = grounded_prosecution" in out
+    assert "check_replay_provenance" not in out
+    assert "disagrees with the requested roster" in out
+
+
+def test_record_path_refuses_a_bare_slate_replay_inside_an_on_slate_record(
+    tmp_path: Path,
+) -> None:
+    # The other direction, and the reason the guard cannot simply be relaxed: a
+    # replay recorded BEFORE the lever was exported is a different substrate, so
+    # dropping it into an ON-slate set must be refused BY NAME rather than swept
+    # into the freeze because it happens to be present.
+    corpus_root = tmp_path / "ml_corpus"
+    set_dir = corpus_root / "4p1i"
+    set_dir.mkdir(parents=True)
+    (set_dir / "replay-seed-1000.jsonl").write_text(
+        _baseline6_corpus_replay_text(), encoding="utf-8"
+    )
+    proc = _run(
+        "--set",
+        "4p1i",
+        "--expect-levers",
+        "grounded_prosecution",
+        env=_on_slate_env(corpus_root),
+        timeout=120,
+    )
+    out = proc.stdout + proc.stderr
+    assert proc.returncode != 0
+    assert "check_replay_provenance" in out
+    assert "disagrees with the declared lever slate" in out
+    assert "grounded_prosecution" in out
 
 
 def test_record_path_refuses_missing_substrate_stamp(tmp_path: Path) -> None:

@@ -203,7 +203,11 @@ from observation.action_intent import ActionIntent
 from observation.public_map import PublicMapView
 from observation.service import ObservationService
 from orchestrator.boundary import public_map_from_engine_map, translate_action_intent
-from orchestrator.replay import LLMCallRecord, MeetingReplayEntry
+from orchestrator.replay import (
+    LLMCallRecord,
+    MeetingReplayEntry,
+    fold_meeting_outcome_into_memories,
+)
 
 # The agent memory frame runs one ahead of the engine/replay frame: a row stamped
 # ``[tick T]`` describes engine tick ``T - 1``.
@@ -1288,10 +1292,17 @@ def _fold_meeting_into_memories(
 ) -> None:
     """Run the per-living-agent post-meeting fold the live loop and replay run.
 
-    It lands the meeting's belief evidence, its reported testimony and — the
-    reason the policy reconstruction needs it — the ``meeting_boundary`` marker
-    every living agent receives at the resume tick. A walk that skipped it would
-    hand the policy a memory no live agent ever holds.
+    It lands the meeting's belief evidence, its reported testimony, the
+    meeting-history outcome, and — the reason the policy reconstruction needs it
+    — the ``meeting_boundary`` marker every living agent receives at the resume
+    tick. A walk that skipped it would hand the policy a memory no live agent
+    ever holds.
+
+    The meeting-history half runs LAST, the live loop's order, through the same
+    shared fold the replay loader and the byte-golden walk use. It is inert to
+    every measured byte while the ``meeting_outcome_memory`` lever is OFF (the
+    channel reaches no render and no instrument), so the committed cells this
+    module pins are unmoved by its presence.
     """
 
     evidence = extract_belief_evidence(walk_event.result)
@@ -1306,6 +1317,9 @@ def _fold_meeting_into_memories(
             contradicted=evidence.contradicted,
         )
         absorb_reported_testimony(composites[pid], statements=statements)
+    fold_meeting_outcome_into_memories(
+        walk_event.result, state=walk_event.state, memories=composites
+    )
 
 
 def _fold_game(

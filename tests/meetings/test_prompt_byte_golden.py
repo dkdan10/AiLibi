@@ -27,7 +27,10 @@ seed, re-apply the recorded action stream through
 :func:`engine.tick.advance_tick`, verify every ``state_hash``, and maintain each
 agent's :class:`agents.memory.store.AgentMemory` in lockstep through the SAME
 observation → perception pipeline (:func:`agents.perception.ingest_packet`) plus
-the post-meeting belief fold (:func:`orchestrator.game._absorb_meeting_beliefs`).
+the post-meeting belief fold (:func:`orchestrator.game._absorb_meeting_beliefs`)
+and the meeting-history fold
+(:func:`orchestrator.replay.fold_meeting_outcome_into_memories`, the helper the
+replay loader and the evidence-honesty walk share).
 Real :class:`orchestrator.game.TacticalAgent` instances are carried so
 participants are built VERBATIM by :func:`orchestrator.game._build_participants`
 (rendered_memory via ``render_memory_for_meeting`` at
@@ -148,6 +151,7 @@ from orchestrator.replay import (
     MeetingReplayEntry,
     ReplayEntry,
     _state_hash,
+    fold_meeting_outcome_into_memories,
     read_all_entries,
 )
 from orchestrator.seeder import seed_initial_state
@@ -546,9 +550,11 @@ def walk_replay_meetings(
     :class:`MeetingManager` with a recorded-response stub, yielding a
     :class:`ReconstructedMeeting`. After each meeting the recorded result is
     applied (:func:`apply_meeting_result`, its ``state_hash_after`` verified) and
-    folded into living agents' beliefs (:func:`_absorb_meeting_beliefs`) so the
-    NEXT meeting renders from the same accumulated/decayed suspicion the live
-    agents held. ``renderers_for_set`` lets a caller inject a perturbed template
+    folded into living agents' beliefs (:func:`_absorb_meeting_beliefs`) and
+    their meeting history (:func:`fold_meeting_outcome_into_memories`) so the
+    NEXT meeting renders from the same accumulated/decayed suspicion and the same
+    announced outcomes the live agents held. ``renderers_for_set`` lets a caller
+    inject a perturbed template
     root (the perturbation leg).
     """
 
@@ -622,6 +628,17 @@ def walk_replay_meetings(
                 state=next_state,
                 agents=agents,
                 trigger_kind=trigger_kind,
+            )
+            # Then the meeting-history fold, in the live loop's order
+            # (``_notify_meeting_concluded`` runs after the belief fold), through
+            # the same shared helper the replay loader and the evidence-honesty
+            # walk call — so the mirrors cannot drift. Inert to every rendered
+            # byte while the ``meeting_outcome_memory`` lever is OFF, which is
+            # the state every committed recording was made in.
+            fold_meeting_outcome_into_memories(
+                result,
+                state=next_state,
+                memories={pid: agent.memory for pid, agent in agents.items()},
             )
             state = next_state
             meeting_index += 1
@@ -1372,3 +1389,81 @@ def test_folded_ballot_provenance_rows_decompose_to_the_scalar(
         f"{len(set_walk.ballot_prov_rows)} folded ballot rows carry a nonzero "
         f"hard/soft split (floor {_MIN_POPULATED_BALLOT_ROWS})"
     )
+
+
+# --------------------------------------------------------------------------- #
+# The meeting-history fold: the mirror must fold what the live loop folded      #
+# --------------------------------------------------------------------------- #
+
+_MEETINGS_HEADER = "## Meetings so far:"
+# One committed 9p2i seed resolving three meetings, so the SECOND meeting renders
+# from a memory that must already carry the FIRST meeting's announced outcome.
+_MULTI_MEETING_REPLAY = _SAMPLE_SETS[0] / "replay-seed-0.jsonl"
+
+
+def _second_meeting_renders(
+    monkeypatch: pytest.MonkeyPatch, *, lever: str
+) -> tuple[str, ...]:
+    """Every prompt the walk renders for the SECOND meeting of one replay.
+
+    Driven with the meeting-outcome lever ``lever`` ("0"/"1"). Under the ON arm
+    the re-rendered prompts no longer match the recorded ones, so the stub misses
+    and the manager takes its fail-soft default path — which is fine here: this
+    asks what the RENDER contains, not whether it reproduces recorded bytes.
+    """
+
+    monkeypatch.setenv("AILIBI_MEETING_OUTCOME_MEMORY", lever)
+    renderers_for_set = _canonical_renderers()
+    game_map = load_canonical_map()
+    for meeting in walk_replay_meetings(
+        _MULTI_MEETING_REPLAY,
+        game_map=game_map,
+        renderers_for_set=renderers_for_set,
+    ):
+        if meeting.meeting_index == 1:
+            return tuple(render.prompt for render in meeting.renders)
+    raise AssertionError(f"{_MULTI_MEETING_REPLAY.name}: no second meeting")
+
+
+def test_the_walk_folds_meeting_outcomes_into_the_memory_it_renders(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The mirror's half of the reconstruction parity: with the lever ON, the
+    # memory this walk renders the SECOND meeting from carries the FIRST
+    # meeting's announced outcome — the same rows the live loop wrote via
+    # ``_notify_meeting_concluded`` while recording. A walk that skipped the fold
+    # would render a memory no live agent ever held, and every prompt-byte
+    # assertion built on it would be measuring the wrong thing.
+    prompts = _second_meeting_renders(monkeypatch, lever="1")
+    assert prompts
+    assert any(_MEETINGS_HEADER in prompt for prompt in prompts)
+
+
+def test_removing_the_fold_empties_the_block_the_previous_test_asserts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The planted divergence that proves the gate above can fail: neutralise the
+    # shared fold and the block disappears from every render, so the assertion
+    # that it is present is a real check rather than prose.
+    import sys
+
+    monkeypatch.setattr(
+        sys.modules[__name__],
+        "fold_meeting_outcome_into_memories",
+        lambda *args, **kwargs: None,
+    )
+    prompts = _second_meeting_renders(monkeypatch, lever="1")
+    assert prompts
+    assert not any(_MEETINGS_HEADER in prompt for prompt in prompts)
+
+
+def test_the_fold_is_inert_on_the_committed_off_substrate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Neutrality, asserted rather than assumed: the walk folds unconditionally,
+    # but with the lever OFF — the substrate every committed recording was made
+    # in — the channel reaches no rendered byte, which is why the whole golden
+    # above still reproduces the committed prompts.
+    prompts = _second_meeting_renders(monkeypatch, lever="0")
+    assert prompts
+    assert not any(_MEETINGS_HEADER in prompt for prompt in prompts)

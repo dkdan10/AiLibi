@@ -56,11 +56,16 @@
 #
 # Usage:
 #   scripts/record_ml_corpus.sh [--set 9p2i|4p1i|both] [--dry-run | --splits-only]
+#                               [--expect-levers KEY,KEY]
 #
 #   --set 9p2i|4p1i|both  which set(s) to record (default: both)
 #   --dry-run             print the resolved plan; touch nothing, no network
 #   --splits-only         (re)write splits.json for the selected set(s) from the
 #                         replays already on disk, then exit — no network, no record
+#   --expect-levers       the toggleable substrate levers this record expects ON
+#                         (comma-separated registry keys; default: none). The live
+#                         slate must match it exactly, and every recorded game_over
+#                         stamp is judged against the same slate.
 #   -h, --help            show this help
 #
 # Operator gate: requires FEATHERLESS_API_KEY and AILIBI_PROMPT_SET=qwen3_6_27b; the
@@ -170,11 +175,16 @@ SPLIT_RULE_DESC="seed mod 5: {0,1,2}=train, {3}=val, {4}=test"
 usage() {
   cat <<EOF
 Usage: $(basename "$0") [--set 9p2i|4p1i|both] [--dry-run | --splits-only]
+                        [--expect-levers KEY,KEY]
 
   --set 9p2i|4p1i|both  which corpus set(s) to record (default: both)
   --dry-run             print the resolved plan; touch nothing, make no API call
   --splits-only         (re)write splits.json for the selected set(s) from the
                         replays already on disk, then exit (no network, no record)
+  --expect-levers       the toggleable substrate levers this record expects ON,
+                        comma-separated (default: none — the bare slate). The
+                        live slate must match it EXACTLY before any seed stages,
+                        and every recorded game_over stamp is judged against it.
   -h, --help            show this help
 
 Records the frozen ML-calibration corpus at baseline-6 config into
@@ -202,6 +212,9 @@ set_config() {
 set_arg="both"
 dry_run=0
 splits_only=0
+# The toggleable levers this record expects ON (comma-separated registry keys).
+# Empty is the bare slate: every live toggle OFF.
+expect_levers=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -216,6 +229,15 @@ while [[ $# -gt 0 ]]; do
       ;;
     --dry-run) dry_run=1 ;;
     --splits-only) splits_only=1 ;;
+    --expect-levers)
+      shift
+      expect_levers="${1:-}"
+      if [[ -z "$expect_levers" ]]; then
+        echo "Error: --expect-levers requires a comma-separated lever list." >&2
+        usage
+        exit 1
+      fi
+      ;;
     -h | --help)
       usage
       exit 0
@@ -234,6 +256,50 @@ if [[ "$dry_run" -eq 1 && "$splits_only" -eq 1 ]]; then
   usage
   exit 1
 fi
+
+# One human-readable rendering of the expected slate, so the preview echo, the
+# refusal and the freeze guard all name the SAME slate.
+if [[ -n "$expect_levers" ]]; then
+  expect_levers_desc="$expect_levers"
+else
+  expect_levers_desc="(none — the bare slate: every live toggle OFF)"
+fi
+
+# Substrate-lever preflight: the slate is checked POSITIVELY against the slate the
+# operator declared (--expect-levers) before any seed stages. A half-set export
+# would otherwise record the whole ~22-23h corpus off-substrate while the echo
+# claims the ruled slate — and an acceptance gate run in the SAME polluted shell
+# would pass coherently, because it reads the same environment. A blacklist of
+# variable names cannot catch a lever MISSING from the export, which is why this
+# is a whole-slate equality. The DRY RUN runs it too: reading the environment
+# writes nothing, and a preview that cannot refuse would let an operator confirm a
+# plan the real run rejects. The comparison lives in
+# orchestrator.replay.substrate_slate_mismatches, shared with
+# scripts/refresh_samples.sh so both recorders judge a slate the same way.
+substrate_lever_preflight() {
+  local diag
+  if diag="$(uv run python -c '
+import sys
+
+from orchestrator.replay import substrate_slate_mismatches
+
+problems = substrate_slate_mismatches(
+    [key for key in sys.argv[1].split(",") if key]
+)
+if problems:
+    sys.stderr.write("; ".join(problems))
+    sys.exit(1)
+' "$expect_levers" 2>&1)"; then
+    echo "Substrate slate OK: expected levers ON = $expect_levers_desc; every other live toggle OFF; the graduated levers unconditional ON."
+    return 0
+  fi
+  echo "Error: the live substrate-lever slate does not match --expect-levers." >&2
+  echo "       Expected ON: $expect_levers_desc" >&2
+  echo "       Mismatch: ${diag}" >&2
+  echo "       Export exactly the levers you named and unset every other AILIBI_*" >&2
+  echo "       lever export, then re-run. Nothing was recorded." >&2
+  return 1
+}
 
 case "$set_arg" in
   9p2i) sets=("9p2i") ;;
@@ -545,13 +611,15 @@ PYINNER
 # before the freeze. $0, no network.
 check_replay_provenance() {
   local set_dir="$1"
-  uv run python - "$REPO_ROOT" "$set_dir" "$DEFAULT_FEATHERLESS_MODEL" <<'PYINNER'
+  uv run python - "$REPO_ROOT" "$set_dir" "$DEFAULT_FEATHERLESS_MODEL" \
+    "$expect_levers" <<'PYINNER'
 import sys
 from pathlib import Path
 
 sys.path.insert(0, sys.argv[1])
 from orchestrator.replay import (  # noqa: E402
     SUBSTRATE_FLAG_KEYS,
+    TOGGLEABLE_SUBSTRATE_FLAG_KEYS,
     FailedCallReplayEntry,
     MeetingReplayEntry,
     compute_cost_usd,
@@ -559,17 +627,21 @@ from orchestrator.replay import (  # noqa: E402
     read_all_entries,
     read_substrate_flags,
     read_tactical_policy_stamp,
-    substrate_flag_snapshot,
 )
 
 set_dir, baseline_model = Path(sys.argv[2]), sys.argv[3]
 canonical = fsm_default_tactical_policy_stamp()
-# The documented baseline-6 lever slate: a BARE recording environment (env={}),
-# so impostor_roll_call — the sole remaining live toggle — is its recorded
-# stay-OFF and every retired lever is unconditionally ON. The preflight already
-# refuses a live slate polluted by a stale AILIBI_* lever export, so the bare
-# slate is exactly what this recorder freezes.
-slate = substrate_flag_snapshot(env={})
+# The slate this record declared (--expect-levers): every graduated lever ON, the
+# named toggles ON, every other toggle OFF. Derived from the DECLARATION rather
+# than from the live environment, so a recorded stamp is judged against the slate
+# that was ruled -- a shell that drifted after the preflight cannot re-define what
+# the bytes are allowed to say.
+_expected_on = {key for key in sys.argv[4].split(",") if key}
+_toggleable = set(TOGGLEABLE_SUBSTRATE_FLAG_KEYS)
+slate = {
+    key: (key in _expected_on) if key in _toggleable else True
+    for key in SUBSTRATE_FLAG_KEYS
+}
 canonical_keys = set(SUBSTRATE_FLAG_KEYS)
 bad: list[str] = []
 for path in sorted(set_dir.glob("replay-seed-*.jsonl")):
@@ -613,12 +685,11 @@ for path in sorted(set_dir.glob("replay-seed-*.jsonl")):
     cost = compute_cost_usd(path)
     if cost != 0.0:
         bad.append(f"{path.name}: non-zero recorded cost ${cost:.4f}")
-    # POSITIVE substrate-slate assertion (Task 17.9, re-grounded at 18.13): the
-    # game_over stamp must carry the baseline-6 lever slate, not just survive the env
-    # refusal. Same tolerant per-lever match as check_cost_and_provenance /
-    # _assert_substrate_matches: an always-on lever must be present and True, a
-    # default-OFF toggleable lever reads False on both sides, and an unknown key
-    # is a stripped/foreign stamp.
+    # POSITIVE substrate-slate assertion: the game_over stamp must CARRY the
+    # declared lever slate, not merely survive the env refusal. Same tolerant
+    # per-lever match as _assert_substrate_matches: an always-on lever must be
+    # present and True, a toggle must match the declared slate on both sides
+    # (a missing key reads False), and an unknown key is a stripped/foreign stamp.
     flags = read_substrate_flags(path)
     if flags is None:
         bad.append(f"{path.name}: no substrate_flags stamp on game_over")
@@ -627,14 +698,14 @@ for path in sorted(set_dir.glob("replay-seed-*.jsonl")):
         if unknown:
             bad.append(
                 f"{path.name}: unknown substrate keys {unknown} "
-                f"(not the baseline-6 slate {sorted(canonical_keys)})"
+                f"(not the declared slate {sorted(canonical_keys)})"
             )
         differing = sorted(
             key for key in canonical_keys if bool(flags.get(key)) != bool(slate.get(key))
         )
         if differing:
             bad.append(
-                f"{path.name}: substrate stamp disagrees with the baseline-6 "
+                f"{path.name}: substrate stamp disagrees with the declared "
                 f"lever slate on {differing} "
                 f"(got {dict(sorted(flags.items()))})"
             )
@@ -642,11 +713,11 @@ if bad:
     listing = "; ".join(bad)
     sys.stderr.write(
         f"check_replay_provenance: {len(bad)} violation(s) in {set_dir} — {listing}\n"
-        "A present replay's bytes must prove the full baseline-6 provenance (the\n"
-        "canonical 15.9 fsm-default stamp, the locked model on every recorded call,\n"
-        "$0 cost, and the baseline-6 lever slate on its game_over stamp); presence\n"
-        "alone must never make it a corpus game. Remove the file(s) and re-record\n"
-        "the seed(s) with this recorder.\n"
+        "A present replay's bytes must prove the full provenance (the canonical\n"
+        "15.9 fsm-default stamp, the locked model on every recorded call, $0 cost,\n"
+        "and the DECLARED lever slate on its game_over stamp); presence alone must\n"
+        "never make it a corpus game. Remove the file(s) and re-record the seed(s)\n"
+        "with this recorder.\n"
     )
     raise SystemExit(1)
 PYINNER
@@ -728,8 +799,8 @@ if [[ "$dry_run" -eq 1 ]]; then
   echo "[dry-run] model: $DEFAULT_FEATHERLESS_MODEL (meeting + trigger pinned; a non-baseline AILIBI_LLM_MEETING_MODEL/AILIBI_LLM_TRIGGER_MODEL override is refused)"
   echo "[dry-run] endpoint: $DEFAULT_FEATHERLESS_BASE_URL (pinned; a non-default AILIBI_FEATHERLESS_BASE_URL override is refused)"
   echo "[dry-run] prompt versions: locked to [$REQUIRED_PROMPT_VERSIONS] (the registry is asserted at preflight; rows off this map are refused at freeze)"
-  echo "[dry-run] substrate flags: baseline-6 slate — the meeting-layer levers unconditional ON (roll_call_round, whereabouts_interior_flags, vent_placement_contradictions, absence_prior graduated at Task 18.12, beside the earlier graduations), impostor_roll_call default-OFF (CREW-ONLY ruling)"
-  echo "[dry-run] substrate-lever preflight: would require the live lever slate to equal the ruled baseline-6 state (thirteen retired levers ON, impostor_roll_call OFF) and refuse a stale AILIBI_* export before any seed stages"
+  echo "[dry-run] substrate flags: expected levers ON = $expect_levers_desc; every other live toggle OFF; the graduated levers unconditional ON"
+  echo "[dry-run] substrate-lever preflight: would require the live lever slate to equal that expectation exactly and refuse before any seed stages — an expected-ON lever left unexported and an unexpected AILIBI_* export are both named"
   echo "[dry-run] tactical policy stamp: $POLICY_STAMP (15.9 FSM-default on every game)"
   if [[ "$REFRESH_WORKERS" -gt 1 ]]; then
     echo "[dry-run] seed workers: $REFRESH_WORKERS parallel (each records one seed, then pulls the next available seed from the queue; Featherless: 2 units per 27B request → 4-unit cap)"
@@ -757,6 +828,9 @@ if [[ "$dry_run" -eq 1 ]]; then
   done
   echo "[dry-run] acceptance (per set, before merge): scripts/validity_gate.py <set> --expected-model $DEFAULT_FEATHERLESS_MODEL --require-zero-cost; scripts/verify_samples.sh <set>"
   echo "[dry-run] no API calls made; no files written."
+  if ! substrate_lever_preflight; then
+    exit 1
+  fi
   exit 0
 fi
 
@@ -786,50 +860,11 @@ if [[ "${AILIBI_PROMPT_SET:-}" != "$REQUIRED_PROMPT_SET" ]]; then
   exit 1
 fi
 
-# ... and the LEVER SLATE. Until baseline 6 this preflight refused a single env
-# knob (AILIBI_ABSENCE_PRIOR — then the sole live toggle). The Task-18.12
-# meeting-layer graduation (the CREW-ONLY ruling,
-# audits/audit-phase-18-meeting-gate.md §9) retired absence_prior along with
-# roll_call_round / whereabouts_interior_flags / vent_placement_contradictions,
-# leaving impostor_roll_call — the UNSHIPPED impostor-answer arm — as the sole
-# remaining env-gated lever, and the baseline-6 substrate this recorder freezes is
-# its recorded stay-OFF (audits/audit-phase-18-baseline-6.md §0.1). A leftover
-# AILIBI_IMPOSTOR_ROLL_CALL=1 export (e.g. from a counterfactual probe session)
-# would record the whole ~22-23h corpus lever-ON while this preflight's echo
-# claims the ruled substrate — and an acceptance gate run in the SAME polluted
-# shell would then PASS coherently (substrate_flag_snapshot() reads the same env),
-# which is exactly the C6 recording-preflight hazard the graduations discharge.
-# So POSITIVELY check the live snapshot equals the ruled baseline-6 state rather
-# than blacklisting one variable name: mirroring the Task-18.12
-# scripts/refresh_samples.sh preflight, this also catches a partial graduation
-# (a retired lever that somehow reads False) and any future toggleable-set drift.
-if ! substrate_diag="$(uv run python -c '
-import sys
-from orchestrator.replay import (
-    SUBSTRATE_FLAG_KEYS,
-    TOGGLEABLE_SUBSTRATE_FLAG_KEYS,
-    substrate_flag_snapshot,
-)
-
-live = substrate_flag_snapshot()
-retired = [k for k in SUBSTRATE_FLAG_KEYS if k not in TOGGLEABLE_SUBSTRATE_FLAG_KEYS]
-bad = ["%s must be ON" % k for k in retired if live.get(k) is not True]
-if live.get("impostor_roll_call") is not False:
-    bad.append("impostor_roll_call must be OFF")
-if TOGGLEABLE_SUBSTRATE_FLAG_KEYS != ("impostor_roll_call",):
-    bad.append("toggleable set is %r" % (TOGGLEABLE_SUBSTRATE_FLAG_KEYS,))
-if bad:
-    sys.stderr.write("; ".join(bad))
-    sys.exit(1)
-' 2>&1)"; then
-  echo "Error: the live substrate-lever slate does not equal the ruled baseline-6 state." >&2
-  echo "       Mismatch: ${substrate_diag}" >&2
-  echo "       Unset any stale AILIBI_* lever export (notably AILIBI_IMPOSTOR_ROLL_CALL); the" >&2
-  echo "       thirteen retired levers are unconditional since baseline 6 and" >&2
-  echo "       impostor_roll_call must stay OFF (the CREW-ONLY ruling). Nothing was recorded." >&2
+# ... and the LEVER SLATE, before any seed stages (the function above states why).
+if ! substrate_lever_preflight; then
   exit 1
 fi
-echo "Locked substrate OK: AILIBI_PROMPT_SET=$REQUIRED_PROMPT_SET (the baseline-6 lever slate: the thirteen retired levers unconditional — incl. the four meeting-layer graduations roll_call_round/whereabouts_interior_flags/vent_placement_contradictions/absence_prior — impostor_roll_call OFF; bare lever environment verified)."
+echo "Locked substrate OK: AILIBI_PROMPT_SET=$REQUIRED_PROMPT_SET."
 
 # Baseline-5 also locks the MODEL: build_default_client honors
 # AILIBI_LLM_MEETING_MODEL / AILIBI_LLM_TRIGGER_MODEL for featherless, so a
