@@ -130,7 +130,6 @@ from meetings.schemas import (
     MARKER_TRUNCATION_SUFFIX,
     AccusationClaim,
     AlibiClaim,
-    AuthoredTurn,
     Claim,
     ContradictionRef,
     CorroborationClaim,
@@ -1516,7 +1515,7 @@ class MeetingManager:
                     _isolate_provider_timeout(
                         self._llm_client.complete(
                             prompt=prompt,
-                            schema=AuthoredTurn,
+                            schema=MeetingTurn,
                             max_tokens=self._config.turn_max_tokens,
                             temperature=self._config.turn_temperature,
                             call_kind="meeting",
@@ -1525,7 +1524,16 @@ class MeetingManager:
                     ),
                     timeout=self._config.deadlines.turn_seconds,
                 )
-                parsed = MeetingTurn.model_validate_json(response.text)
+                # The turn schema doubles as the provider's structured-output
+                # contract, so ``annotations`` is askable -- but it is the
+                # manager's record of its OWN guards and is never authorable.
+                # Anything the model volunteered under that name is dropped
+                # here, at the wire boundary, so no branch below can read a
+                # model-authored row (the recording paths overwrite the field
+                # too; this is the boundary layer of that defense).
+                parsed = MeetingTurn.model_validate_json(response.text).model_copy(
+                    update={"annotations": ()}
+                )
             except (asyncio.TimeoutError, ValidationError) as exc:
                 # Fail-soft on a single turn (Task 7.10): a missed deadline
                 # (``TimeoutError``) and a malformed turn that still fails

@@ -450,21 +450,32 @@ class TurnAnnotation(_FrozenModel):
         return self
 
 
-class AuthoredTurn(_FrozenModel):
-    """Exactly what a model is asked to author for one turn.
+class MeetingTurn(_FrozenModel):
+    """One entry in the ordered ``transcript.turns`` list (DESIGN.md §5.2).
 
-    The structured-output schema the provider receives
-    (:meth:`meetings.manager.MeetingManager._collect_turn` passes this class,
-    and ``model_json_schema()`` goes on the wire verbatim). It is the turn
-    MINUS everything the manager authors about the turn, so a manager-side
-    field can never become something the model is asked for.
+    A turn carries the speaker's structured ``observations`` (with tick
+    references) and ``claims`` (alibi / accusation / corroboration) plus
+    the free-text argument shown to spectators and to later speakers.
 
     ``turn_id`` is ``"{meeting_id}:turn-{turn_index}"`` -- unique even
     when a player speaks twice -- and is what
     :attr:`VoteBallot.primary_reason_id` references. ``reply_to`` is the
     ``turn_id`` this turn answers (set on a ``reply``; ``None`` on
-    ``opening`` and on a volunteering ``opt_in``). The manager is
-    authoritative for those identity fields and overwrites them.
+    ``opening`` and on a volunteering ``opt_in``).
+
+    The reporter's ``found_body`` / ``saw_player`` observations live on
+    the ``opening`` turn (turn 0); :mod:`eval.vote_correctness` reads
+    them from there.
+
+    This class doubles as the structured-output schema the provider is asked
+    to fill, and the manager is authoritative for the identity fields and
+    overwrites them. ``annotations`` -- its typed note of what its own guards
+    changed before recording -- is SYSTEM-POPULATED AND IGNORED ON INPUT: a
+    value arriving on the wire is dropped at the provider boundary
+    (:meth:`meetings.manager.MeetingManager._collect_turn`), so a model can
+    never author its own audit trail. It is served alongside the authored
+    fields, so both halves stay visible to the spectator DTO surface's field
+    tripwires.
     """
 
     turn_id: TurnId
@@ -475,25 +486,6 @@ class AuthoredTurn(_FrozenModel):
     observations: tuple[ObservationClaim, ...] = ()
     claims: tuple[Claim, ...] = ()
     free_text: str
-
-
-class MeetingTurn(AuthoredTurn):
-    """One entry in the ordered ``transcript.turns`` list (DESIGN.md §5.2).
-
-    The recorded turn: what the model authored (:class:`AuthoredTurn`) plus
-    ``annotations``, the manager's typed note of what its guards changed
-    before recording. Both halves are served, so both stay visible to the
-    spectator DTO surface's field tripwires.
-
-    A turn carries the speaker's structured ``observations`` (with tick
-    references) and ``claims`` (alibi / accusation / corroboration) plus
-    the free-text argument shown to spectators and to later speakers.
-
-    The reporter's ``found_body`` / ``saw_player`` observations live on
-    the ``opening`` turn (turn 0); :mod:`eval.vote_correctness` reads
-    them from there.
-    """
-
     annotations: tuple[TurnAnnotation, ...] = ()
 
     @model_serializer(mode="wrap")
@@ -743,7 +735,6 @@ class MeetingResult(_FrozenModel):
 __all__ = [
     "AccusationClaim",
     "AlibiClaim",
-    "AuthoredTurn",
     "BodyId",
     "Claim",
     "CompletedTaskObservation",

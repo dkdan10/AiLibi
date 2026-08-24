@@ -109,7 +109,6 @@ from meetings.schemas import (
     MARKER_TRUNCATION_SUFFIX,
     AccusationClaim,
     AlibiClaim,
-    AuthoredTurn,
     Claim,
     ContradictionRef,
     CorroborationClaim,
@@ -7430,6 +7429,8 @@ _PLANTED_TARGET = "imp-2"
 _PLANTED_SUBJECT = "headless-seed-9"
 _PLANTED_SUPPORTS = "m-1:turn-0"
 _PLANTED_LATER_SUBJECT = "ghost-1"
+# The value a model would forge into its own audit trail if the manager let it.
+_FORGED_ANNOTATION_ORIGINAL = "forged-by-the-model"
 
 
 def _assert_free_of_turn_markers(texts: Iterable[str]) -> None:
@@ -7440,10 +7441,32 @@ def _assert_free_of_turn_markers(texts: Iterable[str]) -> None:
             assert head not in text, f"{head!r} survived into: {text[:200]!r}"
 
 
+def _forge_annotation(turn_json: str, annotation: TurnAnnotation) -> str:
+    """Put ``annotation`` on the wire, as a model volunteering its own audit row."""
+
+    payload = json.loads(turn_json)
+    payload["annotations"] = [annotation.model_dump()]
+    return json.dumps(payload)
+
+
+def _assert_free_of_forged_annotation(
+    turns: Iterable[MeetingTurn], prompts: Iterable[str]
+) -> None:
+    """Fail if a model-authored annotation reached the record or a prompt."""
+
+    for turn in turns:
+        for annotation in turn.annotations:
+            assert annotation.original != _FORGED_ANNOTATION_ORIGINAL, turn.turn_id
+        assert _FORGED_ANNOTATION_ORIGINAL not in turn.free_text, turn.turn_id
+    for prompt in prompts:
+        assert _FORGED_ANNOTATION_ORIGINAL not in prompt, prompt[:200]
+
+
 def _planted_responder(
     participants: tuple[MeetingParticipant, ...],
     *,
     later_subject: str = _PLANTED_LATER_SUBJECT,
+    forged_annotation: TurnAnnotation | None = None,
 ) -> Callable[[str, type[BaseModel] | None], str]:
     """Drive every one of the five turn-side guards from one meeting.
 
@@ -7452,6 +7475,10 @@ def _planted_responder(
     the twice-failed-opening degrade, so its recorded turn carries all five.
     Every later speaker plants one dropped alibi, which takes the OTHER
     recording branch (the ordinary per-turn one).
+
+    ``forged_annotation`` additionally has every turn response carry that
+    annotation on the wire, so the manager's inbound drop can be tested against
+    a model that volunteers one.
     """
 
     def _responder(prompt: str, schema: type[BaseModel] | None) -> str:
@@ -7460,8 +7487,14 @@ def _planted_responder(
             None,
         )
         assert speaker is not None, f"no participant memory in prompt: {prompt[:200]!r}"
-        if schema is not AuthoredTurn:
+        if schema is not MeetingTurn:
             return _vote_json(voter=speaker, target="SKIP")
+        turn_json = _planted_turn(speaker)
+        if forged_annotation is None:
+            return turn_json
+        return _forge_annotation(turn_json, forged_annotation)
+
+    def _planted_turn(speaker: str) -> str:
         if speaker == participants[0].agent_id:
             return _turn_json(
                 speaker=speaker,
@@ -7504,7 +7537,9 @@ def _planted_responder(
 
 
 def _run_planted_meeting(
-    *, later_subject: str = _PLANTED_LATER_SUBJECT
+    *,
+    later_subject: str = _PLANTED_LATER_SUBJECT,
+    forged_annotation: TurnAnnotation | None = None,
 ) -> tuple[MeetingResult, list[str]]:
     """Run the planted meeting through the REAL prompt templates.
 
@@ -7518,7 +7553,11 @@ def _run_planted_meeting(
     participants = _crew_participants()
     renderers = build_prompt_renderers("qwen3_6_27b", env={})
     client = _ScriptedLLMClient(
-        responder=_planted_responder(participants, later_subject=later_subject)
+        responder=_planted_responder(
+            participants,
+            later_subject=later_subject,
+            forged_annotation=forged_annotation,
+        )
     )
     manager = MeetingManager(
         llm_client=client,
@@ -7587,26 +7626,76 @@ class TestTurnAnnotationRecordShape:
         "turn_kind",
     ]
 
-    def test_the_provider_is_asked_only_for_what_a_model_authors(self) -> None:
-        # ``AuthoredTurn`` is the structured-output schema the manager hands the
-        # provider (``llm.ollama_client`` puts ``model_json_schema()`` on the
-        # wire verbatim). ``annotations`` is manager-authored, so asking a model
-        # for it would change the OFF-path request payload -- and a model that
-        # volunteered one would parse instead of failing validation.
-        schema = AuthoredTurn.model_json_schema()
-        assert sorted(schema["properties"]) == self._AUTHORED_FIELDS
-        assert "annotations" not in schema["properties"]
-        with pytest.raises(ValidationError):
-            AuthoredTurn.model_validate(
-                {
-                    "turn_id": "m-1:turn-0",
-                    "turn_index": 0,
-                    "speaker": "p-1",
-                    "turn_kind": "opening",
-                    "reply_to": None,
-                    "free_text": "unsure",
-                    "annotations": [{"kind": "fabricated_opening"}],
-                }
+    def test_the_provider_schema_gains_one_optional_property(self) -> None:
+        # ``MeetingTurn`` doubles as the structured-output schema the manager
+        # hands the provider (``llm.ollama_client`` puts ``model_json_schema()``
+        # on the wire verbatim), so the field IS askable. What must not move is
+        # what the model is REQUIRED to produce: ``annotations`` carries a
+        # default, so the required list is exactly the pre-lever one and no
+        # OFF-path request changes what a model has to fill in.
+        schema = MeetingTurn.model_json_schema()
+        assert sorted(schema["properties"]) == sorted(
+            [*self._AUTHORED_FIELDS, "annotations"]
+        )
+        assert sorted(schema["required"]) == [
+            "free_text",
+            "reply_to",
+            "speaker",
+            "turn_id",
+            "turn_index",
+            "turn_kind",
+        ]
+
+    @pytest.mark.parametrize("lever", ["0", "1"])
+    def test_a_wire_supplied_annotation_never_reaches_the_transcript(
+        self, lever: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The field is on the provider schema, so a model CAN volunteer one:
+        # the planted response below parses WITH the forged row, which is what
+        # makes the assertion meaningful. It is dropped at the wire boundary and
+        # overwritten again at the record, so the only annotations a recorded
+        # turn carries are the ones the manager's own guards minted -- and the
+        # forged value reaches neither the spoken text nor any later prompt.
+        forged = TurnAnnotation(
+            kind="invalid_alibi_subject", original=_FORGED_ANNOTATION_ORIGINAL
+        )
+        wire_turn = _forge_annotation(_turn_json(speaker="p-1"), forged)
+        assert MeetingTurn.model_validate_json(wire_turn).annotations == (forged,)
+
+        monkeypatch.setenv(ENV_STRUCTURED_TURN_MARKERS, lever)
+        result, prompts = _run_planted_meeting(forged_annotation=forged)
+        _assert_free_of_forged_annotation(result.transcript.turns, prompts)
+        if lever == "1":
+            # The drop is of the MODEL's rows, not of the channel: the
+            # manager's own annotations are still recorded.
+            assert result.transcript.turns[0].annotations
+
+    def test_the_forged_annotation_assertion_bites(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The perturbation: put the forged row back onto a recorded turn (and
+        # its value back into the spoken text) and both legs of the gate above
+        # must fail.
+        monkeypatch.setenv(ENV_STRUCTURED_TURN_MARKERS, "1")
+        forged = TurnAnnotation(
+            kind="invalid_alibi_subject", original=_FORGED_ANNOTATION_ORIGINAL
+        )
+        result, prompts = _run_planted_meeting(forged_annotation=forged)
+        clean = result.transcript.turns[0]
+        poisoned = clean.model_copy(
+            update={
+                "annotations": (forged, *clean.annotations),
+                "free_text": _FORGED_ANNOTATION_ORIGINAL + clean.free_text,
+            }
+        )
+
+        with pytest.raises(AssertionError):
+            _assert_free_of_forged_annotation(
+                (poisoned, *result.transcript.turns[1:]), prompts
+            )
+        with pytest.raises(AssertionError):
+            _assert_free_of_forged_annotation(
+                result.transcript.turns, [*prompts, _FORGED_ANNOTATION_ORIGINAL]
             )
 
     def test_the_recorded_turn_keeps_annotations_on_its_served_schema(self) -> None:

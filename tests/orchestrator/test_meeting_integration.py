@@ -47,7 +47,6 @@ from meetings.manager import (
     SuspicionEntry,
 )
 from meetings.schemas import (
-    AuthoredTurn,
     AccusationClaim,
     ContradictionRef,
     FoundBodyObservation,
@@ -900,7 +899,7 @@ class _ScriptedLLMClient:
         agent_id: str | None = None,
     ) -> LLMResponse:
         self.calls.append((schema, call_kind))
-        if schema is AuthoredTurn:
+        if schema is MeetingTurn:
             # Identity fields are placeholders: the manager overrides
             # turn_id / turn_index / speaker / turn_kind / reply_to. A
             # claim-free turn never extends the accusation chain, so the
@@ -1192,7 +1191,7 @@ class TestDefaultMeetingRunner:
                 agent_id: str | None = None,
             ) -> LLMResponse:
                 self._count += 1
-                if schema is AuthoredTurn and self._count == 1:
+                if schema is MeetingTurn and self._count == 1:
                     # "unsure" satisfies the Task 10.3 opening validation, so
                     # the meeting still aborts on the SECOND call (the vote),
                     # not on an opening retry.
@@ -1798,7 +1797,7 @@ class _Seed6BetrayalClient:
         agent_id: str | None = None,
     ) -> LLMResponse:
         mate = self._teammate_of.get(agent_id or "")
-        if schema is AuthoredTurn:
+        if schema is MeetingTurn:
             # An impostor always tries to frame its teammate; a crewmate
             # accuses impostor p-3, passing the chain floor to an impostor.
             accused = mate if mate is not None else "p-3"
@@ -2250,7 +2249,7 @@ class _EmergencyChainLLMClient:
         model: str | None = None,
         agent_id: str | None = None,
     ) -> LLMResponse:
-        if schema is AuthoredTurn:
+        if schema is MeetingTurn:
             self._turn_calls += 1
             if self._turn_calls == 1:
                 turn = MeetingTurn(
