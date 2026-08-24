@@ -220,9 +220,9 @@ def test_dry_run_announces_endpoint_and_prompt_version_locks() -> None:
         "AILIBI_FEATHERLESS_BASE_URL override is refused)" in proc.stdout
     )
     assert (
-        "prompt versions: locked to [accusation_round.qwen3_6_27b.v3, "
-        "crewmate_report.qwen3_6_27b.v3, impostor_report.qwen3_6_27b.v3, "
-        "vote_ballot.qwen3_6_27b.v3]" in proc.stdout
+        "prompt versions: locked to [accusation_round.qwen3_6_27b.v4, "
+        "crewmate_report.qwen3_6_27b.v4, impostor_report.qwen3_6_27b.v4, "
+        "vote_ballot.qwen3_6_27b.v4]" in proc.stdout
     )
 
 

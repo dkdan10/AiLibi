@@ -121,6 +121,7 @@ from llm.client import LLMClient, LLMResponse
 from llm.provider import LLMCallFailure, extract_parse_failure
 from meetings.constants import DEFAULT_SKIP_CONFIDENCE_THRESHOLD, citation_gate_enabled
 from meetings.render_contract import (
+    PromptRenderInputs,
     ReportPromptRenderer,
     StatementPromptRenderer,
     SuspicionEntry,
@@ -1095,6 +1096,7 @@ class MeetingManager:
         trigger: MeetingTrigger,
         participants: Sequence[MeetingParticipant],
         dead_ids: tuple[PlayerId, ...] = (),
+        impostor_count: int | None = None,
     ) -> MeetingResult:
         """Run opening -> reactive chain -> opt-in -> voting -> resolution.
 
@@ -1114,6 +1116,14 @@ class MeetingManager:
         validation: a claim naming a dead player still drops at the
         per-turn chokepoint exactly as before. ``()`` (existing call
         sites, ad-hoc runs) omits the line.
+
+        ``impostor_count`` (Task 20.31) is how many impostors the game was
+        seeded with -- the roster preset's own public setting, derived by the
+        orchestrator from world state the same way ``dead_ids`` is. It is
+        render-only: the templates state the count and the win condition with
+        the right arithmetic, and nothing about validation or tallying reads
+        it. ``None`` (existing call sites, ad-hoc runs) leaves every template
+        on its singular wording.
         """
 
         if not meeting_id:
@@ -1142,6 +1152,10 @@ class MeetingManager:
         # gp-2).
         self._defaulted_calls = []
         self._recovered_call_failures = []
+        # Render-only per-game facts, built once and threaded to every prompt
+        # the way ``dead_ids`` is. The map card is not here: it is a constant of
+        # the map, bound onto each renderer at construction by the loader.
+        render_inputs = PromptRenderInputs(impostor_count=impostor_count)
 
         # Canonicalise participant order at entry. Real callers may iterate
         # over a set/dict whose order is hash-seeded and not
@@ -1203,6 +1217,7 @@ class MeetingManager:
             participant=opener,
             living_ids=roster,
             dead_ids=dead_ids,
+            render_inputs=render_inputs,
             turn_index=0,
             turn_kind="opening",
             reply_to=None,
@@ -1253,6 +1268,7 @@ class MeetingManager:
                 participant=by_id[guarded_next],
                 living_ids=roster,
                 dead_ids=dead_ids,
+                render_inputs=render_inputs,
                 turn_index=len(turns),
                 turn_kind="reply",
                 reply_to=prev.turn_id,
@@ -1287,6 +1303,7 @@ class MeetingManager:
                 participant=by_id[opt_in_id],
                 living_ids=roster,
                 dead_ids=dead_ids,
+                render_inputs=render_inputs,
                 turn_index=len(turns),
                 turn_kind="opt_in",
                 reply_to=None,
@@ -1331,6 +1348,7 @@ class MeetingManager:
                     participant=by_id[roll_call_id],
                     living_ids=roster,
                     dead_ids=dead_ids,
+                    render_inputs=render_inputs,
                     turn_index=len(turns),
                     turn_kind="opt_in",
                     reply_to=None,
@@ -1416,6 +1434,7 @@ class MeetingManager:
             transcript=transcript,
             contradictions=contradictions,
             evidence=evidence,
+            render_inputs=render_inputs,
         )
 
         # Phase 5: resolution.
@@ -1447,6 +1466,7 @@ class MeetingManager:
         transcript_so_far: MeetingTranscript,
         contradictions: tuple[ContradictionRef, ...],
         dead_ids: tuple[PlayerId, ...] = (),
+        render_inputs: PromptRenderInputs | None = None,
         retries: int = 0,
     ) -> MeetingTurn:
         """Collect one turn through the shared guard chokepoint.
@@ -1497,6 +1517,7 @@ class MeetingManager:
             prior_turn=prior_turn,
             living_ids=living_ids,
             dead_ids=dead_ids,
+            render_inputs=render_inputs,
         )
         prompt = base_prompt
         turn_id = _turn_id(meeting_id=meeting_id, turn_index=turn_index)
@@ -1784,6 +1805,7 @@ class MeetingManager:
         prior_turn: MeetingTurn | None,
         living_ids: frozenset[PlayerId],
         dead_ids: tuple[PlayerId, ...] = (),
+        render_inputs: PromptRenderInputs | None = None,
     ) -> str:
         # Living-roster accusation list (Task 9.9, audit gp-3): living
         # participants minus this turn's speaker -- an agent cannot accuse
@@ -1822,6 +1844,7 @@ class MeetingManager:
                 # exactly that state. ``""`` / ``()`` render byte-identical today.
                 persona=participant.persona,
                 suspicion_provenance=participant.suspicion_graph,
+                render_inputs=render_inputs,
             )
         return self._statement_prompt(
             agent_id=participant.agent_id,
@@ -1851,6 +1874,7 @@ class MeetingManager:
             # via the same load-bearing substring the opening templates branch
             # on (mirrors impostor_report.j2's `body_report_opening` gate).
             is_body_report=(EMERGENCY_TRIGGER_PHRASE not in trigger.description),
+            render_inputs=render_inputs,
         )
 
     # -- Voting -----------------------------------------------------------
@@ -1863,6 +1887,7 @@ class MeetingManager:
         transcript: MeetingTranscript,
         contradictions: tuple[ContradictionRef, ...],
         evidence: MeetingBeliefEvidence,
+        render_inputs: PromptRenderInputs | None = None,
     ) -> tuple[VoteBallot, ...]:
         # Sequential collection: concurrent ballots on a single local GPU
         # inflate each call's wall-clock past vote_seconds (measured 0.71x
@@ -1882,6 +1907,7 @@ class MeetingManager:
                     transcript=transcript,
                     contradictions=contradictions,
                     evidence=evidence,
+                    render_inputs=render_inputs,
                 )
             )
         return tuple(ballots)
@@ -1895,6 +1921,7 @@ class MeetingManager:
         transcript: MeetingTranscript,
         contradictions: tuple[ContradictionRef, ...],
         evidence: MeetingBeliefEvidence,
+        render_inputs: PromptRenderInputs | None = None,
     ) -> VoteBallot:
         # Confirm the candidate set over the FINAL transcript: every living
         # participant except the voter is an eligible eject target (the same
@@ -1989,6 +2016,7 @@ class MeetingManager:
             # already shows. ``""`` / ``()`` render byte-identical today.
             persona=participant.persona,
             suspicion_provenance=suspicion_graph,
+            render_inputs=render_inputs,
         )
         # The in-prompt §4.6 verdict max, recomputed bit-for-bit from the SAME
         # graph + candidate set the template rendered (max suspicion over the
@@ -4203,6 +4231,7 @@ __all__ = [
     "MeetingOutcomeSummary",
     "MeetingParticipant",
     "MeetingTrigger",
+    "PromptRenderInputs",
     "ReportPromptRenderer",
     "Role",
     "StatementPromptRenderer",

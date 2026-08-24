@@ -1,6 +1,6 @@
 {#- Vote-ballot prompt — bespoke qwen3_6_27b set (Task 16.13; elicitation batch Task 16.15; persona voice layer Task 16.16).
 
-   prompt_id: vote_ballot  --  version vote_ballot.qwen3_6_27b.v4
+   prompt_id: vote_ballot  --  version vote_ballot.qwen3_6_27b.v3
 
    Baseline-4 merge (v1, Task 16.13): the scratch-ladder style base
    (qwen36_prompt_scratch/v5/ — whose v3-v5 rungs each converted a measured
@@ -63,37 +63,15 @@
    Guarded on a non-empty value: an empty persona renders the exact v2 bytes,
    so the layer is inert wherever assignment is off.
 
-   Evidence honesty (v4, Task 20.31):
-
-   * the flag block speaks the committed evidence taxonomy instead of dressing
-     every flag as verified proof: "Proof" (role-proving, engine-certified)
-     above "Conflicting accounts" (two statements that cannot both be true),
-     with the detector's own weak stamp as a subordinate third group. The
-     grouping is computed in Python (``flag_groups``); this template only
-     loops. The class matters: a grounded vent sighting names an impostor 440
-     times out of 440, while an alibi-versus-sighting flag standing alone
-     convicts correctly 12 times in 82;
-   * the persona and the win condition are parameterised by the game's
-     impostor count (``impostors``), and the teammate line agrees in number;
-   * the bookkeeping leaves the voter's voice: the rendered maximum stays (it
-     is the per-ballot gate input every recorded ballot carries, in the exact
-     wording eval._suspicion_parse reads), the numeric cutoff and the
-     threshold arithmetic are gone from the prose, and the rationale bullet
-     forbids quoting bookkeeping numbers at the table;
-   * the ``<map>`` card publishes the walkable adjacency the detector itself
-     arbitrates one-tick transit with.
-
    Inputs (loader kwargs only): voter_id, rendered_memory, transcript,
    contradiction_flags, suspicion_graph, candidate_targets (optional),
-   skip_confidence_threshold (optional, default 0.6; accepted for the render
-   contract and no longer rendered as of v4), fellow_impostor_ids (optional),
-   reporter_id (optional, Task 15.5 lever), suspicion_provenance (optional,
-   Task 16.3 widening — rendered here since v2; default () keeps the surface
-   off), persona (rendered since v3 — Task 16.16), flag_groups + impostors +
-   map_card (rendered since v4 — Task 20.31).
+   skip_confidence_threshold (optional, default 0.6), fellow_impostor_ids
+   (optional), reporter_id (optional, Task 15.5 lever), suspicion_provenance
+   (optional, Task 16.3 widening — rendered here since v2; default () keeps
+   the surface off), persona (rendered since v3 — Task 16.16).
 -#}
 <persona>
-You are {{ voter_id }}, voting at an AiLibi meeting: {{ impostors.phrase }} {{ impostors.verb_kill }} crewmates; the crew wins by voting {{ impostors.eject_all }}, {{ impostors.subject }} by surviving until they equal or outnumber the crew. The discussion is over — cast one ejection ballot: name the one player you believe is {{ impostors.one_of_them }}, or SKIP if the evidence is too thin. The outcome is a deterministic tally over every ballot, so vote the conclusion you actually reach.
+You are {{ voter_id }}, voting at an AiLibi meeting: a hidden impostor kills crewmates; the crew wins by voting the impostor out, the impostor by surviving. The discussion is over — cast one ejection ballot: name the one player you believe is the impostor, or SKIP if the evidence is too thin. The outcome is a deterministic tally over every ballot, so vote the conclusion you actually reach.
 </persona>
 {% if persona %}
 
@@ -119,32 +97,11 @@ Let that voice color HOW you speak — the wording of your "rationale_text" only
 {% if contradiction_flags %}
 
 <flagged_contradictions>
-{% if flag_groups.proof %}
-Proof. The engine certified these: only an impostor can vent, so a flag here names one outright, and nothing said at this table outweighs it.
-{% for c in flag_groups.proof %}
+Each flag below is VERIFIED evidence, not a verdict — and it is directional: it tells you whose account broke. An unverified counter-accusation that merely mirrors a flagged claim carries no weight; never side with one over a verified flag. Read each flag carefully to see who it implicates.
+{% for c in contradiction_flags %}
 - [{{ c.contradiction_id }}] {{ c.kind }} — {{ c.description }} (subjects: {{ c.subjects | join(", ") }})
 {% endfor %}
-{% endif %}
-{% if flag_groups.conflicting %}
-Conflicting accounts. Two statements that cannot both be true. The flag says only that — not which one is wrong, and not that either has been checked against anything but the other. Most are one player's word against another's, so read each as a question to test against the transcript: whose account is corroborated by someone with nothing to gain, and whose is not. A flag on its own is a lead, not a conviction.
-{% for c in flag_groups.conflicting %}
-- [{{ c.contradiction_id }}] {{ c.kind }} — {{ c.description }} (subjects: {{ c.subjects | join(", ") }})
-{% endfor %}
-{% endif %}
-{% if flag_groups.weak %}
-Weak signals. The same kind of conflict, but the detector already found an innocent reading for it — a narrow window, a transit tick, a speaker recalling their own movements. Weigh these last, and never eject on one alone.
-{% for c in flag_groups.weak %}
-- [{{ c.contradiction_id }}] {{ c.kind }} — {{ c.description }} (subjects: {{ c.subjects | join(", ") }})
-{% endfor %}
-{% endif %}
 </flagged_contradictions>
-{% endif %}
-{% if map_card %}
-
-<map>
-{{ map_card }}
-Two accounts that name rooms one door apart at nearby ticks can BOTH be honest — that is one tick of walking, and a flag over such a pair is thin. Two accounts that name far-apart rooms at the same tick cannot.
-</map>
 {% endif %}
 
 ## Your suspicion of each player
@@ -155,7 +112,7 @@ Two accounts that name rooms one door apart at nearby ticks can BOTH be honest �
 (no per-player beliefs yet)
 {% endfor %}
 {% if suspicion_provenance %}
-Each row's "built from" split shows what made its number: "this meeting" is evidence that landed at this table (flags raised here, body proximity, a witnessed kill or vent, testimony), "carried prior" is what you brought in from earlier meetings. A row tagged "no flag; carried/soft only" has no hard evidence behind it anywhere — read that number as a lead to test against the transcript, not a finished case.
+Each row's "built from" split shows what made its number: "this meeting" is evidence that landed at this table (verified flags, body proximity, a witnessed kill or vent, testimony), "carried prior" is what you brought in from earlier meetings. A row tagged "no flag; carried/soft only" has no hard evidence behind it anywhere — read that number as a lead to test against the transcript, not a finished case.
 {% endif %}
 {% if candidate_targets is defined and candidate_targets %}
 
@@ -166,7 +123,7 @@ These are the ONLY names a ballot may carry. Every other player is already out o
 {% if fellow_impostor_ids %}
 
 ## Your team
-Secret: {{ fellow_impostor_ids | join(", ") }} {% if fellow_impostor_ids | length == 1 %}is your fellow saboteur{% else %}are your fellow saboteurs{% endif %}. Never vote a teammate — if your suspicion lands on one, set "target" to "SKIP" instead. And your own name never goes in "target": you vote a crewmate or SKIP, nothing else.
+Secret: {{ fellow_impostor_ids | join(", ") }} are your fellow saboteurs. Never vote a teammate — if your suspicion lands on one, set "target" to "SKIP" instead. And your own name never goes in "target": you vote a crewmate or SKIP, nothing else.
 {% endif %}
 {% if reporter_id is defined and reporter_id %}
 
@@ -179,17 +136,19 @@ Secret: {{ fellow_impostor_ids | join(", ") }} {% if fellow_impostor_ids | lengt
 {% set _susp = suspicion_graph | map(attribute='suspicion') | list %}
 {% endif %}
 {% set _max = (_susp | max) if _susp else 0.0 %}
+{% set _thr = skip_confidence_threshold | default(0.6) %}
 
 ## How to decide
-Your maximum suspicion among the living ejection targets is **{{ "%.2f" | format(_max) }}**.
-Read that as evidence, never as an instruction: when even your strongest living suspect is thin, SKIP is the sound call, and ejecting anyway must rest on evidence you can cite below, never on momentum. Your suspicion levels above are your own accumulated evidence from the whole game — trust them over meeting rhetoric. A suspect two independent witnesses place at the scene, or whose account one of the flags above contradicts, is a stronger case than one carried by a single voice. Remember the vent mechanic: an impostor vents BETWEEN rooms invisibly, so your own sightings of someone leaving or being elsewhere earlier do NOT clear them of a witnessed vent. If your strongest suspicion points at a row tagged OUT OF THE GAME, that case is already closed — the dead cannot be voted, so weigh only the LIVING targets and SKIP if none of them carries the case on its own. Every EJECT names its evidence: the transcript turn that convinced you (in "primary_reason_id"), or the [obs ...] memory line that did (in "primary_reason_observation_id") — a call you cannot source either way is a call to SKIP, and a SKIP needs no citation. Set "confidence" to your honest probability that the call is right, judged against the evidence you cite — a case you can barely source deserves a low number, and a case you cannot source at all deserves a SKIP. The numbers on this page are for your decision, not for your mouth: never quote a suspicion score or any other bookkeeping figure in "rationale_text" — say what you saw.
+Your maximum suspicion among the living ejection targets is **{{ "%.2f" | format(_max) }}**;
+the skip threshold is **{{ "%.2f" | format(_thr) }}** (the §4.6 reference point).
+That arithmetic is evidence, not a command — but it is the whole crew's shared reference: when the max sits below the threshold, SKIP is the sound call, and a case for ejecting anyway must rest on evidence you can cite below, never on momentum. Your suspicion levels above are your own accumulated evidence from the whole game — trust them over meeting rhetoric. A suspect two independent witnesses place at the scene, or whose account a verified flag broke, is a stronger case than one carried by a single voice. Remember the vent mechanic: an impostor vents BETWEEN rooms invisibly, so your own sightings of someone leaving or being elsewhere earlier do NOT clear them of a witnessed vent. If your strongest suspicion points at a row tagged OUT OF THE GAME, that case is already closed — the dead cannot be voted, so weigh only the LIVING targets and SKIP if none of them carries the case on its own. Every EJECT names its evidence: the transcript turn that convinced you (in "primary_reason_id"), or the [obs ...] memory line that did (in "primary_reason_observation_id") — a call you cannot source either way is a call to SKIP, and a SKIP needs no citation. Set "confidence" to your honest probability that the call is right, judged against the evidence you cite: do not report a confidence at or above the skip threshold for a target whose suspicion is below it.
 
 <output_format>
 Respond with a single JSON object only. No commentary, no markdown, no code fences. It has EXACTLY these 7 keys, every one present and no others — the reason keys are "primary_reason_id" and "primary_reason_observation_id" (WITH the "_id" suffix), never "primary_reason":
 {"voter": "{{ voter_id }}", "target": "<candidate id or SKIP>", "confidence": 0.8, "primary_reason_id": {% if transcript.turns %}"{{ transcript.turns[-1].turn_id }}"{% else %}null{% endif %}, "primary_reason_observation_id": null, "considered_alternatives": [], "rationale_text": "<one short sentence>"}
 - "voter" must equal "{{ voter_id }}".
 - "target" is "SKIP" or one living player other than yourself — never your own name{% if candidate_targets is defined and candidate_targets %}; exactly one of {% for target in candidate_targets %}`{{ target }}`{% if not loop.last %}, {% endif %}{% endfor %}: any other name is an ejected or dead player and wastes your vote{% endif %}.
-- "primary_reason_id" is a turn id copied VERBATIM from the bracketed transcript lines above{% if transcript.turns %} — the skeleton shows [{{ transcript.turns[-1].turn_id }}], this meeting's latest turn; keep it only if that truly is the turn that convinced you, otherwise substitute the convincing turn's id{% endif %}. When a flag above broke your target's account, cite the turn that account was spoken in. Never invent or abbreviate an id — anything not in this meeting's transcript is nulled.
+- "primary_reason_id" is a turn id copied VERBATIM from the bracketed transcript lines above{% if transcript.turns %} — the skeleton shows [{{ transcript.turns[-1].turn_id }}], this meeting's latest turn; keep it only if that truly is the turn that convinced you, otherwise substitute the convincing turn's id{% endif %}. When a verified flag broke your target's account, cite the turn that account was spoken in. Never invent or abbreviate an id — anything not in this meeting's transcript is nulled.
 - "primary_reason_observation_id" carries the case your own memory makes: when the decisive evidence is a memory line above tagged like [obs {{ voter_id }}:12:0], copy that tag's id EXACTLY (e.g. "primary_reason_observation_id": "{{ voter_id }}:12:0") — an id that is not on one of YOUR OWN memory lines is nulled. Keep it null when a transcript turn already carries your reason or your memory lines show no [obs ...] tags.
 - Fill at least one of the two reason ids on every EJECT; a SKIP needs neither.
 - "considered_alternatives" lists at most two or three other players you weighed (empty if none).

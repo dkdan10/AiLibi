@@ -171,14 +171,23 @@ _SAMPLE_SETS: tuple[Path, ...] = (
 # a bump-in-flight window. Retire an entry when no committed set stamps it any
 # longer (the adopting re-record).
 #
-# CURRENTLY EMPTY: the Task 16.17 baseline-5 re-record re-aligned both committed
-# sets onto ``*.qwen3_6_27b.v3`` (resolved directly by PROMPT_VERSION_SETS), so
-# the baseline-4 ``qwen3_6_27b_v1`` entry was retired and its fixture bytes under
-# tests/fixtures/prompt_archive/ deleted. The seam is retained for the next
-# bump-in-flight: add an entry here (and its byte-copied template dir) whenever a
-# committed set stamps a prompt-set the live registry has advanced past.
+# Task 20.31 re-opened the seam: the live ``qwen3_6_27b`` registry entry reads
+# v4, while both committed sample sets stamp ``*.qwen3_6_27b.v3``. The entry
+# below routes those recordings to ``prompt_archive/qwen3_6_27b_v3/``, a
+# byte-copy of the six pre-bump bodies (the four default templates because the
+# recorded stamps resolve through them, the two ``*_roll_call`` siblings so the
+# archived directory is a complete loadable set). Retire it — entry and fixture
+# bytes — at the adopting re-record, exactly as the 16.17 re-record retired the
+# ``qwen3_6_27b_v1`` entry before it.
 _ARCHIVE_ROOT: Path = _REPO_ROOT / "tests" / "fixtures" / "prompt_archive"
-ARCHIVED_PROMPT_VERSION_SETS: Mapping[str, Mapping[str, str]] = {}
+ARCHIVED_PROMPT_VERSION_SETS: Mapping[str, Mapping[str, str]] = {
+    "qwen3_6_27b_v3": {
+        "crewmate_report": "crewmate_report.qwen3_6_27b.v3",
+        "impostor_report": "impostor_report.qwen3_6_27b.v3",
+        "accusation_round": "accusation_round.qwen3_6_27b.v3",
+        "vote_ballot": "vote_ballot.qwen3_6_27b.v3",
+    },
+}
 
 # The four render kinds, labelled by the manager seam that emits each. The
 # opening is split crewmate/impostor (both are ``ReportPromptRenderer``s); the
@@ -1086,7 +1095,10 @@ def test_impostor_report_opening_kind_is_exercised() -> None:
     participants = _build_participants(
         state=state, agents=agents, token_budget=DEFAULT_TOKEN_BUDGET
     )
-    renderers = build_prompt_renderers(
+    # Resolve the committed sets' own recorded stamps and take that set's
+    # renderers from the same table the walk uses, so an archived stamp binds to
+    # its archived template dir rather than a directory that does not exist.
+    renderers = _canonical_renderers()[
         resolve_prompt_set(
             {
                 "accusation_round": "accusation_round.qwen3_6_27b.v3",
@@ -1095,7 +1107,7 @@ def test_impostor_report_opening_kind_is_exercised() -> None:
                 "vote_ballot": "vote_ballot.qwen3_6_27b.v3",
             }
         )
-    )
+    ]
     renders: list[_Render] = []
     stub = _RecordedResponseStub(responses={})
     manager = _tagging_manager(stub=stub, renderers=renderers, renders=renders)
@@ -1136,22 +1148,30 @@ def test_one_byte_template_perturbation_breaks_the_golden(
 ) -> None:
     """Flip one committed template byte; the byte golden must then FAIL.
 
-    Copy the template dirs under a scratch root, append one byte to the LIVE
-    ``qwen3_6_27b/crewmate_report.j2`` — the body the committed baseline-5
-    recordings resolve to (the ``*.qwen3_6_27b.v3`` stamps HEAD's registry serves
-    directly, now that the v1 archive is retired) — build renderers against the
-    perturbed root, and re-run ONE recorded meeting. At least one recorded
-    prompt must no longer reproduce byte-for-byte — proving the gate can
-    fail. Kept cheap: the first meeting-bearing seed of 9p2i, one meeting.
+    The victim is the ARCHIVED ``qwen3_6_27b_v3/crewmate_report.j2`` — the body
+    the committed recordings actually re-render through while their
+    ``*.qwen3_6_27b.v3`` stamps resolve past the live v4 registry entry.
+    Perturbing the LIVE v4 set would be a no-op here: no committed byte
+    exercises it during the bump-in-flight window, so it would prove nothing.
+    (The v4 bodies are guarded instead by the render pins in
+    ``tests/agents/test_bespoke_prompt_sets.py`` and
+    ``tests/meetings/test_persona_render.py``.) Retarget this back to the live
+    set when the adopting re-record retires the archive entry.
+
+    Copy the template dirs under a scratch root, append one byte to that victim,
+    build renderers against the perturbed root, and re-run ONE recorded meeting.
+    At least one recorded prompt must no longer reproduce byte-for-byte —
+    proving the gate can fail. Kept cheap: the first meeting-bearing seed of
+    9p2i, one meeting.
     """
 
     set_dir = _SAMPLE_SETS[0]
     perturbed_root = tmp_path / "prompts"
     for name in PROMPT_VERSION_SETS:
         shutil.copytree(_PROMPTS_ROOT / name, perturbed_root / name)
-    for name in ARCHIVED_PROMPT_VERSION_SETS:  # empty since the v1 retirement
+    for name in ARCHIVED_PROMPT_VERSION_SETS:
         shutil.copytree(_ARCHIVE_ROOT / name, perturbed_root / name)
-    victim = perturbed_root / "qwen3_6_27b" / "crewmate_report.j2"
+    victim = perturbed_root / "qwen3_6_27b_v3" / "crewmate_report.j2"
     victim.write_bytes(victim.read_bytes() + b"\n")  # one-byte perturbation
 
     perturbed_renderers = {

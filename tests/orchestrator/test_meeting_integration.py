@@ -50,6 +50,7 @@ from meetings.manager import (
     MeetingConfig,
     MeetingDeadlines,
     MeetingTrigger,
+    PromptRenderInputs,
     SuspicionEntry,
 )
 from meetings.schemas import (
@@ -955,6 +956,7 @@ def _stub_crewmate_prompt(
     dead_ids: tuple[PlayerId, ...] = (),
     persona: str = "",  # Task 16.3: widened contract kwarg (inert)
     suspicion_provenance: tuple[SuspicionEntry, ...] = (),  # Task 16.3
+    render_inputs: PromptRenderInputs | None = None,  # Task 20.31
 ) -> str:
     return f"CREWMATE_REPORT agent_id={agent_id} tick={current_tick}"
 
@@ -971,6 +973,7 @@ def _stub_impostor_prompt(
     dead_ids: tuple[PlayerId, ...] = (),
     persona: str = "",  # Task 16.3: widened contract kwarg (inert)
     suspicion_provenance: tuple[SuspicionEntry, ...] = (),  # Task 16.3
+    render_inputs: PromptRenderInputs | None = None,  # Task 20.31
 ) -> str:
     return f"IMPOSTOR_REPORT agent_id={agent_id} tick={current_tick}"
 
@@ -990,6 +993,7 @@ def _stub_statement_prompt(
     is_body_report: bool = False,
     persona: str = "",  # Task 16.3: widened contract kwarg (inert)
     suspicion_provenance: tuple[SuspicionEntry, ...] = (),  # Task 16.3
+    render_inputs: PromptRenderInputs | None = None,  # Task 20.31
 ) -> str:
     return f"STATEMENT_PROMPT agent_id={agent_id} kind={turn_kind}"
 
@@ -1007,6 +1011,7 @@ def _stub_vote_prompt(
     reporter_id: PlayerId | None = None,  # Task 15.5: widened contract kwarg
     persona: str = "",  # Task 16.3: widened contract kwarg (inert)
     suspicion_provenance: tuple[SuspicionEntry, ...] = (),  # Task 16.3
+    render_inputs: PromptRenderInputs | None = None,  # Task 20.31
 ) -> str:
     return f"VOTE voter={voter_id}"
 

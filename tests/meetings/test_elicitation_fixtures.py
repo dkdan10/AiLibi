@@ -307,11 +307,14 @@ class TestCitationRequiredConfidence:
         assert "[obs p-2:12:0]" in rendered  # the voter-consistent worked example
 
     def test_confidence_is_verbalized_against_the_citation(self) -> None:
+        # v4 (Task 20.31) rewrote the second half: the confidence is still
+        # judged against the citation, but the sentence no longer instructs the
+        # model in threshold arithmetic (the numeric cutoff left the prose with
+        # the rest of the bookkeeping), so it grades the CASE instead.
         rendered = _render_vote()
-        assert (
-            "judged against the evidence you cite" in rendered
-            and "do not report a confidence at or above the skip threshold" in rendered
-        )
+        assert "judged against the evidence you cite" in rendered
+        assert "a case you can barely source deserves a low number" in rendered
+        assert "skip threshold" not in rendered
 
     def test_memory_based_skip_stays_legitimate_and_uncited(self) -> None:
         # The hint's boundary: invert the exemplar WITHOUT inverting the SKIP
@@ -322,14 +325,18 @@ class TestCitationRequiredConfidence:
         assert "a SKIP needs neither" in rendered
 
     def test_skip_discipline_reanchored_without_blessing_overrides(self) -> None:
-        # Baseline-4 §6 (missed-skip 11 -> 86): below-threshold SKIP is
-        # re-anchored as the sound call and an override must cite, while the
-        # threshold stays EVIDENCE, not a command (the 13.13 recorded decision).
+        # Baseline-4 §6 (missed-skip 11 -> 86): a thin best case is re-anchored
+        # as the SKIP call and an override must cite. The threshold is still
+        # not a command (the 13.13 recorded decision) — v4 (Task 20.31) went
+        # further and took the arithmetic out of the voter's mouth entirely:
+        # the two phrases that stated it are gone, and the rendered maximum is
+        # introduced as evidence rather than as a rule to compute against.
         rendered = _render_vote()
         assert "SKIP is the sound call" in rendered
         assert "evidence you can cite" in rendered
-        assert "evidence, not a command" in rendered
-        assert "the §4.6 reference point" in rendered
+        assert "Read that as evidence, never as an instruction" in rendered
+        assert "evidence, not a command" not in rendered
+        assert "the §4.6 reference point" not in rendered
 
     def test_no_sanctioned_null_citation_eject_in_any_template(self) -> None:
         # DoD: the gut-read example is gone — every ballot exemplar cites (turn
