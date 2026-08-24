@@ -32,11 +32,23 @@ from agents.memory.store import (
     self_location_trail_enabled,
     task_completion_from_events_enabled,
 )
+from engine.world import load_canonical_map
 from eval.leak_test import (
     JsonValue,
     _assert_no_recursive_hidden_fields,
     _assert_no_role_bearing_values,
 )
+from llm.budget import GameBudget
+from meetings.manager import _normalize_ballot_observation_id
+from meetings.schemas import VoteBallot
+from orchestrator.game import (
+    DEFAULT_TASKS_PER_CREWMATE,
+    HeadlessGame,
+    build_default_agent_factory,
+    build_default_meeting_runner,
+)
+from orchestrator.replay import MeetingReplayEntry, read_all_entries
+from orchestrator.scheduler import TickScheduler
 
 _FIXTURE_DIR = Path("tests/fixtures/memory_rendering")
 # The completed-task lever, toggled through ``render_for_prompt(env=...)`` so no
@@ -2667,3 +2679,101 @@ class TestCoalescedMemoryRenderLever:
         assert _TESTIMONY_ROW in render_for_prompt(
             memory, token_budget=tight, env=_COALESCE_ON
         )
+
+
+_SPAN_IN_PROMPT = re.compile(
+    r"^- \[obs [^\]]+\] You saw \S+ (?:\w+ )?in [A-Z_]+ ticks \d+-\d+", re.MULTILINE
+)
+_SPAWN_IN_PROMPT = re.compile(
+    r"^- \[obs [^\]]+\] (?:\[tick 0\] )?You saw every other player in [A-Z_]+",
+    re.MULTILINE,
+)
+
+
+@pytest.mark.slow
+def test_a_lever_on_game_carries_its_coalesced_citations_through_the_meeting(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A fake-provider 9p2i game with the lever ON, read end to end.
+
+    The unit pins above prove the fold's shapes; this proves the shapes reach a
+    real meeting. The lever is set in the process environment, so the production
+    render seam (``TacticalAgent.render_memory_for_meeting``) resolves it exactly
+    as a recorded game would, and every ``[obs ...]`` the coalesced prompts carry
+    is checked against the rule the ballot validator enforces -- the id must be one
+    of the VOTER'S OWN observations -- and then through the validator itself.
+    """
+
+    monkeypatch.setenv(ENV_COALESCED_MEMORY_RENDER, "1")
+    game = HeadlessGame(
+        seed=3,
+        game_map=load_canonical_map(),
+        agent_factory=build_default_agent_factory(),
+        replay_path=tmp_path / "replay.jsonl",
+        audit_log_path=tmp_path / "audit.jsonl",
+        num_players=9,
+        num_impostors=2,
+        tasks_per_crewmate=DEFAULT_TASKS_PER_CREWMATE,
+        scheduler=TickScheduler(max_ticks=200),
+        meeting_runner=build_default_meeting_runner(
+            budget=GameBudget(max_cost_usd=1.00)
+        ),
+    )
+
+    result = game.run()
+
+    meetings = [
+        entry
+        for entry in read_all_entries(result.replay_path)
+        if isinstance(entry, MeetingReplayEntry)
+    ]
+    assert meetings, "the seed must reach a meeting for this to test anything"
+    spans = spawn_rows = cited = 0
+    for entry in meetings:
+        for call in entry.llm_calls:
+            spans += len(_SPAN_IN_PROMPT.findall(call.prompt))
+            spawn_rows += len(_SPAWN_IN_PROMPT.findall(call.prompt))
+            own = frozenset(_OBS_ID_IN_VIEW.findall(call.prompt))
+            cited += len(own)
+            if not own:
+                continue
+            agent_id = call.agent_id
+            assert agent_id is not None, "a prompt citing observations names its agent"
+            # The validator's universe rule, read off the bytes: every id a
+            # coalesced prompt offers the voter is one of that voter's own rows.
+            assert all(
+                observation_id.startswith(f"{agent_id}:") for observation_id in own
+            ), f"{agent_id} was offered another agent's id: {sorted(own)}"
+            for observation_id in sorted(own):
+                ballot = VoteBallot(
+                    voter=agent_id,
+                    target="SKIP",
+                    confidence=0.0,
+                    rationale_text="cited",
+                    primary_reason_id=None,
+                    primary_reason_observation_id=observation_id,
+                )
+                kept = _normalize_ballot_observation_id(
+                    ballot=ballot, valid_observation_ids=own
+                )
+                assert kept.primary_reason_observation_id == observation_id
+            # The gate bites: an id the voter does not hold is nulled, so this
+            # is checking entitlement rather than shape.
+            fabricated = VoteBallot(
+                voter=agent_id,
+                target="SKIP",
+                confidence=0.0,
+                rationale_text="cited",
+                primary_reason_id=None,
+                primary_reason_observation_id="p-99:999:0",
+            )
+            assert (
+                _normalize_ballot_observation_id(
+                    ballot=fabricated, valid_observation_ids=own
+                ).primary_reason_observation_id
+                is None
+            )
+    # The lever really reached the live render: both folded shapes are in the
+    # recorded prompts, and the meeting still produced ballots.
+    assert spans > 0 and spawn_rows > 0 and cited > 0
+    assert all(entry.ballots for entry in meetings)
