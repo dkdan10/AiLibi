@@ -102,6 +102,7 @@ import os
 import re
 from collections.abc import Callable, Coroutine, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
+from types import MappingProxyType
 from typing import Any, Final, Literal, TypeVar
 
 from pydantic import ValidationError
@@ -957,13 +958,15 @@ def structured_turn_markers_enabled(env: Mapping[str, str] | None = None) -> boo
 # One table, so the ON and OFF shapes of the same fact cannot drift and the
 # spectator can project both onto one chip vocabulary
 # (``api.replay_loader._TURN_PREFIX_MARKERS`` imports the same constants).
-_TURN_ANNOTATION_MARKERS: Final[Mapping[TurnAnnotationKind, str]] = {
-    "invalid_accusation_target": INVALID_ACCUSATION_TARGET_MARKER,
-    "invalid_alibi_subject": INVALID_ALIBI_SUBJECT_MARKER,
-    "invalid_corroboration_supports": INVALID_CORROBORATION_SUPPORTS_MARKER,
-    "fabricated_opening": EMERGENCY_BODY_STRIP_MARKER,
-    "opening_degraded_unsure": OPENING_UNSURE_DEGRADE_MARKER,
-}
+_TURN_ANNOTATION_MARKERS: Final[Mapping[TurnAnnotationKind, str]] = MappingProxyType(
+    {
+        "invalid_accusation_target": INVALID_ACCUSATION_TARGET_MARKER,
+        "invalid_alibi_subject": INVALID_ALIBI_SUBJECT_MARKER,
+        "invalid_corroboration_supports": INVALID_CORROBORATION_SUPPORTS_MARKER,
+        "fabricated_opening": EMERGENCY_BODY_STRIP_MARKER,
+        "opening_degraded_unsure": OPENING_UNSURE_DEGRADE_MARKER,
+    }
+)
 
 
 def _turn_annotation_marker(annotation: TurnAnnotation) -> str:

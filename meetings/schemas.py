@@ -470,12 +470,16 @@ class MeetingTurn(_FrozenModel):
     This class doubles as the structured-output schema the provider is asked
     to fill, and the manager is authoritative for the identity fields and
     overwrites them. ``annotations`` -- its typed note of what its own guards
-    changed before recording -- is SYSTEM-POPULATED AND IGNORED ON INPUT: a
-    value arriving on the wire is dropped at the provider boundary
-    (:meth:`meetings.manager.MeetingManager._collect_turn`), so a model can
-    never author its own audit trail. It is served alongside the authored
-    fields, so both halves stay visible to the spectator DTO surface's field
-    tripwires.
+    changed before recording -- is SYSTEM-POPULATED AND IGNORED ON INPUT: no
+    value a model sends under that name can reach the record. One that
+    validates is discarded at the provider boundary
+    (:meth:`meetings.manager.MeetingManager._collect_turn`); one that does not
+    is refused by :class:`TurnAnnotation` like any other malformed field, and
+    the turn retries -- which is what an ``annotations`` key did before this
+    field existed, when ``extra="forbid"`` rejected it outright. Either way a
+    model never authors its own audit trail. The field is served alongside the
+    authored ones, so both halves stay visible to the spectator DTO surface's
+    field tripwires.
     """
 
     turn_id: TurnId
