@@ -301,7 +301,7 @@ audit.
 |---|---|---|---|---|
 | I-2 false crew self-placement | 152/723 = 21.0% | 0/20 = 0.0% | NOT PREDICTABLE OFFLINE (bar 3) | down; n = 20 claims |
 | I-3 sole-flag precision (per victim) | 2/21 | 0/0 — no denominator | ON 1/4 pooled | the class did not occur |
-| I-4 grounded sighting side (at tick) | 31/58 = 53.5% | 0/0 — no denominator | ON 10/12 pooled, 1/1 on this set | the class did not occur |
+| I-4 grounded sighting side (at tick) | 31/58 = 53.4% | 0/0 — no denominator | ON 10/12 pooled, 1/1 on this set | the class did not occur |
 | I-5 fabricated completion lines | 19/458 = 4.1% | **0/10 = 0** | 0 on every set | reaches zero — the §9 tripwire did NOT trip |
 | I-6 adjacent-room STRONG share | 38/58 = 65.5% | 0/0 — no denominator | ON 0/1 on this set | the class did not occur |
 | I-7 movement-origin flags | 7/76 = 9.2% | 0/0 — no denominator | ON grows, 88/363 pooled | the class did not occur |
@@ -311,6 +311,11 @@ audit.
 | I-10 meetings with a venting participant | 16/165 = 9.7% | 1/5 = 20% | no bar | up; n = 5 meetings |
 | render: rows per snapshot (mean) | 99,959/1,956 = 51.10 | 1,974/56 = 35.25 | ON 40.77 on this set | down, past the predicted value |
 | render: reported-testimony retained | 18,319/99,959 = 18.3% | 794/1,974 = 40.2% | ON 47.9% on this set | up sharply, short of the predicted value |
+
+The two render rows quote the **recorded** baseline-6 figures (51.10 rows/snapshot, 18.3%
+retention). The memo's ON predictions are stated against its **reconstructed** OFF leg — 51.13
+rows/snapshot on this set — which is the apples-to-apples comparison it makes and the reason the two
+OFF numbers differ by 0.03 of a row.
 
 Solvability, for completeness (also two games): killer in the candidate set 5/5; one candidate 0/5;
 at most two candidates 1/5; ejected an already-cleared player 1/3.
