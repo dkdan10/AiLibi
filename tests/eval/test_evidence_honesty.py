@@ -883,13 +883,14 @@ def test_one_witness_placing_a_subject_in_two_rooms_is_two_flags() -> None:
     assert tallies.resolved_sighting_flags == 2
     assert (tallies.adjacent_flags, tallies.distance_three_plus) == (1, 1)
 
-    # And the same sentence twice IS one flag: identical speaker, subject, tick,
-    # room and alibi.
+    # And the same sentence twice IS one flag — even re-spelt. Rooms fold
+    # through the same canonicaliser the detector compared them with, so a
+    # lower-case echo is the same placement, not a second one.
     echo_turns = (
         _turn(
             index=0,
             speaker="p-9",
-            observations=(_saw_player(room="MEDBAY"), _saw_player(room="MEDBAY")),
+            observations=(_saw_player(room="MEDBAY"), _saw_player(room="medbay")),
         ),
         _turn(index=1, speaker="p-3", claims=(_FLAG_ALIBI,)),
     )
@@ -899,6 +900,52 @@ def test_one_witness_placing_a_subject_in_two_rooms_is_two_flags() -> None:
     )
     assert echo.strong_flags == 1
     assert echo.resolved_sighting_flags == 1
+
+
+def test_a_transition_only_subsumes_a_placement_at_one_of_its_endpoints() -> None:
+    # The near-miss on the OTHER side of the rule: the same speaker states a
+    # transition LABS -> MEDBAY and, at the same tick, places the subject in a
+    # THIRD room. ADMIN is neither endpoint, so it is a separate statement and
+    # both flags must survive.
+    third_room_turns = (
+        _turn(
+            index=0,
+            speaker="p-9",
+            observations=(_saw_move(to_room="MEDBAY"), _saw_player(room="ADMIN")),
+        ),
+        _turn(index=1, speaker="p-3", claims=(_FLAG_ALIBI,)),
+    )
+    flags = (
+        _sighting_flag(sighting_id="turn:m:turn-0:obs:0"),
+        _sighting_flag(sighting_id="turn:m:turn-0:obs:1"),
+    )
+    kept = _fold(
+        _flag_meeting(turns=third_room_turns, flags=flags),
+        memories={"p-9": _witness_memory(moved_to="MEDBAY")},
+    )
+    assert kept.strong_flags == 2
+    assert kept.resolved_sighting_flags == 2
+    # MEDBAY is one doorway from LABS, ADMIN is three: both flags priced.
+    assert (kept.adjacent_flags, kept.distance_three_plus) == (1, 1)
+
+    # Perturbed onto the ORIGIN endpoint: naming the room the transition left is
+    # the same witnessed event, so it folds — this is the recorded shape, where
+    # the detector rewrote the origin-worded placement at mint time.
+    origin_turns = (
+        _turn(
+            index=0,
+            speaker="p-9",
+            observations=(_saw_move(to_room="MEDBAY"), _saw_player(room="LABS")),
+        ),
+        _turn(index=1, speaker="p-3", claims=(_FLAG_ALIBI,)),
+    )
+    folded = _fold(
+        _flag_meeting(turns=origin_turns, flags=flags),
+        memories={"p-9": _witness_memory(moved_to="MEDBAY")},
+    )
+    assert folded.strong_flags == 1
+    assert folded.resolved_sighting_flags == 1
+    assert folded.adjacent_flags == 1  # the surviving read is the destination
 
 
 def test_a_flag_the_dedup_cannot_key_still_raises_through_the_fold() -> None:
