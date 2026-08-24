@@ -90,6 +90,8 @@ block would already have closed out.
 - tests/observation/test_leak_property.py; (the other direction: with the lever ON the observation packets are unchanged — the disclosure never travels through perception)
 - meetings/schemas.py; (a ReportedStatementKind member for the spoken vent; the SawVentObservation docstring correction)
 
+Recorded deviation at merge (PR #381, orchestrator-ratified): four files outside scope forward the widened note_meeting_concluded keywords verbatim — training/env.py:466, training/crew/scorer.py:814, agents/tactical/learned/factory.py:293 + :388, tests/training/test_learned_factory_acceptance.py:769 — because runtime_checkable capability gates check attribute presence, not signature, so the wrapper implementations had to accept what the orchestrator now passes. A prose record, not scope entries.
+
 **Files NOT in scope:**
 - engine/ (no engine change — the orchestrator already holds the post-meeting state and its roles)
 - agents/strategic/prompts/ (no template may move in this task; the dead-subject exemption to the speak-your-vent-first mandate is the prompt-set bump's, and it is the only task in the phase permitted to touch a `.j2`)

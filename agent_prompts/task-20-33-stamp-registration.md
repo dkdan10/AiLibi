@@ -89,6 +89,8 @@ sweep, not here.
 - tests/experiments/test_probe_backends.py; (the hard-coded _FLAGS_ON slate gains the eight keys)
 - docs/architecture.md; (the toggle-count sentence only)
 
+Coordination note (routed from PR #381): ON-path reconstruction parity is OPEN for lever 7 — neither api/replay_loader.py's memory walk nor tests/meetings/test_prompt_byte_golden.py's mirror folds meeting outcomes (the channel was inert before 20.29), so a lever-ON recording would have served/re-golden'd memories missing the '## Meetings so far:' block and the meeting index on reported lines. This task (or a routed follow-up it names) must close that parity BEFORE the adopting record — it must not be discovered during the 23-hour recording.
+
 **Files NOT in scope:**
 - every lever's home module (the resolvers already exist; this task imports and binds them, and changes no lever behaviour)
 - replays/ and replays/*/MANIFEST.md (committed stamps lack the new keys; the missing-key-reads-False rule makes both sides agree, and `_render_flags` never emits an OFF key — pinned unchanged, not edited)

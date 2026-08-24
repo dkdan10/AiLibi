@@ -4630,6 +4630,8 @@ block would already have closed out.
 - tests/observation/test_leak_property.py; (the other direction: with the lever ON the observation packets are unchanged — the disclosure never travels through perception)
 - meetings/schemas.py; (a ReportedStatementKind member for the spoken vent; the SawVentObservation docstring correction)
 
+Recorded deviation at merge (PR #381, orchestrator-ratified): four files outside scope forward the widened note_meeting_concluded keywords verbatim — training/env.py:466, training/crew/scorer.py:814, agents/tactical/learned/factory.py:293 + :388, tests/training/test_learned_factory_acceptance.py:769 — because runtime_checkable capability gates check attribute presence, not signature, so the wrapper implementations had to accept what the orchestrator now passes. A prose record, not scope entries.
+
 **Files NOT in scope:**
 - engine/ (no engine change — the orchestrator already holds the post-meeting state and its roles)
 - agents/strategic/prompts/ (no template may move in this task; the dead-subject exemption to the speak-your-vent-first mandate is the prompt-set bump's, and it is the only task in the phase permitted to touch a `.j2`)
@@ -5423,6 +5425,8 @@ sweep, not here.
 - api/replay_loader.py; (the substrate-mismatch remediation comment stops claiming no toggleable lever exists; the hint text itself already enumerates keys dynamically)
 - tests/experiments/test_probe_backends.py; (the hard-coded _FLAGS_ON slate gains the eight keys)
 - docs/architecture.md; (the toggle-count sentence only)
+
+Coordination note (routed from PR #381): ON-path reconstruction parity is OPEN for lever 7 — neither api/replay_loader.py's memory walk nor tests/meetings/test_prompt_byte_golden.py's mirror folds meeting outcomes (the channel was inert before 20.29), so a lever-ON recording would have served/re-golden'd memories missing the '## Meetings so far:' block and the meeting index on reported lines. This task (or a routed follow-up it names) must close that parity BEFORE the adopting record — it must not be discovered during the 23-hour recording.
 
 **Files NOT in scope:**
 - every lever's home module (the resolvers already exist; this task imports and binds them, and changes no lever behaviour)
