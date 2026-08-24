@@ -570,7 +570,10 @@ elif [[ "$PROVIDER" == "featherless" ]]; then
     echo "  - AILIBI_PROMPT_SET must be '$REQUIRED_PROMPT_SET' (got '${AILIBI_PROMPT_SET:-<unset>}')" >&2
     exit 1
   fi
-  echo "Locked substrate OK: AILIBI_PROMPT_SET=$REQUIRED_PROMPT_SET (meeting-layer levers unconditionally ON since baseline 6; impostor_roll_call OFF)."
+  # The PROMPT SET only -- the lever slate is the substrate-lever preflight's to
+  # report, from the slate the operator declared, so this message can never
+  # contradict it.
+  echo "Locked substrate OK: AILIBI_PROMPT_SET=$REQUIRED_PROMPT_SET."
   # Model-set coupling (Task 16.13, PR #260 review): the qwen3_6_27b set is
   # authored for its locked owner model Qwen/Qwen3.6-27B
   # (audits/audit-phase-16-model-lock.md; _SET_OWNER in the sweep harness), and

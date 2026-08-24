@@ -85,6 +85,7 @@ from orchestrator.replay import (
     substrate_slate_mismatches,
 )
 from engine.world import WorldState
+from orchestrator import replay as replay_module
 from tests._helpers.world_state import scripted_initial_world_state
 
 # The Task-14.10 lever's snapshot key (retired to ``_RETIRED_ALWAYS_ON_LEVERS``
@@ -1343,6 +1344,32 @@ class TestSubstrateSlateMismatches:
         assert substrate_slate_mismatches(["grounded_prosecutions"], env={}) == [
             "'grounded_prosecutions' is not a lever in the registry"
         ]
+
+    def test_a_partial_graduation_is_reported(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The third failure class, planted so the branch can be seen to bite: a
+        # graduation half-done -- the key moved into ``_RETIRED_ALWAYS_ON_LEVERS``
+        # while its default-OFF toggle resolver is still registered, so the
+        # snapshot's unconditional True is immediately overwritten with False.
+        # This build then cannot produce the substrate the recorder is about to
+        # claim, and the refusal must name it rather than let a multi-hour record
+        # start against a lever that reads OFF everywhere it is consulted.
+        monkeypatch.setattr(
+            replay_module,
+            "_RETIRED_ALWAYS_ON_LEVERS",
+            (*replay_module._RETIRED_ALWAYS_ON_LEVERS, "grounded_prosecution"),
+        )
+        problems = substrate_slate_mismatches([], env={})
+        assert problems == [
+            "grounded_prosecution is a graduated lever but the live slate reads "
+            "OFF (a partial graduation: this build cannot produce the substrate "
+            "the record would claim)"
+        ]
+        # Undo the plant and the same call is silent, so the line above is the
+        # PERTURBATION biting rather than a branch that always fires.
+        monkeypatch.undo()
+        assert substrate_slate_mismatches([], env={}) == []
 
     def test_a_graduated_lever_cannot_be_named_as_a_toggle(self) -> None:
         # Naming a graduated lever is the same class of error: its env gate is
