@@ -83,10 +83,29 @@ def citation_gate_enabled(env: Mapping[str, str] | None = None) -> bool:
 # workflows can cite the threshold without importing the 3-KLoC detector.
 GROUNDED_PROSECUTION_MIN_SOURCES: Final[int] = 2
 
+# The two thresholds of map-aware flag arbitration
+# (:func:`meetings.transcript.map_aware_arbitration_enabled`): how far apart the
+# two rooms of an ``alibi_vs_sighting`` pair may sit, in doorway hops on the
+# canonical map, and how close the sighting tick must sit to the nearest edge of
+# the alibi window, for one tick of walking to reconcile both statements.
+#
+# One hop is one tick: every room edge on the canonical map costs
+# ``traversal_ticks: 1`` (pinned beside
+# :data:`meetings.transcript.CANONICAL_ROOM_NEIGHBORS`), so a single hop is
+# exactly what one tick of window slack buys. A sighting two or more ticks
+# inside a claim of continuous presence stays a contradiction: leaving and
+# returning costs two ticks, which the claim's interior rules out anyway.
+# Homed in this leaf so an audit workflow can cite the thresholds without
+# importing the 3-KLoC detector.
+MAP_ARBITRATION_MAX_HOPS: Final[int] = 1
+MAP_ARBITRATION_MAX_TICK_GAP: Final[int] = 1
+
 
 __all__ = [
     "DEFAULT_SKIP_CONFIDENCE_THRESHOLD",
     "ENV_CITATION_GATE",
     "GROUNDED_PROSECUTION_MIN_SOURCES",
+    "MAP_ARBITRATION_MAX_HOPS",
+    "MAP_ARBITRATION_MAX_TICK_GAP",
     "citation_gate_enabled",
 ]

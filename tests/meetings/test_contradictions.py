@@ -20,12 +20,17 @@ observation appears on a :class:`MeetingTurn`, regardless of turn-kind):
 from __future__ import annotations
 
 import functools
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
 
-from meetings.constants import GROUNDED_PROSECUTION_MIN_SOURCES
+from meetings.constants import (
+    GROUNDED_PROSECUTION_MIN_SOURCES,
+    MAP_ARBITRATION_MAX_HOPS,
+    MAP_ARBITRATION_MAX_TICK_GAP,
+)
 from meetings.schemas import (
     AccusationClaim,
     AlibiClaim,
@@ -46,12 +51,15 @@ from meetings.schemas import (
     WhereaboutsClaim,
 )
 from meetings.transcript import (
+    CANONICAL_ROOM_NEIGHBORS,
     CANONICAL_ROOMS,
     ENV_GROUNDED_PROSECUTION,
+    ENV_MAP_AWARE_ARBITRATION,
     ENV_MOVEMENT_CLAIM_SHAPE,
     ENV_VENT_PLACEMENT_CONTRADICTIONS,
     ENV_WHEREABOUTS_INTERIOR_FLAGS,
     WEAK_CONTRADICTION_MARKER_PREFIX,
+    WEAK_REASON_ADJACENT_ONE_TICK,
     WEAK_REASON_ADVERSARIAL,
     WEAK_REASON_BOUNDARY_OVERLAP,
     WEAK_REASON_ENDPOINT_TICK,
@@ -68,6 +76,7 @@ from meetings.transcript import (
     detect_contradictions,
     grounded_prosecution_enabled,
     is_weak_contradiction,
+    map_aware_arbitration_enabled,
     movement_claim_shape_enabled,
     reconstruct_stated_paths,
     vent_placement_contradictions_enabled,
@@ -4124,3 +4133,446 @@ class TestGroundedProsecutionInjusticeShapes:
         # Rule (b): the sighting side grounds, but one speaker is the whole case.
         assert WEAK_REASON_LONE_GROUNDED_SOURCE in on[0].description
         assert is_weak_contradiction(on[0]) is True
+
+
+# --- Task 20.27: map-aware flag arbitration ---------------------------------
+#
+# Two rooms that share a doorway are one tick of walking apart, so an alibi in
+# one and a sighting in the other at the window's edge are two honest accounts of
+# one transit. The lever teaches the detector that geometry; these tests pin the
+# resolver, the demotion and its two limits, the frozen neighbour table against
+# the map, and the whole class over the 707 committed meetings.
+
+_MAP_AWARE_ON = {ENV_MAP_AWARE_ARBITRATION: "1"}
+_ROSTER_MAP = frozenset({"p-1", "p-9"})
+
+
+class _CountingEnv(Mapping[str, str]):
+    """A mapping that records which keys were read, and how often."""
+
+    def __init__(self, data: dict[str, str]) -> None:
+        self._data = dict(data)
+        self.reads: list[str] = []
+
+    def __getitem__(self, key: str) -> str:
+        self.reads.append(key)
+        return self._data[key]
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._data)
+
+    def __len__(self) -> int:
+        return len(self._data)
+
+
+def _corridor_transcript(
+    *,
+    alibi_room: str = "ENGINEERING",
+    from_tick: int = 6,
+    to_tick: int = 6,
+    sighting_room: str = "EAST_HALL",
+    sighting_tick: int = 6,
+) -> MeetingTranscript:
+    """The seed-17 shape: a self-placement and a sighting one doorway away.
+
+    Turn 0 is p-1's own single-tick alibi (the degenerate class the 18.9
+    exemption adjudicates as an interior tick, so the pair bands STRONG without
+    the lever); turn 1 is p-9's sighting of p-1 next door.
+    """
+
+    return MeetingTranscript(
+        turns=(
+            _turn(
+                turn_index=0,
+                speaker="p-1",
+                claims=(
+                    _alibi(
+                        subject="p-1",
+                        from_tick=from_tick,
+                        to_tick=to_tick,
+                        room=alibi_room,
+                    ),
+                ),
+            ),
+            _turn(
+                turn_index=1,
+                speaker="p-9",
+                turn_kind="opt_in",
+                observations=(
+                    _saw(tick=sighting_tick, subject="p-1", room=sighting_room),
+                ),
+            ),
+        )
+    )
+
+
+class TestMapAwareArbitrationResolver:
+    def test_defaults_off_with_no_environment(self) -> None:
+        assert map_aware_arbitration_enabled({}) is False
+
+    def test_reads_the_documented_true_values(self) -> None:
+        for value in ("1", "true", "TRUE", "yes", "on", " On "):
+            assert map_aware_arbitration_enabled({ENV_MAP_AWARE_ARBITRATION: value})
+
+    def test_any_other_value_is_off(self) -> None:
+        for value in ("", "0", "false", "no", "off", "maybe"):
+            assert (
+                map_aware_arbitration_enabled({ENV_MAP_AWARE_ARBITRATION: value})
+                is False
+            )
+
+    def test_the_passed_mapping_is_not_mutated(self) -> None:
+        env = {ENV_MAP_AWARE_ARBITRATION: "on", "AILIBI_OTHER": "x"}
+        before = dict(env)
+        assert map_aware_arbitration_enabled(env=env) is True
+        assert map_aware_arbitration_enabled(env=env) is True
+        assert env == before
+
+    def test_the_detector_consults_the_key_exactly_once(self) -> None:
+        # One resolver read per call, threaded down as a boolean -- the Task-18.9
+        # convention. A second read would mean a second gate somewhere below.
+        env = _CountingEnv({ENV_MAP_AWARE_ARBITRATION: "1"})
+        flags = detect_contradictions(
+            _corridor_transcript(), roster=_ROSTER_MAP, env=env
+        )
+        assert is_weak_contradiction(flags[0]) is True
+        assert env.reads.count(ENV_MAP_AWARE_ARBITRATION) == 1
+
+
+class TestMapAwareArbitrationDemotion:
+    """ON, a corridor informs; it no longer convicts."""
+
+    def test_the_adjacent_room_one_tick_pair_demotes(self) -> None:
+        # The committed exemplar (samples/9p2i seed 17): ENGINEERING and
+        # EAST_HALL share a doorway, and the sighting sits on the claim's tick.
+        transcript = _corridor_transcript()
+        off = detect_contradictions(transcript, roster=_ROSTER_MAP)
+        assert [flag.kind for flag in off] == ["alibi_vs_sighting"]
+        assert is_weak_contradiction(off[0]) is False
+        on = detect_contradictions(transcript, roster=_ROSTER_MAP, env=_MAP_AWARE_ON)
+        assert is_weak_contradiction(on[0]) is True
+        assert WEAK_REASON_ADJACENT_ONE_TICK in on[0].description
+        # Demoted, never dropped: the flag is the same flag.
+        assert (on[0].contradiction_id, on[0].subjects, on[0].kind) == (
+            off[0].contradiction_id,
+            off[0].subjects,
+            off[0].kind,
+        )
+        assert (on[0].event_a_id, on[0].event_b_id) == (
+            off[0].event_a_id,
+            off[0].event_b_id,
+        )
+
+    def test_a_two_hop_pair_still_mints_strong(self) -> None:
+        # CAFETERIA is two doorways from ENGINEERING (via EAST_HALL): one tick of
+        # walking does not reconcile it, so the flag keeps its band.
+        transcript = _corridor_transcript(sighting_room="CAFETERIA")
+        on = detect_contradictions(transcript, roster=_ROSTER_MAP, env=_MAP_AWARE_ON)
+        assert len(on) == 1
+        assert is_weak_contradiction(on[0]) is False
+        assert WEAK_REASON_ADJACENT_ONE_TICK not in on[0].description
+
+    def test_a_sighting_two_ticks_inside_the_window_still_mints_strong(self) -> None:
+        # A claim of continuous presence over ticks 4-8, contradicted at tick 6:
+        # leaving and returning costs two ticks, which the claim's interior rules
+        # out. The perturbation is the SAME transcript with the sighting one tick
+        # from the edge, which does demote.
+        interior = detect_contradictions(
+            _corridor_transcript(from_tick=4, to_tick=8, sighting_tick=6),
+            roster=_ROSTER_MAP,
+            env=_MAP_AWARE_ON,
+        )
+        assert len(interior) == 1
+        assert is_weak_contradiction(interior[0]) is False
+        near_edge = detect_contradictions(
+            _corridor_transcript(from_tick=4, to_tick=8, sighting_tick=5),
+            roster=_ROSTER_MAP,
+            env=_MAP_AWARE_ON,
+        )
+        assert is_weak_contradiction(near_edge[0]) is True
+        assert WEAK_REASON_ADJACENT_ONE_TICK in near_edge[0].description
+
+    def test_the_new_reason_appends_after_an_existing_marker(self) -> None:
+        # A pair already weak for the endpoint-tick reason keeps that marker text
+        # verbatim and gains this one LAST -- a fixed, byte-stable position.
+        transcript = _corridor_transcript(from_tick=4, to_tick=6, sighting_tick=4)
+        off = detect_contradictions(transcript, roster=_ROSTER_MAP)
+        assert is_weak_contradiction(off[0]) is True
+        assert WEAK_REASON_ENDPOINT_TICK in off[0].description
+        on = detect_contradictions(transcript, roster=_ROSTER_MAP, env=_MAP_AWARE_ON)
+        marker = (
+            f"{WEAK_CONTRADICTION_MARKER_PREFIX}{WEAK_REASON_ENDPOINT_TICK}; "
+            f"{WEAK_REASON_ADJACENT_ONE_TICK}]"
+        )
+        assert on[0].description.endswith(marker)
+        # The factual base text -- the claim and the sighting -- is preserved.
+        assert on[0].description.startswith(
+            off[0].description.split(WEAK_CONTRADICTION_MARKER_PREFIX)[0]
+        )
+
+    def test_a_non_spatial_side_is_never_reconciled_by_the_map(self) -> None:
+        # A label outside the room allowlist mints no flag at all, so there is
+        # nothing for the lever to re-band (the Task 10.6 allowlist, upheld).
+        transcript = _corridor_transcript(sighting_room="VARYING_ROOMS")
+        assert detect_contradictions(transcript, roster=_ROSTER_MAP) == ()
+        assert (
+            detect_contradictions(transcript, roster=_ROSTER_MAP, env=_MAP_AWARE_ON)
+            == ()
+        )
+
+    def test_the_lever_is_inert_with_the_key_absent(self) -> None:
+        transcript = _corridor_transcript()
+        baseline = detect_contradictions(transcript, roster=_ROSTER_MAP)
+        assert detect_contradictions(transcript, roster=_ROSTER_MAP, env={}) == baseline
+        assert (
+            detect_contradictions(
+                transcript, roster=_ROSTER_MAP, env={ENV_MAP_AWARE_ARBITRATION: "0"}
+            )
+            == baseline
+        )
+
+
+class TestCanonicalRoomNeighborsPin:
+    """The frozen neighbour table is the map's own room graph, and one tick wide."""
+
+    def test_the_table_equals_the_committed_map(self) -> None:
+        # DATA inside meetings/ (agents/ imports this module, so an engine import
+        # there would breach the §1.3 firewall transitively). This test is the one
+        # place the duplication is reconciled; tests sit outside the firewall, so
+        # the engine import is legal exactly here.
+        from engine.world import load_canonical_map
+
+        game_map = load_canonical_map()
+        assert dict(CANONICAL_ROOM_NEIGHBORS) == {
+            room: frozenset(game_map.room_neighbors(room)) for room in game_map.rooms
+        }
+        assert set(CANONICAL_ROOM_NEIGHBORS) == CANONICAL_ROOMS
+
+    def test_every_room_edge_costs_exactly_one_tick(self) -> None:
+        # "One hop = one tick" is what makes MAP_ARBITRATION_MAX_TICK_GAP legible
+        # against MAP_ARBITRATION_MAX_HOPS. A multi-tick corridor added to the map
+        # must fail here rather than quietly making the rule false.
+        from engine.world import load_canonical_map
+
+        assert {edge.traversal_ticks for edge in load_canonical_map().edges} == {1}
+        assert (MAP_ARBITRATION_MAX_HOPS, MAP_ARBITRATION_MAX_TICK_GAP) == (1, 1)
+
+    def test_a_flipped_neighbour_entry_fails_the_pin(self) -> None:
+        # The gate bites: one wrong doorway is enough to fail the equality above,
+        # and reading MEDBAY as a neighbour of ENGINEERING is exactly what would
+        # let a genuine two-hop contradiction be dismissed as a corridor.
+        from engine.world import load_canonical_map
+
+        game_map = load_canonical_map()
+        expected = {
+            room: frozenset(game_map.room_neighbors(room)) for room in game_map.rooms
+        }
+        perturbed = dict(CANONICAL_ROOM_NEIGHBORS)
+        perturbed["ENGINEERING"] = perturbed["ENGINEERING"] | {"MEDBAY"}
+        assert perturbed != expected
+        # REACTOR really is next door and demotes; MEDBAY is three hops and does
+        # not -- the behaviour the flipped entry would have destroyed.
+        near = detect_contradictions(
+            _corridor_transcript(sighting_room="REACTOR"),
+            roster=_ROSTER_MAP,
+            env=_MAP_AWARE_ON,
+        )
+        far = detect_contradictions(
+            _corridor_transcript(sighting_room="MEDBAY"),
+            roster=_ROSTER_MAP,
+            env=_MAP_AWARE_ON,
+        )
+        assert is_weak_contradiction(near[0]) is True
+        assert is_weak_contradiction(far[0]) is False
+
+
+@dataclass(frozen=True)
+class _MapAwareSetCensus:
+    meetings: int
+    off_matches_recorded: int
+    falsey_matches_recorded: int
+    ids_identical: int
+    structural_drift: int
+    bands_off: dict[str, int]
+    bands_on: dict[str, int]
+    demoted: int
+    promoted: int
+    moved_kinds: frozenset[str]
+
+
+@functools.cache
+def _map_aware_census() -> dict[str, _MapAwareSetCensus]:
+    """One shared walk of the 707 committed meetings, three detector legs each."""
+
+    per_set: dict[str, _MapAwareSetCensus] = {}
+    for set_dir in _COMMITTED_SETS:
+        set_name = f"{set_dir.parent.name}/{set_dir.name}"
+        counts: dict[str, int] = {}
+        bands: dict[str, dict[str, int]] = {"off": {}, "on": {}}
+        moved_kinds: set[str] = set()
+        for entry_set, _seed, entry in _committed_meeting_entries():
+            if entry_set != set_name:
+                continue
+            counts["meetings"] = counts.get("meetings", 0) + 1
+            roster = _living_roster(entry)
+            vents = _vent_records_from_recorded_flags(entry)
+            off = detect_contradictions(
+                entry.transcript, roster=roster, vent_witness_records=vents, env={}
+            )
+            falsey = detect_contradictions(
+                entry.transcript,
+                roster=roster,
+                vent_witness_records=vents,
+                env={ENV_MAP_AWARE_ARBITRATION: "0"},
+            )
+            on = detect_contradictions(
+                entry.transcript,
+                roster=roster,
+                vent_witness_records=vents,
+                env=_MAP_AWARE_ON,
+            )
+            counts["off_matches_recorded"] = counts.get(
+                "off_matches_recorded", 0
+            ) + int(_flags_match(off, entry.contradictions))
+            counts["falsey_matches_recorded"] = counts.get(
+                "falsey_matches_recorded", 0
+            ) + int(_flags_match(falsey, entry.contradictions))
+            counts["ids_identical"] = counts.get("ids_identical", 0) + int(
+                [flag.contradiction_id for flag in off]
+                == [flag.contradiction_id for flag in on]
+            )
+            for leg, flags in (("off", off), ("on", on)):
+                for band, count in _band_census(flags).items():
+                    bands[leg][band] = bands[leg].get(band, 0) + count
+            off_by_id = {flag.contradiction_id: flag for flag in off}
+            for flag in on:
+                original = off_by_id.get(flag.contradiction_id)
+                if original is None:
+                    counts["structural_drift"] = counts.get("structural_drift", 0) + 1
+                    continue
+                if (
+                    original.kind,
+                    original.event_a_id,
+                    original.event_b_id,
+                    original.subjects,
+                ) != (flag.kind, flag.event_a_id, flag.event_b_id, flag.subjects):
+                    counts["structural_drift"] = counts.get("structural_drift", 0) + 1
+                if is_weak_contradiction(original) == is_weak_contradiction(flag):
+                    continue
+                moved = "demoted" if is_weak_contradiction(flag) else "promoted"
+                counts[moved] = counts.get(moved, 0) + 1
+                moved_kinds.add(flag.kind)
+        per_set[set_name] = _MapAwareSetCensus(
+            meetings=counts.get("meetings", 0),
+            off_matches_recorded=counts.get("off_matches_recorded", 0),
+            falsey_matches_recorded=counts.get("falsey_matches_recorded", 0),
+            ids_identical=counts.get("ids_identical", 0),
+            structural_drift=counts.get("structural_drift", 0),
+            bands_off=bands["off"],
+            bands_on=bands["on"],
+            demoted=counts.get("demoted", 0),
+            promoted=counts.get("promoted", 0),
+            moved_kinds=frozenset(moved_kinds),
+        )
+    return per_set
+
+
+class TestMapAwareArbitrationCommittedCensus:
+    """The lever's price and its scope firewall, over all 707 committed meetings."""
+
+    @pytest.fixture(scope="class")
+    def census(self) -> dict[str, _MapAwareSetCensus]:
+        return _map_aware_census()
+
+    def test_the_off_path_is_byte_identical_to_the_record(
+        self, census: dict[str, _MapAwareSetCensus]
+    ) -> None:
+        # With the key absent (``env={}``) and with an explicit falsey value, the
+        # detector reproduces every recorded flag on every committed meeting.
+        for cell in census.values():
+            assert cell.off_matches_recorded == cell.meetings
+            assert cell.falsey_matches_recorded == cell.meetings
+        assert sum(cell.meetings for cell in census.values()) == _COMMITTED_MEETINGS
+
+    def test_the_flag_set_is_re_banded_never_thinned(
+        self, census: dict[str, _MapAwareSetCensus]
+    ) -> None:
+        for cell in census.values():
+            assert cell.ids_identical == cell.meetings
+            assert cell.structural_drift == 0
+            assert cell.promoted == 0
+            assert cell.moved_kinds <= {"alibi_vs_sighting"}
+
+    def test_only_the_sighting_class_moves(
+        self, census: dict[str, _MapAwareSetCensus]
+    ) -> None:
+        untouched = (
+            "vent_sighting:strong",
+            "alibi_vs_physical:strong",
+            "alibi_vs_physical:weak",
+            "alibi_conflict:weak",
+        )
+        for cell in census.values():
+            for band in untouched:
+                assert cell.bands_on.get(band, 0) == cell.bands_off.get(band, 0), band
+
+    def test_the_committed_class_prices_the_corridor(
+        self, census: dict[str, _MapAwareSetCensus]
+    ) -> None:
+        # 234 STRONG ``alibi_vs_sighting`` flags in the record; 140 of them are a
+        # corridor one tick wide, so 94 survive. The whole class is 313 flags, so
+        # the weak band grows by exactly the 140 that moved.
+        strong_off = sum(
+            cell.bands_off.get("alibi_vs_sighting:strong", 0)
+            for cell in census.values()
+        )
+        strong_on = sum(
+            cell.bands_on.get("alibi_vs_sighting:strong", 0) for cell in census.values()
+        )
+        weak_off = sum(
+            cell.bands_off.get("alibi_vs_sighting:weak", 0) for cell in census.values()
+        )
+        weak_on = sum(
+            cell.bands_on.get("alibi_vs_sighting:weak", 0) for cell in census.values()
+        )
+        assert (strong_off, strong_on) == (234, 94)
+        assert (weak_off, weak_on) == (79, 219)
+        assert sum(cell.demoted for cell in census.values()) == 140
+        assert {name: cell.demoted for name, cell in census.items()} == {
+            "samples/9p2i": 38,
+            "ml_corpus/9p2i": 100,
+            "samples/4p1i": 1,
+            "ml_corpus/4p1i": 1,
+        }
+
+    def test_the_seed_17_exemplar_loses_its_strong_band(self) -> None:
+        # The review's exemplar, read from the committed bytes: p-1 was ejected
+        # on STRONG flags whose two rooms share a doorway.
+        entry = _committed_meeting("samples/9p2i", 17, "headless-seed-17:meeting-0")
+        assert entry.ejected_player_id == "p-1"
+        roster = _living_roster(entry)
+        vents = _vent_records_from_recorded_flags(entry)
+        off = detect_contradictions(
+            entry.transcript, roster=roster, vent_witness_records=vents
+        )
+        on = {
+            flag.contradiction_id: flag
+            for flag in detect_contradictions(
+                entry.transcript,
+                roster=roster,
+                vent_witness_records=vents,
+                env=_MAP_AWARE_ON,
+            )
+        }
+        named = [
+            flag
+            for flag in off
+            if flag.kind == "alibi_vs_sighting" and "p-1" in flag.subjects
+        ]
+        assert named and all(not is_weak_contradiction(flag) for flag in named)
+        assert all("in ENGINEERING" in flag.description for flag in named)
+        assert all("in EAST_HALL at tick" in flag.description for flag in named)
+        for flag in named:
+            under_lever = on[flag.contradiction_id]
+            assert is_weak_contradiction(under_lever) is True
+            assert WEAK_REASON_ADJACENT_ONE_TICK in under_lever.description
