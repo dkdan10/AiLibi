@@ -22,6 +22,7 @@ import type {
   MeetingTriggeredEventView,
   ReportBodyEventView,
   SabotageEventView,
+  SawMoveObservationView,
   SawPlayerView,
   SawVentObservationView,
   TaskCompletedEventView,
@@ -936,6 +937,8 @@ export function _narrow_ObservationClaimView(e: ObservationClaimView): Observati
       return e satisfies SawVentObservationView;
     case "whereabouts":
       return e satisfies WhereaboutsClaimView;
+    case "saw_move":
+      return e satisfies SawMoveObservationView;
     default: {
       const _exhaustive: never = e;
       return _exhaustive;

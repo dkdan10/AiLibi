@@ -28,6 +28,7 @@ export type TriggerKind = "body" | "emergency";
 export type MeetingOutcome = "EJECTED" | "SKIPPED";
 export type ContradictionKind = "alibi_conflict" | "alibi_vs_sighting" | "alibi_vs_physical" | "vent_sighting";
 export type TurnKind = "opening" | "reply" | "opt_in";
+export type TurnAnnotationLabel = "invalid_accusation_target" | "invalid_alibi_subject" | "invalid_corroboration_supports" | "fabricated_opening" | "opening_degraded_unsure";
 
 export interface ReplayView {
   viewModelVersion: string;
@@ -244,6 +245,7 @@ export interface TurnView {
   observations: ObservationClaimView[];
   claims: StatementClaimView[];
   free_text: string;
+  annotations: TurnAnnotationLabel[];
   fabricated_opening: boolean;
 }
 
@@ -280,6 +282,14 @@ export interface WhereaboutsClaimView {
   type: "whereabouts";
   tick: number;
   room: string;
+}
+
+export interface SawMoveObservationView {
+  type: "saw_move";
+  tick: number;
+  subject: string;
+  from_room: string;
+  to_room: string;
 }
 
 export interface AlibiClaimView {
@@ -734,7 +744,7 @@ export interface WitnessedSupplyCells {
 }
 
 export type TickEventView = KillEventView | ReportBodyEventView | SabotageEventView | TaskCompletedEventView | MeetingTriggeredEventView | VentEventView;
-export type ObservationClaimView = SawPlayerView | CompletedTaskObsView | FoundBodyObsView | SawVentObservationView | WhereaboutsClaimView;
+export type ObservationClaimView = SawPlayerView | CompletedTaskObsView | FoundBodyObsView | SawVentObservationView | WhereaboutsClaimView | SawMoveObservationView;
 export type StatementClaimView = AlibiClaimView | AccusationClaimView | CorroborationClaimView;
 
 export interface GameReport {

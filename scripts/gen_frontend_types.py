@@ -114,6 +114,13 @@ _ENUM_ALIASES: Final[dict[str, tuple[str, ...]]] = {
         "vent_sighting",
     ),
     "TurnKind": ("opening", "reply", "opt_in"),
+    "TurnAnnotationLabel": (
+        "invalid_accusation_target",
+        "invalid_alibi_subject",
+        "invalid_corroboration_supports",
+        "fabricated_opening",
+        "opening_degraded_unsure",
+    ),
 }
 _ENUM_BY_VALUES: Final[dict[frozenset[str], str]] = {
     frozenset(values): name for name, values in _ENUM_ALIASES.items()
@@ -137,6 +144,7 @@ _UNION_ALIASES: Final[dict[str, tuple[str, ...]]] = {
         "FoundBodyObsView",
         "SawVentObservationView",
         "WhereaboutsClaimView",
+        "SawMoveObservationView",
     ),
     "StatementClaimView": (
         "AlibiClaimView",

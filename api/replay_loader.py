@@ -90,6 +90,7 @@ from api.schemas import (
     RubricView,
     SabotageDetailView,
     SabotageEventView,
+    SawMoveObservationView,
     SawPlayerView,
     SawVentObservationView,
     SizeView,
@@ -122,8 +123,12 @@ from meetings.manager import (
     BALLOT_TARGET_REDIRECT_MARKER,
     DEFAULT_SKIP_CONFIDENCE_THRESHOLD,
     EMERGENCY_BODY_STRIP_MARKER,
+    INVALID_ACCUSATION_TARGET_MARKER,
+    INVALID_ALIBI_SUBJECT_MARKER,
+    INVALID_CORROBORATION_SUPPORTS_MARKER,
     INVALID_OBSERVATION_ID_MARKER,
     INVALID_REASON_ID_MARKER,
+    OPENING_UNSURE_DEGRADE_MARKER,
     TEAMMATE_VOTE_TARGET_MARKER,
     UNCITED_ZERO_FLAG_EJECT_MARKER,
     VOTE_PARSE_DEFAULT_MARKER,
@@ -141,8 +146,10 @@ from meetings.schemas import (
     MeetingResult,
     MeetingTurn,
     ObservationClaim,
+    SawMoveObservation,
     SawPlayerObservation,
     SawVentObservation,
+    TurnAnnotationKind,
     VoteBallot,
     WhereaboutsClaim,
 )
@@ -2450,6 +2457,7 @@ def _observation_claim_view(
     | FoundBodyObsView
     | SawVentObservationView
     | WhereaboutsClaimView
+    | SawMoveObservationView
 ):
     if isinstance(claim, SawPlayerObservation):
         return SawPlayerView(
@@ -2493,6 +2501,17 @@ def _observation_claim_view(
             tick=claim.tick,
             room=claim.room,
         )
+    if isinstance(claim, SawMoveObservation):
+        # The spectator mirror of the witnessed transition. Both rooms are
+        # surfaced as spoken; which placement the detector draws from it is a
+        # meeting-layer decision the transcript never re-derives.
+        return SawMoveObservationView(
+            type="saw_move",
+            tick=claim.tick,
+            subject=claim.subject,
+            from_room=claim.from_room,
+            to_room=claim.to_room,
+        )
     raise TypeError(f"unsupported observation claim: {type(claim).__name__}")
 
 
@@ -2526,17 +2545,7 @@ def _statement_claim_view(
 
 
 def _turn_view(turn: MeetingTurn) -> TurnView:
-    # An emergency opening that fabricated a found_body carries the deterministic
-    # strip marker in its free_text (meetings.manager). Parse it server-side via
-    # the imported constant (DESIGN.md §3.4 — never hard-code a marker in TS): drop
-    # the dev-jargon string (it may sit among other audit markers, not only at the
-    # front) and surface a role-neutral ``fabricated_opening`` flag the transcript
-    # renders as a "FABRICATED" chip. The marker constant includes its trailing
-    # space, so removing it leaves no double space.
-    free_text = turn.free_text
-    fabricated_opening = EMERGENCY_BODY_STRIP_MARKER in free_text
-    if fabricated_opening:
-        free_text = free_text.replace(EMERGENCY_BODY_STRIP_MARKER, "")
+    annotations, free_text = _parse_turn_annotations(turn)
     return TurnView(
         turn_id=turn.turn_id,
         turn_index=turn.turn_index,
@@ -2546,7 +2555,8 @@ def _turn_view(turn: MeetingTurn) -> TurnView:
         observations=tuple(_observation_claim_view(o) for o in turn.observations),
         claims=tuple(_statement_claim_view(c) for c in turn.claims),
         free_text=free_text,
-        fabricated_opening=fabricated_opening,
+        annotations=annotations,
+        fabricated_opening=_FABRICATED_OPENING in annotations,
     )
 
 
@@ -2875,9 +2885,16 @@ _MARKER_REPR_VALUE: Final[str] = r"(?:'(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\\.)*\")"
 
 
 def _marker_pattern(marker: str) -> re.Pattern[str]:
-    """Anchored regex matching one whole ``.format()`` marker (head + repr + tail)."""
+    """Anchored regex matching one whole audit marker at the head of a string.
 
-    head, _, rest = marker.partition("{")
+    A ``.format()`` marker matches head + repr payload + tail; a marker with no
+    ``{...}`` placeholder (a static audit note, e.g. the emergency-strip one)
+    matches literally.
+    """
+
+    head, brace, rest = marker.partition("{")
+    if not brace:
+        return re.compile("^" + re.escape(marker))
     _, _, tail = rest.partition("}")
     return re.compile("^" + re.escape(head) + _MARKER_REPR_VALUE + re.escape(tail))
 
@@ -2888,6 +2905,57 @@ _BALLOT_PREFIX_PATTERNS: Final[tuple[tuple[str, re.Pattern[str]], ...]] = tuple(
     (label, _marker_pattern(marker)) for label, marker in _BALLOT_PREFIX_MARKERS
 )
 _VOTE_PARSE_DEFAULT_HEAD: Final[str] = VOTE_PARSE_DEFAULT_MARKER.partition("{")[0]
+
+
+# (label, marker) for the audit markers the meeting layer prepends to a TURN's
+# ``free_text`` when its guards change something — the turn-side twin of
+# ``_BALLOT_PREFIX_MARKERS``, and the reason the transcript can print the
+# speaker's words alone. The labels ARE
+# ``meetings.schemas.TurnAnnotationKind``, so a recording that carries the
+# structured field and a recording that carries the spliced string project onto
+# one chip vocabulary. Markers are prepended front-to-back in this order and
+# imported, never hard-coded.
+_TURN_PREFIX_MARKERS: Final[tuple[tuple[TurnAnnotationKind, str], ...]] = (
+    ("fabricated_opening", EMERGENCY_BODY_STRIP_MARKER),
+    ("opening_degraded_unsure", OPENING_UNSURE_DEGRADE_MARKER),
+    ("invalid_accusation_target", INVALID_ACCUSATION_TARGET_MARKER),
+    ("invalid_alibi_subject", INVALID_ALIBI_SUBJECT_MARKER),
+    ("invalid_corroboration_supports", INVALID_CORROBORATION_SUPPORTS_MARKER),
+)
+_TURN_PREFIX_PATTERNS: Final[tuple[tuple[TurnAnnotationKind, re.Pattern[str]], ...]] = (
+    tuple((label, _marker_pattern(marker)) for label, marker in _TURN_PREFIX_MARKERS)
+)
+_FABRICATED_OPENING: Final[TurnAnnotationKind] = "fabricated_opening"
+
+
+def _parse_turn_annotations(
+    turn: MeetingTurn,
+) -> tuple[tuple[TurnAnnotationKind, ...], str]:
+    """Both recorded annotation shapes as one label list plus the clean text.
+
+    Returns ``(annotation_labels, free_text_clean)``. Structured
+    ``MeetingTurn.annotations`` rows contribute their ``kind`` directly; a
+    recording that instead spliced the markers into ``free_text`` has them
+    stripped front-to-back through the shared repr-aware patterns, so the served
+    ``free_text`` is the speaker's words either way.
+    """
+
+    labels: list[TurnAnnotationKind] = [
+        annotation.kind for annotation in turn.annotations
+    ]
+    text = turn.free_text
+    stripped = True
+    while stripped:
+        stripped = False
+        for label, pattern in _TURN_PREFIX_PATTERNS:
+            match = pattern.match(text)
+            if match is None:
+                continue
+            labels.append(label)
+            text = text[match.end() :]
+            stripped = True
+            break
+    return tuple(labels), text
 
 
 def _parse_rewrite_reasons(rationale_text: str) -> tuple[tuple[str, ...], str]:

@@ -94,6 +94,13 @@ function ObservationLine({ obs }: { obs: ObservationClaimView }): ReactElement {
           <span className="font-semibold">was in</span> {obs.room} at tick {obs.tick}
         </span>
       );
+    case "saw_move":
+      return (
+        <span className="min-w-0 break-words text-ink-900">
+          <span className="font-semibold">saw</span> {obs.subject} move from{" "}
+          {obs.from_room} to {obs.to_room} at tick {obs.tick}
+        </span>
+      );
   }
 }
 

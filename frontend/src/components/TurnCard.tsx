@@ -27,6 +27,7 @@ import type {
   ContradictionView,
   PlayerView,
   SawPlayerView,
+  TurnAnnotationLabel,
   TurnView,
 } from "../types/api";
 import { ClaimLine } from "../ui/ClaimLine";
@@ -50,6 +51,58 @@ const TURN_KIND_LABELS: Record<TurnView["turn_kind"], string> = {
 
 const INDENT_PX = 22;
 const MAX_DEPTH = 6;
+
+// What the meeting's guards changed about a turn, in words a viewer can read —
+// the server sends the label, never the internal marker text. A `Record` over
+// the union: a new label is a compile error, not a chip that renders blank.
+//
+// No entry carries role information, and that is deliberate: every turn-side
+// guard fires on a claim naming somebody who is not at the table, which any
+// speaker can do. (The ballot side's `teammate_coerced` chip is gated on the
+// reveal precisely because it WOULD name an impostor; nothing here can.)
+const ANNOTATION_CHIPS: Record<
+  TurnAnnotationLabel,
+  { label: string; title: string }
+> = {
+  invalid_accusation_target: {
+    label: "dropped accusation",
+    title: "This turn accused someone who was not a living player; the accusation was dropped before the transcript.",
+  },
+  invalid_alibi_subject: {
+    label: "dropped alibi",
+    title: "This turn vouched for someone who was not a living player; the alibi was dropped before the transcript.",
+  },
+  invalid_corroboration_supports: {
+    label: "dropped backing",
+    title: "This turn backed someone who was not a living player; the backing was dropped before the transcript.",
+  },
+  fabricated_opening: { label: "fabricated", title: TURN_COPY.fabricatedOpeningTitle },
+  opening_degraded_unsure: {
+    label: "unsure",
+    title: "This opening failed twice to name a living suspect, so it was recorded as an undecided one.",
+  },
+};
+
+// `fabricated_opening` is drawn from the view model's own flag (it predates the
+// annotation channel and older recordings carry only the flag), so it is not
+// repeated in the generic list.
+function annotationChips(turn: TurnView): TurnAnnotationLabel[] {
+  return turn.annotations.filter((label) => label !== "fabricated_opening");
+}
+
+// Ink/paper only — no reserved hue — and always paired with its label, so the
+// chip is never hue-only.
+function AnnotationChip({ label }: { label: TurnAnnotationLabel }) {
+  const chip = ANNOTATION_CHIPS[label];
+  return (
+    <span
+      title={chip.title}
+      className="inline-flex items-center rounded-md border border-ink-300 bg-paper-2 px-1.5 py-1 font-mono text-4xs font-bold uppercase tracking-wide text-ink-700"
+    >
+      {chip.label}
+    </span>
+  );
+}
 
 function playerColor(agentId: string, players: PlayerView[]): string {
   return players.find((p) => p.agent_id === agentId)?.color ?? tokens.ink[400];
@@ -284,17 +337,12 @@ export function TurnCard({
         <span className="font-mono text-3xs text-ink-500">
           t{meetingTick} · {TURN_KIND_LABELS[turn.turn_kind]}
         </span>
-        {turn.fabricated_opening && (
-          // Role-neutral chip for an emergency opening whose fabricated found_body
-          // was stripped (the dev-jargon marker is dropped server-side). Ink/paper
-          // only — no reserved hue — paired with the label (firewall: not hue-only).
-          <span
-            title={TURN_COPY.fabricatedOpeningTitle}
-            className="inline-flex items-center rounded-md border border-ink-300 bg-paper-2 px-1.5 py-1 font-mono text-4xs font-bold uppercase tracking-wide text-ink-700"
-          >
-            fabricated
-          </span>
-        )}
+        {turn.fabricated_opening && <AnnotationChip label="fabricated_opening" />}
+        {annotationChips(turn).map((label, index) => (
+          // Keyed by position: one turn can drop two claims of the same kind,
+          // so the label alone is not a unique key.
+          <AnnotationChip key={`${label}-${index}`} label={label} />
+        ))}
         {target !== null && (
           // distrust-strong is the channel for the accusation EDGE (the arrow);
           // the label text stays ink-900 for contrast (Task 12.13 contrast sweep).

@@ -32,9 +32,19 @@ shape stop validating and are re-recorded in Task 8.12.
 
 from __future__ import annotations
 
-from typing import Annotated, Literal, TypeAlias
+from typing import Annotated, Any, Final, Literal, TypeAlias, cast
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    GetJsonSchemaHandler,
+    SerializerFunctionWrapHandler,
+    model_serializer,
+    model_validator,
+)
+from pydantic.json_schema import JsonSchemaValue
+from pydantic_core import CoreSchema
 
 PlayerId: TypeAlias = str
 RoomId: TypeAlias = str
@@ -355,6 +365,91 @@ TurnKind: TypeAlias = Literal["opening", "reply", "opt_in"]
 """
 
 
+TurnAnnotationKind: TypeAlias = Literal[
+    "invalid_accusation_target",
+    "invalid_alibi_subject",
+    "invalid_corroboration_supports",
+    "fabricated_opening",
+    "opening_degraded_unsure",
+]
+"""What a manager guard changed about a turn before recording it.
+
+The first three name the subject-bearing claim field whose value named no
+living participant, so the claim was dropped
+(:func:`meetings.manager._drop_non_roster_claims`); ``fabricated_opening`` is
+an emergency opening whose invented ``found_body`` was stripped; and
+``opening_degraded_unsure`` is a twice-failed opening rebuilt as an unsure
+position. The spectator surface renders exactly this vocabulary as chips.
+"""
+
+
+_CLAIM_DROP_ANNOTATION_KINDS: frozenset[TurnAnnotationKind] = frozenset(
+    {
+        "invalid_accusation_target",
+        "invalid_alibi_subject",
+        "invalid_corroboration_supports",
+    }
+)
+"""The annotation kinds that name a dropped claim field and quote its value."""
+
+
+# Bound on a quoted original -- the value a dropped claim named. The markers and
+# the structured annotations quote it verbatim for the audit trail, and seed 35
+# m1's opener hallucinated a 3499-char reasoning blob AS an alibi subject: an
+# unbounded quote balloons the recorded turn. A longer value is truncated to this
+# many chars plus :data:`MARKER_TRUNCATION_SUFFIX` before it is quoted
+# (:func:`meetings.manager._bounded_original`), and :class:`TurnAnnotation`
+# rejects anything longer, so the bound holds at the record boundary too.
+MARKER_QUOTED_ORIGINAL_MAX_CHARS: Final[int] = 60
+MARKER_TRUNCATION_SUFFIX: Final[str] = "..."
+
+
+class TurnAnnotation(_FrozenModel):
+    """One manager-authored note about what a guard changed on this turn.
+
+    The typed channel for facts that are ABOUT a turn rather than said in it.
+    ``free_text`` is what the speaker authored and nothing else, so the
+    audit trail no longer travels inside quoted dialogue into every later
+    speaker's prompt.
+
+    ``original`` carries the dropped value for the three claim-field kinds,
+    bounded by :data:`MARKER_QUOTED_ORIGINAL_MAX_CHARS` so a hallucinated
+    mega-value cannot balloon the record; it is ``None`` for the two kinds that
+    drop no value.
+    """
+
+    kind: TurnAnnotationKind
+    original: str | None = None
+
+    @model_validator(mode="after")
+    def _validate_payload_matches_kind(self) -> TurnAnnotation:
+        """The three claim-drop kinds carry their dropped value; the other two do not.
+
+        Fail loud rather than surface a dropped-claim chip whose original the
+        record promised and does not hold (AGENTS.md "no silent fallbacks").
+        """
+
+        if self.kind in _CLAIM_DROP_ANNOTATION_KINDS:
+            if self.original is None:
+                raise ValueError(
+                    f"TurnAnnotation kind={self.kind!r} must carry the dropped "
+                    "value in 'original'"
+                )
+            bound = MARKER_QUOTED_ORIGINAL_MAX_CHARS + len(MARKER_TRUNCATION_SUFFIX)
+            if len(self.original) > bound:
+                raise ValueError(
+                    f"TurnAnnotation 'original' is {len(self.original)} chars, "
+                    f"over the {bound}-char bound; quote the truncated head "
+                    "instead"
+                )
+        elif self.original is not None:
+            raise ValueError(
+                f"TurnAnnotation kind={self.kind!r} drops no value, so "
+                f"'original' must be None (got {self.original!r})"
+            )
+        return self
+
+
 class MeetingTurn(_FrozenModel):
     """One entry in the ordered ``transcript.turns`` list (DESIGN.md §5.2).
 
@@ -371,6 +466,20 @@ class MeetingTurn(_FrozenModel):
     The reporter's ``found_body`` / ``saw_player`` observations live on
     the ``opening`` turn (turn 0); :mod:`eval.vote_correctness` reads
     them from there.
+
+    This class doubles as the structured-output schema the provider is asked
+    to fill, and the manager is authoritative for the identity fields and
+    overwrites them. ``annotations`` -- its typed note of what its own guards
+    changed before recording -- is SYSTEM-POPULATED AND IGNORED ON INPUT: no
+    value a model sends under that name can reach the record. One that
+    validates is discarded at the provider boundary
+    (:meth:`meetings.manager.MeetingManager._collect_turn`); one that does not
+    is refused by :class:`TurnAnnotation` like any other malformed field, and
+    the turn retries -- which is what an ``annotations`` key did before this
+    field existed, when ``extra="forbid"`` rejected it outright. Either way a
+    model never authors its own audit trail. The field is served alongside the
+    authored ones, so both halves stay visible to the spectator DTO surface's
+    field tripwires.
     """
 
     turn_id: TurnId
@@ -381,6 +490,43 @@ class MeetingTurn(_FrozenModel):
     observations: tuple[ObservationClaim, ...] = ()
     claims: tuple[Claim, ...] = ()
     free_text: str
+    annotations: tuple[TurnAnnotation, ...] = ()
+
+    @model_serializer(mode="wrap")
+    def _serialize(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        """Serialize the turn, omitting ``annotations`` when it is empty.
+
+        The overwhelming majority of turns carry no annotation, and a key that
+        appears only when a guard fired keeps a recorded turn's bytes to what
+        actually happened -- so a replay recorded without annotations is
+        byte-identical to one recorded before the field existed. Reading is
+        unaffected: the field defaults to empty.
+        """
+
+        data: dict[str, Any] = handler(self)
+        if not self.annotations:
+            data.pop("annotations", None)
+        return data
+
+    @classmethod
+    def __get_pydantic_json_schema__(
+        cls, core_schema: CoreSchema, handler: GetJsonSchemaHandler
+    ) -> JsonSchemaValue:
+        """Publish the field-typed schema in BOTH modes.
+
+        A custom model serializer with an untyped return would otherwise reduce
+        the serialization-mode schema to a bare object, and that is the schema
+        FastAPI publishes for every response that reaches a turn -- so a client
+        could discover none of these fields. Dropping the serializer from the
+        core schema handed to the generator restores the field list; the only
+        thing the serializer changes is whether one key with a default is
+        present.
+        """
+
+        without_serializer = {
+            key: value for key, value in core_schema.items() if key != "serialization"
+        }
+        return handler(cast(CoreSchema, without_serializer))
 
 
 # ---------------------------------------------------------------------------
@@ -600,6 +746,8 @@ __all__ = [
     "ContradictionRef",
     "CorroborationClaim",
     "FoundBodyObservation",
+    "MARKER_QUOTED_ORIGINAL_MAX_CHARS",
+    "MARKER_TRUNCATION_SUFFIX",
     "MeetingOutcome",
     "MeetingResult",
     "MeetingTranscript",
@@ -616,6 +764,8 @@ __all__ = [
     "SawVentObservation",
     "SightingRecord",
     "TaskId",
+    "TurnAnnotation",
+    "TurnAnnotationKind",
     "TurnId",
     "TurnKind",
     "VentWitnessRecord",
