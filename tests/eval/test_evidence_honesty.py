@@ -89,6 +89,7 @@ from eval.evidence_honesty import (
     _TopRanked,
     _singular_persona_phrase,
     _Tallies,
+    _TESTIMONY_ROW,
     _WALK_CONFIG,
     cell,
     compute_evidence_honesty,
@@ -3247,6 +3248,84 @@ def test_the_counterfactual_counts_a_row_the_way_the_instrument_does() -> None:
     # Three rows, eight subject-ticks: the span's three, the summary's two
     # subjects over two ticks, and the lone row's one.
     assert _sighting_ticks_covered(both) == 8
+
+
+def test_the_widened_meeting_frame_is_off_neutral() -> None:
+    """The `[meeting N]` widening reads a new shape and moves no committed count.
+
+    Task 20.34 widened the two row patterns so the census can read the frame
+    ``meeting_outcome_memory`` ON renders (``[meeting 1]`` instead of the bare
+    ``[meeting]``). OFF-neutrality is proven here rather than argued: the
+    pre-widening patterns are re-stated in this test and asserted to count an
+    OFF-shaped block IDENTICALLY, the planted OFF-shape perturbations (a row the
+    old pattern rejected) are still rejected, and only the tagged frame is new.
+    """
+
+    # The patterns as they stood before the widening. Kept in the test, not
+    # imported, so this is an equality against the committed shape rather than a
+    # tautology against the current one.
+    off_shaped_rendered = re.compile(
+        r"^- (?:\[obs [^\]]+\] |\[tick \d+\] \[meeting\] CLAIM by )", re.MULTILINE
+    )
+    off_shaped_testimony = re.compile(r"^- \[.*\[meeting\] CLAIM by ")
+    obs_row = "- [obs p-1:1:1] You saw p-9 in ADMIN ticks 1-3 (with p-8)."
+    bare = "- [tick 4] [meeting] CLAIM by p-2 (unverified): saw p-9 in ADMIN @ tick 3."
+    # The planted OFF-shape perturbations: three near-misses the old pattern
+    # rejected, which the widened one must go on rejecting.
+    decoys = (
+        "- p-4: suspicion 0.60",
+        "- [tick 4] [meetings] CLAIM by p-2 (unverified): saw p-9 in ADMIN.",
+        "- [tick 4] [meeting one] CLAIM by p-2 (unverified): saw p-9 in ADMIN.",
+        "- [tick 4] [meeting 2] CLAIMED by p-2 (unverified): saw p-9 in ADMIN.",
+    )
+    off_block = "\n".join((obs_row, bare, *decoys))
+    # Byte-for-byte on the OFF shape: two rows, one of them testimony, either way.
+    assert len(_RENDERED_ROW.findall(off_block)) == len(
+        off_shaped_rendered.findall(off_block)
+    )
+    assert len(_RENDERED_ROW.findall(off_block)) == 2
+    assert _testimony_rows(_TESTIMONY_ROW, off_block) == _testimony_rows(
+        off_shaped_testimony, off_block
+    )
+    assert _testimony_rows(_TESTIMONY_ROW, off_block) == 1
+    # The one new shape, and it IS new: the old pattern cannot see it.
+    tagged = (
+        "- [tick 4] [meeting 1] CLAIM by p-2 (unverified): saw p-9 VENT in ADMIN "
+        "@ tick 3."
+    )
+    on_block = "\n".join((obs_row, tagged, *decoys))
+    assert len(_RENDERED_ROW.findall(on_block)) == 2
+    assert len(off_shaped_rendered.findall(on_block)) == 1
+    assert _testimony_rows(_TESTIMONY_ROW, on_block) == 1
+    assert _testimony_rows(off_shaped_testimony, on_block) == 0
+
+
+def _testimony_rows(pattern: re.Pattern[str], text: str) -> int:
+    """Count testimony rows the way ``_fold_prompts`` counts them: per line."""
+
+    return sum(1 for line in text.splitlines() if pattern.match(line) is not None)
+
+
+@pytest.mark.slow
+def test_no_committed_prompt_carries_a_tagged_meeting_frame() -> None:
+    """The widening cannot move a committed cell: the bytes hold no tagged frame.
+
+    ``test_render_budget_pins`` pins 18,319 testimony rows for samples/9p2i. The
+    same count falls straight out of the recorded bytes for the BARE frame, and
+    the tagged frame appears zero times — the recordings predate the lever — so
+    the two committed OFF cells are arithmetically untouched by Task 20.34's
+    pattern widening.
+    """
+
+    bare = re.compile(r"\[meeting\] CLAIM by ")
+    tagged = re.compile(r"\[meeting \d+\] CLAIM by ")
+    bare_rows = tagged_rows = 0
+    for path in sorted(_SAMPLES_9P2I.glob("replay-seed-*.jsonl")):
+        text = path.read_text(encoding="utf-8")
+        bare_rows += len(bare.findall(text))
+        tagged_rows += len(tagged.findall(text))
+    assert bare_rows == 18_319
+    assert tagged_rows == 0
 
 
 @pytest.mark.slow

@@ -244,3 +244,6 @@ recorded measurements, not prose.
   door made true, the inference channel repaired, one pre-registered record.
 - [audit-phase-20-preregistration.md](audit-phase-20-preregistration.md) — the
   falsifiability contract for that record, committed before it is taken.
+- [audit-phase-20-counterfactual.md](audit-phase-20-counterfactual.md) — the
+  offline counterfactual: every predictable bar predicted on frozen bytes, and
+  the cells no offline instrument can reach, published before the record.
