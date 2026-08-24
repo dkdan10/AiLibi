@@ -3105,8 +3105,10 @@ def _sighting_ticks_covered(view: str) -> int:
 # from the memories rather than from the recorded prompts, so the two agree only
 # if the reconstruction is faithful.
 _COMMITTED_OFF_MEAN: Final[float] = 51.1038
-# The row count the contract targets for the ON leg.
-_COALESCED_ROW_TARGET: Final[float] = 36.0
+# The ON-path row count the review PROJECTED (53.2 x 0.68), falsified by the
+# measurement below, and the cell that replaces it as the ratified pin.
+_COALESCED_PROJECTED_ROW_TARGET: Final[float] = 36.0
+_COALESCED_ROW_PIN: Final[float] = 42.1493
 
 
 class _RenderBudgetCensus(NamedTuple):
@@ -3275,22 +3277,42 @@ def test_the_coalesced_render_budget_cells(
 def test_the_on_leg_does_not_reach_the_contracts_row_ceiling(
     render_budget: _RenderBudgetCensus,
 ) -> None:
-    """The unmet acceptance criterion, recorded as a measurement rather than green.
+    """The falsified prediction, recorded with the mechanism that falsified it.
 
-    Task 20.30 asks for a mean of at most :data:`_COALESCED_ROW_TARGET` rendered
-    rows per snapshot under the lever. The fold removes 20.5% of the CANDIDATES,
-    but how many rows a render SHOWS is capped by the token budget rather than by
-    the candidate count, so freed budget refills with rows the OFF render had shed
-    -- and the raised reported band puts a floor of ~38 rows under the mix before
-    any bare sighting renders. This test asserts the gap it measures, so the
-    shortfall is a number in the suite rather than a silently relaxed bound; it
-    must be rewritten deliberately when the ceiling is met or re-pinned.
+    Task 20.30 carried a projected ON-path mean of at most
+    :data:`_COALESCED_PROJECTED_ROW_TARGET` rendered rows per snapshot. The
+    measurement re-pins the cell at :data:`_COALESCED_ROW_PIN`, and the
+    projection is falsified at the METHOD level rather than merely missed: it
+    was computed as 53.2 x 0.68 against RECORDED prompt line counts, i.e.
+    against a render the token budget had ALREADY filled. How many rows a render
+    shows is capped by ``DEFAULT_TOKEN_BUDGET``, not by the candidate count --
+    ``_select_within_budget`` fills that budget greedily, so every token the
+    shorter sighting block frees is refilled with candidates the OFF render had
+    shed. Removing rows from a budget-limited render does not shrink it; it
+    re-fills it, which no candidate-side fold can escape. The raised reported
+    band this same lever requires then puts a floor of ~38 rows under the ON mix
+    before a single bare sighting renders.
+
+    The census row is secondary -- observed and reported, never gated -- so
+    re-pinning it moves no ratified bar (ruled on PR #382).
     """
 
     mean_on = render_budget.rows_on / render_budget.snapshots
 
-    assert mean_on > _COALESCED_ROW_TARGET
-    assert mean_on == pytest.approx(42.1493, abs=1e-4)
+    # The cell, as measured and re-pinned.
+    assert mean_on == pytest.approx(_COALESCED_ROW_PIN, abs=1e-4)
+    # The prediction, falsified.
+    assert mean_on > _COALESCED_PROJECTED_ROW_TARGET
+
+    # And the refill that falsified it, in the census's own numbers: the fold
+    # takes 18,050 sighting rows out of the document, but the document loses only
+    # 8,663 rows -- the other 9,387 are candidates the OFF render had shed,
+    # pulled back in by the budget the fold freed.
+    sightings_removed = render_budget.sightings_off - render_budget.sightings_on
+    rows_removed = render_budget.rows_off - render_budget.rows_on
+    assert sightings_removed == 18_050
+    assert rows_removed == 8_663
+    assert sightings_removed - rows_removed == 9_387
 
 
 @pytest.mark.slow
