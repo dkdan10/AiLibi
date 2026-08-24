@@ -50,7 +50,7 @@ from agents.perception import (
     PROVENANCE_OBSERVED,
 )
 from agents.tactical.impostor_policy import RankedTarget
-from engine.entities import PlayerId, RoomId
+from engine.entities import PlayerId, Role, RoomId
 from engine.world import load_canonical_map
 from eval import evidence_honesty
 from eval.evidence_honesty import (
@@ -74,12 +74,14 @@ from eval.evidence_honesty import (
     _classify_decline,
     _event_index,
     _fold_completion_rows,
+    _fold_flags,
     _fold_geometry,
     _fold_ghost_top,
     _fold_turns,
     _fold_whereabouts,
     _fold_meeting_into_memories,
     _marker_prefixes,
+    _MeetingFacts,
     _perceive_tick,
     _resolve_flag,
     _RENDERED_ROW,
@@ -602,6 +604,391 @@ def test_flag_resolution_returns_none_for_an_unresolvable_pair() -> None:
         )
         is None
     )
+
+
+# --- The movement-sided sighting, and the flag said twice --------------------
+#
+# A spoken transition "X moved A -> B, arriving at t" is a sighting side: the
+# detector indexes it as ONE placement, X in B at t, and mints the flag from
+# that room. These fixtures are SYNTHETIC — the shape reaches a recording only
+# under the v4 prompt set, and no committed replay carries one.
+
+_FLAG_ALIBI = AlibiClaim(
+    type="alibi", subject="p-3", from_tick=6, to_tick=8, room="LABS"
+)
+_FLAG_ROLES: Mapping[PlayerId, Role] = MappingProxyType(
+    {"p-3": "IMPOSTOR", "p-6": "CREWMATE", "p-9": "CREWMATE"}
+)
+_FLAG_ROOM_AT: Mapping[int, Mapping[PlayerId, RoomId]] = MappingProxyType(
+    {6: MappingProxyType({"p-3": "LABS"}), 7: MappingProxyType({"p-3": "MEDBAY"})}
+)
+
+
+def _saw_move(*, to_room: str) -> SawMoveObservation:
+    return SawMoveObservation(
+        type="saw_move", tick=8, subject="p-3", from_room="LABS", to_room=to_room
+    )
+
+
+def _witness_memory(
+    *, saw_player_in: str | None = None, moved_to: str | None = "MEDBAY"
+) -> MemoryStore:
+    """p-9's own perception rows — one channel at a time, on purpose.
+
+    A witness who saw a DEPARTURE holds only the move row: there is no
+    ``saw_player`` row for a destination they never looked into, and the default
+    here is that move-only memory so a grounding assertion cannot pass on the
+    wrong channel.
+    """
+
+    events = []
+    if saw_player_in is not None:
+        events.append(
+            EpisodicEvent(
+                tick=8,
+                type=EVENT_SAW_PLAYER,
+                payload={"player_id": "p-3", "room": saw_player_in},
+                provenance=PROVENANCE_OBSERVED,
+                observation_id="p-9:8:0",
+            )
+        )
+    if moved_to is not None:
+        events.append(
+            EpisodicEvent(
+                tick=8,
+                type=EVENT_SAW_PLAYER_MOVE,
+                payload={"player_id": "p-3", "from_room": "LABS", "to_room": moved_to},
+                provenance=PROVENANCE_OBSERVED,
+                observation_id="p-9:8:1",
+            )
+        )
+    return _memory_with(*events)
+
+
+def _saw_player(*, room: str) -> SawPlayerObservation:
+    return SawPlayerObservation(type="saw_player", tick=8, subject="p-3", room=room)
+
+
+def _sighting_flag(*, sighting_id: str) -> ContradictionRef:
+    return ContradictionRef(
+        contradiction_id=f"contra:alibi_vs_sighting:{sighting_id}|alibi",
+        kind="alibi_vs_sighting",
+        event_a_id=sighting_id,
+        event_b_id="turn:m:turn-1:claim:0",
+        subjects=("p-3",),
+        description="Alibi places p-3 in LABS (ticks 6-8); sighting reports MEDBAY.",
+    )
+
+
+def _flag_meeting(
+    *, turns: tuple[MeetingTurn, ...], flags: tuple[ContradictionRef, ...]
+) -> _MeetingFacts:
+    """One recorded meeting that ejected p-3, carrying ``flags``."""
+
+    return _MeetingFacts(
+        entry=MeetingReplayEntry(
+            game_id="g",
+            meeting_id="g:meeting-0",
+            tick=7,
+            triggered_by="p-9",
+            outcome="EJECTED",
+            ejected_player_id="p-3",
+            transcript=MeetingTranscript(turns=turns),
+            ballots=(),
+            contradictions=flags,
+            llm_calls=(),
+            prompt_versions={},
+            state_hash_before="before",
+            state_hash_after="after",
+        ),
+        living=frozenset({"p-3", "p-6", "p-9"}),
+        venting=frozenset(),
+        body_triggered=True,
+    )
+
+
+def _fold(
+    facts: _MeetingFacts, *, memories: Mapping[PlayerId, MemoryStore]
+) -> _Tallies:
+    tallies = _Tallies()
+    _fold_flags(
+        game_id="g",
+        facts=facts,
+        roles=_FLAG_ROLES,
+        memories=memories,
+        room_at=_FLAG_ROOM_AT,
+        distances=_room_distances(load_canonical_map()),
+        tallies=tallies,
+    )
+    return tallies
+
+
+def test_a_movement_sided_sighting_is_read_at_its_destination() -> None:
+    turns = (
+        _turn(index=0, speaker="p-9", observations=(_saw_move(to_room="MEDBAY"),)),
+        _turn(index=1, speaker="p-3", claims=(_FLAG_ALIBI,)),
+    )
+    flag = _sighting_flag(sighting_id="turn:m:turn-0:obs:0")
+    resolved = _resolve_flag(flag, index=_event_index(MeetingTranscript(turns=turns)))
+    assert resolved is not None
+    # The destination placement the detector minted the flag from, and only it:
+    # the origin half is never placed at tick - 1.
+    assert (resolved.sighting.room, resolved.sighting.tick) == ("MEDBAY", 8)
+    assert (resolved.subject, resolved.speaker) == ("p-3", "p-9")
+
+    tallies = _fold(
+        _flag_meeting(turns=turns, flags=(flag,)), memories={"p-9": _witness_memory()}
+    )
+    assert tallies.strong_flags == 1
+    # I-6 reads LABS -> MEDBAY, one doorway. Read at the ORIGIN the two rooms
+    # would be the same room, distance 0, and the flag would land in NO bucket.
+    assert (tallies.adjacent_flags, tallies.distance_three_plus) == (1, 0)
+    # I-4 grounds against the speaker's own transition row, which lands at
+    # MEDBAY — the origin read would look for LABS and find nothing.
+    assert (tallies.resolvable_sides, tallies.grounded_at_tick) == (1, 1)
+    # I-7 classifies it as the DESTINATION half, which is the truthful one.
+    assert (tallies.move_backed_flags, tallies.destination_flags) == (1, 1)
+    assert (tallies.resolved_sighting_flags, tallies.origin_flags) == (1, 0)
+
+    # Perturbed: the same transition landing three doorways away. Every cell
+    # above moves with ``to_room``, which is what proves it is the room read.
+    far_turns = (
+        _turn(index=0, speaker="p-9", observations=(_saw_move(to_room="ADMIN"),)),
+        _turn(index=1, speaker="p-3", claims=(_FLAG_ALIBI,)),
+    )
+    far = _fold(
+        _flag_meeting(turns=far_turns, flags=(flag,)),
+        memories={"p-9": _witness_memory()},
+    )
+    assert (far.adjacent_flags, far.distance_three_plus) == (0, 1)
+    assert far.grounded_at_tick == 0
+    assert (far.destination_flags, far.origin_flags) == (0, 0)
+
+
+def test_a_movement_sided_side_is_grounded_by_whichever_channel_holds_it() -> None:
+    # I-4 asks whether the speaker COULD have seen what they said. A witness who
+    # saw a DEPARTURE holds no saw_player row at the destination, so refusing the
+    # move channel would score a production-grounded side as unsupported.
+    turns = (
+        _turn(index=0, speaker="p-9", observations=(_saw_move(to_room="MEDBAY"),)),
+        _turn(index=1, speaker="p-3", claims=(_FLAG_ALIBI,)),
+    )
+    move_flag = _sighting_flag(sighting_id="turn:m:turn-0:obs:0")
+    by_move = _fold(
+        _flag_meeting(turns=turns, flags=(move_flag,)),
+        memories={"p-9": _witness_memory(moved_to="MEDBAY")},
+    )
+    assert (by_move.resolvable_sides, by_move.grounded_at_tick) == (1, 1)
+
+    # A witness who watched the ARRIVAL holds the static row instead, and it
+    # supports the same placement: the cell is about the room, not the channel.
+    by_sighting = _fold(
+        _flag_meeting(turns=turns, flags=(move_flag,)),
+        memories={"p-9": _witness_memory(saw_player_in="MEDBAY", moved_to=None)},
+    )
+    assert (by_sighting.resolvable_sides, by_sighting.grounded_at_tick) == (1, 1)
+
+    # Perturbed: a static row for the same subject and tick in a DIFFERENT room.
+    # The room is read, not assumed, so nothing grounds the placement.
+    wrong_room = _fold(
+        _flag_meeting(turns=turns, flags=(move_flag,)),
+        memories={"p-9": _witness_memory(saw_player_in="ADMIN", moved_to=None)},
+    )
+    assert (wrong_room.resolvable_sides, wrong_room.grounded_at_tick) == (1, 0)
+
+    # Perturbed: neither channel holds anything.
+    ungrounded = _fold(
+        _flag_meeting(turns=turns, flags=(move_flag,)),
+        memories={"p-9": _witness_memory(moved_to=None)},
+    )
+    assert (ungrounded.resolvable_sides, ungrounded.grounded_at_tick) == (1, 0)
+
+    # And the clause that protects every committed cell: a STATIC sighting by a
+    # speaker holding only the move row is NOT grounded. The move channel is
+    # admitted for movement-sided placements only.
+    static_turns = (
+        _turn(index=0, speaker="p-9", observations=(_saw_player(room="MEDBAY"),)),
+        _turn(index=1, speaker="p-3", claims=(_FLAG_ALIBI,)),
+    )
+    static = _fold(
+        _flag_meeting(
+            turns=static_turns,
+            flags=(_sighting_flag(sighting_id="turn:m:turn-0:obs:0"),),
+        ),
+        memories={"p-9": _witness_memory(moved_to="MEDBAY")},
+    )
+    assert (static.resolvable_sides, static.grounded_at_tick) == (1, 0)
+
+
+def test_one_witnesss_placement_said_twice_folds_once_into_every_cell() -> None:
+    # p-9 states the same perception two ways — "I saw p-3 in MEDBAY at 8" and
+    # "I saw p-3 move LABS -> MEDBAY at 8" — so two flags reach the recording
+    # against one alibi. They are one piece of evidence and count once.
+    twin_turns = (
+        _turn(
+            index=0,
+            speaker="p-9",
+            observations=(_saw_player(room="MEDBAY"), _saw_move(to_room="MEDBAY")),
+        ),
+        _turn(index=1, speaker="p-3", claims=(_FLAG_ALIBI,)),
+    )
+    twin_flags = (
+        _sighting_flag(sighting_id="turn:m:turn-0:obs:0"),
+        _sighting_flag(sighting_id="turn:m:turn-0:obs:1"),
+    )
+    once = _fold(
+        _flag_meeting(turns=twin_turns, flags=twin_flags),
+        memories={"p-9": _witness_memory(moved_to="MEDBAY")},
+    )
+    assert once.strong_flags == 1  # I-6 denominator
+    assert once.adjacent_flags == 1  # I-6 numerator
+    assert once.strong_sides == 1  # I-4 denominator
+    assert once.resolved_sighting_flags == 1  # I-7 denominator
+    # I-3: the ejected player carried ONE strong flag, not two.
+    assert (once.single_flag_victim_total, once.single_flag_victim_impostor) == (1, 1)
+    # The TRANSITION is the survivor, not the static half: the speaker's memory
+    # holds only the move row, so a grounded side can only be the movement one.
+    assert once.grounded_at_tick == 1
+
+    # Perturbed: the transition spoken by a SECOND witness instead. Two
+    # witnesses are two independent pieces of evidence and must stay two — the
+    # dedup keys on the speaker for exactly this reason.
+    witnesses_turns = (
+        _turn(index=0, speaker="p-9", observations=(_saw_player(room="MEDBAY"),)),
+        _turn(index=1, speaker="p-3", claims=(_FLAG_ALIBI,)),
+        _turn(index=2, speaker="p-6", observations=(_saw_move(to_room="MEDBAY"),)),
+    )
+    witnesses_flags = (
+        _sighting_flag(sighting_id="turn:m:turn-0:obs:0"),
+        _sighting_flag(sighting_id="turn:m:turn-2:obs:0"),
+    )
+    twice = _fold(
+        _flag_meeting(turns=witnesses_turns, flags=witnesses_flags),
+        memories={"p-9": _witness_memory(), "p-6": _witness_memory()},
+    )
+    assert twice.strong_flags == 2
+    assert twice.adjacent_flags == 2
+    assert twice.strong_sides == 2
+    assert twice.resolved_sighting_flags == 2
+    assert twice.single_flag_victim_total == 0
+
+
+def test_one_witness_placing_a_subject_in_two_rooms_is_two_flags() -> None:
+    # The near-miss the dedup must NOT swallow: one speaker, one subject, one
+    # tick — but two DIFFERENT rooms, stated as two static sightings. A witness
+    # who contradicts themselves has made two statements, and collapsing them
+    # would understate the class census the I-3 base rate is read against.
+    turns = (
+        _turn(
+            index=0,
+            speaker="p-9",
+            observations=(_saw_player(room="MEDBAY"), _saw_player(room="ADMIN")),
+        ),
+        _turn(index=1, speaker="p-3", claims=(_FLAG_ALIBI,)),
+    )
+    flags = (
+        _sighting_flag(sighting_id="turn:m:turn-0:obs:0"),
+        _sighting_flag(sighting_id="turn:m:turn-0:obs:1"),
+    )
+    tallies = _fold(
+        _flag_meeting(turns=turns, flags=flags),
+        memories={"p-9": _witness_memory(saw_player_in="MEDBAY", moved_to=None)},
+    )
+    assert tallies.strong_flags == 2
+    assert tallies.resolved_sighting_flags == 2
+    assert (tallies.adjacent_flags, tallies.distance_three_plus) == (1, 1)
+
+    # And the same sentence twice IS one flag — even re-spelt. Rooms fold
+    # through the same canonicaliser the detector compared them with, so a
+    # lower-case echo is the same placement, not a second one.
+    echo_turns = (
+        _turn(
+            index=0,
+            speaker="p-9",
+            observations=(_saw_player(room="MEDBAY"), _saw_player(room="medbay")),
+        ),
+        _turn(index=1, speaker="p-3", claims=(_FLAG_ALIBI,)),
+    )
+    echo = _fold(
+        _flag_meeting(turns=echo_turns, flags=flags),
+        memories={"p-9": _witness_memory(saw_player_in="MEDBAY", moved_to=None)},
+    )
+    assert echo.strong_flags == 1
+    assert echo.resolved_sighting_flags == 1
+
+
+def test_a_transition_only_subsumes_a_placement_at_one_of_its_endpoints() -> None:
+    # The near-miss on the OTHER side of the rule: the same speaker states a
+    # transition LABS -> MEDBAY and, at the same tick, places the subject in a
+    # THIRD room. ADMIN is neither endpoint, so it is a separate statement and
+    # both flags must survive.
+    third_room_turns = (
+        _turn(
+            index=0,
+            speaker="p-9",
+            observations=(_saw_move(to_room="MEDBAY"), _saw_player(room="ADMIN")),
+        ),
+        _turn(index=1, speaker="p-3", claims=(_FLAG_ALIBI,)),
+    )
+    flags = (
+        _sighting_flag(sighting_id="turn:m:turn-0:obs:0"),
+        _sighting_flag(sighting_id="turn:m:turn-0:obs:1"),
+    )
+    kept = _fold(
+        _flag_meeting(turns=third_room_turns, flags=flags),
+        memories={"p-9": _witness_memory(moved_to="MEDBAY")},
+    )
+    assert kept.strong_flags == 2
+    assert kept.resolved_sighting_flags == 2
+    # MEDBAY is one doorway from LABS, ADMIN is three: both flags priced.
+    assert (kept.adjacent_flags, kept.distance_three_plus) == (1, 1)
+
+    # Perturbed onto the ORIGIN endpoint: naming the room the transition left is
+    # the same witnessed event, so it folds — this is the recorded shape, where
+    # the detector rewrote the origin-worded placement at mint time.
+    origin_turns = (
+        _turn(
+            index=0,
+            speaker="p-9",
+            observations=(_saw_move(to_room="MEDBAY"), _saw_player(room="LABS")),
+        ),
+        _turn(index=1, speaker="p-3", claims=(_FLAG_ALIBI,)),
+    )
+    folded = _fold(
+        _flag_meeting(turns=origin_turns, flags=flags),
+        memories={"p-9": _witness_memory(moved_to="MEDBAY")},
+    )
+    assert folded.strong_flags == 1
+    assert folded.resolved_sighting_flags == 1
+    assert folded.adjacent_flags == 1  # the surviving read is the destination
+
+
+def test_a_flag_the_dedup_cannot_key_still_raises_through_the_fold() -> None:
+    # Planted: an alibi_vs_sighting flag whose two sides are BOTH alibis. The
+    # dedup has no identity for it and must not swallow it — the guard has to
+    # see it, because a flag that vanishes from I-4/I-6/I-7 still counts in the
+    # I-3 class census.
+    turns = (
+        _turn(
+            index=0,
+            speaker="p-9",
+            claims=(
+                AlibiClaim(
+                    type="alibi", subject="p-9", from_tick=6, to_tick=8, room="MEDBAY"
+                ),
+            ),
+        ),
+        _turn(index=1, speaker="p-3", claims=(_FLAG_ALIBI,)),
+    )
+    flag = _sighting_flag(sighting_id="turn:m:turn-0:claim:0")
+    with pytest.raises(
+        EvidenceHonestyReconstructionError,
+        match="do not resolve to one spoken sighting and one alibi",
+    ):
+        _fold(
+            _flag_meeting(turns=turns, flags=(flag,)),
+            memories={"p-9": _witness_memory()},
+        )
 
 
 def test_ghost_top_splits_the_two_sub_populations_and_skips_the_living() -> None:
