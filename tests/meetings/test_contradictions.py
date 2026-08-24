@@ -2961,6 +2961,66 @@ class TestGroundedProsecutionRuleTwoSources:
         # construction.
         assert is_weak_contradiction(kinds["vent_sighting"]) is False
 
+    def test_two_prosecutions_in_one_meeting_are_banded_independently(self) -> None:
+        # Each flag is banded against ITS OWN (subject, claim) carriers. p-3's
+        # claim has two grounded witnesses and convicts; p-7's has one and does
+        # not -- in the same meeting, in the same call. A pass that reused one
+        # claim's carriers for the other would flip whichever it read second.
+        tx = MeetingTranscript(
+            turns=(
+                _turn(
+                    turn_index=0,
+                    speaker="p-3",
+                    claims=(
+                        _alibi(subject="p-3", from_tick=4, to_tick=8, room="MEDBAY"),
+                    ),
+                ),
+                _turn(
+                    turn_index=1,
+                    speaker="p-7",
+                    turn_kind="reply",
+                    claims=(
+                        _alibi(subject="p-7", from_tick=4, to_tick=8, room="STORAGE"),
+                    ),
+                ),
+                _turn(
+                    turn_index=2,
+                    speaker="p-9",
+                    turn_kind="opt_in",
+                    observations=(
+                        _saw(tick=6, subject="p-3", room="LABS"),
+                        _saw(tick=6, subject="p-7", room="LABS"),
+                    ),
+                ),
+                _turn(
+                    turn_index=3,
+                    speaker="p-5",
+                    turn_kind="opt_in",
+                    # p-5 corroborates ONLY the case against p-3.
+                    observations=(_saw(tick=6, subject="p-3", room="LABS"),),
+                ),
+            )
+        )
+        records = {
+            "p-9": (
+                _sighting_record(tick=6, subject="p-3", room="LABS"),
+                _sighting_record(tick=6, subject="p-7", room="LABS"),
+            ),
+            "p-5": (_sighting_record(tick=6, subject="p-3", room="LABS"),),
+        }
+        flags = detect_contradictions(
+            tx, roster=_ROSTER_4, sighting_records=records, env=_GROUNDED_ON
+        )
+        banded = {
+            (flag.subjects[0], is_weak_contradiction(flag))
+            for flag in flags
+            if flag.kind == "alibi_vs_sighting"
+        }
+        # Two witnesses against p-3 (both flags STRONG); one against p-7 (weak).
+        assert banded == {("p-3", False), ("p-7", True)}
+        lone = next(f for f in flags if f.subjects == ("p-7",))
+        assert WEAK_REASON_LONE_GROUNDED_SOURCE in lone.description
+
     def _proxy_alibi_transcript(self, *, vent_speaker: str) -> MeetingTranscript:
         # p-5 states a PROXY alibi for p-3, p-9 (grounded) contradicts it, and
         # ``vent_speaker`` supplies a grounded vent of p-3 inside the claimed
@@ -3969,7 +4029,7 @@ class TestGroundedProsecutionCommittedCensus:
         self, census: dict[str, _GroundedSetCensus]
     ) -> None:
         # Ground EVERY spoken sighting -- the most generous reading the lever can
-        # be given -- and 234 STRONG flags still come out as 15: the rest fall to
+        # be given -- and 234 STRONG flags still come out as 22: the rest fall to
         # rule (b) (one speaker is the whole prosecution) or rule (c) (the
         # one-tick self-placement is an edge again).
         strong = sum(
@@ -3980,12 +4040,9 @@ class TestGroundedProsecutionCommittedCensus:
             cell.bands_grounded.get("alibi_vs_sighting:weak", 0)
             for cell in census.values()
         )
-        assert (strong, weak) == (15, 298)
-        assert (
-            census["samples/9p2i"].bands_grounded.get("alibi_vs_sighting:strong", 0)
-            == 0
-        )
-        assert census["ml_corpus/9p2i"].bands_grounded["alibi_vs_sighting:strong"] == 15
+        assert (strong, weak) == (22, 291)
+        assert census["samples/9p2i"].bands_grounded["alibi_vs_sighting:strong"] == 2
+        assert census["ml_corpus/9p2i"].bands_grounded["alibi_vs_sighting:strong"] == 20
         for set_name in ("samples/4p1i", "ml_corpus/4p1i"):
             assert (
                 census[set_name].bands_grounded.get("alibi_vs_sighting:strong", 0) == 0

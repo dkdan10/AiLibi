@@ -3985,16 +3985,16 @@ def _apply_grounded_prosecution(
             continue
         claim_id, sighting_id = sides
         subject = flag.subjects[0]
-        key = (subject, claim_id)
-        sources.setdefault(key, set())
+        claim_key = (subject, claim_id)
+        sources.setdefault(claim_key, set())
         if not is_weak_contradiction(flag):
-            resolved[flag.contradiction_id] = (key, sighting_id)
+            resolved[flag.contradiction_id] = (claim_key, sighting_id)
         speaker = indexed[sighting_id].speaker
         if grounded[sighting_id] and speaker not in (
             subject,
             event_speakers.get(claim_id),
         ):
-            sources[key].add(speaker)
+            sources[claim_key].add(speaker)
 
     # Pass 2: re-band. Reason order is fixed so the rendered marker is stable.
     banded: list[ContradictionRef] = []
@@ -4003,12 +4003,12 @@ def _apply_grounded_prosecution(
         if candidate is None:
             banded.append(flag)
             continue
-        subject, claim_id = key
-        _, sighting_id = candidate
+        prosecution_key, sighting_id = candidate
+        subject, claim_id = prosecution_key
         # The alibi's own author is a party to the dispute, not a witness to it:
         # excluded from the anchor half exactly as from the source half above.
         claim_speaker = event_speakers.get(claim_id)
-        carriers = sources[key] | {
+        carriers = sources[prosecution_key] | {
             speaker
             for speaker in anchors.get(subject, set())
             if speaker != claim_speaker
