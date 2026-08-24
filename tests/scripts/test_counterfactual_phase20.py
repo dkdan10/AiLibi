@@ -232,6 +232,33 @@ def test_the_cleared_census_is_a_join_and_not_a_subtraction(
     assert 79 - survivors[0] != cleared[0]
 
 
+def test_the_render_census_population_is_the_recorded_prompt_count(
+    full_payload: Mapping[str, object],
+) -> None:
+    """The census unit is the recorded LLM call, not the meeting-agent.
+
+    A meeting issues a different number of opening / reply / opt-in / ballot calls
+    per agent. The reconstruction weights each agent's single render by that
+    recorded multiplicity — an agent's memory does not change inside a meeting —
+    so the two OFF readings share ONE denominator instead of the reconstruction
+    silently re-weighting the population.
+    """
+
+    pooled = _pooled(full_payload)
+    recorded = pooled["R|rendered memory rows per snapshot (mean)|recorded_off"]
+    rebuilt = pooled["R|rendered memory rows per snapshot (mean)|reconstructed_off"]
+    on = pooled["R|rendered memory rows per snapshot (mean)|on"]
+    # The recorded prompt population, and both reconstruction legs on it.
+    assert recorded[1] == 7932
+    assert rebuilt[1] == recorded[1]
+    assert on[1] == recorded[1]
+    # The residual is carried, not smoothed: under a quarter of a percent.
+    assert abs(rebuilt[0] - recorded[0]) / recorded[0] < 0.0025
+    # An unweighted census would land on 3,934 meeting-agent renders — half the
+    # population — so a regression to the equal-weight form fails here.
+    assert rebuilt[1] != 3934
+
+
 def test_the_testimony_buckets_partition_the_testimony_total(
     full_payload: Mapping[str, object],
 ) -> None:

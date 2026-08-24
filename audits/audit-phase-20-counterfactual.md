@@ -113,15 +113,15 @@ rather than invented: **[VERIFIED]** recomputed from committed bytes by the comm
 | I-8 | marker contamination (prompts) | 917/7932 | — | PROMPT-SET-COUPLED: a prompt re-renders only under a Jinja set |
 | I-9 | singular-persona prompts | 7932/7932 | — | PROMPT-SET-COUPLED: the persona block is template bytes |
 | I-5 | fabricated completion lines | 88/1888 | 0/1482 | 4.7% → 0 on every set; a predicted-exactly-zero cell, and a §9 tripwire |
-| R | rendered memory rows per snapshot (mean) | 386907/7932 | 154777/3934 | 48.78 → 39.34 rows; ON slate is SEVEN levers (see §4.1) |
-| R | reported-testimony rows retained | 69535/386907 | 65944/154777 | 18.0% → 42.6%; testimony outranks routine co-presence |
+| R | rendered memory rows per snapshot (mean) | 386907/7932 | 312761/7932 | 48.78 → 39.43 rows; ON slate is SEVEN levers (see §4.1) |
+| R | reported-testimony rows retained | 69535/386907 | 133489/312761 | 18.0% → 42.7%; testimony outranks routine co-presence |
 | I-12 | containment (killer in the candidate set) | 544/626 | 544/626 | LEVER-INVARIANT by construction |
 | I-12 | singleton candidate sets | 126/626 | 126/626 | LEVER-INVARIANT by construction |
 | I-12 | singleton correct | 114/126 | 114/126 | LEVER-INVARIANT by construction |
 | I-12 | ejections on an already-cleared player | 83/354 | 83/354 | LEVER-INVARIANT by construction |
-| R | reported-testimony rows, <=4 living | 10890/69535 | 18519/65944 | 5,388 → 18,519 rows on the reconstruction: the band gains most |
-| R | reported-testimony rows, 5-6 living | 47623/69535 | 39948/65944 | 23,390 → 39,948 rows |
-| R | reported-testimony rows, >=7 living | 11022/69535 | 7477/65944 | 5,453 → 7,477 rows |
+| R | reported-testimony rows, <=4 living | 10890/69535 | 37262/133489 | 10,913 → 37,262 rows on the reconstruction: the band gains most |
+| R | reported-testimony rows, 5-6 living | 47623/69535 | 81116/133489 | 47,719 → 81,116 rows |
+| R | reported-testimony rows, >=7 living | 11022/69535 | 15111/133489 | 11,040 → 15,111 rows |
 | E | innocent ejections still carrying a STRONG flag | 70/79 | 3/79 | 88.6% → 3.8% |
 | E | innocent ejections whose STRONG flags were all alibi_vs_sighting | 70/79 | 3/79 | the kind-sole conviction bar 4 prices |
 | E | innocent ejections that LOSE the STRONG flag they convicted on | 0/70 | 67/70 | **95.7% of the convictions that had evidence lose it** — a per-meeting join |
@@ -144,6 +144,17 @@ changed digit is caught (a planted `148/234` → `149/234` is the perturbation t
   prompt-set-coupled — the transcript is frozen bytes — and is measured by parsing each recorded
   turn's audit markers back into typed annotations through `api.replay_loader`'s own repr-aware
   parser, which IS the `structured_turn_markers` ON shape over those bytes.
+* **The render census counts one snapshot per RECORDED PROMPT, not per meeting-agent.** The
+  registered census's unit is the recorded LLM call, and a meeting issues a different number of
+  opening / reply / opt-in / ballot calls per agent. An agent's memory does not change inside a
+  meeting (the fold lands at `MeetingApplied`), so its rendered view is constant across that
+  meeting's calls, and the reconstruction weights the single render by the recorded per-agent call
+  count. That makes the two OFF readings share one denominator — **7,932 snapshots, the recorded
+  population exactly** — instead of a differently-weighted 3,934 stand-in. The residual is 313 rows
+  on 386,907 (0.08%) and 137 testimony rows on 69,535 (0.20%), carried and not smoothed. The I-5
+  completion fold is deliberately NOT weighted: it deduplicates by `(agent, observation_id)` across
+  the whole game, so a repeated prompt is one row either way, and its OFF leg reproduces the recorded
+  cell exactly (88/1888).
 * **The two render rows run on SEVEN levers, not eight.** `meeting_outcome_memory` ON re-tags a
   rendered testimony frame `[meeting N]` (`agents/memory/store.py::_render_reported_testimony`),
   which the instrument's OFF-shaped `_TESTIMONY_ROW` / `_RENDERED_ROW` patterns do not match.
@@ -154,8 +165,8 @@ changed digit is caught (a planted `148/234` → `149/234` is the perturbation t
 * **The testimony rows are reported per living-roster bucket, never blended.** The registered
   census splits them `≤4` / `5-6` / `≥7` because budget pressure differs across those populations
   and a retention gain confined to one band would otherwise hide inside an aggregate. It is not
-  confined: on the reconstruction all three bands rise in absolute rows (5,388 → 18,519;
-  23,390 → 39,948; 5,453 → 7,477), with the small-roster band gaining most. Both 4p1i sets carry
+  confined: on the reconstruction all three bands rise in absolute rows (10,913 → 37,262;
+  47,719 → 81,116; 11,040 → 15,111), with the small-roster band gaining most. Both 4p1i sets carry
   zero testimony rows on either slate, which is why the census is never one blended number.
 * **I-12 is lever-invariant by construction, not by measurement.** The solvability oracle reads the
   engine's kill and visibility record and the recorded ballots. No lever in the slate writes either
@@ -169,8 +180,8 @@ changed digit is caught (a planted `148/234` → `149/234` is the perturbation t
 | I-6 adjacent, OFF → ON | 38/58 → 0/1 | 108/173 → 6/11 | 1/2 → 0/0 | 1/1 → 0/0 |
 | I-5 fabricated, OFF → ON | 19/458 → 0/347 | 40/1311 → 0/1045 | 15/61 → 0/46 | 14/58 → 0/44 |
 | I-8 turns, OFF → ON | 53/971 → 0/971 | 139/2726 → 0/2726 | 0/117 → 0/117 | 0/120 → 0/120 |
-| render rows/snapshot (7-lever ON) | 51.07 → 41.27 | 50.76 → 41.00 | 15.47 → 12.17 | 15.99 → 12.64 |
-| testimony retained | 18.2% → 45.9% | 18.2% → 42.6% | 0% → 0% | 0% → 0% |
+| render rows/snapshot (7-lever ON) | 51.13 → 41.33 | 50.84 → 41.08 | 15.47 → 12.17 | 15.99 → 12.64 |
+| testimony retained | 18.3% → 45.9% | 18.3% → 42.6% | 0% → 0% | 0% → 0% |
 | innocent ejections still STRONG | 19/23 → 0/23 | 50/54 → 3/54 | 1/2 → 0/2 | 0/0 → 0/0 |
 
 Three of the four per-set ON cells for I-4 and I-6 have a denominator of 0 or 1. Under §4.1's
@@ -263,8 +274,9 @@ overreach this phase exists to demonstrate against.
 
 * **I-1 non-direct conviction accuracy, and the innocent-ejection count itself (bars 1 and 2).**
   These are bars about how agents vote once the substrate moves. The recorded ballots were cast under
-  the old one. What this table can show — and does — is that the *evidence* 76 of the 79 wrongful
-  ejections rode is gone; whether the votes follow is the record's question.
+  the old one. What this table can show — and does — is that the *evidence* 67 of the 70 wrongful
+  ejections that HAD a STRONG flag rode is gone, and that none of the nine that had none gains one;
+  whether the votes follow is the record's question.
 * **I-2 false crew self-placement (bar 3).** The cell measures what the model *says*; `self_location_trail`
   changes what the model can *read*. There is no offline projection from the old prompts to the new
   answers, and the trail's coverage (does the record the roll-call asks for exist?) is a different
@@ -314,8 +326,8 @@ ejection census is *negative by one*, and no reading of this table should claim 
 * `task_completion_from_events` — fully supported: I-5 falls to 0 on every set, on a denominator that
   is 78.5% of its baseline value (1482 of 1888), so §4.1's SUPPRESSED-NOT-FIXED threshold (below 10%
   of baseline) is nowhere near reached. The lever grounds the row rather than suppressing it.
-* `coalesced_memory_render` — supported on the seven-lever census: 48.73 → 39.34 rendered rows per
-  snapshot with reported testimony rising from 17.9% to 42.6% of the surviving rows.
+* `coalesced_memory_render` — supported on the seven-lever census: 48.82 → 39.43 rendered rows per
+  snapshot with reported testimony rising from 18.0% to 42.7% of the surviving rows.
 
 **No graduation subset is proposed.** The ratified §6 rules that partial adoption yields a published
 per-lever VERDICT and never a partial graduation, because a subset slate matches neither committed
@@ -357,7 +369,7 @@ an instrument cell. Two things surfaced that belong to a named fix task rather t
 1. **The render census's row patterns are OFF-shaped.** `eval.evidence_honesty._TESTIMONY_ROW` and
    `_RENDERED_ROW` match the untagged `[meeting] CLAIM by` frame only. With `meeting_outcome_memory`
    ON the frame becomes `[meeting N]`, so both patterns silently stop counting the row — the full
-   eight-lever census reads 21.62 rows/snapshot against 39.34 on the seven-lever slate, and the whole
+   eight-lever census reads far below the seven-lever slate's 39.43 rows/snapshot, and the whole
    difference is uncounted testimony rather than shed rows. The fix is one widened pattern in the
    instrument module (its single home for the definition), plus a pin proving the widened pattern
    still counts the OFF shape identically. **Until it lands, the full-slate render census is

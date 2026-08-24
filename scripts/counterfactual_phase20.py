@@ -630,6 +630,18 @@ def _walk_game(
                 meeting_index += 1
                 _render_one_meeting(
                     living=living,
+                    # The registered census counts ONE snapshot per recorded LLM
+                    # call, and a meeting issues a different number of opening /
+                    # reply / opt-in / ballot calls per agent. An agent's memory
+                    # does not change inside a meeting (the fold lands at
+                    # MeetingApplied), so its render is constant across those
+                    # calls and re-weighting the single render by the recorded
+                    # multiplicity reproduces the recorded population exactly.
+                    call_weights=Counter(
+                        call.agent_id
+                        for call in walk_event.entry.llm_calls
+                        if call.agent_id is not None
+                    ),
                     off_memories=off_memories,
                     on_memories=on_memories,
                     completions=completions,
@@ -831,6 +843,7 @@ def _fold_innocent_census(
 def _render_one_meeting(
     *,
     living: frozenset[PlayerId],
+    call_weights: Mapping[PlayerId, int],
     off_memories: Mapping[PlayerId, AgentMemory],
     on_memories: Mapping[PlayerId, AgentMemory],
     completions: Mapping[PlayerId, set[int]],
@@ -843,10 +856,20 @@ def _render_one_meeting(
     the process environment happens to export. Rows are counted with the
     instrument's own patterns and the completion rows through the instrument's own
     fold, so the OFF leg is directly comparable to the recorded-prompt cell.
+
+    The render census is weighted by ``call_weights`` — the recorded number of LLM
+    calls this meeting made for each agent — because the registered census's unit
+    is the recorded PROMPT, not the meeting-agent. An agent's memory is unchanged
+    inside a meeting, so one render weighted by that count reproduces the recorded
+    snapshot population rather than an equally-weighted stand-in for it. The I-5
+    completion fold is deliberately NOT weighted: it deduplicates by
+    ``(agent, observation_id)`` across the whole game, so a repeated prompt is one
+    row either way.
     """
 
     for pid in sorted(living):
-        walk.snapshots += 1
+        weight = call_weights.get(pid, 0)
+        walk.snapshots += weight
         for leg, memories, budget in (
             ("off", off_memories, SLATE_OFF),
             ("on", on_memories, SLATE_ON),
@@ -864,12 +887,12 @@ def _render_one_meeting(
             bucket = _living_bucket(len(living))
             if leg == "census_on":
                 # The render census only: no completion fold, no dedup state.
-                walk.rendered_rows_census_on += rows
-                walk.testimony_rows_census_on += testimony
-                walk.testimony_by_bucket_on[bucket] += testimony
+                walk.rendered_rows_census_on += rows * weight
+                walk.testimony_rows_census_on += testimony * weight
+                walk.testimony_by_bucket_on[bucket] += testimony * weight
                 continue
             if leg == "off":
-                walk.testimony_by_bucket_off[bucket] += testimony
+                walk.testimony_by_bucket_off[bucket] += testimony * weight
             tallies = _Tallies()
             _fold_completion_rows(
                 call=LLMCallRecord(
@@ -888,13 +911,13 @@ def _render_one_meeting(
                 tallies=tallies,
             )
             if leg == "off":
-                walk.rendered_rows_off += rows
-                walk.testimony_rows_off += testimony
+                walk.rendered_rows_off += rows * weight
+                walk.testimony_rows_off += testimony * weight
                 walk.completion_rows_off += tallies.completion_lines
                 walk.fabricated_rows_off += tallies.fabricated_lines
             else:
-                walk.rendered_rows_on += rows
-                walk.testimony_rows_on += testimony
+                walk.rendered_rows_on += rows * weight
+                walk.testimony_rows_on += testimony * weight
                 walk.completion_rows_on += tallies.completion_lines
                 walk.fabricated_rows_on += tallies.fabricated_lines
 
