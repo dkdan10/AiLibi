@@ -21,6 +21,7 @@ import shutil
 import socket
 import subprocess
 import threading
+import time
 from collections.abc import Iterator, Sequence
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
@@ -1596,6 +1597,133 @@ def test_lock_owner_pid_tolerates_an_undefined_bashpid() -> None:
         if not line.lstrip().startswith("#")  # the comment above names $BASHPID
     )
     assert "$BASHPID" not in code.replace("${BASHPID:-$$}", "")
+
+
+# -- the lock's dead-owner verdict ---------------------------------------------
+#
+# _acquire_lock's liveness probe (cat owner, then kill -0) inherently races the
+# holder's release: a holder that releases the lock and exits between the two
+# steps (a worker draining the queue, or a seed-claim command-substitution
+# subshell whose pid dies with the claim) probes as dead even though it finished
+# cleanly. The lock therefore requires the SAME dead pid to stay the recorded
+# owner across consecutive polls before declaring death -- a truly dead holder
+# leaves the owner file frozen, while a released lock is gone on the next poll.
+# These cases drive the script's own lock functions, extracted verbatim, so they
+# bite on the committed implementation rather than a copy.
+
+_LOCK_DRIVER = """\
+set -euo pipefail
+stage_dir="$1"
+_lockdir="$stage_dir/.lock"
+{functions}
+if _acquire_lock; then
+  echo ACQUIRED
+  _release_lock
+else
+  echo REFUSED
+  exit 1
+fi
+"""
+
+
+def _lock_driver(tmp_path: Path) -> Path:
+    """A driver script around the committed _acquire_lock/_release_lock."""
+
+    script = _REFRESH_SH.read_text(encoding="utf-8")
+    functions = []
+    for pattern in (
+        r"(?ms)^_acquire_lock\(\) \{\n.*?\n\}$",
+        r"(?m)^_release_lock\(\) \{ .*\}$",
+    ):
+        match = re.search(pattern, script)
+        assert match is not None, f"lock function not found: {pattern}"
+        functions.append(match.group(0))
+    driver = tmp_path / "lock_driver.sh"
+    driver.write_text(
+        _LOCK_DRIVER.format(functions="\n".join(functions)), encoding="utf-8"
+    )
+    return driver
+
+
+def _reaped_pid() -> str:
+    """The pid of a process that has already exited and been reaped."""
+
+    proc = subprocess.run(
+        ["bash", "-c", "echo $$"], capture_output=True, text=True, timeout=60
+    )
+    assert proc.returncode == 0
+    return proc.stdout.strip()
+
+
+def test_lock_fails_loud_when_a_dead_owner_stays_the_owner(tmp_path: Path) -> None:
+    # The safety net the stability window must NOT lose: a holder SIGKILLed/OOMed
+    # mid-critical-section leaves the mkdir lock held forever, and every waiter
+    # would spin while the parent hangs in `wait`. A lock whose recorded owner is
+    # dead and never released must be refused, flagged in .failed, and named --
+    # and only after the streak of polls, never on a single probe.
+    stage = tmp_path / "stage"
+    lockdir = stage / ".lock"
+    lockdir.mkdir(parents=True)
+    (lockdir / "owner").write_text(_reaped_pid(), encoding="utf-8")
+    start = time.monotonic()
+    proc = subprocess.run(
+        ["bash", str(_lock_driver(tmp_path)), str(stage)],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "REFUSED" in proc.stdout
+    assert "died holding the lock" in proc.stderr
+    assert (stage / ".failed").exists()
+    # The verdict took at least the confirmation window (10 polls x 0.1s sleep);
+    # an instant verdict would mean the single-probe race is back.
+    assert time.monotonic() - start >= 0.5
+
+
+def test_lock_tolerates_a_release_racing_the_dead_owner_probe(tmp_path: Path) -> None:
+    # A dead owner pid may belong to a holder that RELEASED the lock and
+    # finished between the waiter's cat and its kill -0 -- a clean handoff, not
+    # a corpse, and it must not fail the refresh. The waiter here provably
+    # probes the dead owner first (gated on the xtrace showing kill -0), then
+    # the lock is released out from under it; the waiter must acquire and flag
+    # nothing. (Pins the task 20.21 CI flake seen on PRs #369/#372/#378.)
+    stage = tmp_path / "stage"
+    lockdir = stage / ".lock"
+    lockdir.mkdir(parents=True)
+    dead = _reaped_pid()
+    (lockdir / "owner").write_text(dead, encoding="utf-8")
+    trace = tmp_path / "trace.txt"
+    probe = re.compile(rf"kill -0 {dead}\b")
+    with (
+        trace.open("w", encoding="utf-8") as trace_fh,
+        subprocess.Popen(
+            ["bash", "-x", str(_lock_driver(tmp_path)), str(stage)],
+            stdout=subprocess.PIPE,
+            stderr=trace_fh,
+            text=True,
+        ) as proc,
+    ):
+        # On any failure below the waiter may still be spinning on the held
+        # lock, and Popen.__exit__ waits for it unboundedly -- kill it so the
+        # gate reports the failure instead of hanging.
+        try:
+            deadline = time.monotonic() + 60
+            while not probe.search(trace.read_text(encoding="utf-8")):
+                assert time.monotonic() < deadline, "waiter never probed the dead owner"
+                assert proc.poll() is None, (
+                    "waiter exited on a single dead probe: "
+                    + trace.read_text(encoding="utf-8")
+                )
+                time.sleep(0.01)
+            shutil.rmtree(lockdir)  # the release the probe raced
+            stdout, _ = proc.communicate(timeout=60)
+        except BaseException:
+            proc.kill()
+            raise
+    assert proc.returncode == 0, stdout + trace.read_text(encoding="utf-8")
+    assert "ACQUIRED" in stdout
+    assert not (stage / ".failed").exists()
 
 
 def test_default_fake_model_mirrors_the_fake_client() -> None:
