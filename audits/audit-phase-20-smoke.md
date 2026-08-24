@@ -106,7 +106,7 @@ levers unconditional ON.
 The real run's own preflight block, before any seed staged:
 
 ```
-Using Featherless API key prefix: rc_79456
+Using Featherless API key prefix: <redacted — the recorder prints 8 characters; this record keeps none>
 Locked substrate OK: AILIBI_PROMPT_SET=qwen3_6_27b.
 Model-set coupling OK: qwen3_6_27b on Qwen/Qwen3.6-27B.
 Model registry OK: Qwen/Qwen3.6-27B is registered in the production client.
