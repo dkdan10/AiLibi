@@ -4254,10 +4254,10 @@ the committed bytes still sees the rulings that produced them.
 ### Task 20.27 — Map-aware flag arbitration: adjacent rooms within one tick are not a contradiction
 **Branch:** `phase-20-map-aware-arbitration`
 **Depends on:** 20.26 — the grounded-prosecution rules rewrite the same `alibi_vs_sighting` read-site and re-band its STRONG tier, so this lever must compose with the banding that survives that task rather than with the one it replaces
-**Section refs:** audits/review-2026-08-19/A/ideas-multi-agent-researcher.md §D2 (the geometry-blind aggregation; the 234-flag adjacency census) and §R1 (rank 1, "kill the corridor artifact"); audits/review-2026-08-19/D/FINAL-synthesis.md §4 Wave-2 row 2.5; audits/review-2026-08-19/A/verdicts.md §(d) (0/16,905 move intents ever named a non-adjacent room — the engine enforces the geometry the detector ignores); audits/audit-phase-20-preregistration.md §2 instrument I-6, §3 baseline cell (148/234 = 63.2% pooled), §4 bar 7 (63.2% → ≤ 5%), §6 (this lever is a named partial-adoption candidate), §8 (the offline counterfactual reads I-6); meetings/transcript.py:2380-2494 (`_detect_alibi_vs_sightings`, the single read-site), :2472-2483 (the `weak_reasons` assignment and the endpoint band it must join), :530 + :541 + :559-564 (`NARROW_ALIBI_WINDOW_TICKS`, `WEAK_CONTRADICTION_MARKER_PREFIX`, the `WEAK_REASON_*` literals), :668-699 (`CANONICAL_ROOMS` — the frozen "DATA, not an engine import" precedent this task extends), :722-756 (`canonical_rooms`), :759-778 (`is_weak_contradiction`), :1354-1412 (the Task-18.9 `ENV_*` + resolver pair whose shape this lever mirrors), :1414-1422 + :1552-1556 + :1573-1582 (`detect_contradictions`: the signature, the read-the-resolver-once block, the call that threads the boolean down); meetings/constants.py:1-22 (the stdlib-only leaf rule) and :54-73 (the resolver/threshold homing precedent); tests/meetings/test_contradictions.py:1531-1616 (the resolver-test shape), :2082-2107 (`_COMMITTED_SETS` / `_committed_meeting_entries`), :2181-2226 (the committed-bytes re-derivation pin), :2250-2251 (`_L1_ENV` / `_L2_ENV`), :2337-2464 (the lever-census harness); tests/meetings/test_transcript.py:715 (the sibling `CANONICAL_ROOMS == load_canonical_map().rooms` pin); engine/maps/canonical_1.yaml:178-203 (the 11 room edges, every one `traversal_ticks: 1`) and :184 (EAST_HALL↔ENGINEERING, the exemplar doorway); replays/samples/9p2i/replay-seed-17.jsonl (the exemplar flag text, present in the committed bytes)
+**Section refs:** audits/review-2026-08-19/A/ideas-multi-agent-researcher.md §D2 (the geometry-blind aggregation; the 234-flag adjacency census) and §R1 (rank 1, "kill the corridor artifact"); audits/review-2026-08-19/D/FINAL-synthesis.md §4 Wave-2 row 2.5; audits/review-2026-08-19/A/verdicts.md §(d) (0/16,905 move intents ever named a non-adjacent room — the engine enforces the geometry the detector ignores); audits/audit-phase-20-preregistration.md §2 instrument I-6, §3 baseline cell (148/234 = 63.2% pooled), §4 bar 7 (63.2% → ≤ 5%), §6 (this lever is a named partial-adoption candidate), §8 (the offline counterfactual reads I-6); meetings/transcript.py:2836-2961 (`_detect_alibi_vs_sightings`, the single read-site), :2939-2950 (the `weak_reasons` assignment and the endpoint band it must join), :597 + :608 + :626-631 (`NARROW_ALIBI_WINDOW_TICKS`, `WEAK_CONTRADICTION_MARKER_PREFIX`, the `WEAK_REASON_*` literals), :758-789 (`CANONICAL_ROOMS` — the frozen "DATA, not an engine import" precedent this task extends), :812-846 (`canonical_rooms`), :849-868 (`is_weak_contradiction`), :1444-1501 (the Task-18.9 `ENV_*` + resolver pair whose shape this lever mirrors), :1580-1591 + :1754-1765 + :1792-1802 (`detect_contradictions`: the signature, the read-the-resolver-once block, the call that threads the boolean down); meetings/constants.py:1-22 (the stdlib-only leaf rule) and :54-73 (the resolver/threshold homing precedent); tests/meetings/test_contradictions.py:1571-1656 (the resolver-test shape), :3238-3266 (`_COMMITTED_SETS` / `_committed_meeting_entries` — all FOUR sets, `_COMMITTED_MEETINGS = 707`, since 20.25), :3412-3458 (the committed-bytes re-derivation pin), :3542-3543 (`_L1_ENV` / `_L2_ENV`), :3629-3755 (the lever-census harness); tests/meetings/test_transcript.py:715 (the sibling `CANONICAL_ROOMS == load_canonical_map().rooms` pin); engine/maps/canonical_1.yaml:178-203 (the 11 room edges, every one `traversal_ticks: 1`) and :184 (EAST_HALL↔ENGINEERING, the exemplar doorway); replays/samples/9p2i/replay-seed-17.jsonl (the exemplar flag text, present in the committed bytes)
 **Complexity:** Small
 **Record impact:** lever-gated (default-OFF) until the Phase-20 adopting record — ON re-bands flag descriptions, and those strings render into turn and ballot prompts and drive belief Rule 2's graduated delta, so the changed bytes wait for the record
-**Measurement:** `uv run pytest tests/meetings tests/eval/test_evidence_honesty.py -q` green and `bash scripts/verify_samples.sh` 100/100 with the key unset; then the I-6 cell over the four committed sets under `AILIBI_MAP_AWARE_ARBITRATION=1` — pooled baseline 148/234 = 63.2%, expected ≤ 5% (pre-registration bar 7) — pasted into the PR Summary with per-set numerators and the count of ejections that lose their only STRONG flag
+**Measurement:** `uv run pytest tests/meetings tests/eval/test_evidence_honesty.py -q` green and `bash scripts/verify_samples.sh` 100/100 with the key unset; then the I-6 cell over the four committed sets under `AILIBI_MAP_AWARE_ARBITRATION=1` — pooled baseline 148/234 = 63.2%, bar 7 asks for ≤ 5% but a re-derivation against this task's own predicate lands at 8/94 = 8.5% (a MISS, reported as a miss) — pasted into the PR Summary with per-set numerators, the un-gated `adjacent_any_gap` beside the registered cell (bar 7 requires both), and the count of ejections that lose their only STRONG flag
 
 The one cross-agent aggregation the project has is geometry-blind. `_detect_alibi_vs_sightings`
 compares a room-at-a-tick to a room-at-a-tick, and nothing under `meetings/` knows that the
@@ -4288,7 +4288,7 @@ the detector ignores is the geometry the engine enforces on every tick of every 
 What ships is the detector half, behind a default-OFF lever. `AILIBI_MAP_AWARE_ARBITRATION`
 resolves through `meetings.transcript.map_aware_arbitration_enabled` with the 13.5 signature,
 is read ONCE in `detect_contradictions` and threaded down as a boolean — the Task-18.9
-convention at meetings/transcript.py:1552-1582, one resolver read, one read-site. ON, an
+convention at meetings/transcript.py:1754-1802, one resolver read, one read-site. ON, an
 alibi/sighting pair whose canonical room sets are **one doorway hop apart** AND whose sighting
 tick sits **within one tick of an edge of the alibi window** carries a new weak reason instead
 of standing STRONG. The flag is demoted, never dropped: flags are information (DESIGN.md §5.4),
@@ -4299,7 +4299,7 @@ inside a multi-tick claim of continuous presence, because one hop cannot reconci
 out-and-back excursion costs two ticks and contradicts the claim's interior anyway.
 
 Adjacency arrives the way `CANONICAL_ROOMS` already does, and for the same reason. That
-constant (meetings/transcript.py:668-699) is a frozen room allowlist duplicated out of the map
+constant (meetings/transcript.py:758-789) is a frozen room allowlist duplicated out of the map
 under an explicit "This is DATA, not an engine import" rationale — `meetings` must stay
 engine-free because `agents` imports it — and it is kept honest by an equality pin against
 `engine.world.load_canonical_map()` at tests/meetings/test_transcript.py:715. This task adds
@@ -4325,13 +4325,13 @@ half of this repair and belongs to the single prompt-set bump; this task ships n
 - tests/meetings/test_transcript.py (the sibling room-allowlist pin is cited as precedent, not edited)
 
 **Definition of done:**
-- [ ] `meetings.transcript.map_aware_arbitration_enabled(env: Mapping[str, str] | None = None) -> bool` reads `AILIBI_MAP_AWARE_ARBITRATION`, returns False in a bare environment, and is read exactly once in `detect_contradictions` and threaded down as a boolean parameter; `tests/meetings/test_contradictions.py` pins default-OFF, the truthy/falsey value table, and that the passed mapping is neither mutated nor consulted twice — mirroring the resolver tests at :1531-1616.
-- [ ] OFF-path byte identity: the committed-bytes walk at `tests/meetings/test_contradictions.py:2181-2226` is extended so re-deriving `detect_contradictions` with the key absent and with `env={}` still reproduces the recorded flags byte-identically on every committed sample meeting; `uv run pytest tests/meetings/test_prompt_byte_golden.py` and `bash scripts/verify_samples.sh` (100/100) stay green.
+- [ ] `meetings.transcript.map_aware_arbitration_enabled(env: Mapping[str, str] | None = None) -> bool` reads `AILIBI_MAP_AWARE_ARBITRATION`, returns False in a bare environment, and is read exactly once in `detect_contradictions` and threaded down as a boolean parameter; `tests/meetings/test_contradictions.py` pins default-OFF, the truthy/falsey value table, and that the passed mapping is neither mutated nor consulted twice — mirroring the resolver tests at :1571-1656.
+- [ ] OFF-path byte identity: the committed-bytes walk at `tests/meetings/test_contradictions.py:3412-3458` is extended so re-deriving `detect_contradictions` with the key absent and with `env={}` still reproduces the recorded flags byte-identically on every one of the 707 committed meetings across all four sets; `uv run pytest tests/meetings/test_prompt_byte_golden.py` and `bash scripts/verify_samples.sh` (100/100) stay green.
 - [ ] ON behaviour, fixture-pinned in `tests/meetings/test_contradictions.py`: a single-tick alibi in ENGINEERING contradicted by a sighting in EAST_HALL at the same tick demotes to weak carrying `WEAK_REASON_ADJACENT_ONE_TICK`, and `is_weak_contradiction` returns True for it; a two-hop pair (ENGINEERING versus CAFETERIA) still mints STRONG; a sighting two or more ticks inside a multi-tick window still mints STRONG; a pair already weak for another reason gains the new reason in a fixed, byte-stable position rather than replacing the existing marker text.
 - [ ] The flag set is re-banded, never thinned: a test asserts the OFF and ON legs over the committed sample bytes carry the identical `contradiction_id` set, and that every flag whose band changes is an `alibi_vs_sighting` (no other kind moves).
 - [ ] The table is pinned and the pin bites: `CANONICAL_ROOM_NEIGHBORS` equals `{room: load_canonical_map().room_neighbors(room)}` for every canonical room, and every room edge in the canonical map has `traversal_ticks == 1`; a perturbation case (one flipped neighbour entry) is shown to fail the pin, so the gate cannot silently pass.
 - [ ] Counterfactual pin in `tests/eval/test_evidence_honesty.py` over the four committed sets: the I-6 adjacent-room STRONG share OFF and ON per set and pooled, and the count of ejections whose only STRONG flag is an adjacent-room one — the flags that would lose their sole STRONG backing. The review's pooled 148/234 = 63.2% is re-derived rather than restated, and any difference from the pre-registration cell is quoted and explained in the PR.
-- [ ] Instrument/detector drift guard: a test asserts the I-6 classifier in `eval/evidence_honesty.py` and the detector's new predicate agree flag-for-flag over the committed sample bytes; a disagreement fails loud instead of letting the gauge and the mechanism measure two different rules.
+- [ ] Instrument/detector drift guard: a test asserts the ADJACENCY half of the detector's new predicate agrees flag-for-flag with the I-6 classifier's `distance == 1` reading in `eval/evidence_honesty.py` over the committed bytes (148 of 234 pooled), and pins the tick half as the KNOWN, enumerated difference — the registered `adjacent` cell's gap term measures ticks OUTSIDE the alibi window (always 0 on a minted flag, which is why `adjacent` and `adjacent_any_gap` both read 148), whereas `MAP_ARBITRATION_MAX_TICK_GAP` measures distance to the nearest window ENDPOINT, so 8 adjacent flags sit ≥ 2 ticks inside their window and are deliberately NOT demoted. A disagreement outside that enumerated set of 8 fails loud instead of letting the gauge and the mechanism measure two different rules.
 - [ ] `meetings/` remains engine-free: `uv run lint-imports` passes and a grep of `meetings/` for `engine` returns only the data-not-an-import comments; `meetings/constants.py` gains no import.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
@@ -4344,7 +4344,7 @@ half of this repair and belongs to the single prompt-set bump; this task ships n
 **Implementation hint:**
 
 Step 1 — read the read-site before touching it. `_detect_alibi_vs_sightings`
-(meetings/transcript.py:2380-2494) already pairs only when the sighting's canonical rooms are
+(meetings/transcript.py:2836-2961) already pairs only when the sighting's canonical rooms are
 non-empty and disjoint from the alibi's and the sighting tick is inside the alibi window, so
 the new predicate runs on a pair that is already comparable and already contradictory by room.
 The only thing it decides is the band.
@@ -4378,7 +4378,11 @@ per-set numerators in the PR — bar 7 is judged pooled but a set that moves the
 the finding, not a rounding error.
 
 Step 6 — if the ON leg lands above the bar's 5%, report the residue and its shape (which
-window widths and which hop distances survive) under Decisions. Do not widen the rule to reach
+window widths and which hop distances survive) under Decisions. A re-derivation of the committed
+bytes against this exact predicate already predicts the miss: 140 of the 148 adjacent STRONG
+flags demote, leaving 8 adjacent on a 94-flag STRONG denominator = 8.5% pooled — all 8 in
+ml_corpus/9p2i, at endpoint gaps 2-4 inside windows 4-10 ticks wide.
+Do not widen the rule to reach
 a number: the pre-registration says a miss is reported as a miss, and the offline counterfactual
 exists precisely so the owner sees this before the record.
 
@@ -4395,15 +4399,15 @@ exists precisely so the owner sees this before the record.
 ### Task 20.28 — Dev markers leave spoken text: structured turn annotations, chips in the spectator
 **Branch:** `phase-20-structured-turn-markers`
 **Depends on:** 20.16 (the spectator DTO pass settles the view-model contract and regenerates the same TypeScript type files this task extends, so the generated-types diff stays one change per PR), 20.25 (the additive movement-claim shape lands in the turn schema first, so the annotations field is added to a settled turn model rather than racing it), 20.26 (the grounded-prosecution wiring edits the same manager call-site region and the same manager test module, so it merges ahead)
-**Section refs:** G-25 (audits/review-2026-08-19/A/verdicts.md verdict 11 — turn half CONFIRMED-BUG, ballot half CONFIRMED-DESIGN-CHOICE; audits/review-2026-08-19/A/collated-findings.md §D "G-25 — Dev audit markers leak into `free_text`") + C-67 (audits/review-2026-08-19/B/collated-findings.md §4 row C-67; audits/review-2026-08-19/B/meetings-manager.md §P2-9); roadmap item audits/review-2026-08-19/D/FINAL-synthesis.md §4 wave-2 row 2.8, audits/review-2026-08-19/D/synth-credibility.md §4 row 9, audits/review-2026-08-19/D/cross-track-map.md §2.2 G-25 row; meetings/manager.py:381-383, :402-407, :478-480, :515-517 (the five turn-side marker literals), :1542-1544 + :1595-1599 (the two splice sites, both inside `MeetingManager._collect_turn` at :1300), :3884-3887 (the contract the splice breaks), :3857-3928 (`_drop_non_roster_claims`, the markers built in its loop at :3905-3913); agents/strategic/prompts/qwen3_6_27b/accusation_round.j2:136 + :154, accusation_round_roll_call.j2:133 + :151, vote_ballot.j2:91 (the five unfiltered `turn.free_text` renders); api/replay_loader.py:2368-2390 (`_turn_view` and today's one-off emergency-strip), :2696-2703 (`_BALLOT_PREFIX_MARKERS`), :2714-2722 (`_MARKER_REPR_VALUE` / `_marker_pattern`), :2733-2763 (`_parse_rewrite_reasons`); api/schemas.py:584-614 (`TurnView`), :797-833 (`BallotView`, the chip precedent); meetings/schemas.py:298-323 (`MeetingTurn`); DESIGN.md:587-589 (the ballot-marker sanction); audits/audit-2026-06-11-2218-gameplay-data.md:38 (H-H-4, the "Frankenstein turn record" that bounded the quote and left the visibility); tasks/phase-18.md 18.9 (the default-OFF lever shape with committed-bytes counterfactuals)
+**Section refs:** G-25 (audits/review-2026-08-19/A/verdicts.md verdict 11 — turn half CONFIRMED-BUG, ballot half CONFIRMED-DESIGN-CHOICE; audits/review-2026-08-19/A/collated-findings.md §D "G-25 — Dev audit markers leak into `free_text`") + C-67 (audits/review-2026-08-19/B/collated-findings.md §4 row C-67; audits/review-2026-08-19/B/meetings-manager.md §P2-9); roadmap item audits/review-2026-08-19/D/FINAL-synthesis.md §4 wave-2 row 2.8, audits/review-2026-08-19/D/synth-credibility.md §4 row 9, audits/review-2026-08-19/D/cross-track-map.md §2.2 G-25 row; meetings/manager.py:382-384, :403-408, :479-481, :516-518 (the five turn-side marker literals), :1595-1597 + :1648-1652 (the two splice sites, both inside `MeetingManager._collect_turn` at :1353), :3937-3940 (the contract the splice breaks), :3910-3981 (`_drop_non_roster_claims`, the markers built in its loop at :3958-3966); agents/strategic/prompts/qwen3_6_27b/accusation_round.j2:136 + :154, accusation_round_roll_call.j2:133 + :151, vote_ballot.j2:91 (the five unfiltered `turn.free_text` renders); api/replay_loader.py:2528-2550 (`_turn_view` and today's one-off emergency-strip), :2856-2863 (`_BALLOT_PREFIX_MARKERS`), :2874-2882 (`_MARKER_REPR_VALUE` / `_marker_pattern`), :2893-2923 (`_parse_rewrite_reasons`); api/schemas.py:627-657 (`TurnView`), :840-876 (`BallotView`, the chip precedent); meetings/schemas.py:358-383 (`MeetingTurn`); DESIGN.md:595-597 (the ballot-marker sanction); audits/audit-2026-06-11-2218-gameplay-data.md:38 (H-H-4, the "Frankenstein turn record" that bounded the quote and left the visibility); tasks/phase-18.md 18.9 (the default-OFF lever shape with committed-bytes counterfactuals)
 **Complexity:** Small
 **Record impact:** lever-gated (default-OFF) until the Phase-20 adopting record
-**Measurement:** `uv run pytest tests/meetings/test_manager.py tests/api -q` green; the committed-bytes census pin reads marker-bearing turns 53/971 and contaminated prompts 246/1956 over samples/9p2i with zero raw marker substrings surviving into any served `TurnView.free_text`; with `AILIBI_STRUCTURED_TURN_MARKERS=1` a fresh fake-provider 9p2i tournament records 0 marker-bearing turns and 0 contaminated prompts (the honesty-instrument marker cell reads 0); with the lever OFF `uv run pytest tests/meetings/test_prompt_byte_golden.py -q` and `bash scripts/verify_samples.sh` stay green
+**Measurement:** `uv run pytest tests/meetings/test_manager.py tests/api -q` green; the committed-bytes census pin reads marker-bearing turns 53/971 and contaminated prompts 246/1956 over samples/9p2i with zero raw marker substrings surviving into any served `TurnView.free_text`; with `AILIBI_STRUCTURED_TURN_MARKERS=1` a fresh fake-provider 9p2i tournament records 0 marker-bearing turns and 0 contaminated prompts (I-8, `eval/evidence_honesty.py`'s marker-contamination cell, reads 0); with the lever OFF `uv run pytest tests/meetings/test_prompt_byte_golden.py -q` and `bash scripts/verify_samples.sh` stay green
 
 Editor-console text is sitting inside quoted dialogue in one prompt in eight. The manager's
 per-turn roster guard drops a claim naming a non-living participant and prepends an audit
-marker to the turn's `free_text` (`meetings/manager.py:1542-1544`, the marker built at
-:3908-3912 from the constant at :381-383); every later speaker's prompt then renders that
+marker to the turn's `free_text` (`meetings/manager.py:1595-1597`, the marker built at
+:3961-3965 from the constant at :382-384); every later speaker's prompt then renders that
 string verbatim inside the transcript block — `accusation_round.j2:136` and
 `accusation_round_roll_call.j2:133` both emit `said: "{{ turn.free_text }}"`, and
 `vote_ballot.j2:91` repeats it into the vote prompt. Re-verified by me at HEAD over the
@@ -4415,7 +4419,7 @@ kind split is narrow: 53 invalid-accusation-target in samples/9p2i, 137 of the s
 invalid-corroboration-supports in ml_corpus/9p2i, and zero instances of the emergency-strip
 or opening-degrade markers anywhere in the committed corpus.
 
-The function's own docstring is the contract this breaks. `meetings/manager.py:3884-3887`
+The function's own docstring is the contract this breaks. `meetings/manager.py:3937-3940`
 promises that "a dropped claim never reaches the transcript, contradiction detection, the
 post-meeting belief fold, or any prompt surface" — and the *claim* does not; the *marker*
 does. The 2026-06-11 gameplay audit already called a spliced marker "a Frankenstein turn
@@ -4438,10 +4442,10 @@ split). That read-side change is the one deliberate exception to OFF-path identi
 bytes and rendered prompts stay byte-identical with the lever OFF, but the SERVED transcript
 stops printing dev jargon immediately, the same way `fabricated_opening` already lifts the
 emergency-strip marker out of `free_text` into a role-neutral chip
-(`api/replay_loader.py:2368-2390`).
+(`api/replay_loader.py:2528-2550`).
 
 Scope discipline, both halves. The ballot markers are NOT touched: the review verified they
-reach 0/7458 prompts (ballots are post-meeting) and `DESIGN.md:589` explicitly sanctions "an
+reach 0/7458 prompts (ballots are post-meeting) and `DESIGN.md:597` explicitly sanctions "an
 audit marker in `rationale_text`" — that half is a design choice with no model-facing effect,
 and the spectator already strips it into labelled chips. And the four other packages C-67
 names as marker consumers keep working unchanged on committed bytes: `eval/vj_instruments.py`
@@ -4465,17 +4469,18 @@ and is re-pointed at the structured field with the adopting record, not here.
 
 **Files NOT in scope:**
 - agents/strategic/prompts/ (the transcript block renders free_text; with the lever ON the free_text is clean so no template change is needed — and the single prompt-set bump of this phase is another task's, no template byte moves here)
-- the ballot marker path (sanctioned by DESIGN.md:587-589, spectator-stripped, 0/7458 prompts — the four ballot-side constants and `_BALLOT_PREFIX_MARKERS` are imported, never edited)
+- the ballot marker path (sanctioned by DESIGN.md:595-597, spectator-stripped, 0/7458 prompts — the four ballot-side constants and `_BALLOT_PREFIX_MARKERS` are imported, never edited)
 - orchestrator/replay.py (registering this lever into `_TOGGLEABLE_LEVER_RESOLVERS` and the substrate stamp is Task 20.33's, which does it for every Phase-20 lever at once, before any ON-path seed records)
 - audits/workflows/extract_gameplay_facts.py (an offline audit tool whose drop-marker count reads committed bytes today; its re-point at the structured field rides the adopting record)
 - eval/vj_instruments.py + eval/meeting_quality.py + training/surrogate/dataset.py (marker consumers that already tolerate absence; read as evidence, never edited)
+- eval/evidence_honesty.py (a FOURTH marker consumer, landed by 20.15 after this contract was authored: its I-8 cells derive their marker set from the three `_drop_non_roster_claims` constants and are ratified at audits/audit-phase-20-preregistration.md:169-170; this task READS those cells and must not redefine or re-implement one — if a needed split is missing, say so in the PR)
 
 **Definition of done:**
 - [ ] `structured_turn_markers_enabled` follows the 13.5 signature (optional `env` mapping, default OFF, accepting `1/true/yes/on`), is read ONCE per turn collection and threaded down, and with the lever OFF `MeetingManager._collect_turn` prepends the identical marker string in BOTH its branches (the normal path and the degraded-opening path) — pinned in `tests/meetings/test_manager.py`, plus a committed-line re-serialization pin in `tests/api/test_replay_loader.py` showing a recorded meeting entry round-trips byte-identically (the empty `annotations` tuple is elided from the serialized turn, so newly recorded bytes do not gain a key on the OFF path).
 - [ ] Lever ON: a manager test plants EACH of the five turn-side marker constants' trigger conditions and asserts none of the five literals survives into `free_text`, into the rendered transcript block, or into any recorded prompt; each dropped claim is recoverable from `MeetingTurn.annotations` in claim order with its bounded original (the `MARKER_QUOTED_ORIGINAL_MAX_CHARS` bound still applied), and a perturbation shows the assertion bites when a marker is re-spliced.
 - [ ] OFF-path identity holds at the gates: `tests/meetings/test_prompt_byte_golden.py` and `bash scripts/verify_samples.sh` stay green, and no prompt template byte moves in this PR.
 - [ ] `api/replay_loader._turn_view` projects BOTH shapes to one chip vocabulary via the IMPORTED constants and the existing `_marker_pattern` (no second regex, no hard-coded literal): a committed replay's legacy spliced markers become `TurnView.annotations` labels with `free_text` cleaned, a recorded structured annotation becomes the same label, and `fabricated_opening` is derived from either shape — all three pinned in `tests/api/test_replay_loader.py`.
-- [ ] The committed-bytes counterfactual is pinned over the two samples sets and quoted for all four in the PR: marker-bearing turns 53/971 and contaminated prompts 246/1956 for samples/9p2i (33/165 meetings, 25/50 games), 0/117 and 0/234 for samples/4p1i, 139/2726 and 671/5502 for ml_corpus/9p2i (91/463 meetings, 68/150 games), 0/120 and 0/240 for ml_corpus/4p1i, with the kind split (53 invalid-accusation-target; 137 plus 2 invalid-corroboration-supports; zero emergency-strip and zero opening-degrade markers corpus-wide) and the stated would-be effect — every one of those turns carries a structured annotation instead, and the contaminated-prompt cell reads 0 at the adopting record.
+- [ ] The committed-bytes counterfactual is pinned over the two samples sets and quoted for all four in the PR (the four rate cells are ALREADY pinned by `tests/eval/test_evidence_honesty.py::test_i8_marker_contamination_pins` — cite that test rather than duplicating it; only the kind split is new here): marker-bearing turns 53/971 and contaminated prompts 246/1956 for samples/9p2i (33/165 meetings, 25/50 games), 0/117 and 0/234 for samples/4p1i, 139/2726 and 671/5502 for ml_corpus/9p2i (91/463 meetings, 68/150 games), 0/120 and 0/240 for ml_corpus/4p1i, with the kind split (53 invalid-accusation-target; 137 plus 2 invalid-corroboration-supports; zero emergency-strip and zero opening-degrade markers corpus-wide) and the stated would-be effect — every one of those turns carries a structured annotation instead, and the contaminated-prompt cell reads 0 at the adopting record.
 - [ ] `TurnCard` renders the annotation labels as ink/paper chips beside the existing FABRICATED chip, in every perspective, with a one-line comment recording why no turn-annotation label carries role information (unlike the ballot side's `teammate_coerced` gate); the regenerated types are committed and `uv run python scripts/gen_frontend_types.py --check` passes.
 - [ ] The spectator mirror of the movement shape exists: api/replay_loader.py::_observation_claim_view maps SawMoveObservation to a SawMoveObservationView (api/schemas.py + the generated types), pinned — the first recorded saw_move turn must not break the viewer before the record.
 - [ ] `uv run mypy .` passes.
@@ -4489,18 +4494,18 @@ and is re-pointed at the structured field with the adopting record, not here.
 **Implementation hint:**
 
 Step 1 — the resolver. Clone `agents.strategic.prompts.loader.impostor_roll_call_enabled`
-(:264-300) verbatim in shape: a module-level `ENV_STRUCTURED_TURN_MARKERS` constant, a frozen
+(:327-363) verbatim in shape: a module-level `ENV_STRUCTURED_TURN_MARKERS` constant, a frozen
 true-value set, `env if env is not None else os.environ`. Its home is `meetings/manager.py`
 because that is where the single write-site lives. Do NOT register it in
 `orchestrator.replay._TOGGLEABLE_LEVER_RESOLVERS` — say so in a comment the way
-`ENV_IMPOSTOR_ROLL_CALL` does at loader.py:253-257, naming the registration task.
+`ENV_IMPOSTOR_ROLL_CALL` does at loader.py:316-320, naming the registration task.
 
 Step 2 — the five literals, both branches. The turn-side markers are
 `INVALID_ACCUSATION_TARGET_MARKER`, `INVALID_ALIBI_SUBJECT_MARKER`,
 `INVALID_CORROBORATION_SUPPORTS_MARKER` (built in `_drop_non_roster_claims`),
-`EMERGENCY_BODY_STRIP_MARKER` (prepended to `drop_markers` at :1506) and
-`OPENING_UNSURE_DEGRADE_MARKER` (:1596). They are consumed at TWO places in `_collect_turn`
-— the normal return at :1542-1544 and the degraded-opening return at :1595-1599 — so the
+`EMERGENCY_BODY_STRIP_MARKER` (prepended to `drop_markers` at :1559) and
+`OPENING_UNSURE_DEGRADE_MARKER` (:1649). They are consumed at TWO places in `_collect_turn`
+— the normal return at :1595-1597 and the degraded-opening return at :1648-1652 — so the
 lever branch must cover both or the degraded path keeps splicing. Keep every constant exactly
 where it is: they stay the definition of what each guard did, and the annotation `kind`
 values are the labels derived from them.
@@ -4512,8 +4517,8 @@ defaults to `()`. The replay writer serializes via `model_dump(mode="json")`
 to every future recording; a model serializer on `MeetingTurn` that drops the key when the
 tuple is empty is what makes the OFF path byte-identical — pin it, do not assume it.
 
-Step 4 — the projection. `_BALLOT_PREFIX_MARKERS` (:2696-2703) and `_parse_rewrite_reasons`
-(:2733-2763) are the shape to mirror: a `(label, marker)` registry built from imported
+Step 4 — the projection. `_BALLOT_PREFIX_MARKERS` (:2856-2863) and `_parse_rewrite_reasons`
+(:2893-2923) are the shape to mirror: a `(label, marker)` registry built from imported
 constants, patterns precompiled through `_marker_pattern`, stripped front-to-back so stacked
 markers all surface. Reuse `_marker_pattern` rather than writing a second regex — C-67's
 complaint is precisely that the `{x!r}` repr shape and the `]` terminator are re-implemented
@@ -4526,12 +4531,15 @@ first: `frontend/src/stories/MeetingView.stories.tsx:72` and
 literals, the generator emits every field as REQUIRED in TypeScript, and `tsconfig.json`
 includes `src` — so both fixtures need the new field or `npm run tsc:check` and `npm run
 build` fail inside `scripts/check.sh`. `VIEW_MODEL_VERSION` does NOT move: the header at
-api/schemas.py:42-49 says additive projections do not bump it.
+api/schemas.py:42-54 says additive projections do not bump it (it now reads "2" — 20.16 bumped it for the widened `CurrentAction`; this task's additive field does not move it again).
 
-Step 6 — the census. Scan the committed JSONL directly (turn `free_text` for the turn cell,
-`llm_calls[].prompt` for the contaminated-prompt cell), importing the marker constants;
-the samples sets run in seconds, the two ml_corpus sets are the slow half — mark that test
-`slow` and quote its numbers in the PR.
+Step 6 — the census. Do NOT re-implement the four rate cells: Task 20.15 landed them as
+`eval/evidence_honesty.py`'s I-8 marker-contamination cells (marker set derived from the
+manager constants, so a constant edit moves the cell rather than leaving it silently stale),
+and `tests/eval/test_evidence_honesty.py::test_i8_marker_contamination_pins` already pins
+turns, prompts, meetings and games across all four sets at exactly the numbers quoted above —
+read and cite those. Only the per-kind split is not an I-8 cell; derive that one locally, mark
+it `slow` (the two ml_corpus sets are the slow half) and quote it in the PR.
 
 **Public types introduced:**
 - `meetings.manager.structured_turn_markers_enabled`
