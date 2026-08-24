@@ -757,11 +757,13 @@ _lockdir="$stage_dir/.lock"
 # lock held forever: every other worker would spin here, and the parent -- blocked
 # in `wait` on those stuck workers -- would HANG instead of failing loud. Guard
 # it: the holder records its PID in the lock; a waiter that finds the lock owned
-# by a process that no longer exists marks the refresh failed (the half-written
-# MANIFEST is unsafe to canonicalize) and gives up, so the pool tears down and the
-# `.failed` check fails loud. A waiter also bails the instant any worker flags a
-# failure. Returns non-zero when the lock was NOT acquired -- callers must not
-# enter the critical section on a non-zero return.
+# by a process that no longer exists -- stably, across repeated polls, so a
+# holder observed mid-release is never mistaken for a corpse -- marks the
+# refresh failed (the half-written MANIFEST is unsafe to canonicalize) and gives
+# up, so the pool tears down and the `.failed` check fails loud. A waiter also
+# bails the instant any worker flags a failure. Returns non-zero when the lock
+# was NOT acquired -- callers must not enter the critical section on a non-zero
+# return.
 # The owner PID uses $BASHPID (the WORKER subshell's own PID) when available, and
 # falls back to $$ on macOS's stock Bash 3.2, which predates $BASHPID (the ${:-}
 # form is exempt from `set -u`, so an undefined $BASHPID never fatally aborts the
@@ -772,20 +774,42 @@ _lockdir="$stage_dir/.lock"
 # degradation is ledgered for the sibling corpus recorder in
 # audits/audit-phase-18-close.md §7 row 5 and training/README.md §6 row 5.
 _acquire_lock() {
-  local owner
+  local owner last_dead_owner dead_polls
   # Give up the moment any worker has flagged a failure -- even if the lock is
   # free right now -- so a doomed baseline stops touching MANIFEST.md.
   [[ -e "$stage_dir/.failed" ]] && return 1
+  last_dead_owner=""
+  dead_polls=0
   while ! mkdir "$_lockdir" 2>/dev/null; do
     if [[ -e "$stage_dir/.failed" ]]; then
       return 1
     fi
     owner="$(cat "$_lockdir/owner" 2>/dev/null || true)"
     if [[ -n "$owner" ]] && ! kill -0 "$owner" 2>/dev/null; then
-      echo "ERROR: refresh lock owner (pid $owner) died holding the lock" \
-        "(killed/crashed mid critical section); the baseline is incomplete." >&2
-      touch "$stage_dir/.failed"
-      return 1
+      # One dead probe is a race, not a verdict: between this waiter's cat and
+      # its kill -0 the holder may have released the lock and exited (a worker
+      # draining the queue, or a seed-claim command-substitution subshell whose
+      # pid dies with the claim). A holder that truly died mid-critical-section
+      # leaves the owner file frozen -- only a release removes it -- so the same
+      # dead pid must stay the recorded owner across 10 consecutive polls (~1s)
+      # before the refresh is failed. A benign race can't sustain the streak:
+      # the release removes the owner file with the lock dir, so the next poll
+      # either acquires or reads a different owner and resets the count.
+      if [[ "$owner" == "$last_dead_owner" ]]; then
+        dead_polls=$((dead_polls + 1))
+      else
+        last_dead_owner="$owner"
+        dead_polls=1
+      fi
+      if [[ "$dead_polls" -ge 10 ]]; then
+        echo "ERROR: refresh lock owner (pid $owner) died holding the lock" \
+          "(killed/crashed mid critical section); the baseline is incomplete." >&2
+        touch "$stage_dir/.failed"
+        return 1
+      fi
+    else
+      last_dead_owner=""
+      dead_polls=0
     fi
     sleep 0.1
   done
@@ -800,9 +824,10 @@ _release_lock() { rm -rf "$_lockdir" 2>/dev/null || true; }
 # (double spend) and none is skipped.
 claim_next_seed() {
   local idx
-  # A non-zero acquire (a dead lock owner / an already-flagged failure) echoes no
-  # seed, so the worker drains as if the queue were empty and the .failed check
-  # fails loud.
+  # A non-zero acquire (a dead lock owner / an already-flagged failure) returns
+  # non-zero, which fails the worker's `seed="$(claim_next_seed)"` assignment
+  # under set -e: the worker dies, the pool join records it, and the .failed
+  # check fails loud.
   _acquire_lock || return 1
   idx="$(cat "$stage_dir/.next_idx")"
   if [[ "$idx" -ge "$total_seeds" ]]; then

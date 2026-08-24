@@ -21,6 +21,7 @@ import os
 import re
 import shutil
 import subprocess
+import time
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -419,6 +420,116 @@ def test_invalid_seed_max_attempts_fails_loud() -> None:
     assert "AILIBI_SEED_MAX_ATTEMPTS must be a positive integer" in (
         proc.stdout + proc.stderr
     )
+
+
+# -- the lock's dead-owner verdict (twin of the refresh_samples.sh cases) ------
+#
+# The recorder's mkdir mutex mirrors refresh_samples.sh's: the dead-owner probe
+# (cat owner, then kill -0) races the holder's release-and-exit, so death is
+# declared only when the same dead pid stays the recorded owner across
+# consecutive polls. See tests/scripts/test_refresh_samples.py for the full
+# rationale; these cases drive THIS script's own acquire_lock/release_lock,
+# extracted verbatim, so the twin can't silently drift.
+
+_LOCK_DRIVER = """\
+set -euo pipefail
+stage_dir="$1"
+lockdir="$stage_dir/.lock"
+{functions}
+if acquire_lock; then
+  echo ACQUIRED
+  release_lock
+else
+  echo REFUSED
+  exit 1
+fi
+"""
+
+
+def _lock_driver(tmp_path: Path) -> Path:
+    """A driver script around the committed acquire_lock/release_lock."""
+
+    script = _RECORD_SH.read_text(encoding="utf-8")
+    functions = []
+    for pattern in (
+        r"(?ms)^  acquire_lock\(\) \{\n.*?\n  \}$",
+        r"(?m)^  release_lock\(\) \{ .*\}$",
+    ):
+        match = re.search(pattern, script)
+        assert match is not None, f"lock function not found: {pattern}"
+        functions.append(match.group(0))
+    driver = tmp_path / "lock_driver.sh"
+    driver.write_text(
+        _LOCK_DRIVER.format(functions="\n".join(functions)), encoding="utf-8"
+    )
+    return driver
+
+
+def _reaped_pid() -> str:
+    """The pid of a process that has already exited and been reaped."""
+
+    proc = subprocess.run(
+        ["bash", "-c", "echo $$"], capture_output=True, text=True, timeout=60
+    )
+    assert proc.returncode == 0
+    return proc.stdout.strip()
+
+
+def test_lock_fails_loud_when_a_dead_owner_stays_the_owner(tmp_path: Path) -> None:
+    # A holder killed mid-critical-section leaves the lock held forever; the
+    # waiter must refuse, flag .failed, and name the corpse -- after the
+    # confirmation streak, never on a single probe.
+    stage = tmp_path / "stage"
+    lockdir = stage / ".lock"
+    lockdir.mkdir(parents=True)
+    (lockdir / "owner").write_text(_reaped_pid(), encoding="utf-8")
+    start = time.monotonic()
+    proc = subprocess.run(
+        ["bash", str(_lock_driver(tmp_path)), str(stage)],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "REFUSED" in proc.stdout
+    assert "died holding the lock" in proc.stderr
+    assert (stage / ".failed").exists()
+    assert time.monotonic() - start >= 0.5
+
+
+def test_lock_tolerates_a_release_racing_the_dead_owner_probe(tmp_path: Path) -> None:
+    # The waiter provably probes a dead owner (gated on the xtrace), then the
+    # lock is released out from under it: a pid that finished cleanly must not
+    # fail the run.
+    stage = tmp_path / "stage"
+    lockdir = stage / ".lock"
+    lockdir.mkdir(parents=True)
+    dead = _reaped_pid()
+    (lockdir / "owner").write_text(dead, encoding="utf-8")
+    trace = tmp_path / "trace.txt"
+    probe = re.compile(rf"kill -0 {dead}\b")
+    with (
+        trace.open("w", encoding="utf-8") as trace_fh,
+        subprocess.Popen(
+            ["bash", "-x", str(_lock_driver(tmp_path)), str(stage)],
+            stdout=subprocess.PIPE,
+            stderr=trace_fh,
+            text=True,
+        ) as proc,
+    ):
+        deadline = time.monotonic() + 60
+        while not probe.search(trace.read_text(encoding="utf-8")):
+            assert time.monotonic() < deadline, "waiter never probed the dead owner"
+            assert proc.poll() is None, (
+                "waiter exited on a single dead probe: "
+                + trace.read_text(encoding="utf-8")
+            )
+            time.sleep(0.01)
+        shutil.rmtree(lockdir)  # the release the probe raced
+        stdout, _ = proc.communicate(timeout=60)
+    assert proc.returncode == 0, stdout + trace.read_text(encoding="utf-8")
+    assert "ACQUIRED" in stdout
+    assert not (stage / ".failed").exists()
 
 
 # -- preflight (LOCKED to featherless; every case fails BEFORE any record) -----
