@@ -4553,7 +4553,7 @@ it `slow` (the two ml_corpus sets are the slow half) and quote it in the PR.
 ### Task 20.29 — Meetings leave a record: outcomes, revealed roles and testimony as content in memory
 **Branch:** `phase-20-meeting-outcome-memory`
 **Depends on:** 20.24 — the self-location trail lands its own non-elastic block in the same render assembly first, so this block stacks on a settled layout instead of racing it; 20.8 — the entitlement-checking leak scanner must exist before this task widens it with a role-disclosure allowance, or the allowance is written against a scanner that cannot check entitlement at all; 20.28 — the structured turn annotations settle the manager's public reduction surface before an additive outcome payload is added beside it.
-**Section refs:** G-35 and G-23 (audits/review-2026-08-19/A/collated-findings.md §G-35, §G-23); R4 and R5 and D5 (audits/review-2026-08-19/A/ideas-multi-agent-researcher.md §R4, §R5, §D5); V1 and M1 (audits/review-2026-08-19/A/ideas-among-us-veteran.md §V1, §1 row M1); idea #9 (audits/review-2026-08-19/A/ideas-game-designer.md §9); audits/review-2026-08-19/A/s4-info-economy-beliefs.md §3; the roadmap item audits/review-2026-08-19/D/FINAL-synthesis.md §Wave 2 row 2.10. Re-verified at HEAD b809b19c: agents/memory/working.py:57-73 (`MeetingOutcome`, exactly `end_tick` + `ejected_id`), :133-185 (`MeetingHistory`, `record` at :176); agents/memory/store.py:549-575 (`record_meeting_outcome`, "inert to `render_for_prompt` … no prompt-byte impact anywhere"), :443-546 (`absorb_reported_testimony`), :1458-1512 (`_render_reported_testimony`, the `CLAIM by X (unverified):` prefix at :1485, `accused {subject}` at :1500), :85 (`_SALIENCE_REPORTED_TESTIMONY = 25`), :1778-1852 (`_assemble_view`, the fixed/elastic split); orchestrator/game.py:650-691 (the `MeetingPacingAgent` protocol), :1988-2003 (the belief fold then the pacing fold), :2296-2313 (the testimony fan-out), :2360-2400 (`_notify_meeting_concluded`), :3092-3131 (`TacticalAgent.note_meeting_concluded`); meetings/manager.py:3430 (`MeetingBeliefEvidence`, the sibling reduction DTO), :3746-3837 (`derive_reported_testimony`); meetings/schemas.py:331-333 (`ReportedStatementKind`, the closed four), :85-109 (`SawVentObservation`, ":102-103 deliberately NOT reduced to a `ReportedStatement`"), :515 (`MeetingResult.ejected_player_id`); eval/leak_scan.py:66-78 (the forbidden role-value constants and their single allowed path), :147-172 (`_assert_no_role_bearing_values`), :609-651 (`assert_packet_is_leak_clean`); tests/agents/test_memory_meeting_history.py:249-260 (the field-set provenance pin), :301-308 (the render-inertness pin); DESIGN.md:455 §4.7, :694 §6.6; .importlinter (agents must not import engine, agents must not import meetings.manager)
+**Section refs:** G-35 and G-23 (audits/review-2026-08-19/A/collated-findings.md §G-35, §G-23); R4 and R5 and D5 (audits/review-2026-08-19/A/ideas-multi-agent-researcher.md §R4, §R5, §D5); V1 and M1 (audits/review-2026-08-19/A/ideas-among-us-veteran.md §V1, §1 row M1); idea #9 (audits/review-2026-08-19/A/ideas-game-designer.md §9); audits/review-2026-08-19/A/s4-info-economy-beliefs.md §3; the roadmap item audits/review-2026-08-19/D/FINAL-synthesis.md §Wave 2 row 2.10. Re-verified at HEAD 1ceab2c4: agents/memory/working.py:57-73 (`MeetingOutcome`, exactly `end_tick` + `ejected_id`), :133-185 (`MeetingHistory`, `record` at :176); agents/memory/store.py:685-711 (`record_meeting_outcome`, "inert to `render_for_prompt` … no prompt-byte impact anywhere"), :579-682 (`absorb_reported_testimony`), :1750-1804 (`_render_reported_testimony`, the `CLAIM by X (unverified):` prefix at :1777, `accused {subject}` at :1792), :86 (`_SALIENCE_REPORTED_TESTIMONY = 25`), :2070-2163 (`_assemble_view`, the fixed/elastic split); orchestrator/game.py:674-715 (the `MeetingPacingAgent` protocol), :2020-2035 (the belief fold then the pacing fold), :2328-2345 (the testimony fan-out), :2392-2432 (`_notify_meeting_concluded`), :3188-3228 (`TacticalAgent.note_meeting_concluded`); meetings/manager.py:3597 (`MeetingBeliefEvidence`, the sibling reduction DTO), :3913-4004 (`derive_reported_testimony`); meetings/schemas.py:537-539 (`ReportedStatementKind`, the closed four), :95-119 (`SawVentObservation`, ":112-113 deliberately NOT reduced to a `ReportedStatement`"), :721 (`MeetingResult.ejected_player_id`); eval/leak_scan.py:68-80 (the forbidden role-value constants and their single allowed path), :185-210 (`_assert_no_role_bearing_values`), :848-920 (`assert_packet_is_leak_clean`, whose signature 20.8 changed to `(packet, context: PacketContext)`); tests/agents/test_memory_meeting_history.py:249-260 (the field-set provenance pin), :301-308 (the render-inertness pin); DESIGN.md:463 §4.7, :702 §6.6; .importlinter (agents must not import engine, agents must not import meetings.manager)
 **Complexity:** Integration
 **Record impact:** lever-gated (default-OFF) until the Phase-20 adopting record
 **Measurement:** `uv run pytest tests/agents tests/orchestrator tests/observation eval/leak_test.py -q` green; a fake-provider 9p2i game with `AILIBI_MEETING_OUTCOME_MEMORY=1` renders the meetings block in every living agent's memory after its first meeting, pasted into the PR Summary alongside the committed-bytes counterfactual census.
@@ -4566,7 +4566,7 @@ census over the prompt bytes reads 0 of 7,458 meeting LLM calls carrying any rec
 ejection or its revealed role (A/ideas-multi-agent-researcher.md §D5). This is not a missing
 channel — the channel was built and left inert. `MeetingOutcome` at
 agents/memory/working.py:57-73 already carries the concluded meeting's public result,
-`record_meeting_outcome` at agents/memory/store.py:549-575 already folds it per living agent
+`record_meeting_outcome` at agents/memory/store.py:685-711 already folds it per living agent
 off the `note_meeting_concluded` hook, and its own docstring states the terminal fact: it "is
 consumed ONLY by the v3 tactical feature encoder's meeting-history channel and is inert to
 `render_for_prompt` … it carries no prompt-byte impact anywhere". Three survived meetings
@@ -4584,9 +4584,9 @@ the sentence the whole mid- and endgame is built on: without it there is no clea
 parity count, and no reason for a skip to feel expensive.
 
 The second half is the testimony content. `_render_reported_testimony`
-(agents/memory/store.py:1458-1512) reduces an accusation to `accused {subject}` at :1500, and
+(agents/memory/store.py:1750-1804) reduces an accusation to `accused {subject}` at :1792, and
 `SawVentObservation` is deliberately excluded from the reduction altogether —
-meetings/schemas.py:102-103 says so in as many words, because the Task 13.5.2 scope was
+meetings/schemas.py:112-113 says so in as many words, because the Task 13.5.2 scope was
 owner-locked to four kinds. The consequence is exactly inverted from the design intent: the
 game's one 100%-precise signal is destroyed on the way into memory (a witnessed vent becomes
 `CLAIM by p-8 (unverified): accused p-4`) while the impostor's fabricated *sighting* keeps its
@@ -4599,7 +4599,7 @@ one render branch.
 The disclosure is deliberate and it is narrow. Confirm-ejects is the Among Us rule, and the
 revealed role of an EJECTED player is public at the table on exactly the same footing as
 `dead_ids` and the announced tally — the footing on which `ejected_id` already crosses into
-memory (DESIGN.md §4.7; the 18.22 argument recorded at orchestrator/game.py:2360-2382). A
+memory (DESIGN.md §4.7; the 18.22 argument recorded at orchestrator/game.py:2392-2414). A
 player killed rather than ejected reveals nothing, and no living player's role is ever
 disclosed. Because `agents/` may not import `engine` (.importlinter), the translation happens
 where it already belongs: the orchestrator, which holds post-meeting `WorldState`, reads the
@@ -4641,7 +4641,7 @@ block would already have closed out.
 - DESIGN.md (§6.6's prose stays true while the lever is OFF; the adopting record's sweep restates it)
 
 **Definition of done:**
-- [ ] `agents.memory.store.meeting_outcome_memory_enabled(env)` reads `AILIBI_MEETING_OUTCOME_MEMORY`, accepts `1/true/yes/on` case-insensitively, defaults False on unset/empty/unrecognised, and takes `env` so tests toggle without mutating `os.environ` — mirroring the resolver at agents/strategic/prompts/loader.py:264. `render_for_prompt` reads it once and threads the boolean down.
+- [ ] `agents.memory.store.meeting_outcome_memory_enabled(env)` reads `AILIBI_MEETING_OUTCOME_MEMORY`, accepts `1/true/yes/on` case-insensitively, defaults False on unset/empty/unrecognised, and takes `env` so tests toggle without mutating `os.environ` — mirroring the resolver at agents/strategic/prompts/loader.py:327 (and the in-file sibling 20.24 landed, `self_location_trail_enabled` at agents/memory/store.py:290). `render_for_prompt` reads it once and threads the boolean down.
 - [ ] OFF-path byte-identity: `tests/agents/test_memory_meeting_history.py` pins that a memory populated with outcomes carrying roles and tallies renders byte-identically to the same memory without them, and `bash scripts/verify_samples.sh` plus `uv run pytest tests/meetings/test_prompt_byte_golden.py` stay green over all 300 committed games.
 - [ ] ON-path render: every post-meeting render carries the `## Meetings so far:` block as a non-elastic block placed above the observations block, one line per concluded meeting, naming the meeting index, the resume tick, the ejection or the skip with its tally, the revealed role of the ejected player, and the impostors-remaining count — pinned line-for-line in `tests/agents/test_memory_meeting_history.py` for an eject-an-impostor, an eject-a-crewmate and a skip.
 - [ ] The impostors-remaining arithmetic is derived, not asserted: it equals the roster impostor count minus the number of recorded outcomes whose revealed role is IMPOSTOR, is never decremented by a kill, and is pinned across a two-impostor game where the first ejection is wrong and the second is right.
@@ -4673,25 +4673,25 @@ protocol fakes in tests/training/test_crew_scorer.py,
 tests/training/test_learned_factory_acceptance.py and tests/training/test_surrogate_runner.py,
 which is why the widened parameters must be keyword-only with None defaults. Note that
 `meetings.schemas.MeetingOutcome` is a DIFFERENT symbol (a `Literal["EJECTED", "SKIPPED"]`
-alias at meetings/schemas.py:468) imported by meetings/voting.py, meetings/manager.py,
+alias at meetings/schemas.py:674) imported by meetings/voting.py, meetings/manager.py,
 training/rollout.py and training/surrogate/dataset.py — do not widen that one.
 
 Step 2 — the payload, orchestrator-side. `_notify_meeting_concluded` at
-orchestrator/game.py:2360-2400 already holds the post-meeting `next_state`, so the ejected
+orchestrator/game.py:2392-2432 already holds the post-meeting `next_state`, so the ejected
 player's role is one lookup away; the roster impostor count is `self._num_impostors`, held at
-orchestrator/game.py:1602. Widen `MeetingPacingAgent.note_meeting_concluded` and
+orchestrator/game.py:1634. Widen `MeetingPacingAgent.note_meeting_concluded` and
 `TacticalAgent.note_meeting_concluded` with keyword-only additive parameters defaulting to
-None, exactly as `ejected_id` was added at :684-691 — every existing direct caller keeps
+None, exactly as `ejected_id` was added at :708-715 — every existing direct caller keeps
 working untouched and the capability gate is unchanged. Read the role from the post-meeting
 state rather than from the meeting result: the result is engine-free by design and must stay
 so.
 
 Step 3 — the tally, manager-side. Add a pure reduction beside `derive_reported_testimony`
-(meetings/manager.py:3746) that turns a recorded `MeetingResult` into the public tally — votes
+(meetings/manager.py:3913) that turns a recorded `MeetingResult` into the public tally — votes
 for the ejected target and the skip count, over `result.ballots`, remembering `SKIP_TARGET` is
 a first-class tally target (meetings/voting.py:145-215) and that a tie resolves to SKIPPED.
 Keep it engine-free, deterministic and role-blind; the manager must never see a role.
-`MeetingBeliefEvidence` at meetings/manager.py:3430 is the precedent for the DTO's home. The
+`MeetingBeliefEvidence` at meetings/manager.py:3597 is the precedent for the DTO's home. The
 orchestrator flattens it into the hook's keyword arguments so `agents/` never imports
 `meetings.manager` (.importlinter forbids it).
 
@@ -4700,7 +4700,7 @@ pins that it imports no engine: type the revealed role as a local string literal
 module, not `engine.entities.Role`. Give `MeetingHistory` the impostors-remaining derivation so
 the arithmetic lives next to the data it reads; a kill never moves it.
 
-Step 5 — the render. `_assemble_view` (agents/memory/store.py:1778-1852) is where the
+Step 5 — the render. `_assemble_view` (agents/memory/store.py:2070-2163) is where the
 elastic/non-elastic split lives: the meetings block joins `fixed_lines` and the
 beliefs/contradictions blocks, NOT the salience-sorted observation list, so a tight budget can
 never shed it. Keep it short — one line per concluded meeting; the coalescing task that follows
@@ -4708,18 +4708,18 @@ is what buys back the room, and this block must not be what makes the budget bin
 must not merely produce equal bytes but take the same code path shape it takes today.
 
 Step 6 — the testimony content. `SawVentObservation` is currently excluded from the reduction
-on purpose (meetings/schemas.py:102-103); widening the reduction is the point of R5's half, and
+on purpose (meetings/schemas.py:112-113); widening the reduction is the point of R5's half, and
 the schema's own docstring is one of the false claims that must be corrected in the same PR.
-Preserve the `CLAIM by X (unverified):` frame verbatim — agents/memory/store.py:1461-1465
+Preserve the `CLAIM by X (unverified):` frame verbatim — agents/memory/store.py:1753-1757
 documents it as load-bearing, and replacing the frame is a legibility decision this task is not
 making. The meeting index is available at absorb time as the length of the agent's own
-`meeting_history` (the fold order at orchestrator/game.py:1988-2003 is beliefs, then testimony,
+`meeting_history` (the fold order at orchestrator/game.py:2020-2035 is beliefs, then testimony,
 then the outcome). R5's second half — a citable `[tst …]` id a later ballot can quote — is
 deliberately NOT built here: minting new ids collides with the coalescing task's span ids and
 the citation gate; leave `observation_id` as it is.
 
 Step 7 — the scanner. The existing packet scanner's shape is the model: a frozen set of
-forbidden role substrings with one named allowed path (eval/leak_scan.py:66-78, :147-188). The
+forbidden role substrings with one named allowed path (eval/leak_scan.py:68-80, :185-226). The
 render scanner is a pure function over the rendered string plus an ejection ledger of player id
 to ejection tick plus the render tick; assert every role-bearing disclosure resolves to an
 entitled one and fail loud with the offending line quoted. A gate that cannot fail is not a
