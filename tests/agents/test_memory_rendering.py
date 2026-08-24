@@ -2432,12 +2432,12 @@ class TestCoalescedMemoryRenderLever:
         rows = _observation_rows(render_for_prompt(memory, env=_COALESCE_ON))
 
         assert "- [tick 1] You saw p-9 in CAFETERIA." in rows
-        assert "- You saw p-9 in ADMIN ticks 2-3." in rows
+        assert any(row.startswith("- You saw p-9 in ADMIN ticks 2-4") for row in rows)
 
-    def test_the_breadcrumb_row_keeps_its_own_line(self) -> None:
-        # The "moved from …" suffix lands on a subject's most-recent sighting only,
-        # so that row states strictly more than the ones before it and may not be
-        # folded away into their span.
+    def test_the_span_carries_the_terminal_breadcrumb(self) -> None:
+        # The "moved from …" suffix lands on a subject's most-recent sighting only
+        # and describes the whole stay, so it rides the span rather than splitting
+        # a tick off the end of it.
         memory = _seen(
             (1, "p-9", "CAFETERIA"),
             (2, "p-9", "ADMIN"),
@@ -2448,7 +2448,7 @@ class TestCoalescedMemoryRenderLever:
         rows = _observation_rows(render_for_prompt(memory, env=_COALESCE_ON))
 
         assert (
-            "- [tick 4] You saw p-9 in ADMIN "
+            "- You saw p-9 in ADMIN ticks 2-4 "
             "(moved from CAFETERIA, last seen there at tick 1)." in rows
         )
 
@@ -2536,6 +2536,26 @@ class TestCoalescedMemoryRenderLever:
         rows = _observation_rows(render_for_prompt(memory, env=_COALESCE_ON))
 
         assert "- You saw every other player in CAFETERIA ticks 0-1: p-2, p-3." in rows
+
+    def test_the_summary_covers_only_the_ticks_the_whole_group_shared(self) -> None:
+        # p-2 starts a task at tick 1 while p-3 stands there unchanged. The group
+        # was still whole at tick 0, so it still collapses -- the summary covers the
+        # shared tick only, and what each subject did afterwards keeps its own row.
+        memory = _seen(
+            (0, "p-2", "CAFETERIA"),
+            (0, "p-3", "CAFETERIA"),
+            (1, "p-3", "CAFETERIA"),
+        )
+        memory.episodic.append(
+            _saw_player_event(tick=1, player_id="p-2", room="CAFETERIA", action="task")
+        )
+
+        rows = _observation_rows(render_for_prompt(memory, env=_COALESCE_ON))
+
+        assert "- [tick 0] You saw every other player in CAFETERIA: p-2, p-3." in rows
+        assert "- [tick 1] You saw p-2 task in CAFETERIA (with p-3)." in rows
+        assert "- [tick 1] You saw p-3 in CAFETERIA (with p-2)." in rows
+        assert not any("[tick 0] You saw p-3 in CAFETERIA" in row for row in rows)
 
     def test_testimony_outranks_bare_co_presence_and_hard_evidence_outranks_it(
         self,

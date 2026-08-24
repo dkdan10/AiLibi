@@ -158,8 +158,11 @@ class _Observation:
     :func:`render_for_prompt` folds it into the line as an ``[obs {id}]`` prefix.
 
     ``sighting`` carries the span key of a bare co-presence row and is ``None`` for
-    every other class; it is what :func:`_coalesce_sightings` folds runs on, and is
-    inert unless :func:`coalesced_memory_render_enabled` is ON.
+    every other class; it is what :func:`_coalesce_sightings` folds runs on.
+    ``sighting_suffix`` is that row's directional breadcrumb, carried beside the key
+    rather than inside it -- it lands on a subject's most-recent sighting only, so
+    it must not split the run it terminates. Both are inert unless
+    :func:`coalesced_memory_render_enabled` is ON.
     """
 
     salience: int
@@ -167,22 +170,22 @@ class _Observation:
     line: str
     observation_id: str | None = None
     sighting: _SightingKey | None = None
+    sighting_suffix: str = ""
 
 
 @dataclass(frozen=True)
 class _SightingKey:
     """What two bare sightings must share to belong to one coalesced span.
 
-    A run folds only when its rows are identical apart from their tick -- same
-    subject, room and action, the same companions, the same movement breadcrumb --
-    so the span line states exactly what the rows it replaces stated.
+    A run folds only when its rows say the same thing about the same subject --
+    same room, same action, the same companions -- so the span line states exactly
+    what the rows it replaces stated.
     """
 
     subject: str
     room: str
     action: str | None
     companions: frozenset[str]
-    movement_suffix: str
 
 
 @dataclass(frozen=True)
@@ -551,9 +554,10 @@ def render_for_prompt(
     change of room, action or companions -- and any tick the agent holds no row for
     -- breaks the run, so a span never claims a tick its rows did not. A tick-0
     group that names the whole known roster minus the observer collapses to one
-    summary line naming those subjects, because "everyone started together" is one
-    fact and a partial view is not (a player absent at spawn is real information, so
-    that view keeps its rows). The span carries its FIRST row's
+    summary line naming those subjects, over the stretch they all shared, because
+    "everyone started together" is one fact and a partial view is not (a player
+    absent at spawn is real information, so that view keeps its rows). The span
+    carries its FIRST row's
     ``observation_id``, so every id a ballot can cite off the render is still one of
     the agent's own stored ids. The same lever lifts reported testimony above bare
     co-presence in the salience ladder, so the budget sheds routine sightings before
@@ -1906,10 +1910,11 @@ def _coalesce_sightings(
     Bare co-presence rows are the bulk of a rendered memory and most of them
     restate the previous tick verbatim. Rows sharing a :class:`_SightingKey` on
     CONSECUTIVE ticks become one line carrying the tick range; a gap in the ticks
-    or any change of room, action, companions or breadcrumb starts a new span, so
-    a span never claims a tick its rows did not. A tick-0 group naming the whole
-    known roster becomes one summary line. Every other observation class -- vents,
-    kills, bodies, transitions, testimony, own rows -- passes through untouched.
+    or any change of room, action or companions starts a new span, so a span never
+    claims a tick its rows did not. The stretch from tick 0 over which the whole
+    known roster stood together becomes one summary line, and whatever each subject
+    did after it keeps its own span. Every other observation class -- vents, kills,
+    bodies, transitions, testimony, own rows -- passes through untouched.
     """
 
     grouped: dict[_SightingKey, list[_Observation]] = {}
@@ -1932,14 +1937,20 @@ def _coalesce_sightings(
 
     spawn_indices = _spawn_group_indices(runs, roster=roster, own_agent_id=own_agent_id)
     folded: list[_Observation] = []
+    spawn_end = -1
     if spawn_indices:
-        folded.append(_spawn_group_observation(runs, spawn_indices))
+        # The summary covers only the ticks EVERY member shares, so it never
+        # outlives the group it stands for; each member's remaining ticks stay
+        # its own span.
+        spawn_end = min(runs[index][1][-1].tick for index in spawn_indices)
+        folded.append(_spawn_group_observation(runs, spawn_indices, end_tick=spawn_end))
     consumed = frozenset(spawn_indices)
-    folded.extend(
-        _span_observation(key, rows)
-        for index, (key, rows) in enumerate(runs)
-        if index not in consumed
-    )
+    for index, (key, rows) in enumerate(runs):
+        if index in consumed:
+            rows = [row for row in rows if row.tick > spawn_end]
+            if not rows:
+                continue
+        folded.append(_span_observation(key, rows))
     return passthrough + folded
 
 
@@ -1948,7 +1959,9 @@ def _span_observation(key: _SightingKey, rows: list[_Observation]) -> _Observati
 
     The span sorts by its LAST tick -- a run is as current as its most recent row
     -- and cites its FIRST row's ``observation_id``, so the id a ballot can copy off
-    the render is one the agent's own store holds.
+    the render is one the agent's own store holds. It carries the LAST row's
+    directional breadcrumb: only a subject's most-recent sighting has one, and it
+    describes the whole stay in that room.
     """
 
     if len(rows) == 1:
@@ -1961,10 +1974,11 @@ def _span_observation(key: _SightingKey, rows: list[_Observation]) -> _Observati
         line=(
             f"You saw {key.subject} {action}in {key.room} "
             f"ticks {first.tick}-{last.tick}"
-            f"{_co_presence_suffix(key.companions)}{key.movement_suffix}."
+            f"{_co_presence_suffix(key.companions)}{last.sighting_suffix}."
         ),
         observation_id=first.observation_id,
         sighting=key,
+        sighting_suffix=last.sighting_suffix,
     )
 
 
@@ -1974,13 +1988,14 @@ def _spawn_group_indices(
     roster: frozenset[str] | None,
     own_agent_id: str | None,
 ) -> list[int]:
-    """The tick-0 runs that together say only "everyone started in one room".
+    """The tick-0 runs that together say "everyone started in one room".
 
     Empty unless the runs beginning at tick 0 name the full known roster minus the
-    observer, in ONE room, over the SAME ticks, each listing the rest of that roster
-    as its companions -- the render whose whole content is the summary line. A
-    partial view, a split room or a subject who left earlier is real information and
-    keeps its own rows.
+    observer, in ONE room, each listing the rest of that roster as its companions --
+    the one fact the summary line states. A partial view, a split room or a subject
+    the observer did not see at spawn is real information and keeps its own rows.
+    How far past tick 0 the summary reaches is the caller's shared-tick arithmetic,
+    not a condition on collapsing at all.
     """
 
     if roster is None or own_agent_id is None:
@@ -1991,14 +2006,12 @@ def _spawn_group_indices(
     indices = [
         index
         for index, (key, rows) in enumerate(runs)
-        if rows[0].tick == 0 and key.action is None and not key.movement_suffix
+        if rows[0].tick == 0 and key.action is None and not rows[0].sighting_suffix
     ]
     keys = [runs[index][0] for index in indices]
     if len(indices) != len(expected) or {key.subject for key in keys} != expected:
         return []
     if len({key.room for key in keys}) != 1:
-        return []
-    if len({runs[index][1][-1].tick for index in indices}) != 1:
         return []
     if any(key.companions != expected - {key.subject} for key in keys):
         return []
@@ -2008,8 +2021,10 @@ def _spawn_group_indices(
 def _spawn_group_observation(
     runs: Sequence[tuple[_SightingKey, list[_Observation]]],
     indices: Sequence[int],
+    *,
+    end_tick: int,
 ) -> _Observation:
-    """The single line a full-roster tick-0 group renders as.
+    """The single line a full-roster spawn group renders as.
 
     It names every subject it stands for, so the fold costs a line instead of a
     roster and loses nothing; it cites the first-listed subject's tick-0 row.
@@ -2018,7 +2033,6 @@ def _spawn_group_observation(
     rows_by_subject = {runs[index][0].subject: runs[index][1] for index in indices}
     subjects = sorted(rows_by_subject)
     room = runs[indices[0]][0].room
-    end_tick = runs[indices[0]][1][-1].tick
     prefix = "[tick 0] " if end_tick == 0 else ""
     span = "" if end_tick == 0 else f" ticks 0-{end_tick}"
     return _Observation(
@@ -2091,7 +2105,6 @@ def _render_saw_player(
         room=room,
         action=action_str if action_str in _ACTIVE_PLAYER_ACTIONS else None,
         companions=companions,
-        movement_suffix=suffix,
     )
     if action_str in _ACTIVE_PLAYER_ACTIONS:
         return _Observation(
@@ -2103,6 +2116,7 @@ def _render_saw_player(
             ),
             observation_id=event.observation_id,
             sighting=key,
+            sighting_suffix=suffix,
         )
     return _Observation(
         salience=_SALIENCE_SAW_PLAYER,
@@ -2110,6 +2124,7 @@ def _render_saw_player(
         line=f"[tick {event.tick}] You saw {player_id} in {room}{co_present}{suffix}.",
         observation_id=event.observation_id,
         sighting=key,
+        sighting_suffix=suffix,
     )
 
 

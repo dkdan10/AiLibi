@@ -3252,26 +3252,42 @@ def test_the_coalesced_render_budget_cells(
     assert census.rows_off == 49_590
     assert mean_off == pytest.approx(51.0711, abs=1e-4)
     assert mean_off == pytest.approx(_COMMITTED_OFF_MEAN, abs=0.05)
-    # The ON leg. It does NOT reach the 36-row target: the fold removes 19.0% of
-    # the CANDIDATE rows, but how many rows a render SHOWS is capped by the token
-    # budget rather than by the candidate count, so the budget the fold frees
-    # refills with rows the OFF render had shed. Pinned as measured, with the
-    # target stated, so the gap is a number a reader can act on rather than a
-    # silently relaxed bound.
-    assert census.rows_on == 41_698
-    assert mean_on == pytest.approx(42.9434, abs=1e-4)
+    # The ON leg, as measured.
+    assert census.rows_on == 40_927
+    assert mean_on == pytest.approx(42.1493, abs=1e-4)
     assert mean_on < mean_off
-    assert mean_on > _COALESCED_ROW_TARGET
     # What the same budget bought, and what it cost. Sighting ROWS nearly halve
     # and the document shortens; the first-hand subject-TICKS those rows account
-    # for fall 18.6%, because the raised reported band spends the freed budget on
+    # for fall 17.8%, because the raised reported band spends the freed budget on
     # testimony. The next test prices the two folds apart.
     assert census.sightings_off == 37_608
-    assert census.sightings_on == 20_346
+    assert census.sightings_on == 19_558
     assert census.covered_off == 37_608
-    assert census.covered_on == 30_617
+    assert census.covered_on == 30_927
     assert census.chars_off == 4_160_638
-    assert census.chars_on == 3_583_453
+    assert census.chars_on == 3_541_476
+
+
+@pytest.mark.slow
+def test_the_on_leg_does_not_reach_the_contracts_row_ceiling(
+    render_budget: _RenderBudgetCensus,
+) -> None:
+    """The unmet acceptance criterion, recorded as a measurement rather than green.
+
+    Task 20.30 asks for a mean of at most :data:`_COALESCED_ROW_TARGET` rendered
+    rows per snapshot under the lever. The fold removes 20.5% of the CANDIDATES,
+    but how many rows a render SHOWS is capped by the token budget rather than by
+    the candidate count, so freed budget refills with rows the OFF render had shed
+    -- and the raised reported band puts a floor of ~38 rows under the mix before
+    any bare sighting renders. This test asserts the gap it measures, so the
+    shortfall is a number in the suite rather than a silently relaxed bound; it
+    must be rewritten deliberately when the ceiling is met or re-pinned.
+    """
+
+    mean_on = render_budget.rows_on / render_budget.snapshots
+
+    assert mean_on > _COALESCED_ROW_TARGET
+    assert mean_on == pytest.approx(42.1493, abs=1e-4)
 
 
 @pytest.mark.slow
@@ -3291,8 +3307,8 @@ def test_the_band_change_not_the_fold_is_what_costs_first_hand_coverage(
 
     fold_only = _render_budget_census(_SAMPLES_9P2I)
 
-    assert fold_only.rows_on == 41_721
+    assert fold_only.rows_on == 40_924
     assert fold_only.rows_on < render_budget.rows_off
-    assert fold_only.covered_on == 38_904
+    assert fold_only.covered_on == 39_012
     assert fold_only.covered_on > fold_only.covered_off
     assert render_budget.covered_on < fold_only.covered_on
