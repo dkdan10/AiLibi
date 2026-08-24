@@ -92,6 +92,8 @@ seam, and the adopting record is what retires the archive again.
 - tests/agents/test_impostor_answer_arm.py; (the variant registry's inherited keys follow the set to v4)
 - tests/meetings/test_elicitation_fixtures.py; (the two removed threshold-block phrases)
 
+Recorded deviations at merge (PR #383, orchestrator-ratified): (1) five test files outside scope gained one stub parameter + import each (tests/meetings/_manager_helpers.py, tests/meetings/test_manager.py, tests/agents/test_beliefs.py, and the verify-only tests/orchestrator/test_meeting_integration.py / test_replay_meetings.py) — the Protocol widening makes every stub structurally incompatible; no pinned stamp moved, the frozen default-set pins stayed byte-unchanged and green (16.3 precedent). (2) docs/artifacts.md tests/fixtures/ row 23 → 29 / 2.1 MB — the six archived v3 bodies join the tracked count; retire with the archive entry at the re-record. Prose records, not scope entries.
+
 **Files NOT in scope:**
 - every other prompt set directory (frozen references; untouched — in particular the DEFAULT `qwen3_5_9b` set, whose crewmate_report.j2:72 carries the "do NOT emit a `found_body` observation" string two integration suites assert; those assertions stay green precisely because the frozen set does not move)
 - replays/ (committed bytes resolve through the archive; nothing moves, no re-record happens here)
