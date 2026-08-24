@@ -83,6 +83,8 @@ fixture-pinned and carries the committed-bytes counterfactual the pre-registrati
 - tests/fixtures/memory_rendering/; (ON-path expected fixtures)
 - tests/eval/test_evidence_honesty.py; (lines/snapshot and testimony-kept cells under the lever over samples/9p2i)
 
+Recorded at merge (PR #382, orchestrator-ratified): the ≤ 36 rows/snapshot criterion is a FALSIFIED PREDICTION — the review projection (53.2 × 0.68) was computed against already-budget-capped renders and `_select_within_budget`'s refill makes any candidate-side fold unable to reach it; the cell re-pins at the measured mean 42.1493 (971 snapshots, samples/9p2i), with the refill arithmetic pinned (18,050 sighting rows removed − 8,663 net = 9,387 refill) and the decomposition cells kept (fold alone 40,924 rows / 39,012 subject-ticks — strictly better than OFF on both axes; the band lift costs 17.8% first-hand coverage for 0% → 95.8% testimony survival in the largest renders). One out-of-scope cell in docs/artifacts.md (tests/fixtures/ 21 → 23) accepted per the 20.24 precedent. Prose records, not scope entries.
+
 **Files NOT in scope:**
 - agents/strategic/prompts/ (no template change — the single prompt-set bump is the phase's only template edit, and it is a different task)
 - meetings/ (consumes the render; the citation gate and the detector are read as consumers, never edited here)
