@@ -62,6 +62,7 @@ from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 from pydantic import TypeAdapter
 
+from agents.memory.store import ENV_MEETING_OUTCOME_MEMORY
 from engine.actions import Action
 from engine.entities import (
     BodyState,
@@ -1132,3 +1133,46 @@ def test_a_dead_observer_is_entitled_to_nothing(tmp_path: Path) -> None:
             game_map=game_map,
             engine_events=[],
         )
+
+
+# --------------------------------------------------------------------------- #
+# The meeting-outcome memory lever never travels through perception.
+#
+# That lever widens what a MEMORY RENDER may state about an ejected player's
+# role. Perception is a different surface with a different rule, and this sweep
+# is the other direction of the same assertion: turning the lever ON must not
+# move one byte of one observation packet, so the disclosure cannot reach an
+# agent by riding the packet channel the scanners above guard.
+# --------------------------------------------------------------------------- #
+
+
+def test_meeting_outcome_memory_lever_moves_no_observation_packet_byte(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    game_map = load_canonical_map()
+    state = _observer_class_state(game_map)
+    observers = sorted(state.players)
+
+    def _packets(audit_name: str) -> dict[PlayerId, str]:
+        service = ObservationService(
+            game_map=game_map, audit_log_path=tmp_path / audit_name
+        )
+        try:
+            return {
+                observer: service.build_packet(
+                    world_state=state, agent_id=observer, engine_events=[]
+                ).model_dump_json()
+                for observer in observers
+            }
+        finally:
+            service.close()
+
+    monkeypatch.delenv(ENV_MEETING_OUTCOME_MEMORY, raising=False)
+    off = _packets("audit-off.jsonl")
+    monkeypatch.setenv(ENV_MEETING_OUTCOME_MEMORY, "1")
+    on = _packets("audit-on.jsonl")
+
+    assert on == off
+    # And the packets are non-vacuous: at least one observer really sees someone,
+    # so an equality that held only because everything was empty cannot pass.
+    assert any('"visible_players":[{' in dump for dump in off.values())

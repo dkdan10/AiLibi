@@ -29,15 +29,21 @@ import asyncio
 from collections.abc import Awaitable, Callable, Iterable, Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TypeVar
+from typing import Final, TypeVar
 
 import pytest
 from pydantic import BaseModel, TypeAdapter
 
 from agents.memory.episodic import EpisodicEvent
+from agents.memory.store import (
+    ENV_MEETING_OUTCOME_MEMORY,
+    AgentMemory,
+    render_for_prompt,
+)
 from agents.tactical.crewmate_policy import CrewmatePolicy
 from engine.entities import BodyState, PlayerId, PlayerState, Role
 from engine.world import Map, WorldState, load_canonical_map
+from eval.leak_scan import assert_memory_render_role_disclosure_is_entitled
 from llm.budget import GameBudget
 from llm.client import CallKind, LLMResponse, TokenUsage
 from meetings.manager import (
@@ -2894,3 +2900,242 @@ class TestVentWitnessRecordsAccessor:
 
         assert not isinstance(_PreVentDouble(), MeetingAwareAgent)
         assert isinstance(self._crew_agent(), MeetingAwareAgent)
+
+
+# ---------------------------------------------------------------------------
+# The meeting-outcome announcement payload, end to end.
+#
+# The orchestrator is the ONLY module allowed to translate a role out of engine
+# state, and confirm-ejects is the only thing it may translate: the EJECTED
+# player's role, never a living player's and never a kill victim's.
+# ---------------------------------------------------------------------------
+
+_OUTCOME_MEMORY_ON: Final[dict[str, str]] = {ENV_MEETING_OUTCOME_MEMORY: "1"}
+
+
+class _PacingScriptedAgent:
+    """A real :class:`TacticalAgent` behind a scripted intent stream.
+
+    The :class:`_PerceivingScriptedAgent` shape plus the
+    :class:`~orchestrator.game.MeetingPacingAgent` capability, so the
+    post-meeting announcement fan-out actually reaches the wrapped agent's own
+    memory — which is what this test reads.
+    """
+
+    def __init__(
+        self,
+        *,
+        inner: TacticalAgent,
+        intents: Iterable[ActionIntent] = (),
+    ) -> None:
+        self._inner = inner
+        self._intents = list(intents)
+        self._cursor = 0
+
+    @property
+    def memory(self) -> AgentMemory:
+        return self._inner.memory
+
+    def decide(
+        self,
+        packet: ObservationPacket,
+        public_map: PublicMapView,
+    ) -> ActionIntent:
+        self._inner.decide(packet, public_map)
+        if self._cursor < len(self._intents):
+            intent = self._intents[self._cursor]
+            self._cursor += 1
+            return intent
+        return _intent({"type": "wait", "actor": self._inner.agent_id, "payload": {}})
+
+    def note_meeting_concluded(
+        self,
+        *,
+        end_tick: int,
+        dead_ids: tuple[PlayerId, ...],
+        emergency_caller_id: PlayerId | None,
+        ejected_id: PlayerId | None = None,
+        ejected_role: Role | None = None,
+        votes_for_ejected: int | None = None,
+        skip_votes: int | None = None,
+        roster_impostor_count: int | None = None,
+    ) -> None:
+        self._inner.note_meeting_concluded(
+            end_tick=end_tick,
+            dead_ids=dead_ids,
+            emergency_caller_id=emergency_caller_id,
+            ejected_id=ejected_id,
+            ejected_role=ejected_role,
+            votes_for_ejected=votes_for_ejected,
+            skip_votes=skip_votes,
+            roster_impostor_count=roster_impostor_count,
+        )
+
+
+@dataclass
+class _EjectingMeetingRunner:
+    """Canned runner that ejects ``target`` on a stated ballot tally."""
+
+    target: PlayerId
+    skip_voter: PlayerId
+
+    async def run_meeting(
+        self,
+        *,
+        meeting_id: str,
+        trigger: MeetingTrigger,
+        state: WorldState,
+        agents: Mapping[PlayerId, object],
+    ) -> MeetingArtifacts:
+        del agents
+        living = sorted(pid for pid, player in state.players.items() if player.alive)
+        ballots = tuple(
+            VoteBallot(
+                voter=voter,
+                target="SKIP" if voter == self.skip_voter else self.target,
+                confidence=0.8,
+                primary_reason_id=None,
+                rationale_text="r",
+            )
+            for voter in living
+        )
+        result = MeetingResult(
+            meeting_id=meeting_id,
+            triggered_by=trigger.triggered_by,
+            trigger_tick=trigger.trigger_tick,
+            outcome="EJECTED",
+            ejected_player_id=self.target,
+            ballots=ballots,
+            contradictions=(),
+            transcript=MeetingTranscript(turns=()),
+        )
+        return MeetingArtifacts(
+            result=result,
+            llm_calls=(),
+            prompt_versions={"crewmate_report": "test.v0"},
+        )
+
+
+class TestMeetingOutcomeAnnouncementPayload:
+    """The hook carries the revealed role and the tally into every living memory."""
+
+    def _run(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> tuple[dict[PlayerId, _PacingScriptedAgent], WorldState]:
+        game_map = load_canonical_map()
+        # p-2 is a KILL victim seeded dead with a discoverable body; p-4 is the
+        # player the meeting will eject.
+        initial = seed_initial_state(seed=2026, game_map=game_map, num_players=4)
+        state_with_body = replace(
+            initial,
+            bodies={
+                "body-a": BodyState(
+                    id="body-a",
+                    player_id="p-2",
+                    room=game_map.spawn.room,
+                    position=(0.0, 0.0),
+                    killed_by="p-3",
+                    discovered_by=None,
+                )
+            },
+            players={
+                **initial.players,
+                "p-2": replace(initial.players["p-2"], alive=False),
+            },
+        )
+
+        def _stub(
+            *,
+            seed: int,
+            game_map: Map,
+            num_players: int,
+            num_impostors: int = 1,
+            tasks_per_crewmate: int = 1,
+        ) -> WorldState:
+            return state_with_body
+
+        monkeypatch.setattr("orchestrator.game.seed_initial_state", _stub)
+
+        agents: dict[PlayerId, _PacingScriptedAgent] = {}
+        inner_factory = build_default_agent_factory()
+
+        def factory(agent_id: PlayerId, role: Role) -> _PacingScriptedAgent:
+            inner = inner_factory(agent_id, role)
+            assert isinstance(inner, TacticalAgent)
+            intents = (
+                [
+                    _intent(
+                        {
+                            "type": "report",
+                            "actor": "p-1",
+                            "payload": {"body_id": "body-a"},
+                        }
+                    )
+                ]
+                if agent_id == "p-1"
+                else []
+            )
+            agent = _PacingScriptedAgent(inner=inner, intents=intents)
+            agents[agent_id] = agent
+            return agent
+
+        game = HeadlessGame(
+            seed=2026,
+            game_map=game_map,
+            agent_factory=factory,
+            replay_path=tmp_path / "outcome-payload.jsonl",
+            scheduler=TickScheduler(max_ticks=6),
+            meeting_runner=_EjectingMeetingRunner(target="p-4", skip_voter="p-4"),
+        )
+        game.run()
+        return agents, state_with_body
+
+    def test_every_living_memory_holds_the_true_role_and_the_true_tally(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        agents, seeded = self._run(tmp_path, monkeypatch)
+        true_role = seeded.players["p-4"].role
+
+        # p-1 and p-3 survive the ejection and take the announcement.
+        for agent_id in ("p-1", "p-3"):
+            outcomes = agents[agent_id].memory.meeting_history.outcomes
+            assert len(outcomes) == 1, agent_id
+            (row,) = outcomes
+            assert row.ejected_id == "p-4"
+            assert row.revealed_role == true_role
+            # Living voters p-1 and p-3 named p-4; p-4 itself skipped.
+            assert (row.votes_for_ejected, row.skip_votes) == (2, 1)
+            assert row.roster_impostor_count == 1
+
+    def test_a_kill_victim_contributes_no_role_to_any_memory(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        agents, _seeded = self._run(tmp_path, monkeypatch)
+        for agent_id, agent in agents.items():
+            outcomes = agent.memory.meeting_history.outcomes
+            # The victim's role is nowhere in the channel: a kill announces
+            # nothing, so nothing about p-2 was ever folded.
+            assert all(row.ejected_id != "p-2" for row in outcomes), agent_id
+            assert all(
+                row.revealed_role is None or row.ejected_id == "p-4" for row in outcomes
+            )
+            if agent_id == "p-2":
+                continue
+            render = render_for_prompt(agent.memory, env=_OUTCOME_MEMORY_ON)
+            assert "p-2 was" not in render, agent_id
+            # Every role the render DOES state is entitled: p-4's ejection and
+            # nothing else, dated at or after the meeting that ejected them.
+            assert_memory_render_role_disclosure_is_entitled(
+                render,
+                ejection_ticks={"p-4": 0},
+                render_tick=outcomes[-1].end_tick if outcomes else 0,
+            )
+
+    def test_an_agent_dead_before_the_meeting_receives_nothing(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        agents, _seeded = self._run(tmp_path, monkeypatch)
+        # p-2 was already dead when the meeting concluded, and p-4 was ejected BY
+        # it — neither is a living recipient of the announcement.
+        assert agents["p-2"].memory.meeting_history.outcomes == ()
+        assert agents["p-4"].memory.meeting_history.outcomes == ()

@@ -28,8 +28,9 @@ gate paths run under a plain interpreter.
 from __future__ import annotations
 
 import json
+import re
 import tempfile
-from collections.abc import Collection, Iterator, Sequence
+from collections.abc import Collection, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import NoReturn, TypeAlias, cast
@@ -208,6 +209,90 @@ def _assert_no_role_bearing_values(packet_dump: JsonValue) -> None:
                 raise AssertionError(
                     f"role-bearing value {value!r} leaked at {_format_json_path(path)}"
                 )
+
+
+# --------------------------------------------------------------------------- #
+# The memory-render role-disclosure gate.
+#
+# The packet scanners above keep roles OUT of perception entirely. A rendered
+# memory is the one surface where a role may legitimately appear, and it may
+# appear in exactly two places: the agent's own ``## Your role:`` line, and the
+# ``## Meetings so far:`` block's confirm-ejects announcement — which is public
+# at the table on the same footing as ``dead_ids`` (DESIGN.md §4.7), but ONLY
+# for a player the table actually ejected and ONLY from that meeting onward.
+#
+# The allowance is written as an ENTITLEMENT CHECK, not as "roles may appear in
+# renders": a living player's role, a kill victim's role (nobody saw it) and any
+# disclosure dated before its own ejection all fail. This restates the rule
+# independently of the code that renders it, which is the only reason it is a
+# gate rather than prose.
+# --------------------------------------------------------------------------- #
+
+#: Role VALUES as every render writes them — uppercase, exactly as
+#: ``## Your role: CREWMATE`` does. Lowercase prose about the rules ("venting is
+#: impostor-only", the wording open-contradiction summaries carry) states no
+#: player's role and is not a disclosure.
+_MEMORY_ROLE_TOKENS: Sequence[str] = ("IMPOSTOR", "CREWMATE")
+
+#: The two SELF-attributed forms a render writes: the ``## Your role:`` header
+#: and the own-kill line's ``You (IMPOSTOR) killed …``. An agent is always
+#: entitled to its own role, and both forms name the reader rather than a third
+#: party, which is what distinguishes them from a disclosure.
+_OWN_ROLE_FORMS = (
+    re.compile(r"^## Your role: (?:IMPOSTOR|CREWMATE)$"),
+    re.compile(r"\bYou \((?:IMPOSTOR|CREWMATE)\)"),
+)
+
+#: The one entitled disclosure grammar. The back-reference is load-bearing: the
+#: role must be announced for the SAME player the tally ejected, so a line that
+#: ejects one player and reveals another's role fails.
+_ENTITLED_EJECTION_LINE = re.compile(
+    r"^- Meeting \d+ \(tick \d+\): (?P<player>\S+) EJECTED(?: \d+-\d+)? — "
+    r"(?P=player) was an? (?:IMPOSTOR|CREWMATE)\."
+)
+
+
+def assert_memory_render_role_disclosure_is_entitled(
+    render: str,
+    *,
+    ejection_ticks: Mapping[str, int],
+    render_tick: int,
+) -> None:
+    """Assert every role a rendered memory states is one this agent may know.
+
+    ``render`` is the output of ``agents.memory.store.render_for_prompt``;
+    ``ejection_ticks`` maps a player id to the tick the table ejected them at
+    (a KILLED player is absent — a kill reveals nothing); ``render_tick`` is the
+    tick the render was taken at.
+
+    Every uppercase role token in ``render`` must sit on either a SELF-attributed
+    form (the agent's own ``## Your role:`` header, or the own-kill line's
+    ``You (IMPOSTOR) …``) or an entitled ``## Meetings so far:`` ejection line —
+    one naming a player in ``ejection_ticks`` whose ejection tick is at or before
+    ``render_tick``. Anything else raises ``AssertionError`` quoting the
+    offending line.
+    """
+
+    for line in render.splitlines():
+        if not any(token in line for token in _MEMORY_ROLE_TOKENS):
+            continue
+        if any(form.search(line) for form in _OWN_ROLE_FORMS):
+            continue
+        match = _ENTITLED_EJECTION_LINE.match(line)
+        assert match is not None, (
+            f"role disclosed outside the entitled grammar at tick {render_tick}: "
+            f"{line!r}"
+        )
+        player = match.group("player")
+        ejected_at = ejection_ticks.get(player)
+        assert ejected_at is not None, (
+            f"role disclosed for {player!r}, who the table never ejected, "
+            f"at tick {render_tick}: {line!r}"
+        )
+        assert ejected_at <= render_tick, (
+            f"role disclosed for {player!r} at tick {render_tick}, before their "
+            f"ejection at tick {ejected_at}: {line!r}"
+        )
 
 
 # --------------------------------------------------------------------------- #

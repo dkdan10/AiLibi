@@ -297,6 +297,10 @@ class WrappableCrewTacticalAgent(WrappableTacticalAgent, Protocol):
         dead_ids: tuple[PlayerId, ...],
         emergency_caller_id: PlayerId | None,
         ejected_id: PlayerId | None = None,
+        ejected_role: Role | None = None,
+        votes_for_ejected: int | None = None,
+        skip_votes: int | None = None,
+        roster_impostor_count: int | None = None,
     ) -> None: ...
 
 
@@ -392,6 +396,10 @@ class _LearnedCrewAgent:
         dead_ids: tuple[PlayerId, ...],
         emergency_caller_id: PlayerId | None,
         ejected_id: PlayerId | None = None,
+        ejected_role: Role | None = None,
+        votes_for_ejected: int | None = None,
+        skip_votes: int | None = None,
+        roster_impostor_count: int | None = None,
     ) -> None:
         """Track this agent's own spent emergency use, then delegate verbatim.
 
@@ -411,6 +419,10 @@ class _LearnedCrewAgent:
             dead_ids=dead_ids,
             emergency_caller_id=emergency_caller_id,
             ejected_id=ejected_id,
+            ejected_role=ejected_role,
+            votes_for_ejected=votes_for_ejected,
+            skip_votes=skip_votes,
+            roster_impostor_count=roster_impostor_count,
         )
 
     def __getattr__(self, name: str) -> object:
