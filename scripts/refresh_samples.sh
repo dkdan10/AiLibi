@@ -52,11 +52,17 @@ TASKS_PER_CREWMATE="${AILIBI_TASKS_PER_CREWMATE:-1}"
 usage() {
   cat <<EOF
 Usage: $(basename "$0") (--full | --meetings | --seeds N,N,N) [--dry-run]
+                        [--expect-levers KEY,KEY]
 
   --full          Re-run all 50 sample seeds              (~\$1,    ~3 min)
   --meetings      Re-run only the meeting-bearing seeds   (~\$0.10, ~30s)
   --seeds N,N,N   Re-run a specific comma-separated subset (custom spend)
   --dry-run       Print the resolved seeds + planned actions; touch nothing
+  --expect-levers The toggleable substrate levers this record expects ON, as a
+                  comma-separated list of registry keys (default: none — the
+                  bare slate). The live slate must match it EXACTLY before any
+                  seed stages: a named lever that is not exported and an export
+                  nobody named are both refused.
   -h, --help      Show this help
 
 Modes are mutually exclusive. The meeting-bearing seeds are derived from
@@ -67,6 +73,9 @@ EOF
 mode=""
 dry_run=0
 seeds_arg=""
+# The toggleable levers this record expects ON (comma-separated registry keys).
+# Empty is the bare slate: every live toggle OFF.
+expect_levers=""
 
 set_mode() {
   if [[ -n "$mode" ]]; then
@@ -236,6 +245,19 @@ while [[ $# -gt 0 ]]; do
       fi
       ;;
     --dry-run) dry_run=1 ;;
+    --expect-levers)
+      # An explicitly EMPTY value is the bare slate (every live toggle OFF), so
+      # automation can pass "$LEVERS" unconditionally; only a MISSING argument is
+      # an error, which is why this counts what is left rather than testing the
+      # string.
+      shift
+      if [[ $# -eq 0 ]]; then
+        echo "Error: --expect-levers requires a comma-separated lever list (pass an empty string for the bare slate)." >&2
+        usage
+        exit 1
+      fi
+      expect_levers="$1"
+      ;;
     -h | --help)
       usage
       exit 0
@@ -254,6 +276,54 @@ if [[ -z "$mode" ]]; then
   usage
   exit 1
 fi
+
+# One human-readable rendering of the expected slate, used by the dry-run echoes
+# and the refusal below so an operator reads the SAME slate in the preview and in
+# the gate.
+if [[ -n "$expect_levers" ]]; then
+  expect_levers_desc="$expect_levers"
+else
+  expect_levers_desc="(none — the bare slate: every live toggle OFF)"
+fi
+
+# Substrate-lever preflight: the lever slate is load-bearing for a multi-hour
+# record, so it is checked POSITIVELY against the slate the operator declared
+# (--expect-levers) before anything stages. A half-set export would otherwise
+# mis-substrate every seed and only surface in the MANIFEST flags afterwards —
+# and an acceptance gate run in the same polluted shell would pass coherently,
+# because it reads the same environment. Blacklisting variable names cannot catch
+# a lever MISSING from the export, which is why this is a whole-slate equality
+# rather than a list of forbidden knobs. The slate is PROVIDER-INDEPENDENT (it is
+# game-lever state, not the LLM backend), so it runs for anthropic, ollama and
+# featherless alike, and the DRY RUN runs it too: reading the environment writes
+# nothing, and a preview that cannot refuse would let an operator confirm a plan
+# the real run rejects. The comparison itself lives in
+# orchestrator.replay.substrate_slate_mismatches so both recorders judge a slate
+# the same way.
+substrate_lever_preflight() {
+  local diag
+  if diag="$(uv run python -c '
+import sys
+
+from orchestrator.replay import substrate_slate_mismatches
+
+problems = substrate_slate_mismatches(
+    [key for key in sys.argv[1].split(",") if key]
+)
+if problems:
+    sys.stderr.write("; ".join(problems))
+    sys.exit(1)
+' "$expect_levers" 2>&1)"; then
+    echo "Substrate slate OK: expected levers ON = $expect_levers_desc; every other live toggle OFF; the graduated levers unconditional ON."
+    return 0
+  fi
+  echo "Error: the live substrate-lever slate does not match --expect-levers." >&2
+  echo "       Expected ON: $expect_levers_desc" >&2
+  echo "       Mismatch: ${diag}" >&2
+  echo "       Export exactly the levers you named and unset every other AILIBI_*" >&2
+  echo "       lever export, then re-run. Nothing was staged." >&2
+  return 1
+}
 
 case "$mode" in
   full) seeds_csv="$(seq -s, 0 49)" ;;
@@ -425,21 +495,18 @@ if [[ "$dry_run" -eq 1 ]]; then
     echo "[dry-run] preflight: would require ANTHROPIC_API_KEY (real-provider spend)"
   fi
   echo "[dry-run] meeting model: ${AILIBI_LLM_MEETING_MODEL:-(provider default)}"
-  # Provenance the recorded replay self-describes (Task 14.7): the prompt set is
-  # read from the ambient env by the game (AILIBI_PROMPT_SET) and the substrate
-  # levers are stamped into each replay's game_over record + the MANIFEST flags
-  # column. Since the Task-18.12 baseline-6 record the four meeting-layer levers
-  # (roll_call_round, whereabouts_interior_flags, vent_placement_contradictions,
-  # absence_prior) graduated to unconditional ON beside the earlier graduations,
-  # and the CREW-ONLY ruling left impostor_roll_call default-OFF — so there are NO
-  # substrate env vars to export, and a stale AILIBI_* lever export is REFUSED by
-  # the substrate-lever preflight below. Echo the config so the substrate is never
-  # silent (AGENTS.md "no silent fallbacks").
+  # Provenance the recorded replay self-describes: the prompt set is read from the
+  # ambient env by the game (AILIBI_PROMPT_SET) and the substrate levers are
+  # stamped into each replay's game_over record + the MANIFEST flags column. The
+  # graduated levers are unconditional and have no variable to export; every live
+  # toggle is default-OFF, so the expected slate below is exactly the set of
+  # AILIBI_* lever exports this record needs. Echo it so the substrate is never
+  # silent (AGENTS.md "no silent fallbacks"), and echo the preflight for EVERY
+  # provider — the lever slate is a property of the game, not of the LLM backend,
+  # so the real check runs outside the provider block too.
   echo "[dry-run] prompt set: ${AILIBI_PROMPT_SET:-(default qwen3_5_9b)}"
-  echo "[dry-run] substrate flags: baseline-6 slate — the meeting-layer levers unconditional ON (roll_call_round, whereabouts_interior_flags, vent_placement_contradictions, absence_prior graduated at Task 18.12), impostor_roll_call default-OFF (CREW-ONLY ruling)"
-  if [[ "$PROVIDER" == "featherless" ]]; then
-    echo "[dry-run] substrate-lever preflight: would require the live lever slate to equal the ruled baseline-6 state (four meeting-layer levers ON, impostor_roll_call OFF) and refuse a stale AILIBI_* export before any seed stages"
-  fi
+  echo "[dry-run] substrate flags: expected levers ON = $expect_levers_desc; every other live toggle OFF; the graduated levers unconditional ON"
+  echo "[dry-run] substrate-lever preflight: would require the live lever slate to equal that expectation exactly and refuse before any seed stages — an expected-ON lever left unexported and an unexpected AILIBI_* export are both named"
   if [[ "$REFRESH_WORKERS" -gt 1 ]]; then
     echo "[dry-run] seed workers: $REFRESH_WORKERS parallel (each records one seed, then pulls the next available seed from the queue; Featherless: 2 units per 32B request → 4-unit cap)"
   else
@@ -454,6 +521,9 @@ if [[ "$dry_run" -eq 1 ]]; then
   echo "[dry-run] manifest: $MANIFEST"
   echo "[dry-run] eval report: would rebuild $SAMPLE_DIR/tournament-eval-report.json from the refreshed replays (scripts/build_sample_report.py; \$0, no provider)"
   echo "[dry-run] no API calls made; no files written."
+  if ! substrate_lever_preflight; then
+    exit 1
+  fi
   exit 0
 fi
 
@@ -500,7 +570,10 @@ elif [[ "$PROVIDER" == "featherless" ]]; then
     echo "  - AILIBI_PROMPT_SET must be '$REQUIRED_PROMPT_SET' (got '${AILIBI_PROMPT_SET:-<unset>}')" >&2
     exit 1
   fi
-  echo "Locked substrate OK: AILIBI_PROMPT_SET=$REQUIRED_PROMPT_SET (meeting-layer levers unconditionally ON since baseline 6; impostor_roll_call OFF)."
+  # The PROMPT SET only -- the lever slate is the substrate-lever preflight's to
+  # report, from the slate the operator declared, so this message can never
+  # contradict it.
+  echo "Locked substrate OK: AILIBI_PROMPT_SET=$REQUIRED_PROMPT_SET."
   # Model-set coupling (Task 16.13, PR #260 review): the qwen3_6_27b set is
   # authored for its locked owner model Qwen/Qwen3.6-27B
   # (audits/audit-phase-16-model-lock.md; _SET_OWNER in the sweep harness), and
@@ -573,44 +646,10 @@ else
   echo "Using API key prefix: ${ANTHROPIC_API_KEY:0:8}"
 fi
 
-# Substrate-lever preflight (Task 18.12): until now the wrapper preflighted only
-# the prompt set + model. The meeting-layer graduation (the CREW-ONLY ruling,
-# audits/audit-phase-18-meeting-gate.md §9) makes the substrate LEVER slate
-# load-bearing for the ~6-7h baseline-6 record: the four graduated levers
-# (roll_call_round, whereabouts_interior_flags, vent_placement_contradictions,
-# absence_prior) are unconditional ON and impostor_roll_call must stay OFF (it
-# was NOT shipped). A stale AILIBI_* export — most dangerously
-# AILIBI_IMPOSTOR_ROLL_CALL=1, which would ship the UNSHIPPED impostor-answer arm
-# into the record — would silently mis-substrate every seed and only reveal it in
-# the MANIFEST flags afterward, wasting the whole (multi-hour) spend. The substrate
-# slate is PROVIDER-INDEPENDENT (it is the game-lever state, not the LLM backend),
-# so this runs for EVERY provider — anthropic/ollama/featherless alike — not just
-# the featherless leg. POSITIVELY check the live substrate snapshot equals the
-# ruled baseline-6 state and fail loud HERE, before any staging (AGENTS.md "no
-# silent fallbacks"). The graduated levers ignore the environment, so the only way
-# the live slate deviates is a truthy impostor export (or a partial graduation).
-if ! substrate_diag="$(uv run python -c '
-import sys
-from orchestrator.replay import substrate_flag_snapshot, TOGGLEABLE_SUBSTRATE_FLAG_KEYS
-GRADUATED = ("roll_call_round", "whereabouts_interior_flags", "vent_placement_contradictions", "absence_prior")
-live = substrate_flag_snapshot()
-bad = [k for k in GRADUATED if live.get(k) is not True]
-if live.get("impostor_roll_call") is not False:
-    bad.append("impostor_roll_call must be OFF")
-if TOGGLEABLE_SUBSTRATE_FLAG_KEYS != ("impostor_roll_call",):
-    bad.append("toggleable set is %r" % (TOGGLEABLE_SUBSTRATE_FLAG_KEYS,))
-if bad:
-    sys.stderr.write("; ".join(bad))
-    sys.exit(1)
-' 2>&1)"; then
-  echo "Error: the live substrate-lever slate does not equal the ruled baseline-6 state." >&2
-  echo "       Mismatch: ${substrate_diag}" >&2
-  echo "       Unset any stale AILIBI_* lever export (notably AILIBI_IMPOSTOR_ROLL_CALL); the" >&2
-  echo "       four meeting-layer levers are unconditional since baseline 6 and" >&2
-  echo "       impostor_roll_call must stay OFF (the CREW-ONLY ruling). Nothing was staged." >&2
+# The lever slate, before anything stages (the function above states why).
+if ! substrate_lever_preflight; then
   exit 1
 fi
-echo "Substrate slate OK: four meeting-layer levers ON, impostor_roll_call OFF (baseline 6)."
 
 # Create the target set directory before any spend (Task 7.4). A per-set refresh
 # (e.g. AILIBI_SAMPLE_DIR=replays/samples/9p2i) may point at a brand-new subdir;
@@ -678,16 +717,14 @@ elif [[ -z "$active_model" ]]; then
   fi
 fi
 echo "Attributing no-meeting seeds to model: $active_model"
-# Echo the substrate provenance the recorded replays self-stamp (Task 14.7), so
-# the operator can confirm the ruled slate is in effect and the substrate is
-# never silent (AGENTS.md "no silent fallbacks"). The game reads the prompt set
-# from the ambient env; the substrate levers (the meeting-layer levers graduated
-# unconditional ON at Task 18.12 beside the earlier graduations, with
-# impostor_roll_call default-OFF) are stamped into each replay's game_over record +
-# the MANIFEST flags column; this script does not set them (the substrate-lever
-# preflight above already refused any stale AILIBI_* lever export).
+# Echo the substrate provenance the recorded replays self-stamp, so the operator
+# can confirm the slate in effect and the substrate is never silent (AGENTS.md "no
+# silent fallbacks"). The game reads the prompt set from the ambient env; the lever
+# slate is stamped into each replay's game_over record + the MANIFEST flags column.
+# This script sets no lever -- it echoes the slate the preflight above verified, so
+# the real run and the dry-run preview can never describe different substrates.
 echo "Prompt set: ${AILIBI_PROMPT_SET:-(default qwen3_5_9b)}"
-echo "Substrate flags: baseline-6 slate — meeting-layer levers unconditional ON (roll_call_round, whereabouts_interior_flags, vent_placement_contradictions, absence_prior), impostor_roll_call default-OFF"
+echo "Substrate flags: expected levers ON = $expect_levers_desc; every other live toggle OFF; the graduated levers unconditional ON"
 
 # Stage each per-seed run in a temp dir on the same filesystem as the sample dir
 # so the replay can be moved into place atomically, and only after the run

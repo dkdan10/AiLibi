@@ -192,6 +192,67 @@ def test_provenance_reports_the_evidence_quality_lever_when_stamped_on(
     )
 
 
+def test_a_phase20_lever_stamped_on_renders_in_the_flags_cell(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The registered Phase-20 levers round-trip the same way: export ->
+    # substrate_flag_snapshot -> game_over stamp -> read_substrate_flags ->
+    # MANIFEST flags cell, so a lever-ON recording self-describes in the one
+    # column an operator reads. Only ONE lever is exported, and only that key
+    # joins the thirteen graduated ones -- the cell names the arms the recording
+    # actually ran under, not the arms that exist.
+    monkeypatch.setenv("AILIBI_GROUNDED_PROSECUTION", "1")
+    samples = tmp_path / "samples"
+    samples.mkdir()
+    log = ReplayLog(samples / "replay-seed-9.jsonl", game_id="headless-seed-9")
+    log.record_game_end(winner="CREWMATES", reason="TASKS_COMPLETE", tick=10)
+    log.close()
+
+    _, _, flags, _, _, _ = mw.sample_provenance(samples, 9, "Qwen/Qwen3.6-27B")
+    assert flags == (
+        "absence_prior, citation_gate, evidence_quality_lift, grounded_prosecution, "
+        "hard_evidence_gate, movement_perception, observation_id_rendering, "
+        "reporter_exculpation, roll_call_round, testimony_as_content, "
+        "unfreeze_memory, vent_placement_contradictions, "
+        "whereabouts_interior_flags, witnessed_kill_evidence"
+    )
+
+
+def test_an_all_off_phase20_slate_renders_the_unchanged_baseline6_cell(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The registration's neutrality half, asserted rather than assumed: with every
+    # live toggle OFF (a bare environment) the cell is byte-identical to the one
+    # the committed MANIFESTs carry -- _render_flags emits only ON keys, so the
+    # eight new registry entries add nothing to a bare recording's provenance row.
+    for key in (
+        "TASK_COMPLETION_FROM_EVENTS",
+        "SELF_LOCATION_TRAIL",
+        "MOVEMENT_CLAIM_SHAPE",
+        "GROUNDED_PROSECUTION",
+        "MAP_AWARE_ARBITRATION",
+        "STRUCTURED_TURN_MARKERS",
+        "MEETING_OUTCOME_MEMORY",
+        "COALESCED_MEMORY_RENDER",
+        "IMPOSTOR_ROLL_CALL",
+    ):
+        monkeypatch.delenv(f"AILIBI_{key}", raising=False)
+    samples = tmp_path / "samples"
+    samples.mkdir()
+    log = ReplayLog(samples / "replay-seed-11.jsonl", game_id="headless-seed-11")
+    log.record_game_end(winner="CREWMATES", reason="TASKS_COMPLETE", tick=10)
+    log.close()
+
+    _, _, flags, _, _, _ = mw.sample_provenance(samples, 11, "Qwen/Qwen3.6-27B")
+    assert flags == (
+        "absence_prior, citation_gate, evidence_quality_lift, hard_evidence_gate, "
+        "movement_perception, observation_id_rendering, reporter_exculpation, "
+        "roll_call_round, testimony_as_content, unfreeze_memory, "
+        "vent_placement_contradictions, whereabouts_interior_flags, "
+        "witnessed_kill_evidence"
+    )
+
+
 def test_rebuild_writes_sorted_rows(small_samples: Path, tmp_path: Path) -> None:
     manifest = tmp_path / "MANIFEST.md"
     written = mw.rebuild_manifest(manifest, small_samples)

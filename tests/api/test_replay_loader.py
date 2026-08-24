@@ -43,6 +43,7 @@ from api.replay_loader import (
 )
 from api.schemas import (
     CurrentAction,
+    ReplayView,
     FoundBodyObsView,
     KillEventView,
     MeetingTriggeredEventView,
@@ -1910,3 +1911,116 @@ def test_committed_turn_marker_census_and_zero_served_leak() -> None:
                         assert head not in view.free_text, turn.turn_id
         assert (turns, marked) == (expected_turns, expected_marked), directory
         assert dict(kinds) == expected_kinds, directory
+
+
+# --------------------------------------------------------------------------- #
+# The meeting-outcome fold: the reconstruction seam a lever-ON record needs     #
+# --------------------------------------------------------------------------- #
+
+# One committed 9p2i seed that resolves three meetings, so a served memory
+# snapshot at the SECOND meeting must already carry the FIRST meeting's outcome.
+_MULTI_MEETING_SEED = 0
+_MEETINGS_HEADER = "## Meetings so far:"
+
+
+def _meetings_block(rendered: str) -> str:
+    """The ``## Meetings so far:`` block of a rendered memory ("" when absent)."""
+
+    if _MEETINGS_HEADER not in rendered:
+        return ""
+    tail = rendered.split(_MEETINGS_HEADER, 1)[1]
+    lines: list[str] = []
+    for line in tail.splitlines():
+        if line.startswith("## "):
+            break
+        if line.strip():
+            lines.append(line)
+    return "\n".join(lines)
+
+
+def _expected_meetings_block(replay: ReplayView, upto: int) -> str:
+    """Render the meeting-history block from the SERVED replay DTO alone.
+
+    Built independently of the loader's fold: the announced outcome of each
+    resolved meeting before ``upto`` is read off the served ``MeetingView``
+    (ejection, tally) and the served roster (the confirm-ejects role, the
+    impostor count), the resume tick is the meeting tick + 1 (DESIGN.md §3.1,
+    "returns control to tick t+1"), and the rows are pushed through the store's
+    own ``record_meeting_outcome`` / ``render_for_prompt``. A loader that folded a
+    wrong tick, tally or role would not reproduce these bytes.
+    """
+
+    from agents.memory.store import (  # noqa: PLC2701
+        AgentMemory,
+        _meeting_history_lines,
+        record_meeting_outcome,
+    )
+
+    role_by_id = {player.agent_id: player.role for player in replay.players}
+    impostors = sum(1 for role in role_by_id.values() if role == "IMPOSTOR")
+    memory = AgentMemory()
+    for meeting in replay.meetings[:upto]:
+        ejected = meeting.ejected_player_id
+        record_meeting_outcome(
+            memory,
+            end_tick=meeting.tick + 1,
+            ejected_id=ejected,
+            revealed_role=None if ejected is None else role_by_id[ejected],
+            votes_for_ejected=(
+                0
+                if ejected is None
+                else sum(1 for b in meeting.ballots if b.target == ejected)
+            ),
+            skip_votes=sum(1 for b in meeting.ballots if b.target == "SKIP"),
+            roster_impostor_count=impostors,
+        )
+    # The view assembler bullets each line; the block renderer supplies the text.
+    return "\n".join(
+        f"- {line}" for line in _meeting_history_lines(memory.meeting_history)
+    )
+
+
+def test_meeting_outcome_memory_on_reconstruction_matches_the_store_render(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The lever-ON reconstruction the adopting record depends on: with
+    # meeting_outcome_memory exported, a recording stamped for that substrate
+    # reconstructs, and the memory the loader SERVES at the second meeting carries
+    # the first meeting's announced outcome -- byte-for-byte what the store
+    # renders for a memory folded from the served facts alone. Without the fold in
+    # the walk the block is empty and this comparison fails.
+    _delete_ailibi_env(monkeypatch)
+    monkeypatch.setenv("AILIBI_MEETING_OUTCOME_MEMORY", "1")
+    game_id = _stamp_committed_9p2i_seed(
+        tmp_path, _MULTI_MEETING_SEED, substrate_flag_snapshot()
+    )
+    loader = ReplayLoader(replay_dir=tmp_path)
+    replay = loader.load_replay(game_id)
+    assert len(replay.meetings) >= 2
+
+    second = replay.meetings[1]
+    voter = second.ballots[0].voter  # a voter is alive at the meeting it votes in
+    view = loader.get_meeting_memory(game_id, second.meeting_id, voter)
+
+    expected = _expected_meetings_block(replay, upto=1)
+    assert expected != ""
+    assert _meetings_block(view.rendered_memory_text) == expected
+
+
+def test_the_meeting_outcome_channel_is_inert_while_the_lever_is_off(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The neutrality half, asserted rather than assumed: the walk folds the
+    # outcomes unconditionally, but with the lever OFF (the substrate every
+    # committed recording was made in) the channel reaches no rendered byte -- the
+    # served memory is exactly what it was before the fold existed.
+    _delete_ailibi_env(monkeypatch)
+    loader = ReplayLoader(replay_dir=_COMMITTED_9P2I_DIR)
+    replay = loader.load_replay(f"headless-seed-{_MULTI_MEETING_SEED}")
+    assert len(replay.meetings) >= 2
+    second = replay.meetings[1]
+    voter = second.ballots[0].voter
+    view = loader.get_meeting_memory(
+        f"headless-seed-{_MULTI_MEETING_SEED}", second.meeting_id, voter
+    )
+    assert _MEETINGS_HEADER not in view.rendered_memory_text

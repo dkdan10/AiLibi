@@ -174,6 +174,8 @@ from orchestrator.replay import (
     TacticalPolicyStamp,
     WinnerSide,
     _state_hash,
+    env_var_for_lever,
+    fold_meeting_outcome_into_memories,
     fsm_default_tactical_policy_stamp,
     read_all_entries,
     substrate_flag_snapshot,
@@ -387,21 +389,21 @@ class ReplaySubstrateMismatchError(RuntimeError):
             for key in SUBSTRATE_FLAG_KEYS
             if bool(recorded.get(key)) != bool(ambient.get(key))
         )
-        # The remediation hint depends on WHICH lever diverged: a toggleable
-        # lever (env-gated; NONE today — the machinery stays for a future lever)
-        # is env-remediable — match the AILIBI_* environment to the stamp (a
-        # stamp without the key reads as OFF) — while a RETIRED lever has no env
-        # any more (unconditionally ON: the four Phase-13.5 levers since Task
-        # 14.9, the Task-14.10 evidence_quality_lift lever since the Task-14.12
-        # close), so that stamp is a substrate this build can no longer produce.
+        # The remediation hint depends on WHICH lever diverged. A TOGGLEABLE
+        # lever still reads an AILIBI_* variable — nine of them do today, every
+        # one default-OFF — so the divergence is env-remediable: match the
+        # environment to the stamp (a stamp without the key reads as OFF). A
+        # RETIRED lever has no env gate any more (it is unconditionally ON), so
+        # its stamp names a substrate this build can no longer produce.
         toggleable = sorted(set(differing) & set(TOGGLEABLE_SUBSTRATE_FLAG_KEYS))
         retired = sorted(set(differing) - set(TOGGLEABLE_SUBSTRATE_FLAG_KEYS))
         hints: list[str] = []
         if toggleable:
+            variables = ", ".join(env_var_for_lever(key) for key in toggleable)
             hints.append(
-                f"Toggleable lever(s) {toggleable} differ: match the AILIBI_* "
-                "environment to the stamp — a stamp recorded before a lever "
-                "existed reads as OFF, so unset its env var to load it."
+                f"Toggleable lever(s) {toggleable} differ: match the environment "
+                f"to the stamp ({variables}) — a stamp recorded before a lever "
+                "existed reads as OFF, so unset its variable to load it."
             )
         if retired:
             hints.append(
@@ -1384,6 +1386,15 @@ class ReplayLoader:
                             contradicted=evidence.contradicted,
                         )
                         absorb_reported_testimony(memories[pid], statements=statements)
+                    # Then the meeting-history fold, in the live loop's order
+                    # (``orchestrator.game._notify_meeting_concluded`` runs after
+                    # the belief fold). Shared with the byte-golden and
+                    # evidence-honesty walks so the three reconstructions cannot
+                    # drift; inert to every rendered byte while the
+                    # ``meeting_outcome_memory`` lever is OFF.
+                    fold_meeting_outcome_into_memories(
+                        result, state=state, memories=memories
+                    )
                 meeting_index += 1
                 if state.phase == "GAME_OVER":
                     break

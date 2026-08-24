@@ -90,14 +90,23 @@ _FLAGS_ON = {
     "citation_gate": True,
     # The four meeting-layer levers graduated to unconditional ON at the Task-18.12
     # baseline-6 record (the CREW-ONLY ruling), so the bare/default snapshot stamps
-    # them True alongside the nine earlier unconditional levers. Task 18.10's
-    # impostor_roll_call is the ONE remaining live DEFAULT-OFF toggle (the ruling
-    # did not ship it), stamped False here.
+    # them True alongside the nine earlier unconditional levers.
     "absence_prior": True,
     "roll_call_round": True,
     "whereabouts_interior_flags": True,
     "vent_placement_contradictions": True,
+    # The nine live toggles, every one DEFAULT-OFF: the impostor-answer arm the
+    # CREW-ONLY ruling did not ship, plus the eight Phase-20 belief-substrate
+    # levers. A probe backend runs bare, so all nine stamp False.
     "impostor_roll_call": False,
+    "task_completion_from_events": False,
+    "self_location_trail": False,
+    "movement_claim_shape": False,
+    "grounded_prosecution": False,
+    "map_aware_arbitration": False,
+    "structured_turn_markers": False,
+    "meeting_outcome_memory": False,
+    "coalesced_memory_render": False,
 }
 
 

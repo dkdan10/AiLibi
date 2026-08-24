@@ -69,7 +69,7 @@ so the two can never be positionally conflated.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import fields, is_dataclass
 import hashlib
 import json
@@ -79,8 +79,20 @@ from typing import Annotated, Any, Final, Literal, NamedTuple, TextIO, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from agents.memory.store import (
+    AgentMemory,
+    coalesced_memory_render_enabled,
+    meeting_outcome_memory_enabled,
+    record_meeting_outcome,
+    self_location_trail_enabled,
+    task_completion_from_events_enabled,
+)
 from engine.actions import Action
 from engine.world import WorldState
+from meetings.manager import (
+    derive_meeting_outcome_summary,
+    structured_turn_markers_enabled,
+)
 from meetings.schemas import (
     ContradictionRef,
     MeetingOutcome,
@@ -88,6 +100,11 @@ from meetings.schemas import (
     MeetingTranscript,
     PlayerId,
     VoteBallot,
+)
+from meetings.transcript import (
+    grounded_prosecution_enabled,
+    map_aware_arbitration_enabled,
+    movement_claim_shape_enabled,
 )
 
 # The Task-18.10 impostor-answer lever, resolved LOCALLY instead of importing
@@ -523,11 +540,11 @@ ReplayLogEntry: TypeAlias = Annotated[
 # built default-OFF and env-gated at Wave 1, registered into the substrate stamp
 # at Task 18.11 (the meeting-layer gate, so a probe/adoption recording
 # self-describes its arms), and retired to unconditional HERE once baseline 6
-# adopted them. The ONE lever left in ``_TOGGLEABLE_LEVER_RESOLVERS`` below is
-# 18.10's ``impostor_roll_call`` (the impostor-answer template arm): the CREW-ONLY
-# ruling did NOT ship it, so it stays a DEFAULT-OFF toggle. A bare-environment
-# recording stamps the four graduated levers ``True`` (retired-always-on) and
-# ``impostor_roll_call`` ``False`` — exactly the baseline-6 substrate.
+# adopted them. 18.10's ``impostor_roll_call`` (the impostor-answer template arm)
+# did NOT ship under that ruling, so it stayed a DEFAULT-OFF toggle and sits in
+# ``_TOGGLEABLE_LEVER_RESOLVERS`` below beside the eight Phase-20 levers. A
+# bare-environment recording stamps every lever in THIS tuple ``True`` and every
+# live toggle ``False`` — exactly the committed baseline-6 substrate.
 _RETIRED_ALWAYS_ON_LEVERS: Final[tuple[str, ...]] = (
     "testimony_as_content",
     "witnessed_kill_evidence",
@@ -544,32 +561,42 @@ _RETIRED_ALWAYS_ON_LEVERS: Final[tuple[str, ...]] = (
     "vent_placement_contradictions",
 )
 
-# (key, resolver) pairs for levers that still consult an ``AILIBI_*`` env var.
-# Added HERE in source, never mutated at runtime (an immutable ``Final`` tuple,
-# per AGENTS.md "no module-level mutable state", so nothing can silently change
-# replay stamps or the loader's mismatch check mid-process). Each resolver takes
-# the optional ``env`` mapping and returns the lever's active state (the 13.5
-# ``*_enabled()`` signature). ONE live toggle now, DEFAULT-OFF:
+# (key, resolver) pairs for every lever that still consults an ``AILIBI_*`` env
+# var. Declared here in source and never mutated at runtime (an immutable
+# ``Final`` tuple, per AGENTS.md "no module-level mutable state"), so nothing can
+# silently change a replay stamp or the loader's mismatch check mid-process. Each
+# resolver takes the optional ``env`` mapping and returns the lever's live state.
 #
-# * Task 18.10's ``impostor_roll_call`` (the impostor-answer template arm). The
-#   CREW-ONLY ruling of audits/audit-phase-18-meeting-gate.md §9 did NOT ship it
-#   (the probe impostor win missed the 0.20 bright-line and the self-flag clause
-#   decided against it), so it stays default-OFF while the other four Phase-18
-#   levers graduated at the 18.12 record. It binds the LOCAL
-#   :func:`_impostor_roll_call_enabled` mirror (the loader's import-time Jinja
-#   build is prompt-set-sensitive — see the mirror's comment block), with a CI
-#   equivalence pin standing in for the identity binding the graduated levers'
-#   read-sites kept.
+# NINE live toggles, every one DEFAULT-OFF: the impostor-answer template arm plus
+# the eight Phase-20 belief-substrate levers. The eight bind their home-module
+# resolvers BY IDENTITY — the read-site and the stamp are the same function
+# object, so they cannot drift apart. ``impostor_roll_call`` is the single
+# exception: it binds the LOCAL :func:`_impostor_roll_call_enabled` mirror,
+# because importing ``agents.strategic.prompts.loader`` would run that module's
+# prompt-set-sensitive Jinja build inside every replay-only consumer (the mirror's
+# own comment block states it); a CI equivalence pin stands in for the identity.
 #
-# A bare-environment snapshot stamps ``impostor_roll_call`` ``False`` (via the
-# missing-key-reads-False rule), matching the committed baseline-6 record (made
-# bare); ``_assert_substrate_matches`` reads a missing key as ``False`` on both
-# sides. A future gate that ships the impostor arm graduates it into
-# ``_RETIRED_ALWAYS_ON_LEVERS`` the way the four meeting-layer levers graduated at
-# 18.12 (and 16.4/16.5/16.6 at 16.17).
+# Registration order, newest last. The tuple is documentary — appending keeps
+# every earlier key's index in ``SUBSTRATE_FLAG_KEYS`` fixed, so registering a
+# lever is a pure append to the pinned key order rather than a reshuffle.
+#
+# A bare environment stamps all nine ``False``, which IS the committed baseline-6
+# substrate: the missing-key-reads-False rule makes a stamp recorded before a key
+# existed agree with a build that has it. A lever graduates by moving into
+# ``_RETIRED_ALWAYS_ON_LEVERS`` at the record that adopts it.
 _TOGGLEABLE_LEVER_RESOLVERS: Final[
     tuple[tuple[str, Callable[[Mapping[str, str] | None], bool]], ...]
-] = (("impostor_roll_call", _impostor_roll_call_enabled),)
+] = (
+    ("impostor_roll_call", _impostor_roll_call_enabled),
+    ("task_completion_from_events", task_completion_from_events_enabled),
+    ("self_location_trail", self_location_trail_enabled),
+    ("movement_claim_shape", movement_claim_shape_enabled),
+    ("grounded_prosecution", grounded_prosecution_enabled),
+    ("map_aware_arbitration", map_aware_arbitration_enabled),
+    ("structured_turn_markers", structured_turn_markers_enabled),
+    ("meeting_outcome_memory", meeting_outcome_memory_enabled),
+    ("coalesced_memory_render", coalesced_memory_render_enabled),
+)
 
 # The still-toggleable subset of ``SUBSTRATE_FLAG_KEYS`` (Task 14.10):
 # levers whose active state is an ``AILIBI_*`` env read, so a stamp/ambient
@@ -581,6 +608,9 @@ TOGGLEABLE_SUBSTRATE_FLAG_KEYS: Final[tuple[str, ...]] = tuple(
     key for key, _ in _TOGGLEABLE_LEVER_RESOLVERS
 )
 
+# The canonical stamp key order: the retired levers in graduation order, then the
+# live toggles in registration order. Both halves only ever grow at their own end,
+# so every already-recorded key keeps its index and a new lever is a pure append.
 SUBSTRATE_FLAG_KEYS: Final[tuple[str, ...]] = (
     *_RETIRED_ALWAYS_ON_LEVERS,
     *TOGGLEABLE_SUBSTRATE_FLAG_KEYS,
@@ -590,39 +620,144 @@ SUBSTRATE_FLAG_KEYS: Final[tuple[str, ...]] = (
 def substrate_flag_snapshot(
     env: Mapping[str, str] | None = None,
 ) -> dict[str, bool]:
-    """Snapshot the active substrate-lever config (Task 14.7).
+    """Snapshot the live substrate-lever config a recording stamps.
 
-    The thirteen retired levers report unconditionally ``True``. The four merged
-    Phase-13.5 levers (Task 14.9), Task 14.10's ``evidence_quality_lift`` (retired
-    at the Task-14.12 close once baseline 2 adopted it), Task 15.5's
-    ``reporter_exculpation`` (graduated at the Task-15.7 baseline-3 record once
-    baseline 3 adopted it), the three Phase-16 levers graduated at the
-    Task-16.17 baseline-5 record (``hard_evidence_gate``,
-    ``observation_id_rendering``, ``citation_gate`` — the graduation slate,
-    audits/audit-phase-16-close.md §0.1), and the FOUR meeting-layer levers
-    graduated at the Task-18.12 baseline-6 record on the CREW-ONLY ruling
-    (``absence_prior``, ``roll_call_round``, ``whereabouts_interior_flags``,
-    ``vent_placement_contradictions`` — audits/audit-phase-18-baseline-6.md §0.1)
-    all had their ``*_enabled()`` env gates retired, so the unconditional
-    derivation is the only substrate this build can produce. They stay in the
-    snapshot so the MANIFEST ``flags`` column and the replay stamp keep
-    self-describing recordings (and so the loader's substrate-mismatch guard can
-    still validate legacy stamped replays — a baseline-5 stamp recording
-    ``roll_call_round`` OFF now fails loud, no cross-substrate replay). The ONE
-    LIVE env-gated toggle left is Task 18.10's ``impostor_roll_call`` (the
-    CREW-ONLY ruling did not ship it): its resolver is read from the immutable
+    The thirteen retired levers report unconditionally ``True``: their
+    ``*_enabled()`` env gates were deleted at the records that adopted them, so
+    the unconditional derivation is the only substrate this build can produce.
+    They stay in the snapshot as provenance, which is what lets the loader's
+    mismatch guard still refuse a legacy stamp recording one of them OFF.
+
+    The nine live toggles resolve from the immutable
     ``_TOGGLEABLE_LEVER_RESOLVERS`` table with ``env`` threaded through
-    (defaulting to the live process environment), so a bare environment stamps it
-    ``False`` (DEFAULT-OFF, byte-identical to the committed baseline-6 record)
-    while an ``AILIBI_IMPOSTOR_ROLL_CALL`` export stamps it ``True`` -- preserving
-    the deterministic-snapshot seam the probe recorder, tests, and sweep configs
-    rely on to prove which arms a recording ran under.
+    (defaulting to the live process environment). All nine are DEFAULT-OFF, so a
+    bare environment reproduces the committed baseline-6 stamp and each
+    ``AILIBI_*`` export flips exactly its own key — the deterministic seam the
+    recorders, the MANIFEST ``flags`` column and the sweep configs rely on to
+    prove which arms a recording ran under.
     """
 
     snapshot = dict.fromkeys(_RETIRED_ALWAYS_ON_LEVERS, True)
     for key, resolver in _TOGGLEABLE_LEVER_RESOLVERS:
         snapshot[key] = resolver(env)
     return snapshot
+
+
+def env_var_for_lever(key: str) -> str:
+    """The ``AILIBI_*`` variable a substrate-lever registry key derives."""
+
+    return f"AILIBI_{key.upper()}"
+
+
+def substrate_slate_mismatches(
+    expected_on: Iterable[str],
+    *,
+    env: Mapping[str, str] | None = None,
+) -> list[str]:
+    """Compare the live lever slate against the slate an operator expects ON.
+
+    The recorders' pre-spend gate: a multi-hour record is only worth starting
+    once the environment it will record under is the environment that was ruled.
+    ``expected_on`` names the TOGGLEABLE keys the operator intends ON; every
+    other toggleable key must be OFF. Returns one human-readable line per
+    deviation, and an EMPTY list when the slate matches -- so a caller refuses on
+    a non-empty result and never re-derives the comparison itself.
+
+    Three failure classes, all fatal to a record:
+
+    * an expectation that is not a live toggle -- a typo, or a graduated lever
+      whose env gate no longer exists. An expectation that is silently ignored
+      would defeat the whole point of a positive check, so it is reported first;
+    * a toggleable lever whose live state differs from the expectation, in
+      EITHER direction (an expected-ON lever left unexported is as fatal as a
+      stale export nobody asked for);
+    * a lever registered as BOTH graduated and toggleable -- a half-finished
+      graduation (the retired entry added, the resolver not deleted). Checked
+      STRUCTURALLY, not by value: it is the registry that is broken, so a truthy
+      stale export must not make it look healthy, and no declaration may excuse
+      it. It is also the only way a graduated lever can read OFF at all --
+      :func:`substrate_flag_snapshot` seeds every retired key ``True`` and only a
+      surviving resolver can overwrite one.
+    """
+
+    wanted = set(expected_on)
+    live = substrate_flag_snapshot(env)
+    toggleable = set(TOGGLEABLE_SUBSTRATE_FLAG_KEYS)
+    registry = set(SUBSTRATE_FLAG_KEYS)
+    problems: list[str] = []
+    for key in sorted(wanted - toggleable):
+        if key in registry:
+            problems.append(
+                f"{key!r} is a graduated lever (unconditionally ON, no env gate) "
+                "and cannot be named as an expected toggle"
+            )
+        else:
+            problems.append(f"{key!r} is not a lever in the registry")
+    for key in sorted(toggleable & set(_RETIRED_ALWAYS_ON_LEVERS)):
+        problems.append(
+            f"{key} is registered as BOTH a graduated lever and a live toggle "
+            "(a half-finished graduation: delete its resolver, or drop the "
+            "retired entry) -- this build cannot produce the substrate the "
+            "record would claim"
+        )
+    for key in TOGGLEABLE_SUBSTRATE_FLAG_KEYS:
+        want = key in wanted
+        if bool(live.get(key, False)) is not want:
+            problems.append(
+                f"{key} must be {'ON' if want else 'OFF'} but the live slate "
+                f"reads {'ON' if live.get(key, False) else 'OFF'} "
+                f"({env_var_for_lever(key)})"
+            )
+    return problems
+
+
+def fold_meeting_outcome_into_memories(
+    result: MeetingResult,
+    *,
+    state: WorldState,
+    memories: Mapping[str, AgentMemory],
+) -> None:
+    """Fold one applied meeting's public outcome into every living agent's memory.
+
+    The ONE reconstruction-side implementation of the live loop's post-meeting
+    meeting-history fold (``orchestrator.game._notify_meeting_concluded``): the
+    replay loader, the prompt byte-golden walk and the evidence-honesty walk all
+    call THIS function, so no reconstruction can render a ``## Meetings so far:``
+    block the live run that recorded the bytes would not have rendered.
+
+    ``state`` is the POST-``apply_meeting_result`` world -- its ``tick`` is the
+    resume tick every player heard announced -- and ``result`` the recorded
+    meeting. Everything folded is public at the table: the resume tick, the
+    announced ejection and its tally, the ejected player's confirm-ejects role,
+    and the impostor count stated at game start (a roster count, which is why it
+    is read off the roles in ``state`` rather than threaded in). A KILLED
+    player's role is never read: nobody at the table saw it.
+
+    It lives beside the substrate stamp because this is the module every
+    reconstruction path already imports, and because the fold's own lever
+    (``meeting_outcome_memory``) is registered here -- while that lever is OFF
+    the channel is inert to every rendered byte, so the fold moves no committed
+    measurement.
+    """
+
+    summary = derive_meeting_outcome_summary(result)
+    ejected_id = summary.ejected_id
+    revealed_role = None if ejected_id is None else state.players[ejected_id].role
+    roster_impostor_count = sum(
+        1 for player in state.players.values() if player.role == "IMPOSTOR"
+    )
+    for player_id in sorted(state.players):
+        if not state.players[player_id].alive:
+            continue
+        record_meeting_outcome(
+            memories[player_id],
+            end_tick=state.tick,
+            ejected_id=ejected_id,
+            revealed_role=revealed_role,
+            votes_for_ejected=summary.votes_for_ejected,
+            skip_votes=summary.skip_votes,
+            roster_impostor_count=roster_impostor_count,
+        )
 
 
 class ReplayLog:
@@ -1277,6 +1412,8 @@ __all__ = [
     "TacticalPolicyStamp",
     "WinnerSide",
     "compute_cost_usd",
+    "env_var_for_lever",
+    "fold_meeting_outcome_into_memories",
     "fsm_default_tactical_policy_stamp",
     "read_all_entries",
     "read_crew_tactical_policy_stamp",
@@ -1288,4 +1425,5 @@ __all__ = [
     "read_substrate_flags",
     "read_tactical_policy_stamp",
     "substrate_flag_snapshot",
+    "substrate_slate_mismatches",
 ]

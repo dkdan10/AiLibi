@@ -189,14 +189,10 @@ def test_dry_run_default_provider_is_anthropic() -> None:
 
 
 def test_dry_run_featherless_provider_echoes_substrate() -> None:
-    # Task 14.7: AILIBI_LLM_PROVIDER=featherless is an accepted provider; the
-    # dry-run echoes it, its FEATHERLESS_API_KEY preflight, the prompt set, and
-    # the substrate provenance so the ruled slate is never silent (AGENTS.md
-    # "no silent fallbacks"). Since the Task-18.12 baseline-6 record the four
-    # meeting-layer levers graduated unconditional ON beside the earlier
-    # graduations and impostor_roll_call stays default-OFF (the CREW-ONLY ruling),
-    # so no substrate env vars are exported and the echo states the baseline-6
-    # slate.
+    # AILIBI_LLM_PROVIDER=featherless is an accepted provider; the dry-run echoes
+    # it, its FEATHERLESS_API_KEY preflight, the prompt set, and the expected
+    # lever slate, so the substrate an operator is about to record is never
+    # silent (AGENTS.md "no silent fallbacks").
     env = dict(
         _clean_env(),
         AILIBI_LLM_PROVIDER="featherless",
@@ -207,19 +203,128 @@ def test_dry_run_featherless_provider_echoes_substrate() -> None:
     assert "[dry-run] provider: featherless" in proc.stdout
     assert "[dry-run] preflight: would require FEATHERLESS_API_KEY" in proc.stdout
     assert "[dry-run] prompt set: qwen3_6_27b" in proc.stdout
-    assert (
-        "[dry-run] substrate flags: baseline-6 slate — the meeting-layer levers "
-        "unconditional ON (roll_call_round, whereabouts_interior_flags, "
-        "vent_placement_contradictions, absence_prior graduated at Task 18.12), "
-        "impostor_roll_call default-OFF (CREW-ONLY ruling)" in proc.stdout
+    assert _BARE_SLATE_ECHO in proc.stdout
+    assert _PREFLIGHT_ECHO in proc.stdout
+
+
+# The two dry-run lines that describe the substrate. The slate is a property of
+# the GAME, not of the LLM backend, so both print for every provider.
+_BARE_SLATE_ECHO = (
+    "[dry-run] substrate flags: expected levers ON = (none — the bare slate: "
+    "every live toggle OFF); every other live toggle OFF; the graduated levers "
+    "unconditional ON"
+)
+_PREFLIGHT_ECHO = (
+    "[dry-run] substrate-lever preflight: would require the live lever slate to "
+    "equal that expectation exactly and refuse before any seed stages"
+)
+
+
+@pytest.mark.parametrize("provider", ["anthropic", "ollama", "featherless"])
+def test_dry_run_echoes_the_expected_slate_for_every_provider(provider: str) -> None:
+    # The echo used to sit inside the featherless branch while the check it
+    # describes runs outside every provider block, so an operator previewing an
+    # anthropic or ollama refresh was told nothing about the gate that would
+    # refuse them. Both lines now print for all three.
+    env = dict(_clean_env(), AILIBI_LLM_PROVIDER=provider)
+    proc = _run("--seeds", "0", "--dry-run", env=env)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert _BARE_SLATE_ECHO in proc.stdout
+    assert _PREFLIGHT_ECHO in proc.stdout
+
+
+@pytest.mark.parametrize("provider", ["anthropic", "ollama", "featherless"])
+def test_dry_run_echo_names_the_levers_the_operator_declared(provider: str) -> None:
+    # And the echo quotes the RESOLVED slate rather than a hard-coded sentence,
+    # so the preview and the gate can never describe different substrates.
+    env = dict(
+        _clean_env(),
+        AILIBI_LLM_PROVIDER=provider,
+        AILIBI_GROUNDED_PROSECUTION="1",
+        AILIBI_SELF_LOCATION_TRAIL="1",
     )
-    # Task 18.12: the dry-run also describes the new substrate-lever preflight, so
-    # the ruled shipped/unshipped state the real record enforces is never silent.
-    assert (
-        "[dry-run] substrate-lever preflight: would require the live lever slate "
-        "to equal the ruled baseline-6 state (four meeting-layer levers ON, "
-        "impostor_roll_call OFF) and refuse a stale AILIBI_* export" in proc.stdout
+    proc = _run(
+        "--seeds",
+        "0",
+        "--dry-run",
+        "--expect-levers",
+        "grounded_prosecution,self_location_trail",
+        env=env,
     )
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert (
+        "[dry-run] substrate flags: expected levers ON = "
+        "grounded_prosecution,self_location_trail" in proc.stdout
+    )
+
+
+def test_expect_levers_requires_an_argument() -> None:
+    # A --expect-levers with NOTHING after it is an operator typo: the value was
+    # meant to be there and got lost, so refusing beats silently recording the
+    # bare substrate under a flag that claims otherwise.
+    proc = _run("--seeds", "0", "--dry-run", "--expect-levers")
+    assert proc.returncode != 0
+    assert "--expect-levers requires a comma-separated lever list" in (
+        proc.stdout + proc.stderr
+    )
+
+
+def test_an_explicitly_empty_expect_levers_is_the_bare_slate() -> None:
+    # An empty STRING is a declaration, not a typo: automation can pass
+    # --expect-levers "$LEVERS" unconditionally and get the bare slate when the
+    # variable is unset. The two cases are distinguished by whether an argument
+    # follows the flag at all.
+    proc = _run("--seeds", "0", "--dry-run", "--expect-levers", "", env=_clean_env())
+    out = proc.stdout + proc.stderr
+    assert proc.returncode == 0, out
+    assert "Substrate slate OK: expected levers ON = (none" in out
+
+
+def test_preflight_refuses_a_declared_lever_that_is_not_exported() -> None:
+    # Direction 1 -- the failure a blacklist of variable names cannot catch. The
+    # operator declared a lever the shell never exported, so every seed would be
+    # recorded on the OLD substrate while the echo claims the new one.
+    env = _clean_env()
+    proc = _run(
+        "--seeds", "0", "--dry-run", "--expect-levers", "grounded_prosecution", env=env
+    )
+    out = proc.stdout + proc.stderr
+    assert proc.returncode != 0
+    assert "does not match --expect-levers" in out
+    assert "grounded_prosecution must be ON" in out
+    assert "AILIBI_GROUNDED_PROSECUTION" in out
+
+
+def test_preflight_refuses_an_export_nobody_declared() -> None:
+    # Direction 2 -- a stale export from an earlier probe session would ship an
+    # unruled arm into the record, and an acceptance gate run in the same shell
+    # would pass coherently because it reads the same environment.
+    env = dict(_clean_env(), AILIBI_MEETING_OUTCOME_MEMORY="1")
+    proc = _run("--seeds", "0", "--dry-run", env=env)
+    out = proc.stdout + proc.stderr
+    assert proc.returncode != 0
+    assert "meeting_outcome_memory must be OFF" in out
+
+
+def test_preflight_refuses_a_typo_in_the_declared_slate() -> None:
+    # An expectation nobody can check is worse than no expectation: a misspelled
+    # key must fail loud rather than be silently ignored.
+    proc = _run("--seeds", "0", "--dry-run", "--expect-levers", "grounded_prosecutions")
+    out = proc.stdout + proc.stderr
+    assert proc.returncode != 0
+    assert "is not a lever in the registry" in out
+
+
+def test_preflight_accepts_the_declared_slate_when_the_environment_matches() -> None:
+    # The gate must be passable, or it is not a gate: with exactly the declared
+    # levers exported the preflight reports the resolved slate and continues.
+    env = dict(_clean_env(), AILIBI_GROUNDED_PROSECUTION="1")
+    proc = _run(
+        "--seeds", "0", "--dry-run", "--expect-levers", "grounded_prosecution", env=env
+    )
+    out = proc.stdout + proc.stderr
+    assert proc.returncode == 0, out
+    assert "Substrate slate OK: expected levers ON = grounded_prosecution" in out
 
 
 def test_dry_run_featherless_defaults_to_two_seed_workers() -> None:
@@ -456,12 +561,7 @@ def test_featherless_refresh_accepts_locked_substrate() -> None:
     proc = _run("--seeds", "0", "--dry-run", env=env)
     assert proc.returncode == 0
     assert "[dry-run] prompt set: qwen3_6_27b" in proc.stdout
-    assert (
-        "[dry-run] substrate flags: baseline-6 slate — the meeting-layer levers "
-        "unconditional ON (roll_call_round, whereabouts_interior_flags, "
-        "vent_placement_contradictions, absence_prior graduated at Task 18.12), "
-        "impostor_roll_call default-OFF (CREW-ONLY ruling)" in proc.stdout
-    )
+    assert _BARE_SLATE_ECHO in proc.stdout
 
 
 def test_unknown_provider_lists_featherless_in_error() -> None:
@@ -1048,9 +1148,13 @@ def test_fake_refresh_skips_the_key_preflight_but_keeps_the_substrate_one(
     assert proc.returncode == 0, out
     assert "ANTHROPIC_API_KEY must be set" not in out
     assert "Using API key prefix" not in out
+    assert "Substrate slate OK: expected levers ON = (none" in out
+    # The real run's provenance echo renders the SAME resolved slate the preview
+    # and the gate name, so an operator can never read three different substrates.
     assert (
-        "Substrate slate OK: four meeting-layer levers ON, impostor_roll_call OFF"
-        in out
+        "Substrate flags: expected levers ON = (none — the bare slate: every "
+        "live toggle OFF); every other live toggle OFF; the graduated levers "
+        "unconditional ON" in out
     )
     assert "Attributing no-meeting seeds to model: fake-meeting" in out
     assert (set_dir / "replay-seed-0.jsonl").is_file()

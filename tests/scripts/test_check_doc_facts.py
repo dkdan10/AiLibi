@@ -496,6 +496,12 @@ def test_graduated_mention_outside_note_does_not_count(doc_tree: Path) -> None:
     assert "graduated-levers note" in errors[0]
 
 
+# The first line of the first live-toggle paragraph in the belief-substrate
+# section — an anchor for planting an aside ABOVE the toggles, named here so a
+# reworded heading is a one-line fix rather than a hunt through the assertions.
+_TOGGLE_PARAGRAPH_HEADING = "# The Phase-18 impostor-answer template arm"
+
+
 def test_graduated_aside_inside_section_does_not_count(doc_tree: Path) -> None:
     # Tighter still: a mention inside the SECTION but outside the graduated
     # NOTE (a historical aside before the toggle paragraph) must not stand in
@@ -504,9 +510,9 @@ def test_graduated_aside_inside_section_does_not_count(doc_tree: Path) -> None:
     _substitute(
         doc_tree,
         _ENV_EXAMPLE,
-        "# The ONE live toggle",
+        _TOGGLE_PARAGRAPH_HEADING,
         "# Historical aside: movement_perception was once default-OFF.\n\n"
-        "# The ONE live toggle",
+        + _TOGGLE_PARAGRAPH_HEADING,
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1

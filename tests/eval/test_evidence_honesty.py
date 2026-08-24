@@ -98,6 +98,7 @@ from meetings.manager import INVALID_ACCUSATION_TARGET_MARKER
 from meetings.schemas import (
     AlibiClaim,
     ContradictionRef,
+    MeetingResult,
     MeetingTranscript,
     MeetingTurn,
     MoveWitnessRecord,
@@ -106,6 +107,7 @@ from meetings.schemas import (
     SawVentObservation,
     SightingRecord,
     VentWitnessRecord,
+    VoteBallot,
     WhereaboutsClaim,
 )
 from meetings.transcript import (
@@ -129,6 +131,7 @@ from observation.service import ObservationService
 from agents.strategic.prompts.loader import ENV_PROMPT_SET
 from orchestrator.game import DEFAULT_TASKS_PER_CREWMATE
 from orchestrator.replay import LLMCallRecord, MeetingReplayEntry, read_all_entries
+from tests._helpers.world_state import scripted_initial_world_state
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SAMPLES_9P2I = _REPO_ROOT / "replays" / "samples" / "9p2i"
@@ -3405,3 +3408,123 @@ def test_i9_singular_persona_is_zero_under_the_v4_prompt_set(
     assert phrase == "a hidden impostor"
     archive = _REPO_ROOT / "tests" / "fixtures" / "prompt_archive" / "qwen3_6_27b_v3"
     assert phrase in (archive / "crewmate_report.j2").read_text(encoding="utf-8")
+
+
+# --------------------------------------------------------------------------- #
+# The meeting-history fold rides the walk, and stays inert while its lever is OFF
+# --------------------------------------------------------------------------- #
+
+
+def _one_meeting_applied(*, ejected: str | None, tick: int) -> MeetingApplied:
+    """A minimal applied-meeting walk event over the scripted 4-player roster."""
+
+    from dataclasses import replace as dataclass_replace
+
+    state = scripted_initial_world_state(seed=3)
+    players = dict(state.players)
+    if ejected is not None:
+        players[ejected] = dataclass_replace(players[ejected], alive=False)
+    post = dataclass_replace(state, tick=tick, players=players)
+    ballots = tuple(
+        VoteBallot(
+            voter=voter,
+            target=ejected or "SKIP",
+            confidence=0.5,
+            primary_reason_id=None,
+            rationale_text="because",
+        )
+        for voter in ("p-1", "p-2")
+    )
+    result = MeetingResult(
+        meeting_id="g:meeting-0",
+        triggered_by="p-1",
+        trigger_tick=tick - 1,
+        outcome="EJECTED" if ejected is not None else "SKIPPED",
+        ejected_player_id=ejected,
+        ballots=ballots,
+        transcript=MeetingTranscript(),
+    )
+    entry = MeetingReplayEntry(
+        game_id="g",
+        meeting_id="g:meeting-0",
+        tick=tick - 1,
+        triggered_by="p-1",
+        outcome=result.outcome,
+        ejected_player_id=ejected,
+        transcript=result.transcript,
+        ballots=ballots,
+        contradictions=(),
+        llm_calls=(),
+        prompt_versions={},
+        state_hash_before="before",
+        state_hash_after="after",
+    )
+    return MeetingApplied(
+        entry=entry, result=result, body_id=None, state=post, post_events=()
+    )
+
+
+def _seeded_memories(walk_event: MeetingApplied) -> dict[PlayerId, AgentMemory]:
+    """One perception-seeded memory per player, the state a fold expects."""
+
+    memories: dict[PlayerId, AgentMemory] = {}
+    for pid, player in walk_event.state.players.items():
+        memory = AgentMemory()
+        memory.episodic.append(
+            EpisodicEvent(
+                tick=0,
+                type="self_state",
+                payload={
+                    "agent_id": pid,
+                    "role": player.role,
+                    "room": "cafeteria",
+                    "fellow_impostor_ids": [],
+                },
+                provenance="observed",
+            )
+        )
+        memories[pid] = memory
+    return memories
+
+
+def test_the_walk_fold_records_the_announced_outcome_for_living_agents() -> None:
+    # The instrument reconstructs the memory the live agents held, so it runs the
+    # SAME post-meeting fold the live loop and the replay loader run -- including
+    # the meeting-history channel. A walk that skipped it would hand the policy
+    # reconstruction a memory no live agent ever had.
+    walk_event = _one_meeting_applied(ejected="p-3", tick=9)
+    composites = _seeded_memories(walk_event)
+
+    evidence_honesty._fold_meeting_into_memories(walk_event, composites=composites)
+
+    assert composites["p-3"].meeting_history.outcomes == ()
+    recorded = composites["p-1"].meeting_history.outcomes
+    assert len(recorded) == 1
+    assert recorded[0].end_tick == 9
+    assert recorded[0].ejected_id == "p-3"
+    assert recorded[0].revealed_role == "IMPOSTOR"
+
+
+def test_the_meeting_history_channel_is_inert_in_the_measured_render() -> None:
+    # Measurement neutrality, asserted rather than assumed: with the lever OFF --
+    # the substrate every committed recording carries and every pinned cell in
+    # this module was computed under -- a memory that HAS the fold renders exactly
+    # like one that does not, so no instrument reading can move.
+    walk_event = _one_meeting_applied(ejected="p-3", tick=9)
+    folded = _seeded_memories(walk_event)
+    evidence_honesty._fold_meeting_into_memories(walk_event, composites=folded)
+    # The same memory MINUS the meeting-history channel: the three other stores
+    # are shared objects, so the two sides differ in exactly what this fold added.
+    unfolded = {
+        pid: AgentMemory(
+            episodic=memory.episodic, working=memory.working, beliefs=memory.beliefs
+        )
+        for pid, memory in folded.items()
+    }
+
+    for pid in walk_event.state.players:
+        assert render_for_prompt(folded[pid], token_budget=400) == render_for_prompt(
+            unfolded[pid], token_budget=400
+        ), pid
+    assert folded["p-1"].meeting_history.outcomes != ()
+    assert unfolded["p-1"].meeting_history.outcomes == ()
