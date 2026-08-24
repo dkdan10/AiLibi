@@ -81,6 +81,8 @@ and is re-pointed at the structured field with the adopting record, not here.
 - frontend/src/stories/MeetingView.stories.tsx; (the TurnView literal gains the annotations field)
 - frontend/src/stories/MindInspector.stories.tsx; (same)
 
+Recorded deviations at merge (PR #380, orchestrator-ratified per the #377 precedent): four files outside scope, all forced by the SawMoveObservationView DoD item widening ObservationClaimView — frontend/src/ui/ObservationLine.tsx and frontend/src/components/MemoryPanel.tsx (exhaustive TS switches), scripts/gen_frontend_types.py (union/enum alias lists), tests/api/test_leak.py (EXPECTED_DTOS + two EXPECTED_EVAL_REPORT_FIELDS names; FORBIDDEN_EVAL_ENGINE_FIELDS untouched). Ruling implemented as shipped: MeetingTurn stays the single wire shape with `annotations` an optional system-authored field stripped at the parse boundary (no AuthoredTurn type exists); MARKER_QUOTED_ORIGINAL_MAX_CHARS moved to meetings/schemas.py with re-exports, MARKER_TRUNCATION_SUFFIX beside it. A prose record, not scope entries.
+
 **Files NOT in scope:**
 - agents/strategic/prompts/ (the transcript block renders free_text; with the lever ON the free_text is clean so no template change is needed — and the single prompt-set bump of this phase is another task's, no template byte moves here)
 - the ballot marker path (sanctioned by DESIGN.md:595-597, spectator-stripped, 0/7458 prompts — the four ballot-side constants and `_BALLOT_PREFIX_MARKERS` are imported, never edited)
