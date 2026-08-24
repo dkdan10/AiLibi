@@ -20,8 +20,11 @@ exactly zero reached it. None of the five ratified STOP conditions fired.
 **Read the GO narrowly.** It says the stack is coherent, not that the record will separate. The
 smoke's two games minted **zero `alibi_vs_sighting` flags across five meetings**, so three of the
 eight levers — `grounded_prosecution`, `map_aware_arbitration`, `movement_claim_shape` — were never
-exercised at all, and the bars that ride that class (4, 5, 7) have no reading here. That is recorded
-and carried forward to the record audit under counterfactual §9 item 6, never acted on at this n.
+exercised at all, and the bars that ride that class (4, 5, 7) have no reading here. A fourth,
+`structured_turn_markers`, had no input either (no meeting guard fired on any of the 28 turns), and
+`coalesced_memory_render` fired only its opening-summary half. Four levers UNTESTED and one
+half-exercised is §7's count, stated there lever by lever. That is recorded and carried forward to
+the record audit under counterfactual §9 item 6, never acted on at this n.
 
 ## 1. What this is, and what it is not
 
@@ -234,9 +237,11 @@ cell the recorder wrote lists the same 21 ON keys per row, with `impostor_roll_c
 
 ## 7. Lever coverage, OBSERVED on the smoke bytes
 
-Each marker below is discriminating: it counts **0** across all 1,956 recorded prompts and 971 turns
-of the committed baseline-6 `replays/samples/9p2i` (the OFF control), so a non-zero count here is the
-lever on the live path. Counts are over the smoke's 56 recorded prompts / 28 turns / 5 meetings.
+Every RENDER marker below is discriminating: it counts **0** across all 1,956 recorded prompts and
+971 turns of the committed baseline-6 `replays/samples/9p2i` (the OFF control), so a non-zero count
+here is the lever on the live path. Two levers have no discriminating render marker and are read
+from a registered instrument cell instead; their rows say which cell and why. Counts are over the
+smoke's 56 recorded prompts / 28 turns / 5 meetings.
 
 | lever | observed | count | how it was read |
 |---|---|---|---|
@@ -249,8 +254,9 @@ lever on the live path. Counts are over the smoke's 56 recorded prompts / 28 tur
 | `map_aware_arbitration` | **UNTESTED** | 0 flags of its class | as above — it re-bands `alibi_vs_sighting` and there were none |
 | `movement_claim_shape` | **UNTESTED** | I-7 `0/0` | no `alibi_vs_sighting` flag resolvable to a spoken sighting, so the movement-origin cell has no denominator |
 
-Five of eight levers are therefore **named as untested rather than implied green**, and the three of
-them that share one cause — an empty `alibi_vs_sighting` class — are the phase's detector centrepiece.
+**Four of the eight levers are therefore named UNTESTED rather than implied green, and a fifth —
+`coalesced_memory_render` — is only half-exercised.** Three of the four untested share one cause, an
+empty `alibi_vs_sighting` class, and those three are the phase's detector centrepiece.
 The whole recorded flag census over the smoke is a single row:
 
 ```
