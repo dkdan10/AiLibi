@@ -82,6 +82,8 @@ asserts (C-104's flagship example).
 - eval/meeting_quality.py; (one dangling resolver reference)
 - tests/eval/test_meeting_quality.py; (same)
 
+Coordination note (routed from PR #384): eight comment-only forward references in the lever home modules are now FALSE — each reads 'Not registered in orchestrator.replay._TOGGLEABLE_LEVER_RESOLVERS: Task 20.33 wires the whole Phase-20 slate…' at agents/memory/store.py:265-267, :298-299, :349 block, :382-383; meetings/transcript.py:1567-1568, :1603-1604, :1643-1644; meetings/manager.py:924-925 (lines as of fc5cf719). Sweep them here with the other residue (comment-only, re-verify lines at HEAD first).
+
 **Files NOT in scope:**
 - any lever the record did NOT adopt (it stays a live env-gated toggle with its resolver, parameter, tests and `.env.example` entry intact — the 18.10 impostor arm is the standing example)
 - replays/ (the committed bytes are the pin, not an edit target; `verify_samples.sh` green is the invariant this task must not move)

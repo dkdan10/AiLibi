@@ -5463,6 +5463,8 @@ sweep, not here.
 
 Coordination ruling (2026-08-24, supersedes the routed PR #381 note): this task OWNS the lever-7 reconstruction-parity closure — the slate is not recordable until a lever-ON recording reconstructs. Scope is widened accordingly (orchestrator ruling; the reverifier verified the gap at HEAD: `record_meeting_outcome` has exactly one production caller, orchestrator/game.py:3274, and none of the three mirrors folds it). Additional Files in scope: api/replay_loader.py's memory walk (:1361-1386 — fold `record_meeting_outcome` per living agent at MeetingApplied, after absorb_meeting_evidence/absorb_reported_testimony, exactly mirroring the live order), tests/meetings/test_prompt_byte_golden.py (the mirror folds the same way), eval/evidence_honesty.py (the fold at :1302 gains the same call), plus their test modules. Additional DoD: (1) a lever-ON reconstruction test proves a meeting-outcome-memory-ON render served by the loader equals the store's own render byte-for-byte at the seam; (2) the byte-golden mirror folds outcomes identically (a planted divergence bites); (3) the honesty instrument's fold is measurement-neutral on committed bytes with the channel inert OFF — every committed cell reproduces, asserted not assumed; (4) the Record impact field reads: none while OFF; this closure gates the adopting record. The three folds must share one helper or provably identical logic so the mirrors cannot drift.
 
+Recorded deviation at merge (PR #384, orchestrator-ratified): tests/scripts/test_check_doc_facts.py — two lines re-anchoring a perturbation off the swept '# The ONE live toggle' heading onto a named constant; no assertion weakened. A prose record, not a scope entry.
+
 **Files NOT in scope:**
 - every lever's home module (the resolvers already exist; this task imports and binds them, and changes no lever behaviour)
 - replays/ and replays/*/MANIFEST.md (committed stamps lack the new keys; the missing-key-reads-False rule makes both sides agree, and `_render_flags` never emits an OFF key — pinned unchanged, not edited)
@@ -6024,6 +6026,8 @@ asserts (C-104's flagship example).
 - meetings/render_contract.py; (one dangling resolver reference)
 - eval/meeting_quality.py; (one dangling resolver reference)
 - tests/eval/test_meeting_quality.py; (same)
+
+Coordination note (routed from PR #384): eight comment-only forward references in the lever home modules are now FALSE — each reads 'Not registered in orchestrator.replay._TOGGLEABLE_LEVER_RESOLVERS: Task 20.33 wires the whole Phase-20 slate…' at agents/memory/store.py:265-267, :298-299, :349 block, :382-383; meetings/transcript.py:1567-1568, :1603-1604, :1643-1644; meetings/manager.py:924-925 (lines as of fc5cf719). Sweep them here with the other residue (comment-only, re-verify lines at HEAD first).
 
 **Files NOT in scope:**
 - any lever the record did NOT adopt (it stays a live env-gated toggle with its resolver, parameter, tests and `.env.example` entry intact — the 18.10 impostor arm is the standing example)
