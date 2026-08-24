@@ -12,40 +12,47 @@ criteria). Where this smoke and a memo disagree, the memo wins and the disagreem
 
 ## 0. The verdict, in one line
 
-**GO.** Two live 9p2i seeds recorded at the full Phase-20 slate in 16 m 38 s for $0, the validity
-gate PASSED on all ten checks, the recorded substrate stamp equals the declared slate on both games,
-no opening defaulted, no guard tripped, and both cells the counterfactual memo predicts to reach
-exactly zero reached it. None of the five ratified STOP conditions fired.
+**ABANDON. The adopting record does not start.**
 
-**Read the GO narrowly.** It says the stack is coherent, not that the record will separate. The
-smoke's two games minted **zero `alibi_vs_sighting` flags across five meetings**, so three of the
-eight levers — `grounded_prosecution`, `map_aware_arbitration`, `movement_claim_shape` — were never
-exercised at all, and the bars that ride that class (4, 5, 7) have no reading here. A fourth,
-`structured_turn_markers`, had no input either (no meeting guard fired on any of the 28 turns), and
-`coalesced_memory_render` fired only its opening-summary half. Four levers UNTESTED and one
-half-exercised is §7's count, stated there lever by lever. That is recorded and carried forward to
-the record audit under counterfactual §9 item 6, never acted on at this n.
+Five live 9p2i seeds recorded at the full Phase-20 slate for $0. The recording half is clean: the
+validity gate PASSED on all ten checks, the substrate stamp equals the declared slate on all five
+games, no opening defaulted, no guard tripped during the run, and the recorder absorbed no retry.
+**The measuring half is not.** `scripts/measure_baseline.py --honesty` — the phase's primary
+instrument, the one that computes the cells every ratified bar is read on — **raises and folds
+nothing** over these bytes:
+
+```
+eval.evidence_honesty.EvidenceHonestyReconstructionError: headless-seed-13: meeting at tick 8
+carries an alibi_vs_sighting flag whose events
+'turn:headless-seed-13:meeting-0:turn-4:obs:1' / 'turn:headless-seed-13:meeting-0:turn-6:claim:0'
+do not resolve to one spoken sighting and one alibi — the flag would vanish from I-4, I-6 and I-7
+while still counting in the I-3 class census
+```
+
+**A record whose primary instrument cannot read its bytes must not be spent.** The defect, its
+mechanism, its blast radius and its routing slot are §11. §12 states the criterion this was ruled
+against, and states plainly that no §9 criterion names this class verbatim — the report invents
+none.
 
 ## 1. What this is, and what it is not
 
 The standing cadence rule is smoke before full-record. Phase 20 buys one measurement with roughly
-23 h of operator wall across four sets, and this is the cheap proof — a handful of seeds, minutes,
-$0 — that the whole stack is live and coherent before the expensive event starts: the lever slate,
-the v4 prompt set, the recorder's real worker path, the substrate stamp, the validity gate, and the
-honesty instruments reading a freshly recorded set rather than committed bytes.
+23 h of operator wall across four sets, and this is the cheap proof — five seeds, 44 minutes, $0 —
+that the whole stack is live and coherent before the expensive event starts: the lever slate, the v4
+prompt set, the recorder's real worker path, the substrate stamp, the validity gate, and the honesty
+instruments reading a freshly recorded set rather than committed bytes. **The last clause is the one
+that failed, and it is the one no cheaper instrument could have tested.**
 
-It is **not** a measurement. No pre-registered bar is declared met or missed on this many seeds, and
-this report says so in those words wherever a cell appears. The counterfactual memo already fixed
-that rule for the smoke (§9 item 6: a directional bar that merely misses on the smoke seeds is
-explicitly NOT an abandon — it is recorded and carried forward, never acted on here). What the smoke
-CAN decide is mechanical: does the declared slate reach the recorded bytes, does the gate pass, does
-an opening default, does a guard trip, and does a cell predicted to reach exactly zero reach it.
+It is **not** a measurement. No pre-registered bar is declared met or missed on five seeds, and this
+report says so in those words wherever a cell appears. The counterfactual memo already fixed that
+rule for the smoke (§9 item 6: a directional bar that merely misses on five smoke seeds is
+explicitly NOT an abandon — it is recorded and carried forward, never acted on here).
 
 ## 2. The recorded configuration
 
 The whole environment was exported in one block before any worker process started; every lever is
 read at runner construction, never mid-run. The operator's `FEATHERLESS_API_KEY` is not reproduced
-here or anywhere in this record — the recorder prints its 8-character prefix only.
+here or anywhere in this record.
 
 ```
 AILIBI_LLM_PROVIDER=featherless
@@ -88,7 +95,6 @@ preflight passes:
 
 ```
 [dry-run] mode: seeds
-[dry-run] seeds: 7,12
 [dry-run] roster: num_players=9 num_impostors=2 tasks_per_crewmate=2
 [dry-run] provider: featherless
 [dry-run] meeting model: Qwen/Qwen3.6-27B
@@ -127,10 +133,8 @@ rows, at least one `vent_sighting`, at least one `alibi_conflict`, at least one 
 and a game that ends by task completion rather than ejection — with the counterfactual memo's own
 enumerated fixtures drawn from first.
 
-The census below is **re-derived at HEAD from the committed baseline-6 bytes**, not quoted:
-
-a per-seed fold over `replays/samples/9p2i` (the command is in §13, and it also prints the two rows
-of the table below):
+The census is re-derived at HEAD from the committed baseline-6 bytes, not quoted (the command is in
+§14):
 
 ```
 seeds 50 meetings 165 {'vent_sighting': 96, 'alibi_vs_physical': 6,
@@ -138,272 +142,330 @@ seeds 50 meetings 165 {'vent_sighting': 96, 'alibi_vs_physical': 6,
 alibi_vs_sighting seeds 33
 alibi_conflict seeds [12, 21, 28, 31, 40, 47]
 reasons {'CREWMATE_EJECT': 31, 'IMPOSTOR_PARITY': 15, 'CREWMATE_TASKS': 4}
-seed 7 meetings 4 ejections 2 {'vent_sighting': 2, 'alibi_vs_sighting': 3} CREWMATE_TASKS
-seed 12 meetings 2 ejections 1 {'alibi_conflict': 1, 'alibi_vs_sighting': 2} IMPOSTOR_PARITY
 ```
 
-**The slate is seeds 7 and 12**, and between them they cover the whole list:
+**The slate is seeds 7, 12, 13, 31 and 40.**
 
 | seed | baseline-6 meetings | ejections | vent_sighting | alibi_vs_sighting | alibi_conflict | ended by | why it is on the slate |
 |---|---|---|---|---|---|---|---|
-| 7 | 4 | 2 | 2 | 3 | 0 | CREWMATE_TASKS | the task-completion ending, a multi-ejection game, vent and sighting flags |
-| 12 | 2 | 1 | 0 | 2 | 1 | IMPOSTOR_PARITY | the counterfactual memo's own §5.1 fixture (b) anchor (9p2i seed 12, M0), and one of the six `alibi_conflict` seeds |
+| 7 | 4 | 2 | 2 | 3 | 0 | CREWMATE_TASKS | the task-completion ending, a multi-ejection game |
+| 12 | 2 | 1 | 0 | 2 | 1 | IMPOSTOR_PARITY | the counterfactual memo's own §5.1 fixture (b) anchor (9p2i seed 12, M0) |
+| 13 | 3 | 2 | 1 | **8** | 0 | IMPOSTOR_PARITY | one of the two `alibi_vs_sighting`-densest baseline-6 games |
+| 31 | 5 | 3 | 3 | **8** | 1 | IMPOSTOR_PARITY | the other densest game, and a 5-meeting / 3-ejection game |
+| 40 | 3 | 2 | 0 | 4 | **3** | IMPOSTOR_PARITY | the `alibi_conflict`-densest game |
 
 Seeds 0–4 were rejected on the contract's own reasoning: they carry 0, 2, 0, 0 and 0
 `alibi_vs_sighting` rows, so four of five would exercise the phase's centrepiece lever — grounded
 prosecution — zero times.
 
 **Baseline-6 coverage is only a proxy.** The corrected substrate moves trajectories, so the slate is
-chosen from it and coverage is then reported as OBSERVED on the smoke bytes (§7), with any lever the
-slate never exercised named as untested rather than implied green.
+chosen from it and coverage is then reported as OBSERVED on the smoke bytes (§8).
 
-### 3.1 Two seeds, not five — stated plainly
+### 3.1 The slate was recorded in two batches, and why
 
-The contract's Definition of done asks for five seeds; this smoke recorded **two**, on the
-dispatching orchestrator's re-scope of the task (2026-08-24). The deviation is recorded here rather
-than absorbed, and it costs coverage in exactly one place worth naming: fewer games means fewer
-chances for the `alibi_vs_sighting` class to appear, and §7 shows it did not appear at all. Every
-number in this report is a two-game number and is labelled as one.
+Seeds 7 and 12 were recorded first (16 m 38 s), and seeds 13, 31 and 40 followed (27 m 26 s) after
+an automated review of this PR pointed out — correctly — that a five-seed smoke is required by BOTH
+committed sources of truth: the task contract's Definition of done, and the ratified pre-registration
+§9 ("Smoke (20.35): 5 seeds of 9p2i into a scratch directory"). The three added seeds were chosen to
+attack the gap the two-seed set exposed: its games minted **zero** `alibi_vs_sighting` flags, so the
+detector levers had no input at all. They did their job — the five-seed set carries six flags of that
+class, and two of them are the ones that broke the instrument. **Every number in this report is a
+five-game number, re-derived on the whole set; nothing is carried over from the two-seed pass.**
 
 ## 4. Per-seed outcome
 
 | seed | wall | ticks | meetings | ejections | LLM calls | tokens in / out | cost | winner / reason | `failed_call` rows | recorded flags |
 |---|---|---|---|---|---|---|---|---|---|---|
-| 7 | 998 s | 30 | 4 | 2 | 42 | 170,687 / 9,221 | $0.0000 | IMPOSTORS / IMPOSTOR_PARITY | 0 | 1 × `vent_sighting` |
+| 7 | 998 s | 30 | 4 | 2 | 42 | 170,687 / 9,221 | $0.0000 | IMPOSTORS / IMPOSTOR_PARITY | 0 | 1 `vent_sighting` |
 | 12 | 352 s | 13 | 1 | 1 | 14 | 44,944 / 3,472 | $0.0000 | IMPOSTORS / IMPOSTOR_PARITY | 0 | none |
+| 13 | 872 s | 31 | 4 | 2 | 40 | 167,533 / 9,542 | $0.0000 | IMPOSTORS / IMPOSTOR_PARITY | 0 | 2 `alibi_vs_sighting`, 1 `alibi_conflict`, 1 `vent_sighting` |
+| 31 | 808 s | 21 | 3 | 2 | 36 | 137,080 / 7,905 | $0.0000 | CREWMATES / CREWMATE_EJECT | 0 | 2 `vent_sighting` |
+| 40 | 837 s | 16 | 3 | 2 | 38 | 153,925 / 7,673 | $0.0000 | CREWMATES / CREWMATE_EJECT | 0 | 4 `alibi_vs_sighting`, 3 `alibi_conflict`, 1 `vent_sighting` |
 
-Both trajectories moved away from their baseline-6 shapes, which is the expected consequence of a
-corrected substrate and the reason §3 calls baseline-6 coverage a proxy: seed 7 ended by impostor
-parity rather than task completion, and seed 12 reached one meeting where it had reached two.
+Totals: 15 meetings, 9 ejections, 170 LLM calls, 674,169 in / 37,813 out = 711,982 tokens, $0.0000.
+Flag census: 6 `alibi_vs_sighting`, 5 `vent_sighting`, 4 `alibi_conflict`.
 
-The recorder's own summary line, over both seeds:
+Trajectories moved away from their baseline-6 shapes, which is the expected consequence of a
+corrected substrate and the reason §3 calls baseline-6 coverage a proxy — seed 7 ended by impostor
+parity rather than task completion, and seed 31 by crew ejection rather than parity.
 
-```
-Refresh complete in 16m38s: 2/2 seeds reached a meeting (~100%; authoritative meeting_rate is in
-the eval report).
-Total spend: $0.0000
-... meeting_rate 1.00 (5 meetings) | ejection_accuracy 0.3333 (1/3) | conversion 0.3333 (1/3)
-  | lost_openings 0 (defaults 0) | vote_defaults 0 (must_vote 0) | ballot_redirects 0 (eject 0)
-```
-
-## 5. The validity gate
+## 5. The validity gate — PASSED
 
 `uv run python scripts/validity_gate.py "$SMOKE_DIR" --expected-model Qwen/Qwen3.6-27B
---require-zero-cost`, run under the recorded slate (§12 item 1):
+--require-zero-cost`, run under the recorded slate (§13 item 1):
 
 ```
-Validity gate over <scratch>/tasks/20.35/smoke/9p2i (2 games):
-  [PASS] all_games_reach_game_over: 2/2 games reached a reconstructed game_over with a consistent win condition
-  [PASS] meeting_rate_and_resolution: meeting_rate 1.0 (floor 0.60); 5 resolved meetings; 0 unresolved
-  [PASS] no_duplicate_meeting_rows: 0 duplicate meeting rows over 5 (want 0)
+Validity gate over <scratch>/tasks/20.35/smoke/9p2i (5 games):
+  [PASS] all_games_reach_game_over: 5/5 games reached a reconstructed game_over with a consistent win condition
+  [PASS] meeting_rate_and_resolution: meeting_rate 1.0 (floor 0.60); 15 resolved meetings; 0 unresolved
+  [PASS] no_duplicate_meeting_rows: 0 duplicate meeting rows over 15 (want 0)
   [PASS] no_tick_1_kills: 0 kills at tick <= 1 (want 0)
   [PASS] no_friendly_fire_kills: 0 impostor-on-impostor kills (want 0)
-  [PASS] no_betrayal_ballots_or_accusations: 0 teammate-betrayal ballots/accusations over 28 multi-impostor ballots (want 0)
-  [PASS] no_railroaded_crew_ejections: 0 railroaded crew rows over 74 rendered crew suspicions (want 0)
-  [PASS] no_dangling_primary_reason_id: 0 dangling primary_reason_id over 28 ballots (want 0)
-  [PASS] cost_and_provenance_exact: model='Qwen/Qwen3.6-27B', 4 prompt versions, substrate stamped exact on 2 games
+  [PASS] no_betrayal_ballots_or_accusations: 0 teammate-betrayal ballots/accusations over 85 multi-impostor ballots (want 0)
+  [PASS] no_railroaded_crew_ejections: 0 railroaded crew rows over 280 rendered crew suspicions (want 0)
+  [PASS] no_dangling_primary_reason_id: 0 dangling primary_reason_id over 85 ballots (want 0)
+  [PASS] cost_and_provenance_exact: model='Qwen/Qwen3.6-27B', 4 prompt versions, substrate stamped exact on 5 games
   [PASS] byte_identical_reconstruction: 0 samples drifted from byte-identical reconstruction (want 0)
 Validity gate PASSED (all checks green).
 ```
 
 The two checks the contract asks to be quoted verbatim are the last two rows above:
 `cost_and_provenance_exact: model='Qwen/Qwen3.6-27B', 4 prompt versions, substrate stamped exact on
-2 games` and `byte_identical_reconstruction: 0 samples drifted from byte-identical reconstruction
+5 games` and `byte_identical_reconstruction: 0 samples drifted from byte-identical reconstruction
 (want 0)`.
 
-**Reproducibility, as it can actually be proven.** A hosted 27B model is not a deterministic
-function of the seed — that is precisely why the engine records the model's responses and replays
-from them. So the repeat is the RECONSTRUCTION, not a second spend:
-`bash scripts/verify_samples.sh "$SMOKE_DIR"` was run twice and reported `All 2 samples verified
-clean.` both times, and the gate's `byte_identical_reconstruction` row is the same property under
-the gate's own harness.
+**That the gate passes while the instrument raises is itself the finding.** The gate checks the
+recording; it does not fold the flag class. A record can be perfectly valid and still be unmeasurable.
+
+**Reproducibility, as it can actually be proven.** A hosted 27B model is not a deterministic function
+of the seed — that is precisely why the engine records the model's responses and replays from them.
+So the repeat is the RECONSTRUCTION, not a second spend: `bash scripts/verify_samples.sh "$SMOKE_DIR"`
+was run twice and reported `All 5 samples verified clean.` both times.
 
 ## 6. The recorded substrate stamp
 
-Read out of the two `game_over` rows, not out of a live snapshot. Each carries all 22
+Read out of the five `game_over` rows, not out of a live snapshot. Each carries all 22
 `SUBSTRATE_FLAG_KEYS`: the thirteen retired levers `True`, the eight Phase-20 levers `True`, and
-`impostor_roll_call` `False` — the declared slate exactly, on both games.
+`impostor_roll_call` `False` — the declared slate exactly, on every game.
 
 ```
-seed 7  stamp keys=22  eight_ON=True  impostor_roll_call=False  OFF keys=['impostor_roll_call']
-seed 12 stamp keys=22  eight_ON=True  impostor_roll_call=False  OFF keys=['impostor_roll_call']
+seeds 7, 12, 13, 31, 40 — stamp keys=22  eight_ON=True  OFF keys=['impostor_roll_call']
 ```
 
 The wrapper's preflight read the same slate from the environment before spending, through the one
 comparison both recorders and this report use rather than re-deriving:
 `orchestrator.replay.substrate_slate_mismatches(<the eight>)` returned `[]`. The MANIFEST `flags`
-cell the recorder wrote lists the same 21 ON keys per row, with `impostor_roll_call` absent.
-**The two reads agree; there is no disagreement to report as a defect.**
+cell lists the same 21 ON keys on every row, with `impostor_roll_call` absent.
+**The two reads agree; there is no stamp disagreement to report.**
 
-## 7. Lever coverage, OBSERVED on the smoke bytes
+## 7. The prompt set that rendered
+
+Proven from recorded prompt bytes, not inferred from the version string. The phrase "one-tick
+doorways" that reads like the obvious marker lives inside the template's Jinja comment header and
+never renders, so three RENDERED v4-only strings are used instead — each counts **0** across all
+1,956 committed baseline-6 prompts (the OFF control) and non-zero here.
+
+| marker | smoke (170 prompts) | baseline-6 (1,956 prompts) |
+|---|---|---|
+| the `<map>` card's own sentence | 170 | 0 |
+| the vent-first exemption clause | 75 | 0 |
+| the `saw_move` observation shape | **75** | **0** |
+| v3's `Each flag below is VERIFIED evidence` | 0 | 619 |
+
+The recorded `prompt_versions` stamp agrees: `*.qwen3_6_27b.v4` on all four templates, all five games.
+**The third row is the one that matters for §11**: the v4 set is what first tells an agent it may
+speak `{"type": "saw_move", …}`, and 75 of the 170 recorded prompts carry that instruction.
+
+## 8. Lever coverage, OBSERVED on the smoke bytes
 
 Every RENDER marker below is discriminating: it counts **0** across all 1,956 recorded prompts and
 971 turns of the committed baseline-6 `replays/samples/9p2i` (the OFF control), so a non-zero count
-here is the lever on the live path. Two levers have no discriminating render marker and are read
-from a registered instrument cell instead; their rows say which cell and why. Counts are over the
-smoke's 56 recorded prompts / 28 turns / 5 meetings.
+here is the lever on the live path. Counts are over the smoke's 170 prompts / 85 turns / 15 meetings.
 
 | lever | observed | count | how it was read |
 |---|---|---|---|
-| `self_location_trail` | **FIRED** | 56/56 prompts | `## Where you were:` and a `Your route (t = tick): …` line in every recorded prompt |
-| `meeting_outcome_memory` | **FIRED** | 26 prompts, 794 tagged rows | `## Meetings so far:` block plus `[meeting N]`-tagged testimony frames (seed 7 only — seed 12 held one meeting, so nothing had concluded before it) |
-| `coalesced_memory_render` | **FIRED, in part** | 50 prompts | the opening whole-roster summary line (`You saw every other player in CAFETERIA: …`). **The run-folding half is UNTESTED**: zero multi-tick sighting spans were rendered |
-| `task_completion_from_events` | **FIRED** | 10 distinct completion rows, 0 fabricated | the registered I-5 cell, `0/10` (baseline-6: 19/458). The rendered completion LINE is byte-identical on both paths, so no marker scan can discriminate this lever — the cell can |
-| `structured_turn_markers` | **UNTESTED** | 0 of 28 turns | no meeting guard fired on any of the 28 turns, so the lever had no input to move. I-8 turn contamination reads `0/28`, which is consistent with the lever working AND with nothing having happened; on baseline-6 the OFF path prepended 53 `[invalid accusation target …]` markers over 971 turns |
-| `grounded_prosecution` | **UNTESTED** | 0 flags of its class | the smoke minted **zero `alibi_vs_sighting` flags** across five meetings; the lever's entire input class is empty |
-| `map_aware_arbitration` | **UNTESTED** | 0 flags of its class | as above — it re-bands `alibi_vs_sighting` and there were none |
-| `movement_claim_shape` | **UNTESTED** | I-7 `0/0` | no `alibi_vs_sighting` flag resolvable to a spoken sighting, so the movement-origin cell has no denominator |
+| `self_location_trail` | **FIRED** | 170/170 prompts | `## Where you were:` and a `Your route (t = tick): …` line in every recorded prompt |
+| `meeting_outcome_memory` | **FIRED** | 98 prompts, 2,542 tagged rows | the `## Meetings so far:` block plus `[meeting N]`-tagged testimony frames |
+| `movement_claim_shape` | **FIRED** | 2 flags | two `alibi_vs_sighting` flags whose sighting side is a spoken `saw_move` — a shape that exists only because this lever reads a spoken movement report as a placement. **These are the two flags that break the instrument (§11)** |
+| `map_aware_arbitration` | **FIRED** | 4 flags re-banded | the `adjacent room one tick away` weak reason on 4 recorded flag descriptions |
+| `coalesced_memory_render` | **FIRED, in part** | 156 prompts | the opening whole-roster summary line (`You saw every other player in …`). **The run-folding half is UNTESTED**: zero multi-tick sighting spans were rendered |
+| `grounded_prosecution` | **UNTESTED** | 0 | neither of its two bands (`ungrounded sighting`, `single grounded source`) appears on any recorded flag; the six flags of its class were all banded by other rules |
+| `structured_turn_markers` | **UNTESTED** | 0 of 85 turns | no meeting guard fired on any of the 85 turns, so the lever had no input to move. On baseline-6 the OFF path prepended 53 `[invalid accusation target …]` markers over 971 turns |
+| `task_completion_from_events` | **UNMEASURABLE** | — | its registered cell is I-5, and the instrument that computes I-5 raises before emitting anything (§11). 130 completion lines rendered, but the rendered LINE is byte-identical on both paths, so no marker scan can discriminate the lever |
 
-**Four of the eight levers are therefore named UNTESTED rather than implied green, and a fifth —
-`coalesced_memory_render` — is only half-exercised.** Three of the four untested share one cause, an
-empty `alibi_vs_sighting` class, and those three are the phase's detector centrepiece.
-The whole recorded flag census over the smoke is a single row:
+**Four levers fired, one half-fired, two are untested, and one is unmeasurable.** The recorded
+weak-signal bands over the whole set: `endpoint-tick sighting` 6, `self-stated alibi pair` 4,
+`narrow alibi window` 4, `endpoint-tick overlap` 4, `adjacent room one tick away` 4.
 
-```
-p-6 witnessed p-7 vent in ADMIN at tick 13; venting is impostor-only, and the spoken observation
-matches the witness's own record.
-```
+## 9. The honesty cells — NOT COMPUTED
 
-That is a grounded `vent_sighting` — a proof-class flag, and one produced by an already-graduated
-lever, not by any of the eight.
+**No pre-registered bar is declared met or missed on these seeds.** The point is stronger here than
+the usual caution: the cells **do not exist**. `scripts/measure_baseline.py --honesty "$SMOKE_DIR"`
+exits 1 with the reconstruction error quoted in §0 and emits no report at all, so I-2, I-3, I-4, I-5,
+I-6, I-7, I-8, I-9, I-10, I-11 and the render census have no value on this set.
 
-**Live proof that the v4 set rendered**, read out of a recorded prompt rather than inferred from the
-version string (the phrase "one-tick doorways" that reads like the obvious marker lives in the
-template's Jinja comment header and never renders, so three RENDERED v4-only strings are used
-instead; all three count 0 on the baseline-6 control):
+The one instrument that does run is the solvability ceiling, which reads the engine's kill and
+visibility record and the recorded ballots rather than the flag class:
 
 ```
-<map>
-Rooms and doors. Every door below is ONE tick of walking, so two players in rooms that share a door
-can be one tick apart:
-- ADMIN: EAST_HALL, UPPER_HALL, WEST_HALL
-...
-## Meetings so far:
-- Meeting 1 (tick 11): no ejection (4 skip). 2 impostors remain.
-
-## Where you were:
-- Your route (t = tick): CAFETERIA t0 -> EAST_HALL t1 -> ENGINEERING t2-11 -> EAST_HALL t12 -> ADMIN t13
+Solvability ceiling over <scratch>/tasks/20.35/smoke/9p2i (5 games, 15 body meetings, 9 ejections):
+  killer in candidate set: 0.9333  (14/15)
+  one candidate: 0.0  (0/15)
+  at most two candidates: 0.2  (3/15)   ... containing the killer: 1.0 (3/3)
+  ejected a player the crew had already cleared: 0.2222  (2/9)
+  killer in candidate set, last-kill anchor: 1.0  (15/15)
 ```
 
-`prompt_v4_map_card` 56/56, `prompt_v4_vent_exemption` 25, `prompt_v4_saw_move_shape` 25; the v3-only
-sentence `Each flag below is VERIFIED evidence` counts **0** here and 619 on baseline-6. The recorded
-`prompt_versions` stamp agrees: `*.qwen3_6_27b.v4` on all four templates, both games.
-
-## 8. The honesty cells on the smoke seeds — DIRECTIONAL ONLY
-
-**No pre-registered bar is declared met or missed on these seeds.** Every row below is a two-game
-reading printed beside the counterfactual memo's predicted direction, and nothing in this section
-decides anything. Counterfactual §9 item 6 fixes that rule: a directional bar that merely misses on
-the smoke seeds is explicitly NOT an abandon — it is recorded here and carried forward to the record
-audit.
-
-| cell | baseline-6 samples/9p2i (recorded) | smoke (2 games) | memo's predicted direction | directional reading at this n |
-|---|---|---|---|---|
-| I-2 false crew self-placement | 152/723 = 21.0% | 0/20 = 0.0% | NOT PREDICTABLE OFFLINE (bar 3) | down; n = 20 claims |
-| I-3 sole-flag precision (per victim) | 2/21 | 0/0 — no denominator | ON 1/4 pooled | the class did not occur |
-| I-4 grounded sighting side (at tick) | 31/58 = 53.4% | 0/0 — no denominator | ON 10/12 pooled, 1/1 on this set | the class did not occur |
-| I-5 fabricated completion lines | 19/458 = 4.1% | **0/10 = 0** | 0 on every set | reaches zero — the §9 tripwire did NOT trip |
-| I-6 adjacent-room STRONG share | 38/58 = 65.5% | 0/0 — no denominator | ON 0/1 on this set | the class did not occur |
-| I-7 movement-origin flags | 7/76 = 9.2% | 0/0 — no denominator | ON grows, 88/363 pooled | the class did not occur |
-| I-8 marker contamination (turns) | 53/971 = 5.5% | **0/28 = 0** | 0/3934 | reaches zero — the second §9 tripwire did NOT trip; coverage is vacuous (§7) |
-| I-8 marker contamination (prompts) | 246/1956 = 12.6% | 0/56 = 0.0% | PROMPT-SET-COUPLED, no ON | down |
-| I-9 singular-persona prompts | 1956/1956 = 100% | **0/56 = 0.0%** | PROMPT-SET-COUPLED, no ON | the v4 impostor-count parameterisation, live: the prompt now says "2 impostors remain" |
-| I-10 meetings with a venting participant | 16/165 = 9.7% | 1/5 = 20% | no bar | up; n = 5 meetings |
-| render: rows per snapshot (mean) | 99,959/1,956 = 51.10 | 1,974/56 = 35.25 | ON 40.77 on this set | down, past the predicted value |
-| render: reported-testimony retained | 18,319/99,959 = 18.3% | 794/1,974 = 40.2% | ON 47.9% on this set | up sharply, short of the predicted value |
-
-The two render rows quote the **recorded** baseline-6 figures (51.10 rows/snapshot, 18.3%
-retention). The memo's ON predictions are stated against its **reconstructed** OFF leg — 51.13
-rows/snapshot on this set — which is the apples-to-apples comparison it makes and the reason the two
-OFF numbers differ by 0.03 of a row.
-
-Solvability, for completeness (also two games): killer in the candidate set 5/5; one candidate 0/5;
-at most two candidates 1/5; ejected an already-cleared player 1/3.
-
-**The one observation the record audit must carry forward.** The memo predicted the STRONG
-`alibi_vs_sighting` class would shrink 234 → 12 pooled on frozen bytes; live, on this slate, the
-class did not appear at all across five meetings. Bars 4, 5 and 7 are all read on that class. Two
-games cannot establish a rate, but a record whose primary bars land on empty denominators is a
-readable outcome the pre-registration should be prepared for, and the SUPPRESSED-NOT-FIXED label
-§4.1 registers for the count bars is the language it already has for it. Recorded, not acted on.
-
-## 9. The watch items, scanned by hand
-
-1. **The `(deadline_default)` phantom.** The gate's `cost_and_provenance_exact` has a known blindness
-   around the synthetic marker, so the recorded failed-call rows were scanned directly rather than
-   trusted to the gate. **Both replays carry zero `failed_call` records of any `error_type`** — there
-   is no `deadline_default` row, and therefore no defaulted opening, reply or ballot. The recorder's
-   own summary agrees independently: `lost_openings 0 (defaults 0)`, `vote_defaults 0 (must_vote 0)`.
-2. **The prompt set actually rendered.** Proven from recorded prompt bytes, not from the version
-   string — §7.
+Directional only at n = 5, against baseline-6 `samples/9p2i` (containment 544/626 pooled at the
+corpus level; this set's own cells are in the committed 20.15 pins). Nothing here decides anything.
 
 ## 10. Operating data, and the ~23 h projection re-derived
 
 | measurement | value |
 |---|---|
-| pool wall (2 workers, 2 seeds) | 998 s = 16 m 38 s |
-| per-seed wall | seed 7 998 s; seed 12 352 s; mean 675 s |
-| worker occupancy | 1,350 busy worker-seconds of 1,996 available = **67.6%** (worker 2 idled 646 s after finishing the shorter seed — a two-seed artifact, not a pool defect: with 200 seeds queued the pool stays saturated until the tail) |
-| LLM calls | 56 (42 + 14), all `call_kind=meeting` |
-| tokens | 215,631 in + 12,693 out = 228,324; **mean 4,077 per call** |
-| tokens per meeting | mean 45,665; range 28,880 (seed 7 M3, 6 calls) to 59,402 (seed 7 M0, 16 calls) |
-| throughput | **169.1 tokens per worker-second** (338.2 aggregate at 2 workers) |
-| retries / transport blips absorbed | **0** — no `WARN … retrying` line in the run log, no attempt beyond the first for either seed |
+| operator wall, both batches | 998 s + 1,646 s = **2,644 s = 44 m 04 s** |
+| per-seed wall | 7 → 998 s; 12 → 352 s; 13 → 872 s; 31 → 808 s; 40 → 837 s; **mean 773 s** |
+| worker occupancy | 3,867 busy worker-seconds of 5,288 available = **73.1%** (the idle is the two tails; with 200 seeds queued the pool stays saturated until the last round) |
+| LLM calls | 170, all `call_kind=meeting` |
+| tokens | 674,169 in + 37,813 out = 711,982; **mean 4,188 per call** |
+| tokens per meeting | mean **47,465** over 15 meetings |
+| throughput | **184.1 tokens per worker-second** (368.2 aggregate at 2 workers) |
+| retries / transport blips absorbed | **0** — no `WARN … retrying` line in either run log, no attempt beyond the first for any seed |
 | cost | $0.0000 (flat-rate provider; every per-call `cost_usd` row is 0.0) |
 
 **The projection, two ways, both from measured tokens.** The record is 300 games: `samples/9p2i` 50,
 `ml_corpus/9p2i` 150, `samples/4p1i` 50, `ml_corpus/4p1i` 50.
 
-* **At the smoke's own game lengths** (114,162 tokens per 9p2i game) and the committed 4p1i:9p2i
-  tokens-per-game ratio of 0.066: 23.6 M tokens ÷ 338.2 tokens/s = **19.4 h**.
-* **At baseline-6 game lengths** — the honest upper bound, because both smoke games ended early by
-  impostor parity while baseline-6 averages 176,267 tokens per `samples/9p2i` game: 34.9 M tokens
-  ÷ 338.2 tokens/s = **28.6 h**.
+* **At the smoke's own game lengths** (142,396 tokens per 9p2i game) with the committed 4p1i:9p2i
+  tokens-per-game ratio of 0.066: 29.4 M tokens ÷ 368.2 tokens/s = **22.2 h**.
+* **At baseline-6 game lengths** (176,267 tokens per `samples/9p2i` game): 34.9 M tokens ÷ 368.2
+  tokens/s = **26.3 h**.
 
-The review's "~23 h operator wall, $0 flat-rate" sits inside that bracket. **The projection holds;
-no re-plan is required**, and the record's own checkpoint-per-seed-range push is what covers the
-spread. The lever that moves the estimate most is worker count, which is capped by the provider's
-concurrency (2 units per 32B request against a 4-unit cap), not by the recorder.
+The review's "~23 h operator wall, $0 flat-rate" is confirmed by measurement rather than assumed: the
+smoke's own lengths put it at 22.2 h. **No re-plan of the wall clock is required** — what is required
+is the §11 fix before any of it is spent. The lever that moves the estimate most is worker count,
+capped by the provider's concurrency (2 units per 32B request against a 4-unit cap), not by the
+recorder.
 
-## 11. The verdict, against the ratified abandon criteria
+## 11. THE DEFECT — symptom, seed, suspected file, reproduction, routing
+
+**Symptom.** `uv run python scripts/measure_baseline.py --honesty "$SMOKE_DIR"` exits 1 with
+`eval.evidence_honesty.EvidenceHonestyReconstructionError`, raised at `eval/evidence_honesty.py:2043`
+inside `_fold_flags`. No cell is emitted — the fold aborts on the first offending flag, so the whole
+five-game set is unmeasurable, not partially measurable.
+
+**Seeds and meetings.** Two flags, in two different games, both at their game's first meeting:
+
+| seed | meeting | tick | flag events | sighting-side type |
+|---|---|---|---|---|
+| 13 | `headless-seed-13:meeting-0` | 8 | `turn-4:obs:1` / `turn-6:claim:0` | `saw_move` |
+| 40 | `headless-seed-40:meeting-0` | 8 | `turn-3:obs:2` / `turn-5:claim:0` | `saw_move` |
+
+Of the six `alibi_vs_sighting` flags the smoke recorded, **four resolve (`alibi` + `saw_player`) and
+two do not (`alibi` + `saw_move`)**.
+
+**Suspected file, and the mechanism.** `eval/evidence_honesty.py::_resolve_flag` (:2083-2131) reads
+the flag's two event ids and requires **exactly one** side to be a `SawPlayerObservation`:
+
+```python
+sightings = [
+    (speaker, artifact)
+    for event_id, (speaker, artifact) in sides
+    if isinstance(artifact, SawPlayerObservation)
+    and ":whereabouts:" not in event_id
+]
+...
+if len(sightings) != 1 or len(alibis) != 1:
+    return None
+```
+
+A spoken `{"type": "saw_move", "subject": …, "from_room": …, "to_room": …, "tick": …}` is a
+different artifact type, so `sightings` is empty, `_resolve_flag` returns `None`, and `_fold_flags`
+raises by design — its guard exists precisely so an unresolvable flag cannot silently vanish from
+I-4/I-6/I-7 while still counting in the I-3 class census. **The guard is correct. What is missing is
+the resolver's knowledge of the movement-report side.** The flag itself is well-formed; its recorded
+description reads
+
+```
+Alibi places p-9 in LABS (ticks 3-8); sighting reports p-9 in MEDBAY at tick 8.
+[weak signal: endpoint-tick sighting; adjacent room one tick away]
+```
+
+— the detector read the movement's DESTINATION as the placement, which is exactly what
+`movement_claim_shape` (Task 20.23) is specified to do.
+
+**Why no offline instrument could have caught this, and why the smoke is where it had to surface.**
+The spoken `saw_move` observation shape is **new in the v4 prompt set** (Task 20.31): the v3 templates
+never told an agent it could speak a movement, so no committed baseline-6 transcript contains one
+(§7: 0 of 1,956 v3-era prompts carry the shape; 75 of 170 v4 prompts do). The 20.34 offline
+counterfactual re-runs the ON detector over the RECORDED spoken inputs — which are all v3-era — so
+its ON leg could never mint a `saw_move`-sided flag and never exercised this path. **The
+prompt-set bump and the detector lever only meet in a live recording.** That is the whole argument
+for a smoke, and it is the argument this smoke just proved.
+
+**Reproduction, exact.**
+
+```bash
+# the §2 environment block, then:
+bash scripts/refresh_samples.sh --seeds 13 --expect-levers <the eight>
+uv run python scripts/measure_baseline.py --honesty "$AILIBI_SAMPLE_DIR"   # exits 1
+```
+
+A cheaper deterministic reproduction for the follow-up's test: hand-build a meeting whose
+`alibi_vs_sighting` flag names a `saw_move` observation on one side and an `alibi` claim on the
+other, and assert `_resolve_flag` returns a resolved flag rather than `None`. The five recorded
+replays in the scratch set are the live fixture.
+
+**Blast radius.** Every bar read on the flag class — bars 4 (I-3), 5 (I-4), 7 (I-6) — plus the
+secondary I-7 movement-origin cell, and, because the fold aborts wholesale, **every other honesty
+cell too**: I-2 (bar 3), I-5 (bar 6), I-8, I-9, I-10, I-11 and the render census. Bars 1 and 2 read
+`eval/deduction`, which is a separate instrument and unaffected. Note the ugly corollary: I-5 and
+I-8 are the two cells the counterfactual §9 item 5 names as ABANDON tripwires, and **neither can be
+evaluated**, so the tripwire itself is inoperable on these bytes.
+
+**The routing slot for the owner to land.** One `eval/` follow-up contract, before the record:
+
+* teach `eval/evidence_honesty.py::_resolve_flag` the movement-report sighting side — resolve a
+  spoken `saw_move` to the placement the detector actually used (the destination room at that tick),
+  so I-4's grounding, I-6's geometry and I-7's movement-origin cell all read the same side the flag
+  was minted from;
+* ship it with a planted case proving the gate still bites for a genuinely unresolvable pair, per
+  AGENTS.md craft rule 2, and with a fixture built from the two recorded meetings above;
+* re-check whether the same blindness reaches `scripts/counterfactual_phase20.py`'s ON leg — it
+  shares `_fold_flags`, and it will meet a `saw_move` side the moment its inputs are v4 bytes;
+* then the smoke runs again. **The contract's rule is that a routed fix reopens the window and the
+  smoke re-runs from zero with every number re-derived.** One observation for the owner, offered
+  rather than decided: this fix lands in `eval/`, which is outside the frozen trees (`agents/`,
+  `meetings/`, `observation/`, `orchestrator/`, the prompt set), and it changes no recorded byte —
+  so the five replays in the scratch set could in principle be re-MEASURED rather than re-RECORDED.
+  Whether that satisfies "from zero" is the owner's call, not this report's.
+
+**The adopting record does not start.**
+
+## 12. The verdict, against the ratified abandon criteria
 
 The criteria are `audits/audit-phase-20-counterfactual.md` §9, quoted verbatim; nothing is invented
-here. Each is a mechanical check, and each is answered from the evidence above.
+here.
 
 | # | criterion, verbatim | reading |
 |---|---|---|
 | 1 | "A `scripts/validity_gate.py` FAIL on any leg. STOP." | **NOT MET** — PASSED, all ten checks green (§5) |
-| 2 | "A seed whose opening defaults — the `(deadline_default)` watch item on the opening turn. STOP." | **NOT MET** — zero `failed_call` rows of any kind in either replay (§9) |
-| 3 | "A substrate stamp that does not equal the intended slate… a non-empty result STOPS the record" | **NOT MET** — `substrate_slate_mismatches` returned `[]`, and both recorded stamps carry the eight True with `impostor_roll_call` False (§6) |
-| 4 | "A guard trip — any firewall or leak guard raising during the run. STOP." | **NOT MET** — the run exited 0 with no guard exception, and the gate's guard rows (friendly fire, betrayal ballots, railroaded ejections, dangling reason ids, tick-1 kills) are all 0 |
-| 5 | "a cell this memo predicts to reach exactly 0 that is non-zero on the smoke seeds is an ABANDON at any n" | **NOT MET** — the two such cells are I-5 fabricated completion lines (`0/10`) and I-8 marker contamination in turns (`0/28`); both read zero (§8) |
-| 6 | "NOT an abandon, explicitly: a directional bar that merely misses on five smoke seeds." | applied — every §8 row is recorded and carried forward, none acted on |
-| 7 | "Also NOT an abandon: bars 5 and 7 missing at the record." | not reached — neither bar has a reading on these seeds |
+| 2 | "A seed whose opening defaults — the `(deadline_default)` watch item on the opening turn. STOP." | **NOT MET** — zero `failed_call` rows of any `error_type` in all five replays; the recorder's own summary reads `lost_openings 0 (defaults 0)` and `vote_defaults 0 (must_vote 0)` |
+| 3 | "A substrate stamp that does not equal the intended slate… a non-empty result STOPS the record" | **NOT MET** — `substrate_slate_mismatches` returned `[]`, and all five recorded stamps carry the eight True with `impostor_roll_call` False (§6) |
+| 4 | "A guard trip — any firewall or leak guard raising during the run. STOP." | **NOT MET as written** — no firewall or leak guard raised during the run. A guard DID raise, but it is an instrument guard raising during MEASUREMENT (§11), which this criterion's wording does not reach |
+| 5 | "a cell this memo predicts to reach exactly 0 that is non-zero on the smoke seeds is an ABANDON at any n" | **CANNOT BE EVALUATED** — the two cells it names (I-5 fabricated completion lines, I-8 marker contamination in turns) are not computed at all, because the instrument that computes them raises first |
+| 6 | "NOT an abandon, explicitly: a directional bar that merely misses on five smoke seeds." | applied — and it does not reach this case: no bar MISSED here, no bar has a value |
+| 7 | "Also NOT an abandon: bars 5 and 7 missing at the record." | not reached |
 
-**GO.** No STOP condition fired, so the recording window may open and the adopting record may start
-on frozen source. The go/no-go is the owner's; this report stops here, and 20.36 is a separate
-contract.
+**No §9 criterion names this class verbatim, and this report invents none.** What it applies instead
+is the task contract's own Verification checklist — *"a Measurement that cannot be run is reported
+under `## Questions`, never asserted"* — and the contract's framing of the fork: GO means the record
+starts; **ABANDON means the defect is described concretely enough to author a follow-up contract, the
+routing is named, and the record does not start.** All three hold, so the verdict is recorded as
+**ABANDON**.
 
-Because this is a GO, the ABANDON branch has nothing to state: there is no defect to describe, no
-seed to name, no reproduction to write, and no follow-up contract to route. The one thing that DOES
-travel forward is §8's carried observation about the empty `alibi_vs_sighting` class — an
-expectation for the record audit, not a defect and not a routing slot.
+The stronger statement, for the owner: criterion 5 is not merely unmet, it is **inoperable** on these
+bytes. A record taken now would spend ~22 h to produce a set whose ratified tripwire cannot fire and
+whose primary bars have no reading. **The go/no-go on restarting is the owner's**; this report stops
+here.
 
-
-
-## 12. Operating notes the record must carry
+## 13. Operating notes the record must carry
 
 1. **The gate and the instruments must run under the recorded slate.**
    `api/replay_loader.py::_assert_substrate_matches` refuses a cross-substrate reconstruction, so
    `validity_gate.py`, `verify_samples.sh` and `measure_baseline.py` pointed at these bytes must run
    in a shell carrying the same eight `AILIBI_*` exports; the bare committed-set gate must run
    without them. Both were run that way here. This is the mechanism the pre-registration §6 already
-   names when it explains why no subset of levers may graduate — it is not new, but an operator who
-   drops the exports between the record and the gate will read a refusal, not a result.
+   names when it explains why no subset of levers may graduate — not new, but an operator who drops
+   the exports between the record and the gate will read a refusal, not a result.
 2. **`--expect-levers` is required on the dry run too.** Since Task 20.33 the preflight runs on the
-   preview path, so a bare `--dry-run` under a phase-20 shell exits 1. That is the guard working.
+   preview path, so a bare `--dry-run` under a Phase-20 shell exits 1. That is the guard working.
+3. **The validity gate is not a measurement gate.** It passed cleanly on a set the honesty instrument
+   cannot fold. Any future record protocol should run the honesty instrument on the FIRST completed
+   seed, not after the whole set — the smoke is what caught this at 44 minutes instead of 22 hours,
+   and a per-seed instrument check would catch it at 15.
 
-## 13. Reproduction
+## 14. Reproduction
 
 ```bash
 # the environment block of §2, exported first, then:
@@ -411,13 +473,15 @@ bash scripts/refresh_samples.sh --seeds 7,12 --expect-levers \
   task_completion_from_events,self_location_trail,movement_claim_shape,grounded_prosecution,\
 map_aware_arbitration,structured_turn_markers,meeting_outcome_memory,coalesced_memory_render \
   --dry-run                      # preview; writes nothing
-bash scripts/refresh_samples.sh --seeds 7,12 --expect-levers <the same eight>   # the record
+bash scripts/refresh_samples.sh --seeds 7,12 --expect-levers <the same eight>
+bash scripts/refresh_samples.sh --seeds 13,31,40 --expect-levers <the same eight>
 
 # gate, then measure, in that order — under the same exports
 uv run python scripts/validity_gate.py "$AILIBI_SAMPLE_DIR" \
-  --expected-model Qwen/Qwen3.6-27B --require-zero-cost
-bash scripts/verify_samples.sh "$AILIBI_SAMPLE_DIR"
-uv run python scripts/measure_baseline.py --honesty "$AILIBI_SAMPLE_DIR"
+  --expected-model Qwen/Qwen3.6-27B --require-zero-cost      # PASS
+bash scripts/verify_samples.sh "$AILIBI_SAMPLE_DIR"          # clean, twice
+uv run python scripts/measure_baseline.py --honesty "$AILIBI_SAMPLE_DIR"      # EXITS 1 — §11
+uv run python scripts/measure_baseline.py --solvability "$AILIBI_SAMPLE_DIR"  # runs
 
 # the committed sets, in a shell with NO lever exports
 bash scripts/verify_samples.sh
@@ -449,8 +513,5 @@ print("seeds", len(rows), "meetings", sum(r[1] for r in rows), dict(kinds))
 print("alibi_vs_sighting seeds", sum(1 for r in rows if r[3]["alibi_vs_sighting"]))
 print("alibi_conflict seeds", [r[0] for r in rows if r[3]["alibi_conflict"]])
 print("reasons", dict(collections.Counter(r[4] for r in rows)))
-for r in rows:
-    if r[0] in (7, 12):
-        print("seed", r[0], "meetings", r[1], "ejections", r[2], dict(r[3]), r[4])
 PY
 ```
