@@ -22,9 +22,14 @@ from typing import Final
 
 import pytest
 
-from eval.evidence_honesty import compute_evidence_honesty
+from agents.memory.episodic import EpisodicEvent, MemoryStore
+from agents.memory.store import AgentMemory
+from agents.perception import EVENT_SAW_PLAYER, EVENT_SELF_STATE, PROVENANCE_OBSERVED
+from eval.evidence_honesty import compute_evidence_honesty, live_impostor_policy
+from engine.entities import Role
 from meetings.schemas import ContradictionRef
 from meetings.transcript import detect_contradictions
+from orchestrator.game import TacticalAgent
 from orchestrator.replay import (
     TOGGLEABLE_SUBSTRATE_FLAG_KEYS,
     env_var_for_lever,
@@ -337,6 +342,105 @@ def test_the_reconstruction_reproduces_every_recorded_flag_on_the_fast_set() -> 
     off = walk.legs["off"].tallies
     assert off.adjacent_flags == recorded.adjacent_room_flags.adjacent.numerator
     assert off.strong_flags == recorded.adjacent_room_flags.adjacent.denominator
+
+
+def test_the_sighting_channel_is_the_two_stage_production_composition() -> None:
+    """The channel the detector grounds against is the accessor AND the manager.
+
+    ``TacticalAgent.sighting_records_for_meeting`` deliberately KEEPS an
+    impostor's rows naming a fellow impostor (its only other consumer
+    corroborates); ``MeetingManager`` drops them when it builds the per-speaker
+    mapping it threads into ``detect_contradictions`` (meetings/manager.py, "The
+    §4.7 TEAMMATE firewall is applied HERE, not inherited"). Reading either half
+    alone gives the ON slate a channel production never grounds against, so this
+    composes both and pins the counterfactual's rebuild against the result.
+    """
+
+    roles: Mapping[str, Role] = {
+        "p-1": "IMPOSTOR",
+        "p-2": "IMPOSTOR",
+        "p-3": "CREWMATE",
+    }
+    store = MemoryStore()
+    store.append(
+        EpisodicEvent(
+            tick=1,
+            type=EVENT_SELF_STATE,
+            payload={
+                "agent_id": "p-1",
+                "room": "CAFETERIA",
+                "role": "IMPOSTOR",
+                "pending_task_id": None,
+                "owned_task_ids": (),
+                "fellow_impostor_ids": ("p-2",),
+                "in_vent": False,
+            },
+            provenance=PROVENANCE_OBSERVED,
+            observation_id="p-1:1:0",
+        )
+    )
+    for index, subject in enumerate(("p-2", "p-3")):
+        store.append(
+            EpisodicEvent(
+                tick=1,
+                type=EVENT_SAW_PLAYER,
+                payload={"player_id": subject, "room": "CAFETERIA"},
+                provenance=PROVENANCE_OBSERVED,
+                observation_id=f"p-1:1:{index + 1}",
+            )
+        )
+
+    agent = TacticalAgent(
+        agent_id="p-1",
+        policy=live_impostor_policy("p-1"),
+        role="IMPOSTOR",
+        memory=AgentMemory(episodic=store),
+    )
+    accessor_rows = agent.sighting_records_for_meeting()
+    # Stage 1 keeps the teammate row — this is the half a reader can mistake for
+    # the whole channel.
+    assert {record.subject for record in accessor_rows} == {"p-2", "p-3"}
+    # Stage 2 is the manager's own filter, restated from its source predicate.
+    fellows = frozenset(("p-2",))
+    production = tuple(
+        record for record in accessor_rows if record.subject not in fellows
+    )
+    assert {record.subject for record in production} == {"p-3"}
+    # And the counterfactual rebuilds the COMPOSITION, not either half.
+    rebuilt = cf._sighting_channel(store, speaker="p-1", roles=roles)
+    assert rebuilt == production
+    # A crewmate speaker filters nothing, in either path.
+    crew_store = MemoryStore()
+    crew_store.append(
+        EpisodicEvent(
+            tick=1,
+            type=EVENT_SELF_STATE,
+            payload={
+                "agent_id": "p-3",
+                "room": "CAFETERIA",
+                "role": "CREWMATE",
+                "pending_task_id": None,
+                "owned_task_ids": (),
+                "fellow_impostor_ids": (),
+                "in_vent": False,
+            },
+            provenance=PROVENANCE_OBSERVED,
+            observation_id="p-3:1:0",
+        )
+    )
+    crew_store.append(
+        EpisodicEvent(
+            tick=1,
+            type=EVENT_SAW_PLAYER,
+            payload={"player_id": "p-1", "room": "CAFETERIA"},
+            provenance=PROVENANCE_OBSERVED,
+            observation_id="p-3:1:1",
+        )
+    )
+    assert [
+        record.subject
+        for record in cf._sighting_channel(crew_store, speaker="p-3", roles=roles)
+    ] == ["p-1"]
 
 
 # --------------------------------------------------------------------------- #

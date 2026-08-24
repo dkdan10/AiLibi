@@ -347,12 +347,23 @@ def _sighting_channel(
 ) -> tuple[SightingRecord, ...]:
     """One speaker's first-hand sightings, as the prosecution channel gets them.
 
-    The shape ``TacticalAgent.sighting_records_for_meeting`` produces, with the
-    §4.7 teammate filter ``meetings.manager`` applies when it builds the mapping:
-    first-hand ``saw_player`` rows minus the incriminating actions, minus (for an
-    impostor) the rows naming a fellow impostor, carrying the co-presence
-    projection. Reconstruction plumbing, not a cell — its correctness is proven by
-    the OFF leg reproducing the recorded flags, which is asserted per meeting.
+    The channel production feeds ``detect_contradictions`` is a TWO-STAGE
+    composition and this rebuilds both stages, not just the first:
+
+    1. ``TacticalAgent.sighting_records_for_meeting`` — first-hand ``saw_player``
+       rows minus the incriminating actions, with the co-presence projection. It
+       deliberately does NOT drop an impostor's rows naming a fellow impostor,
+       because its other consumer only corroborates, and its docstring says a
+       prosecuting consumer must re-apply the suppression;
+    2. ``MeetingManager`` — which IS that prosecuting consumer, and applies the
+       §4.7 teammate filter when it builds the per-speaker mapping it threads
+       into the detector.
+
+    Reading stage 1 alone would hand the ON slate a WIDER channel than production
+    ever grounds against. ``tests/scripts/test_counterfactual_phase20.py``
+    composes the two production halves on a constructed memory and asserts this
+    function equals them, so the composition cannot silently drift to either half.
+    Reconstruction plumbing, not a cell.
     """
 
     fellows = _fellows(speaker=speaker, roles=roles)
