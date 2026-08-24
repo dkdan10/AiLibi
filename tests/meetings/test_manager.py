@@ -31,7 +31,7 @@ is also exercised to confirm Protocol compatibility + determinism.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
@@ -39,6 +39,13 @@ from types import MappingProxyType
 import pytest
 from pydantic import BaseModel, ValidationError
 
+from agents.strategic.prompts.loader import (
+    ACCUSATION_ROUND_ROLL_CALL_TEMPLATE,
+    ACCUSATION_ROUND_TEMPLATE,
+    accusation_round_prompt,
+    build_environment,
+    build_prompt_renderers,
+)
 from agents.memory.beliefs import (
     ACCUSATION_SUSPICION_DELTA,
     CONTRADICTION_RENDER_CEIL,
@@ -59,6 +66,8 @@ from meetings.manager import (
     EMERGENCY_BODY_STRIP_MARKER,
     EMERGENCY_NO_BODY_RETRY_FEEDBACK,
     ENV_ROLL_CALL_ROUND,
+    ENV_STRUCTURED_TURN_MARKERS,
+    EMERGENCY_TRIGGER_PHRASE,
     INVALID_ACCUSATION_TARGET_MARKER,
     INVALID_ALIBI_SUBJECT_MARKER,
     INVALID_CORROBORATION_SUPPORTS_MARKER,
@@ -86,6 +95,7 @@ from meetings.manager import (
     _normalize_self_alibi_subjects,  # noqa: PLC2701
     _suspicion_graph_with_contradictions,  # noqa: PLC2701
     _trigger_is_emergency,  # noqa: PLC2701
+    _turn_annotation_marker,  # noqa: PLC2701
     coerce_teammate_ballot_to_skip,
     derive_belief_evidence,
     drop_teammate_statement_target,
@@ -93,6 +103,7 @@ from meetings.manager import (
     extract_belief_evidence,
     guard_ballot_target_graph,
     roll_call_round_enabled,
+    structured_turn_markers_enabled,
 )
 from meetings.schemas import (
     AccusationClaim,
@@ -109,6 +120,7 @@ from meetings.schemas import (
     SawPlayerObservation,
     SawVentObservation,
     SightingRecord,
+    TurnAnnotation,
     VentWitnessRecord,
     VoteBallot,
 )
@@ -2399,13 +2411,15 @@ class TestInvalidAccusationTargetDropped:
                 type="corroboration", supports="p-3", on_tick=1, reason="r"
             ),
         )
-        surviving, markers = _drop_non_roster_claims(
+        surviving, annotations = _drop_non_roster_claims(
             claims, living_ids=frozenset({"p-1", "p-2", "p-3", "p-4"})
         )
 
         # The hallucinated 'imp-2' accusation is dropped; the valid 'p-3'
         # accusation and the (valid-supports) corroboration survive in order.
-        assert markers == (INVALID_ACCUSATION_TARGET_MARKER.format(target="imp-2"),)
+        assert annotations == (
+            TurnAnnotation(kind="invalid_accusation_target", original="imp-2"),
+        )
         accusation_targets = [
             c.against for c in surviving if isinstance(c, AccusationClaim)
         ]
@@ -2418,10 +2432,10 @@ class TestInvalidAccusationTargetDropped:
                 type="accusation", against="p-3", confidence=0.6, reason="r"
             ),
         )
-        surviving, markers = _drop_non_roster_claims(
+        surviving, annotations = _drop_non_roster_claims(
             claims, living_ids=frozenset({"p-1", "p-2", "p-3", "p-4"})
         )
-        assert markers == ()
+        assert annotations == ()
         assert surviving == claims
 
     def test_hallucinated_opening_accusation_retries_then_degrades(self) -> None:
@@ -4202,12 +4216,20 @@ class TestNonRosterClaimSubjectsDropped:
             ),
         )
 
-        surviving, markers = _drop_non_roster_claims(
+        surviving, annotations = _drop_non_roster_claims(
             claims, living_ids=frozenset({"p-1", "p-2", "p-3", "p-4"})
         )
 
-        # Markers carry each dropped field's original value, in claim order.
-        assert markers == (
+        # Each annotation names the dropped field and keeps its original value,
+        # in claim order; the OFF-path marker renders from the same row.
+        assert annotations == (
+            TurnAnnotation(kind="invalid_alibi_subject", original="headless-seed-9"),
+            TurnAnnotation(kind="invalid_accusation_target", original="imp-2"),
+            TurnAnnotation(
+                kind="invalid_corroboration_supports", original="m-1:turn-0"
+            ),
+        )
+        assert tuple(_turn_annotation_marker(a) for a in annotations) == (
             INVALID_ALIBI_SUBJECT_MARKER.format(subject="headless-seed-9"),
             INVALID_ACCUSATION_TARGET_MARKER.format(target="imp-2"),
             INVALID_CORROBORATION_SUPPORTS_MARKER.format(supports="m-1:turn-0"),
@@ -4486,12 +4508,12 @@ class TestCommittedBytesRosterDropPins:
                         for claim in turn.claims
                         if isinstance(claim, (AlibiClaim, CorroborationClaim))
                     )
-                    surviving, markers = _drop_non_roster_claims(
+                    surviving, annotations = _drop_non_roster_claims(
                         turn.claims, living_ids=living
                     )
-                    assert markers == (), (
+                    assert annotations == (), (
                         f"recorded claim would drop in {entry.meeting_id} "
-                        f"turn {turn.turn_index}: {markers}"
+                        f"turn {turn.turn_index}: {annotations}"
                     )
                     assert surviving == turn.claims
         # Non-vacuous: the walk exercised real subject-bearing claims.
@@ -4614,17 +4636,18 @@ class TestBoundedDropMarkers:
                 type="alibi", subject=blob, from_tick=400, to_tick=410, room="ADMIN"
             ),
         )
-        surviving, markers = _drop_non_roster_claims(
+        surviving, annotations = _drop_non_roster_claims(
             claims, living_ids=frozenset({"p-1", "p-2"})
         )
 
         assert surviving == ()
-        assert markers == (
-            INVALID_ALIBI_SUBJECT_MARKER.format(
-                subject=blob[:MARKER_QUOTED_ORIGINAL_MAX_CHARS] + "..."
-            ),
+        bounded = blob[:MARKER_QUOTED_ORIGINAL_MAX_CHARS] + "..."
+        assert annotations == (
+            TurnAnnotation(kind="invalid_alibi_subject", original=bounded),
         )
-        assert len(markers[0]) < 120
+        marker = _turn_annotation_marker(annotations[0])
+        assert marker == INVALID_ALIBI_SUBJECT_MARKER.format(subject=bounded)
+        assert len(marker) < 120
 
     def test_sibling_markers_share_the_bound(self) -> None:
         blob = "x" * 500
@@ -4636,10 +4659,14 @@ class TestBoundedDropMarkers:
                 type="corroboration", supports=blob, on_tick=400, reason="r"
             ),
         )
-        _, markers = _drop_non_roster_claims(claims, living_ids=frozenset({"p-1"}))
+        _, annotations = _drop_non_roster_claims(claims, living_ids=frozenset({"p-1"}))
 
         bounded = blob[:MARKER_QUOTED_ORIGINAL_MAX_CHARS] + "..."
-        assert markers == (
+        assert annotations == (
+            TurnAnnotation(kind="invalid_accusation_target", original=bounded),
+            TurnAnnotation(kind="invalid_corroboration_supports", original=bounded),
+        )
+        assert tuple(_turn_annotation_marker(a) for a in annotations) == (
             INVALID_ACCUSATION_TARGET_MARKER.format(target=bounded),
             INVALID_CORROBORATION_SUPPORTS_MARKER.format(supports=bounded),
         )
@@ -4650,8 +4677,10 @@ class TestBoundedDropMarkers:
                 type="accusation", against="p-99", confidence=0.5, reason="r"
             ),
         )
-        _, markers = _drop_non_roster_claims(claims, living_ids=frozenset({"p-1"}))
-        assert markers == (INVALID_ACCUSATION_TARGET_MARKER.format(target="p-99"),)
+        _, annotations = _drop_non_roster_claims(claims, living_ids=frozenset({"p-1"}))
+        assert annotations == (
+            TurnAnnotation(kind="invalid_accusation_target", original="p-99"),
+        )
 
 
 class TestRule3RelevanceGateAtTheEvidenceSeam:
@@ -7373,3 +7402,333 @@ class TestGroundedProsecutionWiring:
             trigger_kind="report",
             sighting_records=records,
         )
+
+
+# ---------------------------------------------------------------------------
+# Structured turn markers: the audit trail leaves the spoken text
+# ---------------------------------------------------------------------------
+
+
+# The five turn-side audit markers' static heads, derived from the constants
+# (never retyped), so a search for "did any of them survive?" needs one list.
+_TURN_MARKER_HEADS: tuple[str, ...] = tuple(
+    marker.partition("{")[0]
+    for marker in (
+        INVALID_ACCUSATION_TARGET_MARKER,
+        INVALID_ALIBI_SUBJECT_MARKER,
+        INVALID_CORROBORATION_SUPPORTS_MARKER,
+        EMERGENCY_BODY_STRIP_MARKER,
+        OPENING_UNSURE_DEGRADE_MARKER,
+    )
+)
+
+# The invalid values planted below, one per claim field plus the two
+# payload-free guards.
+_PLANTED_TARGET = "imp-2"
+_PLANTED_SUBJECT = "headless-seed-9"
+_PLANTED_SUPPORTS = "m-1:turn-0"
+_PLANTED_LATER_SUBJECT = "ghost-1"
+
+
+def _assert_free_of_turn_markers(texts: Iterable[str]) -> None:
+    """Fail if any of the five turn-side audit markers appears in ``texts``."""
+
+    for text in texts:
+        for head in _TURN_MARKER_HEADS:
+            assert head not in text, f"{head!r} survived into: {text[:200]!r}"
+
+
+def _planted_responder(
+    participants: tuple[MeetingParticipant, ...],
+    *,
+    later_subject: str = _PLANTED_LATER_SUBJECT,
+) -> Callable[[str, type[BaseModel] | None], str]:
+    """Drive every one of the five turn-side guards from one meeting.
+
+    The opener plants all three claim-field drops AND a fabricated found_body in
+    an EMERGENCY meeting AND (by having no surviving accusation and no "unsure")
+    the twice-failed-opening degrade, so its recorded turn carries all five.
+    Every later speaker plants one dropped alibi, which takes the OTHER
+    recording branch (the ordinary per-turn one).
+    """
+
+    def _responder(prompt: str, schema: type[BaseModel] | None) -> str:
+        speaker = next(
+            (p.agent_id for p in participants if f"{p.agent_id} memory" in prompt),
+            None,
+        )
+        assert speaker is not None, f"no participant memory in prompt: {prompt[:200]!r}"
+        if schema is VoteBallot:
+            return _vote_json(voter=speaker, target="SKIP")
+        if speaker == participants[0].agent_id:
+            return _turn_json(
+                speaker=speaker,
+                accuses=_PLANTED_TARGET,
+                observations=(
+                    FoundBodyObservation(
+                        type="found_body", tick=400, body_of="p-9", room="ADMIN"
+                    ),
+                ),
+                claims=(
+                    AlibiClaim(
+                        type="alibi",
+                        subject=_PLANTED_SUBJECT,
+                        from_tick=400,
+                        to_tick=405,
+                        room="ADMIN",
+                    ),
+                    CorroborationClaim(
+                        type="corroboration",
+                        supports=_PLANTED_SUPPORTS,
+                        on_tick=401,
+                        reason="r",
+                    ),
+                ),
+            )
+        return _turn_json(
+            speaker=speaker,
+            claims=(
+                AlibiClaim(
+                    type="alibi",
+                    subject=later_subject,
+                    from_tick=400,
+                    to_tick=405,
+                    room="ADMIN",
+                ),
+            ),
+        )
+
+    return _responder
+
+
+def _run_planted_meeting(
+    *, later_subject: str = _PLANTED_LATER_SUBJECT
+) -> tuple[MeetingResult, list[str]]:
+    """Run the planted meeting through the REAL prompt templates.
+
+    The scripted renderers in ``_manager_helpers`` never render a turn's
+    ``free_text``, so a "no marker reached a prompt" assertion over them would
+    be vacuous. These are the production templates -- the transcript block IS
+    ``said: "{turn.free_text}"`` -- so the recorded prompts here are the same
+    bytes a recording would carry. Returns the result and every rendered prompt.
+    """
+
+    participants = _crew_participants()
+    renderers = build_prompt_renderers("qwen3_6_27b", env={})
+    client = _ScriptedLLMClient(
+        responder=_planted_responder(participants, later_subject=later_subject)
+    )
+    manager = MeetingManager(
+        llm_client=client,
+        crewmate_report_prompt=renderers.crewmate_report,
+        impostor_report_prompt=renderers.impostor_report,
+        statement_prompt=renderers.statement,
+        vote_prompt=renderers.vote,
+        config=MeetingConfig(
+            deadlines=MeetingDeadlines(), skip_confidence_threshold=0.6
+        ),
+    )
+    result = _run(
+        manager.run(
+            meeting_id="m-1",
+            trigger=MeetingTrigger(
+                triggered_by="p-1",
+                trigger_tick=410,
+                description=f"p-1 {EMERGENCY_TRIGGER_PHRASE} at tick 410",
+            ),
+            participants=participants,
+        )
+    )
+    return result, [call.prompt for call in client.calls]
+
+
+class TestStructuredTurnMarkersResolver:
+    """The lever reads one variable, defaults OFF, and takes the four words."""
+
+    def test_default_is_off(self) -> None:
+        assert structured_turn_markers_enabled({}) is False
+        assert (
+            structured_turn_markers_enabled({ENV_STRUCTURED_TURN_MARKERS: ""}) is False
+        )
+        assert (
+            structured_turn_markers_enabled({ENV_STRUCTURED_TURN_MARKERS: "0"}) is False
+        )
+        assert (
+            structured_turn_markers_enabled({ENV_STRUCTURED_TURN_MARKERS: "maybe"})
+            is False
+        )
+
+    @pytest.mark.parametrize("value", ["1", "true", "TRUE", "yes", "on", " On "])
+    def test_truthy_words_enable_it(self, value: str) -> None:
+        assert structured_turn_markers_enabled({ENV_STRUCTURED_TURN_MARKERS: value})
+
+    def test_process_environment_is_the_default_source(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv(ENV_STRUCTURED_TURN_MARKERS, raising=False)
+        assert structured_turn_markers_enabled() is False
+        monkeypatch.setenv(ENV_STRUCTURED_TURN_MARKERS, "1")
+        assert structured_turn_markers_enabled() is True
+
+
+class TestStructuredTurnMarkersOff:
+    """OFF, every guard still splices its marker into the spoken text."""
+
+    def test_both_recording_branches_splice_the_identical_markers(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv(ENV_STRUCTURED_TURN_MARKERS, raising=False)
+        result, prompts = _run_planted_meeting()
+
+        # Branch 1 -- the twice-failed opening rebuilt as unsure. All five
+        # markers, in the order the pre-lever code produced them.
+        opening = result.transcript.turns[0]
+        assert opening.free_text == (
+            OPENING_UNSURE_DEGRADE_MARKER
+            + EMERGENCY_BODY_STRIP_MARKER
+            + INVALID_ALIBI_SUBJECT_MARKER.format(subject=_PLANTED_SUBJECT)
+            + INVALID_CORROBORATION_SUPPORTS_MARKER.format(supports=_PLANTED_SUPPORTS)
+            + INVALID_ACCUSATION_TARGET_MARKER.format(target=_PLANTED_TARGET)
+            + "turn from p-1"
+        )
+        assert opening.annotations == ()
+
+        # Branch 2 -- the ordinary per-turn recording.
+        later = [turn for turn in result.transcript.turns if turn.turn_index > 0]
+        assert later, "the planted meeting must record turns after the opening"
+        for turn in later:
+            assert turn.free_text.startswith(
+                INVALID_ALIBI_SUBJECT_MARKER.format(subject=_PLANTED_LATER_SUBJECT)
+            )
+            assert turn.annotations == ()
+
+        # And the markers really do travel into the rendered prompts.
+        contaminated = [
+            prompt
+            for prompt in prompts
+            if any(head in prompt for head in _TURN_MARKER_HEADS)
+        ]
+        assert len(contaminated) >= 2
+
+    def test_a_recorded_turn_gains_no_annotations_key(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The serialization half of OFF-path identity: an empty annotations
+        # tuple is elided, so newly recorded bytes carry the pre-lever key set.
+        monkeypatch.delenv(ENV_STRUCTURED_TURN_MARKERS, raising=False)
+        result, _prompts = _run_planted_meeting()
+        for turn in result.transcript.turns:
+            assert "annotations" not in turn.model_dump(mode="json")
+
+
+class TestStructuredTurnMarkersOn:
+    """ON, the audit trail is typed and the spoken text is the model's words."""
+
+    def test_no_marker_reaches_free_text_the_transcript_or_a_prompt(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv(ENV_STRUCTURED_TURN_MARKERS, "1")
+        result, prompts = _run_planted_meeting()
+
+        _assert_free_of_turn_markers(turn.free_text for turn in result.transcript.turns)
+        _assert_free_of_turn_markers(prompts)
+        # The transcript BLOCK specifically -- rendered through both statement
+        # templates and the ballot template, the five unfiltered free_text
+        # renders this task is about.
+        _assert_free_of_turn_markers(
+            _rendered_transcript_surfaces(result.transcript.turns)
+        )
+        assert result.transcript.turns[0].free_text == "turn from p-1"
+
+    def test_every_dropped_claim_is_recoverable_in_claim_order(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv(ENV_STRUCTURED_TURN_MARKERS, "1")
+        result, _prompts = _run_planted_meeting()
+
+        assert result.transcript.turns[0].annotations == (
+            TurnAnnotation(kind="opening_degraded_unsure"),
+            TurnAnnotation(kind="fabricated_opening"),
+            TurnAnnotation(kind="invalid_alibi_subject", original=_PLANTED_SUBJECT),
+            TurnAnnotation(
+                kind="invalid_corroboration_supports", original=_PLANTED_SUPPORTS
+            ),
+            TurnAnnotation(kind="invalid_accusation_target", original=_PLANTED_TARGET),
+        )
+        for turn in result.transcript.turns[1:]:
+            assert turn.annotations == (
+                TurnAnnotation(
+                    kind="invalid_alibi_subject", original=_PLANTED_LATER_SUBJECT
+                ),
+            )
+
+    def test_the_quoted_original_is_still_bounded(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The gp-6 H-H-4 bound applies to the structured channel too: a
+        # hallucinated mega-value cannot balloon the recorded turn.
+        monkeypatch.setenv(ENV_STRUCTURED_TURN_MARKERS, "1")
+        blob = "I think the body was found near ADMIN and " * 80
+        result, _prompts = _run_planted_meeting(later_subject=blob)
+
+        (annotation,) = result.transcript.turns[1].annotations
+        assert annotation.original == blob[:MARKER_QUOTED_ORIGINAL_MAX_CHARS] + "..."
+
+    def test_the_marker_assertion_bites_when_a_marker_is_respliced(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The perturbation: put ONE marker back into a recorded turn and both
+        # legs of the gate above must fail.
+        monkeypatch.setenv(ENV_STRUCTURED_TURN_MARKERS, "1")
+        result, _prompts = _run_planted_meeting()
+        clean = result.transcript.turns[0]
+        poisoned = clean.model_copy(
+            update={
+                "free_text": INVALID_ACCUSATION_TARGET_MARKER.format(
+                    target=_PLANTED_TARGET
+                )
+                + clean.free_text
+            }
+        )
+
+        with pytest.raises(AssertionError):
+            _assert_free_of_turn_markers([poisoned.free_text])
+        with pytest.raises(AssertionError):
+            _assert_free_of_turn_markers(
+                _rendered_transcript_surfaces((poisoned, *result.transcript.turns[1:]))
+            )
+
+
+def _rendered_transcript_surfaces(turns: tuple[MeetingTurn, ...]) -> list[str]:
+    """The three production renders that print a turn's ``free_text``."""
+
+    transcript = MeetingTranscript(turns=tuple(turns))
+    participant = _crew_participants()[1]
+    environment = build_environment("qwen3_6_27b")
+    surfaces = [
+        accusation_round_prompt(
+            agent_id=participant.agent_id,
+            rendered_memory=participant.rendered_memory,
+            transcript=transcript,
+            contradictions=(),
+            prior_turn=turns[0],
+            turn_kind="reply",
+            living_ids=("p-1", "p-2", "p-3", "p-4"),
+            environment=environment,
+            template_name=template,
+        )
+        for template in (ACCUSATION_ROUND_TEMPLATE, ACCUSATION_ROUND_ROLL_CALL_TEMPLATE)
+    ]
+    surfaces.append(
+        vote_ballot_prompt(
+            voter_id=participant.agent_id,
+            rendered_memory=participant.rendered_memory,
+            transcript=transcript,
+            contradiction_flags=(),
+            suspicion_graph=(),
+            candidate_targets=("p-1", "p-3", "p-4"),
+            skip_confidence_threshold=0.6,
+            environment=environment,
+        )
+    )
+    return surfaces

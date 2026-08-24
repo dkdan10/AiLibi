@@ -32,9 +32,16 @@ shape stop validating and are re-recorded in Task 8.12.
 
 from __future__ import annotations
 
-from typing import Annotated, Literal, TypeAlias
+from typing import Annotated, Any, Literal, TypeAlias
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SerializerFunctionWrapHandler,
+    model_serializer,
+    model_validator,
+)
 
 PlayerId: TypeAlias = str
 RoomId: TypeAlias = str
@@ -355,6 +362,42 @@ TurnKind: TypeAlias = Literal["opening", "reply", "opt_in"]
 """
 
 
+TurnAnnotationKind: TypeAlias = Literal[
+    "invalid_accusation_target",
+    "invalid_alibi_subject",
+    "invalid_corroboration_supports",
+    "fabricated_opening",
+    "opening_degraded_unsure",
+]
+"""What a manager guard changed about a turn before recording it.
+
+The first three name the subject-bearing claim field whose value named no
+living participant, so the claim was dropped
+(:func:`meetings.manager._drop_non_roster_claims`); ``fabricated_opening`` is
+an emergency opening whose invented ``found_body`` was stripped; and
+``opening_degraded_unsure`` is a twice-failed opening rebuilt as an unsure
+position. The spectator surface renders exactly this vocabulary as chips.
+"""
+
+
+class TurnAnnotation(_FrozenModel):
+    """One manager-authored note about what a guard changed on this turn.
+
+    The typed channel for facts that are ABOUT a turn rather than said in it.
+    ``free_text`` is what the speaker authored and nothing else, so the
+    audit trail no longer travels inside quoted dialogue into every later
+    speaker's prompt.
+
+    ``original`` carries the dropped value for the three claim-field kinds,
+    bounded by :data:`meetings.manager.MARKER_QUOTED_ORIGINAL_MAX_CHARS` so a
+    hallucinated mega-value cannot balloon the record; it is ``None`` for the
+    two kinds that drop no value.
+    """
+
+    kind: TurnAnnotationKind
+    original: str | None = None
+
+
 class MeetingTurn(_FrozenModel):
     """One entry in the ordered ``transcript.turns`` list (DESIGN.md §5.2).
 
@@ -381,6 +424,23 @@ class MeetingTurn(_FrozenModel):
     observations: tuple[ObservationClaim, ...] = ()
     claims: tuple[Claim, ...] = ()
     free_text: str
+    annotations: tuple[TurnAnnotation, ...] = ()
+
+    @model_serializer(mode="wrap")
+    def _serialize(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        """Serialize the turn, omitting ``annotations`` when it is empty.
+
+        The overwhelming majority of turns carry no annotation, and a key that
+        appears only when a guard fired keeps a recorded turn's bytes to what
+        actually happened -- so a replay recorded without annotations is
+        byte-identical to one recorded before the field existed. Reading is
+        unaffected: the field defaults to empty.
+        """
+
+        data: dict[str, Any] = handler(self)
+        if not self.annotations:
+            data.pop("annotations", None)
+        return data
 
 
 # ---------------------------------------------------------------------------
@@ -616,6 +676,8 @@ __all__ = [
     "SawVentObservation",
     "SightingRecord",
     "TaskId",
+    "TurnAnnotation",
+    "TurnAnnotationKind",
     "TurnId",
     "TurnKind",
     "VentWitnessRecord",

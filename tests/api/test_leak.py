@@ -95,6 +95,8 @@ EXPECTED_DTOS: Final[frozenset[str]] = frozenset(
         "SawVentObservationView",
         # Task 16.7.1 — spectator mirror of the Task 16.7 roll-call self-placement:
         "WhereaboutsClaimView",
+        # Spectator mirror of the witnessed transition (meetings SawMoveObservation):
+        "SawMoveObservationView",
         "AlibiClaimView",
         "AccusationClaimView",
         "CorroborationClaimView",
@@ -460,6 +462,11 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "against",
         "agent_id",
         "alibi_fabrication",
+        # What a meeting guard changed about a turn (TurnAnnotation): the typed
+        # channel the audit markers used to occupy inside spoken free_text. The
+        # kind names a claim FIELD and `original` quotes the dropped value —
+        # public testimony the speaker authored, never engine state.
+        "annotations",
         "ballots",
         "ballots_total",
         "bin_index",
@@ -612,6 +619,8 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "numerator",
         "observations",
         "on_tick",
+        # The dropped value a TurnAnnotation quotes (bounded).
+        "original",
         "outcome",
         "output_tokens",
         "per_prompt_version",

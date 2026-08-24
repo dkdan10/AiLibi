@@ -579,12 +579,30 @@ class WhereaboutsClaimView(_FrozenView):
     room: str
 
 
+class SawMoveObservationView(_FrozenView):
+    """Shadows ``meetings.schemas.SawMoveObservation``.
+
+    The spectator mirror of a witnessed transition: ``subject`` moved
+    ``from_room`` → ``to_room``, arriving at ``tick``. Display-only, and
+    deliberately shows BOTH rooms — the transition is what the witness said,
+    while which placement the detector draws from it is a meeting-layer
+    decision the transcript never re-derives.
+    """
+
+    type: Literal["saw_move"]
+    tick: int
+    subject: str
+    from_room: str
+    to_room: str
+
+
 ObservationClaimView: TypeAlias = Annotated[
     SawPlayerView
     | CompletedTaskObsView
     | FoundBodyObsView
     | SawVentObservationView
-    | WhereaboutsClaimView,
+    | WhereaboutsClaimView
+    | SawMoveObservationView,
     Field(discriminator="type"),
 ]
 
@@ -624,6 +642,21 @@ StatementClaimView: TypeAlias = Annotated[
 ]
 
 
+TurnAnnotationLabel: TypeAlias = Literal[
+    "invalid_accusation_target",
+    "invalid_alibi_subject",
+    "invalid_corroboration_supports",
+    "fabricated_opening",
+    "opening_degraded_unsure",
+]
+"""What a meeting guard changed about a turn, as the spectator names it.
+
+Shadows ``meetings.schemas.TurnAnnotationKind`` (this module never imports the
+meeting layer); the two are pinned equal in ``tests/api/test_replay_loader.py``,
+so a new kind cannot reach the wire without a chip to render it.
+"""
+
+
 class TurnView(_FrozenView):
     """Shadows ``meetings.schemas.MeetingTurn`` (one turn in the §5.2 chain).
 
@@ -650,10 +683,16 @@ class TurnView(_FrozenView):
     observations: tuple[ObservationClaimView, ...]
     claims: tuple[StatementClaimView, ...]
     free_text: str
+    # What the meeting layer's guards changed about this turn, as the
+    # ``meetings.schemas.TurnAnnotationKind`` vocabulary. Both recorded shapes
+    # land here: the structured ``MeetingTurn.annotations`` rows and the audit
+    # markers older recordings spliced into ``free_text`` (parsed off at load,
+    # so ``free_text`` is the speaker's words alone). Rendered as role-neutral
+    # chips beside the turn, never as raw dev jargon (DESIGN.md §3.4, §5.5).
+    annotations: tuple[TurnAnnotationLabel, ...] = ()
     # True when this (emergency) opening had a fabricated found_body
-    # deterministically stripped (meetings.manager ``EMERGENCY_BODY_STRIP_MARKER``,
-    # parsed off ``free_text`` at load). The transcript renders a role-neutral
-    # "FABRICATED" chip instead of the raw dev-jargon marker (DESIGN.md §3.4, §5.5).
+    # deterministically stripped — the ``fabricated_opening`` annotation, kept
+    # as its own flag because the transcript gives it a dedicated chip.
     fabricated_opening: bool
 
 
@@ -1382,6 +1421,7 @@ __all__ = [
     "RubricView",
     "SabotageDetailView",
     "SabotageEventView",
+    "SawMoveObservationView",
     "SawPlayerView",
     "SawVentObservationView",
     "SizeView",

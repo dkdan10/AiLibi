@@ -59,5 +59,14 @@ export function ObservationLine({ obs }: { obs: ObservationClaimView }): ReactEl
           tick {obs.tick}
         </span>
       );
+    case "saw_move":
+      // A witnessed transition. Both rooms are shown because both are what the
+      // speaker said; which one the detector uses is not a transcript matter.
+      return (
+        <span className="min-w-0 break-words">
+          <span className="font-semibold text-ink-900">saw</span> {obs.subject} move
+          from {obs.from_room} to {obs.to_room} at tick {obs.tick}
+        </span>
+      );
   }
 }

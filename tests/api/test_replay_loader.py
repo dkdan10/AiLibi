@@ -32,6 +32,8 @@ from fastapi.testclient import TestClient
 from api import replay_loader
 from api.main import create_app
 from api.replay_loader import (
+    _TURN_PREFIX_MARKERS,  # noqa: PLC2701
+    _turn_view,  # noqa: PLC2701
     EmptyReplayError,
     ReplayLoader,
     ReplayStateMismatchError,
@@ -45,6 +47,19 @@ from api.schemas import (
     KillEventView,
     MeetingTriggeredEventView,
     ReportBodyEventView,
+    SawMoveObservationView,
+    TurnAnnotationLabel,
+)
+from meetings.manager import (
+    EMERGENCY_BODY_STRIP_MARKER,
+    INVALID_ACCUSATION_TARGET_MARKER,
+    OPENING_UNSURE_DEGRADE_MARKER,
+)
+from meetings.schemas import (
+    MeetingTurn,
+    SawMoveObservation,
+    TurnAnnotation,
+    TurnAnnotationKind,
 )
 from engine.actions import Action
 from engine.entities import BodyState, PlayerState, TaskState
@@ -62,8 +77,10 @@ from orchestrator.game import (
 from orchestrator.replay import (
     GameEndReplayEntry,
     LLMCallRecord,
+    MeetingReplayEntry,
     ReplayEntry,
     ReplayLogEntry,
+    _stable_json,  # noqa: PLC2701
     read_all_entries,
     substrate_flag_snapshot,
 )
@@ -1687,3 +1704,209 @@ def test_fog_action_channel_keeps_its_own_vocabulary() -> None:
     assert set(census.fog_actions) <= {"kill", "vent", "task"}
     assert census.fog_actions["task"] > 0
     assert not set(census.fog_actions) & set(get_args(CurrentAction))
+
+
+# ---------------------------------------------------------------------------
+# Turn annotations: both recorded shapes, one chip vocabulary
+# ---------------------------------------------------------------------------
+
+
+_COMMITTED_4P1I_DIR = (
+    Path(__file__).resolve().parents[2] / "replays" / "samples" / "4p1i"
+)
+
+# The five audit markers' static heads, derived from the loader's own table.
+_TURN_MARKER_HEADS: tuple[str, ...] = tuple(
+    marker.partition("{")[0] for _label, marker in _TURN_PREFIX_MARKERS
+)
+
+
+def _turn(free_text: str, **overrides: object) -> MeetingTurn:
+    return MeetingTurn(
+        turn_id="m-1:turn-0",
+        turn_index=0,
+        speaker="p-1",
+        turn_kind="opening",
+        reply_to=None,
+        free_text=free_text,
+        **overrides,  # type: ignore[arg-type]
+    )
+
+
+def test_turn_annotation_vocabulary_is_single_sourced() -> None:
+    # The loader's chip labels, the meeting-layer kinds and the DTO's literal are
+    # ONE vocabulary: a new kind cannot reach the wire without a label to render.
+    labels = tuple(label for label, _marker in _TURN_PREFIX_MARKERS)
+    assert set(labels) == set(get_args(TurnAnnotationKind))
+    assert set(labels) == set(get_args(TurnAnnotationLabel))
+    assert len(labels) == len(set(labels))
+
+
+def test_legacy_spliced_markers_become_chips_and_leave_free_text() -> None:
+    # A turn recorded before the lever: the markers sit in free_text, stacked
+    # front-to-back. The loader lifts every one out as a label.
+    spliced = (
+        OPENING_UNSURE_DEGRADE_MARKER
+        + EMERGENCY_BODY_STRIP_MARKER
+        + INVALID_ACCUSATION_TARGET_MARKER.format(target="imp-2")
+        + "I am not sure who did it."
+    )
+    view = _turn_view(_turn(spliced))
+
+    # Labels come back in the order the markers were spliced, not table order.
+    assert view.annotations == (
+        "opening_degraded_unsure",
+        "fabricated_opening",
+        "invalid_accusation_target",
+    )
+    assert view.free_text == "I am not sure who did it."
+    assert view.fabricated_opening is True
+
+
+def test_a_marker_payload_containing_the_marker_tail_still_strips_exactly() -> None:
+    # The repr-aware pattern (not a naive scan for the tail) is why a
+    # hallucinated target that literally contains "dropped] " cannot swallow the
+    # speaker's words.
+    view = _turn_view(
+        _turn(
+            INVALID_ACCUSATION_TARGET_MARKER.format(target="x dropped] y")
+            + "the real sentence"
+        )
+    )
+    assert view.annotations == ("invalid_accusation_target",)
+    assert view.free_text == "the real sentence"
+
+
+def test_structured_annotations_become_the_same_chips() -> None:
+    # The same facts recorded the new way: free_text is untouched and the labels
+    # match the legacy projection above.
+    view = _turn_view(
+        _turn(
+            "I am not sure who did it.",
+            annotations=(
+                TurnAnnotation(kind="opening_degraded_unsure"),
+                TurnAnnotation(kind="fabricated_opening"),
+                TurnAnnotation(kind="invalid_accusation_target", original="imp-2"),
+            ),
+        )
+    )
+
+    assert view.annotations == (
+        "opening_degraded_unsure",
+        "fabricated_opening",
+        "invalid_accusation_target",
+    )
+    assert view.free_text == "I am not sure who did it."
+    assert view.fabricated_opening is True
+
+
+def test_a_clean_turn_carries_no_chips() -> None:
+    view = _turn_view(_turn("p-3 was with me in Reactor."))
+    assert view.annotations == ()
+    assert view.fabricated_opening is False
+    assert view.free_text == "p-3 was with me in Reactor."
+
+
+def test_saw_move_observation_reaches_the_spectator() -> None:
+    # The first recorded saw_move turn must render, not raise: the movement
+    # shape parses unconditionally, so it can appear before its lever's record.
+    view = _turn_view(
+        _turn(
+            "p-3 left Reactor for Admin.",
+            observations=(
+                SawMoveObservation(
+                    type="saw_move",
+                    tick=12,
+                    subject="p-3",
+                    from_room="REACTOR",
+                    to_room="ADMIN",
+                ),
+            ),
+        )
+    )
+
+    assert view.observations == (
+        SawMoveObservationView(
+            type="saw_move",
+            tick=12,
+            subject="p-3",
+            from_room="REACTOR",
+            to_room="ADMIN",
+        ),
+    )
+
+
+def test_a_committed_meeting_line_re_serializes_byte_identically() -> None:
+    # OFF-path identity at the bytes: the additive annotations field is elided
+    # when empty, so a committed line round-trips through the model unchanged.
+    # The perturbation below shows the comparison bites.
+    path = _COMMITTED_9P2I_DIR / "replay-seed-0.jsonl"
+    lines = [
+        line
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if json.loads(line).get("kind") == "meeting"
+    ]
+    assert lines, "seed 0 must carry a recorded meeting"
+    for line in lines:
+        entry = MeetingReplayEntry.model_validate_json(line)
+        assert _stable_json(entry.model_dump(mode="json")) == line
+
+    poisoned = MeetingReplayEntry.model_validate_json(lines[0])
+    turns = poisoned.transcript.turns
+    poisoned = poisoned.model_copy(
+        update={
+            "transcript": poisoned.transcript.model_copy(
+                update={
+                    "turns": (
+                        turns[0].model_copy(
+                            update={
+                                "annotations": (
+                                    TurnAnnotation(kind="fabricated_opening"),
+                                )
+                            }
+                        ),
+                        *turns[1:],
+                    )
+                }
+            )
+        }
+    )
+    assert _stable_json(poisoned.model_dump(mode="json")) != lines[0]
+
+
+def test_committed_turn_marker_census_and_zero_served_leak() -> None:
+    """The committed-bytes counterfactual for the two samples sets.
+
+    The four RATE cells (marker-bearing turns and contaminated prompts per set)
+    are pinned in ``tests/eval/test_evidence_honesty.py::
+    test_i8_marker_contamination_pins``; what is pinned here is the KIND split
+    behind them, plus the property that matters at the wire: no raw marker
+    substring survives into a served ``TurnView.free_text``. Every one of these
+    turns carries a structured annotation instead once the lever is adopted.
+    """
+
+    expected = {
+        _COMMITTED_9P2I_DIR: (971, 53, {"invalid_accusation_target": 53}),
+        _COMMITTED_4P1I_DIR: (117, 0, {}),
+    }
+    for directory, (
+        expected_turns,
+        expected_marked,
+        expected_kinds,
+    ) in expected.items():
+        turns = marked = 0
+        kinds: Counter[str] = Counter()
+        for path in sorted(directory.glob("replay-seed-*.jsonl")):
+            for entry in read_all_entries(path):
+                if not isinstance(entry, MeetingReplayEntry):
+                    continue
+                for turn in entry.transcript.turns:
+                    turns += 1
+                    view = _turn_view(turn)
+                    if view.annotations:
+                        marked += 1
+                    kinds.update(view.annotations)
+                    for head in _TURN_MARKER_HEADS:
+                        assert head not in view.free_text, turn.turn_id
+        assert (turns, marked) == (expected_turns, expected_marked), directory
+        assert dict(kinds) == expected_kinds, directory

@@ -98,6 +98,7 @@ schema-validation failure.
 from __future__ import annotations
 
 import asyncio
+import os
 import re
 from collections.abc import Callable, Coroutine, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
@@ -143,6 +144,8 @@ from meetings.schemas import (
     SawPlayerObservation,
     SawVentObservation,
     SightingRecord,
+    TurnAnnotation,
+    TurnAnnotationKind,
     TurnId,
     TurnKind,
     VentWitnessRecord,
@@ -364,6 +367,9 @@ UNCITED_ZERO_FLAG_EJECT_MARKER: Final[str] = (
     "[uncited zero-flag eject target {target!r} coerced to SKIP] "
 )
 
+# The lever-OFF shape of this fact; ON it records as a typed
+# :class:`~meetings.schemas.TurnAnnotation` instead
+# (:func:`structured_turn_markers_enabled`).
 # Audit-trail marker prepended to a turn's ``free_text`` when an
 # ``AccusationClaim`` names a ``target`` (``against``) that is not a living
 # meeting participant. qwen3.5:9b occasionally hallucinates an accusation
@@ -383,6 +389,9 @@ INVALID_ACCUSATION_TARGET_MARKER: Final[str] = (
     "[invalid accusation target {target!r} dropped] "
 )
 
+# The lever-OFF shape of this fact; ON it records as a typed
+# :class:`~meetings.schemas.TurnAnnotation` instead
+# (:func:`structured_turn_markers_enabled`).
 # Audit-trail markers prepended to a turn's ``free_text`` when an
 # ``AlibiClaim`` / ``CorroborationClaim`` carries a subject-bearing field
 # (``subject`` / ``supports``) that is not a living meeting participant
@@ -463,6 +472,9 @@ OPENING_RETRY_FEEDBACK_DEMAND: Final[str] = (
     'roster above or explicitly write "unsure".'
 )
 
+# The lever-OFF shape of this fact; ON it records as a typed
+# :class:`~meetings.schemas.TurnAnnotation` instead
+# (:func:`structured_turn_markers_enabled`).
 # Audit-trail marker prefixed to a degraded opening's ``free_text`` (Task
 # 10.6; audit gp-5 H-H-2). A twice-failed opening whose failures were
 # CONTENT-validation failures (the turn parsed but took no position --
@@ -505,6 +517,9 @@ EMERGENCY_NO_BODY_RETRY_FEEDBACK: Final[str] = (
     '"unsure".'
 )
 
+# The lever-OFF shape of this fact; ON it records as a typed
+# :class:`~meetings.schemas.TurnAnnotation` instead
+# (:func:`structured_turn_markers_enabled`).
 # Audit-trail marker prefixed to an EMERGENCY opening's ``free_text`` when a
 # fabricated found_body is DETERMINISTICALLY stripped (Task 10.11.1). The v7
 # prompt and the single retry are best-effort; this strip is the layered-defense
@@ -906,6 +921,75 @@ def roll_call_round_enabled(env: Mapping[str, str] | None = None) -> bool:
 
     del env  # retired: the lever is unconditional, no environment is consulted
     return True
+
+
+# The structured-turn-marker lever -- DEFAULT-OFF, live. Not registered in
+# ``orchestrator.replay._TOGGLEABLE_LEVER_RESOLVERS``: Task 20.33 wires the whole
+# Phase-20 slate into the substrate stamp at once.
+ENV_STRUCTURED_TURN_MARKERS: Final[str] = "AILIBI_STRUCTURED_TURN_MARKERS"
+_STRUCTURED_TURN_MARKERS_FLAG_TRUE: Final[frozenset[str]] = frozenset(
+    {"1", "true", "yes", "on"}
+)
+
+
+def structured_turn_markers_enabled(env: Mapping[str, str] | None = None) -> bool:
+    """Whether a turn's audit markers stay OUT of its ``free_text``. DEFAULT OFF.
+
+    Reads :data:`ENV_STRUCTURED_TURN_MARKERS` from ``env`` (defaulting to the
+    process environment), accepting ``1/true/yes/on`` case-insensitively;
+    passing ``env`` lets a caller toggle the lever without mutating
+    ``os.environ``.
+
+    ON, :meth:`MeetingManager._collect_turn` records what its guards changed as
+    typed :class:`~meetings.schemas.TurnAnnotation` rows on the turn, and
+    ``free_text`` is exactly what the model authored. OFF, the same facts are
+    prepended to ``free_text`` as the audit-marker strings the committed
+    recordings hold -- byte-identical to the pre-lever path -- where every later
+    speaker's prompt renders them inside quoted dialogue.
+
+    Phase 20 G-25 (audits/review-2026-08-19/D/FINAL-synthesis.md §4 row 2.8).
+    """
+
+    environment = env if env is not None else os.environ
+    return (
+        environment.get(ENV_STRUCTURED_TURN_MARKERS, "").strip().lower()
+        in _STRUCTURED_TURN_MARKERS_FLAG_TRUE
+    )
+
+
+# The turn-side audit markers, keyed by the annotation kind that replaces them.
+# One table, so the ON and OFF shapes of the same fact cannot drift and the
+# spectator can project both onto one chip vocabulary
+# (``api.replay_loader._TURN_PREFIX_MARKERS`` imports the same constants).
+_TURN_ANNOTATION_MARKERS: Final[Mapping[TurnAnnotationKind, str]] = {
+    "invalid_accusation_target": INVALID_ACCUSATION_TARGET_MARKER,
+    "invalid_alibi_subject": INVALID_ALIBI_SUBJECT_MARKER,
+    "invalid_corroboration_supports": INVALID_CORROBORATION_SUPPORTS_MARKER,
+    "fabricated_opening": EMERGENCY_BODY_STRIP_MARKER,
+    "opening_degraded_unsure": OPENING_UNSURE_DEGRADE_MARKER,
+}
+
+
+def _turn_annotation_marker(annotation: TurnAnnotation) -> str:
+    """Render one annotation as the ``free_text`` audit marker (lever OFF).
+
+    The payload field name is read off the template rather than repeated here
+    (``"{target!r}"`` -> ``target``), the same partition
+    ``api.replay_loader._marker_pattern`` uses to parse one back, so a marker
+    rename cannot silently break either direction.
+    """
+
+    template = _TURN_ANNOTATION_MARKERS[annotation.kind]
+    if annotation.original is None:
+        return template
+    field_name = template.partition("{")[2].partition("!")[0]
+    return template.format(**{field_name: annotation.original})
+
+
+def _turn_marker_prefix(annotations: Iterable[TurnAnnotation]) -> str:
+    """The concatenated audit-marker prefix for ``annotations``, in order."""
+
+    return "".join(_turn_annotation_marker(annotation) for annotation in annotations)
 
 
 class MeetingManager:
@@ -1417,6 +1501,9 @@ class MeetingManager:
         )
         prompt = base_prompt
         turn_id = _turn_id(meeting_id=meeting_id, turn_index=turn_index)
+        # Resolved ONCE per turn and threaded to both recording branches below,
+        # so a mid-turn environment change cannot record half a turn each way.
+        structured_markers = structured_turn_markers_enabled()
         # The trigger kind of the LAST failed attempt, recorded with the
         # default so the orchestrator can name it (deadline vs validation).
         trigger_kind: DefaultTrigger = "deadline"
@@ -1517,8 +1604,9 @@ class MeetingManager:
             # here -- BEFORE the turn is recorded -- so a dropped subject
             # never mints a contradiction flag and never materialises a
             # belief row; each dropped claim's original value is preserved
-            # on ``free_text`` via its per-field audit marker.
-            validated_claims, drop_markers = _drop_non_roster_claims(
+            # on the turn as a typed annotation (rendered into ``free_text``
+            # as its audit marker when the lever is off).
+            validated_claims, drop_annotations = _drop_non_roster_claims(
                 guarded_claims, living_ids=living_ids
             )
             # Emergency-opening no-body backstop (Task 10.11.1;
@@ -1556,7 +1644,10 @@ class MeetingManager:
                         )
                     }
                 )
-                drop_markers = (EMERGENCY_BODY_STRIP_MARKER, *drop_markers)
+                drop_annotations = (
+                    TurnAnnotation(kind="fabricated_opening"),
+                    *drop_annotations,
+                )
             # Opening content validation (Task 10.3, audit gp-9 H-H-1): the
             # opener must accuse or explicitly declare "unsure" (DESIGN.md
             # §5.2 PHASE 1). Checked AFTER the guards, against the claims as
@@ -1581,7 +1672,7 @@ class MeetingManager:
                     observations=parsed.observations,
                     claims=validated_claims,
                     free_text=parsed.free_text,
-                    drop_markers=drop_markers,
+                    annotations=drop_annotations,
                 )
                 prompt = base_prompt + _opening_retry_feedback(
                     dropped_targets=tuple(
@@ -1592,9 +1683,14 @@ class MeetingManager:
                     )
                 )
                 continue
+            # The one branch the lever moves: what a guard changed is either a
+            # typed row ON the turn or a marker string INSIDE the spoken text.
             free_text = parsed.free_text
-            if drop_markers:
-                free_text = "".join(drop_markers) + free_text
+            recorded_annotations: tuple[TurnAnnotation, ...] = ()
+            if structured_markers:
+                recorded_annotations = drop_annotations
+            elif drop_annotations:
+                free_text = _turn_marker_prefix(drop_annotations) + free_text
             # This turn parsed, but an earlier retry attempt may have raised a
             # provider parse-failure the recording client never logged. Surface
             # that burned spend so it is recorded even though no default fired
@@ -1614,6 +1710,10 @@ class MeetingManager:
                     "reply_to": reply_to,
                     "claims": validated_claims,
                     "free_text": free_text,
+                    # Always overridden, like the identity fields: annotations
+                    # are the manager's record of its own guards, never the
+                    # model's to author.
+                    "annotations": recorded_annotations,
                 }
             )
         # Every attempt (1 + ``retries``) failed: surface the fired default so
@@ -1637,6 +1737,10 @@ class MeetingManager:
             )
         )
         if positionless_opening is not None:
+            degrade_annotations = (
+                TurnAnnotation(kind="opening_degraded_unsure"),
+                *positionless_opening.annotations,
+            )
             return MeetingTurn(
                 turn_id=turn_id,
                 turn_index=turn_index,
@@ -1646,10 +1750,12 @@ class MeetingManager:
                 observations=positionless_opening.observations,
                 claims=positionless_opening.claims,
                 free_text=(
-                    OPENING_UNSURE_DEGRADE_MARKER
-                    + "".join(positionless_opening.drop_markers)
+                    positionless_opening.free_text
+                    if structured_markers
+                    else _turn_marker_prefix(degrade_annotations)
                     + positionless_opening.free_text
                 ),
+                annotations=degrade_annotations if structured_markers else (),
             )
         return _default_turn(
             turn_id=turn_id,
@@ -2709,7 +2815,7 @@ class _PositionlessOpening:
     observations: tuple[ObservationClaim, ...]
     claims: tuple[Claim, ...]
     free_text: str
-    drop_markers: tuple[str, ...]
+    annotations: tuple[TurnAnnotation, ...]
 
 
 def _opening_retry_feedback(*, dropped_targets: tuple[PlayerId, ...]) -> str:
@@ -3911,7 +4017,7 @@ def _drop_non_roster_claims(
     claims: tuple[Claim, ...],
     *,
     living_ids: frozenset[PlayerId],
-) -> tuple[tuple[Claim, ...], tuple[str, ...]]:
+) -> tuple[tuple[Claim, ...], tuple[TurnAnnotation, ...]]:
     """Drop claims whose subject-bearing field names no living participant.
 
     The single roster-validation chokepoint for every subject-bearing
@@ -3939,46 +4045,47 @@ def _drop_non_roster_claims(
     contradiction detection, the post-meeting belief fold, or any prompt
     surface.
 
-    Returns ``(surviving_claims, markers)``, both in claim order; the
-    caller prepends the pre-formatted audit markers
-    (:data:`INVALID_ACCUSATION_TARGET_MARKER` /
-    :data:`INVALID_ALIBI_SUBJECT_MARKER` /
-    :data:`INVALID_CORROBORATION_SUPPORTS_MARKER`) to the turn's
-    ``free_text``, so the original value stays auditable and downstream
-    eval can count drops per field by grepping one string each. The
-    quoted-original inside each marker is bounded
-    (:func:`_bounded_original`, Task 10.6 / audit gp-6 H-H-4): a
-    hallucinated mega-value -- the seed-35 3499-char reasoning blob
-    emitted AS an alibi subject -- can no longer balloon the recorded
-    turn; real player ids pass through verbatim. Deterministic and a
-    no-op when every claim names a living participant, so a clean
-    replay is byte-unaffected.
+    Returns ``(surviving_claims, annotations)``, both in claim order. Each
+    drop yields one :class:`~meetings.schemas.TurnAnnotation` naming the
+    field and carrying the original value, which the caller records on the
+    turn (:func:`structured_turn_markers_enabled`) or renders as the
+    equivalent ``free_text`` audit marker
+    (:func:`_turn_annotation_marker`). Either way the original stays
+    auditable and downstream eval can count drops per field. The original is
+    bounded (:func:`_bounded_original`): a hallucinated mega-value -- the
+    seed-35 3499-char reasoning blob emitted AS an alibi subject -- can no
+    longer balloon the recorded turn; real player ids pass through verbatim.
+    Deterministic and a no-op when every claim names a living participant, so
+    a clean replay is byte-unaffected.
     """
 
     surviving: list[Claim] = []
-    markers: list[str] = []
+    annotations: list[TurnAnnotation] = []
     for claim in claims:
         if isinstance(claim, AccusationClaim) and claim.against not in living_ids:
-            markers.append(
-                INVALID_ACCUSATION_TARGET_MARKER.format(
-                    target=_bounded_original(claim.against)
+            annotations.append(
+                TurnAnnotation(
+                    kind="invalid_accusation_target",
+                    original=_bounded_original(claim.against),
                 )
             )
         elif isinstance(claim, AlibiClaim) and claim.subject not in living_ids:
-            markers.append(
-                INVALID_ALIBI_SUBJECT_MARKER.format(
-                    subject=_bounded_original(claim.subject)
+            annotations.append(
+                TurnAnnotation(
+                    kind="invalid_alibi_subject",
+                    original=_bounded_original(claim.subject),
                 )
             )
         elif isinstance(claim, CorroborationClaim) and claim.supports not in living_ids:
-            markers.append(
-                INVALID_CORROBORATION_SUPPORTS_MARKER.format(
-                    supports=_bounded_original(claim.supports)
+            annotations.append(
+                TurnAnnotation(
+                    kind="invalid_corroboration_supports",
+                    original=_bounded_original(claim.supports),
                 )
             )
         else:
             surviving.append(claim)
-    return tuple(surviving), tuple(markers)
+    return tuple(surviving), tuple(annotations)
 
 
 __all__ = [
@@ -3996,6 +4103,7 @@ __all__ = [
     "EMERGENCY_NO_BODY_RETRY_FEEDBACK",
     "EMERGENCY_TRIGGER_PHRASE",
     "ENV_ROLL_CALL_ROUND",
+    "ENV_STRUCTURED_TURN_MARKERS",
     "INVALID_ACCUSATION_TARGET_MARKER",
     "INVALID_ALIBI_SUBJECT_MARKER",
     "INVALID_CORROBORATION_SUPPORTS_MARKER",
@@ -4039,4 +4147,5 @@ __all__ = [
     "guard_ballot_citation",
     "guard_ballot_target_graph",
     "roll_call_round_enabled",
+    "structured_turn_markers_enabled",
 ]
