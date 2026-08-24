@@ -18,22 +18,27 @@ from __future__ import annotations
 
 import ast
 import dataclasses
+import json
 from pathlib import Path
+from typing import Final
 
 import pytest
 
 from agents.memory.beliefs import BeliefState
 from agents.memory.episodic import EpisodicEvent, MemoryStore
 from agents.memory.store import (
+    ENV_MEETING_OUTCOME_MEMORY,
     AgentMemory,
+    meeting_outcome_memory_enabled,
     record_meeting_outcome,
     render_for_prompt,
 )
 from agents.memory.working import MeetingHistory, MeetingOutcome, WorkingMemory
 from agents.tactical.crewmate_policy import CrewmatePolicy
-from agents.tactical.features import TacticalFeatureEncoder
+from agents.tactical.features import TacticalFeatureEncoder, TacticalFeatureEncoderV3
 from agents.tactical.impostor_policy import ImpostorPolicy
 from engine.world import load_canonical_map
+from eval.leak_scan import assert_memory_render_role_disclosure_is_entitled
 from observation.packet import (
     GlobalView,
     ObservationPacket,
@@ -43,6 +48,12 @@ from observation.packet import (
 from observation.public_map import PublicMapView
 from orchestrator.boundary import public_map_from_engine_map
 from orchestrator.game import TacticalAgent
+from tests._helpers.committed import (
+    CORPUS_4P1I,
+    CORPUS_9P2I,
+    SAMPLES_4P1I,
+    SAMPLES_9P2I,
+)
 
 _WORKING_PY = Path("agents/memory/working.py")
 
@@ -246,18 +257,54 @@ def test_working_module_has_no_engine_numpy_or_torch_import() -> None:
     assert imported & _FORBIDDEN_WORKING_IMPORTS == set()
 
 
-def test_meeting_outcome_carries_exactly_the_hook_payload_fields() -> None:
-    # Provenance pin: a recorded row carries EXACTLY the two public hook-payload
-    # fields (resume tick + announced ejection) and nothing else — no engine-
-    # private state can ride in through a widened dataclass.
+def test_meeting_outcome_carries_exactly_the_announced_facts() -> None:
+    # Provenance pin: a recorded row carries EXACTLY the facts the table heard
+    # announced and nothing else — no engine-private state can ride in through a
+    # widened dataclass. Each name below is a public announcement:
+    #
+    #   end_tick             the tick gameplay resumed at
+    #   ejected_id           who the tally removed
+    #   revealed_role        the confirm-ejects announcement for THAT player
+    #   votes_for_ejected    the announced tally
+    #   skip_votes           the announced tally
+    #   roster_impostor_count  the impostor count stated at game start
     field_names = tuple(field.name for field in dataclasses.fields(MeetingOutcome))
-    assert field_names == ("end_tick", "ejected_id")
+    assert field_names == (
+        "end_tick",
+        "ejected_id",
+        "revealed_role",
+        "votes_for_ejected",
+        "skip_votes",
+        "roster_impostor_count",
+    )
 
     memory = AgentMemory()
-    record_meeting_outcome(memory, end_tick=12, ejected_id="p-8")
+    record_meeting_outcome(
+        memory,
+        end_tick=12,
+        ejected_id="p-8",
+        revealed_role="IMPOSTOR",
+        votes_for_ejected=5,
+        skip_votes=2,
+        roster_impostor_count=2,
+    )
     (row,) = memory.meeting_history.outcomes
     assert row.end_tick == 12
     assert row.ejected_id == "p-8"
+    assert row.revealed_role == "IMPOSTOR"
+    assert row.votes_for_ejected == 5
+    assert row.skip_votes == 2
+    assert row.roster_impostor_count == 2
+
+
+def test_a_skipped_meeting_may_not_carry_a_revealed_role() -> None:
+    # The disclosure is the EJECTION's, so a row that reveals a role without
+    # ejecting anyone is a wiring bug, not a state to normalise away.
+    memory = AgentMemory()
+    with pytest.raises(ValueError, match="skipped meeting reveals no role"):
+        record_meeting_outcome(
+            memory, end_tick=4, ejected_id=None, revealed_role="CREWMATE"
+        )
 
 
 # ---------------------------------------------------------------------------- #
@@ -355,3 +402,401 @@ def test_v2_encode_is_inert_to_meeting_history() -> None:
     after = encoder.encode(packet, public_map, memory)
     # The v2 encoder never reads the meeting-history channel — byte-identical.
     assert before == after
+
+
+# ---------------------------------------------------------------------------- #
+# The lever resolver
+# ---------------------------------------------------------------------------- #
+
+
+@pytest.mark.parametrize("value", ["1", "true", "TRUE", "Yes", "on", " on ", "ON"])
+def test_lever_reads_true_forms_case_insensitively(value: str) -> None:
+    assert meeting_outcome_memory_enabled({ENV_MEETING_OUTCOME_MEMORY: value})
+
+
+@pytest.mark.parametrize("value", ["", " ", "0", "false", "no", "off", "maybe"])
+def test_lever_defaults_off_on_unset_empty_or_unrecognised(value: str) -> None:
+    assert not meeting_outcome_memory_enabled({ENV_MEETING_OUTCOME_MEMORY: value})
+    assert not meeting_outcome_memory_enabled({})
+
+
+def test_lever_reads_the_process_environment_when_no_mapping_is_passed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    assert not meeting_outcome_memory_enabled()
+    monkeypatch.setenv(ENV_MEETING_OUTCOME_MEMORY, "1")
+    assert meeting_outcome_memory_enabled()
+
+
+# ---------------------------------------------------------------------------- #
+# OFF-path byte identity
+# ---------------------------------------------------------------------------- #
+
+
+def _announced(memory: AgentMemory) -> None:
+    """Fold two meetings carrying the full announcement payload."""
+
+    record_meeting_outcome(
+        memory,
+        end_tick=14,
+        ejected_id="p-2",
+        revealed_role="IMPOSTOR",
+        votes_for_ejected=7,
+        skip_votes=1,
+        roster_impostor_count=2,
+    )
+    record_meeting_outcome(
+        memory,
+        end_tick=27,
+        ejected_id=None,
+        votes_for_ejected=0,
+        skip_votes=6,
+        roster_impostor_count=2,
+    )
+
+
+def test_off_path_render_is_byte_identical_to_an_unpopulated_channel() -> None:
+    # The lever OFF, a memory whose outcomes carry roles and tallies renders
+    # exactly what a memory with no outcomes at all renders.
+    bare = _render_memory()
+    populated = _render_memory()
+    _announced(populated)
+    assert render_for_prompt(populated, env={}) == render_for_prompt(bare, env={})
+
+
+def test_off_path_render_matches_the_two_field_fold() -> None:
+    # And it matches the pre-existing two-field fold byte for byte, so nothing a
+    # committed recording holds can move while the lever is unset.
+    two_field = _render_memory()
+    record_meeting_outcome(two_field, end_tick=14, ejected_id="p-2")
+    record_meeting_outcome(two_field, end_tick=27, ejected_id=None)
+    announced = _render_memory()
+    _announced(announced)
+    assert render_for_prompt(announced, env={}) == render_for_prompt(two_field, env={})
+
+
+# ---------------------------------------------------------------------------- #
+# ON-path render — the block, line for line
+# ---------------------------------------------------------------------------- #
+
+_ON: Final[dict[str, str]] = {ENV_MEETING_OUTCOME_MEMORY: "1"}
+
+
+def _meetings_block(render: str) -> list[str]:
+    """The ``## Meetings so far:`` bullet lines, in rendered order."""
+
+    lines = render.splitlines()
+    start = lines.index("## Meetings so far:")
+    block: list[str] = []
+    for line in lines[start + 1 :]:
+        if not line.startswith("- "):
+            break
+        block.append(line[2:])
+    return block
+
+
+def test_on_path_renders_an_ejected_impostor_a_crewmate_and_a_skip() -> None:
+    memory = _render_memory()
+    record_meeting_outcome(
+        memory,
+        end_tick=14,
+        ejected_id="p-2",
+        revealed_role="CREWMATE",
+        votes_for_ejected=6,
+        skip_votes=2,
+        roster_impostor_count=2,
+    )
+    record_meeting_outcome(
+        memory,
+        end_tick=27,
+        ejected_id=None,
+        votes_for_ejected=0,
+        skip_votes=6,
+        roster_impostor_count=2,
+    )
+    record_meeting_outcome(
+        memory,
+        end_tick=41,
+        ejected_id="p-5",
+        revealed_role="IMPOSTOR",
+        votes_for_ejected=4,
+        skip_votes=0,
+        roster_impostor_count=2,
+    )
+
+    render = render_for_prompt(memory, env=_ON)
+
+    assert _meetings_block(render) == [
+        "Meeting 1 (tick 14): p-2 EJECTED 6-2 — p-2 was a CREWMATE. 2 impostors remain.",
+        "Meeting 2 (tick 27): no ejection (6 skip). 2 impostors remain.",
+        "Meeting 3 (tick 41): p-5 EJECTED 4-0 — p-5 was an IMPOSTOR. 1 impostor remains.",
+    ]
+
+
+def test_the_block_sits_above_the_observations_and_below_the_role_line() -> None:
+    memory = _render_memory()
+    _announced(memory)
+    lines = render_for_prompt(memory, env=_ON).splitlines()
+    assert lines[0].startswith("## Your role:")
+    assert lines.index("## Meetings so far:") < lines.index(
+        "## Recent observations (most salient first):"
+    )
+
+
+def test_the_block_survives_a_budget_that_sheds_every_observation() -> None:
+    # Non-elastic by construction: the record of what a meeting decided is what
+    # stops a long game re-prosecuting a closed case, so a budget tight enough to
+    # drop every sighting must still carry it.
+    memory = _render_memory()
+    _announced(memory)
+    full = render_for_prompt(memory, env=_ON)
+    tight = render_for_prompt(memory, token_budget=60, env=_ON)
+    assert "## Recent observations (most salient first):" in full
+    assert "## Recent observations (most salient first):" not in tight
+    assert _meetings_block(tight) == _meetings_block(full)
+
+
+# ---------------------------------------------------------------------------- #
+# The impostors-remaining arithmetic
+# ---------------------------------------------------------------------------- #
+
+
+def test_impostors_remaining_counts_down_only_on_a_confirmed_impostor() -> None:
+    # A two-impostor game: the first ejection is wrong, the second is right.
+    history = MeetingHistory()
+    history.record(
+        end_tick=10,
+        ejected_id="p-3",
+        revealed_role="CREWMATE",
+        votes_for_ejected=5,
+        skip_votes=1,
+        roster_impostor_count=2,
+    )
+    history.record(
+        end_tick=20,
+        ejected_id=None,
+        votes_for_ejected=0,
+        skip_votes=5,
+        roster_impostor_count=2,
+    )
+    history.record(
+        end_tick=30,
+        ejected_id="p-7",
+        revealed_role="IMPOSTOR",
+        votes_for_ejected=4,
+        skip_votes=0,
+        roster_impostor_count=2,
+    )
+
+    assert history.impostors_remaining_after(0) == 2
+    assert history.impostors_remaining_after(1) == 2
+    assert history.impostors_remaining_after(2) == 1
+
+
+def test_impostors_remaining_is_underivable_without_the_roster_count() -> None:
+    history = MeetingHistory()
+    history.record(end_tick=6, ejected_id="p-4")
+    assert history.impostors_remaining_after(0) is None
+    with pytest.raises(IndexError):
+        history.impostors_remaining_after(1)
+
+
+def test_a_kill_never_moves_the_impostors_remaining_count() -> None:
+    # Kills reach memory through perception, never through this channel; the
+    # count is a pure function of what the table CONFIRMED by ejection.
+    memory = _render_memory()
+    memory.episodic.append(
+        EpisodicEvent(
+            tick=4,
+            type="saw_body",
+            payload={"body_id": "b-1", "victim_id": "p-9", "room": "CAFETERIA"},
+            provenance="observed",
+        )
+    )
+    record_meeting_outcome(
+        memory,
+        end_tick=14,
+        ejected_id=None,
+        votes_for_ejected=0,
+        skip_votes=5,
+        roster_impostor_count=1,
+    )
+    assert _meetings_block(render_for_prompt(memory, env=_ON)) == [
+        "Meeting 1 (tick 14): no ejection (5 skip). 1 impostor remains."
+    ]
+
+
+# ---------------------------------------------------------------------------- #
+# The disclosure is entitled, and the scanner says so
+# ---------------------------------------------------------------------------- #
+
+
+def test_no_role_appears_before_its_ejection_tick() -> None:
+    memory = _render_memory()
+    # Rendered BEFORE the meeting concludes: nothing has been folded, so the
+    # block is absent and the render names no other player's role at all.
+    before = render_for_prompt(memory, env=_ON)
+    assert "## Meetings so far:" not in before
+    assert_memory_render_role_disclosure_is_entitled(
+        before, ejection_ticks={}, render_tick=9
+    )
+
+    record_meeting_outcome(
+        memory,
+        end_tick=14,
+        ejected_id="p-2",
+        revealed_role="IMPOSTOR",
+        votes_for_ejected=7,
+        skip_votes=1,
+        roster_impostor_count=2,
+    )
+    after = render_for_prompt(memory, env=_ON)
+    assert "p-2 was an IMPOSTOR" in after
+    assert_memory_render_role_disclosure_is_entitled(
+        after, ejection_ticks={"p-2": 14}, render_tick=14
+    )
+    # The SAME render dated before the ejection is a leak, and the gate bites.
+    with pytest.raises(AssertionError, match="before their ejection"):
+        assert_memory_render_role_disclosure_is_entitled(
+            after, ejection_ticks={"p-2": 14}, render_tick=13
+        )
+
+
+# ---------------------------------------------------------------------------- #
+# The v3 encoder is untouched
+# ---------------------------------------------------------------------------- #
+
+
+def test_v3_encode_is_inert_to_the_announcement_fields() -> None:
+    encoder = TacticalFeatureEncoderV3()
+    public_map = _canonical_public_map()
+    packet, memory = _encode_fixture(public_map)
+    record_meeting_outcome(memory, end_tick=5, ejected_id="p-2")
+    record_meeting_outcome(memory, end_tick=9, ejected_id=None)
+    two_field = encoder.encode(packet, public_map, memory)
+
+    _packet, announced_memory = _encode_fixture(public_map)
+    record_meeting_outcome(
+        announced_memory,
+        end_tick=5,
+        ejected_id="p-2",
+        revealed_role="IMPOSTOR",
+        votes_for_ejected=6,
+        skip_votes=1,
+        roster_impostor_count=2,
+    )
+    record_meeting_outcome(
+        announced_memory,
+        end_tick=9,
+        ejected_id=None,
+        votes_for_ejected=0,
+        skip_votes=4,
+        roster_impostor_count=2,
+    )
+    announced = encoder.encode(packet, public_map, announced_memory)
+
+    # Not one feature byte moves, and the segment is still exactly three floats.
+    assert announced == two_field
+    segments = {
+        segment.name: segment.size for segment in encoder.feature_layout(public_map)
+    }
+    assert segments["meeting_history_scalars"] == 3
+
+
+# ---------------------------------------------------------------------------- #
+# The committed-bytes counterfactual
+# ---------------------------------------------------------------------------- #
+
+#: What the block would have cost and bought over the four committed sets, keyed
+#: by set: (rendered memories, renders that would gain a prior-ejection line,
+#: those following at least one IMPOSTOR reveal, those following at least one
+#: CREWMATE reveal, ``saw_vent`` observations naming an already-ejected player).
+#:
+#: A "rendered memory" is one (agent, meeting) pair with at least one recorded
+#: LLM call — an agent renders its memory once per meeting and several calls
+#: read it. The IMPOSTOR and CREWMATE columns OVERLAP by construction: a render
+#: after two ejections of different outcomes counts in both.
+#:
+#: Both 4p1i sets read zero on the ejection columns and that is the true number,
+#: not a gap: a 4p/1i game ends at its first ejection, so no meeting ever follows
+#: one. The 9p2i ``saw_vent`` figures (68 and 232) and the 3,934 / 1,799 totals
+#: reproduce the review's counts exactly.
+_COUNTERFACTUAL_CENSUS: Final[dict[str, tuple[int, int, int, int, int]]] = {
+    "samples/4p1i": (117, 0, 0, 0, 0),
+    "samples/9p2i": (971, 475, 409, 139, 68),
+    "ml_corpus/4p1i": (120, 0, 0, 0, 0),
+    "ml_corpus/9p2i": (2726, 1324, 1187, 282, 232),
+}
+
+
+def _census_for(sample_dir: Path) -> tuple[int, int, int, int, int]:
+    """Re-derive one committed set's counterfactual from its recorded bytes.
+
+    Roles are firewalled out of the replay JSONL, so they are re-derived from the
+    seeds through :func:`eval.validity.roles_by_seed` — the deterministic
+    re-seeding route the committed report itself takes.
+    """
+
+    from eval.validity import resolve_roster_knobs, roles_by_seed, seeds_on_disk
+
+    num_players, num_impostors, tasks_per_crewmate = resolve_roster_knobs(sample_dir)
+    roles = roles_by_seed(
+        sample_dir,
+        num_players=num_players,
+        num_impostors=num_impostors,
+        tasks_per_crewmate=tasks_per_crewmate,
+    )
+    renders = gained = after_impostor = after_crewmate = stale_vents = 0
+    for seed in seeds_on_disk(sample_dir):
+        seed_roles = roles[seed]
+        ejected_so_far: list[str] = []
+        replay = sample_dir / f"replay-seed-{seed}.jsonl"
+        for line in replay.read_text(encoding="utf-8").splitlines():
+            record = json.loads(line)
+            if record.get("kind") != "meeting":
+                continue
+            rendering_agents = {
+                call["agent_id"] for call in record.get("llm_calls", ())
+            }
+            renders += len(rendering_agents)
+            prior = [seed_roles[player] for player in ejected_so_far]
+            if prior:
+                gained += len(rendering_agents)
+                if "IMPOSTOR" in prior:
+                    after_impostor += len(rendering_agents)
+                if "CREWMATE" in prior:
+                    after_crewmate += len(rendering_agents)
+            for turn in record.get("transcript", {}).get("turns", ()):
+                for observation in turn.get("observations", ()):
+                    if observation.get("type") != "saw_vent":
+                        continue
+                    if observation.get("subject") in ejected_so_far:
+                        stale_vents += 1
+            ejected = record.get("ejected_player_id")
+            if ejected is not None:
+                ejected_so_far.append(ejected)
+    return renders, gained, after_impostor, after_crewmate, stale_vents
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("set_name", sorted(_COUNTERFACTUAL_CENSUS))
+def test_committed_bytes_counterfactual_is_what_the_record_is_judged_against(
+    set_name: str,
+) -> None:
+    sample_dir = {
+        "samples/4p1i": SAMPLES_4P1I,
+        "samples/9p2i": SAMPLES_9P2I,
+        "ml_corpus/4p1i": CORPUS_4P1I,
+        "ml_corpus/9p2i": CORPUS_9P2I,
+    }[set_name]
+    assert _census_for(sample_dir) == _COUNTERFACTUAL_CENSUS[set_name]
+
+
+@pytest.mark.slow
+def test_the_census_totals_reproduce_the_review_counts() -> None:
+    renders = sum(row[0] for row in _COUNTERFACTUAL_CENSUS.values())
+    gained = sum(row[1] for row in _COUNTERFACTUAL_CENSUS.values())
+    stale_vents = sum(row[4] for row in _COUNTERFACTUAL_CENSUS.values())
+    assert (renders, gained) == (3934, 1799)
+    # The re-litigation denominator the record is judged against.
+    assert stale_vents == 300

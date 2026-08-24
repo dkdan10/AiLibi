@@ -773,11 +773,16 @@ class _StubCrewInnerAgent:
         dead_ids: tuple[PlayerId, ...],
         emergency_caller_id: PlayerId | None,
         ejected_id: PlayerId | None = None,
+        ejected_role: Role | None = None,
+        votes_for_ejected: int | None = None,
+        skip_votes: int | None = None,
+        roster_impostor_count: int | None = None,
     ) -> None:
-        # Task 18.22 widened the WrappableCrewTacticalAgent protocol with a
-        # keyword-only ``ejected_id``; accept and ignore it so the recorded
-        # 3-tuple (and every existing assertion on it) stands unchanged.
-        del ejected_id
+        # The announcement payload the WrappableCrewTacticalAgent protocol
+        # carries beside the pacing facts is accepted and ignored, so the
+        # recorded 3-tuple (and every existing assertion on it) stands unchanged.
+        del ejected_id, ejected_role, votes_for_ejected, skip_votes
+        del roster_impostor_count
         self.concluded_calls.append((end_tick, dead_ids, emergency_caller_id))
 
 

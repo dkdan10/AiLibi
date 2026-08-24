@@ -3910,6 +3910,50 @@ def _reported_statement_sort_key(
     )
 
 
+@dataclass(frozen=True)
+class MeetingOutcomeSummary:
+    """One resolved meeting's PUBLIC vote tally.
+
+    The tally announced at the table, and nothing else: ``ejected_id`` is the
+    player the vote removed (``None`` on a skip or a tie), ``votes_for_ejected``
+    the ballots naming that player, and ``skip_votes`` the ballots naming SKIP.
+    Role-BLIND by construction -- the meeting layer never sees a role, so the
+    confirm-ejects announcement is the orchestrator's half to add.
+    """
+
+    ejected_id: PlayerId | None
+    votes_for_ejected: int
+    skip_votes: int
+
+
+def derive_meeting_outcome_summary(result: MeetingResult) -> MeetingOutcomeSummary:
+    """Reduce a resolved meeting to the tally the table heard announced.
+
+    The outcome twin of :func:`derive_reported_testimony`: a pure,
+    replay-deterministic function of the recorded ``MeetingResult`` that imports
+    no engine, reads only ``ballots`` plus the recorded ejection, and returns the
+    same summary every time.
+
+    The ejected player's own count and the skip count are carried SEPARATELY
+    rather than as a winner/runner-up pair because ``SKIP`` is a first-class
+    tally target (:mod:`meetings.voting`) and a tie resolves to SKIPPED: on a
+    skipped meeting there is no winner to count, only the skips.
+    """
+
+    ejected_id = result.ejected_player_id
+    votes_for_ejected = (
+        0
+        if ejected_id is None
+        else sum(1 for ballot in result.ballots if ballot.target == ejected_id)
+    )
+    skip_votes = sum(1 for ballot in result.ballots if ballot.target == _SKIP_TARGET)
+    return MeetingOutcomeSummary(
+        ejected_id=ejected_id,
+        votes_for_ejected=votes_for_ejected,
+        skip_votes=skip_votes,
+    )
+
+
 def derive_reported_testimony(result: MeetingResult) -> tuple[ReportedStatement, ...]:
     """Reduce a resolved meeting to its public reported testimony (Task 13.5.2).
 
@@ -3922,12 +3966,18 @@ def derive_reported_testimony(result: MeetingResult) -> tuple[ReportedStatement,
     recorded ``transcript.turns`` (NEVER ``free_text``), and returns the same
     sorted tuple every time.
 
-    Scope (owner decision, locked 2026-06-25): the four STRUCTURED kinds only --
-    :class:`~meetings.schemas.SawPlayerObservation` sightings,
+    Scope: the STRUCTURED kinds only --
+    :class:`~meetings.schemas.SawPlayerObservation` and
+    :class:`~meetings.schemas.SawVentObservation` sightings,
     :class:`~meetings.schemas.AlibiClaim`,
     :class:`~meetings.schemas.AccusationClaim`, and
     :class:`~meetings.schemas.CorroborationClaim`. ``completed_task`` /
-    ``found_body`` observations and all free-text are dropped.
+    ``found_body`` observations and all free-text are dropped. A vent sighting
+    reduces to ``saw_vent`` so the listener keeps its room and tick as content;
+    whether it RENDERS is the ingest side's call
+    (:func:`agents.memory.store.absorb_reported_testimony`), and the reduction
+    mints no evidence -- the STRONG ``vent_sighting`` flag is a separate,
+    grounded channel.
 
     Speaker-gated; subject gating deferred to ingest (Codex P2, Task 13.5.2):
     ``roster`` is the meeting's living-participant set read off the recorded
@@ -3969,6 +4019,17 @@ def derive_reported_testimony(result: MeetingResult) -> tuple[ReportedStatement,
                         to_tick=observation.tick,
                         room=observation.room,
                         co_present=observation.co_present,
+                    )
+                )
+            elif isinstance(observation, SawVentObservation):
+                statements.append(
+                    ReportedStatement(
+                        speaker=speaker,
+                        kind="saw_vent",
+                        subject=observation.subject,
+                        from_tick=observation.tick,
+                        to_tick=observation.tick,
+                        room=observation.room,
                     )
                 )
         for claim in turn.claims:
@@ -4139,6 +4200,7 @@ __all__ = [
     "MeetingConfig",
     "MeetingDeadlines",
     "MeetingManager",
+    "MeetingOutcomeSummary",
     "MeetingParticipant",
     "MeetingTrigger",
     "ReportPromptRenderer",
@@ -4148,6 +4210,7 @@ __all__ = [
     "VotePromptRenderer",
     "coerce_teammate_ballot_to_skip",
     "derive_belief_evidence",
+    "derive_meeting_outcome_summary",
     "derive_reported_testimony",
     "drop_teammate_statement_target",
     "exclude_teammate_accusation_claims",

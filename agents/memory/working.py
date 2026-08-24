@@ -25,10 +25,16 @@ dead code to delete.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TypeAlias
+from typing import Literal, TypeAlias
 
 PlayerId: TypeAlias = str
 RoomId: TypeAlias = str
+
+#: A role as ANNOUNCED at the table. Spelled as a local literal alias rather than
+#: imported from ``engine``: ``agents/`` may not import the engine (.importlinter),
+#: and the only role that ever reaches this module is the confirm-ejects
+#: announcement the orchestrator translates.
+RevealedRole: TypeAlias = Literal["CREWMATE", "IMPOSTOR"]
 
 
 @dataclass(frozen=True)
@@ -56,21 +62,33 @@ class LastSeen:
 
 @dataclass(frozen=True)
 class MeetingOutcome:
-    """One concluded meeting's PUBLIC result (Task 18.22).
+    """One concluded meeting's PUBLIC result.
 
-    Both fields are facts every player at the table observed: ``end_tick`` is
-    the tick gameplay resumed at, and ``ejected_id`` is the player the vote
-    tally removed -- ``None`` when the meeting skipped or tied. The channel is
-    fed only from the ``note_meeting_concluded`` hook payload (the resume tick
-    plus the announced ejection outcome), so no engine-private state crosses
-    into agent memory and the row is firewall-clean by construction (DESIGN.md
-    §4.7, the same public footing as a meeting's ``dead_ids``). Consumed only
-    by the v3 tactical feature encoder's meeting-history channel; inert to
-    prompt rendering.
+    Every field is a fact ANNOUNCED at the table, which is what makes the row
+    firewall-clean by construction (DESIGN.md §4.7, the same public footing as a
+    meeting's ``dead_ids``):
+
+    * ``end_tick`` -- the tick gameplay resumed at.
+    * ``ejected_id`` -- the player the vote removed; ``None`` on a skip or tie.
+    * ``revealed_role`` -- the confirm-ejects announcement of that player's role,
+      public at the table on exactly the ejection's own footing. ``None`` on a
+      skip, and never set for a player who was KILLED: nobody saw that role.
+    * ``votes_for_ejected`` / ``skip_votes`` -- the announced tally.
+    * ``roster_impostor_count`` -- the impostor count stated at game start, which
+      :meth:`MeetingHistory.impostors_remaining_after` counts down from.
+
+    The four optional fields default to ``None`` so a fold that knows only the
+    resume tick and the ejection still records, and the v3 tactical feature
+    encoder's three-scalar meeting-history channel reads exactly what it read
+    before they existed.
     """
 
     end_tick: int
     ejected_id: PlayerId | None
+    revealed_role: RevealedRole | None = None
+    votes_for_ejected: int | None = None
+    skip_votes: int | None = None
+    roster_impostor_count: int | None = None
 
 
 class WorkingMemory:
@@ -173,13 +191,65 @@ class MeetingHistory:
 
         return sum(1 for outcome in self._outcomes if outcome.ejected_id is None)
 
-    def record(self, *, end_tick: int, ejected_id: PlayerId | None) -> None:
+    def impostors_remaining_after(self, index: int) -> int | None:
+        """Impostors still at large once the outcome at ``index`` was announced.
+
+        The roster impostor count stated at game start minus the ejections
+        CONFIRMED impostor up to and including ``index``. A kill never moves the
+        number: only a confirm-ejects announcement removes an impostor the table
+        can account for. ``None`` when no outcome at or before ``index`` carries
+        the roster count -- the number is then underivable and the caller states
+        nothing rather than guessing (AGENTS.md "no silent fallbacks").
+        """
+
+        if not 0 <= index < len(self._outcomes):
+            raise IndexError(
+                f"no recorded meeting outcome at index {index} "
+                f"({len(self._outcomes)} recorded)"
+            )
+        considered = self._outcomes[: index + 1]
+        roster: int | None = None
+        for outcome in reversed(considered):
+            if outcome.roster_impostor_count is not None:
+                roster = outcome.roster_impostor_count
+                break
+        if roster is None:
+            return None
+        confirmed = sum(
+            1 for outcome in considered if outcome.revealed_role == "IMPOSTOR"
+        )
+        return roster - confirmed
+
+    def record(
+        self,
+        *,
+        end_tick: int,
+        ejected_id: PlayerId | None,
+        revealed_role: RevealedRole | None = None,
+        votes_for_ejected: int | None = None,
+        skip_votes: int | None = None,
+        roster_impostor_count: int | None = None,
+    ) -> None:
         if end_tick < 0:
             raise ValueError(f"meeting end_tick must be non-negative, got {end_tick}")
+        if ejected_id is None and revealed_role is not None:
+            raise ValueError(
+                "a skipped meeting reveals no role: got revealed_role "
+                f"{revealed_role!r} with ejected_id=None"
+            )
         previous = self._outcomes[-1] if self._outcomes else None
         if previous is not None and end_tick < previous.end_tick:
             raise ValueError(
                 "meeting outcomes must be recorded in non-decreasing end_tick "
                 f"order: got tick {end_tick} after tick {previous.end_tick}"
             )
-        self._outcomes.append(MeetingOutcome(end_tick=end_tick, ejected_id=ejected_id))
+        self._outcomes.append(
+            MeetingOutcome(
+                end_tick=end_tick,
+                ejected_id=ejected_id,
+                revealed_role=revealed_role,
+                votes_for_ejected=votes_for_ejected,
+                skip_votes=skip_votes,
+                roster_impostor_count=roster_impostor_count,
+            )
+        )

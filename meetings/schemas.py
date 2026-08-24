@@ -108,9 +108,11 @@ class SawVentObservation(_FrozenModel):
     spoken observation against the speaker's OWN typed
     :class:`VentWitnessRecord` channel
     (:func:`meetings.transcript.detect_contradictions`); an ungrounded
-    claim records as ordinary testimony and raises no flag. Deliberately
-    NOT reduced to a :class:`ReportedStatement` either — the Task 13.5.2
-    reported-testimony scope is owner-locked to its four kinds.
+    claim records as ordinary testimony and raises no flag. It reduces to a
+    ``saw_vent`` :class:`ReportedStatement` so a listener's memory keeps the
+    sighting's room and tick as CONTENT rather than a bare accusation
+    (:func:`meetings.manager.derive_reported_testimony`); the flag and the
+    testimony are independent -- the reduction mints no evidence.
     """
 
     type: Literal["saw_vent"]
@@ -535,16 +537,15 @@ class MeetingTurn(_FrozenModel):
 
 
 ReportedStatementKind: TypeAlias = Literal[
-    "saw_player", "alibi", "accusation", "corroboration"
+    "saw_player", "saw_vent", "alibi", "accusation", "corroboration"
 ]
-"""Discriminator for the four STRUCTURED testimony shapes carried as content.
+"""Discriminator for the STRUCTURED testimony shapes carried as content.
 
-Task 13.5.2 (2026-06-25 memory diagnosis, workflow ``wg54kfoxy``: "social info
-is a scalar, not content"). Exactly the four structured claim/observation kinds
-the owner scoped IN -- a :class:`SawPlayerObservation` sighting, an
-:class:`AlibiClaim`, an :class:`AccusationClaim`, a :class:`CorroborationClaim`.
-Free-text is excluded by construction (it never produces a
-:class:`ReportedStatement`).
+The structured claim/observation kinds that survive the reduction -- a
+:class:`SawPlayerObservation` sighting, a :class:`SawVentObservation` sighting,
+an :class:`AlibiClaim`, an :class:`AccusationClaim`, a
+:class:`CorroborationClaim`. Free-text is excluded by construction (it never
+produces a :class:`ReportedStatement`).
 """
 
 
@@ -565,6 +566,8 @@ class ReportedStatement(_FrozenModel):
     * ``saw_player`` -- ``from_tick == to_tick`` (the sighting tick), ``room``, and
       any ``co_present`` companions the sighting publicly named (the "who was with
       whom" evidence the structured schema carries; Task 13.5.2, Codex P2).
+    * ``saw_vent`` -- ``from_tick == to_tick`` (the sighting tick) and ``room``;
+      no companions (a vent sighting names only who vented, and where).
     * ``alibi`` -- the inclusive ``from_tick``/``to_tick`` window and ``room``.
     * ``accusation`` -- ``subject`` only (no tick, no room).
     * ``corroboration`` -- ``from_tick == to_tick`` (the corroborated tick); no room.

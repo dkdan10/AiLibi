@@ -41,6 +41,7 @@ from eval.leak_scan import (
     _assert_owned_tasks_match_engine_truth,
     _format_json_path,
     _walk_json,
+    assert_memory_render_role_disclosure_is_entitled,
     assert_moved_players_are_witness_gated,
     assert_no_factory_packet_leaks,
     assert_visible_entities_match_engine_truth,
@@ -75,6 +76,7 @@ __all__ = [
     "_assert_no_role_bearing_values",
     "_format_json_path",
     "_walk_json",
+    "assert_memory_render_role_disclosure_is_entitled",
     "assert_moved_players_are_witness_gated",
     "assert_no_factory_packet_leaks",
     "assert_visible_entities_match_engine_truth",
@@ -808,4 +810,180 @@ def test_moved_players_scanner_can_gate_on_departure_time_visibility() -> None:
             engine_events=[departure],
             visible_rooms=("STORAGE",),
             departure_visible_rooms=("ENGINEERING",),
+        )
+
+
+# --------------------------------------------------------------------------- #
+# Planted-leak self-tests for the memory-render role-disclosure gate.
+#
+# The allowance this gate carries is the narrowest one in the project: a role
+# word may name an EJECTED player, from that player's ejection tick onward, and
+# in no other case. Each leg below plants exactly one of the readings the gate
+# must refuse, so the allowance cannot silently widen into "roles may appear in
+# memory renders".
+# --------------------------------------------------------------------------- #
+
+_ENTITLED_RENDER = """## Your role: CREWMATE
+
+## Meetings so far:
+- Meeting 1 (tick 14): p-4 EJECTED 7-1 — p-4 was an IMPOSTOR. 1 impostor remains.
+- Meeting 2 (tick 27): no ejection (6 skip). 1 impostor remains.
+
+## Recent observations (most salient first):
+- [tick 3] You saw p-4 in CAFETERIA.
+
+## Open contradictions:
+- p-3 witnessed p-8 vent in ENGINEERING at tick 22; venting is impostor-only.
+"""
+
+
+def test_memory_render_scanner_accepts_an_entitled_post_ejection_disclosure() -> None:
+    # The confirm-ejects announcement, read after the ejection that made it
+    # public. The own-role line and the lowercase rules prose ride along.
+    assert_memory_render_role_disclosure_is_entitled(
+        _ENTITLED_RENDER, ejection_ticks={"p-4": 14}, render_tick=30
+    )
+
+
+def test_memory_render_scanner_trips_on_a_pre_ejection_disclosure() -> None:
+    with pytest.raises(AssertionError, match="before their ejection at tick 14"):
+        assert_memory_render_role_disclosure_is_entitled(
+            _ENTITLED_RENDER, ejection_ticks={"p-4": 14}, render_tick=13
+        )
+
+
+def test_memory_render_scanner_trips_on_a_living_players_role() -> None:
+    # p-9 is alive: no ejection ever made their role public.
+    planted = _ENTITLED_RENDER.replace(
+        "p-4 EJECTED 7-1 — p-4 was an IMPOSTOR.",
+        "p-9 EJECTED 7-1 — p-9 was an IMPOSTOR.",
+    )
+    with pytest.raises(AssertionError, match="who the table never ejected"):
+        assert_memory_render_role_disclosure_is_entitled(
+            planted, ejection_ticks={"p-4": 14}, render_tick=30
+        )
+
+
+def test_memory_render_scanner_trips_on_a_kill_victims_role() -> None:
+    # A kill victim is absent from the ledger by construction — a kill reveals
+    # nothing, which is exactly why their role may never render.
+    planted = _ENTITLED_RENDER.replace(
+        "p-4 EJECTED 7-1 — p-4 was an IMPOSTOR.",
+        "p-2 EJECTED 7-1 — p-2 was a CREWMATE.",
+    )
+    with pytest.raises(AssertionError, match="who the table never ejected"):
+        assert_memory_render_role_disclosure_is_entitled(
+            planted, ejection_ticks={"p-4": 14}, render_tick=30
+        )
+
+
+def test_memory_render_scanner_trips_on_a_role_outside_the_entitled_grammar() -> None:
+    # The same true fact, smuggled onto an observation line instead of the
+    # meetings block: still a disclosure, still refused.
+    planted = _ENTITLED_RENDER.replace(
+        "- [tick 3] You saw p-4 in CAFETERIA.",
+        "- [tick 3] You saw p-4 (IMPOSTOR) in CAFETERIA.",
+    )
+    with pytest.raises(AssertionError, match="outside the entitled grammar"):
+        assert_memory_render_role_disclosure_is_entitled(
+            planted, ejection_ticks={"p-4": 14}, render_tick=30
+        )
+
+
+def test_memory_render_scanner_accepts_the_agents_own_role_on_its_own_kill_line() -> (
+    None
+):
+    # ``You (IMPOSTOR) killed …`` is the agent talking about ITSELF, the same
+    # entitlement the ``## Your role:`` header carries.
+    own_kill = _ENTITLED_RENDER.replace(
+        "## Your role: CREWMATE", "## Your role: IMPOSTOR"
+    ).replace(
+        "- [tick 3] You saw p-4 in CAFETERIA.",
+        "- [obs p-6:6:1] [tick 6] You (IMPOSTOR) killed p-2 in STORAGE.",
+    )
+    assert_memory_render_role_disclosure_is_entitled(
+        own_kill, ejection_ticks={"p-4": 14}, render_tick=30
+    )
+
+
+def test_memory_render_scanner_trips_on_the_same_shape_about_another_player() -> None:
+    # The self-attributed form is entitled because it names the READER; the same
+    # parenthetical about a third party is a disclosure and is refused.
+    planted = _ENTITLED_RENDER.replace(
+        "- [tick 3] You saw p-4 in CAFETERIA.",
+        "- [tick 6] p-7 (IMPOSTOR) killed p-2 in STORAGE.",
+    )
+    with pytest.raises(AssertionError, match="outside the entitled grammar"):
+        assert_memory_render_role_disclosure_is_entitled(
+            planted, ejection_ticks={"p-4": 14}, render_tick=30
+        )
+
+
+def test_memory_render_scanner_trips_on_a_disclosure_riding_an_entitled_line() -> None:
+    # The mixed case: an entitled self-attributed form must not buy an exemption
+    # for a second, unentitled role smuggled onto the same line.
+    planted = _ENTITLED_RENDER.replace(
+        "- [tick 3] You saw p-4 in CAFETERIA.",
+        "- [tick 6] You (IMPOSTOR) killed p-2 (CREWMATE) in STORAGE.",
+    )
+    with pytest.raises(AssertionError, match="line states 2 roles"):
+        assert_memory_render_role_disclosure_is_entitled(
+            planted, ejection_ticks={"p-4": 14}, render_tick=30
+        )
+
+
+def test_memory_render_scanner_trips_on_a_disclosure_appended_to_the_grammar() -> None:
+    # And the ejection grammar is matched WHOLE-LINE, so extra text after a
+    # valid announcement cannot ride along.
+    planted = _ENTITLED_RENDER.replace(
+        "- Meeting 1 (tick 14): p-4 EJECTED 7-1 — p-4 was an IMPOSTOR. "
+        "1 impostor remains.",
+        "- Meeting 1 (tick 14): p-4 EJECTED 7-1 — p-4 was an IMPOSTOR. "
+        "1 impostor remains. p-9 is CREWMATE.",
+    )
+    with pytest.raises(AssertionError, match="line states 2 roles"):
+        assert_memory_render_role_disclosure_is_entitled(
+            planted, ejection_ticks={"p-4": 14}, render_tick=30
+        )
+
+
+def test_memory_render_scanner_trips_on_trailing_text_after_a_valid_line() -> None:
+    # Even a single-token line must match the grammar in full: an entitled
+    # announcement with an unentitled tail is not an entitled announcement.
+    planted = _ENTITLED_RENDER.replace(
+        "- Meeting 1 (tick 14): p-4 EJECTED 7-1 — p-4 was an IMPOSTOR. "
+        "1 impostor remains.",
+        "- Meeting 1 (tick 14): p-4 EJECTED 7-1 — p-4 was an IMPOSTOR. "
+        "1 impostor remains. and p-9 too",
+    )
+    with pytest.raises(AssertionError, match="outside the entitled grammar"):
+        assert_memory_render_role_disclosure_is_entitled(
+            planted, ejection_ticks={"p-4": 14}, render_tick=30
+        )
+
+
+def test_memory_render_scanner_trips_on_a_back_dated_announcement() -> None:
+    # The disclosure is TRUE and the player really was ejected, but the line
+    # attributes it to a meeting at tick 5 — before the role became public at
+    # tick 14. Checking only the ledger tick against the render tick would clear
+    # it, so the announcement's own tick is bound to the ledger.
+    planted = _ENTITLED_RENDER.replace(
+        "- Meeting 1 (tick 14): p-4 EJECTED", "- Meeting 1 (tick 5): p-4 EJECTED"
+    )
+    with pytest.raises(AssertionError, match="against a meeting at tick 5"):
+        assert_memory_render_role_disclosure_is_entitled(
+            planted, ejection_ticks={"p-4": 14}, render_tick=30
+        )
+
+
+def test_memory_render_scanner_trips_when_the_tally_and_the_role_disagree() -> None:
+    # A line that ejects one player and announces ANOTHER's role fails the
+    # back-reference: the disclosure must belong to the ejection that carried it.
+    planted = _ENTITLED_RENDER.replace(
+        "p-4 EJECTED 7-1 — p-4 was an IMPOSTOR.",
+        "p-4 EJECTED 7-1 — p-6 was an IMPOSTOR.",
+    )
+    with pytest.raises(AssertionError, match="outside the entitled grammar"):
+        assert_memory_render_role_disclosure_is_entitled(
+            planted, ejection_ticks={"p-4": 14, "p-6": 14}, render_tick=30
         )

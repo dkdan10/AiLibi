@@ -27,7 +27,12 @@ from agents.memory.beliefs import (
     hard_evidence_gated_suspicion,
 )
 from agents.memory.episodic import EpisodicEvent, MemoryStore
-from agents.memory.working import LastSeen, MeetingHistory, WorkingMemory
+from agents.memory.working import (
+    LastSeen,
+    MeetingHistory,
+    RevealedRole,
+    WorkingMemory,
+)
 from agents.perception import (
     EVENT_REPORTED_TESTIMONY,
     EVENT_SAW_PLAYER_MOVE,
@@ -117,16 +122,15 @@ _ACTIVE_PLAYER_ACTIONS: Final[frozenset[str]] = frozenset({"report", "task"})
 class AgentMemory:
     """Composite memory surface for a single agent (DESIGN.md §6.1).
 
-    Aggregates references to the three Task-2.3 stores plus the Task-18.22
+    Aggregates references to the episodic, working and belief stores plus the
     ``meeting_history`` channel. The composite does not copy state: callers
     mutate the underlying stores directly and the composite reflects every
-    change. ``render_for_prompt`` reads from the three original components
-    (R-6 acceptance gate); ``meeting_history`` is inert to rendering -- it is
-    fed by :func:`record_meeting_outcome` from the public
-    ``note_meeting_concluded`` hook and consumed ONLY by the v3 tactical
-    feature encoder, so every existing three-field construction and every
-    rendered prompt byte are unchanged (the field defaults to an empty
-    :class:`~agents.memory.working.MeetingHistory`).
+    change. ``render_for_prompt`` reads all four (the R-6 acceptance gate);
+    ``meeting_history`` is fed by :func:`record_meeting_outcome` from the public
+    ``note_meeting_concluded`` hook, read unconditionally by the v3 tactical
+    feature encoder, and rendered as the ``## Meetings so far:`` block only while
+    :func:`meeting_outcome_memory_enabled` is ON. Every field defaults, so a
+    three-store construction still builds.
     """
 
     episodic: MemoryStore = field(default_factory=MemoryStore)
@@ -308,6 +312,91 @@ def self_location_trail_enabled(env: Mapping[str, str] | None = None) -> bool:
     )
 
 
+# Meeting-outcome memory lever -- DEFAULT-OFF, live (the sibling shape above). It
+# is not registered in ``orchestrator.replay._TOGGLEABLE_LEVER_RESOLVERS``: Task
+# 20.33 wires the whole Phase-20 slate into the substrate stamp at once.
+ENV_MEETING_OUTCOME_MEMORY: Final[str] = "AILIBI_MEETING_OUTCOME_MEMORY"
+_MEETING_OUTCOME_MEMORY_FLAG_TRUE: Final[frozenset[str]] = frozenset(
+    {"1", "true", "yes", "on"}
+)
+
+_MEETINGS_HEADER: Final[str] = "## Meetings so far:"
+
+
+def meeting_outcome_memory_enabled(env: Mapping[str, str] | None = None) -> bool:
+    """Whether concluded meetings render as a record. DEFAULT OFF.
+
+    Reads :data:`ENV_MEETING_OUTCOME_MEMORY` from ``env`` (defaulting to the
+    process environment), accepting ``1/true/yes/on`` case-insensitively; passing
+    ``env`` lets a caller toggle the lever without mutating ``os.environ``.
+
+    ON adds the ``## Meetings so far:`` block (one line per concluded meeting:
+    the ejection or the skip, its tally, the ejected player's announced role and
+    the impostors-remaining count) and keeps a spoken vent sighting as CONTENT,
+    with every reported line naming the meeting it was spoken at. OFF renders
+    neither and drops the vent reduction at ingest, which is what the committed
+    recordings and the prompt byte-golden hold.
+
+    Phase 20 G-35 / G-23 (audits/review-2026-08-19/D/FINAL-synthesis.md
+    §Wave 2 row 2.10).
+    """
+
+    environment = env if env is not None else os.environ
+    return (
+        environment.get(ENV_MEETING_OUTCOME_MEMORY, "").strip().lower()
+        in _MEETING_OUTCOME_MEMORY_FLAG_TRUE
+    )
+
+
+def _impostors_remaining_clause(remaining: int | None) -> str:
+    """The trailing parity sentence, or "" when the count is underivable."""
+
+    if remaining is None:
+        return ""
+    noun = "impostor remains" if remaining == 1 else "impostors remain"
+    return f" {remaining} {noun}."
+
+
+def _meeting_history_lines(history: MeetingHistory) -> list[str]:
+    """One plain line per concluded meeting, oldest first.
+
+    The grammar the agent reads back is the sentence the table heard::
+
+        Meeting 1 (tick 14): p-4 EJECTED 7-1 — p-4 was an IMPOSTOR. 1 impostor remains.
+        Meeting 2 (tick 27): no ejection (6 skip). 1 impostor remains.
+
+    Every clause is dropped rather than guessed when the fold did not carry it:
+    an outcome with no tally states the ejection alone, one with no announced
+    role omits the role clause, and an underivable parity count says nothing.
+    """
+
+    lines: list[str] = []
+    for index, outcome in enumerate(history.outcomes):
+        head = f"Meeting {index + 1} (tick {outcome.end_tick}):"
+        if outcome.ejected_id is None:
+            body = (
+                "no ejection."
+                if outcome.skip_votes is None
+                else f"no ejection ({outcome.skip_votes} skip)."
+            )
+        else:
+            tally = (
+                ""
+                if outcome.votes_for_ejected is None or outcome.skip_votes is None
+                else f" {outcome.votes_for_ejected}-{outcome.skip_votes}"
+            )
+            body = f"{outcome.ejected_id} EJECTED{tally}."
+            if outcome.revealed_role is not None:
+                article = "an" if outcome.revealed_role == "IMPOSTOR" else "a"
+                body = (
+                    f"{outcome.ejected_id} EJECTED{tally} — "
+                    f"{outcome.ejected_id} was {article} {outcome.revealed_role}."
+                )
+        clause = _impostors_remaining_clause(history.impostors_remaining_after(index))
+        lines.append(f"{head} {body}{clause}")
+    return lines
+
+
 def render_for_prompt(
     memory: AgentMemory,
     *,
@@ -350,6 +439,26 @@ def render_for_prompt(
     :func:`task_completion_from_events_enabled` reads the same ``env``: ON, the
     completed-task line comes from the agent's own ``owned_task_ids`` losing an id
     instead of from a ``pending_task_id`` change.
+
+    :func:`meeting_outcome_memory_enabled` (default-OFF) adds the
+    ``## Meetings so far:`` block, one plain line per concluded meeting in
+    oldest-first order: ``Meeting {n} (tick {resume}): {id} EJECTED {for}-{skip}
+    — {id} was an IMPOSTOR. {k} impostors remain.``, or ``… no ejection ({skip}
+    skip). …`` when the vote skipped or tied. It joins the NON-elastic set above
+    the observations, so a budget-tight render sheds sightings around it and
+    never sheds the record of what a meeting decided. The role clause is the one
+    place a rendered memory names another player's role, and it is entitled
+    rather than exempt: confirm-ejects makes the EJECTED player's role public at
+    the table on the same footing as ``dead_ids`` and the announced tally
+    (DESIGN.md §4.7), so it is disclosed only for a player the table ejected and
+    only from that meeting onward -- never for a living player, and never for a
+    kill victim, whose role nobody saw. The orchestrator is the only module that
+    reads a role off engine state; ``agents/`` and ``meetings/`` receive the
+    announcement already made. ``eval.leak_scan`` states the same rule
+    independently of this code
+    (:func:`~eval.leak_scan.assert_memory_render_role_disclosure_is_entitled`).
+    The same lever keeps a spoken vent sighting as content and tags each reported
+    line with the meeting it was spoken at.
 
     :func:`self_location_trail_enabled` (default-OFF) adds a ``## Where you were:``
     block between the fixed lines and the observations, so the agent can answer the
@@ -404,12 +513,16 @@ def render_for_prompt(
     completion_from_events = task_completion_from_events_enabled(env)
     # Same rule for the self-location trail: one read here, a plain bool below.
     trail_on = self_location_trail_enabled(env)
+    # And for the meeting record: one read, then the plain bool reaches both the
+    # ``## Meetings so far:`` block and the reported-testimony frame.
+    meetings_on = meeting_outcome_memory_enabled(env)
     observations = _build_observations(
         memory.episodic,
         own_agent_id=own_agent_id,
         teammate_ids=teammate_ids,
         completion_from_events=completion_from_events,
         self_location_trail=trail_on,
+        meeting_outcome_memory=meetings_on,
     )
     if ids_on:
         # Fold each first-hand observation's stable id into its line BEFORE the
@@ -465,12 +578,17 @@ def render_for_prompt(
         trail_truncated = len(spans) > SELF_LOCATION_TRAIL_MAX_SPANS
         trail_spans = spans[-SELF_LOCATION_TRAIL_MAX_SPANS:]
 
+    meeting_lines = (
+        _meeting_history_lines(memory.meeting_history) if meetings_on else []
+    )
+
     return _assemble_view(
         role=role,
         tasks_summary=tasks_summary,
         observations=observations,
         beliefs_lines=beliefs_lines,
         contradiction_lines=contradiction_lines,
+        meeting_lines=meeting_lines,
         trail_spans=trail_spans,
         trail_truncated=trail_truncated,
         token_budget=token_budget,
@@ -580,6 +698,7 @@ def absorb_reported_testimony(
     memory: AgentMemory,
     *,
     statements: Sequence[ReportedStatement],
+    env: Mapping[str, str] | None = None,
 ) -> None:
     """Fold one meeting's public testimony into ``memory`` as CONTENT (Task 13.5.2).
 
@@ -614,6 +733,20 @@ def absorb_reported_testimony(
       decision, locked 2026-06-25), so a teammate-incriminating public statement
       DOES appear in an impostor's reported memory. Only the SCALAR suspicion
       firewall stays (unchanged, in :func:`absorb_meeting_evidence`).
+    * ``saw_vent`` kept only while :func:`meeting_outcome_memory_enabled` reads
+      ON from ``env`` -- OFF drops the statement before it becomes a row, so the
+      episodic log, its observation-id sequence and every rendered byte are the
+      ones the committed recordings hold.
+
+    Each row also carries the 1-based ``meeting_index`` it was spoken at, counted
+    from the ``meeting_boundary`` markers :func:`absorb_meeting_evidence` has
+    already appended for this meeting — the agent's OWN record of how many
+    meetings it has taken evidence from, so the tag and the ``## Meetings so far:``
+    block number the same meetings. The live orchestrator and the replay loader
+    both run that fold first, so the index is the same on either path. An agent
+    that folds no meeting evidence holds no such record: the index is then
+    UNDERIVABLE and the row carries none, so the render states the untagged
+    ``[meeting]`` frame rather than a fabricated ordinal.
 
     Raises :class:`ValueError` when no ``self_state`` event carrying the agent's
     own id has been recorded -- the own-statement guard cannot run without it,
@@ -635,10 +768,21 @@ def absorb_reported_testimony(
         return
     boundary_tick = last_perceived_tick + 1
     roster = _known_roster_ids(memory.episodic)
+    vents_are_content = meeting_outcome_memory_enabled(env)
+    boundaries = sum(
+        1
+        for event in memory.episodic.recent(since_tick=0)
+        if event.type == _EVENT_MEETING_BOUNDARY
+    )
+    # No boundary record means this agent folds no meeting evidence, so which
+    # meeting this is cannot be known -- state nothing rather than guess.
+    meeting_index = boundaries if boundaries > 0 else None
     for statement in statements:
         if statement.speaker == own_agent_id:
             continue
         if statement.speaker not in roster or statement.subject not in roster:
+            continue
+        if statement.kind == "saw_vent" and not vents_are_content:
             continue
         memory.episodic.append(
             EpisodicEvent(
@@ -648,6 +792,7 @@ def absorb_reported_testimony(
                     "speaker": statement.speaker,
                     "kind": statement.kind,
                     "subject": statement.subject,
+                    "meeting_index": meeting_index,
                     "from_tick": statement.from_tick,
                     "to_tick": statement.to_tick,
                     "room": statement.room,
@@ -683,32 +828,55 @@ def absorb_reported_testimony(
 
 
 def record_meeting_outcome(
-    memory: AgentMemory, *, end_tick: int, ejected_id: PlayerId | None
+    memory: AgentMemory,
+    *,
+    end_tick: int,
+    ejected_id: PlayerId | None,
+    revealed_role: RevealedRole | None = None,
+    votes_for_ejected: int | None = None,
+    skip_votes: int | None = None,
+    roster_impostor_count: int | None = None,
 ) -> None:
-    """Fold one concluded meeting's public outcome into memory (Task 18.22).
+    """Fold one concluded meeting's public outcome into memory.
 
     The meeting-history twin of :func:`absorb_meeting_evidence`: where that
     wrapper folds a meeting into a scalar suspicion Δ on the belief state, this
-    one records the meeting's PUBLIC result -- the resume ``end_tick`` and the
-    announced ``ejected_id`` (``None`` when the vote skipped or tied) -- into
-    ``memory.meeting_history`` by delegating to
-    :meth:`~agents.memory.working.MeetingHistory.record`.
+    one records the meeting's PUBLIC result into ``memory.meeting_history`` by
+    delegating to :meth:`~agents.memory.working.MeetingHistory.record` -- the
+    resume ``end_tick``, the announced ``ejected_id`` (``None`` when the vote
+    skipped or tied), the confirm-ejects ``revealed_role`` of that player, the
+    announced ``votes_for_ejected`` / ``skip_votes`` tally, and the
+    ``roster_impostor_count`` stated at game start.
 
     The channel is fed EXCLUSIVELY from the ``note_meeting_concluded`` hook's
-    PUBLIC payload (the resume tick plus the announced ejection outcome -- both
-    facts every player at the table already knows), so it is firewall-clean by
-    construction: no engine-private state crosses into agent memory (DESIGN.md
-    §4.7, the same public footing as the meeting's ``dead_ids``). It is consumed
-    ONLY by the v3 tactical feature encoder's meeting-history channel and is
-    inert to :func:`render_for_prompt` and every other consumer -- it carries no
-    prompt-byte impact anywhere.
+    PUBLIC payload, so it is firewall-clean by construction: every field is a
+    fact every player at the table already heard, and no engine-private state
+    crosses into agent memory (DESIGN.md §4.7, the same public footing as the
+    meeting's ``dead_ids``). The role in particular is the confirm-ejects
+    announcement and nothing else -- a KILLED player's role is never folded,
+    because nobody at the table saw it. The four announcement fields default to
+    ``None``, so a caller that knows only the tick and the ejection still
+    records and the v3 tactical feature encoder's three-scalar channel reads
+    exactly what it read before they existed.
 
-    The non-negative / non-decreasing ``end_tick`` guards live in
-    ``MeetingHistory.record``, so an out-of-order fold fails loud (AGENTS.md
-    "no silent fallbacks") rather than silently reordering the log.
+    Rendered by :func:`render_for_prompt` as the ``## Meetings so far:`` block
+    only while :func:`meeting_outcome_memory_enabled` is ON; OFF the channel
+    stays inert to every prompt byte.
+
+    The non-negative / non-decreasing ``end_tick`` guards and the
+    skip-reveals-no-role guard live in ``MeetingHistory.record``, so an
+    inconsistent fold fails loud (AGENTS.md "no silent fallbacks") rather than
+    silently recording a contradiction.
     """
 
-    memory.meeting_history.record(end_tick=end_tick, ejected_id=ejected_id)
+    memory.meeting_history.record(
+        end_tick=end_tick,
+        ejected_id=ejected_id,
+        revealed_role=revealed_role,
+        votes_for_ejected=votes_for_ejected,
+        skip_votes=skip_votes,
+        roster_impostor_count=roster_impostor_count,
+    )
 
 
 def _estimate_tokens(text: str) -> int:
@@ -1402,6 +1570,7 @@ def _build_observations(
     teammate_ids: frozenset[str] = frozenset(),
     completion_from_events: bool = False,
     self_location_trail: bool = False,
+    meeting_outcome_memory: bool = False,
 ) -> list[_Observation]:
     observations: list[_Observation] = []
     seen_body_ids: set[str] = set()
@@ -1577,7 +1746,10 @@ def _build_observations(
             continue
 
         if event.type == EVENT_REPORTED_TESTIMONY:
-            obs = _render_reported_testimony(event)
+            obs = _render_reported_testimony(
+                event,
+                meeting_outcome_memory=meeting_outcome_memory,
+            )
             if obs is not None:
                 observations.append(obs)
             continue
@@ -1747,16 +1919,27 @@ def _render_saw_player_move(
     )
 
 
-def _render_reported_testimony(event: EpisodicEvent) -> _Observation | None:
-    """Render one ``reported_testimony`` row as a self-framed unverified claim (Task 13.5.2).
+def _render_reported_testimony(
+    event: EpisodicEvent,
+    *,
+    meeting_outcome_memory: bool = False,
+) -> _Observation | None:
+    """Render one ``reported_testimony`` row as a self-framed unverified claim.
 
-    The framing is LOAD-BEARING (the §contract): every line reads
+    The framing is LOAD-BEARING (the §6.6 contract): every line reads
     ``[meeting] CLAIM by X (unverified): …`` so a weaker model WEIGHS the
     testimony as a third party's assertion rather than treating a reported
     sighting as something it witnessed. The line states the claim's own tick(s)
     / room, while the :class:`_Observation` sorts by ``event.tick`` (the
     meeting-boundary tick) at :data:`_SALIENCE_REPORTED_TESTIMONY` -- strictly
     below first-hand, so a tight budget sheds it first.
+
+    ``meeting_outcome_memory`` ON tags the frame with WHICH meeting the claim
+    was spoken at (``[meeting 1]``) and renders a ``saw_vent`` sighting with its
+    room and tick intact, so the game's one role-proving observation survives
+    the trip into memory instead of arriving as a bare accusation. OFF renders
+    the untagged frame and knows no ``saw_vent`` kind, which is what the
+    committed recordings hold.
 
     A malformed payload (missing speaker / subject / kind) renders nothing,
     matching the defensive ``.get`` convention of the other renderers.
@@ -1774,8 +1957,19 @@ def _render_reported_testimony(event: EpisodicEvent) -> _Observation | None:
     room = event.payload.get("room")
     from_tick = event.payload.get("from_tick")
     to_tick = event.payload.get("to_tick")
-    prefix = f"[tick {event.tick}] [meeting] CLAIM by {speaker} (unverified):"
-    if kind == "saw_player" and isinstance(room, str) and isinstance(from_tick, int):
+    meeting_index = event.payload.get("meeting_index")
+    meeting_tag = "[meeting]"
+    if meeting_outcome_memory and isinstance(meeting_index, int):
+        meeting_tag = f"[meeting {meeting_index}]"
+    prefix = f"[tick {event.tick}] {meeting_tag} CLAIM by {speaker} (unverified):"
+    if (
+        meeting_outcome_memory
+        and kind == "saw_vent"
+        and isinstance(room, str)
+        and isinstance(from_tick, int)
+    ):
+        body = f"saw {subject} VENT in {room} @ tick {from_tick}"
+    elif kind == "saw_player" and isinstance(room, str) and isinstance(from_tick, int):
         companions = event.payload.get("co_present")
         with_suffix = ""
         if isinstance(companions, (list, tuple)) and companions:
@@ -2074,16 +2268,22 @@ def _assemble_view(
     observations: list[_Observation],
     beliefs_lines: list[str],
     contradiction_lines: list[str],
+    meeting_lines: Sequence[str],
     trail_spans: Sequence[_SelfLocationSpan],
     trail_truncated: bool,
     token_budget: int,
 ) -> str:
     """Assemble the final Markdown view, enforcing token budget on observations.
 
-    The role line, tasks-completed line, beliefs, and contradictions are
-    treated as fixed (always rendered) because they are essential context.
-    Observations are the elastic section: they fill the remaining budget,
-    dropped from lowest salience first if the budget is tight.
+    The role line, tasks-completed line, the meeting record, beliefs, and
+    contradictions are treated as fixed (always rendered) because they are
+    essential context. Observations are the elastic section: they fill the
+    remaining budget, dropped from lowest salience first if the budget is tight.
+
+    ``meeting_lines`` is one line per concluded meeting and joins the NON-elastic
+    set deliberately: the record of what a meeting decided is what stops a long
+    game re-prosecuting a closed case, so a tight budget must shed observations
+    around it rather than shed it.
 
     ``trail_spans`` (the self-location route, oldest first) is capped upstream and
     charged before the observations as ONE chained line, then shed OLDEST-first if
@@ -2101,6 +2301,11 @@ def _assemble_view(
     if tasks_summary is not None:
         fixed_lines.append(f"## Tasks completed (global): {tasks_summary}")
 
+    meetings_block: list[str] = []
+    if meeting_lines:
+        meetings_block.append(_MEETINGS_HEADER)
+        meetings_block.extend(f"- {line}" for line in meeting_lines)
+
     beliefs_block: list[str] = []
     if beliefs_lines:
         beliefs_block.append("## Your current beliefs:")
@@ -2112,6 +2317,8 @@ def _assemble_view(
         contradictions_block.extend(f"- {line}" for line in contradiction_lines)
 
     non_elastic_blocks: list[list[str]] = [fixed_lines]
+    if meetings_block:
+        non_elastic_blocks.append(meetings_block)
     if beliefs_block:
         non_elastic_blocks.append(beliefs_block)
     if contradictions_block:
@@ -2149,6 +2356,8 @@ def _assemble_view(
         return non_elastic_text
 
     blocks: list[list[str]] = [fixed_lines]
+    if meetings_block:
+        blocks.append(meetings_block)
     if trail_block:
         blocks.append(trail_block)
     if kept:
@@ -2239,6 +2448,7 @@ __all__ = [
     "BeliefState",
     "ContradictionRef",
     "DEFAULT_TOKEN_BUDGET",
+    "ENV_MEETING_OUTCOME_MEMORY",
     "ENV_OBSERVATION_ID_RENDERING",
     "ENV_SELF_LOCATION_TRAIL",
     "ENV_TASK_COMPLETION_FROM_EVENTS",
@@ -2254,6 +2464,7 @@ __all__ = [
     "WorkingMemory",
     "absorb_meeting_evidence",
     "absorb_reported_testimony",
+    "meeting_outcome_memory_enabled",
     "observation_id_rendering_enabled",
     "record_meeting_outcome",
     "render_for_prompt",

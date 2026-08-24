@@ -12,12 +12,13 @@ below first-hand salience, and the dead ``alibi_map`` is finally populated.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Final
 
 import pytest
 
 from agents.memory.episodic import EpisodicEvent
 from agents.memory.store import (
+    ENV_MEETING_OUTCOME_MEMORY,
     AgentMemory,
     absorb_meeting_evidence,
     absorb_reported_testimony,
@@ -32,6 +33,7 @@ from meetings.schemas import (
     MeetingTurn,
     ReportedStatement,
     SawPlayerObservation,
+    SawVentObservation,
     VoteBallot,
 )
 
@@ -546,3 +548,172 @@ class TestReviewFixes:
         speaker = _memory_for(agent_id="p-3", self_tick=9)
         absorb_reported_testimony(speaker, statements=statements)
         assert _reported_rows(speaker) == ()
+
+
+# ---------------------------------------------------------------------------- #
+# Testimony as CONTENT: the vent body, the speaker, the meeting index
+# ---------------------------------------------------------------------------- #
+
+_ON: Final[dict[str, str]] = {ENV_MEETING_OUTCOME_MEMORY: "1"}
+
+_VENT_SIGHTING: Final[ReportedStatement] = ReportedStatement(
+    speaker="p-8",
+    kind="saw_vent",
+    subject="p-4",
+    from_tick=11,
+    to_tick=11,
+    room="ENGINEERING",
+)
+
+
+def _memory_at_meeting(index: int) -> AgentMemory:
+    """A listener's memory with ``index`` meeting boundaries already folded.
+
+    ``absorb_reported_testimony`` counts the boundary markers
+    ``absorb_meeting_evidence`` appends, so this is what the live orchestrator
+    and the replay loader both hand it.
+    """
+
+    memory = _memory_for(
+        agent_id="p-1",
+        roster_sightings=("p-2", "p-3", "p-4", "p-5", "p-8"),
+        self_tick=14,
+    )
+    for _ in range(index):
+        memory.episodic.append(
+            EpisodicEvent(
+                tick=15,
+                type="meeting_boundary",
+                payload={},
+                provenance="observed",
+            )
+        )
+    return memory
+
+
+def _testimony_lines(render: str) -> list[str]:
+    return [line for line in render.splitlines() if "CLAIM by" in line]
+
+
+class TestVentSightingSurvivesAsContent:
+    def test_the_vent_body_its_room_and_its_tick_all_render(self) -> None:
+        memory = _memory_at_meeting(1)
+        absorb_reported_testimony(memory, statements=(_VENT_SIGHTING,), env=_ON)
+
+        assert _testimony_lines(render_for_prompt(memory, env=_ON)) == [
+            "- [tick 15] [meeting 1] CLAIM by p-8 (unverified): "
+            "saw p-4 VENT in ENGINEERING @ tick 11."
+        ]
+
+    def test_every_reported_line_names_the_meeting_it_was_spoken_at(self) -> None:
+        memory = _memory_at_meeting(3)
+        absorb_reported_testimony(
+            memory,
+            statements=(
+                _VENT_SIGHTING,
+                ReportedStatement(speaker="p-3", kind="accusation", subject="p-2"),
+            ),
+            env=_ON,
+        )
+
+        lines = _testimony_lines(render_for_prompt(memory, env=_ON))
+        assert all("[meeting 3]" in line for line in lines)
+        assert (
+            "- [tick 15] [meeting 3] CLAIM by p-3 (unverified): accused p-2." in lines
+        )
+
+    def test_the_unverified_claim_frame_is_preserved_verbatim(self) -> None:
+        # The frame is what makes a listener WEIGH the testimony instead of
+        # treating a reported sighting as something it witnessed.
+        memory = _memory_at_meeting(1)
+        absorb_reported_testimony(memory, statements=(_VENT_SIGHTING,), env=_ON)
+        (line,) = _testimony_lines(render_for_prompt(memory, env=_ON))
+        assert "CLAIM by p-8 (unverified):" in line
+
+    def test_off_path_drops_the_vent_statement_before_it_becomes_a_row(self) -> None:
+        # OFF the reduction never reaches the episodic log at all, so neither the
+        # rows nor the observation-id sequence they would shift can move.
+        memory = _memory_at_meeting(1)
+        absorb_reported_testimony(memory, statements=(_VENT_SIGHTING,), env={})
+        assert _reported_rows(memory) == ()
+
+    def test_off_path_render_is_byte_identical_to_the_pre_vent_fold(self) -> None:
+        accusation = ReportedStatement(speaker="p-3", kind="accusation", subject="p-2")
+        with_vent = _memory_at_meeting(1)
+        absorb_reported_testimony(
+            with_vent, statements=(_VENT_SIGHTING, accusation), env={}
+        )
+        without_vent = _memory_at_meeting(1)
+        absorb_reported_testimony(without_vent, statements=(accusation,), env={})
+
+        assert render_for_prompt(with_vent, env={}) == render_for_prompt(
+            without_vent, env={}
+        )
+        # And the frame OFF carries no meeting index — the committed bytes.
+        assert _testimony_lines(render_for_prompt(with_vent, env={})) == [
+            "- [tick 15] [meeting] CLAIM by p-3 (unverified): accused p-2."
+        ]
+
+    def test_an_agent_with_no_boundary_record_gets_the_untagged_frame(self) -> None:
+        # An agent that folds no meeting evidence holds no meeting-boundary
+        # record, so WHICH meeting this is cannot be known. The frame states
+        # nothing rather than a fabricated "[meeting 0]".
+        memory = _memory_at_meeting(0)
+        absorb_reported_testimony(memory, statements=(_VENT_SIGHTING,), env=_ON)
+
+        (line,) = _testimony_lines(render_for_prompt(memory, env=_ON))
+        assert "[meeting]" in line
+        assert "[meeting 0]" not in line
+        # The content still survives — only the ordinal is withheld.
+        assert "saw p-4 VENT in ENGINEERING @ tick 11." in line
+
+
+class TestVentSightingDerivation:
+    def test_a_spoken_vent_reduces_to_a_saw_vent_statement(self) -> None:
+        result = MeetingResult(
+            meeting_id="m-1",
+            triggered_by="p-8",
+            trigger_tick=11,
+            outcome="SKIPPED",
+            ejected_player_id=None,
+            ballots=(
+                VoteBallot(
+                    voter="p-8",
+                    target="SKIP",
+                    confidence=0.5,
+                    primary_reason_id=None,
+                    rationale_text="r",
+                ),
+            ),
+            transcript=MeetingTranscript(
+                turns=(
+                    MeetingTurn(
+                        turn_id="m-1:turn-0",
+                        turn_index=0,
+                        speaker="p-8",
+                        turn_kind="opening",
+                        reply_to=None,
+                        observations=(
+                            SawVentObservation(
+                                type="saw_vent",
+                                tick=11,
+                                subject="p-4",
+                                room="ENGINEERING",
+                            ),
+                        ),
+                        claims=(),
+                        free_text="...",
+                    ),
+                )
+            ),
+        )
+
+        (statement,) = derive_reported_testimony(result)
+        assert statement == ReportedStatement(
+            speaker="p-8",
+            kind="saw_vent",
+            subject="p-4",
+            from_tick=11,
+            to_tick=11,
+            room="ENGINEERING",
+        )
