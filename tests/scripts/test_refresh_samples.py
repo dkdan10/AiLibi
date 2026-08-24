@@ -1704,16 +1704,23 @@ def test_lock_tolerates_a_release_racing_the_dead_owner_probe(tmp_path: Path) ->
             text=True,
         ) as proc,
     ):
-        deadline = time.monotonic() + 60
-        while not probe.search(trace.read_text(encoding="utf-8")):
-            assert time.monotonic() < deadline, "waiter never probed the dead owner"
-            assert proc.poll() is None, (
-                "waiter exited on a single dead probe: "
-                + trace.read_text(encoding="utf-8")
-            )
-            time.sleep(0.01)
-        shutil.rmtree(lockdir)  # the release the probe raced
-        stdout, _ = proc.communicate(timeout=60)
+        # On any failure below the waiter may still be spinning on the held
+        # lock, and Popen.__exit__ waits for it unboundedly -- kill it so the
+        # gate reports the failure instead of hanging.
+        try:
+            deadline = time.monotonic() + 60
+            while not probe.search(trace.read_text(encoding="utf-8")):
+                assert time.monotonic() < deadline, "waiter never probed the dead owner"
+                assert proc.poll() is None, (
+                    "waiter exited on a single dead probe: "
+                    + trace.read_text(encoding="utf-8")
+                )
+                time.sleep(0.01)
+            shutil.rmtree(lockdir)  # the release the probe raced
+            stdout, _ = proc.communicate(timeout=60)
+        except BaseException:
+            proc.kill()
+            raise
     assert proc.returncode == 0, stdout + trace.read_text(encoding="utf-8")
     assert "ACQUIRED" in stdout
     assert not (stage / ".failed").exists()
