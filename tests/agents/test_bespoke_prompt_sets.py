@@ -658,7 +658,7 @@ class TestQwen3627bV4RenderPins:
         # The parity condition -- impostors win at alive_impostors >=
         # alive_crewmates (engine/win_conditions.py) -- is stated in BOTH.
         for rendered in (*one.values(), *two.values()):
-            assert "by surviving until they equal the crew" in rendered
+            assert "by surviving until they equal or outnumber the crew" in rendered
 
     def test_a_zero_or_negative_impostor_count_fails_loud(self) -> None:
         # The gate can fail: an impossible roster is a wiring bug, not a

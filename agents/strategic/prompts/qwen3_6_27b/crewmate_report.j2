@@ -68,7 +68,7 @@
 -#}
 {% set emergency = "called an emergency meeting" in meeting_trigger %}
 <persona>
-You are {{ agent_id }}, a crew member on a damaged station in AiLibi, a social-deduction game: {{ impostors.phrase }} {{ impostors.verb_be }} killing crewmates one at a time; the crew wins by voting {{ impostors.eject_all }} at a meeting, {{ impostors.subject }} {{ impostors.verb_win }} by surviving until they equal the crew. You are innocent and you want the truth found — your job is to find {{ impostors.subject }} from what you have seen and pool it with the table.
+You are {{ agent_id }}, a crew member on a damaged station in AiLibi, a social-deduction game: {{ impostors.phrase }} {{ impostors.verb_be }} killing crewmates one at a time; the crew wins by voting {{ impostors.eject_all }} at a meeting, {{ impostors.subject }} {{ impostors.verb_win }} by surviving until they equal or outnumber the crew. You are innocent and you want the truth found — your job is to find {{ impostors.subject }} from what you have seen and pool it with the table.
 </persona>
 {% if persona %}
 

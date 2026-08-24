@@ -490,8 +490,23 @@ def test_flag_block_renders_the_committed_taxonomy() -> None:
             < rendered.index(_CONFLICT_HEADING)
             < rendered.index(_WEAK_HEADING)
         )
-        # Each flag renders under its own heading, once.
-        assert rendered.count("c-proof") + rendered.count("vent_sighting") >= 1
+        # Every planted flag renders EXACTLY ONCE, inside its own group's
+        # slice: a loop that dropped a row, duplicated one, or emitted it
+        # under the wrong heading fails here even though the headings stand.
+        groups = {
+            _PROOF_HEADING: _PROOF_FLAG,
+            _CONFLICT_HEADING: _CONFLICT_FLAG,
+            _WEAK_HEADING: _WEAK_FLAG,
+        }
+        bounds = sorted(rendered.index(heading) for heading in groups)
+        for heading, flag in groups.items():
+            start = rendered.index(heading)
+            after = [index for index in bounds if index > start]
+            slice_ = rendered[start : (after[0] if after else len(rendered))]
+            for flag_body, owner in ((f.description, f) for f in _ALL_FLAGS):
+                expected = 1 if owner is flag else 0
+                assert slice_.count(flag_body) == expected, (heading, owner)
+            assert rendered.count(flag.description) == 1, flag
         assert "VERIFIED evidence" not in rendered
         assert "verified flag" not in rendered
     # The ballot's own echo of the deleted framing is gone too.
