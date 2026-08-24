@@ -1,0 +1,322 @@
+# Phase-20 offline counterfactual — every predictable bar predicted on frozen bytes, before the record (Task 20.34)
+
+**Status:** published BEFORE the smoke (20.35) and the record (20.36). The DAG enforces the order.
+**Instrument:** `scripts/counterfactual_phase20.py`, $0, offline, no LLM call, 28 s over the 300
+committed games.
+**Reads against:** `audits/audit-phase-20-preregistration.md` §2 (instruments), §3 (baseline cells),
+§4 (bars), §4.1 (the rare-event discipline), §5 (secondary cells), §6 (the decision rule), §8 (the
+protocol this memo executes), §9 (record order), §10 (THE RATIFIED DECISION), §11 (the I-11
+erratum). This memo **never re-prices a bar** (§10) and **proposes no graduation subset** (§6:
+partial adoption is a per-lever VERDICT, never a partial graduation).
+
+## 0. The headline, in one sentence
+
+On the frozen baseline-6 bytes the eight-lever slate strips the convicting STRONG evidence from
+**76 of the 79 innocent ejections** (70/79 still carried one OFF → 3/79 ON) and collapses the STRONG
+`alibi_vs_sighting` class from **234 flags to 12**, but it does **not** reach bar 5 (10/12 = 83.3%
+grounded at tick, against a target of 100%) or bar 7 (6/12 = 50.0% adjacent, against ≤ 5%) **as
+rates** — the denominator falls faster than the numerator — so the offline table predicts
+**FINDING**, not ADOPTED, and names exactly which two bars it expects to miss and why.
+
+## 1. What this instrument is, and what it is not
+
+Ruling R3 admits the scripted-mover repair (20.32) into the record as a declared co-intervention and
+then names the price: the record alone can no longer attribute a delta to the honesty levers
+(pre-registration §7). This table is the instrument that pays it. It holds the model, the mover, the
+seeds and the recorded bytes constant and moves **only the detector and render rules**, so whatever
+it shows is caused by the levers and nothing else. Detector-and-render-only is not a limitation of
+the method here; it is the method.
+
+It is **not** a projection of the record. Every ON number below is the frozen baseline-6 transcript
+re-banded under the new rules. At the record the flags are minted inside live meetings whose agents
+read different prompts, so the ON *denominators* here are the old population re-scored, not the
+population baseline 7 will produce. Where that distinction changes how a bar should be read, this
+memo says so on the row.
+
+Three columns, and the third is only worth reading once the first two agree:
+
+| column | what it is |
+|---|---|
+| **RECORDED-OFF** | the committed instrument (`eval.evidence_honesty`, `eval.solvability`) over the recorded bytes — this IS the ratified §3 baseline |
+| **RECONSTRUCTED-OFF** | the same cell folded from re-derived inputs with all eight levers OFF |
+| **ON** | the same reconstruction with the eight levers ON, toggled through each resolver's `env` parameter |
+
+A cell whose two OFF readings disagree prints **no ON value**: the counterfactual would be measuring
+the reconstruction rather than the lever, and that is a defect in the script, not a finding about the
+bytes. The script says so in its own failure message and exits non-zero.
+
+## 2. The command, the slate, the reproduction
+
+```bash
+uv run python scripts/counterfactual_phase20.py --sets all          # the table below
+uv run python scripts/counterfactual_phase20.py --sets all --json   # the same table, machine-readable
+uv run pytest -q tests/scripts/test_counterfactual_phase20.py       # the pins, incl. this memo's table
+```
+
+The slate is read off the substrate registry (`orchestrator.replay.TOGGLEABLE_SUBSTRATE_FLAG_KEYS`
+less `impostor_roll_call`), never listed locally, so a lever registered at 20.33 cannot silently drop
+out of the prediction: `task_completion_from_events`, `self_location_trail`, `movement_claim_shape`,
+`grounded_prosecution`, `map_aware_arbitration`, `structured_turn_markers`, `meeting_outcome_memory`,
+`coalesced_memory_render`. It is threaded as an argument. The script never assigns to `os.environ`,
+never writes a replay and never calls a model; it refuses to start under a stale `AILIBI_*` export
+and re-checks the ambient slate at exit.
+
+## 3. The OFF column IS the committed baseline
+
+Proven before any ON number is believed, and asserted in
+`tests/scripts/test_counterfactual_phase20.py` rather than eyeballed here:
+
+* every RECORDED-OFF cell equals its committed 20.15 / 20.14 pin — pooled `12/82`, `33/192`,
+  `255/1017`, `124/234`, `154/234`, `148/234` (and `adjacent_any_gap` also 148), `38/313`,
+  `192/3934` turns, `917/7932` prompts, `7932/7932` personas, `88/1888` completion rows, `544/626`,
+  `126/626`, `114/126`, `83/354`;
+* the RECONSTRUCTED-OFF leg re-derives **the recorded flag tuple on all 707 committed meetings** —
+  every flag cell's two OFF readings are equal, digit for digit;
+* the innocent-ejection enumeration reproduces the committed 19.14 non-direct split
+  **23 / 54 / 2 / 0 = 79**, and independently re-derives the review's G-2 census: **70 of those 79
+  rode a STRONG flag**, every one of them kind-sole `alibi_vs_sighting`.
+
+**I-11 is excluded by §11's erratum.** The ratified cells are the frozen
+`eval.evidence_honesty.RATIFIED_I11_CELLS`; the policy that produced them left the tree at the 20.32
+mover repair, so a live-policy fold reports `impostor_targeting.reconstruction_mismatches > 0` by
+construction. No ratified bar rides I-11. This script neither recomputes nor gates on it.
+
+## 4. The pooled OFF/ON table
+
+Every row is `numerator/denominator`. `—` means the cell has no reading in that column, with the
+reason in the row's own note (§4.1 below). The evidence-label key is the pre-registration's, copied
+rather than invented: **[VERIFIED]** recomputed from committed bytes by the command in §2;
+**[INFERRED]** derived from a verified cell by stated arithmetic.
+
+<!-- POOLED-TABLE-START -->
+
+| cell | measure | OFF (baseline 6) | ON (all eight) | reading |
+|---|---|---|---|---|
+| I-3 | sole-flag convicting precision (per victim) | 12/82 | 1/4 | 14.6% → 25.0%; the denominator falls below 20, which is §6's class-closed waiver |
+| I-3 | class impostor share (STRONG alibi_vs_sighting, dedup subjects) | 33/192 | 1/6 | 17.2% → 16.7% against a base rate of 22.9%; the class stays below chance |
+| I-3 | living-voter base rate at those meetings | 255/1017 | 8/35 | 25.1% → 22.9%; the comparison base for the row above |
+| I-4 | grounded sighting side (at tick) | 124/234 | 10/12 | 53.0% → 83.3%; bar 5 asks 100% — predicted MISS by two sides |
+| I-4 | grounded sighting side (within +/-1 tick) | 154/234 | 12/12 | 65.8% → 100%; reported beside bar 5, never the bar |
+| I-6 | adjacent-room STRONG share | 148/234 | 6/12 | 63.2% → 50.0%; bar 7 asks ≤ 5% — predicted MISS as a rate, though the count falls 148 → 6 |
+| I-6 | adjacent-room STRONG share (un-gated adjacent_any_gap) | 148/234 | 6/12 | the two readings have NOT separated on this slate |
+| I-7 | movement-origin flags | 38/313 | 88/363 | 12.1% → 24.2%; the class GROWS — the lever's price, §5 secondary, no bar |
+| I-8 | marker contamination (turns) | 192/3934 | 0/3934 | 4.9% → 0; a predicted-exactly-zero cell, and therefore a §9 tripwire |
+| I-8 | marker contamination (prompts) | 917/7932 | — | PROMPT-SET-COUPLED: a prompt re-renders only under a Jinja set |
+| I-9 | singular-persona prompts | 7932/7932 | — | PROMPT-SET-COUPLED: the persona block is template bytes |
+| I-5 | fabricated completion lines | 88/1888 | 0/1482 | 4.7% → 0 on every set; a predicted-exactly-zero cell, and a §9 tripwire |
+| R | rendered memory rows per snapshot (mean) | 386907/7932 | 154777/3934 | 48.78 → 39.34 rows; ON slate is SEVEN levers (see §4.1) |
+| R | reported-testimony rows retained | 69535/386907 | 65944/154777 | 18.0% → 42.6%; testimony outranks routine co-presence |
+| I-12 | containment (killer in the candidate set) | 544/626 | 544/626 | LEVER-INVARIANT by construction |
+| I-12 | singleton candidate sets | 126/626 | 126/626 | LEVER-INVARIANT by construction |
+| I-12 | singleton correct | 114/126 | 114/126 | LEVER-INVARIANT by construction |
+| I-12 | ejections on an already-cleared player | 83/354 | 83/354 | LEVER-INVARIANT by construction |
+| E | innocent ejections still carrying a STRONG flag | 70/79 | 3/79 | 88.6% → 3.8%; **76 of the 79 lose the evidence they convicted on** |
+| E | innocent ejections whose STRONG flags were all alibi_vs_sighting | 70/79 | 3/79 | the kind-sole conviction bar 4 prices |
+
+<!-- POOLED-TABLE-END -->
+
+`tests/scripts/test_counterfactual_phase20.py::test_the_memo_table_equals_the_scripts_output` parses
+the table above back out and asserts every row against the script's own JSON — both directions, so a
+memo row the script does not compute and a computed row the memo drops are both failures. One
+changed digit is caught (a planted `148/234` → `149/234` is the perturbation that proves it bites).
+
+### 4.1 The three rows that do not carry a plain ON, and why
+
+* **I-8 (prompts) and I-9 are PROMPT-SET-COUPLED.** Both cells read whole prompt bytes. A prompt
+  re-renders only under a Jinja prompt set, and the default set at HEAD is the frozen `qwen3_5_9b`
+  reference set while the committed bytes were recorded under `qwen3_6_27b` (AGENTS.md, "LLM
+  providers"). A reconstruction under the wrong template family would measure the template, not the
+  lever, so both are printed with their RECORDED value and no ON. The turn half of I-8 is *not*
+  prompt-set-coupled — the transcript is frozen bytes — and is measured by parsing each recorded
+  turn's audit markers back into typed annotations through `api.replay_loader`'s own repr-aware
+  parser, which IS the `structured_turn_markers` ON shape over those bytes.
+* **The two render rows run on SEVEN levers, not eight.** `meeting_outcome_memory` ON re-tags a
+  rendered testimony frame `[meeting N]` (`agents/memory/store.py::_render_reported_testimony`),
+  which the instrument's OFF-shaped `_TESTIMONY_ROW` / `_RENDERED_ROW` patterns do not match.
+  Widening a pattern here would put a second definition of the render cell inside a script, which is
+  exactly how a memo and a record end up disagreeing about what was measured. The census therefore
+  runs on the slate the committed patterns can read, states that on the row, and the full-slate
+  render census is **routed as a finding** (§10), not recounted here.
+* **I-12 is lever-invariant by construction, not by measurement.** The solvability oracle reads the
+  engine's kill and visibility record and the recorded ballots. No lever in the slate writes either
+  offline, so ON equals OFF identically. It is reported because §8 names it, not because it moved.
+
+## 5. Per-set, for the bars that carry per-set clauses
+
+| cell | samples/9p2i | ml_corpus/9p2i | samples/4p1i | ml_corpus/4p1i |
+|---|---|---|---|---|
+| I-4 at tick, OFF → ON | 31/58 → 1/1 | 92/173 → 9/11 | 1/2 → 0/0 | 0/1 → 0/0 |
+| I-6 adjacent, OFF → ON | 38/58 → 0/1 | 108/173 → 6/11 | 1/2 → 0/0 | 1/1 → 0/0 |
+| I-5 fabricated, OFF → ON | 19/458 → 0/347 | 40/1311 → 0/1045 | 15/61 → 0/46 | 14/58 → 0/44 |
+| I-8 turns, OFF → ON | 53/971 → 0/971 | 139/2726 → 0/2726 | 0/117 → 0/117 | 0/120 → 0/120 |
+| render rows/snapshot (7-lever ON) | 51.07 → 41.27 | 50.76 → 41.00 | 15.47 → 12.17 | 15.99 → 12.64 |
+| testimony retained | 18.2% → 45.9% | 18.2% → 42.6% | 0% → 0% | 0% → 0% |
+| innocent ejections still STRONG | 19/23 → 0/23 | 50/54 → 3/54 | 1/2 → 0/2 | 0/0 → 0/0 |
+
+Three of the four per-set ON cells for I-4 and I-6 have a denominator of 0 or 1. Under §4.1's
+granularity rule those are ADVISORY by an enormous margin and take no part in any verdict, in either
+direction; they are printed because a suppressed denominator must never be left implicit.
+
+## 6. The predicted verdict, bar by bar
+
+Predictions, not summaries. Each row states the direction, the offline value with its denominator
+where the instrument computes one, and the bar it is predicted against.
+
+| bar | target (§4, ratified) | prediction | value, offline |
+|---|---|---|---|
+| 1 | I-1 non-direct accuracy 0.368 → ≥ 0.60 pooled | **NOT PREDICTABLE OFFLINE** | — |
+| 2 | I-1 innocent ejections 79 → < 35 pooled | direction DOWN, magnitude **NOT PREDICTABLE** | the *evidence* under 76 of the 79 is gone (70/79 → 3/79); the ballots are not |
+| 3 | I-2 false self-placement 21.0% → < 5% | **NOT PREDICTABLE OFFLINE** | — |
+| 4 | I-3 precision 14.6% → ≥ 50% pooled, class share above base rate | **MET, via §6's class-closed waiver** | precision 1/4 = 25.0%; the pooled denominator falls to 4, below the waiver's 20 |
+| 5 | I-4 grounded sighting side → 100% at tick | **MISS**, by two sides | 10/12 = 83.3% (within ±1: 12/12 = 100%) |
+| 6 | I-5 fabricated completion lines → 0 on every set | **MET**, on all four sets | 0/347, 0/1045, 0/46, 0/44 |
+| 7 | I-6 adjacent-room STRONG share → ≤ 5% pooled | **MISS** as a rate, though the count falls 96% | 6/12 = 50.0%; 148 flags → 6 |
+| 8 | I-13 four fixtures, individually | flag census computable, the **ejection is not** | see §7 |
+
+**Why bar 5 is predicted to miss.** `grounded_prosecution` bands an ungrounded sighting WEAK using
+a ±2-tick grounding window; bar 5 reads the AT-TICK cell (`nearest == 0`). Two of the twelve
+survivors are grounded at ±1 or ±2 and therefore stand STRONG while failing the bar's own cell. This
+is a mechanism/bar mismatch, published as a prediction. §10 forbids re-pricing a bar after
+ratification and this memo does not: the ±1 reading (12/12) is reported *beside* the bar, exactly as
+§4 bar 5 instructs, and never in place of it.
+
+**Why bar 7 is predicted to miss.** `map_aware_arbitration` demotes 140 of the 148 adjacent flags
+(the eight it keeps sit two or more ticks inside their alibi window, which the detector's tick half
+deliberately preserves). `grounded_prosecution` then demotes most of the rest of the class, so the
+STRONG denominator collapses 234 → 12 while six adjacent flags survive both rules. **A count that
+falls 96% and a rate that rises are the same fact seen twice.** §4.1's SUPPRESSED-NOT-FIXED label is
+registered against the COUNT bars (5 and 6) and does not reach bar 7, which is a rate bar — so the
+honest statement is the one made here: bar 7 is predicted to miss on the rate, and the absolute
+adjacent-flag count is predicted to fall from 148 to single digits.
+
+**The composite reading.** §6 makes ADOPTED conjunctive on bars 1, 2, 3, 5, 6 and 7 plus three of
+four fixtures plus bar 4. Two of those six are predicted to miss offline, so **this memo's
+prediction for the record is FINDING**. That prediction is falsifiable in the useful direction: the
+record mints its flags in live meetings under the new substrate, where the surviving-STRONG
+population is not the frozen twelve. If bar 5 or bar 7 is MET at the record, the difference is
+attributable to what the new substrate made agents *say*, and the record audit should say so.
+
+## 7. What this instrument CANNOT predict offline, and why
+
+**A flag that stops being minted is not a vote that changes.** Everything below is downstream of new
+model behaviour and no offline arithmetic reaches it. Asserting otherwise would be the exact
+overreach this phase exists to demonstrate against.
+
+* **I-1 non-direct conviction accuracy, and the innocent-ejection count itself (bars 1 and 2).**
+  These are bars about how agents vote once the substrate moves. The recorded ballots were cast under
+  the old one. What this table can show — and does — is that the *evidence* 76 of the 79 wrongful
+  ejections rode is gone; whether the votes follow is the record's question.
+* **I-2 false crew self-placement (bar 3).** The cell measures what the model *says*; `self_location_trail`
+  changes what the model can *read*. There is no offline projection from the old prompts to the new
+  answers, and the trail's coverage (does the record the roll-call asks for exist?) is a different
+  cell from the rate.
+* **The model-dependent halves of the four I-13 injustice fixtures (bar 8).** The flag census at each
+  anchored meeting is computable from frozen bytes; the ejection that followed it is not. A fixture
+  FLIPS when the meeting no longer exhibits its injustice, and "no longer exhibits" includes the vote.
+* **The win split (§5 secondary).** Downstream of every one of the above, and un-attributable by
+  construction while the mover repair rides the same record (§7 of the pre-registration).
+* **The full-slate render census.** Not a model-behaviour limit but an instrument one — see §4.1 and
+  the routed finding in §10.
+* **I-8's prompt half and I-9.** Prompt-set-coupled — see §4.1.
+
+## 8. Per-lever predictions (leave-one-out), and what no offline instrument supports
+
+Lever interaction is **reported, not summed**. The per-lever censuses each lever task pinned
+double-count: grounding the prosecution removes flags the map-aware arbitration would also have
+removed, and the movement-claim shape removes a third overlapping set. The ON column above is ONE
+shipping slate; the attribution below is the slate with one lever withheld, so each row's number is
+that lever's *marginal* contribution on top of the other seven.
+
+| leg | innocent ejections still STRONG (of 79) | STRONG alibi_vs_sighting class | marginal effect of the withheld lever |
+|---|---|---|---|
+| all eight OFF | 70 | 234 | — |
+| all eight ON | 3 | 12 | — |
+| ON less `grounded_prosecution` | 26 | 95 | **23 wrongful convictions and 83 flags** — the dominant lever |
+| ON less `map_aware_arbitration` | 5 | 16 | 2 wrongful convictions and 4 flags |
+| ON less `movement_claim_shape` | 2 | 9 | **−1** wrongful conviction and −3 flags: this lever NETS a conviction |
+
+`movement_claim_shape` is the honest one to read carefully. Withholding it leaves *fewer* surviving
+convictions, because re-indexing a mis-spoken origin at the record's own destination mints flags the
+committed meeting did not have (I-7 grows 38/313 → 88/363, the direction 20.23's own census called
+"the price"). The lever is still the right repair — a flag built on the origin half of a transition
+the speaker's own memory contradicts is a manufactured flag — but its offline effect on the wrongful
+ejection census is *negative by one*, and no reading of this table should claim otherwise.
+
+**The levers no offline instrument supports, with the reason:**
+
+* `self_location_trail` — its cell (I-2) is a model-output cell. The trail's *coverage* is pinned by
+  20.24 beside the instrument; its *effect* is not offline-computable.
+* `structured_turn_markers` — the turn half IS measured here (192/3934 → 0/3934), but the prompt half
+  is prompt-set-coupled and the downstream effect (does a model reason better when audit strings stop
+  appearing inside quoted dialogue?) is a model question.
+* `meeting_outcome_memory` — supported for the *ingest* seam (the ON memory lineage carries the
+  testimony rows the OFF lineage drops) but not for the render census, per §4.1 and §10.
+* `task_completion_from_events` — fully supported: I-5 falls to 0 on every set, on a denominator that
+  is 78.5% of its baseline value (1482 of 1888), so §4.1's SUPPRESSED-NOT-FIXED threshold (below 10%
+  of baseline) is nowhere near reached. The lever grounds the row rather than suppressing it.
+* `coalesced_memory_render` — supported on the seven-lever census: 48.73 → 39.34 rendered rows per
+  snapshot with reported testimony rising from 17.9% to 42.6% of the surviving rows.
+
+**No graduation subset is proposed.** The ratified §6 rules that partial adoption yields a published
+per-lever VERDICT and never a partial graduation, because a subset slate matches neither committed
+record's stamp. This section is the narrative input to that per-lever verdict under either outcome;
+it is not a shortlist.
+
+## 9. Abandon criteria — operator STOP conditions
+
+Read as written. Each is a mechanical check requiring no judgment call. Any one of them STOPS the run
+and reports; the go/no-go on restarting is the owner's.
+
+1. **A `scripts/validity_gate.py` FAIL on any leg.** STOP. (§8)
+2. **A seed whose opening defaults** — the `(deadline_default)` watch item on the opening turn. STOP.
+   An opening that never parsed leaves the chain dead and every ballot voting on a husk. (§8)
+3. **A substrate stamp that does not equal the intended slate.** Run
+   `orchestrator.replay.substrate_slate_mismatches` against the eight Phase-20 keys with
+   `impostor_roll_call` OFF; a non-empty result STOPS the record before it spends an hour. (§8, §9)
+4. **A guard trip** — any firewall or leak guard raising during the run. STOP. (§8)
+5. **A cell-level tripwire: a cell this memo predicts to reach exactly 0 that is non-zero on the
+   smoke seeds is an ABANDON at any n.** Exactly two cells are predicted to reach zero:
+   * **I-5 fabricated completion lines** — predicted 0 on every set. One fabricated row on the smoke
+     is a live-path defect in `task_completion_from_events`, not sampling noise: the ON rule mints a
+     completion only from an engine event, so a fabricated row means the lever is not on the path.
+   * **I-8 marker contamination in turn `free_text`** — predicted 0/3934. One marked turn on the
+     smoke means `structured_turn_markers` is not reaching `MeetingManager._collect_turn`.
+6. **NOT an abandon, explicitly:** a directional bar that merely misses on five smoke seeds. Five
+   seeds cannot locate any bar in §4 — the n≥30 clause exists for precisely this reason (§4.1) — so a
+   miss there is sampling noise. It is **recorded in the smoke report and carried forward** to the
+   record audit, never acted on at the smoke.
+7. **Also NOT an abandon:** bars 5 and 7 missing at the record. This memo predicts both to miss
+   offline (§6). A prediction that comes true is evidence, not a stop condition; a prediction that
+   comes true is exactly what makes the FINDING verdict readable.
+
+## 10. Findings routed, not patched here
+
+This task toggles the lever modules and never edits them (files-not-in-scope), and never re-implements
+an instrument cell. Two things surfaced that belong to a named fix task rather than to this script:
+
+1. **The render census's row patterns are OFF-shaped.** `eval.evidence_honesty._TESTIMONY_ROW` and
+   `_RENDERED_ROW` match the untagged `[meeting] CLAIM by` frame only. With `meeting_outcome_memory`
+   ON the frame becomes `[meeting N]`, so both patterns silently stop counting the row — the full
+   eight-lever census reads 21.62 rows/snapshot against 39.34 on the seven-lever slate, and the whole
+   difference is uncounted testimony rather than shed rows. The fix is one widened pattern in the
+   instrument module (its single home for the definition), plus a pin proving the widened pattern
+   still counts the OFF shape identically. **Until it lands, the full-slate render census is
+   UNMEASURABLE and this memo says so rather than printing a number it cannot defend.**
+2. **`adjacent` and `adjacent_any_gap` do not separate on this slate** (both 6/12). §10 registered
+   bar 7 on `adjacent` precisely because the two *can* separate once a lever moves the flags; on the
+   frozen bytes under the full slate they still coincide. Not a defect — an observation the record
+   audit should re-check on baseline-7 bytes rather than assume.
+
+## 11. Reproduction
+
+Everything above is recomputed from committed bytes by two commands, both offline and $0:
+
+```bash
+uv run python scripts/counterfactual_phase20.py --sets all
+uv run pytest -q tests/scripts/test_counterfactual_phase20.py
+```
+
+The pytest file asserts the OFF column against the committed 20.15 / 20.14 pins, the enumeration
+against the 19.14 innocent split, the environment purity before and after a full run, and this
+memo's own table against the script's JSON — with a planted perturbation for each gate proving it
+bites.
