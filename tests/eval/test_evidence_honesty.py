@@ -29,9 +29,11 @@ from typing import Final, NamedTuple
 
 import pytest
 
+from agents.memory import store as memory_store
 from agents.memory.episodic import EpisodicEvent, MemoryStore
 from agents.memory.store import (
     DEFAULT_TOKEN_BUDGET,
+    ENV_COALESCED_MEMORY_RENDER,
     ENV_SELF_LOCATION_TRAIL,
     ENV_TASK_COMPLETION_FROM_EVENTS,
     AgentMemory,
@@ -79,6 +81,7 @@ from eval.evidence_honesty import (
     _marker_prefixes,
     _perceive_tick,
     _resolve_flag,
+    _RENDERED_ROW,
     _ResolvedFlag,
     _room_distances,
     _SelfLocations,
@@ -3052,3 +3055,244 @@ def test_the_ejections_that_lose_their_only_strong_flag(
     per_set = [corridors[d].sole_flag_ejections for d in sets]
     assert per_set == [14, 32, 1, 0]
     assert sum(per_set) == 47
+
+
+# --------------------------------------------------------------------------- #
+# Layer 4 — the coalesced render's offline counterfactual (Task 20.30).        #
+# --------------------------------------------------------------------------- #
+
+_COALESCE_ON: Mapping[str, str] = MappingProxyType({ENV_COALESCED_MEMORY_RENDER: "1"})
+# Any first-hand sighting-class row, per-tick or coalesced: the rows the fold
+# rewrites. The ``[obs ...]`` prefix is unconditional, so it anchors the match.
+_SIGHTING_ROW: Final[re.Pattern[str]] = re.compile(
+    r"^- \[obs [^\]]+\] (?:\[tick \d+\] )?You saw ", re.MULTILINE
+)
+# The subject-ticks a sighting row COVERS: a per-tick row covers one, a span covers
+# its whole range, and the spawn summary covers one per subject it names. Counting
+# these rather than rows is what tells a compression lever apart from a lossy one.
+_PER_TICK_SIGHTING: Final[re.Pattern[str]] = re.compile(
+    r"^- \[obs [^\]]+\] \[tick \d+\] You saw (?!every other player)", re.MULTILINE
+)
+_SPAN_SIGHTING: Final[re.Pattern[str]] = re.compile(
+    r"^- \[obs [^\]]+\] You saw (?!every other player)\S+ (?:\w+ )?in [A-Z_]+ "
+    r"ticks (\d+)-(\d+)",
+    re.MULTILINE,
+)
+_SPAWN_SIGHTING: Final[re.Pattern[str]] = re.compile(
+    r"^- \[obs [^\]]+\] (?:\[tick 0\] )?You saw every other player in [A-Z_]+"
+    r"(?: ticks 0-(\d+))?: (.+)\.$",
+    re.MULTILINE,
+)
+
+
+def _sighting_ticks_covered(view: str) -> int:
+    """How many subject-ticks the render's sighting rows account for."""
+
+    covered = len(_PER_TICK_SIGHTING.findall(view))
+    covered += sum(
+        int(end) - int(start) + 1 for start, end in _SPAN_SIGHTING.findall(view)
+    )
+    covered += sum(
+        (int(end or 0) + 1) * len(subjects.split(", "))
+        for end, subjects in _SPAWN_SIGHTING.findall(view)
+    )
+    return covered
+
+
+# The committed OFF-path cell this counterfactual is read against
+# (``test_render_budget_pins`` above; ratified at
+# audits/audit-phase-20-preregistration.md:351-356). The re-render recounts it
+# from the memories rather than from the recorded prompts, so the two agree only
+# if the reconstruction is faithful.
+_COMMITTED_OFF_MEAN: Final[float] = 51.1038
+# The row count the contract targets for the ON leg.
+_COALESCED_ROW_TARGET: Final[float] = 36.0
+
+
+class _RenderBudgetCensus(NamedTuple):
+    """One committed set's rendered-row counts, re-rendered OFF and ON."""
+
+    snapshots: int
+    rows_off: int
+    rows_on: int
+    sightings_off: int
+    sightings_on: int
+    covered_off: int
+    covered_on: int
+    chars_off: int
+    chars_on: int
+
+
+def _render_budget_census(sample_dir: Path) -> _RenderBudgetCensus:
+    """Re-render every meeting's memories at ``DEFAULT_TOKEN_BUDGET``, both ways.
+
+    The instrument's own walk, stopped at each ``MeetingOpened`` so the memory is
+    the one the speaker actually held there, then rendered twice from the RETAINED
+    composite. Rows are counted with the instrument's own row pattern, so the OFF
+    leg is directly comparable to the recorded-prompt cell it is pinned against;
+    the ON leg exists only here, because a recorded prompt cannot carry it.
+    """
+
+    num_players, num_impostors, tasks_per_crewmate = resolve_roster_knobs(sample_dir)
+    game_map = load_canonical_map()
+    roles_by_game = roles_by_seed(
+        sample_dir,
+        num_players=num_players,
+        num_impostors=num_impostors,
+        tasks_per_crewmate=tasks_per_crewmate,
+        game_map=game_map,
+    )
+    snapshots = rows_off = rows_on = sightings_off = sightings_on = 0
+    covered_off = covered_on = chars_off = chars_on = 0
+
+    for seed in seeds_on_disk(sample_dir):
+        roles = roles_by_game[seed]
+        memories: dict[PlayerId, MemoryStore] = {pid: MemoryStore() for pid in roles}
+        composites = {pid: AgentMemory(episodic=s) for pid, s in memories.items()}
+        audit_dir = tempfile.TemporaryDirectory(prefix="ailibi-render-budget-")
+        service = ObservationService(
+            game_map=game_map, audit_log_path=Path(audit_dir.name) / "audit.jsonl"
+        )
+        try:
+            for walk_event in walk_replay(
+                sample_dir / f"replay-seed-{seed}.jsonl",
+                seed=seed,
+                num_players=num_players,
+                num_impostors=num_impostors,
+                tasks_per_crewmate=tasks_per_crewmate,
+                game_map=game_map,
+                config=_WALK_CONFIG,
+            ):
+                if isinstance(walk_event, TickOpened):
+                    _perceive_tick(walk_event, service=service, memories=memories)
+                elif isinstance(walk_event, MeetingOpened):
+                    living = sorted(
+                        pid
+                        for pid, player in walk_event.state.players.items()
+                        if player.alive
+                    )
+                    for pid in living:
+                        composite = composites[pid]
+                        off = render_for_prompt(
+                            composite, token_budget=DEFAULT_TOKEN_BUDGET
+                        )
+                        on = render_for_prompt(
+                            composite,
+                            token_budget=DEFAULT_TOKEN_BUDGET,
+                            env=_COALESCE_ON,
+                        )
+                        snapshots += 1
+                        rows_off += len(_RENDERED_ROW.findall(off))
+                        rows_on += len(_RENDERED_ROW.findall(on))
+                        sightings_off += len(_SIGHTING_ROW.findall(off))
+                        sightings_on += len(_SIGHTING_ROW.findall(on))
+                        covered_off += _sighting_ticks_covered(off)
+                        covered_on += _sighting_ticks_covered(on)
+                        chars_off += len(off)
+                        chars_on += len(on)
+                elif isinstance(walk_event, MeetingApplied):
+                    _fold_meeting_into_memories(walk_event, composites=composites)
+        finally:
+            service.close()
+            audit_dir.cleanup()
+
+    return _RenderBudgetCensus(
+        snapshots=snapshots,
+        rows_off=rows_off,
+        rows_on=rows_on,
+        sightings_off=sightings_off,
+        sightings_on=sightings_on,
+        covered_off=covered_off,
+        covered_on=covered_on,
+        chars_off=chars_off,
+        chars_on=chars_on,
+    )
+
+
+@pytest.fixture(scope="module")
+def render_budget() -> _RenderBudgetCensus:
+    """The coalesced-render counterfactual over the committed 9p2i sample set."""
+
+    return _render_budget_census(_SAMPLES_9P2I)
+
+
+def test_the_counterfactual_counts_a_row_the_way_the_instrument_does() -> None:
+    # The gate the cells rest on: this counterfactual counts a rendered row with
+    # the SAME pattern the recorded-prompt instrument counts one with, so its OFF
+    # leg and the committed cell are one measurement. A coalesced span is a row;
+    # a belief line is not; and the sighting reading sees the span and the spawn
+    # summary the fold introduces.
+    span = "- [obs p-1:1:1] You saw p-9 in ADMIN ticks 1-3 (with p-8)."
+    spawn = (
+        "- [obs p-1:0:1] You saw every other player in CAFETERIA ticks 0-1: p-2, p-3."
+    )
+    single = "- [obs p-1:4:1] [tick 4] You saw p-9 in ADMIN."
+    both = f"{span}\n{spawn}\n{single}"
+    assert len(_RENDERED_ROW.findall(both)) == 3
+    assert len(_SIGHTING_ROW.findall(both)) == 3
+    assert _RENDERED_ROW.findall("- p-4: suspicion 0.60") == []
+    assert _SIGHTING_ROW.findall("- [tick 4] p-3 left ADMIN.") == []
+    # Three rows, eight subject-ticks: the span's three, the summary's two
+    # subjects over two ticks, and the lone row's one.
+    assert _sighting_ticks_covered(both) == 8
+
+
+@pytest.mark.slow
+def test_the_coalesced_render_budget_cells(
+    render_budget: _RenderBudgetCensus,
+) -> None:
+    census = render_budget
+    assert census.snapshots == 971
+    mean_off = census.rows_off / census.snapshots
+    mean_on = census.rows_on / census.snapshots
+    # The OFF leg recounted from the memories lands on the committed
+    # recorded-prompt cell (51.1038 over 1,956 snapshots): the reconstruction is
+    # the same render the recording carries, counted over meeting-agent renders
+    # rather than over LLM calls.
+    assert census.rows_off == 49_590
+    assert mean_off == pytest.approx(51.0711, abs=1e-4)
+    assert mean_off == pytest.approx(_COMMITTED_OFF_MEAN, abs=0.05)
+    # The ON leg. It does NOT reach the 36-row target: the fold removes 19.0% of
+    # the CANDIDATE rows, but how many rows a render SHOWS is capped by the token
+    # budget rather than by the candidate count, so the budget the fold frees
+    # refills with rows the OFF render had shed. Pinned as measured, with the
+    # target stated, so the gap is a number a reader can act on rather than a
+    # silently relaxed bound.
+    assert census.rows_on == 41_698
+    assert mean_on == pytest.approx(42.9434, abs=1e-4)
+    assert mean_on < mean_off
+    assert mean_on > _COALESCED_ROW_TARGET
+    # What the same budget bought, and what it cost. Sighting ROWS nearly halve
+    # and the document shortens; the first-hand subject-TICKS those rows account
+    # for fall 18.6%, because the raised reported band spends the freed budget on
+    # testimony. The next test prices the two folds apart.
+    assert census.sightings_off == 37_608
+    assert census.sightings_on == 20_346
+    assert census.covered_off == 37_608
+    assert census.covered_on == 30_617
+    assert census.chars_off == 4_160_638
+    assert census.chars_on == 3_583_453
+
+
+@pytest.mark.slow
+def test_the_band_change_not_the_fold_is_what_costs_first_hand_coverage(
+    render_budget: _RenderBudgetCensus, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The lever's two halves, priced apart on the same walk: with the reported
+    # band left where the OFF path has it, the span + spawn fold alone renders
+    # FEWER rows that account for MORE first-hand subject-ticks than the OFF
+    # render -- it is compression, not loss. Raising the band is the half that
+    # spends that coverage, and this is where its price is stated.
+    monkeypatch.setattr(
+        memory_store,
+        "_SALIENCE_REPORTED_TESTIMONY_COALESCED",
+        memory_store._SALIENCE_REPORTED_TESTIMONY,
+    )
+
+    fold_only = _render_budget_census(_SAMPLES_9P2I)
+
+    assert fold_only.rows_on == 41_721
+    assert fold_only.rows_on < render_budget.rows_off
+    assert fold_only.covered_on == 38_904
+    assert fold_only.covered_on > fold_only.covered_off
+    assert render_budget.covered_on < fold_only.covered_on

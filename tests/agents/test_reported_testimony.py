@@ -12,20 +12,38 @@ below first-hand salience, and the dead ``alibi_map`` is finally populated.
 
 from __future__ import annotations
 
-from typing import Any, Final
+import tempfile
+from collections import Counter
+from collections.abc import Mapping
+from pathlib import Path
+from types import MappingProxyType
+from typing import Any, Final, NamedTuple
 
 import pytest
 
-from agents.memory.episodic import EpisodicEvent
+from agents.memory.episodic import EpisodicEvent, MemoryStore
 from agents.memory.store import (
+    DEFAULT_TOKEN_BUDGET,
+    ENV_COALESCED_MEMORY_RENDER,
     ENV_MEETING_OUTCOME_MEMORY,
     AgentMemory,
+    _build_observations,
+    _latest_self_guard_fields,
     absorb_meeting_evidence,
     absorb_reported_testimony,
     render_for_prompt,
 )
 from agents.perception import EVENT_REPORTED_TESTIMONY, PROVENANCE_REPORTED
+from engine.world import load_canonical_map
+from eval.evidence_honesty import (
+    _WALK_CONFIG,
+    _fold_meeting_into_memories,
+    _perceive_tick,
+)
+from eval.replay_walk import MeetingApplied, MeetingOpened, TickOpened, walk_replay
+from eval.validity import resolve_roster_knobs, roles_by_seed, seeds_on_disk
 from meetings.manager import derive_reported_testimony
+from observation.service import ObservationService
 from meetings.schemas import (
     AccusationClaim,
     MeetingResult,
@@ -717,3 +735,201 @@ class TestVentSightingDerivation:
             to_tick=11,
             room="ENGINEERING",
         )
+
+
+# --------------------------------------------------------------------------- #
+# Reported-row survival under the coalesced render, recounted from the bytes.  #
+# --------------------------------------------------------------------------- #
+
+_COALESCE_ON: Final[Mapping[str, str]] = MappingProxyType(
+    {ENV_COALESCED_MEMORY_RENDER: "1"}
+)
+_CORPUS_9P2I: Final[Path] = (
+    Path(__file__).resolve().parents[2] / "replays" / "ml_corpus" / "9p2i"
+)
+_CANDIDATE_BUCKETS: Final[tuple[str, ...]] = ("<=60", "61-100", "101-150", ">150")
+_TESTIMONY_ROW: Final[str] = "[meeting] CLAIM by "
+_SURVIVAL_FLOOR: Final[float] = 0.80
+
+
+def _candidate_bucket(candidates: int) -> str:
+    """Which candidate-count bucket a render belongs to.
+
+    The bucket is a property of the MEMORY, not of the lever: both legs of the
+    census are bucketed by the same OFF-path candidate count, so a bucket's two
+    numbers are the same renders scored twice.
+    """
+
+    if candidates <= 60:
+        return "<=60"
+    if candidates <= 100:
+        return "61-100"
+    if candidates <= 150:
+        return "101-150"
+    return ">150"
+
+
+class _SurvivalCensus(NamedTuple):
+    """Reported rows offered and kept per candidate bucket, OFF and ON."""
+
+    offered: Mapping[str, int]
+    kept_off: Mapping[str, int]
+    kept_on: Mapping[str, int]
+    renders: int
+
+
+def _survival_census(sample_dir: Path) -> _SurvivalCensus:
+    """Re-render every meeting's memories at ``DEFAULT_TOKEN_BUDGET``, both ways.
+
+    The instrument's own walk, stopped at each ``MeetingOpened`` so the memory is
+    the one the speaker actually held there, then rendered twice from the RETAINED
+    composite -- once with an empty environment and once with the lever ON. Each
+    render is bucketed by how many candidate observations the selector saw, and the
+    reported rows it OFFERED are scored against the reported rows it KEPT.
+    """
+
+    num_players, num_impostors, tasks_per_crewmate = resolve_roster_knobs(sample_dir)
+    game_map = load_canonical_map()
+    roles_by_game = roles_by_seed(
+        sample_dir,
+        num_players=num_players,
+        num_impostors=num_impostors,
+        tasks_per_crewmate=tasks_per_crewmate,
+        game_map=game_map,
+    )
+    offered: Counter[str] = Counter()
+    kept_off: Counter[str] = Counter()
+    kept_on: Counter[str] = Counter()
+    renders = 0
+
+    for seed in seeds_on_disk(sample_dir):
+        roles = roles_by_game[seed]
+        memories: dict[str, MemoryStore] = {pid: MemoryStore() for pid in roles}
+        composites = {pid: AgentMemory(episodic=s) for pid, s in memories.items()}
+        audit_dir = tempfile.TemporaryDirectory(prefix="ailibi-survival-")
+        service = ObservationService(
+            game_map=game_map, audit_log_path=Path(audit_dir.name) / "audit.jsonl"
+        )
+        try:
+            for walk_event in walk_replay(
+                sample_dir / f"replay-seed-{seed}.jsonl",
+                seed=seed,
+                num_players=num_players,
+                num_impostors=num_impostors,
+                tasks_per_crewmate=tasks_per_crewmate,
+                game_map=game_map,
+                config=_WALK_CONFIG,
+            ):
+                if isinstance(walk_event, TickOpened):
+                    _perceive_tick(walk_event, service=service, memories=memories)
+                elif isinstance(walk_event, MeetingOpened):
+                    living = sorted(
+                        pid
+                        for pid, player in walk_event.state.players.items()
+                        if player.alive
+                    )
+                    for pid in living:
+                        composite = composites[pid]
+                        own, fellows = _latest_self_guard_fields(composite.episodic)
+                        candidates = _build_observations(
+                            composite.episodic,
+                            own_agent_id=own,
+                            teammate_ids=(
+                                fellows if roles.get(pid) == "IMPOSTOR" else frozenset()
+                            ),
+                        )
+                        rows = sum(
+                            1 for obs in candidates if _TESTIMONY_ROW in obs.line
+                        )
+                        renders += 1
+                        if rows == 0:
+                            continue
+                        bucket = _candidate_bucket(len(candidates))
+                        offered[bucket] += rows
+                        off = render_for_prompt(
+                            composite, token_budget=DEFAULT_TOKEN_BUDGET
+                        )
+                        on = render_for_prompt(
+                            composite,
+                            token_budget=DEFAULT_TOKEN_BUDGET,
+                            env=_COALESCE_ON,
+                        )
+                        kept_off[bucket] += sum(
+                            1 for line in off.splitlines() if _TESTIMONY_ROW in line
+                        )
+                        kept_on[bucket] += sum(
+                            1 for line in on.splitlines() if _TESTIMONY_ROW in line
+                        )
+                elif isinstance(walk_event, MeetingApplied):
+                    _fold_meeting_into_memories(walk_event, composites=composites)
+        finally:
+            service.close()
+            audit_dir.cleanup()
+
+    return _SurvivalCensus(
+        offered=dict(offered),
+        kept_off=dict(kept_off),
+        kept_on=dict(kept_on),
+        renders=renders,
+    )
+
+
+@pytest.fixture(scope="module")
+def survival() -> _SurvivalCensus:
+    """The reported-row survival census over the committed 9p2i corpus."""
+
+    return _survival_census(_CORPUS_9P2I)
+
+
+def test_the_bucket_boundaries_partition_the_candidate_counts() -> None:
+    # The gate the pins rest on, exercised directly: every boundary lands in the
+    # bucket it names, so a shifted edge cannot silently move rows between pins.
+    assert [_candidate_bucket(n) for n in (0, 60)] == ["<=60", "<=60"]
+    assert [_candidate_bucket(n) for n in (61, 100)] == ["61-100", "61-100"]
+    assert [_candidate_bucket(n) for n in (101, 150)] == ["101-150", "101-150"]
+    assert [_candidate_bucket(n) for n in (151, 4000)] == [">150", ">150"]
+
+
+@pytest.mark.slow
+def test_reported_rows_survive_in_every_candidate_bucket(
+    survival: _SurvivalCensus,
+) -> None:
+    # Recounted from the committed bytes of replays/ml_corpus/9p2i, the set the
+    # C-73 register measured: OFF, reported rows are kept 0 of 4,150 times past 150
+    # candidates and 718 of 5,886 in the 101-150 bucket
+    # (audits/review-2026-08-19/B/agents-memory.md §2 F2). This recount differs from
+    # those figures -- the register sampled 60 games and 1,656 renders, this walks
+    # every committed game -- so the shape, not the absolute count, is what carries.
+    assert set(survival.offered) == set(_CANDIDATE_BUCKETS)
+    assert survival.renders == 2726
+    assert survival.offered == {
+        "<=60": 10_090,
+        "61-100": 17_668,
+        "101-150": 12_147,
+        ">150": 8_264,
+    }
+    assert survival.kept_off == {
+        "<=60": 10_090,
+        "61-100": 13_705,
+        "101-150": 1_402,
+        ">150": 0,
+    }
+    assert survival.kept_on == {
+        "<=60": 10_090,
+        "61-100": 17_668,
+        "101-150": 12_076,
+        ">150": 7_916,
+    }
+    for bucket in _CANDIDATE_BUCKETS:
+        offered = survival.offered[bucket]
+        assert survival.kept_on[bucket] / offered >= _SURVIVAL_FLOOR, (
+            f"{bucket}: kept {survival.kept_on[bucket]} of {offered} ON"
+        )
+    # The band change is what moved them: OFF, three of the four buckets sit under
+    # the floor and the largest render keeps no reported row at all.
+    under_off = [
+        bucket
+        for bucket in _CANDIDATE_BUCKETS
+        if survival.kept_off[bucket] / survival.offered[bucket] < _SURVIVAL_FLOOR
+    ]
+    assert under_off == ["61-100", "101-150", ">150"]

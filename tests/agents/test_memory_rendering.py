@@ -22,10 +22,12 @@ from agents.memory.beliefs import ContradictionRef
 from agents.memory.episodic import EpisodicEvent
 from agents.memory.store import (
     DEFAULT_TOKEN_BUDGET,
+    ENV_COALESCED_MEMORY_RENDER,
     ENV_SELF_LOCATION_TRAIL,
     ENV_TASK_COMPLETION_FROM_EVENTS,
     SELF_LOCATION_TRAIL_MAX_SPANS,
     AgentMemory,
+    coalesced_memory_render_enabled,
     render_for_prompt,
     self_location_trail_enabled,
     task_completion_from_events_enabled,
@@ -2239,3 +2241,409 @@ class TestSelfLocationTrailProperties:
         view = render_for_prompt(memory, env=_TRAIL_ON, token_budget=8000)
 
         _assert_completions_agree_with_the_trail(view)
+
+
+# --------------------------------------------------------------------------- #
+# The coalesced render (AILIBI_COALESCED_MEMORY_RENDER, default-OFF).          #
+# --------------------------------------------------------------------------- #
+
+_COALESCE_ON: Mapping[str, str] = {ENV_COALESCED_MEMORY_RENDER: "1"}
+_COALESCE_OFF: Mapping[str, str] = {ENV_COALESCED_MEMORY_RENDER: "0"}
+_SPAN_ROW = re.compile(
+    r"^- (?:\[obs [^\]]+\] )?(?:\[tick (?P<tick>\d+)\] )?You saw (?P<subject>p-\d+) "
+    r"(?:(?P<action>task|report) )?in (?P<room>[A-Z_]+)"
+    r"(?: ticks (?P<start>\d+)-(?P<end>\d+))?"
+    r"(?: \(with (?P<with>[^)]+)\))?"
+)
+_SPAWN_ROW = re.compile(
+    r"^- (?:\[obs [^\]]+\] )?(?:\[tick 0\] )?You saw every other player in "
+    r"(?P<room>[A-Z_]+)(?: ticks 0-(?P<end>\d+))?: (?P<subjects>.+)\.$"
+)
+_TESTIMONY_ROW = "[meeting] CLAIM by "
+_OBSERVATIONS_HEADER = "## Recent observations (most salient first):"
+
+
+def _observation_rows(view: str) -> list[str]:
+    """The rendered observation bullets, in the order the model reads them."""
+
+    lines = view.splitlines()
+    if _OBSERVATIONS_HEADER not in lines:
+        return []
+    start = lines.index(_OBSERVATIONS_HEADER) + 1
+    end = start
+    while end < len(lines) and lines[end].startswith("- "):
+        end += 1
+    return lines[start:end]
+
+
+def _sighting_facts(view: str) -> set[tuple[int, str, str, str | None, frozenset[str]]]:
+    """Every ``(tick, subject, room, action, companions)`` the render claims.
+
+    A span is expanded back to one entry per tick it names and the spawn summary to
+    one per subject it lists, so a coalesced render and a per-row render can be
+    compared as the SETS OF FACTS they state rather than as strings.
+    """
+
+    facts: set[tuple[int, str, str, str | None, frozenset[str]]] = set()
+    for row in _observation_rows(view):
+        spawn = _SPAWN_ROW.match(row)
+        if spawn is not None:
+            subjects = [part.strip() for part in spawn.group("subjects").split(",")]
+            for tick in range(int(spawn.group("end") or 0) + 1):
+                for subject in subjects:
+                    facts.add(
+                        (
+                            tick,
+                            subject,
+                            spawn.group("room"),
+                            None,
+                            frozenset(subjects) - {subject},
+                        )
+                    )
+            continue
+        match = _SPAN_ROW.match(row)
+        if match is None:
+            continue
+        companions = frozenset(
+            part.strip() for part in (match.group("with") or "").split(",") if part
+        )
+        if match.group("start") is not None:
+            ticks = range(int(match.group("start")), int(match.group("end")) + 1)
+        else:
+            ticks = range(int(match.group("tick")), int(match.group("tick")) + 1)
+        for tick in ticks:
+            facts.add(
+                (
+                    tick,
+                    match.group("subject"),
+                    match.group("room"),
+                    match.group("action"),
+                    companions,
+                )
+            )
+    return facts
+
+
+def _seen(*rows: tuple[int, str, str]) -> AgentMemory:
+    """A memory for ``p-1`` holding one ``saw_player`` row per (tick, subject, room)."""
+
+    memory = AgentMemory()
+    by_tick: dict[int, list[EpisodicEvent]] = {}
+    for tick in sorted({tick for tick, _, _ in rows}):
+        by_tick[tick] = [_self_state_event(tick=tick, room="CAFETERIA", agent_id="p-1")]
+    for tick, player_id, room in rows:
+        by_tick[tick].append(
+            _saw_player_event(tick=tick, player_id=player_id, room=room)
+        )
+    for tick in sorted(by_tick):
+        for event in by_tick[tick]:
+            memory.episodic.append(event)
+    return memory
+
+
+class TestCoalescedMemoryRenderLever:
+    """Routine sightings fold into spans and testimony outranks them (default-OFF).
+
+    Every test toggles the lever through the ``env`` mapping rather than
+    ``os.environ``, so the suite stays parallel-safe.
+    """
+
+    def test_lever_defaults_off_and_reads_the_env_mapping(self) -> None:
+        assert coalesced_memory_render_enabled() is False
+        assert coalesced_memory_render_enabled({}) is False
+        for falsy in ("", "0", "off", "no", "maybe", "coalesce"):
+            assert (
+                coalesced_memory_render_enabled({ENV_COALESCED_MEMORY_RENDER: falsy})
+                is False
+            )
+        for truthy in ("1", "true", "TRUE", "Yes", " on "):
+            assert (
+                coalesced_memory_render_enabled({ENV_COALESCED_MEMORY_RENDER: truthy})
+                is True
+            )
+
+    @pytest.mark.parametrize(
+        "fixture_name",
+        ["crewmate_basic", "tight_budget_drops_low_salience", "impostor_minimal"],
+    )
+    def test_off_path_fixtures_are_byte_identical(self, fixture_name: str) -> None:
+        fixture, expected = _load_fixture(fixture_name)
+        memory = _build_memory_from_fixture(fixture)
+        budget = int(fixture["token_budget"])
+
+        for env in (None, {}, _COALESCE_OFF):
+            rendered = render_for_prompt(memory, token_budget=budget, env=env)
+            assert rendered == expected, f"{fixture_name} moved with env={env!r}"
+
+    def test_the_off_path_pin_can_fail_because_the_lever_is_not_inert(self) -> None:
+        # The three OFF goldens hold no foldable run, no full-roster spawn group and
+        # no heard claim, so their byte-identity would pass with the lever doing
+        # nothing at all. The gate is the fourth committed fixture: the same memory,
+        # rendered both ways, must be two different documents.
+        fixture, _ = _load_fixture("coalesced_memory_render")
+        memory = _build_memory_from_fixture(fixture)
+        budget = int(fixture["token_budget"])
+
+        off = render_for_prompt(memory, token_budget=budget)
+        on = render_for_prompt(memory, token_budget=budget, env=_COALESCE_ON)
+
+        assert on != off
+        assert render_for_prompt(memory, token_budget=budget, env=_COALESCE_OFF) == off
+
+    def test_render_matches_the_coalesced_golden(self) -> None:
+        fixture, expected = _load_fixture("coalesced_memory_render")
+        memory = _build_memory_from_fixture(fixture)
+        budget = int(fixture["token_budget"])
+
+        rendered = render_for_prompt(memory, token_budget=budget, env=_COALESCE_ON)
+
+        assert rendered == expected, (
+            f"---- expected ----\n{expected}---- rendered ----\n{rendered}"
+        )
+        # The gate bites: the same fixture rendered OFF is a different document, and
+        # it is the one that spends eighteen rows on eleven rows' worth of facts.
+        off = render_for_prompt(memory, token_budget=budget)
+        assert off != expected
+        assert len(_observation_rows(off)) > len(_observation_rows(rendered))
+
+    def test_consecutive_identical_sightings_become_one_span(self) -> None:
+        memory = _seen(
+            (1, "p-9", "CAFETERIA"),
+            (1, "p-8", "CAFETERIA"),
+            (2, "p-9", "CAFETERIA"),
+            (2, "p-8", "CAFETERIA"),
+            (3, "p-9", "CAFETERIA"),
+            (3, "p-8", "CAFETERIA"),
+        )
+
+        rows = _observation_rows(render_for_prompt(memory, env=_COALESCE_ON))
+
+        assert "- You saw p-9 in CAFETERIA ticks 1-3 (with p-8)." in rows
+        assert "- You saw p-8 in CAFETERIA ticks 1-3 (with p-9)." in rows
+
+    def test_a_new_room_breaks_the_run(self) -> None:
+        memory = _seen(
+            (1, "p-9", "CAFETERIA"),
+            (2, "p-9", "ADMIN"),
+            (3, "p-9", "ADMIN"),
+            (4, "p-9", "ADMIN"),
+        )
+
+        rows = _observation_rows(render_for_prompt(memory, env=_COALESCE_ON))
+
+        assert "- [tick 1] You saw p-9 in CAFETERIA." in rows
+        assert "- You saw p-9 in ADMIN ticks 2-3." in rows
+
+    def test_the_breadcrumb_row_keeps_its_own_line(self) -> None:
+        # The "moved from …" suffix lands on a subject's most-recent sighting only,
+        # so that row states strictly more than the ones before it and may not be
+        # folded away into their span.
+        memory = _seen(
+            (1, "p-9", "CAFETERIA"),
+            (2, "p-9", "ADMIN"),
+            (3, "p-9", "ADMIN"),
+            (4, "p-9", "ADMIN"),
+        )
+
+        rows = _observation_rows(render_for_prompt(memory, env=_COALESCE_ON))
+
+        assert (
+            "- [tick 4] You saw p-9 in ADMIN "
+            "(moved from CAFETERIA, last seen there at tick 1)." in rows
+        )
+
+    def test_a_new_action_breaks_the_run(self) -> None:
+        memory = _seen((1, "p-9", "ADMIN"), (2, "p-9", "ADMIN"))
+        memory.episodic.append(
+            _saw_player_event(tick=3, player_id="p-9", room="ADMIN", action="task")
+        )
+
+        rows = _observation_rows(render_for_prompt(memory, env=_COALESCE_ON))
+
+        assert "- You saw p-9 in ADMIN ticks 1-2." in rows
+        assert "- [tick 3] You saw p-9 task in ADMIN." in rows
+
+    def test_a_changed_companion_set_breaks_the_run(self) -> None:
+        # p-8 leaves at tick 3, so who p-9 was standing with is NEW information and
+        # may not be folded into the earlier span.
+        memory = _seen(
+            (1, "p-9", "ADMIN"),
+            (1, "p-8", "ADMIN"),
+            (2, "p-9", "ADMIN"),
+            (2, "p-8", "ADMIN"),
+            (3, "p-9", "ADMIN"),
+        )
+
+        rows = _observation_rows(render_for_prompt(memory, env=_COALESCE_ON))
+
+        assert "- You saw p-9 in ADMIN ticks 1-2 (with p-8)." in rows
+        assert "- [tick 3] You saw p-9 in ADMIN." in rows
+
+    def test_a_tick_the_agent_holds_no_row_for_breaks_the_run(self) -> None:
+        memory = _seen((1, "p-9", "ADMIN"), (2, "p-9", "ADMIN"), (4, "p-9", "ADMIN"))
+
+        rows = _observation_rows(render_for_prompt(memory, env=_COALESCE_ON))
+
+        assert "- You saw p-9 in ADMIN ticks 1-2." in rows
+        assert "- [tick 4] You saw p-9 in ADMIN." in rows
+        assert not any("ticks 1-4" in row for row in rows)
+
+    def test_a_lone_sighting_renders_exactly_as_it_does_off(self) -> None:
+        memory = _seen((4, "p-9", "ADMIN"))
+
+        on = render_for_prompt(memory, env=_COALESCE_ON)
+
+        assert "- [tick 4] You saw p-9 in ADMIN." in _observation_rows(on)
+
+    def test_a_full_roster_tick_zero_group_collapses_to_one_line(self) -> None:
+        memory = _seen(
+            (0, "p-2", "CAFETERIA"),
+            (0, "p-3", "CAFETERIA"),
+            (0, "p-4", "CAFETERIA"),
+            (1, "p-2", "ADMIN"),
+        )
+
+        rows = _observation_rows(render_for_prompt(memory, env=_COALESCE_ON))
+
+        assert (
+            "- [tick 0] You saw every other player in CAFETERIA: p-2, p-3, p-4." in rows
+        )
+        assert not any("[tick 0] You saw p-2 in CAFETERIA" in row for row in rows)
+
+    def test_a_partial_tick_zero_view_keeps_its_rows(self) -> None:
+        # p-4 is a known roster id (the agent saw it later) but was NOT in the
+        # spawn room, and that absence is real information: no summary line.
+        memory = _seen(
+            (0, "p-2", "CAFETERIA"),
+            (0, "p-3", "CAFETERIA"),
+            (1, "p-4", "ADMIN"),
+        )
+
+        rows = _observation_rows(render_for_prompt(memory, env=_COALESCE_ON))
+
+        assert not any("every other player" in row for row in rows)
+        assert "- [tick 0] You saw p-2 in CAFETERIA (with p-3)." in rows
+        assert "- [tick 0] You saw p-3 in CAFETERIA (with p-2)." in rows
+
+    def test_a_roster_that_stayed_together_summarises_its_whole_span(self) -> None:
+        memory = _seen(
+            (0, "p-2", "CAFETERIA"),
+            (0, "p-3", "CAFETERIA"),
+            (1, "p-2", "CAFETERIA"),
+            (1, "p-3", "CAFETERIA"),
+        )
+
+        rows = _observation_rows(render_for_prompt(memory, env=_COALESCE_ON))
+
+        assert "- You saw every other player in CAFETERIA ticks 0-1: p-2, p-3." in rows
+
+    def test_testimony_outranks_bare_co_presence_and_hard_evidence_outranks_it(
+        self,
+    ) -> None:
+        memory = _seen((4, "p-9", "ADMIN"))
+        memory.episodic.append(
+            _saw_player_event(tick=5, player_id="p-8", room="ADMIN", action="vent")
+        )
+        memory.episodic.append(
+            EpisodicEvent(
+                tick=6,
+                type="reported_testimony",
+                payload={
+                    "speaker": "p-3",
+                    "subject": "p-9",
+                    "kind": "saw_player",
+                    "room": "STORAGE",
+                    "from_tick": 2,
+                },
+                provenance="reported",
+            )
+        )
+
+        rows = _observation_rows(render_for_prompt(memory, env=_COALESCE_ON))
+        order = [
+            next(index for index, row in enumerate(rows) if "vent in ADMIN" in row),
+            next(index for index, row in enumerate(rows) if _TESTIMONY_ROW in row),
+            next(
+                index for index, row in enumerate(rows) if "You saw p-9 in ADMIN" in row
+            ),
+        ]
+
+        assert order == sorted(order)
+        # OFF the last two run in the opposite order: the band change is what this
+        # asserts, not the render's shape.
+        off_rows = _observation_rows(render_for_prompt(memory))
+        testimony_off = next(row for row in off_rows if _TESTIMONY_ROW in row)
+        sighting_off = next(row for row in off_rows if "You saw p-9 in ADMIN" in row)
+        assert off_rows.index(testimony_off) > off_rows.index(sighting_off)
+
+    def test_salience_is_a_sort_key_not_a_filter(self) -> None:
+        # At an unbounded budget the ON render must state the SAME facts as the OFF
+        # render -- the same subjects, rooms, ticks and companions, re-shaped.
+        fixture, _ = _load_fixture("coalesced_memory_render")
+        memory = _build_memory_from_fixture(fixture)
+
+        off = render_for_prompt(memory, token_budget=8000)
+        on = render_for_prompt(memory, token_budget=8000, env=_COALESCE_ON)
+
+        assert _sighting_facts(on) == _sighting_facts(off)
+        assert _sighting_facts(on)
+
+    def test_a_dropped_fact_fails_the_same_comparison(self) -> None:
+        # The gate bites: a render missing one tick of a span is not the same set.
+        full = f"{_OBSERVATIONS_HEADER}\n- You saw p-9 in ADMIN ticks 1-3 (with p-8).\n"
+        short = full.replace("ticks 1-3", "ticks 1-2")
+
+        assert _sighting_facts(full) != _sighting_facts(short)
+        assert len(_sighting_facts(full)) == 3
+
+    def test_every_rendered_citation_id_is_one_the_agent_stores(self) -> None:
+        memory = AgentMemory()
+        for tick in range(6):
+            memory.episodic.append(
+                _self_state_event(
+                    tick=tick,
+                    room="CAFETERIA",
+                    agent_id="p-1",
+                    observation_id=f"p-1:{tick}:0",
+                )
+            )
+            for index, subject in enumerate(("p-2", "p-3"), start=1):
+                memory.episodic.append(
+                    EpisodicEvent(
+                        tick=tick,
+                        type="saw_player",
+                        payload={
+                            "player_id": subject,
+                            "room": "CAFETERIA",
+                            "action": None,
+                        },
+                        provenance="observed",
+                        observation_id=f"p-1:{tick}:{index}",
+                    )
+                )
+
+        view = render_for_prompt(memory, env=_COALESCE_ON, token_budget=8000)
+
+        stored = {
+            event.observation_id for event in memory.episodic.recent(since_tick=0)
+        }
+        cited = set(_OBS_ID_IN_VIEW.findall(view))
+        assert cited
+        assert cited <= stored
+
+    def test_the_reported_band_survives_a_budget_that_sheds_it_off(self) -> None:
+        memory = _seen(*[(tick, "p-9", "ADMIN") for tick in range(1, 12)])
+        memory.episodic.append(
+            EpisodicEvent(
+                tick=12,
+                type="reported_testimony",
+                payload={"speaker": "p-3", "subject": "p-9", "kind": "accusation"},
+                provenance="reported",
+            )
+        )
+
+        tight = 90
+        assert _TESTIMONY_ROW not in render_for_prompt(memory, token_budget=tight)
+        assert _TESTIMONY_ROW in render_for_prompt(
+            memory, token_budget=tight, env=_COALESCE_ON
+        )
