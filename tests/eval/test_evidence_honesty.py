@@ -89,6 +89,7 @@ from eval.evidence_honesty import (
     cell,
     compute_evidence_honesty,
 )
+from meetings.constants import MAP_ARBITRATION_MAX_TICK_GAP
 from meetings.manager import INVALID_ACCUSATION_TARGET_MARKER
 from meetings.schemas import (
     AlibiClaim,
@@ -98,12 +99,14 @@ from meetings.schemas import (
     MoveWitnessRecord,
     SawMoveObservation,
     SawPlayerObservation,
+    SawVentObservation,
     SightingRecord,
     VentWitnessRecord,
     WhereaboutsClaim,
 )
 from meetings.transcript import (
     ENV_GROUNDED_PROSECUTION,
+    ENV_MAP_AWARE_ARBITRATION,
     ENV_MOVEMENT_CLAIM_SHAPE,
     canonical_rooms,
     detect_contradictions,
@@ -118,7 +121,7 @@ from eval.replay_walk import (
 )
 from eval.validity import resolve_roster_knobs, roles_by_seed, seeds_on_disk
 from observation.service import ObservationService
-from orchestrator.replay import LLMCallRecord
+from orchestrator.replay import LLMCallRecord, MeetingReplayEntry, read_all_entries
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SAMPLES_9P2I = _REPO_ROOT / "replays" / "samples" / "9p2i"
@@ -1053,6 +1056,14 @@ def test_i6_adjacent_room_strong_share_pins(
     ]
     assert per_set == [(38, 58), (108, 173), (1, 2), (1, 1)]
     assert (sum(n for n, _ in per_set), sum(d for _, d in per_set)) == (148, 234)
+    # The registered cell's gap term measures ticks OUTSIDE the alibi window,
+    # which is 0 on every minted flag — so the un-gated cell reads the same 148.
+    # The two separate only under a lever that measures ticks differently.
+    any_gap = [
+        _counts(reports[d].adjacent_room_flags.adjacent_any_gap)
+        for d in (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I)
+    ]
+    assert any_gap == per_set
     assert (
         sum(
             reports[d].adjacent_room_flags.distance_two
@@ -2717,3 +2728,327 @@ def test_the_sole_flag_wrongful_ejections_lose_their_strong_flag(
     # class; 66 do not. With the movement lever also on, 5 do.
     assert sum(grounded[d].sole_crewmate_still_strong_grounded for d in sets) == 4
     assert sum(grounded[d].sole_crewmate_still_strong_both for d in sets) == 5
+
+
+# --- The map-aware arbitration counterfactual (Task 20.27) ------------------
+#
+# I-6 measures the geometry-blind aggregation: a STRONG ``alibi_vs_sighting``
+# convicts on two rooms that share a doorway, which one tick of walking
+# reconciles. This census re-derives the detector over the committed bytes with
+# the map lever OFF (the recorded substrate) and ON, reads the I-6 cell off both
+# legs with the INSTRUMENT's own classifier, and pins the one place the gauge and
+# the mechanism deliberately disagree.
+
+_MAP_AWARE_ON: Final[Mapping[str, str]] = {ENV_MAP_AWARE_ARBITRATION: "1"}
+
+
+class _CorridorCensus(NamedTuple):
+    """One committed set's I-6 counts on both legs, recounted from the bytes."""
+
+    meetings: int
+    # The OFF leg IS the record for the class this lever touches.
+    sighting_flags_match_recorded: int
+    # The I-6 denominator: STRONG alibi_vs_sighting flags, per leg.
+    strong_off: int
+    strong_on: int
+    # The I-6 numerator: of those, the pairs one doorway apart.
+    adjacent_off: int
+    adjacent_on: int
+    # The detector's own verdict, read against the instrument's.
+    demoted: int
+    demoted_but_not_adjacent: int
+    adjacent_kept_strong: int
+    adjacent_kept_strong_min_gap: int
+    # Ejections whose only STRONG evidence loses its band under the lever.
+    sole_flag_ejections: int
+
+
+def _endpoint_gap(resolved: _ResolvedFlag) -> int:
+    """Ticks from the sighting to the NEAREST edge of the alibi window.
+
+    The detector's tick term, restated from its definition rather than imported,
+    so the drift guard below compares two independent readings. Distinct from the
+    registered I-6 cell's ``gap``, which measures ticks OUTSIDE the window and is
+    therefore 0 on every minted flag.
+    """
+
+    return min(
+        resolved.sighting.tick - resolved.from_tick,
+        resolved.to_tick - resolved.sighting.tick,
+    )
+
+
+def _is_adjacent(
+    resolved: _ResolvedFlag, *, distances: Mapping[RoomId, Mapping[RoomId, int]]
+) -> bool:
+    """The I-6 classifier's ``distance == 1`` reading, verbatim."""
+
+    pairs = [
+        distances.get(alibi, {}).get(seen)
+        for alibi in canonical_rooms(resolved.alibi_room)
+        for seen in canonical_rooms(resolved.sighting.room)
+    ]
+    reachable = [d for d in pairs if d is not None]
+    return bool(reachable) and min(reachable) == 1
+
+
+def _vent_channel(
+    entry: MeetingReplayEntry,
+) -> dict[PlayerId, tuple[VentWitnessRecord, ...]]:
+    """Rebuild each speaker's groundable vent channel from the RECORDED flags.
+
+    The replay persists no private records, but a recorded ``vent_sighting`` flag
+    IS the record-time grounding verdict: its ``event_a_id`` names the spoken
+    observation that matched the speaker's own channel, so a record minted from
+    that observation's typed fields re-grounds it by construction. Without this
+    the re-derivation would drop every ``vent_sighting`` flag, and an ejection
+    backed by a grounded vent would be miscounted below as convicted on a
+    corridor alone.
+    """
+
+    flagged = {
+        flag.event_a_id for flag in entry.contradictions if flag.kind == "vent_sighting"
+    }
+    records: dict[PlayerId, list[VentWitnessRecord]] = {}
+    for turn in entry.transcript.turns:
+        for index, observation in enumerate(turn.observations):
+            if not isinstance(observation, SawVentObservation):
+                continue
+            if f"turn:{turn.turn_id}:obs:{index}" not in flagged:
+                continue
+            records.setdefault(turn.speaker, []).append(
+                VentWitnessRecord(
+                    subject=observation.subject,
+                    room=observation.room,
+                    tick=observation.tick,
+                )
+            )
+    return {speaker: tuple(rows) for speaker, rows in records.items()}
+
+
+def _corridor_census(sample_dir: Path) -> _CorridorCensus:
+    """Re-derive every committed meeting's flags OFF and ON.
+
+    The map rule is a pure function of the transcript and a frozen table, so this
+    census needs no memory reconstruction — only the vent channel rebuilt from the
+    recorded verdicts, so the victim's full STRONG evidence is on the table when
+    the sole-flag ejections are counted. The OFF leg is checked against the
+    recorded bytes for the one kind this lever can re-band.
+    """
+
+    distances = _room_distances(load_canonical_map())
+    counts: Counter[str] = Counter()
+    min_gap = 0
+    for path in sorted(sample_dir.glob("replay-seed-*.jsonl")):
+        for entry in read_all_entries(path):
+            if not isinstance(entry, MeetingReplayEntry):
+                continue
+            counts["meetings"] += 1
+            roster = frozenset(ballot.voter for ballot in entry.ballots)
+            vents = _vent_channel(entry)
+            off = detect_contradictions(
+                entry.transcript, roster=roster, vent_witness_records=vents
+            )
+            on = detect_contradictions(
+                entry.transcript,
+                roster=roster,
+                vent_witness_records=vents,
+                env=_MAP_AWARE_ON,
+            )
+            counts["sighting_flags_match_recorded"] += int(
+                _sighting_flags(off) == _sighting_flags(entry.contradictions)
+            )
+            index = _event_index(entry.transcript)
+            weak_on = {
+                flag.contradiction_id for flag in on if is_weak_contradiction(flag)
+            }
+            for flag in _strong_sightings(off):
+                counts["strong_off"] += 1
+                resolved = _resolve_flag(flag, index=index)
+                if resolved is None:
+                    continue
+                adjacent = _is_adjacent(resolved, distances=distances)
+                demoted = flag.contradiction_id in weak_on
+                counts["adjacent_off"] += int(adjacent)
+                counts["demoted"] += int(demoted)
+                counts["demoted_but_not_adjacent"] += int(demoted and not adjacent)
+                if adjacent and not demoted:
+                    counts["adjacent_kept_strong"] += 1
+                    gap = _endpoint_gap(resolved)
+                    min_gap = gap if min_gap == 0 else min(min_gap, gap)
+            for flag in _strong_sightings(on):
+                counts["strong_on"] += 1
+                resolved = _resolve_flag(flag, index=index)
+                if resolved is not None:
+                    counts["adjacent_on"] += int(
+                        _is_adjacent(resolved, distances=distances)
+                    )
+            victim = entry.ejected_player_id
+            if entry.outcome == "EJECTED" and victim is not None:
+                on_victim = [
+                    flag
+                    for flag in off
+                    if not is_weak_contradiction(flag) and victim in flag.subjects
+                ]
+                if on_victim and all(
+                    flag.contradiction_id in weak_on for flag in on_victim
+                ):
+                    counts["sole_flag_ejections"] += 1
+
+    return _CorridorCensus(
+        meetings=counts["meetings"],
+        sighting_flags_match_recorded=counts["sighting_flags_match_recorded"],
+        strong_off=counts["strong_off"],
+        strong_on=counts["strong_on"],
+        adjacent_off=counts["adjacent_off"],
+        adjacent_on=counts["adjacent_on"],
+        demoted=counts["demoted"],
+        demoted_but_not_adjacent=counts["demoted_but_not_adjacent"],
+        adjacent_kept_strong=counts["adjacent_kept_strong"],
+        adjacent_kept_strong_min_gap=min_gap,
+        sole_flag_ejections=counts["sole_flag_ejections"],
+    )
+
+
+def _sighting_flags(
+    flags: tuple[ContradictionRef, ...],
+) -> tuple[ContradictionRef, ...]:
+    return tuple(flag for flag in flags if flag.kind == "alibi_vs_sighting")
+
+
+@pytest.fixture(scope="module")
+def corridors() -> Mapping[Path, _CorridorCensus]:
+    """One map-aware census per committed set, computed once."""
+
+    return MappingProxyType(
+        {
+            sample_dir: _corridor_census(sample_dir)
+            for sample_dir in (
+                _SAMPLES_9P2I,
+                _CORPUS_9P2I,
+                _SAMPLES_4P1I,
+                _CORPUS_4P1I,
+            )
+        }
+    )
+
+
+def test_the_endpoint_gap_is_not_the_registered_cells_gap() -> None:
+    # The two tick terms measure different things, which is the whole reason the
+    # drift guard below has an enumerated difference. The registered cell's gap
+    # is ticks OUTSIDE the window — 0 on any minted flag; this one is the distance
+    # to the nearest endpoint, which grows toward the window's middle.
+    edge = _resolved(
+        alibi_room="ENGINEERING",
+        sighting_room="EAST_HALL",
+        from_tick=4,
+        to_tick=8,
+        sighting_tick=4,
+    )
+    interior = _resolved(
+        alibi_room="ENGINEERING",
+        sighting_room="EAST_HALL",
+        from_tick=4,
+        to_tick=8,
+        sighting_tick=6,
+    )
+    assert (_endpoint_gap(edge), _endpoint_gap(interior)) == (0, 2)
+    distances = _room_distances(load_canonical_map())
+    tallies = _Tallies()
+    _fold_geometry(interior, distances=distances, tallies=tallies)
+    # The instrument counts the interior flag as adjacent in BOTH its cells; the
+    # detector does not demote it. That is the enumerated difference, in one case.
+    assert (tallies.adjacent_flags, tallies.adjacent_any_gap) == (1, 1)
+    assert _is_adjacent(interior, distances=distances) is True
+
+
+def test_the_adjacency_reading_bites_on_a_two_hop_pair() -> None:
+    # The 148/148 agreement below would pass vacuously if _is_adjacent said yes to
+    # everything: the map's distance has to matter.
+    distances = _room_distances(load_canonical_map())
+    for room, expected in (("EAST_HALL", True), ("CAFETERIA", False), ("LABS", False)):
+        resolved = _resolved(
+            alibi_room="ENGINEERING",
+            sighting_room=room,
+            from_tick=6,
+            to_tick=6,
+            sighting_tick=6,
+        )
+        assert _is_adjacent(resolved, distances=distances) is expected
+
+
+@pytest.mark.slow
+def test_the_corridor_off_leg_is_the_recorded_substrate(
+    corridors: Mapping[Path, _CorridorCensus],
+) -> None:
+    # The counterfactual is only worth reading if its baseline IS the record: on
+    # every committed meeting the OFF leg re-derives the recorded
+    # ``alibi_vs_sighting`` flags — the only kind this lever can move.
+    sets = (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I)
+    for sample_dir in sets:
+        cell = corridors[sample_dir]
+        assert cell.sighting_flags_match_recorded == cell.meetings
+    assert sum(corridors[d].meetings for d in sets) == 707
+    assert sum(corridors[d].strong_off for d in sets) == 234
+
+
+@pytest.mark.slow
+def test_i6_adjacent_room_strong_share_off_and_on(
+    corridors: Mapping[Path, _CorridorCensus],
+) -> None:
+    """The registered I-6 cell, re-derived on both legs of this lever."""
+
+    sets = (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I)
+    off = [(corridors[d].adjacent_off, corridors[d].strong_off) for d in sets]
+    on = [(corridors[d].adjacent_on, corridors[d].strong_on) for d in sets]
+    # OFF: the review's pooled 148/234 = 63.2%, re-derived here rather than
+    # restated, and matching the report-fixture pin per set.
+    assert off == [(38, 58), (108, 173), (1, 2), (1, 1)]
+    assert (sum(n for n, _ in off), sum(d for _, d in off)) == (148, 234)
+    # ON: 140 of the 148 are demoted, so the class drops to 94 STRONG flags of
+    # which 8 are still adjacent — 8/94 = 8.5%. Bar 7 asks for <= 5% and this
+    # lever ALONE does not reach it; the bar is evaluated at the full-slate
+    # record, and the rule is not widened here to chase it.
+    assert on == [(0, 20), (8, 73), (0, 1), (0, 0)]
+    assert (sum(n for n, _ in on), sum(d for _, d in on)) == (8, 94)
+    assert sum(corridors[d].demoted for d in sets) == 140
+
+
+@pytest.mark.slow
+def test_the_instrument_and_the_detector_read_one_adjacency_rule(
+    corridors: Mapping[Path, _CorridorCensus],
+) -> None:
+    """The drift guard: one gauge, one mechanism, one enumerated difference."""
+
+    sets = (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I)
+    # Direction 1 — the detector never demotes a pair the instrument does not
+    # call adjacent. A single such flag means the two are measuring two rules.
+    assert sum(corridors[d].demoted_but_not_adjacent for d in sets) == 0
+    # Direction 2 — the KNOWN difference, enumerated: 8 of the 148 adjacent flags
+    # sit two or more ticks inside their alibi window, so the tick half of the
+    # detector's predicate keeps them STRONG while the instrument still counts
+    # them adjacent. 148 - 140 = 8, and every one of them clears the tick bar.
+    kept = sum(corridors[d].adjacent_kept_strong for d in sets)
+    assert kept == 8
+    assert sum(corridors[d].adjacent_off for d in sets) - kept == sum(
+        corridors[d].demoted for d in sets
+    )
+    assert min(
+        corridors[d].adjacent_kept_strong_min_gap
+        for d in sets
+        if corridors[d].adjacent_kept_strong
+    ) >= (MAP_ARBITRATION_MAX_TICK_GAP + 1)
+
+
+@pytest.mark.slow
+def test_the_ejections_that_lose_their_only_strong_flag(
+    corridors: Mapping[Path, _CorridorCensus],
+) -> None:
+    # What the lever costs the meeting: 47 committed ejections were decided with
+    # no STRONG evidence against the victim except flags this rule re-bands to
+    # weak. They still inform — the flag set is identical — but they can no
+    # longer eject alone.
+    sets = (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I)
+    per_set = [corridors[d].sole_flag_ejections for d in sets]
+    assert per_set == [14, 32, 1, 0]
+    assert sum(per_set) == 47

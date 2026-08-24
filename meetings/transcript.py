@@ -288,6 +288,26 @@ for any caller supplying no mapping):
   superseded by rule two;
 * the Task 18.9 endpoint-band whereabouts exemption, which promoted roll-call
   answers to STRONG -- superseded by rule three.
+
+Map-aware arbitration (:func:`map_aware_arbitration_enabled`, DEFAULT-OFF)
+=========================================================================
+
+The one cross-agent aggregation this module performs is geometry-blind: it
+compares a room-at-a-tick to a room-at-a-tick, and nothing under ``meetings``
+knows the station is a graph. Two rooms that share a doorway are one tick of
+walking apart, so an alibi in one and a sighting in the other at the window's
+edge are two honest accounts of one transit -- and the engine enforces exactly
+that geometry, permitting no non-adjacent step on any tick of any game. This
+lever teaches the detector the map: ON, such a pair carries
+:data:`WEAK_REASON_ADJACENT_ONE_TICK` and informs instead of convicting, while a
+two-hop pair, or a sighting two or more ticks inside a claim of continuous
+presence, keeps its STRONG band -- an out-and-back excursion costs two ticks,
+which the claim's interior rules out anyway. Adjacency is
+:data:`CANONICAL_ROOM_NEIGHBORS`, frozen beside :data:`CANONICAL_ROOMS` under
+the same "DATA, not an engine import" discipline and pinned against the map.
+The flag is demoted, never dropped: flags are information (DESIGN.md §5.4), the
+id set is identical either way, and :func:`is_weak_contradiction` routes the
+pair through belief Rule 2's graduated down-weight.
 """
 
 from __future__ import annotations
@@ -296,9 +316,14 @@ import os
 import re
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Final, Literal
 
-from meetings.constants import GROUNDED_PROSECUTION_MIN_SOURCES
+from meetings.constants import (
+    GROUNDED_PROSECUTION_MIN_SOURCES,
+    MAP_ARBITRATION_MAX_HOPS,
+    MAP_ARBITRATION_MAX_TICK_GAP,
+)
 from meetings.schemas import (
     AccusationClaim,
     AlibiClaim,
@@ -704,6 +729,15 @@ WEAK_REASON_KILL_SCENE: Final[str] = "single-voice kill-scene placement"
 WEAK_REASON_UNGROUNDED_SIGHTING: Final[str] = "ungrounded sighting"
 WEAK_REASON_LONE_GROUNDED_SOURCE: Final[str] = "single grounded source"
 
+# The band map-aware arbitration adds to ``alibi_vs_sighting``
+# (:func:`map_aware_arbitration_enabled`, DEFAULT-OFF). The alibi room and the
+# sighting room share a doorway and the sighting sits within one tick of the
+# window's nearest edge, so one tick of walking reconciles both accounts: the
+# pair informs, but a corridor may not convict. Read by
+# :func:`is_weak_contradiction` exactly like its siblings above, and appended
+# LAST when a flag earns it alongside another reason.
+WEAK_REASON_ADJACENT_ONE_TICK: Final[str] = "adjacent room one tick away"
+
 # Task 13.4 (report-phase-b-plan B3/B4): the minimum number of DISTINCT
 # independent CO-PRESENCE voices that must place a subject OUTSIDE their own
 # stated alibi for the inferential ``alibi_vs_physical`` flag to fire STRONG.
@@ -785,6 +819,35 @@ CANONICAL_ROOMS: Final[frozenset[str]] = frozenset(
         "WEST_HALL",
         "MEDBAY",
         "LABS",
+    }
+)
+
+# Which canonical rooms share a doorway -- the map's room graph, frozen beside
+# the room allowlist above and read for the same reason: :mod:`meetings` must
+# stay engine-free (``agents`` imports this module, and agents/ must not
+# transitively reach engine/ -- the §1.3 observation firewall, enforced by
+# import-linter), so this is DATA, not an engine import.
+#
+# The station is a graph and every one of its room edges costs one tick of
+# walking, which is what lets :func:`map_aware_arbitration_enabled` read "two
+# adjacent rooms one tick apart" as transit rather than a lie. The duplication
+# is pinned by a test asserting this table equals
+# ``engine.world.load_canonical_map().room_neighbors`` for every room AND that
+# every room edge's ``traversal_ticks`` is 1, so a map change that adds a
+# multi-tick corridor fails loud here instead of quietly making "one hop = one
+# tick" false.
+CANONICAL_ROOM_NEIGHBORS: Final[Mapping[str, frozenset[str]]] = MappingProxyType(
+    {
+        "ADMIN": frozenset({"UPPER_HALL", "EAST_HALL", "WEST_HALL"}),
+        "CAFETERIA": frozenset({"UPPER_HALL", "EAST_HALL", "WEST_HALL"}),
+        "EAST_HALL": frozenset({"ADMIN", "CAFETERIA", "ENGINEERING"}),
+        "ENGINEERING": frozenset({"EAST_HALL", "REACTOR", "STORAGE"}),
+        "LABS": frozenset({"MEDBAY"}),
+        "MEDBAY": frozenset({"LABS", "WEST_HALL"}),
+        "REACTOR": frozenset({"ENGINEERING"}),
+        "STORAGE": frozenset({"ENGINEERING"}),
+        "UPPER_HALL": frozenset({"ADMIN", "CAFETERIA"}),
+        "WEST_HALL": frozenset({"ADMIN", "CAFETERIA", "MEDBAY"}),
     }
 )
 
@@ -1577,6 +1640,46 @@ def grounded_prosecution_enabled(env: Mapping[str, str] | None = None) -> bool:
     )
 
 
+# The map-aware arbitration lever -- DEFAULT-OFF, live. Not registered in
+# ``orchestrator.replay._TOGGLEABLE_LEVER_RESOLVERS``: Task 20.33 wires the whole
+# Phase-20 slate into the substrate stamp at once.
+ENV_MAP_AWARE_ARBITRATION: Final[str] = "AILIBI_MAP_AWARE_ARBITRATION"
+_MAP_AWARE_ARBITRATION_FLAG_TRUE: Final[frozenset[str]] = frozenset(
+    {"1", "true", "yes", "on"}
+)
+
+
+def map_aware_arbitration_enabled(env: Mapping[str, str] | None = None) -> bool:
+    """Whether two adjacent rooms one tick apart still convict. DEFAULT OFF.
+
+    Reads :data:`ENV_MAP_AWARE_ARBITRATION` from ``env`` (defaulting to the
+    process environment), accepting ``1/true/yes/on`` case-insensitively;
+    passing ``env`` lets a caller toggle the lever without mutating
+    ``os.environ``.
+
+    ON, an ``alibi_vs_sighting`` pair whose canonical room sets sit within
+    :data:`meetings.constants.MAP_ARBITRATION_MAX_HOPS` doorway hops of each
+    other (:data:`CANONICAL_ROOM_NEIGHBORS`) AND whose sighting tick sits within
+    :data:`meetings.constants.MAP_ARBITRATION_MAX_TICK_GAP` of the nearest edge
+    of the alibi window carries :data:`WEAK_REASON_ADJACENT_ONE_TICK` instead of
+    standing STRONG -- one tick of walking reconciles both accounts, so the pair
+    informs but cannot eject alone. The flag is DEMOTED, never dropped: the
+    ``contradiction_id`` set is identical either way and only the description
+    moves. A two-hop pair keeps its STRONG band, and so does a sighting buried
+    two or more ticks inside a claim of continuous presence -- an out-and-back
+    excursion costs two ticks and contradicts the claim's interior anyway. OFF,
+    no pair is re-banded, which is what the committed recordings hold.
+
+    Phase 20 R1 (audits/review-2026-08-19/D/FINAL-synthesis.md §4 row 2.5).
+    """
+
+    environment = env if env is not None else os.environ
+    return (
+        environment.get(ENV_MAP_AWARE_ARBITRATION, "").strip().lower()
+        in _MAP_AWARE_ARBITRATION_FLAG_TRUE
+    )
+
+
 def detect_contradictions(
     transcript: MeetingTranscript,
     *,
@@ -1747,6 +1850,18 @@ def detect_contradictions(
     Only descriptions move: ids, kinds, event pairs and subjects are stable, so
     every ballot citation and the detector's sort survive a demotion.
 
+    Map-aware arbitration (:func:`map_aware_arbitration_enabled`, DEFAULT-OFF).
+    No channel and no call-site wiring: the rule is a pure function of the
+    transcript and the frozen :data:`CANONICAL_ROOM_NEIGHBORS` table, read once
+    here and threaded down as a boolean. ON, an ``alibi_vs_sighting`` whose two
+    canonical room sets share a doorway and whose sighting sits within one tick
+    of the alibi window's nearest edge carries
+    :data:`WEAK_REASON_ADJACENT_ONE_TICK` -- one tick of walking reconciles both
+    accounts, so a corridor informs but cannot convict. Two hops apart, or two
+    or more ticks inside a claim of continuous presence, keeps the STRONG band.
+    Like the lever above it re-bands only descriptions, so the flag set is
+    identical either way.
+
     The function is pure: it does not mutate the transcript and has no
     side effects.
     """
@@ -1763,6 +1878,9 @@ def detect_contradictions(
     # mapping keeps the pre-lever rules, which is what makes the record-free
     # re-derivers safe and the OFF-path byte pin trivially true.
     grounded_prosecution = grounded_prosecution_enabled(env) and bool(sighting_records)
+    # The map lever needs no channel: it is a pure function of the transcript and
+    # the frozen neighbour table, so one resolver read is the whole gate.
+    map_aware_arbitration = map_aware_arbitration_enabled(env)
 
     effective_roster = _NO_ROSTER if roster is None else roster
     indexed_alibis = tuple(
@@ -1798,6 +1916,7 @@ def detect_contradictions(
             ),
             whereabouts_interior_flags=whereabouts_interior_flags,
             grounded_prosecution=grounded_prosecution,
+            map_aware_arbitration=map_aware_arbitration,
         )
     )
     # Task 13.4 (B3/B4): the inferential physical path.
@@ -2840,6 +2959,7 @@ def _detect_alibi_vs_sightings(
     subject_accounts: Mapping[PlayerId, tuple[_SubjectAccount, ...]],
     whereabouts_interior_flags: bool = False,
     grounded_prosecution: bool = False,
+    map_aware_arbitration: bool = False,
 ) -> Iterator[ContradictionRef]:
     for alibi in alibis:
         if not alibi.rooms:
@@ -2948,6 +3068,16 @@ def _detect_alibi_vs_sightings(
                 alibi.claim.to_tick,
             ):
                 weak_reasons = (*base_reasons, WEAK_REASON_ENDPOINT_TICK)
+            # Map-aware arbitration: two rooms that share a doorway, and a
+            # sighting close enough to the window's edge that one tick of walking
+            # covers the difference, are two honest accounts of one transit. The
+            # reason joins the endpoint band LAST so a flag that already carries
+            # one keeps its existing marker text and gains this in a fixed,
+            # byte-stable position.
+            if map_aware_arbitration and _adjacent_within_one_tick(
+                alibi=alibi, sighting=sighting
+            ):
+                weak_reasons = (*weak_reasons, WEAK_REASON_ADJACENT_ONE_TICK)
             yield _build_contradiction(
                 kind="alibi_vs_sighting",
                 event_a_id=alibi.event_id,
@@ -2959,6 +3089,63 @@ def _detect_alibi_vs_sightings(
                     weak_reasons=weak_reasons,
                 ),
             )
+
+
+def _room_hops(
+    origin: frozenset[str], destination: frozenset[str], *, max_hops: int
+) -> int | None:
+    """Fewest doorway hops from ``origin`` to ``destination``, or ``None``.
+
+    A bounded breadth-first walk over :data:`CANONICAL_ROOM_NEIGHBORS`, room SET
+    to room SET (a compound label like ``"LABS/MEDBAY"`` canonicalises to more
+    than one room, and the subject claims to have been at each). Returns 0 when
+    the two sets intersect, and ``None`` when nothing in ``destination`` is
+    reachable within ``max_hops`` -- including when either side is non-spatial.
+    """
+
+    if not origin or not destination:
+        return None
+    if origin & destination:
+        return 0
+    reached = set(origin)
+    frontier = set(origin)
+    for hops in range(1, max_hops + 1):
+        frontier = {
+            neighbor
+            for room in frontier
+            for neighbor in CANONICAL_ROOM_NEIGHBORS.get(room, frozenset())
+        } - reached
+        if not frontier:
+            return None
+        if frontier & destination:
+            return hops
+        reached |= frontier
+    return None
+
+
+def _adjacent_within_one_tick(
+    *, alibi: _IndexedAlibi, sighting: _IndexedSighting
+) -> bool:
+    """Whether walking reconciles this alibi/sighting pair (Phase 20 R1).
+
+    True when the two canonical room sets sit within
+    :data:`~meetings.constants.MAP_ARBITRATION_MAX_HOPS` doorway hops of each
+    other AND the sighting tick sits within
+    :data:`~meetings.constants.MAP_ARBITRATION_MAX_TICK_GAP` of the nearest edge
+    of the alibi window. The gap is measured to the window's ENDPOINTS, not to
+    the window as a whole: the caller only reaches here for a sighting already
+    INSIDE the window, and a sighting buried deeper than that names an interior
+    tick of a claim of continuous presence, which no single hop reconciles.
+    """
+
+    hops = _room_hops(alibi.rooms, sighting.rooms, max_hops=MAP_ARBITRATION_MAX_HOPS)
+    if hops is None or hops == 0:
+        return False
+    gap = min(
+        sighting.observation.tick - alibi.claim.from_tick,
+        alibi.claim.to_tick - sighting.observation.tick,
+    )
+    return gap <= MAP_ARBITRATION_MAX_TICK_GAP
 
 
 def _direct_sighting_events(
@@ -4135,7 +4322,9 @@ def _ranges_overlap(a_from: int, a_to: int, b_from: int, b_to: int) -> bool:
 
 __all__ = [
     "CANONICAL_ROOMS",
+    "CANONICAL_ROOM_NEIGHBORS",
     "ENV_GROUNDED_PROSECUTION",
+    "ENV_MAP_AWARE_ARBITRATION",
     "ENV_MOVEMENT_CLAIM_SHAPE",
     "ENV_VENT_PLACEMENT_CONTRADICTIONS",
     "ENV_WHEREABOUTS_INTERIOR_FLAGS",
@@ -4146,6 +4335,7 @@ __all__ = [
     "SPAWN_WINDOW_LAST_TICK",
     "VENT_GROUNDING_TICK_TOLERANCE",
     "WEAK_CONTRADICTION_MARKER_PREFIX",
+    "WEAK_REASON_ADJACENT_ONE_TICK",
     "WEAK_REASON_ADVERSARIAL",
     "WEAK_REASON_BOUNDARY_OVERLAP",
     "WEAK_REASON_ENDPOINT_TICK",
@@ -4176,6 +4366,7 @@ __all__ = [
     "is_canonically_ordered",
     "is_relevant_sighting",
     "is_weak_contradiction",
+    "map_aware_arbitration_enabled",
     "movement_claim_shape_enabled",
     "next_chain_step",
     "reconstruct_stated_paths",
