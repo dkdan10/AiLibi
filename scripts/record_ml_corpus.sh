@@ -15,8 +15,8 @@
 # templates at v3), the baseline-6 lever slate (the thirteen retired always-on
 # levers — including the four meeting-layer graduations of Task 18.12:
 # roll_call_round / whereabouts_interior_flags / vent_placement_contradictions /
-# absence_prior — with impostor_roll_call the SOLE live toggle, default-OFF),
-# $0 flat-rate.
+# absence_prior — with every live toggle default-OFF unless --expect-levers
+# declares otherwise), $0 flat-rate.
 # Nothing trains against a meeting layer scheduled to change, so this corpus is a
 # SEPARATE release artifact from the canonical samples: it lands under
 # replays/ml_corpus/ (NOT replays/samples/), at fresh seed ranges so a corpus game
@@ -117,9 +117,9 @@ CORPUS_ROOT="${AILIBI_ML_CORPUS_ROOT:-$REPO_ROOT/replays/ml_corpus}"
 # include the four meeting-layer graduations of the CREW-ONLY ruling
 # (roll_call_round, whereabouts_interior_flags, vent_placement_contradictions,
 # absence_prior — audits/audit-phase-18-baseline-6.md §0.1;
-# audits/audit-phase-18-meeting-gate.md §9), with impostor_roll_call the SOLE
-# remaining live toggle and its recorded state OFF (the unshipped impostor-answer
-# arm). The preflight COUPLES model + prompt set + prompt versions + lever slate
+# audits/audit-phase-18-meeting-gate.md §9), with every live toggle recorded OFF
+# unless --expect-levers declares it ON.
+# The preflight COUPLES model + prompt set + prompt versions + lever slate
 # as ONE substrate, so they re-pin together (Task 18.13, an owner decision — the
 # re-record + re-freeze onto baseline 6).
 #
@@ -598,14 +598,10 @@ PYINNER
 #     is the property that actually matters, rather than on the model sentinel,
 #     which is an artifact of which branch emitted the row;
 #   * its summed cost is exactly $0 (the flat-rate provider contract);
-#   * its game_over substrate_flags stamp POSITIVELY carries the baseline-6
-#     lever slate — every retired always-on lever present and True (incl. the
-#     16.4/16.5/16.6 graduations hard_evidence_gate / observation_id_rendering /
-#     citation_gate AND the four Task-18.12 meeting-layer graduations
-#     roll_call_round / whereabouts_interior_flags /
-#     vent_placement_contradictions / absence_prior) and impostor_roll_call OFF
-#     (the unshipped impostor-answer arm) — the same tolerant per-lever match the
-#     validity gate (check_cost_and_provenance) and the loader
+#   * its game_over substrate_flags stamp POSITIVELY carries the DECLARED lever
+#     slate — every retired always-on lever present and True, every toggle named
+#     by --expect-levers True, every other toggle False — the same tolerant
+#     per-lever match the validity gate (check_cost_and_provenance) and the loader
 #     (_assert_substrate_matches) enforce. The env preflight only refuses a
 #     polluted live slate; this asserts the SLATE in the recorded BYTES, so a
 #     stale baseline-5 replay (whose stamp records the four meeting-layer levers

@@ -317,12 +317,13 @@ class TestSubstrateFlagStamp:
     ``citation_gate`` — and the FOUR meeting-layer levers graduated at the
     Task-18.12 baseline-6 record on the CREW-ONLY ruling: 16.8's ``absence_prior``,
     18.8's ``roll_call_round``, and 18.9's ``whereabouts_interior_flags`` and
-    ``vent_placement_contradictions``. Task 18.10's ``impostor_roll_call`` is the
-    ONE remaining LIVE env-gated toggle (``_TOGGLEABLE_LEVER_RESOLVERS`` — the
-    CREW-ONLY ruling did NOT ship it), DEFAULT-OFF: a bare-environment recording
-    stamps the thirteen retired levers True and ``impostor_roll_call`` False —
-    exactly the committed baseline-6 substrate (``_assert_substrate_matches`` reads
-    a missing key as ``False`` on both sides). An ambient
+    ``vent_placement_contradictions``. Nine LIVE env-gated toggles remain in
+    ``_TOGGLEABLE_LEVER_RESOLVERS`` — Task 18.10's ``impostor_roll_call`` (the arm
+    the CREW-ONLY ruling did NOT ship) and the eight Phase-20 belief-substrate
+    levers — every one DEFAULT-OFF: a bare-environment recording stamps the
+    thirteen retired levers True and all nine toggles False — exactly the
+    committed baseline-6 substrate (``_assert_substrate_matches`` reads a missing
+    key as ``False`` on both sides). An ambient
     ``AILIBI_IMPOSTOR_ROLL_CALL`` export flips the live toggle's stamp ON; the
     thirteen retired levers never read env again.
     """
@@ -1349,27 +1350,44 @@ class TestSubstrateSlateMismatches:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         # The third failure class, planted so the branch can be seen to bite: a
-        # graduation half-done -- the key moved into ``_RETIRED_ALWAYS_ON_LEVERS``
-        # while its default-OFF toggle resolver is still registered, so the
-        # snapshot's unconditional True is immediately overwritten with False.
-        # This build then cannot produce the substrate the recorder is about to
-        # claim, and the refusal must name it rather than let a multi-hour record
-        # start against a lever that reads OFF everywhere it is consulted.
+        # graduation half-done -- the key added to ``_RETIRED_ALWAYS_ON_LEVERS``
+        # while its toggle resolver is still registered. The check is STRUCTURAL,
+        # so neither a truthy stale export nor an operator declaring the lever can
+        # dress the broken registry up as healthy; all three environments below
+        # report the same defect.
+        expected = [
+            "grounded_prosecution is registered as BOTH a graduated lever and a "
+            "live toggle (a half-finished graduation: delete its resolver, or "
+            "drop the retired entry) -- this build cannot produce the substrate "
+            "the record would claim"
+        ]
         monkeypatch.setattr(
             replay_module,
             "_RETIRED_ALWAYS_ON_LEVERS",
             (*replay_module._RETIRED_ALWAYS_ON_LEVERS, "grounded_prosecution"),
         )
-        problems = substrate_slate_mismatches([], env={})
-        assert problems == [
-            "grounded_prosecution is a graduated lever but the live slate reads "
-            "OFF (a partial graduation: this build cannot produce the substrate "
-            "the record would claim)"
+        assert substrate_slate_mismatches(["grounded_prosecution"], env={}) == [
+            *expected,
+            "grounded_prosecution must be ON but the live slate reads OFF "
+            "(AILIBI_GROUNDED_PROSECUTION)",
         ]
-        # Undo the plant and the same call is silent, so the line above is the
+        assert substrate_slate_mismatches([], env={}) == expected
+        assert (
+            substrate_slate_mismatches(
+                ["grounded_prosecution"], env={ENV_GROUNDED_PROSECUTION: "1"}
+            )
+            == expected
+        )
+        # Undo the plant and the same calls are silent, so the lines above are the
         # PERTURBATION biting rather than a branch that always fires.
         monkeypatch.undo()
         assert substrate_slate_mismatches([], env={}) == []
+        assert (
+            substrate_slate_mismatches(
+                ["grounded_prosecution"], env={ENV_GROUNDED_PROSECUTION: "1"}
+            )
+            == []
+        )
 
     def test_a_graduated_lever_cannot_be_named_as_a_toggle(self) -> None:
         # Naming a graduated lever is the same class of error: its env gate is

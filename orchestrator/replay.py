@@ -540,11 +540,11 @@ ReplayLogEntry: TypeAlias = Annotated[
 # built default-OFF and env-gated at Wave 1, registered into the substrate stamp
 # at Task 18.11 (the meeting-layer gate, so a probe/adoption recording
 # self-describes its arms), and retired to unconditional HERE once baseline 6
-# adopted them. The ONE lever left in ``_TOGGLEABLE_LEVER_RESOLVERS`` below is
-# 18.10's ``impostor_roll_call`` (the impostor-answer template arm): the CREW-ONLY
-# ruling did NOT ship it, so it stays a DEFAULT-OFF toggle. A bare-environment
-# recording stamps the four graduated levers ``True`` (retired-always-on) and
-# ``impostor_roll_call`` ``False`` — exactly the baseline-6 substrate.
+# adopted them. 18.10's ``impostor_roll_call`` (the impostor-answer template arm)
+# did NOT ship under that ruling, so it stayed a DEFAULT-OFF toggle and sits in
+# ``_TOGGLEABLE_LEVER_RESOLVERS`` below beside the eight Phase-20 levers. A
+# bare-environment recording stamps every lever in THIS tuple ``True`` and every
+# live toggle ``False`` — exactly the committed baseline-6 substrate.
 _RETIRED_ALWAYS_ON_LEVERS: Final[tuple[str, ...]] = (
     "testimony_as_content",
     "witnessed_kill_evidence",
@@ -671,8 +671,13 @@ def substrate_slate_mismatches(
     * a toggleable lever whose live state differs from the expectation, in
       EITHER direction (an expected-ON lever left unexported is as fatal as a
       stale export nobody asked for);
-    * a retired lever reading ``False`` -- a partial graduation, i.e. this build
-      cannot produce the substrate the recorder is about to claim.
+    * a lever registered as BOTH graduated and toggleable -- a half-finished
+      graduation (the retired entry added, the resolver not deleted). Checked
+      STRUCTURALLY, not by value: it is the registry that is broken, so a truthy
+      stale export must not make it look healthy, and no declaration may excuse
+      it. It is also the only way a graduated lever can read OFF at all --
+      :func:`substrate_flag_snapshot` seeds every retired key ``True`` and only a
+      surviving resolver can overwrite one.
     """
 
     wanted = set(expected_on)
@@ -688,6 +693,13 @@ def substrate_slate_mismatches(
             )
         else:
             problems.append(f"{key!r} is not a lever in the registry")
+    for key in sorted(toggleable & set(_RETIRED_ALWAYS_ON_LEVERS)):
+        problems.append(
+            f"{key} is registered as BOTH a graduated lever and a live toggle "
+            "(a half-finished graduation: delete its resolver, or drop the "
+            "retired entry) -- this build cannot produce the substrate the "
+            "record would claim"
+        )
     for key in TOGGLEABLE_SUBSTRATE_FLAG_KEYS:
         want = key in wanted
         if bool(live.get(key, False)) is not want:
@@ -695,13 +707,6 @@ def substrate_slate_mismatches(
                 f"{key} must be {'ON' if want else 'OFF'} but the live slate "
                 f"reads {'ON' if live.get(key, False) else 'OFF'} "
                 f"({env_var_for_lever(key)})"
-            )
-    for key in _RETIRED_ALWAYS_ON_LEVERS:
-        if live.get(key) is not True:
-            problems.append(
-                f"{key} is a graduated lever but the live slate reads OFF "
-                "(a partial graduation: this build cannot produce the "
-                "substrate the record would claim)"
             )
     return problems
 
