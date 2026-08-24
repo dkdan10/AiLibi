@@ -765,32 +765,47 @@ def test_a_movement_sided_sighting_is_read_at_its_destination() -> None:
     assert (far.destination_flags, far.origin_flags) == (0, 0)
 
 
-def test_a_movement_sided_side_is_grounded_by_the_move_channel_only() -> None:
-    # A witness who saw a DEPARTURE holds no saw_player row at the destination,
-    # so the placement's grounding lives in the move channel. I-4 has to read it
-    # there or it scores a production-grounded side as unsupported.
+def test_a_movement_sided_side_is_grounded_by_whichever_channel_holds_it() -> None:
+    # I-4 asks whether the speaker COULD have seen what they said. A witness who
+    # saw a DEPARTURE holds no saw_player row at the destination, so refusing the
+    # move channel would score a production-grounded side as unsupported.
     turns = (
         _turn(index=0, speaker="p-9", observations=(_saw_move(to_room="MEDBAY"),)),
         _turn(index=1, speaker="p-3", claims=(_FLAG_ALIBI,)),
     )
     move_flag = _sighting_flag(sighting_id="turn:m:turn-0:obs:0")
-    grounded = _fold(
+    by_move = _fold(
         _flag_meeting(turns=turns, flags=(move_flag,)),
         memories={"p-9": _witness_memory(moved_to="MEDBAY")},
     )
-    assert (grounded.resolvable_sides, grounded.grounded_at_tick) == (1, 1)
+    assert (by_move.resolvable_sides, by_move.grounded_at_tick) == (1, 1)
 
-    # Perturbed one way: no transition in memory at all. The side is resolvable
-    # and NOT grounded — the channel is read, not assumed.
+    # A witness who watched the ARRIVAL holds the static row instead, and it
+    # supports the same placement: the cell is about the room, not the channel.
+    by_sighting = _fold(
+        _flag_meeting(turns=turns, flags=(move_flag,)),
+        memories={"p-9": _witness_memory(saw_player_in="MEDBAY", moved_to=None)},
+    )
+    assert (by_sighting.resolvable_sides, by_sighting.grounded_at_tick) == (1, 1)
+
+    # Perturbed: a static row for the same subject and tick in a DIFFERENT room.
+    # The room is read, not assumed, so nothing grounds the placement.
+    wrong_room = _fold(
+        _flag_meeting(turns=turns, flags=(move_flag,)),
+        memories={"p-9": _witness_memory(saw_player_in="ADMIN", moved_to=None)},
+    )
+    assert (wrong_room.resolvable_sides, wrong_room.grounded_at_tick) == (1, 0)
+
+    # Perturbed: neither channel holds anything.
     ungrounded = _fold(
         _flag_meeting(turns=turns, flags=(move_flag,)),
         memories={"p-9": _witness_memory(moved_to=None)},
     )
     assert (ungrounded.resolvable_sides, ungrounded.grounded_at_tick) == (1, 0)
 
-    # Perturbed the other way: a STATIC sighting of the same room, by a speaker
-    # holding the same move row. A static side reads the saw_player channel and
-    # only that — which is why no committed cell can move.
+    # And the clause that protects every committed cell: a STATIC sighting by a
+    # speaker holding only the move row is NOT grounded. The move channel is
+    # admitted for movement-sided placements only.
     static_turns = (
         _turn(index=0, speaker="p-9", observations=(_saw_player(room="MEDBAY"),)),
         _turn(index=1, speaker="p-3", claims=(_FLAG_ALIBI,)),

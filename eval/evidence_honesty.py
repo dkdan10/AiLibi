@@ -2308,14 +2308,23 @@ def _supports_placement(
 ) -> bool:
     """Whether one memory row is the speaker's own perception of the placement.
 
-    A static sighting is supported by a ``saw_player`` row naming the room it
-    spoke. A MOVEMENT-sided placement is the arrival half of a transition, and
-    the speaker's channel for THAT is ``saw_player_move``: a witness who saw a
-    departure holds no ``saw_player`` row at the destination, which is the same
-    channel disjointness the detector relies on when it treats such a placement
-    as grounded (``meetings.transcript::_IndexedSighting.movement_grounded``).
-    Only a movement-sided placement reads the move channel, so a static side's
-    cell is exactly what it always was.
+    The cell asks whether the speaker COULD have seen what they said, so a row
+    counts when it puts the subject in the spoken room, whichever channel
+    recorded it:
+
+    * a ``saw_player`` row naming that room -- the witness looked and saw them
+      there, and this supports a static sighting and a transition's arrival
+      alike;
+    * a ``saw_player_move`` row LANDING there, admitted only for a
+      MOVEMENT-sided placement. A witness who saw a departure holds no
+      ``saw_player`` row at the destination -- the same channel disjointness the
+      detector relies on when it treats such a placement as grounded
+      (``meetings.transcript::_IndexedSighting.movement_grounded``) -- so
+      refusing the move channel would score a production-grounded side as
+      unsupported.
+
+    The move channel is admitted for movement-sided placements ONLY, which is
+    what keeps every static side's cell exactly what it always was.
     """
 
     if event.payload.get("player_id") != resolved.sighting.subject:
