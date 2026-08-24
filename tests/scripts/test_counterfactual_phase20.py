@@ -23,8 +23,14 @@ from typing import Final
 import pytest
 
 from agents.memory.episodic import EpisodicEvent, MemoryStore
-from agents.memory.store import AgentMemory
-from agents.perception import EVENT_SAW_PLAYER, EVENT_SELF_STATE, PROVENANCE_OBSERVED
+from agents.memory.store import DEFAULT_TOKEN_BUDGET, AgentMemory, render_for_prompt
+from agents.perception import (
+    EVENT_REPORTED_TESTIMONY,
+    EVENT_SAW_PLAYER,
+    EVENT_SELF_STATE,
+    PROVENANCE_OBSERVED,
+    PROVENANCE_REPORTED,
+)
 from eval.evidence_honesty import compute_evidence_honesty, live_impostor_policy
 from engine.entities import Role
 from meetings.schemas import ContradictionRef
@@ -308,6 +314,84 @@ def test_the_render_census_headline_is_the_full_eight_lever_slate(
     assert full_testimony[0] / full_testimony[1] > (
         seven_testimony[0] / seven_testimony[1]
     )
+
+
+def test_the_decomposition_leg_is_ingest_lineage_invariant() -> None:
+    """Withholding lever 7 at RENDER time prices its INGEST half too.
+
+    `meeting_outcome_memory` is the one lever with an ingest seam: ON, a spoken
+    `saw_vent` statement is kept as reported CONTENT, so the ON memory lineage
+    holds an event a lever-OFF ingest would have dropped. The decomposition leg
+    renders that ON lineage under the withheld-lever slate rather than rebuilding
+    a third lineage, which is sound because the extra event renders to NOTHING
+    when the render-time lever is OFF (`_render_reported_testimony` returns None
+    for that kind) and a reported-testimony event carries no observation id to
+    shift a sequence. Asserted here, not argued: the two lineages render
+    byte-identically on the decomposition slate, and differ on the full one.
+    """
+
+    def _memory(*, with_vent: bool) -> AgentMemory:
+        store = MemoryStore()
+        store.append(
+            EpisodicEvent(
+                tick=4,
+                type=EVENT_SELF_STATE,
+                payload={
+                    "agent_id": "p-1",
+                    "room": "CAFETERIA",
+                    "role": "CREWMATE",
+                    "pending_task_id": None,
+                    "owned_task_ids": (),
+                    "fellow_impostor_ids": (),
+                    "in_vent": False,
+                },
+                provenance=PROVENANCE_OBSERVED,
+                observation_id="p-1:4:0",
+            )
+        )
+        statements: list[tuple[str, str]] = [("saw_player", "p-3")]
+        if with_vent:
+            statements.append(("saw_vent", "p-4"))
+        for kind, subject in statements:
+            store.append(
+                EpisodicEvent(
+                    tick=5,
+                    type=EVENT_REPORTED_TESTIMONY,
+                    payload={
+                        "speaker": "p-2",
+                        "kind": kind,
+                        "subject": subject,
+                        "meeting_index": 1,
+                        "from_tick": 3,
+                        "to_tick": 3,
+                        "room": "ADMIN",
+                        "co_present": (),
+                    },
+                    provenance=PROVENANCE_REPORTED,
+                )
+            )
+        return AgentMemory(episodic=store)
+
+    on_ingest = _memory(with_vent=True)
+    off_ingest = _memory(with_vent=False)
+    withheld = {
+        "seven": cf.LEVER_7_DECOMPOSITION_SLATE,
+        "full": cf.SLATE_ON,
+    }
+    rendered = {
+        f"{slate}:{leg}": render_for_prompt(
+            memory, token_budget=DEFAULT_TOKEN_BUDGET, env=env
+        )
+        for slate, env in withheld.items()
+        for leg, memory in (("on", on_ingest), ("off", off_ingest))
+    }
+    # The decomposition leg cannot tell the two lineages apart — which is exactly
+    # what makes rendering the ON lineage under the withheld slate legitimate.
+    assert rendered["seven:on"] == rendered["seven:off"]
+    # And the two stores really do differ: the full slate renders the vent claim.
+    assert rendered["full:on"] != rendered["full:off"]
+    assert "VENT" in rendered["full:on"]
+    assert "VENT" not in rendered["seven:on"]
 
 
 def test_the_testimony_buckets_partition_the_testimony_total(

@@ -203,9 +203,17 @@ changed digit is caught (a planted `148/234` → `149/234` is the perturbation t
 | testimony retained, less lever 7 | 18.3% → 45.9% | 18.3% → 42.6% | 0% → 0% | 0% → 0% |
 | innocent ejections still STRONG | 19/23 → 0/23 | 50/54 → 3/54 | 1/2 → 0/2 | 0/0 → 0/0 |
 
-Three of the four per-set ON cells for I-4 and I-6 have a denominator of 0 or 1. Under §4.1's
-granularity rule those are ADVISORY by an enormous margin and take no part in any verdict, in either
+Three of the four per-set ON cells for I-6 have a denominator of 0 or 1. Under §4.1's granularity
+rule those RATE cells are ADVISORY by an enormous margin and take no part in any verdict, in either
 direction; they are printed because a suppressed denominator must never be left implicit.
+
+**I-4 is deliberately NOT covered by that sentence.** §4.1 registers bars 5 and 6 as COUNT bars and
+says in terms that the granularity test does not reach them: their target is zero occurrences and
+they are decided on the NUMERATOR, where one ungrounded surviving side fails at any denominator and
+an empty denominator passes vacuously. Calling a small-denominator I-4 cell "advisory" would invite
+the record audit to discount a real bar-5 failure. The denominator is reported beside the verdict
+instead, exactly as §4.1 instructs, and the SUPPRESSED-NOT-FIXED label is the mechanism that prices a
+shrunken population — not the granularity waiver.
 
 The two render rows carry the same headline-plus-decomposition pair as the pooled table, so a per-set
 comparison at the record is like-for-like; their OFF column is the RECONSTRUCTED leg (51.13, not the
@@ -344,18 +352,30 @@ ejection census is *negative by one*, and no reading of this table should claim 
 * `structured_turn_markers` — the turn half IS measured here (192/3934 → 0/3934), but the prompt half
   is prompt-set-coupled and the downstream effect (does a model reason better when audit strings stop
   appearing inside quoted dialogue?) is a model question.
-* `meeting_outcome_memory` — supported on both seams. The *ingest* seam is the ON memory lineage
-  carrying the testimony rows the OFF lineage drops; the *render* seam is now measurable too, and the
-  decomposition rows price it: withholding this one lever moves the census 39.03 → 39.43
-  rows/snapshot and testimony retention 44.6% → 42.7%. What it does NOT support is the downstream
-  question — whether a model votes differently once a claim says which meeting it came from.
+* `meeting_outcome_memory` — supported on both seams, and the decomposition rows price the WHOLE
+  lever: withholding it moves the census 39.03 → 39.43 rows/snapshot and testimony retention
+  44.6% → 42.7%. That leg withholds the lever at RENDER time over the ON memory lineage, and it
+  captures the ingest half too, because the ingest half is only visible through the render: a
+  `saw_vent` statement the ON ingest kept renders to NOTHING when the render-time lever is OFF
+  (`agents/memory/store.py::_render_reported_testimony` returns `None` for that kind), and a
+  reported-testimony event carries no observation id to shift a sequence.
+  `test_the_decomposition_leg_is_ingest_lineage_invariant` asserts exactly that: an ON-ingest store
+  and a true lever-OFF-ingest store render byte-identically on the decomposition slate, while
+  differing on the full one. What no offline instrument supports is the downstream question —
+  whether a model votes differently once a claim says which meeting it came from.
 * `task_completion_from_events` — fully supported: I-5 falls to 0 on every set, on a denominator that
   is 78.5% of its baseline value (1482 of 1888), so §4.1's SUPPRESSED-NOT-FIXED threshold (below 10%
   of baseline) is nowhere near reached. The lever grounds the row rather than suppressing it.
-* `coalesced_memory_render` — supported on the census: 48.82 → 39.03 rendered rows per snapshot at
-  the full slate, with reported testimony rising from 18.0% to 44.6% of the surviving rows. The
-  compression is this lever's; the retention shift is shared with the other render levers, which is
-  why the census is a §5 secondary cell and no bar rides it.
+* `coalesced_memory_render` — the census MOVES, 48.82 → 39.03 rendered rows per snapshot at the full
+  slate with reported testimony rising from 18.0% to 44.6% of the surviving rows, but that move is
+  the SLATE's and this memo does not assign it to this lever. Only the three detector levers carry a
+  leave-one-out leg here (each is a flag cell); no render-lever ablation was run, and a spot check is
+  enough to show why the attribution would be wrong — with only coalescing withheld, samples/9p2i
+  renders **96,565/1,956 = 49.37** rows per snapshot against a reconstructed OFF of 51.13, so part of
+  the compression belongs to the other render levers and coalescing's own marginal is 49.37 → 40.77
+  rather than the whole 51.13 → 40.77. The census is a §5 secondary cell and no bar rides it, so the
+  per-render-lever
+  decomposition is left to the record audit rather than half-asserted here.
 
 **No graduation subset is proposed.** The ratified §6 rules that partial adoption yields a published
 per-lever VERDICT and never a partial graduation, because a subset slate matches neither committed
