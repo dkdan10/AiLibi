@@ -7614,10 +7614,13 @@ class TestTurnAnnotationRecordShape:
         # ``/eval/tournament-report`` surface), so the field must stay visible to
         # the recursive field tripwires in ``tests/api/test_leak.py`` rather than
         # be hidden from schema generation while still serializing.
-        schema = MeetingTurn.model_json_schema()
-        assert sorted(schema["properties"]) == sorted(
-            [*self._AUTHORED_FIELDS, "annotations"]
-        )
+        expected = sorted([*self._AUTHORED_FIELDS, "annotations"])
+        # BOTH modes: FastAPI publishes the serialization schema for a response
+        # model, and a custom model serializer reduces it to a bare object
+        # unless the generator is handed the field-typed core schema.
+        for mode in ("validation", "serialization"):
+            schema = MeetingTurn.model_json_schema(mode=mode)
+            assert sorted(schema["properties"]) == expected, mode
 
     def test_an_annotation_payload_must_match_its_kind(self) -> None:
         # The three claim-drop kinds carry their dropped value; the other two

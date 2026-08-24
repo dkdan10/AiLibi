@@ -32,16 +32,19 @@ shape stop validating and are re-recorded in Task 8.12.
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Final, Literal, TypeAlias
+from typing import Annotated, Any, Final, Literal, TypeAlias, cast
 
 from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    GetJsonSchemaHandler,
     SerializerFunctionWrapHandler,
     model_serializer,
     model_validator,
 )
+from pydantic.json_schema import JsonSchemaValue
+from pydantic_core import CoreSchema
 
 PlayerId: TypeAlias = str
 RoomId: TypeAlias = str
@@ -508,6 +511,26 @@ class MeetingTurn(AuthoredTurn):
         if not self.annotations:
             data.pop("annotations", None)
         return data
+
+    @classmethod
+    def __get_pydantic_json_schema__(
+        cls, core_schema: CoreSchema, handler: GetJsonSchemaHandler
+    ) -> JsonSchemaValue:
+        """Publish the field-typed schema in BOTH modes.
+
+        A custom model serializer with an untyped return would otherwise reduce
+        the serialization-mode schema to a bare object, and that is the schema
+        FastAPI publishes for every response that reaches a turn -- so a client
+        could discover none of these fields. Dropping the serializer from the
+        core schema handed to the generator restores the field list; the only
+        thing the serializer changes is whether one key with a default is
+        present.
+        """
+
+        without_serializer = {
+            key: value for key, value in core_schema.items() if key != "serialization"
+        }
+        return handler(cast(CoreSchema, without_serializer))
 
 
 # ---------------------------------------------------------------------------
