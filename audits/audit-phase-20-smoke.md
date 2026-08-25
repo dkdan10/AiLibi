@@ -515,3 +515,65 @@ print("alibi_conflict seeds", [r[0] for r in rows if r[3]["alibi_conflict"]])
 print("reasons", dict(collections.Counter(r[4] for r in rows)))
 PY
 ```
+
+## §14 — Post-fix re-measure and the restart ruling (addendum, 2026-08-25)
+
+Task 20.43 (PR #387, merged acf71f14) landed the movement-sided resolver arm and the
+instrument-side flag dedup this report's §11 routed. Per that contract's Step 5, the
+orchestrator ran the re-measure on the PRESERVED smoke bytes (the same five replays this
+report recorded; no re-record, no new spend), at origin/main 28599ec3, with the eight
+Phase-20 lever exports matching the recorded slate:
+
+`uv run python scripts/measure_baseline.py --honesty <preserved smoke dir>` — exit 0:
+
+```
+Evidence-honesty instruments over /private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/d2f79696-15f2-4a2e-a7e2-cb7d5b023724/scratchpad/tasks/20.35/smoke/9p2i (5 games, 15 meetings; +1 agent clock proved on 252 discriminating sightings):
+  I-2 false crew self-placement: 0.0  (0/63)  95% CI [0.0, 0.0575]  (rare count — read the interval)
+    ... agent-frame reading: 0.0  (0/63)  95% CI [0.0, 0.0575]  (rare count — read the interval)
+    ... impostor claims: 0.0  (0/13)  95% CI [0.0, 0.2281]  (rare count — read the interval)
+    ... copyable from a rendered self-location line: 0.0952  (6/63)  95% CI [0.0444, 0.1926]  (rare count — read the interval)
+  I-3 sole-flag precision (per victim): None  (0/0)  95% CI undefined  (rare count — read the interval)
+    ... per meeting: crewmates ejected: None  (0/0)  95% CI undefined  (rare count — read the interval)  [0 sole-flag meetings]
+    ... class impostor share: None  (0/0)  95% CI undefined  (rare count — read the interval)
+    ... living-voter base rate: None  (0/0)  95% CI undefined  (rare count — read the interval)
+  I-4 grounded sighting side (+-0): None  (0/0)  95% CI undefined  (rare count — read the interval)
+    ... (+-1): None  (0/0)  95% CI undefined  (rare count — read the interval)
+    ... (+-2): None  (0/0)  95% CI undefined  (rare count — read the interval)  [0 of 0 sides unresolvable]
+  I-5 fabricated completion lines: 0.0  (0/32)  95% CI [0.0, 0.1072]  (rare count — read the interval)  [+1 render offset 32/32; 0 games hit]
+  I-6 adjacent-room STRONG share: None  (0/0)  95% CI undefined  (rare count — read the interval)  [distance 2: 0; >=3: 0; single-tick window: 0]
+    ... adjacency alone, any tick gap: None  (0/0)  95% CI undefined  (rare count — read the interval)
+  I-7 movement-origin flags: 0.0  (0/5)  95% CI [0.0, 0.4345]  (rare count — read the interval)  [move-backed 2; destination 2; STRONG 0; memory-truthful 0]
+  I-8 marker contamination (turns): 0.0  (0/85)  95% CI [0.0, 0.0432]  (rare count — read the interval)
+    ... (prompts): 0.0  (0/170)  95% CI [0.0, 0.0221]  (rare count — read the interval)  [0 meetings, 0 games]
+  I-9 singular-persona prompts: 0.0  (0/170)  95% CI [0.0, 0.0221]  (rare count — read the interval)
+  I-10 meetings with a venting participant: 0.2  (3/15)  95% CI [0.0705, 0.4519]  (rare count — read the interval)
+    ... reporter killed within 3 ticks: 0.2  (3/15)  95% CI [0.0705, 0.4519]  (rare count — read the interval)  [15 body-triggered]
+  I-11 [live-policy-fold] free zero-witness kills declined: 0.04  (1/25)  95% CI [0.0071, 0.1954]  (rare count — read the interval)  [ranking 0; fellow-defer 1; cover 0; other 0]
+    ... ghost-top decisions: 0.0  (0/173)  95% CI [0.0, 0.0217]  (rare count — read the interval)  [0 ejected / 0 unseen death; 0 mismatches over 173 decisions]
+  render budget: mean rendered lines/snapshot 35.69 over 170 snapshots; reported-testimony rows 2542 {'5-6': 1252, '<=4': 1026, '>=7': 264}
+```
+
+`uv run python scripts/measure_baseline.py --solvability <preserved smoke dir>` — exit 0:
+
+```
+Solvability ceiling over /private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/d2f79696-15f2-4a2e-a7e2-cb7d5b023724/scratchpad/tasks/20.35/smoke/9p2i (5 games, 15 body meetings, 9 ejections at them):
+  killer in candidate set: 0.9333  (14/15)  95% CI [0.7018, 0.9881]
+  one candidate: 0.0  (0/15)  95% CI [0.0, 0.2039]  (rare count — read the interval)
+    ... and it is the killer: None  (0/0)  95% CI undefined  (rare count — read the interval)
+  at most two candidates: 0.2  (3/15)  95% CI [0.0705, 0.4519]  (rare count — read the interval)
+    ... containing the killer: 1.0  (3/3)  95% CI [0.4385, 1.0]  (rare count — read the interval)
+  ejected a player the crew had already cleared: 0.2222  (2/9)  95% CI [0.0632, 0.5474]  (rare count — read the interval)
+  killer in candidate set, last-kill anchor: 1.0  (15/15)  95% CI [0.7961, 1.0]
+```
+
+Every cell family folds; the §11 defect is lifted. Read against the bars (n = 5 games,
+every interval advisory): I-2 0/63, I-5 0/32, I-7 origin 0/5, I-8 0/85 + 0/170 and
+I-9 0/170 all read at their targets; I-3, I-4 and I-6 are empty-denominator cells — the
+sole-flag and STRONG alibi_vs_sighting classes did not occur on these bytes — and take
+their real read at the record. The recording half was already clean (§§5–8).
+
+RULING: the owner's restart go was given 2026-08-25 (recorded by the orchestrator; the
+owner also directed two parallel Featherless workers and an ETA re-derivation at the
+first leg). The §12 ABANDON is LIFTED TO GO for Task 20.36 on the corrected instrument.
+The §13 operating notes carry unchanged, including note 3: the record runs the honesty
+instrument after the FIRST completed seed of each leg, not only at the end.
