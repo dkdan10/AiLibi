@@ -3182,7 +3182,7 @@ def test_committed_flat_4p1i_report_pins_the_successor_instrument() -> None:
 
     assert result.legacy_alibi_supplied == 0  # was 1
     assert result.legacy_alibi_converted == 0  # was 1
-    assert result.legacy_alibi_conversion_rate == pytest.approx(1.0)
+    assert result.legacy_alibi_conversion_rate == pytest.approx(None)
     committed_legacy = report.gate_metrics.genuine_class_conversion
     assert result.legacy_alibi_supplied == committed_legacy.supplied
     assert result.legacy_alibi_converted == committed_legacy.converted

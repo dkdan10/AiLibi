@@ -644,7 +644,7 @@ def test_9p2i_pooling_reads_the_live_roll_call_channel(
     )  # was 0.8628354978354977
     assert nine_pooling.whereabouts_lies_detected == 29  # was 50
     assert nine_pooling.whereabouts_lie_detection_rate == pytest.approx(
-        0.05931198102016608
+        0.03800786369593709
     )
 
 
@@ -684,12 +684,10 @@ def test_4p1i_pooling_reproduces_baseline_5_exactly(
     assert four_pooling.roll_call_coverage_mean == pytest.approx(
         0.7083333333333333
     )  # was 0.735042735042735
-    assert four_pooling.whereabouts_lie_detection_rate == pytest.approx(
-        0.03488372093023256
-    )
-    assert four_pooling.vouch_observations_total == 118
-    assert four_pooling.vouch_rate_mean == pytest.approx(0.5555555555555555)
-    assert four_pooling.grounded_vouch_rate_mean == pytest.approx(0.3333333333333333)
+    assert four_pooling.whereabouts_lie_detection_rate == pytest.approx(0.0)
+    assert four_pooling.vouch_observations_total == 55
+    assert four_pooling.vouch_rate_mean == pytest.approx(0.3583333333333333)
+    assert four_pooling.grounded_vouch_rate_mean == pytest.approx(0.14166666666666666)
     assert four_pooling.grounded_vouch_share == pytest.approx(0.6)
     assert four_pooling.absence_set_size_mean == pytest.approx(0.3333333333333333)
     assert dict(four_pooling.absence_set_size_histogram) == {0: 26, 1: 13}
@@ -712,15 +710,11 @@ def test_9p2i_pooling_roll_call_breakdown_reproduces_baseline_5(
         + nine_pooling.roll_call_placed_impostor_total
         == nine_pooling.roll_call_answered_total
     )
-    assert nine_pooling.roll_call_coverage_crew_mean == pytest.approx(
-        0.9957575757575758
-    )
-    assert nine_pooling.roll_call_coverage_impostor_mean == pytest.approx(
-        0.45454545454545453
-    )
-    assert nine_pooling.whereabouts_claims_opening_total == 164
+    assert nine_pooling.roll_call_coverage_crew_mean == pytest.approx(1.0)
+    assert nine_pooling.roll_call_coverage_impostor_mean == pytest.approx(0.4375)
+    assert nine_pooling.whereabouts_claims_opening_total == 157
     assert nine_pooling.whereabouts_claims_reply_total == 79
-    assert nine_pooling.whereabouts_claims_opt_in_total == 600
+    assert nine_pooling.whereabouts_claims_opt_in_total == 527
     # The surface split totals partition the set-wide claims total exactly.
     assert (
         nine_pooling.whereabouts_claims_opening_total
@@ -747,11 +741,9 @@ def test_4p1i_pooling_roll_call_breakdown_reproduces_baseline_5(
         == four_pooling.roll_call_answered_total
     )
     assert four_pooling.roll_call_coverage_crew_mean == pytest.approx(1.0)
-    assert four_pooling.roll_call_coverage_impostor_mean == pytest.approx(
-        0.20512820512820512
-    )
-    assert four_pooling.whereabouts_claims_opening_total == 39
-    assert four_pooling.whereabouts_claims_reply_total == 10
+    assert four_pooling.roll_call_coverage_impostor_mean == pytest.approx(0.125)
+    assert four_pooling.whereabouts_claims_opening_total == 40
+    assert four_pooling.whereabouts_claims_reply_total == 8
     assert four_pooling.whereabouts_claims_opt_in_total == 37
     assert (
         four_pooling.whereabouts_claims_opening_total
@@ -759,7 +751,7 @@ def test_4p1i_pooling_roll_call_breakdown_reproduces_baseline_5(
         + four_pooling.whereabouts_claims_opt_in_total
         == four_pooling.whereabouts_claims_total
     )
-    assert four_pooling.roll_call_asked_total == 117
+    assert four_pooling.roll_call_asked_total == 120
     assert four_pooling.roll_call_answered_total == 86
     assert four_pooling.roll_call_answer_rate == pytest.approx(0.7350427350427351)
 

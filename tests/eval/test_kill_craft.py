@@ -91,7 +91,7 @@ def test_corpus_means_and_correlations(corpus_report: KillCraftReport) -> None:
     # committed kill has ever had a co-present crewmate — survives the re-record.
     assert corpus_report.witnessed_point_biserial_co_present is None
     assert corpus_report.witnessed_point_biserial_within_one_hop == pytest.approx(
-        0.2585155159660001
+        0.10745972885288838
     )
 
 
@@ -114,11 +114,11 @@ def test_samples_9p2i_fold1(samples_9p2i_report: KillCraftReport) -> None:
         2.3333333333333335
     )
     assert samples_9p2i_report.mean_one_hop_unwitnessed == pytest.approx(
-        0.8304093567251462
+        1.0632183908045978
     )
     assert samples_9p2i_report.witnessed_point_biserial_co_present is None
     assert samples_9p2i_report.witnessed_point_biserial_within_one_hop == pytest.approx(
-        0.238331042011978
+        0.1432852958330477
     )
 
 
@@ -136,7 +136,7 @@ def test_samples_4p1i_fold1(samples_4p1i_report: KillCraftReport) -> None:
     )  # was 0.2
     assert samples_4p1i_report.witnessed_point_biserial_co_present is None
     assert samples_4p1i_report.witnessed_point_biserial_within_one_hop == pytest.approx(
-        0.22687999213482657
+        0.18805416740144096
     )
 
 

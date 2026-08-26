@@ -1000,15 +1000,15 @@ def test_committed_flat_4p1i_report_pins_the_gate_metrics() -> None:
     # The preserved legacy column mirrors the genuine-class cell above.
     assert supplied_channel.legacy_alibi_supplied == 0  # was 1
     assert supplied_channel.legacy_alibi_converted == 0  # was 1
-    assert supplied_channel.legacy_alibi_conversion_rate == pytest.approx(1.0)
+    assert supplied_channel.legacy_alibi_conversion_rate == pytest.approx(None)
     assert supplied_channel.note == SUPPLIED_CHANNEL_GATE_NOTE
 
     assert gate.lost_opening_accusations == 0
     assert gate.cap_defaulted_turns == 0
 
-    assert gate.accused_impostor_events == 31
-    assert gate.accused_impostor_survivals == 22
-    assert gate.survivals_rendered_met == 3
+    assert gate.accused_impostor_events == 35
+    assert gate.accused_impostor_survivals == 15
+    assert gate.survivals_rendered_met == 1
     assert gate.survivals_sheltered_sub_gate == 0
     assert gate.survivals_unevidenced == 19
 

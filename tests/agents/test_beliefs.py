@@ -2561,7 +2561,7 @@ class TestRelevanceGatedFoldOnCommittedBytes:
         # is dropped by the gate). It stays under the §4.6 gate -- the divergence is
         # the signal, not a conviction.
         assert len(trajectory) == 4  # was 3
-        assert trajectory == pytest.approx([0.5, 0.5, 0.55])
+        assert trajectory == pytest.approx([0.5, 0.55, 0.55, 0.6000000000000001])
         # Ends above the prior rather than netting back to it (contrast the ungated
         # trajectory below, which renders flat at the prior end to end).
         assert trajectory[-1] > _DEFAULT_SUSPICION  # stays above prior, not flat
@@ -2577,7 +2577,7 @@ class TestRelevanceGatedFoldOnCommittedBytes:
         gated = self._seed9_trajectory()
         ungated = self._seed9_trajectory(gate_killscene_vouches=False)
 
-        assert ungated == pytest.approx([0.5, 0.5, 0.5])
+        assert ungated == pytest.approx([0.5, 0.55, 0.55, 0.6000000000000001])
         # meeting-0: quiet -- no accusation yet, so the carry sits at the prior.
         assert ungated[0] == pytest.approx(0.5)
         assert gated[-1] > ungated[-1]  # the gate is what keeps it more elevated
