@@ -1175,6 +1175,17 @@ class TestContradictionsWiring:
         assert _suspicion_of("p-2", suspicion_line) > _DEFAULT_TEST_SUSPICION
 
 
+def _annotations(turn: MeetingTurn) -> list[str]:
+    """The turn's audit-annotation kinds, in recorded order.
+
+    Since the baseline-7 record the manager records what its guards changed as
+    typed annotations instead of prepending audit markers to ``free_text``, so a
+    test that used to read the prefix reads this.
+    """
+
+    return [annotation.kind for annotation in turn.annotations]
+
+
 def _suspicion_of(player_id: str, suspicion_line: str) -> float:
     body = suspicion_line[len("suspicion=") :]
     for part in body.split(","):
@@ -2453,8 +2464,10 @@ class TestInvalidAccusationTargetDropped:
 
         opening = result.transcript.turns[0]
         assert opening.speaker == "p-1"
-        assert opening.free_text.startswith(OPENING_UNSURE_DEGRADE_MARKER)
-        assert OPENING_UNSURE_MARKER in opening.free_text.lower()
+        assert _annotations(opening) == [
+            "opening_degraded_unsure",
+            "invalid_accusation_target",
+        ]
         assert opening.free_text != DEFAULT_TURN_FREE_TEXT
         assert not any(isinstance(c, AccusationClaim) for c in opening.claims)
         # Exactly one retry: two opening attempts, then the degrade.
@@ -2499,9 +2512,8 @@ class TestInvalidAccusationTargetDropped:
         opening = result.transcript.turns[0]
         assert opening.speaker == "p-1"
         assert not any(isinstance(c, AccusationClaim) for c in opening.claims)
-        assert opening.free_text.startswith(
-            INVALID_ACCUSATION_TARGET_MARKER.format(target="imp-2")
-        )
+        assert _annotations(opening) == ["invalid_accusation_target"]
+        assert [a.original for a in opening.annotations] == ["imp-2"]
         # Recorded on the first attempt: the unsure declaration satisfies the
         # opening validation, so no retry fires.
         opening_calls = [c for c in client.calls if "PHASE=OPENING" in c.prompt]
@@ -3345,7 +3357,8 @@ class TestOpeningAccuseOrUnsureValidation:
 
         assert client.opening_calls == 2
         opening = result.transcript.turns[0]
-        assert opening.free_text == OPENING_UNSURE_DEGRADE_MARKER + self._NARRATION
+        assert _annotations(opening) == ["opening_degraded_unsure"]
+        assert opening.free_text == self._NARRATION
         assert len(manager.defaulted_calls) == 1
         default = manager.defaulted_calls[0]
         assert default.phase == "opening"
@@ -3410,21 +3423,20 @@ class TestOpeningAccuseOrUnsureValidation:
     def test_drop_marker_text_never_self_certifies_unsure(self) -> None:
         # A hallucinated target literally named "unsure" produces a drop
         # marker quoting it ("[invalid accusation target 'unsure' ...]").
-        # The validation reads the MODEL-AUTHORED free_text, never the
-        # marker-prefixed text, so the quoted value cannot satisfy the
-        # unsure check and the opening still retries -- then degrades,
-        # with the drop marker preserved AFTER the degrade marker.
+        # The validation reads the MODEL-AUTHORED free_text, so the quoted
+        # value cannot satisfy the unsure check and the opening still retries --
+        # then degrades, with the drop recorded AFTER the degrade.
         result, client, manager = _run_with_openings(
             _turn_json(speaker="p-1", accuses="unsure", free_text="It was them."),
         )
 
         assert client.opening_calls == 2
         opening = result.transcript.turns[0]
-        assert opening.free_text == (
-            OPENING_UNSURE_DEGRADE_MARKER
-            + INVALID_ACCUSATION_TARGET_MARKER.format(target="unsure")
-            + "It was them."
-        )
+        assert _annotations(opening) == [
+            "opening_degraded_unsure",
+            "invalid_accusation_target",
+        ]
+        assert opening.free_text == "It was them."
         assert not any(isinstance(c, AccusationClaim) for c in opening.claims)
         assert len(manager.defaulted_calls) == 1
         assert manager.defaulted_calls[0].trigger == "validation"
@@ -4281,10 +4293,14 @@ class TestNonRosterClaimSubjectsDropped:
         assert not any(isinstance(c, AlibiClaim) for c in opening.claims)
         kept = [c.supports for c in opening.claims if isinstance(c, CorroborationClaim)]
         assert kept == ["p-3"]
-        assert opening.free_text.startswith(
-            INVALID_ALIBI_SUBJECT_MARKER.format(subject="headless-seed-9")
-            + INVALID_CORROBORATION_SUPPORTS_MARKER.format(supports="headless-seed-9")
-        )
+        assert _annotations(opening) == [
+            "invalid_alibi_subject",
+            "invalid_corroboration_supports",
+        ]
+        assert [a.original for a in opening.annotations] == [
+            "headless-seed-9",
+            "headless-seed-9",
+        ]
 
     def test_corroboration_naming_a_dead_roster_player_is_dropped(self) -> None:
         # The seed-40 shape generalised: p-2 is a real roster id but DEAD
@@ -4315,9 +4331,8 @@ class TestNonRosterClaimSubjectsDropped:
 
         opening = result.transcript.turns[0]
         assert not any(isinstance(c, CorroborationClaim) for c in opening.claims)
-        assert opening.free_text.startswith(
-            INVALID_CORROBORATION_SUPPORTS_MARKER.format(supports="p-2")
-        )
+        assert _annotations(opening) == ["invalid_corroboration_supports"]
+        assert [a.original for a in opening.annotations] == ["p-2"]
         assert "p-2" not in extract_belief_evidence(result).corroborated
 
     def test_valid_alibi_and_corroboration_pass_through_unmarked(self) -> None:
@@ -4394,9 +4409,7 @@ class TestNonRosterClaimSubjectsDropped:
             for turn in result.transcript.turns
             for c in turn.claims
         )
-        assert result.transcript.turns[0].free_text.startswith(
-            INVALID_ALIBI_SUBJECT_MARKER.format(subject="headless-seed-9")
-        )
+        assert _annotations(result.transcript.turns[0]) == ["invalid_alibi_subject"]
         assert all(
             "headless-seed-9" not in flag.subjects for flag in result.contradictions
         )
@@ -4575,7 +4588,7 @@ class TestOpeningUnsureDegrade:
 
         opening = result.transcript.turns[0]
         assert opening.turn_kind == "opening"
-        assert opening.free_text.startswith(OPENING_UNSURE_DEGRADE_MARKER)
+        assert _annotations(opening)[0] == "opening_degraded_unsure"
         # The body report SURVIVES the degrade -- the whole point.
         assert any(isinstance(o, FoundBodyObservation) for o in opening.observations)
         assert not any(isinstance(c, AccusationClaim) for c in opening.claims)
@@ -6574,7 +6587,7 @@ class TestEmergencyOpeningNoBody:
         assert not any(
             isinstance(o, FoundBodyObservation) for o in opening.observations
         )
-        assert opening.free_text.startswith(EMERGENCY_BODY_STRIP_MARKER)
+        assert _annotations(opening) == ["fabricated_opening"]
         assert any(
             isinstance(c, AccusationClaim) and c.against == "p-2"
             for c in opening.claims
@@ -6612,7 +6625,7 @@ class TestEmergencyOpeningNoBody:
         assert not any(
             isinstance(o, FoundBodyObservation) for o in opening.observations
         )
-        assert EMERGENCY_BODY_STRIP_MARKER not in opening.free_text
+        assert "fabricated_opening" not in _annotations(opening)
         opening_calls = [c for c in client.calls if "PHASE=OPENING" in c.prompt]
         assert len(opening_calls) == 2
 
@@ -6628,7 +6641,7 @@ class TestEmergencyOpeningNoBody:
         opening = result.transcript.turns[0]
 
         assert body in opening.observations
-        assert EMERGENCY_BODY_STRIP_MARKER not in opening.free_text
+        assert "fabricated_opening" not in _annotations(opening)
 
     def test_body_only_emergency_opening_degrades_to_unsure_after_strip(self) -> None:
         # When the body was the opening's ONLY content, the post-strip opening
@@ -6658,8 +6671,10 @@ class TestEmergencyOpeningNoBody:
         assert not any(
             isinstance(o, FoundBodyObservation) for o in opening.observations
         )
-        assert OPENING_UNSURE_DEGRADE_MARKER in opening.free_text
-        assert EMERGENCY_BODY_STRIP_MARKER in opening.free_text
+        assert _annotations(opening) == [
+            "opening_degraded_unsure",
+            "fabricated_opening",
+        ]
 
     def test_emergency_opening_without_a_body_is_unchanged(self) -> None:
         # The desired case: a suspicion-framed emergency opening with no body
@@ -6671,7 +6686,7 @@ class TestEmergencyOpeningNoBody:
         opening = result.transcript.turns[0]
 
         assert opening.observations == ()
-        assert EMERGENCY_BODY_STRIP_MARKER not in opening.free_text
+        assert "fabricated_opening" not in _annotations(opening)
         opening_calls = [c for c in client.calls if "PHASE=OPENING" in c.prompt]
         assert len(opening_calls) == 1
 
@@ -7320,11 +7335,14 @@ class TestGroundedProsecutionWiring:
 
     _MATCHING_RECORD = SightingRecord(subject="p-1", room="EAST_HALL", tick=150)
 
-    def test_the_flag_is_strong_with_the_lever_off(self) -> None:
+    def test_a_lone_grounded_speaker_bands_weak_through_the_manager(self) -> None:
+        # The manager threads ONE grounding source per meeting, so a single
+        # grounded speaker bands the flag WEAK on every call -- the graduated
+        # rule (b), read through the production seam rather than the detector.
         result, seen = _run_prosecution_meeting({"p-2": (self._MATCHING_RECORD,)})
         (flag,) = result.contradictions
         assert flag.kind == "alibi_vs_sighting"
-        assert WEAK_CONTRADICTION_MARKER_PREFIX not in flag.description
+        assert WEAK_CONTRADICTION_MARKER_PREFIX in flag.description
         assert seen["p-3"] == (flag,)
 
     def test_a_lone_grounded_speaker_bands_weak_on_every_call(
@@ -7597,31 +7615,21 @@ def _run_planted_meeting(
 
 
 class TestStructuredTurnMarkersResolver:
-    """The lever reads one variable, defaults OFF, and takes the four words."""
+    """Graduated at the baseline-7 record: unconditional, env never consulted."""
 
-    def test_default_is_off(self) -> None:
-        assert structured_turn_markers_enabled({}) is False
-        assert (
-            structured_turn_markers_enabled({ENV_STRUCTURED_TURN_MARKERS: ""}) is False
-        )
-        assert (
-            structured_turn_markers_enabled({ENV_STRUCTURED_TURN_MARKERS: "0"}) is False
-        )
-        assert (
-            structured_turn_markers_enabled({ENV_STRUCTURED_TURN_MARKERS: "maybe"})
-            is False
-        )
-
-    @pytest.mark.parametrize("value", ["1", "true", "TRUE", "yes", "on", " On "])
-    def test_truthy_words_enable_it(self, value: str) -> None:
+    @pytest.mark.parametrize(
+        "value", ["", "0", "maybe", "1", "true", "TRUE", "yes", "on", " On "]
+    )
+    def test_the_channel_is_unconditional(self, value: str) -> None:
         assert structured_turn_markers_enabled({ENV_STRUCTURED_TURN_MARKERS: value})
+        assert structured_turn_markers_enabled({}) is True
 
-    def test_process_environment_is_the_default_source(
+    def test_the_process_environment_is_not_consulted(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.delenv(ENV_STRUCTURED_TURN_MARKERS, raising=False)
-        assert structured_turn_markers_enabled() is False
-        monkeypatch.setenv(ENV_STRUCTURED_TURN_MARKERS, "1")
+        assert structured_turn_markers_enabled() is True
+        monkeypatch.setenv(ENV_STRUCTURED_TURN_MARKERS, "0")
         assert structured_turn_markers_enabled() is True
 
 
@@ -7783,54 +7791,59 @@ class TestTurnAnnotationRecordShape:
             TurnAnnotation(kind="invalid_alibi_subject", original="x" * (bound + 1))
 
 
-class TestStructuredTurnMarkersOff:
-    """OFF, every guard still splices its marker into the spoken text."""
+class TestStructuredTurnMarkersRecording:
+    """Every guard records a typed annotation and leaves the spoken text alone."""
 
-    def test_both_recording_branches_splice_the_identical_markers(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.delenv(ENV_STRUCTURED_TURN_MARKERS, raising=False)
+    def test_both_recording_branches_record_the_identical_annotations(self) -> None:
         result, prompts = _run_planted_meeting()
 
         # Branch 1 -- the twice-failed opening rebuilt as unsure. All five
-        # markers, in the order the pre-lever code produced them.
+        # guards, in the order the manager applies them, and none of them in the
+        # spoken text.
         opening = result.transcript.turns[0]
-        assert opening.free_text == (
-            OPENING_UNSURE_DEGRADE_MARKER
-            + EMERGENCY_BODY_STRIP_MARKER
-            + INVALID_ALIBI_SUBJECT_MARKER.format(subject=_PLANTED_SUBJECT)
-            + INVALID_CORROBORATION_SUPPORTS_MARKER.format(supports=_PLANTED_SUPPORTS)
-            + INVALID_ACCUSATION_TARGET_MARKER.format(target=_PLANTED_TARGET)
-            + "turn from p-1"
-        )
-        assert opening.annotations == ()
+        assert _annotations(opening) == [
+            "opening_degraded_unsure",
+            "fabricated_opening",
+            "invalid_alibi_subject",
+            "invalid_corroboration_supports",
+            "invalid_accusation_target",
+        ]
+        assert [a.original for a in opening.annotations] == [
+            None,
+            None,
+            _PLANTED_SUBJECT,
+            _PLANTED_SUPPORTS,
+            _PLANTED_TARGET,
+        ]
+        assert opening.free_text == "turn from p-1"
 
         # Branch 2 -- the ordinary per-turn recording.
         later = [turn for turn in result.transcript.turns if turn.turn_index > 0]
         assert later, "the planted meeting must record turns after the opening"
         for turn in later:
-            assert turn.free_text.startswith(
-                INVALID_ALIBI_SUBJECT_MARKER.format(subject=_PLANTED_LATER_SUBJECT)
-            )
-            assert turn.annotations == ()
+            assert "invalid_alibi_subject" in _annotations(turn)
+            assert _PLANTED_LATER_SUBJECT not in turn.free_text
 
-        # And the markers really do travel into the rendered prompts.
+        # And no marker reaches a rendered prompt.
         contaminated = [
             prompt
             for prompt in prompts
             if any(head in prompt for head in _TURN_MARKER_HEADS)
         ]
-        assert len(contaminated) >= 2
+        assert contaminated == []
 
-    def test_a_recorded_turn_gains_no_annotations_key(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        # The serialization half of OFF-path identity: an empty annotations
-        # tuple is elided, so newly recorded bytes carry the pre-lever key set.
-        monkeypatch.delenv(ENV_STRUCTURED_TURN_MARKERS, raising=False)
+    def test_a_recorded_turn_carries_its_annotations_key(self) -> None:
+        # The serialization half: a turn with guards applied serializes them, so
+        # the spectator can read the audit trail off the recorded bytes.
         result, _prompts = _run_planted_meeting()
-        for turn in result.transcript.turns:
-            assert "annotations" not in turn.model_dump(mode="json")
+        opening = result.transcript.turns[0].model_dump(mode="json")
+        assert [row["kind"] for row in opening["annotations"]] == [
+            "opening_degraded_unsure",
+            "fabricated_opening",
+            "invalid_alibi_subject",
+            "invalid_corroboration_supports",
+            "invalid_accusation_target",
+        ]
 
 
 class TestStructuredTurnMarkersOn:
