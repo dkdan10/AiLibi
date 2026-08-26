@@ -10,7 +10,7 @@ class the 19.1 sweep cleaned (a stale refresh date, a stale win rate, a stale
 ladder tip, a graduated lever still documented as a live knob) is exactly what
 regenerates silently otherwise.
 
-Seventeen checks. Each accumulates precise errors; all of them are reported
+Eighteen checks. Each accumulates precise errors; all of them are reported
 together, so one run names every drifted fact rather than the first.
 
 1. **Sample provenance.** ``replays/samples/<set>/MANIFEST.md`` owns each sample
@@ -117,8 +117,9 @@ together, so one run names every drifted fact rather than the first.
 12. **The reading guide carries no ``file.ext:NN`` citations.** Line numbers rot
     on the next edit; the guide cites heading anchors and symbols instead.
 13. **Every relative link resolves.** Across README.md, docs/history.md,
-    docs/glossary.md, audits/README.md and docs/reading-guide.md, each relative
-    markdown target (fragment stripped) must name a path that exists.
+    docs/glossary.md, audits/README.md, docs/reading-guide.md, docs/lessons.md
+    and audits/review-2026-08-19/README.md, each relative markdown target
+    (fragment stripped) must name a path that exists.
 14. **The ML page's results table is re-derived from the finalist-eval JSONL.**
     docs/ml-program.md publishes the program's headline table — per arm, its
     wins, the same-seed comparator's wins, the paired exact-McNemar p, and the
@@ -145,6 +146,13 @@ together, so one run names every drifted fact rather than the first.
     and every sentence naming a wrongful or innocent ejection must name the
     count the record read — or the count the recording before it read, which
     is what the before column is for.
+18. **The published review index's acted-on map resolves.** Every row of
+    ``audits/review-2026-08-19/README.md``'s finding -> task -> pull-request
+    table must credit a task that exists as a contract in ``tasks/phase-20.md``
+    AND whose contract actually names that finding, so a row cannot be moved to
+    a neighbouring task and still read as true. Whether the pull-request number
+    was merged is resolved in the unit tests, which need full git history and
+    skip rather than pass without it.
 
 ``--repo-root`` points the document and source reads at another tree (the unit
 tests perturb a copy); it defaults to this checkout. The lever registry ALWAYS
@@ -205,6 +213,13 @@ _LINKED_DOCUMENTS: Final[tuple[str, ...]] = (
     _AUDITS_INDEX,
     _READING_GUIDE,
 )
+# The two pages published alongside the front door: the lessons essay and the
+# curated index of the review it came out of. Their links are held to the same
+# resolution rule; the index's acted-on map is held to the phase contract.
+_LESSONS: Final = "docs/lessons.md"
+_REVIEW_INDEX: Final = "audits/review-2026-08-19/README.md"
+_PUBLISHED_DOCUMENTS: Final[tuple[str, ...]] = (_LESSONS, _REVIEW_INDEX)
+_PHASE_20_CONTRACT: Final = "tasks/phase-20.md"
 # The documents that between them must account for every phase contract.
 _PHASE_DOCUMENTS: Final[tuple[str, ...]] = (_README, _HISTORY)
 # The documents allowed to repeat a claim the committed bytes own — a win rate,
@@ -391,6 +406,22 @@ _VOLATILE_COUNTS: Final[tuple[tuple[str, re.Pattern[str]], ...]] = (
     ("tests", re.compile(r"\d[\d,]*\+?\s+tests\b", re.IGNORECASE)),
 )
 _AS_OF: Final = re.compile(r"as of (\d{4}-\d{2}-\d{2})")
+
+# The review index's acted-on map, located by its header cells. A row is one
+# review finding, the claim in a line, the phase task that closed it and the
+# merged pull request that carries it.
+_REVIEW_MAP_HEADER: Final[tuple[str, ...]] = (
+    "Finding",
+    "What it claimed",
+    "Closed by",
+    "Pull request",
+)
+_REVIEW_FINDING: Final = re.compile(r"\A`([GC]-\d{1,3})`\Z")
+_REVIEW_TASK: Final = re.compile(r"\A(\d+\.\d+)\Z")
+_REVIEW_PULL_REQUEST: Final = re.compile(
+    r"\A\[#(\d+)\]\(https://github\.com/[\w.-]+/[\w.-]+/pull/(\d+)\)\Z"
+)
+_PHASE_TASK_HEADING: Final = re.compile(r"^### Task (\d+\.\d+) — ", re.MULTILINE)
 
 # A `path.ext:NN` citation — the shape that rots on the next edit of the file it
 # names. The extensions are the ones this tree's prose actually cites.
@@ -652,8 +683,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         f"{_READING_GUIDE} carries no file:line citation, narrates the cells "
         f"{_DEDUCTION_INSTRUMENT} pins, and names only games {_PICKER} "
         f"features; the claim-shaped facts hold across "
-        f"{len(_CLAIM_DOCUMENTS)} documents; and every relative link in "
-        f"{len(_LINKED_DOCUMENTS)} front-door documents resolves."
+        f"{len(_CLAIM_DOCUMENTS)} documents; every relative link in "
+        f"{len(_LINKED_DOCUMENTS) + len(_PUBLISHED_DOCUMENTS)} front-door and "
+        f"published documents resolves; and every {_REVIEW_INDEX} map row "
+        f"credits a {_PHASE_20_CONTRACT} contract that names its finding."
     )
     print(
         f"{_ML_PAGE} verified: every published arm's wins, comparator wins, "
@@ -685,6 +718,7 @@ def check_facts(repo_root: Path) -> list[str]:
     check_verdict_figures(repo_root, errors)
     check_featured_exhibits(repo_root, errors)
     check_relative_links(repo_root, errors)
+    check_review_map(repo_root, errors)
     check_ml_results_table(repo_root, errors)
     return errors
 
@@ -3071,7 +3105,7 @@ def check_featured_exhibits(repo_root: Path, errors: list[str]) -> None:
 
 
 def check_relative_links(repo_root: Path, errors: list[str]) -> None:
-    """Every relative link on the front door resolves to a real path.
+    """Every relative link on the front door and the published pages resolves.
 
     Offline by construction: the fragment is stripped and the path is stat-ed.
     External URLs are not this check's business — nothing here reaches the
@@ -3079,7 +3113,7 @@ def check_relative_links(repo_root: Path, errors: list[str]) -> None:
     go somewhere that does not exist.
     """
 
-    for document in _LINKED_DOCUMENTS:
+    for document in _LINKED_DOCUMENTS + _PUBLISHED_DOCUMENTS:
         text = read_document(repo_root, document, errors)
         if text is None:
             continue
@@ -3117,6 +3151,118 @@ def relative_targets(
         if not path:
             continue
         yield target, repo_root / posixpath.normpath(posixpath.join(base, path))
+
+
+def check_review_map(repo_root: Path, errors: list[str]) -> None:
+    """The review index's acted-on map points at real contracts and real work.
+
+    "The process caught it and here is the fix" is only a checkable claim while
+    the third and fourth columns resolve. Each row is held to the contract that
+    owns the change: the task id must name a section of the phase document, and
+    that section must actually cite the finding — a row moved to a neighbouring
+    task would otherwise read as true. The pull-request number's own resolution
+    needs full git history, so it lives in the unit tests, which can skip on a
+    shallow clone rather than pass on one.
+    """
+
+    index = read_document(repo_root, _REVIEW_INDEX, errors)
+    contract = read_document(repo_root, _PHASE_20_CONTRACT, errors)
+    if index is None or contract is None:
+        return
+    rows = review_map_cells(index)
+    if not rows:
+        errors.append(
+            f"{_REVIEW_INDEX}: no acted-on map rows found under the "
+            f"{' | '.join(_REVIEW_MAP_HEADER)} header — that table is what links "
+            "each published finding to the change that closed it."
+        )
+        return
+
+    sections = phase_task_sections(contract)
+    for number, cells in rows:
+        finding = _REVIEW_FINDING.match(cells[0])
+        task = _REVIEW_TASK.match(cells[2])
+        pull_request = _REVIEW_PULL_REQUEST.match(cells[3])
+        if finding is None or task is None or pull_request is None:
+            errors.append(
+                f"{_REVIEW_INDEX}:{number}: the map row {cells[0]!r} does not "
+                "parse — a row is a `G-n`/`C-n` finding, a claim, a bare task id "
+                "and one [#N](…/pull/N) link."
+            )
+            continue
+        if pull_request.group(1) != pull_request.group(2):
+            errors.append(
+                f"{_REVIEW_INDEX}:{number}: the {finding.group(1)} row shows "
+                f"#{pull_request.group(1)} but links pull request "
+                f"#{pull_request.group(2)}."
+            )
+        section = sections.get(task.group(1))
+        if section is None:
+            errors.append(
+                f"{_REVIEW_INDEX}:{number}: the {finding.group(1)} row credits "
+                f"task {task.group(1)}, which is not a contract in "
+                f"{_PHASE_20_CONTRACT}."
+            )
+            continue
+        if re.search(rf"\b{re.escape(finding.group(1))}\b", section) is None:
+            errors.append(
+                f"{_REVIEW_INDEX}:{number}: the {finding.group(1)} row credits "
+                f"task {task.group(1)}, whose contract in {_PHASE_20_CONTRACT} "
+                f"never names {finding.group(1)}."
+            )
+
+
+def review_map_cells(index: str) -> list[tuple[int, list[str]]] | None:
+    """``(line, cells)`` for each acted-on map row, or ``None`` with no table.
+
+    Located by its header cells rather than by the heading above it, so renaming
+    the section cannot silently disable the check.
+    """
+
+    rows: list[tuple[int, list[str]]] | None = None
+    width = len(_REVIEW_MAP_HEADER)
+    for number, line in enumerate(index.splitlines(), 1):
+        cells = table_cells(line)
+        if cells is None or len(cells) != width:
+            if rows is not None:
+                break
+            continue
+        if rows is None:
+            if tuple(cells) == _REVIEW_MAP_HEADER:
+                rows = []
+            continue
+        if all(_TABLE_RULE_CELL.match(cell) for cell in cells):
+            continue
+        rows.append((number, cells))
+    return rows
+
+
+def review_map_rows(index: str) -> list[tuple[int, str, int]]:
+    """``(line, finding id, pull-request number)`` for each parseable map row."""
+
+    parsed: list[tuple[int, str, int]] = []
+    for number, cells in review_map_cells(index) or []:
+        finding = _REVIEW_FINDING.match(cells[0])
+        pull_request = _REVIEW_PULL_REQUEST.match(cells[3])
+        if finding is not None and pull_request is not None:
+            parsed.append((number, finding.group(1), int(pull_request.group(2))))
+    return parsed
+
+
+def phase_task_sections(contract: str) -> dict[str, str]:
+    """Each ``### Task N.M — …`` section of a phase contract, keyed by task id."""
+
+    headings = list(_PHASE_TASK_HEADING.finditer(contract))
+    return {
+        match.group(1): contract[
+            match.start() : (
+                headings[index + 1].start()
+                if index + 1 < len(headings)
+                else len(contract)
+            )
+        ]
+        for index, match in enumerate(headings)
+    }
 
 
 def heading_anchors(markdown: str) -> set[str]:

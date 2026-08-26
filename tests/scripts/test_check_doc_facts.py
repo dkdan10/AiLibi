@@ -55,6 +55,11 @@ _COPIED = (
     "frontend/src/components/ReplayPicker.tsx",
     "docs/ml-program.md",
     "training/reports/results-finalist-eval.jsonl",
+    # The two published pages and the phase contract the review index's
+    # acted-on map is resolved against.
+    "docs/lessons.md",
+    "audits/review-2026-08-19/README.md",
+    "tasks/phase-20.md",
 )
 
 # The front-door checks also ENUMERATE paths whose contents they never open:
@@ -90,6 +95,12 @@ _HISTORY = "docs/history.md"
 _READING_GUIDE = "docs/reading-guide.md"
 _CITATION_INSTRUMENT = "tests/eval/test_vj_instruments.py"
 _AUDITS_INDEX = "audits/README.md"
+_LESSONS = "docs/lessons.md"
+_REVIEW_INDEX = "audits/review-2026-08-19/README.md"
+# One acted-on map row, cell by cell: the finding, the task credited with
+# closing it, and the pull request that carries the change.
+_MAP_FINDING = "`C-31`"
+_MAP_TASK_CELL = "| 20.8 |"
 _PROOF_AUDIT = "audits/audit-phase-19-close.md"
 _PROOF_ROW = (
     "| **direct-proof accuracy** | **68/68 = 1.000** [0.947, 1.0] | "
@@ -171,7 +182,9 @@ def _stand_in_enumerated_paths(root: Path) -> None:
         for child in (_REPO_ROOT / "audits").iterdir()
         if child.is_dir()
     )
-    for document in check_doc_facts._LINKED_DOCUMENTS:
+    for document in (
+        check_doc_facts._LINKED_DOCUMENTS + check_doc_facts._PUBLISHED_DOCUMENTS
+    ):
         text = (root / document).read_text(encoding="utf-8")
         for _, resolved in check_doc_facts.relative_targets(_REPO_ROOT, document, text):
             relative = resolved.relative_to(_REPO_ROOT).as_posix()
@@ -2134,6 +2147,77 @@ def test_broken_relative_link_detected(doc_tree: Path) -> None:
     assert "does not exist" in errors[0]
 
 
+def test_broken_relative_link_on_a_published_page_detected(doc_tree: Path) -> None:
+    # The lessons page and the review index carry the same link rule as the
+    # front door: they are published surfaces, not scratch notes.
+    _substitute(
+        doc_tree,
+        _LESSONS,
+        "(../CONTRIBUTING.md)",
+        "(../CONTRIBUTING.markdown)",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert errors[0].startswith(f"{_LESSONS}: ")
+    assert "'../CONTRIBUTING.markdown'" in errors[0]
+    assert "does not exist" in errors[0]
+
+
+def test_broken_relative_link_on_the_review_index_detected(doc_tree: Path) -> None:
+    _substitute(
+        doc_tree,
+        _REVIEW_INDEX,
+        "(A/verdicts.md)",
+        "(A/verdict.md)",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert errors and all(error.startswith(f"{_REVIEW_INDEX}: ") for error in errors)
+    assert all("'A/verdict.md'" in error for error in errors)
+
+
+def test_mapped_task_with_no_contract_detected(doc_tree: Path) -> None:
+    # The map's whole claim is "here is the change that closed it": a task id
+    # no contract owns makes that unverifiable, and the row is named.
+    _substitute(doc_tree, _REVIEW_INDEX, _MAP_TASK_CELL, "| 20.99 |")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert _MAP_FINDING.strip("`") in errors[0]
+    assert "20.99" in errors[0]
+    assert "not a contract" in errors[0]
+
+
+def test_map_row_moved_to_a_neighbouring_task_detected(doc_tree: Path) -> None:
+    # A real contract that never names this finding: the id has to appear in
+    # the section credited with closing it, or the row is decoration.
+    _substitute(doc_tree, _REVIEW_INDEX, _MAP_TASK_CELL, "| 20.11 |")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert f"never names {_MAP_FINDING.strip('`')}" in errors[0]
+
+
+def test_map_row_whose_link_disagrees_with_its_label_detected(doc_tree: Path) -> None:
+    _substitute(
+        doc_tree,
+        _REVIEW_INDEX,
+        "[#363](https://github.com/dkdan10/AiLibi/pull/363)",
+        "[#363](https://github.com/dkdan10/AiLibi/pull/633)",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "#363 but links pull request #633" in errors[0]
+
+
+def test_deleted_acted_on_map_fails_loud(doc_tree: Path) -> None:
+    # An emptied table must not read as "nothing drifted".
+    index = _read(doc_tree, _REVIEW_INDEX)
+    header = "| " + " | ".join(check_doc_facts._REVIEW_MAP_HEADER) + " |"
+    kept = [line for line in index.splitlines() if not line.startswith("| `")]
+    _write(doc_tree, _REVIEW_INDEX, "\n".join(kept))
+    assert header in index
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert errors and "no acted-on map rows found" in errors[0]
+
+
 def test_missing_document_reported(doc_tree: Path) -> None:
     (doc_tree / _ENV_EXAMPLE).unlink()
     errors = check_doc_facts.check_facts(doc_tree)
@@ -2539,6 +2623,24 @@ def _pull_request_numbers(repo_root: Path) -> set[int] | None:
     return numbers
 
 
+def _map_pull_request_problems(index: str, pull_requests: set[int]) -> list[str]:
+    """Every acted-on map row crediting a pull request no commit here carries.
+
+    The git-history half of the map check: ``check_doc_facts`` resolves the task
+    id against the phase contract, and this resolves the number against the
+    subjects merged onto this branch. It lives here because the caller can skip
+    on a shallow clone, which a gate script running in CI could not.
+    """
+
+    return [
+        f"{_REVIEW_INDEX}:{line}: the {finding} row credits pull request "
+        f"#{number}, which closed nothing reachable from HEAD — no commit "
+        "subject ends in its number."
+        for line, finding, number in check_doc_facts.review_map_rows(index)
+        if number not in pull_requests
+    ]
+
+
 def _exhibit_problems(
     readme: str, repo_root: Path, pull_requests: set[int]
 ) -> list[str]:
@@ -2675,6 +2777,30 @@ def test_an_exhibit_pull_request_in_another_repository_is_rejected() -> None:
     )
     problems = _exhibit_problems(elsewhere, _REPO_ROOT, {328})
     assert any("someone-else/a-fork" in problem for problem in problems), problems
+
+
+def test_the_review_maps_pull_requests_resolve() -> None:
+    """ "Here is the fix" is a claim, so every number in it is resolved."""
+
+    pull_requests = _pull_request_numbers(_REPO_ROOT)
+    if pull_requests is None:
+        pytest.skip("no full git history here; the map's PRs cannot be resolved")
+    index = _committed(_REVIEW_INDEX)
+    assert check_doc_facts.review_map_rows(index), "the acted-on map parsed to no rows"
+    assert _map_pull_request_problems(index, pull_requests) == []
+
+
+def test_a_mapped_pull_request_absent_from_history_is_rejected() -> None:
+    index = _committed(_REVIEW_INDEX)
+    rows = check_doc_facts.review_map_rows(index)
+    dropped = rows[0][2]
+    named = {finding for _, finding, number in rows if number == dropped}
+    problems = _map_pull_request_problems(
+        index, {number for _, _, number in rows} - {dropped}
+    )
+    assert len(problems) == len(named), problems
+    assert all(any(finding in problem for finding in named) for problem in problems)
+    assert all("reachable from HEAD" in problem for problem in problems), problems
 
 
 def test_a_low_contrast_palette_is_rejected() -> None:
