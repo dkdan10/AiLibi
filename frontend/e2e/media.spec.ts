@@ -5,14 +5,12 @@
 // the skip. This is a CAPTURE tool that happens to be written as a spec — it
 // writes into `docs/media/`, which no gate may ever do on its own.
 //
-// WHY IT IS COMMITTED AT ALL. The previous harness was not, and the cost showed
-// up as three separate failures: an asset nobody could regenerate, a written
-// recipe that silently encoded a viewport where the transport dock covered the
-// whole map, and no way to re-shoot the front door when the recorded bytes moved
-// underneath it. A composite of two perspectives of one tick cannot be a dozen
-// throwaway lines either: it has to PROVE the two halves are the same tick of the
-// same game, name the fog subject, and read the quoted accusation out of the
-// bytes rather than out of a caption someone typed.
+// EVERY CAPTION IS A CHECKED CLAIM. The README's sentences about these pictures
+// are asserted here against the served bytes before anything is shot: the two
+// halves are the same tick of the same game, the fog subject is a crewmate who
+// could see one player and no bodies, both impostors are on the omniscient half,
+// and the quoted accusation is read out of the replay rather than typed. A
+// capture that cannot make those claims true fails instead of publishing.
 //
 // WHAT IT SHOOTS, against the built static demo bundle (so every picture is a
 // picture of the artifact a reader can build in one command):
@@ -82,6 +80,12 @@ const HERO = {
   tick: 5,
   fogSubject: "p-3",
   accused: "p-1",
+  meetingId: "headless-seed-2:meeting-0",
+  meetingTick: 7,
+  /** Bodies on the omniscient half at `tick` — the caption's "two players are already dead". */
+  bodies: 2,
+  /** Players the fog subject can see at `tick` — the caption's "one other player". */
+  fogSubjectSees: 1,
 } as const;
 
 /** Both halves and both stills are shot here; the dock must clear the map. */
@@ -240,9 +244,15 @@ interface BakedReplay {
   readonly ticks: readonly {
     readonly tick: number;
     readonly events: readonly { readonly type: string; readonly killer_id?: string }[];
+    readonly bodies: readonly { readonly victim_id: string }[];
     readonly agent_states: readonly {
       readonly agent_id: string;
       readonly room_id: string | null;
+      readonly is_alive: boolean;
+      readonly visibility: {
+        readonly visible_players: readonly { readonly id: string }[];
+        readonly visible_bodies: readonly { readonly victim_id: string }[];
+      } | null;
     }[];
   }[];
 }
@@ -537,15 +547,32 @@ function runFfmpeg(args: readonly string[]): string {
     encoding: "utf-8",
     timeout: 300_000,
   });
-  // `ffmpeg -i FILE` with no output is the probe form: it prints the container's
-  // metadata and then exits non-zero for the missing output, so the caller reads
-  // stderr either way.
+  const output = `${result.stdout ?? ""}\n${result.stderr ?? ""}`;
+  if (result.status !== 0) {
+    throw new Error(`ffmpeg failed (status ${String(result.status)}):\n${output}`);
+  }
+  return output;
+}
+
+/**
+ * The metadata-probe form: `ffmpeg -i FILE` with no output file prints the
+ * container's streams and then exits non-zero for the output it was not given.
+ *
+ * Kept separate from `runFfmpeg` so that expected exit code stays confined to the
+ * probe — an ENCODE that fails must raise, or the checks below would measure the
+ * committed file the encode was supposed to replace and call the run a success.
+ */
+function probeFfmpeg(path: string): string {
+  const result = spawnSync(ffmpegBinary(), ["-hide_banner", "-i", path], {
+    encoding: "utf-8",
+    timeout: 300_000,
+  });
   return `${result.stdout ?? ""}\n${result.stderr ?? ""}`;
 }
 
 /** Seconds of video in a container, read back from the file rather than assumed. */
 function videoDurationSeconds(path: string): number {
-  const output = runFfmpeg(["-hide_banner", "-i", path]);
+  const output = probeFfmpeg(path);
   const match = /Duration: (\d+):(\d+):(\d+\.\d+)/.exec(output);
   if (match === null) {
     throw new Error(`ffmpeg reported no duration for ${path}:\n${output}`);
@@ -557,7 +584,7 @@ function videoDurationSeconds(path: string): number {
 
 /** Frame size in a container, likewise read back rather than assumed. */
 function videoDimensions(path: string): string {
-  const output = runFfmpeg(["-hide_banner", "-i", path]);
+  const output = probeFfmpeg(path);
   const match = /Video: .*?, (\d+x\d+)/.exec(output);
   if (match?.[1] === undefined) {
     throw new Error(`ffmpeg reported no frame size for ${path}:\n${output}`);
@@ -630,6 +657,62 @@ flat[0].save(
   }
 }
 
+/**
+ * Which of two reference screenshots a video frame resembles, as RMS distance
+ * over a small greyscale reduction of each.
+ *
+ * The point is to check the published clip's OWN bytes rather than a model of
+ * where a beat landed in it. Playwright stretches a recording's final frame to
+ * the end of the capture, so wall-clock offsets do not project linearly into the
+ * container's timeline and any arithmetic answer to "is the beat inside the cut"
+ * is a guess. Decoding the cut and comparing it to what the page looked like at
+ * the beat is not.
+ */
+function frameDistances(
+  framePath: string,
+  references: readonly string[],
+): readonly number[] {
+  const script = `
+import sys
+from PIL import Image, ImageChops, ImageStat
+
+def reduced(path):
+    return Image.open(path).convert("L").resize((64, 40), Image.LANCZOS)
+
+frame = reduced(sys.argv[1])
+for reference in sys.argv[2:]:
+    difference = ImageChops.difference(frame, reduced(reference))
+    print(round(ImageStat.Stat(difference).rms[0], 3))
+`;
+  const result = spawnSync(
+    "uv",
+    ["run", "--with", "pillow", "python", "-", framePath, ...references],
+    { cwd: REPO_ROOT, input: script, encoding: "utf-8", timeout: 300_000 },
+  );
+  if (result.status !== 0) {
+    throw new Error(
+      `frame comparison failed (status ${String(result.status)}):\n` +
+        `${result.stdout ?? ""}\n${result.stderr ?? ""}`,
+    );
+  }
+  return result.stdout.trim().split("\n").map(Number);
+}
+
+/** Decode one frame of a clip at `seconds` into `out`. */
+function extractFrame(clip: string, seconds: number, out: string): void {
+  runFfmpeg([
+    "-y",
+    "-hide_banner",
+    "-ss",
+    seconds.toFixed(3),
+    "-i",
+    clip,
+    "-frames:v",
+    "1",
+    out,
+  ]);
+}
+
 function digest(path: string): string {
   return createHash("sha256").update(readFileSync(path)).digest("hex").slice(0, 16);
 }
@@ -661,10 +744,39 @@ test.describe("README media capture", () => {
     )?.role;
     expect(fogRole).toBe("CREWMATE");
     const heroFrame = replay.ticks.find((frame) => frame.tick === HERO.tick);
+    expect(heroFrame, `the replay must reach tick ${String(HERO.tick)}`).toBeDefined();
     expect(heroFrame?.events.some((event) => event.type === "kill")).toBe(true);
+    // "two players are already dead" — the caption's count, not a rounded one.
+    expect(heroFrame?.bodies).toHaveLength(HERO.bodies);
+    // "both impostors are on screen": alive and standing in a room this frame.
+    const impostors = replay.players
+      .filter((player) => player.role === "IMPOSTOR")
+      .map((player) => player.agent_id);
+    expect(impostors.length).toBeGreaterThan(0);
+    for (const agentId of impostors) {
+      const state = heroFrame?.agent_states.find(
+        (agent) => agent.agent_id === agentId,
+      );
+      expect(state?.is_alive, `${agentId} must be alive at the hero tick`).toBe(true);
+      expect(state?.room_id, `${agentId} must be in a room at the hero tick`).not.toBeNull();
+    }
+    // "one lit room and one other player": the fog half's whole claim, read off
+    // the same projection the right-hand capture renders.
+    const fogState = heroFrame?.agent_states.find(
+      (agent) => agent.agent_id === HERO.fogSubject,
+    );
+    expect(fogState?.is_alive).toBe(true);
+    expect(fogState?.visibility?.visible_players).toHaveLength(HERO.fogSubjectSees);
+    expect(fogState?.visibility?.visible_bodies).toHaveLength(0);
 
-    const meeting = replay.meetings.find((each) => each.tick > HERO.tick);
-    expect(meeting, "the hero tick must be followed by a meeting").toBeDefined();
+    const meeting = replay.meetings.find((each) => each.meeting_id === HERO.meetingId);
+    expect(meeting, `${HERO.meetingId} must be the meeting that follows`).toBeDefined();
+    expect(meeting?.tick).toBe(HERO.meetingTick);
+    expect(meeting?.tick).toBeGreaterThan(HERO.tick);
+    // …and nothing earlier, so "the meeting that followed" stays literally true.
+    expect(
+      replay.meetings.filter((each) => each.tick <= HERO.tick),
+    ).toHaveLength(0);
     const turn = meeting?.turns.find((each) => each.speaker === HERO.fogSubject);
     expect(turn, `${HERO.fogSubject} must speak at that meeting`).toBeDefined();
     const accusation = turn?.claims.find((claim) => claim.type === "accusation");
@@ -763,11 +875,21 @@ test.describe("README media capture", () => {
     expect(size).toBeLessThanOrEqual(STILL_MAX_BYTES);
   });
 
-  test("the meeting still", async ({ page, bundle }) => {
+  test("the meeting still", async ({ browser, bundle }) => {
     const replay = bakedReplay(bundle);
-    const meeting = replay.meetings[0];
-    expect(meeting).toBeDefined();
+    // Pinned to the meeting `docs/media/README.md` names, not to whichever one
+    // happens to be first: the provenance tuple is part of the asset.
+    const meeting = replay.meetings.find((each) => each.meeting_id === HERO.meetingId);
+    expect(meeting, `${HERO.meetingId} must exist in the replay`).toBeDefined();
+    expect(meeting?.tick).toBe(HERO.meetingTick);
 
+    // A reduced-motion context, at the asset's own density: the same preference
+    // the map layer reads, so re-shooting this still reproduces its bytes.
+    const context = await browser.newContext({
+      viewport: { ...SHOT_VIEWPORT },
+      reducedMotion: "reduce",
+    });
+    const page = await context.newPage();
     await openMoment(
       page,
       momentUrl(bundle.origin, { selectedMeeting: meeting?.meeting_id ?? "" }),
@@ -779,10 +901,9 @@ test.describe("README media capture", () => {
       await document.fonts.ready;
     });
 
-    const path = writeAsset(
-      "spectator-meeting.png",
-      await page.screenshot({ animations: "disabled" }),
-    );
+    const shot = await page.screenshot({ animations: "disabled" });
+    await context.close();
+    const path = writeAsset("spectator-meeting.png", shot);
     const size = statSync(path).size;
     console.log(
       `[media] spectator-meeting.png ${String(size)} B sha256:${digest(path)}`,
@@ -814,7 +935,17 @@ test.describe("README media capture", () => {
     // settling the dock takes as long as the machine takes, and none of it is a
     // beat, so the cut below starts from here rather than from a guessed offset.
     await clipPage.waitForTimeout(CLIP_SETTLE_SECONDS * 1000);
-    const headWallSeconds = (Date.now() - startedAt) / 1000;
+
+    // When each beat happened, in wall seconds from the page's first paint. The
+    // published window is chosen to CONTAIN these and asserted to, so a walk the
+    // machine ran too slowly fails the capture instead of publishing a clip whose
+    // last beat happened after the cut.
+    const beats: { name: string; wall: number }[] = [];
+    const mark = (name: string): void => {
+      beats.push({ name, wall: (Date.now() - startedAt) / 1000 });
+    };
+    mark("the map before anything moves");
+    const openingReference = await clipPage.screenshot({ animations: "disabled" });
 
     const seek = clipPage.getByLabel("Seek tick");
 
@@ -838,7 +969,8 @@ test.describe("README media capture", () => {
       ([id, room]) => room !== null && before.get(id) !== room,
     );
     expect(crossed.length).toBeGreaterThan(0);
-    await clipPage.waitForTimeout(400);
+    mark("a token crosses between rooms");
+    await clipPage.waitForTimeout(300);
 
     // Beat 2 — the kill flash. STEPPED onto the kill tick rather than played
     // through it: autoplay holds a frame for a few hundred milliseconds, which is
@@ -848,7 +980,8 @@ test.describe("README media capture", () => {
       await forwardOne.click();
     }
     await expect(seek).toHaveValue(String(killTick + 1));
-    await clipPage.waitForTimeout(1_200);
+    mark("the kill flash");
+    await clipPage.waitForTimeout(1_000);
 
     // Beat 3 — the transport stops ITSELF when the meeting starts. At 2× the run
     // into the meeting fits the published window; at 1× it does not.
@@ -863,11 +996,12 @@ test.describe("README media capture", () => {
     // The play-through really crossed the flashed tick, and the meeting the
     // transport stopped at is later than it.
     expect(Number(await seek.inputValue())).toBeGreaterThan(killTick + 1);
+    mark("the transport pauses itself at the meeting");
     // Long enough to read the room's first exchange before the fog lands.
-    await clipPage.waitForTimeout(1_500);
+    await clipPage.waitForTimeout(1_200);
     await clipPage.keyboard.press("Escape");
     await expect(clipPage.getByRole("dialog")).toBeHidden();
-    await clipPage.waitForTimeout(400);
+    await clipPage.waitForTimeout(300);
 
     // Beat 4 — the perspective flips into fog, and the URL says whose.
     await clipPage.getByRole("button", { name: "As-agent" }).click();
@@ -875,14 +1009,14 @@ test.describe("README media capture", () => {
       /^As p-\d+ · fog$/,
     );
     await expect(clipPage).toHaveURL(/[?&]perspective=p-\d+\b/);
+    mark("the perspective flips into fog");
+    const fogReference = await clipPage.screenshot({ animations: "disabled" });
 
-    // Hold the last beat on screen until the recording certainly outlasts the
-    // window the cut takes out of it.
-    const holdMs = Math.max(
-      500,
-      (headWallSeconds + CLIP_SECONDS) * 1000 - (Date.now() - startedAt),
-    );
-    await clipPage.waitForTimeout(holdMs);
+    // A SHORT tail. Playwright stretches a recording's final frame to the end of
+    // the capture, so a long idle hold would inflate the container's running time
+    // without adding anything to look at — and the cut below takes the last
+    // window, which would then be mostly that one frame.
+    await clipPage.waitForTimeout(600);
 
     const rawVideo = await clipPage.video()?.path();
     const wallSeconds = (Date.now() - startedAt) / 1000;
@@ -894,30 +1028,25 @@ test.describe("README media capture", () => {
     // walk began is projected into the recording's own timeline before cutting,
     // rather than assumed to be the same number of seconds in.
     const rawSeconds = videoDurationSeconds(raw);
-    const headSeconds = Math.max(
-      0,
-      Math.min(
-        (headWallSeconds * rawSeconds) / wallSeconds,
-        rawSeconds - CLIP_SECONDS,
-      ),
-    );
+    expect(rawSeconds).toBeGreaterThanOrEqual(CLIP_SECONDS);
     console.log(
       `[media] clip walk ${wallSeconds.toFixed(2)} s wall, recording ` +
-        `${rawSeconds.toFixed(2)} s, cut from ${headSeconds.toFixed(2)} s`,
+        `${rawSeconds.toFixed(2)} s; beats at ` +
+        beats.map((beat) => `${beat.wall.toFixed(2)} s ${beat.name}`).join(", "),
     );
-    expect(rawSeconds).toBeGreaterThanOrEqual(CLIP_SECONDS);
 
     // A FIXED window out of the recording. The walk's wall-clock length depends
     // on how busy the machine is; the published clip's must not, so the length
     // is a constant here rather than a measurement of the run.
     const clipPath = join(MEDIA_DIR, "spectator-journey.webm");
+    // Removed first: a failed encode must not leave the previously committed clip
+    // standing for the size/duration/dimension checks below to measure.
+    rmSync(clipPath, { force: true });
     runFfmpeg([
       "-y",
       "-hide_banner",
-      "-ss",
-      headSeconds.toFixed(3),
-      "-t",
-      String(CLIP_SECONDS),
+      "-sseof",
+      `-${String(CLIP_SECONDS)}`,
       "-i",
       raw,
       "-an",
@@ -942,10 +1071,55 @@ test.describe("README media capture", () => {
         `sha256:${digest(clipPath)}`,
     );
     expect(clipSize).toBeLessThanOrEqual(CLIP_MAX_BYTES);
-    expect(videoDurationSeconds(clipPath)).toBeLessThanOrEqual(10);
+    const clipSeconds = videoDurationSeconds(clipPath);
+    expect(clipSeconds).toBeLessThanOrEqual(10);
     expect(videoDimensions(clipPath)).toBe(
       `${String(SHOT_VIEWPORT.width)}x${String(SHOT_VIEWPORT.height)}`,
     );
+
+    // THE GATE THIS WALK NEEDS: the beats the assertions above proved happened
+    // must be in the PUBLISHED bytes, not merely in the longer recording they
+    // were cut out of. Decoded from the clip itself and matched against what the
+    // page looked like at the first and last beat. It bites: shorten the window
+    // (or slow the walk) until the fog flip falls past the cut, and the final
+    // frame resolves to the opening reference instead.
+    const probeDir = mkdtempSync(join(tmpdir(), "ailibi-clip-probe-"));
+    try {
+      const openingPath = join(probeDir, "opening-reference.png");
+      const fogPath = join(probeDir, "fog-reference.png");
+      writeFileSync(openingPath, openingReference);
+      writeFileSync(fogPath, fogReference);
+
+      const firstFrame = join(probeDir, "first.png");
+      const lastFrame = join(probeDir, "last.png");
+      extractFrame(clipPath, 0, firstFrame);
+      extractFrame(clipPath, clipSeconds - 0.2, lastFrame);
+
+      const [firstToOpening, firstToFog] = frameDistances(firstFrame, [
+        openingPath,
+        fogPath,
+      ]);
+      const [lastToOpening, lastToFog] = frameDistances(lastFrame, [
+        openingPath,
+        fogPath,
+      ]);
+      console.log(
+        `[media] clip frame 0 → opening ${String(firstToOpening)} / fog ` +
+          `${String(firstToFog)}; final frame → opening ${String(lastToOpening)} / ` +
+          `fog ${String(lastToFog)}`,
+      );
+      expect(
+        lastToFog,
+        "the published clip must END on the As-agent fog beat",
+      ).toBeLessThan(lastToOpening ?? 0);
+      expect(
+        firstToOpening,
+        "the published clip must OPEN before the walk moves, so every beat " +
+          "between the two is inside it",
+      ).toBeLessThan(firstToFog ?? 0);
+    } finally {
+      rmSync(probeDir, { recursive: true, force: true });
+    }
 
     // ── the GIF: the same walk, as frames GitHub will actually render ────────
     // Shot rather than transcoded. Frames off the page palettise to a few dozen

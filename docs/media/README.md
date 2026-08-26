@@ -92,8 +92,16 @@ token tweens and freeze the kill ring.
 `spectator-journey.webm` is deliberately the other case — the tween and the
 pulsing kill ring are two of its four beats — so its bytes differ run to run.
 What is fixed is its shape: the same 1440×900 frame size and the same 9.00 s
-running time, because the published clip is a fixed-length window cut out of a
-longer recording rather than the recording itself.
+running time, because the published clip is the last nine seconds of a longer
+recording rather than the recording itself.
+
+That cut is checked against the clip's own bytes, not against a clock. Playwright
+stretches a recording's final frame to the end of the capture, so a walk's
+wall-clock offsets do not project into the container's timeline and arithmetic
+cannot answer "is the last beat inside the cut". The capture instead decodes the
+published clip's first and final frames and matches each against what the page
+looked like at the first and last beat; if the fog flip has fallen past the cut,
+the final frame resolves to the opening view and the capture fails.
 
 ### Why the clip is linked and the GIF is shown
 
