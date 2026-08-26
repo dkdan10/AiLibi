@@ -53,11 +53,13 @@ on it, and both are one diff away from checkable.
   calls (a design target, not an enforced invariant — `llm/budget.py` enforces USD
   and token ceilings, not a per-game call counter)". Where the two lists differ,
   DESIGN.md §0 is the source and this record is the restatement.
-- **So read ≤ 100 calls as a sizing assumption, not a property of a run.**
-  `llm/budget.py`'s `GameBudget` charges `cost_usd`, `input_tokens` and
-  `output_tokens` and raises on those three dimensions only; nothing counts calls
-  per game, and no gate fails when a game passes 100. The figure is what the
-  two-tier split was sized against.
+- **So read ≤ 100 calls as a sizing assumption, not a property of a run.** A
+  recorded game does count its calls — each meeting entry carries one
+  `LLMCallRecord` per call — but nothing *enforces* a per-game ceiling on that
+  count. `llm/budget.py`'s `GameBudget` charges `cost_usd`, `input_tokens` and
+  `output_tokens` and raises on those three dimensions only, so no gate fails
+  when a game passes 100. The figure is what the two-tier split was sized
+  against.
 
 README.md's "What it is" restates these three decisions in its own words, names
 this record and DESIGN.md §0 as where they are kept, and says outright that the two

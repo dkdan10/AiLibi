@@ -68,13 +68,20 @@ records no replay writes neither: that audit goes to the null device, and an
 explicit `--audit-log-path` on such a run is refused rather than honoured, so
 "records nothing" means nothing.
 
-It holds one JSON object per `ObservationPacket` the run handed to an agent
+It holds one JSON object per `ObservationPacket` handed to an agent
 (`observation/audit.py`). Each packet is already filtered to what its own agent
 may see, but the file **pools every agent's packets**, and `SelfView.role`
 (`observation/packet.py`) rides the self channel — so the sidecar of a nine-agent
 game states all nine roles, the impostors' included. Treat it exactly as the
 unauthenticated API above: hidden-information ground truth, safe only on the
 machine that produced it.
+
+One caveat before reading a sidecar as one game's record: the log **appends**.
+`ObservationAuditLog` opens its path in append mode, so an explicit
+`--audit-log-path` reused across runs accumulates all of them in one file
+(`tests/observation/test_service.py::test_audit_log_appends_across_two_instances`
+pins that). The default path is the one that holds a single run in practice,
+because it is derived from a replay path the recorder refuses to overwrite.
 
 Nothing publishes it, by mechanism rather than by intention. `.gitignore`'s
 `**/*.audit.jsonl` line keeps every sidecar out of the repository, and the bundle

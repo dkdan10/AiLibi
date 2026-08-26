@@ -2726,10 +2726,13 @@ above it moves, and nothing was re-recorded.
    slate as repo-external. Each is correct as recorded and none is rewritten:
    §2's provenance separation (:115-118) — "the raw recordings … live **outside**
    the repo tree"; §16's source line (:1066-1070), which reads every recorded cell
-   from a `~/ailibi-campaign-1826/scoring/<arm>/` JSON; and the nine
+   from a `~/ailibi-campaign-1826/scoring/<arm>/` JSON; and the
    `/Users/danielkeinan/ailibi-campaign-1826/…` `replay_set_dir` values kept
    **verbatim** in `training/reports/results-finalist-eval.jsonl` under §9.2's
-   as-recorded rule. All three name the operator working root this campaign ran
+   as-recorded rule — **63 occurrences of 11 distinct paths**, the nine arm
+   directories plus two `scoring/<arm>/instruments-view` paths, counted with
+   `grep -o '"replay_set_dir": *"/Users/[^"]*"' training/reports/results-finalist-eval.jsonl`
+   (add `| sort -u` for the distinct count). All three name the working root this campaign ran
    in, and the bytes that root held are the bytes on the pinned commit in item 1 —
    so a reader who wants the event-level lineage under any §16 cell runs item 2's
    command and reads it at `training/reports/_finalist_eval_raw/`. The recorded
