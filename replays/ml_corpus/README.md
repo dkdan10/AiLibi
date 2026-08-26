@@ -1,22 +1,20 @@
-# ML-calibration corpus (Task 15.12, re-grounded onto baseline 6 by Task 18.13)
+# ML-calibration corpus (Task 15.12, re-grounded onto baseline 7 by the baseline-7 record)
 
 The frozen training/calibration corpus the ballot surrogate (15.13) and the
-impostor bake-off (15.15+) consume, recorded at **exact baseline-6 config** —
-the adopted Phase-18 substrate: `Qwen/Qwen3.6-27B` on Featherless (non-thinking,
-`fail_loud`, `json_object`), the `qwen3_6_27b` prompt set (all four templates —
-`accusation_round`, `crewmate_report`, `impostor_report`, `vote_ballot` — at
-**v3**), the **baseline-6 lever slate** (the thirteen retired always-on levers,
-which since Task 18.12 include the four meeting-layer graduations
-`roll_call_round` / `whereabouts_interior_flags` /
-`vent_placement_contradictions` / `absence_prior`, with `impostor_roll_call` the
-**sole live toggle** and its recorded state **OFF**), `$0` flat-rate — with the
-15.9 FSM-default tactical-policy stamp on every game. The model was locked
-2026-07-12 at Task 16.2 (`audits/audit-phase-16-model-lock.md`); the four
-meeting-layer graduations and the `impostor_roll_call` stay-OFF are the CREW-ONLY
-ruling of `audits/audit-phase-18-meeting-gate.md` §9, adopted at the Task-18.12
-record (`audits/audit-phase-18-baseline-6.md` §0.1). Baseline 6 graduated
-**levers, not templates**, so the locked v3 prompt map is unchanged from
-baseline 5.
+impostor bake-off (15.15+) consume, recorded at **exact baseline-7 config** —
+`Qwen/Qwen3.6-27B` on Featherless (non-thinking, `fail_loud`, `json_object`), the
+`qwen3_6_27b` prompt set (all four templates — `accusation_round`,
+`crewmate_report`, `impostor_report`, `vote_ballot` — at **v4**), the
+**baseline-7 lever slate** (the twenty-one retired always-on levers, which since
+the baseline-7 record include the eight Phase-20 evidence-honesty levers, with
+`impostor_roll_call` the **sole live toggle** and its recorded state **OFF**),
+`$0` flat-rate — with the 15.9 FSM-default tactical-policy stamp on every game.
+The model was locked 2026-07-12 at Task 16.2
+(`audits/audit-phase-16-model-lock.md`). The eight Phase-20 graduations were
+adopted by owner override of a FINDING verdict at the baseline-7 record
+(`audits/audit-phase-20-baseline-7.md` §6.1) — the pre-registered bars were
+missed, and the owner adopted the substrate regardless. The v4 prompt map is
+Task 20.31's evidence-honesty bump.
 
 Nothing trains against a meeting layer scheduled to change
 (`tasks/post-phase-14-plan.md` §4;
@@ -25,42 +23,44 @@ Nothing trains against a meeting layer scheduled to change
 uses **fresh seed ranges** so a corpus game can never be confused with a
 canonical 0–49 game.
 
-> **This record discharges the Phase-18 staleness rule.**
-> `audits/audit-phase-17-close.md` §5 ruled that "a Phase-18 meeting-layer change
-> … makes the corpus PRIOR-SUBSTRATE-ANCHORED again — re-record before any
-> training against it." The Task-18.12 meeting-layer graduation was exactly that
-> change, and this re-record discharges the rule: the corpus and the canonical
-> samples now sit at the **same** substrate rung (samples at 18.12, corpus here),
-> so nothing downstream trains across a substrate seam. Everything fitted,
-> selected, or pinned on the **baseline-5** corpus (the 17.10 surrogate, the
-> 17.12/17.14 bake-off rankings and finalist rows) is prior-substrate-anchored
-> and re-grounds against these bytes — that re-grounding is Task 18.14's.
+> **The corpus and the samples sit at ONE substrate rung, and the ML program
+> does not.** The baseline-7 record re-recorded all four committed sets in one
+> window, so nothing downstream trains across a substrate seam *inside*
+> `replays/`. Everything fitted, selected, or pinned on the **baseline-6** corpus
+> — the surrogate, the conviction model, the bake-off rankings and finalist rows
+> — is now prior-substrate-anchored: `uv run python scripts/verify_ml_evidence.py`
+> reconstructs 300/300 and **exits 0 with 11 rows reporting STALE**, each naming
+> the gap; `BAKEOFF_BASELINE_ID` reads `baseline-6`, which is correct — it names
+> the baseline the bake-off is GROUNDED on, not the substrate baseline. Read the
+> command's `ML grounding` row first: it carries the two corpus fingerprints and
+> decides whether a disagreement below it is a defect (FAIL) or this declared gap
+> (STALE). Re-grounding those artifacts on these bytes is a NAMED FOLLOW-UP, not
+> part of this record (`audits/audit-phase-20-baseline-7.md` §10.2). Until it
+> lands, treat every published fit metric as anchored to bytes that are no longer
+> committed.
 
-> **Canary denominator — the Q3 restoration.** With this baseline-6 re-record the
-> corpus is again the **canonical canary denominator**: the mid-Phase-15 Q3 ruling
-> (the ML corpus is the canary denominator; the canonical `replays/samples/`
-> baseline is the continuity anchor) was DEGRADED through Phase 16 while the
-> corpus sat two substrate rungs behind, restored at the baseline-5 re-record
-> (Task 17.9), and **re-lapsed for exactly the interval between the Task-18.12
-> samples record and this one** — the window in which the samples were baseline 6
-> and the corpus was not. It is **operative again from this record**: the corpus
-> is the canary denominator, the 18.12 baseline-6 samples are the continuity
-> anchor, and future phase closes re-adopt the pairing
-> (`audits/audit-phase-17-close.md` §3 is the worked example of a close reading
-> anchors off the restored denominator).
+> **Canary denominator — the Q3 rule, unbroken this time.** The mid-Phase-15 Q3
+> ruling (the ML corpus is the canary denominator; the canonical
+> `replays/samples/` baseline is the continuity anchor) lapses whenever the two
+> artifacts sit at different substrate rungs — it was DEGRADED through Phase 16,
+> restored at Task 17.9, and re-lapsed for the interval between the Task-18.12
+> samples record and the 18.13 corpus record. The baseline-7 record closes that
+> gap by construction: all four sets were recorded in ONE window, so the rule
+> never lapses across it. The corpus is the canary denominator, the baseline-7
+> samples are the continuity anchor, and future phase closes re-adopt the pairing
+> (`audits/audit-phase-17-close.md` §3 is the worked example).
 
-> **These bytes are the baseline-6 re-record (Task 18.13).** Both sets under
-> `9p2i/` and `4p1i/` were re-recorded at baseline 6 by a local operator session
-> and pass the acceptance gate: `validity_gate.py --expected-model
-> Qwen/Qwen3.6-27B --require-zero-cost` is green on each, reconstruction is
-> byte-identical, every recorded `game_over` stamp carries the baseline-6 lever
-> slate + the locked model + `$0` cost, and the `FROZEN` line in each
-> `MANIFEST.md` names the recording commit. The recorder's freeze-path guards
-> (`check_replay_provenance` — the model, the `$0` cost, and the **baseline-6
-> lever slate** on every recorded stamp) now PASS over the committed bytes by
-> construction; they refuse anything off-substrate (the prior baseline-5
-> recording, whose stamp carries the four meeting-layer levers OFF; a phantom
-> seed) from being resumed-over and frozen.
+> **These bytes are the baseline-7 record.** Both sets under `9p2i/` and
+> `4p1i/` were re-recorded at baseline 7 by a local operator session and pass the
+> acceptance gate: `validity_gate.py --expected-model Qwen/Qwen3.6-27B
+> --require-zero-cost` is green on each, reconstruction is byte-identical, every
+> recorded `game_over` stamp carries the baseline-7 lever slate + the locked
+> model + `$0` cost, and the `FROZEN` line in each `MANIFEST.md` names the
+> recording commit. The recorder's freeze-path guards (`check_replay_provenance`
+> — the model, the `$0` cost, and the **baseline-7 lever slate** on every
+> recorded stamp) PASS over the committed bytes by construction; they refuse
+> anything off-substrate (a prior baseline-6 recording, whose stamp carries the
+> eight Phase-20 levers OFF; a phantom seed) from being resumed-over and frozen.
 
 ## Layout
 
@@ -109,7 +109,7 @@ Task-19.8 session — stdlib scripts over the JSONL, with each command and its
 numerator/denominator recorded in that task's PR — per the verify-then-fix rule:
 where a recount differed from an audit figure, the recount won and the delta is
 stated. Four surfaces are measured: this corpus's two sets and the canonical
-`replays/samples/` twins recorded at the same baseline-6 substrate — **S9**
+`replays/samples/` twins recorded at the same baseline-7 substrate — **S9**
 (`replays/samples/9p2i`, 50 games), **S4** (`replays/samples/4p1i`, 50 games),
 **C9** (`replays/ml_corpus/9p2i`, 150 games), **C4** (`replays/ml_corpus/4p1i`,
 50 games). These are **capability disclosures, not defects fixed here**: Task
@@ -299,15 +299,18 @@ estimate:
 
 | leg | wall clock |
 |---|---|
-| 4p1i (50 games) | 0h 45m |
-| 9p2i (150 games) | 19h 26m |
-| phantom-repair pass (10 seeds, see below) | 2h 43m |
-| **total** | **~22h 54m** |
+| 4p1i (50 games) | 0h 47m 01s |
+| 9p2i (150 games) | 16h 00m 16s |
+| phantom-repair pass (2 seeds, see below) | 0h 12m 33s |
+| **corpus total** | **~17h 00m** |
 
-Baseline-5 ran ~14–15h; the baseline-6 roll-call round adds ~36% meeting LLM
-calls and drives the 9p2i meeting rate to **1.00**, so budget **~22–23h** and
-treat both the ~14–15h baseline-5 figure and the pre-record ~18–20h projection as
-stale. Note the wall clock includes any time the machine spends asleep — a
+Those are the corpus legs alone. The baseline-7 record recorded all four
+committed sets in one window — **23h 25m 42s** for 300 games at **$0.0000**,
+including the two samples legs (`audits/audit-phase-20-baseline-7.md` §0.3). It
+came in inside a bracket committed in advance (22.2 h at the smoke's own game
+lengths, 26.3 h at baseline-6 lengths), nearer the lower figure. Treat the
+baseline-6 figures (0h45m / 19h26m / 2h43m, ~22h54m) as history: the v4 prompt
+set is shorter per meeting call than v3 was. Note the wall clock includes any time the machine spends asleep — a
 suspend pauses the run rather than corrupting it. Apply the 16.14/17.9/18.12
 operator notes (staggered worker starts, jittered backoff, per-seed atomic
 staging, `AILIBI_SEED_MAX_ATTEMPTS=8`) and **checkpoint-push discipline**: commit
@@ -325,21 +328,21 @@ to validate the pipeline end to end, then the long 9p2i leg:
 
 ```bash
 export FEATHERLESS_API_KEY=...          # hosted flat-rate; recorded as $0
-export AILIBI_LLM_PROVIDER=featherless  # the locked baseline-6 provider
-export AILIBI_PROMPT_SET=qwen3_6_27b    # the locked baseline-6 prompt set
+export AILIBI_LLM_PROVIDER=featherless  # the locked baseline-7 provider
+export AILIBI_PROMPT_SET=qwen3_6_27b    # the locked baseline-7 prompt set
 export AILIBI_SEED_MAX_ATTEMPTS=8       # raised transport retry budget for the long run
 bash scripts/record_ml_corpus.sh --set 4p1i    # short leg first
 bash scripts/record_ml_corpus.sh --set 9p2i    # then the long leg
 ```
 
-Those four exports are the **whole** recording environment. The thirteen retired
+Those four exports are the **whole** recording environment. The twenty-one retired
 levers are unconditional in code and need no env at all; `AILIBI_IMPOSTOR_ROLL_CALL`
 must stay **UNSET** (see below).
 
-The preflight locks the full baseline-6 substrate, not just the provider:
+The preflight locks the full baseline-7 substrate, not just the provider:
 
 - **the lever slate.** The preflight POSITIVELY checks the live substrate
-  snapshot equals the ruled baseline-6 state — the thirteen retired levers ON and
+  snapshot equals the ruled baseline-7 state — the twenty-one retired levers ON and
   `impostor_roll_call` OFF — and refuses before any seed stages. A leftover
   `AILIBI_IMPOSTOR_ROLL_CALL` export would ship the **unshipped** impostor-answer
   arm into the record while the echo claimed the ruled substrate, and an
@@ -358,7 +361,7 @@ The preflight locks the full baseline-6 substrate, not just the provider:
 All three knobs are then exported pinned so the recorded substrate can never
 drift from the one the `MANIFEST` stamps. The prompt **versions** are locked too,
 not just the set name: the preflight asserts the registry still resolves
-`qwen3_6_27b` to the baseline-6 map (all four templates at v3), and the finalize
+`qwen3_6_27b` to the baseline-7 map (all four templates at v4), and the finalize
 refuses to freeze a set unless every meeting-bearing `MANIFEST` row carries
 **exactly** that map (a foreign version string AND a stripped/partial row both
 refuse — the manager stamps the full set map on every meeting, so anything short
@@ -394,7 +397,7 @@ written) — rows recorded by an earlier session keep that session's `git_sha`,
 so a resume never rewrites the provenance of bytes it did not record. File
 presence alone is not provenance: before a present replay is skipped as
 "already recorded" (and again before the freeze), the recorder proves its
-**bytes** carry the full baseline-6 provenance —
+**bytes** carry the full baseline-7 provenance —
 
 - the canonical **five-field** 15.9 `fsm-default` tactical-policy stamp (not just
   its id: a hand-crafted stamp with non-canonical method/encoder/weights/anchor
@@ -403,7 +406,7 @@ presence alone is not provenance: before a present replay is skipped as
   and failed-call rows alike, so a wall-clock-miss phantom or a foreign-model
   recording is refused);
 - exactly `$0` recorded cost;
-- the **baseline-6 lever slate** stamped **positively** on the `game_over` record
+- the **baseline-7 lever slate** stamped **positively** on the `game_over` record
   (the same tolerant per-lever match the validity gate and the loader enforce:
   every retired always-on lever present and True — including the four Task-18.12
   meeting-layer graduations `roll_call_round` / `whereabouts_interior_flags` /
@@ -439,12 +442,12 @@ no `deadline_default` check at all; it rejects the sentinel shape only
 incidentally, via the model column. The corpus recorder is deliberately stricter
 than the gate here, because the corpus is a training artifact.)
 
-**Expect to iterate.** Across the Task-18.13 record, roughly **1 recording in 8**
-produced a defaulted turn of some shape, and a re-recorded seed can pick up a
-fresh one (seed 1115 did). Budget a repair pass or two; the 18.12 samples record
-hit only 1/150, so the rate is a property of the longer baseline-6 meetings. The
-deadline cannot be widened to compensate without changing the locked substrate, so
-re-recording is the only honest fix (`audits/audit-phase-16-close.md` §5.2's
+**Expect to iterate.** The 18.13 baseline-6 record paid a 2h43m repair pass at
+**10/150**; the baseline-7 record paid **2/150**, repaired in 12m33s, and
+absorbed no transport retry anywhere in its 23-hour window. Budget a repair pass
+anyway — the rate is a property of meeting length, and a re-recorded seed can
+pick up a fresh default. The deadline cannot be widened to compensate without
+changing the locked substrate, so re-recording is the only honest fix (`audits/audit-phase-16-close.md` §5.2's
 runbook rule: the seed re-records clean and its MANIFEST row honestly stamps the
 re-record date):
 
@@ -453,7 +456,7 @@ re-record date):
 bash scripts/record_ml_corpus.sh --set 9p2i     # records ONLY the dropped seeds, then re-finalizes
 ```
 
-All 10 came back clean on the first retry. **A refused freeze costs only the bad
+Both baseline-7 seeds came back clean on the first retry (all 10 did at 18.13). **A refused freeze costs only the bad
 seeds**, never the good ones: provenance is checked separately from presence, so
 19 hours of recorded work survived the refusal untouched.
 

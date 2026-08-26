@@ -96,7 +96,7 @@ than its output preserved.
 | `replays/samples/` — the baseline-6 adopting record (100 replays + per-set `MANIFEST.md`) | (a) + (b) | in git | 61 MB / 107 files |
 | `replays/ml_corpus/` — the committed ML corpus | (a) | in git | 161 MB / 209 files |
 | `agents/tactical/learned/{weights,crew_weights}.json` + `.sha256` — the **shipped inference weights** the live tactical factories load | (a) + (b) | in git | 4 files |
-| `tests/fixtures/` — golden fixtures (rendered memory views and their inputs, plus the bump-in-flight prompt archive) | (a) | in git | 2.1 MB / 29 files |
+| `tests/fixtures/` — golden fixtures (rendered memory views and their inputs; the bump-in-flight prompt archive is empty between bumps) | (a) | in git | 2.0 MB / 23 files |
 | `data/personas.json` — the canonical persona set | (a) | in git | 12 KB |
 | `training/artifacts/impostor/`, `crew/`, `anchor_study/` — the **canonical learned genomes** (`weights.json` + `config.json` + `stamp.json` + `weights.json.sha256`) | (a) + (b) | in git | 1.5 MB / 105 files |
 | `training/artifacts/surrogate/`, `conviction/`, `composed/` — the ballot surrogate, the conviction model and the composed-runner verdict, with their sidecars | (a) + (b) | in git | 52 KB / 10 files |
@@ -104,7 +104,7 @@ than its output preserved.
 | `training/artifacts/coevo/EVIDENCE-MANIFEST.md` — the pin + the digests + the consumer enumeration | (b) | in git | 283 KiB |
 | `training/reports/` — the reports and their flattened `results-*.jsonl` rows | (b) | in git | 2.5 MB / 21 files |
 | `training/reports/_finalist_eval_raw/MANIFEST.md` — the slate's per-file digests (Task 19.21) | (b) | in git | 1,569 digests |
-| `audits/` — the audit record, with `audits/README.md` as its index | (b) | in git | 6.8 MB / 152 files |
+| `audits/` — the audit record, with `audits/README.md` as its index | (b) | in git | 6.8 MB / 153 files |
 | `docs/media/` — the README captures + the as-built architecture picture | (a) | in git | 1.7 MB / 4 files |
 | `design/phase-12/` — the design-artifact record (map reference renders + briefs) | (b) | in git | 1.9 MB / 18 files |
 | `experiments/lab/`, `experiments/model_probe/` — recorded read-only harness outputs and their syntheses (`experiments/` outputs are artifacts, not behavior — `docs/architecture.md`) | (b) | in git | 7.3 MB / 164 files |

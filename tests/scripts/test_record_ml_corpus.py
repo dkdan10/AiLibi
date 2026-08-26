@@ -252,11 +252,11 @@ def test_dry_run_announces_the_expected_slate_and_the_lever_preflight() -> None:
 def test_dry_run_echo_names_the_levers_the_operator_declared() -> None:
     # The echo quotes the RESOLVED slate, so the preview and the gate can never
     # describe different substrates.
-    env = dict(_clean_env(), AILIBI_GROUNDED_PROSECUTION="1")
-    proc = _run("--dry-run", "--expect-levers", "grounded_prosecution", env=env)
+    env = dict(_clean_env(), AILIBI_IMPOSTOR_ROLL_CALL="1")
+    proc = _run("--dry-run", "--expect-levers", "impostor_roll_call", env=env)
     assert proc.returncode == 0, proc.stdout + proc.stderr
     assert (
-        "[dry-run] substrate flags: expected levers ON = grounded_prosecution"
+        "[dry-run] substrate flags: expected levers ON = impostor_roll_call"
         in proc.stdout
     )
 
@@ -293,11 +293,11 @@ def test_preflight_refuses_a_declared_lever_that_is_not_exported(
         AILIBI_PROMPT_SET="qwen3_6_27b",
         AILIBI_ML_CORPUS_ROOT=str(corpus_root),
     )
-    proc = _run("--set", "4p1i", "--expect-levers", "grounded_prosecution", env=env)
+    proc = _run("--set", "4p1i", "--expect-levers", "impostor_roll_call", env=env)
     out = proc.stdout + proc.stderr
     assert proc.returncode != 0
     assert "does not match --expect-levers" in out
-    assert "grounded_prosecution must be ON" in out
+    assert "impostor_roll_call must be ON" in out
     assert not corpus_root.exists()  # refused before any record
 
 
@@ -312,13 +312,13 @@ def test_preflight_accepts_the_declared_slate_when_the_environment_matches(
         AILIBI_LLM_PROVIDER="featherless",
         FEATHERLESS_API_KEY="test-key-unused",
         AILIBI_PROMPT_SET="qwen3_6_27b",
-        AILIBI_GROUNDED_PROSECUTION="1",
+        AILIBI_IMPOSTOR_ROLL_CALL="1",
         AILIBI_LLM_MEETING_MODEL="some-other/Model-7B",  # stops the run one rung on
         AILIBI_ML_CORPUS_ROOT=str(corpus_root),
     )
-    proc = _run("--set", "4p1i", "--expect-levers", "grounded_prosecution", env=env)
+    proc = _run("--set", "4p1i", "--expect-levers", "impostor_roll_call", env=env)
     out = proc.stdout + proc.stderr
-    assert "Substrate slate OK: expected levers ON = grounded_prosecution" in out
+    assert "Substrate slate OK: expected levers ON = impostor_roll_call" in out
     assert "does not match --expect-levers" not in out
     assert proc.returncode != 0  # stopped at the MODEL guard, not the lever guard
     assert "locked baseline-6 model" in out
@@ -867,6 +867,21 @@ def test_record_path_refuses_impostor_roll_call_on_in_recorded_slate(
     assert "impostor_roll_call" in out
 
 
+def _on_slate_corpus_replay_text() -> str:
+    """The committed corpus replay re-stamped with the DECLARED on-slate substrate.
+
+    ``_on_slate_env`` exports the one live toggle, so a replay carrying the bare
+    stamp is off-slate by construction; this is the matching fixture.
+    """
+
+    on_slate = dict(_BASELINE6_SUBSTRATE_SLATE)
+    on_slate["impostor_roll_call"] = True
+    text = _COMMITTED_CORPUS_REPLAY.read_text(encoding="utf-8").replace(
+        f'"model":"{_STALE_CORPUS_MODEL}"', f'"model":"{_BASELINE_MODEL}"'
+    )
+    return _rewrite_game_over_substrate(text, on_slate)
+
+
 def _on_slate_env(corpus_root: Path) -> dict[str, str]:
     """A locked-substrate env with ONE Phase-20 lever exported."""
 
@@ -875,7 +890,7 @@ def _on_slate_env(corpus_root: Path) -> dict[str, str]:
         AILIBI_LLM_PROVIDER="featherless",
         FEATHERLESS_API_KEY="test-key-unused",
         AILIBI_PROMPT_SET="qwen3_6_27b",
-        AILIBI_GROUNDED_PROSECUTION="1",
+        AILIBI_IMPOSTOR_ROLL_CALL="1",
         AILIBI_ML_CORPUS_ROOT=str(corpus_root),
     )
 
@@ -891,11 +906,8 @@ def test_record_path_accepts_a_replay_stamped_with_the_declared_slate(
     corpus_root = tmp_path / "ml_corpus"
     set_dir = corpus_root / "4p1i"
     set_dir.mkdir(parents=True)
-    on_slate = dict(_BASELINE6_SUBSTRATE_SLATE)
-    on_slate["grounded_prosecution"] = True
     (set_dir / "replay-seed-1000.jsonl").write_text(
-        _rewrite_game_over_substrate(_baseline6_corpus_replay_text(), on_slate),
-        encoding="utf-8",
+        _on_slate_corpus_replay_text(), encoding="utf-8"
     )
     (set_dir / "roster.json").write_text(
         json.dumps({"num_players": 9, "num_impostors": 2, "tasks_per_crewmate": 2})
@@ -904,12 +916,12 @@ def test_record_path_accepts_a_replay_stamped_with_the_declared_slate(
         "--set",
         "4p1i",
         "--expect-levers",
-        "grounded_prosecution",
+        "impostor_roll_call",
         env=_on_slate_env(corpus_root),
         timeout=120,
     )
     out = proc.stdout + proc.stderr
-    assert "Substrate slate OK: expected levers ON = grounded_prosecution" in out
+    assert "Substrate slate OK: expected levers ON = impostor_roll_call" in out
     assert "check_replay_provenance" not in out
     assert "disagrees with the requested roster" in out
 
@@ -931,7 +943,7 @@ def test_record_path_refuses_a_bare_slate_replay_inside_an_on_slate_record(
         "--set",
         "4p1i",
         "--expect-levers",
-        "grounded_prosecution",
+        "impostor_roll_call",
         env=_on_slate_env(corpus_root),
         timeout=120,
     )
@@ -939,7 +951,7 @@ def test_record_path_refuses_a_bare_slate_replay_inside_an_on_slate_record(
     assert proc.returncode != 0
     assert "check_replay_provenance" in out
     assert "disagrees with the declared lever slate" in out
-    assert "grounded_prosecution" in out
+    assert "impostor_roll_call" in out
 
 
 def test_record_path_refuses_missing_substrate_stamp(tmp_path: Path) -> None:

@@ -1390,8 +1390,9 @@ class ReplayLoader:
                     # (``orchestrator.game._notify_meeting_concluded`` runs after
                     # the belief fold). Shared with the byte-golden and
                     # evidence-honesty walks so the three reconstructions cannot
-                    # drift; inert to every rendered byte while the
-                    # ``meeting_outcome_memory`` lever is OFF.
+                    # drift. It was inert to every rendered byte until
+                    # ``meeting_outcome_memory`` graduated at the baseline-7
+                    # record; it now reaches the render on every path.
                     fold_meeting_outcome_into_memories(
                         result, state=state, memories=memories
                     )

@@ -87,12 +87,12 @@ export interface FeaturedGame {
   readonly label: string;
 }
 
-// DATA, not machinery. These are the good-tail games the two Phase-19 audits
-// named and read end-to-end (audits/audit-phase-19-input-claude.md §5.3–5.4;
-// audits/audit-phase-19-input-codex.md §5.3), with a why-watch line each. The
-// interestingness rubric does NOT produce this order and cannot: it ranks 9p2i
-// seed 8 last-but-five (33.6) and seed 2 third. Editing this list is an editorial
-// act — re-scoring the rubric does not update it.
+// DATA, not machinery. These are the good-tail games of the committed sets, each
+// with a why-watch line, re-curated against the baseline-7 bytes: every earlier
+// blurb described a game that no longer exists, because the record changed what
+// the meetings do (audits/audit-phase-20-baseline-7.md §4). The interestingness
+// rubric does NOT produce this order and cannot. Editing this list is an
+// editorial act — re-scoring the rubric does not update it.
 //
 // SPOILER RULE (BINDING, PR #324 review): this strip renders BEFORE any game is
 // opened, and a static blurb is prose, not outcome-derived data — so 19.10's
@@ -105,43 +105,43 @@ export const FEATURED_GAMES: readonly FeaturedGame[] = [
     set: "9p2i",
     seed: 2,
     label:
-      "Four meetings, four acts: a cold open, a case that nearly lands, and a last meeting that turns on one piece of hard evidence.",
-  },
-  {
-    set: "9p2i",
-    seed: 17,
-    label:
-      "An impostor pair builds a fabricated sighting against a truthful vent witness — watch whose testimony the engine stamps “verified”.",
+      "One meeting decides the whole game, and every contradiction on the table is stamped a weak signal. Watch a room reason with nothing solid in front of it.",
   },
   {
     set: "9p2i",
     seed: 23,
     label:
-      "A sighting that is factually true but provenance-impossible: the flag fires, and nothing asks whether the observer could have seen it.",
+      "Twenty-six spoken turns across four meetings — the most-argued game in the set. Read how a claim changes as it gets repeated back.",
   },
   {
     set: "9p2i",
-    seed: 8,
+    seed: 13,
     label:
-      "The corpus's most contested endgame — and the game the rubric ranks 45th of 50. Read the last ballots against what each voter knew.",
+      "Five meetings, the longest run any nine-player game here needed. Each round adds testimony and costs a player; watch which is worth more.",
+  },
+  {
+    set: "9p2i",
+    seed: 46,
+    label:
+      "Four meetings on almost nothing the engine flagged. The game to read if you want to see the crew argue without help.",
   },
   {
     set: "4p1i",
     seed: 29,
     label:
-      "One alibi in the only meeting reads completely differently the second time through — the most Among-Us moment in the corpus.",
+      "One meeting, three turns, and not a single contradiction raised. The whole game is what four players can do with no evidence at all.",
   },
   {
     set: "4p1i",
     seed: 2,
     label:
-      "The emergency button, pressed with no body ever found: the table has to argue from absence alone.",
+      "The smallest table in the corpus: everything the crew will ever know is said in three turns, and then they vote.",
   },
   {
     set: "4p1i",
-    seed: 41,
+    seed: 11,
     label:
-      "The one meeting in the corpus an LLM tie-break decided rather than the flags — two flags of equal weight pointing opposite ways.",
+      "A meeting that opens with nothing flagged and has to end in a vote anyway — the crew's own reading is all there is.",
   },
 ];
 

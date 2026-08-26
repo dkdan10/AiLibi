@@ -104,35 +104,30 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 CORPUS_ROOT="${AILIBI_ML_CORPUS_ROOT:-$REPO_ROOT/replays/ml_corpus}"
 
 # =============================================================================
-# PIN BLOCK — the baseline-6 substrate (Task 18.13); committed corpus IS current.
+# PIN BLOCK — the baseline-7 substrate; the committed corpus IS current.
 # =============================================================================
-# The pins below name the BASELINE-6 substrate — the substrate this recorder
+# The pins below name the BASELINE-7 substrate — the substrate this recorder
 # records (and freezes) at, and the substrate the COMMITTED corpus under
 # replays/ml_corpus/ now carries: Qwen/Qwen3.6-27B (the Task 16.2 locked model,
 # audits/audit-phase-16-model-lock.md, locked 2026-07-12) + the qwen3_6_27b
-# prompt set at v3 (the 16.13 bespoke port -> 16.15 elicitation batch -> 16.16
-# persona voice layer; all four templates at v3 — UNMOVED by the baseline-6
-# graduation, which is a lever change, not a prompt change) + the baseline-6
-# lever slate: the thirteen retired always-on levers, which since Task 18.12
-# include the four meeting-layer graduations of the CREW-ONLY ruling
-# (roll_call_round, whereabouts_interior_flags, vent_placement_contradictions,
-# absence_prior — audits/audit-phase-18-baseline-6.md §0.1;
-# audits/audit-phase-18-meeting-gate.md §9), with every live toggle recorded OFF
-# unless --expect-levers declares it ON.
+# prompt set at v4 (the Task-20.31 evidence-honesty bump; lineage v1 bespoke port
+# -> v2 elicitation batch -> v3 persona voice -> v4) + the baseline-7 lever slate:
+# the twenty-one retired always-on levers, which since the baseline-7 record
+# include the eight Phase-20 evidence-honesty levers
+# (audits/audit-phase-20-baseline-7.md §6.1), with the one surviving live toggle
+# (impostor_roll_call) recorded OFF unless --expect-levers declares it ON.
 # The preflight COUPLES model + prompt set + prompt versions + lever slate
-# as ONE substrate, so they re-pin together (Task 18.13, an owner decision — the
-# re-record + re-freeze onto baseline 6).
+# as ONE substrate, so they re-pin together.
 #
-# This discharges the audits/audit-phase-17-close.md §5 staleness rule: the
-# corpus no longer trails the canonical samples by a substrate rung. Both artifacts
-# now sit at baseline 6 — the samples re-recorded at Task 18.12, this corpus at
-# Task 18.13 — so the freeze-path provenance guards (check_replay_provenance —
-# the model, the $0 cost, and the lever slate on every recorded stamp — and
-# check_recorded_prompt_versions — the MANIFEST version cells) PASS over the
-# committed bytes by construction. They still REFUSE anything off-substrate (a
-# prior baseline-5 recording, whose stamp carries the four meeting-layer levers
-# OFF; a phantom seed) from being resumed-over and frozen: that refusal is correct
-# and expected. Nothing here weakens to accommodate off-substrate bytes.
+# Both canonical artifacts sit at baseline 7 — the samples and this corpus were
+# re-recorded together at the baseline-7 record — so the freeze-path provenance
+# guards (check_replay_provenance — the model, the $0 cost, and the lever slate on
+# every recorded stamp — and check_recorded_prompt_versions — the MANIFEST version
+# cells) PASS over the committed bytes by construction. They still REFUSE anything
+# off-substrate (a prior baseline-6 recording, whose stamp carries the eight
+# Phase-20 levers OFF; a phantom seed) from being resumed-over and frozen: that
+# refusal is correct and expected. Nothing here weakens to accommodate
+# off-substrate bytes.
 # =============================================================================
 
 # The locked Featherless baseline model (Task 16.2 model lock); mirrors
@@ -144,9 +139,9 @@ DEFAULT_FEATHERLESS_MODEL="Qwen/Qwen3.6-27B"
 # AILIBI_FEATHERLESS_BASE_URL, so the preflight pins it — a leftover mock/staging
 # export must never record the "hosted-$0" corpus against an alternate endpoint.
 DEFAULT_FEATHERLESS_BASE_URL="https://api.featherless.ai/v1"
-# The locked prompt set the corpus records under (baseline 6; Task 16.13/16.17,
-# carried unmoved through the Task-18.12 lever graduation). A featherless run with
-# any other set would SILENTLY record the wrong substrate.
+# The locked prompt set the corpus records under (baseline 7; Task 16.13/16.17,
+# bumped to v4 at Task 20.31). A featherless run with any other set would
+# SILENTLY record the wrong substrate.
 REQUIRED_PROMPT_SET="qwen3_6_27b"
 # The per-template prompt versions the set must resolve to (all four at v4 since
 # Task 20.31's evidence-honesty bump; the lineage is v1 bespoke port -> v2
@@ -760,7 +755,7 @@ PYINNER
   fi
   {
     printf '\n'
-    printf '**FROZEN** — recording-time code state git_sha `%s` (the commit the recorder RAN at, NOT the commit containing these bytes, which cannot exist yet at freeze time; recorded %s; Task 15.12, baseline-6 re-grounding per Task 18.13): the %s ML-calibration corpus is frozen at Qwen/Qwen3.6-27B Featherless, prompt set %s, lever slate — expected ON = %s, every other live toggle OFF, the graduated levers unconditional ON — tactical policy %s. By-game split rule: %s. Do not re-record without re-freezing.\n' \
+    printf '**FROZEN** — recording-time code state git_sha `%s` (the commit the recorder RAN at, NOT the commit containing these bytes, which cannot exist yet at freeze time; recorded %s; Task 15.12, baseline-7 re-record per Task 20.36): the %s ML-calibration corpus is frozen at Qwen/Qwen3.6-27B Featherless, prompt set %s, lever slate — expected ON = %s, every other live toggle OFF, the graduated levers unconditional ON — tactical policy %s. By-game split rule: %s. Do not re-record without re-freezing.\n' \
       "$git_sha" "$refreshed_at" "$set_name" "$REQUIRED_PROMPT_SET" "$expect_levers_desc" "$POLICY_STAMP" "$SPLIT_RULE_DESC"
   } >>"$manifest"
   echo "  FROZEN: $manifest at git_sha $git_sha"

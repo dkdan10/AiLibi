@@ -1107,20 +1107,29 @@ def test_map_elites_default_run_config_is_byte_stable(
         )
 
 
-def test_committed_map_elites_cells_are_the_baseline6_fit() -> None:
-    """The committed map-elites pool IS the baseline-6 fit (Task 18.14 re-ground).
+def test_committed_map_elites_cells_are_a_baseline6_pool_on_a_baseline7_corpus() -> (
+    None
+):
+    """The pool's GENOMES are untouched by the re-record; its STAMP is stale.
 
-    The inverse of the PR #301 tripwire this replaces. The MAP-Elites archive is
-    SUBSTRATE-INDEPENDENT — the illumination runs fresh deterministic fake-provider
-    rollouts off ``seed`` + the canonical map and never reads the corpus — so a
-    baseline-6 re-run reproduces the committed cell genomes byte-for-byte; only the
-    provenance stamp in ``cells/index.json`` (``baseline_id`` +
-    ``substrate.substrate_sha256``, both derived from ``BAKEOFF_BASELINE_ID`` and
-    the corpus ``MANIFEST.md``) moves. The re-ground re-stamps exactly those two
-    derived fields, so the pool's recorded substrate now MATCHES the live
-    ``bakeoff_substrate_sha()`` and reads ``baseline-6``. The structural pins (cell
-    count, champion identity, genome-vs-champion agreement) are the
-    substrate-independent structure and stay unchanged.
+    The MAP-Elites archive is SUBSTRATE-INDEPENDENT: the illumination runs fresh
+    deterministic fake-provider rollouts off ``seed`` + the canonical map and never
+    reads the corpus, so the cell genomes, the cell count and the champion do not
+    move when the corpus is re-recorded. The provenance stamp in
+    ``cells/index.json`` DOES move -- ``substrate.substrate_sha256`` is the sha of
+    the corpus ``MANIFEST.md``, deliberately chosen (``bakeoff_substrate_sha``) as
+    the thing that trips when a re-record lands.
+
+    It has tripped. The baseline-7 record re-recorded the corpus without
+    re-grounding the ML program (a NAMED follow-up,
+    audits/audit-phase-20-baseline-7.md §10.2), so the pool is a baseline-6 pool
+    sitting on a baseline-7 corpus and the stale-seed fence reads STALE. This test
+    is the tripwire that says so out loud: the two halves below are asserted
+    together, so neither the untouched structure nor the stale stamp can be read
+    without the other. Re-stamping the index -- a two-field edit -- is NOT the
+    re-ground and must not be done on its own: the stamp's whole job is to mark
+    the pool as un-re-grounded, and forging it green would erase the only signal
+    that the campaign's seeds predate the corpus under them.
     """
 
     root = Path("training/artifacts/impostor/map-elites")
@@ -1129,11 +1138,13 @@ def test_committed_map_elites_cells_are_the_baseline6_fit() -> None:
 
     index = json.loads((root / "cells" / "index.json").read_text())
     assert index["filled_cells"] == 30
-    # The committed pool is now re-grounded: its recorded substrate MATCHES the
-    # live substrate and reads the adopted baseline id.
+    # The pool still declares the baseline it was illuminated against ...
     assert index["baseline_id"] == "baseline-6"
-    assert index["substrate"]["substrate_sha256"] == bakeoff_substrate_sha()
+    # ... and the live corpus is no longer that one.
+    assert index["substrate"]["substrate_sha256"] != bakeoff_substrate_sha()
+    assert index["substrate"]["corpus_manifest"] == "replays/ml_corpus/9p2i/MANIFEST.md"
 
+    # The substrate-independent structure, unchanged across the re-record.
     champion_key, champion_cell = min(
         archive.items(), key=lambda item: (-item[1].fitness, item[1].genome)
     )

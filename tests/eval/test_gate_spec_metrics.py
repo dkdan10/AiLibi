@@ -935,11 +935,11 @@ class TestCommittedW2GateSpecPins:
         report = _load_committed_9p2i()
         result = compute_multi_signal_conversion(report.report.games)
 
-        assert result.impostor_ejections == 78
-        assert result.multi_signal_conversions == 26
-        assert result.single_signal_conversions == 52
+        assert result.impostor_ejections == 85  # was 78
+        assert result.multi_signal_conversions == 22  # was 26
+        assert result.single_signal_conversions == 63  # was 52
         assert result.unattributed_conversions == 0
-        assert result.multi_signal_rate == pytest.approx(26 / 78)
+        assert result.multi_signal_rate == pytest.approx(22 / 85)  # was 26 / 78
 
     def test_supply_gauges_read_the_corrected_instrument(self) -> None:
         # The supply row, re-extracted on the baseline-6 re-record (Qwen/Qwen3.6-27B,
@@ -955,16 +955,16 @@ class TestCommittedW2GateSpecPins:
         report = _load_committed_9p2i()
         gauges = compute_supply_gauges(report.report.games)
 
-        assert gauges.meetings_total == 165
-        assert gauges.total_flags == 84
-        assert gauges.weak_flags == 26
-        assert gauges.strong_flags == 58
-        assert gauges.zero_contradiction_meetings == 115
-        assert gauges.genuine_subject_meetings == 41
-        assert gauges.flag_subjects_crew == 75
-        assert gauges.flag_subjects_impostor == 9
-        assert gauges.accused_impostor_meetings == 134
-        assert gauges.over_gate_listener_rows == 506
+        assert gauges.meetings_total == 152  # was 165
+        assert gauges.total_flags == 42  # was 84
+        assert gauges.weak_flags == 39  # was 26
+        assert gauges.strong_flags == 3  # was 58
+        assert gauges.zero_contradiction_meetings == 127  # was 115
+        assert gauges.genuine_subject_meetings == 10  # was 41
+        assert gauges.flag_subjects_crew == 36  # was 75
+        assert gauges.flag_subjects_impostor == 6  # was 9
+        assert gauges.accused_impostor_meetings == 122  # was 134
+        assert gauges.over_gate_listener_rows == 450  # was 506
 
     def test_corrected_w2_baseline_matches_a_rederivation(
         self, committed_9p2i_report: TournamentEvalReport

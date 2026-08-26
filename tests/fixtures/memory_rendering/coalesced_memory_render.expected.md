@@ -1,6 +1,9 @@
 ## Your role: CREWMATE
 ## Tasks completed (global): 2 / 10
 
+## Where you were:
+- Your route (t = tick): CAFETERIA t0 -> ADMIN t1-5 -> (no record) -> ADMIN t7-8 -> (no record) -> ADMIN t10-11
+
 ## Recent observations (most salient first):
 - [tick 11] [meeting] CLAIM by p-3 (unverified): saw p-4 in STORAGE @ tick 6.
 - [tick 5] You saw p-2 task in ADMIN (moved from CAFETERIA, last seen there at tick 0).

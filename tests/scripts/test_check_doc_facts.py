@@ -36,6 +36,9 @@ _COPIED = (
     "replays/samples/9p2i/MANIFEST.md",
     "audits/audit-phase-18-close.md",
     "audits/audit-phase-19-close.md",
+    # The ladder-tip audit: the fixture stands every other audits/*.md up EMPTY,
+    # so the one the checker actually reads has to be copied whole.
+    "audits/audit-phase-20-baseline-7.md",
     "eval/vote_correctness.py",
     "replays/samples/4p1i/tournament-eval-report.json",
     "replays/samples/9p2i/tournament-eval-report.json",
@@ -105,7 +108,7 @@ _ML_DROPPED_ARM_ROW = (
 )
 _ML_COMPARATOR_ROW = "| `p18-fsm-comparator` (scripted) | 13/50 = 0.26 |"
 # The one dialect term the front door keeps, and the link that defines it.
-_BASELINE_LINK = "[baseline 6](docs/glossary.md#baseline-n-the-reference-recording)"
+_BASELINE_LINK = "[baseline 7](docs/glossary.md#baseline-n-the-reference-recording)"
 _BASELINE_ANCHOR_HEADING = "### baseline N (the reference recording)"
 # "ladder tip" is private dialect too, so a planted ladder-tip sentence has to
 # carry its glossary link — otherwise the dialect check fires alongside the
@@ -199,10 +202,10 @@ def test_unperturbed_copy_passes(doc_tree: Path) -> None:
 
 def test_stale_sample_date_detected(doc_tree: Path) -> None:
     # (a) The pre-19.1 README claimed the baseline-5-era refresh date.
-    _substitute(doc_tree, _README, "2026-07-20", "2026-07-14")
+    _substitute(doc_tree, _README, "2026-08-25", "2026-08-19")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert "refresh date '2026-07-20'" in errors[0]
+    assert "refresh date '2026-08-25'" in errors[0]
     assert _README in errors[0]
 
 
@@ -210,17 +213,17 @@ def test_paragraph_date_drift_not_alibied_elsewhere(doc_tree: Path) -> None:
     # The provenance claim is bound to its paragraph: the correct date
     # appearing somewhere else in the file must not satisfy a drifted
     # paragraph (the pre-hardening checker accepted exactly this).
-    _substitute(doc_tree, _README, "regenerated 2026-07-20", "regenerated 2026-07-14")
+    _substitute(doc_tree, _README, "regenerated 2026-08-25", "regenerated 2026-08-19")
     _write(
         doc_tree,
         _README,
         _read(doc_tree, _README)
-        + "\nAn unrelated historical note mentioning 2026-07-20.\n",
+        + "\nAn unrelated historical note mentioning 2026-08-25.\n",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert "'regenerated 2026-07-14'" in errors[0]
-    assert "refresh date '2026-07-20'" in errors[0]
+    assert "'regenerated 2026-08-19'" in errors[0]
+    assert "refresh date '2026-08-25'" in errors[0]
 
 
 def test_duplicate_stale_date_clause_detected(doc_tree: Path) -> None:
@@ -229,13 +232,13 @@ def test_duplicate_stale_date_clause_detected(doc_tree: Path) -> None:
     _substitute(
         doc_tree,
         _README,
-        "regenerated 2026-07-20",
-        "regenerated 2026-07-20 (an earlier draft said regenerated 2026-07-14)",
+        "regenerated 2026-08-25",
+        "regenerated 2026-08-25 (an earlier draft said regenerated 2026-08-19)",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert "'regenerated 2026-07-14'" in errors[0]
-    assert "refresh date '2026-07-20'" in errors[0]
+    assert "'regenerated 2026-08-19'" in errors[0]
+    assert "refresh date '2026-08-25'" in errors[0]
 
 
 def test_wrong_total_sample_count_detected(doc_tree: Path) -> None:
@@ -290,18 +293,18 @@ def test_wrong_prompt_set_version_detected(doc_tree: Path) -> None:
     _substitute(
         doc_tree,
         _README,
-        "`qwen3_6_27b` `v3` prompt set",
+        "`qwen3_6_27b` `v4` prompt set",
         "`qwen3_6_27b` `v2` prompt set",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert "'v3'" in errors[0]
+    assert "'v4'" in errors[0]
     assert "`prompt_versions` column" in errors[0]
 
 
 def test_missing_provenance_paragraph_fails_loud(doc_tree: Path) -> None:
     # Losing the paragraph anchor is format drift, not a vacuous pass.
-    _substitute(doc_tree, _README, "regenerated 2026-07-20", "refreshed 2026-07-20")
+    _substitute(doc_tree, _README, "regenerated 2026-08-25", "refreshed 2026-08-25")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert "exactly one sample-provenance paragraph" in errors[0]
@@ -311,11 +314,11 @@ def test_wrong_win_rate_detected(doc_tree: Path) -> None:
     # (b) A win rate that no longer matches the manifest it is drawn from:
     # the paragraph misses the expected substring AND carries a claim that
     # contradicts the manifest — both are reported.
-    _substitute(doc_tree, _README, "rates 34% (4p1i)", "rates 30% (4p1i)")
+    _substitute(doc_tree, _README, "rates 36% (4p1i)", "rates 30% (4p1i)")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 2
-    assert "'34% (4p1i)'" in errors[0]
-    assert "17/50" in errors[0]
+    assert "'36% (4p1i)'" in errors[0]
+    assert "18/50" in errors[0]
     assert "claim '30% (4p1i)' disagrees" in errors[1]
 
 
@@ -330,7 +333,7 @@ def test_stale_ladder_tip_sentence_detected(doc_tree: Path) -> None:
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert "names baseline 5" in errors[0]
-    assert "ladder tip at baseline 6" in errors[0]
+    assert "ladder tip at baseline 7" in errors[0]
 
 
 def test_stray_win_rate_claim_detected(doc_tree: Path) -> None:
@@ -345,7 +348,7 @@ def test_stray_win_rate_claim_detected(doc_tree: Path) -> None:
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert "win-rate claim '36% (9p2i)'" in errors[0]
-    assert "15/50 = 30%" in errors[0]
+    assert "12/50 = 24%" in errors[0]
 
 
 def test_in_paragraph_stale_claim_detected(doc_tree: Path) -> None:
@@ -354,13 +357,13 @@ def test_in_paragraph_stale_claim_detected(doc_tree: Path) -> None:
     _substitute(
         doc_tree,
         _README,
-        "34% (4p1i) and 30% (9p2i)",
-        "34% (4p1i) and 30% (9p2i) (an earlier draft misquoted 35% (9p2i))",
+        "36% (4p1i) and 24% (9p2i)",
+        "36% (4p1i) and 24% (9p2i) (an earlier draft misquoted 25% (9p2i))",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert "win-rate claim '35% (9p2i)' disagrees" in errors[0]
-    assert "15/50 = 30%" in errors[0]
+    assert "win-rate claim '25% (9p2i)' disagrees" in errors[0]
+    assert "12/50 = 24%" in errors[0]
 
 
 def test_long_ladder_tip_sentence_detected(doc_tree: Path) -> None:
@@ -390,7 +393,7 @@ def test_ladder_tip_sentence_without_baseline_detected(doc_tree: Path) -> None:
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert "names no baseline at all" in errors[0]
-    assert "baseline 6" in errors[0]
+    assert "baseline 7" in errors[0]
 
 
 def test_missing_live_toggle_example_detected(doc_tree: Path) -> None:
@@ -571,9 +574,9 @@ def test_manifest_outcome_flip_detected(doc_tree: Path) -> None:
     _write(doc_tree, _MANIFEST_4P1I, text.replace("| IMPOSTORS |", "| CREWMATES |", 1))
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 3
-    assert "'32% (4p1i)'" in errors[0]
-    assert "16/50" in errors[0]
-    assert all("claim '34% (4p1i)' disagrees" in error for error in errors[1:])
+    assert "'34% (4p1i)'" in errors[0]
+    assert "17/50" in errors[0]
+    assert all("claim '36% (4p1i)' disagrees" in error for error in errors[1:])
 
 
 def test_unparseable_manifest_fails_loud(doc_tree: Path) -> None:
@@ -591,13 +594,13 @@ def test_unparseable_manifest_fails_loud(doc_tree: Path) -> None:
 def test_vote_correctness_stamp_drift_detected(doc_tree: Path) -> None:
     # The module's per-set stamp is bound to that set's committed report: a
     # numerator drifting away from the recorded one is named on both sides.
-    _substitute(doc_tree, _VOTE_CORRECTNESS, "72/78 = 0.9231", "71/78 = 0.9103")
+    _substitute(doc_tree, _VOTE_CORRECTNESS, "78/85 = 0.9176", "77/85 = 0.9059")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert _VOTE_CORRECTNESS in errors[0]
     assert "replays/samples/9p2i" in errors[0]
-    assert "71/78 = 0.9103" in errors[0]
-    assert "records 72/78 = 0.9231" in errors[0]
+    assert "77/85 = 0.9059" in errors[0]
+    assert "records 78/85 = 0.9176" in errors[0]
 
 
 def test_structural_pin_prose_detected(doc_tree: Path) -> None:
@@ -613,7 +616,7 @@ def test_structural_pin_prose_detected(doc_tree: Path) -> None:
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert "'structurally pinned'" in errors[0]
-    assert "replays/samples/9p2i (72/78)" in errors[0]
+    assert "replays/samples/9p2i (78/85)" in errors[0]
 
 
 def test_eval_report_rate_drift_detected(doc_tree: Path) -> None:
@@ -623,7 +626,7 @@ def test_eval_report_rate_drift_detected(doc_tree: Path) -> None:
     _substitute(
         doc_tree,
         _EVAL_REPORT_9P2I,
-        '"vote_correctness_rate": 0.9230769230769231',
+        '"vote_correctness_rate": 0.9176470588235294',
         '"vote_correctness_rate": 0.99',
     )
     errors = check_doc_facts.check_facts(doc_tree)
@@ -632,7 +635,7 @@ def test_eval_report_rate_drift_detected(doc_tree: Path) -> None:
     # report it points a reader at.
     assert len(errors) == 2
     assert any(
-        _EVAL_REPORT_9P2I in error and "72/78 = 0.9231" in error for error in errors
+        _EVAL_REPORT_9P2I in error and "78/85 = 0.9176" in error for error in errors
     )
     assert any("vote correctness 0.990" in error for error in errors)
 
@@ -679,11 +682,11 @@ def test_vote_correctness_baseline_attribution_drift_detected(doc_tree: Path) ->
     # The baseline the stamps are attributed to has a committed source too: a
     # rate hung on the wrong baseline is a wrong claim even when its
     # arithmetic checks out.
-    _substitute(doc_tree, _VOTE_CORRECTNESS, "baseline-6", "baseline-5")
+    _substitute(doc_tree, _VOTE_CORRECTNESS, "baseline-7", "baseline-5")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert _VOTE_CORRECTNESS in errors[0]
-    assert "'baseline-6'" in errors[0]
+    assert "'baseline-7'" in errors[0]
 
 
 def test_zero_impostor_ejection_set_wants_an_undefined_rate_stamp(
@@ -695,10 +698,10 @@ def test_zero_impostor_ejection_set_wants_an_undefined_rate_stamp(
     _substitute(
         doc_tree,
         _EVAL_REPORT_4P1I,
-        '"impostor_ejections": 10,\n    "crewmate_ejections": 2,\n'
-        '    "evidence_backed_impostor_ejections": 10,\n'
-        '    "vote_correctness_rate": 1.0,',
-        '"impostor_ejections": 0,\n    "crewmate_ejections": 2,\n'
+        '"impostor_ejections": 20,\n    "crewmate_ejections": 1,\n'
+        '    "evidence_backed_impostor_ejections": 19,\n'
+        '    "vote_correctness_rate": 0.95,',
+        '"impostor_ejections": 0,\n    "crewmate_ejections": 1,\n'
         '    "evidence_backed_impostor_ejections": 0,\n'
         '    "vote_correctness_rate": null,',
     )
@@ -757,8 +760,8 @@ def test_evidence_count_above_its_denominator_fails_loud(doc_tree: Path) -> None
     _substitute(
         doc_tree,
         _EVAL_REPORT_9P2I,
-        '"evidence_backed_impostor_ejections": 72,',
-        '"evidence_backed_impostor_ejections": 79,',
+        '"evidence_backed_impostor_ejections": 78,',
+        '"evidence_backed_impostor_ejections": 92,',
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
@@ -783,8 +786,8 @@ def test_eval_report_without_vote_correctness_block_fails_loud(
 
 def test_unlinked_dialect_term_detected(doc_tree: Path) -> None:
     # The one private-dialect term the front door keeps loses its glossary
-    # link: a reader now meets "baseline 6" with nowhere to look it up.
-    _substitute(doc_tree, _README, _BASELINE_LINK, "baseline 6")
+    # link: a reader now meets "baseline 7" with nowhere to look it up.
+    _substitute(doc_tree, _README, _BASELINE_LINK, "baseline 7")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert "'baseline'" in errors[0]
@@ -879,18 +882,18 @@ def test_citation_figure_derived_from_the_committed_instrument(
     _substitute(
         doc_tree,
         _README,
-        "| 520 / 520, zero dangling |",
-        "| 519 / 519, zero dangling |",
+        "| 538 / 538, zero dangling |",
+        "| 537 / 537, zero dangling |",
     )
     _substitute(
         doc_tree,
         _READING_GUIDE,
-        "| 520 / 520, zero dangling |",
-        "| 519 / 519, zero dangling |",
+        "| 538 / 538, zero dangling |",
+        "| 537 / 537, zero dangling |",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert "'519 / 519, zero dangling'" in errors[0]
+    assert "'537 / 537, zero dangling'" in errors[0]
     assert _CITATION_INSTRUMENT in errors[0]
 
 
@@ -905,7 +908,7 @@ def test_instrument_pin_move_reaches_the_front_door(doc_tree: Path) -> None:
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert "'520 / 520, 3 dangling'" in errors[0]
+    assert "'538 / 538, 3 dangling'" in errors[0]
 
 
 def test_vent_headline_derived_from_the_crosstab(doc_tree: Path) -> None:
@@ -1290,25 +1293,25 @@ def test_missing_ml_results_table_fails_loud(doc_tree: Path) -> None:
 def test_report_example_ejection_count_drift_detected(doc_tree: Path) -> None:
     # The example exists because the fake provider's report is empty; its
     # scalars come from the committed report, not from prose.
-    _substitute(doc_tree, _README, "records 101 ejections", "records 99 ejections")
+    _substitute(doc_tree, _README, "records 99 ejections", "records 97 ejections")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert "'101 ejections'" in errors[0]
+    assert "'99 ejections'" in errors[0]
     assert "total_ejections" in errors[0]
 
 
 def test_report_example_rate_drift_detected(doc_tree: Path) -> None:
-    _substitute(doc_tree, _README, "vote correctness 0.923", "vote correctness 0.950")
+    _substitute(doc_tree, _README, "vote correctness 0.918", "vote correctness 0.950")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert "'vote correctness 0.923'" in errors[0]
+    assert "'vote correctness 0.918'" in errors[0]
 
 
 def test_report_example_accuracy_drift_detected(doc_tree: Path) -> None:
-    _substitute(doc_tree, _README, "ejection accuracy 0.772", "ejection accuracy 0.800")
+    _substitute(doc_tree, _README, "ejection accuracy 0.859", "ejection accuracy 0.800")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert "'ejection accuracy 0.772'" in errors[0]
+    assert "'ejection accuracy 0.859'" in errors[0]
 
 
 def test_missing_report_example_paragraph_fails_loud(doc_tree: Path) -> None:
@@ -1341,7 +1344,7 @@ def test_glossary_ladder_tip_drift_detected(doc_tree: Path) -> None:
     _substitute(
         doc_tree,
         _GLOSSARY,
-        "the newest — the ladder tip — is baseline 6",
+        "the newest — the ladder tip — is baseline 7",
         "the newest — the ladder tip — is baseline 5",
     )
     errors = check_doc_facts.check_facts(doc_tree)
@@ -1521,13 +1524,13 @@ def test_missing_document_reported(doc_tree: Path) -> None:
 def test_main_reports_every_failure_at_once(
     doc_tree: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    _substitute(doc_tree, _README, "2026-07-20", "2026-07-14")
-    _substitute(doc_tree, _README, "34% (4p1i)", "30% (4p1i)")
+    _substitute(doc_tree, _README, "2026-08-25", "2026-08-19")
+    _substitute(doc_tree, _README, "36% (4p1i)", "30% (4p1i)")
     assert check_doc_facts.main(["--repo-root", str(doc_tree)]) == 1
     err = capsys.readouterr().err
     assert "Doc-fact check failed:" in err
-    assert "'34% (4p1i)'" in err
-    assert "'2026-07-20'" in err
+    assert "'36% (4p1i)'" in err
+    assert "'2026-08-25'" in err
 
 
 def test_main_clean_repo_exits_zero(capsys: pytest.CaptureFixture[str]) -> None:

@@ -6,7 +6,7 @@
     {
       "tick": 200,
       "type": "self_state",
-      "payload": {"room": "ADMIN", "role": "CREWMATE", "pending_task_id": "wiring_admin"},
+      "payload": {"room": "ADMIN", "role": "CREWMATE", "pending_task_id": "wiring_admin", "owned_task_ids": ["wiring_admin", "swipe_card"]},
       "provenance": "observed"
     },
     {
@@ -18,7 +18,7 @@
     {
       "tick": 380,
       "type": "self_state",
-      "payload": {"room": "ADMIN", "role": "CREWMATE", "pending_task_id": null},
+      "payload": {"room": "ADMIN", "role": "CREWMATE", "pending_task_id": null, "owned_task_ids": ["swipe_card"]},
       "provenance": "observed"
     },
     {

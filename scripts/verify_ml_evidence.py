@@ -66,7 +66,7 @@ import subprocess
 import sys
 import tempfile
 from collections.abc import Callable, Iterator, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from itertools import zip_longest
 from pathlib import Path, PurePosixPath
 from typing import Final, Literal
@@ -178,7 +178,33 @@ _DIGEST_ROW: Final = re.compile(r"^([0-9a-f]{64})  (\S.*)$")
 _PIN_ROW_MARKER: Final = "tip sha — THE PIN"
 _SHA1_RE: Final = re.compile(r"\b[0-9a-f]{40}\b")
 
-Status = Literal["OK", "FAIL", "ABSENT", "INFO"]
+Status = Literal["OK", "FAIL", "ABSENT", "INFO", "STALE"]
+
+#: The ONE grounding gap this checkout declares: (the corpus fingerprint the
+#: committed ML fits were made on, the corpus fingerprint now on disk).
+#:
+#: The baseline-7 record re-recorded ``replays/ml_corpus`` without re-fitting the
+#: ML artifacts; re-grounding them is a named follow-up
+#: (``audits/audit-phase-20-baseline-7.md`` §10.2). Until it lands, this exact
+#: pair of digests is expected, and the rows it explains report STALE instead of
+#: FAIL.
+#:
+#: Naming BOTH digests, rather than accepting any mismatch, is what keeps the
+#: fingerprint checks real gates: a corpus perturbed by so much as one added
+#: replay fingerprints to something that is not the right-hand digest, and FAILS.
+#: When the re-ground lands, the two digests agree, nothing matches this pair,
+#: and the constant can be deleted along with every branch that reads it.
+_DECLARED_GROUNDING_GAP: Final[tuple[str, str]] = (
+    "164ef00c16fa5108aa2d2a691f2f9a65d5ea60faa10f7bbd1604e93f36bc3170",
+    "45b11993d7badcc9c413ff6db0ee0b5e693006173185d0295bb3a16f221e59a8",
+)
+
+
+def _is_declared_grounding_gap(fit_sha: str, corpus_sha: str) -> bool:
+    """Is this mismatch the one gap the checkout declares, digit for digit?"""
+
+    return (fit_sha, corpus_sha) == _DECLARED_GROUNDING_GAP
+
 
 #: The availability vocabulary of `docs/artifacts.md`, plus the two outcomes for
 #: named evidence the registry table does not hold a row for.
@@ -212,7 +238,11 @@ class CheckRow:
     before a restore) — it passes a default run and FAILS ``--complete``;
     ``INFO`` is a recorded state that is not a measurement of this checkout
     (a repo-external working root, a manifest-recorded loss, a class-(d) view)
-    and never fails.
+    and never fails; ``STALE`` is a measured disagreement whose CAUSE is already
+    known and recorded — the committed fit and the corpus under it are grounded
+    on different recordings — so the number it reports is the size of a declared
+    gap, not a defect. ``STALE`` never fails a run, and only the recompute leg
+    issues it, only when the grounding check below proves the gap is real.
     """
 
     name: str
@@ -1393,13 +1423,24 @@ def run_corpus(ctx: Context) -> LegResult:
     )
     measured_sha = fit_corpus_fingerprint(ctx.repo_root / CORPUS_SET)
     stated_set = CORPUS_SET.rsplit("/", 1)[-1]
-    provenance_drift = [
+    # Two kinds of disagreement live in this one record, and they are not read
+    # the same way. A corpus FINGERPRINT that has moved means the corpus was
+    # re-recorded under a frozen fit — a declared grounding gap (STALE, see the
+    # recompute leg's 'ML grounding' row). A record keyed to the wrong WEIGHTS,
+    # or naming a different SET, is the record and the artifact disagreeing about
+    # themselves — a defect on any corpus, and always a FAIL. Collapsing the two
+    # into one status is what made a re-record read like a broken artifact.
+    corpus_drift = (
+        f"corpus_sha256: {CORPUS_SET} fingerprints to "
+        f"{measured_sha[:16]}…, the record says {fit_corpus.corpus_sha256[:16]}… "
+        "— the corpus was re-recorded under a frozen fit; re-grounding is a "
+        "named follow-up (audits/audit-phase-20-baseline-7.md §10.2)"
+        if measured_sha != fit_corpus.corpus_sha256
+        else ""
+    )
+    keying_drift = [
         problem
         for problem in (
-            f"corpus_sha256: {CORPUS_SET} fingerprints to "
-            f"{measured_sha[:16]}…, the record says {fit_corpus.corpus_sha256[:16]}…"
-            if measured_sha != fit_corpus.corpus_sha256
-            else "",
             f"weights_sha256: the record is keyed on "
             f"{fit_corpus.weights_sha256[:16]}… but the committed weights hash "
             f"to {weights_sha[:16]}… — the substrate fence "
@@ -1413,6 +1454,16 @@ def run_corpus(ctx: Context) -> LegResult:
         )
         if problem
     ]
+    if keying_drift:
+        fingerprint_status: Status = "FAIL"
+    elif corpus_drift and _is_declared_grounding_gap(
+        fit_corpus.corpus_sha256, measured_sha
+    ):
+        fingerprint_status = "STALE"
+    elif corpus_drift:
+        fingerprint_status = "FAIL"
+    else:
+        fingerprint_status = "OK"
     rows.append(
         CheckRow(
             name="fit-corpus identity fingerprint",
@@ -1422,8 +1473,10 @@ def run_corpus(ctx: Context) -> LegResult:
                 f"{fit_corpus.weights_sha256[:16]}…"
             ),
             source=f"{SURROGATE_DIR}/fit-corpus.json (SurrogateFitCorpus)",
-            status="OK" if not provenance_drift else "FAIL",
-            detail="\n".join(provenance_drift),
+            status=fingerprint_status,
+            detail="\n".join(
+                [*keying_drift, corpus_drift] if corpus_drift else keying_drift
+            ),
         )
     )
     return LegResult(leg="corpus", rows=tuple(rows), notes=tuple(notes))
@@ -1483,6 +1536,103 @@ def _float_row(
     )
 
 
+#: The recompute rows a grounding gap can explain, named one by one.
+#:
+#: These are the rows whose value is a MEASUREMENT of frozen weights against the
+#: corpus: change the corpus and they move, whatever the artifacts say. They are
+#: the only rows the grounding gap downgrades.
+#:
+#: Every other row in the leg is corpus-INDEPENDENT — the composed adoption
+#: constraints, the manifest's configuration identity, the two weight hashes —
+#: and a disagreement there is a defect on any corpus. Downgrading them along
+#: with the rest would mean that during the stale period a regression in an
+#: invariant that has nothing to do with the corpus exits 0.
+#:
+#: Named explicitly rather than derived, so a NEW recompute row is not silently
+#: enrolled in the amnesty: ``run_recompute`` asserts every name here is a row it
+#: actually emitted, and a row not named here keeps its own status.
+_CORPUS_DEPENDENT_RECOMPUTE_ROWS: Final[frozenset[str]] = frozenset(
+    {
+        "surrogate top-1 (ranking channel)",
+        "surrogate SKIP-vs-eject decision accuracy",
+        "conviction flag-count Spearman",
+        "conviction conversion-label accuracy",
+        "conviction verdict.json reproduces",
+        "composed decision accuracy",
+        "composed exact-outcome match",
+        "composed convicting top-1",
+        "composed verdict.json reproduces",
+    }
+)
+
+#: Printed beside every recompute row a proven grounding gap explains.
+_STALE_GROUNDING_NOTE: Final[str] = (
+    "the committed fit and the corpus under it are grounded on different "
+    "recordings (see the 'ML grounding' row) — this number measures that gap, "
+    "and closes when the re-ground lands "
+    "(audits/audit-phase-20-baseline-7.md §10.2)"
+)
+
+
+def _grounding_row(repo_root: Path) -> tuple[CheckRow, bool]:
+    """Is the committed fit grounded on the corpus that is about to score it?
+
+    Everything this leg re-derives reads the SAME corpus and the SAME frozen
+    weights, so one question decides how to read all of it: were those weights
+    fitted on these bytes? The surrogate's committed fit-corpus record answers
+    it directly — it stores the fingerprint of the corpus it was fitted on, and
+    ``fit_corpus_fingerprint`` recomputes that fingerprint from the corpus now on
+    disk. When they agree, a disagreement downstream is a real defect and the row
+    FAILS. When they do not, a disagreement downstream is the corpus having moved
+    under a frozen fit, which is a declared state, not a defect — the rows report
+    STALE and this row says why.
+
+    The distinction is the whole point: before it existed, a re-record made every
+    recompute row FAIL at once, which reads like a broken model and is in fact a
+    bookkeeping debt with a name.
+    """
+
+    from training.surrogate.runner import (
+        fit_corpus_fingerprint,
+        load_fit_corpus_record,
+    )
+
+    record = load_fit_corpus_record(repo_root / SURROGATE_DIR)
+    live = fit_corpus_fingerprint(repo_root / CORPUS_SET)
+    stale = _is_declared_grounding_gap(record.corpus_sha256, live)
+    return (
+        CheckRow(
+            name="ML grounding",
+            measured=f"{live[:16]}… (corpus on disk)",
+            committed=f"{record.corpus_sha256[:16]}… (corpus the fit was made on)",
+            source=f"{SURROGATE_DIR}/fit-corpus.json vs {CORPUS_SET}",
+            status=(
+                "STALE" if stale else "OK" if live == record.corpus_sha256 else "FAIL"
+            ),
+            detail=(
+                (
+                    "the committed ML artifacts were fitted on a corpus this "
+                    "checkout no longer holds; re-grounding them is a named "
+                    "follow-up (audits/audit-phase-20-baseline-7.md §10.2) and "
+                    "every recomputation below is read against that gap"
+                )
+                if stale
+                else (
+                    ""
+                    if live == record.corpus_sha256
+                    else (
+                        "the corpus on disk is neither the one the fit was made "
+                        "on nor the one this checkout declares as the pending "
+                        "re-ground — an undeclared substrate, which no "
+                        "recomputation below can be read against"
+                    )
+                )
+            ),
+        ),
+        stale,
+    )
+
+
 def run_recompute(ctx: Context) -> LegResult:
     """Re-derive the three instruments from the FROZEN committed weights.
 
@@ -1492,6 +1642,16 @@ def run_recompute(ctx: Context) -> LegResult:
     conviction channels from ``run_conviction_fidelity`` + ``decide_conviction_go``,
     and the composed channels from ``run_composed_fidelity`` + ``decide_composed_go``.
     Nothing refits and nothing retrains.
+
+    Read the ``ML grounding`` row first: it decides whether a disagreement below
+    is a defect (FAIL) or a declared grounding gap (STALE). Rows that AGREE stay
+    OK either way — a frozen fit still reproducing a number on a corpus it never
+    saw is a stronger result than one reproducing on its own fit corpus, not a
+    weaker one. And only the CORPUS-DEPENDENT rows are eligible for that reading
+    (:data:`_CORPUS_DEPENDENT_RECOMPUTE_ROWS`): the weight hashes, the manifest's
+    configuration identity and the composed adoption constraints are the same on
+    any corpus, so they FAIL during the stale period exactly as they would
+    outside it.
     """
 
     from training.composed_runner import (
@@ -1762,7 +1922,32 @@ def run_recompute(ctx: Context) -> LegResult:
                 status="OK" if measured_sha == committed_sha else "FAIL",
             )
         )
-    return LegResult(leg="recompute", rows=tuple(rows))
+    grounding, stale = _grounding_row(ctx.repo_root)
+    emitted = {row.name for row in rows}
+    missing = sorted(_CORPUS_DEPENDENT_RECOMPUTE_ROWS - emitted)
+    if missing:
+        raise EvidenceError(
+            "the corpus-dependent recompute rows named in "
+            f"_CORPUS_DEPENDENT_RECOMPUTE_ROWS were not emitted: {missing}. A "
+            "renamed or deleted row must be re-stated there, or the grounding "
+            "gap would silently stop covering it."
+        )
+    if stale:
+        rows = [
+            row
+            if row.status != "FAIL" or row.name not in _CORPUS_DEPENDENT_RECOMPUTE_ROWS
+            else replace(
+                row,
+                status="STALE",
+                detail=(
+                    f"{row.detail}\n{_STALE_GROUNDING_NOTE}"
+                    if row.detail
+                    else _STALE_GROUNDING_NOTE
+                ),
+            )
+            for row in rows
+        ]
+    return LegResult(leg="recompute", rows=(grounding, *rows))
 
 
 def _verdict_identity_row(
@@ -2683,7 +2868,11 @@ def render(result: LegResult) -> str:
 
 
 def _failed(rows: Sequence[CheckRow], *, complete: bool) -> list[CheckRow]:
-    """The rows that fail this run. ``ABSENT`` fails only under ``--complete``."""
+    """The rows that fail this run. ``ABSENT`` fails only under ``--complete``.
+
+    ``STALE`` never fails: it is issued only where a proven grounding gap already
+    explains the disagreement, and the gap itself is reported as its own row.
+    """
 
     return [
         row
@@ -2826,14 +3015,24 @@ def main(argv: list[str] | None = None) -> int:
     every_row = [row for result in results for row in result.rows]
     failures = _failed(every_row, complete=complete)
     absent = [row for row in every_row if row.status == "ABSENT"]
+    stale = [row for row in every_row if row.status == "STALE"]
     print("")
     print(
         f"checks: {len(every_row)} | "
         f"OK {sum(1 for row in every_row if row.status == 'OK')} | "
         f"FAIL {sum(1 for row in every_row if row.status == 'FAIL')} | "
+        f"STALE {len(stale)} | "
         f"ABSENT {len(absent)} | "
         f"INFO {sum(1 for row in every_row if row.status == 'INFO')}"
     )
+    if stale:
+        print(
+            f"{len(stale)} check(s) report STALE — the committed ML fits and the "
+            "corpus under them are grounded on different recordings, so those "
+            "rows measure a declared gap rather than a defect. Re-grounding is a "
+            "named follow-up (audits/audit-phase-20-baseline-7.md §10.2); the "
+            "'ML grounding' row above carries the two fingerprints."
+        )
     if absent and not complete:
         print(
             f"{len(absent)} check(s) report EVIDENCE-BRANCH-ABSENT — the bytes "

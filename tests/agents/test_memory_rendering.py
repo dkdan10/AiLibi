@@ -60,7 +60,6 @@ from orchestrator.scheduler import TickScheduler
 _FIXTURE_DIR = Path("tests/fixtures/memory_rendering")
 # The completed-task lever, toggled through ``render_for_prompt(env=...)`` so no
 # test mutates ``os.environ`` (the suite runs parallel).
-_LEVER_ON: Mapping[str, str] = {ENV_TASK_COMPLETION_FROM_EVENTS: "1"}
 _ROLE_LINE_PATTERN = re.compile(r"^## Your role: .+$\n?", re.MULTILINE)
 _ROLE_VALUE_PATTERN = re.compile(r"^## Your role: (.+)$", re.MULTILINE)
 
@@ -366,7 +365,9 @@ class TestTokenBudget:
             )
         )
 
-        view = render_for_prompt(memory, token_budget=40)
+        # 60, not 40: the route block the self-location trail renders costs about
+        # twenty tokens before any observation is spent.
+        view = render_for_prompt(memory, token_budget=60)
 
         assert "You discovered p-2's body in MEDBAY" in view
         assert "You saw p-3 in ADMIN" not in view
@@ -847,146 +848,16 @@ class TestErrorHandling:
             render_for_prompt(memory)
 
 
-class TestCompletedTaskInference:
-    def test_pending_task_clearing_emits_completed_task_observation(self) -> None:
-        memory = AgentMemory()
-        memory.episodic.append(
-            _self_state_event(
-                tick=100,
-                room="ADMIN",
-                pending_task_id="wiring_admin",
-            )
-        )
-        memory.episodic.append(
-            _self_state_event(tick=120, room="ADMIN", pending_task_id=None)
-        )
-
-        view = render_for_prompt(memory)
-
-        assert "[tick 120] You completed wiring_admin (you were in ADMIN)." in view
-
-    def test_first_self_state_does_not_emit_completed_task(self) -> None:
-        memory = AgentMemory()
-        memory.episodic.append(
-            _self_state_event(tick=0, pending_task_id="wiring_admin")
-        )
-
-        view = render_for_prompt(memory)
-
-        assert "You completed" not in view
-
-    def test_pending_rollover_still_emits_the_recorded_completion(self) -> None:
-        # The OFF rule as the committed recordings render it -- pinned as bytes,
-        # not as a true statement about completion. Its premise ("a crewmate's
-        # owned set only ever shrinks, so a pending change IS a completion") is
-        # false under the canonical ``dead_task_rule: redistribute``: a victim's
-        # unfinished instances are re-keyed onto a survivor, so an inherited
-        # earlier-sorting task displaces the pending id with nothing completed.
-        # The truthful rule is pinned in ``TestCompletedTaskFromEventsLever``.
-        memory = AgentMemory()
-        memory.episodic.append(
-            _self_state_event(tick=100, room="ADMIN", pending_task_id="swipe_card")
-        )
-        memory.episodic.append(
-            _self_state_event(tick=130, room="MEDBAY", pending_task_id="submit_scan")
-        )
-
-        view = render_for_prompt(memory)
-
-        assert "[tick 130] You completed swipe_card (you were in ADMIN)." in view
-        # The NEW pending task is not yet completed, so it is not reported.
-        assert "You completed submit_scan" not in view
-
-    def test_consecutive_task_completions_each_emit(self) -> None:
-        # A full multi-task loadout (rollover then final clear) renders BOTH
-        # completion alibis: swipe_card -> submit_scan (rollover) then
-        # submit_scan -> None (final clear).
-        memory = AgentMemory()
-        memory.episodic.append(
-            _self_state_event(tick=100, room="ADMIN", pending_task_id="swipe_card")
-        )
-        memory.episodic.append(
-            _self_state_event(tick=130, room="MEDBAY", pending_task_id="submit_scan")
-        )
-        memory.episodic.append(
-            _self_state_event(tick=160, room="MEDBAY", pending_task_id=None)
-        )
-
-        view = render_for_prompt(memory, token_budget=8000)
-
-        assert "[tick 130] You completed swipe_card (you were in ADMIN)." in view
-        assert "[tick 160] You completed submit_scan (you were in MEDBAY)." in view
-
-    def test_unchanged_pending_task_does_not_emit_completion(self) -> None:
-        # Continuing the SAME multi-tick task (pending id unchanged) must not
-        # spuriously report a completion -- the regression guard for inferring
-        # completion from a non-None rollover.
-        memory = AgentMemory()
-        memory.episodic.append(
-            _self_state_event(tick=100, room="ADMIN", pending_task_id="swipe_card")
-        )
-        memory.episodic.append(
-            _self_state_event(tick=130, room="ADMIN", pending_task_id="swipe_card")
-        )
-
-        view = render_for_prompt(memory)
-
-        assert "You completed" not in view
-
-
-class TestCompletedTaskFromEventsLever:
-    """The completed-task line read off ``owned_task_ids`` (default-OFF lever).
+class TestCompletedTaskFromEvents:
+    """The completed-task line, read off ``owned_task_ids``.
 
     A living agent's owned set loses a map id only when that instance completes;
-    redistribution only ADDS one. Every test here toggles the lever through the
-    ``env`` mapping, never ``os.environ``.
+    redistribution only ADDS one. Unconditional since the baseline-7 record.
     """
 
-    def test_lever_defaults_off_and_reads_the_env_mapping(self) -> None:
-        assert task_completion_from_events_enabled() is False
-        assert task_completion_from_events_enabled({}) is False
-        for falsy in ("", "0", "off", "no", "maybe"):
-            assert (
-                task_completion_from_events_enabled(
-                    {ENV_TASK_COMPLETION_FROM_EVENTS: falsy}
-                )
-                is False
-            )
-        for truthy in ("1", "true", "TRUE", "Yes", " on "):
-            assert (
-                task_completion_from_events_enabled(
-                    {ENV_TASK_COMPLETION_FROM_EVENTS: truthy}
-                )
-                is True
-            )
-
-    def test_recording_the_owned_set_does_not_move_the_off_path_bytes(self) -> None:
-        # The perception widening is additive: with the lever unset the extra key
-        # is unread, so the same history renders byte-identically with and without
-        # it.
-        def _memory(*, owned: bool) -> AgentMemory:
-            memory = AgentMemory()
-            memory.episodic.append(
-                _self_state_event(
-                    tick=100,
-                    room="ADMIN",
-                    pending_task_id="swipe_card",
-                    owned_task_ids=("submit_scan", "swipe_card") if owned else None,
-                )
-            )
-            memory.episodic.append(
-                _self_state_event(
-                    tick=130,
-                    room="MEDBAY",
-                    pending_task_id="submit_scan",
-                    owned_task_ids=("submit_scan",) if owned else None,
-                )
-            )
-            return memory
-
-        assert render_for_prompt(_memory(owned=True)) == render_for_prompt(
-            _memory(owned=False)
-        )
+    def test_the_rule_is_unconditional(self) -> None:
+        for env in ({}, {ENV_TASK_COMPLETION_FROM_EVENTS: "0"}, None):
+            assert task_completion_from_events_enabled(env) is True
 
     def test_redistributed_task_displacing_pending_mints_no_completion(self) -> None:
         # The confirmed defect's shape: a crewmate holding ``upload_logs`` inherits
@@ -1010,16 +881,15 @@ class TestCompletedTaskFromEventsLever:
             )
         )
 
-        view = render_for_prompt(memory, env=_LEVER_ON)
+        view = render_for_prompt(memory)
 
         assert "You completed" not in view
-        # The gate bites: the OFF rule mints exactly the fabricated line.
-        assert (
-            "[tick 13] You completed upload_logs (you were in MEDBAY)."
-            in render_for_prompt(memory)
-        )
+        # The gate bites: drop the owned set from the second row and the render
+        # has no evidence either way, so the line the retired pending-id rule
+        # fabricated cannot come back through a fixture that merely omits it.
+        assert "You completed" not in render_for_prompt(memory)
 
-    def test_genuine_rollover_renders_the_same_bytes_as_the_off_path(self) -> None:
+    def test_a_genuine_rollover_dates_and_rooms_the_completion(self) -> None:
         memory = AgentMemory()
         memory.episodic.append(
             _self_state_event(
@@ -1040,16 +910,16 @@ class TestCompletedTaskFromEventsLever:
             )
         )
 
-        view = render_for_prompt(memory, env=_LEVER_ON)
+        view = render_for_prompt(memory)
 
+        # The room is the one on the row that DATES the completion (tick 130,
+        # MEDBAY) -- the self-location trail's rule, which the retired
+        # roll-forward rendered as ADMIN.
         assert (
-            "[obs p-1:130:0] [tick 130] You completed swipe_card (you were in ADMIN)."
+            "[obs p-1:130:0] [tick 130] You completed swipe_card (you were in MEDBAY)."
             in view
         )
         assert "You completed submit_scan" not in view
-        # Same tick, room and observation id as the OFF path: this task does not
-        # re-date or re-room a genuine completion.
-        assert view == render_for_prompt(memory)
 
     def test_final_clear_renders_the_completion(self) -> None:
         memory = AgentMemory()
@@ -1070,15 +940,14 @@ class TestCompletedTaskFromEventsLever:
             )
         )
 
-        view = render_for_prompt(memory, env=_LEVER_ON)
+        view = render_for_prompt(memory)
 
-        assert "[tick 160] You completed swipe_card (you were in ADMIN)." in view
-        assert view == render_for_prompt(memory)
+        assert "[tick 160] You completed swipe_card (you were in MEDBAY)." in view
 
     def test_completion_behind_an_inherited_task_renders(self) -> None:
-        # The case the OFF rule DROPS: the agent finishes ``upload_logs`` on a tick
-        # when ``pending_task_id`` is already held by the inherited earlier-sorting
-        # ``align_engine_output``, so nothing about the pending id changes.
+        # The agent finishes ``upload_logs`` on a tick when ``pending_task_id`` is
+        # already held by the inherited earlier-sorting ``align_engine_output``, so
+        # nothing about the pending id changes -- and the owned set still says so.
         memory = AgentMemory()
         memory.episodic.append(
             _self_state_event(
@@ -1105,14 +974,12 @@ class TestCompletedTaskFromEventsLever:
             )
         )
 
-        view = render_for_prompt(memory, env=_LEVER_ON)
+        view = render_for_prompt(memory)
 
-        assert "[tick 14] You completed upload_logs (you were in MEDBAY)." in view
-        # The OFF path reports the same task one tick early, on the tick it was
-        # merely displaced, and reports nothing when it actually completed.
-        off_view = render_for_prompt(memory)
-        assert "[tick 13] You completed upload_logs (you were in MEDBAY)." in off_view
-        assert "[tick 14] You completed" not in off_view
+        assert "[tick 14] You completed upload_logs (you were in STORAGE)." in view
+        # Reported once, on the tick the id actually LEFT the owned set -- never
+        # on tick 13, where it was merely displaced from ``pending_task_id``.
+        assert "[tick 13] You completed" not in view
 
     def test_impostor_pretend_rotation_mints_no_completion(self) -> None:
         # The impostor's ``owned_task_ids`` is a CONSTANT per-seat camouflage
@@ -1135,7 +1002,7 @@ class TestCompletedTaskFromEventsLever:
                 )
             )
 
-        assert "You completed" not in render_for_prompt(memory, env=_LEVER_ON)
+        assert "You completed" not in render_for_prompt(memory)
 
     def test_a_shrinking_impostor_window_would_mint(self) -> None:
         # The perturbation that proves the test above is not vacuous: the ON rule
@@ -1161,7 +1028,7 @@ class TestCompletedTaskFromEventsLever:
             )
         )
 
-        view = render_for_prompt(memory, env=_LEVER_ON)
+        view = render_for_prompt(memory)
 
         assert "[tick 20] You completed swipe_card (you were in ELECTRICAL)." in view
 
@@ -1185,7 +1052,7 @@ class TestCompletedTaskFromEventsLever:
             )
         )
 
-        view = render_for_prompt(memory, env=_LEVER_ON, token_budget=8000)
+        view = render_for_prompt(memory, token_budget=8000)
 
         assert "[tick 41] You completed fuel_reserves (you were in LABS)." in view
         assert "[tick 41] You completed swipe_card (you were in LABS)." in view
@@ -1195,8 +1062,8 @@ class TestCompletedTaskFromEventsLever:
 
     def test_rows_without_the_owned_set_mint_nothing(self) -> None:
         # Fail-closed: a pre-widening recording or a hand-built fixture carries no
-        # set, so the ON path has no evidence and mints nothing -- even though the
-        # OFF rule would.
+        # set, so the rule has no evidence and mints nothing -- a cleared pending
+        # id is not, on its own, a completion.
         memory = AgentMemory()
         memory.episodic.append(
             _self_state_event(tick=100, room="ADMIN", pending_task_id="swipe_card")
@@ -1205,11 +1072,7 @@ class TestCompletedTaskFromEventsLever:
             _self_state_event(tick=130, room="MEDBAY", pending_task_id=None)
         )
 
-        assert "You completed" not in render_for_prompt(memory, env=_LEVER_ON)
-        assert (
-            "[tick 130] You completed swipe_card (you were in ADMIN)."
-            in render_for_prompt(memory)
-        )
+        assert "You completed" not in render_for_prompt(memory)
 
     def test_one_row_without_the_owned_set_mints_nothing(self) -> None:
         # The set has to be readable on BOTH rows: a gap in the evidence is not a
@@ -1235,7 +1098,7 @@ class TestCompletedTaskFromEventsLever:
             )
         )
 
-        assert "You completed" not in render_for_prompt(memory, env=_LEVER_ON)
+        assert "You completed" not in render_for_prompt(memory)
 
     def test_unchanged_owned_set_mints_nothing(self) -> None:
         memory = AgentMemory()
@@ -1249,7 +1112,7 @@ class TestCompletedTaskFromEventsLever:
                 )
             )
 
-        assert "You completed" not in render_for_prompt(memory, env=_LEVER_ON)
+        assert "You completed" not in render_for_prompt(memory)
 
 
 class TestSawBodyDeduplication:
@@ -1674,7 +1537,6 @@ class TestMovementPerceptionRender:
 # --------------------------------------------------------------------------- #
 
 _TRAIL_ON: Mapping[str, str] = {ENV_SELF_LOCATION_TRAIL: "1"}
-_TRAIL_OFF: Mapping[str, str] = {ENV_SELF_LOCATION_TRAIL: "0"}
 _TRAIL_HEADER = "## Where you were:"
 _TRAIL_TRUNCATED = "- Earlier parts of your route are not listed."
 _TRAIL_ROUTE_PREFIX = "- Your route (t = tick): "
@@ -1740,41 +1602,19 @@ def _walk(*rows: tuple[int, str]) -> AgentMemory:
     return memory
 
 
-class TestSelfLocationTrailLever:
-    """The agent's own route, rendered from its own record (default-OFF lever).
+class TestSelfLocationTrail:
+    """The agent's own route, rendered from its own record.
 
-    Every test toggles the lever through the ``env`` mapping rather than
-    ``os.environ``, so the suite stays parallel-safe.
+    Unconditional since the baseline-7 record.
     """
 
-    def test_lever_defaults_off_and_reads_the_env_mapping(self) -> None:
-        assert self_location_trail_enabled() is False
-        assert self_location_trail_enabled({}) is False
-        for falsy in ("", "0", "off", "no", "maybe", "trail"):
-            assert (
-                self_location_trail_enabled({ENV_SELF_LOCATION_TRAIL: falsy}) is False
-            )
-        for truthy in ("1", "true", "TRUE", "Yes", " on "):
-            assert (
-                self_location_trail_enabled({ENV_SELF_LOCATION_TRAIL: truthy}) is True
-            )
+    def test_the_trail_is_unconditional(self) -> None:
+        for env in ({}, {ENV_SELF_LOCATION_TRAIL: "0"}, None):
+            assert self_location_trail_enabled(env) is True
 
-    @pytest.mark.parametrize(
-        "fixture_name",
-        ["crewmate_basic", "tight_budget_drops_low_salience", "impostor_minimal"],
-    )
-    def test_off_path_fixtures_are_byte_identical(self, fixture_name: str) -> None:
-        fixture, expected = _load_fixture(fixture_name)
-        memory = _build_memory_from_fixture(fixture)
-        budget = int(fixture["token_budget"])
-
-        for env in (None, {}, _TRAIL_OFF):
-            rendered = render_for_prompt(memory, token_budget=budget, env=env)
-            assert rendered == expected, f"{fixture_name} moved with env={env!r}"
-
-    def test_the_off_path_identity_assertion_bites(self) -> None:
+    def test_the_golden_comparison_bites(self) -> None:
         # The perturbation craft rule 2 asks for: one altered byte in the
-        # expectation must fail the comparison the test above makes.
+        # expectation must fail the comparison the golden tests make.
         fixture, expected = _load_fixture("crewmate_basic")
         memory = _build_memory_from_fixture(fixture)
         perturbed = expected.replace("## Your role:", "## Your ROLE:", 1)
@@ -1789,25 +1629,35 @@ class TestSelfLocationTrailLever:
         fixture, expected = _load_fixture("self_location_trail")
         memory = _build_memory_from_fixture(fixture)
 
-        rendered = render_for_prompt(
-            memory, token_budget=int(fixture["token_budget"]), env=_TRAIL_ON
-        )
+        rendered = render_for_prompt(memory, token_budget=int(fixture["token_budget"]))
 
         assert rendered == expected, (
             f"---- expected ----\n{expected}---- rendered ----\n{rendered}"
         )
-        # The gate bites: the same fixture rendered with the lever OFF is a
-        # different document, and it is the one that mis-rooms the completion.
-        off = render_for_prompt(memory, token_budget=int(fixture["token_budget"]))
-        assert off != expected
-        assert "[tick 9] You completed start_reactor (you were in EAST_HALL)." in off
+        # The gate bites: drop the row that DATES the completion and both the
+        # route and the completion line move, so the golden is a real comparison
+        # rather than a snapshot of whatever the renderer happens to emit.
+        thinned = _build_memory_from_fixture(
+            {
+                **fixture,
+                "events": [
+                    event
+                    for event in fixture["events"]
+                    if not (event["tick"] == 9 and event["type"] == "self_state")
+                ],
+            }
+        )
+        assert (
+            render_for_prompt(thinned, token_budget=int(fixture["token_budget"]))
+            != expected
+        )
 
     def test_adjacent_ticks_in_one_room_coalesce_and_a_lone_tick_stands_alone(
         self,
     ) -> None:
         memory = _walk((12, "REACTOR"), (13, "REACTOR"), (14, "REACTOR"), (17, "ADMIN"))
 
-        view = render_for_prompt(memory, env=_TRAIL_ON)
+        view = render_for_prompt(memory)
 
         assert _trail_block(view) == [
             _TRAIL_HEADER,
@@ -1821,7 +1671,7 @@ class TestSelfLocationTrailLever:
         # agent has no row for.
         memory = _walk((13, "REACTOR"), (15, "REACTOR"))
 
-        view = render_for_prompt(memory, env=_TRAIL_ON)
+        view = render_for_prompt(memory)
 
         assert _trail_block(view) == [
             _TRAIL_HEADER,
@@ -1836,7 +1686,7 @@ class TestSelfLocationTrailLever:
         memory = _walk((13, "REACTOR"), (14, "REACTOR"))
         memory.episodic.append(_meeting_boundary_event(tick=14))
 
-        view = render_for_prompt(memory, env=_TRAIL_ON)
+        view = render_for_prompt(memory)
 
         assert _trail_block(view) == [
             _TRAIL_HEADER,
@@ -1851,7 +1701,7 @@ class TestSelfLocationTrailLever:
             _saw_player_event(tick=4, player_id="p-3", room="REACTOR", action=None)
         )
 
-        view = render_for_prompt(memory, env=_TRAIL_ON)
+        view = render_for_prompt(memory)
 
         assert view.startswith("## Your role: CREWMATE\n")
         assert view.index("## Tasks completed") < view.index(_TRAIL_HEADER)
@@ -1874,8 +1724,8 @@ class TestSelfLocationTrailLever:
             )
             return memory
 
-        crew = render_for_prompt(_memory("CREWMATE"), env=_TRAIL_ON)
-        impostor = render_for_prompt(_memory("IMPOSTOR"), env=_TRAIL_ON)
+        crew = render_for_prompt(_memory("CREWMATE"))
+        impostor = render_for_prompt(_memory("IMPOSTOR"))
 
         for view in (crew, impostor):
             # Entering the vent breaks the span: the two ticks are not the same
@@ -1914,7 +1764,7 @@ class TestSelfLocationTrailLever:
             )
         )
 
-        view = render_for_prompt(memory, env=_TRAIL_ON)
+        view = render_for_prompt(memory)
 
         own_ids = {
             event.observation_id
@@ -1931,7 +1781,7 @@ class TestSelfLocationTrailLever:
         rows = [(tick, f"ROOM_{tick}") for tick in range(40)]
         memory = _walk(*rows)
 
-        view = render_for_prompt(memory, env=_TRAIL_ON, token_budget=8000)
+        view = render_for_prompt(memory, token_budget=8000)
 
         block = _trail_block(view)
         notice = _TRAIL_TRUNCATED
@@ -1965,7 +1815,7 @@ class TestSelfLocationTrailLever:
 
         seen_shed = False
         for budget in range(20, 260):
-            view = render_for_prompt(memory, token_budget=budget, env=_TRAIL_ON)
+            view = render_for_prompt(memory, token_budget=budget)
             # The block never overflows the budget onto anything else.
             assert _estimate_tokens_of(view) <= budget
             if _TRAIL_HEADER not in view:
@@ -1991,7 +1841,7 @@ class TestSelfLocationTrailLever:
         memory.episodic.append(
             _self_state_event(tick=5, room="ADMIN", agent_id="p-1", in_vent=True)
         )
-        assert "a vent in ADMIN" in render_for_prompt(memory, env=_TRAIL_ON)
+        assert "a vent in ADMIN" in render_for_prompt(memory)
 
         # An absent key is the pre-11.1 shape and means "not in a vent"; a
         # present one must be a bool, explicit null included.
@@ -2011,27 +1861,11 @@ class TestSelfLocationTrailLever:
             )
 
             with pytest.raises(ValueError, match="non-bool in_vent"):
-                render_for_prompt(broken, env=_TRAIL_ON)
+                render_for_prompt(broken)
 
     def test_the_completed_task_line_is_dated_and_placed_by_one_row(self) -> None:
-        memory = AgentMemory()
-        memory.episodic.append(
-            _self_state_event(tick=20, room="EAST_HALL", pending_task_id="wiring")
-        )
-        memory.episodic.append(
-            _self_state_event(tick=21, room="ADMIN", pending_task_id="swipe_card")
-        )
-
-        on = render_for_prompt(memory, env=_TRAIL_ON)
-        off = render_for_prompt(memory)
-
-        assert "[tick 21] You completed wiring (you were in ADMIN)." in on
-        # The gate bites: the roll-forward names the room the agent had left.
-        assert "[tick 21] You completed wiring (you were in EAST_HALL)." in off
-
-    def test_the_owned_set_branch_is_placed_by_the_same_row(self) -> None:
-        # The 20.23 lever's branch reads the same room, so the two completion
-        # rules cannot disagree about where the agent was.
+        # The completion names the room on the row that DATES it (tick 21,
+        # ADMIN), never the room the agent had already left.
         memory = AgentMemory()
         memory.episodic.append(
             _self_state_event(
@@ -2050,12 +1884,11 @@ class TestSelfLocationTrailLever:
             )
         )
 
-        view = render_for_prompt(
-            memory,
-            env={ENV_SELF_LOCATION_TRAIL: "1", ENV_TASK_COMPLETION_FROM_EVENTS: "1"},
-        )
+        view = render_for_prompt(memory)
 
         assert "[tick 21] You completed wiring (you were in ADMIN)." in view
+        assert "you were in EAST_HALL" not in view
+        _assert_completions_agree_with_the_trail(view)
 
     def test_the_completion_row_is_placed_by_the_row_that_stamps_its_citation(
         self,
@@ -2070,6 +1903,7 @@ class TestSelfLocationTrailLever:
                 tick=1,
                 room="EAST_HALL",
                 pending_task_id="wiring",
+                owned_task_ids=("submit_scan", "swipe_card", "wiring"),
                 observation_id="p-1:1:0",
             )
         )
@@ -2078,6 +1912,7 @@ class TestSelfLocationTrailLever:
                 tick=2,
                 room="ADMIN",
                 pending_task_id="swipe_card",
+                owned_task_ids=("submit_scan", "swipe_card"),
                 observation_id="p-1:2:0",
             )
         )
@@ -2086,11 +1921,12 @@ class TestSelfLocationTrailLever:
                 tick=2,
                 room="ADMIN",
                 pending_task_id="submit_scan",
+                owned_task_ids=("submit_scan",),
                 observation_id="p-1:2:1",
             )
         )
 
-        view = render_for_prompt(memory, env=_TRAIL_ON)
+        view = render_for_prompt(memory)
 
         assert (
             "[obs p-1:2:0] [tick 2] You completed wiring (you were in ADMIN)." in view
@@ -2134,7 +1970,7 @@ class TestSelfLocationTrailLever:
         fixture, _ = _load_fixture("self_location_trail")
         memory = _build_memory_from_fixture(fixture)
 
-        view = render_for_prompt(memory, env=_TRAIL_ON)
+        view = render_for_prompt(memory)
 
         _assert_completions_agree_with_the_trail(view)
 
@@ -2152,7 +1988,7 @@ class TestSelfLocationTrailLever:
         )
         memory.beliefs.adjust_suspicion("p-3", delta=0.4)
 
-        view = render_for_prompt(memory, env=_TRAIL_ON)
+        view = render_for_prompt(memory)
 
         assert _TRAIL_HEADER in view
         _scan_rendered_view(view)
@@ -2226,7 +2062,7 @@ class TestSelfLocationTrailProperties:
         if not recorded:
             return
 
-        view = render_for_prompt(memory, env=_TRAIL_ON, token_budget=8000)
+        view = render_for_prompt(memory, token_budget=8000)
 
         claimed = _trail_ticks(view)
         # No overlap, oldest first, and nothing outside the recorded set.
@@ -2257,7 +2093,7 @@ class TestSelfLocationTrailProperties:
                 )
             )
 
-        view = render_for_prompt(memory, env=_TRAIL_ON, token_budget=8000)
+        view = render_for_prompt(memory, token_budget=8000)
 
         _assert_completions_agree_with_the_trail(view)
 
@@ -2266,8 +2102,6 @@ class TestSelfLocationTrailProperties:
 # The coalesced render (AILIBI_COALESCED_MEMORY_RENDER, default-OFF).          #
 # --------------------------------------------------------------------------- #
 
-_COALESCE_ON: Mapping[str, str] = {ENV_COALESCED_MEMORY_RENDER: "1"}
-_COALESCE_OFF: Mapping[str, str] = {ENV_COALESCED_MEMORY_RENDER: "0"}
 _SPAN_ROW = re.compile(
     r"^- (?:\[obs [^\]]+\] )?(?:\[tick (?P<tick>\d+)\] )?You saw (?P<subject>p-\d+) "
     r"(?:(?P<action>task|report) )?in (?P<room>[A-Z_]+)"
@@ -2360,70 +2194,52 @@ def _seen(*rows: tuple[int, str, str]) -> AgentMemory:
     return memory
 
 
-class TestCoalescedMemoryRenderLever:
-    """Routine sightings fold into spans and testimony outranks them (default-OFF).
+class TestCoalescedMemoryRender:
+    """Routine sightings fold into spans and testimony outranks them.
 
-    Every test toggles the lever through the ``env`` mapping rather than
-    ``os.environ``, so the suite stays parallel-safe.
+    Unconditional since the baseline-7 record.
     """
 
-    def test_lever_defaults_off_and_reads_the_env_mapping(self) -> None:
-        assert coalesced_memory_render_enabled() is False
-        assert coalesced_memory_render_enabled({}) is False
-        for falsy in ("", "0", "off", "no", "maybe", "coalesce"):
-            assert (
-                coalesced_memory_render_enabled({ENV_COALESCED_MEMORY_RENDER: falsy})
-                is False
-            )
-        for truthy in ("1", "true", "TRUE", "Yes", " on "):
-            assert (
-                coalesced_memory_render_enabled({ENV_COALESCED_MEMORY_RENDER: truthy})
-                is True
-            )
-
-    @pytest.mark.parametrize(
-        "fixture_name",
-        ["crewmate_basic", "tight_budget_drops_low_salience", "impostor_minimal"],
-    )
-    def test_off_path_fixtures_are_byte_identical(self, fixture_name: str) -> None:
-        fixture, expected = _load_fixture(fixture_name)
-        memory = _build_memory_from_fixture(fixture)
-        budget = int(fixture["token_budget"])
-
-        for env in (None, {}, _COALESCE_OFF):
-            rendered = render_for_prompt(memory, token_budget=budget, env=env)
-            assert rendered == expected, f"{fixture_name} moved with env={env!r}"
-
-    def test_the_off_path_pin_can_fail_because_the_lever_is_not_inert(self) -> None:
-        # The three OFF goldens hold no foldable run, no full-roster spawn group and
-        # no heard claim, so their byte-identity would pass with the lever doing
-        # nothing at all. The gate is the fourth committed fixture: the same memory,
-        # rendered both ways, must be two different documents.
-        fixture, _ = _load_fixture("coalesced_memory_render")
-        memory = _build_memory_from_fixture(fixture)
-        budget = int(fixture["token_budget"])
-
-        off = render_for_prompt(memory, token_budget=budget)
-        on = render_for_prompt(memory, token_budget=budget, env=_COALESCE_ON)
-
-        assert on != off
-        assert render_for_prompt(memory, token_budget=budget, env=_COALESCE_OFF) == off
+    def test_the_fold_is_unconditional(self) -> None:
+        for env in ({}, {ENV_COALESCED_MEMORY_RENDER: "0"}, None):
+            assert coalesced_memory_render_enabled(env) is True
 
     def test_render_matches_the_coalesced_golden(self) -> None:
         fixture, expected = _load_fixture("coalesced_memory_render")
         memory = _build_memory_from_fixture(fixture)
         budget = int(fixture["token_budget"])
 
-        rendered = render_for_prompt(memory, token_budget=budget, env=_COALESCE_ON)
+        rendered = render_for_prompt(memory, token_budget=budget)
 
         assert rendered == expected, (
             f"---- expected ----\n{expected}---- rendered ----\n{rendered}"
         )
-        # The gate bites: the same fixture rendered OFF is a different document, and
-        # it is the one that spends eighteen rows on eleven rows' worth of facts.
-        off = render_for_prompt(memory, token_budget=budget)
-        assert off != expected
-        assert len(_observation_rows(off)) > len(_observation_rows(rendered))
+        # The gate bites: the fold is what keeps eleven rows' worth of facts under
+        # eighteen rows, so a memory whose runs are broken by one extra companion
+        # per tick renders MORE rows than the golden does.
+        broken = _build_memory_from_fixture(
+            {
+                **fixture,
+                "events": [
+                    row
+                    for event in fixture["events"]
+                    for row in (
+                        [event]
+                        if event["type"] != "saw_player"
+                        else [
+                            event,
+                            {
+                                **event,
+                                "payload": {**event["payload"], "player_id": "p-7"},
+                            },
+                        ]
+                    )
+                ],
+            }
+        )
+        assert len(
+            _observation_rows(render_for_prompt(broken, token_budget=budget))
+        ) > len(_observation_rows(rendered))
 
     def test_consecutive_identical_sightings_become_one_span(self) -> None:
         memory = _seen(
@@ -2435,7 +2251,7 @@ class TestCoalescedMemoryRenderLever:
             (3, "p-8", "CAFETERIA"),
         )
 
-        rows = _observation_rows(render_for_prompt(memory, env=_COALESCE_ON))
+        rows = _observation_rows(render_for_prompt(memory))
 
         assert "- You saw p-9 in CAFETERIA ticks 1-3 (with p-8)." in rows
         assert "- You saw p-8 in CAFETERIA ticks 1-3 (with p-9)." in rows
@@ -2448,7 +2264,7 @@ class TestCoalescedMemoryRenderLever:
             (4, "p-9", "ADMIN"),
         )
 
-        rows = _observation_rows(render_for_prompt(memory, env=_COALESCE_ON))
+        rows = _observation_rows(render_for_prompt(memory))
 
         assert "- [tick 1] You saw p-9 in CAFETERIA." in rows
         assert any(row.startswith("- You saw p-9 in ADMIN ticks 2-4") for row in rows)
@@ -2464,7 +2280,7 @@ class TestCoalescedMemoryRenderLever:
             (4, "p-9", "ADMIN"),
         )
 
-        rows = _observation_rows(render_for_prompt(memory, env=_COALESCE_ON))
+        rows = _observation_rows(render_for_prompt(memory))
 
         assert (
             "- You saw p-9 in ADMIN ticks 2-4 "
@@ -2477,7 +2293,7 @@ class TestCoalescedMemoryRenderLever:
             _saw_player_event(tick=3, player_id="p-9", room="ADMIN", action="task")
         )
 
-        rows = _observation_rows(render_for_prompt(memory, env=_COALESCE_ON))
+        rows = _observation_rows(render_for_prompt(memory))
 
         assert "- You saw p-9 in ADMIN ticks 1-2." in rows
         assert "- [tick 3] You saw p-9 task in ADMIN." in rows
@@ -2493,7 +2309,7 @@ class TestCoalescedMemoryRenderLever:
             (3, "p-9", "ADMIN"),
         )
 
-        rows = _observation_rows(render_for_prompt(memory, env=_COALESCE_ON))
+        rows = _observation_rows(render_for_prompt(memory))
 
         assert "- You saw p-9 in ADMIN ticks 1-2 (with p-8)." in rows
         assert "- [tick 3] You saw p-9 in ADMIN." in rows
@@ -2501,7 +2317,7 @@ class TestCoalescedMemoryRenderLever:
     def test_a_tick_the_agent_holds_no_row_for_breaks_the_run(self) -> None:
         memory = _seen((1, "p-9", "ADMIN"), (2, "p-9", "ADMIN"), (4, "p-9", "ADMIN"))
 
-        rows = _observation_rows(render_for_prompt(memory, env=_COALESCE_ON))
+        rows = _observation_rows(render_for_prompt(memory))
 
         assert "- You saw p-9 in ADMIN ticks 1-2." in rows
         assert "- [tick 4] You saw p-9 in ADMIN." in rows
@@ -2510,7 +2326,7 @@ class TestCoalescedMemoryRenderLever:
     def test_a_lone_sighting_renders_exactly_as_it_does_off(self) -> None:
         memory = _seen((4, "p-9", "ADMIN"))
 
-        on = render_for_prompt(memory, env=_COALESCE_ON)
+        on = render_for_prompt(memory)
 
         assert "- [tick 4] You saw p-9 in ADMIN." in _observation_rows(on)
 
@@ -2522,7 +2338,7 @@ class TestCoalescedMemoryRenderLever:
             (1, "p-2", "ADMIN"),
         )
 
-        rows = _observation_rows(render_for_prompt(memory, env=_COALESCE_ON))
+        rows = _observation_rows(render_for_prompt(memory))
 
         assert (
             "- [tick 0] You saw every other player in CAFETERIA: p-2, p-3, p-4." in rows
@@ -2538,7 +2354,7 @@ class TestCoalescedMemoryRenderLever:
             (1, "p-4", "ADMIN"),
         )
 
-        rows = _observation_rows(render_for_prompt(memory, env=_COALESCE_ON))
+        rows = _observation_rows(render_for_prompt(memory))
 
         assert not any("every other player" in row for row in rows)
         assert "- [tick 0] You saw p-2 in CAFETERIA (with p-3)." in rows
@@ -2552,7 +2368,7 @@ class TestCoalescedMemoryRenderLever:
             (1, "p-3", "CAFETERIA"),
         )
 
-        rows = _observation_rows(render_for_prompt(memory, env=_COALESCE_ON))
+        rows = _observation_rows(render_for_prompt(memory))
 
         assert "- You saw every other player in CAFETERIA ticks 0-1: p-2, p-3." in rows
 
@@ -2569,7 +2385,7 @@ class TestCoalescedMemoryRenderLever:
             _saw_player_event(tick=1, player_id="p-2", room="CAFETERIA", action="task")
         )
 
-        rows = _observation_rows(render_for_prompt(memory, env=_COALESCE_ON))
+        rows = _observation_rows(render_for_prompt(memory))
 
         assert "- [tick 0] You saw every other player in CAFETERIA: p-2, p-3." in rows
         assert "- [tick 1] You saw p-2 task in CAFETERIA (with p-3)." in rows
@@ -2598,7 +2414,7 @@ class TestCoalescedMemoryRenderLever:
             )
         )
 
-        rows = _observation_rows(render_for_prompt(memory, env=_COALESCE_ON))
+        rows = _observation_rows(render_for_prompt(memory))
         order = [
             next(index for index, row in enumerate(rows) if "vent in ADMIN" in row),
             next(index for index, row in enumerate(rows) if _TESTIMONY_ROW in row),
@@ -2608,24 +2424,18 @@ class TestCoalescedMemoryRenderLever:
         ]
 
         assert order == sorted(order)
-        # OFF the last two run in the opposite order: the band change is what this
-        # asserts, not the render's shape.
-        off_rows = _observation_rows(render_for_prompt(memory))
-        testimony_off = next(row for row in off_rows if _TESTIMONY_ROW in row)
-        sighting_off = next(row for row in off_rows if "You saw p-9 in ADMIN" in row)
-        assert off_rows.index(testimony_off) > off_rows.index(sighting_off)
 
     def test_salience_is_a_sort_key_not_a_filter(self) -> None:
-        # At an unbounded budget the ON render must state the SAME facts as the OFF
-        # render -- the same subjects, rooms, ticks and companions, re-shaped.
-        fixture, _ = _load_fixture("coalesced_memory_render")
+        # At an unbounded budget the folded render states every fact the committed
+        # fixture holds -- the same subjects, rooms, ticks and companions, re-shaped
+        # rather than dropped.
+        fixture, expected = _load_fixture("coalesced_memory_render")
         memory = _build_memory_from_fixture(fixture)
 
-        off = render_for_prompt(memory, token_budget=8000)
-        on = render_for_prompt(memory, token_budget=8000, env=_COALESCE_ON)
+        generous = render_for_prompt(memory, token_budget=8000)
 
-        assert _sighting_facts(on) == _sighting_facts(off)
-        assert _sighting_facts(on)
+        assert _sighting_facts(generous) == _sighting_facts(expected)
+        assert _sighting_facts(generous)
 
     def test_a_dropped_fact_fails_the_same_comparison(self) -> None:
         # The gate bites: a render missing one tick of a span is not the same set.
@@ -2661,7 +2471,7 @@ class TestCoalescedMemoryRenderLever:
                     )
                 )
 
-        view = render_for_prompt(memory, env=_COALESCE_ON, token_budget=8000)
+        view = render_for_prompt(memory, token_budget=8000)
 
         stored = {
             event.observation_id for event in memory.episodic.recent(since_tick=0)
@@ -2681,11 +2491,12 @@ class TestCoalescedMemoryRenderLever:
             )
         )
 
+        # The reported band outranks bare co-presence, so a budget that sheds
+        # eleven ticks of routine sighting still carries the claim.
         tight = 90
-        assert _TESTIMONY_ROW not in render_for_prompt(memory, token_budget=tight)
-        assert _TESTIMONY_ROW in render_for_prompt(
-            memory, token_budget=tight, env=_COALESCE_ON
-        )
+        assert _TESTIMONY_ROW in render_for_prompt(memory, token_budget=tight)
+        # The gate bites: at a budget too small for either, nothing survives.
+        assert _TESTIMONY_ROW not in render_for_prompt(memory, token_budget=30)
 
 
 _SPAN_IN_PROMPT = re.compile(

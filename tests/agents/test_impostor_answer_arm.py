@@ -36,7 +36,6 @@ The reconstructed meeting context mirrors ``test_bespoke_prompt_sets.py``
 from __future__ import annotations
 
 import asyncio
-import pathlib
 from collections.abc import Mapping
 from dataclasses import replace
 
@@ -97,18 +96,13 @@ _OFF: dict[str, str] = {}
 _VARIANT_IMPOSTOR_STAMP = "impostor_report_roll_call.qwen3_6_27b.v1"
 _VARIANT_ACCUSATION_STAMP = "accusation_round_roll_call.qwen3_6_27b.v1"
 
-# The BASE the two variant bodies were authored against: the v3 default
-# templates, archived byte-for-byte at the Task-20.31 bump
-# (tests/fixtures/prompt_archive/qwen3_6_27b_v3/). The variant arm is
-# unrecorded and default-OFF, so its bodies stay frozen on their v1 lineage
-# while the default set advances — which means "the variant swaps ONLY the
-# impostor surfaces" is now a statement about this base, not about the live
-# v4 files. Point the comparisons back onto one lineage when an adopting
-# re-record retires the archive.
-_ARCHIVED_BASE_SET = "qwen3_6_27b_v3"
-_ARCHIVED_BASE_ROOT = (
-    pathlib.Path(__file__).resolve().parents[1] / "fixtures" / "prompt_archive"
-)
+# The BASE the two variant bodies were authored against was the v3 default set,
+# archived at the Task-20.31 bump and RETIRED at the baseline-7 record (no
+# committed set stamps v3 any more). The variant arm is unrecorded and
+# default-OFF, so its bodies stay frozen on their v1 lineage while the default
+# set advances: "the variant swaps ONLY the impostor surfaces" can no longer be
+# asserted against a base, and is left to the re-authoring that puts the arm
+# back on the current lineage.
 
 # A small reconstructed body-report meeting context (a found body + an
 # accusation chain) — the ``test_bespoke_prompt_sets.py`` shape, enough to
@@ -485,15 +479,6 @@ class TestVariantRendersSelfPlacementContract:
     def _off(self) -> dict[str, str]:
         return _render_sweep(build_prompt_renderers(_VARIANT_SET, env=_OFF))
 
-    def _base(self) -> dict[str, str]:
-        """The v3 default bodies the two variant files were authored against."""
-
-        return _render_sweep(
-            build_prompt_renderers(
-                _ARCHIVED_BASE_SET, root=_ARCHIVED_BASE_ROOT, env=_OFF
-            )
-        )
-
     def test_every_branch_renders_non_empty_under_strict_undefined(self) -> None:
         # StrictUndefined raises on a missing / typo'd kwarg, so a clean render
         # of every branch proves the variant templates introduce no kwarg drift.
@@ -560,21 +545,12 @@ class TestVariantRendersSelfPlacementContract:
         assert "## Your turn: a reply" in rendered["reply/imp=True/body=True"]
         assert "## Your turn: an info-share" in rendered["opt_in/imp=True"]
 
-    def test_crew_branches_are_byte_identical_to_the_variant_base(self) -> None:
-        # The variant file swaps ONLY impostor surfaces: every crew-rendered
-        # accusation_round branch is byte-identical to the BASE the variant was
-        # authored against. That base is the archived v3 default, not the live
-        # v4 one — the Task-20.31 bump moved the default set and deliberately
-        # left this unrecorded, default-OFF arm frozen on its v1 lineage, so
-        # the live files differ by the whole v4 batch and comparing against
-        # them would assert a divergence the arm intends.
-        on, base = self._on(), self._base()
-        for label in (
-            "reply/imp=False/body=True",
-            "reply/imp=False/body=False",
-            "opt_in/imp=False",
-        ):
-            assert on[label] == base[label], label
+    # RETIRED at the baseline-7 record: ``test_crew_branches_are_byte_identical_
+    # to_the_variant_base`` and ``test_impostor_opt_in_differs_only_by_the_two_
+    # guarded_lines`` compared the variant against the ARCHIVED v3 default bodies,
+    # and that archive retired with the record (no committed set stamps v3 any
+    # more). The comparison has no base to make; what the variant still promises
+    # is pinned by the live ON/OFF tests around this note.
 
     def test_the_variant_arm_has_diverged_from_the_live_default_set(self) -> None:
         # The deferral, stated as a gate: the variant bodies do NOT carry the
@@ -634,21 +610,6 @@ class TestVariantRendersSelfPlacementContract:
             fellow_impostor_ids=(),
         )
         assert on.vote(**vote_kwargs) == off.vote(**vote_kwargs)  # type: ignore[arg-type]
-
-    def test_impostor_opt_in_differs_only_by_the_two_guarded_lines(self) -> None:
-        # The is_impostor persona line and the fellow-gated saboteurs block
-        # render on every impostor turn, so an impostor OPT-IN render differs
-        # from the default by exactly those two guarded lines (the teammate
-        # firewall must cover the opt-in whereabouts answer too) — the
-        # info-share branch itself (the 18.8 roll-call round's ask surface) is
-        # untouched.
-        on, base = self._on(), self._base()
-        assert _PERSONA_DEFAULT in base["opt_in/imp=True"]
-        assert _PERSONA_VARIANT in on["opt_in/imp=True"]
-        assert _TEAMMATE_FIREWALL in _flat(on["opt_in/imp=True"])
-        assert on["opt_in/imp=True"] == base["opt_in/imp=True"].replace(
-            _PERSONA_DEFAULT, _PERSONA_VARIANT
-        ).replace(_FELLOWS_DEFAULT, _FELLOWS_VARIANT)
 
     def test_module_wrapper_resolves_the_lever_live(
         self, monkeypatch: pytest.MonkeyPatch

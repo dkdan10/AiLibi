@@ -838,20 +838,80 @@ _BASELINE_SUPPLY_FLOORS: Final[Mapping[str, Mapping[str, SupplyFloors]]] = {
             population_relative_conversion=True,
         ),
     },
+    "baseline-7": {
+        # Measured on replays/samples/9p2i at the Phase-20 slate: the locked model
+        # + qwen3_6_27b v4 + the thirteen retired levers + the eight
+        # evidence-honesty levers ON, impostor_roll_call OFF.
+        #   witnessed_event_rate        = 3/177 = 0.01694915254237288
+        #                                 (numerator 3: a rare count the 15.19
+        #                                 rule does not mark advisory, but one
+        #                                 witnessed kill still moves it by a
+        #                                 third of itself — read it that way)
+        #   flags_per_meeting           = 134/152 = 0.881578947368421 (92
+        #                                 persisted vent flags + 42 re-derived
+        #                                 transcript flags)
+        #   testimony_backed_conversion = 80/115 = 0.6956521739130435
+        #                                 (OBSERVATION-BACKED, SUBJECT-AWARE)
+        # TASK 16.11 derivation (population_relative_conversion=True): the
+        # evaluated floor per scored population is
+        #   floor = 0.6956521739130435 * (0.881578947368421 / measured
+        #           flags_per_meeting), capped at 1.0.
+        # The baseline itself: flags 134/152 -> ratio exactly 1.0 -> derived
+        # floor = pin = 0.6956521739130435; measured 80/115 -> PASS at exact
+        # equality (self-consistency).
+        # The flag census FALLS against baseline 6 (180/165 = 1.0909 -> 134/152 =
+        # 0.8816) while conversion RISES (78/136 = 0.5735 -> 80/115 = 0.6957):
+        # this substrate mints fewer STRONG flags on purpose — the ungrounded
+        # alibi-versus-sighting class it stopped minting is the one the record's
+        # bars 5 and 7 were about — and the ones it does mint convert more often.
+        # A baseline-6 floor scored against these bytes therefore FAILS, which is
+        # the referee reading the supply it was pinned to and not a defect.
+        # audits/audit-phase-20-baseline-7.md §8 quotes this block.
+        "9p2i": SupplyFloors(
+            witnessed_event_rate=FloorPin(value=0.01694915254237288, numerator=3),
+            flags_per_meeting=FloorPin(value=0.881578947368421, numerator=134),
+            testimony_backed_conversion=FloorPin(
+                value=0.6956521739130435, numerator=80
+            ),
+            population_relative_conversion=True,
+        ),
+        # Measured on replays/samples/4p1i at the same slate:
+        #   witnessed_event_rate        = 1/65 = 0.015384615384615385
+        #                                 (numerator 1 -> ADVISORY, as on
+        #                                 baseline 6)
+        #   flags_per_meeting           = 20/40 = 0.5 (20 persisted vent flags +
+        #                                 0 re-derived transcript flags)
+        #   testimony_backed_conversion = 19/31 = 0.6129032258064516
+        #                                 (OBSERVATION-BACKED, SUBJECT-AWARE)
+        # TASK 16.11 derivation (same shape, this roster's pins):
+        #   floor = 0.6129032258064516 * (0.5 / measured flags_per_meeting),
+        #           capped at 1.0.
+        # The baseline itself: flags 20/40 -> ratio exactly 1.0 -> derived
+        # floor = pin = 0.6129032258064516; measured 19/31 -> PASS at exact
+        # equality (self-consistency). The small 4p1i games carry no re-derived
+        # transcript flag at all, so every flag here is a persisted vent sighting.
+        "4p1i": SupplyFloors(
+            witnessed_event_rate=FloorPin(value=0.015384615384615385, numerator=1),
+            flags_per_meeting=FloorPin(value=0.5, numerator=20),
+            testimony_backed_conversion=FloorPin(
+                value=0.6129032258064516, numerator=19
+            ),
+            population_relative_conversion=True,
+        ),
+    },
 }
 
-# baseline 6 is the committed canonical SAMPLES set since Task 18.12 (the
-# meeting-layer adopting record on the graduated slate), so a bare
-# ``measure_baseline.py --watchability`` reads baseline 6's own floors — the
-# referee accepts the committed bytes at equality. (Baselines 3, 4, and 5 moved
-# here from Tasks 15.7, 16.14, and 16.17 the same way; their blocks above stay
-# scoreable via an explicit --baseline-id.) NOTE the bake-off lag REOPENS at this
-# record: ``BAKEOFF_BASELINE_ID`` (training/bakeoff/harness.py) stays
-# ``baseline-5`` until Task 18.14 flips it, so the training-side selection floors
-# deliberately lag this default until the surrogate re-ground
-# (audits/audit-phase-18-baseline-6.md §8; the corpus canary denominator is
-# restored at the 18.13 corpus re-record).
-_DEFAULT_BASELINE_ID: Final[str] = "baseline-6"
+# baseline 7 is the committed canonical SAMPLES set, so a bare
+# ``measure_baseline.py --watchability`` reads baseline 7's own floors — the
+# referee accepts the committed bytes at equality. (Baselines 3-6 moved here from
+# Tasks 15.7, 16.14, 16.17 and 18.12 the same way; their blocks above stay
+# scoreable via an explicit --baseline-id.) NOTE the bake-off lag: the
+# training-side selection floors deliberately lag this default —
+# ``BAKEOFF_BASELINE_ID`` (training/bakeoff/harness.py) still reads
+# ``baseline-5`` — until the surrogate is re-ground on the new corpus, which is a
+# routed follow-up rather than part of this record
+# (audits/audit-phase-20-baseline-7.md §10.2).
+_DEFAULT_BASELINE_ID: Final[str] = "baseline-7"
 
 
 @dataclass(frozen=True)

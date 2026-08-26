@@ -24,25 +24,30 @@ prompt A/B on this rate: the published conversion leads live on
 PRECISION lead, defined below) and the impostor-accused -> impostor-ejected
 conversion rate (the RECALL lead).
 
-What the recorded sets read (evidence-backed / impostor ejections). All four
-were recorded on the baseline-6 substrate -- model ``Qwen/Qwen3.6-27B``, every
-template at ``qwen3_6_27b.v3`` -- as each set's ``MANIFEST.md`` records:
+What the recorded sets read (evidence-backed / impostor ejections). All four were
+recorded at the Phase-20 evidence-honesty slate -- model ``Qwen/Qwen3.6-27B``,
+every template at ``qwen3_6_27b.v4``, the eight levers ON -- as each set's
+``MANIFEST.md`` records. That slate is now the ``baseline-7`` substrate: the
+record missed two of its own pre-registered bars -- the rule's verdict is FINDING
+-- and the owner adopted it as canon regardless, by explicit override
+(``audits/audit-phase-20-baseline-7.md`` §6.1).
 
-* ``replays/samples/9p2i``: 72/78 = 0.9231
-* ``replays/samples/4p1i``: 10/10 = 1.0000
-* ``replays/ml_corpus/9p2i``: 235/248 = 0.9476
-* ``replays/ml_corpus/4p1i``: 20/20 = 1.0000
+* ``replays/samples/9p2i``: 78/85 = 0.9176
+* ``replays/samples/4p1i``: 19/20 = 0.9500
+* ``replays/ml_corpus/9p2i``: 229/254 = 0.9016
+* ``replays/ml_corpus/4p1i``: 26/28 = 0.9286
 
 ``scripts/check_doc_facts.py`` re-derives all four rates from the committed
 reports and the model and prompt-set tokens from the four manifests, and fails
 when a stamp or the provenance drifts, or when this module claims a structural
 pin the data contradicts -- so a re-record re-stamps these lines rather than
-rotting them. The six samples/9p2i ejections behind the shortfall are censused
+rotting them. The seven samples/9p2i ejections behind the shortfall are censused
 seed by seed -- and classified -- in ``tests/eval/test_vote_correctness.py``.
-Mind the two populations: **8** of those 78 ejections carry no naming
-``ContradictionRef`` at all, and 2 of the 8 are evidence-backed anyway through
+Mind the two populations: **16** of those 85 ejections carry no naming
+``ContradictionRef`` at all, and 9 of the 16 are evidence-backed anyway through
 the kill-witness disjunct, so "zero-flag" is a strictly wider set than "not
-evidence-backed".
+evidence-backed" -- 16 zero-flag against 7 unbacked. (Baseline 6 read 8 of 78,
+2 rescued, 6 unbacked.)
 
 The module reads only :mod:`eval.report_schema` data (composed of
 :mod:`meetings.schemas` leaf types) and the post-game ``roles`` ground truth on
@@ -111,8 +116,8 @@ Decisions baked into this metric (recorded in the PR's ``## Decisions`` block):
   ejections) while ``ejection_accuracy`` was ``0.5`` (3 impostor / 6 total
   ejections), because the rate silently dropped the 3 wrong crewmate
   ejections. The gap survives on the recorded sets: samples/9p2i reads
-  ``vote_correctness_rate`` 0.9231 beside ``ejection_accuracy`` 78/101 =
-  0.7723, because 23 of those 101 ejections took a crewmate.
+  ``vote_correctness_rate`` 0.9176 beside ``ejection_accuracy`` 85/99 =
+  0.8586, because 14 of those 99 ejections took a crewmate.
   Like the rate it is :data:`None` (undefined, not ``0.0``) when there were
   zero ejections at all. :class:`eval.meeting_quality.ConversionReport`
   mirrors it (same fold, never recomputed) so both Wave-1 leads read from one

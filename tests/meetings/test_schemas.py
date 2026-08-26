@@ -518,10 +518,11 @@ class TestSawMoveObservation:
                 {"type": "saw_move", "tick": 380, "subject": "p-5", "room": "MEDBAY"}
             )
 
-    def test_the_default_off_detector_ignores_the_shape(self) -> None:
-        # Acceptance does not depend on the lever, and neither does silence: with
-        # the lever off a spoken transition is ordinary testimony, even when the
-        # speaker's own record confirms it.
+    def test_the_detector_reads_the_shape_as_a_destination_placement(self) -> None:
+        # The movement channel is unconditional since the baseline-7 record, so a
+        # spoken transition the speaker's own record confirms participates as ONE
+        # destination placement -- which here contradicts the same speaker's own
+        # alibi for the subject. Baseline 6 ignored the shape entirely.
         transcript = MeetingTranscript(
             turns=(
                 _opening_turn(
@@ -554,11 +555,15 @@ class TestSawMoveObservation:
                 ),
             )
         }
-        assert (
-            detect_contradictions(
-                transcript,
-                roster=frozenset({"p-3", "p-5"}),
-                move_witness_records=records,
-            )
-            == ()
+        (flag,) = detect_contradictions(
+            transcript,
+            roster=frozenset({"p-3", "p-5"}),
+            move_witness_records=records,
         )
+        assert flag.kind == "alibi_vs_sighting"
+        # The flag names the SPEAKER: p-3 stated both the alibi and the
+        # transition that contradicts it, which is the same-speaker proxy shape.
+        assert flag.subjects == ("p-3",)
+        # The gate bites: without the speaker's own move record the transition is
+        # ungrounded and the placement never enters.
+        assert detect_contradictions(transcript, roster=frozenset({"p-3", "p-5"})) == ()

@@ -93,10 +93,11 @@ from training.conviction.serving import (
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _CORPUS = _REPO_ROOT / "replays" / "ml_corpus" / "9p2i"
 
-# The committed corpus test split's meeting count (``report-conviction-model.md``
-# §5: 150 games / 463 meetings, test split = 96 meetings). Pinned so a silent
-# under-coverage of the parity walk fails loud.
-_EXPECTED_TEST_MEETINGS = 96
+# The committed corpus test split's meeting count. A measurement of the corpus,
+# so it moves with every re-record: 96 on baseline 6, 87 on the baseline-7 record
+# (``report-conviction-model.md`` §5 describes the baseline-6 shape, 150 games /
+# 463 meetings). Pinned so a silent under-coverage of the parity walk fails loud.
+_EXPECTED_TEST_MEETINGS = 87
 
 _ACTION_ADAPTER: TypeAdapter[Action] = TypeAdapter(Action)
 
@@ -269,7 +270,7 @@ def test_live_assembly_matches_offline_table_over_test_split(
     Over the committed corpus TEST split, every ``CONVICTION_FEATURE_NAMES``
     entry of every meeting's live-assembled vector equals the offline table's
     row EXACTLY (not approx — the live/offline semantics gap closes by
-    measurement). Also pins the 1:1 join on ``(seed, meeting_id)`` and the 96
+    measurement). Also pins the 1:1 join on ``(seed, meeting_id)`` and the
     meeting count, so neither a silent under-coverage nor an unmatched offline
     row can pass.
     """

@@ -325,9 +325,9 @@ def _corrupted_set(tmp_path: Path, mutate: Callable[[list[str]], list[str]]) -> 
         (_SAMPLES_4P1I / "roster.json").read_text(encoding="utf-8"), encoding="utf-8"
     )
     lines = (
-        (_SAMPLES_4P1I / "replay-seed-0.jsonl").read_text(encoding="utf-8").splitlines()
+        (_SAMPLES_4P1I / "replay-seed-1.jsonl").read_text(encoding="utf-8").splitlines()
     )
-    (tmp_path / "replay-seed-0.jsonl").write_text(
+    (tmp_path / "replay-seed-1.jsonl").write_text(
         "\n".join(mutate(lines)) + "\n", encoding="utf-8"
     )
     return tmp_path
@@ -477,63 +477,63 @@ def _counts(report: SolvabilityReport) -> dict[str, tuple[int, int]]:
 
 def test_samples_9p2i_cells(samples_9p2i: SolvabilityReport) -> None:
     assert samples_9p2i.games_total == 50
-    assert samples_9p2i.body_meetings == 151  # of 165 recorded meetings
-    assert samples_9p2i.ejections_at_body_meetings == 87
+    assert samples_9p2i.body_meetings == 144  # of 165 recorded meetings  # was 151
+    assert samples_9p2i.ejections_at_body_meetings == 91  # was 87
     assert _counts(samples_9p2i) == {
-        "killer_in_set": (132, 151),
-        "singleton_sets": (41, 151),
-        "singleton_correct": (37, 41),
-        "at_most_two_sets": (67, 151),
-        "at_most_two_contains_killer": (59, 67),
-        "cleared_player_ejections": (21, 87),
-        "killer_in_set_last_kill_anchor": (137, 151),
+        "killer_in_set": (126, 144),
+        "singleton_sets": (20, 144),
+        "singleton_correct": (14, 20),
+        "at_most_two_sets": (46, 144),
+        "at_most_two_contains_killer": (37, 46),
+        "cleared_player_ejections": (19, 91),
+        "killer_in_set_last_kill_anchor": (135, 144),
     }
 
 
 def test_samples_4p1i_cells(samples_4p1i: SolvabilityReport) -> None:
     assert samples_4p1i.games_total == 50
-    assert samples_4p1i.body_meetings == 35  # of 39 recorded meetings
-    assert samples_4p1i.ejections_at_body_meetings == 8
+    assert samples_4p1i.body_meetings == 37  # of 39 recorded meetings  # was 35
+    assert samples_4p1i.ejections_at_body_meetings == 18  # was 8
     # One impostor and at most three living crew: nobody is ever cleared away
     # from the killer, so containment is total on both 4p1i sets.
     assert _counts(samples_4p1i) == {
-        "killer_in_set": (35, 35),
-        "singleton_sets": (6, 35),
-        "singleton_correct": (6, 6),
-        "at_most_two_sets": (6, 35),
-        "at_most_two_contains_killer": (6, 6),
-        "cleared_player_ejections": (0, 8),
-        "killer_in_set_last_kill_anchor": (35, 35),
+        "killer_in_set": (37, 37),
+        "singleton_sets": (5, 37),
+        "singleton_correct": (5, 5),
+        "at_most_two_sets": (5, 37),
+        "at_most_two_contains_killer": (5, 5),
+        "cleared_player_ejections": (0, 18),
+        "killer_in_set_last_kill_anchor": (37, 37),
     }
 
 
 def test_corpus_9p2i_cells(corpus_9p2i: SolvabilityReport) -> None:
     assert corpus_9p2i.games_total == 150
-    assert corpus_9p2i.body_meetings == 411  # of 463 recorded meetings
-    assert corpus_9p2i.ejections_at_body_meetings == 250
+    assert corpus_9p2i.body_meetings == 400  # of 463 recorded meetings  # was 411
+    assert corpus_9p2i.ejections_at_body_meetings == 248  # was 250
     assert _counts(corpus_9p2i) == {
-        "killer_in_set": (348, 411),
-        "singleton_sets": (74, 411),
-        "singleton_correct": (66, 74),
-        "at_most_two_sets": (168, 411),
-        "at_most_two_contains_killer": (139, 168),
-        "cleared_player_ejections": (62, 250),
-        "killer_in_set_last_kill_anchor": (380, 411),
+        "killer_in_set": (355, 400),
+        "singleton_sets": (51, 400),
+        "singleton_correct": (49, 51),
+        "at_most_two_sets": (133, 400),
+        "at_most_two_contains_killer": (112, 133),
+        "cleared_player_ejections": (49, 248),
+        "killer_in_set_last_kill_anchor": (377, 400),
     }
 
 
 def test_corpus_4p1i_cells(corpus_4p1i: SolvabilityReport) -> None:
     assert corpus_4p1i.games_total == 50
-    assert corpus_4p1i.body_meetings == 29  # of 40 recorded meetings
-    assert corpus_4p1i.ejections_at_body_meetings == 9
+    assert corpus_4p1i.body_meetings == 37  # of 40 recorded meetings  # was 29
+    assert corpus_4p1i.ejections_at_body_meetings == 22  # was 9
     assert _counts(corpus_4p1i) == {
-        "killer_in_set": (29, 29),
-        "singleton_sets": (5, 29),
-        "singleton_correct": (5, 5),
-        "at_most_two_sets": (5, 29),
-        "at_most_two_contains_killer": (5, 5),
-        "cleared_player_ejections": (0, 9),
-        "killer_in_set_last_kill_anchor": (29, 29),
+        "killer_in_set": (37, 37),
+        "singleton_sets": (4, 37),
+        "singleton_correct": (4, 4),
+        "at_most_two_sets": (4, 37),
+        "at_most_two_contains_killer": (4, 4),
+        "cleared_player_ejections": (0, 22),
+        "killer_in_set_last_kill_anchor": (37, 37),
     }
 
 
@@ -575,17 +575,18 @@ def test_pooled_denominators_and_headline_cells(
             pooled[name] = (carried[0] + numerator, carried[1] + denominator)
 
     assert sum(report.games_total for report in reports) == 300
-    assert sum(report.body_meetings for report in reports) == 626
-    assert sum(report.ejections_at_body_meetings for report in reports) == 354
+    assert sum(report.body_meetings for report in reports) == 618  # was 626
+    assert (
+        sum(report.ejections_at_body_meetings for report in reports) == 379
+    )  # was 354
     assert pooled == {
-        "killer_in_set": (544, 626),  # [REVIEW-DERIVED] 581/626
-        "singleton_sets": (126, 626),  # [REVIEW-DERIVED] 109/626
-        "singleton_correct": (114, 126),  # [REVIEW-DERIVED] 103/109
-        "at_most_two_sets": (246, 626),  # [REVIEW-DERIVED] 208/626
-        "at_most_two_contains_killer": (209, 246),  # [REVIEW-DERIVED] 183/208
-        "cleared_player_ejections": (83, 354),  # [REVIEW-DERIVED] 61/354
-        # The review's own containment, reproduced to the unit under its anchor.
-        "killer_in_set_last_kill_anchor": (581, 626),
+        "killer_in_set": (555, 618),
+        "singleton_sets": (80, 618),
+        "singleton_correct": (72, 80),
+        "at_most_two_sets": (188, 618),
+        "at_most_two_contains_killer": (158, 188),
+        "cleared_player_ejections": (68, 379),
+        "killer_in_set_last_kill_anchor": (586, 618),
     }
 
 
@@ -596,7 +597,7 @@ def test_cells_carry_their_wilson_interval(samples_4p1i: SolvabilityReport) -> N
     assert cell.rate is not None
     assert cell.wilson_low is not None
     assert cell.wilson_high is not None
-    assert cell.rate == pytest.approx(6 / 35)
+    assert cell.rate == pytest.approx(5 / 37)  # was 6 / 35
     assert cell.wilson_low < cell.rate < cell.wilson_high
     assert cell.advisory is True  # numerator 6 is a rare-event count
 

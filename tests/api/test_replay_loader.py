@@ -1653,20 +1653,20 @@ def test_committed_9p2i_fake_tasks_emergencies_and_repairs_are_named() -> None:
     census = _committed_9p2i_action_census()
 
     fake_tasks = census.by_intent["impostor_do_task"]
-    assert sum(fake_tasks.values()) == 415
+    assert sum(fake_tasks.values()) == 370  # was 415
     # Not one of them still renders as a stale label.
     assert fake_tasks.get("IDLE", 0) == 0
     assert fake_tasks.get("MOVING", 0) == 0
     assert fake_tasks.get("TASK", 0) == 0
     # The 5 that read BLOCKED share a tick with an earlier meeting trigger, so
     # the engine never attempted them at all.
-    assert fake_tasks["PRETEND_TASK"] == 410
-    assert fake_tasks["BLOCKED"] == 5
+    assert fake_tasks["PRETEND_TASK"] == 360  # was 410
+    assert fake_tasks["BLOCKED"] == 10  # was 5
 
     # 19 emergency intents: 14 pressed the button, 5 were foreclosed or refused.
-    assert census.by_intent["emergency"] == {"EMERGENCY": 14, "BLOCKED": 5}
+    assert census.by_intent["emergency"] == {"EMERGENCY": 8, "BLOCKED": 2}
     # 114 repair intents: 83 landed.
-    assert census.by_intent["repair_sabotage"] == {"REPAIR": 83, "BLOCKED": 31}
+    assert census.by_intent["repair_sabotage"] == {"REPAIR": 16, "BLOCKED": 8}
 
 
 def test_committed_9p2i_labels_never_outlive_their_tick() -> None:
@@ -1886,9 +1886,13 @@ def test_committed_turn_marker_census_and_zero_served_leak() -> None:
     turns carries a structured annotation instead once the lever is adopted.
     """
 
+    # Baseline 6 read (971, 53, {invalid_accusation_target: 53}) and (117, 0, {}).
+    # The marked count collapsed to ONE: the structured-turn-marker channel is
+    # unconditional now, so the guards record annotations instead of splicing
+    # prose, and the accusation guard itself fires far less on the v4 openings.
     expected = {
-        _COMMITTED_9P2I_DIR: (971, 53, {"invalid_accusation_target": 53}),
-        _COMMITTED_4P1I_DIR: (117, 0, {}),
+        _COMMITTED_9P2I_DIR: (871, 1, {"invalid_accusation_target": 1}),
+        _COMMITTED_4P1I_DIR: (120, 0, {}),
     }
     for directory, (
         expected_turns,
@@ -2007,13 +2011,13 @@ def test_meeting_outcome_memory_on_reconstruction_matches_the_store_render(
     assert _meetings_block(view.rendered_memory_text) == expected
 
 
-def test_the_meeting_outcome_channel_is_inert_while_the_lever_is_off(
+def test_the_meeting_outcome_channel_reaches_the_served_memory(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # The neutrality half, asserted rather than assumed: the walk folds the
-    # outcomes unconditionally, but with the lever OFF (the substrate every
-    # committed recording was made in) the channel reaches no rendered byte -- the
-    # served memory is exactly what it was before the fold existed.
+    # The channel is UNCONDITIONAL since the baseline-7 record, so the served
+    # memory for a second meeting carries the FIRST meeting's announced outcome
+    # -- with no AILIBI_* export in the process at all. (Baseline 6 rendered
+    # nothing here, which is what made the fold measurement-neutral then.)
     _delete_ailibi_env(monkeypatch)
     loader = ReplayLoader(replay_dir=_COMMITTED_9P2I_DIR)
     replay = loader.load_replay(f"headless-seed-{_MULTI_MEETING_SEED}")
@@ -2023,4 +2027,4 @@ def test_the_meeting_outcome_channel_is_inert_while_the_lever_is_off(
     view = loader.get_meeting_memory(
         f"headless-seed-{_MULTI_MEETING_SEED}", second.meeting_id, voter
     )
-    assert _MEETINGS_HEADER not in view.rendered_memory_text
+    assert _MEETINGS_HEADER in view.rendered_memory_text

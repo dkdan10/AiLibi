@@ -1,12 +1,12 @@
 {
   "name": "self_location_trail",
-  "description": "Crewmate whose own record is coalesced into a route by the AILIBI_SELF_LOCATION_TRAIL lever. Exercises every span rule at once: adjacent same-room ticks coalesce (4-6), an unrecorded tick 7 breaks the span, a meeting boundary at the resume tick 10 does NOT break one (a meeting freezes movement), and tick 12 stands alone after another gap. The completed-task line is dated and placed by the same self_state row (tick 9, ADMIN), where the previous-iteration roll-forward would have said EAST_HALL. Rendered with the lever ON.",
+  "description": "Crewmate whose own record is coalesced into a route by the self-location trail (graduated to unconditional at the baseline-7 record). Exercises every span rule at once: adjacent same-room ticks coalesce (4-6), an unrecorded tick 7 breaks the span, a meeting boundary at the resume tick 10 does NOT break one (a meeting freezes movement), and tick 12 stands alone after another gap. The completed-task line is dated and placed by the same self_state row (tick 9, ADMIN), where the previous-iteration roll-forward would have said EAST_HALL.",
   "token_budget": 1500,
   "events": [
     {
       "tick": 4,
       "type": "self_state",
-      "payload": {"room": "REACTOR", "role": "CREWMATE", "pending_task_id": "start_reactor", "agent_id": "p-1"},
+      "payload": {"room": "REACTOR", "role": "CREWMATE", "pending_task_id": "start_reactor", "agent_id": "p-1", "owned_task_ids": ["start_reactor", "swipe_card"]},
       "provenance": "observed"
     },
     {
@@ -18,25 +18,25 @@
     {
       "tick": 5,
       "type": "self_state",
-      "payload": {"room": "REACTOR", "role": "CREWMATE", "pending_task_id": "start_reactor", "agent_id": "p-1"},
+      "payload": {"room": "REACTOR", "role": "CREWMATE", "pending_task_id": "start_reactor", "agent_id": "p-1", "owned_task_ids": ["start_reactor", "swipe_card"]},
       "provenance": "observed"
     },
     {
       "tick": 6,
       "type": "self_state",
-      "payload": {"room": "REACTOR", "role": "CREWMATE", "pending_task_id": "start_reactor", "agent_id": "p-1"},
+      "payload": {"room": "REACTOR", "role": "CREWMATE", "pending_task_id": "start_reactor", "agent_id": "p-1", "owned_task_ids": ["start_reactor", "swipe_card"]},
       "provenance": "observed"
     },
     {
       "tick": 8,
       "type": "self_state",
-      "payload": {"room": "EAST_HALL", "role": "CREWMATE", "pending_task_id": "start_reactor", "agent_id": "p-1"},
+      "payload": {"room": "EAST_HALL", "role": "CREWMATE", "pending_task_id": "start_reactor", "agent_id": "p-1", "owned_task_ids": ["start_reactor", "swipe_card"]},
       "provenance": "observed"
     },
     {
       "tick": 9,
       "type": "self_state",
-      "payload": {"room": "ADMIN", "role": "CREWMATE", "pending_task_id": "swipe_card", "agent_id": "p-1"},
+      "payload": {"room": "ADMIN", "role": "CREWMATE", "pending_task_id": "swipe_card", "agent_id": "p-1", "owned_task_ids": ["swipe_card"]},
       "provenance": "observed"
     },
     {
@@ -48,7 +48,7 @@
     {
       "tick": 10,
       "type": "self_state",
-      "payload": {"room": "ADMIN", "role": "CREWMATE", "pending_task_id": "swipe_card", "agent_id": "p-1"},
+      "payload": {"room": "ADMIN", "role": "CREWMATE", "pending_task_id": "swipe_card", "agent_id": "p-1", "owned_task_ids": ["swipe_card"]},
       "provenance": "observed"
     },
     {
@@ -60,7 +60,7 @@
     {
       "tick": 12,
       "type": "self_state",
-      "payload": {"room": "MEDBAY", "role": "CREWMATE", "pending_task_id": "swipe_card", "agent_id": "p-1"},
+      "payload": {"room": "MEDBAY", "role": "CREWMATE", "pending_task_id": "swipe_card", "agent_id": "p-1", "owned_task_ids": ["swipe_card"]},
       "provenance": "observed"
     }
   ],

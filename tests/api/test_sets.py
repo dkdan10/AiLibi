@@ -436,10 +436,18 @@ def test_featured_seeds_exist_in_their_committed_sets() -> None:
     # editorial and deliberately unpinned — the rubric does not validate it.
     featured = _parse_featured_games()
     assert {game[0] for game in featured} == {"4p1i", "9p2i"}
-    # The audits' named good tail (audits/audit-phase-19-input-claude.md §5.3-5.4).
+    # Re-curated against the baseline-7 bytes: every earlier blurb described a
+    # game the record changed (audits/audit-phase-20-baseline-7.md §4), so the
+    # list was re-read rather than re-scored. Baseline 6 featured 9p2i {2, 8, 17,
+    # 23} and 4p1i {2, 29, 41}.
     assert featured[0] == ("9p2i", 2)  # the tour's landing game (the curated head)
-    assert {seed for set_name, seed in featured if set_name == "9p2i"} == {2, 8, 17, 23}
-    assert {seed for set_name, seed in featured if set_name == "4p1i"} == {2, 29, 41}
+    assert {seed for set_name, seed in featured if set_name == "9p2i"} == {
+        2,
+        13,
+        23,
+        46,
+    }
+    assert {seed for set_name, seed in featured if set_name == "4p1i"} == {2, 11, 29}
     registry = SetLoaderRegistry(_PARENT)
     for set_name, seed in featured:
         loader = registry.get(set_name)

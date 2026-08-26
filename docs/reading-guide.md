@@ -14,8 +14,8 @@ page summarizes, the cited file wins. Private vocabulary is in the
 |---|---|---|
 | Committed sample replays that reconstruct byte-identically | 100 of 100 | every commit — `bash scripts/verify_samples.sh` |
 | Observation-firewall violations, all phases | zero | never breached in CI — the three mechanisms are named below |
-| Impostor win rate, committed samples | 34% (4p1i), 30% (9p2i) | reference recording 6, 2026-07-20 — [4p1i](../replays/samples/4p1i/MANIFEST.md), [9p2i](../replays/samples/9p2i/MANIFEST.md) |
-| Eject ballots carrying a valid citation, a turn or an observation id (9p2i) | 520 / 520, zero dangling | reference recording 6, 2026-07-20 — [instrument](../tests/eval/test_vj_instruments.py) |
+| Impostor win rate, committed samples | 36% (4p1i), 24% (9p2i) | the 2026-08-25 record — [4p1i](../replays/samples/4p1i/MANIFEST.md), [9p2i](../replays/samples/9p2i/MANIFEST.md) |
+| Eject ballots carrying a valid citation, a turn or an observation id (9p2i) | 538 / 538, zero dangling | reference recording 7, 2026-08-25 — [instrument](../tests/eval/test_vj_instruments.py) |
 | Ejection accuracy with engine-certified proof of the ejectee's role, against without | 310 / 310 = 1.000 vs 46 / 125 = 0.368 | measured 2026-08-18 across all four committed recordings — [phase-19 close](../audits/audit-phase-19-close.md) §4.1 |
 | Correct 9p ejections riding an ejectee-specific vent sighting | 68 / 78 = 87% | reference recording 6, 2026-07-20 — [triage audit](../audits/audit-phase-19-triage.md) §8 |
 | Impostor ballots cast against a partner (9p2i) | 0 of 245 | enforced by the meeting layer, not shown by the model — §3 |

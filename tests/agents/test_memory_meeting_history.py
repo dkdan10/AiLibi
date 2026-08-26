@@ -345,14 +345,17 @@ def _render_memory() -> AgentMemory:
     return memory
 
 
-def test_render_for_prompt_is_inert_to_meeting_history() -> None:
+def test_render_for_prompt_reads_the_meeting_history_channel() -> None:
     memory = _render_memory()
     before = render_for_prompt(memory)
     record_meeting_outcome(memory, end_tick=5, ejected_id="p-2")
     record_meeting_outcome(memory, end_tick=9, ejected_id=None)
     after = render_for_prompt(memory)
-    # Populating the meeting-history channel changes ZERO prompt bytes.
-    assert before == after
+    # Populating the channel adds the block: one line per concluded meeting.
+    assert before != after
+    assert "## Meetings so far:" not in before
+    assert "- Meeting 1 (tick 5): p-2 EJECTED." in after
+    assert "- Meeting 2 (tick 9): no ejection." in after
 
 
 def _encode_fixture(public_map: PublicMapView) -> tuple[ObservationPacket, AgentMemory]:
@@ -409,22 +412,11 @@ def test_v2_encode_is_inert_to_meeting_history() -> None:
 # ---------------------------------------------------------------------------- #
 
 
-@pytest.mark.parametrize("value", ["1", "true", "TRUE", "Yes", "on", " on ", "ON"])
-def test_lever_reads_true_forms_case_insensitively(value: str) -> None:
+@pytest.mark.parametrize("value", ["", " ", "0", "false", "no", "maybe", "1", "on"])
+def test_the_channel_is_unconditional(value: str) -> None:
+    # Graduated at the baseline-7 record: no environment turns it off again.
     assert meeting_outcome_memory_enabled({ENV_MEETING_OUTCOME_MEMORY: value})
-
-
-@pytest.mark.parametrize("value", ["", " ", "0", "false", "no", "off", "maybe"])
-def test_lever_defaults_off_on_unset_empty_or_unrecognised(value: str) -> None:
-    assert not meeting_outcome_memory_enabled({ENV_MEETING_OUTCOME_MEMORY: value})
-    assert not meeting_outcome_memory_enabled({})
-
-
-def test_lever_reads_the_process_environment_when_no_mapping_is_passed(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    assert not meeting_outcome_memory_enabled()
-    monkeypatch.setenv(ENV_MEETING_OUTCOME_MEMORY, "1")
+    assert meeting_outcome_memory_enabled({})
     assert meeting_outcome_memory_enabled()
 
 
@@ -455,24 +447,25 @@ def _announced(memory: AgentMemory) -> None:
     )
 
 
-def test_off_path_render_is_byte_identical_to_an_unpopulated_channel() -> None:
-    # The lever OFF, a memory whose outcomes carry roles and tallies renders
-    # exactly what a memory with no outcomes at all renders.
-    bare = _render_memory()
-    populated = _render_memory()
-    _announced(populated)
-    assert render_for_prompt(populated, env={}) == render_for_prompt(bare, env={})
-
-
-def test_off_path_render_matches_the_two_field_fold() -> None:
-    # And it matches the pre-existing two-field fold byte for byte, so nothing a
-    # committed recording holds can move while the lever is unset.
+def test_the_announced_fields_reach_the_render() -> None:
+    # A memory whose outcomes carry the announced role and the tally renders MORE
+    # than one holding the two-field fold alone: the extra fields are read, not
+    # merely stored.
     two_field = _render_memory()
     record_meeting_outcome(two_field, end_tick=14, ejected_id="p-2")
     record_meeting_outcome(two_field, end_tick=27, ejected_id=None)
     announced = _render_memory()
     _announced(announced)
-    assert render_for_prompt(announced, env={}) == render_for_prompt(two_field, env={})
+
+    lean = render_for_prompt(two_field)
+    full = render_for_prompt(announced)
+
+    assert lean != full
+    assert "- Meeting 1 (tick 14): p-2 EJECTED." in lean
+    assert (
+        "- Meeting 1 (tick 14): p-2 EJECTED 7-1 — p-2 was an IMPOSTOR. "
+        "1 impostor remains." in full
+    )
 
 
 # ---------------------------------------------------------------------------- #
@@ -719,13 +712,18 @@ def test_v3_encode_is_inert_to_the_announcement_fields() -> None:
 #:
 #: Both 4p1i sets read zero on the ejection columns and that is the true number,
 #: not a gap: a 4p/1i game ends at its first ejection, so no meeting ever follows
-#: one. The 9p2i ``saw_vent`` figures (68 and 232) and the 3,934 / 1,799 totals
-#: reproduce the review's counts exactly.
+#: one.
+#:
+#: Re-measured on the baseline-7 bytes (the baseline-6 rows were
+#: 117/0/0/0/0, 971/475/409/139/68, 120/0/0/0/0 and 2726/1324/1187/282/232). The
+#: ``saw_vent`` columns fall hardest — 68 -> 14 and 232 -> 45 — because the
+#: meeting-outcome channel now renders the ejection, so a witness has far less
+#: occasion to name an already-ejected player.
 _COUNTERFACTUAL_CENSUS: Final[dict[str, tuple[int, int, int, int, int]]] = {
-    "samples/4p1i": (117, 0, 0, 0, 0),
-    "samples/9p2i": (971, 475, 409, 139, 68),
-    "ml_corpus/4p1i": (120, 0, 0, 0, 0),
-    "ml_corpus/9p2i": (2726, 1324, 1187, 282, 232),
+    "samples/4p1i": (120, 0, 0, 0, 0),
+    "samples/9p2i": (871, 415, 410, 31, 14),
+    "ml_corpus/4p1i": (132, 0, 0, 0, 0),
+    "ml_corpus/9p2i": (2479, 1196, 1148, 106, 45),
 }
 
 
@@ -797,6 +795,8 @@ def test_the_census_totals_reproduce_the_review_counts() -> None:
     renders = sum(row[0] for row in _COUNTERFACTUAL_CENSUS.values())
     gained = sum(row[1] for row in _COUNTERFACTUAL_CENSUS.values())
     stale_vents = sum(row[4] for row in _COUNTERFACTUAL_CENSUS.values())
-    assert (renders, gained) == (3934, 1799)
-    # The re-litigation denominator the record is judged against.
-    assert stale_vents == 300
+    assert (renders, gained) == (3602, 1611)  # baseline 6: (3934, 1799)
+    # The re-litigation denominator, re-measured on the baseline-7 bytes: the
+    # meeting-outcome channel renders the ejection, so a witness has far less
+    # occasion to name an already-ejected player (baseline 6: 300).
+    assert stale_vents == 59

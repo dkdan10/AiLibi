@@ -127,6 +127,10 @@ from training.env import build_action_mask
 from training.rewards import compute_shaped_reward
 from training.rollout import DESCRIPTOR_VECTOR_FIELDS, EpisodeRollout
 
+from tests.training._regrounding import (
+    artifact_copy_fingerprinted_to_the_live_corpus,
+)
+
 # The four entrant modules the firewall test AST-scans (the committed forbidden
 # import is any ``eval`` / ``eval.*`` module — the harness is the ONLY bake-off
 # module allowed to reach the eval gates).
@@ -351,7 +355,12 @@ def test_evaluate_candidate_full_row(tmp_path: Path) -> None:
         determinism_seeds=(1004,),
         leak_seeds=(0, 1),
         repeat_n=2,
-        surrogate_artifact_dir=Path("training/artifacts/surrogate"),
+        # The committed artifact's fit-corpus fence refuses the baseline-7 corpus
+        # until the ML re-ground lands (tests/training/_regrounding.py); this row
+        # is about the HARNESS, so it runs against the re-fingerprinted copy.
+        surrogate_artifact_dir=artifact_copy_fingerprinted_to_the_live_corpus(
+            tmp_path / "surrogate"
+        ),
     )
     result = evaluate_candidate(candidate, protocol, artifact_root=tmp_path)
 
@@ -535,7 +544,7 @@ def test_artifact_round_trip(tmp_path: Path) -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_goodhart_surrogate_rerun_ci_budget() -> None:
+def test_goodhart_surrogate_rerun_ci_budget(tmp_path: Path) -> None:
     config = ESConfig(
         generations=1,
         population=1,
@@ -543,7 +552,15 @@ def test_goodhart_surrogate_rerun_ci_budget() -> None:
         seed=0,
         fitness_seeds=(1004,),
     )
-    rerun = run_goodhart_surrogate_rerun(config=config)
+    # As above: the 15.14 obligation is about the PROBE, and the probe cannot run
+    # at all until a surrogate loads, so it runs against the re-fingerprinted copy
+    # while the ML re-ground is outstanding (tests/training/_regrounding.py).
+    rerun = run_goodhart_surrogate_rerun(
+        config=config,
+        surrogate_artifact_dir=artifact_copy_fingerprinted_to_the_live_corpus(
+            tmp_path / "surrogate"
+        ),
+    )
 
     assert rerun.probe.verdict in ("HELD", "EXPLOITS_FOUND")
     # The forced single-tactic reachability sweep ran every non-FSM lever.

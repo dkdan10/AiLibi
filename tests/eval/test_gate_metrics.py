@@ -873,41 +873,43 @@ def test_committed_9p2i_report_pins_the_audited_gate_metrics() -> None:
     gate = report.gate_metrics
     genuine = gate.genuine_class_conversion
 
-    assert genuine.supplied == 4
-    assert genuine.converted == 3
-    assert genuine.conversion_rate == 0.75
+    assert genuine.supplied == 1  # was 4
+    assert genuine.converted == 0  # was 3
+    assert genuine.conversion_rate == 0.0  # was 0.75
     assert genuine.note == GENUINE_CLASS_GATE_NOTE
 
     # The Task-19.5 canary cell: the successor instrument the canary bands read.
     supplied_channel = gate.supplied_channel_conversion
-    assert supplied_channel.supplied == 79
-    assert supplied_channel.converted == 70
-    assert supplied_channel.conversion_rate == pytest.approx(70 / 79)
-    assert supplied_channel.witnessed_vent_supplied == 76
-    assert supplied_channel.witnessed_vent_converted == 68
-    assert supplied_channel.sighting_contradiction_supplied == 2
-    assert supplied_channel.sighting_contradiction_converted == 2
-    assert supplied_channel.whereabouts_lie_supplied == 7
-    assert supplied_channel.whereabouts_lie_converted == 5
+    assert supplied_channel.supplied == 76  # was 79
+    assert supplied_channel.converted == 69  # was 70
+    assert supplied_channel.conversion_rate == pytest.approx(69 / 76)  # was 70 / 79
+    assert supplied_channel.witnessed_vent_supplied == 74  # was 76
+    assert supplied_channel.witnessed_vent_converted == 69  # was 68
+    assert supplied_channel.sighting_contradiction_supplied == 0  # was 2
+    assert supplied_channel.sighting_contradiction_converted == 0  # was 2
+    assert supplied_channel.whereabouts_lie_supplied == 5  # was 7
+    assert supplied_channel.whereabouts_lie_converted == 2  # was 5
     # The preserved legacy column mirrors the genuine-class cell above.
-    assert supplied_channel.legacy_alibi_supplied == 4
-    assert supplied_channel.legacy_alibi_converted == 3
-    assert supplied_channel.legacy_alibi_conversion_rate == pytest.approx(0.75)
+    assert supplied_channel.legacy_alibi_supplied == 1  # was 4
+    assert supplied_channel.legacy_alibi_converted == 0  # was 3
+    assert supplied_channel.legacy_alibi_conversion_rate == pytest.approx(
+        0.0
+    )  # was 0.75
     assert supplied_channel.note == SUPPLIED_CHANNEL_GATE_NOTE
 
     assert gate.lost_opening_accusations == 0
     assert gate.cap_defaulted_turns == 0
 
-    assert gate.accused_impostor_events == 148
-    assert gate.accused_impostor_survivals == 70
+    assert gate.accused_impostor_events == 137  # was 148
+    assert gate.accused_impostor_survivals == 52  # was 70
     # The 70 accused-impostor survivals partition into rendered-met (voters saw a
     # §4.6-gate-meeting suspicion yet the impostor survived), sheltered sub-gate,
     # and unevidenced. On the baseline-6 re-record the sheltered class is empty, so
     # survivors split rendered-met (34), sheltered (0), and unevidenced (36), the
     # largest share still unevidenced.
-    assert gate.survivals_rendered_met == 34
+    assert gate.survivals_rendered_met == 18  # was 34
     assert gate.survivals_sheltered_sub_gate == 0
-    assert gate.survivals_unevidenced == 36
+    assert gate.survivals_unevidenced == 34  # was 36
 
     # Per-seed identities re-derived from the same committed games: the
     # genuine-class supply and conversions sit exactly where documented above. The
@@ -920,13 +922,13 @@ def test_committed_9p2i_report_pins_the_audited_gate_metrics() -> None:
         for game in report.report.games
         if compute_genuine_class_conversion((game,)).supplied > 0
     }
-    assert supplied_seeds == {1, 5, 31, 42}
+    assert supplied_seeds == {26}
     converted_seeds = {
         game.seed
         for game in report.report.games
         if compute_genuine_class_conversion((game,)).converted > 0
     }
-    assert converted_seeds == {1, 5, 42}
+    assert converted_seeds == set()
     lost_opening_seeds = {
         game.seed
         for game in report.report.games
@@ -944,14 +946,14 @@ def test_committed_9p2i_report_pins_the_audited_gate_metrics() -> None:
     # the era-invalidity note (a reader pulling the raw report sees the
     # PRIMARY gate and the warning, the gp-7 ask).
     raw = json.loads(_COMMITTED_9P2I_REPORT.read_text(encoding="utf-8"))
-    assert raw["gate_metrics"]["genuine_class_conversion"]["supplied"] == 4
-    assert raw["gate_metrics"]["genuine_class_conversion"]["converted"] == 3
+    assert raw["gate_metrics"]["genuine_class_conversion"]["supplied"] == 1
+    assert raw["gate_metrics"]["genuine_class_conversion"]["converted"] == 0
     assert (
         "ejection_accuracy" in raw["gate_metrics"]["genuine_class_conversion"]["note"]
     )
     assert "INVALID" in raw["gate_metrics"]["genuine_class_conversion"]["note"]
     # ... and the Task-19.5 successor beside it, carrying its canary label.
-    assert raw["gate_metrics"]["supplied_channel_conversion"]["supplied"] == 79
+    assert raw["gate_metrics"]["supplied_channel_conversion"]["supplied"] == 76
     assert (
         "canary-eligible" in raw["gate_metrics"]["supplied_channel_conversion"]["note"]
     )
@@ -979,41 +981,41 @@ def test_committed_flat_4p1i_report_pins_the_gate_metrics() -> None:
     gate = report.gate_metrics
     genuine = gate.genuine_class_conversion
 
-    assert genuine.supplied == 1
-    assert genuine.converted == 1
-    assert genuine.conversion_rate == 1.0
+    assert genuine.supplied == 0  # was 1
+    assert genuine.converted == 0  # was 1
+    assert genuine.conversion_rate is None
     assert genuine.note == GENUINE_CLASS_GATE_NOTE
 
     # The Task-19.5 canary cell: the successor instrument the canary bands read.
     supplied_channel = gate.supplied_channel_conversion
-    assert supplied_channel.supplied == 11
-    assert supplied_channel.converted == 10
-    assert supplied_channel.conversion_rate == pytest.approx(10 / 11)
-    assert supplied_channel.witnessed_vent_supplied == 10
-    assert supplied_channel.witnessed_vent_converted == 9
-    assert supplied_channel.sighting_contradiction_supplied == 1
-    assert supplied_channel.sighting_contradiction_converted == 1
+    assert supplied_channel.supplied == 19
+    assert supplied_channel.converted == 19
+    assert supplied_channel.conversion_rate == pytest.approx(1 / 1)  # was 10 / 11
+    assert supplied_channel.witnessed_vent_supplied == 19  # was 10
+    assert supplied_channel.witnessed_vent_converted == 19  # was 9
+    assert supplied_channel.sighting_contradiction_supplied == 0  # was 1
+    assert supplied_channel.sighting_contradiction_converted == 0  # was 1
     assert supplied_channel.whereabouts_lie_supplied == 0
     assert supplied_channel.whereabouts_lie_converted == 0
     # The preserved legacy column mirrors the genuine-class cell above.
-    assert supplied_channel.legacy_alibi_supplied == 1
-    assert supplied_channel.legacy_alibi_converted == 1
-    assert supplied_channel.legacy_alibi_conversion_rate == pytest.approx(1.0)
+    assert supplied_channel.legacy_alibi_supplied == 0  # was 1
+    assert supplied_channel.legacy_alibi_converted == 0  # was 1
+    assert supplied_channel.legacy_alibi_conversion_rate == pytest.approx(None)
     assert supplied_channel.note == SUPPLIED_CHANNEL_GATE_NOTE
 
     assert gate.lost_opening_accusations == 0
     assert gate.cap_defaulted_turns == 0
 
-    assert gate.accused_impostor_events == 31
-    assert gate.accused_impostor_survivals == 22
-    assert gate.survivals_rendered_met == 3
+    assert gate.accused_impostor_events == 35
+    assert gate.accused_impostor_survivals == 15
+    assert gate.survivals_rendered_met == 1
     assert gate.survivals_sheltered_sub_gate == 0
-    assert gate.survivals_unevidenced == 19
+    assert gate.survivals_unevidenced == 14
 
     # JSON-level guard, mirroring the 9p2i pin above: the committed file itself
     # serves the successor cell with its canary label.
     raw = json.loads(_COMMITTED_FLAT_REPORT.read_text(encoding="utf-8"))
-    assert raw["gate_metrics"]["supplied_channel_conversion"]["supplied"] == 11
+    assert raw["gate_metrics"]["supplied_channel_conversion"]["supplied"] == 19
     assert (
         "canary-eligible" in raw["gate_metrics"]["supplied_channel_conversion"]["note"]
     )

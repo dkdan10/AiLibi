@@ -168,16 +168,24 @@ record. [Contract](../tasks/phase-20.md).
 ## Where the sample sets came from
 
 The 100 committed replays under `replays/samples/` are the adopting record for
-reference recording 6. The meeting layer graduated **crew-only** at that
-recording: the roll-call round, the endpoint-band whereabouts exemption, the
-vent-placement contradiction variant (flag-minting plus the absent-set widening)
-and the absence prior all became unconditional, beside the nine settings already
-retired — thirteen graduated in total. The impostor-answer arm did not ship, so
-the record was made in a bare environment with that toggle off
+reference recording 7, made 2026-08-25. Eight evidence-honesty settings graduated
+at that recording — task completion read from events, the self-location trail,
+the movement-claim shape, grounded prosecution, map-aware arbitration, structured
+turn markers, meeting-outcome memory and the coalesced memory render — beside the
+thirteen already retired, twenty-one graduated in total. The impostor-answer arm
+still has not shipped, so this record too was made in a bare environment with
+that toggle off.
+
+**Read the record's own §6.1 before citing it.** The pre-registered decision rule
+returned **FINDING**, not adoption: two of its bars missed. Reference recording 7
+is canon because the owner adopted it by an explicit override of that verdict, on
+stated grounds — not because the bars passed
+([`audits/audit-phase-20-baseline-7.md`](../audits/audit-phase-20-baseline-7.md)).
+Reference recording 6 remains the meeting-layer adopting record that preceded it
 ([`audits/audit-phase-18-baseline-6.md`](../audits/audit-phase-18-baseline-6.md)).
 
 Each set's `MANIFEST.md` is the canonical provenance record, row by row: model,
-prompt-template versions, the thirteen graduated settings stamped on every row,
+prompt-template versions, the twenty-one graduated settings stamped on every row,
 refresh date, cost and outcome. `scripts/refresh_samples.sh` regenerates the
 sets against the active provider and rewrites those rows;
 `scripts/verify_samples.sh` replays every sample through the engine, free and

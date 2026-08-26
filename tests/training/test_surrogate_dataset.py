@@ -319,9 +319,11 @@ def test_build_meeting_table_consumes_the_frozen_corpus() -> None:
 
     table = build_meeting_table(Path("replays/ml_corpus/4p1i"))
     assert table.games_total == 50
-    assert table.meetings_total == 40
-    assert table.ballots_total == 120  # == validity-gate ballot count: 100% join
-    assert len(table.rows) == 120
+    assert table.meetings_total == 44  # was 40
+    assert (
+        table.ballots_total == 132
+    )  # == validity-gate ballot count: 100% join  # was 120
+    assert len(table.rows) == 132  # was 120
     assert table.splits is not None
     assert (len(table.splits.train), len(table.splits.val), len(table.splits.test)) == (
         30,
@@ -856,9 +858,9 @@ def test_walk_reproduces_the_production_fold_on_the_4p1i_corpus() -> None:
 
     parity = measure_belief_render_parity(Path("replays/ml_corpus/4p1i"))
     assert parity.games_total == 50
-    assert parity.meetings_total == 40
-    assert parity.rows_total == 120
-    assert parity.cells_compared == 240
+    assert parity.meetings_total == 44  # was 40
+    assert parity.rows_total == 132  # was 120
+    assert parity.cells_compared == 264  # was 240
     assert parity.raw_mismatches == 0
     assert parity.trust_mismatches == 0
     assert parity.max_raw_abs_delta == 0.0
@@ -922,11 +924,11 @@ def test_j1_live_parity_divergence_is_measured_on_the_9p2i_corpus(
     """
 
     parity = corpus_parity
-    assert parity.meetings_total == 463
-    assert parity.rows_total == 2726
-    assert parity.cells_compared == 14326
-    assert parity.j1_divergent_cells == 141
-    assert parity.j1_divergent_rows == 130
-    assert parity.j1_divergent_fit_cells == 113
-    assert parity.j1_divergent_test_cells == 28
+    assert parity.meetings_total == 432  # was 463
+    assert parity.rows_total == 2479  # was 2726
+    assert parity.cells_compared == 12600  # was 14326
+    assert parity.j1_divergent_cells == 61  # was 141
+    assert parity.j1_divergent_rows == 57  # was 130
+    assert parity.j1_divergent_fit_cells == 42  # was 113
+    assert parity.j1_divergent_test_cells == 19  # was 28
     assert parity.j1_max_abs_divergence == pytest.approx(0.06, abs=1e-9)

@@ -67,11 +67,13 @@ _CORPUS_SETS: Final[tuple[str, ...]] = (
 # eval-side twin must reproduce on the same bytes; a diff here is either a
 # corpus change (re-record the numbers, in the PR that changes the corpus) or a
 # classification change (which is the thing this pin exists to surface).
+# Baseline 6 read 96/64/26, 11/2/3, 313/204/90 and 20/1/0. The cross-statement
+# column is the one the record closed: 64 -> 2 and 204 -> 10.
 _EXPECTED_COUNTS: Final[dict[str, dict[EvidenceCategory, int]]] = {
-    "samples/9p2i": {"role_proof": 96, "cross_statement": 64, "weak_signal": 26},
-    "samples/4p1i": {"role_proof": 11, "cross_statement": 2, "weak_signal": 3},
-    "ml_corpus/9p2i": {"role_proof": 313, "cross_statement": 204, "weak_signal": 90},
-    "ml_corpus/4p1i": {"role_proof": 20, "cross_statement": 1, "weak_signal": 0},
+    "samples/9p2i": {"role_proof": 92, "cross_statement": 2, "weak_signal": 50},
+    "samples/4p1i": {"role_proof": 20, "cross_statement": 0, "weak_signal": 0},
+    "ml_corpus/9p2i": {"role_proof": 308, "cross_statement": 10, "weak_signal": 110},
+    "ml_corpus/4p1i": {"role_proof": 28, "cross_statement": 0, "weak_signal": 1},
 }
 
 # The committed replay count per set, pinned so a thinned checkout cannot make
@@ -279,11 +281,11 @@ def test_corpus_wide_totals() -> None:
             totals[_served(flag).category] += 1
 
     assert dict(totals) == {
-        "role_proof": 440,
-        "cross_statement": 271,
-        "weak_signal": 119,
+        "role_proof": 448,
+        "weak_signal": 161,
+        "cross_statement": 12,
     }
-    assert sum(totals.values()) == flag_count == 830
+    assert sum(totals.values()) == flag_count == 621  # was 830
 
 
 @pytest.mark.parametrize("set_name", _CORPUS_SETS)
@@ -332,25 +334,20 @@ def test_weak_category_matches_the_detector_stamp(set_name: str) -> None:
 def test_served_dto_carries_the_category() -> None:
     """The additive field arrives on a real served payload.
 
-    Seed 17 M0 is the §8 row-14 injustice exhibit and carries all three shapes
-    at once: two cross-statement flags against the truthful witness, and the
-    self-linked ``vent_sighting`` naming the actual venter.
+    On baseline 6 this meeting carried all three shapes at once -- two
+    cross-statement flags against a truthful witness plus the self-linked
+    ``vent_sighting`` naming the actual venter -- and ejected the witness. The
+    baseline-7 record closed the cross-statement pair: what is served now is the
+    role proof alone, and the ejection follows it.
     """
 
     replay = ReplayLoader(_SAMPLES / "9p2i").load_replay("headless-seed-17")
     meeting = replay.meetings[0]
-    assert [flag.category for flag in meeting.contradictions] == [
-        "cross_statement",
-        "cross_statement",
-        "role_proof",
-    ]
-    proof = meeting.contradictions[2]
+    assert [flag.category for flag in meeting.contradictions] == ["role_proof"]
+    (proof,) = meeting.contradictions
     assert proof.event_a_id == proof.event_b_id
     assert proof.kind == "vent_sighting"
-    # The witness p-1 is ejected while the proof names p-2 — the exhibit the
-    # taxonomy exists to make legible on the surface.
-    assert meeting.ejected_player_id == "p-1"
-    assert proof.subjects == ("p-2",)
+    assert meeting.ejected_player_id in proof.subjects
 
 
 @pytest.mark.parametrize("set_name", _CORPUS_SETS)
@@ -433,12 +430,8 @@ def test_endpoint_render_classes() -> None:
         for flag in flags:
             counts[_endpoint_class(flag)] += 1
 
-    assert dict(counts) == {
-        "self_linked": 440,
-        "same_turn": 35,
-        "two_turns": 355,
-    }
-    assert sum(counts.values()) == 830
+    assert dict(counts) == {"self_linked": 448, "two_turns": 113, "same_turn": 60}
+    assert sum(counts.values()) == 621
     # Every self-linked flag is role proof; the same-turn class is the
     # self-stated pair the "within …" reading exists for.
     assert counts["unresolvable"] == 0
@@ -454,5 +447,5 @@ def test_seed_47_is_entirely_weak_signal() -> None:
     replay = ReplayLoader(_SAMPLES / "9p2i").load_replay("headless-seed-47")
     meeting = replay.meetings[2]
     assert meeting.outcome == "EJECTED"
-    assert {flag.category for flag in meeting.contradictions} == {"weak_signal"}
-    assert len(meeting.contradictions) == 3
+    assert {flag.category for flag in meeting.contradictions} == {"role_proof"}
+    assert len(meeting.contradictions) == 1

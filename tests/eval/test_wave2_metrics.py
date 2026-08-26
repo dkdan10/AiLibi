@@ -251,9 +251,9 @@ class TestConversionPerMeeting:
         # the gate ejects 78 impostors across 165 resolved meetings — the
         # per-meeting conversion KPI over the new bytes.
         result = compute_conversion_per_meeting(committed_9p2i_report.report.games)
-        assert result.impostor_ejections == 78
-        assert result.resolved_meetings == 165
-        assert result.conversion_per_meeting == pytest.approx(78 / 165)
+        assert result.impostor_ejections == 85  # was 78
+        assert result.resolved_meetings == 152  # was 165
+        assert result.conversion_per_meeting == pytest.approx(85 / 152)  # was 78 / 165
 
 
 # ---------------------------------------------------------------------------
@@ -396,13 +396,13 @@ class TestEffectiveDeflection:
         # transcript contradiction channel collapsed, fewer of the impostor's
         # survivals come from landing plurality on a named or third-party target.
         result = compute_effective_deflection(committed_9p2i_report.report.games)
-        assert result.accused_impostor_events == 148
-        assert result.accused_impostor_survivals == 70
-        assert result.active_survivals == 67
-        assert result.named_target_deflections == 8
+        assert result.accused_impostor_events == 137  # was 148
+        assert result.accused_impostor_survivals == 52  # was 70
+        assert result.active_survivals == 51  # was 67
+        assert result.named_target_deflections == 17  # was 8
         assert result.third_party_deflections == 15
-        assert result.effective_deflections == 23
-        assert result.skip_saved_active_survivals == 44
+        assert result.effective_deflections == 32  # was 23
+        assert result.skip_saved_active_survivals == 19  # was 44
 
 
 # ---------------------------------------------------------------------------
@@ -470,12 +470,16 @@ class TestIndistinguishability:
             _COMMITTED_9P2I_DIR, committed_9p2i_report.report.games
         )
         result = compute_indistinguishability(tally)
-        assert result.impostor_do_task == 415
-        assert result.crewmate_do_task == 3703
+        assert result.impostor_do_task == 370  # was 415
+        assert result.crewmate_do_task == 3163  # was 3703
         assert result.impostor_wait_share is not None
         assert result.crewmate_wait_share is not None
-        assert result.impostor_wait_share == pytest.approx(0.0683, abs=1e-3)
-        assert result.crewmate_wait_share == pytest.approx(0.1739, abs=1e-3)
+        assert result.impostor_wait_share == pytest.approx(
+            0.10171428571428572, abs=1e-3
+        )  # was 0.0683
+        assert result.crewmate_wait_share == pytest.approx(
+            0.06418039895923677, abs=1e-3
+        )  # was 0.1739
         # The fingerprint is gone: impostor wait-share no longer dwarfs crew's —
         # impostors now idle LESS than the task-burdened crew.
         assert result.impostor_wait_share < 2 * result.crewmate_wait_share
@@ -585,7 +589,7 @@ class TestSingleWitnessInformChannel:
         # baseline-4 substrate, with transcript contradiction flags collapsed, no
         # ejection re-derives into the single-witness inform band.)
         result = compute_multi_signal_conversion(committed_9p2i_report.report.games)
-        assert result.conversions_with_single_witness_inform == 0
+        assert result.conversions_with_single_witness_inform == 3  # was 0
 
 
 def test_gate_spec_states_the_three_tiers_separately() -> None:

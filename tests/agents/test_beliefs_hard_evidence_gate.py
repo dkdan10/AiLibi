@@ -941,8 +941,8 @@ class TestHardEvidenceGateOnCommittedBytes:
         # 79 baseline-4 recorded; the qwen3_6_27b v3 prompt set with the
         # meeting-layer levers graduated to unconditional plus the vent widening
         # cascaded the trajectories and raised the ejection rate further).
-        assert funnel.report_ejections == 87
-        assert counterfactual.total_ejections == 87
+        assert funnel.report_ejections == 91  # was 87
+        assert counterfactual.total_ejections == 91  # was 87
 
     # -- (i) the soft-only split, by ejectee role ----------------------------
 
@@ -960,10 +960,10 @@ class TestHardEvidenceGateOnCommittedBytes:
         # kept / 14 still-over; the baseline-2-era 24/31-vs-6/16 hypothesis is long
         # superseded -- exactly why the DoD re-measures rather than carrying a prior
         # figure.)
-        assert counterfactual.kept == {"CREWMATE": 0, "IMPOSTOR": 0}
-        assert counterfactual.already_sub_gate == {"CREWMATE": 0, "IMPOSTOR": 0}
-        assert counterfactual.still_over == {"CREWMATE": 0, "IMPOSTOR": 7}
-        assert counterfactual.soft_only_total == 7
+        assert counterfactual.kept == {"CREWMATE": 2, "IMPOSTOR": 0}
+        assert counterfactual.already_sub_gate == {"CREWMATE": 3, "IMPOSTOR": 0}
+        assert counterfactual.still_over == {"CREWMATE": 1, "IMPOSTOR": 14}
+        assert counterfactual.soft_only_total == 20
 
     # -- (ii) the hard-backed count (non-vacuity floor) ----------------------
 
@@ -973,7 +973,7 @@ class TestHardEvidenceGateOnCommittedBytes:
         # There ARE hard-flag-backed convictions to guard: 80 of the 87 ejections
         # carry a grounded (hard_total > atol) post-fold row for the ejectee.
         assert counterfactual.hard_backed >= _HARD_BACKED_FLOOR
-        assert counterfactual.hard_backed == 80
+        assert counterfactual.hard_backed == 71  # was 80
         assert (
             counterfactual.hard_backed + counterfactual.soft_only_total
             == counterfactual.total_ejections

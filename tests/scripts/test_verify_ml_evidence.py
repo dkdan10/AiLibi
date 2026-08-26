@@ -274,17 +274,37 @@ def test_availability_registry_covers_the_document() -> None:
     ] * len(vme._OFF_TREE_ANCHORS)
 
 
-def test_recompute_reproduces_every_committed_verdict() -> None:
-    """The three instruments re-derive from the FROZEN weights, to the pin.
+def test_recompute_reads_every_committed_verdict_against_the_declared_gap() -> None:
+    """The three instruments re-derive from the FROZEN weights, and land STALE.
 
     The slow leg (~30s: two corpus tables plus the composed fidelity). It is the
     command's whole point — the Codex audit's executed-evidence row, run as one
     check — so it is asserted end to end rather than sampled.
+
+    The baseline-7 record re-recorded ``replays/ml_corpus`` without re-fitting
+    the ML artifacts (a named follow-up, audits/audit-phase-20-baseline-7.md
+    §10.2), so every recomputed figure now measures a frozen fit against a corpus
+    it never saw. The leg reports that as STALE rather than FAIL, and this test
+    pins the whole shape of it: NOTHING may FAIL, the grounding row must be the
+    one saying why, and the re-derived figures are pinned as measurements in
+    their own right. The committed side of each row still carries the baseline-6
+    number, so the two are readable against each other here and in the output.
     """
 
     result = vme.run_recompute(_context(_REPO_ROOT))
-    failed = [row for row in result.rows if row.status != "OK"]
+    failed = [row for row in result.rows if row.status == "FAIL"]
     assert not failed, "\n".join(f"{row.name}: {row.detail}" for row in failed)
+
+    # The gap is declared by ONE row, and every other non-OK row points at it.
+    grounding = _row(result.rows, "ML grounding")
+    assert grounding.status == "STALE"
+    assert "§10.2" in grounding.detail
+    stale = [row for row in result.rows if row.status == "STALE"]
+    assert len(stale) > 1  # non-vacuous: the recomputations are read, not skipped
+    for row in stale:
+        if row.name != "ML grounding":
+            assert "ML grounding" in row.detail, row.name
+
     # The six figures the audit's executed-evidence table names, by name.
     assert {row.name for row in result.rows} >= {
         "surrogate top-1 (ranking channel)",
@@ -294,21 +314,124 @@ def test_recompute_reproduces_every_committed_verdict() -> None:
         "composed decision accuracy",
         "composed exact-outcome match",
     }
-    assert _row(result.rows, "surrogate top-1 (ranking channel)").measured.startswith(
-        "0.7666666"
+    # Left: measured on the baseline-7 corpus. Right: the committed baseline-6
+    # figure the row is read against. Pinned in pairs so neither can drift alone.
+    for name, measured, committed in (
+        ("surrogate top-1 (ranking channel)", "0.8181818", "0.7666666"),
+        ("surrogate SKIP-vs-eject decision accuracy", "0.3908045", "0.3750000"),
+        ("conviction flag-count Spearman", "0.6991081", "0.5781584"),
+        ("conviction conversion-label accuracy", "0.9310344", "0.9375000"),
+        ("composed decision accuracy", "0.8620689", "0.8645833"),
+        ("composed exact-outcome match", "0.8160919", "0.7916666"),
+    ):
+        row = _row(result.rows, name)
+        assert row.measured.startswith(measured), row.measured
+        assert row.committed.startswith(committed), row.committed
+
+
+def test_the_stale_amnesty_stops_at_the_corpus_dependent_rows() -> None:
+    """A corpus-INDEPENDENT disagreement still FAILS during the stale period.
+
+    The grounding gap explains rows whose value is a measurement of frozen
+    weights against the corpus. It explains nothing about the weight hashes, the
+    manifest's configuration identity, or the composed adoption constraints:
+    those are the same on any corpus, so a regression in one of them must turn
+    the command red even while the ML fits are stale. This pins the boundary
+    from both sides — the amnesty's membership, and that it is not the whole leg.
+    """
+
+    result = vme.run_recompute(_context(_REPO_ROOT))
+    emitted = {row.name for row in result.rows}
+    # Every named row is a row the leg actually produces (run_recompute raises
+    # otherwise, so this is the readable statement of the same guard).
+    assert vme._CORPUS_DEPENDENT_RECOMPUTE_ROWS <= emitted
+    # And the leg is MORE than the amnesty: the corpus-independent rows exist,
+    # are outside it, and are green on this checkout rather than downgraded.
+    outside = emitted - vme._CORPUS_DEPENDENT_RECOMPUTE_ROWS - {"ML grounding"}
+    assert outside == {
+        "composed adoption constraints",
+        "composed manifest.json reproduces",
+        "surrogate weights sha256",
+        "conviction weights sha256",
+    }
+    for name in outside:
+        assert _row(result.rows, name).status == "OK", name
+    # No row outside the amnesty was downgraded.
+    for row in result.rows:
+        if row.status == "STALE" and row.name != "ML grounding":
+            assert row.name in vme._CORPUS_DEPENDENT_RECOMPUTE_ROWS, row.name
+
+
+def test_a_perturbed_weight_hash_fails_even_while_the_fits_are_stale(
+    tmp_path: Path,
+) -> None:
+    """The planted case: perturb a corpus-INDEPENDENT row and it goes red.
+
+    ``composed/manifest.json`` records the weight digests the composed runner was
+    assembled from — a fact about the artifacts, not about any corpus. Moving one
+    of them must FAIL, and the declared grounding gap must not launder it into
+    STALE. Without this, the amnesty's boundary would be asserted only by the
+    membership list above and never exercised.
+    """
+
+    import json
+
+    scratch = tmp_path / "repo"
+    _manifests(scratch)
+    for rel in (
+        vme.CORPUS_SET,
+        vme.SURROGATE_DIR,
+        vme.CONVICTION_DIR,
+        vme.ARTIFACTS_DOC,
+        "training/reports/report-ballot-surrogate.md",
+        "training/reports/report-conviction-model.md",
+        "training/reports/report-composed-runner.md",
+    ):
+        _link(scratch, rel)
+    composed = _copy(scratch, f"{vme.COMPOSED_DIR}/manifest.json")
+    for rel in sorted(path.name for path in (_REPO_ROOT / vme.COMPOSED_DIR).iterdir()):
+        if rel != "manifest.json":
+            _link(scratch, f"{vme.COMPOSED_DIR}/{rel}")
+    payload = json.loads(composed.read_text(encoding="utf-8"))
+    payload["surrogate_weights_sha256"] = "b" * 64
+    composed.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+    result = vme.run_recompute(_context(scratch))
+    assert _row(result.rows, "ML grounding").status == "STALE"  # the gap is declared
+    assert _row(result.rows, "surrogate weights sha256").status == "FAIL"
+    assert vme._failed(result.rows, complete=False)
+
+
+def test_an_undeclared_corpus_still_fails_the_grounding_row(tmp_path: Path) -> None:
+    """STALE is granted to ONE declared pair of digests, not to any mismatch.
+
+    The planted case behind the leniency above: a corpus that is neither the fit
+    corpus nor the one this checkout declares as the pending re-ground is an
+    undeclared substrate, and the grounding row FAILS on it. Without this, the
+    STALE branch would be an unconditional amnesty for corpus drift.
+    """
+
+    root = tmp_path / "repo"
+    _manifests(root)
+    _link(
+        root,
+        f"{vme.SURROGATE_DIR}/fit-corpus.json",
+        f"{vme.SURROGATE_DIR}/ballot-predictor.json",
+        f"{vme.SURROGATE_DIR}/ballot-predictor.json.sha256",
     )
-    assert _row(
-        result.rows, "surrogate SKIP-vs-eject decision accuracy"
-    ).measured.startswith("0.3750000")
-    assert _row(
-        result.rows, "conviction conversion-label accuracy"
-    ).measured.startswith("0.9375000")
-    assert _row(result.rows, "composed decision accuracy").measured.startswith(
-        "0.8645833"
+    corpus = root / vme.CORPUS_SET
+    corpus.mkdir(parents=True)
+    for child in sorted((_REPO_ROOT / vme.CORPUS_SET).iterdir()):
+        (corpus / child.name).symlink_to(child)
+    # One added recording moves the fingerprint off the declared digit string.
+    (corpus / "replay-seed-999999.jsonl").symlink_to(
+        _REPO_ROOT / vme.CORPUS_SET / "replay-seed-1000.jsonl"
     )
-    assert _row(result.rows, "composed exact-outcome match").measured.startswith(
-        "0.7916666"
-    )
+
+    row, stale = vme._grounding_row(root)
+    assert not stale
+    assert row.status == "FAIL"
+    assert "undeclared substrate" in row.detail
 
 
 def test_main_runs_the_cheap_legs_green_at_head(
@@ -459,7 +582,11 @@ def test_perturbed_replay_fails_the_corpus_leg(tmp_path: Path) -> None:
     assert "headless-seed-0" in row.detail
     # The unperturbed legs of the same run stay green, so the failure is located
     # rather than merely global.
-    assert _row(result.rows, "fit-corpus identity fingerprint").status == "OK"
+    # STALE, not OK: this checkout declares one grounding gap (the corpus was
+    # re-recorded under a frozen fit). What matters here is that it is not FAIL —
+    # the perturbation above is located in the row it perturbed, not smeared
+    # across the leg.
+    assert _row(result.rows, "fit-corpus identity fingerprint").status == "STALE"
     assert result.notes and "SAMPLE" in result.notes[0]
 
 

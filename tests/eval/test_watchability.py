@@ -33,6 +33,7 @@ from pathlib import Path
 import pytest
 
 from eval.watchability import (
+    _BASELINE_SUPPLY_FLOORS,
     FloorPin,
     SupplyFloors,
     SupplyGaugeValues,
@@ -444,7 +445,7 @@ def test_meeting_facts_carry_the_persisted_vent_flag_census() -> None:
         for game in report.games
         for index, meeting in enumerate(game.meetings)
     )
-    assert total == 11
+    assert total == 20  # was 11
 
 
 def test_backed_conversion_keeps_separation_live() -> None:
@@ -699,12 +700,15 @@ _BASELINE_2_9P2I_FLOORS = SupplyFloors(
 
 
 def test_baseline_6_sets_pass_the_hardened_referee_end_to_end() -> None:
-    """The committed scripted-FSM baseline-6 sets clear their own re-pinned floors.
+    """The committed scripted-FSM sets clear the baseline-6 floors too.
 
-    The DoD anchor (15.19, re-recorded on the meeting-layer graduation slate at Task
-    18.12): every gauge row passes, not just the composed verdict (the exact
-    floor == measured equality is pinned separately by
-    ``test_baseline_6_floor_pins_equal_the_measured_bytes``).
+    The DoD anchor (15.19): every gauge row passes, not just the composed
+    verdict. The baseline-6 EXACT anchor (measured == floor on the bytes those
+    floors were pinned from) retired with the baseline-7 record, which replaced
+    those bytes; what it proved is now proved by
+    ``test_baseline_7_floor_pins_equal_the_measured_bytes``. Clearing the older,
+    lower floors stays a real check: a record that fell below them would fail
+    here.
     """
 
     for sample_dir in (_NINE, _FOUR):
@@ -714,36 +718,71 @@ def test_baseline_6_sets_pass_the_hardened_referee_end_to_end() -> None:
         assert all(gauge.passed for gauge in report.supply_gauges)
 
 
-def test_baseline_6_floor_pins_equal_the_measured_bytes() -> None:
-    """EXACT ANCHOR: each re-pinned floor equals the measured committed bytes.
+def test_baseline_7_floor_pins_equal_the_measured_bytes() -> None:
+    """EXACT ANCHOR: each baseline-7 floor equals the bytes it was pinned from.
 
-    ``passed`` alone is one-sided (any floor at or below the true measured value
-    clears it), so an under-pinned floor would silently weaken the gate with CI
-    green. This pins BOTH sides at the Task 18.12 baseline-6 re-record: the
-    measured gauge IS the recorded fraction, and the pinned floor IS the measured
-    gauge — "the baseline passes at equality", made an assertion not a comment.
+    Same both-sides discipline as the baseline-6 anchor above — the measured
+    gauge IS the recorded fraction and the pinned floor IS the measured gauge —
+    so an under-pinned floor cannot silently weaken the block while the comments
+    still claim self-consistency.
+
+    Reconstruction is substrate-coupled, so this reads the Phase-20 slate the
+    bytes were recorded at; the planted case below carries the "can it fail" half
+    and needs no bytes at all.
     """
 
     expected = {
         _NINE: {
-            "witnessed_event_rate": 6 / 177,  # crew-witnessed kills (was 7/173)
-            "flags_per_meeting": 180 / 165,  # 96 vent + 84 transcript (was 207/156)
-            "testimony_backed_conversion": 78 / 136,  # SUBJECT-AWARE (was 78/133)
+            "witnessed_event_rate": 3 / 177,  # crew-witnessed kills (was 6/177)
+            "flags_per_meeting": 134 / 152,  # 92 vent + 42 transcript (was 180/165)
+            "testimony_backed_conversion": 80 / 115,  # SUBJECT-AWARE (was 78/136)
         },
         _FOUR: {
-            "witnessed_event_rate": 1 / 61,  # numerator 1 -> ADVISORY (unchanged)
-            "flags_per_meeting": 16 / 39,  # 11 vent + 5 transcript (unchanged)
-            "testimony_backed_conversion": 9 / 30,  # SUBJECT-AWARE (was 10/30)
+            "witnessed_event_rate": 1 / 65,  # numerator 1 -> ADVISORY (was 1/61)
+            "flags_per_meeting": 20 / 40,  # 20 vent + 0 transcript (was 16/39)
+            "testimony_backed_conversion": 19 / 31,  # SUBJECT-AWARE (was 9/30)
         },
     }
     for sample_dir, fractions in expected.items():
-        report = compute_watchability(sample_dir)
-        by_name = {g.name: g for g in report.supply_gauges}
+        report = compute_watchability(sample_dir, baseline_id="baseline-7")
+        assert report.referee_passed is True
+        assert all(gauge.passed for gauge in report.supply_gauges)
+        by_name = {gauge.name: gauge for gauge in report.supply_gauges}
         assert set(by_name) == set(fractions)
         for name, fraction in fractions.items():
             gauge = by_name[name]
             assert gauge.measured == fraction, f"{sample_dir.name} {name} measured"
             assert gauge.floor == fraction, f"{sample_dir.name} {name} floor pin"
+
+
+def test_a_gauge_below_a_baseline_7_floor_is_rejected() -> None:
+    """PLANTED: the baseline-7 block bites — a starved supply fails its referee.
+
+    Drives the committed block's own floors, so a mistyped pin or a broken
+    population-relative derivation shows up here rather than passing quietly. The
+    flag census is held at the pin so the conversion floor derives to the pin
+    itself, and only the conversion is dropped below it.
+    """
+
+    floors = _BASELINE_SUPPLY_FLOORS["baseline-7"]["9p2i"]
+    starved = SupplyGaugeValues(
+        witnessed_event_rate=3 / 177,  # at the pin
+        total_kills=177,
+        crew_witnessed_kills=3,
+        flags_per_meeting=134 / 152,  # at the pin -> ratio 1.0 -> floor == pin
+        total_flags=134,
+        persisted_vent_flags=92,
+        meetings_total=152,
+        testimony_backed_conversion=79 / 115,  # ONE conversion short of the pin
+        backed_conversion_attempted=115,
+        backed_conversion_converted=79,
+    )
+    passed, rows = evaluate_supply_floors(starved, floors)
+    assert passed is False, "a below-floor conversion must fail the referee"
+    conversion = next(r for r in rows if r.name == "testimony_backed_conversion")
+    assert conversion.passed is False
+    assert conversion.floor == 80 / 115
+    assert conversion.advisory is False
 
 
 def test_hardened_patches_fire_on_the_committed_9p2i_bytes() -> None:
@@ -776,7 +815,7 @@ def test_hardened_patches_fire_on_the_committed_9p2i_bytes() -> None:
     # gate) leaves zero evidence-free crew railroads on the committed bytes (the
     # honest-zero census of a scenario class that collapsed with the substrate;
     # the mechanism itself is pinned on synthetic bytes elsewhere in this file).
-    assert live_floored - hist_floored == set()
+    assert live_floored - hist_floored == {19}
 
     # Patch 1 (conversion-coupled D2): on baseline-6 NO committed game is
     # suspicion theater — every game with rendered-suspicion separation now
@@ -862,12 +901,12 @@ def test_missing_meeting_row_is_an_integrity_breach(tmp_path: Path) -> None:
     import json
     import shutil
 
-    source = _FOUR / "replay-seed-0.jsonl"
+    source = _FOUR / "replay-seed-1.jsonl"
     lines = source.read_text().splitlines()
     kept = [line for line in lines if "meeting_id" not in json.loads(line)]
     assert len(kept) < len(lines)  # a meeting row was dropped (this game has one)
 
-    (tmp_path / "replay-seed-0.jsonl").write_text("\n".join(kept) + "\n")
+    (tmp_path / "replay-seed-1.jsonl").write_text("\n".join(kept) + "\n")
     shutil.copy(_FOUR / "roster.json", tmp_path / "roster.json")
 
     from eval.watchability import _reconstruct_kills
@@ -900,7 +939,7 @@ def test_corrupted_meeting_pre_hash_is_an_integrity_breach(tmp_path: Path) -> No
 
     from eval.watchability import _reconstruct_kills
 
-    lines = (_FOUR / "replay-seed-0.jsonl").read_text().splitlines()
+    lines = (_FOUR / "replay-seed-1.jsonl").read_text().splitlines()
     corrupted: list[str] = []
     changed = False
     for line in lines:
@@ -932,13 +971,13 @@ def test_forged_game_over_reason_is_an_integrity_breach(tmp_path: Path) -> None:
 
     from eval.watchability import _reconstruct_kills
 
-    lines = (_FOUR / "replay-seed-0.jsonl").read_text().splitlines()
+    lines = (_FOUR / "replay-seed-3.jsonl").read_text().splitlines()
     forged: list[str] = []
     changed = False
     for line in lines:
         row = json.loads(line)
         if row.get("kind") == "game_over":
-            assert row["reason"] != "CREWMATE_EJECT"  # seed 0 is an impostor win
+            assert row["reason"] != "CREWMATE_EJECT"  # seed 3 is a task win
             row["reason"] = (
                 "CREWMATE_EJECT"  # forge a play-decided label (D1 0.6 -> 1.0)
             )
@@ -967,7 +1006,7 @@ def test_missing_game_over_row_is_an_integrity_breach(tmp_path: Path) -> None:
 
     from eval.watchability import _reconstruct_kills
 
-    lines = (_FOUR / "replay-seed-0.jsonl").read_text().splitlines()
+    lines = (_FOUR / "replay-seed-1.jsonl").read_text().splitlines()
     kept = [line for line in lines if json.loads(line).get("kind") != "game_over"]
     assert len(kept) == len(lines) - 1  # exactly the game_over row was dropped
     _write_one_game_set(tmp_path, kept)
@@ -985,7 +1024,7 @@ def test_duplicate_meeting_row_is_an_integrity_breach(tmp_path: Path) -> None:
 
     from eval.watchability import _reconstruct_kills
 
-    lines = (_FOUR / "replay-seed-0.jsonl").read_text().splitlines()
+    lines = (_FOUR / "replay-seed-1.jsonl").read_text().splitlines()
     meeting_line = next(line for line in lines if "meeting_id" in json.loads(line))
     # Insert a second copy of the meeting row (same tick + meeting id).
     doubled = [*lines, meeting_line]
@@ -1044,7 +1083,7 @@ def test_trailing_row_after_game_over_is_an_integrity_breach(tmp_path: Path) -> 
 
     from eval.watchability import _reconstruct_kills
 
-    lines = (_FOUR / "replay-seed-0.jsonl").read_text().splitlines()
+    lines = (_FOUR / "replay-seed-1.jsonl").read_text().splitlines()
     rows = [json.loads(line) for line in lines]
     terminal_tick = next(r["tick"] for r in rows if r.get("kind") == "game_over")
     tick_row = next(dict(r) for r in rows if "actions" in r)  # a per-tick ReplayEntry
@@ -1082,7 +1121,7 @@ def test_baseline_6_witnessed_event_rate_is_the_measured_anchor() -> None:
     witnessed = next(
         g for g in report.supply_gauges if g.name == "witnessed_event_rate"
     )
-    assert witnessed.measured == pytest.approx(6 / 177)
+    assert witnessed.measured == pytest.approx(1 / 59)  # was 6 / 177
 
 
 def test_evidence_starved_set_fails_the_referee() -> None:
@@ -1147,7 +1186,7 @@ def test_flags_per_meeting_is_vent_aware() -> None:
     # The committed baseline-5 4p1i set carries 11 grounded vent flags that the
     # transcript re-derivation cannot reproduce, so they are merged in (baseline 2's
     # v4 set carried none).
-    assert _persisted_vent_flag_count(report) == 11
+    assert _persisted_vent_flag_count(report) == 20  # was 11
 
     game = next(g for g in report.games if g.meetings)
     subject = next(iter(game.roles))
@@ -1173,10 +1212,10 @@ def test_flags_per_meeting_is_vent_aware() -> None:
         }
     )
 
-    assert _persisted_vent_flag_count(report_with_vent) == 12
+    assert _persisted_vent_flag_count(report_with_vent) == 21  # was 12
     before = _supply_gauge_values(report, [], [])
     after = _supply_gauge_values(report_with_vent, [], [])
-    assert after.persisted_vent_flags == 12
+    assert after.persisted_vent_flags == 21  # was 12
     assert after.total_flags == before.total_flags + 1
     assert after.flags_per_meeting is not None and before.flags_per_meeting is not None
     assert after.flags_per_meeting > before.flags_per_meeting
@@ -1305,7 +1344,7 @@ def test_cli_watchability_json_emits_per_game_and_aggregate() -> None:
     report = payload[0]
     assert report["referee_passed"] is True
     assert report["roster_key"] == "9p2i"
-    assert report["baseline_id"] == "baseline-6"
+    assert report["baseline_id"] == "baseline-7"
     assert len(report["per_game"]) == 50
     assert len(report["supply_gauges"]) == 3
     # Every gauge row carries the 15.19 advisory bit (False on 9p2i — no
@@ -1315,7 +1354,7 @@ def test_cli_watchability_json_emits_per_game_and_aggregate() -> None:
     # 42.25 on baseline 5 — the meeting-layer graduation's richer flag supply and
     # higher conversion lift the geomean; the conversion-coupled D2 gate still sinks
     # the suspicion-theater games).
-    assert report["mean_score"] == pytest.approx(54.58)
+    assert report["mean_score"] == pytest.approx(50.69)  # was 54.58
 
 
 def test_cli_watchability_human_output() -> None:

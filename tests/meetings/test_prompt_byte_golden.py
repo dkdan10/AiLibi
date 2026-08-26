@@ -175,23 +175,12 @@ _SAMPLE_SETS: tuple[Path, ...] = (
 # a bump-in-flight window. Retire an entry when no committed set stamps it any
 # longer (the adopting re-record).
 #
-# Task 20.31 re-opened the seam: the live ``qwen3_6_27b`` registry entry reads
-# v4, while both committed sample sets stamp ``*.qwen3_6_27b.v3``. The entry
-# below routes those recordings to ``prompt_archive/qwen3_6_27b_v3/``, a
-# byte-copy of the six pre-bump bodies (the four default templates because the
-# recorded stamps resolve through them, the two ``*_roll_call`` siblings so the
-# archived directory is a complete loadable set). Retire it — entry and fixture
-# bytes — at the adopting re-record, exactly as the 16.17 re-record retired the
-# ``qwen3_6_27b_v1`` entry before it.
+# EMPTY: every committed set stamps ``*.qwen3_6_27b.v4``, which the live
+# registry resolves, so the golden walks the committed goldens through the live
+# registry alone. The baseline-7 record retired the ``qwen3_6_27b_v3`` entry
+# 20.31 opened, and its archived bodies with it.
 _ARCHIVE_ROOT: Path = _REPO_ROOT / "tests" / "fixtures" / "prompt_archive"
-ARCHIVED_PROMPT_VERSION_SETS: Mapping[str, Mapping[str, str]] = {
-    "qwen3_6_27b_v3": {
-        "crewmate_report": "crewmate_report.qwen3_6_27b.v3",
-        "impostor_report": "impostor_report.qwen3_6_27b.v3",
-        "accusation_round": "accusation_round.qwen3_6_27b.v3",
-        "vote_ballot": "vote_ballot.qwen3_6_27b.v3",
-    },
-}
+ARCHIVED_PROMPT_VERSION_SETS: Mapping[str, Mapping[str, str]] = {}
 
 # The four render kinds, labelled by the manager seam that emits each. The
 # opening is split crewmate/impostor (both are ``ReportPromptRenderer``s); the
@@ -693,6 +682,13 @@ def _run_recorded_meeting(
             trigger=trigger,
             participants=participants,
             dead_ids=dead_ids,
+            # The SEEDED impostor count, derived exactly as the live loop derives
+            # it (orchestrator.game._run_meeting): render-only, and the persona
+            # sentence's number agreement rides on it, so omitting it renders a
+            # 9p2i meeting in 4p1i wording and every prompt lookup misses.
+            impostor_count=sum(
+                1 for player in state.players.values() if player.role == "IMPOSTOR"
+            ),
         )
     )
     hit_prompts = frozenset(call.prompt for call in stub.calls if call.hit)
@@ -1079,6 +1075,16 @@ def _first_meeting_state(
     raise AssertionError(f"{set_dir.name}: seed-0 has no resolved meeting to reuse")
 
 
+def _first_meeting_prompt_set() -> Mapping[str, str]:
+    """The ``prompt_versions`` stamp the 9p2i set's first meeting recorded."""
+
+    path = _seed_paths(_SAMPLE_SETS[0])[0]
+    for entry in read_all_entries(path):
+        if isinstance(entry, MeetingReplayEntry):
+            return entry.prompt_versions
+    raise AssertionError(f"{path.name}: no recorded meeting to read a stamp from")
+
+
 def test_impostor_report_opening_kind_is_exercised() -> None:
     """The fourth kind: drive an impostor opener through the real manager seam.
 
@@ -1112,19 +1118,12 @@ def test_impostor_report_opening_kind_is_exercised() -> None:
     participants = _build_participants(
         state=state, agents=agents, token_budget=DEFAULT_TOKEN_BUDGET
     )
-    # Resolve the committed sets' own recorded stamps and take that set's
-    # renderers from the same table the walk uses, so an archived stamp binds to
-    # its archived template dir rather than a directory that does not exist.
-    renderers = _canonical_renderers()[
-        resolve_prompt_set(
-            {
-                "accusation_round": "accusation_round.qwen3_6_27b.v3",
-                "crewmate_report": "crewmate_report.qwen3_6_27b.v3",
-                "impostor_report": "impostor_report.qwen3_6_27b.v3",
-                "vote_ballot": "vote_ballot.qwen3_6_27b.v3",
-            }
-        )
-    ]
+    # Resolve the set's OWN recorded stamps — read off the replay rather than
+    # written out here, so a prompt-set bump cannot leave this test pointing at a
+    # version no committed meeting stamps — and take that set's renderers from
+    # the same table the walk uses, so an archived stamp binds to its archived
+    # template dir rather than a directory that does not exist.
+    renderers = _canonical_renderers()[resolve_prompt_set(_first_meeting_prompt_set())]
     renders: list[_Render] = []
     stub = _RecordedResponseStub(responses={})
     manager = _tagging_manager(stub=stub, renderers=renderers, renders=renders)
@@ -1165,15 +1164,9 @@ def test_one_byte_template_perturbation_breaks_the_golden(
 ) -> None:
     """Flip one committed template byte; the byte golden must then FAIL.
 
-    The victim is the ARCHIVED ``qwen3_6_27b_v3/crewmate_report.j2`` — the body
-    the committed recordings actually re-render through while their
-    ``*.qwen3_6_27b.v3`` stamps resolve past the live v4 registry entry.
-    Perturbing the LIVE v4 set would be a no-op here: no committed byte
-    exercises it during the bump-in-flight window, so it would prove nothing.
-    (The v4 bodies are guarded instead by the render pins in
-    ``tests/agents/test_bespoke_prompt_sets.py`` and
-    ``tests/meetings/test_persona_render.py``.) Retarget this back to the live
-    set when the adopting re-record retires the archive entry.
+    The victim is the LIVE ``qwen3_6_27b/crewmate_report.j2`` — the body every
+    committed recording re-renders through now that the sets stamp
+    ``*.qwen3_6_27b.v4`` and the v3 archive entry has retired.
 
     Copy the template dirs under a scratch root, append one byte to that victim,
     build renderers against the perturbed root, and re-run ONE recorded meeting.
@@ -1188,7 +1181,7 @@ def test_one_byte_template_perturbation_breaks_the_golden(
         shutil.copytree(_PROMPTS_ROOT / name, perturbed_root / name)
     for name in ARCHIVED_PROMPT_VERSION_SETS:
         shutil.copytree(_ARCHIVE_ROOT / name, perturbed_root / name)
-    victim = perturbed_root / "qwen3_6_27b_v3" / "crewmate_report.j2"
+    victim = perturbed_root / "qwen3_6_27b" / "crewmate_report.j2"
     victim.write_bytes(victim.read_bytes() + b"\n")  # one-byte perturbation
 
     perturbed_renderers = {
@@ -1401,18 +1394,9 @@ _MEETINGS_HEADER = "## Meetings so far:"
 _MULTI_MEETING_REPLAY = _SAMPLE_SETS[0] / "replay-seed-0.jsonl"
 
 
-def _second_meeting_renders(
-    monkeypatch: pytest.MonkeyPatch, *, lever: str
-) -> tuple[str, ...]:
-    """Every prompt the walk renders for the SECOND meeting of one replay.
+def _second_meeting_renders() -> tuple[str, ...]:
+    """Every prompt the walk renders for the SECOND meeting of one replay."""
 
-    Driven with the meeting-outcome lever ``lever`` ("0"/"1"). Under the ON arm
-    the re-rendered prompts no longer match the recorded ones, so the stub misses
-    and the manager takes its fail-soft default path — which is fine here: this
-    asks what the RENDER contains, not whether it reproduces recorded bytes.
-    """
-
-    monkeypatch.setenv("AILIBI_MEETING_OUTCOME_MEMORY", lever)
     renderers_for_set = _canonical_renderers()
     game_map = load_canonical_map()
     for meeting in walk_replay_meetings(
@@ -1425,16 +1409,14 @@ def _second_meeting_renders(
     raise AssertionError(f"{_MULTI_MEETING_REPLAY.name}: no second meeting")
 
 
-def test_the_walk_folds_meeting_outcomes_into_the_memory_it_renders(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    # The mirror's half of the reconstruction parity: with the lever ON, the
-    # memory this walk renders the SECOND meeting from carries the FIRST
-    # meeting's announced outcome — the same rows the live loop wrote via
+def test_the_walk_folds_meeting_outcomes_into_the_memory_it_renders() -> None:
+    # The mirror's half of the reconstruction parity: the memory this walk
+    # renders the SECOND meeting from carries the FIRST meeting's announced
+    # outcome — the same rows the live loop wrote via
     # ``_notify_meeting_concluded`` while recording. A walk that skipped the fold
     # would render a memory no live agent ever held, and every prompt-byte
     # assertion built on it would be measuring the wrong thing.
-    prompts = _second_meeting_renders(monkeypatch, lever="1")
+    prompts = _second_meeting_renders()
     assert prompts
     assert any(_MEETINGS_HEADER in prompt for prompt in prompts)
 
@@ -1452,18 +1434,6 @@ def test_removing_the_fold_empties_the_block_the_previous_test_asserts(
         "fold_meeting_outcome_into_memories",
         lambda *args, **kwargs: None,
     )
-    prompts = _second_meeting_renders(monkeypatch, lever="1")
-    assert prompts
-    assert not any(_MEETINGS_HEADER in prompt for prompt in prompts)
-
-
-def test_the_fold_is_inert_on_the_committed_off_substrate(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    # Neutrality, asserted rather than assumed: the walk folds unconditionally,
-    # but with the lever OFF — the substrate every committed recording was made
-    # in — the channel reaches no rendered byte, which is why the whole golden
-    # above still reproduces the committed prompts.
-    prompts = _second_meeting_renders(monkeypatch, lever="0")
+    prompts = _second_meeting_renders()
     assert prompts
     assert not any(_MEETINGS_HEADER in prompt for prompt in prompts)
