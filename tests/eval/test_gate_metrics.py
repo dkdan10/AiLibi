@@ -983,7 +983,7 @@ def test_committed_flat_4p1i_report_pins_the_gate_metrics() -> None:
 
     assert genuine.supplied == 0  # was 1
     assert genuine.converted == 0  # was 1
-    assert genuine.conversion_rate == None
+    assert genuine.conversion_rate is None
     assert genuine.note == GENUINE_CLASS_GATE_NOTE
 
     # The Task-19.5 canary cell: the successor instrument the canary bands read.
