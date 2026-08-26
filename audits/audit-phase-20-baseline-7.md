@@ -649,12 +649,24 @@ affected tests raise on reconstruction rather than fail on a number.
 `verify_samples.sh` reports 100/100 and `verify_ml_evidence.py` reports 300/300 reconstruction
 (§1.1). What is in question is which substrate the repository declares as ambient.
 
-**A second, independent sweep item is recorded here so the ruling is made with it in view.**
-`tests/meetings/test_prompt_byte_golden.py` diverges on the meeting-level `state_hash_after`
-rebuild for `9p2i` seed 0 meeting 0 **even under the recorded slate** — its rebuild path needs
-substantive updating for a lever-ON meeting fold, not just a re-pinned constant. That work is
-part of the `tests/meetings/` sweep and is only worth doing once the substrate question is
-settled, because the shape of the fix depends on the answer.
+**Two further sweep items are recorded here so the ruling is made with them in view.**
+
+1. `tests/meetings/test_prompt_byte_golden.py` diverges on the meeting-level `state_hash_after`
+   rebuild for `9p2i` seed 0 meeting 0 **even under the recorded slate** — its rebuild path needs
+   substantive updating for a lever-ON meeting fold, not just a re-pinned constant. That work is
+   part of the `tests/meetings/` sweep and is only worth doing once the substrate question is
+   settled, because the shape of the fix depends on the answer. It is also why the v3
+   prompt-archive retirement is not taken here: retiring the archive without being able to run
+   the golden or its one-byte perturbation leg would be an unverified change to a gate.
+2. **The byte-coupled pin census is wider than the contract's.** The contract's census starts
+   from `grep -rln 'replays/samples\|replays/ml_corpus' tests/` (38 files) plus the Phase-20
+   instrument tests. It misses at least one pin outside `tests/`:
+   `frontend/src/lib/bodies.test.ts` recomputes a `corpusSha256` digest over
+   `replays/samples/<set>` on every run and compares it to `bodies.fixture.json`, alongside
+   census assertions (`games`, `frames`, body-state counts) folded from the same bytes. The
+   frontend suite therefore fails on this record, and regenerating the fixture alone would not
+   fix it — the census assertions in the test body move too. Whoever runs the sweep should start
+   from a repo-wide grep, not a `tests/`-scoped one.
 
 Amending the pre-registration is not available: §11's convention is that amendments "land BEFORE
 the record or not at all for this phase's claims."
