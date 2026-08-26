@@ -123,9 +123,15 @@ the task that made the change, not every task that mentions it.
 | `G-38` | The spectator misrepresented four action classes and never cleared bodies | 20.16 | [#370](https://github.com/dkdan10/AiLibi/pull/370) |
 | `G-41` | Internal jargon and task numbers were on the product surface | 20.2 | [#360](https://github.com/dkdan10/AiLibi/pull/360) |
 
-`G-37` is the one row where "closed" means *labelled*: the clock convention is documented on
-the spectator surface rather than changed, because changing it would move every recorded tick
-stamp ([`../audit-phase-20-planning.md`](../audit-phase-20-planning.md) §5).
+Four rows want a qualification, and it is better stated than glossed. `G-37` was *labelled*
+rather than changed — the clock convention is documented on the spectator surface, because
+changing it would move every recorded tick stamp
+([`../audit-phase-20-planning.md`](../audit-phase-20-planning.md) §5). `C-88` was *disclosed*:
+the front door now explains why a run against the offline provider ejects nobody and reports
+null rates, and hands the reader a real report instead. `C-101` and `C-107` name structural
+gaps that one task each *began* closing — the first component-level render test, and the first
+session-scoped fixture behind a parallel runner — rather than gaps a single change could
+close; the remainder of both sits in the tail below.
 
 ---
 
@@ -147,10 +153,11 @@ None of these are re-argued here; each points at the ruling that owns it.
 - **The history rewrite** — untracking the regenerable report JSONs and rewriting git history
   to shrink the pack (`C-45`) needs a build step the demo bundle and CI would both have to
   grow; recorded, not done (§5 item 6 and §7 of the same audit).
-- **The remaining tail** — roughly 94 P2 code findings and the text-hygiene remainder
-  (`G-26`, `G-36`, `G-29` beyond the prompt change), plus the agent-clock convention itself
-  (`G-37`). Triaged and listed in §7; the phase's divergences from the review's own roadmap,
-  with reasons, are in §5.
+- **The remaining tail** — roughly 94 P2 code findings, the walker consolidation's flag matrix
+  (`C-37`), the text-hygiene remainder (`G-26`, `G-36`, `G-29` beyond the prompt change), and
+  the agent-clock convention itself, which was labelled rather than changed (`G-37`, above).
+  Triaged and listed in §7; the phase's divergences from the review's own roadmap, with
+  reasons, are in §5 of the same audit.
 
 ---
 
