@@ -104,6 +104,8 @@ so changing this directory's file set without restating that row turns
 - docs/artifacts.md; (the docs/media/ registry row count)
 - docs/media/spectator-meeting.png; (re-shot from the re-recorded featured seed so the hero still pictures a game the repository contains)
 
+Recorded at merge (PR #392, orchestrator-ratified): the clip shipped as .webm, not .mp4 — Playwright's bundled ffmpeg carries only png/libvpx encoders and the recipe's point is one-command regeneration; GitHub's sanitizer strips <video> from the README so the map-bearing GIF is the inline motion asset wrapped in a link to the clip (condition for reversing recorded in docs/media/README.md). Routed to 20.42's ledger: no standing gate asserts a DEFAULT 1440×900 arrival shows the whole map (journey.spec.ts pins 1280×800 and 1000×640 only; the dock covered the map until the Timeline drawer collapsed). A prose record, not scope entries.
+
 **Files NOT in scope:**
 - frontend/src (no UI change: the body layer, the dock and the fog switcher all landed earlier in this phase — if the capture wants a UI change to look good, the capture is wrong)
 - replays/ (reads the committed bytes; nothing re-records here)
