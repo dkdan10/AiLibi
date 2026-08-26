@@ -2032,46 +2032,35 @@ class TestImpostorEjectionBarrier:
         assert [target.player_id for target in ranking] == ["survivor"]
 
     @pytest.mark.slow
-    def test_seed_36_tick_50_kills_instead_of_ranking_the_ejected_player(self) -> None:
-        # The demonstrable case (A/verdicts.md claim 12): p-6 was ejected at the
-        # tick-35 meeting boundary and its tick-24 sighting still heads the FROZEN
-        # scoring static -- the one the ES option enumerators call, which this
-        # repair does not touch. The decision ranking drops it and the co-located,
-        # isolated, cooldown-0 p-7 is killed instead.
-        decision = next(
-            row
-            for row in reconstruct_impostor_decisions(_SAMPLES_9P2I, seed=36)
-            if row.tick == 50 and row.actor == "p-2"
-        )
-        frozen = _frozen_static_ranking(decision.memory)
+    def test_no_committed_decision_ranks_an_already_ejected_player(self) -> None:
+        # The barrier, stated over the whole set rather than through one seed.
+        # The two exemplars 20.32 pinned (samples/9p2i seed 36 tick 50 and seed 31
+        # p-5) were baseline-6 decisions and do not exist in this record; what
+        # they demonstrated is asserted here across every committed 9p2i decision:
+        # once a player is ejected at a meeting boundary, no later ranking names
+        # them, however high the FROZEN scoring static still scores them.
+        from orchestrator.replay import MeetingReplayEntry, read_all_entries
 
-        assert frozen[0].player_id == "p-6"
-        assert [target.player_id for target in decision.ranked] == ["p-7", "p-9"]
-        assert isinstance(decision.intent, KillIntent)
-        assert decision.intent.payload.target == "p-7"
-        # The recording walked away instead; that is the kill the defect cost.
-        assert decision.recorded["type"] == "move"
-
-    @pytest.mark.slow
-    def test_seed_31_never_ranks_the_ejected_p1_after_its_meeting(self) -> None:
-        # The window the review attributed to a dead subject (C-4 / G-12): p-1
-        # heads p-5's ranking up to the meeting and never appears in one again.
-        rows = [
-            row
-            for row in reconstruct_impostor_decisions(_SAMPLES_9P2I, seed=31)
-            if row.actor == "p-5"
-        ]
-        headed = [
-            row.tick for row in rows if row.ranked and row.ranked[0].player_id == "p-1"
-        ]
-        after = [
-            row.tick
-            for row in rows
-            if row.tick >= 14 and any(t.player_id == "p-1" for t in row.ranked)
-        ]
-
-        assert headed and max(headed) < 14
-        assert after == []
+        offenders: list[tuple[int, int, str]] = []
+        ranked_any = 0
+        for seed in range(50):
+            replay = _SAMPLES_9P2I / f"replay-seed-{seed}.jsonl"
+            ejected_from = {
+                entry.ejected_player_id: entry.tick
+                for entry in read_all_entries(replay)
+                if isinstance(entry, MeetingReplayEntry)
+                and entry.ejected_player_id is not None
+            }
+            if not ejected_from:
+                continue
+            for row in reconstruct_impostor_decisions(_SAMPLES_9P2I, seed=seed):
+                for target in row.ranked:
+                    ranked_any += 1
+                    since = ejected_from.get(target.player_id)
+                    if since is not None and row.tick > since:
+                        offenders.append((seed, row.tick, target.player_id))
+        assert ranked_any > 0, "the walk ranked nobody -- the pin would be vacuous"
+        assert offenders == []
 
 
 class TestImpostorRefutedSighting:
@@ -2212,21 +2201,23 @@ class TestCommittedCorpusTargetingPins:
         assert after.decline_reason_other == 0
         assert after.decline_reason_fellow_defer == 6
         assert after.decline_reason_cover == 2
-        # The reconstruction still walks every decision the recording holds.
-        assert (
-            after.decisions_reconstructed == before.decisions_reconstructed == 1750
-        )  # was 1750
-        assert after.in_vent_decisions == before.in_vent_decisions == 130
+        # The reconstruction still walks every decision the recording holds. The
+        # frozen ``before`` describes the BASELINE-6 bytes (2,461 decisions, 130
+        # in-vent), which the record replaced, so the two are no longer
+        # comparable and only the measured side is pinned.
+        assert after.decisions_reconstructed == 1750
+        assert after.in_vent_decisions == 111
 
     @pytest.mark.slow
     def test_no_recorded_kill_is_lost(self) -> None:
         # The loss guard: a repair that gains free kills must not silently drop one
         # the recording made. Every recorded kill state re-emits the same intent.
+        # Baseline 6 recorded 225 / 640 / 64 / 57.
         for name, recorded_kills in (
-            ("samples/9p2i", 225),
-            ("ml_corpus/9p2i", 640),
-            ("samples/4p1i", 64),
-            ("ml_corpus/4p1i", 57),
+            ("samples/9p2i", 220),
+            ("ml_corpus/9p2i", 663),
+            ("samples/4p1i", 67),
+            ("ml_corpus/4p1i", 61),
         ):
             cells = self._targeting(name)
             assert cells.recorded_kill_decisions == recorded_kills
