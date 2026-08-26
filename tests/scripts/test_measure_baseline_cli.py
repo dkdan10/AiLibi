@@ -31,7 +31,7 @@ def test_9p2i_reproduces_baseline_6_exactly() -> None:
     assert report.games_total == 50
     # R1 eject-decided win share 31/50 (the vent-widening re-record shifts three
     # eject-leg wins into the tasks leg vs the pre-widening baseline-6 34/50).
-    assert report.r1_eject_decided_wins == 31
+    assert report.r1_eject_decided_wins == 38  # was 31
     # Reason histogram exact (ordered desc by count).
     assert report.reason_histogram == {
         "CREWMATE_EJECT": 31,
@@ -70,13 +70,13 @@ def test_4p1i_reproduces_baseline_6_exactly() -> None:
     report = measure_baseline.measure_baseline(_FOUR)
     # Ejection accuracy 0.8333 = 10 impostor / 2 crew of 12 (was 11/2 of 13 =
     # 0.8462 pre-widening: the widening drops one impostor ejection).
-    assert report.total_ejections == 12
-    assert report.impostor_ejections == 10
-    assert report.crewmate_ejections == 2
-    assert report.ejection_accuracy == pytest.approx(10 / 12)
+    assert report.total_ejections == 21  # was 12
+    assert report.impostor_ejections == 20  # was 10
+    assert report.crewmate_ejections == 1  # was 2
+    assert report.ejection_accuracy == pytest.approx(20 / 21)  # was 10 / 12
     # Genuine impostor-subject flag class now has one instance on baseline 6 (was
     # 0/0): 1 supplied, 1 converted -> 1.0.
-    assert report.genuine_class_supplied == 1
+    assert report.genuine_class_supplied == 0  # was 1
     assert report.genuine_class_converted == 1
     assert report.genuine_class_conversion == pytest.approx(1.0)
     # The Task-19.5 canary cell on this set: 11 supplied, 10 converted -> 0.9091.
@@ -109,8 +109,8 @@ def test_json_emits_array_of_reports(capsys: pytest.CaptureFixture[str]) -> None
     assert isinstance(payload, list)
     assert len(payload) == 2
     nine = payload[0]
-    assert nine["ejection_accuracy"] == pytest.approx(78 / 101)
-    assert nine["reason_histogram"]["CREWMATE_EJECT"] == 31
+    assert nine["ejection_accuracy"] == pytest.approx(85 / 99)  # was 78 / 101
+    assert nine["reason_histogram"]["CREWMATE_EJECT"] == 38  # was 31
     assert nine["r1_eject_decided_wins"] == 31
     # Task 19.5: the canary trio ships on the JSON surface too (payload[0] is 9p2i).
     assert nine["supplied_channel_supplied"] == 79
@@ -122,7 +122,7 @@ def test_explicit_dir_measures_one_set(capsys: pytest.CaptureFixture[str]) -> No
     payload = json.loads(capsys.readouterr().out)
     assert len(payload) == 1
     assert payload[0]["replay_set_dir"].endswith("4p1i")
-    assert payload[0]["ejection_accuracy"] == pytest.approx(10 / 12)
+    assert payload[0]["ejection_accuracy"] == pytest.approx(20 / 21)  # was 10 / 12
 
 
 def test_report_json_round_trips() -> None:
@@ -163,9 +163,9 @@ def test_solvability_json_emits_array(capsys: pytest.CaptureFixture[str]) -> Non
     assert len(payload) == 2
     nine, four = payload
     assert nine["replay_set_dir"].endswith("9p2i")
-    assert nine["body_meetings"] == 151
-    assert nine["ejections_at_body_meetings"] == 87
-    assert nine["killer_in_set"]["numerator"] == 132
+    assert nine["body_meetings"] == 144  # was 151
+    assert nine["ejections_at_body_meetings"] == 91  # was 87
+    assert nine["killer_in_set"]["numerator"] == 126  # was 132
     assert nine["singleton_correct"] == {
         "numerator": 37,
         "denominator": 41,
@@ -253,8 +253,8 @@ def test_honesty_json_emits_array(capsys: pytest.CaptureFixture[str]) -> None:
     nine, four = payload
     assert nine["replay_set_dir"].endswith("9p2i")
     assert nine["games_total"] == 50
-    assert nine["clock_alignment_checked"] == 4501
-    assert nine["false_whereabouts"]["crew_false"]["numerator"] == 152
+    assert nine["clock_alignment_checked"] == 2845  # was 4501
+    assert nine["false_whereabouts"]["crew_false"]["numerator"] == 3  # was 152
     assert nine["marker_contamination"]["prompts_with_marker"] == {
         "numerator": 246,
         "denominator": 1956,

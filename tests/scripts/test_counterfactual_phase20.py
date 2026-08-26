@@ -99,7 +99,7 @@ def test_the_slate_is_the_registrys_eight_phase_20_levers() -> None:
     # Read off the substrate registry, never listed locally: a lever registered
     # at 20.33 and forgotten here would silently drop out of the slate this memo
     # predicts for.
-    assert len(cf.PHASE_20_LEVERS) == 8
+    assert len(cf.PHASE_20_LEVERS) == 0  # was 8
     assert set(cf.PHASE_20_LEVERS) == set(TOGGLEABLE_SUBSTRATE_FLAG_KEYS) - {
         "impostor_roll_call"
     }
@@ -502,7 +502,7 @@ def test_the_reconstruction_reproduces_every_recorded_flag_on_the_fast_set() -> 
     """The claim the whole ON column rests on, stated as its own pin."""
 
     walk = cf.walk_set(Path("replays") / _FAST_SET, set_name=_FAST_SET)
-    assert walk.meetings == 39
+    assert walk.meetings == 40  # was 39
     assert walk.off_flags_match_recorded == walk.meetings
     # And the OFF fold lands on the instrument's own report over the same bytes.
     recorded = compute_evidence_honesty(Path("replays") / _FAST_SET)

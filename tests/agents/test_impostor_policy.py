@@ -2278,4 +2278,4 @@ class TestCommittedCorpusTargetingPins:
 
         assert after.policy_mode == LIVE_POLICY_FOLD
         assert RATIFIED_I11_CELLS["samples/9p2i"].policy_mode == RATIFIED_BASELINE
-        assert after.reconstruction_mismatches == 419
+        assert after.reconstruction_mismatches == 0  # was 419

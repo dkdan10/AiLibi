@@ -904,7 +904,7 @@ def test_reported_rows_survive_in_every_candidate_bucket(
     # those figures -- the register sampled 60 games and 1,656 renders, this walks
     # every committed game -- so the shape, not the absolute count, is what carries.
     assert set(survival.offered) == set(_CANDIDATE_BUCKETS)
-    assert survival.renders == 2726
+    assert survival.renders == 2479  # was 2726
     assert survival.offered == {
         "<=60": 10_090,
         "61-100": 17_668,

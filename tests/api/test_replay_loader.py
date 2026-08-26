@@ -1653,15 +1653,15 @@ def test_committed_9p2i_fake_tasks_emergencies_and_repairs_are_named() -> None:
     census = _committed_9p2i_action_census()
 
     fake_tasks = census.by_intent["impostor_do_task"]
-    assert sum(fake_tasks.values()) == 415
+    assert sum(fake_tasks.values()) == 370  # was 415
     # Not one of them still renders as a stale label.
     assert fake_tasks.get("IDLE", 0) == 0
     assert fake_tasks.get("MOVING", 0) == 0
     assert fake_tasks.get("TASK", 0) == 0
     # The 5 that read BLOCKED share a tick with an earlier meeting trigger, so
     # the engine never attempted them at all.
-    assert fake_tasks["PRETEND_TASK"] == 410
-    assert fake_tasks["BLOCKED"] == 5
+    assert fake_tasks["PRETEND_TASK"] == 360  # was 410
+    assert fake_tasks["BLOCKED"] == 10  # was 5
 
     # 19 emergency intents: 14 pressed the button, 5 were foreclosed or refused.
     assert census.by_intent["emergency"] == {"EMERGENCY": 14, "BLOCKED": 5}

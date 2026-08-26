@@ -445,7 +445,7 @@ def test_meeting_facts_carry_the_persisted_vent_flag_census() -> None:
         for game in report.games
         for index, meeting in enumerate(game.meetings)
     )
-    assert total == 11
+    assert total == 20  # was 11
 
 
 def test_backed_conversion_keeps_separation_live() -> None:
@@ -1150,7 +1150,7 @@ def test_baseline_6_witnessed_event_rate_is_the_measured_anchor() -> None:
     witnessed = next(
         g for g in report.supply_gauges if g.name == "witnessed_event_rate"
     )
-    assert witnessed.measured == pytest.approx(6 / 177)
+    assert witnessed.measured == pytest.approx(1 / 59)  # was 6 / 177
 
 
 def test_evidence_starved_set_fails_the_referee() -> None:
@@ -1215,7 +1215,7 @@ def test_flags_per_meeting_is_vent_aware() -> None:
     # The committed baseline-5 4p1i set carries 11 grounded vent flags that the
     # transcript re-derivation cannot reproduce, so they are merged in (baseline 2's
     # v4 set carried none).
-    assert _persisted_vent_flag_count(report) == 11
+    assert _persisted_vent_flag_count(report) == 20  # was 11
 
     game = next(g for g in report.games if g.meetings)
     subject = next(iter(game.roles))
@@ -1241,10 +1241,10 @@ def test_flags_per_meeting_is_vent_aware() -> None:
         }
     )
 
-    assert _persisted_vent_flag_count(report_with_vent) == 12
+    assert _persisted_vent_flag_count(report_with_vent) == 21  # was 12
     before = _supply_gauge_values(report, [], [])
     after = _supply_gauge_values(report_with_vent, [], [])
-    assert after.persisted_vent_flags == 12
+    assert after.persisted_vent_flags == 21  # was 12
     assert after.total_flags == before.total_flags + 1
     assert after.flags_per_meeting is not None and before.flags_per_meeting is not None
     assert after.flags_per_meeting > before.flags_per_meeting

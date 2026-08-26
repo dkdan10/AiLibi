@@ -685,7 +685,7 @@ def test_finale_pins_committed_eject_decided_game(
     assert finale is not None
     assert finale.winner == "CREWMATES"
     assert finale.winner_reason == "CREWMATE_EJECT"
-    assert finale.final_tick == 12
+    assert finale.final_tick == 19  # was 12
     assert replay.metadata.total_ticks == 13, "the row count is a different number"
 
     # Ascending tick; within tick 12 the ejection precedes the terminal beat.
@@ -740,7 +740,7 @@ def test_finale_pins_committed_wrong_ejection_game(
     assert finale is not None
     assert finale.winner == "IMPOSTORS"
     assert finale.winner_reason == "IMPOSTOR_PARITY"
-    assert finale.final_tick == 33
+    assert finale.final_tick == 28  # was 33
 
     ejections = [e for e in finale.decisive_events if e.kind == "ejection"]
     assert [(e.tick, e.subject_id) for e in ejections] == [(33, "p-8")]

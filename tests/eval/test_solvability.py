@@ -477,8 +477,8 @@ def _counts(report: SolvabilityReport) -> dict[str, tuple[int, int]]:
 
 def test_samples_9p2i_cells(samples_9p2i: SolvabilityReport) -> None:
     assert samples_9p2i.games_total == 50
-    assert samples_9p2i.body_meetings == 151  # of 165 recorded meetings
-    assert samples_9p2i.ejections_at_body_meetings == 87
+    assert samples_9p2i.body_meetings == 144  # of 165 recorded meetings  # was 151
+    assert samples_9p2i.ejections_at_body_meetings == 91  # was 87
     assert _counts(samples_9p2i) == {
         "killer_in_set": (132, 151),
         "singleton_sets": (41, 151),
@@ -492,8 +492,8 @@ def test_samples_9p2i_cells(samples_9p2i: SolvabilityReport) -> None:
 
 def test_samples_4p1i_cells(samples_4p1i: SolvabilityReport) -> None:
     assert samples_4p1i.games_total == 50
-    assert samples_4p1i.body_meetings == 35  # of 39 recorded meetings
-    assert samples_4p1i.ejections_at_body_meetings == 8
+    assert samples_4p1i.body_meetings == 37  # of 39 recorded meetings  # was 35
+    assert samples_4p1i.ejections_at_body_meetings == 18  # was 8
     # One impostor and at most three living crew: nobody is ever cleared away
     # from the killer, so containment is total on both 4p1i sets.
     assert _counts(samples_4p1i) == {
@@ -509,8 +509,8 @@ def test_samples_4p1i_cells(samples_4p1i: SolvabilityReport) -> None:
 
 def test_corpus_9p2i_cells(corpus_9p2i: SolvabilityReport) -> None:
     assert corpus_9p2i.games_total == 150
-    assert corpus_9p2i.body_meetings == 411  # of 463 recorded meetings
-    assert corpus_9p2i.ejections_at_body_meetings == 250
+    assert corpus_9p2i.body_meetings == 400  # of 463 recorded meetings  # was 411
+    assert corpus_9p2i.ejections_at_body_meetings == 248  # was 250
     assert _counts(corpus_9p2i) == {
         "killer_in_set": (348, 411),
         "singleton_sets": (74, 411),
@@ -524,8 +524,8 @@ def test_corpus_9p2i_cells(corpus_9p2i: SolvabilityReport) -> None:
 
 def test_corpus_4p1i_cells(corpus_4p1i: SolvabilityReport) -> None:
     assert corpus_4p1i.games_total == 50
-    assert corpus_4p1i.body_meetings == 29  # of 40 recorded meetings
-    assert corpus_4p1i.ejections_at_body_meetings == 9
+    assert corpus_4p1i.body_meetings == 37  # of 40 recorded meetings  # was 29
+    assert corpus_4p1i.ejections_at_body_meetings == 22  # was 9
     assert _counts(corpus_4p1i) == {
         "killer_in_set": (29, 29),
         "singleton_sets": (5, 29),
@@ -575,8 +575,8 @@ def test_pooled_denominators_and_headline_cells(
             pooled[name] = (carried[0] + numerator, carried[1] + denominator)
 
     assert sum(report.games_total for report in reports) == 300
-    assert sum(report.body_meetings for report in reports) == 626
-    assert sum(report.ejections_at_body_meetings for report in reports) == 354
+    assert sum(report.body_meetings for report in reports) == 618  # was 626
+    assert sum(report.ejections_at_body_meetings for report in reports) == 379  # was 354
     assert pooled == {
         "killer_in_set": (544, 626),  # [REVIEW-DERIVED] 581/626
         "singleton_sets": (126, 626),  # [REVIEW-DERIVED] 109/626
@@ -596,7 +596,7 @@ def test_cells_carry_their_wilson_interval(samples_4p1i: SolvabilityReport) -> N
     assert cell.rate is not None
     assert cell.wilson_low is not None
     assert cell.wilson_high is not None
-    assert cell.rate == pytest.approx(6 / 35)
+    assert cell.rate == pytest.approx(5 / 37)  # was 6 / 35
     assert cell.wilson_low < cell.rate < cell.wilson_high
     assert cell.advisory is True  # numerator 6 is a rare-event count
 

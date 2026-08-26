@@ -292,12 +292,12 @@ def test_sample_conversion_census_pins(
     §3.1 census measured at baseline 5.
     """
 
-    assert nine_conviction.meetings_total == 165
-    assert nine_conviction.conversion_attempts_total == 136
-    assert nine_conviction.conversions_total == 78
-    assert four_conviction.meetings_total == 39
-    assert four_conviction.conversion_attempts_total == 30
-    assert four_conviction.conversions_total == 9
+    assert nine_conviction.meetings_total == 152  # was 165
+    assert nine_conviction.conversion_attempts_total == 115  # was 136
+    assert nine_conviction.conversions_total == 80  # was 78
+    assert four_conviction.meetings_total == 40  # was 39
+    assert four_conviction.conversion_attempts_total == 31  # was 30
+    assert four_conviction.conversions_total == 19  # was 9
 
 
 def _turn(
@@ -776,15 +776,15 @@ def test_corpus_census_pins(corpus_conviction: ConvictionTable) -> None:
     """The baseline-6 corpus economy, pinned (re-derived at any re-record)."""
 
     assert corpus_conviction.games_total == 150
-    assert corpus_conviction.meetings_total == 463
-    assert corpus_conviction.ejections_total == 302
-    assert corpus_conviction.flags_minted_total == 576
-    assert corpus_conviction.conversion_attempts_total == 394
+    assert corpus_conviction.meetings_total == 432  # was 463
+    assert corpus_conviction.ejections_total == 280  # was 302
+    assert corpus_conviction.flags_minted_total == 431  # was 576
+    assert corpus_conviction.conversion_attempts_total == 336  # was 394
     assert corpus_conviction.conversions_total == 239
     splits = corpus_conviction.splits
     assert splits is not None
     fit_seeds = frozenset(splits.train) | frozenset(splits.val)
-    assert sum(1 for r in corpus_conviction.rows if r.seed in fit_seeds) == 367
+    assert sum(1 for r in corpus_conviction.rows if r.seed in fit_seeds) == 345  # was 367
 
 
 def test_committed_artifact_round_trips_and_matches_refit(

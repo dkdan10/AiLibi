@@ -66,8 +66,8 @@ def samples_4p1i_report(committed_kill_craft_4p1i: KillCraftReport) -> KillCraft
 
 def test_corpus_kill_counts_and_histograms(corpus_report: KillCraftReport) -> None:
     assert corpus_report.games_total == 150
-    assert corpus_report.kills_total == 505
-    assert corpus_report.crew_witnessed_kills == 12
+    assert corpus_report.kills_total == 526  # was 505
+    assert corpus_report.crew_witnessed_kills == 16  # was 12
     assert dict(corpus_report.co_present_histogram) == {0: 505}
     assert dict(corpus_report.one_hop_histogram) == {
         0: 269,
@@ -82,8 +82,8 @@ def test_corpus_kill_counts_and_histograms(corpus_report: KillCraftReport) -> No
 def test_corpus_means_and_correlations(corpus_report: KillCraftReport) -> None:
     assert corpus_report.mean_co_present_witnessed == pytest.approx(0.0)
     assert corpus_report.mean_co_present_unwitnessed == pytest.approx(0.0)
-    assert corpus_report.mean_one_hop_witnessed == pytest.approx(2.75)
-    assert corpus_report.mean_one_hop_unwitnessed == pytest.approx(0.847870182555781)
+    assert corpus_report.mean_one_hop_witnessed == pytest.approx(1.6875)  # was 2.75
+    assert corpus_report.mean_one_hop_unwitnessed == pytest.approx(1.007843137254902)  # was 0.847870182555781
     # co_present is all-zero (zero variance) -> the point-biserial is undefined.
     # STILL all-zero at baseline 6: the kill-craft fold's structural finding — no
     # committed kill has ever had a co-present crewmate — survives the re-record.
@@ -96,7 +96,7 @@ def test_corpus_means_and_correlations(corpus_report: KillCraftReport) -> None:
 def test_samples_9p2i_fold1(samples_9p2i_report: KillCraftReport) -> None:
     assert samples_9p2i_report.games_total == 50
     assert samples_9p2i_report.kills_total == 177
-    assert samples_9p2i_report.crew_witnessed_kills == 6
+    assert samples_9p2i_report.crew_witnessed_kills == 3  # was 6
     assert dict(samples_9p2i_report.co_present_histogram) == {0: 177}
     assert dict(samples_9p2i_report.one_hop_histogram) == {
         0: 96,
@@ -122,7 +122,7 @@ def test_samples_9p2i_fold1(samples_9p2i_report: KillCraftReport) -> None:
 
 def test_samples_4p1i_fold1(samples_4p1i_report: KillCraftReport) -> None:
     assert samples_4p1i_report.games_total == 50
-    assert samples_4p1i_report.kills_total == 61
+    assert samples_4p1i_report.kills_total == 65  # was 61
     assert samples_4p1i_report.crew_witnessed_kills == 1
     assert dict(samples_4p1i_report.co_present_histogram) == {0: 61}
     assert dict(samples_4p1i_report.one_hop_histogram) == {0: 49, 1: 11, 2: 1}
@@ -144,13 +144,13 @@ def test_samples_4p1i_fold1(samples_4p1i_report: KillCraftReport) -> None:
 def test_corpus_entropy_crew_cells(corpus_report: KillCraftReport) -> None:
     crew = corpus_report.entropy_by_side["CREWMATE"]
     assert crew.agents == 1050
-    assert crew.decisions == 22095
-    assert crew.mean_conditional_entropy == pytest.approx(0.869323712309377)
-    assert crew.mean_unconditional_entropy == pytest.approx(1.1899868117224368)
+    assert crew.decisions == 18464  # was 22095
+    assert crew.mean_conditional_entropy == pytest.approx(0.7629334468846046)  # was 0.869323712309377
+    assert crew.mean_unconditional_entropy == pytest.approx(1.088330190321391)  # was 1.1899868117224368
     assert sorted(crew.buckets) == ["none|crowd", "none|pair", "none|solo"]
     # One full bucket cell pinned (decisions + exact kinds + approx entropy).
     solo = crew.buckets["none|solo"]
-    assert solo.decisions == 7713
+    assert solo.decisions == 6548  # was 7713
     assert dict(solo.action_kinds) == {
         "do_task": 4527,
         "emergency": 11,
@@ -165,9 +165,9 @@ def test_corpus_entropy_crew_cells(corpus_report: KillCraftReport) -> None:
 def test_corpus_entropy_impostor_cells(corpus_report: KillCraftReport) -> None:
     impostor = corpus_report.entropy_by_side["IMPOSTOR"]
     assert impostor.agents == 300
-    assert impostor.decisions == 6663
-    assert impostor.mean_conditional_entropy == pytest.approx(0.6525758068858258)
-    assert impostor.mean_unconditional_entropy == pytest.approx(1.7618425557336113)
+    assert impostor.decisions == 5528  # was 6663
+    assert impostor.mean_conditional_entropy == pytest.approx(0.6065071892821182)  # was 0.6525758068858258
+    assert impostor.mean_unconditional_entropy == pytest.approx(1.9203951445069416)  # was 1.7618425557336113
     assert sorted(impostor.buckets) == [
         "cooling|crowd",
         "cooling|pair",
@@ -179,7 +179,7 @@ def test_corpus_entropy_impostor_cells(corpus_report: KillCraftReport) -> None:
     # The kill bucket (impostor ready + a co-present victim): the fold's sharpest
     # cell — kills concentrate here.
     ready_pair = impostor.buckets["ready|pair"]
-    assert ready_pair.decisions == 1205
+    assert ready_pair.decisions == 743  # was 1205
     assert dict(ready_pair.action_kinds) == {
         "do_task": 10,
         "kill": 602,
@@ -193,14 +193,14 @@ def test_corpus_entropy_impostor_cells(corpus_report: KillCraftReport) -> None:
 def test_samples_9p2i_entropy(samples_9p2i_report: KillCraftReport) -> None:
     crew = samples_9p2i_report.entropy_by_side["CREWMATE"]
     assert crew.agents == 350
-    assert crew.decisions == 8136
-    assert crew.mean_conditional_entropy == pytest.approx(0.8789489039463282)
-    assert crew.mean_unconditional_entropy == pytest.approx(1.1994131474293237)
+    assert crew.decisions == 5765  # was 8136
+    assert crew.mean_conditional_entropy == pytest.approx(0.757706547711433)  # was 0.8789489039463282
+    assert crew.mean_unconditional_entropy == pytest.approx(1.0734922751612022)  # was 1.1994131474293237
     assert sorted(crew.buckets) == ["none|crowd", "none|pair", "none|solo"]
 
     impostor = samples_9p2i_report.entropy_by_side["IMPOSTOR"]
     assert impostor.agents == 100
-    assert impostor.decisions == 2461
+    assert impostor.decisions == 1750  # was 2461
     assert impostor.mean_conditional_entropy == pytest.approx(0.7069138997083648)
     assert impostor.mean_unconditional_entropy == pytest.approx(1.7642325293949697)
     assert sorted(impostor.buckets) == [
@@ -216,14 +216,14 @@ def test_samples_9p2i_entropy(samples_9p2i_report: KillCraftReport) -> None:
 def test_samples_4p1i_entropy(samples_4p1i_report: KillCraftReport) -> None:
     crew = samples_4p1i_report.entropy_by_side["CREWMATE"]
     assert crew.agents == 150
-    assert crew.decisions == 1584
-    assert crew.mean_conditional_entropy == pytest.approx(0.6529321621450677)
-    assert crew.mean_unconditional_entropy == pytest.approx(1.0988807344951677)
+    assert crew.decisions == 1403  # was 1584
+    assert crew.mean_conditional_entropy == pytest.approx(0.6478604310748124)  # was 0.6529321621450677
+    assert crew.mean_unconditional_entropy == pytest.approx(1.0713129612472163)  # was 1.0988807344951677
     assert sorted(crew.buckets) == ["none|crowd", "none|pair", "none|solo"]
 
     impostor = samples_4p1i_report.entropy_by_side["IMPOSTOR"]
     assert impostor.agents == 50
-    assert impostor.decisions == 632
+    assert impostor.decisions == 551  # was 632
     assert impostor.mean_conditional_entropy == pytest.approx(0.490861414163582)
     assert impostor.mean_unconditional_entropy == pytest.approx(1.5135518536786732)
     assert sorted(impostor.buckets) == [

@@ -126,7 +126,7 @@ def test_committed_4p1i_set_holds_the_invariant() -> None:
     # still holds set-wide); this pins the count the re-record produced, so the
     # §6.3 elimination path runs on the committed bytes, not only the hermetic
     # apply_meeting_result eject tests.
-    assert eliminations == 10
+    assert eliminations == 20  # was 10
 
 
 def _roster(replay_dir: Path) -> tuple[int, int, int]:

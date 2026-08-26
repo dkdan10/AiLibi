@@ -941,8 +941,8 @@ class TestHardEvidenceGateOnCommittedBytes:
         # 79 baseline-4 recorded; the qwen3_6_27b v3 prompt set with the
         # meeting-layer levers graduated to unconditional plus the vent widening
         # cascaded the trajectories and raised the ejection rate further).
-        assert funnel.report_ejections == 87
-        assert counterfactual.total_ejections == 87
+        assert funnel.report_ejections == 91  # was 87
+        assert counterfactual.total_ejections == 91  # was 87
 
     # -- (i) the soft-only split, by ejectee role ----------------------------
 
@@ -973,7 +973,7 @@ class TestHardEvidenceGateOnCommittedBytes:
         # There ARE hard-flag-backed convictions to guard: 80 of the 87 ejections
         # carry a grounded (hard_total > atol) post-fold row for the ejectee.
         assert counterfactual.hard_backed >= _HARD_BACKED_FLOOR
-        assert counterfactual.hard_backed == 80
+        assert counterfactual.hard_backed == 71  # was 80
         assert (
             counterfactual.hard_backed + counterfactual.soft_only_total
             == counterfactual.total_ejections

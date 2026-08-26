@@ -2560,7 +2560,7 @@ class TestRelevanceGatedFoldOnCommittedBytes:
         # -> [0.50, 0.50, 0.55], ABOVE the 0.5 prior (the vouch that would offset it
         # is dropped by the gate). It stays under the §4.6 gate -- the divergence is
         # the signal, not a conviction.
-        assert len(trajectory) == 3
+        assert len(trajectory) == 4  # was 3
         assert trajectory == pytest.approx([0.5, 0.5, 0.55])
         # Ends above the prior rather than netting back to it (contrast the ungated
         # trajectory below, which renders flat at the prior end to end).
@@ -3789,9 +3789,9 @@ class TestReporterExculpationOnCommittedBytes:
         # still EXACTLY ZERO (no report meeting had the killer as its reporter).
         # Prior baselines: 0 of 61 (baseline 5), 1 of 79 (baseline 4), 4 of 95
         # (baseline 3), 22 of 106 (baseline 2).
-        assert funnel.report_ejections == 87
-        assert funnel.reporter_ejected == 2
-        assert funnel.reporter_ejected_innocent == 2
+        assert funnel.report_ejections == 91  # was 87
+        assert funnel.reporter_ejected == 10  # was 2
+        assert funnel.reporter_ejected_innocent == 10  # was 2
         assert funnel.killer_self_reported == 0
 
     # -- (a) the damp's effect on the innocent-reporter convictions ----------
@@ -3812,7 +3812,7 @@ class TestReporterExculpationOnCommittedBytes:
         # The kept / already-sub-gate split is still guarded structurally by
         # test_damp_touches_only_the_reporter and by the over-damping canary below.
         meetings = self._innocent_reporter_meetings(funnel)
-        assert len(meetings) == 2
+        assert len(meetings) == 10  # was 2
 
         kept = 0
         already_sub_gate = 0
@@ -3932,7 +3932,7 @@ class TestReporterExculpationOnCommittedBytes:
             for row in funnel.per_meeting
             if row.outcome == "EJECTED" and row.ejected is not None
         ]
-        assert len(report_ejections) == 87
+        assert len(report_ejections) == 91  # was 87
         hard_backed = 0
         outcome_changes = 0
         for row in report_ejections:

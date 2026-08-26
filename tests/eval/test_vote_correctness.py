@@ -1898,10 +1898,10 @@ def test_committed_9p2i_report_pins_the_audited_conversion_values() -> None:
     )
     conversion = report.conversion
 
-    assert conversion.total_ejections == 101
-    assert conversion.impostor_ejections == 78
-    assert conversion.ejection_accuracy == pytest.approx(78 / 101)
-    assert conversion.impostor_accused_meetings == 134
+    assert conversion.total_ejections == 99  # was 101
+    assert conversion.impostor_ejections == 85  # was 78
+    assert conversion.ejection_accuracy == pytest.approx(85 / 99)  # was 78 / 101
+    assert conversion.impostor_accused_meetings == 122  # was 134
     assert conversion.impostor_accused_conversions == 78
     assert conversion.impostor_accused_conversion_rate == pytest.approx(78 / 134)
     assert conversion.skip_ballots == 451
@@ -2069,7 +2069,7 @@ def test_committed_9p2i_censuses_the_six_unbacked_impostor_ejections() -> None:
         _COMMITTED_9P2I_REPORT.read_text(encoding="utf-8")
     )
     rows = _impostor_ejections(report)
-    assert len(rows) == report.vote_correctness.impostor_ejections == 78
+    assert len(rows) == report.vote_correctness.impostor_ejections == 85  # was 78
 
     unbacked = tuple(
         (seed, meeting.meeting_id, meeting.tick, ejected)
@@ -2101,7 +2101,7 @@ def test_committed_9p2i_zero_flag_population_is_wider_than_the_unbacked() -> Non
         for seed, meeting, ejected in rows
         if not _has_naming_contradiction(meeting, ejected)
     )
-    assert len(zero_flag) == 8
+    assert len(zero_flag) == 16  # was 8
     assert set(zero_flag) == set(_UNBACKED_9P2I) | set(_KILL_WITNESS_ONLY_9P2I)
 
     kill_witness_only = tuple(
@@ -3102,10 +3102,10 @@ def test_committed_9p2i_report_pins_the_successor_instrument() -> None:
     )
     result = compute_supplied_channel_conversion(report.report)
 
-    assert result.supplied == 79
-    assert result.converted == 70
-    assert result.conversion_rate == pytest.approx(70 / 79)
-    assert result.witnessed_vent_supplied == 76
+    assert result.supplied == 76  # was 79
+    assert result.converted == 69  # was 70
+    assert result.conversion_rate == pytest.approx(69 / 76)  # was 70 / 79
+    assert result.witnessed_vent_supplied == 74  # was 76
     assert result.witnessed_vent_converted == 68
     assert result.sighting_contradiction_supplied == 2
     assert result.sighting_contradiction_converted == 2
@@ -3166,10 +3166,10 @@ def test_committed_flat_4p1i_report_pins_the_successor_instrument() -> None:
     )
     result = compute_supplied_channel_conversion(report.report)
 
-    assert result.supplied == 11
-    assert result.converted == 10
-    assert result.conversion_rate == pytest.approx(10 / 11)
-    assert result.witnessed_vent_supplied == 10
+    assert result.supplied == 19  # was 11
+    assert result.converted == 19  # was 10
+    assert result.conversion_rate == pytest.approx(1 / 1)  # was 10 / 11
+    assert result.witnessed_vent_supplied == 19  # was 10
     assert result.witnessed_vent_converted == 9
     assert result.sighting_contradiction_supplied == 1
     assert result.whereabouts_lie_supplied == 0

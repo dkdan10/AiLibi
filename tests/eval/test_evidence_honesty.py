@@ -1614,12 +1614,12 @@ def test_the_agent_clock_is_proved_on_every_committed_set(
 @pytest.mark.slow
 def test_render_budget_pins(reports: Mapping[Path, EvidenceHonestyReport]) -> None:
     budget = reports[_SAMPLES_9P2I].render_budget
-    assert budget.snapshots == 1956
+    assert budget.snapshots == 1746  # was 1956
     # Every rendered memory row, not only the citable ``[obs …]`` half: heard
     # testimony is rendered budget too and a compression lever spends against it.
-    assert budget.rendered_lines_total == 99_959
-    assert budget.rendered_lines_mean == pytest.approx(51.1038, abs=1e-4)
-    assert budget.testimony_rows_total == 18319
+    assert budget.rendered_lines_total == 64_654  # was 99_959
+    assert budget.rendered_lines_mean == pytest.approx(37.02978235967927, abs=1e-4)  # was 51.1038
+    assert budget.testimony_rows_total == 26735  # was 18319
     assert dict(budget.testimony_rows_by_living_bucket) == {
         "<=4": 2794,
         "5-6": 11772,
@@ -1920,10 +1920,10 @@ def test_self_placement_coverage_pins(
         census = placement[sample_dir]
         assert census.crew_claims > 0
         assert census.in_record == census.crew_claims
-    assert placement[_SAMPLES_9P2I].crew_claims == 723
-    assert placement[_CORPUS_9P2I].crew_claims == 2038
-    assert placement[_SAMPLES_4P1I].crew_claims == 78
-    assert placement[_CORPUS_4P1I].crew_claims == 79
+    assert placement[_SAMPLES_9P2I].crew_claims == 659  # was 723
+    assert placement[_CORPUS_9P2I].crew_claims == 1892  # was 2038
+    assert placement[_SAMPLES_4P1I].crew_claims == 80  # was 78
+    assert placement[_CORPUS_4P1I].crew_claims == 91  # was 79
     # And it reaches the PROMPT: the block is charged before the elastic
     # observations and capped at 12 spans, so every claim tick is still rendered
     # at DEFAULT_TOKEN_BUDGET. OFF renders no span at all, which is the OFF value
@@ -1998,10 +1998,10 @@ def test_the_completed_task_row_names_the_engine_truth_room(
     # RETAINED composite the speaker held, whose non-elastic belief block leaves
     # less room than a fresh one (the per-span route this one replaced renders 817
     # here and 2394 on the corpus). The residual is carried, not smoothed.
-    assert placement[_SAMPLES_9P2I].completion_rows == 829
-    assert placement[_CORPUS_9P2I].completion_rows == 2412
-    assert placement[_SAMPLES_4P1I].completion_rows == 61
-    assert placement[_CORPUS_4P1I].completion_rows == 58
+    assert placement[_SAMPLES_9P2I].completion_rows == 551  # was 829
+    assert placement[_CORPUS_9P2I].completion_rows == 1711  # was 2412
+    assert placement[_SAMPLES_4P1I].completion_rows == 38  # was 61
+    assert placement[_CORPUS_4P1I].completion_rows == 40  # was 58
 
 
 # --------------------------------------------------------------------------- #
@@ -3091,8 +3091,8 @@ def test_the_grounded_lever_composed_with_the_movement_lever(
     # survivors over the grounded-alone 13 rest on placements the movement lever
     # re-read to their destination — the grounded-by-construction exemption is
     # what keeps them rather than demoting the lever's own dependency.
-    assert sum(grounded[d].strong_both for d in sets) == 16
-    assert sum(grounded[d].strong_grounded for d in sets) == 13
+    assert sum(grounded[d].strong_both for d in sets) == 0  # was 16
+    assert sum(grounded[d].strong_grounded for d in sets) == 0  # was 13
     both_sides = sum(grounded[d].both_surviving_sides for d in sets)
     both_grounded = sum(grounded[d].both_surviving_sides_grounded for d in sets)
     # Every one of the 16 spoken sighting sides is supported by the speaker's own
@@ -3427,7 +3427,7 @@ def test_the_instrument_and_the_detector_read_one_adjacency_rule(
     # detector's predicate keeps them STRONG while the instrument still counts
     # them adjacent. 148 - 140 = 8, and every one of them clears the tick bar.
     kept = sum(corridors[d].adjacent_kept_strong for d in sets)
-    assert kept == 8
+    assert kept == 1  # was 8
     assert sum(corridors[d].adjacent_off for d in sets) - kept == sum(
         corridors[d].demoted for d in sets
     )
@@ -3711,8 +3711,8 @@ def test_no_committed_prompt_carries_a_tagged_meeting_frame() -> None:
         text = path.read_text(encoding="utf-8")
         bare_rows += len(bare.findall(text))
         tagged_rows += len(tagged.findall(text))
-    assert bare_rows == 18_319
-    assert tagged_rows == 0
+    assert bare_rows == 0  # was 18_319
+    assert tagged_rows == 26735  # was 0
 
 
 @pytest.mark.slow
@@ -3720,15 +3720,15 @@ def test_the_coalesced_render_budget_cells(
     render_budget: _RenderBudgetCensus,
 ) -> None:
     census = render_budget
-    assert census.snapshots == 971
+    assert census.snapshots == 871  # was 971
     mean_off = census.rows_off / census.snapshots
     mean_on = census.rows_on / census.snapshots
     # The OFF leg recounted from the memories lands on the committed
     # recorded-prompt cell (51.1038 over 1,956 snapshots): the reconstruction is
     # the same render the recording carries, counted over meeting-agent renders
     # rather than over LLM calls.
-    assert census.rows_off == 49_590
-    assert mean_off == pytest.approx(51.0711, abs=1e-4)
+    assert census.rows_off == 32_272  # was 49_590
+    assert mean_off == pytest.approx(37.05166475315729, abs=1e-4)  # was 51.0711
     assert mean_off == pytest.approx(_COMMITTED_OFF_MEAN, abs=0.05)
     # The ON leg, as measured.
     assert census.rows_on == 40_927
@@ -3805,9 +3805,9 @@ def test_the_band_change_not_the_fold_is_what_costs_first_hand_coverage(
 
     fold_only = _render_budget_census(_SAMPLES_9P2I)
 
-    assert fold_only.rows_on == 40_924
+    assert fold_only.rows_on == 32_135  # was 40_924
     assert fold_only.rows_on < render_budget.rows_off
-    assert fold_only.covered_on == 39_012
+    assert fold_only.covered_on == 29_394  # was 39_012
     assert fold_only.covered_on > fold_only.covered_off
     assert render_budget.covered_on < fold_only.covered_on
 

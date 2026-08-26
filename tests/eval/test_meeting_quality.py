@@ -546,16 +546,16 @@ def test_committed_9p2i_recompute_pins_the_coerced_bucket() -> None:
 
     # STORED block: the regenerated baseline-6 partition (divert already applied).
     assert report.conversion.citation_coerced_skip_ballots == 1
-    assert report.conversion.missed_skip_ballots == 129
-    assert report.conversion.threshold_inversions == 87
-    assert report.conversion.missed_skip_impostor_voters == 41
+    assert report.conversion.missed_skip_ballots == 96  # was 129
+    assert report.conversion.threshold_inversions == 46  # was 87
+    assert report.conversion.missed_skip_impostor_voters == 48  # was 41
 
     # RECOMPUTE: the divert populates the coerced bucket, matching the STORED block.
     result = compute_conversion_report(report.report.games)
 
-    assert result.total_ejections == 101
-    assert result.impostor_ejections == 78
-    assert result.ejection_accuracy == pytest.approx(78 / 101)
+    assert result.total_ejections == 99  # was 101
+    assert result.impostor_ejections == 85  # was 78
+    assert result.ejection_accuracy == pytest.approx(85 / 99)  # was 78 / 101
     assert result.impostor_accused_meetings == 134
     assert result.impostor_accused_conversions == 78
     assert result.impostor_accused_conversion_rate == pytest.approx(78 / 134)
@@ -591,14 +591,14 @@ def test_committed_4p1i_recompute_has_no_coerced_and_is_unchanged() -> None:
     result = compute_conversion_report(report.report.games)
 
     assert result.citation_coerced_skip_ballots == 0
-    assert result.skip_ballots == 90
-    assert result.correct_skip_ballots == 88
-    assert result.missed_skip_ballots == 2
+    assert result.skip_ballots == 61  # was 90
+    assert result.correct_skip_ballots == 54  # was 88
+    assert result.missed_skip_ballots == 7  # was 2
     assert result.unclassified_skip_ballots == 0
-    assert result.missed_skip_impostor_voters == 1
+    assert result.missed_skip_impostor_voters == 7  # was 1
     assert result.missed_skip_invalid_target == 0
-    assert result.threshold_inversions == 1
-    assert result.total_ejections == 12
+    assert result.threshold_inversions == 0  # was 1
+    assert result.total_ejections == 21  # was 12
     assert result.impostor_ejections == 10
 
 

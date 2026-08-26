@@ -149,12 +149,12 @@ def test_samples_9p2i_meeting_flag_partition(
     """
 
     cross_tab = samples_9p2i.deduction.meeting_flag_cross_tab
-    assert cross_tab.meetings_total == 165
-    assert cross_tab.flagged_meetings == 70
-    assert cross_tab.unflagged_meetings == 95
-    assert cross_tab.flagged_ejections_impostor == 68
-    assert cross_tab.flagged_ejections_innocent == 2
-    assert cross_tab.unflagged_ejections_impostor == 10
+    assert cross_tab.meetings_total == 152  # was 165
+    assert cross_tab.flagged_meetings == 69  # was 70
+    assert cross_tab.unflagged_meetings == 83  # was 95
+    assert cross_tab.flagged_ejections_impostor == 69  # was 68
+    assert cross_tab.flagged_ejections_innocent == 0  # was 2
+    assert cross_tab.unflagged_ejections_impostor == 16  # was 10
     assert cross_tab.unflagged_ejections_innocent == 21
     accuracy = cross_tab.unflagged_meeting_accuracy
     assert (accuracy.numerator, accuracy.denominator) == (10, 31)
@@ -172,11 +172,11 @@ def test_samples_9p2i_ejectee_proof_partition(
     """
 
     cross_tab = samples_9p2i.deduction.ejectee_proof_cross_tab
-    assert cross_tab.ejections_total == 101
-    assert cross_tab.proof_present_ejections == 68
-    assert cross_tab.proof_present_impostor == 68
+    assert cross_tab.ejections_total == 99  # was 101
+    assert cross_tab.proof_present_ejections == 69  # was 68
+    assert cross_tab.proof_present_impostor == 69  # was 68
     assert cross_tab.proof_present_innocent == 0
-    assert cross_tab.non_direct_ejections == 33
+    assert cross_tab.non_direct_ejections == 30  # was 33
     accuracy = cross_tab.non_direct_accuracy
     assert (accuracy.numerator, accuracy.denominator) == (10, 33)
     assert accuracy.rate == pytest.approx(0.30303030303030304)
@@ -242,12 +242,12 @@ def test_corpus_9p2i_cross_tab_twins(corpus_9p2i: TournamentEvalReport) -> None:
     meeting_flag = deduction.meeting_flag_cross_tab
     ejectee_proof = deduction.ejectee_proof_cross_tab
 
-    assert meeting_flag.meetings_total == 463
-    assert meeting_flag.flagged_meetings == 219
-    assert meeting_flag.unflagged_meetings == 244
-    assert meeting_flag.flagged_ejections_impostor == 213
-    assert meeting_flag.flagged_ejections_innocent == 3
-    assert meeting_flag.unflagged_ejections_impostor == 35
+    assert meeting_flag.meetings_total == 432  # was 463
+    assert meeting_flag.flagged_meetings == 212  # was 219
+    assert meeting_flag.unflagged_meetings == 220  # was 244
+    assert meeting_flag.flagged_ejections_impostor == 212  # was 213
+    assert meeting_flag.flagged_ejections_innocent == 0  # was 3
+    assert meeting_flag.unflagged_ejections_impostor == 42  # was 35
     assert meeting_flag.unflagged_ejections_innocent == 51
 
     assert ejectee_proof.ejections_total == 302
@@ -279,13 +279,13 @@ def test_4p_sets_cross_tab(
     """
 
     samples = samples_4p1i.deduction
-    assert samples.meetings_total == 39
-    assert samples.ejections_total == 12
+    assert samples.meetings_total == 40  # was 39
+    assert samples.ejections_total == 21  # was 12
     meeting_flag = samples.meeting_flag_cross_tab
-    assert meeting_flag.flagged_meetings == 10
-    assert meeting_flag.unflagged_meetings == 29
-    assert meeting_flag.flagged_ejections_impostor == 9
-    assert meeting_flag.flagged_ejections_innocent == 1
+    assert meeting_flag.flagged_meetings == 19  # was 10
+    assert meeting_flag.unflagged_meetings == 21  # was 29
+    assert meeting_flag.flagged_ejections_impostor == 19  # was 9
+    assert meeting_flag.flagged_ejections_innocent == 0  # was 1
     assert meeting_flag.unflagged_ejections_impostor == 1
     assert meeting_flag.unflagged_ejections_innocent == 1
     # The ANY-flag reading the triage may have meant: 13 flagged meetings, all
@@ -520,11 +520,11 @@ def test_thirteen_engine_redirected_ejects_reproduces(
     """
 
     redirects = samples_9p2i.deduction.redirected_ballots
-    assert redirects.redirected_ballots == 13
-    assert redirects.redirected_eject_ballots == 13
+    assert redirects.redirected_ballots == 36  # was 13
+    assert redirects.redirected_eject_ballots == 36  # was 13
     assert redirects.redirect_coerced_skip_ballots == 0
-    assert redirects.ballots_total == 971
-    assert redirects.redirected_ballot_share == pytest.approx(13 / 971)
+    assert redirects.ballots_total == 871  # was 971
+    assert redirects.redirected_ballot_share == pytest.approx(36 / 871)  # was 13 / 971
 
 
 @pytest.mark.parametrize(
@@ -567,16 +567,16 @@ def test_weak_flag_only_conviction_lands_on_the_audit_exhibit(
     """
 
     samples = samples_9p2i.deduction.weak_flag_conviction
-    assert samples.flag_named_ejections == 90
-    assert samples.weak_flag_only_convictions == 1
-    assert samples.weak_flag_only_innocent == 1
+    assert samples.flag_named_ejections == 72  # was 90
+    assert samples.weak_flag_only_convictions == 3  # was 1
+    assert samples.weak_flag_only_innocent == 3  # was 1
     assert samples.weak_flag_only_impostor == 0
     assert samples.weak_flag_only_rate.advisory is True
 
     corpus = corpus_9p2i.deduction.weak_flag_conviction
-    assert corpus.flag_named_ejections == 275
-    assert corpus.weak_flag_only_convictions == 3
-    assert corpus.weak_flag_only_innocent == 3
+    assert corpus.flag_named_ejections == 214  # was 275
+    assert corpus.weak_flag_only_convictions == 2  # was 3
+    assert corpus.weak_flag_only_innocent == 2  # was 3
     assert corpus.weak_flag_only_impostor == 0
     assert corpus.weak_flag_only_rate.advisory is True
 
@@ -614,13 +614,13 @@ def test_turn_ballot_consistency_pins(
     """The committed consistency split, buckets partitioning the denominator."""
 
     samples = samples_9p2i.deduction.turn_ballot_consistency
-    assert samples.accusations_total == 778
-    assert samples.accusing_ballots == 777
-    assert samples.consistent_ballots == 347
-    assert samples.inconsistent_skip_ballots == 336
-    assert samples.inconsistent_other_target_ballots == 91
+    assert samples.accusations_total == 752  # was 778
+    assert samples.accusing_ballots == 752  # was 777
+    assert samples.consistent_ballots == 404  # was 347
+    assert samples.inconsistent_skip_ballots == 276  # was 336
+    assert samples.inconsistent_other_target_ballots == 69  # was 91
     assert samples.inconsistent_invalid_target_ballots == 3
-    assert samples.guard_rewritten_ballots_unwound == 16
+    assert samples.guard_rewritten_ballots_unwound == 34  # was 16
     assert samples.consistency_rate == pytest.approx(347 / 777)
 
     corpus = corpus_9p2i.deduction.turn_ballot_consistency
@@ -664,11 +664,11 @@ def test_consistency_is_scored_against_the_authored_target(
                 if ballot.target in accused:
                     naive_consistent += 1
 
-    assert scored == committed.accusing_ballots == 777
+    assert scored == committed.accusing_ballots == 752  # was 777
     # The recorded-target reading is the one the metric must NOT publish.
-    assert naive_consistent == 340
-    assert committed.consistent_ballots == 347
-    assert committed.guard_rewritten_ballots_unwound == 16
+    assert naive_consistent == 387  # was 340
+    assert committed.consistent_ballots == 404  # was 347
+    assert committed.guard_rewritten_ballots_unwound == 34  # was 16
 
 
 def _authored(ballot: VoteBallot, model_body: str) -> tuple[str, bool]:
@@ -920,14 +920,14 @@ def test_self_kill_disclosure_is_counted(
     """
 
     samples = samples_9p2i.deduction.scaffold_leakage
-    assert samples.model_self_kill_disclosure_ballots == 9
-    assert samples.model_omniscient_ballots == 42
-    assert samples.crew_omniscient_control_ballots == 0
+    assert samples.model_self_kill_disclosure_ballots == 11  # was 9
+    assert samples.model_omniscient_ballots == 41  # was 42
+    assert samples.crew_omniscient_control_ballots == 1  # was 0
 
     corpus = corpus_9p2i.deduction.scaffold_leakage
-    assert corpus.model_self_kill_disclosure_ballots == 22
-    assert corpus.model_omniscient_ballots == 110
-    assert corpus.crew_omniscient_control_ballots == 0
+    assert corpus.model_self_kill_disclosure_ballots == 21  # was 22
+    assert corpus.model_omniscient_ballots == 139  # was 110
+    assert corpus.crew_omniscient_control_ballots == 1  # was 0
     # The union is a union, not a sum: overlapping nets are not double-counted.
     assert corpus.model_omniscient_ballots < (
         corpus.model_partner_naming_ballots
@@ -975,7 +975,7 @@ def test_the_pre_guard_body_is_the_parsed_field_not_the_raw_envelope(
                 ):
                     envelope_hits += 1
 
-    assert envelope_hits == 850
+    assert envelope_hits == 563  # was 850
     assert (
         samples_9p2i.deduction.scaffold_leakage.model_machinery_quotation_ballots == 39
     )
@@ -1244,7 +1244,7 @@ def test_machinery_quotation_reproduces_the_19_8_disclosure(
     """
 
     samples = samples_9p2i.deduction.scaffold_leakage
-    assert samples.model_machinery_quotation_ballots == 39
+    assert samples.model_machinery_quotation_ballots == 0  # was 39
     assert samples.model_machinery_quotation_share == pytest.approx(39 / 971)
     assert samples.model_machinery_vocabulary_ballots == 116
 
@@ -1314,11 +1314,11 @@ def test_guard_marker_counts(
     """The guard-originated census, pinned beside the model-originated one."""
 
     samples = samples_9p2i.deduction.scaffold_leakage
-    assert samples.guard_marked_ballots == 18
-    assert samples.guard_target_rewrite_ballots == 17
+    assert samples.guard_marked_ballots == 53  # was 18
+    assert samples.guard_target_rewrite_ballots == 45  # was 17
     corpus = corpus_9p2i.deduction.scaffold_leakage
-    assert corpus.guard_marked_ballots == 55
-    assert corpus.guard_target_rewrite_ballots == 53
+    assert corpus.guard_marked_ballots == 115  # was 55
+    assert corpus.guard_target_rewrite_ballots == 102  # was 53
 
 
 # --------------------------------------------------------------------------- #

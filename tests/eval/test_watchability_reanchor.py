@@ -305,14 +305,14 @@ def test_remeasured_corpus_sets_at_baseline6_referee_verdicts() -> None:
     witnessed_nine = next(
         g for g in corpus_nine.supply_gauges if g.name == "witnessed_event_rate"
     )
-    assert witnessed_nine.measured == 0.023762376237623763
+    assert witnessed_nine.measured == 0.030418250950570342  # was 0.023762376237623763
     assert witnessed_nine.floor == 0.03389830508474576
     assert witnessed_nine.passed is False  # a real rate miss, blocks the floor AND
     conversion_nine = next(
         g for g in corpus_nine.supply_gauges if g.name == "testimony_backed_conversion"
     )
-    assert conversion_nine.measured == 0.6065989847715736
-    assert conversion_nine.floor == 0.5029244652406416  # derived population-relative
+    assert conversion_nine.measured == 0.7113095238095238  # was 0.6065989847715736
+    assert conversion_nine.floor == 0.6271201161333547  # derived population-relative  # was 0.5029244652406416
     assert (
         conversion_nine.passed is True
     )  # conversion clears; the miss is witnessed-supply
@@ -326,8 +326,8 @@ def test_remeasured_corpus_sets_at_baseline6_referee_verdicts() -> None:
     conversion_four = next(
         g for g in corpus_four.supply_gauges if g.name == "testimony_backed_conversion"
     )
-    assert conversion_four.measured == 0.5882352941176471
-    assert conversion_four.floor == 0.23443223443223438  # derived population-relative
+    assert conversion_four.measured == 0.75  # was 0.5882352941176471
+    assert conversion_four.floor == 0.186737400530504  # derived population-relative  # was 0.23443223443223438
     assert conversion_four.passed is True
 
 

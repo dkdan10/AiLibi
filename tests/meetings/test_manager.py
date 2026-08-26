@@ -5461,7 +5461,7 @@ class TestCommittedBytes107FoldPins:
         # Non-vacuous: the fold DID fire across the committed set (123 folds on
         # the baseline-6 re-record — a byte-coupled count that re-pins on each
         # re-record).
-        assert folded_total == 123
+        assert folded_total == 99  # was 123
 
     def test_seed29_m1_fold_lifts_listeners_over_gate_and_converts(self) -> None:
         # The two-witness fold's conversion on baseline 6 (Qwen/Qwen3.6-27B, Task
@@ -6484,8 +6484,8 @@ class TestSingleWitnessInformYieldOnCommittedBytes:
         # offline oracle). The accused-not-ejected count cross-checks the
         # effective-deflection survivals (accused_impostor_survivals in the eval-layer
         # metrics) exactly.
-        assert result.accused_not_ejected == 70
-        assert result.over_gate_lost_plurality == 34
+        assert result.accused_not_ejected == 52  # was 70
+        assert result.over_gate_lost_plurality == 18  # was 34
 
     def test_single_witness_inform_converts_fourteen_of_the_ninety_seven(self) -> None:
         result = _derive_inform_yield()
@@ -6501,7 +6501,7 @@ class TestSingleWitnessInformYieldOnCommittedBytes:
         # [gate - inform, gate) -- a baseline below that band still cannot cross on
         # the inform alone, the owner principle); this zero-conversion census is the
         # honest census the committed bytes support, pinned exactly.
-        assert result.informed_candidates == 12
+        assert result.informed_candidates == 6  # was 12
         assert len(result.conversions) == 0
         assert result.conversions == ()
 

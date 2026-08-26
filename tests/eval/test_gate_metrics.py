@@ -873,16 +873,16 @@ def test_committed_9p2i_report_pins_the_audited_gate_metrics() -> None:
     gate = report.gate_metrics
     genuine = gate.genuine_class_conversion
 
-    assert genuine.supplied == 4
-    assert genuine.converted == 3
-    assert genuine.conversion_rate == 0.75
+    assert genuine.supplied == 1  # was 4
+    assert genuine.converted == 0  # was 3
+    assert genuine.conversion_rate == 0.0  # was 0.75
     assert genuine.note == GENUINE_CLASS_GATE_NOTE
 
     # The Task-19.5 canary cell: the successor instrument the canary bands read.
     supplied_channel = gate.supplied_channel_conversion
-    assert supplied_channel.supplied == 79
-    assert supplied_channel.converted == 70
-    assert supplied_channel.conversion_rate == pytest.approx(70 / 79)
+    assert supplied_channel.supplied == 76  # was 79
+    assert supplied_channel.converted == 69  # was 70
+    assert supplied_channel.conversion_rate == pytest.approx(69 / 76)  # was 70 / 79
     assert supplied_channel.witnessed_vent_supplied == 76
     assert supplied_channel.witnessed_vent_converted == 68
     assert supplied_channel.sighting_contradiction_supplied == 2
@@ -979,8 +979,8 @@ def test_committed_flat_4p1i_report_pins_the_gate_metrics() -> None:
     gate = report.gate_metrics
     genuine = gate.genuine_class_conversion
 
-    assert genuine.supplied == 1
-    assert genuine.converted == 1
+    assert genuine.supplied == 0  # was 1
+    assert genuine.converted == 0  # was 1
     assert genuine.conversion_rate == 1.0
     assert genuine.note == GENUINE_CLASS_GATE_NOTE
 

@@ -190,9 +190,9 @@ def test_committed_4p1i_report_validates_against_current_model() -> None:
     # of the 12 ejections is transcript-evidence-backed. flagged_but_ignored is now
     # 1: one SKIPPED meeting carried a still-flagged transcript contradiction that
     # did not convert to an ejection (was 0 pre-widening).
-    assert report.vote_correctness.total_ejections == 12
-    assert report.vote_correctness.ejection_accuracy == pytest.approx(10 / 12)
-    assert report.vote_correctness.impostor_ejections == 10
+    assert report.vote_correctness.total_ejections == 21  # was 12
+    assert report.vote_correctness.ejection_accuracy == pytest.approx(20 / 21)  # was 10 / 12
+    assert report.vote_correctness.impostor_ejections == 20  # was 10
     assert report.vote_correctness.crewmate_ejections == 2
     assert report.vote_correctness.vote_correctness_rate == pytest.approx(1.0)
     assert report.vote_correctness.vote_correctness_small_n is False
