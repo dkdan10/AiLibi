@@ -927,9 +927,13 @@ def test_replay_count_figure_derived_from_the_committed_replays(
     _substitute(doc_tree, _README, "| 100 of 100 |", "| 96 of 96 |")
     _substitute(doc_tree, _READING_GUIDE, "| 100 of 100 |", "| 96 of 96 |")
     errors = check_doc_facts.check_facts(doc_tree)
-    assert len(errors) == 1
-    assert "'96 of 96'" in errors[0]
-    assert "100 committed replays" in errors[0]
+    assert len(errors) == 2
+    assert any(
+        "'96 of 96'" in error and "100 committed replays" in error for error in errors
+    )
+    # The edit also leaves the row claiming its figure moved from 100 to 96,
+    # which nothing owns — the same drift read from the history column.
+    assert any("states a moved figure" in error for error in errors)
 
 
 def test_empty_replay_corpus_fails_loud(doc_tree: Path) -> None:
@@ -1064,9 +1068,14 @@ def test_proof_partition_derived_from_the_close_audit(doc_tree: Path) -> None:
     assert "'302 / 310 = 0.9742 vs 46 / 125 = 0.3680'" in figure[0]
     # The arithmetic cross-check reads the same drift independently: eight of
     # the proof-present cell's ejections would now have convicted an innocent,
-    # against a row that still totals zero.
-    assert len(errors) == 2
+    # against a row that still totals zero. And the ML page, which quotes the
+    # same baseline-6 pair in prose, is now quoting a cell that moved.
+    assert len(errors) == 3
     assert any("proof-present cell reads 302/310" in error for error in errors)
+    assert any(
+        error.startswith(_ML_PAGE) and "whose cell is 302/310" in error
+        for error in errors
+    )
 
 
 def test_published_partition_derived_from_the_record(doc_tree: Path) -> None:
@@ -1750,19 +1759,21 @@ def test_unowned_moved_history_cell_detected(doc_tree: Path) -> None:
     # Either this checker re-derives that value or the row is named as one it
     # only compares — otherwise the two tables can drift together, which is the
     # one failure the before/after column exists to prevent.
-    row = "| Observation-firewall violations, all phases | zero | zero |"
-    drifted = "| Observation-firewall violations, all phases | zero | one |"
+    row = "| 100 of 100 | 100 of 100 |"
+    drifted = "| 100 of 100 | 99 of 100 |"
     _substitute(doc_tree, _README, row, drifted)
     # One-sided first: that is the agreement check's finding, not this one.
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert "'one'" in errors[0] and "records 'zero'" in errors[0]
-    # Made in BOTH tables it survives agreement, and only this check sees it.
+    assert "'99 of 100'" in errors[0] and "records '100 of 100'" in errors[0]
+    # Made in BOTH tables it survives agreement, and only this check sees it —
+    # no row is exempt, including the ones whose FIGURE is re-derived, because
+    # deriving today's count says nothing about the one before it.
     _substitute(doc_tree, _READING_GUIDE, row, drifted)
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert "states a moved figure" in errors[0]
-    assert "'one'" in errors[0]
+    assert "'99 of 100'" in errors[0]
 
 
 def test_verdict_rate_that_contradicts_its_own_fraction_detected(
@@ -1791,6 +1802,32 @@ def test_verdict_wrongful_ejection_count_drift_detected(doc_tree: Path) -> None:
     assert len(errors) == 1
     assert "a wrongful-ejection sentence names neither the count" in errors[0]
     assert "(42)" in errors[0]
+
+
+def test_verdict_fraction_rewritten_consistently_detected(doc_tree: Path) -> None:
+    # Self-consistent arithmetic is not enough: a fraction over a conviction
+    # population the record measured has to BE the cell the record recorded, or
+    # the prose argues past the finding while adding up.
+    _substitute(doc_tree, _README, "61 of 103 = 0.5922", "62 of 103 = 0.6019")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "is over a conviction population" in errors[0]
+    assert "whose cell is 61/103" in errors[0]
+
+
+def test_wrongful_ejection_count_inside_a_longer_number_detected(
+    doc_tree: Path,
+) -> None:
+    # The count is matched as a whole number: "142" contains "42" and is not it.
+    _substitute(
+        doc_tree,
+        _README,
+        "wrongful ejections came to 42",
+        "wrongful ejections came to 142",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "names neither the count the record read (42)" in errors[0]
 
 
 def test_wrongful_ejection_sentence_may_state_the_previous_count(

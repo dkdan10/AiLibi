@@ -558,10 +558,9 @@ _QUOTED_BEFORE_CLAIMS: Final[frozenset[str]] = frozenset(
         _PARTNER_BALLOT_CLAIM,
     }
 )
-# Rows whose FIGURE :func:`check_result_sources` re-derives. A wrong figure
-# there is reported precisely, so the history cell beside it must not be
-# reported a second time for the same edit.
-_DERIVED_FIGURE_CLAIMS: Final[frozenset[str]] = frozenset({_REPLAY_COUNT_CLAIM})
+# A whole integer, so a count is matched as a number and not as a run of digits
+# inside a longer one.
+_WHOLE_NUMBER: Final = re.compile(r"\b\d+\b")
 # Every front-door sentence about wrongful convictions names the count the
 # record read, the way every "ladder tip" sentence names the baseline.
 _INJUSTICE_SENTENCE: Final = re.compile(
@@ -1853,7 +1852,7 @@ def check_unowned_history(
         _README: dict(results_rows(readme) or []),
         _READING_GUIDE: dict(results_rows(guide) or []),
     }
-    owned = _DERIVED_BEFORE_CLAIMS | _QUOTED_BEFORE_CLAIMS | _DERIVED_FIGURE_CLAIMS
+    owned = _DERIVED_BEFORE_CLAIMS | _QUOTED_BEFORE_CLAIMS
     for claim, stated in columns[_README].items():
         if claim in owned or not stated.strip():
             continue
@@ -2984,6 +2983,10 @@ def check_verdict_figures(repo_root: Path, errors: list[str]) -> None:
     if partition is None or previous is None:
         return
     counts = {str(partition[2]), str(previous[2])}
+    # The four conviction cells, keyed by denominator: a prose fraction over one
+    # of these populations is one of these cells, so an internally consistent
+    # rewrite of it ("62 of 103 = 0.6019") still has to be the recorded one.
+    recorded = {cell[1]: cell for cell in (*partition[:2], *previous[:2])}
     for document in _CLAIM_DOCUMENTS:
         text = read_document(repo_root, document, errors)
         if text is None:
@@ -2997,17 +3000,24 @@ def check_verdict_figures(repo_root: Path, errors: list[str]) -> None:
                 if not denominator:
                     continue
                 recomputed = f"{numerator / denominator:.{len(printed) - 2}f}"
-                if recomputed == printed:
-                    continue
-                errors.append(
-                    f"{document}:{number}: the claim "
-                    f"{match.group(0)!r} does not recompute — "
-                    f"{numerator}/{denominator} is {recomputed} at the "
-                    "precision it prints."
-                )
+                if recomputed != printed:
+                    errors.append(
+                        f"{document}:{number}: the claim "
+                        f"{match.group(0)!r} does not recompute — "
+                        f"{numerator}/{denominator} is {recomputed} at the "
+                        "precision it prints."
+                    )
+                cell = recorded.get(denominator)
+                if cell is not None and cell[0] != numerator:
+                    errors.append(
+                        f"{document}:{number}: the claim "
+                        f"{match.group(0)!r} is over a conviction population "
+                        f"{_LADDER_TIP_AUDIT} and {_PROOF_PARTITION_AUDIT} "
+                        f"record, whose cell is {cell[0]}/{cell[1]}."
+                    )
         for match in _INJUSTICE_SENTENCE.finditer(text):
             sentence = sentence_around(text, match.start(), match.end())
-            if any(count in sentence for count in counts):
+            if counts & set(_WHOLE_NUMBER.findall(sentence)):
                 continue
             errors.append(
                 f"{document}:{line_number(text, match.start())}: a "
