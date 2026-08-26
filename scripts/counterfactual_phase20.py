@@ -128,7 +128,6 @@ from meetings.transcript import detect_contradictions, is_weak_contradiction  # 
 from observation.service import ObservationService  # noqa: E402
 from orchestrator.replay import (  # noqa: E402
     LLMCallRecord,
-    TOGGLEABLE_SUBSTRATE_FLAG_KEYS,
     env_var_for_lever,
     fold_meeting_outcome_into_memories,
     substrate_flag_snapshot,
@@ -146,11 +145,21 @@ CANONICAL_SETS: Final[tuple[str, ...]] = (
 # arm, which §9 pins OFF for the record.
 NON_PHASE_20_LEVER: Final[str] = "impostor_roll_call"
 
-# The eight Phase-20 levers, read off the substrate registry rather than listed
-# here: a lever registered at 20.33 and forgotten here would silently drop out of
-# the slate this memo predicts for.
-PHASE_20_LEVERS: Final[tuple[str, ...]] = tuple(
-    key for key in TOGGLEABLE_SUBSTRATE_FLAG_KEYS if key != NON_PHASE_20_LEVER
+# The eight Phase-20 levers. Written out rather than read off
+# ``TOGGLEABLE_SUBSTRATE_FLAG_KEYS``: the baseline-7 record graduated all eight
+# into ``_RETIRED_ALWAYS_ON_LEVERS``, so that tuple no longer names them and a
+# derived list would be empty. The OFF column this memo priced can no longer be
+# produced at all -- every lever is unconditional -- so the slate legs below now
+# read identically, which is what the committed tests assert.
+PHASE_20_LEVERS: Final[tuple[str, ...]] = (
+    "task_completion_from_events",
+    "self_location_trail",
+    "movement_claim_shape",
+    "grounded_prosecution",
+    "map_aware_arbitration",
+    "structured_turn_markers",
+    "meeting_outcome_memory",
+    "coalesced_memory_render",
 )
 
 # The three levers that move a flag. The other five move a rendered line.
@@ -1393,16 +1402,24 @@ def leave_one_out_table(walk: _SetWalk) -> dict[str, dict[str, int]]:
 
 
 def _assert_ambient_slate_is_off(when: str) -> None:
-    """Refuse to run under a stale ``AILIBI_*`` export."""
+    """Refuse to run once the OFF column this table prices cannot be produced.
 
-    snapshot = substrate_flag_snapshot()
-    stale = sorted(key for key in PHASE_20_LEVERS if snapshot.get(key, False))
-    if stale:
+    The table is an OFF-vs-ON counterfactual: it toggles each lever through the
+    resolver's ``env`` parameter and never reads the process environment. A
+    GRADUATED lever ignores that parameter, so its OFF derivation no longer
+    exists in this build and the OFF column would silently be the ON column.
+    """
+
+    snapshot = substrate_flag_snapshot({})
+    graduated = sorted(key for key in PHASE_20_LEVERS if snapshot.get(key, False))
+    if graduated:
         raise SystemExit(
-            f"the ambient process slate is not OFF {when}: "
-            + ", ".join(f"{key} ({env_var_for_lever(key)})" for key in stale)
-            + " — this table toggles levers through each resolver's env parameter "
-            "and never reads the process environment; unset the exports and re-run"
+            f"the OFF column cannot be produced {when}: "
+            + ", ".join(f"{key} ({env_var_for_lever(key)})" for key in graduated)
+            + " graduated to unconditionally ON at the baseline-7 record "
+            "(audits/audit-phase-20-baseline-7.md §6.1), so this build has no OFF "
+            "derivation to compare against. The memo's table is FROZEN as the "
+            "pre-record prediction it was: audits/audit-phase-20-counterfactual.md"
         )
 
 
