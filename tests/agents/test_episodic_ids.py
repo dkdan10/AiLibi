@@ -423,7 +423,9 @@ class TestObservationIdRenderLever:
         assert rendered.count("[obs ") == 4
         assert "## Your role: CREWMATE" in rendered
         assert "## Your current beliefs:" in rendered
-        assert "[meeting] CLAIM by p2 (unverified): accused p4." in rendered
+        # The meeting-outcome channel tags the frame with the meeting it was
+        # spoken at (baseline 6 rendered the untagged "[meeting] CLAIM by …").
+        assert "[meeting 1] CLAIM by p2 (unverified): accused p4." in rendered
 
     def test_resolver_is_unconditionally_on(
         self, monkeypatch: pytest.MonkeyPatch

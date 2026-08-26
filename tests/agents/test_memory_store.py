@@ -42,6 +42,7 @@ def _self_state_event(
     role: str = "CREWMATE",
     room: str = "CAFETERIA",
     pending_task_id: str | None = None,
+    owned_task_ids: tuple[str, ...] | None = None,
     fellow_impostor_ids: tuple[str, ...] | None = None,
 ) -> EpisodicEvent:
     payload: dict[str, Any] = {
@@ -50,6 +51,8 @@ def _self_state_event(
         "role": role,
         "pending_task_id": pending_task_id,
     }
+    if owned_task_ids is not None:
+        payload["owned_task_ids"] = owned_task_ids
     if fellow_impostor_ids is not None:
         payload["fellow_impostor_ids"] = fellow_impostor_ids
     return EpisodicEvent(
@@ -439,7 +442,10 @@ class TestImpostorPretendTaskCompletionGate:
 
         assert "You completed" not in view
 
-    def test_crewmate_pending_change_still_mints_completed_task(self) -> None:
+    def test_a_crewmate_completion_leaves_the_owned_set_and_renders(self) -> None:
+        # The completion is minted from the tasks that LEAVE the owned set, so
+        # the crew fixture carries one (baseline 6 inferred it from the changed
+        # pending id alone, which a redistributed instance could fake).
         memory = AgentMemory()
         memory.episodic.append(
             _self_state_event(
@@ -447,6 +453,7 @@ class TestImpostorPretendTaskCompletionGate:
                 agent_id="p-1",
                 role="CREWMATE",
                 pending_task_id="swipe_card",
+                owned_task_ids=("submit_scan", "swipe_card"),
             )
         )
         memory.episodic.append(
@@ -455,6 +462,7 @@ class TestImpostorPretendTaskCompletionGate:
                 agent_id="p-1",
                 role="CREWMATE",
                 pending_task_id="submit_scan",
+                owned_task_ids=("submit_scan",),
             )
         )
 
@@ -927,14 +935,13 @@ def _byte_fixture_memory() -> AgentMemory:
 _EXPECTED_FIXTURE_RENDER = """\
 ## Your role: CREWMATE
 
+## Where you were:
+- Your route (t = tick): CAFETERIA t0 -> (no record) -> ELECTRICAL t3 -> (no record) -> ELECTRICAL t5
+
 ## Recent observations (most salient first):
 - [tick 5] You discovered p-3's body in ELECTRICAL.
 - [tick 3] You saw p-2 in ELECTRICAL (moved from CAFETERIA, last seen there at tick 0).
-- [tick 0] You saw p-2 in CAFETERIA (with p-3, p-4, p-5).
-- [tick 0] You saw p-3 in CAFETERIA (with p-2, p-4, p-5).
-- [tick 0] You saw p-4 in CAFETERIA (with p-2, p-3, p-5).
-- [tick 0] You saw p-5 in CAFETERIA (with p-2, p-3, p-4).
-- [tick 5] You completed swipe_card (you were in ELECTRICAL).
+- [tick 0] You saw every other player in CAFETERIA: p-2, p-3, p-4, p-5.
 
 ## Your current beliefs:
 - p-2: suspicion 0.55
