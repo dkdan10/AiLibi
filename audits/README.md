@@ -252,5 +252,10 @@ recorded measurements, not prose.
   observed lever coverage, and the GO/ABANDON call before the record starts.
 - [audit-phase-20-baseline-7.md](audit-phase-20-baseline-7.md) — the record
   itself: 300 games at the frozen slate, the pre-registered read bar by bar, and
-  the decision the arithmetic selected. FINDING — the ladder tip stands at
-  baseline 6.
+  the decision the arithmetic selected. FINDING: two bars missed, neither
+  re-priced — and the owner then adopted the substrate over that verdict by
+  explicit override (§6.1), which is why the ladder tip stands at baseline 7.
+- [audit-phase-20-close.md](audit-phase-20-close.md) — the phase close: the
+  whole gate re-run at close HEAD in both evidence states, every dispatched
+  contract re-verified, the before/after read back bar by bar, the defects it
+  found, and the balance wave put to the owner.

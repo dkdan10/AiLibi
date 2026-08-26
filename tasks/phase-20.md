@@ -1,7 +1,19 @@
 # Phase 20 — Evidence honesty: the front door made true, the inference channel repaired, one pre-registered record
 
-STATUS: PLANNED (owner ratification pending — the owner's merge of this document ratifies
-the plan, the 15.18 convention). Chartered from the three-track review of 2026-08-19
+STATUS: CLOSED 2026-08-26 (Task 20.42; `audits/audit-phase-20-close.md`) — all 43 dispatched
+contracts merged (2026-08-19 → 2026-08-26, PRs #351–#394) and the other 42 re-verified at close
+HEAD `937bd805` with two deviations recorded and none silent. The evidence-honesty substrate
+shipped and one pre-registered record was spent: the ratified decision rule returned **FINDING**
+(bar 1 non-direct accuracy 61/103 = 0.5922 against ≥ 0.60, bar 2 innocent ejections 42 against
+< 35 — both missed, neither re-priced), and on 2026-08-26 the owner **adopted the baseline-7
+substrate over that verdict by explicit override** (`audits/audit-phase-20-baseline-7.md` §6.1),
+so the eight levers graduated and the ladder tip stands at baseline 7. The default gate is green
+at close HEAD in BOTH the clean and the restored-evidence states — the pair the phase-19 close
+recorded as mutually exclusive, closed by Task 20.17 and re-run here; four findings are recorded
+and routed rather than fixed, the campaign tier's red among them. The next decision — the balance
+wave — is routed to the owner in the close audit's §4. The plan below is the ratified charter
+(the owner's merge of the planning PR ratified it, the 15.18 convention).
+Chartered from the three-track review of 2026-08-19
 (`audits/review-2026-08-19/`, the planning inputs, committed by this PR) and its synthesis
 (`audits/review-2026-08-19/D/FINAL-synthesis.md`); the phase shape, the decisions, the method
 changes this PR makes to the phase machinery, and every divergence from the review's roadmap
@@ -11,7 +23,8 @@ cells and is re-pinned from committed instruments at Task 20.22 BEFORE any subst
 exists. The ladder tip at chartering is baseline 6 (the 18.12 adopting record); this phase
 records ONE adopting record (baseline 7, Task 20.36) under a pre-registered decision rule
 that can ADOPT the new substrate or record it as a FINDING — either way the numbers are
-published. 42 contracts across four waves; the close (20.42) routes the next decision.
+published. 43 contracts across four waves (42 chartered plus 20.43, added mid-phase out of the
+smoke's ABANDON); the close (20.42) routes the next decision.
 
 ## Locked decisions (owner-ratified by the merge of this document)
 
