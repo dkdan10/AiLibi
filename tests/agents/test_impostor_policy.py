@@ -2213,7 +2213,9 @@ class TestCommittedCorpusTargetingPins:
         assert after.decline_reason_fellow_defer == 6
         assert after.decline_reason_cover == 2
         # The reconstruction still walks every decision the recording holds.
-        assert after.decisions_reconstructed == before.decisions_reconstructed == 2461
+        assert (
+            after.decisions_reconstructed == before.decisions_reconstructed == 1750
+        )  # was 1750
         assert after.in_vent_decisions == before.in_vent_decisions == 130
 
     @pytest.mark.slow

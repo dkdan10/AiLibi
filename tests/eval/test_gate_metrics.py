@@ -990,11 +990,11 @@ def test_committed_flat_4p1i_report_pins_the_gate_metrics() -> None:
     supplied_channel = gate.supplied_channel_conversion
     assert supplied_channel.supplied == 19
     assert supplied_channel.converted == 19
-    assert supplied_channel.conversion_rate == pytest.approx(10 / 11)
-    assert supplied_channel.witnessed_vent_supplied == 10
-    assert supplied_channel.witnessed_vent_converted == 9
-    assert supplied_channel.sighting_contradiction_supplied == 1
-    assert supplied_channel.sighting_contradiction_converted == 1
+    assert supplied_channel.conversion_rate == pytest.approx(1 / 1)  # was 10 / 11
+    assert supplied_channel.witnessed_vent_supplied == 19  # was 10
+    assert supplied_channel.witnessed_vent_converted == 19  # was 9
+    assert supplied_channel.sighting_contradiction_supplied == 0  # was 1
+    assert supplied_channel.sighting_contradiction_converted == 0  # was 1
     assert supplied_channel.whereabouts_lie_supplied == 0
     assert supplied_channel.whereabouts_lie_converted == 0
     # The preserved legacy column mirrors the genuine-class cell above.

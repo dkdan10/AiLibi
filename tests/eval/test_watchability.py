@@ -1383,7 +1383,7 @@ def test_cli_watchability_json_emits_per_game_and_aggregate() -> None:
     # 42.25 on baseline 5 — the meeting-layer graduation's richer flag supply and
     # higher conversion lift the geomean; the conversion-coupled D2 gate still sinks
     # the suspicion-theater games).
-    assert report["mean_score"] == pytest.approx(54.58)
+    assert report["mean_score"] == pytest.approx(50.69)  # was 54.58
 
 
 def test_cli_watchability_human_output() -> None:

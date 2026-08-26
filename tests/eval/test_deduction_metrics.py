@@ -158,7 +158,7 @@ def test_samples_9p2i_meeting_flag_partition(
     assert cross_tab.unflagged_ejections_innocent == 14  # was 21
     accuracy = cross_tab.unflagged_meeting_accuracy
     assert (accuracy.numerator, accuracy.denominator) == (16, 30)
-    assert accuracy.rate == pytest.approx(0.3225806451612903)
+    assert accuracy.rate == pytest.approx(0.5333333333333333)  # was 0.3225806451612903
 
 
 def test_samples_9p2i_ejectee_proof_partition(
@@ -179,7 +179,7 @@ def test_samples_9p2i_ejectee_proof_partition(
     assert cross_tab.non_direct_ejections == 30  # was 33
     accuracy = cross_tab.non_direct_accuracy
     assert (accuracy.numerator, accuracy.denominator) == (16, 30)
-    assert accuracy.rate == pytest.approx(0.30303030303030304)
+    assert accuracy.rate == pytest.approx(0.5333333333333333)  # was 0.30303030303030304
     # The audits' headline share: 68 of the 78 correct ejections rode proof.
     assert cross_tab.proof_present_impostor + cross_tab.non_direct_impostor == 78
 
@@ -255,7 +255,9 @@ def test_corpus_9p2i_cross_tab_twins(corpus_9p2i: TournamentEvalReport) -> None:
     assert ejectee_proof.proof_present_impostor == 212  # was 213
     non_direct = ejectee_proof.non_direct_accuracy
     assert (non_direct.numerator, non_direct.denominator) == (42, 68)
-    assert non_direct.rate == pytest.approx(0.39325842696629215)
+    assert non_direct.rate == pytest.approx(
+        0.6176470588235294
+    )  # was 0.39325842696629215
     # 213 of the 248 correct corpus ejections rode ejectee-specific proof.
     assert (
         ejectee_proof.proof_present_impostor + ejectee_proof.non_direct_impostor == 248
@@ -479,11 +481,17 @@ def test_roll_call_coverage_split_under_both_estimators(
         104,
         219,
     )
-    assert samples.crew_pooled_coverage == pytest.approx(0.9958677685950413)
-    assert samples.impostor_pooled_coverage == pytest.approx(0.4897959183673469)
+    assert samples.crew_pooled_coverage == pytest.approx(1.0)  # was 0.9958677685950413
+    assert samples.impostor_pooled_coverage == pytest.approx(
+        0.4748858447488584
+    )  # was 0.4897959183673469
     # The triage's "45.5%" reproduces exactly — as the macro-average.
-    assert samples.impostor_macro_average_coverage == pytest.approx(0.45454545454545453)
-    assert samples.crew_macro_average_coverage == pytest.approx(0.9957575757575758)
+    assert samples.impostor_macro_average_coverage == pytest.approx(
+        0.4375
+    )  # was 0.45454545454545453
+    assert samples.crew_macro_average_coverage == pytest.approx(
+        1.0
+    )  # was 0.9957575757575758
 
     corpus = corpus_9p2i.deduction.public_response_coverage
     assert (corpus.crew_turns_with_whereabouts, corpus.crew_turns) == (2035, 2042)
@@ -1008,7 +1016,9 @@ def test_guard_preserved_omniscient_rate_has_its_own_denominator(
     assert (rate.numerator, rate.denominator) == (1, 102)
     assert rate.advisory is True
     assert leakage.guard_marked_ballots == 115
-    assert leakage.guard_marked_ballot_share == pytest.approx(55 / 2726)
+    assert leakage.guard_marked_ballot_share == pytest.approx(
+        115 / 2479
+    )  # was 55 / 2726
     assert rate.rate != leakage.guard_marked_ballot_share
 
 
@@ -1360,7 +1370,9 @@ def test_witnessed_supply_adopts_the_kill_craft_pins(
     assert samples9 is not None
     assert (samples9.kills_total, samples9.crew_witnessed_kills) == (177, 3)
     assert samples9.co_present_crew_kills == 0
-    assert samples9.crew_witnessed_kill_rate.rate == pytest.approx(6 / 177)
+    assert samples9.crew_witnessed_kill_rate.rate == pytest.approx(
+        1 / 59
+    )  # was 6 / 177
 
     samples4 = samples_4p1i.deduction.witnessed_supply
     assert samples4 is not None

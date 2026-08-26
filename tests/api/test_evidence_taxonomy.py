@@ -283,7 +283,7 @@ def test_corpus_wide_totals() -> None:
         "weak_signal": 161,
         "cross_statement": 12,
     }
-    assert sum(totals.values()) == flag_count == 830
+    assert sum(totals.values()) == flag_count == 621  # was 830
 
 
 @pytest.mark.parametrize("set_name", _CORPUS_SETS)

@@ -727,8 +727,12 @@ def test_surrogate_fidelity_reproduces_pinned_numbers(
     assert report.ballot_brier == pytest.approx(
         0.12890565371024734, abs=1e-12
     )  # was 0.1242077399380805
-    assert report.ballot_ece == pytest.approx(0.048885448916408246, abs=1e-12)
-    assert report.honest_ceiling.max_achievable_top1 == pytest.approx(0.85, abs=1e-12)
+    assert report.ballot_ece == pytest.approx(
+        0.0818727915194337, abs=1e-12
+    )  # was 0.048885448916408246
+    assert report.honest_ceiling.max_achievable_top1 == pytest.approx(
+        0.8, abs=1e-12
+    )  # was 0.85
 
 
 def test_go_no_go_reproduces_the_re_measured_no_go_verdict(

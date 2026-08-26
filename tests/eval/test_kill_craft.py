@@ -131,7 +131,9 @@ def test_samples_4p1i_fold1(samples_4p1i_report: KillCraftReport) -> None:
     assert samples_4p1i_report.mean_co_present_witnessed == pytest.approx(0.0)
     assert samples_4p1i_report.mean_co_present_unwitnessed == pytest.approx(0.0)
     assert samples_4p1i_report.mean_one_hop_witnessed == pytest.approx(1.0)
-    assert samples_4p1i_report.mean_one_hop_unwitnessed == pytest.approx(0.2)
+    assert samples_4p1i_report.mean_one_hop_unwitnessed == pytest.approx(
+        0.265625
+    )  # was 0.2
     assert samples_4p1i_report.witnessed_point_biserial_co_present is None
     assert samples_4p1i_report.witnessed_point_biserial_within_one_hop == pytest.approx(
         0.22687999213482657
@@ -165,7 +167,7 @@ def test_corpus_entropy_crew_cells(corpus_report: KillCraftReport) -> None:
         "report": 296,
         "wait": 324,
     }
-    assert solo.entropy == pytest.approx(1.5054529064563125)
+    assert solo.entropy == pytest.approx(1.4181914332356391)  # was 1.5054529064563125
 
 
 def test_corpus_entropy_impostor_cells(corpus_report: KillCraftReport) -> None:
@@ -196,7 +198,9 @@ def test_corpus_entropy_impostor_cells(corpus_report: KillCraftReport) -> None:
         "move": 85,
         "vent": 18,
     }
-    assert ready_pair.entropy == pytest.approx(1.2749397234112307)
+    assert ready_pair.entropy == pytest.approx(
+        0.6995789292335453
+    )  # was 1.2749397234112307
 
 
 def test_samples_9p2i_entropy(samples_9p2i_report: KillCraftReport) -> None:

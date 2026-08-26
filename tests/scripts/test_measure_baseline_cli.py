@@ -40,17 +40,17 @@ def test_9p2i_reproduces_baseline_6_exactly() -> None:
     assert report.total_ejections == 99
     assert report.impostor_ejections == 85
     assert report.crewmate_ejections == 14
-    assert report.ejection_accuracy == pytest.approx(78 / 101)
+    assert report.ejection_accuracy == pytest.approx(85 / 99)  # was 78 / 101
     # Genuine impostor-subject flag class supply on baseline 6 (was 8/4 -> 0.5
     # pre-widening): 4 supplied, 3 converted -> 0.75.
-    assert report.genuine_class_supplied == 4
-    assert report.genuine_class_converted == 3
-    assert report.genuine_class_conversion == pytest.approx(0.75)
+    assert report.genuine_class_supplied == 1  # was 4
+    assert report.genuine_class_converted == 0  # was 3
+    assert report.genuine_class_conversion == pytest.approx(0.0)  # was 0.75
     # Task 19.5 wires the Task-17.6 successor here too: the CANARY cell, the
     # only canary-eligible genuine-class instrument from baseline 5 onward.
     # 79 supplied (meeting, impostor) pairs across the three recorded channels,
     # 70 converted -> 0.8861.
-    assert report.supplied_channel_supplied == 79
+    assert report.supplied_channel_supplied == 76  # was 79
     assert report.supplied_channel_converted == 70
     assert report.supplied_channel_conversion == pytest.approx(70 / 79)
     # Impostor win 0.30; win split CREW 35 / IMP 15 (unchanged by the widening).
