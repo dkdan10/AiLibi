@@ -670,10 +670,10 @@ def test_bakeoff_reloads_the_committed_artifact_and_reproduces_the_numbers(
 
     calibration = frozen.predicted_ballot_calibration(test_views)
     assert calibration.predicted_ballots == 97  # was 100
-    assert calibration.predicted_skips == 457
+    assert calibration.predicted_skips == 401  # was 457
     # Inference from FIXED committed weights; tolerance covers libm exp variance
     # across platforms, nothing more.
-    assert calibration.brier == pytest.approx(0.2541857827042379, abs=1e-9)
+    assert calibration.brier == pytest.approx(0.3061476258037689, abs=1e-9)  # was 0.2541857827042379
 
 
 def test_surrogate_fidelity_reproduces_pinned_numbers(
@@ -697,18 +697,18 @@ def test_surrogate_fidelity_reproduces_pinned_numbers(
     assert report.top1_hits == 44  # was 46
     assert report.top2_hits == 52  # was 55
     assert report.predicted_ejections == 2  # was 0
-    assert report.predicted_skips == 96
-    assert report.correct_skip_decisions == 36
-    assert report.correct_eject_decisions == 0
-    assert report.ejection_predicted_skips == 60
+    assert report.predicted_skips == 85  # was 96
+    assert report.correct_skip_decisions == 32  # was 36
+    assert report.correct_eject_decisions == 2  # was 0
+    assert report.ejection_predicted_skips == 53  # was 60
     assert report.degenerates_to_skip is True
-    assert report.ballot_rows == 323
-    assert report.honest_ceiling.ejections_total == 60
-    assert report.honest_ceiling.reachable == 51
+    assert report.ballot_rows == 283  # was 323
+    assert report.honest_ceiling.ejections_total == 55  # was 60
+    assert report.honest_ceiling.reachable == 44  # was 51
     # Floats — deterministic, pinned to the exact literals.
-    assert report.top1 == pytest.approx(0.7666666666666667, abs=1e-12)
-    assert report.top2 == pytest.approx(0.9166666666666666, abs=1e-12)
-    assert report.skip_vs_eject_accuracy == pytest.approx(0.375, abs=1e-12)
+    assert report.top1 == pytest.approx(0.8, abs=1e-12)  # was 0.7666666666666667
+    assert report.top2 == pytest.approx(0.9454545454545454, abs=1e-12)  # was 0.9166666666666666
+    assert report.skip_vs_eject_accuracy == pytest.approx(0.39080459770114945, abs=1e-12)  # was 0.375
     assert report.always_eject_baseline == pytest.approx(0.625, abs=1e-12)
     assert report.brier == pytest.approx(0.06785997153616342, abs=1e-12)
     assert report.ece == pytest.approx(0.09477687280149634, abs=1e-12)

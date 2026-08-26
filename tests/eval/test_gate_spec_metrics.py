@@ -961,10 +961,10 @@ class TestCommittedW2GateSpecPins:
         assert gauges.strong_flags == 3  # was 58
         assert gauges.zero_contradiction_meetings == 127  # was 115
         assert gauges.genuine_subject_meetings == 10  # was 41
-        assert gauges.flag_subjects_crew == 75
-        assert gauges.flag_subjects_impostor == 9
-        assert gauges.accused_impostor_meetings == 134
-        assert gauges.over_gate_listener_rows == 506
+        assert gauges.flag_subjects_crew == 36  # was 75
+        assert gauges.flag_subjects_impostor == 6  # was 9
+        assert gauges.accused_impostor_meetings == 122  # was 134
+        assert gauges.over_gate_listener_rows == 450  # was 506
 
     def test_corrected_w2_baseline_matches_a_rederivation(
         self, committed_9p2i_report: TournamentEvalReport

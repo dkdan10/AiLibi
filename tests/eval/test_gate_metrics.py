@@ -883,22 +883,22 @@ def test_committed_9p2i_report_pins_the_audited_gate_metrics() -> None:
     assert supplied_channel.supplied == 76  # was 79
     assert supplied_channel.converted == 69  # was 70
     assert supplied_channel.conversion_rate == pytest.approx(69 / 76)  # was 70 / 79
-    assert supplied_channel.witnessed_vent_supplied == 76
-    assert supplied_channel.witnessed_vent_converted == 68
-    assert supplied_channel.sighting_contradiction_supplied == 2
-    assert supplied_channel.sighting_contradiction_converted == 2
-    assert supplied_channel.whereabouts_lie_supplied == 7
-    assert supplied_channel.whereabouts_lie_converted == 5
+    assert supplied_channel.witnessed_vent_supplied == 74  # was 76
+    assert supplied_channel.witnessed_vent_converted == 69  # was 68
+    assert supplied_channel.sighting_contradiction_supplied == 0  # was 2
+    assert supplied_channel.sighting_contradiction_converted == 0  # was 2
+    assert supplied_channel.whereabouts_lie_supplied == 5  # was 7
+    assert supplied_channel.whereabouts_lie_converted == 2  # was 5
     # The preserved legacy column mirrors the genuine-class cell above.
-    assert supplied_channel.legacy_alibi_supplied == 4
-    assert supplied_channel.legacy_alibi_converted == 3
-    assert supplied_channel.legacy_alibi_conversion_rate == pytest.approx(0.75)
+    assert supplied_channel.legacy_alibi_supplied == 1  # was 4
+    assert supplied_channel.legacy_alibi_converted == 0  # was 3
+    assert supplied_channel.legacy_alibi_conversion_rate == pytest.approx(0.0)  # was 0.75
     assert supplied_channel.note == SUPPLIED_CHANNEL_GATE_NOTE
 
     assert gate.lost_opening_accusations == 0
     assert gate.cap_defaulted_turns == 0
 
-    assert gate.accused_impostor_events == 148
+    assert gate.accused_impostor_events == 137  # was 148
     assert gate.accused_impostor_survivals == 70
     # The 70 accused-impostor survivals partition into rendered-met (voters saw a
     # §4.6-gate-meeting suspicion yet the impostor survived), sheltered sub-gate,

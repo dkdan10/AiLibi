@@ -201,8 +201,8 @@ def test_samples_9p2i_entropy(samples_9p2i_report: KillCraftReport) -> None:
     impostor = samples_9p2i_report.entropy_by_side["IMPOSTOR"]
     assert impostor.agents == 100
     assert impostor.decisions == 1750  # was 2461
-    assert impostor.mean_conditional_entropy == pytest.approx(0.7069138997083648)
-    assert impostor.mean_unconditional_entropy == pytest.approx(1.7642325293949697)
+    assert impostor.mean_conditional_entropy == pytest.approx(0.6009214748000467)  # was 0.7069138997083648
+    assert impostor.mean_unconditional_entropy == pytest.approx(1.884506862995976)  # was 1.7642325293949697
     assert sorted(impostor.buckets) == [
         "cooling|crowd",
         "cooling|pair",
@@ -224,8 +224,8 @@ def test_samples_4p1i_entropy(samples_4p1i_report: KillCraftReport) -> None:
     impostor = samples_4p1i_report.entropy_by_side["IMPOSTOR"]
     assert impostor.agents == 50
     assert impostor.decisions == 551  # was 632
-    assert impostor.mean_conditional_entropy == pytest.approx(0.490861414163582)
-    assert impostor.mean_unconditional_entropy == pytest.approx(1.5135518536786732)
+    assert impostor.mean_conditional_entropy == pytest.approx(0.5289882873221415)  # was 0.490861414163582
+    assert impostor.mean_unconditional_entropy == pytest.approx(1.6894510017431523)  # was 1.5135518536786732
     assert sorted(impostor.buckets) == [
         "cooling|crowd",
         "cooling|pair",

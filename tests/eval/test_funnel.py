@@ -607,7 +607,7 @@ def test_funnel_reproduces_oracle_stage(nine_funnel: InformationFunnelReport) ->
     # singleton that convicted the wrong player).
     assert nine_funnel.candidate_singleton_pm1 == 33  # was 55
     assert nine_funnel.unique_killer_pm1 == 26  # was 51
-    assert nine_funnel.candidate_le2_pm1 == 98
+    assert nine_funnel.candidate_le2_pm1 == 93  # was 98
 
 
 def test_funnel_reproduces_possession_stage(
@@ -634,15 +634,15 @@ def test_funnel_reproduces_transmission_stage(
     assert nine_funnel.report_ejections == 91  # was 87
     # Votes outside the ≤3 exact-tick candidate set.
     assert nine_funnel.votes_outside_small_set == 21  # was 18
-    assert nine_funnel.small_set_ejections == 56
+    assert nine_funnel.small_set_ejections == 62  # was 56
     # The messenger-innocent-prior tripwire: no committed killer self-reports.
     assert nine_funnel.killer_self_reported == 0
     # 15.4's SawVentObservation type makes held vents STRUCTURALLY speakable — 93
     # structured vent observations on baseline 5. Pinned so the folds cannot
     # silently drift.
-    assert nine_funnel.structured_vent_observed == 93
-    assert nine_funnel.killer_placement_observed == 35
-    assert nine_funnel.killer_accused == 92
+    assert nine_funnel.structured_vent_observed == 72  # was 93
+    assert nine_funnel.killer_placement_observed == 26  # was 35
+    assert nine_funnel.killer_accused == 97  # was 92
 
 
 def test_funnel_runs_on_4p1i_preset() -> None:

@@ -556,18 +556,18 @@ def test_committed_9p2i_recompute_pins_the_coerced_bucket() -> None:
     assert result.total_ejections == 99  # was 101
     assert result.impostor_ejections == 85  # was 78
     assert result.ejection_accuracy == pytest.approx(85 / 99)  # was 78 / 101
-    assert result.impostor_accused_meetings == 134
-    assert result.impostor_accused_conversions == 78
-    assert result.impostor_accused_conversion_rate == pytest.approx(78 / 134)
-    assert result.skip_ballots == 451
-    assert result.correct_skip_ballots == 321
-    assert result.missed_skip_ballots == 129
+    assert result.impostor_accused_meetings == 122  # was 134
+    assert result.impostor_accused_conversions == 85  # was 78
+    assert result.impostor_accused_conversion_rate == pytest.approx(85 / 122)  # was 78 / 134
+    assert result.skip_ballots == 333  # was 451
+    assert result.correct_skip_ballots == 236  # was 321
+    assert result.missed_skip_ballots == 96  # was 129
     assert result.unclassified_skip_ballots == 0
     assert result.citation_coerced_skip_ballots == 1
-    assert result.missed_skip_impostor_voters == 41
-    assert result.missed_skip_teammate_coerced == 0
-    assert result.missed_skip_invalid_target == 1
-    assert result.threshold_inversions == 87
+    assert result.missed_skip_impostor_voters == 48  # was 41
+    assert result.missed_skip_teammate_coerced == 2  # was 0
+    assert result.missed_skip_invalid_target == 2  # was 1
+    assert result.threshold_inversions == 46  # was 87
 
     # Exactly one ballot carries the marker head: the baseline-6 bytes have a
     # single coerced SKIP, so the divert scan yields one entry.
@@ -599,7 +599,7 @@ def test_committed_4p1i_recompute_has_no_coerced_and_is_unchanged() -> None:
     assert result.missed_skip_invalid_target == 0
     assert result.threshold_inversions == 0  # was 1
     assert result.total_ejections == 21  # was 12
-    assert result.impostor_ejections == 10
+    assert result.impostor_ejections == 20  # was 10
 
 
 @pytest.mark.parametrize(

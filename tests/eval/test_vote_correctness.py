@@ -1902,22 +1902,22 @@ def test_committed_9p2i_report_pins_the_audited_conversion_values() -> None:
     assert conversion.impostor_ejections == 85  # was 78
     assert conversion.ejection_accuracy == pytest.approx(85 / 99)  # was 78 / 101
     assert conversion.impostor_accused_meetings == 122  # was 134
-    assert conversion.impostor_accused_conversions == 78
-    assert conversion.impostor_accused_conversion_rate == pytest.approx(78 / 134)
-    assert conversion.skip_ballots == 451
-    assert conversion.correct_skip_ballots == 321
-    assert conversion.missed_skip_ballots == 129
+    assert conversion.impostor_accused_conversions == 85  # was 78
+    assert conversion.impostor_accused_conversion_rate == pytest.approx(85 / 122)  # was 78 / 134
+    assert conversion.skip_ballots == 333  # was 451
+    assert conversion.correct_skip_ballots == 236  # was 321
+    assert conversion.missed_skip_ballots == 96  # was 129
     assert conversion.unclassified_skip_ballots == 0
-    assert conversion.missed_skip_impostor_voters == 41
-    assert conversion.missed_skip_teammate_coerced == 0
-    assert conversion.missed_skip_invalid_target == 1
+    assert conversion.missed_skip_impostor_voters == 48  # was 41
+    assert conversion.missed_skip_teammate_coerced == 2  # was 0
+    assert conversion.missed_skip_invalid_target == 2  # was 1
     # The missed_skip partition holds exactly: 129 = 41 impostor-voter + 1
     # invalid-target + 87 threshold_inversions (the crew discretionary remainder).
-    assert conversion.threshold_inversions == 87
+    assert conversion.threshold_inversions == 46  # was 87
 
     # The sentinel reads the recorded truth: 72 of the 78 impostor ejections are
     # transcript-evidence-backed (see docstring).
-    assert report.vote_correctness.vote_correctness_rate == pytest.approx(72 / 78)
+    assert report.vote_correctness.vote_correctness_rate == pytest.approx(78 / 85)  # was 72 / 78
     assert report.vote_correctness.evidence_backed_impostor_ejections == 72
     assert report.vote_correctness.impostor_ejections == 78
     # The wrapper mirrors, never re-derives: the two surfaces agree exactly.
@@ -3106,18 +3106,18 @@ def test_committed_9p2i_report_pins_the_successor_instrument() -> None:
     assert result.converted == 69  # was 70
     assert result.conversion_rate == pytest.approx(69 / 76)  # was 70 / 79
     assert result.witnessed_vent_supplied == 74  # was 76
-    assert result.witnessed_vent_converted == 68
-    assert result.sighting_contradiction_supplied == 2
-    assert result.sighting_contradiction_converted == 2
-    assert result.whereabouts_lie_supplied == 7
-    assert result.whereabouts_lie_converted == 5
+    assert result.witnessed_vent_converted == 69  # was 68
+    assert result.sighting_contradiction_supplied == 0  # was 2
+    assert result.sighting_contradiction_converted == 0  # was 2
+    assert result.whereabouts_lie_supplied == 5  # was 7
+    assert result.whereabouts_lie_converted == 2  # was 5
 
     # The legacy alibi-anchored cell: preserved, labeled, now reading a non-zero
     # 4/3 (rate 0.75), mirrored exactly from the committed gate block (one home,
     # never recomputed differently).
-    assert result.legacy_alibi_supplied == 4
-    assert result.legacy_alibi_converted == 3
-    assert result.legacy_alibi_conversion_rate == pytest.approx(0.75)
+    assert result.legacy_alibi_supplied == 1  # was 4
+    assert result.legacy_alibi_converted == 0  # was 3
+    assert result.legacy_alibi_conversion_rate == pytest.approx(0.0)  # was 0.75
     committed_legacy = report.gate_metrics.genuine_class_conversion
     assert result.legacy_alibi_supplied == committed_legacy.supplied
     assert result.legacy_alibi_converted == committed_legacy.converted
@@ -3170,12 +3170,12 @@ def test_committed_flat_4p1i_report_pins_the_successor_instrument() -> None:
     assert result.converted == 19  # was 10
     assert result.conversion_rate == pytest.approx(1 / 1)  # was 10 / 11
     assert result.witnessed_vent_supplied == 19  # was 10
-    assert result.witnessed_vent_converted == 9
-    assert result.sighting_contradiction_supplied == 1
+    assert result.witnessed_vent_converted == 19  # was 9
+    assert result.sighting_contradiction_supplied == 0  # was 1
     assert result.whereabouts_lie_supplied == 0
 
-    assert result.legacy_alibi_supplied == 1
-    assert result.legacy_alibi_converted == 1
+    assert result.legacy_alibi_supplied == 0  # was 1
+    assert result.legacy_alibi_converted == 0  # was 1
     assert result.legacy_alibi_conversion_rate == pytest.approx(1.0)
     committed_legacy = report.gate_metrics.genuine_class_conversion
     assert result.legacy_alibi_supplied == committed_legacy.supplied

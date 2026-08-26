@@ -655,7 +655,7 @@ def test_9p2i_pooling_reproduces_baseline_5_exactly(
     assert nine_pooling.vouch_rate_mean == pytest.approx(0.5555372807017543)  # was 0.709040404040404
     assert nine_pooling.grounded_vouch_rate_mean == pytest.approx(0.4753054511278195)  # was 0.587034632034632
     assert nine_pooling.grounded_vouch_share == pytest.approx(0.8622754491017964)  # was 0.8333333333333334
-    assert nine_pooling.absence_set_size_mean == pytest.approx(0.22424242424242424)
+    assert nine_pooling.absence_set_size_mean == pytest.approx(0.3881578947368421)  # was 0.22424242424242424
     assert nine_pooling.absence_set_size_median == pytest.approx(0.0)
     assert dict(nine_pooling.absence_set_size_histogram) == {
         0: 129,

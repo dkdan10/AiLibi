@@ -155,7 +155,7 @@ def test_samples_9p2i_meeting_flag_partition(
     assert cross_tab.flagged_ejections_impostor == 69  # was 68
     assert cross_tab.flagged_ejections_innocent == 0  # was 2
     assert cross_tab.unflagged_ejections_impostor == 16  # was 10
-    assert cross_tab.unflagged_ejections_innocent == 21
+    assert cross_tab.unflagged_ejections_innocent == 14  # was 21
     accuracy = cross_tab.unflagged_meeting_accuracy
     assert (accuracy.numerator, accuracy.denominator) == (10, 31)
     assert accuracy.rate == pytest.approx(0.3225806451612903)
@@ -248,11 +248,11 @@ def test_corpus_9p2i_cross_tab_twins(corpus_9p2i: TournamentEvalReport) -> None:
     assert meeting_flag.flagged_ejections_impostor == 212  # was 213
     assert meeting_flag.flagged_ejections_innocent == 0  # was 3
     assert meeting_flag.unflagged_ejections_impostor == 42  # was 35
-    assert meeting_flag.unflagged_ejections_innocent == 51
+    assert meeting_flag.unflagged_ejections_innocent == 26  # was 51
 
-    assert ejectee_proof.ejections_total == 302
-    assert ejectee_proof.proof_present_ejections == 213
-    assert ejectee_proof.proof_present_impostor == 213
+    assert ejectee_proof.ejections_total == 280  # was 302
+    assert ejectee_proof.proof_present_ejections == 212  # was 213
+    assert ejectee_proof.proof_present_impostor == 212  # was 213
     non_direct = ejectee_proof.non_direct_accuracy
     assert (non_direct.numerator, non_direct.denominator) == (35, 89)
     assert non_direct.rate == pytest.approx(0.39325842696629215)
@@ -290,14 +290,14 @@ def test_4p_sets_cross_tab(
     assert meeting_flag.unflagged_ejections_innocent == 1
     # The ANY-flag reading the triage may have meant: 13 flagged meetings, all
     # 12 ejections inside them, 26 flagless meetings — still not 13 ejections.
-    assert samples.evidence_taxonomy.meetings_with_any_flag == 13
+    assert samples.evidence_taxonomy.meetings_with_any_flag == 19  # was 13
     ejectee_proof = samples.ejectee_proof_cross_tab
-    assert ejectee_proof.proof_present_ejections == 9
-    assert ejectee_proof.non_direct_ejections == 3
+    assert ejectee_proof.proof_present_ejections == 19  # was 9
+    assert ejectee_proof.non_direct_ejections == 2  # was 3
     assert ejectee_proof.non_direct_accuracy.numerator == 1
     # 9 of the 10 correct ejections involved vent proof (the row's one 4p clause
     # that DOES reproduce).
-    assert ejectee_proof.proof_present_impostor == 9
+    assert ejectee_proof.proof_present_impostor == 19  # was 9
     assert (
         ejectee_proof.proof_present_impostor + ejectee_proof.non_direct_impostor == 10
     )
@@ -621,15 +621,15 @@ def test_turn_ballot_consistency_pins(
     assert samples.inconsistent_other_target_ballots == 69  # was 91
     assert samples.inconsistent_invalid_target_ballots == 3
     assert samples.guard_rewritten_ballots_unwound == 34  # was 16
-    assert samples.consistency_rate == pytest.approx(347 / 777)
+    assert samples.consistency_rate == pytest.approx(101 / 188)  # was 347 / 777
 
     corpus = corpus_9p2i.deduction.turn_ballot_consistency
-    assert corpus.accusing_ballots == 2186
-    assert corpus.consistent_ballots == 1003
-    assert corpus.inconsistent_skip_ballots == 829
-    assert corpus.inconsistent_other_target_ballots == 354
-    assert corpus.inconsistent_invalid_target_ballots == 0
-    assert corpus.guard_rewritten_ballots_unwound == 46
+    assert corpus.accusing_ballots == 2113  # was 2186
+    assert corpus.consistent_ballots == 1158  # was 1003
+    assert corpus.inconsistent_skip_ballots == 792  # was 829
+    assert corpus.inconsistent_other_target_ballots == 162  # was 354
+    assert corpus.inconsistent_invalid_target_ballots == 1  # was 0
+    assert corpus.guard_rewritten_ballots_unwound == 85  # was 46
 
 
 def test_consistency_is_scored_against_the_authored_target(

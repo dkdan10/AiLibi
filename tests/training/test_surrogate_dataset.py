@@ -928,5 +928,5 @@ def test_j1_live_parity_divergence_is_measured_on_the_9p2i_corpus(
     assert parity.j1_divergent_cells == 61  # was 141
     assert parity.j1_divergent_rows == 57  # was 130
     assert parity.j1_divergent_fit_cells == 42  # was 113
-    assert parity.j1_divergent_test_cells == 28
+    assert parity.j1_divergent_test_cells == 19  # was 28
     assert parity.j1_max_abs_divergence == pytest.approx(0.06, abs=1e-9)

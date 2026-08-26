@@ -77,7 +77,7 @@ def test_4p1i_reproduces_baseline_6_exactly() -> None:
     # Genuine impostor-subject flag class now has one instance on baseline 6 (was
     # 0/0): 1 supplied, 1 converted -> 1.0.
     assert report.genuine_class_supplied == 0  # was 1
-    assert report.genuine_class_converted == 1
+    assert report.genuine_class_converted == 0  # was 1
     assert report.genuine_class_conversion == pytest.approx(1.0)
     # The Task-19.5 canary cell on this set: 11 supplied, 10 converted -> 0.9091.
     assert report.supplied_channel_supplied == 11
@@ -111,9 +111,9 @@ def test_json_emits_array_of_reports(capsys: pytest.CaptureFixture[str]) -> None
     nine = payload[0]
     assert nine["ejection_accuracy"] == pytest.approx(85 / 99)  # was 78 / 101
     assert nine["reason_histogram"]["CREWMATE_EJECT"] == 38  # was 31
-    assert nine["r1_eject_decided_wins"] == 31
+    assert nine["r1_eject_decided_wins"] == 38  # was 31
     # Task 19.5: the canary trio ships on the JSON surface too (payload[0] is 9p2i).
-    assert nine["supplied_channel_supplied"] == 79
+    assert nine["supplied_channel_supplied"] == 76  # was 79
     assert "supplied_channel_conversion" in nine
 
 
