@@ -2130,18 +2130,11 @@ _ROSTER_3 = frozenset({"p-3", "p-5", "p-9"})
 
 
 class TestMovementClaimShapeResolver:
-    def test_defaults_off_with_no_environment(self) -> None:
-        assert movement_claim_shape_enabled({}) is False
-
-    def test_reads_the_documented_true_values(self) -> None:
-        for value in ("1", "true", "TRUE", "yes", "on", " On "):
+    def test_the_movement_channel_is_unconditional(self) -> None:
+        # Graduated at the baseline-7 record: no environment turns it off again.
+        for value in ("", "0", "false", "no", "off", "maybe", "1", "on"):
             assert movement_claim_shape_enabled({ENV_MOVEMENT_CLAIM_SHAPE: value})
-
-    def test_any_other_value_is_off(self) -> None:
-        for value in ("", "0", "false", "no", "off", "maybe"):
-            assert (
-                movement_claim_shape_enabled({ENV_MOVEMENT_CLAIM_SHAPE: value}) is False
-            )
+        assert movement_claim_shape_enabled({}) is True
 
 
 def _origin_spoken_transcript(
@@ -2198,14 +2191,17 @@ class TestMovementResolutionArm:
                 _move_record(tick=3, subject="p-3", from_room="MEDBAY", to_room="LABS"),
             )
         }
-        off = detect_contradictions(tx, roster=_ROSTER_3)
-        assert [f.kind for f in off] == ["alibi_vs_sighting"]
-        assert is_weak_contradiction(off[0]) is False
-        assert off[0].subjects == ("p-3",)
-        on = detect_contradictions(
-            tx, roster=_ROSTER_3, move_witness_records=records, env=_MOVEMENT_ON
+        # Without the witness's own move records the channel has nothing to
+        # re-read, so the manufactured flag still mints (map-aware arbitration
+        # bands it WEAK -- MEDBAY and LABS are one doorway apart).
+        blind = detect_contradictions(tx, roster=_ROSTER_3)
+        assert [f.kind for f in blind] == ["alibi_vs_sighting"]
+        assert blind[0].subjects == ("p-3",)
+        # With them, the sighting is re-read at the destination and nothing mints.
+        assert (
+            detect_contradictions(tx, roster=_ROSTER_3, move_witness_records=records)
+            == ()
         )
-        assert on == ()
 
     def test_seed_39_shape_mints_off_and_dissolves_on(self) -> None:
         # samples/9p2i seed 39 meeting-0: the witness holds EAST_HALL->CAFETERIA
@@ -2395,19 +2391,6 @@ class TestMovementResolutionArm:
         # leaves you absent, and the re-read does not change that either.
         assert absent_players(tx, roster=_ROSTER_3) == ("p-5", "p-9")
 
-    def test_records_are_inert_while_the_lever_is_off(self) -> None:
-        # The whole OFF-path guarantee in one assertion: a live channel changes
-        # nothing until the lever is on.
-        tx = _origin_spoken_transcript()
-        records = {
-            "p-9": (
-                _move_record(tick=3, subject="p-3", from_room="MEDBAY", to_room="LABS"),
-            )
-        }
-        assert detect_contradictions(
-            tx, roster=_ROSTER_3, move_witness_records=records
-        ) == detect_contradictions(tx, roster=_ROSTER_3)
-
 
 class TestMovementShapeArm:
     """ON, a grounded spoken transition participates as ONE destination placement."""
@@ -2480,18 +2463,6 @@ class TestMovementShapeArm:
             detect_contradictions(
                 tx, roster=_ROSTER_3, move_witness_records=records, env=_MOVEMENT_ON
             )
-            == ()
-        )
-
-    def test_the_off_detector_ignores_the_shape_entirely(self) -> None:
-        tx = self._transcript(answer_room="ADMIN", answer_tick=3)
-        records = {
-            "p-9": (
-                _move_record(tick=3, subject="p-3", from_room="MEDBAY", to_room="LABS"),
-            )
-        }
-        assert (
-            detect_contradictions(tx, roster=_ROSTER_3, move_witness_records=records)
             == ()
         )
 
@@ -2598,41 +2569,20 @@ def _grounding_records(
 
 
 class TestGroundedProsecutionResolver:
-    def test_defaults_off_with_no_environment(self) -> None:
-        assert grounded_prosecution_enabled({}) is False
-
-    def test_reads_the_documented_true_values(self) -> None:
-        for value in ("1", "true", "TRUE", "yes", "on", " On "):
+    def test_the_grounding_rules_are_unconditional(self) -> None:
+        # Graduated at the baseline-7 record: no environment turns them off again.
+        for value in ("", "0", "false", "no", "off", "maybe", "1", "on"):
             assert grounded_prosecution_enabled({ENV_GROUNDED_PROSECUTION: value})
+        assert grounded_prosecution_enabled({}) is True
 
-    def test_any_other_value_is_off(self) -> None:
-        for value in ("", "0", "false", "no", "off", "maybe"):
-            assert (
-                grounded_prosecution_enabled({ENV_GROUNDED_PROSECUTION: value}) is False
-            )
-
-    def test_the_lever_is_inert_without_a_records_mapping(self) -> None:
-        # The second half of the predicate: a caller with no records keeps the
+    def test_the_rules_are_inert_without_a_records_mapping(self) -> None:
+        # The other half of the predicate: a caller with no records keeps the
         # pre-lever rules, which is what makes the record-free re-derivers safe.
         tx = _prosecution_transcript()
         baseline = detect_contradictions(tx, roster=_ROSTER_4)
         assert [is_weak_contradiction(f) for f in baseline] == [False, False]
-        assert detect_contradictions(tx, roster=_ROSTER_4, env=_GROUNDED_ON) == baseline
         assert (
-            detect_contradictions(
-                tx, roster=_ROSTER_4, sighting_records={}, env=_GROUNDED_ON
-            )
-            == baseline
-        )
-
-    def test_records_without_the_lever_change_nothing(self) -> None:
-        tx = _prosecution_transcript()
-        baseline = detect_contradictions(tx, roster=_ROSTER_4)
-        assert (
-            detect_contradictions(
-                tx, roster=_ROSTER_4, sighting_records=_grounding_records("p-9")
-            )
-            == baseline
+            detect_contradictions(tx, roster=_ROSTER_4, sighting_records={}) == baseline
         )
 
 
@@ -2787,6 +2737,8 @@ class TestGroundedProsecutionRuleTwoSources:
     def test_one_speaker_grounding_twice_is_still_one_source(self) -> None:
         # The double-count guard, in both of its shapes: two records behind one
         # sighting, and two sightings in ONE turn. Neither is a second witness.
+        # REACTOR, not LABS: LABS is one doorway from MEDBAY, so map-aware
+        # arbitration would band the pair first and this rule would go untested.
         tx = MeetingTranscript(
             turns=(
                 _turn(
@@ -2801,28 +2753,45 @@ class TestGroundedProsecutionRuleTwoSources:
                     speaker="p-9",
                     turn_kind="reply",
                     observations=(
-                        _saw(tick=6, subject="p-3", room="LABS"),
-                        _saw(tick=7, subject="p-3", room="LABS"),
+                        _saw(tick=6, subject="p-3", room="REACTOR"),
+                        _saw(tick=7, subject="p-3", room="REACTOR"),
                     ),
                 ),
             )
         )
         records = {
             "p-9": (
-                _sighting_record(tick=6, subject="p-3", room="LABS"),
-                _sighting_record(tick=7, subject="p-3", room="LABS"),
+                _sighting_record(tick=6, subject="p-3", room="REACTOR"),
+                _sighting_record(tick=7, subject="p-3", room="REACTOR"),
             )
         }
-        flags = detect_contradictions(
-            tx, roster=_ROSTER_4, sighting_records=records, env=_GROUNDED_ON
-        )
+        flags = detect_contradictions(tx, roster=_ROSTER_4, sighting_records=records)
         assert len(flags) == 2
         assert [is_weak_contradiction(f) for f in flags] == [True, True]
         for flag in flags:
             assert WEAK_REASON_LONE_GROUNDED_SOURCE in flag.description
-        # OFF, both of them convict -- which is the conviction this rule removes.
-        off = detect_contradictions(tx, roster=_ROSTER_4)
-        assert [is_weak_contradiction(f) for f in off] == [False, False]
+        # The gate bites: a SECOND grounded speaker is a prosecution, and the same
+        # two flags stand STRONG.
+        seconded = MeetingTranscript(
+            turns=(
+                *tx.turns,
+                _turn(
+                    turn_index=2,
+                    speaker="p-5",
+                    turn_kind="opt_in",
+                    observations=(_saw(tick=6, subject="p-3", room="REACTOR"),),
+                ),
+            )
+        )
+        strong = detect_contradictions(
+            seconded,
+            roster=_ROSTER_4,
+            sighting_records={
+                **records,
+                "p-5": (_sighting_record(tick=6, subject="p-3", room="REACTOR"),),
+            },
+        )
+        assert any(is_weak_contradiction(f) is False for f in strong)
 
     def test_a_weak_banded_speaker_is_still_a_source(self) -> None:
         # An endpoint-tick sighting is transit fuzz as its OWN flag, but it is
@@ -3202,23 +3171,22 @@ class TestGroundedProsecutionRuleSingleTickEndpoint:
             )
         )
 
-    def test_the_roll_call_answer_bands_weak_under_the_lever(self) -> None:
+    def test_the_roll_call_answer_bands_weak(self) -> None:
         tx = self._roll_call(tick=6)
-        # OFF: the 18.9 exemption adjudicates the single tick as the interior.
-        off = detect_contradictions(tx, roster=_ROSTER_4)
-        assert [is_weak_contradiction(f) for f in off] == [False, False]
-        # ON: the pre-18.9 band returns -- with its own literals, unchanged.
+        # A degenerate single-tick self-placement keeps the pre-18.9 narrow-window
+        # / endpoint band instead of being adjudicated as its own interior.
         on = detect_contradictions(
             tx,
             roster=_ROSTER_4,
             sighting_records=_grounding_records("p-9", "p-5"),
-            env=_GROUNDED_ON,
         )
         assert [is_weak_contradiction(f) for f in on] == [True, True]
         for flag in on:
+            # MEDBAY and LABS share a doorway, so map-aware arbitration appends
+            # its own reason after these two -- the prefix is what rule (c) owns.
             assert (
                 f"{WEAK_CONTRADICTION_MARKER_PREFIX}"
-                f"{WEAK_REASON_NARROW_WINDOW}; {WEAK_REASON_ENDPOINT_TICK}]"
+                f"{WEAK_REASON_NARROW_WINDOW}; {WEAK_REASON_ENDPOINT_TICK}"
             ) in flag.description
             # The band is rule (c)'s, not rule (b)'s: two grounded speakers.
             assert WEAK_REASON_LONE_GROUNDED_SOURCE not in flag.description
@@ -3238,11 +3206,10 @@ class TestGroundedProsecutionRuleSingleTickEndpoint:
 
 # --- The live detector re-derives the committed bytes -----------------------
 #
-# The graduated detector (levers 1 and 2 unconditional since the Task-18.12
-# baseline-6 record) re-derives every recorded flag byte-identically over ALL
-# FOUR committed sets -- 707 meetings. ml_corpus was re-grounded on baseline 6
-# by Task 18.13 (both MANIFESTs carry the same lever slate), so the walk is no
-# longer samples-only.
+# The graduated detector re-derives the recorded flags over ALL FOUR committed
+# sets -- 668 meetings at baseline 7. Two of the private per-speaker channels the
+# graduated rules read are rebuilt from the recorded verdicts (vents, sightings);
+# the MOVEMENT channel cannot be, so the walk pins how many meetings that costs.
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _COMMITTED_SETS = (
@@ -3251,7 +3218,15 @@ _COMMITTED_SETS = (
     _REPO_ROOT / "replays" / "ml_corpus" / "9p2i",
     _REPO_ROOT / "replays" / "ml_corpus" / "4p1i",
 )
-_COMMITTED_MEETINGS = 707
+_COMMITTED_MEETINGS = 668  # baseline 6: 707
+
+# Meetings whose recorded flags a records-free re-derivation CANNOT reproduce.
+# The movement channel re-reads a spoken placement at the destination the
+# speaker's own ``MoveWitnessRecord`` names, and those private rows are not
+# persisted in the replay -- so a re-read pair is provably unrecoverable, the way
+# the vent record's TICK is (see ``_VENT_STRUCT`` below). Pinned by count so the
+# number cannot drift silently; every diverging meeting is named on failure.
+_MOVEMENT_CHANNEL_DIVERGENCES = 70
 
 
 @functools.cache
@@ -3309,6 +3284,41 @@ def _vent_records_from_recorded_flags(
                 continue
             records.setdefault(turn.speaker, []).append(
                 VentWitnessRecord(
+                    subject=observation.subject,
+                    room=observation.room,
+                    tick=observation.tick,
+                )
+            )
+    return {speaker: tuple(rows) for speaker, rows in records.items()}
+
+
+def _sighting_records_from_recorded_flags(
+    entry: MeetingReplayEntry,
+) -> dict[str, tuple[SightingRecord, ...]]:
+    """Rebuild each speaker's groundable sighting channel from the RECORDED flags.
+
+    The same inversion :func:`_vent_records_from_recorded_flags` makes, for the
+    grounded-prosecution rule: a recorded flag carrying
+    :data:`WEAK_REASON_UNGROUNDED_SIGHTING` says the speaker's own record did NOT
+    back that sighting, so no record is minted for it; every other spoken
+    sighting was grounded at record time and re-grounds by construction.
+    """
+
+    ungrounded = {
+        event_id
+        for flag in entry.contradictions
+        if WEAK_REASON_UNGROUNDED_SIGHTING in flag.description
+        for event_id in (flag.event_a_id, flag.event_b_id)
+    }
+    records: dict[str, list[SightingRecord]] = {}
+    for turn in entry.transcript.turns:
+        for index, observation in enumerate(turn.observations):
+            if not isinstance(observation, SawPlayerObservation):
+                continue
+            if _turn_observation_id(turn=turn, index=index) in ungrounded:
+                continue
+            records.setdefault(turn.speaker, []).append(
+                SightingRecord(
                     subject=observation.subject,
                     room=observation.room,
                     tick=observation.tick,
@@ -3418,113 +3428,97 @@ def _ungroundable_sighting_channel(
     }
 
 
+def _rederive(
+    entry: MeetingReplayEntry, **kwargs: object
+) -> tuple[ContradictionRef, ...]:
+    """The detector, over one recorded meeting, with both rebuildable channels."""
+
+    return detect_contradictions(
+        entry.transcript,
+        roster=_living_roster(entry),
+        vent_witness_records=_vent_records_from_recorded_flags(entry),
+        sighting_records=_sighting_records_from_recorded_flags(entry),
+        **kwargs,  # type: ignore[arg-type]
+    )
+
+
 class TestLiveDetectorCommittedBytesByteIdentity:
-    """The graduated ``detect_contradictions`` re-derives the recorded flags
-    byte-identically over every committed meeting, all four sets (baseline 6).
+    """The graduated ``detect_contradictions`` against every committed meeting.
 
     Coverage beyond the ``test_transcript.py`` re-derivation pin: this walk
-    includes ``vent_sighting`` (via records rebuilt from the recorded verdicts)
-    across all four sets exhaustively (707 meetings). Levers 1 and 2 are
-    UNCONDITIONAL, so the detector ignores its ``env`` for them -- env absent and
-    env={} must agree -- while the movement lever is DEFAULT-OFF, so a live
-    movement channel must leave every recorded flag exactly where it is.
+    includes ``vent_sighting`` across all four sets exhaustively (668 meetings).
+    Every lever is UNCONDITIONAL, so the detector ignores its ``env`` -- env
+    absent and env={} must agree -- and the two private channels a recorded flag
+    can be inverted back into (vents, sightings) are rebuilt from the recorded
+    verdicts. The movement channel cannot be inverted, so the meetings it
+    re-paired are pinned by count rather than reproduced.
     """
 
     def test_re_derivation_equals_recorded_on_every_committed_meeting(self) -> None:
         entries = _committed_meeting_entries()
         # Guard: a thinned checkout or a glob typo fails here, not vacuously.
         assert len(entries) == _COMMITTED_MEETINGS
-        mismatches: list[str] = []
+        problems: list[str] = []
+        diverged: list[str] = []
         for set_name, seed, entry in entries:
-            roster = _living_roster(entry)
-            records = _vent_records_from_recorded_flags(entry)
-            # Levers unconditional: env absent (default) AND an explicit empty
-            # mapping resolve identically (the key is no longer read).
-            rederived = detect_contradictions(
-                entry.transcript, roster=roster, vent_witness_records=records
-            )
-            rederived_empty_env = detect_contradictions(
-                entry.transcript,
-                roster=roster,
-                vent_witness_records=records,
-                env={},
-            )
+            rederived = _rederive(entry)
             # env is ignored => env absent and env={} are byte-identical.
-            if rederived != rederived_empty_env:
-                mismatches.append(
-                    f"{set_name} seed {seed} {entry.meeting_id}: env drift"
-                )
+            if rederived != _rederive(entry, env={}):
+                problems.append(f"{set_name} seed {seed} {entry.meeting_id}: env drift")
             # Determinism: a second call reproduces the first exactly.
-            if rederived != detect_contradictions(
-                entry.transcript, roster=roster, vent_witness_records=records
-            ):
-                mismatches.append(f"{set_name} seed {seed} {entry.meeting_id}: nondet")
+            if rederived != _rederive(entry):
+                problems.append(f"{set_name} seed {seed} {entry.meeting_id}: nondet")
             if not _flags_match(rederived, entry.contradictions):
-                mismatches.append(
+                diverged.append(
                     f"{set_name} seed {seed} {entry.meeting_id}: "
                     f"{len(rederived)} re-derived vs {len(entry.contradictions)} recorded"
                 )
-        assert mismatches == []
+        assert problems == []
+        assert len(diverged) == _MOVEMENT_CHANNEL_DIVERGENCES, diverged
 
-    def test_a_live_movement_channel_moves_nothing_while_the_lever_is_off(
-        self,
-    ) -> None:
-        mismatches: list[str] = []
+    def test_the_divergences_are_the_movement_channel_and_nothing_else(self) -> None:
+        # The count above would be a magic number if nothing tied it to a cause.
+        # Every diverging meeting must hold a spoken ``saw_player`` the movement
+        # channel could have re-read; a meeting with none of them and a divergence
+        # would be a different defect wearing this pin's number.
         for set_name, seed, entry in _committed_meeting_entries():
-            roster = _living_roster(entry)
-            vents = _vent_records_from_recorded_flags(entry)
-            baseline = detect_contradictions(
-                entry.transcript, roster=roster, vent_witness_records=vents
-            )
-            with_channel = detect_contradictions(
-                entry.transcript,
-                roster=roster,
-                vent_witness_records=vents,
-                move_witness_records=_planted_move_channel(entry),
-            )
-            if baseline != with_channel:
-                mismatches.append(f"{set_name} seed {seed} {entry.meeting_id}")
-        assert mismatches == []
+            if _flags_match(_rederive(entry), entry.contradictions):
+                continue
+            spoken = [
+                observation
+                for turn in entry.transcript.turns
+                for observation in turn.observations
+                if isinstance(observation, SawPlayerObservation)
+            ]
+            assert spoken, f"{set_name} seed {seed} {entry.meeting_id}"
 
-    def test_a_live_sighting_channel_moves_nothing_while_the_lever_is_off(
-        self,
-    ) -> None:
-        # The grounded-prosecution mapping is threaded by the manager on every
-        # meeting; with the lever off it must leave every recorded flag exactly
-        # where it is. The planted channel grounds EVERY spoken sighting, so a
-        # leak of the lever into the OFF path would re-band the class at once.
-        mismatches: list[str] = []
-        for set_name, seed, entry in _committed_meeting_entries():
-            roster = _living_roster(entry)
-            vents = _vent_records_from_recorded_flags(entry)
-            with_channel = detect_contradictions(
-                entry.transcript,
-                roster=roster,
-                vent_witness_records=vents,
-                sighting_records=_planted_sighting_channel(entry),
-            )
-            if not _flags_match(with_channel, entry.contradictions):
-                mismatches.append(f"{set_name} seed {seed} {entry.meeting_id}")
-        assert mismatches == []
-
-    def test_the_planted_channel_is_live_when_the_lever_is_on(self) -> None:
-        # The OFF pin above would pass vacuously if the plant grounded nothing.
+    def test_the_planted_movement_channel_is_live(self) -> None:
+        # The pin above would be untethered if the movement channel could not move
+        # a committed meeting at all.
         moved = 0
         for _set_name, _seed, entry in _committed_meeting_entries():
-            roster = _living_roster(entry)
-            vents = _vent_records_from_recorded_flags(entry)
-            baseline = detect_contradictions(
-                entry.transcript, roster=roster, vent_witness_records=vents
-            )
-            on = detect_contradictions(
-                entry.transcript,
-                roster=roster,
-                vent_witness_records=vents,
-                move_witness_records=_planted_move_channel(entry),
-                env=_MOVEMENT_ON,
-            )
-            moved += int(baseline != on)
+            if _rederive(entry) != _rederive(
+                entry, move_witness_records=_planted_move_channel(entry)
+            ):
+                moved += 1
         assert moved > 0
+
+    def test_an_ungroundable_sighting_channel_bands_the_class_weak(self) -> None:
+        # The other half of the rebuild: a channel that grounds NOTHING must band
+        # every ``alibi_vs_sighting`` flag WEAK, so the rebuilt channel above is
+        # load-bearing rather than decorative.
+        banded = 0
+        for _set_name, _seed, entry in _committed_meeting_entries():
+            for flag in detect_contradictions(
+                entry.transcript,
+                roster=_living_roster(entry),
+                vent_witness_records=_vent_records_from_recorded_flags(entry),
+                sighting_records=_ungroundable_sighting_channel(entry),
+            ):
+                if flag.kind == "alibi_vs_sighting":
+                    assert is_weak_contradiction(flag) is True
+                    banded += 1
+        assert banded > 0
 
 
 # --- Task 18.12: the committed-samples lever census (the graduated substrate) ---
@@ -3630,8 +3624,10 @@ class _SetCensus:
     vent_flag_count: int
     vent_subjects_by_role: dict[str, int]
     vent_new_ids_all_physical: bool
-    # --- the live census IS the recorded substrate (re-derived == recorded) --
-    off_matches_recorded: bool
+    # --- how many meetings the re-derivation reproduces byte-identically -----
+    # Short of ``meetings`` only by the movement-channel divergences the replay
+    # cannot persist (``_MOVEMENT_CHANNEL_DIVERGENCES``).
+    off_matches_recorded: int
 
 
 @functools.cache
@@ -3665,7 +3661,7 @@ def _committed_lever_census() -> dict[str, _SetCensus]:
         vent_flags = 0
         vent_subjects: dict[str, set[tuple[int, str]]] = {}
         vent_new_all_physical = True
-        off_matches = True
+        off_matches = 0
         meetings = 0
 
         for entry_set, seed, entry in _committed_meeting_entries():
@@ -3674,27 +3670,14 @@ def _committed_lever_census() -> dict[str, _SetCensus]:
             meetings += 1
             role_map = roles[seed]
             roster = _living_roster(entry)
-            records = _vent_records_from_recorded_flags(entry)
             degenerate = _degenerate_self_alibi_ids(entry, roster)
 
-            off = detect_contradictions(
-                entry.transcript, roster=roster, vent_witness_records=records
-            )
-            on1 = detect_contradictions(
-                entry.transcript,
-                roster=roster,
-                vent_witness_records=records,
-                env=_L1_ENV,
-            )
-            on2 = detect_contradictions(
-                entry.transcript,
-                roster=roster,
-                vent_witness_records=records,
-                env=_L2_ENV,
-            )
+            off = _rederive(entry)
+            on1 = _rederive(entry, env=_L1_ENV)
+            on2 = _rederive(entry, env=_L2_ENV)
 
-            if not _flags_match(off, entry.contradictions):
-                off_matches = False
+            if _flags_match(off, entry.contradictions):
+                off_matches += 1
 
             # (a) default leg: distinct degenerate ids carrying an
             #     alibi_vs_sighting flag -- all STRONG since the graduation.
@@ -3764,72 +3747,90 @@ def _committed_lever_census() -> dict[str, _SetCensus]:
     return per_set
 
 
+# The exemption census, re-measured on the baseline-7 bytes. Baseline 6 read
+# {CREWMATE: 37, IMPOSTOR: 3} / {whereabouts: 38, alibi: 2} / 48 flags on 9p2i and
+# a single CREWMATE whereabouts claim on 4p1i, every one of them STRONG. The class
+# survives on 9p2i and is now entirely WEAK-banded; on 4p1i it is empty.
+_SAMPLES_9P2I_EXEMPT_BY_ROLE = {"CREWMATE": 11, "IMPOSTOR": 1}
+_SAMPLES_9P2I_EXEMPT_BY_CLASS = {"alibi": 3, "whereabouts": 9}
+_SAMPLES_9P2I_EXEMPT_FLAGS = 15
+_SAMPLES_9P2I_EXEMPT_STRONG: dict[str, int] = {}
+_SAMPLES_9P2I_EXEMPT_STRONG_FLAGS = 0
+_SAMPLES_4P1I_EXEMPT_BY_ROLE: dict[str, int] = {}
+_SAMPLES_4P1I_EXEMPT_BY_CLASS: dict[str, int] = {}
+_SAMPLES_4P1I_EXEMPT_FLAGS = 0
+_SAMPLES_4P1I_EXEMPT_STRONG: dict[str, int] = {}
+_SAMPLES_4P1I_EXEMPT_STRONG_FLAGS = 0
+# Meetings the records-free re-derivation reproduces byte-identically, per set.
+_SAMPLES_9P2I_REDERIVED = 135
+_SAMPLES_4P1I_REDERIVED = 40
+
+
 class TestExemptionCensus:
     """Lever 1 (endpoint-band whereabouts exemption) -- the graduated substrate
     census over the committed SAMPLE bytes.
 
     Per sample set: the DISTINCT degenerate single-tick self-alibi claims that
-    carry an ``alibi_vs_sighting`` flag. Since baseline 6 they are all STRONG (the
-    graduation reversed the pre-record weak invariant the 18.11 gate read). The
-    default leg and the ``_L1_ENV`` leg are byte-identical (env is ignored), so the
-    id sets and counts agree -- proving the collapse the record adopts. ml_corpus
-    cells are dropped until Task 18.13 re-records them on baseline 6.
+    carry an ``alibi_vs_sighting`` flag. The 18.12 graduation made them all
+    STRONG; the baseline-7 slate bands them WEAK again, because grounded
+    prosecution and map-aware arbitration re-describe exactly this class. The
+    default leg and the ``_L1_ENV`` leg are byte-identical (env is ignored), which
+    is what these cells prove.
     """
 
     @pytest.fixture(scope="class")
     def census(self) -> dict[str, _SetCensus]:
         return _committed_lever_census()
 
-    def test_exempt_class_is_all_strong_every_sample_set(
+    def test_the_exempt_class_is_re_banded_by_the_graduated_rules(
         self, census: dict[str, _SetCensus]
     ) -> None:
-        # The graduation ADOPTED: every degenerate single-tick self-alibi that
-        # carries an alibi_vs_sighting flag is now STRONG (was all weak-tier
-        # pre-record -- the audit §3.3 invariant the levers reversed).
-        for cell in census.values():
-            assert cell.exempt_class_all_strong is True
+        # The 18.12 graduation made this class all-STRONG; the baseline-7 slate
+        # bands part of it WEAK again -- grounded prosecution and map-aware
+        # arbitration re-describe exactly the flags this class carries. Pinned as
+        # the observation it is, per set (9p2i has the class, 4p1i does not).
+        assert census["samples/9p2i"].exempt_class_all_strong is False
+        assert census["samples/4p1i"].exempt_class_all_strong is True
 
     def test_env_is_ignored_the_class_is_stable_every_set(
         self, census: dict[str, _SetCensus]
     ) -> None:
         # env is ignored: the default leg and the _L1_ENV leg carry the SAME flag
-        # ids and the SAME exempt census -- no flag is added, dropped, or re-banded
-        # between them (the differential the pre-graduation census measured is 0).
+        # ids -- no flag is added, dropped, or re-banded between them (the
+        # differential the pre-graduation census measured is 0).
         for cell in census.values():
-            assert cell.exempt_off_equals_on_strong_ids is True
             assert cell.l1_leaves_flag_id_set_unchanged is True
-            assert cell.exempt_off_flag_count == cell.exempt_on_strong_flag_count
-            assert (
-                cell.exempt_off_distinct_by_role
-                == cell.exempt_on_strong_distinct_by_role
-            )
 
     def test_samples_9p2i_cells(self, census: dict[str, _SetCensus]) -> None:
+        # Baseline 6 read 165 meetings, {CREWMATE: 37, IMPOSTOR: 3},
+        # {whereabouts: 38, alibi: 2} and 48 flags. The class did not empty; the
+        # graduated rules re-banded most of it.
         cell = census["samples/9p2i"]
-        assert cell.meetings == 165
-        assert cell.exempt_off_distinct_by_role == {"CREWMATE": 37, "IMPOSTOR": 3}
-        assert cell.exempt_off_distinct_by_class == {"whereabouts": 38, "alibi": 2}
-        assert cell.exempt_off_flag_count == 48
-        assert cell.exempt_on_strong_distinct_by_role == {"CREWMATE": 37, "IMPOSTOR": 3}
-        assert cell.exempt_on_strong_flag_count == 48
+        assert cell.meetings == 152
+        assert cell.exempt_off_distinct_by_role == _SAMPLES_9P2I_EXEMPT_BY_ROLE
+        assert cell.exempt_off_distinct_by_class == _SAMPLES_9P2I_EXEMPT_BY_CLASS
+        assert cell.exempt_off_flag_count == _SAMPLES_9P2I_EXEMPT_FLAGS
+        assert cell.exempt_on_strong_distinct_by_role == _SAMPLES_9P2I_EXEMPT_STRONG
+        assert cell.exempt_on_strong_flag_count == _SAMPLES_9P2I_EXEMPT_STRONG_FLAGS
 
     def test_samples_4p1i_cells(self, census: dict[str, _SetCensus]) -> None:
+        # Baseline 6 read 39 meetings and one CREWMATE whereabouts claim.
         cell = census["samples/4p1i"]
-        assert cell.meetings == 39
-        assert cell.exempt_off_distinct_by_role == {"CREWMATE": 1}
-        assert cell.exempt_off_distinct_by_class == {"whereabouts": 1}
-        assert cell.exempt_off_flag_count == 1
-        assert cell.exempt_on_strong_distinct_by_role == {"CREWMATE": 1}
-        assert cell.exempt_on_strong_flag_count == 1
+        assert cell.meetings == 40
+        assert cell.exempt_off_distinct_by_role == _SAMPLES_4P1I_EXEMPT_BY_ROLE
+        assert cell.exempt_off_distinct_by_class == _SAMPLES_4P1I_EXEMPT_BY_CLASS
+        assert cell.exempt_off_flag_count == _SAMPLES_4P1I_EXEMPT_FLAGS
+        assert cell.exempt_on_strong_distinct_by_role == _SAMPLES_4P1I_EXEMPT_STRONG
+        assert cell.exempt_on_strong_flag_count == _SAMPLES_4P1I_EXEMPT_STRONG_FLAGS
 
-    def test_live_census_equals_recorded_on_the_census_walk(
+    def test_live_census_reproduces_all_but_the_movement_divergences(
         self, census: dict[str, _SetCensus]
     ) -> None:
-        # The live (graduated) census IS the recorded substrate: re-deriving the
-        # detector over each sample set reproduces the recorded flags exactly, so
-        # the census baseline and the committed bytes are the same substrate.
-        for cell in census.values():
-            assert cell.off_matches_recorded is True
+        # The census leg is the same re-derivation the byte-identity walk makes,
+        # so it reproduces every committed meeting except the ones whose flags the
+        # unpersistable movement channel re-paired.
+        assert census["samples/9p2i"].off_matches_recorded == _SAMPLES_9P2I_REDERIVED
+        assert census["samples/4p1i"].off_matches_recorded == _SAMPLES_4P1I_REDERIVED
 
 
 class TestVentPlacementCensus:
@@ -4010,20 +4011,23 @@ class TestGroundedProsecutionCommittedCensus:
         for cell in census.values():
             for band, count in cell.bands_off.items():
                 totals[band] = totals.get(band, 0) + count
+        # Baseline 6 read 234/79/37/5/35/440. The STRONG sighting class is the
+        # cell the record closed: 234 -> 11 even before any grounding channel.
         assert totals == {
-            "alibi_vs_sighting:strong": 234,
-            "alibi_vs_sighting:weak": 79,
-            "alibi_vs_physical:strong": 37,
-            "alibi_vs_physical:weak": 5,
-            "alibi_conflict:weak": 35,
-            "vent_sighting:strong": 440,
+            "alibi_vs_sighting:strong": 11,
+            "alibi_vs_sighting:weak": 94,
+            "alibi_vs_physical:strong": 12,
+            "alibi_vs_physical:weak": 1,
+            "alibi_conflict:weak": 60,
+            "vent_sighting:strong": 448,
         }
 
     def test_the_ungrounded_leg_convicts_on_nothing(
         self, census: dict[str, _GroundedSetCensus]
     ) -> None:
         # Rule (a) alone, at its limit: no speaker's record supports anything
-        # they said, so the whole class of 313 flags is weak and none convicts.
+        # they said, so the whole class is weak and none convicts. The class is
+        # 105 flags on the baseline-7 bytes (baseline 6: 313).
         strong = sum(
             cell.bands_ungrounded.get("alibi_vs_sighting:strong", 0)
             for cell in census.values()
@@ -4032,15 +4036,17 @@ class TestGroundedProsecutionCommittedCensus:
             cell.bands_ungrounded.get("alibi_vs_sighting:weak", 0)
             for cell in census.values()
         )
-        assert (strong, weak) == (0, 313)
+        assert (strong, weak) == (0, 105)
 
-    def test_the_fully_grounded_leg_still_drops_most_of_the_class(
+    def test_the_fully_grounded_leg_drops_the_whole_class(
         self, census: dict[str, _GroundedSetCensus]
     ) -> None:
-        # Ground EVERY spoken sighting -- the most generous reading the lever can
-        # be given -- and 234 STRONG flags still come out as 22: the rest fall to
-        # rule (b) (one speaker is the whole prosecution) or rule (c) (the
-        # one-tick self-placement is an edge again).
+        # Ground EVERY spoken sighting -- the most generous reading the rules can
+        # be given -- and the class comes out entirely WEAK on the baseline-7
+        # bytes. On baseline 6 this leg still left 22 STRONG of 234; here the 11
+        # that survive a records-free read fall to rule (b) (one speaker is the
+        # whole prosecution) or rule (c) (the one-tick self-placement is an edge
+        # again), and nothing in the class convicts.
         strong = sum(
             cell.bands_grounded.get("alibi_vs_sighting:strong", 0)
             for cell in census.values()
@@ -4049,10 +4055,8 @@ class TestGroundedProsecutionCommittedCensus:
             cell.bands_grounded.get("alibi_vs_sighting:weak", 0)
             for cell in census.values()
         )
-        assert (strong, weak) == (22, 291)
-        assert census["samples/9p2i"].bands_grounded["alibi_vs_sighting:strong"] == 2
-        assert census["ml_corpus/9p2i"].bands_grounded["alibi_vs_sighting:strong"] == 20
-        for set_name in ("samples/4p1i", "ml_corpus/4p1i"):
+        assert (strong, weak) == (0, 105)
+        for set_name in census:
             assert (
                 census[set_name].bands_grounded.get("alibi_vs_sighting:strong", 0) == 0
             )
@@ -4066,73 +4070,45 @@ def _committed_meeting(set_name: str, seed: int, meeting_id: str) -> MeetingRepl
 
 
 class TestGroundedProsecutionInjusticeShapes:
-    """The three meetings the review named, read under the lever.
+    """The injustice class the review named, re-read on the baseline-7 bytes.
 
-    Each ejected a crewmate on a STRONG ``alibi_vs_sighting`` flag. They are read
-    here through the FULLY-GROUNDED plant -- the most generous channel the lever
-    can be handed -- so a demotion here holds a fortiori for the sparser channel
-    the speakers actually held.
+    The three exemplars 20.26 pinned by seed (samples/9p2i 17 M0, 23 M1 and 8 M4)
+    were baseline-6 meetings and do not exist in this record, so they are RETIRED
+    rather than re-anchored -- the class they exemplified is what this asserts,
+    and the record's own reading of it is in
+    ``audits/audit-phase-20-baseline-7.md`` §3 bar 4.
     """
 
-    def _flags_on_victim(
-        self, set_name: str, seed: int, meeting_id: str
-    ) -> tuple[str, tuple[ContradictionRef, ...], tuple[ContradictionRef, ...]]:
-        entry = _committed_meeting(set_name, seed, meeting_id)
-        victim = entry.ejected_player_id
-        assert victim is not None
-        roster = _living_roster(entry)
-        vents = _vent_records_from_recorded_flags(entry)
-        off = detect_contradictions(
-            entry.transcript, roster=roster, vent_witness_records=vents
-        )
-        on = detect_contradictions(
-            entry.transcript,
-            roster=roster,
-            vent_witness_records=vents,
-            sighting_records=_planted_sighting_channel(entry),
-            env=_GROUNDED_ON,
-        )
-        named = tuple(
+    def test_no_committed_ejection_rides_a_strong_sighting_flag(self) -> None:
+        # The class is EMPTY on the recorded bytes: not one committed meeting
+        # ejected a player who carried a STRONG ``alibi_vs_sighting`` flag. That
+        # is the cell bar 4 reads at 0/0.
+        convicting = [
+            f"{set_name} seed {seed} {entry.meeting_id}"
+            for set_name, seed, entry in _committed_meeting_entries()
+            if entry.ejected_player_id is not None
+            and any(
+                flag.kind == "alibi_vs_sighting"
+                and entry.ejected_player_id in flag.subjects
+                and not is_weak_contradiction(flag)
+                for flag in _rederive(entry)
+            )
+        ]
+        assert convicting == []
+
+    def test_the_search_finds_a_planted_conviction(self) -> None:
+        # The emptiness above would be vacuous if the predicate could not fire.
+        # ``_prosecution_transcript`` is the shape it looks for: a STRONG
+        # ``alibi_vs_sighting`` naming the subject, with no grounding channel.
+        flags = detect_contradictions(_prosecution_transcript(), roster=_ROSTER_4)
+        convicting = [
             flag
-            for flag in off
-            if flag.kind == "alibi_vs_sighting" and victim in flag.subjects
-        )
-        under_lever = tuple(
-            flag
-            for flag in on
-            if flag.kind == "alibi_vs_sighting" and victim in flag.subjects
-        )
-        return victim, named, under_lever
-
-    def test_seed_17_meeting_0_is_the_one_tick_self_placement(self) -> None:
-        victim, off, on = self._flags_on_victim(
-            "samples/9p2i", 17, "headless-seed-17:meeting-0"
-        )
-        assert victim == "p-1"
-        assert len(off) == 2 and all(not is_weak_contradiction(f) for f in off)
-        assert all(is_weak_contradiction(f) for f in on)
-        # Rule (c): the roll-call tick is an endpoint again.
-        for flag in on:
-            assert WEAK_REASON_ENDPOINT_TICK in flag.description
-
-    def test_seed_23_meeting_1_is_the_one_tick_self_placement(self) -> None:
-        victim, off, on = self._flags_on_victim(
-            "samples/9p2i", 23, "headless-seed-23:meeting-1"
-        )
-        assert victim == "p-4"
-        assert len(off) == 1 and not is_weak_contradiction(off[0])
-        assert is_weak_contradiction(on[0]) is True
-        assert WEAK_REASON_ENDPOINT_TICK in on[0].description
-
-    def test_seed_8_meeting_4_is_the_lone_grounded_source(self) -> None:
-        victim, off, on = self._flags_on_victim(
-            "samples/9p2i", 8, "headless-seed-8:meeting-4"
-        )
-        assert victim == "p-9"
-        assert len(off) == 1 and not is_weak_contradiction(off[0])
-        # Rule (b): the sighting side grounds, but one speaker is the whole case.
-        assert WEAK_REASON_LONE_GROUNDED_SOURCE in on[0].description
-        assert is_weak_contradiction(on[0]) is True
+            for flag in flags
+            if flag.kind == "alibi_vs_sighting"
+            and "p-3" in flag.subjects
+            and not is_weak_contradiction(flag)
+        ]
+        assert convicting
 
 
 # --- Task 20.27: map-aware flag arbitration ---------------------------------
@@ -4207,36 +4183,27 @@ def _corridor_transcript(
 
 
 class TestMapAwareArbitrationResolver:
-    def test_defaults_off_with_no_environment(self) -> None:
-        assert map_aware_arbitration_enabled({}) is False
-
-    def test_reads_the_documented_true_values(self) -> None:
-        for value in ("1", "true", "TRUE", "yes", "on", " On "):
+    def test_the_arbitration_is_unconditional(self) -> None:
+        # Graduated at the baseline-7 record: no environment turns it off again.
+        for value in ("", "0", "false", "no", "off", "maybe", "1", "on"):
             assert map_aware_arbitration_enabled({ENV_MAP_AWARE_ARBITRATION: value})
-
-    def test_any_other_value_is_off(self) -> None:
-        for value in ("", "0", "false", "no", "off", "maybe"):
-            assert (
-                map_aware_arbitration_enabled({ENV_MAP_AWARE_ARBITRATION: value})
-                is False
-            )
+        assert map_aware_arbitration_enabled({}) is True
 
     def test_the_passed_mapping_is_not_mutated(self) -> None:
         env = {ENV_MAP_AWARE_ARBITRATION: "on", "AILIBI_OTHER": "x"}
         before = dict(env)
         assert map_aware_arbitration_enabled(env=env) is True
-        assert map_aware_arbitration_enabled(env=env) is True
         assert env == before
 
-    def test_the_detector_consults_the_key_exactly_once(self) -> None:
-        # One resolver read per call, threaded down as a boolean -- the Task-18.9
-        # convention. A second read would mean a second gate somewhere below.
+    def test_the_detector_reads_no_environment_for_this_rule(self) -> None:
+        # The env gate is gone, so the detector consults the key ZERO times and
+        # still demotes the corridor pair.
         env = _CountingEnv({ENV_MAP_AWARE_ARBITRATION: "1"})
         flags = detect_contradictions(
             _corridor_transcript(), roster=_ROSTER_MAP, env=env
         )
         assert is_weak_contradiction(flags[0]) is True
-        assert env.reads.count(ENV_MAP_AWARE_ARBITRATION) == 1
+        assert env.reads.count(ENV_MAP_AWARE_ARBITRATION) == 0
 
 
 class TestMapAwareArbitrationDemotion:
@@ -4246,21 +4213,24 @@ class TestMapAwareArbitrationDemotion:
         # The committed exemplar (samples/9p2i seed 17): ENGINEERING and
         # EAST_HALL share a doorway, and the sighting sits on the claim's tick.
         transcript = _corridor_transcript()
-        off = detect_contradictions(transcript, roster=_ROSTER_MAP)
-        assert [flag.kind for flag in off] == ["alibi_vs_sighting"]
-        assert is_weak_contradiction(off[0]) is False
-        on = detect_contradictions(transcript, roster=_ROSTER_MAP, env=_MAP_AWARE_ON)
+        on = detect_contradictions(transcript, roster=_ROSTER_MAP)
+        assert [flag.kind for flag in on] == ["alibi_vs_sighting"]
         assert is_weak_contradiction(on[0]) is True
         assert WEAK_REASON_ADJACENT_ONE_TICK in on[0].description
-        # Demoted, never dropped: the flag is the same flag.
+        # Demoted, never dropped: the same flag, id for id, as the two-hop pair
+        # that keeps its STRONG band.
+        two_hop = detect_contradictions(
+            _corridor_transcript(sighting_room="CAFETERIA"), roster=_ROSTER_MAP
+        )
+        assert is_weak_contradiction(two_hop[0]) is False
         assert (on[0].contradiction_id, on[0].subjects, on[0].kind) == (
-            off[0].contradiction_id,
-            off[0].subjects,
-            off[0].kind,
+            two_hop[0].contradiction_id,
+            two_hop[0].subjects,
+            two_hop[0].kind,
         )
         assert (on[0].event_a_id, on[0].event_b_id) == (
-            off[0].event_a_id,
-            off[0].event_b_id,
+            two_hop[0].event_a_id,
+            two_hop[0].event_b_id,
         )
 
     def test_a_two_hop_pair_still_mints_strong(self) -> None:
@@ -4484,14 +4454,21 @@ class TestMapAwareArbitrationCommittedCensus:
     def census(self) -> dict[str, _MapAwareSetCensus]:
         return _map_aware_census()
 
-    def test_the_off_path_is_byte_identical_to_the_record(
+    def test_the_env_legs_agree_on_every_committed_meeting(
         self, census: dict[str, _MapAwareSetCensus]
     ) -> None:
-        # With the key absent (``env={}``) and with an explicit falsey value, the
-        # detector reproduces every recorded flag on every committed meeting.
+        # The key is no longer read, so the absent-key leg and the explicit
+        # falsey leg reproduce the SAME meetings -- and both reproduce every
+        # committed meeting except the movement-channel divergences this walk
+        # cannot rebuild (it supplies vents only).
         for cell in census.values():
-            assert cell.off_matches_recorded == cell.meetings
-            assert cell.falsey_matches_recorded == cell.meetings
+            assert cell.off_matches_recorded == cell.falsey_matches_recorded
+        assert {name: cell.off_matches_recorded for name, cell in census.items()} == {
+            "samples/9p2i": 132,
+            "samples/4p1i": 40,
+            "ml_corpus/9p2i": 371,
+            "ml_corpus/4p1i": 44,
+        }
         assert sum(cell.meetings for cell in census.values()) == _COMMITTED_MEETINGS
 
     def test_the_flag_set_is_re_banded_never_thinned(
@@ -4519,9 +4496,11 @@ class TestMapAwareArbitrationCommittedCensus:
     def test_the_committed_class_prices_the_corridor(
         self, census: dict[str, _MapAwareSetCensus]
     ) -> None:
-        # 234 STRONG ``alibi_vs_sighting`` flags in the record; 140 of them are a
-        # corridor one tick wide, so 94 survive. The whole class is 313 flags, so
-        # the weak band grows by exactly the 140 that moved.
+        # Baseline 6 priced the corridor at 140 demotions of 234 STRONG flags.
+        # The arbitration is UNCONDITIONAL here, so both legs already carry it and
+        # the env differential is zero: 11 STRONG and 94 WEAK on both sides, and
+        # nothing moves BETWEEN the legs. The corridor's price on these bytes is
+        # in the record audit, not in an env diff that no longer exists.
         strong_off = sum(
             cell.bands_off.get("alibi_vs_sighting:strong", 0)
             for cell in census.values()
@@ -4535,44 +4514,27 @@ class TestMapAwareArbitrationCommittedCensus:
         weak_on = sum(
             cell.bands_on.get("alibi_vs_sighting:weak", 0) for cell in census.values()
         )
-        assert (strong_off, strong_on) == (234, 94)
-        assert (weak_off, weak_on) == (79, 219)
-        assert sum(cell.demoted for cell in census.values()) == 140
-        assert {name: cell.demoted for name, cell in census.items()} == {
-            "samples/9p2i": 38,
-            "ml_corpus/9p2i": 100,
-            "samples/4p1i": 1,
-            "ml_corpus/4p1i": 1,
-        }
+        assert (strong_off, strong_on) == (11, 11)
+        assert (weak_off, weak_on) == (94, 94)
+        assert sum(cell.demoted for cell in census.values()) == 0
+        # The rule still bites -- on a transcript, where a corridor pair exists.
+        corridor = detect_contradictions(_corridor_transcript(), roster=_ROSTER_MAP)
+        assert is_weak_contradiction(corridor[0]) is True
+        assert WEAK_REASON_ADJACENT_ONE_TICK in corridor[0].description
 
-    def test_the_seed_17_exemplar_loses_its_strong_band(self) -> None:
-        # The review's exemplar, read from the committed bytes: p-1 was ejected
-        # on STRONG flags whose two rooms share a doorway.
-        entry = _committed_meeting("samples/9p2i", 17, "headless-seed-17:meeting-0")
-        assert entry.ejected_player_id == "p-1"
-        roster = _living_roster(entry)
-        vents = _vent_records_from_recorded_flags(entry)
-        off = detect_contradictions(
-            entry.transcript, roster=roster, vent_witness_records=vents
-        )
-        on = {
-            flag.contradiction_id: flag
-            for flag in detect_contradictions(
-                entry.transcript,
-                roster=roster,
-                vent_witness_records=vents,
-                env=_MAP_AWARE_ON,
-            )
-        }
-        named = [
-            flag
-            for flag in off
-            if flag.kind == "alibi_vs_sighting" and "p-1" in flag.subjects
+    def test_no_committed_corridor_pair_still_convicts(self) -> None:
+        # The review's exemplar (samples/9p2i seed 17 meeting 0, p-1 ejected on a
+        # STRONG ENGINEERING/EAST_HALL pair) was a baseline-6 meeting and does not
+        # exist in this record, so it is RETIRED rather than re-anchored. What
+        # replaces it is the class-wide statement: on the recorded bytes no
+        # committed STRONG ``alibi_vs_sighting`` flag names two rooms one doorway
+        # apart -- the corridor no longer convicts anywhere.
+        survivors = [
+            f"{set_name} seed {seed} {entry.meeting_id}"
+            for set_name, seed, entry in _committed_meeting_entries()
+            for flag in _rederive(entry)
+            if flag.kind == "alibi_vs_sighting"
+            and not is_weak_contradiction(flag)
+            and WEAK_REASON_ADJACENT_ONE_TICK in flag.description
         ]
-        assert named and all(not is_weak_contradiction(flag) for flag in named)
-        assert all("in ENGINEERING" in flag.description for flag in named)
-        assert all("in EAST_HALL at tick" in flag.description for flag in named)
-        for flag in named:
-            under_lever = on[flag.contradiction_id]
-            assert is_weak_contradiction(under_lever) is True
-            assert WEAK_REASON_ADJACENT_ONE_TICK in under_lever.description
+        assert survivors == []
