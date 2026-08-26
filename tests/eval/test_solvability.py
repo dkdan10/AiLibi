@@ -325,9 +325,9 @@ def _corrupted_set(tmp_path: Path, mutate: Callable[[list[str]], list[str]]) -> 
         (_SAMPLES_4P1I / "roster.json").read_text(encoding="utf-8"), encoding="utf-8"
     )
     lines = (
-        (_SAMPLES_4P1I / "replay-seed-0.jsonl").read_text(encoding="utf-8").splitlines()
+        (_SAMPLES_4P1I / "replay-seed-1.jsonl").read_text(encoding="utf-8").splitlines()
     )
-    (tmp_path / "replay-seed-0.jsonl").write_text(
+    (tmp_path / "replay-seed-1.jsonl").write_text(
         "\n".join(mutate(lines)) + "\n", encoding="utf-8"
     )
     return tmp_path

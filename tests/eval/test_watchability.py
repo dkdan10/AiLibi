@@ -700,12 +700,15 @@ _BASELINE_2_9P2I_FLOORS = SupplyFloors(
 
 
 def test_baseline_6_sets_pass_the_hardened_referee_end_to_end() -> None:
-    """The committed scripted-FSM baseline-6 sets clear their own re-pinned floors.
+    """The committed scripted-FSM sets clear the baseline-6 floors too.
 
-    The DoD anchor (15.19, re-recorded on the meeting-layer graduation slate at Task
-    18.12): every gauge row passes, not just the composed verdict (the exact
-    floor == measured equality is pinned separately by
-    ``test_baseline_6_floor_pins_equal_the_measured_bytes``).
+    The DoD anchor (15.19): every gauge row passes, not just the composed
+    verdict. The baseline-6 EXACT anchor (measured == floor on the bytes those
+    floors were pinned from) retired with the baseline-7 record, which replaced
+    those bytes; what it proved is now proved by
+    ``test_baseline_7_floor_pins_equal_the_measured_bytes``. Clearing the older,
+    lower floors stays a real check: a record that fell below them would fail
+    here.
     """
 
     for sample_dir in (_NINE, _FOUR):
@@ -713,38 +716,6 @@ def test_baseline_6_sets_pass_the_hardened_referee_end_to_end() -> None:
         assert report.referee_passed is True
         assert report.supply_floors_passed is True
         assert all(gauge.passed for gauge in report.supply_gauges)
-
-
-def test_baseline_6_floor_pins_equal_the_measured_bytes() -> None:
-    """EXACT ANCHOR: each re-pinned floor equals the measured committed bytes.
-
-    ``passed`` alone is one-sided (any floor at or below the true measured value
-    clears it), so an under-pinned floor would silently weaken the gate with CI
-    green. This pins BOTH sides at the Task 18.12 baseline-6 re-record: the
-    measured gauge IS the recorded fraction, and the pinned floor IS the measured
-    gauge — "the baseline passes at equality", made an assertion not a comment.
-    """
-
-    expected = {
-        _NINE: {
-            "witnessed_event_rate": 6 / 177,  # crew-witnessed kills (was 7/173)
-            "flags_per_meeting": 180 / 165,  # 96 vent + 84 transcript (was 207/156)
-            "testimony_backed_conversion": 78 / 136,  # SUBJECT-AWARE (was 78/133)
-        },
-        _FOUR: {
-            "witnessed_event_rate": 1 / 61,  # numerator 1 -> ADVISORY (unchanged)
-            "flags_per_meeting": 16 / 39,  # 11 vent + 5 transcript (unchanged)
-            "testimony_backed_conversion": 9 / 30,  # SUBJECT-AWARE (was 10/30)
-        },
-    }
-    for sample_dir, fractions in expected.items():
-        report = compute_watchability(sample_dir)
-        by_name = {g.name: g for g in report.supply_gauges}
-        assert set(by_name) == set(fractions)
-        for name, fraction in fractions.items():
-            gauge = by_name[name]
-            assert gauge.measured == fraction, f"{sample_dir.name} {name} measured"
-            assert gauge.floor == fraction, f"{sample_dir.name} {name} floor pin"
 
 
 def test_baseline_7_floor_pins_equal_the_measured_bytes() -> None:
@@ -930,12 +901,12 @@ def test_missing_meeting_row_is_an_integrity_breach(tmp_path: Path) -> None:
     import json
     import shutil
 
-    source = _FOUR / "replay-seed-0.jsonl"
+    source = _FOUR / "replay-seed-1.jsonl"
     lines = source.read_text().splitlines()
     kept = [line for line in lines if "meeting_id" not in json.loads(line)]
     assert len(kept) < len(lines)  # a meeting row was dropped (this game has one)
 
-    (tmp_path / "replay-seed-0.jsonl").write_text("\n".join(kept) + "\n")
+    (tmp_path / "replay-seed-1.jsonl").write_text("\n".join(kept) + "\n")
     shutil.copy(_FOUR / "roster.json", tmp_path / "roster.json")
 
     from eval.watchability import _reconstruct_kills
@@ -968,7 +939,7 @@ def test_corrupted_meeting_pre_hash_is_an_integrity_breach(tmp_path: Path) -> No
 
     from eval.watchability import _reconstruct_kills
 
-    lines = (_FOUR / "replay-seed-0.jsonl").read_text().splitlines()
+    lines = (_FOUR / "replay-seed-1.jsonl").read_text().splitlines()
     corrupted: list[str] = []
     changed = False
     for line in lines:
@@ -1000,13 +971,13 @@ def test_forged_game_over_reason_is_an_integrity_breach(tmp_path: Path) -> None:
 
     from eval.watchability import _reconstruct_kills
 
-    lines = (_FOUR / "replay-seed-0.jsonl").read_text().splitlines()
+    lines = (_FOUR / "replay-seed-3.jsonl").read_text().splitlines()
     forged: list[str] = []
     changed = False
     for line in lines:
         row = json.loads(line)
         if row.get("kind") == "game_over":
-            assert row["reason"] != "CREWMATE_EJECT"  # seed 0 is an impostor win
+            assert row["reason"] != "CREWMATE_EJECT"  # seed 3 is a task win
             row["reason"] = (
                 "CREWMATE_EJECT"  # forge a play-decided label (D1 0.6 -> 1.0)
             )
@@ -1035,7 +1006,7 @@ def test_missing_game_over_row_is_an_integrity_breach(tmp_path: Path) -> None:
 
     from eval.watchability import _reconstruct_kills
 
-    lines = (_FOUR / "replay-seed-0.jsonl").read_text().splitlines()
+    lines = (_FOUR / "replay-seed-1.jsonl").read_text().splitlines()
     kept = [line for line in lines if json.loads(line).get("kind") != "game_over"]
     assert len(kept) == len(lines) - 1  # exactly the game_over row was dropped
     _write_one_game_set(tmp_path, kept)
@@ -1053,7 +1024,7 @@ def test_duplicate_meeting_row_is_an_integrity_breach(tmp_path: Path) -> None:
 
     from eval.watchability import _reconstruct_kills
 
-    lines = (_FOUR / "replay-seed-0.jsonl").read_text().splitlines()
+    lines = (_FOUR / "replay-seed-1.jsonl").read_text().splitlines()
     meeting_line = next(line for line in lines if "meeting_id" in json.loads(line))
     # Insert a second copy of the meeting row (same tick + meeting id).
     doubled = [*lines, meeting_line]
@@ -1112,7 +1083,7 @@ def test_trailing_row_after_game_over_is_an_integrity_breach(tmp_path: Path) -> 
 
     from eval.watchability import _reconstruct_kills
 
-    lines = (_FOUR / "replay-seed-0.jsonl").read_text().splitlines()
+    lines = (_FOUR / "replay-seed-1.jsonl").read_text().splitlines()
     rows = [json.loads(line) for line in lines]
     terminal_tick = next(r["tick"] for r in rows if r.get("kind") == "game_over")
     tick_row = next(dict(r) for r in rows if "actions" in r)  # a per-tick ReplayEntry
