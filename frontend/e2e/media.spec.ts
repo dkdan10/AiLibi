@@ -890,11 +890,20 @@ test.describe("README media capture", () => {
       reducedMotion: "reduce",
     });
     const page = await context.newPage();
+    // Opened AT the meeting's own tick, not merely with its modal on top: the
+    // transport behind the dialog is in the picture, and `docs/media/README.md`
+    // publishes this asset as tick 7. `openMoment` asserts the scrubber lands on
+    // the frame the URL names, so the deep link and the pixels agree.
     await openMoment(
       page,
-      momentUrl(bundle.origin, { selectedMeeting: meeting?.meeting_id ?? "" }),
+      momentUrl(bundle.origin, {
+        tick: String(HERO.meetingTick),
+        selectedMeeting: meeting?.meeting_id ?? "",
+      }),
     );
-    const dialog = page.getByRole("dialog");
+    const dialog = page.getByRole("dialog", {
+      name: `Meeting at tick ${String(HERO.meetingTick)}`,
+    });
     await expect(dialog).toBeVisible();
     await expect(dialog.getByRole("region", { name: /^Ballots \(\d+\)$/ })).toBeVisible();
     await page.evaluate(async () => {
