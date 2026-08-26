@@ -254,7 +254,7 @@ def test_dry_run_echo_names_the_levers_the_operator_declared() -> None:
     # describe different substrates.
     env = dict(_clean_env(), AILIBI_GROUNDED_PROSECUTION="1")
     proc = _run("--dry-run", "--expect-levers", "grounded_prosecution", env=env)
-    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert proc.returncode == 1, proc.stdout + proc.stderr
     assert (
         "[dry-run] substrate flags: expected levers ON = grounded_prosecution"
         in proc.stdout

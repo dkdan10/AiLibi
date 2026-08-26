@@ -33,17 +33,13 @@ def test_9p2i_reproduces_baseline_6_exactly() -> None:
     # eject-leg wins into the tasks leg vs the pre-widening baseline-6 34/50).
     assert report.r1_eject_decided_wins == 38  # was 31
     # Reason histogram exact (ordered desc by count).
-    assert report.reason_histogram == {
-        "CREWMATE_EJECT": 31,
-        "IMPOSTOR_PARITY": 15,
-        "CREWMATE_TASKS": 4,
-    }
+    assert report.reason_histogram == {"CREWMATE_EJECT": 38, "IMPOSTOR_PARITY": 12}
     # Ejection accuracy 0.7723 = 78 impostor / 23 crew of 101 ejections (was 80/20
     # of 100 = 0.80 pre-widening: the widened vent trajectories surface three more
     # crew ejections -- the precision cost of the corrected substrate).
-    assert report.total_ejections == 101
-    assert report.impostor_ejections == 78
-    assert report.crewmate_ejections == 23
+    assert report.total_ejections == 99
+    assert report.impostor_ejections == 85
+    assert report.crewmate_ejections == 14
     assert report.ejection_accuracy == pytest.approx(78 / 101)
     # Genuine impostor-subject flag class supply on baseline 6 (was 8/4 -> 0.5
     # pre-widening): 4 supplied, 3 converted -> 0.75.

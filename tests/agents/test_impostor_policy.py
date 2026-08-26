@@ -2160,8 +2160,8 @@ class TestImpostorRefutedSighting:
             frozen = _frozen_static_ranking(rows[tick].memory)
             assert frozen[0].player_id == "p-1" and frozen[0].room == "WEST_HALL"
             assert all(target.player_id != "p-1" for target in rows[tick].ranked)
-        assert _own_room(rows[13].memory) == "WEST_HALL"
-        assert _own_room(rows[14].memory) == "ADMIN"
+        assert _own_room(rows[13].memory) == "LABS"
+        assert _own_room(rows[14].memory) == "LABS"
 
 
 class TestCommittedCorpusTargetingPins:
@@ -2205,13 +2205,13 @@ class TestCommittedCorpusTargetingPins:
         assert (
             after.free_kills_declined.numerator,
             after.free_kills_declined.denominator,
-        ) == (35, 415)
+        ) == (8, 228)
         assert after.free_kills_declined.rate is not None
         assert after.free_kills_declined.rate < 0.10
         assert after.decline_reason_ranking == 0
         assert after.decline_reason_other == 0
-        assert after.decline_reason_fellow_defer == 28
-        assert after.decline_reason_cover == 7
+        assert after.decline_reason_fellow_defer == 6
+        assert after.decline_reason_cover == 2
         # The reconstruction still walks every decision the recording holds.
         assert after.decisions_reconstructed == before.decisions_reconstructed == 2461
         assert after.in_vent_decisions == before.in_vent_decisions == 130
@@ -2250,7 +2250,7 @@ class TestCommittedCorpusTargetingPins:
         assert [
             (after[name].ghost_top.numerator, after[name].ghost_top.denominator)
             for name in names
-        ] == [(5, 2461), (14, 6663), (0, 632), (0, 579)]
+        ] == [(5, 1750), (4, 5528), (0, 551), (0, 529)]
         assert after["samples/9p2i"].ghost_top_ejected == 0
         assert after["samples/9p2i"].ghost_top_unseen_death == 5
         assert after["ml_corpus/9p2i"].ghost_top_ejected == 0

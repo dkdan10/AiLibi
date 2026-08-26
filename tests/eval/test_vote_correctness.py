@@ -1930,7 +1930,9 @@ def test_committed_9p2i_report_pins_the_audited_conversion_values() -> None:
     # JSON-level guard: the committed file itself serves both leads (a reader
     # pulling the raw report sees the published metric surface, gp-2's ask).
     raw = json.loads(_COMMITTED_9P2I_REPORT.read_text(encoding="utf-8"))
-    assert raw["conversion"]["ejection_accuracy"] == pytest.approx(85 / 99, abs=1e-4)  # was 78 / 101
+    assert raw["conversion"]["ejection_accuracy"] == pytest.approx(
+        85 / 99, abs=1e-4
+    )  # was 78 / 101
     assert raw["conversion"]["missed_skip_ballots"] == 96  # was 129
 
 

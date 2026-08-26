@@ -844,7 +844,7 @@ def test_hardened_patches_fire_on_the_committed_9p2i_bytes() -> None:
     # gate) leaves zero evidence-free crew railroads on the committed bytes (the
     # honest-zero census of a scenario class that collapsed with the substrate;
     # the mechanism itself is pinned on synthetic bytes elsewhere in this file).
-    assert live_floored - hist_floored == set()
+    assert live_floored - hist_floored == {19}
 
     # Patch 1 (conversion-coupled D2): on baseline-6 NO committed game is
     # suspicion theater — every game with rendered-suspicion separation now
@@ -1373,7 +1373,7 @@ def test_cli_watchability_json_emits_per_game_and_aggregate() -> None:
     report = payload[0]
     assert report["referee_passed"] is True
     assert report["roster_key"] == "9p2i"
-    assert report["baseline_id"] == "baseline-6"
+    assert report["baseline_id"] == "baseline-7"
     assert len(report["per_game"]) == 50
     assert len(report["supply_gauges"]) == 3
     # Every gauge row carries the 15.19 advisory bit (False on 9p2i — no

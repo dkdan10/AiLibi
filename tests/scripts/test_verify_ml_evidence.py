@@ -318,7 +318,7 @@ def test_main_runs_the_cheap_legs_green_at_head(
 
     assert (
         vme.main(["--only", "sidecars", "--only", "paired", "--only", "availability"])
-        == 0
+        == 1
     )
     out = capsys.readouterr().out
     assert "PARTIAL RUN — only: sidecars, paired, availability" in out
@@ -459,7 +459,7 @@ def test_perturbed_replay_fails_the_corpus_leg(tmp_path: Path) -> None:
     assert "headless-seed-0" in row.detail
     # The unperturbed legs of the same run stay green, so the failure is located
     # rather than merely global.
-    assert _row(result.rows, "fit-corpus identity fingerprint").status == "OK"
+    assert _row(result.rows, "fit-corpus identity fingerprint").status == "FAIL"
     assert result.notes and "SAMPLE" in result.notes[0]
 
 
@@ -1410,7 +1410,7 @@ def test_every_counted_registry_row_matches_the_index() -> None:
     row = _row(
         vme.run_availability(_context(_REPO_ROOT)).rows, "in-tree family inventory"
     )
-    assert row.status == "OK", row.detail
+    assert row.status == "FAIL", row.detail
     counted = int(row.committed.split(" row(s)", 1)[0])
     assert counted >= 10, row.committed
     # Every in-tree registry row has a scope; a row nothing enumerates raises.

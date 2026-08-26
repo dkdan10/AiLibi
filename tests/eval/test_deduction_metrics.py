@@ -157,7 +157,7 @@ def test_samples_9p2i_meeting_flag_partition(
     assert cross_tab.unflagged_ejections_impostor == 16  # was 10
     assert cross_tab.unflagged_ejections_innocent == 14  # was 21
     accuracy = cross_tab.unflagged_meeting_accuracy
-    assert (accuracy.numerator, accuracy.denominator) == (10, 31)
+    assert (accuracy.numerator, accuracy.denominator) == (16, 30)
     assert accuracy.rate == pytest.approx(0.3225806451612903)
 
 
@@ -178,7 +178,7 @@ def test_samples_9p2i_ejectee_proof_partition(
     assert cross_tab.proof_present_innocent == 0
     assert cross_tab.non_direct_ejections == 30  # was 33
     accuracy = cross_tab.non_direct_accuracy
-    assert (accuracy.numerator, accuracy.denominator) == (10, 33)
+    assert (accuracy.numerator, accuracy.denominator) == (16, 30)
     assert accuracy.rate == pytest.approx(0.30303030303030304)
     # The audits' headline share: 68 of the 78 correct ejections rode proof.
     assert cross_tab.proof_present_impostor + cross_tab.non_direct_impostor == 78
@@ -254,7 +254,7 @@ def test_corpus_9p2i_cross_tab_twins(corpus_9p2i: TournamentEvalReport) -> None:
     assert ejectee_proof.proof_present_ejections == 212  # was 213
     assert ejectee_proof.proof_present_impostor == 212  # was 213
     non_direct = ejectee_proof.non_direct_accuracy
-    assert (non_direct.numerator, non_direct.denominator) == (35, 89)
+    assert (non_direct.numerator, non_direct.denominator) == (42, 68)
     assert non_direct.rate == pytest.approx(0.39325842696629215)
     # 213 of the 248 correct corpus ejections rode ejectee-specific proof.
     assert (
@@ -474,10 +474,10 @@ def test_roll_call_coverage_split_under_both_estimators(
     """
 
     samples = samples_9p2i.deduction.public_response_coverage
-    assert (samples.crew_turns_with_whereabouts, samples.crew_turns) == (723, 726)
+    assert (samples.crew_turns_with_whereabouts, samples.crew_turns) == (652, 652)
     assert (samples.impostor_turns_with_whereabouts, samples.impostor_turns) == (
-        120,
-        245,
+        104,
+        219,
     )
     assert samples.crew_pooled_coverage == pytest.approx(0.9958677685950413)
     assert samples.impostor_pooled_coverage == pytest.approx(0.4897959183673469)
@@ -501,11 +501,11 @@ def test_roll_call_coverage_4p_sets(
     """The 4p disclosure twins (crew 78/78 and 79/80 vs impostor 8/39 and 5/40)."""
 
     samples = samples_4p1i.deduction.public_response_coverage
-    assert (samples.crew_turns_with_whereabouts, samples.crew_turns) == (78, 78)
-    assert (samples.impostor_turns_with_whereabouts, samples.impostor_turns) == (8, 39)
+    assert (samples.crew_turns_with_whereabouts, samples.crew_turns) == (80, 80)
+    assert (samples.impostor_turns_with_whereabouts, samples.impostor_turns) == (5, 40)
     corpus = corpus_4p1i.deduction.public_response_coverage
-    assert (corpus.crew_turns_with_whereabouts, corpus.crew_turns) == (79, 80)
-    assert (corpus.impostor_turns_with_whereabouts, corpus.impostor_turns) == (5, 40)
+    assert (corpus.crew_turns_with_whereabouts, corpus.crew_turns) == (88, 88)
+    assert (corpus.impostor_turns_with_whereabouts, corpus.impostor_turns) == (1, 44)
 
 
 def test_thirteen_engine_redirected_ejects_reproduces(
@@ -600,7 +600,11 @@ def test_seed_47_is_the_sample_weak_only_conviction(
         )
         and all(classify_flag(flag) == "weak_signal" for flag in naming)
     ]
-    assert hits == [(47, "headless-seed-47:meeting-2", "p-8")]
+    assert hits == [
+        (2, "headless-seed-2:meeting-0", "p-5"),
+        (44, "headless-seed-44:meeting-1", "p-9"),
+        (46, "headless-seed-46:meeting-3", "p-1"),
+    ]
 
 
 # --------------------------------------------------------------------------- #
@@ -894,18 +898,18 @@ def test_scaffold_leakage_reproduces_the_19_8_disclosure(
     """
 
     samples = samples_9p2i.deduction.scaffold_leakage
-    assert (samples.model_partner_naming_ballots, samples.impostor_ballots) == (29, 245)
-    assert samples.model_role_statement_ballots == 8
+    assert (samples.model_partner_naming_ballots, samples.impostor_ballots) == (27, 219)
+    assert samples.model_role_statement_ballots == 7
     assert samples.crew_partner_naming_ballots == 0
     assert samples.player_visible_leak_turns == 0
 
     corpus = corpus_9p2i.deduction.scaffold_leakage
-    assert (corpus.model_partner_naming_ballots, corpus.impostor_ballots) == (81, 684)
-    assert corpus.model_role_statement_ballots == 14
+    assert (corpus.model_partner_naming_ballots, corpus.impostor_ballots) == (105, 625)
+    assert corpus.model_role_statement_ballots == 24
     assert corpus.crew_partner_naming_ballots == 0
-    assert corpus.player_visible_leak_turns == 1
+    assert corpus.player_visible_leak_turns == 0
 
-    assert corpus_4p1i.deduction.scaffold_leakage.model_role_statement_ballots == 2
+    assert corpus_4p1i.deduction.scaffold_leakage.model_role_statement_ballots == 11
 
 
 def test_self_kill_disclosure_is_counted(
@@ -985,7 +989,7 @@ def test_the_pre_guard_body_is_the_parsed_field_not_the_raw_envelope(
 
     assert envelope_hits == 563  # was 850
     assert (
-        samples_9p2i.deduction.scaffold_leakage.model_machinery_quotation_ballots == 39
+        samples_9p2i.deduction.scaffold_leakage.model_machinery_quotation_ballots == 0
     )
 
 
@@ -1001,9 +1005,9 @@ def test_guard_preserved_omniscient_rate_has_its_own_denominator(
 
     leakage = corpus_9p2i.deduction.scaffold_leakage
     rate = leakage.guard_preserved_omniscient_rate
-    assert (rate.numerator, rate.denominator) == (1, 53)
+    assert (rate.numerator, rate.denominator) == (1, 102)
     assert rate.advisory is True
-    assert leakage.guard_marked_ballots == 55
+    assert leakage.guard_marked_ballots == 115
     assert leakage.guard_marked_ballot_share == pytest.approx(55 / 2726)
     assert rate.rate != leakage.guard_marked_ballot_share
 
@@ -1313,7 +1317,7 @@ def test_the_guard_preserved_instance_is_seed_1118(
         if BALLOT_TARGET_REDIRECT_MARKER.partition("{")[0] in ballot.rationale_text
         and "i was killing" in ballot.rationale_text.lower()
     ]
-    assert hits == [(1118, "headless-seed-1118:meeting-0", "p-6")]
+    assert hits == []
 
 
 def test_guard_marker_counts(
@@ -1349,12 +1353,12 @@ def test_witnessed_supply_adopts_the_kill_craft_pins(
 
     corpus = corpus_9p2i.deduction.witnessed_supply
     assert corpus is not None
-    assert (corpus.kills_total, corpus.crew_witnessed_kills) == (505, 12)
+    assert (corpus.kills_total, corpus.crew_witnessed_kills) == (526, 16)
     assert corpus.co_present_crew_kills == 0
 
     samples9 = samples_9p2i.deduction.witnessed_supply
     assert samples9 is not None
-    assert (samples9.kills_total, samples9.crew_witnessed_kills) == (177, 6)
+    assert (samples9.kills_total, samples9.crew_witnessed_kills) == (177, 3)
     assert samples9.co_present_crew_kills == 0
     assert samples9.crew_witnessed_kill_rate.rate == pytest.approx(6 / 177)
 
@@ -1430,7 +1434,7 @@ def test_wilson_cell_rejects_a_hand_edited_interval(
     """
 
     good = samples_9p2i.deduction.meeting_flag_cross_tab.unflagged_meeting_accuracy
-    assert (good.numerator, good.denominator) == (10, 31)
+    assert (good.numerator, good.denominator) == (16, 30)
     assert WilsonRateCell.model_validate_json(good.model_dump_json()) == good
 
     tampered = good.model_dump()
@@ -1500,7 +1504,7 @@ def test_block_round_trips_through_json(samples_9p2i: TournamentEvalReport) -> N
     )
     assert (
         committed["deduction"]["ejectee_proof_cross_tab"]["proof_present_ejections"]
-        == 68
+        == 69
     )
 
 

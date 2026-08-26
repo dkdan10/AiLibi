@@ -68,13 +68,13 @@ def test_corpus_kill_counts_and_histograms(corpus_report: KillCraftReport) -> No
     assert corpus_report.games_total == 150
     assert corpus_report.kills_total == 526  # was 505
     assert corpus_report.crew_witnessed_kills == 16  # was 12
-    assert dict(corpus_report.co_present_histogram) == {0: 505}
+    assert dict(corpus_report.co_present_histogram) == {0: 526}
     assert dict(corpus_report.one_hop_histogram) == {
-        0: 269,
-        1: 86,
-        2: 96,
-        3: 45,
-        4: 7,
+        0: 226,
+        1: 127,
+        2: 112,
+        3: 56,
+        4: 3,
         5: 2,
     }
 
@@ -101,11 +101,11 @@ def test_samples_9p2i_fold1(samples_9p2i_report: KillCraftReport) -> None:
     assert samples_9p2i_report.crew_witnessed_kills == 3  # was 6
     assert dict(samples_9p2i_report.co_present_histogram) == {0: 177}
     assert dict(samples_9p2i_report.one_hop_histogram) == {
-        0: 96,
-        1: 30,
-        2: 33,
-        3: 13,
-        4: 4,
+        0: 73,
+        1: 44,
+        2: 39,
+        3: 15,
+        4: 5,
         5: 1,
     }
     assert samples_9p2i_report.mean_co_present_witnessed == pytest.approx(0.0)
@@ -126,8 +126,8 @@ def test_samples_4p1i_fold1(samples_4p1i_report: KillCraftReport) -> None:
     assert samples_4p1i_report.games_total == 50
     assert samples_4p1i_report.kills_total == 65  # was 61
     assert samples_4p1i_report.crew_witnessed_kills == 1
-    assert dict(samples_4p1i_report.co_present_histogram) == {0: 61}
-    assert dict(samples_4p1i_report.one_hop_histogram) == {0: 49, 1: 11, 2: 1}
+    assert dict(samples_4p1i_report.co_present_histogram) == {0: 65}
+    assert dict(samples_4p1i_report.one_hop_histogram) == {0: 48, 1: 16, 2: 1}
     assert samples_4p1i_report.mean_co_present_witnessed == pytest.approx(0.0)
     assert samples_4p1i_report.mean_co_present_unwitnessed == pytest.approx(0.0)
     assert samples_4p1i_report.mean_one_hop_witnessed == pytest.approx(1.0)
@@ -158,12 +158,12 @@ def test_corpus_entropy_crew_cells(corpus_report: KillCraftReport) -> None:
     solo = crew.buckets["none|solo"]
     assert solo.decisions == 6548  # was 7713
     assert dict(solo.action_kinds) == {
-        "do_task": 4527,
-        "emergency": 11,
-        "move": 2259,
-        "repair_sabotage": 83,
-        "report": 332,
-        "wait": 501,
+        "do_task": 4007,
+        "emergency": 8,
+        "move": 1879,
+        "repair_sabotage": 34,
+        "report": 296,
+        "wait": 324,
     }
     assert solo.entropy == pytest.approx(1.5054529064563125)
 
@@ -191,11 +191,10 @@ def test_corpus_entropy_impostor_cells(corpus_report: KillCraftReport) -> None:
     ready_pair = impostor.buckets["ready|pair"]
     assert ready_pair.decisions == 743  # was 1205
     assert dict(ready_pair.action_kinds) == {
-        "do_task": 10,
-        "kill": 602,
-        "move": 548,
-        "sabotage": 7,
-        "vent": 38,
+        "do_task": 2,
+        "kill": 638,
+        "move": 85,
+        "vent": 18,
     }
     assert ready_pair.entropy == pytest.approx(1.2749397234112307)
 

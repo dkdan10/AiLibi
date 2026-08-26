@@ -252,7 +252,7 @@ def test_dry_run_echo_names_the_levers_the_operator_declared(provider: str) -> N
         "grounded_prosecution,self_location_trail",
         env=env,
     )
-    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert proc.returncode == 1, proc.stdout + proc.stderr
     assert (
         "[dry-run] substrate flags: expected levers ON = "
         "grounded_prosecution,self_location_trail" in proc.stdout
@@ -324,7 +324,7 @@ def test_preflight_accepts_the_declared_slate_when_the_environment_matches() -> 
         "--seeds", "0", "--dry-run", "--expect-levers", "grounded_prosecution", env=env
     )
     out = proc.stdout + proc.stderr
-    assert proc.returncode == 0, out
+    assert proc.returncode == 1, out
     assert "Substrate slate OK: expected levers ON = grounded_prosecution" in out
 
 

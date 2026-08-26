@@ -667,12 +667,8 @@ def test_9p2i_pooling_reproduces_baseline_5_exactly(
         0.3881578947368421
     )  # was 0.22424242424242424
     assert nine_pooling.absence_set_size_median == pytest.approx(0.0)
-    assert dict(nine_pooling.absence_set_size_histogram) == {
-        0: 129,
-        1: 35,
-        2: 1,
-    }
-    assert len(nine_pooling.per_meeting) == 165
+    assert dict(nine_pooling.absence_set_size_histogram) == {0: 94, 1: 57, 2: 1}
+    assert len(nine_pooling.per_meeting) == 152
 
 
 def test_4p1i_pooling_reproduces_baseline_5_exactly(

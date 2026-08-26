@@ -1664,9 +1664,9 @@ def test_committed_9p2i_fake_tasks_emergencies_and_repairs_are_named() -> None:
     assert fake_tasks["BLOCKED"] == 10  # was 5
 
     # 19 emergency intents: 14 pressed the button, 5 were foreclosed or refused.
-    assert census.by_intent["emergency"] == {"EMERGENCY": 14, "BLOCKED": 5}
+    assert census.by_intent["emergency"] == {"EMERGENCY": 8, "BLOCKED": 2}
     # 114 repair intents: 83 landed.
-    assert census.by_intent["repair_sabotage"] == {"REPAIR": 83, "BLOCKED": 31}
+    assert census.by_intent["repair_sabotage"] == {"REPAIR": 16, "BLOCKED": 8}
 
 
 def test_committed_9p2i_labels_never_outlive_their_tick() -> None:

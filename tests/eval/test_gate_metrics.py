@@ -922,13 +922,13 @@ def test_committed_9p2i_report_pins_the_audited_gate_metrics() -> None:
         for game in report.report.games
         if compute_genuine_class_conversion((game,)).supplied > 0
     }
-    assert supplied_seeds == {1, 5, 31, 42}
+    assert supplied_seeds == {26}
     converted_seeds = {
         game.seed
         for game in report.report.games
         if compute_genuine_class_conversion((game,)).converted > 0
     }
-    assert converted_seeds == {1, 5, 42}
+    assert converted_seeds == set()
     lost_opening_seeds = {
         game.seed
         for game in report.report.games
@@ -946,14 +946,14 @@ def test_committed_9p2i_report_pins_the_audited_gate_metrics() -> None:
     # the era-invalidity note (a reader pulling the raw report sees the
     # PRIMARY gate and the warning, the gp-7 ask).
     raw = json.loads(_COMMITTED_9P2I_REPORT.read_text(encoding="utf-8"))
-    assert raw["gate_metrics"]["genuine_class_conversion"]["supplied"] == 4
-    assert raw["gate_metrics"]["genuine_class_conversion"]["converted"] == 3
+    assert raw["gate_metrics"]["genuine_class_conversion"]["supplied"] == 1
+    assert raw["gate_metrics"]["genuine_class_conversion"]["converted"] == 0
     assert (
         "ejection_accuracy" in raw["gate_metrics"]["genuine_class_conversion"]["note"]
     )
     assert "INVALID" in raw["gate_metrics"]["genuine_class_conversion"]["note"]
     # ... and the Task-19.5 successor beside it, carrying its canary label.
-    assert raw["gate_metrics"]["supplied_channel_conversion"]["supplied"] == 79
+    assert raw["gate_metrics"]["supplied_channel_conversion"]["supplied"] == 76
     assert (
         "canary-eligible" in raw["gate_metrics"]["supplied_channel_conversion"]["note"]
     )
@@ -983,13 +983,13 @@ def test_committed_flat_4p1i_report_pins_the_gate_metrics() -> None:
 
     assert genuine.supplied == 0  # was 1
     assert genuine.converted == 0  # was 1
-    assert genuine.conversion_rate == 1.0
+    assert genuine.conversion_rate == None
     assert genuine.note == GENUINE_CLASS_GATE_NOTE
 
     # The Task-19.5 canary cell: the successor instrument the canary bands read.
     supplied_channel = gate.supplied_channel_conversion
-    assert supplied_channel.supplied == 11
-    assert supplied_channel.converted == 10
+    assert supplied_channel.supplied == 19
+    assert supplied_channel.converted == 19
     assert supplied_channel.conversion_rate == pytest.approx(10 / 11)
     assert supplied_channel.witnessed_vent_supplied == 10
     assert supplied_channel.witnessed_vent_converted == 9

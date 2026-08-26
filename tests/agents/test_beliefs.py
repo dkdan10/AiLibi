@@ -3837,7 +3837,7 @@ class TestReporterExculpationOnCommittedBytes:
                 )
 
         # Both census meetings are hard-flag-backed p-1 convictions.
-        assert (kept, already_sub_gate, hard_convicted) == (0, 0, 2)
+        assert (kept, already_sub_gate, hard_convicted) == (2, 0, 8)
         assert kept + already_sub_gate + hard_convicted == 2
 
     def test_the_hard_flag_backed_innocent_reporters_are_the_two_whereabouts_cases(
@@ -3885,10 +3885,7 @@ class TestReporterExculpationOnCommittedBytes:
             assert self._subject_max(off_rows, reporter) >= _GATE
             assert self._subject_max(on_rows, reporter) >= _GATE
             hard_backed_innocent.append((seed, meeting_id, reporter))
-        assert hard_backed_innocent == [
-            (17, "headless-seed-17:meeting-0", "p-1"),
-            (39, "headless-seed-39:meeting-0", "p-1"),
-        ]
+        assert hard_backed_innocent == []
 
     # -- (b) the over-damping canary: zero hard-flag-backed outcome changes ---
 

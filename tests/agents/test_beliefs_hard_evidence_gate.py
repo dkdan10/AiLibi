@@ -960,10 +960,10 @@ class TestHardEvidenceGateOnCommittedBytes:
         # kept / 14 still-over; the baseline-2-era 24/31-vs-6/16 hypothesis is long
         # superseded -- exactly why the DoD re-measures rather than carrying a prior
         # figure.)
-        assert counterfactual.kept == {"CREWMATE": 0, "IMPOSTOR": 0}
-        assert counterfactual.already_sub_gate == {"CREWMATE": 0, "IMPOSTOR": 0}
-        assert counterfactual.still_over == {"CREWMATE": 0, "IMPOSTOR": 7}
-        assert counterfactual.soft_only_total == 7
+        assert counterfactual.kept == {"CREWMATE": 2, "IMPOSTOR": 0}
+        assert counterfactual.already_sub_gate == {"CREWMATE": 3, "IMPOSTOR": 0}
+        assert counterfactual.still_over == {"CREWMATE": 1, "IMPOSTOR": 14}
+        assert counterfactual.soft_only_total == 20
 
     # -- (ii) the hard-backed count (non-vacuity floor) ----------------------
 

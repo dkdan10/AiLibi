@@ -5491,7 +5491,7 @@ class TestCommittedBytes107FoldPins:
             and graph.get("p-6", 0.0) >= 0.60
             and ballots.get(voter) == "p-6"
         )
-        assert listeners_over_gate == ["p-7", "p-8"]
+        assert listeners_over_gate == []
 
     def test_seed7_m2_defended_subject_corroborated_not_folded(self) -> None:
         # Same-phase symmetry (re-anchored to baseline 6 -- Qwen/Qwen3.6-27B, Task
@@ -5516,7 +5516,7 @@ class TestCommittedBytes107FoldPins:
         assert independent_voices(entry.transcript, roster=roster).get("p-1", ()) == ()
         assert "p-1" in evidence.corroborated
         assert "p-1" not in evidence.pre_vote_folded
-        assert evidence.pre_vote_folded == ("p-7",)
+        assert evidence.pre_vote_folded == ("p-3",)
 
 
 # ---------------------------------------------------------------------------

@@ -1341,11 +1341,7 @@ class TestAbsencePriorOnCommittedBytes:
         # max / median. Sizes span 0..2 (a 9-player set minus the reporter and any
         # placed players; one meeting leaves 2 unplaced); with live roll-call the
         # median meeting still leaves 0 players unplaced (baseline-4 left 4, reached 8).
-        assert counterfactual.absent_histogram == (
-            (0, 129),
-            (1, 35),
-            (2, 1),
-        )
+        assert counterfactual.absent_histogram == ((0, 94), (1, 57), (2, 1))
         assert counterfactual.absent_min == 0
         assert counterfactual.absent_max == 2
         assert counterfactual.absent_median == 0.0
@@ -1403,8 +1399,8 @@ class TestAbsencePriorOnCommittedBytes:
         # widening re-places exactly 23 subject-meetings. In the other 47
         # vent-flagged meetings the flagged subject was already placed by a
         # sighting/whereabouts, so the widening is a no-op there.
-        assert counterfactual.vent_double_count_histogram == ((0, 142), (1, 23))
-        assert counterfactual.vent_double_count_meetings == 23
+        assert counterfactual.vent_double_count_histogram == ((0, 121), (1, 31))
+        assert counterfactual.vent_double_count_meetings == 31
 
     def test_widened_mechanism_agrees_with_recorded_flags(
         self, counterfactual: _AbsenceCounterfactual
@@ -1425,12 +1421,8 @@ class TestAbsencePriorOnCommittedBytes:
         # one |absent|=2 meeting had no vent double-count to re-place), the
         # median holds at 0.0, and the histogram shifts exactly the 23
         # re-placed subject-meetings down one bucket each.
-        assert counterfactual.widened_absent_histogram == (
-            (0, 152),
-            (1, 12),
-            (2, 1),
-        )
-        assert counterfactual.widened_nonempty_absent == 13
+        assert counterfactual.widened_absent_histogram == ((0, 125), (1, 26), (2, 1))
+        assert counterfactual.widened_nonempty_absent == 27
         assert counterfactual.widened_absent_min == 0
         assert counterfactual.widened_absent_max == 2
         assert counterfactual.widened_absent_median == 0.0

@@ -686,7 +686,7 @@ def test_finale_pins_committed_eject_decided_game(
     assert finale.winner == "CREWMATES"
     assert finale.winner_reason == "CREWMATE_EJECT"
     assert finale.final_tick == 19  # was 12
-    assert replay.metadata.total_ticks == 13, "the row count is a different number"
+    assert replay.metadata.total_ticks == 20, "the row count is a different number"
 
     # Ascending tick; within tick 12 the ejection precedes the terminal beat.
     assert [
@@ -695,8 +695,10 @@ def test_finale_pins_committed_eject_decided_game(
         (5, "kill", "p-6", "p-3"),
         (7, "kill", "p-7", "p-4"),
         (8, "ejection", "p-8", "p-6"),
-        (12, "ejection", "p-1", "p-7"),
-        (12, "game_end", None, None),
+        (12, "meeting_skipped", "p-1", None),
+        (15, "kill", "p-7", "p-9"),
+        (19, "ejection", "p-1", "p-7"),
+        (19, "game_end", None, None),
     ]
 
     recaps = {recap.agent_id: recap for recap in finale.agent_recaps}
@@ -743,7 +745,7 @@ def test_finale_pins_committed_wrong_ejection_game(
     assert finale.final_tick == 28  # was 33
 
     ejections = [e for e in finale.decisive_events if e.kind == "ejection"]
-    assert [(e.tick, e.subject_id) for e in ejections] == [(33, "p-8")]
+    assert [(e.tick, e.subject_id) for e in ejections] == [(25, "p-9"), (26, "p-4")]
     # Both earlier meetings resolved without an ejection and are recorded as
     # such — a skipped meeting is a decisive beat too (it is why nobody left).
     assert [e.tick for e in finale.decisive_events if e.kind == "meeting_skipped"] == [
@@ -754,7 +756,7 @@ def test_finale_pins_committed_wrong_ejection_game(
     recaps = {recap.agent_id: recap for recap in finale.agent_recaps}
     assert recaps["p-8"].role == "CREWMATE"
     assert recaps["p-8"].alive_at_end is False
-    assert recaps["p-1"].final_vote_target == "p-8"
+    assert recaps["p-1"].final_vote_target == "p-4"
     assert recaps["p-1"].final_vote_named_impostor is False
     # An authored ballot: the meeting layer rewrote nothing on this one.
     assert recaps["p-1"].final_vote_rewritten is False

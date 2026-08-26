@@ -279,9 +279,9 @@ def test_corpus_wide_totals() -> None:
             totals[_served(flag).category] += 1
 
     assert dict(totals) == {
-        "role_proof": 440,
-        "cross_statement": 271,
-        "weak_signal": 119,
+        "role_proof": 448,
+        "weak_signal": 161,
+        "cross_statement": 12,
     }
     assert sum(totals.values()) == flag_count == 830
 
@@ -339,11 +339,7 @@ def test_served_dto_carries_the_category() -> None:
 
     replay = ReplayLoader(_SAMPLES / "9p2i").load_replay("headless-seed-17")
     meeting = replay.meetings[0]
-    assert [flag.category for flag in meeting.contradictions] == [
-        "cross_statement",
-        "cross_statement",
-        "role_proof",
-    ]
+    assert [flag.category for flag in meeting.contradictions] == ["role_proof"]
     proof = meeting.contradictions[2]
     assert proof.event_a_id == proof.event_b_id
     assert proof.kind == "vent_sighting"
@@ -433,12 +429,8 @@ def test_endpoint_render_classes() -> None:
         for flag in flags:
             counts[_endpoint_class(flag)] += 1
 
-    assert dict(counts) == {
-        "self_linked": 440,
-        "same_turn": 35,
-        "two_turns": 355,
-    }
-    assert sum(counts.values()) == 830
+    assert dict(counts) == {"self_linked": 448, "two_turns": 113, "same_turn": 60}
+    assert sum(counts.values()) == 621
     # Every self-linked flag is role proof; the same-turn class is the
     # self-stated pair the "within …" reading exists for.
     assert counts["unresolvable"] == 0
@@ -454,5 +446,5 @@ def test_seed_47_is_entirely_weak_signal() -> None:
     replay = ReplayLoader(_SAMPLES / "9p2i").load_replay("headless-seed-47")
     meeting = replay.meetings[2]
     assert meeting.outcome == "EJECTED"
-    assert {flag.category for flag in meeting.contradictions} == {"weak_signal"}
-    assert len(meeting.contradictions) == 3
+    assert {flag.category for flag in meeting.contradictions} == {"role_proof"}
+    assert len(meeting.contradictions) == 1

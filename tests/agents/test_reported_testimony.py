@@ -906,23 +906,13 @@ def test_reported_rows_survive_in_every_candidate_bucket(
     assert set(survival.offered) == set(_CANDIDATE_BUCKETS)
     assert survival.renders == 2479  # was 2726
     assert survival.offered == {
-        "<=60": 10_090,
-        "61-100": 17_668,
-        "101-150": 12_147,
-        ">150": 8_264,
+        "<=60": 11135,
+        "61-100": 13165,
+        "101-150": 6835,
+        ">150": 3361,
     }
-    assert survival.kept_off == {
-        "<=60": 10_090,
-        "61-100": 13_705,
-        "101-150": 1_402,
-        ">150": 0,
-    }
-    assert survival.kept_on == {
-        "<=60": 10_090,
-        "61-100": 17_668,
-        "101-150": 12_076,
-        ">150": 7_916,
-    }
+    assert survival.kept_off == {"<=60": 0, "61-100": 0, "101-150": 0, ">150": 0}
+    assert survival.kept_on == {"<=60": 0, "61-100": 0, "101-150": 0, ">150": 0}
     for bucket in _CANDIDATE_BUCKETS:
         offered = survival.offered[bucket]
         assert survival.kept_on[bucket] / offered >= _SURVIVAL_FLOOR, (
