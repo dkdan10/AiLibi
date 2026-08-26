@@ -270,12 +270,11 @@ class VotePromptRenderer(Protocol):
     non-empty (instructing the impostor to SKIP rather than vote a
     teammate), so a crewmate / sole-impostor prompt is byte-unchanged.
 
-    ``reporter_id`` (Task 15.5, the reporter-exculpation lever) is the
-    body-report meeting's own reporter -- the manager threads
-    :attr:`meetings.manager.MeetingTrigger.triggered_by`, but ONLY when the
-    default-OFF ``reporter_exculpation`` lever is ON and the meeting is a body
-    report. The template renders the base-rate annotation ("p-N reported the
-    body; self-report is weakly exculpatory in this game") only when it is
+    ``reporter_id`` (the reporter-exculpation annotation) is the body-report
+    meeting's own reporter -- the manager threads
+    :attr:`meetings.manager.MeetingTrigger.triggered_by` for every body report.
+    The template renders the base-rate annotation ("p-N reported the body;
+    self-report is weakly exculpatory in this game") only when it is
     non-``None``. The default ``None`` -- an emergency call, or any ad-hoc
     render -- omits the block. This is the render mirror of the belief-side damp
     in :func:`agents.memory.beliefs.apply_meeting_evidence_rules`, threaded from

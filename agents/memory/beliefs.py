@@ -1561,8 +1561,8 @@ def apply_meeting_evidence_rules(
     guards, and -- downstream -- the manager's joint cap. Applied AFTER the
     testimony bumps and BEFORE the corroborations, so a vouched-but-unplaced
     subject still gets the corroboration's clamp-ceiling last word. An EMPTY
-    ``absent`` set is still byte-identical to the pre-16.8 fold -- that is the
-    live no-op condition; the lever-OFF path is history.
+    ``absent`` set is a no-op, which is the only condition under which this
+    fold leaves the graph untouched.
 
     All subject sets are processed in sorted order; the result is a
     deterministic function of its arguments (replay-stable).

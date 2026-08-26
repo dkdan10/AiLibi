@@ -3241,7 +3241,7 @@ class TacticalAgent:
         this agent's OWN memory via
         :func:`~agents.memory.store.record_meeting_outcome`, which the v3
         tactical feature encoder reads and the ``## Meetings so far:`` render
-        block reads while its lever is ON. This fold is UN-gated by the
+        block renders. This fold is UN-gated by the
         emergency tracker: it runs for BOTH roles because the v3 encoder is
         impostor-side too, and an impostor has no tracker. The hook only ever
         reaches living agents, so the append is monotone in ``end_tick`` and

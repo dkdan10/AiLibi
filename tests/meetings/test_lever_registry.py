@@ -86,13 +86,21 @@ def _reads_env(func: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
 
 
 def accept_and_ignore_resolvers(source: str) -> list[str]:
-    """Names of the ``*_enabled`` functions in ``source`` that are pure ``True``.
+    """Names of the ``*_enabled`` functions in ``source`` that always read ``True``.
 
-    A resolver is reported when its name ends ``_enabled``, its body reads no
-    ``env``, and every statement it executes is either a docstring, a ``del`` or
-    ``return True``. That is exactly the graduated-but-undeleted shape; a
-    resolver that branches, or that reads its argument, is a LIVE toggle and is
-    never reported.
+    A resolver is reported when its name ends ``_enabled``, its body never LOADS
+    ``env``, and EVERY ``return`` reachable inside it -- at any nesting depth --
+    returns a bare ``True``. That is the graduated-but-undeleted shape whatever
+    its spelling: the straight-line ``del env; return True``, and equally
+    ``if cond: return True`` followed by ``return True``, which is env-independent
+    and can never resolve OFF however many branches it grows. A resolver that
+    reads its argument, or that can return anything but ``True``, is a LIVE
+    toggle and is never reported.
+
+    Descendant returns are read rather than the top-level statement list,
+    precisely so wrapping the constant in control flow cannot slip a retired
+    lever back in. A resolver with NO return at all is not reported -- it does
+    not resolve to a constant ``True`` and is somebody else's bug.
     """
 
     found: list[str] = []
@@ -103,22 +111,44 @@ def accept_and_ignore_resolvers(source: str) -> list[str]:
             continue
         if _reads_env(node):
             continue
-        body = [
+        returns = [
             stmt
-            for stmt in node.body
-            if not (
-                isinstance(stmt, ast.Expr)
-                and isinstance(stmt.value, ast.Constant)
-                and isinstance(stmt.value.value, str)
-            )
+            for stmt in ast.walk(node)
+            if isinstance(stmt, ast.Return)
+            # A return inside a NESTED def belongs to that function, not this one.
+            and _owning_function(node, stmt) is node
         ]
-        if not body:
-            continue
-        if all(
-            isinstance(stmt, ast.Delete) or _is_bare_true_return(stmt) for stmt in body
-        ):
+        if returns and all(_is_bare_true_return(stmt) for stmt in returns):
             found.append(node.name)
     return found
+
+
+def _owning_function(
+    root: ast.FunctionDef | ast.AsyncFunctionDef, target: ast.Return
+) -> ast.AST | None:
+    """The innermost function definition ``target`` returns from, within ``root``."""
+
+    owner: ast.AST | None = None
+
+    def _descend(node: ast.AST, current: ast.AST) -> None:
+        nonlocal owner
+        for child in ast.iter_child_nodes(node):
+            if child is target:
+                owner = current
+                return
+            nested = (
+                child
+                if isinstance(
+                    child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)
+                )
+                else current
+            )
+            _descend(child, nested)
+            if owner is not None:
+                return
+
+    _descend(root, root)
+    return owner
 
 
 def test_no_accept_and_ignore_resolver_survives() -> None:
@@ -153,6 +183,51 @@ def test_the_gate_bites_on_a_planted_resolver(tmp_path: Path) -> None:
     assert accept_and_ignore_resolvers(planted.read_text(encoding="utf-8")) == [
         "graduated_thing_enabled"
     ]
+
+
+def test_the_gate_bites_on_a_branched_always_true_resolver(tmp_path: Path) -> None:
+    # The evasion the straight-line shape invites: wrap the constant in control
+    # flow and a statement-list check stops seeing it, while the resolver is
+    # still env-independent and still cannot resolve OFF. The gate reads every
+    # descendant return instead, so both spellings are reported.
+    branched = tmp_path / "branched_lever.py"
+    branched.write_text(
+        "from collections.abc import Mapping\n"
+        "\n"
+        "\n"
+        "def branched_thing_enabled(env: Mapping[str, str] | None = None) -> bool:\n"
+        '    """Whether the thing is on -- now always True."""\n'
+        "\n"
+        "    del env\n"
+        "    if True:\n"
+        "        return True\n"
+        "    return True\n",
+        encoding="utf-8",
+    )
+
+    assert accept_and_ignore_resolvers(branched.read_text(encoding="utf-8")) == [
+        "branched_thing_enabled"
+    ]
+
+
+def test_the_gate_leaves_a_branched_env_free_resolver_that_can_be_false(
+    tmp_path: Path,
+) -> None:
+    # The discrimination half of the branched case: a resolver that can return
+    # False is a real decision, not a retired lever, even though it reads no
+    # ``env``. Reporting it would make the gate a ban on ``*_enabled`` names.
+    real = tmp_path / "real_predicate.py"
+    real.write_text(
+        "def roster_thing_enabled(size: int) -> bool:\n"
+        '    """A real predicate that happens to end _enabled."""\n'
+        "\n"
+        "    if size > 3:\n"
+        "        return True\n"
+        "    return False\n",
+        encoding="utf-8",
+    )
+
+    assert accept_and_ignore_resolvers(real.read_text(encoding="utf-8")) == []
 
 
 def test_the_gate_leaves_a_live_resolver_alone(tmp_path: Path) -> None:

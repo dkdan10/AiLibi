@@ -479,7 +479,7 @@ class TestOptIn:
         assert opt_in_speakers == ["p-2", "p-4"]
 
 
-# --- Roll-call round (Task 18.8, DEFAULT-OFF) ------------------------------
+# --- Roll-call round -------------------------------------------------------
 @dataclass
 class _RollCallValidationClient:
     """Valid opening / reply / votes, but invalid turn JSON for the roll-call

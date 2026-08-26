@@ -170,9 +170,9 @@ class SawMoveObservation(_FrozenModel):
     shape re-opens the off-by-one class this shape closes, because a spoken
     tick is the model's transcription of a rendered one and an inferred
     ``tick - 1`` compounds that slip into a claim nobody made. The turn schema
-    accepts the shape unconditionally, so parsing never depends on the lever;
-    with the lever off the detector ignores it and it records as ordinary
-    testimony.
+    accepts the shape unconditionally, so parsing never depends on which
+    templates offer it -- a set that stays silent about the shape simply has no
+    speaker who can emit one.
     """
 
     type: Literal["saw_move"]
@@ -601,8 +601,7 @@ class VoteBallot(_FrozenModel):
     §3.4). ``primary_reason_observation_id`` is the private-hard-evidence
     citation channel: a stable episodic observation id drawn from the
     VOTER'S OWN memory (the ``{agent_id}:{tick}:{seq}`` scheme minted in
-    perception; the DESIGN.md §6.6 render surfaces them to the voter only
-    when the ``AILIBI_OBSERVATION_ID_RENDERING`` lever is ON). It lets a
+    perception; the DESIGN.md §6.6 render surfaces them to the voter). It lets a
     voter cite evidence NOBODY spoke -- a witnessed kill or vent the voter
     holds first-hand but which never entered the transcript -- so the
     reason need not be a ``turn_id`` from the public chain. The manager

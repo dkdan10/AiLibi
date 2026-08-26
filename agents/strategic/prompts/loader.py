@@ -863,12 +863,11 @@ def vote_ballot_prompt(
     instead" block only when it is non-empty, so a crewmate /
     sole-impostor ballot (``()``) is byte-unchanged.
 
-    ``reporter_id`` (Task 15.5, reporter-exculpation lever) is the
-    body-report meeting's own reporter, threaded by the manager ONLY when the
-    default-OFF ``reporter_exculpation`` lever is ON. The v6 template renders
-    the self-report base-rate annotation only when it is non-``None``; the
-    default ``None`` (lever OFF, emergency call, or ad-hoc render) omits the
-    block, so a lever-OFF ballot prompt is byte-identical.
+    ``reporter_id`` (the reporter-exculpation annotation) is the body-report
+    meeting's own reporter, threaded by the manager for every body report. The
+    v6 template renders the self-report base-rate annotation only when it is
+    non-``None``; the default ``None`` (an emergency call, or an ad-hoc render)
+    omits the block.
 
     ``persona`` (Task 16.3, populated 16.9, rendered 16.16) and
     ``suspicion_provenance`` (Task 16.3, rendered 16.15) are the inert

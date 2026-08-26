@@ -795,22 +795,26 @@ def _candidate_bucket(candidates: int) -> str:
 
 
 class _SurvivalCensus(NamedTuple):
-    """Reported rows offered and kept per candidate bucket, OFF and ON."""
+    """Reported rows offered and kept per candidate bucket."""
 
     offered: Mapping[str, int]
-    kept_off: Mapping[str, int]
-    kept_on: Mapping[str, int]
+    kept: Mapping[str, int]
     renders: int
 
 
 def _survival_census(sample_dir: Path) -> _SurvivalCensus:
-    """Re-render every meeting's memories at ``DEFAULT_TOKEN_BUDGET``, both ways.
+    """Re-render every meeting's memories at ``DEFAULT_TOKEN_BUDGET``.
 
     The instrument's own walk, stopped at each ``MeetingOpened`` so the memory is
-    the one the speaker actually held there, then rendered twice from the RETAINED
-    composite -- once with an empty environment and once with the lever ON. Each
-    render is bucketed by how many candidate observations the selector saw, and the
-    reported rows it OFFERED are scored against the reported rows it KEPT.
+    the one the speaker actually held there, then rendered from the RETAINED
+    composite. Each render is bucketed by how many candidate observations the
+    selector saw, and the reported rows it OFFERED are scored against the
+    reported rows it KEPT.
+
+    ONE leg. The census was a two-way lever counterfactual until the raised
+    reported band graduated; with the lever gone the second render was the same
+    call as the first, so the differential could not detect drift and the slow
+    corpus walk paid for it twice.
     """
 
     num_players, num_impostors, tasks_per_crewmate = resolve_roster_knobs(sample_dir)
@@ -823,8 +827,7 @@ def _survival_census(sample_dir: Path) -> _SurvivalCensus:
         game_map=game_map,
     )
     offered: Counter[str] = Counter()
-    kept_off: Counter[str] = Counter()
-    kept_on: Counter[str] = Counter()
+    kept: Counter[str] = Counter()
     renders = 0
 
     for seed in seeds_on_disk(sample_dir):
@@ -871,22 +874,14 @@ def _survival_census(sample_dir: Path) -> _SurvivalCensus:
                             continue
                         bucket = _candidate_bucket(len(candidates))
                         offered[bucket] += rows
-                        # Both legs pass an explicit mapping: the counterfactual
-                        # must not read whatever the process environment happens
-                        # to export.
-                        off = render_for_prompt(
+                        rendered = render_for_prompt(
                             composite,
                             token_budget=DEFAULT_TOKEN_BUDGET,
                         )
-                        on = render_for_prompt(
-                            composite,
-                            token_budget=DEFAULT_TOKEN_BUDGET,
-                        )
-                        kept_off[bucket] += sum(
-                            1 for line in off.splitlines() if _TESTIMONY_ROW in line
-                        )
-                        kept_on[bucket] += sum(
-                            1 for line in on.splitlines() if _TESTIMONY_ROW in line
+                        kept[bucket] += sum(
+                            1
+                            for line in rendered.splitlines()
+                            if _TESTIMONY_ROW in line
                         )
                 elif isinstance(walk_event, MeetingApplied):
                     _fold_meeting_into_memories(walk_event, composites=composites)
@@ -896,8 +891,7 @@ def _survival_census(sample_dir: Path) -> _SurvivalCensus:
 
     return _SurvivalCensus(
         offered=dict(offered),
-        kept_off=dict(kept_off),
-        kept_on=dict(kept_on),
+        kept=dict(kept),
         renders=renders,
     )
 
@@ -944,13 +938,12 @@ def test_reported_rows_survive_in_every_candidate_bucket(
         ">150": 3689,  # was 3361
     }
     # The raised reported band is unconditional since the baseline-7 record, so
-    # the two legs are ONE walk and read identically -- the differential the C-73
-    # register measured is what graduating the lever spent. Kept can exceed
-    # offered in a bucket: the candidate scan counts rows the selector was HANDED,
-    # and a render can carry a testimony line composed from several candidates.
+    # there is ONE leg to count -- the differential the C-73 register measured is
+    # what graduating the lever spent. Kept can exceed offered in a bucket: the
+    # candidate scan counts rows the selector was HANDED, and a render can carry
+    # a testimony line composed from several candidates.
     kept = {"<=60": 11308, "61-100": 13803, "101-150": 7059, ">150": 3564}
-    assert survival.kept_off == kept
-    assert survival.kept_on == kept
+    assert survival.kept == kept
     # THE no-behaviour-moved statement, recomputed rather than asserted: the
     # sweep re-bucketed the kept rows and minted none. Every kept row comes off
     # ``render_for_prompt``, whose path the sweep did not touch, so the TOTAL is
@@ -963,6 +956,6 @@ def test_reported_rows_survive_in_every_candidate_bucket(
     # the bucket the register measured keeping NO reported row at all.
     for bucket in _CANDIDATE_BUCKETS:
         offered = survival.offered[bucket]
-        assert survival.kept_on[bucket] / offered >= _SURVIVAL_FLOOR, (
-            f"{bucket}: kept {survival.kept_on[bucket]} of {offered} ON"
+        assert survival.kept[bucket] / offered >= _SURVIVAL_FLOOR, (
+            f"{bucket}: kept {survival.kept[bucket]} of {offered}"
         )

@@ -1562,7 +1562,7 @@ class TestCrossSpeakerConflictStrength:
         assert WEAK_REASON_BOUNDARY_OVERLAP in flags[0].description
 
 
-# --- Task 18.9 lever resolvers (default-OFF, the 16.8 absence-prior shape) ---
+# --- The Task 18.9 detector rules ------------------------------------------
 
 
 class TestEndpointBandExemption:
@@ -2044,7 +2044,7 @@ class TestBothLeversCompose:
         assert is_weak_contradiction(by_kind["alibi_vs_physical"]) is False
 
 
-# --- The movement-claim lever (default-OFF) --------------------------------
+# --- The movement-claim chokepoint -----------------------------------------
 #
 # A witness who saw "p-3 move from MEDBAY to LABS at tick 3" holds two facts and
 # may speak only one room. Speaking the ORIGIN states a placement that was

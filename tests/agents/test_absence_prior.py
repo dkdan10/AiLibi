@@ -829,11 +829,11 @@ class TestAbsencePriorOnCommittedBytes:
     baseline-5 re-record; the 14.8 analysis-only machinery, cloned from
     :class:`tests.agents.test_beliefs_hard_evidence_gate.TestHardEvidenceGateOnCommittedBytes`).
 
-    The absence-prior lever stays default-OFF at baseline 5: it did NOT graduate at
-    16.17 (the slate keeps it OFF -- Phase 17 re-measures it on the roll-call
-    substrate), so the recorded builder rows carry NO absence lift and the OFF leg
-    is the recorded fold. The one thing that DID change under the feet of this
-    counterfactual is the 16.15 roll-call elicitation, now LIVE: agents state their
+    The absence prior graduated at the Task-18.12 baseline-6 record, so the OFF
+    leg it was written against can no longer be produced and the two legs are one
+    re-derivation (see the walk). What the cells still measure is the WIDENED
+    column against that single baseline. The other thing that changed under the
+    feet of this counterfactual is the 16.15 roll-call elicitation, now LIVE: agents state their
     whereabouts, so far fewer living players are left publicly unplaced and the
     absent sets are markedly SMALLER than baseline-4 (mean |absent| ~3.09, median
     3.0, down from ~3.6 / 4.0). This class walks every committed 9p2i meeting ONCE
@@ -853,11 +853,10 @@ class TestAbsencePriorOnCommittedBytes:
     the walk's reconstructed trigger via ``ReconstructedMeeting.trigger_kind``).
 
     Absence only LIFTS (it never lowers), so a recorded conviction is never lost
-    under the lever -- the counterfactual measures only the NEW-must-vote channel
-    (a candidate ON pushes to/over the rendered gate that OFF left under it) and
-    the argmax TOP-candidate churn. The measured aggregates are PINNED exactly:
-    committed bytes are frozen, so these numbers are the calibration evidence
-    Phase 17 re-checks when it re-measures the lever on the live-roll-call substrate.
+    -- the counterfactual measures the NEW-must-vote channel (a candidate pushed
+    to/over the rendered gate that the baseline left under it) and the argmax
+    TOP-candidate churn. The measured aggregates are PINNED exactly: committed
+    bytes are frozen, so these numbers stay the calibration evidence of record.
 
     Task 17.5 extends the sweep with the DOUBLE-COUNT counterfactual -- the
     widened column the 17.7 gate reads beside these cells. The committed bytes

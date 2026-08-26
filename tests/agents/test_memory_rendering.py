@@ -2081,7 +2081,7 @@ class TestSelfLocationTrailProperties:
 
 
 # --------------------------------------------------------------------------- #
-# The coalesced render (AILIBI_COALESCED_MEMORY_RENDER, default-OFF).          #
+# The coalesced render.                                                        #
 # --------------------------------------------------------------------------- #
 
 _SPAN_ROW = re.compile(

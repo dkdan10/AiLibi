@@ -19,8 +19,9 @@ Phase 19 changed labels and instrumentation only (locked decision 1 —
 the served DTOs holds unchanged.
 
 A second block at the bottom reads the same four exhibits under the Phase-20
-grounded-prosecution lever (DEFAULT-OFF, so the served bytes above are still the
-lever-off reading) and records each fixture's new outcome as an asserted value.
+grounded-prosecution rules (which bind only when a caller supplies the sighting
+records, so the served bytes above are still the record-free reading) and
+records each fixture's new outcome as an asserted value.
 An exhibit whose mechanism moves at that lever's adopting record then says so
 here rather than quietly ceasing to demonstrate anything.
 """
