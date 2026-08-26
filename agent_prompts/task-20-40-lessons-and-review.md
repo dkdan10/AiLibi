@@ -86,6 +86,8 @@ boast.
 - scripts/check_doc_facts.py; (the link-check over the new pages)
 - tests/scripts/test_check_doc_facts.py
 
+Recorded deviation at merge (PR #393, orchestrator-ratified): docs/artifacts.md one number (audits/ 153 → 154, the standing toll for a new tracked audits/ file). Notes for the close ledger: docs/lessons.md is a first-person DRAFT for the owner to edit (owner markers in place); its word count sits at 1,491 of a 1,500 budget; check_review_map now requires every finding id on any Section refs line to appear in the published review index — a Section-refs edit adding a new id reds check_doc_facts until the index names it; five verified-open items recorded in the index §4 (C-46 sequential tournament loop, C-83 by design, C-126 operator-env docs, C-130 unused sweep sets, G-29 stock-rationale half). A prose record, not scope entries.
+
 **Files NOT in scope:**
 - audits/review-2026-08-19/A/, audits/review-2026-08-19/B/, audits/review-2026-08-19/C/, audits/review-2026-08-19/D/ (records — the index describes, orders and corrects by pointing; a correction found while indexing is recorded in the index's own errata line and routed to the close, never written into a report)
 - audits/audit-phase-20-baseline-7.md, audits/audit-phase-20-preregistration.md, audits/audit-phase-20-planning.md (records — quoted and linked, never edited)
