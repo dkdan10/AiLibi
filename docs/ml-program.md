@@ -112,7 +112,7 @@ discipline**, and this framing does not upgrade them: clause (c) wants a lever w
 ablation switches the behaviour off, and both appear on the un-levered control arm, so no
 such lever exists. Findings, not demonstrated emergence.
 
-## The comparator carries two measured defects, and they run one way
+## The comparator carried two measured defects, and they ran one way
 
 The 2026-08-19 review found two target-selection defects, both 9p2i-only, both
 **depressing the comparator**:
@@ -135,8 +135,44 @@ asserted by `tests/agents/test_impostor_policy.py::TestCommittedCorpusTargetingP
 **Direction of the confound, plainly:** a weakened comparator inflates every win edge above,
 so those edges are **upper bounds**. Nothing else moves: the referee verdicts, the NO-FLIP
 rulings and the pre-registration ordering all stand, and the gate failures are if anything
-understated, since a stronger comparator would not have made these arms more watchable. The
-repair is Task 20.32; the re-measurement, Task 20.38.
+understated, since a stronger comparator would not have made these arms more watchable.
+
+**Erratum, and it is not closed.** Both defects are repaired in the tree as it stands: the
+kill seam and the sabotage guard now scan the whole ranking for a co-located, zero-witness
+candidate instead of testing only its head, and a target whose freshest sighting predates the
+last meeting boundary can no longer rank at all. Nothing was retrained and nothing was re-run
+against the repaired policy, so the comparator every edge in the table above was measured
+against no longer exists in that form, and those edges were never re-measured. They are stale
+by construction — upper bounds against a policy this repository no longer ships — and
+re-grounding them means a fresh campaign on the current mover, which is an owner decision and
+not a documentation edit. Until that happens the table stands as recorded, with this
+paragraph attached to it.
+
+## What the next recording changed under all of this
+
+The social layer these policies were searched against was rebuilt after the campaign closed,
+and the committed sample sets were re-recorded on it — regenerated 2026-08-25, impostor win
+rates 36% (4p1i) and 24% (9p2i). The bars that recording was read against were registered
+before the repairs existed, and the read is published bar by bar in
+[`audit-phase-20-baseline-7.md`](../audits/audit-phase-20-baseline-7.md) §3. Every pair below
+reads baseline 6 → baseline 7:
+
+* **Moved, and met their bars.** False crewmate self-placement, 20.1% → 0.77% pooled;
+  fabricated task-completion lines, 88 of 1,888 rendered rows → zero on every set; all four
+  of the traced injustice fixtures flipped.
+* **Moved, and missed their bars.** Conviction accuracy without engine-certified proof,
+  46/125 = 0.3680 → 61/103 = 0.5922, against a registered 0.60 — short by 0.0078. Wrongful
+  ejections, 79 → 42, against a registered fewer-than-35.
+* **Did not move.** The impostor win split landed inside the pre-registered ±15-point band on
+  every leg, and it is the observed-not-gated secondary here for a structural reason: the
+  mover repair above rode the same recording as a declared co-intervention, so no win-split
+  move can be attributed to either change (§5.1, §7).
+
+The rule's verdict on that read is a **finding**, not an adoption: two bars missed. The
+recording is the reference in spite of it, by an explicit owner override of the verdict
+recorded with its grounds on 2026-08-26 (§6.1). None of this re-prices a referee verdict
+above — those were decided on the campaign's own recordings, and nothing in this section
+was measured against a retrained arm.
 
 ## Limitations
 

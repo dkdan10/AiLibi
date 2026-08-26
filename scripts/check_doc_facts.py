@@ -10,7 +10,7 @@ class the 19.1 sweep cleaned (a stale refresh date, a stale win rate, a stale
 ladder tip, a graduated lever still documented as a live knob) is exactly what
 regenerates silently otherwise.
 
-Fourteen checks. Each accumulates precise errors; all of them are reported
+Sixteen checks. Each accumulates precise errors; all of them are reported
 together, so one run names every drifted fact rather than the first.
 
 1. **Sample provenance.** ``replays/samples/<set>/MANIFEST.md`` owns each sample
@@ -29,16 +29,24 @@ together, so one run names every drifted fact rather than the first.
    (``"<sum> sample replays"``), with every count-shaped claim in the
    paragraph held to the row totals — and the recording model plus the
    prompt-set family/version tokens the ``model`` / ``prompt_versions``
-   columns record must be named in the paragraph as well.
-2. **Ladder tip.** ``audits/audit-phase-18-close.md`` owns which baseline the
-   substrate ladder stands at. Every README sentence naming the "ladder tip" —
-   the whole sentence, however long — must name that baseline, and no other.
+   columns record must be named in the paragraph as well. Both claim shapes
+   are then scanned across every document allowed to repeat them — README.md,
+   docs/history.md, docs/glossary.md, audits/README.md,
+   docs/reading-guide.md and docs/ml-program.md — because a figure the front
+   door states twice rots in the copy nobody re-reads. The results tables'
+   ``At baseline 6`` column is the one span held to a different source: its
+   cells state what the previous recording read, and the record's own
+   win-split table owns them.
+2. **Ladder tip.** The audit that adopted the current recording owns which
+   baseline the substrate ladder stands at. Every front-door sentence naming
+   the "ladder tip" — the whole sentence, however long — must name that
+   baseline, and no other.
 3. **Lever registry vs .env.example.** ``orchestrator.replay`` owns the live
    substrate-lever registry. Every still-toggleable lever must be documented
    IN the belief-substrate section with a commented example line showing its
    bare-environment default — and ONLY that way: an active (uncommented)
    export anywhere in the template fails, because a copied .env would flip
-   the substrate away from the committed baseline-6 record. Every graduated
+   the substrate away from the committed record. Every graduated
    lever must be named by its registry key inside the section's GRADUATED
    LEVERS note — the contiguous comment block, not merely the section or the
    file — whose wording must keep saying "always ON" and never drift back to
@@ -83,18 +91,21 @@ together, so one run names every drifted fact rather than the first.
    and name every subdirectory of ``audits/`` as a unit.
 8. **The results table agrees with the reading guide.** The numbers are stated
    once: every row of README.md's results table must appear in
-   docs/reading-guide.md's numbers table with the SAME figure, so a later edit
-   cannot drift one from the other, and neither table may state one claim twice.
+   docs/reading-guide.md's numbers table with the SAME figure and the same
+   ``At baseline 6`` cell, so a later edit cannot drift one from the other, and
+   neither table may state one claim twice.
 9. **The results figures are re-derived from their sources.** Agreement between
    two documents cannot catch a figure edited identically in both, so every row
    whose source is cheap to read is recomputed instead: the replay count from
    the verifier's own file population, the citation figure from the committed
    instrument's pinned assertions, the vent headline as arithmetic over the
    reading guide's cross-tab cells, and the proof-vs-inference conviction pair
-   as the column sums of the phase-19 close audit's own partition table — whose
-   proof-present innocent-ejection row must still be zero, because the README
-   row says every innocent ejection sits in the no-proof cell. The win rates are
-   re-derived in check 1.
+   from BOTH recordings that measured it — the current one's pre-registered
+   bar read for the published figure, the phase-19 close audit's own partition
+   table for the ``At baseline 6`` cell. Each is checked against itself first
+   (an accuracy cell fixes its own injustice count), and the published row must
+   still say every innocent ejection sits in the no-proof cell, with the count
+   the record read. The win rates are re-derived in check 1.
 10. **The real-report example matches that report.** README.md hands a reader a
     populated eval report because the default fake provider produces an empty
     one; its ejection count and two rates come from that report's own
@@ -117,6 +128,17 @@ together, so one run names every drifted fact rather than the first.
     ``watchability.referee_passed``. No published row is skipped and no
     measured arm may be missing, so a moved cell, a flipped verdict, an
     invented row and a quietly dropped arm all fail.
+15. **The reading guide's narrative matches its tables' pins.** Its §3
+    cross-tab is what the README's vent headline is derived from, so the
+    table's cells are bound to ``tests/eval/test_deduction_metrics.py``'s
+    pinned assertions — and so are the sentences that narrate them, the
+    eject-ballot count and the meeting total. Prose is where a recording's
+    drift survives: a table gets re-quoted row by row and a paragraph does not.
+16. **The reading guide's exhibits are games the spectator features.** Every
+    ``<set> seed <n>`` the guide names must appear in ``FEATURED_GAMES``
+    (frontend/src/components/ReplayPicker.tsx), the committed curated list; a
+    guide naming a seed the strip dropped points a reader at a card that does
+    not exist.
 
 ``--repo-root`` points the document and source reads at another tree (the unit
 tests perturb a copy); it defaults to this checkout. The lever registry ALWAYS
@@ -133,7 +155,7 @@ import json
 import posixpath
 import re
 import sys
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from datetime import date
 from pathlib import Path
 from typing import Final
@@ -179,6 +201,12 @@ _LINKED_DOCUMENTS: Final[tuple[str, ...]] = (
 )
 # The documents that between them must account for every phase contract.
 _PHASE_DOCUMENTS: Final[tuple[str, ...]] = (_README, _HISTORY)
+# The documents allowed to repeat a claim the committed bytes own — a win rate,
+# the recording's date. A figure the front door states more than once is checked
+# everywhere it is stated: the README is where such a claim is first written,
+# never the only place it rots.
+_ML_PAGE: Final = "docs/ml-program.md"
+_CLAIM_DOCUMENTS: Final[tuple[str, ...]] = _LINKED_DOCUMENTS + (_ML_PAGE,)
 # Every document allowed to state which baseline the ladder stands at. All of
 # them are scanned, so a recording that moves the tip moves them together.
 _LADDER_TIP_DOCUMENTS: Final[tuple[str, ...]] = (
@@ -238,6 +266,13 @@ _SENTENCE_END: Final = re.compile(r"\.(?=\s|\Z)")
 _REGENERATED_DATE: Final = re.compile(r"regenerated (\d{4}-\d{2}-\d{2})")
 # Any "<rate>% (<set>)" claim, wherever it appears, must match the manifest.
 _WIN_RATE_CLAIM: Final = re.compile(r"(\d+)% \((4p1i|9p2i)\)")
+# The two other shapes the front door dates the current recording in. Both are
+# held to the manifests' newest ``refreshed_at``; a numbered claim naming an
+# OLDER recording is history and is left alone.
+_RECORDING_DATE_CLAIM: Final = re.compile(
+    r"reference recording (\d+),? (?:made )?(\d{4}-\d{2}-\d{2})"
+)
+_RECORD_DATE_CLAIM: Final = re.compile(r"the (\d{4}-\d{2}-\d{2}) record\b")
 
 # The .env.example section whose AILIBI_*= assignments must all resolve to a
 # live registry key, delimited by the repo's dashed section banners.
@@ -357,6 +392,13 @@ _LINE_CITATION: Final = re.compile(
 # The results tables, located by their header row rather than by heading text,
 # so a section rename does not silently disable the agreement check.
 _RESULTS_TABLE_HEADER: Final[tuple[str, str]] = ("What", "Figure")
+# The column carrying each row's value at the recording this one replaced. Its
+# cells are HISTORY: the claim-shaped scans hold them to what the record itself
+# says the old value was, never to today's committed bytes.
+_BEFORE_COLUMN_HEADER: Final = "At baseline 6"
+# A markdown link reduced to its text, so a column header may carry its glossary
+# link and still be matched by name.
+_LINK_TEXT: Final = re.compile(r"\[([^\]]*)\]\([^)\s]+\)")
 # Below this the README table is a stub, and row-by-row agreement would pass
 # vacuously — a check that cannot fail is not a gate.
 _MIN_RESULT_ROWS: Final = 4
@@ -384,9 +426,67 @@ _CITATION_PIN_NAMES: Final[tuple[str, ...]] = (
 )
 _VENT_CLAIM: Final = "Correct 9p ejections riding an ejectee-specific vent sighting"
 _VENT_TABLE_HEADER: Final = "Meeting contains a vent flag"
-# The conviction partition: the phase-19 close audit's own per-set table, whose
-# four data columns sum to the pooled pair the README states.
+# The reading guide's §3 cross-tab, and the committed instrument whose pinned
+# assertions own its cells. The guide's table is where the README's vent
+# headline is derived FROM, so leaving it unbound would leave the headline
+# resting on prose; these pins are what it rests on instead.
+_DEDUCTION_INSTRUMENT: Final = "tests/eval/test_deduction_metrics.py"
+# ``assert cross_tab.<field> == <n>`` — the samples-9p2i partitions, which are
+# the only ones the instrument reads through a bare ``cross_tab`` name. A
+# trailing comment is allowed: these pins carry their previous value in one.
+_CROSSTAB_PIN: Final = re.compile(
+    r"^\s*assert cross_tab\.(\w+) == (\d+)\s*(?:#.*)?$", re.MULTILINE
+)
+# What the guide's cross-tab states, as (pinned field, how the guide states it).
+_CROSSTAB_MEETING_TOTAL: Final = "meetings_total"
+_CROSSTAB_ROW_FIELDS: Final[tuple[tuple[str, str, str], ...]] = (
+    ("yes", "flagged_ejections_impostor", "flagged_ejections_innocent"),
+    ("no", "unflagged_ejections_impostor", "unflagged_ejections_innocent"),
+)
+_CROSSTAB_ROW_MEETINGS: Final[dict[str, str]] = {
+    "yes": "flagged_meetings",
+    "no": "unflagged_meetings",
+}
+# The guide's PROSE figures — the sentences that narrate the tables. They rot
+# where the tables do not: a record moves the table and leaves the paragraph.
+_GUIDE_BALLOT_PROSE: Final = re.compile(r"all (\d+) eject\s+ballots")
+_GUIDE_MEETING_PROSE: Final = re.compile(r"all (\d+)\s+committed 9p2i meetings")
+_VENT_ROW_MEETINGS: Final = re.compile(r"\|\s*(yes|no)\s*\((\d+) meetings\)")
+
+# The curated featured list the spectator opens, as committed data. Any game the
+# guide names as an exhibit must be on it, or the guide sends a reader looking
+# for a card that is not there.
+_PICKER: Final = "frontend/src/components/ReplayPicker.tsx"
+_FEATURED_BLOCK: Final = re.compile(
+    r"FEATURED_GAMES: readonly FeaturedGame\[\] = \[(.*?)\n\];", re.DOTALL
+)
+_FEATURED_ENTRY: Final = re.compile(r'set: "([^"]+)",\s*\n\s*seed: (\d+),')
+_GUIDE_EXHIBIT: Final = re.compile(r"\*\*(4p1i|9p2i) seed (\d+)\*\*")
+# Below this the guide names too few exhibits for the binding to mean anything,
+# and a paragraph that quietly lost its seeds would pass vacuously.
+_MIN_EXHIBIT_SEEDS: Final = 2
+# The conviction partition. The BEFORE column is the phase-19 close audit's own
+# per-set table, whose four data columns sum to the pooled pair; the AFTER
+# column is the current record's pre-registered read, which measured the same
+# cells on the new bytes and publishes them pooled.
 _PROOF_PARTITION_AUDIT: Final = "audits/audit-phase-19-close.md"
+# Each bar of the record's read is its own section, and the pooled row of the
+# table inside it is the cell the front door quotes. Located by the heading, so
+# the four ``| set | before | after |`` tables cannot be confused for each other.
+_RECORD_BAR_HEADING: Final = re.compile(r"^#{2,4} +Bar (\d+)\b", re.MULTILINE)
+_BEFORE_AFTER_HEADER: Final[tuple[str, str]] = ("set", "before")
+_RECORD_POOLED_LABEL: Final = "pooled"
+_ACCURACY_BAR: Final = 1
+_INNOCENT_BAR: Final = 2
+# The direct-proof half is stated in the accuracy bar's prose rather than in its
+# table, which reports the non-direct cell per set.
+_DIRECT_PROOF_POOLED: Final = re.compile(
+    r"direct-proof cell[^|]*?\*\*(\d+)/(\d+) = [\d.]+\*\* pooled"
+)
+# The record's win-split table: the baseline-6 rate each set carried, which is
+# what a before-column win-rate claim is held to.
+_WIN_SPLIT_HEADER: Final[tuple[str, str]] = ("set", "baseline-6 impostor rate")
+_WIN_SPLIT_ROW: Final = "samples/{name}"
 _PROOF_CLAIM: Final = (
     "Ejection accuracy with engine-certified proof of the ejectee's role, "
     "against without"
@@ -405,6 +505,10 @@ _PROOF_ROW_LABELS: Final[tuple[str, ...]] = (
     _INNOCENT_ROW,
     _PROOF_INNOCENT_ROW,
 )
+# One reading of the conviction partition: the direct-proof accuracy, the
+# non-direct accuracy, the innocent ejections and the innocent ejections that
+# landed in the direct-proof cell.
+_Partition = tuple[tuple[int, int], tuple[int, int], int, int]
 _RATIO_CELL: Final = re.compile(r"(\d+)\s*/\s*(\d+)")
 _COUNT_CELL: Final = re.compile(r"(\d+)")
 _EMPHASIS: Final = re.compile(r"[*`]")
@@ -418,7 +522,6 @@ _INJUSTICE_CLAIM: Final = (
 # The ML page's results table and the committed measurement it is derived from.
 # The table is located by its own header cells, so renaming the section above it
 # does not disable the derivation.
-_ML_PAGE: Final = "docs/ml-program.md"
 _FINALIST_JSONL: Final = "training/reports/results-finalist-eval.jsonl"
 _ML_TABLE_HEADER: Final[tuple[str, str]] = ("policy", "impostor win")
 # Every row label opens with its identity in backticks — an arm's committed sha
@@ -493,10 +596,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         f"{_HISTORY} account for every {_TASKS_DIR}/{_PHASE_GLOB}; "
         f"{_AUDITS_INDEX} indexes every top-level {_AUDITS_DIR}/*.md once; the "
         f"{_README} results figures are re-derived from their sources and equal "
-        f"{_READING_GUIDE}'s; the real-report example matches "
-        f"{_POPULATED_REPORT}; every volatile count is as-of stamped; "
-        f"{_READING_GUIDE} carries no file:line citation; and every relative "
-        f"link in {len(_LINKED_DOCUMENTS)} front-door documents resolves."
+        f"{_READING_GUIDE}'s, before column included; the real-report example "
+        f"matches {_POPULATED_REPORT}; every volatile count is as-of stamped; "
+        f"{_READING_GUIDE} carries no file:line citation, narrates the cells "
+        f"{_DEDUCTION_INSTRUMENT} pins, and names only games {_PICKER} "
+        f"features; the claim-shaped facts hold across "
+        f"{len(_CLAIM_DOCUMENTS)} documents; and every relative link in "
+        f"{len(_LINKED_DOCUMENTS)} front-door documents resolves."
     )
     print(
         f"{_ML_PAGE} verified: every published arm's wins, comparator wins, "
@@ -524,6 +630,8 @@ def check_facts(repo_root: Path) -> list[str]:
     check_phase_coverage(repo_root, errors)
     check_audits_index(repo_root, errors)
     check_guide_line_citations(repo_root, errors)
+    check_guide_narrative(repo_root, errors)
+    check_featured_exhibits(repo_root, errors)
     check_relative_links(repo_root, errors)
     check_ml_results_table(repo_root, errors)
     return errors
@@ -685,19 +793,207 @@ def check_sample_provenance(repo_root: Path, readme: str, errors: list[str]) -> 
                     "`prompt_versions` column records it."
                 )
 
-    for claim_match in _WIN_RATE_CLAIM.finditer(readme):
-        name = claim_match.group(2)
-        if name not in rates:
+    check_repeated_claims(repo_root, rates, max(dates) if dates else None, errors)
+
+
+def check_repeated_claims(
+    repo_root: Path,
+    rates: dict[str, tuple[int, int]],
+    newest_date: str | None,
+    errors: list[str],
+) -> None:
+    """The win rates and the recording's date, everywhere the front door says them.
+
+    The README is where a claim like "24% (9p2i)" is first written; it is not
+    the only place it rots. The reading guide repeats both figures in its own
+    numbers table and the ML page dates the recording its comparator now sits
+    against, so all of them are held to the manifests here.
+
+    The results tables' before column is the one exception, and it is checked
+    rather than skipped: those cells state what the value was at the recording
+    this one replaced, so they are held to the record's own win-split table.
+    A live figure written into a history cell, or a history figure written into
+    a live one, fails either way.
+    """
+
+    historical_rates = record_win_rates(repo_root, rates, errors)
+    # Which recording is current is the ladder tip's own question, and
+    # :func:`check_ladder_tip` already reports it when the audit cannot answer.
+    tip = recorded_ladder_tip(repo_root, [])
+    for document in _CLAIM_DOCUMENTS:
+        text = read_document(repo_root, document, errors)
+        if text is None:
             continue
-        impostor_wins, total = rates[name]
-        expected = round(100 * impostor_wins / total)
-        if int(claim_match.group(1)) != expected:
-            errors.append(
-                f"{_README}:{line_number(readme, claim_match.start())}: win-rate "
-                f"claim {claim_match.group(0)!r} disagrees with "
-                f"{_MANIFEST_PATH.format(name=name)} "
-                f"({impostor_wins}/{total} = {expected}%)."
+        for number, unit, historical in claim_units(text):
+            expected_rates = historical_rates if historical else rates
+            for match in _WIN_RATE_CLAIM.finditer(unit):
+                name = match.group(2)
+                if name not in expected_rates:
+                    continue
+                wins, total = expected_rates[name]
+                expected = round(100 * wins / total)
+                if int(match.group(1)) == expected:
+                    continue
+                source = (
+                    f"{_LADDER_TIP_AUDIT}'s win-split table"
+                    if historical
+                    else _MANIFEST_PATH.format(name=name)
+                )
+                where = " in the before column" if historical else ""
+                errors.append(
+                    f"{document}:{number}: win-rate claim {match.group(0)!r}"
+                    f"{where} disagrees with {source} "
+                    f"({wins}/{total} = {expected}%)."
+                )
+            if historical or newest_date is None:
+                continue
+            for stated, claim in current_record_dates(unit, tip):
+                if stated == newest_date:
+                    continue
+                errors.append(
+                    f"{document}:{number}: {claim!r} dates the current "
+                    f"reference recording {stated!r}, but "
+                    f"{', '.join(_MANIFEST_PATH.format(name=name) for name in _SAMPLE_SETS)}"
+                    f" record {newest_date!r}."
+                )
+
+
+def current_record_dates(text: str, tip: str | None) -> Iterator[tuple[str, str]]:
+    """Each ``(date, claim)`` in ``text`` that dates the CURRENT recording.
+
+    A numbered claim naming an older recording is history and is not yielded:
+    "reference recording 6, 2026-07-20" is a true sentence about a recording
+    this tree no longer ships, and holding it to today's manifests would force
+    the front door to forget what it replaced. The unnumbered shapes — "the
+    <date> record", "regenerated <date>" — are always about the current one.
+    """
+
+    if tip is not None:
+        for match in _RECORDING_DATE_CLAIM.finditer(text):
+            if match.group(1) == tip:
+                yield match.group(2), match.group(0)
+    for pattern in (_RECORD_DATE_CLAIM, _REGENERATED_DATE):
+        for match in pattern.finditer(text):
+            yield match.group(1), match.group(0)
+
+
+def claim_units(markdown: str) -> Iterator[tuple[int, str, bool]]:
+    """``(line, text, historical)`` for every span a claim scan may read.
+
+    A document is scanned line by line, except inside the results table: there
+    each cell is its own unit, because one column of it — the before column —
+    holds the previous recording's values and must not be held to the current
+    bytes. Everything else, including every other cell of those same rows, is a
+    live claim.
+    """
+
+    before_index: int | None = None
+    for number, line in enumerate(markdown.splitlines(), 1):
+        cells = table_cells(line)
+        if cells is None:
+            before_index = None
+            yield number, line, False
+            continue
+        if tuple(cells[:2]) == _RESULTS_TABLE_HEADER:
+            plain = [strip_links(cell) for cell in cells]
+            before_index = (
+                plain.index(_BEFORE_COLUMN_HEADER)
+                if _BEFORE_COLUMN_HEADER in plain
+                else None
             )
+        if before_index is None:
+            yield number, line, False
+            continue
+        for index, cell in enumerate(cells):
+            yield number, cell, index == before_index
+
+
+def strip_links(text: str) -> str:
+    """``text`` with every markdown link reduced to its link text."""
+
+    return _LINK_TEXT.sub(r"\1", text).strip()
+
+
+def record_win_rates(
+    repo_root: Path, rates: dict[str, tuple[int, int]], errors: list[str]
+) -> dict[str, tuple[int, int]]:
+    """Each sample set's PREVIOUS impostor win rate, from the record's own table.
+
+    The record publishes both columns of the split it measured, so the front
+    door's before column has a committed source rather than a memory. The after
+    column is checked against the manifests while we are here: a record that
+    disagreed with the bytes it recorded would make every before/after pair on
+    the front door meaningless.
+    """
+
+    audit = read_document(repo_root, _LADDER_TIP_AUDIT, errors)
+    if audit is None:
+        return {}
+    rows = labelled_table_rows(audit, _WIN_SPLIT_HEADER)
+    if rows is None:
+        errors.append(
+            f"{_LADDER_TIP_AUDIT}: no win-split table with a "
+            f"'{' | '.join(_WIN_SPLIT_HEADER)}' header row — the front door's "
+            "before-column win rates have no committed source."
+        )
+        return {}
+    previous: dict[str, tuple[int, int]] = {}
+    for name in _SAMPLE_SETS:
+        cells = rows.get(_WIN_SPLIT_ROW.format(name=name))
+        if cells is None or len(cells) < 2:
+            errors.append(
+                f"{_LADDER_TIP_AUDIT}: the win-split table has no "
+                f"{_WIN_SPLIT_ROW.format(name=name)!r} row, so the before-column "
+                f"win rate for {name} cannot be re-derived."
+            )
+            continue
+        before, after = _RATIO_CELL.search(cells[0]), _RATIO_CELL.search(cells[1])
+        if before is None or after is None:
+            errors.append(
+                f"{_LADDER_TIP_AUDIT}: the win-split row for {name} holds no "
+                "before/after pair of the shape '<wins>/<games>'."
+            )
+            continue
+        previous[name] = (int(before.group(1)), int(before.group(2)))
+        recorded = (int(after.group(1)), int(after.group(2)))
+        if name in rates and recorded != rates[name]:
+            errors.append(
+                f"{_LADDER_TIP_AUDIT}: the win-split table records "
+                f"{recorded[0]}/{recorded[1]} for {name}, but "
+                f"{_MANIFEST_PATH.format(name=name)} holds "
+                f"{rates[name][0]}/{rates[name][1]}."
+            )
+    return previous
+
+
+def labelled_table_rows(
+    markdown: str, header: tuple[str, ...]
+) -> dict[str, list[str]] | None:
+    """The table under ``header``, keyed on each row's own first cell.
+
+    Emphasis and backticks are stripped from the label so a bolded or
+    code-spanned row name reads the same as a bare one. ``None`` when no table
+    carries that header row — format drift the caller reports.
+    """
+
+    rows: dict[str, list[str]] | None = None
+    for line in markdown.splitlines():
+        cells = table_cells(line)
+        if cells is None or len(cells) < len(header):
+            if rows is not None:
+                break
+            continue
+        if rows is None:
+            if (
+                tuple(_EMPHASIS.sub("", cell).strip() for cell in cells[: len(header)])
+                == header
+            ):
+                rows = {}
+            continue
+        if all(_TABLE_RULE_CELL.match(cell) for cell in cells):
+            continue
+        rows[_EMPHASIS.sub("", cells[0]).strip()] = cells[1:]
+    return rows
 
 
 def provenance_paragraph(readme: str) -> str | None:
@@ -720,9 +1016,10 @@ def provenance_paragraph(readme: str) -> str | None:
 def check_ladder_tip(repo_root: Path, errors: list[str]) -> None:
     """No front-door "ladder tip" sentence may name a baseline but the tip.
 
-    The tip itself is parsed from the phase-18 close audit, which is where the
-    ladder's standing is recorded; whitespace is collapsed first because the
-    audit wraps its prose mid-sentence.
+    The tip itself is parsed from the audit :data:`_LADDER_TIP_AUDIT` names —
+    the record that adopted the current recording, which is where the ladder's
+    standing is written down; whitespace is collapsed first because the audit
+    wraps its prose mid-sentence.
 
     Every document that may state the tip is scanned, not only README.md: the
     glossary defines the term and the history narrates it, so a recording that
@@ -1081,7 +1378,7 @@ def check_vote_correctness_provenance(
     the provenance lead-in that introduces the stamps
     (:func:`provenance_lead_in`), never merely somewhere in the file, so a
     correct token in an unrelated comment cannot alibi a wrong lead-in. The
-    flags stamp is thirteen keys wide, so it is held to agreement only: naming
+    flags stamp is tens of keys wide, so it is held to agreement only: naming
     it in prose would be a second copy to rot.
     """
 
@@ -1429,6 +1726,44 @@ def check_results_agreement(repo_root: Path, readme: str, errors: list[str]) -> 
                 f"{_READING_GUIDE} records {guide_figures[claim]!r} for the "
                 "same claim."
             )
+    check_before_columns(readme, guide, errors)
+
+
+def check_before_columns(readme: str, guide: str, errors: list[str]) -> None:
+    """The two tables' before columns, held to each other the way the figures are.
+
+    A figure and the value it moved from are one statement, so the history half
+    is stated once too. Both tables must carry the column, every row must have
+    a cell in it, and the shared rows must agree.
+    """
+
+    columns = {}
+    for document, text in ((_README, readme), (_READING_GUIDE, guide)):
+        before = results_before_column(text)
+        if before is None:
+            errors.append(
+                f"{document}: its results table has no "
+                f"{_BEFORE_COLUMN_HEADER!r} column — every row states what the "
+                "recording before this one read, including the rows nothing "
+                "moved."
+            )
+            return
+        columns[document] = before
+    for claim, stated in columns[_README].items():
+        recorded = columns[_READING_GUIDE].get(claim)
+        if recorded is None:
+            continue  # the missing row is already reported against the figure
+        if not stated.strip():
+            errors.append(
+                f"{_README}: the results row {claim!r} has an empty "
+                f"{_BEFORE_COLUMN_HEADER!r} cell."
+            )
+        elif strip_links(recorded) != strip_links(stated):
+            errors.append(
+                f"{_README}: the {_BEFORE_COLUMN_HEADER!r} cell of results row "
+                f"{claim!r} reads {stated!r}, but {_READING_GUIDE} records "
+                f"{recorded!r} for the same claim."
+            )
 
 
 def check_result_sources(repo_root: Path, readme: str, errors: list[str]) -> None:
@@ -1488,12 +1823,8 @@ def check_result_sources(repo_root: Path, readme: str, errors: list[str]) -> Non
             errors,
         )
 
-    instrument = read_document(repo_root, _CITATION_INSTRUMENT, errors)
-    if instrument is not None:
-        pins = {
-            match.group(1): int(match.group(2))
-            for match in _CITATION_PIN.finditer(instrument)
-        }
+    pins = citation_pins(repo_root, errors)
+    if pins:
         missing = [name for name in _CITATION_PIN_NAMES if name not in pins]
         if missing:
             errors.append(
@@ -1537,33 +1868,55 @@ def check_result_sources(repo_root: Path, readme: str, errors: list[str]) -> Non
                 errors,
             )
 
-    audit = read_document(repo_root, _PROOF_PARTITION_AUDIT, errors)
-    if audit is not None:
-        partition = proof_partition(audit)
-        if partition is None:
-            errors.append(
-                f"{_PROOF_PARTITION_AUDIT}: no conviction-partition table with a "
-                f"'{_PROOF_TABLE_HEADER}' header row and its four labelled rows "
-                f"— the {_README} proof-vs-inference figure has nothing to be "
-                "derived from."
-            )
-        else:
-            (proof, non_proof), innocent, proof_innocent = partition
-            expected = (
-                f"{proof[0]} / {proof[1]} = {proof[0] / proof[1]:.3f} vs "
-                f"{non_proof[0]} / {non_proof[1]} = {non_proof[0] / non_proof[1]:.3f}"
-            )
-            compare_result_figure(
-                _PROOF_CLAIM,
-                figures,
-                expected,
-                f"the partition table in {_PROOF_PARTITION_AUDIT}",
-                errors,
-            )
-            check_partition_arithmetic(
-                proof, non_proof, innocent, proof_innocent, errors
-            )
-            check_injustice_cell(readme, innocent, proof_innocent, errors)
+    check_conviction_partition(repo_root, readme, figures, errors)
+
+
+def check_conviction_partition(
+    repo_root: Path, readme: str, figures: dict[str, str], errors: list[str]
+) -> None:
+    """The proof-vs-inference row, both columns, each from the record that owns it.
+
+    The row is the front door's headline pair, and after a recording it is two
+    measurements rather than one: the current record's own pre-registered read
+    of those cells, and the read the recording before it published. Each column
+    is derived from its own audit and neither is copied from the other, so a
+    re-record that moved the figure and left the history behind — or the
+    reverse — fails here.
+    """
+
+    before = audit_partition(
+        repo_root, _PROOF_PARTITION_AUDIT, phase_19_partition, errors
+    )
+    after = audit_partition(repo_root, _LADDER_TIP_AUDIT, record_partition, errors)
+    if before is not None:
+        check_partition_arithmetic(*before, errors)
+        compare_before_figure(
+            readme,
+            _PROOF_CLAIM,
+            partition_figure(before[0], before[1]),
+            f"the partition table in {_PROOF_PARTITION_AUDIT}",
+            errors,
+        )
+    if after is not None:
+        proof, non_proof, innocent, proof_innocent = after
+        check_record_partition_arithmetic(non_proof, innocent, errors)
+        compare_result_figure(
+            _PROOF_CLAIM,
+            figures,
+            partition_figure(proof, non_proof),
+            f"the pre-registered read in {_LADDER_TIP_AUDIT}",
+            errors,
+        )
+        check_injustice_cell(readme, innocent, proof_innocent, errors)
+
+
+def partition_figure(proof: tuple[int, int], non_proof: tuple[int, int]) -> str:
+    """One conviction-partition cell, as the front door states it."""
+
+    return (
+        f"{proof[0]} / {proof[1]} = {proof[0] / proof[1]:.4f} vs "
+        f"{non_proof[0]} / {non_proof[1]} = {non_proof[0] / non_proof[1]:.4f}"
+    )
 
 
 def check_partition_arithmetic(
@@ -1596,6 +1949,28 @@ def check_partition_arithmetic(
             )
 
 
+def check_record_partition_arithmetic(
+    non_proof: tuple[int, int], innocent: int, errors: list[str]
+) -> None:
+    """The record's two decided bars against each other.
+
+    The accuracy bar and the wrongful-ejection bar are read from different
+    instruments on the same bytes, and every wrongful ejection sits in the
+    non-direct cell — so one bar's ``n - k`` is the other bar's count. A record
+    whose two headline bars disagreed would put a contradiction on the front
+    door under one date.
+    """
+
+    implied = non_proof[1] - non_proof[0]
+    if implied != innocent:
+        errors.append(
+            f"{_LADDER_TIP_AUDIT}: its non-direct accuracy bar reads "
+            f"{non_proof[0]}/{non_proof[1]}, so {implied} of those ejections "
+            f"convicted an innocent, but its wrongful-ejection bar reads "
+            f"{innocent}."
+        )
+
+
 def check_injustice_cell(
     readme: str, innocent: int, proof_innocent: int, errors: list[str]
 ) -> None:
@@ -1619,7 +1994,7 @@ def check_injustice_cell(
     if proof_innocent:
         errors.append(
             f"{_README}: the results row {_PROOF_CLAIM!r} says every innocent "
-            f"ejection sits in the no-proof cell, but {_PROOF_PARTITION_AUDIT} "
+            f"ejection sits in the no-proof cell, but {_LADDER_TIP_AUDIT} "
             f"records {proof_innocent} proof-present innocent ejection(s)."
         )
         return
@@ -1627,7 +2002,7 @@ def check_injustice_cell(
     if stated not in " | ".join(row):
         errors.append(
             f"{_README}: the results row {_PROOF_CLAIM!r} does not state "
-            f"{stated!r} — {_PROOF_PARTITION_AUDIT}'s partition table counts "
+            f"{stated!r} — {_LADDER_TIP_AUDIT}'s pre-registered read counts "
             f"{innocent} innocent ejections and zero proof-present ones, so "
             "both the count and the cell they landed in have to be stated here."
         )
@@ -1893,6 +2268,58 @@ def compare_result_figure(
         )
 
 
+def compare_before_figure(
+    markdown: str, claim: str, expected: str, source: str, errors: list[str]
+) -> None:
+    """One results row's before cell, held to the recording that owns it."""
+
+    before = results_before_column(markdown)
+    if before is None:
+        errors.append(
+            f"{_README}: the results table has no {_BEFORE_COLUMN_HEADER!r} "
+            "column — every figure a recording moved states what it moved from, "
+            "so the column is the page's own before/after."
+        )
+        return
+    stated = before.get(claim)
+    if stated is None:
+        errors.append(
+            f"{_README}: the results row {claim!r} has no "
+            f"{_BEFORE_COLUMN_HEADER!r} cell."
+        )
+    elif strip_links(stated) != expected:
+        errors.append(
+            f"{_README}: the {_BEFORE_COLUMN_HEADER!r} cell of results row "
+            f"{claim!r} reads {stated!r}, but {source} recomputes to "
+            f"{expected!r}."
+        )
+
+
+def results_before_column(markdown: str) -> dict[str, str] | None:
+    """Claim -> before cell for the results table, or ``None`` if it has none."""
+
+    before: dict[str, str] | None = None
+    index = 0
+    for line in markdown.splitlines():
+        cells = table_cells(line)
+        if cells is None or len(cells) < 2:
+            if before is not None:
+                break
+            continue
+        if before is None:
+            plain = [strip_links(cell) for cell in cells]
+            if tuple(cells[:2]) == _RESULTS_TABLE_HEADER:
+                if _BEFORE_COLUMN_HEADER not in plain:
+                    return None
+                before, index = {}, plain.index(_BEFORE_COLUMN_HEADER)
+            continue
+        if all(_TABLE_RULE_CELL.match(cell) for cell in cells):
+            continue
+        if index < len(cells):
+            before.setdefault(cells[0], cells[index])
+    return before
+
+
 def vent_crosstab(guide: str) -> tuple[tuple[int, int], tuple[int, int]] | None:
     """The (impostor, innocent) ejection counts of the vent cross-tab's rows.
 
@@ -1929,14 +2356,12 @@ def vent_crosstab(guide: str) -> tuple[tuple[int, int], tuple[int, int]] | None:
     return labelled[_VENT_ROW_LABELS[0]], labelled[_VENT_ROW_LABELS[1]]
 
 
-def proof_partition(
-    audit: str,
-) -> tuple[tuple[tuple[int, int], tuple[int, int]], int, int] | None:
+def phase_19_partition(audit: str) -> _Partition | None:
     """The conviction partition, pooled across the audit table's four sets.
 
-    Returns ``((proof_correct, proof_total), (other_correct, other_total))``
-    followed by the innocent-ejection total and the proof-present innocent
-    total. Each accuracy cell contributes its own ``k/n`` — the leading ratio
+    The recording this one replaced measured these cells per set; pooling its
+    columns is what the front door's before column states. Each accuracy cell
+    contributes its own ``k/n`` — the leading ratio
     of the cell, ahead of any interval or advisory note — so a set that
     recorded no cell at all (``0/0``) pools as the nothing it is. Rows are
     keyed on their own labels, so reordering the table changes nothing while
@@ -1990,7 +2415,91 @@ def proof_partition(
         return None
     if innocent is None or proof_innocent is None:
         return None
-    return (proof, non_proof), innocent, proof_innocent
+    return proof, non_proof, innocent, proof_innocent
+
+
+def record_partition(audit: str) -> _Partition | None:
+    """The same four cells, read off the record's pre-registered bar sections.
+
+    The record measures them on the new bytes and publishes each bar's pooled
+    row; the direct-proof half sits in the accuracy bar's prose, because that
+    bar's table reports the non-direct cell per set. ``None`` when a bar, its
+    pooled row or the direct-proof sentence is missing — a record whose read
+    cannot be located is drift the caller reports rather than guesses through.
+    """
+
+    non_proof = bar_pooled_ratio(audit, _ACCURACY_BAR)
+    innocent = bar_pooled_count(audit, _INNOCENT_BAR)
+    section = bar_section(audit, _ACCURACY_BAR)
+    direct = None if section is None else _DIRECT_PROOF_POOLED.search(section)
+    if non_proof is None or innocent is None or direct is None:
+        return None
+    proof = (int(direct.group(1)), int(direct.group(2)))
+    return proof, non_proof, innocent, proof[1] - proof[0]
+
+
+def bar_section(audit: str, bar: int) -> str | None:
+    """The record's section for one pre-registered bar, heading to next heading."""
+
+    for match in _RECORD_BAR_HEADING.finditer(audit):
+        if int(match.group(1)) != bar:
+            continue
+        following = _RECORD_BAR_HEADING.search(audit, match.end())
+        return audit[match.start() : following.start() if following else len(audit)]
+    return None
+
+
+def bar_pooled_cells(audit: str, bar: int) -> list[str] | None:
+    """The ``before`` / ``after`` cells of one bar's pooled row."""
+
+    section = bar_section(audit, bar)
+    if section is None:
+        return None
+    rows = labelled_table_rows(section, _BEFORE_AFTER_HEADER)
+    if rows is None:
+        return None
+    return rows.get(_RECORD_POOLED_LABEL)
+
+
+def bar_pooled_ratio(audit: str, bar: int) -> tuple[int, int] | None:
+    """One bar's pooled ``k/n`` on the new bytes."""
+
+    cells = bar_pooled_cells(audit, bar)
+    if cells is None or len(cells) < 2:
+        return None
+    match = _RATIO_CELL.search(cells[1])
+    return None if match is None else (int(match.group(1)), int(match.group(2)))
+
+
+def bar_pooled_count(audit: str, bar: int) -> int | None:
+    """One bar's pooled count on the new bytes."""
+
+    cells = bar_pooled_cells(audit, bar)
+    if cells is None or len(cells) < 2:
+        return None
+    match = _COUNT_CELL.search(cells[1])
+    return None if match is None else int(match.group(1))
+
+
+def audit_partition(
+    repo_root: Path,
+    relative_path: str,
+    parse: Callable[[str], _Partition | None],
+    errors: list[str],
+) -> _Partition | None:
+    """One audit's conviction partition, or ``None`` with the drift reported."""
+
+    audit = read_document(repo_root, relative_path, errors)
+    if audit is None:
+        return None
+    partition = parse(audit)
+    if partition is None:
+        errors.append(
+            f"{relative_path}: its conviction-partition cells cannot be located "
+            f"— the {_README} results row {_PROOF_CLAIM!r} has nothing to be "
+            "derived from."
+        )
+    return partition
 
 
 def check_populated_report_example(
@@ -2119,6 +2628,171 @@ def check_guide_line_citations(repo_root: Path, errors: list[str]) -> None:
             "or a symbol instead; a line number is wrong on the next edit of "
             "the file it names."
         )
+
+
+def check_guide_narrative(repo_root: Path, errors: list[str]) -> None:
+    """The reading guide's cross-tab and the sentences that narrate it.
+
+    The guide is where the README's vent headline is derived from, so its §3
+    cross-tab is bound here to the committed instrument's pinned cells rather
+    than left as the root of a chain nothing checks. Its PROSE is bound with
+    it: the paragraphs that narrate a table are what a recording leaves behind,
+    because a table gets re-quoted row by row and a sentence does not.
+    """
+
+    guide = read_document(repo_root, _READING_GUIDE, errors)
+    if guide is None:
+        return
+    pins = crosstab_pins(repo_root, errors)
+    ballots = citation_pins(repo_root, errors)
+    if "eject_ballots" in ballots:
+        compare_narrative_figure(
+            guide,
+            _GUIDE_BALLOT_PROSE,
+            ballots["eject_ballots"],
+            f"the pins in {_CITATION_INSTRUMENT}",
+            errors,
+        )
+    if not pins:
+        return
+    compare_narrative_figure(
+        guide,
+        _GUIDE_MEETING_PROSE,
+        pins[_CROSSTAB_MEETING_TOTAL],
+        f"the pins in {_DEDUCTION_INSTRUMENT}",
+        errors,
+    )
+    crosstab = vent_crosstab(guide)
+    if crosstab is None:
+        return  # check_result_sources reports the unlocatable table
+    for (label, impostor_field, innocent_field), row in zip(
+        _CROSSTAB_ROW_FIELDS, crosstab
+    ):
+        expected = (pins[impostor_field], pins[innocent_field])
+        if row != expected:
+            errors.append(
+                f"{_READING_GUIDE}: the cross-tab's {label!r} row reads "
+                f"{row[0]} impostor / {row[1]} innocent, but "
+                f"{_DEDUCTION_INSTRUMENT} pins {expected[0]} / {expected[1]}."
+            )
+    for match in _VENT_ROW_MEETINGS.finditer(guide):
+        expected_meetings = pins[_CROSSTAB_ROW_MEETINGS[match.group(1)]]
+        if int(match.group(2)) != expected_meetings:
+            errors.append(
+                f"{_READING_GUIDE}:{line_number(guide, match.start())}: the "
+                f"cross-tab's {match.group(1)!r} row is labelled "
+                f"{match.group(2)} meetings, but {_DEDUCTION_INSTRUMENT} pins "
+                f"{expected_meetings}."
+            )
+
+
+def compare_narrative_figure(
+    guide: str, pattern: re.Pattern[str], expected: int, source: str, errors: list[str]
+) -> None:
+    """Every occurrence of one narrated figure, held to the pin that owns it."""
+
+    found = False
+    for match in pattern.finditer(guide):
+        found = True
+        if int(match.group(1)) == expected:
+            continue
+        errors.append(
+            f"{_READING_GUIDE}:{line_number(guide, match.start())}: the "
+            f"narrated figure {' '.join(match.group(0).split())!r} disagrees "
+            f"with {source} ({expected})."
+        )
+    if not found:
+        errors.append(
+            f"{_READING_GUIDE}: no sentence matching {pattern.pattern!r} — the "
+            f"figure {source} owns is no longer narrated anywhere, so nothing "
+            "binds the prose to it."
+        )
+
+
+def crosstab_pins(repo_root: Path, errors: list[str]) -> dict[str, int]:
+    """The samples-9p2i cross-tab cells, from the instrument's own assertions."""
+
+    instrument = read_document(repo_root, _DEDUCTION_INSTRUMENT, errors)
+    if instrument is None:
+        return {}
+    pins: dict[str, int] = {}
+    for match in _CROSSTAB_PIN.finditer(instrument):
+        field, value = match.group(1), int(match.group(2))
+        if pins.setdefault(field, value) != value:
+            errors.append(
+                f"{_DEDUCTION_INSTRUMENT}: pins {field} at both "
+                f"{pins[field]} and {value} — the reading guide's cross-tab "
+                "cannot be held to two answers."
+            )
+    wanted = (
+        _CROSSTAB_MEETING_TOTAL,
+        *_CROSSTAB_ROW_MEETINGS.values(),
+        *(field for _, *fields in _CROSSTAB_ROW_FIELDS for field in fields),
+    )
+    missing = [field for field in wanted if field not in pins]
+    if missing:
+        errors.append(
+            f"{_DEDUCTION_INSTRUMENT}: no pinned assertion for "
+            f"{', '.join(missing)} — the {_READING_GUIDE} cross-tab has no "
+            "committed source to be checked against."
+        )
+        return {}
+    return pins
+
+
+def citation_pins(repo_root: Path, errors: list[str]) -> dict[str, int]:
+    """The 9p2i ballot-citation cells, from the instrument's own assertions."""
+
+    instrument = read_document(repo_root, _CITATION_INSTRUMENT, errors)
+    if instrument is None:
+        return {}
+    return {
+        match.group(1): int(match.group(2))
+        for match in _CITATION_PIN.finditer(instrument)
+    }
+
+
+def check_featured_exhibits(repo_root: Path, errors: list[str]) -> None:
+    """Every game the reading guide names is one the spectator actually features.
+
+    The guide points a reader at named seeds and the spectator opens a curated
+    strip; if the two drift, the guide sends people looking for a card that is
+    not there. The picker's list is the committed data, so it is the one that
+    decides.
+    """
+
+    guide = read_document(repo_root, _READING_GUIDE, errors)
+    picker = read_document(repo_root, _PICKER, errors)
+    if guide is None or picker is None:
+        return
+    block = _FEATURED_BLOCK.search(picker)
+    if block is None:
+        errors.append(
+            f"{_PICKER}: no FEATURED_GAMES list — the reading guide's named "
+            "exhibits have nothing to be checked against."
+        )
+        return
+    featured = {
+        (set_name, int(seed))
+        for set_name, seed in _FEATURED_ENTRY.findall(block.group(1))
+    }
+    named = [
+        (match.group(1), int(match.group(2)), line_number(guide, match.start()))
+        for match in _GUIDE_EXHIBIT.finditer(guide)
+    ]
+    if len(named) < _MIN_EXHIBIT_SEEDS:
+        errors.append(
+            f"{_READING_GUIDE}: names {len(named)} featured games, fewer than "
+            f"the {_MIN_EXHIBIT_SEEDS} this check needs to mean anything — a "
+            "paragraph that lost its exhibits would otherwise pass vacuously."
+        )
+    for set_name, seed, number in named:
+        if (set_name, seed) not in featured:
+            errors.append(
+                f"{_READING_GUIDE}:{number}: names {set_name} seed {seed} as an "
+                f"exhibit, but {_PICKER}'s curated list does not carry it — the "
+                "guide would point a reader at a game the spectator never opens."
+            )
 
 
 def check_relative_links(repo_root: Path, errors: list[str]) -> None:
