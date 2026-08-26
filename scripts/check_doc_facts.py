@@ -267,10 +267,13 @@ _REGENERATED_DATE: Final = re.compile(r"regenerated (\d{4}-\d{2}-\d{2})")
 # Any "<rate>% (<set>)" claim, wherever it appears, must match the manifest.
 _WIN_RATE_CLAIM: Final = re.compile(r"(\d+)% \((4p1i|9p2i)\)")
 # The two other shapes the front door dates the current recording in. Both are
-# held to the manifests' newest ``refreshed_at``; a numbered claim naming an
-# OLDER recording is history and is left alone.
+# held to the manifests' newest ``refreshed_at``; a NUMBERED claim naming an
+# older recording is history and is left alone. The number is optional because
+# the front door also dates the recording without numbering it ("the current
+# reference recording, made <date>"), and an unnumbered claim is always about
+# the current one.
 _RECORDING_DATE_CLAIM: Final = re.compile(
-    r"reference recording (\d+),? (?:made )?(\d{4}-\d{2}-\d{2})"
+    r"reference recording(?:\s+(\d+))?,?\s+(?:made\s+)?(\d{4}-\d{2}-\d{2})"
 )
 _RECORD_DATE_CLAIM: Final = re.compile(r"the (\d{4}-\d{2}-\d{2}) record\b")
 
@@ -451,7 +454,19 @@ _CROSSTAB_ROW_MEETINGS: Final[dict[str, str]] = {
 # where the tables do not: a record moves the table and leaves the paragraph.
 _GUIDE_BALLOT_PROSE: Final = re.compile(r"all (\d+) eject\s+ballots")
 _GUIDE_MEETING_PROSE: Final = re.compile(r"all (\d+)\s+committed 9p2i meetings")
+# The unflagged half read as a ratio in the paragraph under the cross-tab: the
+# most-quoted sentence on the page, and the one a reader takes away.
+_GUIDE_NO_PROOF_PROSE: Final = re.compile(r"coin flip[^.]*?(\d+) of (\d+)")
 _VENT_ROW_MEETINGS: Final = re.compile(r"\|\s*(yes|no)\s*\((\d+) meetings\)")
+# The guide's own row for the teammate firewall, whose denominator moved with
+# the recording. The zero is the firewall holding; the total is a pinned count
+# of the impostor ballots it held over.
+_PARTNER_BALLOT_CLAIM: Final = "Impostor ballots cast against a partner (9p2i)"
+_PARTNER_BALLOT_FIGURE: Final = "0 of {total}"
+_PARTNER_BALLOT_PIN: Final = re.compile(
+    r"samples\.model_partner_naming_ballots,\s*samples\.impostor_ballots\)\s*"
+    r"==\s*\(\d+,\s*(\d+)\)"
+)
 
 # The curated featured list the spectator opens, as committed data. Any game the
 # guide names as an exhibit must be on it, or the guide sends a reader looking
@@ -461,7 +476,9 @@ _FEATURED_BLOCK: Final = re.compile(
     r"FEATURED_GAMES: readonly FeaturedGame\[\] = \[(.*?)\n\];", re.DOTALL
 )
 _FEATURED_ENTRY: Final = re.compile(r'set: "([^"]+)",\s*\n\s*seed: (\d+),')
-_GUIDE_EXHIBIT: Final = re.compile(r"\*\*(4p1i|9p2i) seed (\d+)\*\*")
+# Emphasis-independent on purpose: the rule binds every game the guide names,
+# and an unbolded mention names one just as loudly.
+_GUIDE_EXHIBIT: Final = re.compile(r"\b(4p1i|9p2i) seed (\d+)")
 # Below this the guide names too few exhibits for the binding to mean anything,
 # and a paragraph that quietly lost its seeds would pass vacuously.
 _MIN_EXHIBIT_SEEDS: Final = 2
@@ -864,17 +881,18 @@ def check_repeated_claims(
 def current_record_dates(text: str, tip: str | None) -> Iterator[tuple[str, str]]:
     """Each ``(date, claim)`` in ``text`` that dates the CURRENT recording.
 
-    A numbered claim naming an older recording is history and is not yielded:
+    A claim NUMBERING an older recording is history and is not yielded:
     "reference recording 6, 2026-07-20" is a true sentence about a recording
     this tree no longer ships, and holding it to today's manifests would force
-    the front door to forget what it replaced. The unnumbered shapes — "the
-    <date> record", "regenerated <date>" — are always about the current one.
+    the front door to forget what it replaced. Everything else — an unnumbered
+    "reference recording, made <date>", "the <date> record", "regenerated
+    <date>" — is about the current one.
     """
 
-    if tip is not None:
-        for match in _RECORDING_DATE_CLAIM.finditer(text):
-            if match.group(1) == tip:
-                yield match.group(2), match.group(0)
+    for match in _RECORDING_DATE_CLAIM.finditer(text):
+        numbered = match.group(1)
+        if numbered is None or numbered == tip:
+            yield match.group(2), " ".join(match.group(0).split())
     for pattern in (_RECORD_DATE_CLAIM, _REGENERATED_DATE):
         for match in pattern.finditer(text):
             yield match.group(1), match.group(0)
@@ -1754,16 +1772,21 @@ def check_before_columns(readme: str, guide: str, errors: list[str]) -> None:
         columns[document] = before
     if len(columns) < 2:
         return
+    # Every row of BOTH tables, not only the shared ones: the guide carries
+    # rows the README does not, and a row with an empty history cell states a
+    # moved figure with nothing to read it against.
+    for document, before in columns.items():
+        for claim, stated in before.items():
+            if not stated.strip():
+                errors.append(
+                    f"{document}: the results row {claim!r} has an empty "
+                    f"{_BEFORE_COLUMN_HEADER!r} cell."
+                )
     for claim, stated in columns[_README].items():
         recorded = columns[_READING_GUIDE].get(claim)
         if recorded is None:
             continue  # the missing row is already reported against the figure
-        if not stated.strip():
-            errors.append(
-                f"{_README}: the results row {claim!r} has an empty "
-                f"{_BEFORE_COLUMN_HEADER!r} cell."
-            )
-        elif strip_links(recorded) != strip_links(stated):
+        if strip_links(recorded) != strip_links(stated):
             errors.append(
                 f"{_README}: the {_BEFORE_COLUMN_HEADER!r} cell of results row "
                 f"{claim!r} reads {stated!r}, but {_READING_GUIDE} records "
@@ -2662,6 +2685,7 @@ def check_guide_narrative(repo_root: Path, errors: list[str]) -> None:
             f"the pins in {_CITATION_INSTRUMENT}",
             errors,
         )
+    check_partner_ballot_row(repo_root, guide, errors)
     if not pins:
         return
     compare_narrative_figure(
@@ -2669,6 +2693,15 @@ def check_guide_narrative(repo_root: Path, errors: list[str]) -> None:
         _GUIDE_MEETING_PROSE,
         pins[_CROSSTAB_MEETING_TOTAL],
         f"the pins in {_DEDUCTION_INSTRUMENT}",
+        errors,
+    )
+    compare_narrative_ratio(
+        guide,
+        _GUIDE_NO_PROOF_PROSE,
+        (
+            pins["unflagged_ejections_impostor"],
+            pins["unflagged_ejections_impostor"] + pins["unflagged_ejections_innocent"],
+        ),
         errors,
     )
     crosstab = vent_crosstab(guide)
@@ -2684,7 +2717,9 @@ def check_guide_narrative(repo_root: Path, errors: list[str]) -> None:
                 f"{row[0]} impostor / {row[1]} innocent, but "
                 f"{_DEDUCTION_INSTRUMENT} pins {expected[0]} / {expected[1]}."
             )
+    labelled: set[str] = set()
     for match in _VENT_ROW_MEETINGS.finditer(guide):
+        labelled.add(match.group(1))
         expected_meetings = pins[_CROSSTAB_ROW_MEETINGS[match.group(1)]]
         if int(match.group(2)) != expected_meetings:
             errors.append(
@@ -2693,6 +2728,79 @@ def check_guide_narrative(repo_root: Path, errors: list[str]) -> None:
                 f"{match.group(2)} meetings, but {_DEDUCTION_INSTRUMENT} pins "
                 f"{expected_meetings}."
             )
+    # Each row must CARRY its population, not merely agree when it has one: a
+    # row that dropped its "(N meetings)" label would otherwise stop being
+    # checked while still reading as a complete table.
+    for label in sorted(set(_CROSSTAB_ROW_MEETINGS) - labelled):
+        errors.append(
+            f"{_READING_GUIDE}: the cross-tab's {label!r} row carries no "
+            f"'(N meetings)' population, so the "
+            f"{_DEDUCTION_INSTRUMENT} pin for it is checked against nothing."
+        )
+
+
+def check_partner_ballot_row(repo_root: Path, guide: str, errors: list[str]) -> None:
+    """The teammate-firewall row, held to the ballot count it is taken over.
+
+    The row lives only in the guide's numbers table, so the README agreement
+    check cannot reach it; its denominator moves with every recording, and the
+    instrument that counts those ballots owns it.
+    """
+
+    instrument = read_document(repo_root, _DEDUCTION_INSTRUMENT, errors)
+    if instrument is None:
+        return
+    pin = _PARTNER_BALLOT_PIN.search(instrument)
+    if pin is None:
+        errors.append(
+            f"{_DEDUCTION_INSTRUMENT}: no pinned impostor-ballot total — the "
+            f"{_READING_GUIDE} row {_PARTNER_BALLOT_CLAIM!r} has no committed "
+            "source to be checked against."
+        )
+        return
+    rows = results_rows(guide)
+    figures = dict(rows) if rows is not None else {}
+    expected = _PARTNER_BALLOT_FIGURE.format(total=pin.group(1))
+    stated = figures.get(_PARTNER_BALLOT_CLAIM)
+    if stated is None:
+        errors.append(
+            f"{_READING_GUIDE}: its numbers table has no "
+            f"{_PARTNER_BALLOT_CLAIM!r} row — the teammate firewall's own "
+            "figure is the one row nothing else on the front door repeats."
+        )
+    elif stated != expected:
+        errors.append(
+            f"{_READING_GUIDE}: the row {_PARTNER_BALLOT_CLAIM!r} reads "
+            f"{stated!r}, but {_DEDUCTION_INSTRUMENT} pins {expected!r}."
+        )
+
+
+def compare_narrative_ratio(
+    guide: str,
+    pattern: re.Pattern[str],
+    expected: tuple[int, int],
+    errors: list[str],
+) -> None:
+    """One narrated ``k of n``, held to the cross-tab cells it is read off."""
+
+    found = False
+    for match in pattern.finditer(guide):
+        found = True
+        stated = (int(match.group(1)), int(match.group(2)))
+        if stated == expected:
+            continue
+        errors.append(
+            f"{_READING_GUIDE}:{line_number(guide, match.start())}: the "
+            f"narrated ratio {stated[0]} of {stated[1]} disagrees with the "
+            f"cross-tab's own unflagged row, which {_DEDUCTION_INSTRUMENT} "
+            f"pins at {expected[0]} of {expected[1]}."
+        )
+    if not found:
+        errors.append(
+            f"{_READING_GUIDE}: no sentence matching {pattern.pattern!r} — the "
+            "unflagged half of the cross-tab is no longer narrated anywhere, "
+            "so nothing binds that reading to the table."
+        )
 
 
 def compare_narrative_figure(

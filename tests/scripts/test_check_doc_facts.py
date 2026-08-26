@@ -1474,6 +1474,23 @@ def test_stale_guide_record_date_detected(doc_tree: Path) -> None:
     assert "'2026-08-25'" in errors[0]
 
 
+def test_unnumbered_guide_record_date_detected(doc_tree: Path) -> None:
+    # The front door also dates the recording without numbering it. That shape
+    # is about the current one by construction, so it is held to the manifests
+    # too — a numbered claim is what carries an exemption, not an unnumbered.
+    _substitute(
+        doc_tree,
+        _READING_GUIDE,
+        "current reference recording, made 2026-08-25",
+        "current reference recording, made 2026-07-20",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert errors[0].startswith(_READING_GUIDE)
+    assert "'reference recording, made 2026-07-20'" in errors[0]
+    assert "'2026-08-25'" in errors[0]
+
+
 def test_older_recording_date_is_left_alone(doc_tree: Path) -> None:
     # The front door is allowed to say what the recording it replaced was
     # dated; holding a numbered claim about recording 6 to today's manifests
@@ -1643,6 +1660,79 @@ def test_contradicting_crosstab_pins_fail_loud(doc_tree: Path) -> None:
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert any("pins meetings_total at both 152 and 151" in error for error in errors)
+
+
+def test_stale_guide_no_proof_ratio_detected(doc_tree: Path) -> None:
+    # The most-quoted sentence on the page is the unflagged half read as a
+    # ratio, and it is read off the cross-tab's own cells.
+    _substitute(
+        doc_tree, _READING_GUIDE, "coin flip — 16 of 30", "coin flip — 17 of 30"
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "narrated ratio 17 of 30" in errors[0]
+    assert "pins at 16 of 30" in errors[0]
+
+
+def test_deleted_guide_no_proof_ratio_fails_loud(doc_tree: Path) -> None:
+    # Dropping the sentence must fail rather than leave the reading unbound.
+    _substitute(
+        doc_tree, _READING_GUIDE, "close to a coin flip — 16 of 30", "close to chance"
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "no longer narrated anywhere" in errors[0]
+
+
+def test_stale_partner_ballot_denominator_detected(doc_tree: Path) -> None:
+    # The teammate-firewall row lives only in the guide, so README agreement
+    # cannot reach it; the instrument that counts those ballots owns it.
+    _substitute(doc_tree, _READING_GUIDE, "| 0 of 219 |", "| 0 of 218 |")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "'0 of 218'" in errors[0]
+    assert "pins '0 of 219'" in errors[0]
+
+
+def test_partner_ballot_row_without_its_pin_fails_loud(doc_tree: Path) -> None:
+    # Losing the pin must not read as "nothing to check".
+    _substitute(
+        doc_tree,
+        _DEDUCTION_INSTRUMENT,
+        "samples.model_partner_naming_ballots, samples.impostor_ballots",
+        "samples.model_partner_naming_ballots, samples.impostor_ballot_count",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "no pinned impostor-ballot total" in errors[0]
+
+
+def test_guide_only_row_losing_its_before_cell_detected(doc_tree: Path) -> None:
+    # The guide carries rows the README does not, and they state history too.
+    _substitute(doc_tree, _READING_GUIDE, "| 0 of 219 | 0 of 245 |", "| 0 of 219 |  |")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert errors[0].startswith(_READING_GUIDE)
+    assert "'Impostor ballots cast against a partner (9p2i)'" in errors[0]
+    assert "empty 'At baseline 6' cell" in errors[0]
+
+
+def test_vent_row_without_its_population_fails_loud(doc_tree: Path) -> None:
+    # A row that drops its "(N meetings)" label still reads as a table but is
+    # no longer checked against the pin, so the label itself is required.
+    _substitute(doc_tree, _READING_GUIDE, "| yes (69 meetings) |", "| yes |")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "the cross-tab's 'yes' row carries no '(N meetings)' population" in errors[0]
+
+
+def test_unbolded_guide_exhibit_the_picker_dropped_detected(doc_tree: Path) -> None:
+    # The rule binds every game the guide NAMES; markdown emphasis is not what
+    # makes a mention count.
+    _substitute(doc_tree, _READING_GUIDE, "**4p1i seed 11**", "4p1i seed 41")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "names 4p1i seed 41 as an exhibit" in errors[0]
 
 
 def test_guide_exhibit_the_picker_no_longer_carries_detected(doc_tree: Path) -> None:
