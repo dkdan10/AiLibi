@@ -1344,8 +1344,10 @@ def test_i3_sole_flag_precision_pins(
     assert (sum(n for n, _ in single), sum(d for _, d in single)) == (0, 0)
 
     base = reports[_SAMPLES_9P2I].sole_flag_precision.living_voter_base_rate
+    # The class emptied, so the base rate has no denominator: the None sentinel,
+    # never 0.0 (baseline 6 read 0.25 over a populated class).
     assert _counts(base) == (0, 0)
-    assert base.rate == pytest.approx(0.25)
+    assert base.rate is None
 
 
 @pytest.mark.slow
@@ -1903,16 +1905,19 @@ def test_self_placement_coverage_pins(
     assert placement[_SAMPLES_4P1I].crew_claims == 80  # was 78
     assert placement[_CORPUS_4P1I].crew_claims == 91  # was 79
     # And it reaches the PROMPT: the block is charged before the elastic
-    # observations and capped at 12 spans, so every claim tick is still rendered
-    # at DEFAULT_TOKEN_BUDGET. OFF renders no span at all, which is the OFF value
-    # measured rather than predicted.
+    # observations and capped at 12 spans, so every claim tick is rendered at
+    # DEFAULT_TOKEN_BUDGET. The trail is UNCONDITIONAL since the baseline-7
+    # record, so both legs render every claim -- baseline 6 read (0, crew_claims)
+    # because the OFF leg rendered no span at all.
     for sample_dir in (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I):
         census = placement[sample_dir]
-        assert (census.rendered_off, census.rendered_on) == (0, census.crew_claims)
-    # The lever reads the mapping the render threads down, and the hermetic guard
-    # clears the whole AILIBI_* namespace, so setting it inside the test is the
-    # only way a shell export could ever be visible.
-    assert self_location_trail_enabled() is False
+        assert (census.rendered_off, census.rendered_on) == (
+            census.crew_claims,
+            census.crew_claims,
+        )
+    # Unconditional since the baseline-7 record: no ambient export can turn the
+    # trail off again, which is why both legs above render the same claims.
+    assert self_location_trail_enabled() is True
     monkeypatch.setenv(ENV_SELF_LOCATION_TRAIL, "1")
     assert self_location_trail_enabled() is True
 
@@ -2438,31 +2443,45 @@ def test_the_origin_reading_bites_on_a_destination_spoken_flag() -> None:
     assert _move_backed_reading(_flag(room="MEDBAY", tick=3), MemoryStore()) is None
 
 
+# The records-free re-derivation these censuses run cannot reproduce a meeting
+# whose flags the MOVEMENT channel re-paired -- the replay persists no
+# ``MoveWitnessRecord`` rows, so those pairings are unrecoverable the way the
+# vent record's tick is (audits/audit-phase-20-baseline-7.md §10.3). Everything
+# else re-derives exactly, and the shortfall is pinned by set so it cannot drift.
+_REDERIVED_MEETINGS: Final[dict[Path, int]] = {
+    _SAMPLES_9P2I: 132,
+    _CORPUS_9P2I: 371,
+    _SAMPLES_4P1I: 40,
+    _CORPUS_4P1I: 44,
+}
+_COMMITTED_MEETING_TOTAL: Final[int] = 668  # baseline 6: 707
+
+
 @pytest.mark.slow
-def test_the_off_leg_is_the_recorded_substrate(
+def test_the_off_leg_re_derives_every_recoverable_meeting(
     movement: Mapping[Path, _MovementCensus],
 ) -> None:
     # The counterfactual is only worth reading if its baseline IS the committed
-    # record: every meeting on all four sets re-derives byte-identically with the
-    # lever off, so the ON leg below is a change to the real substrate.
+    # record. It is, on every meeting the replay carries enough to rebuild.
     for sample_dir in (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I):
         cell = movement[sample_dir]
-        assert cell.off_matches_recorded == cell.meetings
+        assert cell.off_matches_recorded == _REDERIVED_MEETINGS[sample_dir]
     assert (
         sum(
             movement[d].meetings
             for d in (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I)
         )
-        == 707
+        == _COMMITTED_MEETING_TOTAL
     )
-    # No committed turn states a transition (no template offers the shape yet),
-    # so the whole counterfactual below is the RESOLUTION arm's doing.
+    # Baseline 6 carried NO spoken transition at all -- no v3 template offered
+    # the shape. The v4 set does, and the recorded bytes hold 1,657 of them, so
+    # the movement channel has a real population to read for the first time.
     assert (
         sum(
             movement[d].spoken_transitions
             for d in (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I)
         )
-        == 0
+        == 1_657
     )
 
 
@@ -3007,12 +3026,12 @@ def test_the_grounded_off_leg_is_the_recorded_substrate(
     sets = (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I)
     for sample_dir in sets:
         cell = grounded[sample_dir]
-        assert cell.off_matches_recorded == cell.meetings
-    assert sum(grounded[d].meetings for d in sets) == 707
-    # The OFF leg reproduces the two baselines the record's slate is measured
-    # against — 234 with neither lever, 268 with the merged movement lever.
-    assert sum(grounded[d].strong_off for d in sets) == 234
-    assert sum(grounded[d].strong_move for d in sets) == 268
+        assert cell.off_matches_recorded == _REDERIVED_MEETINGS[sample_dir]
+    assert sum(grounded[d].meetings for d in sets) == _COMMITTED_MEETING_TOTAL
+    # Baseline 6's two baselines were 234 with neither rule and 268 with the
+    # merged movement rule. The record closed the class: 11 and 12.
+    assert sum(grounded[d].strong_off for d in sets) == 11
+    assert sum(grounded[d].strong_move for d in sets) == 12
 
 
 @pytest.mark.slow
@@ -3096,14 +3115,14 @@ def test_the_sole_flag_wrongful_ejections_lose_their_strong_flag(
     sets = (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I)
     victims = sum(grounded[d].sole_victims for d in sets)
     impostors = sum(grounded[d].sole_victim_impostors for d in sets)
-    # I-3's own population, recounted here: 82 ejections convicted on this class
-    # alone, 12 of them impostors — so 70 crewmates.
+    # I-3's own population, recounted here. Baseline 6 read 82 ejections
+    # convicted on this class alone, 12 of them impostors -- 70 crewmates. The
+    # record CLOSED the class: nothing is convicted on it at all, which is the
+    # cell bar 4's waiver reads at 0/0.
     assert (victims, impostors) == (0, 0)
-    assert victims - impostors == 70
-    # Under the lever, 4 of those 70 innocents still carry a STRONG flag of this
-    # class; 66 do not. With the movement lever also on, 5 do.
-    assert sum(grounded[d].sole_crewmate_still_strong_grounded for d in sets) == 4
-    assert sum(grounded[d].sole_crewmate_still_strong_both for d in sets) == 5
+    assert victims - impostors == 0
+    assert sum(grounded[d].sole_crewmate_still_strong_grounded for d in sets) == 0
+    assert sum(grounded[d].sole_crewmate_still_strong_both for d in sets) == 0
 
 
 # --- The map-aware arbitration counterfactual (Task 20.27) ------------------
@@ -3363,9 +3382,9 @@ def test_the_corridor_off_leg_is_the_recorded_substrate(
     sets = (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I)
     for sample_dir in sets:
         cell = corridors[sample_dir]
-        assert cell.sighting_flags_match_recorded == cell.meetings
-    assert sum(corridors[d].meetings for d in sets) == 707
-    assert sum(corridors[d].strong_off for d in sets) == 234
+        assert cell.sighting_flags_match_recorded == _REDERIVED_MEETINGS[sample_dir]
+    assert sum(corridors[d].meetings for d in sets) == _COMMITTED_MEETING_TOTAL
+    assert sum(corridors[d].strong_off for d in sets) == 11  # baseline 6: 234
 
 
 @pytest.mark.slow
@@ -3477,11 +3496,11 @@ def _sighting_ticks_covered(view: str) -> int:
 # audits/audit-phase-20-preregistration.md:351-356). The re-render recounts it
 # from the memories rather than from the recorded prompts, so the two agree only
 # if the reconstruction is faithful.
-_COMMITTED_OFF_MEAN: Final[float] = 51.1038
+_COMMITTED_OFF_MEAN: Final[float] = 37.0517  # baseline 6: 51.1038
 # The ON-path row count the review PROJECTED (53.2 x 0.68), falsified by the
 # measurement below, and the cell that replaces it as the ratified pin.
 _COALESCED_PROJECTED_ROW_TARGET: Final[float] = 36.0
-_COALESCED_ROW_PIN: Final[float] = 42.1493
+_COALESCED_ROW_PIN: Final[float] = 37.0517  # baseline 6: 42.1493
 
 
 class _RenderBudgetCensus(NamedTuple):
@@ -3701,27 +3720,21 @@ def test_the_coalesced_render_budget_cells(
     assert census.snapshots == 871  # was 971
     mean_off = census.rows_off / census.snapshots
     mean_on = census.rows_on / census.snapshots
-    # The OFF leg recounted from the memories lands on the committed
-    # recorded-prompt cell (51.1038 over 1,956 snapshots): the reconstruction is
-    # the same render the recording carries, counted over meeting-agent renders
-    # rather than over LLM calls.
-    assert census.rows_off == 32_272  # was 49_590
-    assert mean_off == pytest.approx(37.05166475315729, abs=1e-4)  # was 51.0711
-    assert mean_off == pytest.approx(_COMMITTED_OFF_MEAN, abs=0.05)
-    # The ON leg, as measured.
-    assert census.rows_on == 40_927
-    assert mean_on == pytest.approx(42.1493, abs=1e-4)
-    assert mean_on < mean_off
-    # What the same budget bought, and what it cost. Sighting ROWS nearly halve
-    # and the document shortens; the first-hand subject-TICKS those rows account
-    # for fall 17.8%, because the raised reported band spends the freed budget on
-    # testimony. The next test prices the two folds apart.
-    assert census.sightings_off == 37_608
-    assert census.sightings_on == 19_558
-    assert census.covered_off == 37_608
-    assert census.covered_on == 30_927
-    assert census.chars_off == 4_160_638
-    assert census.chars_on == 3_541_476
+    # The coalesced render is UNCONDITIONAL since the baseline-7 record, so this
+    # census no longer has two legs: the OFF and ON columns are the same walk and
+    # every cell below is the SAME number twice. What it still pins is the
+    # recorded document's shape -- the mean rows a snapshot spends, the sighting
+    # rows inside it, and the first-hand subject-ticks those rows account for.
+    # Baseline 6 read 49,590 OFF rows / 51.0711 mean against 40,927 ON rows /
+    # 42.1493 mean, with 37,608 -> 19,558 sighting rows and 37,608 -> 30,927
+    # covered ticks; the differential those pairs measured is what graduating the
+    # lever spent.
+    assert census.rows_off == census.rows_on == 32_272
+    assert mean_off == mean_on == pytest.approx(37.05166475315729, abs=1e-4)
+    assert mean_on == pytest.approx(_COMMITTED_OFF_MEAN, abs=0.05)
+    assert census.sightings_off == census.sightings_on == 16_413
+    assert census.covered_off == census.covered_on == 25_966
+    assert census.chars_off == census.chars_on == 3_055_058
 
 
 @pytest.mark.slow
@@ -3755,15 +3768,13 @@ def test_the_on_leg_does_not_reach_the_contracts_row_ceiling(
     # The prediction, falsified.
     assert mean_on > _COALESCED_PROJECTED_ROW_TARGET
 
-    # And the refill that falsified it, in the census's own numbers: the fold
-    # takes 18,050 sighting rows out of the document, but the document loses only
-    # 8,663 rows -- the other 9,387 are candidates the OFF render had shed,
-    # pulled back in by the budget the fold freed.
-    sightings_removed = render_budget.sightings_off - render_budget.sightings_on
-    rows_removed = render_budget.rows_off - render_budget.rows_on
-    assert sightings_removed == 18_050
-    assert rows_removed == 8_663
-    assert sightings_removed - rows_removed == 9_387
+    # The refill that falsified the projection was measured on baseline 6 as a
+    # DIFFERENTIAL -- 18,050 sighting rows removed against 8,663 document rows
+    # lost, the other 9,387 pulled back in by the budget the fold freed. The
+    # lever is unconditional now, so the differential is identically zero and
+    # what survives is the statement that the two legs are one walk.
+    assert render_budget.sightings_off == render_budget.sightings_on
+    assert render_budget.rows_off == render_budget.rows_on
 
 
 @pytest.mark.slow
@@ -3783,11 +3794,15 @@ def test_the_band_change_not_the_fold_is_what_costs_first_hand_coverage(
 
     fold_only = _render_budget_census(_SAMPLES_9P2I)
 
-    assert fold_only.rows_on == 32_135  # was 40_924
+    # Baseline 6 read 40,924 rows / 39,012 covered ticks on this leg. With the
+    # band patched back the fold alone renders FEWER rows than the recorded
+    # document and accounts for MORE first-hand subject-ticks: compression, not
+    # loss. Raising the band is the half that spends coverage, and the recorded
+    # render (which has it raised) covers less than this leg does.
+    assert fold_only.rows_on == 32_135
     assert fold_only.rows_on < render_budget.rows_off
-    assert fold_only.covered_on == 29_394  # was 39_012
-    assert fold_only.covered_on > fold_only.covered_off
-    assert render_budget.covered_on < fold_only.covered_on
+    assert fold_only.covered_on == 29_394
+    assert fold_only.covered_on > render_budget.covered_on
 
 
 # ---------------------------------------------------------------------------
@@ -3850,8 +3865,18 @@ def test_i9_singular_persona_is_zero_under_the_v4_prompt_set(
     # ``test_i9_singular_persona_pins`` above.
     phrase = _singular_persona_phrase()
     assert phrase == "a hidden impostor"
-    archive = _REPO_ROOT / "tests" / "fixtures" / "prompt_archive" / "qwen3_6_27b_v3"
-    assert phrase in (archive / "crewmate_report.j2").read_text(encoding="utf-8")
+    # The phrase is still found in the committed templates -- the two frozen
+    # ``*_roll_call`` bodies keep it, which is where the reader reads it from now
+    # that the v3 archive has retired with the record.
+    roll_call = (
+        _REPO_ROOT
+        / "agents"
+        / "strategic"
+        / "prompts"
+        / "qwen3_6_27b"
+        / "impostor_report_roll_call.j2"
+    )
+    assert phrase in roll_call.read_text(encoding="utf-8")
 
 
 # --------------------------------------------------------------------------- #
@@ -3949,11 +3974,12 @@ def test_the_walk_fold_records_the_announced_outcome_for_living_agents() -> None
     assert recorded[0].revealed_role == "IMPOSTOR"
 
 
-def test_the_meeting_history_channel_is_inert_in_the_measured_render() -> None:
-    # Measurement neutrality, asserted rather than assumed: with the lever OFF --
-    # the substrate every committed recording carries and every pinned cell in
-    # this module was computed under -- a memory that HAS the fold renders exactly
-    # like one that does not, so no instrument reading can move.
+def test_the_meeting_history_channel_reaches_the_measured_render() -> None:
+    # The channel is UNCONDITIONAL since the baseline-7 record, so the fold is
+    # load-bearing on every cell this module computes: a memory that HAS it
+    # renders MORE than one that does not, and the extra is exactly the
+    # meetings block. (On baseline 6 the two rendered identically, which is what
+    # made every pinned cell here lever-independent.)
     walk_event = _one_meeting_applied(ejected="p-3", tick=9)
     folded = _seeded_memories(walk_event)
     evidence_honesty._fold_meeting_into_memories(walk_event, composites=folded)
@@ -3966,9 +3992,14 @@ def test_the_meeting_history_channel_is_inert_in_the_measured_render() -> None:
         for pid, memory in folded.items()
     }
 
+    moved = 0
     for pid in walk_event.state.players:
-        assert render_for_prompt(folded[pid], token_budget=400) == render_for_prompt(
-            unfolded[pid], token_budget=400
-        ), pid
+        with_fold = render_for_prompt(folded[pid], token_budget=400)
+        without = render_for_prompt(unfolded[pid], token_budget=400)
+        if with_fold != without:
+            moved += 1
+            assert "## Meetings so far:" in with_fold
+            assert "## Meetings so far:" not in without
+    assert moved > 0
     assert folded["p-1"].meeting_history.outcomes != ()
     assert unfolded["p-1"].meeting_history.outcomes == ()
