@@ -196,7 +196,7 @@ Status = Literal["OK", "FAIL", "ABSENT", "INFO", "STALE"]
 #: and the constant can be deleted along with every branch that reads it.
 _DECLARED_GROUNDING_GAP: Final[tuple[str, str]] = (
     "164ef00c16fa5108aa2d2a691f2f9a65d5ea60faa10f7bbd1604e93f36bc3170",
-    "2f9644c5d9bfd3f2f36c502c551fc1debc9412e5c9a8782d0e5345c7296890b6",
+    "45b11993d7badcc9c413ff6db0ee0b5e693006173185d0295bb3a16f221e59a8",
 )
 
 

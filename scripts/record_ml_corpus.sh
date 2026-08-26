@@ -755,7 +755,7 @@ PYINNER
   fi
   {
     printf '\n'
-    printf '**FROZEN** — recording-time code state git_sha `%s` (the commit the recorder RAN at, NOT the commit containing these bytes, which cannot exist yet at freeze time; recorded %s; Task 15.12, baseline-6 re-grounding per Task 18.13): the %s ML-calibration corpus is frozen at Qwen/Qwen3.6-27B Featherless, prompt set %s, lever slate — expected ON = %s, every other live toggle OFF, the graduated levers unconditional ON — tactical policy %s. By-game split rule: %s. Do not re-record without re-freezing.\n' \
+    printf '**FROZEN** — recording-time code state git_sha `%s` (the commit the recorder RAN at, NOT the commit containing these bytes, which cannot exist yet at freeze time; recorded %s; Task 15.12, baseline-7 re-record per Task 20.36): the %s ML-calibration corpus is frozen at Qwen/Qwen3.6-27B Featherless, prompt set %s, lever slate — expected ON = %s, every other live toggle OFF, the graduated levers unconditional ON — tactical policy %s. By-game split rule: %s. Do not re-record without re-freezing.\n' \
       "$git_sha" "$refreshed_at" "$set_name" "$REQUIRED_PROMPT_SET" "$expect_levers_desc" "$POLICY_STAMP" "$SPLIT_RULE_DESC"
   } >>"$manifest"
   echo "  FROZEN: $manifest at git_sha $git_sha"

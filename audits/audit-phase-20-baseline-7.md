@@ -646,8 +646,12 @@ that passed a set which suppressed its own bad evidence would be measuring the w
 The baseline-7 block is pinned from the numbers above with the same 16.11 population-relative
 derivation, and its self-consistency property holds by construction: flags ratio exactly 1.0 →
 derived conversion floor = pin → the record scores PASS against its own floors at exact
-equality. `_DEFAULT_BASELINE_ID` **stays `"baseline-6"`** under FINDING, so the new block is
-scoreable only via an explicit `--baseline-id`, exactly as baselines 3, 4 and 5 are.
+equality. Under FINDING alone `_DEFAULT_BASELINE_ID` would have stayed `"baseline-6"` and the
+new block would be scoreable only via an explicit `--baseline-id`, exactly as baselines 3, 4
+and 5 are. **The owner's override (§6.1) moved it**: `_DEFAULT_BASELINE_ID` now reads
+`"baseline-7"`, so a bare `--watchability` scores against these floors and baseline 6 is the one
+that needs the explicit selector. That is a consequence of the adoption, not of the bars — the
+verdict on them is unchanged.
 
 The training-side selection constants deliberately lag: `BAKEOFF_BASELINE_ID`
 (`training/bakeoff/harness.py`) is untouched by this record. The ML re-ground is a future owner
@@ -661,7 +665,7 @@ decision and is named in §10, not discharged here.
 |---|---|
 | model | `Qwen/Qwen3.6-27B`, non-thinking, via Featherless (the Task-16.2 lock) |
 | prompt set | `qwen3_6_27b`, all four templates at **v4** on all 300 rows |
-| lever slate | the thirteen retired always-on levers + the eight Phase-20 levers ON; `impostor_roll_call` OFF |
+| lever slate | the thirteen retired always-on levers + the eight Phase-20 levers ON; `impostor_roll_call` OFF. At record time the eight were env-exported toggles; the adoption graduated them, so the same slate is now the bare default (twenty-one retired, one toggle) |
 | tactical policy | `fsm-default` in every MANIFEST `policy` cell, on all 300 rows |
 | co-intervention | Task 20.32's scripted-impostor-mover repair, inside the freeze — its identity carried by the `git_sha` column |
 | cost | **$0.0000** on every row; flat-rate provider |
@@ -726,7 +730,7 @@ two real defects the sweep surfaced:
 * **The ML re-ground — A NAMED FOLLOW-UP, not a silent debt.** `training/` artifacts and fits are
   frozen by this contract. The corpus this record re-recorded IS the surrogate's calibration
   corpus, so every committed fit is now keyed to bytes that no longer exist. The surrogate's
-  fit-corpus record names `164ef00c…`; `replays/ml_corpus/9p2i` fingerprints to `2f9644c5…`.
+  fit-corpus record names `164ef00c…`; `replays/ml_corpus/9p2i` fingerprints to `45b11993…`.
   `BAKEOFF_BASELINE_ID` (`training/bakeoff/harness.py`) still reads `baseline-6`, which is
   correct — it names the baseline the bake-off is GROUNDED on, not the substrate baseline — and
   `eval/watchability.py`'s training-side selection floors deliberately lag the new
@@ -892,11 +896,20 @@ The recording itself is not reproducible at $0 — it is 300 hosted generations 
 re-runnable at the same slate by the two committed recorders:
 
 ```bash
-# the §0.2 environment block, exported first, then per leg:
-bash scripts/refresh_samples.sh   --full        --expect-levers <the eight>   # the samples sets
-bash scripts/record_ml_corpus.sh  --set 9p2i    --expect-levers <the eight>   # the corpus sets
+# The BARE slate, and it must stay bare. The record was made with the eight levers
+# exported ON, because they were still toggles then; graduating them DELETED those
+# env gates, so naming any of them to --expect-levers now fails the recorders'
+# pre-spend check ("an expectation that is not a live toggle") before a single game
+# is recorded. `impostor_roll_call` is the only live toggle left, and it stays OFF.
+bash scripts/refresh_samples.sh   --full        --expect-levers ""   # the samples sets
+bash scripts/record_ml_corpus.sh  --set 9p2i    --expect-levers ""   # the corpus sets
 uv run python scripts/validity_gate.py <set> --expected-model Qwen/Qwen3.6-27B --require-zero-cost
 ```
+
+A re-run is therefore reproducing the same SUBSTRATE by a different route: at the
+record it was eight exports over a default-OFF slate, and it is now the default
+slate itself. The stamp on every recorded row is identical either way — twenty-one
+keys ON, `impostor_roll_call` OFF — which is the thing the validity gate compares.
 
 **Cite this audit for the record's truth, never the PR body.** PR bodies quote first-cut numbers
 and have already caused one downstream citation error in this repository's history.

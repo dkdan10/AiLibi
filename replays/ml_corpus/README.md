@@ -29,11 +29,15 @@ canonical 0–49 game.
 > `replays/`. Everything fitted, selected, or pinned on the **baseline-6** corpus
 > — the surrogate, the conviction model, the bake-off rankings and finalist rows
 > — is now prior-substrate-anchored: `uv run python scripts/verify_ml_evidence.py`
-> reconstructs 300/300 and exits 1 on 11 ML-fit FAILs, and
-> `BAKEOFF_BASELINE_ID` still reads `baseline-5`. Re-grounding those artifacts on
-> these bytes is a NAMED FOLLOW-UP, not part of this record
-> (`audits/audit-phase-20-baseline-7.md` §10.2). Until it lands, treat every
-> published fit metric as anchored to bytes that are no longer committed.
+> reconstructs 300/300 and **exits 0 with 11 rows reporting STALE**, each naming
+> the gap; `BAKEOFF_BASELINE_ID` reads `baseline-6`, which is correct — it names
+> the baseline the bake-off is GROUNDED on, not the substrate baseline. Read the
+> command's `ML grounding` row first: it carries the two corpus fingerprints and
+> decides whether a disagreement below it is a defect (FAIL) or this declared gap
+> (STALE). Re-grounding those artifacts on these bytes is a NAMED FOLLOW-UP, not
+> part of this record (`audits/audit-phase-20-baseline-7.md` §10.2). Until it
+> lands, treat every published fit metric as anchored to bytes that are no longer
+> committed.
 
 > **Canary denominator — the Q3 rule, unbroken this time.** The mid-Phase-15 Q3
 > ruling (the ML corpus is the canary denominator; the canonical
