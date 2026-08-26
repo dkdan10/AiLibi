@@ -36,6 +36,9 @@ _COPIED = (
     "replays/samples/9p2i/MANIFEST.md",
     "audits/audit-phase-18-close.md",
     "audits/audit-phase-19-close.md",
+    # The ladder-tip audit: the fixture stands every other audits/*.md up EMPTY,
+    # so the one the checker actually reads has to be copied whole.
+    "audits/audit-phase-20-baseline-7.md",
     "eval/vote_correctness.py",
     "replays/samples/4p1i/tournament-eval-report.json",
     "replays/samples/9p2i/tournament-eval-report.json",
