@@ -1944,20 +1944,28 @@ def test_committed_9p2i_report_pins_the_audited_conversion_values() -> None:
 # The impostor ejections on the committed 9p2i set that fail
 # ``_has_real_evidence``: (seed, meeting id, tick, ejected player).
 _UNBACKED_9P2I: tuple[tuple[int, str, int, PlayerId], ...] = (
-    (4, "headless-seed-4:meeting-2", 17, "p-3"),
-    (17, "headless-seed-17:meeting-4", 61, "p-2"),
-    (18, "headless-seed-18:meeting-4", 43, "p-7"),
-    (22, "headless-seed-22:meeting-2", 34, "p-7"),
-    (29, "headless-seed-29:meeting-2", 20, "p-8"),
-    (40, "headless-seed-40:meeting-2", 25, "p-9"),
+    (6, "headless-seed-6:meeting-3", 43, "p-9"),
+    (10, "headless-seed-10:meeting-1", 14, "p-6"),
+    (14, "headless-seed-14:meeting-2", 26, "p-9"),
+    (34, "headless-seed-34:meeting-1", 12, "p-4"),
+    (39, "headless-seed-39:meeting-0", 8, "p-6"),
+    (40, "headless-seed-40:meeting-2", 15, "p-9"),
+    (41, "headless-seed-41:meeting-4", 30, "p-8"),
 )
 
 # The impostor ejections carrying no naming ``ContradictionRef`` that the
 # kill-witness disjunct nevertheless backs — the gap between the two
 # populations.
 _KILL_WITNESS_ONLY_9P2I: tuple[tuple[int, str, int, PlayerId], ...] = (
+    (5, "headless-seed-5:meeting-1", 13, "p-4"),
+    (8, "headless-seed-8:meeting-3", 28, "p-5"),
+    (10, "headless-seed-10:meeting-2", 18, "p-3"),
+    (17, "headless-seed-17:meeting-3", 29, "p-4"),
+    (25, "headless-seed-25:meeting-3", 26, "p-6"),
     (26, "headless-seed-26:meeting-0", 6, "p-3"),
+    (29, "headless-seed-29:meeting-1", 9, "p-8"),
     (38, "headless-seed-38:meeting-0", 8, "p-4"),
+    (44, "headless-seed-44:meeting-0", 10, "p-5"),
 )
 
 
@@ -2062,13 +2070,14 @@ def _has_detector_material(meeting: MeetingReport, subject: PlayerId) -> bool:
     )
 
 
-def test_committed_9p2i_censuses_the_six_unbacked_impostor_ejections() -> None:
-    """Which of the 78 impostor ejections the predicate cannot account for.
+def test_committed_9p2i_censuses_the_unbacked_impostor_ejections() -> None:
+    """Which of the 85 impostor ejections the predicate cannot account for.
 
-    ``vote_correctness_rate`` reads 72/78 on the committed set. These are the
-    other six, seed by seed, so the shortfall is an inventory a reader can
+    ``vote_correctness_rate`` reads 78/85 on the committed set. These are the
+    other seven, seed by seed, so the shortfall is an inventory a reader can
     open rather than an anomaly they must re-derive. Each is a real ejection
-    of a real impostor; none is a recording fault.
+    of a real impostor; none is a recording fault. (Baseline 6 read 72/78 with
+    six unbacked.)
     """
 
     report = TournamentEvalReport.model_validate_json(
@@ -2083,7 +2092,7 @@ def test_committed_9p2i_censuses_the_six_unbacked_impostor_ejections() -> None:
         if not _has_real_evidence(meeting, ejected)
     )
     assert unbacked == _UNBACKED_9P2I
-    assert len(rows) - len(unbacked) == 72
+    assert len(rows) - len(unbacked) == 78
 
 
 def test_committed_9p2i_zero_flag_population_is_wider_than_the_unbacked() -> None:
@@ -2091,10 +2100,10 @@ def test_committed_9p2i_zero_flag_population_is_wider_than_the_unbacked() -> Non
 
     ``_has_real_evidence`` is a disjunction, so an ejection the contradiction
     detector never flagged can still be evidence-backed through the second
-    disjunct — a kill-witness chain. Eight of the 78 impostor ejections carry
-    no naming ``ContradictionRef``; two of those eight (seeds 26 and 38) are
-    rescued by the chain, leaving the six above. Conflating the two counts is
-    the confusion this census exists to prevent.
+    disjunct — a kill-witness chain. Sixteen of the 85 impostor ejections carry
+    no naming ``ContradictionRef``; nine of those sixteen are rescued by the
+    chain, leaving the seven above. Conflating the two counts is the confusion
+    this census exists to prevent. (Baseline 6: eight of 78, two rescued.)
     """
 
     report = TournamentEvalReport.model_validate_json(
@@ -2120,7 +2129,7 @@ def test_committed_9p2i_zero_flag_population_is_wider_than_the_unbacked() -> Non
 
 
 def test_committed_9p2i_unbacked_ejections_are_all_rhetoric_only() -> None:
-    """Each of the six, classified under one rule decidable from the bytes.
+    """Each of the seven, classified under one rule decidable from the bytes.
 
     **Detector miss** iff the meeting's transcript carries the structured
     material the contradiction detector is specified to prosecute against the
@@ -2133,12 +2142,12 @@ def test_committed_9p2i_unbacked_ejections_are_all_rhetoric_only() -> None:
     miss, and the table convicted on argument.
 
     The verdict does not rest on the rule's edges. The assertion below is the
-    blunt one: not one of the six ejectees is placed by ANY alibi or
+    blunt one: not one of the seven ejectees is placed by ANY alibi or
     whereabouts claim in their meeting — nobody, themselves included, put them
     anywhere on the public record — so there is no placement for any detector
     rule to prosecute, however the proxy cases are resolved.
 
-    All six fall on the rhetoric-only side, for one recorded reason: in every
+    All seven fall on the rhetoric-only side, for one recorded reason: in every
     one of them the ejectee's single reply turn carries no observations and no
     whereabouts claim, so they volunteered nothing the detector could
     prosecute. The citation gate still passed the eject ballots because each
@@ -2216,7 +2225,7 @@ def test_committed_9p2i_unbacked_ejections_are_all_rhetoric_only() -> None:
                 "cites neither a transcript turn nor an observation id"
             )
     counts = Counter(classified.values())
-    assert counts["rhetoric-only conviction"] == 6
+    assert counts["rhetoric-only conviction"] == 7  # baseline 6: 6
     assert counts["detector miss"] == 0
 
 

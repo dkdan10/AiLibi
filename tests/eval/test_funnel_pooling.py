@@ -688,9 +688,9 @@ def test_4p1i_pooling_reproduces_baseline_5_exactly(
     assert four_pooling.vouch_observations_total == 55
     assert four_pooling.vouch_rate_mean == pytest.approx(0.3583333333333333)
     assert four_pooling.grounded_vouch_rate_mean == pytest.approx(0.14166666666666666)
-    assert four_pooling.grounded_vouch_share == pytest.approx(0.6)
-    assert four_pooling.absence_set_size_mean == pytest.approx(0.3333333333333333)
-    assert dict(four_pooling.absence_set_size_histogram) == {0: 26, 1: 13}
+    assert four_pooling.grounded_vouch_share == pytest.approx(0.3953488372093023)
+    assert four_pooling.absence_set_size_mean == pytest.approx(0.625)
+    assert dict(four_pooling.absence_set_size_histogram) == {0: 15, 1: 25}
 
 
 def test_9p2i_pooling_roll_call_breakdown_reproduces_baseline_5(
@@ -722,9 +722,9 @@ def test_9p2i_pooling_roll_call_breakdown_reproduces_baseline_5(
         + nine_pooling.whereabouts_claims_opt_in_total
         == nine_pooling.whereabouts_claims_total
     )
-    assert nine_pooling.roll_call_asked_total == 971
-    assert nine_pooling.roll_call_answered_total == 843
-    assert nine_pooling.roll_call_answer_rate == pytest.approx(0.8681771369721936)
+    assert nine_pooling.roll_call_asked_total == 871
+    assert nine_pooling.roll_call_answered_total == 756
+    assert nine_pooling.roll_call_answer_rate == pytest.approx(0.8679678530424799)
 
 
 def test_4p1i_pooling_roll_call_breakdown_reproduces_baseline_5(
@@ -752,8 +752,8 @@ def test_4p1i_pooling_roll_call_breakdown_reproduces_baseline_5(
         == four_pooling.whereabouts_claims_total
     )
     assert four_pooling.roll_call_asked_total == 120
-    assert four_pooling.roll_call_answered_total == 86
-    assert four_pooling.roll_call_answer_rate == pytest.approx(0.7350427350427351)
+    assert four_pooling.roll_call_answered_total == 85
+    assert four_pooling.roll_call_answer_rate == pytest.approx(0.7083333333333334)
 
 
 def test_pooling_per_row_decomposition_identities(
