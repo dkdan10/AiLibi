@@ -35,9 +35,7 @@ from __future__ import annotations
 
 import inspect
 
-import pytest
 
-from meetings.constants import ENV_CITATION_GATE, citation_gate_enabled
 from meetings.manager import (
     BALLOT_TARGET_REDIRECT_MARKER,
     INVALID_OBSERVATION_ID_MARKER,
@@ -124,28 +122,8 @@ def _conflict_claims() -> dict[str, tuple[Claim, ...]]:
     }
 
 
-class TestCitationGateLever:
-    """The ``citation_gate_enabled`` resolver -- UNCONDITIONAL since Task 16.17.
-
-    Graduated to the always-ON substrate (the Task-15.7 ``reporter_exculpation``
-    move, applied once baseline 5 adopted it): the resolver ignores its ``env``
-    argument and always returns ``True``, so the J2 citation guard is always
-    consulted at its one read-site.
-    """
-
-    def test_is_unconditionally_on(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        # No env can turn it off any more -- every mapping, and the ambient
-        # process environment, resolves ON.
-        assert citation_gate_enabled() is True
-        assert citation_gate_enabled(env={}) is True
-        monkeypatch.delenv(ENV_CITATION_GATE, raising=False)
-        assert citation_gate_enabled() is True
-
-    @pytest.mark.parametrize("value", ["1", "true", "", "0", "false", "off", "garbage"])
-    def test_env_value_is_ignored(self, value: str) -> None:
-        # The ``env`` argument is accepted and ignored (retained for signature
-        # stability); any value -- truthy, falsy, or junk -- reads ON.
-        assert citation_gate_enabled(env={ENV_CITATION_GATE: value}) is True
+class TestCitationGateMarker:
+    """The audit marker the J2 citation guard writes onto a coerced ballot."""
 
     def test_marker_literal_pinned_exactly(self) -> None:
         # Downstream eval greps this literal and the spectator marker parser

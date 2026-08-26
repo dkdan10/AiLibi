@@ -16,7 +16,6 @@ import tempfile
 from collections import Counter
 from collections.abc import Mapping
 from pathlib import Path
-from types import MappingProxyType
 from typing import Any, Final, NamedTuple
 
 import pytest
@@ -24,8 +23,6 @@ import pytest
 from agents.memory.episodic import EpisodicEvent, MemoryStore
 from agents.memory.store import (
     DEFAULT_TOKEN_BUDGET,
-    ENV_COALESCED_MEMORY_RENDER,
-    ENV_MEETING_OUTCOME_MEMORY,
     AgentMemory,
     _build_observations,
     _latest_self_guard_fields,
@@ -577,8 +574,6 @@ class TestReviewFixes:
 # Testimony as CONTENT: the vent body, the speaker, the meeting index
 # ---------------------------------------------------------------------------- #
 
-_ON: Final[dict[str, str]] = {ENV_MEETING_OUTCOME_MEMORY: "1"}
-
 _VENT_SIGHTING: Final[ReportedStatement] = ReportedStatement(
     speaker="p-8",
     kind="saw_vent",
@@ -770,9 +765,6 @@ class TestVentSightingDerivation:
 # Reported-row survival under the coalesced render, recounted from the bytes.  #
 # --------------------------------------------------------------------------- #
 
-_COALESCE_ON: Final[Mapping[str, str]] = MappingProxyType(
-    {ENV_COALESCED_MEMORY_RENDER: "1"}
-)
 _CORPUS_9P2I: Final[Path] = (
     Path(__file__).resolve().parents[2] / "replays" / "ml_corpus" / "9p2i"
 )
@@ -938,20 +930,35 @@ def test_reported_rows_survive_in_every_candidate_bucket(
     # every committed game -- so the shape, not the absolute count, is what carries.
     assert set(survival.offered) == set(_CANDIDATE_BUCKETS)
     assert survival.renders == 2479  # was 2726
+    # Both columns re-bucketed at the graduation sweep (Task 20.37) and NEITHER
+    # moved in total. The candidate scan calls the private builder directly, and
+    # until the sweep that builder's lever parameters DEFAULTED OFF -- so this
+    # column counted a candidate set production never built (a ``saw_vent`` row
+    # rendered nothing under the OFF default) and, because the same count keys
+    # the bucket, it filed each render under an OFF-path bucket too. Deleting the
+    # parameters made the scan read the path ``render_for_prompt`` always took.
     assert survival.offered == {
-        "<=60": 11135,
-        "61-100": 13165,
-        "101-150": 6835,
-        ">150": 3361,
+        "<=60": 11308,  # was 11135 under the builder's OFF defaults
+        "61-100": 13808,  # was 13165
+        "101-150": 7069,  # was 6835
+        ">150": 3689,  # was 3361
     }
     # The raised reported band is unconditional since the baseline-7 record, so
     # the two legs are ONE walk and read identically -- the differential the C-73
     # register measured is what graduating the lever spent. Kept can exceed
     # offered in a bucket: the candidate scan counts rows the selector was HANDED,
     # and a render can carry a testimony line composed from several candidates.
-    kept = {"<=60": 11707, "61-100": 13622, "101-150": 7074, ">150": 3331}
+    kept = {"<=60": 11308, "61-100": 13803, "101-150": 7059, ">150": 3564}
     assert survival.kept_off == kept
     assert survival.kept_on == kept
+    # THE no-behaviour-moved statement, recomputed rather than asserted: the
+    # sweep re-bucketed the kept rows and minted none. Every kept row comes off
+    # ``render_for_prompt``, whose path the sweep did not touch, so the TOTAL is
+    # the number the pre-sweep buckets summed to (11,707 + 13,622 + 7,074 +
+    # 3,331). The offered total legitimately GREW by the saw_vent rows the OFF
+    # default used to swallow.
+    assert sum(kept.values()) == 35734
+    assert sum(survival.offered.values()) == 35874
     # Every bucket clears the survival floor now, including the largest render --
     # the bucket the register measured keeping NO reported row at all.
     for bucket in _CANDIDATE_BUCKETS:

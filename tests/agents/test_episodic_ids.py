@@ -39,11 +39,9 @@ from agents.memory.episodic import (
     derive_observation_id,
 )
 from agents.memory.store import (
-    ENV_OBSERVATION_ID_RENDERING,
     AgentMemory,
     absorb_meeting_evidence,
     absorb_reported_testimony,
-    observation_id_rendering_enabled,
     render_for_prompt,
 )
 from agents.perception import (
@@ -388,28 +386,7 @@ def _lever_memory() -> AgentMemory:
     return memory
 
 
-class TestObservationIdRenderLever:
-    def test_env_is_ignored_and_ids_always_render(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        # UNCONDITIONAL since Task 16.17: env=None (unset), env={}, an explicit
-        # "0", and an explicit "1" all render IDENTICALLY, and every render carries
-        # the ``[obs `` prefix -- the lever ignores its env argument.
-        monkeypatch.delenv(ENV_OBSERVATION_ID_RENDERING, raising=False)
-        memory = _lever_memory()
-        default = render_for_prompt(memory)
-        empty = render_for_prompt(
-            memory,
-        )
-        zero = render_for_prompt(
-            memory,
-        )
-        one = render_for_prompt(
-            memory,
-        )
-        assert default == empty == zero == one
-        assert "[obs " in default
-
+class TestObservationIdRender:
     def test_prefixes_each_first_hand_observation_with_its_id(self) -> None:
         # The fold puts ``[obs {agent}:{tick}:{seq}]`` into each first-hand
         # observation line with the EXACT id of its source event; the belief line,
@@ -432,24 +409,6 @@ class TestObservationIdRenderLever:
         # The meeting-outcome channel tags the frame with the meeting it was
         # spoken at (baseline 6 rendered the untagged "[meeting] CLAIM by …").
         assert "[meeting 1] CLAIM by p2 (unverified): accused p4." in rendered
-
-    def test_resolver_is_unconditionally_on(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        # Graduated to unconditional at Task 16.17 (mirrors the 16.4 lever's
-        # graduation): the resolver ignores its env and always returns True -- a
-        # bare mapping, an explicit "0", junk, the truthy tokens, and the ambient
-        # process environment all read ON.
-        assert observation_id_rendering_enabled() is True
-        assert observation_id_rendering_enabled({}) is True
-        monkeypatch.delenv(ENV_OBSERVATION_ID_RENDERING, raising=False)
-        assert observation_id_rendering_enabled() is True
-        for value in ("0", "garbage", "1", "true", "on", ""):
-            assert (
-                observation_id_rendering_enabled({ENV_OBSERVATION_ID_RENDERING: value})
-                is True
-            )
-
     def test_ids_survive_a_tight_token_budget_shed(self) -> None:
         # The id is folded BEFORE the salience sort and budget shed, so a surviving
         # line keeps its ORIGINAL id even when lower-salience lines are dropped. The

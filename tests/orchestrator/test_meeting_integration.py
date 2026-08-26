@@ -29,14 +29,13 @@ import asyncio
 from collections.abc import Awaitable, Callable, Iterable, Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Final, TypeVar
+from typing import TypeVar
 
 import pytest
 from pydantic import BaseModel, TypeAdapter
 
 from agents.memory.episodic import EpisodicEvent
 from agents.memory.store import (
-    ENV_MEETING_OUTCOME_MEMORY,
     AgentMemory,
     render_for_prompt,
 )
@@ -2914,9 +2913,6 @@ class TestVentWitnessRecordsAccessor:
 # state, and confirm-ejects is the only thing it may translate: the EJECTED
 # player's role, never a living player's and never a kill victim's.
 # ---------------------------------------------------------------------------
-
-_OUTCOME_MEMORY_ON: Final[dict[str, str]] = {ENV_MEETING_OUTCOME_MEMORY: "1"}
-
 
 class _PacingScriptedAgent:
     """A real :class:`TacticalAgent` behind a scripted intent stream.

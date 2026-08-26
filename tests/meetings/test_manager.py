@@ -12,11 +12,8 @@ The contract exercised here is the reactive accusation chain (DESIGN.md
 * Opt-in is limited to living non-speakers with a relevant observation
   (a co-presence gate with the body / accused), one terminal turn each,
   and never extends the chain.
-* The Task 18.8 roll-call round (DEFAULT-OFF, behind
-  :func:`~meetings.manager.roll_call_round_enabled`) asks EVERY remaining
-  living non-speaker one terminal ``opt_in`` turn after the opt-in phase;
-  OFF (the default) it is skipped and the allocation is byte-identical to
-  the committed substrate.
+* The roll-call round asks EVERY remaining living non-speaker one terminal
+  ``opt_in`` turn after the opt-in phase.
 * Every turn-kind flows through one chokepoint, so the 7.12 teammate
   firewall, self-alibi normalization, and the 7.10 fail-soft wrap every
   turn; the vote inherits the teammate-ballot guard.
@@ -65,8 +62,6 @@ from meetings.manager import (
     DEFAULT_VOTE_RATIONALE,
     EMERGENCY_BODY_STRIP_MARKER,
     EMERGENCY_NO_BODY_RETRY_FEEDBACK,
-    ENV_ROLL_CALL_ROUND,
-    ENV_STRUCTURED_TURN_MARKERS,
     EMERGENCY_TRIGGER_PHRASE,
     INVALID_ACCUSATION_TARGET_MARKER,
     INVALID_ALIBI_SUBJECT_MARKER,
@@ -96,15 +91,12 @@ from meetings.manager import (
     _normalize_self_alibi_subjects,  # noqa: PLC2701
     _suspicion_graph_with_contradictions,  # noqa: PLC2701
     _trigger_is_emergency,  # noqa: PLC2701
-    _turn_annotation_marker,  # noqa: PLC2701
     coerce_teammate_ballot_to_skip,
     derive_belief_evidence,
     drop_teammate_statement_target,
     exclude_teammate_accusation_claims,
     extract_belief_evidence,
     guard_ballot_target_graph,
-    roll_call_round_enabled,
-    structured_turn_markers_enabled,
 )
 from meetings.schemas import (
     MARKER_TRUNCATION_SUFFIX,
@@ -127,7 +119,6 @@ from meetings.schemas import (
     VoteBallot,
 )
 from meetings.transcript import (
-    ENV_GROUNDED_PROSECUTION,
     WEAK_CONTRADICTION_MARKER_PREFIX,
     WEAK_REASON_LONE_GROUNDED_SOURCE,
     WEAK_REASON_SELF_STATED,
@@ -489,45 +480,6 @@ class TestOptIn:
 
 
 # --- Roll-call round (Task 18.8, DEFAULT-OFF) ------------------------------
-
-
-class TestRollCallResolver:
-    """The Task-18.8 roll-call-round lever resolver -- UNCONDITIONAL since the
-    Task-18.12 baseline-6 record.
-
-    Retired to the always-ON substrate (the 16.17 move, applied to this lever
-    once baseline 6 adopted it per the CREW-ONLY graduation slate): the resolver
-    ignores its ``env`` argument and always returns ``True``, so
-    :meth:`MeetingManager.run` always inserts the roll-call round. ``ENV_ROLL_CALL_ROUND``
-    is retained for signature/stamp-key provenance but no longer read.
-    """
-
-    def test_is_unconditionally_on(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        # No env can turn it off any more -- every mapping, and the ambient
-        # process environment, resolves ON.
-        assert roll_call_round_enabled() is True
-        assert roll_call_round_enabled(env={}) is True
-        assert roll_call_round_enabled(env={"AILIBI_SOMETHING_ELSE": "1"}) is True
-        monkeypatch.delenv(ENV_ROLL_CALL_ROUND, raising=False)
-        assert roll_call_round_enabled() is True
-        assert roll_call_round_enabled(env=None) is True
-
-    @pytest.mark.parametrize("value", ["1", "true", "", "0", "false", "off", "maybe"])
-    def test_env_value_is_ignored(self, value: str) -> None:
-        # The ``env`` argument is accepted and ignored (retained for signature
-        # stability); any value -- truthy, falsy, or junk -- reads ON.
-        assert roll_call_round_enabled(env={ENV_ROLL_CALL_ROUND: value}) is True
-
-    def test_env_argument_is_not_mutated_and_reads_deterministically(self) -> None:
-        # The resolver never writes its env argument (pure read), so two calls on
-        # the same mapping agree and the mapping is unchanged.
-        env = {ENV_ROLL_CALL_ROUND: "on", "AILIBI_OTHER": "x"}
-        before = dict(env)
-        assert roll_call_round_enabled(env=env) is True
-        assert roll_call_round_enabled(env=env) is True
-        assert env == before
-
-
 @dataclass
 class _RollCallValidationClient:
     """Valid opening / reply / votes, but invalid turn JSON for the roll-call
@@ -583,7 +535,6 @@ class TestRollCallRound:
     def test_every_living_non_speaker_takes_one_roll_call_turn(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setenv(ENV_ROLL_CALL_ROUND, "1")
         # Chain: p-1 opens accusing p-3, p-3 replies without accusing (the chain
         # dies). No observations -> no genuine opt-in. Roll-call then asks the
         # two living non-speakers p-2, p-4 in ascending id order.
@@ -607,7 +558,6 @@ class TestRollCallRound:
     def test_non_eligible_non_speaker_is_asked_after_genuine_opt_ins(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setenv(ENV_ROLL_CALL_ROUND, "1")
         # The opening places p-4 in the body room (p-4 becomes opt-in eligible)
         # while p-2 holds NO relevant observation. The eligible player
         # deliberately carries the HIGHER id: the opt-in phase runs FIRST
@@ -643,7 +593,6 @@ class TestRollCallRound:
     def test_meeting_where_everyone_spoke_adds_no_roll_call_turn(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setenv(ENV_ROLL_CALL_ROUND, "1")
         # Two participants: p-1 accuses p-2 -> both speak, so ``roster - spoken``
         # is empty and the round appends nothing.
         result, _ = _run_meeting(
@@ -656,7 +605,6 @@ class TestRollCallRound:
     def test_roll_call_asks_living_participants_only(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setenv(ENV_ROLL_CALL_ROUND, "1")
         # ``dead_ids`` is render-only context: the round derives from the
         # living participant roster, so a dead player is never asked.
         result, _ = _run_meeting(
@@ -670,7 +618,6 @@ class TestRollCallRound:
     def test_roll_call_turn_ids_stay_sequential_and_contiguous(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setenv(ENV_ROLL_CALL_ROUND, "1")
         result, _ = _run_meeting(
             _make_responder(accusations={"p-1": "p-3"}), meeting_id="m-xyz"
         )
@@ -687,7 +634,6 @@ class TestRollCallRound:
     def test_roll_call_transcript_replays_under_walk_chain(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setenv(ENV_ROLL_CALL_ROUND, "1")
         result, _ = _run_meeting(_make_responder(accusations={"p-1": "p-3"}))
 
         living = frozenset({"p-1", "p-2", "p-3", "p-4"})
@@ -699,7 +645,6 @@ class TestRollCallRound:
     def test_roll_call_invalid_json_defaults_after_single_attempt(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setenv(ENV_ROLL_CALL_ROUND, "1")
         # p-2's roll-call turn returns schema-invalid JSON; the meeting must
         # still complete and p-2's turn is the placeholder default.
         client = _RollCallValidationClient(
@@ -736,7 +681,6 @@ class TestRollCallRound:
     def test_roll_call_missed_deadline_records_default_turn(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setenv(ENV_ROLL_CALL_ROUND, "1")
 
         # p-2's roll-call turn sleeps past the turn deadline; every other call
         # answers instantly (the ``_SleepOnOpening`` pattern). The turn defaults
@@ -786,67 +730,6 @@ class TestRollCallRound:
         assert default.phase == "opt_in"
         assert default.agent_id == "p-2"
         assert default.trigger == "deadline"
-
-
-class TestRollCallOffPath:
-    """OFF path (the default): the round is skipped and the allocation is
-    byte-identical to the committed substrate. The committed-bytes OFF-path pin
-    is the existing 179-meeting reconstruction
-    (``tests/meetings/test_prompt_byte_golden.py`` +
-    ``tests/agents/test_absence_prior.py::TestAbsencePriorOnCommittedBytes``),
-    which re-runs the REAL ``MeetingManager.run`` keyed by recorded prompt bytes
-    and stays green precisely because the lever defaults OFF.
-    """
-
-    def test_default_env_skips_the_round_and_issues_no_extra_calls(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.delenv(ENV_ROLL_CALL_ROUND, raising=False)
-        # Same fixture as the ON test: p-1 -> p-3 chain; since the Task-18.12
-        # graduation the round is UNCONDITIONAL, so the env no longer suppresses
-        # it -- the two silent non-speakers p-2, p-4 take roll-call opt-ins.
-        result, client = _run_meeting(_make_responder(accusations={"p-1": "p-3"}))
-
-        assert [t.turn_kind for t in result.transcript.turns] == [
-            "opening",
-            "reply",
-            "opt_in",
-            "opt_in",
-        ]
-        assert {t.speaker for t in result.transcript.turns} == {
-            "p-1",
-            "p-2",
-            "p-3",
-            "p-4",
-        }
-        # 2 turn calls (opening + reply) + 2 roll-call opt-in calls + 4 vote
-        # calls -- the round fires regardless of the (now-ignored) env.
-        assert len(client.calls) == 8
-
-    @pytest.mark.parametrize("value", ["0", "false", "off"])
-    def test_explicit_falsy_env_is_the_identical_off_path(
-        self, monkeypatch: pytest.MonkeyPatch, value: str
-    ) -> None:
-        monkeypatch.setenv(ENV_ROLL_CALL_ROUND, value)
-        result, client = _run_meeting(_make_responder(accusations={"p-1": "p-3"}))
-
-        # The graduated round is unconditional: any env value reads identically
-        # ON, so the two silent non-speakers still take roll-call opt-ins.
-        assert [t.turn_kind for t in result.transcript.turns] == [
-            "opening",
-            "reply",
-            "opt_in",
-            "opt_in",
-        ]
-        assert {t.speaker for t in result.transcript.turns} == {
-            "p-1",
-            "p-2",
-            "p-3",
-            "p-4",
-        }
-        assert len(client.calls) == 8
-
-
 # --- Turn ids --------------------------------------------------------------
 
 
@@ -4243,11 +4126,6 @@ class TestNonRosterClaimSubjectsDropped:
                 kind="invalid_corroboration_supports", original="m-1:turn-0"
             ),
         )
-        assert tuple(_turn_annotation_marker(a) for a in annotations) == (
-            INVALID_ALIBI_SUBJECT_MARKER.format(subject="headless-seed-9"),
-            INVALID_ACCUSATION_TARGET_MARKER.format(target="imp-2"),
-            INVALID_CORROBORATION_SUPPORTS_MARKER.format(supports="m-1:turn-0"),
-        )
         # The valid alibi and corroboration survive, in order.
         assert [c.subject for c in surviving if isinstance(c, AlibiClaim)] == ["p-1"]
         assert [c.supports for c in surviving if isinstance(c, CorroborationClaim)] == [
@@ -4660,9 +4538,7 @@ class TestBoundedDropMarkers:
         assert annotations == (
             TurnAnnotation(kind="invalid_alibi_subject", original=bounded),
         )
-        marker = _turn_annotation_marker(annotations[0])
-        assert marker == INVALID_ALIBI_SUBJECT_MARKER.format(subject=bounded)
-        assert len(marker) < 120
+        assert len(INVALID_ALIBI_SUBJECT_MARKER.format(subject=bounded)) < 120
 
     def test_sibling_markers_share_the_bound(self) -> None:
         blob = "x" * 500
@@ -4680,10 +4556,6 @@ class TestBoundedDropMarkers:
         assert annotations == (
             TurnAnnotation(kind="invalid_accusation_target", original=bounded),
             TurnAnnotation(kind="invalid_corroboration_supports", original=bounded),
-        )
-        assert tuple(_turn_annotation_marker(a) for a in annotations) == (
-            INVALID_ACCUSATION_TARGET_MARKER.format(target=bounded),
-            INVALID_CORROBORATION_SUPPORTS_MARKER.format(supports=bounded),
         )
 
     def test_real_player_ids_pass_through_verbatim(self) -> None:
@@ -7348,7 +7220,6 @@ class TestGroundedProsecutionWiring:
     def test_a_lone_grounded_speaker_bands_weak_on_every_call(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setenv(ENV_GROUNDED_PROSECUTION, "1")
         result, seen = _run_prosecution_meeting({"p-2": (self._MATCHING_RECORD,)})
         (flag,) = result.contradictions
         assert WEAK_REASON_LONE_GROUNDED_SOURCE in flag.description
@@ -7360,7 +7231,6 @@ class TestGroundedProsecutionWiring:
     ) -> None:
         # p-4's unrelated record keeps the MAPPING non-empty (so the lever is
         # live) while the sighting's own speaker holds nothing.
-        monkeypatch.setenv(ENV_GROUNDED_PROSECUTION, "1")
         result, seen = _run_prosecution_meeting(
             {"p-4": (SightingRecord(subject="p-3", room="LABS", tick=10),)}
         )
@@ -7374,7 +7244,6 @@ class TestGroundedProsecutionWiring:
         # The predicate's second half, through the production path: with the
         # lever ON but no participant carrying records, the manager builds an
         # empty mapping and the pre-lever rules stand.
-        monkeypatch.setenv(ENV_GROUNDED_PROSECUTION, "1")
         result, seen = _run_prosecution_meeting({})
         (flag,) = result.contradictions
         assert WEAK_CONTRADICTION_MARKER_PREFIX not in flag.description
@@ -7387,7 +7256,6 @@ class TestGroundedProsecutionWiring:
         # The accessor keeps an impostor's rows naming a fellow impostor because
         # its only consumer corroborates; a PROSECUTING consumer must not, so a
         # row the §6.6 render hides from p-2 cannot ground a flag against p-1.
-        monkeypatch.setenv(ENV_GROUNDED_PROSECUTION, "1")
         result, _seen = _run_prosecution_meeting(
             {
                 "p-2": (self._MATCHING_RECORD,),
@@ -7414,7 +7282,6 @@ class TestGroundedProsecutionWiring:
         # The fourth call site is the recorded one: re-deriving over the final
         # transcript with the same mapping must reproduce it exactly, which is
         # what proves the mapping was threaded there and not dropped.
-        monkeypatch.setenv(ENV_GROUNDED_PROSECUTION, "1")
         records = {"p-2": (self._MATCHING_RECORD,)}
         result, _seen = _run_prosecution_meeting(records)
         assert result.contradictions == detect_contradictions(
@@ -7612,27 +7479,6 @@ def _run_planted_meeting(
         )
     )
     return result, [call.prompt for call in client.calls]
-
-
-class TestStructuredTurnMarkersResolver:
-    """Graduated at the baseline-7 record: unconditional, env never consulted."""
-
-    @pytest.mark.parametrize(
-        "value", ["", "0", "maybe", "1", "true", "TRUE", "yes", "on", " On "]
-    )
-    def test_the_channel_is_unconditional(self, value: str) -> None:
-        assert structured_turn_markers_enabled({ENV_STRUCTURED_TURN_MARKERS: value})
-        assert structured_turn_markers_enabled({}) is True
-
-    def test_the_process_environment_is_not_consulted(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.delenv(ENV_STRUCTURED_TURN_MARKERS, raising=False)
-        assert structured_turn_markers_enabled() is True
-        monkeypatch.setenv(ENV_STRUCTURED_TURN_MARKERS, "0")
-        assert structured_turn_markers_enabled() is True
-
-
 class TestTurnAnnotationRecordShape:
     """The annotation channel is the manager's, and stays off the wire."""
 
@@ -7667,10 +7513,7 @@ class TestTurnAnnotationRecordShape:
             "turn_kind",
         ]
 
-    @pytest.mark.parametrize("lever", ["0", "1"])
-    def test_a_wire_supplied_annotation_never_reaches_the_transcript(
-        self, lever: str, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_a_wire_supplied_annotation_never_reaches_the_transcript(self) -> None:
         # The field is on the provider schema, so a model CAN volunteer one:
         # the planted response below parses WITH the forged row, which is what
         # makes the assertion meaningful. It is dropped at the wire boundary and
@@ -7683,18 +7526,13 @@ class TestTurnAnnotationRecordShape:
         wire_turn = _forge_annotation(_turn_json(speaker="p-1"), forged)
         assert MeetingTurn.model_validate_json(wire_turn).annotations == (forged,)
 
-        monkeypatch.setenv(ENV_STRUCTURED_TURN_MARKERS, lever)
         result, prompts = _run_planted_meeting(forged_annotation=forged)
         _assert_free_of_forged_annotation(result.transcript.turns, prompts)
-        if lever == "1":
-            # The drop is of the MODEL's rows, not of the channel: the
-            # manager's own annotations are still recorded.
-            assert result.transcript.turns[0].annotations
+        # The drop is of the MODEL's rows, not of the channel: the manager's
+        # own annotations are still recorded.
+        assert result.transcript.turns[0].annotations
 
-    @pytest.mark.parametrize("lever", ["0", "1"])
-    def test_a_malformed_wire_annotation_is_refused_not_recorded(
-        self, lever: str, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_a_malformed_wire_annotation_is_refused_not_recorded(self) -> None:
         # The other half of "ignored on input". A payload-free kind carrying an
         # ``original`` satisfies the published JSON Schema but not the record
         # invariant, so it is refused where every provider adapter validates --
@@ -7711,20 +7549,16 @@ class TestTurnAnnotationRecordShape:
         with pytest.raises(ValidationError):
             TurnAnnotation.model_validate(malformed)
 
-        monkeypatch.setenv(ENV_STRUCTURED_TURN_MARKERS, lever)
         result, prompts = _run_planted_meeting(forged_payload=malformed)
         _assert_free_of_forged_annotation(result.transcript.turns, prompts)
         assert result.transcript.turns, "the meeting still reaches a transcript"
         for turn in result.transcript.turns:
             assert turn.free_text == DEFAULT_TURN_FREE_TEXT, turn.turn_id
 
-    def test_the_forged_annotation_assertion_bites(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_the_forged_annotation_assertion_bites(self) -> None:
         # The perturbation: put the forged row back onto a recorded turn (and
         # its value back into the spoken text) and both legs of the gate above
         # must fail.
-        monkeypatch.setenv(ENV_STRUCTURED_TURN_MARKERS, "1")
         forged = TurnAnnotation(
             kind="invalid_alibi_subject", original=_FORGED_ANNOTATION_ORIGINAL
         )
@@ -7852,7 +7686,6 @@ class TestStructuredTurnMarkersOn:
     def test_no_marker_reaches_free_text_the_transcript_or_a_prompt(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setenv(ENV_STRUCTURED_TURN_MARKERS, "1")
         result, prompts = _run_planted_meeting()
 
         _assert_free_of_turn_markers(turn.free_text for turn in result.transcript.turns)
@@ -7868,7 +7701,6 @@ class TestStructuredTurnMarkersOn:
     def test_every_dropped_claim_is_recoverable_in_claim_order(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setenv(ENV_STRUCTURED_TURN_MARKERS, "1")
         result, _prompts = _run_planted_meeting()
 
         assert result.transcript.turns[0].annotations == (
@@ -7892,7 +7724,6 @@ class TestStructuredTurnMarkersOn:
     ) -> None:
         # The gp-6 H-H-4 bound applies to the structured channel too: a
         # hallucinated mega-value cannot balloon the recorded turn.
-        monkeypatch.setenv(ENV_STRUCTURED_TURN_MARKERS, "1")
         blob = "I think the body was found near ADMIN and " * 80
         result, _prompts = _run_planted_meeting(later_subject=blob)
 
@@ -7904,7 +7735,6 @@ class TestStructuredTurnMarkersOn:
     ) -> None:
         # The perturbation: put ONE marker back into a recorded turn and both
         # legs of the gate above must fail.
-        monkeypatch.setenv(ENV_STRUCTURED_TURN_MARKERS, "1")
         result, _prompts = _run_planted_meeting()
         clean = result.transcript.turns[0]
         poisoned = clean.model_copy(

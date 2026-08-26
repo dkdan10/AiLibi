@@ -124,8 +124,6 @@ from meetings.schemas import (
     VentWitnessRecord,
 )
 from meetings.transcript import (
-    ENV_VENT_PLACEMENT_CONTRADICTIONS,
-    ENV_WHEREABOUTS_INTERIOR_FLAGS,
     MeetingTriggerKind,
     WEAK_REASON_ENDPOINT_TICK,
     WEAK_REASON_RETARGETED_PROXY,
@@ -138,8 +136,6 @@ from meetings.transcript import (
     is_canonically_ordered,
     is_weak_contradiction,
     next_chain_step,
-    vent_placement_contradictions_enabled,
-    whereabouts_interior_flags_enabled,
 )
 from agents.memory.beliefs import (
     CONTRADICTION_SUSPICION_DELTA,
@@ -359,8 +355,6 @@ def _testimony_vehicle(turn: Any, subject: str) -> tuple[str | None, bool]:
 def _genuine_subjects(
     transcript: Any,
     roster: frozenset[str],
-    *,
-    detector_env: Mapping[str, str],
 ) -> frozenset[str]:
     """Re-derive the genuine CANON-interior subjects (one-home, Task 10.4).
 
@@ -374,11 +368,6 @@ def _genuine_subjects(
     recordings the re-run equals the recorded flags byte-for-byte (verified by
     the genuine-class cross-check invariant).
 
-    ``detector_env`` (Task 18.11) is the recording's OWN lever mapping
-    (:func:`_detector_env_from_stamp`), threaded here exactly as into
-    :func:`_rederive_meeting_contradictions`: the exemption lever changes which
-    ``alibi_vs_sighting`` flags are interior-class, so an ambient shell must
-    never decide this classification.
     """
 
     genuine: set[str] = set()
@@ -528,35 +517,9 @@ def _vent_records_from_recorded_flags(
     }
 
 
-def _detector_env_from_stamp(
-    substrate_flags: Mapping[str, bool] | None,
-) -> dict[str, str]:
-    """The detector-lever env a recording's OWN substrate stamp names (Task 18.11).
-
-    The two Task-18.9 detector levers are read from the RECORDED
-    ``game_over`` stamp, never the operator's shell: an ON-path probe/adoption
-    recording re-derives with the exemption/vent levers it actually ran, and an
-    OFF-path recording (the committed baseline-5 sets, which stamp the levers
-    absent = OFF) re-derives with an explicit all-OFF mapping — so a polluted
-    ambient ``AILIBI_*`` export can never skew contradiction-derived facts in
-    either direction. Returning an explicit dict (possibly empty) is the
-    load-bearing part: ``detect_contradictions(env=...)`` then never consults
-    ``os.environ``.
-    """
-
-    flags = substrate_flags or {}
-    env: dict[str, str] = {}
-    if flags.get("whereabouts_interior_flags"):
-        env[ENV_WHEREABOUTS_INTERIOR_FLAGS] = "1"
-    if flags.get("vent_placement_contradictions"):
-        env[ENV_VENT_PLACEMENT_CONTRADICTIONS] = "1"
-    return env
-
-
 def _rederive_meeting_contradictions(
     entry: MeetingReplayEntry,
     *,
-    detector_env: Mapping[str, str],
     trigger_kind: MeetingTriggerKind | None = None,
 ) -> MeetingReplayEntry:
     """Re-run the CURRENT detector over the recorded transcript (Task 13.3).
@@ -575,11 +538,8 @@ def _rederive_meeting_contradictions(
     roster, verified across the committed 9p2i set); it diverges ONLY when the
     detector itself changes, which is exactly the signal re-extraction surfaces.
 
-    ``detector_env`` (Task 18.11) is the recording's OWN lever mapping
-    (:func:`_detector_env_from_stamp`), so the re-run applies the exemption /
-    vent-variant levers the bytes were recorded under rather than the ambient
-    shell; the vent channel is rebuilt from the recorded grounding verdicts
-    (:func:`_vent_records_from_recorded_flags`) so a vent-ON recording's
+    The vent channel is rebuilt from the recorded grounding verdicts
+    (:func:`_vent_records_from_recorded_flags`) so a recording's
     ``alibi_vs_physical`` mints reproduce — the replay persists no private
     records (the 15.4 boundary).
 
@@ -864,7 +824,6 @@ def _analyze_meeting(
     invariant_failures: list[str],
     defaulted_vote_rendered_max: Mapping[str, float],
     roll_call_round_recorded: bool = False,
-    detector_env: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
     """Per-meeting chain facts + chain-protocol mechanical checks (v2).
 
@@ -1682,7 +1641,6 @@ def _analyze_meeting(
     genuine_subjects = _genuine_subjects(
         meeting_entry.transcript,
         ballot_voter_roster,
-        detector_env=detector_env if detector_env is not None else {},
     )
 
     # Ballot tallies (non-skip) for plurality + margin, and the set of accusers
@@ -2201,52 +2159,8 @@ def main() -> int:
         # Task 13.3: re-derive each meeting's contradictions from the recorded
         # transcript with the CURRENT detector (the $0 re-extraction spine), so
         # a detector change is reflected without a re-record. A byte-for-byte
-        # no-op for an unchanged detector (recorded == re-derived). Task 18.11:
-        # the detector LEVERS come from THIS recording's substrate stamp, never
-        # the ambient shell — an explicit (possibly empty) env mapping, so an
-        # ON-path recording re-derives under the exemption/vent levers it
-        # actually ran and a polluted operator shell cannot skew the
-        # contradiction-derived facts of an OFF-path one.
-        detector_env = _detector_env_from_stamp(
-            game_end.substrate_flags if game_end is not None else None
-        )
-        # The tool's OWN detector re-runs are stamp-true regardless of the shell
-        # (detector_env above). The SHIPPED eval folds this audit cross-checks
-        # against (eval.vote_correctness / meeting_quality, out of 18.11 scope)
-        # still read the ambient env — so an ambient detector-lever state that
-        # DISAGREES with a stamped recording is refused up front rather than
-        # letting the two halves of the report silently diverge (the same
-        # match-the-env-to-the-stamp requirement the validity gate and the
-        # replay loader already enforce). Unstamped legacy recordings skip the
-        # check, mirroring the loader.
-        if game_end is not None and game_end.substrate_flags is not None:
-            stamped = game_end.substrate_flags
-            ambient_mismatches = [
-                f"{env_var}: recording stamps {bool(stamped.get(key))}, "
-                f"ambient resolves {resolver(None)}"
-                for env_var, key, resolver in (
-                    (
-                        ENV_WHEREABOUTS_INTERIOR_FLAGS,
-                        "whereabouts_interior_flags",
-                        whereabouts_interior_flags_enabled,
-                    ),
-                    (
-                        ENV_VENT_PLACEMENT_CONTRADICTIONS,
-                        "vent_placement_contradictions",
-                        vent_placement_contradictions_enabled,
-                    ),
-                )
-                if resolver(None) != bool(stamped.get(key))
-            ]
-            if ambient_mismatches:
-                raise SystemExit(
-                    f"seed {seed}: ambient detector-lever env disagrees with the "
-                    f"recording's substrate stamp ({'; '.join(ambient_mismatches)}). "
-                    "Export/unset the AILIBI_* vars to match the stamp before "
-                    "extracting — the shipped eval cross-checks read the ambient "
-                    "env and would silently diverge from this tool's stamp-true "
-                    "re-derivations."
-                )
+        # no-op for an unchanged detector (recorded == re-derived).
+        #
         # RAW entries here; the re-derivation happens per meeting inside the
         # walk, where the reconstructed trigger kind is known — the live
         # manager's final detection runs with ``trigger_kind`` (an emergency
@@ -2487,7 +2401,6 @@ def main() -> int:
             )
             meeting_entry = _rederive_meeting_contradictions(
                 raw_meeting_entry,
-                detector_env=detector_env,
                 trigger_kind=meeting_trigger_kind,
             )
 
@@ -2534,7 +2447,6 @@ def main() -> int:
                     meeting_entry.meeting_id, {}
                 ),
                 roll_call_round_recorded=roll_call_round_recorded,
-                detector_env=detector_env,
             )
             meetings_out.append(m_facts)
             total_meetings += 1

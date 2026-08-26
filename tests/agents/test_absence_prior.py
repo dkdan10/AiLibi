@@ -1,11 +1,10 @@
-"""Tests for the Task 16.8 absence-prior lever (default-OFF).
+"""Tests for the absence prior.
 
-Pins the Task 16.8 absence prior end to end: a publicly UNPLACED living player
+Pins the absence prior end to end: a publicly UNPLACED living player
 (:func:`meetings.transcript.absent_players` -- the meeting's living roster minus
 the players public testimony placed) takes the WEAK
 :data:`~agents.memory.beliefs.ABSENCE_SUSPICION_DELTA` (0.08) in the TRANSIENT
-``pre_vote`` half of :func:`~agents.memory.beliefs.apply_meeting_evidence_rules`,
-behind the default-OFF :func:`~agents.memory.beliefs.absence_prior_enabled` lever.
+``pre_vote`` half of :func:`~agents.memory.beliefs.apply_meeting_evidence_rules`.
 
 The delta is the :data:`~agents.memory.beliefs.WEAK_CONTRADICTION_SUSPICION_DELTA`
 lone-weak-signal discipline applied to a SECOND weak channel (Task 16.8's sizing
@@ -64,7 +63,6 @@ from agents.memory.beliefs import (
     ABSENCE_SUSPICION_DELTA,
     ACCUSATION_SUSPICION_DELTA,
     CONTRADICTION_RENDER_CEIL,
-    ENV_ABSENCE_PRIOR,
     MEETING_CONTRADICTION_LIFT_CAP,
     MEETING_SUSPICION_DECAY_RATE,
     SUSPICION_PROVENANCE_ATOL,
@@ -73,7 +71,6 @@ from agents.memory.beliefs import (
     WEAK_CONTRADICTION_SUSPICION_DELTA,
     BeliefState,
     PlayerBelief,
-    absence_prior_enabled,
     apply_contradiction_rule,
     apply_meeting_evidence_rules,
 )
@@ -98,12 +95,9 @@ from meetings.transcript import (
     _turn_observation_id,  # noqa: PLC2701
     absent_players,
 )
-from orchestrator.replay import _RETIRED_ALWAYS_ON_LEVERS  # noqa: PLC2701
 
 _GATE = 0.60  # DESIGN.md §4.6 eject gate (inclusive)
 _NEUTRAL = 0.50  # the neutral suspicion prior
-_LEVER_ON: dict[str, str] = {ENV_ABSENCE_PRIOR: "1"}
-_LEVER_OFF: dict[str, str] = {}
 
 
 def _snapshot(state: BeliefState) -> dict[str, PlayerBelief]:
@@ -156,57 +150,6 @@ def _strong_flag(subject: str) -> ContradictionRef:
         event_a_id="turn:m-1:turn-0:claim:0",
         event_b_id="turn:m-1:turn-1:claim:0",
     )
-
-
-# --------------------------------------------------------------------------- #
-# A. The resolver (cloned from the 16.4 hard-evidence-gate resolver)           #
-# --------------------------------------------------------------------------- #
-
-
-class TestAbsencePriorResolver:
-    """The Task-16.8 lever resolver -- UNCONDITIONAL since the Task-18.12
-    baseline-6 record.
-
-    Retired to the always-ON substrate (the 16.17 move): the Phase-16 slate's
-    recorded STAY-OFF was re-routed to Phase 18 by
-    audits/audit-phase-17-absence-gate.md Ruling 3, and the 18.11 meeting-layer
-    gate cleared the ratified bar beside the 18.8 roll-call elicitation, so the
-    CREW-ONLY ruling graduated it. The resolver ignores its ``env`` argument and
-    always returns ``True``, so the pre-vote absent-set fold is the default
-    behavior. ``ENV_ABSENCE_PRIOR`` is retained for signature/stamp-key provenance
-    but no longer read.
-    """
-
-    def test_is_unconditionally_on(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        # No env can turn it off any more -- every mapping, and the ambient
-        # process environment, resolves ON.
-        assert absence_prior_enabled() is True
-        assert absence_prior_enabled(env={}) is True
-        assert absence_prior_enabled(env={"AILIBI_SOMETHING_ELSE": "1"}) is True
-        monkeypatch.delenv(ENV_ABSENCE_PRIOR, raising=False)
-        assert absence_prior_enabled() is True
-        assert absence_prior_enabled(env=None) is True
-
-    @pytest.mark.parametrize("value", ["1", "true", "", "0", "false", "off", "maybe"])
-    def test_env_value_is_ignored(self, value: str) -> None:
-        # The ``env`` argument is accepted and ignored (retained for signature
-        # stability); any value -- truthy, falsy, or junk -- reads ON.
-        assert absence_prior_enabled(env={ENV_ABSENCE_PRIOR: value}) is True
-
-    def test_env_argument_is_not_mutated_and_reads_deterministically(self) -> None:
-        # The resolver never writes its env argument (pure read), so two calls on
-        # the same mapping agree and the mapping is unchanged.
-        env = {ENV_ABSENCE_PRIOR: "on", "AILIBI_OTHER": "x"}
-        before = dict(env)
-        assert absence_prior_enabled(env=env) is True
-        assert absence_prior_enabled(env=env) is True
-        assert env == before
-
-    def test_resolver_is_retired_to_always_on(self) -> None:
-        # Graduated at the 18.12 baseline-6 record: the lever moved out of the
-        # replay toggle table into the retired-always-on tuple (stamped True via
-        # ``dict.fromkeys``; no resolver identity binding survives).
-        assert "absence_prior" in _RETIRED_ALWAYS_ON_LEVERS
 
 
 # --------------------------------------------------------------------------- #
@@ -1043,9 +986,8 @@ class TestAbsencePriorOnCommittedBytes:
         voters: list[str],
         *,
         reporter: str | None,
-        env: dict[str, str],
     ) -> dict[str, dict[str, SuspicionEntry]]:
-        """Re-derive each voter's post-fold rows under ``env`` (OFF or ON).
+        """Re-derive each voter's post-fold rows from ``evidence``.
 
         ``reporter`` is the manager's exact predicate, computed by the caller:
         ``entry.triggered_by`` for a body report, ``None`` for an emergency
@@ -1187,6 +1129,14 @@ class TestAbsencePriorOnCommittedBytes:
                 widened_nonempty += 1
             widened_evidence = replace(evidence, absent=widened_absent)
 
+            # The OFF leg can no longer be PRODUCED: the delta is unconditional,
+            # so a re-derivation under the standing absent set is the only one
+            # this build can compute. ``off_rows`` and ``on_rows`` are therefore
+            # one derivation under two names -- kept because the widened column
+            # below is a real comparison against exactly this baseline, and
+            # because the cells the two names key stay the numbers the record was
+            # read against. A SECOND independent derivation still runs, so the
+            # determinism check below is not comparing an object to itself.
             off_rows = self._voter_rows(
                 entry,
                 graphs,
@@ -1194,7 +1144,6 @@ class TestAbsencePriorOnCommittedBytes:
                 evidence,
                 voters,
                 reporter=reporter,
-                env=_LEVER_OFF,
             )
             off_rows_again = self._voter_rows(
                 entry,
@@ -1203,11 +1152,8 @@ class TestAbsencePriorOnCommittedBytes:
                 evidence,
                 voters,
                 reporter=reporter,
-                env=_LEVER_OFF,
             )
-            on_rows = self._voter_rows(
-                entry, graphs, roles, evidence, voters, reporter=reporter, env=_LEVER_ON
-            )
+            on_rows = off_rows
             on_rows_widened = self._voter_rows(
                 entry,
                 graphs,
@@ -1215,7 +1161,6 @@ class TestAbsencePriorOnCommittedBytes:
                 widened_evidence,
                 voters,
                 reporter=reporter,
-                env=_LEVER_ON,
             )
             # Determinism: two OFF derivations agree row-for-row.
             for voter in voters:

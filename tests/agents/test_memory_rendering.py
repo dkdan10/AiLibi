@@ -23,15 +23,9 @@ from agents.memory.beliefs import ContradictionRef
 from agents.memory.episodic import EpisodicEvent
 from agents.memory.store import (
     DEFAULT_TOKEN_BUDGET,
-    ENV_COALESCED_MEMORY_RENDER,
-    ENV_SELF_LOCATION_TRAIL,
-    ENV_TASK_COMPLETION_FROM_EVENTS,
     SELF_LOCATION_TRAIL_MAX_SPANS,
     AgentMemory,
-    coalesced_memory_render_enabled,
     render_for_prompt,
-    self_location_trail_enabled,
-    task_completion_from_events_enabled,
 )
 from engine.world import WorldState, load_canonical_map
 from eval.leak_test import (
@@ -854,11 +848,6 @@ class TestCompletedTaskFromEvents:
     A living agent's owned set loses a map id only when that instance completes;
     redistribution only ADDS one. Unconditional since the baseline-7 record.
     """
-
-    def test_the_rule_is_unconditional(self) -> None:
-        for env in ({}, {ENV_TASK_COMPLETION_FROM_EVENTS: "0"}, None):
-            assert task_completion_from_events_enabled(env) is True
-
     def test_redistributed_task_displacing_pending_mints_no_completion(self) -> None:
         # The confirmed defect's shape: a crewmate holding ``upload_logs`` inherits
         # a victim's ``align_engine_output``, which sorts first and takes over
@@ -1536,7 +1525,6 @@ class TestMovementPerceptionRender:
 # The self-location trail (AILIBI_SELF_LOCATION_TRAIL, default-OFF).           #
 # --------------------------------------------------------------------------- #
 
-_TRAIL_ON: Mapping[str, str] = {ENV_SELF_LOCATION_TRAIL: "1"}
 _TRAIL_HEADER = "## Where you were:"
 _TRAIL_TRUNCATED = "- Earlier parts of your route are not listed."
 _TRAIL_ROUTE_PREFIX = "- Your route (t = tick): "
@@ -1607,11 +1595,6 @@ class TestSelfLocationTrail:
 
     Unconditional since the baseline-7 record.
     """
-
-    def test_the_trail_is_unconditional(self) -> None:
-        for env in ({}, {ENV_SELF_LOCATION_TRAIL: "0"}, None):
-            assert self_location_trail_enabled(env) is True
-
     def test_the_golden_comparison_bites(self) -> None:
         # The perturbation craft rule 2 asks for: one altered byte in the
         # expectation must fail the comparison the golden tests make.
@@ -1962,11 +1945,8 @@ class TestSelfLocationTrail:
             )
         )
 
-        for env in (_TRAIL_ON, None):
-            with pytest.raises(ValueError, match="disagree about tick 2"):
-                render_for_prompt(
-                    memory,
-                )
+        with pytest.raises(ValueError, match="disagree about tick 2"):
+            render_for_prompt(memory)
 
     def test_the_completed_task_room_agrees_with_the_trail_for_its_tick(self) -> None:
         fixture, _ = _load_fixture("self_location_trail")
@@ -2201,11 +2181,6 @@ class TestCoalescedMemoryRender:
 
     Unconditional since the baseline-7 record.
     """
-
-    def test_the_fold_is_unconditional(self) -> None:
-        for env in ({}, {ENV_COALESCED_MEMORY_RENDER: "0"}, None):
-            assert coalesced_memory_render_enabled(env) is True
-
     def test_render_matches_the_coalesced_golden(self) -> None:
         fixture, expected = _load_fixture("coalesced_memory_render")
         memory = _build_memory_from_fixture(fixture)
@@ -2664,7 +2639,6 @@ def test_a_lever_on_game_carries_its_coalesced_citations_through_the_meeting(
     participant the orchestrator wired, not against anything this test built.
     """
 
-    monkeypatch.setenv(ENV_COALESCED_MEMORY_RENDER, "1")
     client = _CitingFakeProvider()
     meetings, universes_per_meeting = _run_lever_on_game(
         tmp_path=tmp_path, client=client
@@ -2735,7 +2709,6 @@ def test_a_fabricated_citation_does_not_survive_the_same_meeting_path(
     # citations through unvalidated, the fabrication would land exactly like a
     # coalesced id does -- instead every recorded ballot comes back nulled and
     # marked, so the test above is checking entitlement, not shape.
-    monkeypatch.setenv(ENV_COALESCED_MEMORY_RENDER, "1")
     client = _CitingFakeProvider(fabricated_id=_FABRICATED_OBSERVATION_ID)
     meetings, universes_per_meeting = _run_lever_on_game(
         tmp_path=tmp_path, client=client

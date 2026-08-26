@@ -62,16 +62,31 @@ contract for each PR.
 ## Graduation sweeps (substrate levers)
 
 When a substrate lever graduates — its `AILIBI_*` env gate retired, its
-behavior unconditional, normally at a baseline adopting record — the graduating
-PR must ALSO sweep the prose. Grep the lever's snake_case name repo-wide and
-rewrite every docstring, comment, and doc line that still describes it as live
-or default-OFF: the lever stays in the substrate stamp for provenance, but
-nothing may still tell a reader it can be switched off. Stale "default-OFF"
-prose is exactly the drift class the Task-19.2 in-code sweep had to clean;
-sweeping at graduation is the structural fix that stops it regenerating. The
-registry in `orchestrator/replay.py` (`_RETIRED_ALWAYS_ON_LEVERS` /
-`_TOGGLEABLE_LEVER_RESOLVERS`) is the source of truth for which levers are
-still live.
+behavior unconditional, normally at a baseline adopting record — **delete the
+mechanism, keep the stamp key and one history line.** What goes: the
+`*_enabled()` resolver, the `ENV_*` constant and its `__all__` entry, the `env`
+parameter wherever no live resolver is reachable from that call chain, every
+`if <lever>_enabled():` guard (replaced by its always-taken side), and the tests
+that pin the parameter rather than the behavior. What stays: the lever's
+snake_case key in `orchestrator/replay.py::_RETIRED_ALWAYS_ON_LEVERS`, so a
+recording keeps self-describing its substrate and the loader can still refuse a
+legacy stamp recording it OFF — plus at most one trailing provenance line naming
+the adopting record.
+
+The prose sweep is still required; it is the smaller half. Grep the lever's
+snake_case name repo-wide and rewrite every docstring, comment, and doc line
+that still describes it as live or default-OFF: nothing may tell a reader it can
+be switched off. The registry in `orchestrator/replay.py`
+(`_RETIRED_ALWAYS_ON_LEVERS` / `_TOGGLEABLE_LEVER_RESOLVERS`) is the source of
+truth for which levers are still live.
+
+Keeping the shape is how nine dead resolvers accumulated across five
+graduations. Task 20.37 is the precedent for doing it properly: it swept both
+generations at once (seventeen resolvers, 332 source lines, 227 test env-lines)
+and left behind the structural gate that stops them regenerating —
+`tests/meetings/test_lever_registry.py` walks `agents/`, `meetings/` and
+`orchestrator/` with `ast` and fails on any `*_enabled` function that neither
+reads its `env` argument nor returns anything but a bare `True`.
 
 ## Craft rules (added at the Phase-20 planning PR)
 
@@ -89,9 +104,8 @@ them.
    checks the semantics it claims (entitlement, not just shape). A gate nobody
    can fail is prose.
 3. **Retire means delete.** When a lever graduates or a branch dies, delete the
-   resolver, its parameter, the dead `if`, and the tests that pin the parameter.
-   Keep only the stamp key (provenance) and one history line. The prose sweep
-   above is still required; it is the smaller half.
+   mechanism. "Graduation sweeps" above states the rule in full and names its
+   precedent; this applies to every dead branch, not only substrate levers.
 4. **No internal dialect on user-facing surfaces.** UI copy, rendered game
    prompts, spoken `free_text`, README and docs carry no task/audit ids, no
    threshold arithmetic, and no undefined jargon; a term that must survive is

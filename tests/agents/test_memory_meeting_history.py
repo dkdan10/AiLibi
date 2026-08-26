@@ -27,9 +27,7 @@ import pytest
 from agents.memory.beliefs import BeliefState
 from agents.memory.episodic import EpisodicEvent, MemoryStore
 from agents.memory.store import (
-    ENV_MEETING_OUTCOME_MEMORY,
     AgentMemory,
-    meeting_outcome_memory_enabled,
     record_meeting_outcome,
     render_for_prompt,
 )
@@ -410,16 +408,6 @@ def test_v2_encode_is_inert_to_meeting_history() -> None:
 # ---------------------------------------------------------------------------- #
 # The lever resolver
 # ---------------------------------------------------------------------------- #
-
-
-@pytest.mark.parametrize("value", ["", " ", "0", "false", "no", "maybe", "1", "on"])
-def test_the_channel_is_unconditional(value: str) -> None:
-    # Graduated at the baseline-7 record: no environment turns it off again.
-    assert meeting_outcome_memory_enabled({ENV_MEETING_OUTCOME_MEMORY: value})
-    assert meeting_outcome_memory_enabled({})
-    assert meeting_outcome_memory_enabled()
-
-
 # ---------------------------------------------------------------------------- #
 # OFF-path byte identity
 # ---------------------------------------------------------------------------- #
@@ -469,10 +457,8 @@ def test_the_announced_fields_reach_the_render() -> None:
 
 
 # ---------------------------------------------------------------------------- #
-# ON-path render — the block, line for line
+# The rendered block, line for line
 # ---------------------------------------------------------------------------- #
-
-_ON: Final[dict[str, str]] = {ENV_MEETING_OUTCOME_MEMORY: "1"}
 
 
 def _meetings_block(render: str) -> list[str]:
