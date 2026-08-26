@@ -29,14 +29,13 @@ import asyncio
 from collections.abc import Awaitable, Callable, Iterable, Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Final, TypeVar
+from typing import TypeVar
 
 import pytest
 from pydantic import BaseModel, TypeAdapter
 
 from agents.memory.episodic import EpisodicEvent
 from agents.memory.store import (
-    ENV_MEETING_OUTCOME_MEMORY,
     AgentMemory,
     render_for_prompt,
 )
@@ -2915,8 +2914,6 @@ class TestVentWitnessRecordsAccessor:
 # player's role, never a living player's and never a kill victim's.
 # ---------------------------------------------------------------------------
 
-_OUTCOME_MEMORY_ON: Final[dict[str, str]] = {ENV_MEETING_OUTCOME_MEMORY: "1"}
-
 
 class _PacingScriptedAgent:
     """A real :class:`TacticalAgent` behind a scripted intent stream.
@@ -3126,7 +3123,9 @@ class TestMeetingOutcomeAnnouncementPayload:
             )
             if agent_id == "p-2":
                 continue
-            render = render_for_prompt(agent.memory, env=_OUTCOME_MEMORY_ON)
+            render = render_for_prompt(
+                agent.memory,
+            )
             assert "p-2 was" not in render, agent_id
             # Every role the render DOES state is entitled: p-4's ejection and
             # nothing else, dated at or after the meeting that ejected them.

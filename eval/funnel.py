@@ -1059,12 +1059,21 @@ def compute_information_funnel(sample_dir: Path) -> InformationFunnelReport:
 # cross-check (every per-player suspicion in the committed vote prompts        #
 # reproduces exactly).                                                         #
 #                                                                              #
-# Accessor levers resolve against an EMPTY environment (``env={}``): the       #
-# instrument is pure and $0 (no ``AILIBI_*`` reads), and every committed set   #
-# was recorded lever-OFF, so the snapshots match the recorded bytes. A future  #
-# lever-ON recording diverges only in the J1-clamped rendered SCALAR, never in #
-# the raw decomposition this region reads — the vj rendered cross-check counts #
-# any such divergence instead of failing.                                      #
+# The accessors read no environment at all: every lever they once consulted    #
+# graduated, so the instrument is pure and $0 (no ``AILIBI_*`` reads) and the   #
+# snapshots reproduce the baseline-7 substrate the committed sets were          #
+# recorded under.                                                               #
+#                                                                               #
+# This walk reads the replay through ``eval.replay_walk``, which calls          #
+# ``read_all_entries`` directly and performs NO substrate check — unlike the    #
+# API replay loader, and unlike the audit workflows' re-extraction spine, which #
+# refuses a stamp naming a retired lever OFF. Run against a recording made      #
+# under an EARLIER substrate this region would therefore reconstruct current    #
+# always-on memory and belief state over legacy bytes, and the divergence is    #
+# NOT confined to the J1-clamped rendered scalar: retired rules (the absence    #
+# prior, the evidence-quality fold) move the typed decomposition too. The vj    #
+# rendered cross-check counts a rendered divergence but does not gate it, so    #
+# the committed sets are the only inputs these numbers are stated for.          #
 # --------------------------------------------------------------------------- #
 
 
@@ -1215,15 +1224,15 @@ def _walk_game_vj(
                     )
 
                 # Meeting-open snapshots off the PRODUCTION accessors, sorted
-                # like ``_build_participants``. ``env={}`` resolves every
-                # accessor lever OFF deterministically (see the region banner).
+                # like ``_build_participants``. The accessors consult no
+                # environment (see the region banner).
                 graph_by_voter: dict[PlayerId, tuple[SuspicionEntry, ...]] = {}
                 sightings_by_speaker: dict[PlayerId, tuple[SightingRecord, ...]] = {}
                 obs_ids_by_voter: dict[PlayerId, frozenset[str]] = {}
                 fellows_by_voter: dict[PlayerId, tuple[PlayerId, ...]] = {}
                 for pid in sorted(living):
                     agent = agents[pid]
-                    graph_by_voter[pid] = agent.suspicion_graph_for_meeting(env={})
+                    graph_by_voter[pid] = agent.suspicion_graph_for_meeting()
                     sightings_by_speaker[pid] = agent.sighting_records_for_meeting()
                     obs_ids_by_voter[pid] = frozenset(
                         agent.observation_ids_for_meeting()
@@ -1428,7 +1437,7 @@ def _whereabouts_lies_detected(meeting: _VJMeeting) -> int:
 # coverage sits where it does: whether the ~⅓ answer rate is uniform silence   #
 # or STRUCTURED refusal. The impostor prompt templates instruct impostors to   #
 # explain nothing about their own whereabouts, so the crew-vs-impostor split   #
-# is the calibration signal the §0.1.4 absence-prior re-measure needs (a lever #
+# is the calibration signal the §0.1.4 absence-prior re-measure needs (a rule  #
 # that removes roll-call answerers from the absent set must know whether a     #
 # non-answerer is crew going quiet or an impostor refusing by design); and the #
 # living − asked gap separates never-took-the-mic from the asked − answered    #

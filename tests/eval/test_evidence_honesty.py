@@ -34,14 +34,9 @@ from agents.memory import store as memory_store
 from agents.memory.episodic import EpisodicEvent, MemoryStore
 from agents.memory.store import (
     DEFAULT_TOKEN_BUDGET,
-    ENV_COALESCED_MEMORY_RENDER,
-    ENV_SELF_LOCATION_TRAIL,
-    ENV_TASK_COMPLETION_FROM_EVENTS,
     AgentMemory,
     _collect_self_location_spans,
     render_for_prompt,
-    self_location_trail_enabled,
-    task_completion_from_events_enabled,
 )
 from agents.memory.beliefs import OBSERVED_KILL_ACTION, OBSERVED_VENT_ACTION
 from agents.perception import (
@@ -114,9 +109,6 @@ from meetings.schemas import (
     WhereaboutsClaim,
 )
 from meetings.transcript import (
-    ENV_GROUNDED_PROSECUTION,
-    ENV_MAP_AWARE_ARBITRATION,
-    ENV_MOVEMENT_CLAIM_SHAPE,
     canonical_rooms,
     detect_contradictions,
     is_weak_contradiction,
@@ -1407,16 +1399,11 @@ def test_i5_fabricated_completion_pins(
         38,
         38,
     )
-    # The completed-task lever cannot move a cell here: I-5 is scored off the
-    # RECORDED prompt bytes, and this instrument exposes no lever slate by design
-    # (audits/audit-phase-20-preregistration.md §8) -- the ON census over the
-    # committed sets belongs to the offline counterfactual. Set the gate inside the
-    # test: the session-scoped hermetic guard clears the whole ``AILIBI_*``
-    # namespace, so a shell export is invisible under pytest.
-    monkeypatch.setenv(ENV_TASK_COMPLETION_FROM_EVENTS, "1")
-    assert task_completion_from_events_enabled() is True
-    lever_on = compute_evidence_honesty(_SAMPLES_4P1I)
-    assert _counts(lever_on.fabricated_completions.fabricated) == (0, 38)
+    # The completed-task rule cannot move a cell here: I-5 is scored off the
+    # RECORDED prompt bytes (audits/audit-phase-20-preregistration.md §8) -- the
+    # census over the committed sets belongs to the offline counterfactual.
+    rederived = compute_evidence_honesty(_SAMPLES_4P1I)
+    assert _counts(rederived.fabricated_completions.fabricated) == (0, 38)
 
 
 @pytest.mark.slow
@@ -1629,7 +1616,6 @@ def test_the_report_is_json_stable_and_leaks_no_identifiers(
 # Layer 4 — the self-location trail's offline counterfactual (Task 20.24).     #
 # --------------------------------------------------------------------------- #
 
-_TRAIL_ON: Mapping[str, str] = MappingProxyType({ENV_SELF_LOCATION_TRAIL: "1"})
 _TRAIL_ROUTE_PREFIX: Final[str] = "- Your route (t = tick): "
 _TRAIL_GAP_STEP: Final[str] = "(no record)"
 _TRAIL_TRUNCATED_NOTICE: Final[str] = "Earlier parts of your route are not listed."
@@ -1644,6 +1630,11 @@ _COMPLETED_ROOM: Final[re.Pattern[str]] = re.compile(
 _COOLDOWN_ROW: Final[re.Pattern[str]] = re.compile(
     r"\bYour kill cooldown is \d+ ticks\."
 )
+# The reported-testimony band BEFORE the coalesced render raised it: strictly
+# below every first-hand sighting band. Restated here as a plain number because
+# the production constant no longer holds it -- it is the counterfactual leg the
+# budget census below prices the band change against, not a live value.
+_PRE_COALESCE_REPORTED_BAND: Final[int] = 25
 
 
 def _rendered_trail_steps(view: str) -> list[tuple[int, int]]:
@@ -1788,7 +1779,8 @@ def _self_placement_census(sample_dir: Path) -> _SelfPlacementCensus:
                             composite, token_budget=DEFAULT_TOKEN_BUDGET
                         )
                         on = render_for_prompt(
-                            composite, token_budget=DEFAULT_TOKEN_BUDGET, env=_TRAIL_ON
+                            composite,
+                            token_budget=DEFAULT_TOKEN_BUDGET,
                         )
                         renders += 1
                         on_ticks[pid] = _rendered_trail_ticks(on)
@@ -1915,11 +1907,6 @@ def test_self_placement_coverage_pins(
             census.crew_claims,
             census.crew_claims,
         )
-    # Unconditional since the baseline-7 record: no ambient export can turn the
-    # trail off again, which is why both legs above render the same claims.
-    assert self_location_trail_enabled() is True
-    monkeypatch.setenv(ENV_SELF_LOCATION_TRAIL, "1")
-    assert self_location_trail_enabled() is True
 
 
 @pytest.mark.slow
@@ -1998,8 +1985,6 @@ def test_the_completed_task_row_names_the_engine_truth_room(
 # directions: the origin flags that stop minting, and the flags that newly mint
 # because a resolved destination placement now contradicts a subject who was
 # agreeing with the mis-spoken origin.
-
-_MOVEMENT_ON: Final[Mapping[str, str]] = {ENV_MOVEMENT_CLAIM_SHAPE: "1"}
 
 
 def _move_witness_records(
@@ -2210,7 +2195,6 @@ def _movement_census(sample_dir: Path) -> _MovementCensus:
                         roster=roster,
                         vent_witness_records=vents,
                         move_witness_records=moves,
-                        env=_MOVEMENT_ON,
                     )
                     counts["meetings"] += 1
                     counts["off_matches_recorded"] += int(
@@ -2580,11 +2564,6 @@ def test_the_price_of_the_lever_in_the_other_direction(
 # Phase-20 record actually runs) — with each speaker's sighting channel rebuilt
 # from the memory they actually held at that meeting.
 
-_GROUNDED_ON: Final[Mapping[str, str]] = {ENV_GROUNDED_PROSECUTION: "1"}
-_BOTH_LEVERS_ON: Final[Mapping[str, str]] = {
-    ENV_GROUNDED_PROSECUTION: "1",
-    ENV_MOVEMENT_CLAIM_SHAPE: "1",
-}
 # The vouch channel's tolerance, restated here so the "grounded share" cell is an
 # INDEPENDENT reading of the surviving flags rather than a second call into the
 # predicate that produced them.
@@ -2794,14 +2773,12 @@ def _grounded_census(sample_dir: Path) -> _GroundedCensus:
                         roster=roster,
                         vent_witness_records=vents,
                         sighting_records=sights,
-                        env=_GROUNDED_ON,
                     )
                     move_only = detect_contradictions(
                         entry.transcript,
                         roster=roster,
                         vent_witness_records=vents,
                         move_witness_records=moves,
-                        env=_MOVEMENT_ON,
                     )
                     both = detect_contradictions(
                         entry.transcript,
@@ -2809,7 +2786,6 @@ def _grounded_census(sample_dir: Path) -> _GroundedCensus:
                         vent_witness_records=vents,
                         move_witness_records=moves,
                         sighting_records=sights,
-                        env=_BOTH_LEVERS_ON,
                     )
                     counts["meetings"] += 1
                     counts["off_matches_recorded"] += int(
@@ -3134,8 +3110,6 @@ def test_the_sole_flag_wrongful_ejections_lose_their_strong_flag(
 # legs with the INSTRUMENT's own classifier, and pins the one place the gauge and
 # the mechanism deliberately disagree.
 
-_MAP_AWARE_ON: Final[Mapping[str, str]] = {ENV_MAP_AWARE_ARBITRATION: "1"}
-
 
 class _CorridorCensus(NamedTuple):
     """One committed set's I-6 counts on both legs, recounted from the bytes."""
@@ -3248,7 +3222,6 @@ def _corridor_census(sample_dir: Path) -> _CorridorCensus:
                 entry.transcript,
                 roster=roster,
                 vent_witness_records=vents,
-                env=_MAP_AWARE_ON,
             )
             counts["sighting_flags_match_recorded"] += int(
                 _sighting_flags(off) == _sighting_flags(entry.contradictions)
@@ -3453,7 +3426,6 @@ def test_the_ejections_that_lose_their_only_strong_flag(
 # Layer 4 — the coalesced render's offline counterfactual (Task 20.30).        #
 # --------------------------------------------------------------------------- #
 
-_COALESCE_ON: Mapping[str, str] = MappingProxyType({ENV_COALESCED_MEMORY_RENDER: "1"})
 # Any first-hand sighting-class row, per-tick or coalesced: the rows the fold
 # rewrites. The ``[obs ...]`` prefix is unconditional, so it anchors the match.
 _SIGHTING_ROW: Final[re.Pattern[str]] = re.compile(
@@ -3571,12 +3543,12 @@ def _render_budget_census(sample_dir: Path) -> _RenderBudgetCensus:
                         # must not read whatever the process environment happens
                         # to export.
                         off = render_for_prompt(
-                            composite, token_budget=DEFAULT_TOKEN_BUDGET, env={}
+                            composite,
+                            token_budget=DEFAULT_TOKEN_BUDGET,
                         )
                         on = render_for_prompt(
                             composite,
                             token_budget=DEFAULT_TOKEN_BUDGET,
-                            env=_COALESCE_ON,
                         )
                         snapshots += 1
                         rows_off += len(_RENDERED_ROW.findall(off))
@@ -3781,15 +3753,16 @@ def test_the_on_leg_does_not_reach_the_contracts_row_ceiling(
 def test_the_band_change_not_the_fold_is_what_costs_first_hand_coverage(
     render_budget: _RenderBudgetCensus, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # The lever's two halves, priced apart on the same walk: with the reported
-    # band left where the OFF path has it, the span + spawn fold alone renders
-    # FEWER rows that account for MORE first-hand subject-ticks than the OFF
-    # render -- it is compression, not loss. Raising the band is the half that
-    # spends that coverage, and this is where its price is stated.
+    # The coalesced render's two halves, priced apart on the same walk: with the
+    # reported band patched back to its PRE-coalesce value, the span + spawn fold
+    # alone renders FEWER rows that account for MORE first-hand subject-ticks
+    # than the recorded document -- it is compression, not loss. Raising the band
+    # is the half that spends that coverage, and this is where its price is
+    # stated.
     monkeypatch.setattr(
         memory_store,
-        "_SALIENCE_REPORTED_TESTIMONY_COALESCED",
-        memory_store._SALIENCE_REPORTED_TESTIMONY,
+        "_SALIENCE_REPORTED_TESTIMONY",
+        _PRE_COALESCE_REPORTED_BAND,
     )
 
     fold_only = _render_budget_census(_SAMPLES_9P2I)

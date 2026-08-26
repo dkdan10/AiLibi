@@ -44,25 +44,17 @@ A meeting is one ordered ``transcript.turns`` list followed by a vote:
    decay) stays the orchestrator-owned post-meeting absorb, exactly as
    the 9.8 design wired it.
 
-Roll-call round (Task 18.8, unconditional since baseline 6)
-===========================================================
+Roll-call round
+===============
 
-Task 18.8 adds a roll-call round between the opt-in phase (PHASE 3) and
-voting, behind :func:`roll_call_round_enabled` -- UNCONDITIONAL since the
-Task-18.12 baseline-6 record (the CREW-ONLY graduation slate; it was
-default-OFF and env-gated at Wave 1, retired to always-on once baseline 6
-adopted it, mirroring the 16.17 slate). Every living player who has not yet
-spoken takes one terminal
-``opt_in``-surface turn in ascending player-id order, executing the
-turn-taking routing of ``audits/audit-phase-17-absence-gate.md``
-Ruling 3(a). The measured cost is honest and large
-(``audits/audit-phase-18-planning.md`` §3.4): +3.13 turn calls/meeting
-at today's economy (496 -> 1057 turn calls over the 179-meeting
-canonical samples denominator, 2.13x), ~+36% meeting LLM calls -- the
-number the 18.11 gate and the 18.13 duration plan both quote. Skipping the
-round entirely -- the pre-graduation lever-OFF path -- held the allocation
-byte-identical to the pre-baseline-6 substrate; the committed substrate now
-runs the round on every meeting.
+A roll-call round sits between the opt-in phase (PHASE 3) and voting. Every
+living player who has not yet spoken takes one terminal ``opt_in``-surface turn
+in ascending player-id order, executing the turn-taking routing of
+``audits/audit-phase-17-absence-gate.md`` Ruling 3(a). The measured cost is
+honest and large (``audits/audit-phase-18-planning.md`` §3.4): +3.13 turn
+calls/meeting at today's economy (496 -> 1057 turn calls over the 179-meeting
+canonical samples denominator, 2.13x), ~+36% meeting LLM calls -- the number
+the 18.11 gate and the 18.13 duration plan both quote.
 
 Single per-turn chokepoint
 ===========================
@@ -101,7 +93,6 @@ import asyncio
 import re
 from collections.abc import Callable, Coroutine, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
-from types import MappingProxyType
 from typing import Any, Final, Literal, TypeVar
 
 from pydantic import ValidationError
@@ -111,14 +102,12 @@ from agents.memory.beliefs import (
     TESTIMONY_INDEPENDENCE_BAR,
     BeliefState,
     SuspicionProvenance,
-    absence_prior_enabled,
     apply_contradiction_rule,
     apply_meeting_evidence_rules,
-    reporter_exculpation_enabled,
 )
 from llm.client import LLMClient, LLMResponse
 from llm.provider import LLMCallFailure, extract_parse_failure
-from meetings.constants import DEFAULT_SKIP_CONFIDENCE_THRESHOLD, citation_gate_enabled
+from meetings.constants import DEFAULT_SKIP_CONFIDENCE_THRESHOLD
 from meetings.render_contract import (
     PromptRenderInputs,
     ReportPromptRenderer,
@@ -148,7 +137,6 @@ from meetings.schemas import (
     SawVentObservation,
     SightingRecord,
     TurnAnnotation,
-    TurnAnnotationKind,
     TurnId,
     TurnKind,
     VentWitnessRecord,
@@ -346,11 +334,8 @@ INVALID_OBSERVATION_ID_MARKER: Final[str] = (
 # ``primary_reason_id`` and ``primary_reason_observation_id`` are null after
 # validation (a fabricated citation has already been nulled by the
 # ``INVALID_REASON_ID_MARKER`` / ``INVALID_OBSERVATION_ID_MARKER`` passes
-# above, so it gates exactly like a bare null). The
-# ``citation_gate_enabled`` lever is UNCONDITIONAL since the Task-16.17
-# baseline-5 record (it was default-OFF at Task 16.6; graduated once
-# baseline 5 adopted it), so the gate -- and this marker -- is armed on
-# every production ballot. The gate coerces, never rejects (never a crash,
+# above, so it gates exactly like a bare null). The gate -- and this marker --
+# is armed on every production ballot, and it coerces, never rejects (never a crash,
 # never a re-prompt), so the marker preserves the original target for replay
 # / audit analysis and rides ``rationale_text`` into the recorded ballot the
 # spectator surface already reads (mirrors the ``INVALID_REASON_ID_MARKER``
@@ -370,12 +355,12 @@ UNCITED_ZERO_FLAG_EJECT_MARKER: Final[str] = (
     "[uncited zero-flag eject target {target!r} coerced to SKIP] "
 )
 
-# The lever-OFF shape of this fact; ON it records as a typed
-# :class:`~meetings.schemas.TurnAnnotation` instead
-# (:func:`structured_turn_markers_enabled`).
-# Audit-trail marker prepended to a turn's ``free_text`` when an
-# ``AccusationClaim`` names a ``target`` (``against``) that is not a living
-# meeting participant. qwen3.5:9b occasionally hallucinates an accusation
+# The recorded-bytes shape of the ``invalid_accusation_target`` annotation:
+# a marker earlier builds prepended to a turn's ``free_text`` when an
+# ``AccusationClaim`` named a ``target`` (``against``) that was not a living
+# meeting participant. A turn now carries the fact as a typed
+# :class:`~meetings.schemas.TurnAnnotation`; the literal survives so
+# ``api.replay_loader`` can project a committed transcript onto the same chips. qwen3.5:9b occasionally hallucinates an accusation
 # target id (e.g. ``"imp-2"``) that names no player. The reactive chain
 # already terminates on such a target (``next_chain_step`` ->
 # ``TERMINATION_TARGET_NOT_LIVING``), but the claim was still recorded into
@@ -392,12 +377,11 @@ INVALID_ACCUSATION_TARGET_MARKER: Final[str] = (
     "[invalid accusation target {target!r} dropped] "
 )
 
-# The lever-OFF shape of this fact; ON it records as a typed
-# :class:`~meetings.schemas.TurnAnnotation` instead
-# (:func:`structured_turn_markers_enabled`).
-# Audit-trail markers prepended to a turn's ``free_text`` when an
-# ``AlibiClaim`` / ``CorroborationClaim`` carries a subject-bearing field
-# (``subject`` / ``supports``) that is not a living meeting participant
+# The recorded-bytes shape of the ``invalid_alibi_subject`` /
+# ``invalid_corroboration_supports`` annotations: markers earlier builds
+# prepended to a turn's ``free_text`` when an
+# ``AlibiClaim`` / ``CorroborationClaim`` carried a subject-bearing field
+# (``subject`` / ``supports``) that was not a living meeting participant
 # (Task 10.2; audit gp-6 C-C-8, H-H-6). The fb3cfa5 guard above covered
 # accusation targets only, so the 9B's hallucinated structural ids -- a
 # game id (``"headless-seed-9"``) as an alibi subject / corroboration
@@ -475,11 +459,10 @@ OPENING_RETRY_FEEDBACK_DEMAND: Final[str] = (
     'roster above or explicitly write "unsure".'
 )
 
-# The lever-OFF shape of this fact; ON it records as a typed
-# :class:`~meetings.schemas.TurnAnnotation` instead
-# (:func:`structured_turn_markers_enabled`).
-# Audit-trail marker prefixed to a degraded opening's ``free_text`` (Task
-# 10.6; audit gp-5 H-H-2). A twice-failed opening whose failures were
+# The recorded-bytes shape of the ``opening_degraded_unsure`` annotation, kept
+# so ``api.replay_loader`` can project a committed transcript onto the same
+# chips: a marker earlier builds prefixed to a degraded opening's ``free_text``
+# (Task 10.6; audit gp-5 H-H-2). A twice-failed opening whose failures were
 # CONTENT-validation failures (the turn parsed but took no position --
 # e.g. its only accusation named a dead player and was guard-dropped)
 # degrades to an UNSURE opening built from the model's last parsed
@@ -520,11 +503,10 @@ EMERGENCY_NO_BODY_RETRY_FEEDBACK: Final[str] = (
     '"unsure".'
 )
 
-# The lever-OFF shape of this fact; ON it records as a typed
-# :class:`~meetings.schemas.TurnAnnotation` instead
-# (:func:`structured_turn_markers_enabled`).
-# Audit-trail marker prefixed to an EMERGENCY opening's ``free_text`` when a
-# fabricated found_body is DETERMINISTICALLY stripped (Task 10.11.1). The v7
+# The recorded-bytes shape of the ``fabricated_opening`` annotation, kept so
+# ``api.replay_loader`` can project a committed transcript onto the same chips:
+# a marker earlier builds prefixed to an EMERGENCY opening's ``free_text`` when
+# a fabricated found_body was DETERMINISTICALLY stripped (Task 10.11.1). The v7
 # prompt and the single retry are best-effort; this strip is the layered-defense
 # backstop that makes ``orchestrator.game._assert_no_emergency_opening_body``
 # unreachable (the recorded opening never carries a body), so the fail-loud
@@ -629,8 +611,7 @@ class MeetingParticipant:
     firewall-correct value for a crewmate.
 
     ``rerender_memory`` is the Task 13.5.5 unfreeze hook. The orchestrator
-    attaches it unconditionally since Task 14.9 (the adopted lever is the
-    default substrate); the manager stays env-free and hook-driven, so a
+    attaches it unconditionally; the manager stays env-free and hook-driven, so a
     ``None`` (the structural default, e.g. a direct-construction test or
     tooling participant) keeps the frozen open-tick ``rendered_memory`` for
     the ballot too. When a hook is attached the manager
@@ -661,27 +642,23 @@ class MeetingParticipant:
     orchestrator populates it from
     ``MeetingAwareAgent.sighting_records_for_meeting()`` (episodic memory,
     self-channel only, so it is firewall-clean). It has two consuming seams,
-    at different stages of graduation. The manager threads the per-speaker
+    at different stages of wiring. The manager threads the per-speaker
     mapping into every
-    :func:`meetings.transcript.detect_contradictions` call, where the
-    grounded-prosecution lever
-    (:func:`meetings.transcript.grounded_prosecution_enabled`, GRADUATED)
-    checks a spoken sighting against the speaker's own record before it can
-    band an ``alibi_vs_sighting`` flag STRONG; with the lever off the mapping
-    is read by nothing. The VOUCH seam -- the ``sighting_records`` parameter of
+    :func:`meetings.transcript.detect_contradictions` call, where grounded
+    prosecution checks a spoken sighting against the speaker's own record
+    before it can band an ``alibi_vs_sighting`` flag STRONG. The VOUCH seam -- the ``sighting_records`` parameter of
     :func:`derive_belief_evidence`, which routes the same rows through
     :func:`meetings.transcript.grounded_vouch_subjects` into the
     relevance-gated ``corroborated`` set -- stays fixture-pinned and unfed,
     because feeding it moves committed ballot-prompt bytes at rest. The
     channel never reaches a prompt surface. The default ``()`` keeps every
     existing construction site valid and means "this speaker grounds nothing":
-    their spoken sightings are ordinary testimony that exculpates no one and,
-    under the lever, convicts no one.
+    their spoken sightings are ordinary testimony that exculpates no one and
+    convicts no one.
 
     ``move_witness_records`` is the vent channel's movement sibling: the
     participant's OWN typed witnessed-transition channel, the grounding input
-    behind the default-OFF movement-claim lever
-    (:func:`meetings.transcript.movement_claim_shape_enabled`). The
+    the movement-claim chokepoint reads. The
     orchestrator populates it from
     ``MoveWitnessAgent.move_witness_records_for_meeting()`` (episodic memory,
     self-channel only, so it is firewall-clean); the manager threads the
@@ -699,10 +676,8 @@ class MeetingParticipant:
     own memory rows and leak nothing). The manager consults it in exactly ONE
     place, :func:`_normalize_ballot_observation_id`: a cited id outside this
     set is nulled with the audit marker. It never reaches a prompt surface;
-    the validated citation's one downstream consumer is the Task 16.6
-    citation gate (:func:`guard_ballot_citation`, UNCONDITIONAL since the
-    Task-16.17 baseline-5 record; it was a default-OFF lever at 16.6). The
-    default ``()`` keeps every existing construction site valid and means
+    the validated citation's one downstream consumer is the citation gate
+    (:func:`guard_ballot_citation`). The default ``()`` keeps every existing construction site valid and means
     "this voter can cite nothing": any non-null citation from such a
     participant nulls.
 
@@ -713,7 +688,7 @@ class MeetingParticipant:
     into every render seam as the ``persona`` kwarg the widened renderer
     Protocols accept. The default ``""`` keeps every existing construction site
     valid and renders byte-identically until 16.16 edits the templates (the
-    widen-the-contract-inert pattern; the 15.5 reporter lever precedent).
+    widen-the-contract-inert pattern).
     """
 
     agent_id: PlayerId
@@ -866,118 +841,6 @@ class DefaultedCall:
     # verdict) and for a vote default recorded before this field existed (the
     # reader tolerates its absence; the committed single-era sets carry none).
     rendered_vote_max: float | None = None
-
-
-# Task 18.8 roll-call-round lever — UNCONDITIONAL since the Task-18.12 baseline-6
-# record (the meeting-layer graduation slate, audits/audit-phase-18-baseline-6.md
-# §0.1; the CREW-ONLY ruling of audits/audit-phase-18-meeting-gate.md §9). The
-# lever was adopted by the baseline-6 re-record, so — mirroring the
-# 14.9/14.12/15.7/16.17 graduations — it is now the default substrate rather than
-# an env-gated toggle: :meth:`MeetingManager.run` always inserts the roll-call
-# round. This is byte-identical to the baseline-6 recording (which ran the lever
-# ON), and it lets the committed set reconstruct/serve under a BARE environment
-# (no AILIBI_* export). The lever is stamped unconditionally ON via
-# ``orchestrator.replay._RETIRED_ALWAYS_ON_LEVERS``; a stamp recording it OFF is a
-# legacy (baseline-5-or-earlier) artifact that fails loud (no cross-substrate
-# replay). ``ENV_ROLL_CALL_ROUND`` is retained (no longer read) for the stamp
-# key's naming provenance and backward-compatible imports.
-ENV_ROLL_CALL_ROUND: Final[str] = "AILIBI_ROLL_CALL_ROUND"
-
-
-def roll_call_round_enabled(env: Mapping[str, str] | None = None) -> bool:
-    """Whether the Task 18.8 roll-call-round lever is ON — now always True.
-
-    Retired to UNCONDITIONAL at the Task-18.12 baseline-6 record (the 16.17 move,
-    applied to this lever once baseline 6 adopted it per the CREW-ONLY graduation
-    slate — the probe's live crew roll-call coverage cleared the ratified >= 0.60
-    bar, audits/audit-phase-18-meeting-gate.md §7). The round is inserted at
-    exactly ONE call site in :meth:`MeetingManager.run` (after the opt-in phase,
-    before ballots). The ``env`` argument is accepted and ignored (retained so the
-    call site and the substrate stamp read one source of truth without a signature
-    churn).
-
-    ON inserts the roll-call round after the opt-in phase and before ballots:
-    every living player who has not yet spoken takes exactly one terminal
-    ``opt_in``-surface turn (the existing role-blind info-share whereabouts
-    ask; what impostor templates DO with it is Task 18.10's separate arm) in
-    ascending player-id order. This is the turn-allocation surface
-    ``audits/audit-phase-17-absence-gate.md`` Ruling 3(a) routes to Phase 18,
-    and the only surface that can reach the ratified >= 0.60 crew roll-call
-    coverage clause (template asks cap coverage at 496/1057 = 0.469).
-
-    THE MEASURED COST (``audits/audit-phase-18-planning.md`` §3.4, the
-    turn-taking decomposition): on the canonical samples (179 meetings; living
-    player-meetings 1057, took >= 1 turn 496), 561/1057 = 53% of living
-    player-meetings never speak, so the round adds +3.13 turn calls/meeting
-    (496 -> 1057 turn calls over the samples denominator, 2.13x), ~+36% meeting
-    LLM calls -- the number the 18.11 gate memo and the 18.13 duration plan
-    both quote. The live measurement against the ratified bar was Task 18.11
-    (the meeting-layer gate); the graduation flip is this record, Task 18.12 (the
-    baseline-6 adopting record).
-    """
-
-    del env  # retired: the lever is unconditional, no environment is consulted
-    return True
-
-
-# The structured-turn-marker lever -- UNCONDITIONAL since the baseline-7 record.
-# ``ENV_STRUCTURED_TURN_MARKERS`` is retained (no longer read) for the stamp key's
-# naming provenance and backward-compatible imports.
-ENV_STRUCTURED_TURN_MARKERS: Final[str] = "AILIBI_STRUCTURED_TURN_MARKERS"
-
-
-def structured_turn_markers_enabled(env: Mapping[str, str] | None = None) -> bool:
-    """Whether a turn's audit markers stay OUT of its ``free_text`` -- always True.
-
-    :meth:`MeetingManager._collect_turn` records what its guards changed as typed
-    :class:`~meetings.schemas.TurnAnnotation` rows on the turn, and ``free_text``
-    is exactly what the model authored, so no later speaker's prompt renders an
-    audit marker inside quoted dialogue. The ``env`` argument is accepted and
-    ignored, so the read sites and the substrate stamp keep one source of truth
-    without a signature churn.
-
-    Graduated at the baseline-7 record (audits/audit-phase-20-baseline-7.md §6.1).
-    """
-
-    del env  # retired: the lever is unconditional, no environment is consulted
-    return True
-
-
-# The turn-side audit markers, keyed by the annotation kind that replaces them.
-# One table, so the ON and OFF shapes of the same fact cannot drift and the
-# spectator can project both onto one chip vocabulary
-# (``api.replay_loader._TURN_PREFIX_MARKERS`` imports the same constants).
-_TURN_ANNOTATION_MARKERS: Final[Mapping[TurnAnnotationKind, str]] = MappingProxyType(
-    {
-        "invalid_accusation_target": INVALID_ACCUSATION_TARGET_MARKER,
-        "invalid_alibi_subject": INVALID_ALIBI_SUBJECT_MARKER,
-        "invalid_corroboration_supports": INVALID_CORROBORATION_SUPPORTS_MARKER,
-        "fabricated_opening": EMERGENCY_BODY_STRIP_MARKER,
-        "opening_degraded_unsure": OPENING_UNSURE_DEGRADE_MARKER,
-    }
-)
-
-
-def _turn_annotation_marker(annotation: TurnAnnotation) -> str:
-    """Render one annotation as the ``free_text`` audit marker (lever OFF).
-
-    The payload field name is read off the template rather than repeated here
-    (``"{target!r}"`` -> ``target``), the same partition
-    ``api.replay_loader._marker_pattern`` uses to parse one back, so a marker
-    rename cannot silently break either direction.
-    """
-
-    template = _TURN_ANNOTATION_MARKERS[annotation.kind]
-    if annotation.original is None:
-        return template
-    field_name = template.partition("{")[2].partition("!")[0]
-    return template.format(**{field_name: annotation.original})
-
-
-def _turn_marker_prefix(annotations: Iterable[TurnAnnotation]) -> str:
-    """The concatenated audit-marker prefix for ``annotations``, in order."""
-
-    return "".join(_turn_annotation_marker(annotation) for annotation in annotations)
 
 
 class MeetingManager:
@@ -1163,17 +1026,17 @@ class MeetingManager:
             for participant in ordered_participants
             if participant.vent_witness_records
         }
-        # The movement-claim lever's grounding channel, threaded the same way:
-        # one source for every detection below. Inert while the lever is off.
+        # The movement-claim grounding channel, threaded the same way: one
+        # source for every detection below.
         move_witness_records: Mapping[PlayerId, tuple[MoveWitnessRecord, ...]] = {
             participant.agent_id: participant.move_witness_records
             for participant in ordered_participants
             if participant.move_witness_records
         }
-        # The grounded-prosecution lever's channel -- the same first-hand
-        # sighting rows the grounded-vouch path reads, threaded into detection
-        # so a spoken sighting can be checked against the speaker's own record
-        # before it convicts. Inert while the lever is off.
+        # The grounded-prosecution channel -- the same first-hand sighting
+        # rows the grounded-vouch path reads, threaded into detection so a
+        # spoken sighting can be checked against the speaker's own record
+        # before it convicts.
         #
         # The §4.7 TEAMMATE firewall is applied HERE, not inherited: the
         # accessor keeps an impostor's rows naming a fellow impostor because
@@ -1302,50 +1165,42 @@ class MeetingManager:
             turns.append(opt_in_turn)
             spoken.add(opt_in_id)
 
-        # Roll-call round (Task 18.8) -- UNCONDITIONAL since the Task-18.12
-        # baseline-6 record behind :func:`roll_call_round_enabled` (it was
-        # DEFAULT-OFF and env-gated at Wave 1, retired to always-on once
-        # baseline 6 adopted it). Every living player who has not yet spoken
-        # -- the Phase-3 co-presence gate leaves 53% of living
-        # player-meetings silent (audits/audit-phase-18-planning.md §3.4) --
-        # takes one terminal ``opt_in``-surface turn in ascending player-id
-        # order, the turn-allocation routing
-        # audits/audit-phase-17-absence-gate.md Ruling 3(a) sends to Phase 18.
-        # The ENTIRE round stays path-gated on the bare resolver call, which
-        # now always returns True: skipping this block was the byte-identical
-        # code path (and allocation) of the pre-baseline-6 committed
-        # substrate. Each turn reuses the existing opt-in surface through the
-        # single per-turn chokepoint, so it inherits the same guards and the
-        # same deadline/default fail-soft (no ``retries`` -- a defaulted
-        # roll-call turn is recorded exactly like a defaulted opt-in). NOT
-        # co-presence-gated: every living non-speaker is asked, so
+        # The roll-call round. Every living player who has not yet spoken --
+        # the Phase-3 co-presence gate leaves 53% of living player-meetings
+        # silent (audits/audit-phase-18-planning.md §3.4) -- takes one terminal
+        # ``opt_in``-surface turn in ascending player-id order, the
+        # turn-allocation routing audits/audit-phase-17-absence-gate.md
+        # Ruling 3(a) sends to Phase 18. Each turn reuses the existing opt-in
+        # surface through the single per-turn chokepoint, so it inherits the
+        # same guards and the same deadline/default fail-soft (no ``retries``
+        # -- a defaulted roll-call turn is recorded exactly like a defaulted
+        # opt-in). NOT co-presence-gated: every living non-speaker is asked, so
         # ``_opt_in_eligible_ids`` is deliberately not reused here.
-        if roll_call_round_enabled():
-            for roll_call_id in sorted(roster - spoken):
-                transcript_so_far = MeetingTranscript(turns=tuple(turns))
-                contradictions_so_far = detect_contradictions(
-                    transcript_so_far,
-                    roster=roster,
-                    vent_witness_records=vent_witness_records,
-                    move_witness_records=move_witness_records,
-                    sighting_records=sighting_records,
-                )
-                roll_call_turn = await self._collect_turn(
-                    meeting_id=meeting_id,
-                    trigger=trigger,
-                    participant=by_id[roll_call_id],
-                    living_ids=roster,
-                    dead_ids=dead_ids,
-                    render_inputs=render_inputs,
-                    turn_index=len(turns),
-                    turn_kind="opt_in",
-                    reply_to=None,
-                    prior_turn=None,
-                    transcript_so_far=transcript_so_far,
-                    contradictions=contradictions_so_far,
-                )
-                turns.append(roll_call_turn)
-                spoken.add(roll_call_id)
+        for roll_call_id in sorted(roster - spoken):
+            transcript_so_far = MeetingTranscript(turns=tuple(turns))
+            contradictions_so_far = detect_contradictions(
+                transcript_so_far,
+                roster=roster,
+                vent_witness_records=vent_witness_records,
+                move_witness_records=move_witness_records,
+                sighting_records=sighting_records,
+            )
+            roll_call_turn = await self._collect_turn(
+                meeting_id=meeting_id,
+                trigger=trigger,
+                participant=by_id[roll_call_id],
+                living_ids=roster,
+                dead_ids=dead_ids,
+                render_inputs=render_inputs,
+                turn_index=len(turns),
+                turn_kind="opt_in",
+                reply_to=None,
+                prior_turn=None,
+                transcript_so_far=transcript_so_far,
+                contradictions=contradictions_so_far,
+            )
+            turns.append(roll_call_turn)
+            spoken.add(roll_call_id)
 
         transcript = MeetingTranscript(turns=tuple(turns))
 
@@ -1376,15 +1231,13 @@ class MeetingManager:
             sighting_records=sighting_records,
         )
         # The VOUCH half of the sighting channel is still not threaded here.
-        # Detection above now receives the per-speaker mapping (the
-        # grounded-prosecution lever grounds a spoken sighting before it can
-        # convict, and reads nothing while the lever is off), but passing the
-        # same mapping into :func:`derive_belief_evidence` would feed the -0.05
-        # exculpation channel and move committed ballot-prompt bytes at rest --
-        # committed transcripts already carry speaker-groundable sightings
-        # (9p2i seed-0 meeting-0: p-5/p-6 mutual grounded vouches). That feed
-        # graduates behind its own lever (Task 16.7's mechanism is complete and
-        # fixture-pinned behind the parameter).
+        # Detection above receives the per-speaker mapping (grounding a spoken
+        # sighting before it can convict), but passing the same mapping into
+        # :func:`derive_belief_evidence` would feed the -0.05 exculpation
+        # channel and move committed ballot-prompt bytes at rest -- committed
+        # transcripts already carry speaker-groundable sightings (9p2i seed-0
+        # meeting-0: p-5/p-6 mutual grounded vouches). Task 16.7's mechanism is
+        # complete and fixture-pinned behind the parameter, unfed.
         evidence = derive_belief_evidence(
             transcript, contradictions=contradictions, roster=roster
         )
@@ -1509,9 +1362,6 @@ class MeetingManager:
         )
         prompt = base_prompt
         turn_id = _turn_id(meeting_id=meeting_id, turn_index=turn_index)
-        # Resolved ONCE per turn and threaded to both recording branches below,
-        # so a mid-turn environment change cannot record half a turn each way.
-        structured_markers = structured_turn_markers_enabled()
         # The trigger kind of the LAST failed attempt, recorded with the
         # default so the orchestrator can name it (deadline vs validation).
         trigger_kind: DefaultTrigger = "deadline"
@@ -1621,8 +1471,7 @@ class MeetingManager:
             # here -- BEFORE the turn is recorded -- so a dropped subject
             # never mints a contradiction flag and never materialises a
             # belief row; each dropped claim's original value is preserved
-            # on the turn as a typed annotation (rendered into ``free_text``
-            # as its audit marker when the lever is off).
+            # on the turn as a typed annotation.
             validated_claims, drop_annotations = _drop_non_roster_claims(
                 guarded_claims, living_ids=living_ids
             )
@@ -1700,14 +1549,10 @@ class MeetingManager:
                     )
                 )
                 continue
-            # The one branch the lever moves: what a guard changed is either a
-            # typed row ON the turn or a marker string INSIDE the spoken text.
+            # What a guard changed is a typed row ON the turn; ``free_text`` is
+            # exactly what the model authored.
             free_text = parsed.free_text
-            recorded_annotations: tuple[TurnAnnotation, ...] = ()
-            if structured_markers:
-                recorded_annotations = drop_annotations
-            elif drop_annotations:
-                free_text = _turn_marker_prefix(drop_annotations) + free_text
+            recorded_annotations: tuple[TurnAnnotation, ...] = drop_annotations
             # This turn parsed, but an earlier retry attempt may have raised a
             # provider parse-failure the recording client never logged. Surface
             # that burned spend so it is recorded even though no default fired
@@ -1766,13 +1611,8 @@ class MeetingManager:
                 reply_to=reply_to,
                 observations=positionless_opening.observations,
                 claims=positionless_opening.claims,
-                free_text=(
-                    positionless_opening.free_text
-                    if structured_markers
-                    else _turn_marker_prefix(degrade_annotations)
-                    + positionless_opening.free_text
-                ),
-                annotations=degrade_annotations if structured_markers else (),
+                free_text=positionless_opening.free_text,
+                annotations=degrade_annotations,
             )
         return _default_turn(
             turn_id=turn_id,
@@ -1807,7 +1647,7 @@ class MeetingManager:
         )
         # Task 13.5.5: turn prompts always read the frozen open-tick render.
         # A turn carries NO ``suspicion_graph`` kwarg (the belief-line-vs-graph
-        # divergence the unfreeze lever targets exists only at the ballot), and
+        # divergence the unfreeze hook targets exists only at the ballot), and
         # the running meeting evidence already reaches speakers via the
         # transcript -- so re-rendering here would change nothing it needs.
         if turn_kind == "opening":
@@ -1929,16 +1769,14 @@ class MeetingManager:
         # any soft lift landing on them; the render annotation is THREADED
         # for that same ballot, and whether it renders is the serving
         # template's call (only the reporter-aware ``qwen3_32b`` v6 /
-        # ``qwen3_6_27b`` ballots read ``reporter_id``). Both halves read the
-        # one ``reporter_exculpation_enabled`` resolver, which now
-        # hard-returns True; an emergency call (``None`` reporter) is the one
-        # ballot where NEITHER half is armed -- no fold cap, no threaded
+        # ``qwen3_6_27b`` ballots read ``reporter_id``). An emergency call
+        # (``None`` reporter) arms neither half -- no fold cap, no threaded
         # annotation. A body report arms both, though each can be inert (no
         # soft lift to cap; a reporter-unaware template).
         reporter_id = (
             trigger.triggered_by if not _trigger_is_emergency(trigger) else None
         )
-        render_reporter = reporter_id if reporter_exculpation_enabled() else None
+        render_reporter = reporter_id
         # Belief Rule 2 (DESIGN.md §6.3): a detected contradiction lifts the
         # contradicted subject's suspicion in this voter's graph before the
         # ballot prompt renders, so the vote sees the detected lie reflected
@@ -1953,14 +1791,11 @@ class MeetingManager:
             contradictions=contradictions,
             fellow_impostor_ids=participant.fellow_impostor_ids,
             evidence=evidence,
-            # Task 14.10: the transcript carries the self-refuted-alibi
-            # signal for the evidence-quality downgrade (derived inside the
-            # fold; the lever is unconditional since the Task-14.12 close --
-            # it was default-OFF at 14.10 -- so the downgrade always applies).
+            # The transcript carries the self-refuted-alibi signal for the
+            # evidence-quality downgrade (derived inside the fold).
             transcript=transcript,
-            # Task 15.5: the body-report reporter, damped in the pre-vote fold
-            # whenever it is non-None (the reporter_exculpation lever is
-            # unconditional since the Task-15.7 record; default-OFF at 15.5).
+            # The body-report reporter, damped in the pre-vote fold whenever it
+            # is non-None.
             reporter=reporter_id,
         )
         # Task 13.5.5: when the unfreeze hook is attached (unconditionally by
@@ -1987,11 +1822,9 @@ class MeetingManager:
             candidate_targets=candidate_targets,
             skip_confidence_threshold=self._config.skip_confidence_threshold,
             fellow_impostor_ids=participant.fellow_impostor_ids,
-            # Task 15.5: names the reporter + states the base rate. The
-            # reporter_exculpation lever is unconditional since the Task-15.7
-            # record (default-OFF at 15.5), so the kwarg is THREADED for every
-            # body report (``None`` only for an emergency call, which has no
-            # reporter); whether an annotation RENDERS is the serving
+            # Names the reporter + states the base rate. The kwarg is THREADED
+            # for every body report (``None`` only for an emergency call, which
+            # has no reporter); whether an annotation RENDERS is the serving
             # template's call -- only the reporter-aware ballots reference
             # ``reporter_id`` (``qwen3_32b`` v6, where the 15.5 bump landed,
             # and ``qwen3_6_27b``); the other sets ignore the kwarg.
@@ -2192,17 +2025,11 @@ class MeetingManager:
         # with :data:`UNCITED_ZERO_FLAG_EJECT_MARKER` -- mark-and-coerce,
         # never a crash, never a re-prompt. The POST-REDIRECT slot is the
         # contract: a redirected ballot is judged on the REDIRECTED target's
-        # flag status, not the original's. ``citation_gate_enabled`` is
-        # UNCONDITIONAL since the Task-16.17 baseline-5 record (default-OFF at
-        # 16.6), so the guard below ALWAYS runs on a production ballot -- the
-        # ``if`` reads the always-True resolver, keeping the one lever seam.
-        # Skipping the guard entirely was byte-identical to the committed
-        # baseline-3/4 substrate; that is history, not today's chain output.
-        if citation_gate_enabled():
-            normalized = guard_ballot_citation(
-                ballot=normalized,
-                contradictions=contradictions,
-            )
+        # flag status, not the original's.
+        normalized = guard_ballot_citation(
+            ballot=normalized,
+            contradictions=contradictions,
+        )
         return normalized.model_copy(update={"voter": participant.agent_id})
 
     # -- Resolution -------------------------------------------------------
@@ -2497,7 +2324,6 @@ def _suspicion_graph_with_contradictions(
     evidence: MeetingBeliefEvidence | None = None,
     transcript: MeetingTranscript | None = None,
     reporter: PlayerId | None = None,
-    env: Mapping[str, str] | None = None,
 ) -> tuple[SuspicionEntry, ...]:
     """Apply belief Rule 2 + the pre-vote fold to a voter's graph (§6.3, §4.6).
 
@@ -2558,10 +2384,8 @@ def _suspicion_graph_with_contradictions(
     is the data channel for the fold's self-refuted-alibi downgrade:
     :func:`agents.memory.beliefs.apply_contradiction_rule` derives the
     self-refutation signal from it at fold time
-    (:func:`meetings.transcript.self_refuted_alibi_claim_ids`). The lever is
-    UNCONDITIONAL since the Task-14.12 close (the 14.9 move for the 13.5
-    levers, applied to this lever after baseline 2 adopted it), so a
-    contradiction fold now ALWAYS requires the transcript: folding
+    (:func:`meetings.transcript.self_refuted_alibi_claim_ids`), so a
+    contradiction fold ALWAYS requires the transcript: folding
     contradictions WITHOUT one fails loud below (PR #217 review) -- the graph
     would otherwise silently skip the self-refuted-alibi downgrade and render
     values the run's stamped substrate says cannot exist (AGENTS.md "no silent
@@ -2571,34 +2395,23 @@ def _suspicion_graph_with_contradictions(
     baseline-3 record (it was default-OFF at 15.5; graduated once baseline 3
     adopted it). ``reporter`` is the body-report meeting's own reporter
     (``None`` for an emergency call), passed straight into the pre-vote
-    :func:`agents.memory.beliefs.apply_meeting_evidence_rules` fold, which reads
-    :func:`agents.memory.beliefs.reporter_exculpation_enabled` -- now
-    hard-returning True -- before damping: the reporter's soft accusation lift
-    is capped so proximity-at-discovery no longer reads as guilt. The cap
-    bites only when soft lift actually lands on the reporter this meeting (an
-    accusation-spread or absence delta); a reporter taking no soft lift -- and
-    the ``None`` reporter of an emergency call -- leaves this path
-    byte-identical. ``env`` is still accepted by the resolver (and ignored since
-    the graduation), so an offline counterfactual can thread a mapping without
-    mutating ``os.environ``.
+    :func:`agents.memory.beliefs.apply_meeting_evidence_rules` fold, which caps
+    the reporter's soft accusation lift so proximity-at-discovery no longer
+    reads as guilt. The cap bites only when soft lift actually lands on the
+    reporter this meeting (an accusation-spread or absence delta); a reporter
+    taking no soft lift -- and the ``None`` reporter of an emergency call --
+    leaves this path untouched.
 
-    Absence prior (Task 16.8) -- UNCONDITIONAL since the Task-18.12 baseline-6
-    record (it was default-OFF at 16.8; the Phase-16 slate recorded STAY-OFF,
-    audits/audit-phase-17-absence-gate.md Ruling 3 re-routed the decision to
-    Phase 18, and the 18.11 meeting-layer gate cleared the ratified bar).
-    ``evidence.absent`` -- the living roster minus the players public testimony
-    placed (:func:`meetings.transcript.absent_players`) -- is threaded into the
-    same pre-vote fold, where each absent subject takes the TRANSIENT
-    :data:`agents.memory.beliefs.ABSENCE_SUSPICION_DELTA` through
-    :func:`agents.memory.beliefs.absence_prior_enabled` (``env``-accepted and
-    ignored, like the reporter damp). The lift composes through the fold's
-    existing ceilings AND this function's joint cap below -- absence + a strong
-    flag caps at ``prior + 0.30`` like every other stack -- and it moves
-    suspicion only (no :class:`ContradictionRef` is minted), so the 16.6
-    citation gate's zero-flag boundary never sees it. An absence-only meeting
-    with a non-empty absent set therefore ALWAYS enters the fold path (the
-    ``folds`` guard re-reads the same always-True resolver); an EMPTY absent
-    set stays the no-op that leaves the graph byte-identical.
+    Absence prior. ``evidence.absent`` -- the living roster minus the players
+    public testimony placed (:func:`meetings.transcript.absent_players`) -- is
+    threaded into the same pre-vote fold, where each absent subject takes the
+    TRANSIENT :data:`agents.memory.beliefs.ABSENCE_SUSPICION_DELTA`. The lift
+    composes through the fold's existing ceilings AND this function's joint cap
+    below -- absence + a strong flag caps at ``prior + 0.30`` like every other
+    stack -- and it moves suspicion only (no :class:`ContradictionRef` is
+    minted), so the citation gate's zero-flag boundary never sees it. An
+    absence-only meeting with a non-empty absent set therefore enters the fold
+    path; an EMPTY absent set stays a no-op.
     """
 
     # Task 14.10 fail-loud seam guard (PR #217 review; unconditional since the
@@ -2616,19 +2429,13 @@ def _suspicion_graph_with_contradictions(
         )
 
     teammates = frozenset(fellow_impostor_ids)
-    # Task 16.8: a meeting whose ONLY pre-vote evidence is a non-empty absent
-    # set ALWAYS takes the fold path -- the absence_prior lever is
-    # unconditional since the Task-18.12 baseline-6 record (default-OFF at
-    # 16.8). The path stays gated on the resolver rather than on the delta
-    # alone: that structure is what kept the lever-OFF control flow, and
-    # therefore the emitted rows, identical to the pre-16.8 graph, and it now
-    # keeps this guard and the fold reading ONE resolver (the fold re-checks
-    # it before applying the delta).
+    # A meeting whose ONLY pre-vote evidence is a non-empty absent set still
+    # takes the fold path: the absence delta is the evidence.
     folds = evidence is not None and bool(
         evidence.pre_vote_folded
         or evidence.pre_vote_informed
         or evidence.corroborated
-        or (evidence.absent and absence_prior_enabled(env))
+        or evidence.absent
     )
 
     if not contradictions and not folds:
@@ -2674,15 +2481,11 @@ def _suspicion_graph_with_contradictions(
             # lift landing on a passed reporter; ``None``, or a reporter
             # taking no soft lift this meeting, is inert.
             reporter=reporter,
-            # Task 16.8: the publicly-unplaced set, taking the TRANSIENT
-            # absence delta behind the absence_prior lever -- unconditional
-            # since the Task-18.12 record (default-OFF at 16.8) -- where the
-            # fold reads the SAME resolver as the path guard above. Like the
-            # voice counts, it rides the meeting context only -- the
+            # The publicly-unplaced set, taking the TRANSIENT absence delta.
+            # Like the voice counts, it rides the meeting context only -- the
             # persistent absorb never passes it, so only this vote-time graph
             # ever sees the lift.
             absent=frozenset(evidence.absent),
-            env=env,
         )
 
     entries: list[SuspicionEntry] = []
@@ -3024,9 +2827,8 @@ def _normalize_ballot_observation_id(
     ``:turn-{k}`` ordinal recovery is turn-id-specific (the 7B echo shape),
     and an observation id has no in-meeting ordinal table to recover
     against -- an unknown id is nulled, never guessed. The validated field's
-    one consumer is the Task 16.6 citation gate
-    (:func:`guard_ballot_citation`, UNCONDITIONAL since the Task-16.17
-    baseline-5 record; it was a default-OFF lever at 16.6): a nulled
+    one consumer is the citation gate
+    (:func:`guard_ballot_citation`): a nulled
     fabrication gates exactly like a bare null. The tally never reads it.
     """
 
@@ -3476,14 +3278,13 @@ def guard_ballot_citation(
     distinguish an honest memory-only conviction from a bare pile-on when the
     voter cites nothing -- that is WHY 16.5's observation-citation path lands
     first (an honest witness can cite their private observation id) and why
-    the lever was HELD default-OFF while the served ballot prompt sanctioned
+    the gate shipped only after the served ballot prompt stopped sanctioning
     a blanket null-citation register (``vote_ballot.j2`` "use ``null`` when
     your call rests on your own memory" -- the earlier bespoke sets still
     carry that prose verbatim). The 16.15 elicitation rewrote the served
     set's "Gut-read" register to a memory-citing one (every EJECT is asked to
     source a turn or observation id; a memory-based SKIP legitimately stays
-    null), 16.17 measured the soundness counterfactual, and the lever is
-    UNCONDITIONAL since that Task-16.17 baseline-5 record, so this guard runs
+    null) and 16.17 measured the soundness counterfactual, so this guard runs
     on every production ballot.
 
     Runs AFTER :func:`guard_ballot_target_graph` (the post-redirect slot in
@@ -3498,16 +3299,14 @@ def guard_ballot_citation(
     citation to the ballot's target (a voter naming any target may cite any
     real turn / own observation), so the direct-vote twin passes
     identically and the redirect opens no new hole. Nulling the citation at
-    the redirect instead would edit ``guard_ballot_target_graph``'s
-    lever-independent recorded behavior (OFF-path bytes) -- not this
-    lever's to change; citation QUALITY is 16.15/16.17's measured business.
-    The zero-flag predicate reads only this
+    the redirect instead would edit ``guard_ballot_target_graph``'s recorded
+    behavior, which this gate does not own; citation QUALITY is
+    16.15/16.17's measured business. The zero-flag predicate reads only this
     meeting's detected ``contradictions`` -- never suspicion values -- so
-    16.8's absence delta (which moves suspicion and mints no flag) cannot
+    the absence delta (which moves suspicion and mints no flag) cannot
     change the gate's decision by construction. Pure function of its inputs
-    (no RNG, no clock, no env read -- lever gating lives at the call site,
-    the 15.5/16.4 pattern), so replaying the same ballot + flags yields the
-    same coercion.
+    (no RNG, no clock, no env read), so replaying the same ballot + flags
+    yields the same coercion.
     """
 
     if ballot.target == _SKIP_TARGET:
@@ -3684,10 +3483,7 @@ class MeetingBeliefEvidence:
       or your own Task 16.7 whereabouts answer places you; otherwise you
       are absent). Derived unconditionally (pure, PUBLIC-transcript-only,
       so the replay path re-derives the identical set), but CONSUMED only
-      by the vote-time pre-vote fold behind the
-      :func:`agents.memory.beliefs.absence_prior_enabled` lever -- itself
-      UNCONDITIONAL since the Task-18.12 baseline-6 record (default-OFF at
-      16.8) -- where each absent subject takes the TRANSIENT
+      by the vote-time pre-vote fold, where each absent subject takes the TRANSIENT
       :data:`agents.memory.beliefs.ABSENCE_SUSPICION_DELTA`. Derived with
       THIS function's ``trigger_kind`` -- both live paths supply the true
       engine-derived kind (the manager's pre-vote region re-derives this
@@ -3752,10 +3548,9 @@ def derive_belief_evidence(
     by the same -0.05 delta -- one channel, three producers, never a
     parallel path). NO production caller passes it yet: committed
     transcripts already carry speaker-groundable sightings, so the live
-    pre-vote feed would move committed ballot-prompt bytes, and the
-    phase's lever doctrine requires every behavioral change to be
-    byte-identical at rest -- the graduating task passes the participant
-    mapping from :meth:`MeetingManager.run`. ``None`` (every current
+    pre-vote feed would move committed ballot-prompt bytes; the task that
+    adopts it passes the participant mapping from
+    :meth:`MeetingManager.run`. ``None`` (every current
     caller, including every replay-side re-derivation, which has no
     private records by construction) is byte-identical to the pre-16.7
     derivation, so a recorded meeting still re-derives its persistent
@@ -4133,10 +3928,8 @@ def _drop_non_roster_claims(
     Returns ``(surviving_claims, annotations)``, both in claim order. Each
     drop yields one :class:`~meetings.schemas.TurnAnnotation` naming the
     field and carrying the original value, which the caller records on the
-    turn (:func:`structured_turn_markers_enabled`) or renders as the
-    equivalent ``free_text`` audit marker
-    (:func:`_turn_annotation_marker`). Either way the original stays
-    auditable and downstream eval can count drops per field. The original is
+    turn -- ``free_text`` stays exactly what the model authored. The original
+    is therefore auditable and downstream eval can count drops per field. The original is
     bounded (:func:`_bounded_original`): a hallucinated mega-value -- the
     seed-35 3499-char reasoning blob emitted AS an alibi subject -- can no
     longer balloon the recorded turn; real player ids pass through verbatim.
@@ -4187,8 +3980,6 @@ __all__ = [
     "EMERGENCY_BODY_STRIP_MARKER",
     "EMERGENCY_NO_BODY_RETRY_FEEDBACK",
     "EMERGENCY_TRIGGER_PHRASE",
-    "ENV_ROLL_CALL_ROUND",
-    "ENV_STRUCTURED_TURN_MARKERS",
     "INVALID_ACCUSATION_TARGET_MARKER",
     "INVALID_ALIBI_SUBJECT_MARKER",
     "INVALID_CORROBORATION_SUPPORTS_MARKER",
@@ -4235,6 +4026,4 @@ __all__ = [
     "extract_belief_evidence",
     "guard_ballot_citation",
     "guard_ballot_target_graph",
-    "roll_call_round_enabled",
-    "structured_turn_markers_enabled",
 ]

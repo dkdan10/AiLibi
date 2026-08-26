@@ -620,6 +620,34 @@ def env_var_for_lever(key: str) -> str:
     return f"AILIBI_{key.upper()}"
 
 
+def retired_levers_stamped_off(
+    substrate_flags: Mapping[str, bool] | None,
+) -> list[str]:
+    """Retired levers a recording's stamp claims were OFF, in registry order.
+
+    A retired lever has no env gate: its OFF derivation was deleted at the
+    record that adopted it, so a stamp naming one OFF describes a substrate this
+    build cannot reproduce. Consumers that re-derive from recorded bytes WITHOUT
+    going through the API replay loader's own substrate guard -- the audit
+    workflows' ``$0`` re-extraction spine -- call this and refuse on a non-empty
+    result, rather than silently scoring legacy bytes with the current detector.
+
+    An UNSTAMPED recording (``None``) returns empty: its substrate is unknown,
+    not OFF, and it is never checked -- mirroring
+    :class:`api.replay_loader.ReplaySubstrateMismatchError`, which skips an
+    unstamped replay entirely. Within a stamp that IS present, a MISSING key
+    reads OFF exactly as the loader's ``bool(recorded.get(key))`` reads it: a
+    recording made before a lever existed ran without it, which is precisely the
+    substrate this build can no longer produce.
+    """
+
+    if substrate_flags is None:
+        return []
+    return [
+        key for key in _RETIRED_ALWAYS_ON_LEVERS if not bool(substrate_flags.get(key))
+    ]
+
+
 def substrate_slate_mismatches(
     expected_on: Iterable[str],
     *,
@@ -705,10 +733,9 @@ def fold_meeting_outcome_into_memories(
     player's role is never read: nobody at the table saw it.
 
     It lives beside the substrate stamp because this is the module every
-    reconstruction path already imports, and because the fold's own lever
-    (``meeting_outcome_memory``) is registered here. That lever graduated at the
-    baseline-7 record, so the channel now reaches every rendered byte; it was
-    inert to all of them while the lever was default-OFF.
+    reconstruction path already imports, and because the fold's own stamp key
+    (``meeting_outcome_memory``) is registered here. It graduated at the
+    baseline-7 record, so the channel reaches every rendered byte.
     """
 
     summary = derive_meeting_outcome_summary(result)

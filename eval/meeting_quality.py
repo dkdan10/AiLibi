@@ -111,9 +111,9 @@ census in this module:
 Phase 17 Wave 0 (Task 17.2) teaches the SKIP partition the citation-gate
 coercion in this module:
 
-* *Citation-coerced SKIPs* — the ballots the Task 16.6 citation gate
-  (``citation_gate_enabled`` lever ON) rewrote from an uncited zero-flag
-  EJECT to SKIP, keyed on
+* *Citation-coerced SKIPs* — the ballots the citation gate
+  (:func:`meetings.manager.guard_ballot_citation`) rewrote from an uncited
+  zero-flag EJECT to SKIP, keyed on
   :data:`~meetings.manager.UNCITED_ZERO_FLAG_EJECT_MARKER` and censused as a
   fourth by-design bucket of the SKIP partition
   (``citation_coerced_skip_ballots``, beside correct / missed /

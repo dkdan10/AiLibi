@@ -20,7 +20,6 @@ from agents.memory.beliefs import (
     CONTRADICTION_RENDER_CEIL,
     CONTRADICTION_SUSPICION_DELTA,
     CORROBORATION_SUSPICION_DELTA,
-    ENV_EVIDENCE_QUALITY_LIFT,
     MEETING_CONTRADICTION_LIFT_CAP,
     MEETING_SUSPICION_DECAY_RATE,
     OBSERVED_KILL_ACTION,
@@ -36,7 +35,6 @@ from agents.memory.beliefs import (
     apply_contradiction_rule,
     apply_meeting_evidence_rules,
     apply_observation_rules,
-    evidence_quality_lift_enabled,
     graduated_spread_delta,
 )
 from meetings.schemas import AlibiClaim as SchemaAlibiClaim
@@ -2691,13 +2689,9 @@ class TestRelevanceGatedFoldOnCommittedBytes:
 
 
 # ---------------------------------------------------------------------------
-# Task 14.10 evidence-quality lift (audit 2026-07-01 §3/§3a): the certain-
-# guilt render ceiling + the self-refuted-alibi downgrade, behind the
-# default-OFF AILIBI_EVIDENCE_QUALITY_LIFT lever.
+# Evidence-quality lift (audit 2026-07-01 §3/§3a): the certain-guilt render
+# ceiling + the self-refuted-alibi downgrade.
 # ---------------------------------------------------------------------------
-
-_LEVER_ON: Mapping[str, str] = {ENV_EVIDENCE_QUALITY_LIFT: "1"}
-_LEVER_OFF: Mapping[str, str] = {}
 
 # The Phase-10 Rule-1 body-proximity prior of the audit's compounding path:
 # 0.50 + BODY_PROXIMITY_SUSPICION_DELTA — the meeting-open suspicion the
@@ -2732,33 +2726,6 @@ def _same_claim_flag_stack(
     ]
 
 
-class TestEvidenceQualityLiftResolver:
-    """The Task-14.10 lever resolver — UNCONDITIONAL since the Task-14.12 close.
-
-    Retired to the always-ON substrate (the 14.9 move for the 13.5 levers,
-    applied after baseline 2 adopted the lever): the resolver ignores its ``env``
-    argument and always returns ``True``, so the certain-guilt exclusion and the
-    self-refuted-alibi downgrade are the default fold behavior.
-    """
-
-    def test_is_unconditionally_on(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        # No env can turn it off any more — every mapping, and the ambient
-        # process environment, resolves ON.
-        assert evidence_quality_lift_enabled() is True
-        assert evidence_quality_lift_enabled(env={}) is True
-        monkeypatch.delenv(ENV_EVIDENCE_QUALITY_LIFT, raising=False)
-        assert evidence_quality_lift_enabled() is True
-
-    @pytest.mark.parametrize("value", ["1", "true", "", "0", "false", "off", "maybe"])
-    def test_env_value_is_ignored(self, value: str) -> None:
-        # The ``env`` argument is accepted and ignored (retained for signature
-        # stability); any value — truthy, falsy, or junk — reads ON.
-        assert (
-            evidence_quality_lift_enabled(env={ENV_EVIDENCE_QUALITY_LIFT: value})
-            is True
-        )
-
-
 class TestCertainGuiltRenderCeiling:
     """Bound 1 (audit §3a): flag/testimony lift never renders at the 1.0 clamp.
 
@@ -2779,8 +2746,14 @@ class TestCertainGuiltRenderCeiling:
         # BYTE-IDENTICAL to the lever-OFF fold (the audit's zero-cost bound).
         flags = _same_claim_flag_stack(subject="p-1", count=9)
 
-        lever_on = apply_contradiction_rule(BeliefState(), flags, env=_LEVER_ON)
-        lever_off = apply_contradiction_rule(BeliefState(), flags, env=_LEVER_OFF)
+        lever_on = apply_contradiction_rule(
+            BeliefState(),
+            flags,
+        )
+        lever_off = apply_contradiction_rule(
+            BeliefState(),
+            flags,
+        )
 
         assert lever_on.view("p-1").suspicion == pytest.approx(
             _DEFAULT_SUSPICION + CONTRADICTION_SUSPICION_DELTA
@@ -2812,7 +2785,8 @@ class TestCertainGuiltRenderCeiling:
         flags = [_meeting_flag(subject="p-1", weak=False)]
 
         lever_on = apply_contradiction_rule(
-            _seeded("p-1", suspicion=0.98), flags, env=_LEVER_ON
+            _seeded("p-1", suspicion=0.98),
+            flags,
         )
 
         assert lever_on.view("p-1").suspicion == pytest.approx(0.98)
@@ -2832,7 +2806,8 @@ class TestCertainGuiltRenderCeiling:
         assert pinned.view("p-1").suspicion == pytest.approx(1.0)
 
         lever_on = apply_contradiction_rule(
-            pinned, _same_claim_flag_stack(subject="p-1", count=3), env=_LEVER_ON
+            pinned,
+            _same_claim_flag_stack(subject="p-1", count=3),
         )
 
         assert lever_on.view("p-1").suspicion == pytest.approx(1.0)
@@ -2866,7 +2841,6 @@ class TestCertainGuiltRenderCeiling:
             phase="pre_vote",
             pre_vote_folded=frozenset({"p-2"}),
             pre_vote_voice_counts={"p-2": 2},
-            env=_LEVER_ON,
         )
 
         assert lever_on.view("p-2").suspicion == pytest.approx(
@@ -2883,37 +2857,9 @@ class TestCertainGuiltRenderCeiling:
             _seeded("p-2", suspicion=0.96),
             own_id="observer",
             accused=("p-2",),
-            env=_LEVER_ON,
         )
 
         assert lever_on.view("p-2").suspicion == pytest.approx(1.0)
-
-    def test_env_argument_is_ignored_the_lever_is_unconditional(self) -> None:
-        # The lever is unconditional since the 14.12 close: passing a
-        # would-be-OFF env, a would-be-ON env, or no env argument at all all
-        # produce the SAME ceiled render — the fold no longer consults the env.
-        flags = _same_claim_flag_stack(subject="p-1", count=9)
-
-        def render(
-            env: Mapping[str, str] | None = None, *, pass_env: bool = True
-        ) -> float:
-            state = _seeded("p-1", suspicion=_BODY_PROXIMITY_PRIOR)
-            folded = (
-                apply_contradiction_rule(state, flags, env=env)
-                if pass_env
-                else apply_contradiction_rule(state, flags)
-            )
-            return folded.view("p-1").suspicion
-
-        no_env = render(pass_env=False)
-        would_be_off = render(env={})
-        would_be_on = render(env={ENV_EVIDENCE_QUALITY_LIFT: "1"})
-        assert (
-            no_env
-            == would_be_off
-            == would_be_on
-            == pytest.approx(CONTRADICTION_RENDER_CEIL)
-        )
 
 
 def _alibi_with_own_task_turn(
@@ -2991,7 +2937,6 @@ class TestSelfRefutedAlibiDowngrade:
             BeliefState(),
             [_flag_on_self_alibi()],
             transcript=transcript,
-            env=_LEVER_ON,
         )
 
         suspicion = lifted.view("p-1").suspicion
@@ -3011,7 +2956,6 @@ class TestSelfRefutedAlibiDowngrade:
             _seeded("p-1", suspicion=_BODY_PROXIMITY_PRIOR),
             [_flag_on_self_alibi()],
             transcript=transcript,
-            env=_LEVER_ON,
         )
 
         assert lifted.view("p-1").suspicion == pytest.approx(0.78)
@@ -3020,7 +2964,8 @@ class TestSelfRefutedAlibiDowngrade:
         # The analysis-caller default (transcript=None) has no signal to
         # derive from; only the production vote path threads the transcript.
         lifted = apply_contradiction_rule(
-            BeliefState(), [_flag_on_self_alibi()], env=_LEVER_ON
+            BeliefState(),
+            [_flag_on_self_alibi()],
         )
 
         assert lifted.view("p-1").suspicion == pytest.approx(
@@ -3051,7 +2996,6 @@ class TestSelfRefutedAlibiDowngrade:
             BeliefState(),
             [_flag_on_self_alibi()],
             transcript=transcript,
-            env=_LEVER_ON,
         )
 
         assert lifted.view("p-1").suspicion == pytest.approx(
@@ -3085,7 +3029,6 @@ class TestSelfRefutedAlibiDowngrade:
             BeliefState(),
             [_flag_on_self_alibi()],
             transcript=transcript,
-            env=_LEVER_ON,
         )
         assert lifted.view("p-1").suspicion == pytest.approx(
             _DEFAULT_SUSPICION + CONTRADICTION_SUSPICION_DELTA
@@ -3191,7 +3134,9 @@ class TestSelfRefutedAlibiDowngrade:
         )
 
         lifted = apply_contradiction_rule(
-            BeliefState(), flags, transcript=transcript, env=_LEVER_ON
+            BeliefState(),
+            flags,
+            transcript=transcript,
         )
         assert lifted.view("p-1").suspicion == pytest.approx(
             _DEFAULT_SUSPICION + WEAK_CONTRADICTION_SUSPICION_DELTA
@@ -3274,7 +3219,9 @@ class TestSelfRefutedAlibiDowngrade:
         ]
         assert strong_sightings  # the witness sighting minted the flag
         lifted = apply_contradiction_rule(
-            BeliefState(), flags, transcript=transcript, env=_LEVER_ON
+            BeliefState(),
+            flags,
+            transcript=transcript,
         )
         # Every group riding the self-refuted account folds WEAK; nothing
         # accumulates past the weak band from this one account.
@@ -3320,7 +3267,6 @@ class TestSelfRefutedAlibiDowngrade:
             BeliefState(),
             [_flag_on_self_alibi()],
             transcript=transcript,
-            env=_LEVER_ON,
         )
 
         assert len(lifted.view("p-1").inconsistencies) == 1
@@ -3341,7 +3287,6 @@ class TestSelfRefutedAlibiDowngrade:
             BeliefState(),
             [_flag_on_self_alibi(), clean_strong],
             transcript=transcript,
-            env=_LEVER_ON,
         )
 
         assert lifted.view("p-1").suspicion == pytest.approx(
@@ -3355,7 +3300,7 @@ class TestSelfRefutedAlibiDowngrade:
         # bound 2 becomes live is MeetingManager._collect_one_ballot passing
         # ``transcript=transcript`` into the suspicion-graph fold. Drive the
         # REAL manager ballot path — a capturing vote renderer + the fake
-        # provider — with the lever ON and a self-refuted-alibi transcript:
+        # provider — with a self-refuted-alibi transcript:
         # the graph the ballot renders must carry the WEAK-downgraded 0.58,
         # not the STRONG 0.80. Mutating the manager's kwarg to
         # ``transcript=None`` (or dropping it) fails this test; every other
@@ -3373,8 +3318,6 @@ class TestSelfRefutedAlibiDowngrade:
             SuspicionEntry,
             derive_belief_evidence,
         )
-
-        monkeypatch.setenv(ENV_EVIDENCE_QUALITY_LIFT, "1")
 
         transcript = MeetingTranscript(turns=(_alibi_with_own_task_turn(),))
         flags = (_flag_on_self_alibi(),)

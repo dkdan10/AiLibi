@@ -195,12 +195,9 @@ the anti-collusion floor -- and :func:`_carries_relevant_observation`'s
 accusation-backing gate -- a self-placement is no evidence about the
 accused, so it cannot promote a bare accusation into an independent voice.
 
-Task 18.9 (audit-phase-18-planning.md §3.3; audit-phase-17-close.md §6 item 4):
-two INDEPENDENT flag-minting levers, both UNCONDITIONAL since the Task-18.12
-baseline-6 record (the CREW-ONLY graduation slate). They were default-OFF and
-env-gated at Wave 1 (cloning the 16.8 absence-prior resolver's shape) and retired
-to always-on once baseline 6 adopted them (the 16.17 move). (1) The endpoint-band
-whereabouts exemption (:func:`whereabouts_interior_flags_enabled`): a spoken
+Two INDEPENDENT flag-minting rules (audit-phase-18-planning.md §3.3;
+audit-phase-17-close.md §6 item 4). (1) The endpoint-band
+whereabouts exemption: a spoken
 :class:`~meetings.schemas.WhereaboutsClaim` indexes as a DEGENERATE SINGLE-TICK
 SELF-ALIBI (``from_tick == to_tick``, speaker is subject), so BEFORE the exemption
 a contradicting first-hand sighting sat on an endpoint tick and was banded WEAK --
@@ -211,8 +208,7 @@ drop and a contradicting sighting mints a STRONG ``alibi_vs_sighting`` flag.
 Genuine multi-tick alibis keep the endpoint band and the two-source
 discipline unchanged; a genuine single-tick self-stated
 :class:`~meetings.schemas.AlibiClaim` is the SAME class by construction and is
-exempted too. (2) The vent-placement flag variant
-(:func:`vent_placement_contradictions_enabled`): the 17.5 scope firewall's
+exempted too. (2) The vent-placement flag variant: the 17.5 scope firewall's
 flag-minting arm, routed by the close. A spoken
 :class:`~meetings.schemas.SawVentObservation` GROUNDED against the speaker's own
 typed :class:`~meetings.schemas.VentWitnessRecord` (the 15.4 chokepoint reused
@@ -227,38 +223,38 @@ two testimonies, but the record side is typed engine truth). No corroboration
 suppression and no adversarial-pair guard: engine truth beats forgeable
 testimony, mirroring kill_scene's "can only CONTRADICT, never corroborate".
 
-Movement claims (:func:`movement_claim_shape_enabled`, GRADUATED)
-=================================================================
+Movement claims
+===============
 
 A witnessed transition is two facts -- the subject was in A at ``T-1`` and in B
 at ``T`` -- and a witness with only the static
 :class:`~meetings.schemas.SawPlayerObservation` to speak with must pick one
 room. Picking the ORIGIN states a placement that was already false when the
 witness saw it, and the detector then prosecutes the SUBJECT's truthful answer
-for disagreeing with it. The lever closes that in two arms, both grounded on the
+for disagreeing with it. Two arms close that, both grounded on the
 SPEAKER'S OWN typed :class:`~meetings.schemas.MoveWitnessRecord` channel: a
 spoken placement the speaker's own record moved the subject OUT of at that exact
 tick is re-read at the DESTINATION before pairing, and a spoken
 :class:`~meetings.schemas.SawMoveObservation` participates as the destination
 placement. Grounding is the firewall -- an UNGROUNDED spoken sighting is never
-rewritten, so the lever can only re-read testimony the speaker demonstrably
+rewritten, so the rule can only re-read testimony the speaker demonstrably
 held and can never launder a fabrication into a different room. The resolution
 rewrites the indexed sighting's ROOM only: the event id, the speaker and every
 id-keyed downstream surface are untouched.
 This is the movement-driven contradiction rule Task 13.5.4 deferred when it
 shipped the render (tasks/phase-13-5.md:271).
 
-Grounded prosecution (:func:`grounded_prosecution_enabled`, GRADUATED)
-=====================================================================
+Grounded prosecution
+====================
 
 A spoken vent grounds against the speaker's own record before it can mint a
 flag, and a spoken sighting grounds against the speaker's own record before it
 can earn its subject the -0.05 vouch. The PROSECUTORIAL half of the sighting
 channel was never checked: any spoken
 :class:`~meetings.schemas.SawPlayerObservation` could mint a STRONG
-``alibi_vs_sighting`` flag on the strength of speech alone. This lever installs
-three rules on that ONE kind, gated on ONE predicate -- the resolver is ON and
-the caller supplied a ``sighting_records`` mapping:
+``alibi_vs_sighting`` flag on the strength of speech alone. Three rules bind
+that ONE kind, gated on ONE predicate -- the caller supplied a
+``sighting_records`` mapping:
 
 * **grounding** -- a spoken sighting is GROUNDED iff the speaker holds a
   matching own :class:`~meetings.schemas.SightingRecord`
@@ -280,9 +276,8 @@ the caller supplied a ``sighting_records`` mapping:
   self-placement is no longer adjudicated as its own interior, so it keeps the
   narrow-window / endpoint band.
 
-Two rulings are superseded by this lever, and stand untouched only for a caller
-supplying no ``sighting_records`` mapping (the lever itself no longer switches
-off):
+Two rulings are superseded by these rules, and stand untouched only for a caller
+supplying no ``sighting_records`` mapping:
 
 * the 2026-06-22 LONE-STRONG relaxation (tasks/phase-13.md:700, "a
   single-witness ``alibi_vs_sighting`` contradiction MAY cross the gate") --
@@ -290,16 +285,16 @@ off):
 * the Task 18.9 endpoint-band whereabouts exemption, which promoted roll-call
   answers to STRONG -- superseded by rule three.
 
-Map-aware arbitration (:func:`map_aware_arbitration_enabled`, GRADUATED)
-=======================================================================
+Map-aware arbitration
+=====================
 
 The one cross-agent aggregation this module performs is geometry-blind: it
 compares a room-at-a-tick to a room-at-a-tick, and nothing under ``meetings``
 knows the station is a graph. Two rooms that share a doorway are one tick of
 walking apart, so an alibi in one and a sighting in the other at the window's
 edge are two honest accounts of one transit -- and the engine enforces exactly
-that geometry, permitting no non-adjacent step on any tick of any game. This
-lever teaches the detector the map: ON, such a pair carries
+that geometry, permitting no non-adjacent step on any tick of any game. The
+detector reads the map: such a pair carries
 :data:`WEAK_REASON_ADJACENT_ONE_TICK` and informs instead of convicting, while a
 two-hop pair, or a sighting two or more ticks inside a claim of continuous
 presence, keeps its STRONG band -- an out-and-back excursion costs two ticks,
@@ -717,8 +712,7 @@ WEAK_REASON_LONE_PHYSICAL: Final[str] = "single-voice physical contradiction"
 # rendered flag; both are read identically by :func:`is_weak_contradiction`.
 WEAK_REASON_KILL_SCENE: Final[str] = "single-voice kill-scene placement"
 
-# The two bands the grounded-prosecution lever adds to ``alibi_vs_sighting``
-# (:func:`grounded_prosecution_enabled`, GRADUATED). Ungrounded: the sighting
+# The two grounded-prosecution bands on ``alibi_vs_sighting``. Ungrounded: the sighting
 # side is speech the speaker's own typed record does not support, so it informs
 # but cannot convict. Lone grounded source: the sighting side IS grounded, but
 # one speaker is the whole prosecution -- below
@@ -729,8 +723,7 @@ WEAK_REASON_KILL_SCENE: Final[str] = "single-voice kill-scene placement"
 WEAK_REASON_UNGROUNDED_SIGHTING: Final[str] = "ungrounded sighting"
 WEAK_REASON_LONE_GROUNDED_SOURCE: Final[str] = "single grounded source"
 
-# The band map-aware arbitration adds to ``alibi_vs_sighting``
-# (:func:`map_aware_arbitration_enabled`, GRADUATED). The alibi room and the
+# The band map-aware arbitration adds to ``alibi_vs_sighting``. The alibi room and the
 # sighting room share a doorway and the sighting sits within one tick of the
 # window's nearest edge, so one tick of walking reconciles both accounts: the
 # pair informs, but a corridor may not convict. Read by
@@ -829,7 +822,7 @@ CANONICAL_ROOMS: Final[frozenset[str]] = frozenset(
 # import-linter), so this is DATA, not an engine import.
 #
 # The station is a graph and every one of its room edges costs one tick of
-# walking, which is what lets :func:`map_aware_arbitration_enabled` read "two
+# walking, which is what lets map-aware arbitration read "two
 # adjacent rooms one tick apart" as transit rather than a lie. The duplication
 # is pinned by a test asserting this table equals
 # ``engine.world.load_canonical_map().room_neighbors`` for every room AND that
@@ -1027,10 +1020,8 @@ def self_refuted_alibi_claim_ids(transcript: MeetingTranscript) -> frozenset[str
     classification lives next to what it classifies). Detector behavior is
     untouched: flags are still detected and recorded identically; only the
     Rule-2 WEIGHT read by
-    :func:`agents.memory.beliefs.apply_contradiction_rule` (behind the
-    Task-14.10 lever, UNCONDITIONAL since the Task-14.12 phase close -- it
-    was default-OFF and env-gated at 14.10, adopted by the baseline-2
-    re-record) consumes this. Pure and deterministic -- a function of the
+    :func:`agents.memory.beliefs.apply_contradiction_rule` consumes this.
+    Pure and deterministic -- a function of the
     transcript alone, so the replay-side re-derivation folds the identical
     classification.
 
@@ -1496,159 +1487,6 @@ def grounded_vent_subjects_from_flags(
     )
 
 
-# Task 18.9 lever 1 -- the endpoint-band whereabouts exemption (audit-phase-18-
-# planning.md §3.3; audit-phase-17-close.md §6 item 4). UNCONDITIONAL since the
-# Task-18.12 baseline-6 record (the CREW-ONLY graduation slate,
-# audits/audit-phase-18-baseline-6.md §0.1): it was default-OFF and env-gated at
-# Wave 1, retired to always-on once baseline 6 adopted it (the 16.17 move). Stamped
-# unconditionally ON via ``orchestrator.replay._RETIRED_ALWAYS_ON_LEVERS``;
-# ``ENV_WHEREABOUTS_INTERIOR_FLAGS`` is retained (no longer read) for the stamp
-# key's naming provenance and backward-compatible imports.
-ENV_WHEREABOUTS_INTERIOR_FLAGS: Final[str] = "AILIBI_WHEREABOUTS_INTERIOR_FLAGS"
-
-# Task 18.9 lever 2 -- the vent-placement flag variant (the 17.5 scope firewall's
-# flag-minting arm). UNCONDITIONAL since the same Task-18.12 baseline-6 record; its
-# first live yield in the shipping combination was measured on this record.
-ENV_VENT_PLACEMENT_CONTRADICTIONS: Final[str] = "AILIBI_VENT_PLACEMENT_CONTRADICTIONS"
-
-
-def whereabouts_interior_flags_enabled(env: Mapping[str, str] | None = None) -> bool:
-    """Whether the Task 18.9 endpoint-band whereabouts exemption is ON — now always True.
-
-    Retired to UNCONDITIONAL at the Task-18.12 baseline-6 record (the 16.17 move,
-    applied once baseline 6 adopted it per the CREW-ONLY graduation slate). The
-    exemption applies at exactly ONE read-site in :func:`detect_contradictions`,
-    which reads THIS resolver once and threads the boolean down. The ``env``
-    argument is accepted and ignored (retained so the call site and the substrate
-    stamp read one source of truth without a signature churn).
-
-    ON, a DEGENERATE SINGLE-TICK SELF-ALIBI (``from_tick == to_tick`` with the
-    speaker its own subject -- exactly how a
-    :class:`~meetings.schemas.WhereaboutsClaim` indexes per :func:`_iter_alibis`,
-    and how a genuine single-tick self-stated
-    :class:`~meetings.schemas.AlibiClaim` reads too) contradicted by a first-hand
-    sighting mints a STRONG ``alibi_vs_sighting`` flag: the exemption adjudicates
-    the single tick as the claim's INTERIOR, so the narrow-window and
-    endpoint-tick weak reasons (:func:`_detect_alibi_vs_sightings`) that would
-    otherwise band it WEAK do not apply. Multi-tick alibis keep the endpoint band
-    and the two-source discipline unchanged (audit §3.3: roll-call answers become
-    conviction-economy currency, nothing else moves).
-    """
-
-    del env  # retired: the lever is unconditional, no environment is consulted
-    return True
-
-
-def vent_placement_contradictions_enabled(env: Mapping[str, str] | None = None) -> bool:
-    """Whether the Task 18.9 vent-placement flag variant is ON — now always True.
-
-    Retired to UNCONDITIONAL at the Task-18.12 baseline-6 record (the sibling of
-    :func:`whereabouts_interior_flags_enabled`, graduated on the same CREW-ONLY
-    slate once baseline 6 adopted it). The variant applies at exactly ONE read-site
-    in :func:`detect_contradictions`, which reads THIS resolver once and threads the
-    boolean down. Its first live yield in the shipping combination was measured on
-    this record. The ``env`` argument is accepted and ignored (retained so the call
-    site and the substrate stamp read one source of truth without a signature
-    churn).
-
-    ON, a spoken :class:`~meetings.schemas.SawVentObservation` GROUNDED against
-    the speaker's own typed :class:`~meetings.schemas.VentWitnessRecord` (the
-    15.4 chokepoint, :func:`_vent_observation_matches_record`, reused verbatim)
-    whose RECORD contradicts the subject's OWN stated path -- inclusive window,
-    disjoint room -- mints a STRONG ``alibi_vs_physical`` flag
-    (:func:`_detect_vent_placement_contradictions`). Grounded-only is the
-    firewall: an UNGROUNDED spoken vent claim mints nothing.
-    """
-
-    del env  # retired: the lever is unconditional, no environment is consulted
-    return True
-
-
-# The movement-claim lever -- DEFAULT-OFF, live. Not registered in
-# ``orchestrator.replay._TOGGLEABLE_LEVER_RESOLVERS``: Task 20.33 wires the whole
-# Phase-20 slate into the substrate stamp at once.
-# ``ENV_MOVEMENT_CLAIM_SHAPE`` is retained (no longer read) for the stamp key's
-# naming provenance and backward-compatible imports.
-ENV_MOVEMENT_CLAIM_SHAPE: Final[str] = "AILIBI_MOVEMENT_CLAIM_SHAPE"
-
-
-def movement_claim_shape_enabled(env: Mapping[str, str] | None = None) -> bool:
-    """Whether a movement claim carries its origin -- now always True.
-
-    Both arms of the movement channel apply, each grounded on the SPEAKER'S OWN
-    :class:`~meetings.schemas.MoveWitnessRecord` rows: a spoken ``saw_player``
-    placement the speaker's own record moved the subject OUT of at that exact
-    tick is re-read at the record's ``to_room`` before contradiction pairing, and
-    a spoken :class:`~meetings.schemas.SawMoveObservation` participates as one
-    destination placement. The ``env`` argument is accepted and ignored, so the
-    read sites and the substrate stamp keep one source of truth without a
-    signature churn.
-
-    Graduated at the baseline-7 record (audits/audit-phase-20-baseline-7.md §6.1).
-    """
-
-    del env  # retired: the lever is unconditional, no environment is consulted
-    return True
-
-
-# The grounded-prosecution lever -- UNCONDITIONAL since the baseline-7 record.
-# ``ENV_GROUNDED_PROSECUTION`` is retained (no longer read) for the stamp key's
-# naming provenance and backward-compatible imports.
-ENV_GROUNDED_PROSECUTION: Final[str] = "AILIBI_GROUNDED_PROSECUTION"
-
-
-def grounded_prosecution_enabled(env: Mapping[str, str] | None = None) -> bool:
-    """Whether a spoken sighting must be grounded to convict -- now always True.
-
-    When the caller supplies the per-speaker ``sighting_records`` mapping
-    :func:`detect_contradictions` grounds against, three rules apply to
-    ``alibi_vs_sighting`` alone: an ungrounded sighting side bands the flag WEAK
-    (:data:`WEAK_REASON_UNGROUNDED_SIGHTING`), a lone grounded speaker with no
-    physical anchor bands it WEAK (:data:`WEAK_REASON_LONE_GROUNDED_SOURCE`), and
-    a degenerate single-tick self-placement keeps the narrow-window / endpoint
-    band instead of being adjudicated as its own interior. Every other flag kind
-    is untouched, and no flag's ``contradiction_id``, ``kind``, event ids or
-    ``subjects`` move -- a demotion rewrites the description only. The ``env``
-    argument is accepted and ignored, so the read sites and the substrate stamp
-    keep one source of truth without a signature churn.
-
-    Graduated at the baseline-7 record (audits/audit-phase-20-baseline-7.md §6.1).
-    """
-
-    del env  # retired: the lever is unconditional, no environment is consulted
-    return True
-
-
-# The map-aware arbitration lever -- UNCONDITIONAL since the baseline-7 record.
-# ``ENV_MAP_AWARE_ARBITRATION`` is retained (no longer read) for the stamp key's
-# naming provenance and backward-compatible imports.
-ENV_MAP_AWARE_ARBITRATION: Final[str] = "AILIBI_MAP_AWARE_ARBITRATION"
-
-
-def map_aware_arbitration_enabled(env: Mapping[str, str] | None = None) -> bool:
-    """Whether two adjacent rooms one tick apart still convict -- now always True.
-
-    An ``alibi_vs_sighting`` pair whose canonical room sets sit within
-    :data:`meetings.constants.MAP_ARBITRATION_MAX_HOPS` doorway hops of each
-    other (:data:`CANONICAL_ROOM_NEIGHBORS`) AND whose sighting tick sits within
-    :data:`meetings.constants.MAP_ARBITRATION_MAX_TICK_GAP` of the nearest edge
-    of the alibi window carries :data:`WEAK_REASON_ADJACENT_ONE_TICK` instead of
-    standing STRONG -- one tick of walking reconciles both accounts, so the pair
-    informs but cannot eject alone. The flag is DEMOTED, never dropped: the
-    ``contradiction_id`` set is identical either way and only the description
-    moves. A two-hop pair keeps its STRONG band, and so does a sighting buried
-    two or more ticks inside a claim of continuous presence -- an out-and-back
-    excursion costs two ticks and contradicts the claim's interior anyway. The
-    ``env`` argument is accepted and ignored, so the read sites and the substrate
-    stamp keep one source of truth without a signature churn.
-
-    Graduated at the baseline-7 record (audits/audit-phase-20-baseline-7.md §6.1).
-    """
-
-    del env  # retired: the lever is unconditional, no environment is consulted
-    return True
-
-
 def detect_contradictions(
     transcript: MeetingTranscript,
     *,
@@ -1659,7 +1497,6 @@ def detect_contradictions(
     move_witness_records: Mapping[PlayerId, tuple[MoveWitnessRecord, ...]]
     | None = None,
     sighting_records: Mapping[PlayerId, tuple[SightingRecord, ...]] | None = None,
-    env: Mapping[str, str] | None = None,
 ) -> tuple[ContradictionRef, ...]:
     """Flag incompatible alibi and saw-player claims (DESIGN.md §5.4, §6.4).
 
@@ -1761,95 +1598,74 @@ def detect_contradictions(
     disagreement and the impostor-frames-innocent deception frame --
     untouched.
 
-    Task 18.9 lever 1 (:func:`whereabouts_interior_flags_enabled`,
-    UNCONDITIONAL since baseline 6; audit-phase-18-planning.md §3.3): a
+    The endpoint-band whereabouts exemption (audit-phase-18-planning.md §3.3): a
     DEGENERATE SINGLE-TICK SELF-ALIBI (a :class:`~meetings.schemas.WhereaboutsClaim`
     roll-call answer, or a genuine single-tick self-stated
     :class:`~meetings.schemas.AlibiClaim` -- the same class by construction)
     contradicted by a first-hand sighting mints a STRONG ``alibi_vs_sighting``
     flag instead of the endpoint-banded WEAK one, the single tick adjudicated
     as the claim's interior (:func:`_detect_alibi_vs_sightings`). Multi-tick
-    endpoint semantics and the narrow-window band are untouched. The gate reads
-    THIS resolver once and threads the boolean down (one call site); it graduated
-    to always-on at the Task-18.12 baseline-6 record.
+    endpoint semantics and the narrow-window band are untouched.
 
-    Task 18.9 lever 2 (:func:`vent_placement_contradictions_enabled`,
-    UNCONDITIONAL since baseline 6; audit-phase-17-close.md §6 item 4): a spoken
+    The vent-placement variant (audit-phase-17-close.md §6 item 4): a spoken
     :class:`~meetings.schemas.SawVentObservation` GROUNDED against the
     speaker's own typed :class:`~meetings.schemas.VentWitnessRecord` (the 15.4
     chokepoint) whose RECORD contradicts the subject's OWN stated path mints a
     STRONG ``alibi_vs_physical`` flag beside the ``vent_sighting`` flag
     (:func:`_detect_vent_placement_contradictions`, joined after the 10.10
     proxy guard). Grounded-only is the firewall -- an ungrounded spoken vent
-    claim mints nothing. Both levers still resolve through ``env`` (their
-    now-unconditional resolvers ignore it), so the read-site and the substrate
-    stamp share one source of truth.
+    claim mints nothing.
 
-    Movement claims (:func:`movement_claim_shape_enabled`, GRADUATED).
-    ``move_witness_records`` is the per-speaker
+    Movement claims. ``move_witness_records`` is the per-speaker
     :class:`~meetings.schemas.MoveWitnessRecord` channel, keyed by speaker id
     exactly like ``vent_witness_records`` -- the live path threads each
-    participant's ``move_witness_records_for_meeting()`` output. ON, the indexed
+    participant's ``move_witness_records_for_meeting()`` output. The indexed
     sightings pass one chokepoint before pairing
     (:func:`_apply_movement_claim_shape`): a spoken placement the SPEAKER's own
     record moved the subject OUT of at that exact tick is re-read at the
     record's ``to_room``, and a spoken
     :class:`~meetings.schemas.SawMoveObservation` joins as one destination
-    placement. ``None`` / an absent speaker entry grounds nothing, and OFF
-    nothing is re-read and a spoken ``saw_move`` is ignored -- so committed
-    transcripts re-derive byte-identically either way.
+    placement. ``None`` / an absent speaker entry grounds nothing, so a
+    record-free caller re-derives the pre-movement placements.
 
-    Grounded prosecution (:func:`grounded_prosecution_enabled`, GRADUATED).
-    ``sighting_records`` is the per-speaker
+    Grounded prosecution. ``sighting_records`` is the per-speaker
     :class:`~meetings.schemas.SightingRecord` channel -- the SAME rows the
     grounded-vouch path reads (:func:`grounded_vouch_subjects`), keyed by
     speaker id exactly like the two channels above; the live path threads each
-    participant's ``sighting_records_for_meeting()`` output. The lever's three
-    rules apply only when the resolver is ON **and** this mapping is non-empty:
+    participant's ``sighting_records_for_meeting()`` output. Its three
+    rules apply only when this mapping is non-empty:
     a caller that supplies no records (the record-free re-derivers in ``eval/``
-    and ``audits/workflows/``, legacy unit tests) keeps the pre-lever rules by
-    construction rather than reading every spoken sighting as fabricated. ON,
-    an ``alibi_vs_sighting`` whose sighting side the speaker's own records do
+    and ``audits/workflows/``, legacy unit tests) keeps the pre-grounding rules by
+    construction rather than reading every spoken sighting as fabricated. With
+    records, an ``alibi_vs_sighting`` whose sighting side the speaker's own records do
     not support bands WEAK, one that fewer than
     :data:`meetings.constants.GROUNDED_PROSECUTION_MIN_SOURCES` distinct
     speakers stand behind -- grounded contradicting speakers plus the speakers
     behind any ``vent_sighting`` / ``alibi_vs_physical`` flag on the same
     subject, neither party to the dispute counting -- bands WEAK, and a
-    degenerate single-tick self-placement loses the 18.9 interior exemption.
+    degenerate single-tick self-placement loses the interior exemption above.
     Only descriptions move: ids, kinds, event pairs and subjects are stable, so
     every ballot citation and the detector's sort survive a demotion.
 
-    Map-aware arbitration (:func:`map_aware_arbitration_enabled`, GRADUATED).
-    No channel and no call-site wiring: the rule is a pure function of the
-    transcript and the frozen :data:`CANONICAL_ROOM_NEIGHBORS` table, read once
-    here and threaded down as a boolean. ON, an ``alibi_vs_sighting`` whose two
+    Map-aware arbitration. No channel and no call-site wiring: the rule is a
+    pure function of the transcript and the frozen
+    :data:`CANONICAL_ROOM_NEIGHBORS` table. An ``alibi_vs_sighting`` whose two
     canonical room sets share a doorway and whose sighting sits within one tick
     of the alibi window's nearest edge carries
     :data:`WEAK_REASON_ADJACENT_ONE_TICK` -- one tick of walking reconciles both
     accounts, so a corridor informs but cannot convict. Two hops apart, or two
     or more ticks inside a claim of continuous presence, keeps the STRONG band.
-    Like the lever above it re-bands only descriptions, so the flag set is
-    identical either way.
+    Like the rules above it re-bands only descriptions, so the flag set is
+    unchanged.
 
     The function is pure: it does not mutate the transcript and has no
     side effects.
     """
 
-    # Task 18.9: read BOTH now-unconditional levers ONCE and thread the booleans
-    # down (the graduated-lever convention -- one resolver read, one call site per
-    # lever). Both resolvers return True since the Task-18.12 baseline-6 record.
-    whereabouts_interior_flags = whereabouts_interior_flags_enabled(env)
-    vent_placement_contradictions = vent_placement_contradictions_enabled(env)
-    # The movement lever is read ONCE here too and threaded down as a boolean.
-    movement_claim_shape = movement_claim_shape_enabled(env)
-    # ONE predicate gates all three grounded-prosecution rules: the lever is ON
-    # AND this caller handed us the records to ground against. A caller with no
-    # mapping keeps the pre-lever rules, which is what makes the record-free
-    # re-derivers safe and the OFF-path byte pin trivially true.
-    grounded_prosecution = grounded_prosecution_enabled(env) and bool(sighting_records)
-    # The map lever needs no channel: it is a pure function of the transcript and
-    # the frozen neighbour table, so one resolver read is the whole gate.
-    map_aware_arbitration = map_aware_arbitration_enabled(env)
+    # The three grounded-prosecution rules need the records to ground against:
+    # a caller with no mapping keeps the pre-grounding rules, which is what makes
+    # the record-free re-derivers safe.
+    grounded_prosecution = bool(sighting_records)
 
     effective_roster = _NO_ROSTER if roster is None else roster
     indexed_alibis = tuple(
@@ -1863,15 +1679,14 @@ def detect_contradictions(
         for indexed in _iter_sightings(transcript)
         if _subject_in_roster(indexed.observation.subject, effective_roster)
     )
-    if movement_claim_shape:
-        # ONE chokepoint, before the sightings reach any detector: the placements
-        # every consumer below sees are the ones the witnesses meant.
-        sightings = _apply_movement_claim_shape(
-            transcript,
-            sightings=sightings,
-            move_witness_records=move_witness_records or {},
-            roster=effective_roster,
-        )
+    # ONE chokepoint, before the sightings reach any detector: the placements
+    # every consumer below sees are the ones the witnesses meant.
+    sightings = _apply_movement_claim_shape(
+        transcript,
+        sightings=sightings,
+        move_witness_records=move_witness_records or {},
+        roster=effective_roster,
+    )
 
     accusation_pairs = _accusation_pairs(transcript)
     flags: list[ContradictionRef] = []
@@ -1883,9 +1698,7 @@ def detect_contradictions(
             subject_accounts=_subject_account_index(
                 alibis=indexed_alibis, sightings=sightings
             ),
-            whereabouts_interior_flags=whereabouts_interior_flags,
             grounded_prosecution=grounded_prosecution,
-            map_aware_arbitration=map_aware_arbitration,
         )
     )
     # Task 13.4 (B3/B4): the inferential physical path.
@@ -1955,24 +1768,19 @@ def detect_contradictions(
                 roster=effective_roster,
             )
         )
-        # Task 18.9 lever 2: the vent-placement variant joins AFTER the grounded
-        # vent flags -- and, like them, after the 10.10 proxy-intra-turn guard.
-        # The join point is deliberate (grounded evidence must never be
-        # re-targeted; structurally the guard could not hit these flags anyway --
-        # two distinct speakers: the venter subject and the witness). The lever is
-        # UNCONDITIONAL since the Task-18.12 baseline-6 record (it was default-OFF
-        # and env-gated at Wave 1), so production ALWAYS enters this block when
-        # vent witness records exist; the ``if`` below reads the always-True
-        # verdict resolved once above (the function's single resolver read).
-        if vent_placement_contradictions:
-            guarded.extend(
-                _detect_vent_placement_contradictions(
-                    transcript,
-                    self_alibis=self_alibis,
-                    vent_witness_records=vent_witness_records,
-                    roster=effective_roster,
-                )
+        # The vent-placement variant joins AFTER the grounded vent flags -- and,
+        # like them, after the 10.10 proxy-intra-turn guard. The join point is
+        # deliberate (grounded evidence must never be re-targeted; structurally
+        # the guard could not hit these flags anyway -- two distinct speakers:
+        # the venter subject and the witness).
+        guarded.extend(
+            _detect_vent_placement_contradictions(
+                transcript,
+                self_alibis=self_alibis,
+                vent_witness_records=vent_witness_records,
+                roster=effective_roster,
             )
+        )
     if grounded_prosecution:
         # LAST, so the physical-anchor set is complete: the vent flags above
         # are part of it, and a demotion must never be re-read by an earlier
@@ -2517,7 +2325,7 @@ def _apply_movement_claim_shape(
 ) -> tuple[_IndexedSighting, ...]:
     """Read every spoken placement as the room the witness's own record left them in.
 
-    The movement lever's one chokepoint (:func:`movement_claim_shape_enabled`),
+    The movement channel's one chokepoint,
     applied to the indexed sightings before any detector sees them, so the
     contradiction path, the subject-account index and the direct-sighting
     exclusion set all read ONE set of placements. Two arms:
@@ -2926,17 +2734,14 @@ def _detect_alibi_vs_sightings(
     alibis: tuple[_IndexedAlibi, ...],
     sightings: tuple[_IndexedSighting, ...],
     subject_accounts: Mapping[PlayerId, tuple[_SubjectAccount, ...]],
-    whereabouts_interior_flags: bool = False,
     grounded_prosecution: bool = False,
-    map_aware_arbitration: bool = False,
 ) -> Iterator[ContradictionRef]:
     for alibi in alibis:
         if not alibi.rooms:
             continue
-        # Task 18.9 lever 1 (UNCONDITIONAL since the Task-18.12 baseline-6 record;
-        # it was default-OFF and env-gated at Wave 1): the endpoint-band
-        # whereabouts exemption. A DEGENERATE SINGLE-TICK SELF-ALIBI -- ``from_tick ==
-        # to_tick`` AND the speaker is its own subject -- is exactly how a
+        # The endpoint-band whereabouts exemption. A DEGENERATE SINGLE-TICK
+        # SELF-ALIBI -- ``from_tick == to_tick`` AND the speaker is its own
+        # subject -- is exactly how a
         # :class:`~meetings.schemas.WhereaboutsClaim` roll-call answer indexes
         # per :func:`_iter_alibis` (and how a genuine single-tick self-stated
         # :class:`~meetings.schemas.AlibiClaim` reads too -- the same class by
@@ -2950,23 +2755,16 @@ def _detect_alibi_vs_sightings(
         # skipped. Proxy alibis (speaker != subject) never satisfy the class, so
         # the re-targeted-proxy path is structurally untouched; multi-tick
         # alibis keep the endpoint band and narrow-window band verbatim.
-        # :func:`detect_contradictions` reads the resolver ONCE and threads True,
-        # so production ALWAYS takes the exemption; the ``False`` parameter branch
-        # (byte-identical to the pre-18.9 path) survives only for direct callers
-        # of this private helper.
         #
-        # Rule (c) of the grounded-prosecution lever rides that same branch: ON,
-        # the degenerate single-tick self-placement is no longer adjudicated as
-        # its own interior, so it takes the pre-18.9 narrow-window / endpoint
-        # band. That knowingly supersedes the 18.9 exemption while the lever is
-        # ON (tasks/phase-18.md Task 18.9); OFF it is untouched.
-        interior_exempt = (
-            whereabouts_interior_flags
-            and not grounded_prosecution
-            and (
-                alibi.claim.from_tick == alibi.claim.to_tick
-                and alibi.speaker == alibi.claim.subject
-            )
+        # ``grounded_prosecution`` -- true exactly when the caller handed
+        # :func:`detect_contradictions` per-speaker sighting records -- WITHDRAWS
+        # the exemption: with records to ground against, the degenerate
+        # single-tick self-placement takes the narrow-window / endpoint band
+        # instead of being adjudicated as its own interior. A record-free caller
+        # keeps the exemption, so both branches are live.
+        interior_exempt = not grounded_prosecution and (
+            alibi.claim.from_tick == alibi.claim.to_tick
+            and alibi.speaker == alibi.claim.subject
         )
         # Task 13.14: the sighting path no longer down-weights a self-stated
         # alibi (the owner LONE-STRONG reversal of audit-9.7) -- a self-stated
@@ -3043,9 +2841,7 @@ def _detect_alibi_vs_sightings(
             # reason joins the endpoint band LAST so a flag that already carries
             # one keeps its existing marker text and gains this in a fixed,
             # byte-stable position.
-            if map_aware_arbitration and _adjacent_within_one_tick(
-                alibi=alibi, sighting=sighting
-            ):
+            if _adjacent_within_one_tick(alibi=alibi, sighting=sighting):
                 weak_reasons = (*weak_reasons, WEAK_REASON_ADJACENT_ONE_TICK)
             yield _build_contradiction(
                 kind="alibi_vs_sighting",
@@ -3547,9 +3343,8 @@ def _detect_vent_placement_contradictions(
 ) -> Iterator[ContradictionRef]:
     """Yield STRONG ``alibi_vs_physical`` flags for grounded vent placements.
 
-    Task 18.9 lever 2 (UNCONDITIONAL since the Task-18.12 baseline-6 record; it
-    was default-OFF and env-gated at Wave 1; audit-phase-17-close.md §6 item 4):
-    the 17.5 scope firewall's flag-minting arm. Since 18.12 this arm ALWAYS feeds
+    The 17.5 scope firewall's flag-minting arm (audit-phase-17-close.md §6
+    item 4). This arm ALWAYS feeds
     the DETECTOR on the production path; the absent-set derivation the widening
     once fed alone (:func:`absent_players`) now takes its Task-18.12 production
     driver from :func:`grounded_vent_subjects_from_flags`, reading the
@@ -4076,7 +3871,7 @@ def _apply_grounded_prosecution(
 ) -> list[ContradictionRef]:
     """Band an ``alibi_vs_sighting`` WEAK unless grounded testimony carries it.
 
-    Rules (a) and (b) of :func:`grounded_prosecution_enabled`, applied as a
+    The grounding and two-source rules, applied as a
     post-pass over the finished flag set so the physical-anchor set is complete.
     A flag survives STRONG only when its own sighting side is GROUNDED in the
     speaker's own records AND
@@ -4292,11 +4087,6 @@ def _ranges_overlap(a_from: int, a_to: int, b_from: int, b_to: int) -> bool:
 __all__ = [
     "CANONICAL_ROOMS",
     "CANONICAL_ROOM_NEIGHBORS",
-    "ENV_GROUNDED_PROSECUTION",
-    "ENV_MAP_AWARE_ARBITRATION",
-    "ENV_MOVEMENT_CLAIM_SHAPE",
-    "ENV_VENT_PLACEMENT_CONTRADICTIONS",
-    "ENV_WHEREABOUTS_INTERIOR_FLAGS",
     "MOVE_GROUNDING_TICK_TOLERANCE",
     "NARROW_ALIBI_WINDOW_TICKS",
     "PHYSICAL_CONTRADICTION_MIN_VOICES",
@@ -4328,21 +4118,16 @@ __all__ = [
     "contradiction_lift_key",
     "detect_contradictions",
     "detect_corroborations",
-    "grounded_prosecution_enabled",
     "grounded_vent_subjects_from_flags",
     "grounded_vouch_subjects",
     "independent_voices",
     "is_canonically_ordered",
     "is_relevant_sighting",
     "is_weak_contradiction",
-    "map_aware_arbitration_enabled",
-    "movement_claim_shape_enabled",
     "next_chain_step",
     "reconstruct_stated_paths",
     "self_refuted_alibi_claim_ids",
     "sort_turns_canonically",
     "triggering_body_rooms",
-    "vent_placement_contradictions_enabled",
     "walk_chain",
-    "whereabouts_interior_flags_enabled",
 ]

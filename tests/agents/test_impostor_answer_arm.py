@@ -319,7 +319,7 @@ def _render_sweep(renderers: PromptRenderers) -> dict[str, str]:
 
 
 class TestImpostorRollCallResolver:
-    """The lever semantics — the 16.8 ``absence_prior_enabled`` clone."""
+    """The lever semantics — the project's ONE surviving env-gated toggle."""
 
     def test_default_is_off(self) -> None:
         assert impostor_roll_call_enabled(env={}) is False

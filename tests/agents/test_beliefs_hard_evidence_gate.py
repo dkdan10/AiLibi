@@ -10,10 +10,8 @@ unknown class -- renders untouched. The clamp is a render-time lever, never a
 fold-time cap: the stored :class:`~agents.memory.beliefs.BeliefState` scalar and the
 belief-fold arithmetic are never mutated -- only the two render read-sites clamp.
 
-The clamp is UNCONDITIONAL since the Task-16.17 baseline-5 graduation
-(:func:`~agents.memory.beliefs.hard_evidence_gate_enabled` now ignores its ``env``
-and always returns ``True`` -- the Task-15.7 ``reporter_exculpation`` move applied to
-this lever) and applies at exactly two read-sites: the store's §6.6 belief lines
+The clamp is UNCONDITIONAL since the Task-16.17 baseline-5 graduation and
+applies at exactly two read-sites: the store's §6.6 belief lines
 (:func:`agents.memory.store._build_belief_lines`) and the vote-ballot suspicion-graph
 builder (:meth:`orchestrator.game.TacticalAgent.suspicion_graph_for_meeting`). The
 pure classification predicate
@@ -51,7 +49,6 @@ if TYPE_CHECKING:
 
 from agents.memory.beliefs import (
     ACCUSATION_SUSPICION_DELTA,
-    ENV_HARD_EVIDENCE_GATE,
     HARD_EVIDENCE_GATE_RENDER_CEIL,
     SUSPICION_PROVENANCE_ATOL,
     VENTING_SUSPICION_DELTA,
@@ -59,7 +56,6 @@ from agents.memory.beliefs import (
     SuspicionProvenance,
     apply_meeting_evidence_rules,
     apply_observation_rules,
-    hard_evidence_gate_enabled,
     hard_evidence_gated_suspicion,
 )
 from agents.memory.episodic import EpisodicEvent
@@ -81,33 +77,6 @@ _CEIL = HARD_EVIDENCE_GATE_RENDER_CEIL  # 0.59, one "%.2f" notch under the gate
 # --------------------------------------------------------------------------- #
 # A. The resolver (graduated to unconditional at Task 16.17)                    #
 # --------------------------------------------------------------------------- #
-
-
-class TestHardEvidenceGateResolver:
-    """The Task-16.4 lever resolver -- UNCONDITIONAL since the Task-16.17 close.
-
-    Retired to the always-ON substrate (the Task-15.7 ``reporter_exculpation``
-    move, applied to this lever once baseline 5 adopted it per the graduation
-    slate): the resolver ignores its ``env`` argument and always returns ``True``,
-    so the J1 render clamp is the default behavior at both belief-render
-    read-sites.
-    """
-
-    def test_is_unconditionally_on(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        # No env can turn it off any more -- every mapping, and the ambient
-        # process environment, resolves ON.
-        assert hard_evidence_gate_enabled() is True
-        assert hard_evidence_gate_enabled(env={}) is True
-        monkeypatch.delenv(ENV_HARD_EVIDENCE_GATE, raising=False)
-        assert hard_evidence_gate_enabled() is True
-
-    @pytest.mark.parametrize("value", ["1", "true", "", "0", "false", "off", "maybe"])
-    def test_env_value_is_ignored(self, value: str) -> None:
-        # The ``env`` argument is accepted and ignored (retained for signature
-        # stability); any value -- truthy, falsy, or junk -- reads ON.
-        assert hard_evidence_gate_enabled(env={ENV_HARD_EVIDENCE_GATE: value}) is True
-
-
 # --------------------------------------------------------------------------- #
 # B. The pure helper's HARD / SOFT / EXEMPT classification                     #
 # --------------------------------------------------------------------------- #
@@ -192,19 +161,6 @@ class TestHardEvidenceGatedSuspicionHelper:
         provenance = SuspicionProvenance(carried_soft=0.20, unattributed=1e-12)
         hard_evidence_gated_suspicion(0.70, provenance)
         assert provenance == SuspicionProvenance(carried_soft=0.20, unattributed=1e-12)
-
-    def test_the_helper_is_lever_agnostic(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        # The predicate NEVER reads the env / lever (the gating is the 15.5
-        # in-line pattern at the call sites): the result is identical whether the
-        # ambient lever is exported ON or deleted.
-        provenance = SuspicionProvenance(carried_soft=0.20)
-        monkeypatch.setenv(ENV_HARD_EVIDENCE_GATE, "1")
-        on = hard_evidence_gated_suspicion(0.70, provenance)
-        monkeypatch.delenv(ENV_HARD_EVIDENCE_GATE, raising=False)
-        off = hard_evidence_gated_suspicion(0.70, provenance)
-        assert on == off == pytest.approx(_CEIL)
 
 
 # --------------------------------------------------------------------------- #
@@ -680,13 +636,12 @@ def _entry_provenance(entry: SuspicionEntry) -> SuspicionProvenance:
 
 
 def _unclamped_seed(entry: SuspicionEntry) -> SuspicionEntry:
-    """Recover the RAW (lever-OFF) scalar from a recorded builder row.
+    """Recover the RAW (unclamped) scalar from a recorded builder row.
 
-    Since the Task-16.17 baseline-5 re-record the builder clamp is unconditional
-    (:func:`~agents.memory.beliefs.hard_evidence_gate_enabled` always ON), so the
-    committed ``suspicion_graph`` rows are the CLAMPED (lever-ON) graph -- a
+    Since the Task-16.17 baseline-5 re-record the builder clamp is unconditional,
+    so the committed ``suspicion_graph`` rows are the CLAMPED graph -- a
     soft-only row's ``suspicion`` reads the sub-gate ceil while its eight
-    provenance kwargs stay the untouched Task-16.3 decomposition. The lever-OFF
+    provenance kwargs stay the untouched Task-16.3 decomposition. The unclamped
     scalar is exactly ``0.5 + sum(the eight components)`` (the module sum
     invariant, which holds verbatim for every un-clamped row and reconstructs the
     pre-clamp scalar for a clamped one), so recomputing it restores the raw OFF

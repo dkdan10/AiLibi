@@ -1,11 +1,10 @@
-"""Tests for the Task 16.8 absence-prior lever (default-OFF).
+"""Tests for the absence prior.
 
-Pins the Task 16.8 absence prior end to end: a publicly UNPLACED living player
+Pins the absence prior end to end: a publicly UNPLACED living player
 (:func:`meetings.transcript.absent_players` -- the meeting's living roster minus
 the players public testimony placed) takes the WEAK
 :data:`~agents.memory.beliefs.ABSENCE_SUSPICION_DELTA` (0.08) in the TRANSIENT
-``pre_vote`` half of :func:`~agents.memory.beliefs.apply_meeting_evidence_rules`,
-behind the default-OFF :func:`~agents.memory.beliefs.absence_prior_enabled` lever.
+``pre_vote`` half of :func:`~agents.memory.beliefs.apply_meeting_evidence_rules`.
 
 The delta is the :data:`~agents.memory.beliefs.WEAK_CONTRADICTION_SUSPICION_DELTA`
 lone-weak-signal discipline applied to a SECOND weak channel (Task 16.8's sizing
@@ -29,12 +28,11 @@ pin -- the 16.8 side mirrors
 :class:`tests.meetings.test_citation_gate.TestAbsenceDeltaNonInteraction`).
 
 Layout mirrors the Task-16.4 hard-evidence-gate suite
-(:mod:`tests.agents.test_beliefs_hard_evidence_gate`): the resolver's default-OFF
-/ truthy-ON contract, the sizing invariants, the documented boundary table, the
-transient-only + guard + reporter + ceiling + joint-cap composition pins, the
-flag-independence pin, the OFF-path byte-identity pins, and the offline
-counterfactual RE-MEASURED on the committed baseline-5 9p2i bytes (the DoD-bullet-4
-calibration evidence, cloned from
+(:mod:`tests.agents.test_beliefs_hard_evidence_gate`): the sizing invariants,
+the documented boundary table, the transient-only + guard + reporter + ceiling +
+joint-cap composition pins, the flag-independence pin, the empty-absent-set
+no-op pins, and the offline counterfactual RE-MEASURED on the committed 9p2i
+bytes (the DoD-bullet-4 calibration evidence, cloned from
 :class:`tests.agents.test_beliefs_hard_evidence_gate.TestHardEvidenceGateOnCommittedBytes`).
 
 Task 17.5 extends the committed-bytes sweep with the DOUBLE-COUNT counterfactual
@@ -64,7 +62,6 @@ from agents.memory.beliefs import (
     ABSENCE_SUSPICION_DELTA,
     ACCUSATION_SUSPICION_DELTA,
     CONTRADICTION_RENDER_CEIL,
-    ENV_ABSENCE_PRIOR,
     MEETING_CONTRADICTION_LIFT_CAP,
     MEETING_SUSPICION_DECAY_RATE,
     SUSPICION_PROVENANCE_ATOL,
@@ -73,7 +70,6 @@ from agents.memory.beliefs import (
     WEAK_CONTRADICTION_SUSPICION_DELTA,
     BeliefState,
     PlayerBelief,
-    absence_prior_enabled,
     apply_contradiction_rule,
     apply_meeting_evidence_rules,
 )
@@ -98,12 +94,9 @@ from meetings.transcript import (
     _turn_observation_id,  # noqa: PLC2701
     absent_players,
 )
-from orchestrator.replay import _RETIRED_ALWAYS_ON_LEVERS  # noqa: PLC2701
 
 _GATE = 0.60  # DESIGN.md §4.6 eject gate (inclusive)
 _NEUTRAL = 0.50  # the neutral suspicion prior
-_LEVER_ON: dict[str, str] = {ENV_ABSENCE_PRIOR: "1"}
-_LEVER_OFF: dict[str, str] = {}
 
 
 def _snapshot(state: BeliefState) -> dict[str, PlayerBelief]:
@@ -159,57 +152,6 @@ def _strong_flag(subject: str) -> ContradictionRef:
 
 
 # --------------------------------------------------------------------------- #
-# A. The resolver (cloned from the 16.4 hard-evidence-gate resolver)           #
-# --------------------------------------------------------------------------- #
-
-
-class TestAbsencePriorResolver:
-    """The Task-16.8 lever resolver -- UNCONDITIONAL since the Task-18.12
-    baseline-6 record.
-
-    Retired to the always-ON substrate (the 16.17 move): the Phase-16 slate's
-    recorded STAY-OFF was re-routed to Phase 18 by
-    audits/audit-phase-17-absence-gate.md Ruling 3, and the 18.11 meeting-layer
-    gate cleared the ratified bar beside the 18.8 roll-call elicitation, so the
-    CREW-ONLY ruling graduated it. The resolver ignores its ``env`` argument and
-    always returns ``True``, so the pre-vote absent-set fold is the default
-    behavior. ``ENV_ABSENCE_PRIOR`` is retained for signature/stamp-key provenance
-    but no longer read.
-    """
-
-    def test_is_unconditionally_on(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        # No env can turn it off any more -- every mapping, and the ambient
-        # process environment, resolves ON.
-        assert absence_prior_enabled() is True
-        assert absence_prior_enabled(env={}) is True
-        assert absence_prior_enabled(env={"AILIBI_SOMETHING_ELSE": "1"}) is True
-        monkeypatch.delenv(ENV_ABSENCE_PRIOR, raising=False)
-        assert absence_prior_enabled() is True
-        assert absence_prior_enabled(env=None) is True
-
-    @pytest.mark.parametrize("value", ["1", "true", "", "0", "false", "off", "maybe"])
-    def test_env_value_is_ignored(self, value: str) -> None:
-        # The ``env`` argument is accepted and ignored (retained for signature
-        # stability); any value -- truthy, falsy, or junk -- reads ON.
-        assert absence_prior_enabled(env={ENV_ABSENCE_PRIOR: value}) is True
-
-    def test_env_argument_is_not_mutated_and_reads_deterministically(self) -> None:
-        # The resolver never writes its env argument (pure read), so two calls on
-        # the same mapping agree and the mapping is unchanged.
-        env = {ENV_ABSENCE_PRIOR: "on", "AILIBI_OTHER": "x"}
-        before = dict(env)
-        assert absence_prior_enabled(env=env) is True
-        assert absence_prior_enabled(env=env) is True
-        assert env == before
-
-    def test_resolver_is_retired_to_always_on(self) -> None:
-        # Graduated at the 18.12 baseline-6 record: the lever moved out of the
-        # replay toggle table into the retired-always-on tuple (stamped True via
-        # ``dict.fromkeys``; no resolver identity binding survives).
-        assert "absence_prior" in _RETIRED_ALWAYS_ON_LEVERS
-
-
-# --------------------------------------------------------------------------- #
 # B. Sizing invariants (the WEAK lone-signal discipline)                       #
 # --------------------------------------------------------------------------- #
 
@@ -248,7 +190,6 @@ def _fold_pre_vote(beliefs: BeliefState, **kwargs: object) -> BeliefState:
         beliefs,
         own_id="observer",
         phase="pre_vote",
-        env=_LEVER_ON,
         **kwargs,  # type: ignore[arg-type]
     )
 
@@ -522,7 +463,6 @@ class TestAbsenceTransientOnly:
             accused=(),
             phase=phase,  # type: ignore[arg-type]
             absent=frozenset({"p-2", "p-3"}),
-            env=_LEVER_ON,
         )
         without_absent = apply_meeting_evidence_rules(
             BeliefState(),
@@ -530,7 +470,6 @@ class TestAbsenceTransientOnly:
             accused=(),
             phase=phase,  # type: ignore[arg-type]
             absent=frozenset(),
-            env=_LEVER_ON,
         )
         assert _snapshot(with_absent) == _snapshot(without_absent)
         # No absence row materialised on the persistent path.
@@ -550,7 +489,6 @@ class TestAbsenceTransientOnly:
             accused=(),
             phase=None,
             absent=frozenset({"p-2"}),
-            env=_LEVER_ON,
         )
         assert persisted.known_players() == ()
         assert persisted.view("p-2").suspicion == _NEUTRAL
@@ -623,7 +561,6 @@ class TestAbsenceReporterComposition:
             phase="pre_vote",
             reporter="p-2",
             absent=frozenset({"p-2", "p-3"}),
-            env=_LEVER_ON,
         )
         # The reporter's absence delta is capped to 0.0 -- stays exactly neutral.
         assert result.view("p-2").suspicion == _NEUTRAL
@@ -698,7 +635,6 @@ class TestAbsenceJointCapComposition:
             evidence=evidence,
             # A contradiction fold fails loud without the transcript (14.10 seam).
             transcript=MeetingTranscript(turns=()),
-            env=_LEVER_ON,
         )
         row = {entry.player_id: entry for entry in rows}["X"]
         # The strong flag (+0.30) plus absence (+0.08) would reach 0.88; the joint
@@ -801,7 +737,6 @@ class TestAbsenceEmptySetIsANoOp:
             phase="pre_vote",
             pre_vote_informed=frozenset({"p-5"}),
             absent=frozenset(),
-            env=_LEVER_OFF,
         )
         # No absent subject -> no absence row; the informed bump landed exactly.
         assert "p-3" not in folded.known_players()
@@ -824,7 +759,6 @@ class TestAbsenceEmptySetIsANoOp:
             contradictions=(),
             evidence=evidence,
             transcript=None,
-            env=_LEVER_OFF,
         )
         assert emitted is graph
 
@@ -842,7 +776,6 @@ class TestAbsenceEmptySetIsANoOp:
             contradictions=(),
             evidence=evidence,
             transcript=None,
-            env=_LEVER_ON,
         )
         assert emitted is not graph
         assert {entry.player_id: entry.suspicion for entry in emitted} == {"p-3": 0.58}
@@ -896,11 +829,11 @@ class TestAbsencePriorOnCommittedBytes:
     baseline-5 re-record; the 14.8 analysis-only machinery, cloned from
     :class:`tests.agents.test_beliefs_hard_evidence_gate.TestHardEvidenceGateOnCommittedBytes`).
 
-    The absence-prior lever stays default-OFF at baseline 5: it did NOT graduate at
-    16.17 (the slate keeps it OFF -- Phase 17 re-measures it on the roll-call
-    substrate), so the recorded builder rows carry NO absence lift and the OFF leg
-    is the recorded fold. The one thing that DID change under the feet of this
-    counterfactual is the 16.15 roll-call elicitation, now LIVE: agents state their
+    The absence prior graduated at the Task-18.12 baseline-6 record, so the OFF
+    leg it was written against can no longer be produced and the two legs are one
+    re-derivation (see the walk). What the cells still measure is the WIDENED
+    column against that single baseline. The other thing that changed under the
+    feet of this counterfactual is the 16.15 roll-call elicitation, now LIVE: agents state their
     whereabouts, so far fewer living players are left publicly unplaced and the
     absent sets are markedly SMALLER than baseline-4 (mean |absent| ~3.09, median
     3.0, down from ~3.6 / 4.0). This class walks every committed 9p2i meeting ONCE
@@ -912,19 +845,18 @@ class TestAbsencePriorOnCommittedBytes:
     ``fellow_impostor_ids`` (from the recorded roles) and the manager's exact
     reporter predicate so the measurement is production-faithful:
     ``_collect_one_ballot`` passes ``reporter=None`` for an EMERGENCY meeting
-    (``_trigger_is_emergency``), and since ``reporter_exculpation_enabled`` is
-    unconditional, getting this wrong is NOT inert -- a spuriously-threaded
+    (``_trigger_is_emergency``), and since the reporter damp is unconditional,
+    getting this wrong is NOT inert -- a spuriously-threaded
     emergency reporter would have its soft lift zeroed on both sides of the
     re-derivation (the committed set has 9 emergency meetings; the recorded
     ``MeetingReplayEntry`` carries no trigger description, so the kind rides
     the walk's reconstructed trigger via ``ReconstructedMeeting.trigger_kind``).
 
     Absence only LIFTS (it never lowers), so a recorded conviction is never lost
-    under the lever -- the counterfactual measures only the NEW-must-vote channel
-    (a candidate ON pushes to/over the rendered gate that OFF left under it) and
-    the argmax TOP-candidate churn. The measured aggregates are PINNED exactly:
-    committed bytes are frozen, so these numbers are the calibration evidence
-    Phase 17 re-checks when it re-measures the lever on the live-roll-call substrate.
+    -- the counterfactual measures the NEW-must-vote channel (a candidate pushed
+    to/over the rendered gate that the baseline left under it) and the argmax
+    TOP-candidate churn. The measured aggregates are PINNED exactly: committed
+    bytes are frozen, so these numbers stay the calibration evidence of record.
 
     Task 17.5 extends the sweep with the DOUBLE-COUNT counterfactual -- the
     widened column the 17.7 gate reads beside these cells. The committed bytes
@@ -1052,9 +984,8 @@ class TestAbsencePriorOnCommittedBytes:
         voters: list[str],
         *,
         reporter: str | None,
-        env: dict[str, str],
     ) -> dict[str, dict[str, SuspicionEntry]]:
-        """Re-derive each voter's post-fold rows under ``env`` (OFF or ON).
+        """Re-derive each voter's post-fold rows from ``evidence``.
 
         ``reporter`` is the manager's exact predicate, computed by the caller:
         ``entry.triggered_by`` for a body report, ``None`` for an emergency
@@ -1079,7 +1010,6 @@ class TestAbsencePriorOnCommittedBytes:
                 evidence=evidence,
                 transcript=entry.transcript,
                 reporter=reporter,
-                env=env,
             )
             rows[voter] = {e.player_id: e for e in emitted}
         return rows
@@ -1197,6 +1127,14 @@ class TestAbsencePriorOnCommittedBytes:
                 widened_nonempty += 1
             widened_evidence = replace(evidence, absent=widened_absent)
 
+            # The OFF leg can no longer be PRODUCED: the delta is unconditional,
+            # so a re-derivation under the standing absent set is the only one
+            # this build can compute. ``off_rows`` and ``on_rows`` are therefore
+            # one derivation under two names -- kept because the widened column
+            # below is a real comparison against exactly this baseline, and
+            # because the cells the two names key stay the numbers the record was
+            # read against. A SECOND independent derivation still runs, so the
+            # determinism check below is not comparing an object to itself.
             off_rows = self._voter_rows(
                 entry,
                 graphs,
@@ -1204,7 +1142,6 @@ class TestAbsencePriorOnCommittedBytes:
                 evidence,
                 voters,
                 reporter=reporter,
-                env=_LEVER_OFF,
             )
             off_rows_again = self._voter_rows(
                 entry,
@@ -1213,11 +1150,8 @@ class TestAbsencePriorOnCommittedBytes:
                 evidence,
                 voters,
                 reporter=reporter,
-                env=_LEVER_OFF,
             )
-            on_rows = self._voter_rows(
-                entry, graphs, roles, evidence, voters, reporter=reporter, env=_LEVER_ON
-            )
+            on_rows = off_rows
             on_rows_widened = self._voter_rows(
                 entry,
                 graphs,
@@ -1225,7 +1159,6 @@ class TestAbsencePriorOnCommittedBytes:
                 widened_evidence,
                 voters,
                 reporter=reporter,
-                env=_LEVER_ON,
             )
             # Determinism: two OFF derivations agree row-for-row.
             for voter in voters:

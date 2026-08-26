@@ -468,7 +468,7 @@ class TestMeetingResult:
 
 class TestSawMoveObservation:
     """The witnessed-transition shape: accepted unconditionally, read only by the
-    default-OFF movement lever."""
+    movement chokepoint."""
 
     def test_a_turn_carries_a_transition_and_round_trips(self) -> None:
         turn = _opening_turn(

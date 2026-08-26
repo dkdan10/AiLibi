@@ -16,7 +16,6 @@ import tempfile
 from collections import Counter
 from collections.abc import Mapping
 from pathlib import Path
-from types import MappingProxyType
 from typing import Any, Final, NamedTuple
 
 import pytest
@@ -24,8 +23,6 @@ import pytest
 from agents.memory.episodic import EpisodicEvent, MemoryStore
 from agents.memory.store import (
     DEFAULT_TOKEN_BUDGET,
-    ENV_COALESCED_MEMORY_RENDER,
-    ENV_MEETING_OUTCOME_MEMORY,
     AgentMemory,
     _build_observations,
     _latest_self_guard_fields,
@@ -577,8 +574,6 @@ class TestReviewFixes:
 # Testimony as CONTENT: the vent body, the speaker, the meeting index
 # ---------------------------------------------------------------------------- #
 
-_ON: Final[dict[str, str]] = {ENV_MEETING_OUTCOME_MEMORY: "1"}
-
 _VENT_SIGHTING: Final[ReportedStatement] = ReportedStatement(
     speaker="p-8",
     kind="saw_vent",
@@ -621,9 +616,16 @@ def _testimony_lines(render: str) -> list[str]:
 class TestVentSightingSurvivesAsContent:
     def test_the_vent_body_its_room_and_its_tick_all_render(self) -> None:
         memory = _memory_at_meeting(1)
-        absorb_reported_testimony(memory, statements=(_VENT_SIGHTING,), env=_ON)
+        absorb_reported_testimony(
+            memory,
+            statements=(_VENT_SIGHTING,),
+        )
 
-        assert _testimony_lines(render_for_prompt(memory, env=_ON)) == [
+        assert _testimony_lines(
+            render_for_prompt(
+                memory,
+            )
+        ) == [
             "- [tick 15] [meeting 1] CLAIM by p-8 (unverified): "
             "saw p-4 VENT in ENGINEERING @ tick 11."
         ]
@@ -636,10 +638,13 @@ class TestVentSightingSurvivesAsContent:
                 _VENT_SIGHTING,
                 ReportedStatement(speaker="p-3", kind="accusation", subject="p-2"),
             ),
-            env=_ON,
         )
 
-        lines = _testimony_lines(render_for_prompt(memory, env=_ON))
+        lines = _testimony_lines(
+            render_for_prompt(
+                memory,
+            )
+        )
         assert all("[meeting 3]" in line for line in lines)
         assert (
             "- [tick 15] [meeting 3] CLAIM by p-3 (unverified): accused p-2." in lines
@@ -649,8 +654,15 @@ class TestVentSightingSurvivesAsContent:
         # The frame is what makes a listener WEIGH the testimony instead of
         # treating a reported sighting as something it witnessed.
         memory = _memory_at_meeting(1)
-        absorb_reported_testimony(memory, statements=(_VENT_SIGHTING,), env=_ON)
-        (line,) = _testimony_lines(render_for_prompt(memory, env=_ON))
+        absorb_reported_testimony(
+            memory,
+            statements=(_VENT_SIGHTING,),
+        )
+        (line,) = _testimony_lines(
+            render_for_prompt(
+                memory,
+            )
+        )
         assert "CLAIM by p-8 (unverified):" in line
 
     def test_the_vent_statement_becomes_a_row(self) -> None:
@@ -682,9 +694,16 @@ class TestVentSightingSurvivesAsContent:
         # record, so WHICH meeting this is cannot be known. The frame states
         # nothing rather than a fabricated "[meeting 0]".
         memory = _memory_at_meeting(0)
-        absorb_reported_testimony(memory, statements=(_VENT_SIGHTING,), env=_ON)
+        absorb_reported_testimony(
+            memory,
+            statements=(_VENT_SIGHTING,),
+        )
 
-        (line,) = _testimony_lines(render_for_prompt(memory, env=_ON))
+        (line,) = _testimony_lines(
+            render_for_prompt(
+                memory,
+            )
+        )
         assert "[meeting]" in line
         assert "[meeting 0]" not in line
         # The content still survives — only the ordinal is withheld.
@@ -746,9 +765,6 @@ class TestVentSightingDerivation:
 # Reported-row survival under the coalesced render, recounted from the bytes.  #
 # --------------------------------------------------------------------------- #
 
-_COALESCE_ON: Final[Mapping[str, str]] = MappingProxyType(
-    {ENV_COALESCED_MEMORY_RENDER: "1"}
-)
 _CORPUS_9P2I: Final[Path] = (
     Path(__file__).resolve().parents[2] / "replays" / "ml_corpus" / "9p2i"
 )
@@ -779,22 +795,26 @@ def _candidate_bucket(candidates: int) -> str:
 
 
 class _SurvivalCensus(NamedTuple):
-    """Reported rows offered and kept per candidate bucket, OFF and ON."""
+    """Reported rows offered and kept per candidate bucket."""
 
     offered: Mapping[str, int]
-    kept_off: Mapping[str, int]
-    kept_on: Mapping[str, int]
+    kept: Mapping[str, int]
     renders: int
 
 
 def _survival_census(sample_dir: Path) -> _SurvivalCensus:
-    """Re-render every meeting's memories at ``DEFAULT_TOKEN_BUDGET``, both ways.
+    """Re-render every meeting's memories at ``DEFAULT_TOKEN_BUDGET``.
 
     The instrument's own walk, stopped at each ``MeetingOpened`` so the memory is
-    the one the speaker actually held there, then rendered twice from the RETAINED
-    composite -- once with an empty environment and once with the lever ON. Each
-    render is bucketed by how many candidate observations the selector saw, and the
-    reported rows it OFFERED are scored against the reported rows it KEPT.
+    the one the speaker actually held there, then rendered from the RETAINED
+    composite. Each render is bucketed by how many candidate observations the
+    selector saw, and the reported rows it OFFERED are scored against the
+    reported rows it KEPT.
+
+    ONE leg. The census was a two-way lever counterfactual until the raised
+    reported band graduated; with the lever gone the second render was the same
+    call as the first, so the differential could not detect drift and the slow
+    corpus walk paid for it twice.
     """
 
     num_players, num_impostors, tasks_per_crewmate = resolve_roster_knobs(sample_dir)
@@ -807,8 +827,7 @@ def _survival_census(sample_dir: Path) -> _SurvivalCensus:
         game_map=game_map,
     )
     offered: Counter[str] = Counter()
-    kept_off: Counter[str] = Counter()
-    kept_on: Counter[str] = Counter()
+    kept: Counter[str] = Counter()
     renders = 0
 
     for seed in seeds_on_disk(sample_dir):
@@ -855,22 +874,14 @@ def _survival_census(sample_dir: Path) -> _SurvivalCensus:
                             continue
                         bucket = _candidate_bucket(len(candidates))
                         offered[bucket] += rows
-                        # Both legs pass an explicit mapping: the counterfactual
-                        # must not read whatever the process environment happens
-                        # to export.
-                        off = render_for_prompt(
-                            composite, token_budget=DEFAULT_TOKEN_BUDGET, env={}
-                        )
-                        on = render_for_prompt(
+                        rendered = render_for_prompt(
                             composite,
                             token_budget=DEFAULT_TOKEN_BUDGET,
-                            env=_COALESCE_ON,
                         )
-                        kept_off[bucket] += sum(
-                            1 for line in off.splitlines() if _TESTIMONY_ROW in line
-                        )
-                        kept_on[bucket] += sum(
-                            1 for line in on.splitlines() if _TESTIMONY_ROW in line
+                        kept[bucket] += sum(
+                            1
+                            for line in rendered.splitlines()
+                            if _TESTIMONY_ROW in line
                         )
                 elif isinstance(walk_event, MeetingApplied):
                     _fold_meeting_into_memories(walk_event, composites=composites)
@@ -880,8 +891,7 @@ def _survival_census(sample_dir: Path) -> _SurvivalCensus:
 
     return _SurvivalCensus(
         offered=dict(offered),
-        kept_off=dict(kept_off),
-        kept_on=dict(kept_on),
+        kept=dict(kept),
         renders=renders,
     )
 
@@ -914,24 +924,38 @@ def test_reported_rows_survive_in_every_candidate_bucket(
     # every committed game -- so the shape, not the absolute count, is what carries.
     assert set(survival.offered) == set(_CANDIDATE_BUCKETS)
     assert survival.renders == 2479  # was 2726
+    # Both columns re-bucketed at the graduation sweep (Task 20.37) and NEITHER
+    # moved in total. The candidate scan calls the private builder directly, and
+    # until the sweep that builder's lever parameters DEFAULTED OFF -- so this
+    # column counted a candidate set production never built (a ``saw_vent`` row
+    # rendered nothing under the OFF default) and, because the same count keys
+    # the bucket, it filed each render under an OFF-path bucket too. Deleting the
+    # parameters made the scan read the path ``render_for_prompt`` always took.
     assert survival.offered == {
-        "<=60": 11135,
-        "61-100": 13165,
-        "101-150": 6835,
-        ">150": 3361,
+        "<=60": 11308,  # was 11135 under the builder's OFF defaults
+        "61-100": 13808,  # was 13165
+        "101-150": 7069,  # was 6835
+        ">150": 3689,  # was 3361
     }
     # The raised reported band is unconditional since the baseline-7 record, so
-    # the two legs are ONE walk and read identically -- the differential the C-73
-    # register measured is what graduating the lever spent. Kept can exceed
-    # offered in a bucket: the candidate scan counts rows the selector was HANDED,
-    # and a render can carry a testimony line composed from several candidates.
-    kept = {"<=60": 11707, "61-100": 13622, "101-150": 7074, ">150": 3331}
-    assert survival.kept_off == kept
-    assert survival.kept_on == kept
+    # there is ONE leg to count -- the differential the C-73 register measured is
+    # what graduating the lever spent. Kept can exceed offered in a bucket: the
+    # candidate scan counts rows the selector was HANDED, and a render can carry
+    # a testimony line composed from several candidates.
+    kept = {"<=60": 11308, "61-100": 13803, "101-150": 7059, ">150": 3564}
+    assert survival.kept == kept
+    # THE no-behaviour-moved statement, recomputed rather than asserted: the
+    # sweep re-bucketed the kept rows and minted none. Every kept row comes off
+    # ``render_for_prompt``, whose path the sweep did not touch, so the TOTAL is
+    # the number the pre-sweep buckets summed to (11,707 + 13,622 + 7,074 +
+    # 3,331). The offered total legitimately GREW by the saw_vent rows the OFF
+    # default used to swallow.
+    assert sum(kept.values()) == 35734
+    assert sum(survival.offered.values()) == 35874
     # Every bucket clears the survival floor now, including the largest render --
     # the bucket the register measured keeping NO reported row at all.
     for bucket in _CANDIDATE_BUCKETS:
         offered = survival.offered[bucket]
-        assert survival.kept_on[bucket] / offered >= _SURVIVAL_FLOOR, (
-            f"{bucket}: kept {survival.kept_on[bucket]} of {offered} ON"
+        assert survival.kept[bucket] / offered >= _SURVIVAL_FLOOR, (
+            f"{bucket}: kept {survival.kept[bucket]} of {offered}"
         )
