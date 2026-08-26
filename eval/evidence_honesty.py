@@ -1310,10 +1310,11 @@ def _fold_meeting_into_memories(
     ever holds.
 
     The meeting-history half runs LAST, the live loop's order, through the same
-    shared fold the replay loader and the byte-golden walk use. It is inert to
-    every measured byte while the ``meeting_outcome_memory`` lever is OFF (the
-    channel reaches no render and no instrument), so the committed cells this
-    module pins are unmoved by its presence.
+    shared fold the replay loader and the byte-golden walk use. It was inert to
+    every measured byte while ``meeting_outcome_memory`` was a default-OFF lever;
+    the lever graduated at the baseline-7 record, so the channel now reaches the
+    render on every path and the committed cells this module pins were measured
+    with it present.
     """
 
     evidence = extract_belief_evidence(walk_event.result)

@@ -471,12 +471,13 @@ def render_for_prompt(
     salience sort). Both levers were GRADUATED to unconditional at the Task-16.17
     baseline-5 record, so the argument is accepted and ignored by those resolvers
     (retained without a signature churn; the committed baseline-5 bytes were
-    recorded with both ON and reconstruct BARE). The live default-OFF
-    :func:`task_completion_from_events_enabled` reads the same ``env``: ON, the
-    completed-task line comes from the agent's own ``owned_task_ids`` losing an id
-    instead of from a ``pending_task_id`` change.
+    recorded with both ON and reconstruct BARE).
+    :func:`task_completion_from_events_enabled` GRADUATED the same way at the
+    baseline-7 record, so it too ignores ``env``: the completed-task line comes
+    from the agent's own ``owned_task_ids`` losing an id rather than from a
+    ``pending_task_id`` change, on every render.
 
-    :func:`meeting_outcome_memory_enabled` (default-OFF) adds the
+    :func:`meeting_outcome_memory_enabled` (GRADUATED) adds the
     ``## Meetings so far:`` block, one plain line per concluded meeting in
     oldest-first order: ``Meeting {n} (tick {resume}): {id} EJECTED {for}-{skip}
     — {id} was an IMPOSTOR. {k} impostors remain.``, or ``… no ejection ({skip}
@@ -496,7 +497,7 @@ def render_for_prompt(
     The same lever keeps a spoken vent sighting as content and tags each reported
     line with the meeting it was spoken at.
 
-    :func:`self_location_trail_enabled` (default-OFF) adds a ``## Where you were:``
+    :func:`self_location_trail_enabled` (GRADUATED) adds a ``## Where you were:``
     block between the fixed lines and the observations, so the agent can answer the
     meeting's roll-call from its own record instead of extrapolating: the ticks its
     ``self_state`` channel recorded, coalesced oldest-first into spans and chained
@@ -514,7 +515,7 @@ def render_for_prompt(
     validator would null. The same lever takes the completed-task line's room from
     the row that dates it, so that line carries one clock.
 
-    :func:`coalesced_memory_render_enabled` (default-OFF) spends the observations
+    :func:`coalesced_memory_render_enabled` (GRADUATED) spends the observations
     budget on what discriminates. A run of consecutive sightings of one subject in
     one room, same action and an unchanged companion set, renders as ONE line
     stating its tick range (``You saw p-9 in CAFETERIA ticks 0-4 (with p-8).``); any

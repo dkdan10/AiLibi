@@ -665,7 +665,7 @@ class MeetingParticipant:
     mapping into every
     :func:`meetings.transcript.detect_contradictions` call, where the
     grounded-prosecution lever
-    (:func:`meetings.transcript.grounded_prosecution_enabled`, DEFAULT-OFF)
+    (:func:`meetings.transcript.grounded_prosecution_enabled`, GRADUATED)
     checks a spoken sighting against the speaker's own record before it can
     band an ``alibi_vs_sighting`` flag STRONG; with the lever off the mapping
     is read by nothing. The VOUCH seam -- the ``sighting_records`` parameter of

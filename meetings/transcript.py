@@ -227,8 +227,8 @@ two testimonies, but the record side is typed engine truth). No corroboration
 suppression and no adversarial-pair guard: engine truth beats forgeable
 testimony, mirroring kill_scene's "can only CONTRADICT, never corroborate".
 
-Movement claims (:func:`movement_claim_shape_enabled`, DEFAULT-OFF)
-==================================================================
+Movement claims (:func:`movement_claim_shape_enabled`, GRADUATED)
+=================================================================
 
 A witnessed transition is two facts -- the subject was in A at ``T-1`` and in B
 at ``T`` -- and a witness with only the static
@@ -248,8 +248,8 @@ id-keyed downstream surface are untouched.
 This is the movement-driven contradiction rule Task 13.5.4 deferred when it
 shipped the render (tasks/phase-13-5.md:271).
 
-Grounded prosecution (:func:`grounded_prosecution_enabled`, DEFAULT-OFF)
-=======================================================================
+Grounded prosecution (:func:`grounded_prosecution_enabled`, GRADUATED)
+=====================================================================
 
 A spoken vent grounds against the speaker's own record before it can mint a
 flag, and a spoken sighting grounds against the speaker's own record before it
@@ -280,8 +280,9 @@ the caller supplied a ``sighting_records`` mapping:
   self-placement is no longer adjudicated as its own interior, so it keeps the
   narrow-window / endpoint band.
 
-Two rulings are superseded while the lever is ON, and stand untouched OFF (and
-for any caller supplying no mapping):
+Two rulings are superseded by this lever, and stand untouched only for a caller
+supplying no ``sighting_records`` mapping (the lever itself no longer switches
+off):
 
 * the 2026-06-22 LONE-STRONG relaxation (tasks/phase-13.md:700, "a
   single-witness ``alibi_vs_sighting`` contradiction MAY cross the gate") --
@@ -289,8 +290,8 @@ for any caller supplying no mapping):
 * the Task 18.9 endpoint-band whereabouts exemption, which promoted roll-call
   answers to STRONG -- superseded by rule three.
 
-Map-aware arbitration (:func:`map_aware_arbitration_enabled`, DEFAULT-OFF)
-=========================================================================
+Map-aware arbitration (:func:`map_aware_arbitration_enabled`, GRADUATED)
+=======================================================================
 
 The one cross-agent aggregation this module performs is geometry-blind: it
 compares a room-at-a-tick to a room-at-a-tick, and nothing under ``meetings``
@@ -717,7 +718,7 @@ WEAK_REASON_LONE_PHYSICAL: Final[str] = "single-voice physical contradiction"
 WEAK_REASON_KILL_SCENE: Final[str] = "single-voice kill-scene placement"
 
 # The two bands the grounded-prosecution lever adds to ``alibi_vs_sighting``
-# (:func:`grounded_prosecution_enabled`, DEFAULT-OFF). Ungrounded: the sighting
+# (:func:`grounded_prosecution_enabled`, GRADUATED). Ungrounded: the sighting
 # side is speech the speaker's own typed record does not support, so it informs
 # but cannot convict. Lone grounded source: the sighting side IS grounded, but
 # one speaker is the whole prosecution -- below
@@ -729,7 +730,7 @@ WEAK_REASON_UNGROUNDED_SIGHTING: Final[str] = "ungrounded sighting"
 WEAK_REASON_LONE_GROUNDED_SOURCE: Final[str] = "single grounded source"
 
 # The band map-aware arbitration adds to ``alibi_vs_sighting``
-# (:func:`map_aware_arbitration_enabled`, DEFAULT-OFF). The alibi room and the
+# (:func:`map_aware_arbitration_enabled`, GRADUATED). The alibi room and the
 # sighting room share a doorway and the sighting sits within one tick of the
 # window's nearest edge, so one tick of walking reconciles both accounts: the
 # pair informs, but a corridor may not convict. Read by
@@ -1784,7 +1785,7 @@ def detect_contradictions(
     now-unconditional resolvers ignore it), so the read-site and the substrate
     stamp share one source of truth.
 
-    Movement claims (:func:`movement_claim_shape_enabled`, DEFAULT-OFF).
+    Movement claims (:func:`movement_claim_shape_enabled`, GRADUATED).
     ``move_witness_records`` is the per-speaker
     :class:`~meetings.schemas.MoveWitnessRecord` channel, keyed by speaker id
     exactly like ``vent_witness_records`` -- the live path threads each
@@ -1798,7 +1799,7 @@ def detect_contradictions(
     nothing is re-read and a spoken ``saw_move`` is ignored -- so committed
     transcripts re-derive byte-identically either way.
 
-    Grounded prosecution (:func:`grounded_prosecution_enabled`, DEFAULT-OFF).
+    Grounded prosecution (:func:`grounded_prosecution_enabled`, GRADUATED).
     ``sighting_records`` is the per-speaker
     :class:`~meetings.schemas.SightingRecord` channel -- the SAME rows the
     grounded-vouch path reads (:func:`grounded_vouch_subjects`), keyed by
@@ -1818,7 +1819,7 @@ def detect_contradictions(
     Only descriptions move: ids, kinds, event pairs and subjects are stable, so
     every ballot citation and the detector's sort survive a demotion.
 
-    Map-aware arbitration (:func:`map_aware_arbitration_enabled`, DEFAULT-OFF).
+    Map-aware arbitration (:func:`map_aware_arbitration_enabled`, GRADUATED).
     No channel and no call-site wiring: the rule is a pure function of the
     transcript and the frozen :data:`CANONICAL_ROOM_NEIGHBORS` table, read once
     here and threaded down as a boolean. ON, an ``alibi_vs_sighting`` whose two

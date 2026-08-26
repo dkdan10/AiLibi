@@ -706,9 +706,9 @@ def fold_meeting_outcome_into_memories(
 
     It lives beside the substrate stamp because this is the module every
     reconstruction path already imports, and because the fold's own lever
-    (``meeting_outcome_memory``) is registered here -- while that lever is OFF
-    the channel is inert to every rendered byte, so the fold moves no committed
-    measurement.
+    (``meeting_outcome_memory``) is registered here. That lever graduated at the
+    baseline-7 record, so the channel now reaches every rendered byte; it was
+    inert to all of them while the lever was default-OFF.
     """
 
     summary = derive_meeting_outcome_summary(result)

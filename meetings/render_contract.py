@@ -32,9 +32,11 @@ player moved from one room to another, arriving at the tick),
 The turn schema accepts a transition unconditionally. The ``qwen3_6_27b`` v4
 turn templates list the shape, so a model served that set can answer with one;
 every other set is silent about it and its speakers cannot. The meeting layer
-reads a spoken transition only through
-:func:`meetings.transcript.movement_claim_shape_enabled` — with that lever off a
-stated transition records as ordinary testimony and grounds no placement.
+reads a spoken transition through
+:func:`meetings.transcript.movement_claim_shape_enabled`, which graduated at the
+baseline-7 record: a stated transition now grounds a placement on every path.
+Before that graduation it recorded as ordinary testimony and grounded nothing,
+which is what the pre-baseline-7 committed bytes hold.
 
 Keep this module a leaf: import only from :mod:`meetings.schemas` and the
 stdlib. It must never import :mod:`meetings.manager` (that would re-create
