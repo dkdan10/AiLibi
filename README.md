@@ -4,14 +4,17 @@ by **Daniel Keinan** · code by Claude Code agents, reviewed by Codex · [MIT](L
 
 **▶ [Live demo](https://dkdan10.github.io/AiLibi/)** — the spectator as a static directory, no server behind it.
 
+[![One tick of seed 2 shown twice: the whole map on the left, the same tick under one crewmate's fog on the right, and that crewmate's accusation underneath](docs/media/spectator-two-truths.png)](docs/media/spectator-two-truths.png)
+
+*One tick, two truths. Left: two players are already dead and both impostors are on screen. Right: everything the crewmate p-3 was allowed to know at that same tick — one lit room and one other player. Underneath, what p-3 said at the meeting two ticks later: it accused p-1, who is also a crewmate.*
+
 [![Nine agents mid-meeting: the accusation chain beside every ballot](docs/media/spectator-meeting.png)](docs/media/spectator-meeting.png)
 
 *One meeting, seed 2: who accused whom, the observations behind each claim, and every ballot beside the sentence its voter acted on.*
-<!-- ANCHOR: a later contract swaps this hero for a side-by-side still, omniscient beside one crewmate's fog-of-war. -->
 
-![The spectator playing a featured replay](docs/media/spectator-journey.gif)
+[![The spectator walking seed 2 from the first tick to the meeting](docs/media/spectator-journey.gif)](docs/media/spectator-journey.webm)
 
-*Fifteen seconds against the built static bundle: pick a featured game, play it, watch the transport stop itself when a meeting starts.*
+*The same game in motion, against the built static bundle: tokens cross rooms, a kill lands, and the transport stops itself when the meeting starts. Click through for the [nine-second clip](docs/media/spectator-journey.webm), which also shows the flip into fog.*
 
 ---
 
