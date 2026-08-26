@@ -93,12 +93,12 @@ def test_full_dry_run_lists_all_seeds() -> None:
 def test_meetings_dry_run_uses_real_manifest() -> None:
     proc = _run("--meetings", "--dry-run")
     assert proc.returncode == 0
-    # Meeting-bearing seeds derived from the committed flat MANIFEST.md after the
-    # Task 13.12 redistribute + Wave-E re-record: the far more meeting-dense
-    # recording carries a meeting on 39/50 flat 4p/1i seeds.
+    # Meeting-bearing seeds derived from the committed flat MANIFEST.md: the
+    # baseline-7 record carries a meeting on 40/50 flat 4p/1i seeds
+    # (baseline 6 carried 39).
     assert (
-        "[dry-run] seeds: 0,1,2,3,4,5,6,7,8,9,10,11,13,16,17,18,19,20,21,22,23,"
-        "24,26,27,28,29,32,33,35,36,39,41,42,44,45,46,47,48,49" in proc.stdout
+        "[dry-run] seeds: 1,2,3,4,5,6,7,9,10,11,13,14,16,17,18,19,"
+        "20,21,22,23,24,26,27,28,29,32,33,35,36,38,39,40,41,42,44,45,46,47,48,49" in proc.stdout
     )
 
 
@@ -241,7 +241,7 @@ def test_dry_run_echo_names_the_levers_the_operator_declared(provider: str) -> N
     env = dict(
         _clean_env(),
         AILIBI_LLM_PROVIDER=provider,
-        AILIBI_GROUNDED_PROSECUTION="1",
+        AILIBI_IMPOSTOR_ROLL_CALL="1",
         AILIBI_SELF_LOCATION_TRAIL="1",
     )
     proc = _run(
@@ -287,24 +287,24 @@ def test_preflight_refuses_a_declared_lever_that_is_not_exported() -> None:
     # recorded on the OLD substrate while the echo claims the new one.
     env = _clean_env()
     proc = _run(
-        "--seeds", "0", "--dry-run", "--expect-levers", "grounded_prosecution", env=env
+        "--seeds", "0", "--dry-run", "--expect-levers", "impostor_roll_call", env=env
     )
     out = proc.stdout + proc.stderr
     assert proc.returncode != 0
     assert "does not match --expect-levers" in out
-    assert "grounded_prosecution must be ON" in out
-    assert "AILIBI_GROUNDED_PROSECUTION" in out
+    assert "impostor_roll_call must be ON" in out
+    assert "AILIBI_IMPOSTOR_ROLL_CALL" in out
 
 
 def test_preflight_refuses_an_export_nobody_declared() -> None:
     # Direction 2 -- a stale export from an earlier probe session would ship an
     # unruled arm into the record, and an acceptance gate run in the same shell
     # would pass coherently because it reads the same environment.
-    env = dict(_clean_env(), AILIBI_MEETING_OUTCOME_MEMORY="1")
+    env = dict(_clean_env(), AILIBI_IMPOSTOR_ROLL_CALL="1")
     proc = _run("--seeds", "0", "--dry-run", env=env)
     out = proc.stdout + proc.stderr
     assert proc.returncode != 0
-    assert "meeting_outcome_memory must be OFF" in out
+    assert "impostor_roll_call must be OFF" in out
 
 
 def test_preflight_refuses_a_typo_in_the_declared_slate() -> None:
@@ -319,13 +319,13 @@ def test_preflight_refuses_a_typo_in_the_declared_slate() -> None:
 def test_preflight_accepts_the_declared_slate_when_the_environment_matches() -> None:
     # The gate must be passable, or it is not a gate: with exactly the declared
     # levers exported the preflight reports the resolved slate and continues.
-    env = dict(_clean_env(), AILIBI_GROUNDED_PROSECUTION="1")
+    env = dict(_clean_env(), AILIBI_IMPOSTOR_ROLL_CALL="1")
     proc = _run(
-        "--seeds", "0", "--dry-run", "--expect-levers", "grounded_prosecution", env=env
+        "--seeds", "0", "--dry-run", "--expect-levers", "impostor_roll_call", env=env
     )
     out = proc.stdout + proc.stderr
-    assert proc.returncode == 1, out
-    assert "Substrate slate OK: expected levers ON = grounded_prosecution" in out
+    assert proc.returncode == 0, out
+    assert "Substrate slate OK: expected levers ON = impostor_roll_call" in out
 
 
 def test_dry_run_featherless_defaults_to_two_seed_workers() -> None:

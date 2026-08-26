@@ -95,18 +95,20 @@ _FLAGS_ON = {
     "roll_call_round": True,
     "whereabouts_interior_flags": True,
     "vent_placement_contradictions": True,
-    # The nine live toggles, every one DEFAULT-OFF: the impostor-answer arm the
-    # CREW-ONLY ruling did not ship, plus the eight Phase-20 belief-substrate
-    # levers. A probe backend runs bare, so all nine stamp False.
+    # The eight Phase-20 belief-substrate levers, graduated at the baseline-7
+    # record (audits/audit-phase-20-baseline-7.md §6.1) -- unconditionally ON, so
+    # a probe backend running bare stamps them True too.
+    "task_completion_from_events": True,
+    "self_location_trail": True,
+    "movement_claim_shape": True,
+    "grounded_prosecution": True,
+    "map_aware_arbitration": True,
+    "structured_turn_markers": True,
+    "meeting_outcome_memory": True,
+    "coalesced_memory_render": True,
+    # The ONE live toggle, DEFAULT-OFF: the impostor-answer arm the CREW-ONLY
+    # ruling did not ship. A probe backend runs bare, so it stamps False.
     "impostor_roll_call": False,
-    "task_completion_from_events": False,
-    "self_location_trail": False,
-    "movement_claim_shape": False,
-    "grounded_prosecution": False,
-    "map_aware_arbitration": False,
-    "structured_turn_markers": False,
-    "meeting_outcome_memory": False,
-    "coalesced_memory_render": False,
 }
 
 
@@ -420,14 +422,15 @@ def test_unknown_backend_raises(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_substrate_flags_default_snapshot(monkeypatch: pytest.MonkeyPatch) -> None:
-    # No explicit substrate_flags: call_turn snapshots the live substrate. Thirteen
-    # levers are unconditionally ON -- the four 13.5 levers since Task 14.9, the
+    # No explicit substrate_flags: call_turn snapshots the live substrate.
+    # Twenty-one levers are unconditionally ON -- the four 13.5 levers since Task 14.9, the
     # 14.10 evidence-quality lever since the Task-14.12 close, Task 15.5's
     # reporter_exculpation since the Task-15.7 baseline-3 record, the three Phase-16
     # levers graduated at the Task-16.17 baseline-5 record, and the four
-    # meeting-layer levers graduated at the Task-18.12 baseline-6 record -- so no
-    # AILIBI_* var can flip any of THEM (a stray AILIBI_EVIDENCE_QUALITY_LIFT
-    # export cannot). Task 18.10's impostor_roll_call is the lone live default-OFF
+    # meeting-layer levers graduated at the Task-18.12 baseline-6 record, and the
+    # eight Phase-20 levers graduated at the baseline-7 record -- so no AILIBI_*
+    # var can flip any of THEM (a stray AILIBI_EVIDENCE_QUALITY_LIFT export
+    # cannot). Task 18.10's impostor_roll_call is the lone live default-OFF
     # toggle, stamped False under this bare env.
     monkeypatch.delenv("AILIBI_EVIDENCE_QUALITY_LIFT", raising=False)
     send = _RecordingOllama(text=_VALID)
@@ -540,7 +543,8 @@ def test_active_substrate_flags_every_graduated_lever_unconditional(
     # observation_id_rendering, 16.6's citation_gate) at the Task-16.17 baseline-5
     # record, and the four meeting-layer gates (16.8's absence_prior, 18.8's
     # roll_call_round, 18.9's whereabouts_interior_flags /
-    # vent_placement_contradictions) at the Task-18.12 baseline-6 record. So
+    # vent_placement_contradictions) at the Task-18.12 baseline-6 record, and the
+    # eight Phase-20 belief-substrate levers at the baseline-7 record. So
     # active_substrate_flags reads them all-True under ANY env — bare, a legacy
     # all-ON export, a legacy "0", or a stray lever export (either polarity) — and
     # no AILIBI_* var can flip any of them (the delegation to
@@ -602,8 +606,8 @@ def test_active_substrate_flags_impostor_roll_call_is_the_live_toggle(
     # reads from env (the CREW-ONLY ruling did NOT ship it). A bare / unset / "0"
     # env stamps it False — the _FLAGS_ON default — while a truthy
     # AILIBI_IMPOSTOR_ROLL_CALL export flips it True, yielding a DIFFERENT mapping
-    # that diverges from _FLAGS_ON in exactly that one key (the thirteen graduated
-    # levers stay ON).
+    # that diverges from _FLAGS_ON in exactly that one key (the twenty-one
+    # graduated levers stay ON).
     monkeypatch.delenv("AILIBI_IMPOSTOR_ROLL_CALL", raising=False)
     assert active_substrate_flags(env={}) == _FLAGS_ON
     assert active_substrate_flags(env={"AILIBI_IMPOSTOR_ROLL_CALL": "0"}) == _FLAGS_ON
