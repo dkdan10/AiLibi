@@ -33,10 +33,9 @@ The turn schema accepts a transition unconditionally. The ``qwen3_6_27b`` v4
 turn templates list the shape, so a model served that set can answer with one;
 every other set is silent about it and its speakers cannot. The meeting layer
 reads a spoken transition through
-:func:`meetings.transcript.movement_claim_shape_enabled`, which graduated at the
-baseline-7 record: a stated transition now grounds a placement on every path.
-Before that graduation it recorded as ordinary testimony and grounded nothing,
-which is what the pre-baseline-7 committed bytes hold.
+:func:`meetings.transcript.detect_contradictions`: a stated transition grounds a
+placement on every path. The pre-baseline-7 committed bytes predate that and
+record such a transition as ordinary testimony that grounds nothing.
 
 Keep this module a leaf: import only from :mod:`meetings.schemas` and the
 stdlib. It must never import :mod:`meetings.manager` (that would re-create
@@ -277,18 +276,16 @@ class VotePromptRenderer(Protocol):
     default-OFF ``reporter_exculpation`` lever is ON and the meeting is a body
     report. The template renders the base-rate annotation ("p-N reported the
     body; self-report is weakly exculpatory in this game") only when it is
-    non-``None``. The default ``None`` -- lever OFF, an emergency call, or any
-    ad-hoc render -- omits the block, so a lever-OFF ballot prompt is
-    byte-identical (the Voice-doc 15.0 widen-the-contract-inert pattern). This is
-    the render mirror of the belief-side damp in
-    :func:`agents.memory.beliefs.apply_meeting_evidence_rules`; both read the one
-    :func:`agents.memory.beliefs.reporter_exculpation_enabled` resolver so the
-    damped suspicion graph and the annotation cannot disagree.
+    non-``None``. The default ``None`` -- an emergency call, or any ad-hoc
+    render -- omits the block. This is the render mirror of the belief-side damp
+    in :func:`agents.memory.beliefs.apply_meeting_evidence_rules`, threaded from
+    the same reporter id, so the damped suspicion graph and the annotation
+    cannot disagree.
 
     ``persona`` (Task 16.3, populated 16.9, rendered 16.16) and
     ``suspicion_provenance`` (Task 16.3, rendered 16.15) are the two inert
     trailing widenings the foundation lands once (the widen-the-contract-inert
-    pattern; the 15.5 ``reporter_id`` lever precedent). On the ballot the manager
+    pattern; the 15.5 ``reporter_id`` precedent). On the ballot the manager
     threads the SAME post-fold rows into ``suspicion_provenance`` as into
     ``suspicion_graph`` -- the render-after-fold consistency pin -- so 16.15's
     surface decomposes exactly the scalars this prompt already shows. The default

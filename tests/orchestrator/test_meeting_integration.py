@@ -3126,7 +3126,9 @@ class TestMeetingOutcomeAnnouncementPayload:
             )
             if agent_id == "p-2":
                 continue
-            render = render_for_prompt(agent.memory, env=_OUTCOME_MEMORY_ON)
+            render = render_for_prompt(
+                agent.memory,
+            )
             assert "p-2 was" not in render, agent_id
             # Every role the render DOES state is entitled: p-4's ejection and
             # nothing else, dated at or after the meeting that ejected them.

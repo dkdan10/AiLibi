@@ -316,11 +316,10 @@ VOTE_BALLOT_TEMPLATE: Final[str] = "vote_ballot.j2"
 IMPOSTOR_REPORT_ROLL_CALL_TEMPLATE: Final[str] = "impostor_report_roll_call.j2"
 ACCUSATION_ROUND_ROLL_CALL_TEMPLATE: Final[str] = "accusation_round_roll_call.j2"
 
-# Task 18.10 impostor-answer lever — DEFAULT-OFF (the 16.8 ``absence_prior_enabled``
-# pattern: env-gated, NOT retired). Deliberately NOT registered in
-# ``orchestrator.replay._TOGGLEABLE_LEVER_RESOLVERS`` yet — Task 18.11 wires the
-# substrate stamp (with the other three Phase-18 lever flags) before any probe
-# seed records; Task 18.12 is the graduation flip if the gate rules SHIP.
+# The Task 18.10 impostor-answer lever — the one LIVE substrate toggle, DEFAULT-OFF.
+# Registered in ``orchestrator.replay._TOGGLEABLE_LEVER_RESOLVERS`` (through a
+# local mirror, so a replay-only consumer need not build this module's Jinja
+# environment); the CREW-ONLY ruling did not ship its arm, so it never graduated.
 ENV_IMPOSTOR_ROLL_CALL: Final[str] = "AILIBI_IMPOSTOR_ROLL_CALL"
 _IMPOSTOR_ROLL_CALL_FLAG_TRUE: Final[frozenset[str]] = frozenset(
     {"1", "true", "yes", "on"}
@@ -331,10 +330,7 @@ def impostor_roll_call_enabled(env: Mapping[str, str] | None = None) -> bool:
     """Whether the Task 18.10 impostor-answer lever is ON. DEFAULT OFF.
 
     Reads :data:`ENV_IMPOSTOR_ROLL_CALL` from ``env`` (defaulting to the real
-    process environment), mirroring the 16.8
-    :func:`agents.memory.beliefs.absence_prior_enabled` resolver it clones
-    (itself the 16.4 ``hard_evidence_gate`` live-toggle pattern; the 18.8
-    :func:`meetings.manager.roll_call_round_enabled` sibling). Default OFF: an
+    process environment). Default OFF: an
     unset / empty / unrecognised value is ``False`` so the loader keeps serving
     the exact default template filenames and the rendered prompt set stays
     byte-identical to the committed registry (the committed recordings and the

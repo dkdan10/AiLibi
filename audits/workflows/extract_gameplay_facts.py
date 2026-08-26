@@ -382,7 +382,10 @@ def _genuine_subjects(
     """
 
     genuine: set[str] = set()
-    for flag in detect_contradictions(transcript, roster=roster, env=detector_env):
+    for flag in detect_contradictions(
+        transcript,
+        roster=roster,
+    ):
         if flag.kind != "alibi_vs_sighting":
             continue
         if WEAK_REASON_ENDPOINT_TICK in flag.description:
@@ -593,7 +596,6 @@ def _rederive_meeting_contradictions(
                 roster=roster,
                 trigger_kind=trigger_kind,
                 vent_witness_records=_vent_records_from_recorded_flags(entry),
-                env=detector_env,
             )
         }
     )

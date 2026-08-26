@@ -1788,7 +1788,8 @@ def _self_placement_census(sample_dir: Path) -> _SelfPlacementCensus:
                             composite, token_budget=DEFAULT_TOKEN_BUDGET
                         )
                         on = render_for_prompt(
-                            composite, token_budget=DEFAULT_TOKEN_BUDGET, env=_TRAIL_ON
+                            composite,
+                            token_budget=DEFAULT_TOKEN_BUDGET,
                         )
                         renders += 1
                         on_ticks[pid] = _rendered_trail_ticks(on)
@@ -2210,7 +2211,6 @@ def _movement_census(sample_dir: Path) -> _MovementCensus:
                         roster=roster,
                         vent_witness_records=vents,
                         move_witness_records=moves,
-                        env=_MOVEMENT_ON,
                     )
                     counts["meetings"] += 1
                     counts["off_matches_recorded"] += int(
@@ -2794,14 +2794,12 @@ def _grounded_census(sample_dir: Path) -> _GroundedCensus:
                         roster=roster,
                         vent_witness_records=vents,
                         sighting_records=sights,
-                        env=_GROUNDED_ON,
                     )
                     move_only = detect_contradictions(
                         entry.transcript,
                         roster=roster,
                         vent_witness_records=vents,
                         move_witness_records=moves,
-                        env=_MOVEMENT_ON,
                     )
                     both = detect_contradictions(
                         entry.transcript,
@@ -2809,7 +2807,6 @@ def _grounded_census(sample_dir: Path) -> _GroundedCensus:
                         vent_witness_records=vents,
                         move_witness_records=moves,
                         sighting_records=sights,
-                        env=_BOTH_LEVERS_ON,
                     )
                     counts["meetings"] += 1
                     counts["off_matches_recorded"] += int(
@@ -3248,7 +3245,6 @@ def _corridor_census(sample_dir: Path) -> _CorridorCensus:
                 entry.transcript,
                 roster=roster,
                 vent_witness_records=vents,
-                env=_MAP_AWARE_ON,
             )
             counts["sighting_flags_match_recorded"] += int(
                 _sighting_flags(off) == _sighting_flags(entry.contradictions)
@@ -3571,12 +3567,12 @@ def _render_budget_census(sample_dir: Path) -> _RenderBudgetCensus:
                         # must not read whatever the process environment happens
                         # to export.
                         off = render_for_prompt(
-                            composite, token_budget=DEFAULT_TOKEN_BUDGET, env={}
+                            composite,
+                            token_budget=DEFAULT_TOKEN_BUDGET,
                         )
                         on = render_for_prompt(
                             composite,
                             token_budget=DEFAULT_TOKEN_BUDGET,
-                            env=_COALESCE_ON,
                         )
                         snapshots += 1
                         rows_off += len(_RENDERED_ROW.findall(off))

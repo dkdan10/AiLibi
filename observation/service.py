@@ -63,12 +63,9 @@ from observation.packet import (
 # The rotation is reconciled with the memory renderer: ``agents/memory/store.py``
 # must never render a "You completed {task}" observation for a pretend id, so the
 # impostor's memory stays accurate and alibi fabrication is the LLM's job at the
-# meeting (DESIGN.md §4.7). Its default rule infers a completion from any change
-# of ``pending_task_id`` and is role-GATED to crewmates for exactly that reason;
-# under ``agents.memory.store.task_completion_from_events_enabled`` it instead
-# reads a completion off an id LEAVING ``owned_task_ids``, which the constant
-# camouflage window below never does — the property then holds for both roles by
-# construction. Seats are taken over ALL role==IMPOSTOR players (alive or dead —
+# meeting (DESIGN.md §4.7). It reads a completion off an id LEAVING
+# ``owned_task_ids``, which the constant camouflage window below never does — so
+# the property holds for both roles by construction. Seats are taken over ALL role==IMPOSTOR players (alive or dead —
 # ejection marks ``alive=False`` but never removes the player), so a seat never
 # shifts mid-game when a teammate is ejected.
 IMPOSTOR_PRETEND_TASK_SET_SIZE: Final[int] = 3

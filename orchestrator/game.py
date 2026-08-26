@@ -42,7 +42,6 @@ from agents.memory.beliefs import (
     BODY_PROXIMITY_WINDOW_TICKS,
     OBSERVED_KILL_ACTION,
     OBSERVED_VENT_ACTION,
-    hard_evidence_gate_enabled,
     hard_evidence_gated_suspicion,
 )
 from agents.memory.store import (
@@ -666,11 +665,11 @@ class ReportedTestimonyAgent(Protocol):
 class MoveWitnessAgent(Protocol):
     """Agent that exposes its OWN witnessed room→room transitions.
 
-    The grounding feed behind the meeting layer's default-OFF movement-claim
-    lever (:func:`meetings.transcript.movement_claim_shape_enabled`): a spoken
-    placement is only ever re-read at a destination the SPEAKER's own record
-    already holds, so the channel is what keeps the lever unable to rewrite
-    testimony nobody made. Firewall-clean -- an agent reporting its own
+    The grounding feed behind the meeting layer's movement-claim chokepoint
+    (:func:`meetings.transcript.detect_contradictions`): a spoken placement is
+    only ever re-read at a destination the SPEAKER's own record already holds,
+    so the channel is what keeps the rule unable to rewrite testimony nobody
+    made. Firewall-clean -- an agent reporting its own
     witnessed events leaks nothing, and the packet the rows derive from is
     witness-gated by the engine (``eval/leak_test.py``).
 
@@ -2745,9 +2744,7 @@ class TacticalAgent:
             suspicion_override=suspicion_override,
         )
 
-    def suspicion_graph_for_meeting(
-        self, *, env: Mapping[str, str] | None = None
-    ) -> tuple[SuspicionEntry, ...]:
+    def suspicion_graph_for_meeting(self) -> tuple[SuspicionEntry, ...]:
         """Snapshot of the agent's belief state as a suspicion graph.
 
         DESIGN.md §5.5 feeds the suspicion graph straight into the
@@ -2771,13 +2768,7 @@ class TacticalAgent:
         one at or under 0.59 renders it unchanged; see Task 16.4 below), so
         the 16.15 surface reads real hard/soft data rather than defaults.
 
-        Task 16.4 (the J1 render clamp). The hard-evidence-gate lever is
-        UNCONDITIONAL since the Task-16.17 baseline-5 record (was default-OFF at
-        Task 16.4; graduated at that record), so
-        :func:`~agents.memory.beliefs.hard_evidence_gate_enabled` hard-returns
-        True and the clamp ALWAYS applies; ``env`` is still threaded through so
-        the resolver stays the single source of truth, but it is accepted and
-        ignored. A row whose typed provenance is entirely soft renders its
+        The J1 render clamp. A row whose typed provenance is entirely soft renders its
         ``suspicion`` scalar clamped to
         :data:`~agents.memory.beliefs.HARD_EVIDENCE_GATE_RENDER_CEIL`, just below
         the §4.6 gate; hard-backed rows and the stored :class:`BeliefState` are
@@ -2785,21 +2776,14 @@ class TacticalAgent:
         the true evidence record -- so a clamped row's scalar deliberately renders
         below its decomposition sum, and the manager's ``seed_player`` reconciling
         that shortfall as an ``unattributed`` residual is the ALWAYS-ON
-        reconciliation, not a lever-ON special case.
+        reconciliation.
         """
 
-        # Task 16.4: resolve the hard-evidence-gate lever ONCE. UNCONDITIONAL
-        # since the Task-16.17 baseline-5 record (was default-OFF at Task 16.4),
-        # so gate_on is always True in production and every entirely-soft row
-        # takes the clamp; the call stays the single source of truth.
-        gate_on = hard_evidence_gate_enabled(env)
         entries: list[SuspicionEntry] = []
         for player_id in sorted(self._memory.beliefs.known_players()):
             belief = self._memory.beliefs.view(player_id)
             provenance = belief.provenance
-            suspicion = belief.suspicion
-            if gate_on:
-                suspicion = hard_evidence_gated_suspicion(suspicion, provenance)
+            suspicion = hard_evidence_gated_suspicion(belief.suspicion, provenance)
             entries.append(
                 SuspicionEntry(
                     player_id=player_id,

@@ -2779,8 +2779,14 @@ class TestCertainGuiltRenderCeiling:
         # BYTE-IDENTICAL to the lever-OFF fold (the audit's zero-cost bound).
         flags = _same_claim_flag_stack(subject="p-1", count=9)
 
-        lever_on = apply_contradiction_rule(BeliefState(), flags, env=_LEVER_ON)
-        lever_off = apply_contradiction_rule(BeliefState(), flags, env=_LEVER_OFF)
+        lever_on = apply_contradiction_rule(
+            BeliefState(),
+            flags,
+        )
+        lever_off = apply_contradiction_rule(
+            BeliefState(),
+            flags,
+        )
 
         assert lever_on.view("p-1").suspicion == pytest.approx(
             _DEFAULT_SUSPICION + CONTRADICTION_SUSPICION_DELTA
@@ -2812,7 +2818,8 @@ class TestCertainGuiltRenderCeiling:
         flags = [_meeting_flag(subject="p-1", weak=False)]
 
         lever_on = apply_contradiction_rule(
-            _seeded("p-1", suspicion=0.98), flags, env=_LEVER_ON
+            _seeded("p-1", suspicion=0.98),
+            flags,
         )
 
         assert lever_on.view("p-1").suspicion == pytest.approx(0.98)
@@ -2832,7 +2839,8 @@ class TestCertainGuiltRenderCeiling:
         assert pinned.view("p-1").suspicion == pytest.approx(1.0)
 
         lever_on = apply_contradiction_rule(
-            pinned, _same_claim_flag_stack(subject="p-1", count=3), env=_LEVER_ON
+            pinned,
+            _same_claim_flag_stack(subject="p-1", count=3),
         )
 
         assert lever_on.view("p-1").suspicion == pytest.approx(1.0)
@@ -2866,7 +2874,6 @@ class TestCertainGuiltRenderCeiling:
             phase="pre_vote",
             pre_vote_folded=frozenset({"p-2"}),
             pre_vote_voice_counts={"p-2": 2},
-            env=_LEVER_ON,
         )
 
         assert lever_on.view("p-2").suspicion == pytest.approx(
@@ -2883,7 +2890,6 @@ class TestCertainGuiltRenderCeiling:
             _seeded("p-2", suspicion=0.96),
             own_id="observer",
             accused=("p-2",),
-            env=_LEVER_ON,
         )
 
         assert lever_on.view("p-2").suspicion == pytest.approx(1.0)
@@ -2899,7 +2905,10 @@ class TestCertainGuiltRenderCeiling:
         ) -> float:
             state = _seeded("p-1", suspicion=_BODY_PROXIMITY_PRIOR)
             folded = (
-                apply_contradiction_rule(state, flags, env=env)
+                apply_contradiction_rule(
+                    state,
+                    flags,
+                )
                 if pass_env
                 else apply_contradiction_rule(state, flags)
             )
@@ -2991,7 +3000,6 @@ class TestSelfRefutedAlibiDowngrade:
             BeliefState(),
             [_flag_on_self_alibi()],
             transcript=transcript,
-            env=_LEVER_ON,
         )
 
         suspicion = lifted.view("p-1").suspicion
@@ -3011,7 +3019,6 @@ class TestSelfRefutedAlibiDowngrade:
             _seeded("p-1", suspicion=_BODY_PROXIMITY_PRIOR),
             [_flag_on_self_alibi()],
             transcript=transcript,
-            env=_LEVER_ON,
         )
 
         assert lifted.view("p-1").suspicion == pytest.approx(0.78)
@@ -3020,7 +3027,8 @@ class TestSelfRefutedAlibiDowngrade:
         # The analysis-caller default (transcript=None) has no signal to
         # derive from; only the production vote path threads the transcript.
         lifted = apply_contradiction_rule(
-            BeliefState(), [_flag_on_self_alibi()], env=_LEVER_ON
+            BeliefState(),
+            [_flag_on_self_alibi()],
         )
 
         assert lifted.view("p-1").suspicion == pytest.approx(
@@ -3051,7 +3059,6 @@ class TestSelfRefutedAlibiDowngrade:
             BeliefState(),
             [_flag_on_self_alibi()],
             transcript=transcript,
-            env=_LEVER_ON,
         )
 
         assert lifted.view("p-1").suspicion == pytest.approx(
@@ -3085,7 +3092,6 @@ class TestSelfRefutedAlibiDowngrade:
             BeliefState(),
             [_flag_on_self_alibi()],
             transcript=transcript,
-            env=_LEVER_ON,
         )
         assert lifted.view("p-1").suspicion == pytest.approx(
             _DEFAULT_SUSPICION + CONTRADICTION_SUSPICION_DELTA
@@ -3191,7 +3197,9 @@ class TestSelfRefutedAlibiDowngrade:
         )
 
         lifted = apply_contradiction_rule(
-            BeliefState(), flags, transcript=transcript, env=_LEVER_ON
+            BeliefState(),
+            flags,
+            transcript=transcript,
         )
         assert lifted.view("p-1").suspicion == pytest.approx(
             _DEFAULT_SUSPICION + WEAK_CONTRADICTION_SUSPICION_DELTA
@@ -3274,7 +3282,9 @@ class TestSelfRefutedAlibiDowngrade:
         ]
         assert strong_sightings  # the witness sighting minted the flag
         lifted = apply_contradiction_rule(
-            BeliefState(), flags, transcript=transcript, env=_LEVER_ON
+            BeliefState(),
+            flags,
+            transcript=transcript,
         )
         # Every group riding the self-refuted account folds WEAK; nothing
         # accumulates past the weak band from this one account.
@@ -3320,7 +3330,6 @@ class TestSelfRefutedAlibiDowngrade:
             BeliefState(),
             [_flag_on_self_alibi()],
             transcript=transcript,
-            env=_LEVER_ON,
         )
 
         assert len(lifted.view("p-1").inconsistencies) == 1
@@ -3341,7 +3350,6 @@ class TestSelfRefutedAlibiDowngrade:
             BeliefState(),
             [_flag_on_self_alibi(), clean_strong],
             transcript=transcript,
-            env=_LEVER_ON,
         )
 
         assert lifted.view("p-1").suspicion == pytest.approx(

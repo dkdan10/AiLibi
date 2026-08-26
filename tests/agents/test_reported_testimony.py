@@ -621,9 +621,16 @@ def _testimony_lines(render: str) -> list[str]:
 class TestVentSightingSurvivesAsContent:
     def test_the_vent_body_its_room_and_its_tick_all_render(self) -> None:
         memory = _memory_at_meeting(1)
-        absorb_reported_testimony(memory, statements=(_VENT_SIGHTING,), env=_ON)
+        absorb_reported_testimony(
+            memory,
+            statements=(_VENT_SIGHTING,),
+        )
 
-        assert _testimony_lines(render_for_prompt(memory, env=_ON)) == [
+        assert _testimony_lines(
+            render_for_prompt(
+                memory,
+            )
+        ) == [
             "- [tick 15] [meeting 1] CLAIM by p-8 (unverified): "
             "saw p-4 VENT in ENGINEERING @ tick 11."
         ]
@@ -636,10 +643,13 @@ class TestVentSightingSurvivesAsContent:
                 _VENT_SIGHTING,
                 ReportedStatement(speaker="p-3", kind="accusation", subject="p-2"),
             ),
-            env=_ON,
         )
 
-        lines = _testimony_lines(render_for_prompt(memory, env=_ON))
+        lines = _testimony_lines(
+            render_for_prompt(
+                memory,
+            )
+        )
         assert all("[meeting 3]" in line for line in lines)
         assert (
             "- [tick 15] [meeting 3] CLAIM by p-3 (unverified): accused p-2." in lines
@@ -649,8 +659,15 @@ class TestVentSightingSurvivesAsContent:
         # The frame is what makes a listener WEIGH the testimony instead of
         # treating a reported sighting as something it witnessed.
         memory = _memory_at_meeting(1)
-        absorb_reported_testimony(memory, statements=(_VENT_SIGHTING,), env=_ON)
-        (line,) = _testimony_lines(render_for_prompt(memory, env=_ON))
+        absorb_reported_testimony(
+            memory,
+            statements=(_VENT_SIGHTING,),
+        )
+        (line,) = _testimony_lines(
+            render_for_prompt(
+                memory,
+            )
+        )
         assert "CLAIM by p-8 (unverified):" in line
 
     def test_the_vent_statement_becomes_a_row(self) -> None:
@@ -682,9 +699,16 @@ class TestVentSightingSurvivesAsContent:
         # record, so WHICH meeting this is cannot be known. The frame states
         # nothing rather than a fabricated "[meeting 0]".
         memory = _memory_at_meeting(0)
-        absorb_reported_testimony(memory, statements=(_VENT_SIGHTING,), env=_ON)
+        absorb_reported_testimony(
+            memory,
+            statements=(_VENT_SIGHTING,),
+        )
 
-        (line,) = _testimony_lines(render_for_prompt(memory, env=_ON))
+        (line,) = _testimony_lines(
+            render_for_prompt(
+                memory,
+            )
+        )
         assert "[meeting]" in line
         assert "[meeting 0]" not in line
         # The content still survives — only the ordinal is withheld.
@@ -859,12 +883,12 @@ def _survival_census(sample_dir: Path) -> _SurvivalCensus:
                         # must not read whatever the process environment happens
                         # to export.
                         off = render_for_prompt(
-                            composite, token_budget=DEFAULT_TOKEN_BUDGET, env={}
+                            composite,
+                            token_budget=DEFAULT_TOKEN_BUDGET,
                         )
                         on = render_for_prompt(
                             composite,
                             token_budget=DEFAULT_TOKEN_BUDGET,
-                            env=_COALESCE_ON,
                         )
                         kept_off[bucket] += sum(
                             1 for line in off.splitlines() if _TESTIMONY_ROW in line

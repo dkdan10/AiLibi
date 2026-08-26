@@ -248,7 +248,6 @@ def _fold_pre_vote(beliefs: BeliefState, **kwargs: object) -> BeliefState:
         beliefs,
         own_id="observer",
         phase="pre_vote",
-        env=_LEVER_ON,
         **kwargs,  # type: ignore[arg-type]
     )
 
@@ -522,7 +521,6 @@ class TestAbsenceTransientOnly:
             accused=(),
             phase=phase,  # type: ignore[arg-type]
             absent=frozenset({"p-2", "p-3"}),
-            env=_LEVER_ON,
         )
         without_absent = apply_meeting_evidence_rules(
             BeliefState(),
@@ -530,7 +528,6 @@ class TestAbsenceTransientOnly:
             accused=(),
             phase=phase,  # type: ignore[arg-type]
             absent=frozenset(),
-            env=_LEVER_ON,
         )
         assert _snapshot(with_absent) == _snapshot(without_absent)
         # No absence row materialised on the persistent path.
@@ -550,7 +547,6 @@ class TestAbsenceTransientOnly:
             accused=(),
             phase=None,
             absent=frozenset({"p-2"}),
-            env=_LEVER_ON,
         )
         assert persisted.known_players() == ()
         assert persisted.view("p-2").suspicion == _NEUTRAL
@@ -623,7 +619,6 @@ class TestAbsenceReporterComposition:
             phase="pre_vote",
             reporter="p-2",
             absent=frozenset({"p-2", "p-3"}),
-            env=_LEVER_ON,
         )
         # The reporter's absence delta is capped to 0.0 -- stays exactly neutral.
         assert result.view("p-2").suspicion == _NEUTRAL
@@ -698,7 +693,6 @@ class TestAbsenceJointCapComposition:
             evidence=evidence,
             # A contradiction fold fails loud without the transcript (14.10 seam).
             transcript=MeetingTranscript(turns=()),
-            env=_LEVER_ON,
         )
         row = {entry.player_id: entry for entry in rows}["X"]
         # The strong flag (+0.30) plus absence (+0.08) would reach 0.88; the joint
@@ -801,7 +795,6 @@ class TestAbsenceEmptySetIsANoOp:
             phase="pre_vote",
             pre_vote_informed=frozenset({"p-5"}),
             absent=frozenset(),
-            env=_LEVER_OFF,
         )
         # No absent subject -> no absence row; the informed bump landed exactly.
         assert "p-3" not in folded.known_players()
@@ -824,7 +817,6 @@ class TestAbsenceEmptySetIsANoOp:
             contradictions=(),
             evidence=evidence,
             transcript=None,
-            env=_LEVER_OFF,
         )
         assert emitted is graph
 
@@ -842,7 +834,6 @@ class TestAbsenceEmptySetIsANoOp:
             contradictions=(),
             evidence=evidence,
             transcript=None,
-            env=_LEVER_ON,
         )
         assert emitted is not graph
         assert {entry.player_id: entry.suspicion for entry in emitted} == {"p-3": 0.58}
@@ -1079,7 +1070,6 @@ class TestAbsencePriorOnCommittedBytes:
                 evidence=evidence,
                 transcript=entry.transcript,
                 reporter=reporter,
-                env=env,
             )
             rows[voter] = {e.player_id: e for e in emitted}
         return rows

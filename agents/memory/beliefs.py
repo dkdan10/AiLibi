@@ -158,9 +158,7 @@ Phase-10 Rule-1 body-proximity prior (0.70 = 0.50 +
 in all 5 pinned railroad rows the 1.00-renderers are the impostors,
 handed a false "certain guilt" row on an innocent. This ceiling, just
 below the clamp, extends the 13.14 joint-cap discipline with a third
-bound: under the now-unconditional :func:`evidence_quality_lift_enabled`
-lever (was default-OFF at Task 14.10; graduated to always-on at the
-Task-14.12 close), a subject's flag/testimony-driven transient lift
+bound: a subject's flag/testimony-driven transient lift
 ALWAYS renders at most
 ``min(lifted, prior + 0.3, max(prior, CONTRADICTION_RENDER_CEIL))`` --
 no same-meeting stack can reach the 1.0 clamp. Zero conversion cost:
@@ -173,84 +171,14 @@ never the prior. Applied only to the transient render channels
 spread); the persistent absorb is untouched, so the across-meeting 9.8
 accumulator stays the allowed channel."""
 
-# Task 14.10 evidence-quality lift lever — UNCONDITIONAL since the Task-14.12
-# phase close (PR follow-up). The lever was adopted by the baseline-2 re-record,
-# so — mirroring the Task-14.9 move for the four Phase-13.5 levers — it is now the
-# default substrate rather than an env-gated toggle: the certain-guilt exclusion
-# and self-refuted-alibi downgrade always apply. This is byte-identical to the
-# baseline-2 recording (which ran the lever ON), and it lets the committed set
-# reconstruct/serve under a BARE environment (no AILIBI_* export). The lever is
-# stamped unconditionally ON via ``orchestrator.replay._RETIRED_ALWAYS_ON_LEVERS``;
-# a stamp recording it OFF is a legacy artifact that fails loud (no cross-substrate
-# replay). ``ENV_EVIDENCE_QUALITY_LIFT`` is retained (no longer read) for the stamp
-# key's naming provenance and backward-compatible imports.
-ENV_EVIDENCE_QUALITY_LIFT: Final[str] = "AILIBI_EVIDENCE_QUALITY_LIFT"
-
-
-def evidence_quality_lift_enabled(env: Mapping[str, str] | None = None) -> bool:
-    """Whether the Task 14.10 evidence-quality lift lever is ON — now always True.
-
-    Retired to UNCONDITIONAL at the Task-14.12 close (the 14.9 move for the 13.5
-    levers, applied to this lever after baseline 2 adopted it): the
-    :data:`CONTRADICTION_RENDER_CEIL` certain-guilt exclusion and the
-    self-refuted-alibi WEAK downgrade in :func:`apply_contradiction_rule`, plus
-    the ceiling on the ``pre_vote`` testimony spread in
-    :func:`apply_meeting_evidence_rules`, are the default substrate. The ``env``
-    argument is accepted and ignored (retained so the belief-fold call sites and
-    the substrate stamp read one source of truth without a signature churn).
-    """
-
-    del env  # retired: the lever is unconditional, no environment is consulted
-    return True
-
-
-# Task 15.5 reporter-exculpation lever — UNCONDITIONAL since the Task-15.7
-# baseline-3 record (the Wave-0 close). The lever was adopted by the baseline-3
-# re-record, so — mirroring the Task-14.9/14.12 graduation of the five earlier
-# levers — it is now the default substrate rather than an env-gated toggle: the
-# reporter suspicion-damp and the vote-surface base-rate annotation always apply.
-# This is byte-identical to the baseline-3 recording (which ran the lever ON), and
-# it lets the committed set reconstruct/serve under a BARE environment (no AILIBI_*
-# export) — discharging the C6 recording-preflight hazard: no lever env for an
-# operator to forget, and no gap between the stamped flags and the code's bare
-# behavior. The lever is stamped unconditionally ON via
-# ``orchestrator.replay._RETIRED_ALWAYS_ON_LEVERS``; a stamp recording it OFF is a
-# legacy (baseline-2) artifact that fails loud (no cross-substrate replay).
-# ``ENV_REPORTER_EXCULPATION`` is retained (no longer read) for the stamp key's
-# naming provenance and backward-compatible imports.
-ENV_REPORTER_EXCULPATION: Final[str] = "AILIBI_REPORTER_EXCULPATION"
-
-
-def reporter_exculpation_enabled(env: Mapping[str, str] | None = None) -> bool:
-    """Whether the Task 15.5 reporter-exculpation lever is ON — now always True.
-
-    Retired to UNCONDITIONAL at the Task-15.7 baseline-3 record (the 14.9/14.12
-    move for the earlier levers, applied to this lever once baseline 3 adopted
-    it): the reporter soft-lift damp in :func:`apply_meeting_evidence_rules` (the
-    ``pre_vote`` accusation lift against a body-report meeting's own reporter,
-    capped at :data:`REPORTER_EXCULPATION_SOFT_LIFT_CAP`) and, on the render side,
-    the base-rate annotation the vote-ballot template surfaces are the default
-    substrate. The HARD channels (:func:`apply_contradiction_rule` strong flags;
-    the witnessed vent/kill perception pins) are still never gated by it — a
-    reporter caught by a real contradiction or a vent/kill flag stays convictable.
-    The ``env`` argument is accepted and ignored (retained so the belief-fold call
-    sites and the substrate stamp read one source of truth without a signature
-    churn).
-    """
-
-    del env  # retired: the lever is unconditional, no environment is consulted
-    return True
-
-
 REPORTER_EXCULPATION_SOFT_LIFT_CAP: Final[float] = 0.0
 """Per-meeting cap on the SOFT accusation-driven suspicion lift against a
 body-report meeting's own REPORTER (Task 15.5; tasks/post-phase-14-clean-up.md
 H5; audit-phase-14-close.md §4).
 
-Applied behind the now-unconditional :func:`reporter_exculpation_enabled` lever
-(graduated to always-on at the Task-15.7 baseline-3 record), and only in the
-``pre_vote`` half of the fold (the transient vote-time graph the ballot reads — the
-deciding-lift channel), so the persistent across-meeting absorb is untouched. A
+Applied only in the ``pre_vote`` half of the fold (the transient vote-time graph
+the ballot reads — the deciding-lift channel), so the persistent across-meeting
+absorb is untouched. A
 reporter's accusation-driven pre-vote bump -- the flat single-voice
 :data:`ACCUSATION_SUSPICION_DELTA` accusation-carry AND the graduated
 :func:`graduated_spread_delta` testimony-spread -- is capped at this value. At ``0.0`` the reporter takes NO soft lift: proximity-at-discovery no
@@ -273,46 +201,6 @@ outcomes change) is the contract's hard line. The magnitude is a single tuning
 point should 15.7's live measurement warrant a non-zero cap."""
 
 
-# Task 16.4 hard-evidence-gate lever — UNCONDITIONAL since the Task-16.17
-# baseline-5 record (the graduation slate, audits/audit-phase-16-close.md §0.1.1).
-# The lever was adopted by the baseline-5 re-record, so — mirroring the
-# 14.9/14.12/15.7 graduations — it is now the default substrate rather than an
-# env-gated toggle: the J1 render clamp always applies at the two belief-render
-# read-sites. This is byte-identical to the baseline-5 recording (which ran the
-# lever ON), and it lets the committed set reconstruct/serve under a BARE
-# environment (no AILIBI_* export) — discharging the C6 recording-preflight
-# hazard for this lever. The lever is stamped unconditionally ON via
-# ``orchestrator.replay._RETIRED_ALWAYS_ON_LEVERS``; a stamp recording it OFF is
-# a legacy (baseline-3/4) artifact that fails loud (no cross-substrate replay).
-# ``ENV_HARD_EVIDENCE_GATE`` is retained (no longer read) for the stamp key's
-# naming provenance and backward-compatible imports.
-ENV_HARD_EVIDENCE_GATE: Final[str] = "AILIBI_HARD_EVIDENCE_GATE"
-
-
-def hard_evidence_gate_enabled(env: Mapping[str, str] | None = None) -> bool:
-    """Whether the Task 16.4 hard-evidence-gate (J1) lever is ON — now always True.
-
-    Retired to UNCONDITIONAL at the Task-16.17 baseline-5 record (the 15.7 move,
-    applied to this lever once baseline 5 adopted it per the graduation slate —
-    the over-damping canary held on the baseline-4 committed-bytes counterfactual:
-    zero hard-flag-backed conviction outcomes change). The J1 render clamp applies
-    at exactly the two belief-render read-sites -- the store's §6.6 belief lines
-    (:func:`agents.memory.store._build_belief_lines`) and the vote-ballot
-    suspicion-graph builder
-    (:meth:`orchestrator.game.TacticalAgent.suspicion_graph_for_meeting`) -- where a
-    row whose typed provenance is ENTIRELY soft is clamped to
-    :data:`HARD_EVIDENCE_GATE_RENDER_CEIL`. The classification is a pure function of
-    the 16.3 provenance (:func:`hard_evidence_gated_suspicion`); the HARD channels,
-    the stored scalar, and the fold arithmetic are never touched, so a hard-backed
-    row renders unchanged. The ``env`` argument is accepted and ignored (retained
-    so the render call sites and the substrate stamp read one source of truth
-    without a signature churn).
-    """
-
-    del env  # retired: the lever is unconditional, no environment is consulted
-    return True
-
-
 HARD_EVIDENCE_GATE_RENDER_CEIL: Final[float] = 0.59
 """Sub-gate render value the J1 clamp folds an entirely-soft conviction-grade row
 down to (Task 16.4; audits/post-phase-14-Voice-and-Judgment-planning.md §3.4 J1).
@@ -322,9 +210,7 @@ One display-precision notch under the §4.6 0.60 eject gate
 ``0.59`` renders exactly ``"0.59"`` under the vote template's ``"%.2f"`` format, so
 the model reads a MUST-SKIP row rather than the MUST-vote a raw ``>= 0.60`` scalar
 would surface. Mirrors the :data:`CONTRADICTION_RENDER_CEIL` naming (a
-render-time ceiling, not a fold-time cap) and sits behind the now-unconditional
-:func:`hard_evidence_gate_enabled` lever (graduated to always-on at the Task-16.17
-baseline-5 record). The measured trade was re-checked per rung of the ladder: the
+render-time ceiling, not a fold-time cap). The measured trade was re-checked per rung of the ladder: the
 planning-doc §3.4 J1 static counterfactual read 24/31 crew mis-ejects neutralised
 vs 6/16 impostor catches risked (baseline-2-era figures); the 16.4 re-measure on
 the committed baseline-3 bytes found 0 kept / 2 catches risked; the 16.14-era
@@ -365,11 +251,9 @@ def hard_evidence_gated_suspicion(
     reconciled straight into ``unattributed``; on a real belief row the residual is
     ~0 and the predicate turns on the hard/soft split alone.
 
-    Pure and lever-agnostic: this helper NEVER reads the env or the lever (the
-    gating is the 15.5 in-line pattern at the two call sites,
-    :func:`hard_evidence_gate_enabled`). It mutates no stored state -- it is applied
-    to the rendered scalar at the two belief-render read-sites only, and every
-    non-render consumer keeps reading the raw ``belief.suspicion``.
+    Pure: it mutates no stored state -- it is applied to the rendered scalar at
+    the two belief-render read-sites only, and every non-render consumer keeps
+    reading the raw ``belief.suspicion``.
 
     Composes with (never bypasses) the downstream caps. The clamp is applied to the
     builder rows BEFORE the manager pre-vote fold, so fresh same-meeting lift lands
@@ -389,45 +273,6 @@ def hard_evidence_gated_suspicion(
     return min(suspicion, HARD_EVIDENCE_GATE_RENDER_CEIL) if soft_only else suspicion
 
 
-# Task 16.8 absence-prior lever — UNCONDITIONAL since the Task-18.12 baseline-6
-# record. The Phase-16 slate recorded this lever's STAY-OFF (baseline 5), and
-# audits/audit-phase-17-absence-gate.md Ruling 3 re-routed the graduation decision
-# to Phase 18, gating it on the ratified bar measured beside the 18.8 roll-call
-# elicitation (which supplies the placement channel that keeps the absent set
-# small). The 18.11 meeting-layer gate cleared that bar and the CREW-ONLY ruling
-# graduated it, so — mirroring the 14.9/14.12/15.7/16.17 graduations — it is now
-# the default substrate rather than an env-gated toggle: the pre-vote fold always
-# applies the delta to the absent set. Stamped unconditionally ON via
-# ``orchestrator.replay._RETIRED_ALWAYS_ON_LEVERS``; ``ENV_ABSENCE_PRIOR`` is
-# retained (no longer read) for the stamp key's naming provenance and
-# backward-compatible imports.
-ENV_ABSENCE_PRIOR: Final[str] = "AILIBI_ABSENCE_PRIOR"
-
-
-def absence_prior_enabled(env: Mapping[str, str] | None = None) -> bool:
-    """Whether the Task 16.8 absence-prior lever is ON — now always True.
-
-    Retired to UNCONDITIONAL at the Task-18.12 baseline-6 record (the 16.17 move,
-    applied to this lever once baseline 6 adopted it: the Phase-16 slate's recorded
-    STAY-OFF was re-routed to Phase 18 by audits/audit-phase-17-absence-gate.md
-    Ruling 3, and the 18.11 meeting-layer gate cleared the ratified bar beside the
-    18.8 roll-call elicitation). The fold applies at exactly the pre-vote
-    application region and the manager's fold-path guard -- both read THIS
-    resolver. The ``env`` argument is accepted and ignored (retained so the read
-    sites and the substrate stamp read one source of truth without a signature
-    churn).
-
-    ON applies :data:`ABSENCE_SUSPICION_DELTA` to every absent subject
-    (:func:`meetings.transcript.absent_players` -- the meeting's living roster
-    minus the players public testimony placed) in the TRANSIENT ``pre_vote``
-    half of :func:`apply_meeting_evidence_rules`, threaded by the manager's
-    vote-time fold. The persistent absorb never applies the delta.
-    """
-
-    del env  # retired: the lever is unconditional, no environment is consulted
-    return True
-
-
 ABSENCE_SUSPICION_DELTA: Final[float] = 0.08
 """The Task 16.8 absence prior: the WEAK pre-vote delta a publicly UNPLACED
 living player takes (audits/post-phase-14-Voice-and-Judgment-planning.md's
@@ -436,9 +281,7 @@ pooling program; the phase-16 "visibility as a resource" channel).
 At the pre-vote fold, every subject in the meeting's ABSENT set -- the living
 roster minus :func:`meetings.transcript.reconstruct_stated_paths` keys, i.e.
 the players whom NOBODY's public testimony (sighting or Task 16.7 whereabouts
-answer) placed anywhere this meeting -- takes this delta, under the
-now-unconditional :func:`absence_prior_enabled` lever (was default-OFF at
-Task 16.8; graduated to always-on at the Task-18.12 baseline-6 record).
+answer) placed anywhere this meeting -- takes this delta.
 Answering roll-call removes a player from the set, so impostors gain a reason
 to account for their time (lying creates the contradiction material the alibi
 rules prosecute), and staying unseen finally has a price -- the incentive
@@ -1342,7 +1185,6 @@ def apply_contradiction_rule(
     contradictions: Sequence[MeetingContradictionRef],
     *,
     transcript: MeetingTranscript | None = None,
-    env: Mapping[str, str] | None = None,
 ) -> BeliefState:
     """Apply DESIGN.md §6.3 Rule 2 for detected meeting contradictions.
 
@@ -1423,12 +1265,8 @@ def apply_contradiction_rule(
     about the score, never the information (§5.4 "flags are
     information").
 
-    Evidence-quality bounds (Task 14.10; audit 2026-07-01 §3a). Under the
-    now-unconditional :func:`evidence_quality_lift_enabled` lever (was
-    default-OFF at Task 14.10 on the retired 13.5 env pattern; graduated to
-    always-on at the Task-14.12 phase close, so ``env`` is accepted and
-    ignored), two MEASURED bounds ALWAYS tighten the lift -- the lever-OFF
-    byte-identity with the pre-14.10 fold is history:
+    Evidence-quality bounds (audit 2026-07-01 §3a). Two MEASURED bounds always
+    tighten the lift:
 
     * **Self-refuted-alibi downgrade (bound 2).** A flag whose referenced
       alibi claim is self-refuted -- the subject's OWN same-turn
@@ -1460,9 +1298,8 @@ def apply_contradiction_rule(
     replay-stable belief snapshots.
     """
 
-    lift_enabled = evidence_quality_lift_enabled(env)
     self_refuted: frozenset[str] = frozenset()
-    if lift_enabled and transcript is not None:
+    if transcript is not None:
         self_refuted = self_refuted_alibi_claim_ids(transcript)
 
     result = beliefs.copy()
@@ -1499,14 +1336,13 @@ def apply_contradiction_rule(
         lift_by_subject[subject] = lift_by_subject.get(subject, 0.0) + delta
     for subject in sorted(lift_by_subject):
         capped = min(lift_by_subject[subject], MEETING_CONTRADICTION_LIFT_CAP)
-        if lift_enabled:
-            # Task 14.10 bound 1: never lift a subject INTO the 1.0 clamp --
-            # the render ceiling caps the delta so the result stays at or
-            # under max(prior, CONTRADICTION_RENDER_CEIL). A prior already at
-            # the clamp (the witnessed-kill pin) is exempt by the max: its
-            # ceiling equals the prior, so the value holds rather than drops.
-            prior = result.view(subject).suspicion
-            capped = min(capped, max(prior, CONTRADICTION_RENDER_CEIL) - prior)
+        # Never lift a subject INTO the 1.0 clamp -- the render ceiling caps the
+        # delta so the result stays at or under
+        # max(prior, CONTRADICTION_RENDER_CEIL). A prior already at the clamp
+        # (the witnessed-kill pin) is exempt by the max: its ceiling equals the
+        # prior, so the value holds rather than drops.
+        prior = result.view(subject).suspicion
+        capped = min(capped, max(prior, CONTRADICTION_RENDER_CEIL) - prior)
         # Task 16.3: the contradiction lift is the HARD flag_lift channel. The
         # capped/ceilinged APPLIED delta is what accumulates -- exactly why
         # post-hoc attribution is wrong (the dedup, cap, and render-ceiling all
@@ -1530,7 +1366,6 @@ def apply_meeting_evidence_rules(
     pre_vote_voice_counts: Mapping[PlayerId, int] | None = None,
     reporter: PlayerId | None = None,
     absent: AbstractSet[PlayerId] = frozenset(),
-    env: Mapping[str, str] | None = None,
 ) -> BeliefState:
     """Fold one meeting's public evidence into persistent beliefs (Tasks 9.8, 10.7, 10.15).
 
@@ -1681,27 +1516,21 @@ def apply_meeting_evidence_rules(
     impostor listener never takes a pre-vote bump against a fellow
     impostor.
 
-    **Certain-guilt exclusion on the spread (Task 14.10 bound 1; audit
-    2026-07-01 §3a).** Under the now-unconditional
-    :func:`evidence_quality_lift_enabled` lever (was default-OFF at Task
-    14.10; graduated to always-on at the Task-14.12 phase close, ``env``
-    accepted and ignored), the ``pre_vote`` bump is ALWAYS additionally
-    bounded so a bumped subject renders at or under
+    **Certain-guilt exclusion on the spread (audit 2026-07-01 §3a).** The
+    ``pre_vote`` bump is ALWAYS additionally bounded so a bumped subject
+    renders at or under
     ``max(prior, CONTRADICTION_RENDER_CEIL)`` -- testimony-driven transient
     lift can never reach the 1.0 clamp, mirroring the contradiction-lift
     ceiling in :func:`apply_contradiction_rule` (the two channels stack on
     one graph at vote time, so both must respect the render bound). ONLY the
     ``pre_vote`` half is ceilinged: the ``post_vote`` and composed halves are
     the persistent absorb, whose flat +0.05 across-meeting accumulation is
-    the legitimate 9.8 channel and stays untouched. The pre-14.10 fold's
-    byte-identity under a lever-OFF path is history.
+    the legitimate 9.8 channel and stays untouched.
 
-    **Reporter exculpation (Task 15.5; unconditional since Task 15.7; H5 /
-    audit-phase-14-close §4).** ``reporter`` names the body-report meeting's own
-    reporter (the manager threads
+    **Reporter exculpation (H5 / audit-phase-14-close §4).** ``reporter`` names
+    the body-report meeting's own reporter (the manager threads
     :attr:`meetings.manager.MeetingTrigger.triggered_by` for a body report;
-    ``None`` for an emergency call or any non-vote-time caller). Under the
-    now-unconditional :func:`reporter_exculpation_enabled` lever the reporter's
+    ``None`` for an emergency call or any non-vote-time caller). The reporter's
     ``pre_vote`` accusation-driven bump -- the flat single-voice accusation-carry
     AND the graduated testimony-spread -- is capped at
     :data:`REPORTER_EXCULPATION_SOFT_LIFT_CAP` (0.0), removing the
@@ -1719,13 +1548,9 @@ def apply_meeting_evidence_rules(
     caught by a real flag still crosses the §4.6 gate (the over-damping canary:
     zero hard-flag-backed conviction outcomes change).
 
-    **Absence prior (Task 16.8; unconditional since Task 18.12).** ``absent``
-    names the meeting's publicly UNPLACED living players
-    (:func:`meetings.transcript.absent_players` -- the roster minus the
-    stated-paths keys), threaded by the manager's vote-time fold. Under the
-    now-unconditional :func:`absence_prior_enabled` lever (was default-OFF at
-    Task 16.8 on the 15.5 ``reporter`` gating pattern; graduated to always-on
-    at the Task-18.12 baseline-6 record), every absent
+    **Absence prior.** ``absent`` names the meeting's publicly UNPLACED living
+    players (:func:`meetings.transcript.absent_players` -- the roster minus the
+    stated-paths keys), threaded by the manager's vote-time fold. Every absent
     subject takes :data:`ABSENCE_SUSPICION_DELTA` in the ``pre_vote`` half ONLY
     -- the delta is TRANSIENT exactly like the 13.7 spread graduation (the
     ``post_vote`` and composed halves ignore ``absent`` entirely, so a
@@ -1819,26 +1644,19 @@ def apply_meeting_evidence_rules(
         for player_id in result.known_players():
             if player_id not in roster:
                 result.drop_player(player_id)
-    # Task 14.10 bound 1: the render ceiling applies to the TRANSIENT
-    # pre-vote half only (the graph the ballot reads); the persistent
-    # halves never take the ceiling (the resolver is unconditional since
-    # 14.12), so the 9.8 across-meeting accumulator is untouched.
-    ceil_lift = phase == "pre_vote" and evidence_quality_lift_enabled(env)
-    # Task 15.5 reporter exculpation (unconditional since Task 15.7): cap the
-    # soft accusation lift against a body-report meeting's own reporter,
-    # TRANSIENT pre-vote half only. ``reporter=None`` (every caller but the
-    # manager's vote-time fold) still makes this a no-op, so the persistent
-    # absorb stays byte-identical; the lever-OFF path is history.
-    exculpate_reporter = (
-        phase == "pre_vote"
-        and reporter is not None
-        and reporter_exculpation_enabled(env)
-    )
-    # Task 16.8 absence prior (unconditional since Task 18.12): the TRANSIENT
-    # pre-vote half only, like the 13.7 spread graduation -- the persistent
-    # halves never read the absent set, so absence can never accumulate across
-    # meetings and an EMPTY set is byte-identical by construction.
-    absence_now = phase == "pre_vote" and bool(absent) and absence_prior_enabled(env)
+    # The evidence-quality render ceiling applies to the TRANSIENT pre-vote half
+    # only (the graph the ballot reads); the persistent halves never take it, so
+    # the 9.8 across-meeting accumulator is untouched.
+    ceil_lift = phase == "pre_vote"
+    # Reporter exculpation: cap the soft accusation lift against a body-report
+    # meeting's own reporter, TRANSIENT pre-vote half only. ``reporter=None``
+    # (every caller but the manager's vote-time fold) makes this a no-op, so the
+    # persistent absorb is untouched.
+    exculpate_reporter = phase == "pre_vote" and reporter is not None
+    # The absence prior: the TRANSIENT pre-vote half only, like the 13.7 spread
+    # graduation -- the persistent halves never read the absent set, so absence
+    # can never accumulate across meetings and an EMPTY set is a no-op.
+    absence_now = phase == "pre_vote" and bool(absent)
     for subject in sorted(bump_now):
         # Graduated testimony spread (Task 13.7): the PRE-VOTE half lifts a
         # voiced subject by its voice-count delta (1->+0.05, 2->+0.12,
@@ -1927,10 +1745,6 @@ __all__ = [
     "CONTRADICTION_RENDER_CEIL",
     "CONTRADICTION_SUSPICION_DELTA",
     "CORROBORATION_SUSPICION_DELTA",
-    "ENV_ABSENCE_PRIOR",
-    "ENV_EVIDENCE_QUALITY_LIFT",
-    "ENV_HARD_EVIDENCE_GATE",
-    "ENV_REPORTER_EXCULPATION",
     "HARD_EVIDENCE_GATE_RENDER_CEIL",
     "MEETING_CONTRADICTION_LIFT_CAP",
     "MEETING_SUSPICION_DECAY_RATE",
@@ -1952,13 +1766,9 @@ __all__ = [
     "PlayerBelief",
     "SuspicionProvenance",
     "SuspicionSource",
-    "absence_prior_enabled",
     "apply_contradiction_rule",
     "apply_meeting_evidence_rules",
     "apply_observation_rules",
-    "evidence_quality_lift_enabled",
     "graduated_spread_delta",
-    "hard_evidence_gate_enabled",
     "hard_evidence_gated_suspicion",
-    "reporter_exculpation_enabled",
 ]

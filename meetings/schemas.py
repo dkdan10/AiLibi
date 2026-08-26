@@ -162,7 +162,7 @@ class SawMoveObservation(_FrozenModel):
     :class:`SawPlayerObservation`, where naming the origin room places the
     subject at a tick they had already left.
 
-    Under :func:`meetings.transcript.movement_claim_shape_enabled` the shape
+    In :func:`meetings.transcript.detect_contradictions` the shape
     contributes EXACTLY ONE placement, the destination "``subject`` in
     ``to_room`` at ``tick``", and only when the SPEAKER's own typed
     :class:`MoveWitnessRecord` channel holds the same transition. The origin

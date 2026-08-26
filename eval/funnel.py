@@ -1223,7 +1223,7 @@ def _walk_game_vj(
                 fellows_by_voter: dict[PlayerId, tuple[PlayerId, ...]] = {}
                 for pid in sorted(living):
                     agent = agents[pid]
-                    graph_by_voter[pid] = agent.suspicion_graph_for_meeting(env={})
+                    graph_by_voter[pid] = agent.suspicion_graph_for_meeting()
                     sightings_by_speaker[pid] = agent.sighting_records_for_meeting()
                     obs_ids_by_voter[pid] = frozenset(
                         agent.observation_ids_for_meeting()

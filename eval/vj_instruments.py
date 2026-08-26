@@ -377,7 +377,6 @@ def _pre_vote_graphs(
             evidence=evidence,
             transcript=meeting.transcript,
             reporter=reporter,
-            env={},
         )
     return graphs
 

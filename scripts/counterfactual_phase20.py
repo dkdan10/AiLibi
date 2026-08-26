@@ -535,7 +535,10 @@ def _fold_meeting_both_ways(
                 corroborated=evidence.corroborated,
                 contradicted=evidence.contradicted,
             )
-            absorb_reported_testimony(lineage[pid], statements=statements, env=slate)
+            absorb_reported_testimony(
+                lineage[pid],
+                statements=statements,
+            )
     for lineage in (off, on):
         fold_meeting_outcome_into_memories(
             walk_event.result, state=walk_event.state, memories=lineage
@@ -775,7 +778,6 @@ def _fold_one_meeting(
             vent_witness_records=vents,
             move_witness_records=moves,
             sighting_records=sightings,
-            env=slate,
         )
         for name, slate in legs.items()
     }
@@ -940,7 +942,8 @@ def _render_one_meeting(
             ("seven_on", on_memories, decomposition),
         ):
             view = render_for_prompt(
-                memories[pid], token_budget=DEFAULT_TOKEN_BUDGET, env=budget
+                memories[pid],
+                token_budget=DEFAULT_TOKEN_BUDGET,
             )
             rows = len(_RENDERED_ROW.findall(view))
             testimony = sum(

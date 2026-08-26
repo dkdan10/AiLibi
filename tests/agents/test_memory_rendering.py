@@ -1964,7 +1964,9 @@ class TestSelfLocationTrail:
 
         for env in (_TRAIL_ON, None):
             with pytest.raises(ValueError, match="disagree about tick 2"):
-                render_for_prompt(memory, env=env)
+                render_for_prompt(
+                    memory,
+                )
 
     def test_the_completed_task_room_agrees_with_the_trail_for_its_tick(self) -> None:
         fixture, _ = _load_fixture("self_location_trail")

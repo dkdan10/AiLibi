@@ -517,7 +517,9 @@ def test_on_path_renders_an_ejected_impostor_a_crewmate_and_a_skip() -> None:
         roster_impostor_count=2,
     )
 
-    render = render_for_prompt(memory, env=_ON)
+    render = render_for_prompt(
+        memory,
+    )
 
     assert _meetings_block(render) == [
         "Meeting 1 (tick 14): p-2 EJECTED 6-2 — p-2 was a CREWMATE. 2 impostors remain.",
@@ -529,7 +531,9 @@ def test_on_path_renders_an_ejected_impostor_a_crewmate_and_a_skip() -> None:
 def test_the_block_sits_above_the_observations_and_below_the_role_line() -> None:
     memory = _render_memory()
     _announced(memory)
-    lines = render_for_prompt(memory, env=_ON).splitlines()
+    lines = render_for_prompt(
+        memory,
+    ).splitlines()
     assert lines[0].startswith("## Your role:")
     assert lines.index("## Meetings so far:") < lines.index(
         "## Recent observations (most salient first):"
@@ -542,8 +546,13 @@ def test_the_block_survives_a_budget_that_sheds_every_observation() -> None:
     # drop every sighting must still carry it.
     memory = _render_memory()
     _announced(memory)
-    full = render_for_prompt(memory, env=_ON)
-    tight = render_for_prompt(memory, token_budget=60, env=_ON)
+    full = render_for_prompt(
+        memory,
+    )
+    tight = render_for_prompt(
+        memory,
+        token_budget=60,
+    )
     assert "## Recent observations (most salient first):" in full
     assert "## Recent observations (most salient first):" not in tight
     assert _meetings_block(tight) == _meetings_block(full)
@@ -614,9 +623,11 @@ def test_a_kill_never_moves_the_impostors_remaining_count() -> None:
         skip_votes=5,
         roster_impostor_count=1,
     )
-    assert _meetings_block(render_for_prompt(memory, env=_ON)) == [
-        "Meeting 1 (tick 14): no ejection (5 skip). 1 impostor remains."
-    ]
+    assert _meetings_block(
+        render_for_prompt(
+            memory,
+        )
+    ) == ["Meeting 1 (tick 14): no ejection (5 skip). 1 impostor remains."]
 
 
 # ---------------------------------------------------------------------------- #
@@ -628,7 +639,9 @@ def test_no_role_appears_before_its_ejection_tick() -> None:
     memory = _render_memory()
     # Rendered BEFORE the meeting concludes: nothing has been folded, so the
     # block is absent and the render names no other player's role at all.
-    before = render_for_prompt(memory, env=_ON)
+    before = render_for_prompt(
+        memory,
+    )
     assert "## Meetings so far:" not in before
     assert_memory_render_role_disclosure_is_entitled(
         before, ejection_ticks={}, render_tick=9
@@ -643,7 +656,9 @@ def test_no_role_appears_before_its_ejection_tick() -> None:
         skip_votes=1,
         roster_impostor_count=2,
     )
-    after = render_for_prompt(memory, env=_ON)
+    after = render_for_prompt(
+        memory,
+    )
     assert "p-2 was an IMPOSTOR" in after
     assert_memory_render_role_disclosure_is_entitled(
         after, ejection_ticks={"p-2": 14}, render_tick=14

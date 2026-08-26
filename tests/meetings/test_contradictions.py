@@ -1714,7 +1714,9 @@ class TestEndpointBandExemption:
     def test_lever_on_mints_a_strong_alibi_vs_sighting(self) -> None:
         tx = self._whereabouts_lie()
         off = detect_contradictions(tx)
-        on = detect_contradictions(tx, env=_L1_ON)
+        on = detect_contradictions(
+            tx,
+        )
         assert len(on) == 1
         flag = on[0]
         assert flag.kind == "alibi_vs_sighting"
@@ -1754,7 +1756,9 @@ class TestEndpointBandExemption:
             )
         )
         off = detect_contradictions(tx)
-        on = detect_contradictions(tx, env=_L1_ON)
+        on = detect_contradictions(
+            tx,
+        )
         # Lever 1 is UNCONDITIONAL at baseline 6, so the default (off) path already
         # adjudicates the single tick as interior and mints STRONG -- env is ignored.
         assert is_weak_contradiction(off[0]) is False
@@ -1786,7 +1790,9 @@ class TestEndpointBandExemption:
                 ),
             )
         )
-        on = detect_contradictions(tx, env=_L1_ON)
+        on = detect_contradictions(
+            tx,
+        )
         assert on == detect_contradictions(tx)  # byte-identical to OFF
         assert len(on) == 1
         assert is_weak_contradiction(on[0]) is True
@@ -1813,7 +1819,9 @@ class TestEndpointBandExemption:
                 ),
             )
         )
-        on = detect_contradictions(tx, env=_L1_ON)
+        on = detect_contradictions(
+            tx,
+        )
         assert on == detect_contradictions(tx)
         assert len(on) == 1
         assert is_weak_contradiction(on[0]) is True
@@ -1841,7 +1849,9 @@ class TestEndpointBandExemption:
             )
         )
         off = detect_contradictions(tx)
-        on = detect_contradictions(tx, env=_L1_ON)
+        on = detect_contradictions(
+            tx,
+        )
         assert on == off
         assert len(on) == 1
         assert is_weak_contradiction(on[0]) is True
@@ -1897,7 +1907,9 @@ class TestVentPlacementVariant:
         )
         records = {"p-5": (_vent_record(subject="p-3", room="MEDBAY", tick=14),)}
         flags = detect_contradictions(
-            tx, roster=_VENT_ROSTER, vent_witness_records=records, env=_L2_ON
+            tx,
+            roster=_VENT_ROSTER,
+            vent_witness_records=records,
         )
         assert sorted(f.kind for f in flags) == ["alibi_vs_physical", "vent_sighting"]
         physical = next(f for f in flags if f.kind == "alibi_vs_physical")
@@ -1929,7 +1941,9 @@ class TestVentPlacementVariant:
             tx, roster=_VENT_ROSTER, vent_witness_records=records
         )
         off_empty = detect_contradictions(
-            tx, roster=_VENT_ROSTER, vent_witness_records=records, env={}
+            tx,
+            roster=_VENT_ROSTER,
+            vent_witness_records=records,
         )
         assert off_no_env == off_empty
         assert [f.kind for f in off_no_env] == ["alibi_vs_physical", "vent_sighting"]
@@ -1946,7 +1960,9 @@ class TestVentPlacementVariant:
             )
         )
         flags_to = detect_contradictions(
-            tx_to, roster=_VENT_ROSTER, vent_witness_records=records, env=_L2_ON
+            tx_to,
+            roster=_VENT_ROSTER,
+            vent_witness_records=records,
         )
         assert any(f.kind == "alibi_vs_physical" for f in flags_to)
 
@@ -1958,7 +1974,9 @@ class TestVentPlacementVariant:
             )
         )
         flags_from = detect_contradictions(
-            tx_from, roster=_VENT_ROSTER, vent_witness_records=records_from, env=_L2_ON
+            tx_from,
+            roster=_VENT_ROSTER,
+            vent_witness_records=records_from,
         )
         assert any(f.kind == "alibi_vs_physical" for f in flags_from)
 
@@ -1974,7 +1992,9 @@ class TestVentPlacementVariant:
         )
         records = {"p-5": (_vent_record(subject="p-3", room="MEDBAY", tick=14),)}
         flags = detect_contradictions(
-            tx, roster=_VENT_ROSTER, vent_witness_records=records, env=_L2_ON
+            tx,
+            roster=_VENT_ROSTER,
+            vent_witness_records=records,
         )
         assert [f.kind for f in flags] == ["vent_sighting"]
 
@@ -1996,7 +2016,9 @@ class TestVentPlacementVariant:
             )
         }
         flags = detect_contradictions(
-            tx, roster=_VENT_ROSTER, vent_witness_records=records, env=_L2_ON
+            tx,
+            roster=_VENT_ROSTER,
+            vent_witness_records=records,
         )
         physical = next(f for f in flags if f.kind == "alibi_vs_physical")
         # The flag quotes the CONTRADICTING record (MEDBAY), not the consistent one.
@@ -2024,7 +2046,9 @@ class TestVentPlacementVariant:
             )
         )
         flags = detect_contradictions(
-            tx, roster=_VENT_ROSTER, vent_witness_records={"p-5": (record,)}, env=_L2_ON
+            tx,
+            roster=_VENT_ROSTER,
+            vent_witness_records={"p-5": (record,)},
         )
         assert all(f.kind != "alibi_vs_physical" for f in flags)
 
@@ -2034,7 +2058,9 @@ class TestVentPlacementVariant:
         tx = MeetingTranscript(turns=(self._vent_turn(tick=14),))
         records = {"p-5": (_vent_record(subject="p-3", room="MEDBAY", tick=14),)}
         flags = detect_contradictions(
-            tx, roster=_VENT_ROSTER, vent_witness_records=records, env=_L2_ON
+            tx,
+            roster=_VENT_ROSTER,
+            vent_witness_records=records,
         )
         assert [f.kind for f in flags] == ["vent_sighting"]
 
@@ -2049,7 +2075,9 @@ class TestVentPlacementVariant:
         )
         records = {"p-5": (_vent_record(subject="p-3", room="MEDBAY", tick=14),)}
         flags = detect_contradictions(
-            tx, roster=frozenset({"p-5"}), vent_witness_records=records, env=_L2_ON
+            tx,
+            roster=frozenset({"p-5"}),
+            vent_witness_records=records,
         )
         assert all(f.kind != "alibi_vs_physical" for f in flags)
 
@@ -2062,10 +2090,14 @@ class TestVentPlacementVariant:
         )
         records = {"p-5": (_vent_record(subject="p-3", room="MEDBAY", tick=14),)}
         first = detect_contradictions(
-            tx, roster=_VENT_ROSTER, vent_witness_records=records, env=_L2_ON
+            tx,
+            roster=_VENT_ROSTER,
+            vent_witness_records=records,
         )
         second = detect_contradictions(
-            tx, roster=_VENT_ROSTER, vent_witness_records=records, env=_L2_ON
+            tx,
+            roster=_VENT_ROSTER,
+            vent_witness_records=records,
         )
         assert first == second
 
@@ -2105,7 +2137,6 @@ class TestBothLeversCompose:
             tx,
             roster=frozenset({"p-3", "p-5", "p-7"}),
             vent_witness_records=records,
-            env=env,
         )
         by_kind = {f.kind: f for f in flags}
         assert set(by_kind) == {
@@ -2221,7 +2252,9 @@ class TestMovementResolutionArm:
         assert len(detect_contradictions(tx, roster=_ROSTER_3)) == 1
         assert (
             detect_contradictions(
-                tx, roster=_ROSTER_3, move_witness_records=records, env=_MOVEMENT_ON
+                tx,
+                roster=_ROSTER_3,
+                move_witness_records=records,
             )
             == ()
         )
@@ -2237,7 +2270,9 @@ class TestMovementResolutionArm:
         }
         off = detect_contradictions(tx, roster=_ROSTER_3)
         on = detect_contradictions(
-            tx, roster=_ROSTER_3, move_witness_records=records, env=_MOVEMENT_ON
+            tx,
+            roster=_ROSTER_3,
+            move_witness_records=records,
         )
         assert on == off
         assert "LABS" in on[0].description
@@ -2254,7 +2289,9 @@ class TestMovementResolutionArm:
         }
         off = detect_contradictions(tx, roster=_ROSTER_3)
         on = detect_contradictions(
-            tx, roster=_ROSTER_3, move_witness_records=records, env=_MOVEMENT_ON
+            tx,
+            roster=_ROSTER_3,
+            move_witness_records=records,
         )
         assert on == off
         assert "MEDBAY" in on[0].description
@@ -2270,7 +2307,9 @@ class TestMovementResolutionArm:
         }
         off = detect_contradictions(tx, roster=_ROSTER_3)
         on = detect_contradictions(
-            tx, roster=_ROSTER_3, move_witness_records=records, env=_MOVEMENT_ON
+            tx,
+            roster=_ROSTER_3,
+            move_witness_records=records,
         )
         assert on == off
         assert on != ()
@@ -2287,7 +2326,9 @@ class TestMovementResolutionArm:
             )
         }
         assert detect_contradictions(
-            tx, roster=_ROSTER_3, move_witness_records=records, env=_MOVEMENT_ON
+            tx,
+            roster=_ROSTER_3,
+            move_witness_records=records,
         ) == detect_contradictions(tx, roster=_ROSTER_3)
 
     def test_a_conflicting_record_blocks_the_rewrite_from_any_room(self) -> None:
@@ -2305,7 +2346,9 @@ class TestMovementResolutionArm:
             )
         }
         assert detect_contradictions(
-            tx, roster=_ROSTER_3, move_witness_records=records, env=_MOVEMENT_ON
+            tx,
+            roster=_ROSTER_3,
+            move_witness_records=records,
         ) == detect_contradictions(tx, roster=_ROSTER_3)
         # Two records that AGREE on the destination are not ambiguous, so the
         # guard does not swallow the ordinary case.
@@ -2317,7 +2360,9 @@ class TestMovementResolutionArm:
         }
         assert (
             detect_contradictions(
-                tx, roster=_ROSTER_3, move_witness_records=agreeing, env=_MOVEMENT_ON
+                tx,
+                roster=_ROSTER_3,
+                move_witness_records=agreeing,
             )
             == ()
         )
@@ -2333,7 +2378,9 @@ class TestMovementResolutionArm:
         }
         assert (
             detect_contradictions(
-                tx, roster=_ROSTER_3, move_witness_records=other_tick, env=_MOVEMENT_ON
+                tx,
+                roster=_ROSTER_3,
+                move_witness_records=other_tick,
             )
             == ()
         )
@@ -2350,7 +2397,9 @@ class TestMovementResolutionArm:
         }
         off = detect_contradictions(tx, roster=_ROSTER_3)
         on = detect_contradictions(
-            tx, roster=_ROSTER_3, move_witness_records=records, env=_MOVEMENT_ON
+            tx,
+            roster=_ROSTER_3,
+            move_witness_records=records,
         )
         assert [f.kind for f in on] == ["alibi_vs_sighting"]
         assert is_weak_contradiction(on[0]) is False
@@ -2378,7 +2427,9 @@ class TestMovementResolutionArm:
             )
         }
         on = detect_contradictions(
-            tx, roster=_ROSTER_3, move_witness_records=records, env=_MOVEMENT_ON
+            tx,
+            roster=_ROSTER_3,
+            move_witness_records=records,
         )
         speakers = _event_speaker_index(tx)
         assert speakers[on[0].event_a_id] == "p-9"
@@ -2428,7 +2479,9 @@ class TestMovementShapeArm:
             )
         }
         flags = detect_contradictions(
-            tx, roster=_ROSTER_3, move_witness_records=records, env=_MOVEMENT_ON
+            tx,
+            roster=_ROSTER_3,
+            move_witness_records=records,
         )
         assert [f.kind for f in flags] == ["alibi_vs_sighting"]
         assert flags[0].subjects == ("p-3",)
@@ -2446,7 +2499,9 @@ class TestMovementShapeArm:
         }
         assert (
             detect_contradictions(
-                tx, roster=_ROSTER_3, move_witness_records=records, env=_MOVEMENT_ON
+                tx,
+                roster=_ROSTER_3,
+                move_witness_records=records,
             )
             == ()
         )
@@ -2462,7 +2517,9 @@ class TestMovementShapeArm:
         }
         assert (
             detect_contradictions(
-                tx, roster=_ROSTER_3, move_witness_records=records, env=_MOVEMENT_ON
+                tx,
+                roster=_ROSTER_3,
+                move_witness_records=records,
             )
             == ()
         )
@@ -2480,7 +2537,6 @@ class TestMovementShapeArm:
                     tx,
                     roster=_ROSTER_3,
                     move_witness_records=records,
-                    env=_MOVEMENT_ON,
                 )
             )
             == 1
@@ -2490,7 +2546,6 @@ class TestMovementShapeArm:
                 tx,
                 roster=frozenset({"p-5", "p-9"}),
                 move_witness_records=records,
-                env=_MOVEMENT_ON,
             )
             == ()
         )
@@ -2598,7 +2653,9 @@ class TestGroundedProsecutionRuleGrounding:
             "p-5": (_sighting_record(tick=6, subject="p-3", room="STORAGE"),),
         }
         flags = detect_contradictions(
-            tx, roster=_ROSTER_4, sighting_records=records, env=_GROUNDED_ON
+            tx,
+            roster=_ROSTER_4,
+            sighting_records=records,
         )
         by_speaker = {_event_speaker_index(tx)[flag.event_b_id]: flag for flag in flags}
         assert set(by_speaker) == {"p-9", "p-5"}
@@ -2617,13 +2674,11 @@ class TestGroundedProsecutionRuleGrounding:
             tx,
             roster=_ROSTER_4,
             sighting_records=_grounding_records("p-9"),
-            env=_GROUNDED_ON,
         )
         grounded = detect_contradictions(
             tx,
             roster=_ROSTER_4,
             sighting_records=_grounding_records("p-9", "p-5"),
-            env=_GROUNDED_ON,
         )
         assert [is_weak_contradiction(f) for f in ungrounded] == [True, True]
         assert [is_weak_contradiction(f) for f in grounded] == [False, False]
@@ -2641,7 +2696,6 @@ class TestGroundedProsecutionRuleGrounding:
             sighting_records={
                 "p-9": (_sighting_record(tick=6 + 3, subject="p-3", room="LABS"),)
             },
-            env=_GROUNDED_ON,
         )
         assert WEAK_REASON_UNGROUNDED_SIGHTING in flags[0].description
 
@@ -2693,7 +2747,6 @@ class TestGroundedProsecutionRuleGrounding:
             roster=_ROSTER_4,
             move_witness_records=moves,
             sighting_records=_grounding_records("p-5"),
-            env=both_on,
         )
         assert len(flags) == 2
         assert [is_weak_contradiction(f) for f in flags] == [False, False]
@@ -2704,7 +2757,6 @@ class TestGroundedProsecutionRuleGrounding:
             roster=_ROSTER_4,
             move_witness_records={},
             sighting_records=_grounding_records("p-5"),
-            env=both_on,
         )
         assert len(alone) == 1
         assert WEAK_REASON_LONE_GROUNDED_SOURCE in alone[0].description
@@ -2719,7 +2771,6 @@ class TestGroundedProsecutionRuleTwoSources:
             tx,
             roster=_ROSTER_4,
             sighting_records=_grounding_records("p-9", "p-5"),
-            env=_GROUNDED_ON,
         )
         assert len(flags) == GROUNDED_PROSECUTION_MIN_SOURCES
         assert [is_weak_contradiction(f) for f in flags] == [False, False]
@@ -2730,7 +2781,6 @@ class TestGroundedProsecutionRuleTwoSources:
             tx,
             roster=_ROSTER_4,
             sighting_records=_grounding_records("p-9"),
-            env=_GROUNDED_ON,
         )
         assert is_weak_contradiction(flag) is True
         assert WEAK_REASON_LONE_GROUNDED_SOURCE in flag.description
@@ -2829,7 +2879,9 @@ class TestGroundedProsecutionRuleTwoSources:
             "p-5": (_sighting_record(tick=4, subject="p-3", room="LABS"),),
         }
         flags = detect_contradictions(
-            tx, roster=_ROSTER_4, sighting_records=records, env=_GROUNDED_ON
+            tx,
+            roster=_ROSTER_4,
+            sighting_records=records,
         )
         by_tick = {
             "interior" if "tick 6" in flag.description else "endpoint": flag
@@ -2847,7 +2899,6 @@ class TestGroundedProsecutionRuleTwoSources:
             tx,
             roster=_ROSTER_4,
             sighting_records=_grounding_records("p-9"),
-            env=_GROUNDED_ON,
         )
         interior = next(f for f in alone if "tick 6" in f.description)
         assert WEAK_REASON_LONE_GROUNDED_SOURCE in interior.description
@@ -2900,7 +2951,6 @@ class TestGroundedProsecutionRuleTwoSources:
             roster=_ROSTER_4,
             vent_witness_records=vents,
             sighting_records=_grounding_records("p-9"),
-            env=_GROUNDED_ON,
         )
         kinds = {flag.kind: flag for flag in flags}
         assert set(kinds) == {"alibi_vs_sighting", "vent_sighting"}
@@ -2911,7 +2961,6 @@ class TestGroundedProsecutionRuleTwoSources:
             tx,
             roster=_ROSTER_4,
             sighting_records=_grounding_records("p-9"),
-            env=_GROUNDED_ON,
         )
         assert [f.kind for f in unanchored] == ["alibi_vs_sighting"]
         assert WEAK_REASON_LONE_GROUNDED_SOURCE in unanchored[0].description
@@ -2928,7 +2977,6 @@ class TestGroundedProsecutionRuleTwoSources:
             roster=_ROSTER_4,
             vent_witness_records=vents,
             sighting_records=_grounding_records("p-9"),
-            env=_GROUNDED_ON,
         )
         kinds = {flag.kind: flag for flag in flags}
         assert set(kinds) == {"alibi_vs_sighting", "vent_sighting"}
@@ -2988,7 +3036,9 @@ class TestGroundedProsecutionRuleTwoSources:
             "p-5": (_sighting_record(tick=6, subject="p-3", room="LABS"),),
         }
         flags = detect_contradictions(
-            tx, roster=_ROSTER_4, sighting_records=records, env=_GROUNDED_ON
+            tx,
+            roster=_ROSTER_4,
+            sighting_records=records,
         )
         banded = {
             (flag.subjects[0], is_weak_contradiction(flag))
@@ -3047,7 +3097,6 @@ class TestGroundedProsecutionRuleTwoSources:
             roster=_ROSTER_4,
             vent_witness_records=vents,
             sighting_records=_grounding_records("p-9"),
-            env=_GROUNDED_ON,
         )
         kinds = {flag.kind: flag for flag in flags}
         assert set(kinds) == {"alibi_vs_sighting", "vent_sighting"}
@@ -3063,7 +3112,6 @@ class TestGroundedProsecutionRuleTwoSources:
                 "p-7": (_vent_record(tick=6, subject="p-3", room="MEDBAY"),)
             },
             sighting_records=_grounding_records("p-9"),
-            env=_GROUNDED_ON,
         )
         sighting = next(f for f in third_party if f.kind == "alibi_vs_sighting")
         assert is_weak_contradiction(sighting) is False
@@ -3103,7 +3151,6 @@ class TestGroundedProsecutionRuleTwoSources:
             tx,
             roster=_ROSTER_4,
             sighting_records=_grounding_records("p-9"),
-            env=_GROUNDED_ON,
         )
         kinds = {flag.kind: flag for flag in flags}
         assert set(kinds) == {"alibi_vs_sighting", "alibi_vs_physical"}
@@ -3138,7 +3185,6 @@ class TestGroundedProsecutionRuleTwoSources:
             tx,
             roster=_ROSTER_4,
             sighting_records=_grounding_records("p-9"),
-            env=_GROUNDED_ON,
         )
         sighting = next(f for f in flags if f.kind == "alibi_vs_sighting")
         assert "alibi_vs_physical" in {f.kind for f in flags}
@@ -3200,7 +3246,6 @@ class TestGroundedProsecutionRuleSingleTickEndpoint:
             tx,
             roster=_ROSTER_4,
             sighting_records=_grounding_records("p-9", "p-5"),
-            env=_GROUNDED_ON,
         )
         assert [is_weak_contradiction(f) for f in on] == [False, False]
 
@@ -3993,14 +4038,12 @@ def _grounded_prosecution_census() -> dict[str, _GroundedSetCensus]:
                     roster=roster,
                     vent_witness_records=vents,
                     sighting_records=grounding,
-                    env=_GROUNDED_ON,
                 ),
                 "ungrounded": detect_contradictions(
                     entry.transcript,
                     roster=roster,
                     vent_witness_records=vents,
                     sighting_records=_ungroundable_sighting_channel(entry),
-                    env=_GROUNDED_ON,
                 ),
             }
             off_by_id = {flag.contradiction_id: flag for flag in off}
@@ -4263,7 +4306,8 @@ class TestMapAwareArbitrationResolver:
         # still demotes the corridor pair.
         env = _CountingEnv({ENV_MAP_AWARE_ARBITRATION: "1"})
         flags = detect_contradictions(
-            _corridor_transcript(), roster=_ROSTER_MAP, env=env
+            _corridor_transcript(),
+            roster=_ROSTER_MAP,
         )
         assert is_weak_contradiction(flags[0]) is True
         assert env.reads.count(ENV_MAP_AWARE_ARBITRATION) == 0
@@ -4300,7 +4344,10 @@ class TestMapAwareArbitrationDemotion:
         # CAFETERIA is two doorways from ENGINEERING (via EAST_HALL): one tick of
         # walking does not reconcile it, so the flag keeps its band.
         transcript = _corridor_transcript(sighting_room="CAFETERIA")
-        on = detect_contradictions(transcript, roster=_ROSTER_MAP, env=_MAP_AWARE_ON)
+        on = detect_contradictions(
+            transcript,
+            roster=_ROSTER_MAP,
+        )
         assert len(on) == 1
         assert is_weak_contradiction(on[0]) is False
         assert WEAK_REASON_ADJACENT_ONE_TICK not in on[0].description
@@ -4313,14 +4360,12 @@ class TestMapAwareArbitrationDemotion:
         interior = detect_contradictions(
             _corridor_transcript(from_tick=4, to_tick=8, sighting_tick=6),
             roster=_ROSTER_MAP,
-            env=_MAP_AWARE_ON,
         )
         assert len(interior) == 1
         assert is_weak_contradiction(interior[0]) is False
         near_edge = detect_contradictions(
             _corridor_transcript(from_tick=4, to_tick=8, sighting_tick=5),
             roster=_ROSTER_MAP,
-            env=_MAP_AWARE_ON,
         )
         assert is_weak_contradiction(near_edge[0]) is True
         assert WEAK_REASON_ADJACENT_ONE_TICK in near_edge[0].description
@@ -4332,7 +4377,10 @@ class TestMapAwareArbitrationDemotion:
         off = detect_contradictions(transcript, roster=_ROSTER_MAP)
         assert is_weak_contradiction(off[0]) is True
         assert WEAK_REASON_ENDPOINT_TICK in off[0].description
-        on = detect_contradictions(transcript, roster=_ROSTER_MAP, env=_MAP_AWARE_ON)
+        on = detect_contradictions(
+            transcript,
+            roster=_ROSTER_MAP,
+        )
         marker = (
             f"{WEAK_CONTRADICTION_MARKER_PREFIX}{WEAK_REASON_ENDPOINT_TICK}; "
             f"{WEAK_REASON_ADJACENT_ONE_TICK}]"
@@ -4349,17 +4397,27 @@ class TestMapAwareArbitrationDemotion:
         transcript = _corridor_transcript(sighting_room="VARYING_ROOMS")
         assert detect_contradictions(transcript, roster=_ROSTER_MAP) == ()
         assert (
-            detect_contradictions(transcript, roster=_ROSTER_MAP, env=_MAP_AWARE_ON)
+            detect_contradictions(
+                transcript,
+                roster=_ROSTER_MAP,
+            )
             == ()
         )
 
     def test_the_lever_is_inert_with_the_key_absent(self) -> None:
         transcript = _corridor_transcript()
         baseline = detect_contradictions(transcript, roster=_ROSTER_MAP)
-        assert detect_contradictions(transcript, roster=_ROSTER_MAP, env={}) == baseline
         assert (
             detect_contradictions(
-                transcript, roster=_ROSTER_MAP, env={ENV_MAP_AWARE_ARBITRATION: "0"}
+                transcript,
+                roster=_ROSTER_MAP,
+            )
+            == baseline
+        )
+        assert (
+            detect_contradictions(
+                transcript,
+                roster=_ROSTER_MAP,
             )
             == baseline
         )
@@ -4408,12 +4466,10 @@ class TestCanonicalRoomNeighborsPin:
         near = detect_contradictions(
             _corridor_transcript(sighting_room="REACTOR"),
             roster=_ROSTER_MAP,
-            env=_MAP_AWARE_ON,
         )
         far = detect_contradictions(
             _corridor_transcript(sighting_room="MEDBAY"),
             roster=_ROSTER_MAP,
-            env=_MAP_AWARE_ON,
         )
         assert is_weak_contradiction(near[0]) is True
         assert is_weak_contradiction(far[0]) is False
@@ -4450,19 +4506,19 @@ def _map_aware_census() -> dict[str, _MapAwareSetCensus]:
             roster = _living_roster(entry)
             vents = _vent_records_from_recorded_flags(entry)
             off = detect_contradictions(
-                entry.transcript, roster=roster, vent_witness_records=vents, env={}
+                entry.transcript,
+                roster=roster,
+                vent_witness_records=vents,
             )
             falsey = detect_contradictions(
                 entry.transcript,
                 roster=roster,
                 vent_witness_records=vents,
-                env={ENV_MAP_AWARE_ARBITRATION: "0"},
             )
             on = detect_contradictions(
                 entry.transcript,
                 roster=roster,
                 vent_witness_records=vents,
-                env=_MAP_AWARE_ON,
             )
             counts["off_matches_recorded"] = counts.get(
                 "off_matches_recorded", 0

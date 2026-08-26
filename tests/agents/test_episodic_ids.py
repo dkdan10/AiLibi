@@ -398,9 +398,15 @@ class TestObservationIdRenderLever:
         monkeypatch.delenv(ENV_OBSERVATION_ID_RENDERING, raising=False)
         memory = _lever_memory()
         default = render_for_prompt(memory)
-        empty = render_for_prompt(memory, env={})
-        zero = render_for_prompt(memory, env={ENV_OBSERVATION_ID_RENDERING: "0"})
-        one = render_for_prompt(memory, env={ENV_OBSERVATION_ID_RENDERING: "1"})
+        empty = render_for_prompt(
+            memory,
+        )
+        zero = render_for_prompt(
+            memory,
+        )
+        one = render_for_prompt(
+            memory,
+        )
         assert default == empty == zero == one
         assert "[obs " in default
 

@@ -22,7 +22,6 @@ from agents.memory.beliefs import (
     ContradictionRef,
     PlayerBelief,
     apply_meeting_evidence_rules,
-    hard_evidence_gate_enabled,
     hard_evidence_gated_suspicion,
 )
 from agents.memory.episodic import EpisodicEvent, MemoryStore
@@ -82,19 +81,12 @@ _SALIENCE_SAW_PLAYER: Final[int] = 50
 _SALIENCE_TRANSITION: Final[int] = 48
 _SALIENCE_COMPLETED_TASK: Final[int] = 30
 # Reported testimony: a meeting speaker's public CLAIM, rendered self-framed as
-# unverified. The band it sits in is lever-conditional, and both readings hold the
-# same rule -- testimony is something the model WEIGHS, never ground truth it acts
-# on as if witnessed.
-# OFF (:data:`_SALIENCE_REPORTED_TESTIMONY`): strictly BELOW every first-hand
-# sighting band and below own completed-task memory, so a budget-tight render sheds
-# every reported row before any first-hand observation.
-# ON (:data:`_SALIENCE_REPORTED_TESTIMONY_COALESCED`, under
-# :func:`coalesced_memory_render_enabled`): above bare co-presence and below every
-# first-hand HARD-evidence row (body, own kill, witnessed kill, witnessed vent,
-# heard vent, heard sabotage), so the budget sheds routine sightings before it
-# sheds the game's only cross-meeting social memory.
-_SALIENCE_REPORTED_TESTIMONY: Final[int] = 25
-_SALIENCE_REPORTED_TESTIMONY_COALESCED: Final[int] = 60
+# unverified -- something the model WEIGHS, never ground truth it acts on as if
+# witnessed. Banded above bare co-presence and below every first-hand HARD-evidence
+# row (body, own kill, witnessed kill, witnessed vent, heard vent, heard sabotage),
+# so the budget sheds routine sightings before it sheds the game's only
+# cross-meeting social memory.
+_SALIENCE_REPORTED_TESTIMONY: Final[int] = 60
 _SALIENCE_COOLDOWN_STATUS: Final[int] = 10
 
 # Per-subject cap on rendered reported alibis (Task 13.5.2, Codex P2). The §6.6
@@ -133,9 +125,8 @@ class AgentMemory:
     mutate the underlying stores directly and the composite reflects every
     change. ``render_for_prompt`` reads all four (the R-6 acceptance gate);
     ``meeting_history`` is fed by :func:`record_meeting_outcome` from the public
-    ``note_meeting_concluded`` hook, read unconditionally by the v3 tactical
-    feature encoder, and rendered as the ``## Meetings so far:`` block only while
-    :func:`meeting_outcome_memory_enabled` is ON. Every field defaults, so a
+    ``note_meeting_concluded`` hook, read by the v3 tactical feature encoder, and
+    rendered as the ``## Meetings so far:`` block. Every field defaults, so a
     three-store construction still builds.
     """
 
@@ -149,19 +140,16 @@ class AgentMemory:
 class _Observation:
     """One renderable observation line with the data needed to sort and budget it.
 
-    ``observation_id`` (Task 16.5) is the stable id of the SINGLE episodic event
-    this line derives from, or ``None`` when the line is not a single citable
-    observation (a RECONSTRUCTED breadcrumb / transition, a meeting boundary). It
-    is inert unless the observation-id render lever
-    (:func:`observation_id_rendering_enabled`) is ON, in which case
+    ``observation_id`` is the stable id of the SINGLE episodic event this line
+    derives from, or ``None`` when the line is not a single citable observation
+    (a RECONSTRUCTED breadcrumb / transition, a meeting boundary);
     :func:`render_for_prompt` folds it into the line as an ``[obs {id}]`` prefix.
 
     ``sighting`` carries the span key of a bare co-presence row and is ``None`` for
     every other class; it is what :func:`_coalesce_sightings` folds runs on.
     ``sighting_suffix`` is that row's directional breadcrumb, carried beside the key
     rather than inside it -- it lands on a subject's most-recent sighting only, so
-    it must not split the run it terminates. Both are inert unless
-    :func:`coalesced_memory_render_enabled` is ON.
+    it must not split the run it terminates.
     """
 
     salience: int
@@ -223,76 +211,6 @@ class _SelfLocationSpan:
     in_vent: bool
 
 
-# Task 16.5 observation-id render lever — UNCONDITIONAL since the Task-16.17
-# baseline-5 record (the graduation slate, audits/audit-phase-16-close.md §0.1.2).
-# The lever was adopted by the baseline-5 re-record, so — mirroring the
-# 14.9/14.12/15.7 graduations — it is now the default substrate rather than an
-# env-gated toggle: every first-hand remembered observation renders its stable
-# ``[obs {id}]`` prefix, the surface 16.15's citation asks read. This is
-# byte-identical to the baseline-5 recording (which ran the lever ON), and it
-# lets the committed set reconstruct/serve under a BARE environment (no
-# AILIBI_* export). The lever is stamped unconditionally ON via
-# ``orchestrator.replay._RETIRED_ALWAYS_ON_LEVERS``; a stamp recording it OFF is
-# a legacy (baseline-3/4) artifact that fails loud (no cross-substrate replay).
-# ``ENV_OBSERVATION_ID_RENDERING`` is retained (no longer read) for the stamp
-# key's naming provenance and backward-compatible imports.
-ENV_OBSERVATION_ID_RENDERING: Final[str] = "AILIBI_OBSERVATION_ID_RENDERING"
-
-
-def observation_id_rendering_enabled(env: Mapping[str, str] | None = None) -> bool:
-    """Whether the Task 16.5 observation-id render lever is ON — now always True.
-
-    Retired to UNCONDITIONAL at the Task-16.17 baseline-5 record (the 15.7 move,
-    applied to this lever once baseline 5 adopted it per the graduation slate —
-    OFF-path inertness was golden-proven through the 16.3 prompt-byte instrument,
-    and 16.15's citation surface asks for the ids only this lever renders). The
-    fold puts each first-hand remembered observation's stable
-    :data:`~agents.memory.episodic.ObservationId` into its rendered line as an
-    ``[obs {id}]`` prefix (the §6.6 render surface the Task-16.15 elicitation reads);
-    RECONSTRUCTED breadcrumb / meeting-boundary lines and the belief / contradiction
-    rows carry no id. The fold happens BEFORE the salience sort in
-    :func:`render_for_prompt`, so ordering, tie-breaks and the token budget all see
-    the final bytes. The ``env`` argument is accepted and ignored (retained so the
-    render call site and the substrate stamp read one source of truth without a
-    signature churn).
-    """
-
-    del env  # retired: the lever is unconditional, no environment is consulted
-    return True
-
-
-# Completed-task-from-events lever -- UNCONDITIONAL since the baseline-7 record.
-# A completion is minted from the tasks that LEAVE an agent's owned set, never
-# inferred from a changed pending id. Stamped ON via
-# ``orchestrator.replay._RETIRED_ALWAYS_ON_LEVERS``;
-# ``ENV_TASK_COMPLETION_FROM_EVENTS`` is retained (no longer read) for the stamp
-# key's naming provenance and backward-compatible imports.
-ENV_TASK_COMPLETION_FROM_EVENTS: Final[str] = "AILIBI_TASK_COMPLETION_FROM_EVENTS"
-
-
-def task_completion_from_events_enabled(env: Mapping[str, str] | None = None) -> bool:
-    """Whether completed-task memory is read off the owned set -- now always True.
-
-    A completion is emitted for every map task id that LEAVES the agent's
-    ``owned_task_ids``: a redistributed instance can displace the pending id but
-    can only ADD to a living agent's owned set, so the rule mints nothing it did
-    not observe. The ``env`` argument is accepted and ignored, so the read sites
-    and the substrate stamp keep one source of truth without a signature churn.
-
-    Graduated at the baseline-7 record (audits/audit-phase-20-baseline-7.md §6.1).
-    """
-
-    del env  # retired: the lever is unconditional, no environment is consulted
-    return True
-
-
-# Self-location trail lever -- UNCONDITIONAL since the baseline-7 record. Every
-# rendered memory carries the agent's own room-by-tick route. Stamped ON via
-# ``orchestrator.replay._RETIRED_ALWAYS_ON_LEVERS``; ``ENV_SELF_LOCATION_TRAIL``
-# is retained (no longer read) for the stamp key's naming provenance and
-# backward-compatible imports.
-ENV_SELF_LOCATION_TRAIL: Final[str] = "AILIBI_SELF_LOCATION_TRAIL"
-
 # Most spans the trail block renders; past it the OLDEST are dropped and the block
 # says so. Sized from the committed sets: the furthest back a crew ``whereabouts``
 # answer ever reaches is 10 spans on both 9p2i sets and 4 on both 4p1i sets, so 12
@@ -311,77 +229,11 @@ _TRAIL_STEP_JOIN: Final[str] = " -> "
 # two steps means "and then", so an unrecorded stretch needs its own step.
 _TRAIL_GAP_STEP: Final[str] = "(no record)"
 
-
-def self_location_trail_enabled(env: Mapping[str, str] | None = None) -> bool:
-    """Whether the agent's own room-by-tick trail renders -- now always True.
-
-    The ``## Where you were:`` block renders, and the completed-task line takes
-    its room from the SAME self-state row that dates it. The ``env`` argument is
-    accepted and ignored, so the read sites and the substrate stamp keep one
-    source of truth without a signature churn.
-
-    Graduated at the baseline-7 record (audits/audit-phase-20-baseline-7.md §6.1).
-    """
-
-    del env  # retired: the lever is unconditional, no environment is consulted
-    return True
-
-
-# Meeting-outcome memory lever -- UNCONDITIONAL since the baseline-7 record.
-# Concluded meetings render as a record and a spoken vent sighting stays CONTENT.
-# Stamped ON via ``orchestrator.replay._RETIRED_ALWAYS_ON_LEVERS``;
-# ``ENV_MEETING_OUTCOME_MEMORY`` is retained (no longer read) for the stamp key's
-# naming provenance and backward-compatible imports.
-ENV_MEETING_OUTCOME_MEMORY: Final[str] = "AILIBI_MEETING_OUTCOME_MEMORY"
-
 _MEETINGS_HEADER: Final[str] = "## Meetings so far:"
-
-
-def meeting_outcome_memory_enabled(env: Mapping[str, str] | None = None) -> bool:
-    """Whether concluded meetings render as a record -- now always True.
-
-    The ``## Meetings so far:`` block renders one line per concluded meeting (the
-    ejection or the skip, its tally, the ejected player's announced role and the
-    impostors-remaining count), and a spoken vent sighting is kept as CONTENT
-    with every reported line naming the meeting it was spoken at. The ``env``
-    argument is accepted and ignored, so the read sites and the substrate stamp
-    keep one source of truth without a signature churn.
-
-    Graduated at the baseline-7 record (audits/audit-phase-20-baseline-7.md §6.1).
-    """
-
-    del env  # retired: the lever is unconditional, no environment is consulted
-    return True
-
-
-# Coalesced-render lever -- UNCONDITIONAL since the baseline-7 record. Routine
-# sightings fold and reported testimony outranks bare co-presence. Stamped ON via
-# ``orchestrator.replay._RETIRED_ALWAYS_ON_LEVERS``;
-# ``ENV_COALESCED_MEMORY_RENDER`` is retained (no longer read) for the stamp key's
-# naming provenance and backward-compatible imports.
-ENV_COALESCED_MEMORY_RENDER: Final[str] = "AILIBI_COALESCED_MEMORY_RENDER"
 
 # The one-line summary that replaces a full-roster tick-0 sighting group. It names
 # every subject it stands for, so the fold costs a line instead of a roster.
 _SPAWN_GROUP_PREFIX: Final[str] = "You saw every other player in "
-
-
-def coalesced_memory_render_enabled(env: Mapping[str, str] | None = None) -> bool:
-    """Whether routine sightings coalesce and testimony outranks them -- always True.
-
-    Three changes apply under one key: a run of same-subject, same-room,
-    same-action sightings with an unchanged companion set renders as ONE line
-    carrying its tick range; a tick-0 group that names the whole known roster
-    renders as one summary line; and reported testimony ranks above bare
-    co-presence so a budget-tight render sheds routine rows first. The ``env``
-    argument is accepted and ignored, so the read sites and the substrate stamp
-    keep one source of truth without a signature churn.
-
-    Graduated at the baseline-7 record (audits/audit-phase-20-baseline-7.md §6.1).
-    """
-
-    del env  # retired: the lever is unconditional, no environment is consulted
-    return True
 
 
 def _impostors_remaining_clause(remaining: int | None) -> str:
@@ -438,7 +290,6 @@ def render_for_prompt(
     *,
     token_budget: int = DEFAULT_TOKEN_BUDGET,
     suspicion_override: Mapping[PlayerId, float] | None = None,
-    env: Mapping[str, str] | None = None,
 ) -> str:
     """Produce a token-budgeted Markdown view of agent memory (DESIGN.md §6.6).
 
@@ -463,73 +314,62 @@ def render_for_prompt(
     lines and that graph agree by construction. ``None`` (the default, and
     every non-ballot render) is byte-identical to pre-task HEAD.
 
-    ``env`` (Task 16.4) is threaded to the lever resolvers consulted here — the
-    Task-16.4 hard-evidence-gate clamp in the belief-line render
-    (:func:`_build_belief_lines`) and the Task-16.5 observation-id render fold
-    (:func:`observation_id_rendering_enabled`, which prefixes each first-hand
-    observation line with its stable ``[obs {agent}:{tick}:{seq}]`` id before the
-    salience sort). Both levers were GRADUATED to unconditional at the Task-16.17
-    baseline-5 record, so the argument is accepted and ignored by those resolvers
-    (retained without a signature churn; the committed baseline-5 bytes were
-    recorded with both ON and reconstruct BARE).
-    :func:`task_completion_from_events_enabled` GRADUATED the same way at the
-    baseline-7 record, so it too ignores ``env``: the completed-task line comes
-    from the agent's own ``owned_task_ids`` losing an id rather than from a
-    ``pending_task_id`` change, on every render.
+    Every first-hand observation line carries its stable
+    ``[obs {agent}:{tick}:{seq}]`` id, folded in BEFORE the salience sort so
+    ordering, tie-breaks and the token-budget arithmetic all see the final bytes.
+    RECONSTRUCTED lines (breadcrumb transitions, the meeting boundary) derive
+    from several events, carry no id and render unadorned. The completed-task
+    line is minted from the ids that LEAVE the agent's ``owned_task_ids`` and
+    takes its room from the same ``self_state`` row that dates it, so it carries
+    one clock.
 
-    :func:`meeting_outcome_memory_enabled` (GRADUATED) adds the
-    ``## Meetings so far:`` block, one plain line per concluded meeting in
-    oldest-first order: ``Meeting {n} (tick {resume}): {id} EJECTED {for}-{skip}
-    — {id} was an IMPOSTOR. {k} impostors remain.``, or ``… no ejection ({skip}
-    skip). …`` when the vote skipped or tied. It joins the NON-elastic set above
-    the observations, so a budget-tight render sheds sightings around it and
-    never sheds the record of what a meeting decided. The role clause is the one
-    place a rendered memory names another player's role, and it is entitled
-    rather than exempt: confirm-ejects makes the EJECTED player's role public at
-    the table on the same footing as ``dead_ids`` and the announced tally
-    (DESIGN.md §4.7), so it is disclosed only for a player the table ejected and
-    only from that meeting onward -- never for a living player, and never for a
-    kill victim, whose role nobody saw. The orchestrator is the only module that
-    reads a role off engine state; ``agents/`` and ``meetings/`` receive the
-    announcement already made. ``eval.leak_scan`` states the same rule
-    independently of this code
+    The ``## Meetings so far:`` block renders one plain line per concluded
+    meeting, oldest first: ``Meeting {n} (tick {resume}): {id} EJECTED
+    {for}-{skip} — {id} was an IMPOSTOR. {k} impostors remain.``, or ``… no
+    ejection ({skip} skip). …`` when the vote skipped or tied. It joins the
+    NON-elastic set above the observations, so a budget-tight render sheds
+    sightings around it and never sheds the record of what a meeting decided.
+    The role clause is the one place a rendered memory names another player's
+    role, and it is entitled rather than exempt: confirm-ejects makes the EJECTED
+    player's role public at the table on the same footing as ``dead_ids`` and the
+    announced tally (DESIGN.md §4.7), so it is disclosed only for a player the
+    table ejected and only from that meeting onward -- never for a living player,
+    and never for a kill victim, whose role nobody saw. The orchestrator is the
+    only module that reads a role off engine state; ``agents/`` and ``meetings/``
+    receive the announcement already made. ``eval.leak_scan`` states the same
+    rule independently of this code
     (:func:`~eval.leak_scan.assert_memory_render_role_disclosure_is_entitled`).
-    The same lever keeps a spoken vent sighting as content and tags each reported
-    line with the meeting it was spoken at.
 
-    :func:`self_location_trail_enabled` (GRADUATED) adds a ``## Where you were:``
-    block between the fixed lines and the observations, so the agent can answer the
-    meeting's roll-call from its own record instead of extrapolating: the ticks its
-    ``self_state`` channel recorded, coalesced oldest-first into spans and chained
-    onto ONE line, ``ROOM t{a}-{b} -> ROOM t{c} -> ...`` (a lone tick states one
-    tick, and a tick spent in a vent says so). Chaining is what makes the route
-    affordable: it costs about half the per-span shape, so the whole route reaches
-    the prompt beside the observations rather than displacing them. A tick with no
-    recorded row BREAKS a span and renders its own ``(no record)`` step -- the
-    trail never interpolates across a gap -- while a meeting boundary does not,
-    because a meeting freezes movement (DESIGN.md §5.1). At most
-    :data:`SELF_LOCATION_TRAIL_MAX_SPANS` spans render; past that the oldest are
-    dropped and the block says so in one plain line. The route line carries no
-    ``[obs ...]`` prefix -- a span is coalesced from several rows rather than being
-    one citable observation -- so it cannot teach a model to cite an id the ballot
-    validator would null. The same lever takes the completed-task line's room from
-    the row that dates it, so that line carries one clock.
+    The ``## Where you were:`` block sits between the fixed lines and the
+    observations, so the agent answers the meeting's roll-call from its own
+    record instead of extrapolating: the ticks its ``self_state`` channel
+    recorded, coalesced oldest-first into spans and chained onto ONE line,
+    ``ROOM t{a}-{b} -> ROOM t{c} -> ...`` (a lone tick states one tick, and a
+    tick spent in a vent says so). Chaining costs about half the per-span shape,
+    so the whole route reaches the prompt beside the observations rather than
+    displacing them. A tick with no recorded row BREAKS a span and renders its
+    own ``(no record)`` step -- the trail never interpolates across a gap --
+    while a meeting boundary does not, because a meeting freezes movement
+    (DESIGN.md §5.1). At most :data:`SELF_LOCATION_TRAIL_MAX_SPANS` spans render;
+    past that the oldest are dropped and the block says so in one plain line. The
+    route line carries no ``[obs ...]`` prefix -- a span is coalesced from several
+    rows rather than being one citable observation -- so it cannot teach a model
+    to cite an id the ballot validator would null.
 
-    :func:`coalesced_memory_render_enabled` (GRADUATED) spends the observations
-    budget on what discriminates. A run of consecutive sightings of one subject in
-    one room, same action and an unchanged companion set, renders as ONE line
-    stating its tick range (``You saw p-9 in CAFETERIA ticks 0-4 (with p-8).``); any
-    change of room, action or companions -- and any tick the agent holds no row for
-    -- breaks the run, so a span never claims a tick its rows did not. A tick-0
-    group that names the whole known roster minus the observer collapses to one
-    summary line naming those subjects, over the stretch they all shared, because
-    "everyone started together" is one fact and a partial view is not (a player
-    absent at spawn is real information, so that view keeps its rows). The span
-    carries its FIRST row's
-    ``observation_id``, so every id a ballot can cite off the render is still one of
-    the agent's own stored ids. The same lever lifts reported testimony above bare
-    co-presence in the salience ladder, so the budget sheds routine sightings before
-    it sheds the game's only cross-meeting social memory.
+    The observations budget is spent on what discriminates. A run of consecutive
+    sightings of one subject in one room, same action and an unchanged companion
+    set, renders as ONE line stating its tick range (``You saw p-9 in CAFETERIA
+    ticks 0-4 (with p-8).``); any change of room, action or companions -- and any
+    tick the agent holds no row for -- breaks the run, so a span never claims a
+    tick its rows did not. A tick-0 group that names the whole known roster minus
+    the observer collapses to one summary line naming those subjects, over the
+    stretch they all shared, because "everyone started together" is one fact and
+    a partial view is not (a player absent at spawn is real information, so that
+    view keeps its rows). The span carries its FIRST row's ``observation_id``, so
+    every id a ballot can cite off the render is still one of the agent's own
+    stored ids. Reported testimony ranks above bare co-presence in the salience
+    ladder, so the budget sheds routine sightings before it sheds the game's only
+    cross-meeting social memory.
 
     Raises :class:`ValueError` if ``token_budget`` is non-positive or
     if no ``self_state`` event has been recorded. A render call before
@@ -557,29 +397,10 @@ def render_for_prompt(
     # byte-identically.
     own_agent_id, fellow_impostor_ids = _latest_self_guard_fields(memory.episodic)
     teammate_ids = fellow_impostor_ids if role == "IMPOSTOR" else frozenset()
-    # Task 16.5: resolve the observation-id render lever ONCE (the 16.4 in-line
-    # pattern). Unconditional since the 16.17 graduation — the committed baseline-5
-    # bytes carry the ids, so the fold is the byte-identical reconstruction path.
-    ids_on = observation_id_rendering_enabled(env)
-    # Resolve the completed-task lever ONCE here too, and thread the plain bool
-    # down: the observation loop never consults an environment.
-    completion_from_events = task_completion_from_events_enabled(env)
-    # Same rule for the self-location trail: one read here, a plain bool below.
-    trail_on = self_location_trail_enabled(env)
-    # And for the meeting record: one read, then the plain bool reaches both the
-    # ``## Meetings so far:`` block and the reported-testimony frame.
-    meetings_on = meeting_outcome_memory_enabled(env)
-    # And for the coalesced render: one read, then the plain bool reaches the
-    # reported-testimony band below and the span fold above the salience sort.
-    coalesce_on = coalesced_memory_render_enabled(env)
     observations = _build_observations(
         memory.episodic,
         own_agent_id=own_agent_id,
         teammate_ids=teammate_ids,
-        completion_from_events=completion_from_events,
-        self_location_trail=trail_on,
-        meeting_outcome_memory=meetings_on,
-        coalesced_memory_render=coalesce_on,
     )
     # §6.6 roster filter (Task 10.2, audit gp-6 C-C-8): belief rows AND
     # open-contradiction lines render only for engine-witnessed player
@@ -592,27 +413,25 @@ def render_for_prompt(
     # Task 9.3. The span fold reads the same set, so "everyone" in its
     # tick-0 summary means the same roster the belief rows are filtered by.
     roster = _known_roster_ids(memory.episodic) if own_agent_id is not None else None
-    if coalesce_on:
-        # Fold the runs BEFORE the id prefix and the sort: the fold works on the
-        # built observations, so every firewall suppression, co-presence suffix
-        # and breadcrumb is already settled and a span cites a real stored id.
-        observations = _coalesce_sightings(
-            observations, roster=roster, own_agent_id=own_agent_id
-        )
-    if ids_on:
-        # Fold each first-hand observation's stable id into its line BEFORE the
-        # salience sort, so ordering, tie-breaks and the token-budget arithmetic all
-        # see the final bytes. RECONSTRUCTED lines (breadcrumb transitions, the
-        # meeting boundary) carry ``observation_id is None`` -- they derive from
-        # MULTIPLE events and are not a single citable observation -- so they render
-        # unchanged. The ``[obs ...]`` wrapper is render dressing only; a ballot
-        # cites the raw ``{agent}:{tick}:{seq}`` id, not the wrapper.
-        observations = [
-            replace(obs, line=f"[obs {obs.observation_id}] {obs.line}")
-            if obs.observation_id is not None
-            else obs
-            for obs in observations
-        ]
+    # Fold the runs BEFORE the id prefix and the sort: the fold works on the
+    # built observations, so every firewall suppression, co-presence suffix
+    # and breadcrumb is already settled and a span cites a real stored id.
+    observations = _coalesce_sightings(
+        observations, roster=roster, own_agent_id=own_agent_id
+    )
+    # Fold each first-hand observation's stable id into its line BEFORE the
+    # salience sort, so ordering, tie-breaks and the token-budget arithmetic all
+    # see the final bytes. RECONSTRUCTED lines (breadcrumb transitions, the
+    # meeting boundary) carry ``observation_id is None`` -- they derive from
+    # MULTIPLE events and are not a single citable observation -- so they render
+    # unchanged. The ``[obs ...]`` wrapper is render dressing only; a ballot
+    # cites the raw ``{agent}:{tick}:{seq}`` id, not the wrapper.
+    observations = [
+        replace(obs, line=f"[obs {obs.observation_id}] {obs.line}")
+        if obs.observation_id is not None
+        else obs
+        for obs in observations
+    ]
     observations = sorted(
         observations,
         key=lambda obs: (-obs.salience, -obs.tick, obs.line),
@@ -633,19 +452,13 @@ def render_for_prompt(
         memory.working,
         roster=roster,
         suspicion_override=suspicion_override,
-        env=env,
     )
     contradiction_lines = _build_contradiction_lines(memory.beliefs, roster=roster)
-    trail_spans: list[_SelfLocationSpan] = []
-    trail_truncated = False
-    if trail_on:
-        spans = _collect_self_location_spans(memory.episodic)
-        trail_truncated = len(spans) > SELF_LOCATION_TRAIL_MAX_SPANS
-        trail_spans = spans[-SELF_LOCATION_TRAIL_MAX_SPANS:]
+    spans = _collect_self_location_spans(memory.episodic)
+    trail_truncated = len(spans) > SELF_LOCATION_TRAIL_MAX_SPANS
+    trail_spans = spans[-SELF_LOCATION_TRAIL_MAX_SPANS:]
 
-    meeting_lines = (
-        _meeting_history_lines(memory.meeting_history) if meetings_on else []
-    )
+    meeting_lines = _meeting_history_lines(memory.meeting_history)
 
     return _assemble_view(
         role=role,
@@ -763,7 +576,6 @@ def absorb_reported_testimony(
     memory: AgentMemory,
     *,
     statements: Sequence[ReportedStatement],
-    env: Mapping[str, str] | None = None,
 ) -> None:
     """Fold one meeting's public testimony into ``memory`` as CONTENT (Task 13.5.2).
 
@@ -798,10 +610,9 @@ def absorb_reported_testimony(
       decision, locked 2026-06-25), so a teammate-incriminating public statement
       DOES appear in an impostor's reported memory. Only the SCALAR suspicion
       firewall stays (unchanged, in :func:`absorb_meeting_evidence`).
-    * ``saw_vent`` kept only while :func:`meeting_outcome_memory_enabled` reads
-      ON from ``env`` -- OFF drops the statement before it becomes a row, so the
-      episodic log, its observation-id sequence and every rendered byte are the
-      ones the committed recordings hold.
+    A ``saw_vent`` statement is kept as CONTENT: the game's one role-proving
+    public observation survives the trip into memory with its room and tick
+    intact, instead of arriving as a bare accusation.
 
     Each row also carries the 1-based ``meeting_index`` it was spoken at, counted
     from the ``meeting_boundary`` markers :func:`absorb_meeting_evidence` has
@@ -833,7 +644,6 @@ def absorb_reported_testimony(
         return
     boundary_tick = last_perceived_tick + 1
     roster = _known_roster_ids(memory.episodic)
-    vents_are_content = meeting_outcome_memory_enabled(env)
     boundaries = sum(
         1
         for event in memory.episodic.recent(since_tick=0)
@@ -846,8 +656,6 @@ def absorb_reported_testimony(
         if statement.speaker == own_agent_id:
             continue
         if statement.speaker not in roster or statement.subject not in roster:
-            continue
-        if statement.kind == "saw_vent" and not vents_are_content:
             continue
         memory.episodic.append(
             EpisodicEvent(
@@ -924,9 +732,7 @@ def record_meeting_outcome(
     records and the v3 tactical feature encoder's three-scalar channel reads
     exactly what it read before they existed.
 
-    Rendered by :func:`render_for_prompt` as the ``## Meetings so far:`` block
-    only while :func:`meeting_outcome_memory_enabled` is ON; OFF the channel
-    stays inert to every prompt byte.
+    Rendered by :func:`render_for_prompt` as the ``## Meetings so far:`` block.
 
     The non-negative / non-decreasing ``end_tick`` guards and the
     skip-reveals-no-role guard live in ``MeetingHistory.record``, so an
@@ -1641,17 +1447,10 @@ def _build_observations(
     *,
     own_agent_id: str | None = None,
     teammate_ids: frozenset[str] = frozenset(),
-    completion_from_events: bool = False,
-    self_location_trail: bool = False,
-    meeting_outcome_memory: bool = False,
-    coalesced_memory_render: bool = False,
 ) -> list[_Observation]:
     observations: list[_Observation] = []
     seen_body_ids: set[str] = set()
-    last_pending_task: str | None = None
-    last_self_room: str | None = None
     last_owned_task_ids: frozenset[TaskId] | None = None
-    first_self_state = True
     body_sightings = _collect_body_sightings(episodic)
     own_kill_victims = _collect_own_kill_victims(episodic)
     breadcrumbs = _collect_movement_breadcrumbs(
@@ -1681,64 +1480,36 @@ def _build_observations(
 
     for event in episodic.recent(since_tick=0):
         if event.type == _EVENT_SELF_STATE:
-            pending_raw = event.payload.get("pending_task_id")
-            pending = pending_raw if isinstance(pending_raw, str) else None
             room = event.payload.get("room")
-            role = event.payload.get("role")
             self_room = room if isinstance(room, str) else None
             owned = _owned_task_ids(event.payload)
             # One row dates the completion, places it and stamps its citation:
             # the row this iteration is reading. The line therefore carries one
             # clock, and its ``[obs ...]`` handle names the row it is placed by.
-            completion_room = self_room if self_location_trail else last_self_room
-            if completion_from_events:
-                # An id LEAVING a living agent's owned set is a completion it
-                # performed: only completion removes an id, while redistribution
-                # merely ADDS a dead player's unfinished instances to a survivor
-                # and the victim receives no further packet. One line per departed
-                # id, sorted, so a genuine completion is not dropped when an
-                # inherited earlier-sorting task already holds the pending id, and
-                # ties render in a fixed order. Role-blind: an impostor's
-                # ``owned_task_ids`` is a CONSTANT per-seat camouflage window
-                # (observation/service.py), so its rotating pretend id never leaves
-                # the set. Both rows must carry the set -- a payload without it is
-                # no evidence, so nothing is minted.
-                # G-3 / C-2, audits/review-2026-08-19/D/FINAL-synthesis.md §1 RC3.
-                if last_owned_task_ids is not None and owned is not None:
-                    observations.extend(
-                        _completed_task_observation(
-                            tick=event.tick,
-                            task_id=task_id,
-                            room=completion_room,
-                            observation_id=event.observation_id,
-                        )
-                        for task_id in sorted(last_owned_task_ids - owned)
-                    )
-            elif (
-                role == "CREWMATE"
-                and not first_self_state
-                and isinstance(last_pending_task, str)
-                and pending != last_pending_task
-            ):
-                # Lever OFF: a completion is inferred from ANY change of a
-                # crewmate's ``pending_task_id`` -- the rule the committed
-                # recordings were rendered under. It over-mints whenever a
-                # redistributed instance displaces the pending id, and is gated to
-                # crewmates because an impostor's pretend id rotates without ever
-                # completing.
-                # PR #155.
-                observations.append(
+            completion_room = self_room
+            # An id LEAVING a living agent's owned set is a completion it
+            # performed: only completion removes an id, while redistribution
+            # merely ADDS a dead player's unfinished instances to a survivor
+            # and the victim receives no further packet. One line per departed
+            # id, sorted, so a genuine completion is not dropped when an
+            # inherited earlier-sorting task already holds the pending id, and
+            # ties render in a fixed order. Role-blind: an impostor's
+            # ``owned_task_ids`` is a CONSTANT per-seat camouflage window
+            # (observation/service.py), so its rotating pretend id never leaves
+            # the set. Both rows must carry the set -- a payload without it is
+            # no evidence, so nothing is minted.
+            # G-3 / C-2, audits/review-2026-08-19/D/FINAL-synthesis.md §1 RC3.
+            if last_owned_task_ids is not None and owned is not None:
+                observations.extend(
                     _completed_task_observation(
                         tick=event.tick,
-                        task_id=last_pending_task,
+                        task_id=task_id,
                         room=completion_room,
                         observation_id=event.observation_id,
                     )
+                    for task_id in sorted(last_owned_task_ids - owned)
                 )
-            last_pending_task = pending
-            last_self_room = self_room
             last_owned_task_ids = owned
-            first_self_state = False
             continue
 
         if event.type == _EVENT_OWN_KILL:
@@ -1820,11 +1591,7 @@ def _build_observations(
             continue
 
         if event.type == EVENT_REPORTED_TESTIMONY:
-            obs = _render_reported_testimony(
-                event,
-                meeting_outcome_memory=meeting_outcome_memory,
-                coalesced_memory_render=coalesced_memory_render,
-            )
+            obs = _render_reported_testimony(event)
             if obs is not None:
                 observations.append(obs)
             continue
@@ -2151,30 +1918,18 @@ def _render_saw_player_move(
     )
 
 
-def _render_reported_testimony(
-    event: EpisodicEvent,
-    *,
-    meeting_outcome_memory: bool = False,
-    coalesced_memory_render: bool = False,
-) -> _Observation | None:
+def _render_reported_testimony(event: EpisodicEvent) -> _Observation | None:
     """Render one ``reported_testimony`` row as a self-framed unverified claim.
 
     The framing is LOAD-BEARING (the §6.6 contract): every line reads
-    ``[meeting] CLAIM by X (unverified): …`` so a weaker model WEIGHS the
+    ``[meeting {n}] CLAIM by X (unverified): …`` so a weaker model WEIGHS the
     testimony as a third party's assertion rather than treating a reported
-    sighting as something it witnessed. The line states the claim's own tick(s)
-    / room, while the :class:`_Observation` sorts by ``event.tick`` (the
-    meeting-boundary tick) in the reported band -- below first-hand by default, so
-    a tight budget sheds it first; ``coalesced_memory_render`` ON raises it to
-    :data:`_SALIENCE_REPORTED_TESTIMONY_COALESCED`, above bare co-presence and
+    sighting as something it witnessed, and the tag names WHICH meeting it was
+    spoken at (untagged when the agent holds no meeting record to number it by).
+    The line states the claim's own tick(s) / room, while the
+    :class:`_Observation` sorts by ``event.tick`` (the meeting-boundary tick) at
+    :data:`_SALIENCE_REPORTED_TESTIMONY` -- above bare co-presence and
     still below every hard-evidence row.
-
-    ``meeting_outcome_memory`` ON tags the frame with WHICH meeting the claim
-    was spoken at (``[meeting 1]``) and renders a ``saw_vent`` sighting with its
-    room and tick intact, so the game's one role-proving observation survives
-    the trip into memory instead of arriving as a bare accusation. OFF renders
-    the untagged frame and knows no ``saw_vent`` kind, which is what the
-    committed recordings hold.
 
     A malformed payload (missing speaker / subject / kind) renders nothing,
     matching the defensive ``.get`` convention of the other renderers.
@@ -2194,15 +1949,10 @@ def _render_reported_testimony(
     to_tick = event.payload.get("to_tick")
     meeting_index = event.payload.get("meeting_index")
     meeting_tag = "[meeting]"
-    if meeting_outcome_memory and isinstance(meeting_index, int):
+    if isinstance(meeting_index, int):
         meeting_tag = f"[meeting {meeting_index}]"
     prefix = f"[tick {event.tick}] {meeting_tag} CLAIM by {speaker} (unverified):"
-    if (
-        meeting_outcome_memory
-        and kind == "saw_vent"
-        and isinstance(room, str)
-        and isinstance(from_tick, int)
-    ):
+    if kind == "saw_vent" and isinstance(room, str) and isinstance(from_tick, int):
         body = f"saw {subject} VENT in {room} @ tick {from_tick}"
     elif kind == "saw_player" and isinstance(room, str) and isinstance(from_tick, int):
         companions = event.payload.get("co_present")
@@ -2224,11 +1974,7 @@ def _render_reported_testimony(
     else:
         return None
     return _Observation(
-        salience=(
-            _SALIENCE_REPORTED_TESTIMONY_COALESCED
-            if coalesced_memory_render
-            else _SALIENCE_REPORTED_TESTIMONY
-        ),
+        salience=_SALIENCE_REPORTED_TESTIMONY,
         tick=event.tick,
         line=f"{prefix} {body}.",
         # A reported-testimony event carries no observation id (it is not first-hand
@@ -2320,7 +2066,6 @@ def _build_belief_lines(
     *,
     roster: frozenset[str] | None = None,
     suspicion_override: Mapping[PlayerId, float] | None = None,
-    env: Mapping[str, str] | None = None,
 ) -> list[str]:
     """Render the §6.6 belief rows, filtered to ``roster`` when supplied.
 
@@ -2339,12 +2084,10 @@ def _build_belief_lines(
     ``suspicion_graph`` it mirrors is suspicion-only. ``None`` is
     byte-identical to pre-task HEAD.
 
-    ``env`` (Task 16.4) resolves the default-OFF hard-evidence-gate lever once,
-    before the row loop. With it ON, a row whose stored scalar is used (no override
-    for that player) and whose 16.3 typed provenance is entirely soft renders
-    clamped to :data:`~agents.memory.beliefs.HARD_EVIDENCE_GATE_RENDER_CEIL` just
-    below the §4.6 gate; a hard-backed row renders untouched. OFF (the default) runs
-    the original path untouched, so the render is byte-identical to pre-task HEAD.
+    A row whose stored scalar is used (no override for that player) and whose
+    typed provenance is entirely soft renders clamped to
+    :data:`~agents.memory.beliefs.HARD_EVIDENCE_GATE_RENDER_CEIL`, just below the
+    §4.6 gate; a hard-backed row renders untouched.
 
     Reads ``working.last_seen`` for the last-seen suffix (the R-6
     composite-memory gate: render reads all three stores). The field is filled
@@ -2352,9 +2095,6 @@ def _build_belief_lines(
     rows (firewall-suppressed).
     """
 
-    # Task 16.4: resolve the default-OFF hard-evidence-gate lever ONCE; OFF leaves
-    # the loop body byte-identical to pre-task HEAD.
-    gate_on = hard_evidence_gate_enabled(env)
     lines: list[str] = []
     for player_id in sorted(beliefs.known_players()):
         if roster is not None and player_id not in roster:
@@ -2365,7 +2105,7 @@ def _build_belief_lines(
             if suspicion_override is not None
             else None
         )
-        # Task 16.4 J1 render clamp. TWO halves: (1) the STORED-scalar clamp --
+        # The J1 render clamp. TWO halves: (1) the STORED-scalar clamp --
         # when this row renders its own ``belief.suspicion`` (no override, or the
         # player is absent from the override mapping) an entirely-soft
         # conviction-grade scalar is clamped sub-gate. (2) an override VALUE passes
@@ -2374,9 +2114,7 @@ def _build_belief_lines(
         # so clamping it again against the STORED provenance would misclassify a row
         # that took fresh HARD lift this meeting. Prose and graph therefore read one
         # clamped source by construction.
-        if gate_on and (
-            suspicion_override is None or player_id not in suspicion_override
-        ):
+        if suspicion_override is None or player_id not in suspicion_override:
             effective_suspicion = hard_evidence_gated_suspicion(
                 belief.suspicion, belief.provenance
             )
@@ -2687,11 +2425,6 @@ __all__ = [
     "BeliefState",
     "ContradictionRef",
     "DEFAULT_TOKEN_BUDGET",
-    "ENV_COALESCED_MEMORY_RENDER",
-    "ENV_MEETING_OUTCOME_MEMORY",
-    "ENV_OBSERVATION_ID_RENDERING",
-    "ENV_SELF_LOCATION_TRAIL",
-    "ENV_TASK_COMPLETION_FROM_EVENTS",
     "EpisodicEvent",
     "MeetingHistory",
     "MemoryStore",
@@ -2704,11 +2437,6 @@ __all__ = [
     "WorkingMemory",
     "absorb_meeting_evidence",
     "absorb_reported_testimony",
-    "coalesced_memory_render_enabled",
-    "meeting_outcome_memory_enabled",
-    "observation_id_rendering_enabled",
     "record_meeting_outcome",
     "render_for_prompt",
-    "self_location_trail_enabled",
-    "task_completion_from_events_enabled",
 ]
