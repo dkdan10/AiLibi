@@ -447,7 +447,7 @@ describe("the Omniscient body layer over the committed served payloads", () => {
   it("9p2i: reads engine truth on every frame", () => {
     expect(census(set("9p2i").games, bodyStatesByTick)).toEqual({
       games: 50,
-      frames: 1769,
+      frames: 1217,
       phantomFrames: 0,
       missingFrames: 0,
       phantomBodies: 0,
@@ -455,32 +455,32 @@ describe("the Omniscient body layer over the committed served payloads", () => {
       roomCountMismatchFrames: 0,
       capOverflowFrames: 0,
       // One frame per report_body event, each on the report frame itself.
-      discoveredFrames: 151,
+      discoveredFrames: 144,
       discoveredAfterReportFrame: 0,
       attributionMismatches: 0,
     });
-    expect(reportBodyEvents(set("9p2i").games)).toBe(151);
+    expect(reportBodyEvents(set("9p2i").games)).toBe(144);
   });
 
   it("9p2i: the retired accumulate rule fails the same walk", () => {
     expect(census(set("9p2i").games, retiredAccumulateRule)).toEqual({
       games: 50,
-      frames: 1769,
-      // Two thirds of the frames painted a corpse the engine had consumed.
-      phantomFrames: 1182,
+      frames: 1217,
+      // Over half the frames painted a corpse the engine had consumed.
+      phantomFrames: 668,
       missingFrames: 0,
-      phantomBodies: 2426,
-      gamesWithPhantom: 50,
+      phantomBodies: 1371,
+      gamesWithPhantom: 48,
       // Every phantom frame also inflates that room's body count …
-      roomCountMismatchFrames: 1182,
-      // … and on 4 of them a room's pile crosses BODY_CAP, firing a spurious
+      roomCountMismatchFrames: 668,
+      // … and on 7 of them a room's pile crosses BODY_CAP, firing a spurious
       // "✕ ×N" collapse marker over a room the engine has emptied.
-      capOverflowFrames: 4,
-      discoveredFrames: 1232,
+      capOverflowFrames: 7,
+      discoveredFrames: 718,
       // Exactly the phantom count: every phantom IS a consumed corpse, so every
       // one of them still wears the "freshly reported" kill ring on a frame long
       // after its report. The shipped rule reads 0 here.
-      discoveredAfterReportFrame: 2426,
+      discoveredAfterReportFrame: 1371,
       attributionMismatches: 0,
     });
   });
@@ -488,41 +488,48 @@ describe("the Omniscient body layer over the committed served payloads", () => {
   it("4p1i: reads engine truth on every frame", () => {
     expect(census(set("4p1i").games, bodyStatesByTick)).toEqual({
       games: 50,
-      frames: 682,
+      frames: 601,
       phantomFrames: 0,
       missingFrames: 0,
       phantomBodies: 0,
       gamesWithPhantom: 0,
       roomCountMismatchFrames: 0,
       capOverflowFrames: 0,
-      discoveredFrames: 35,
+      discoveredFrames: 37,
       discoveredAfterReportFrame: 0,
       attributionMismatches: 0,
     });
-    expect(reportBodyEvents(set("4p1i").games)).toBe(35);
+    expect(reportBodyEvents(set("4p1i").games)).toBe(37);
   });
 
   it("4p1i: the retired accumulate rule fails the same walk", () => {
     const retired = census(set("4p1i").games, retiredAccumulateRule);
-    expect(retired.phantomFrames).toBe(101);
-    expect(retired.phantomBodies).toBe(101);
-    expect(retired.gamesWithPhantom).toBe(25);
-    expect(retired.roomCountMismatchFrames).toBe(101);
+    expect(retired.phantomFrames).toBe(66);
+    expect(retired.phantomBodies).toBe(66);
+    expect(retired.gamesWithPhantom).toBe(18);
+    expect(retired.roomCountMismatchFrames).toBe(66);
     expect(retired.missingFrames).toBe(0);
   });
 
-  it("draws the two instances the review named", () => {
-    // "seed 0 tick 18: the engine has nothing on the floor, the map draws p-2."
-    const seed0 = victimsAt(set("9p2i").games, "headless-seed-0", 18);
-    expect(seed0.served).toEqual([]);
-    expect(seed0.shipped).toEqual([]);
-    expect(seed0.retired).toEqual(["p-2"]);
+  it("draws the two shapes the review named", () => {
+    // The review named two instances, and the SHAPES it named are what these
+    // pin: a floor the engine has emptied that the retired rule still paints,
+    // and a pile the retired rule inflates around a single real corpse. The
+    // coordinates move with every re-record — the first survived the baseline-7
+    // recording, the second re-anchored from seed 2 tick 29 to seed 6 tick 39 —
+    // so the census above is what proves the class, and these two draw it.
 
-    // "seed 2 tick 29: FOUR corpses drawn while the engine state has one."
-    const seed2 = victimsAt(set("9p2i").games, "headless-seed-2", 29);
-    expect(seed2.served).toEqual(["p-5"]);
-    expect(seed2.shipped).toEqual(["p-5"]);
-    expect(seed2.retired).toEqual(["p-1", "p-2", "p-5", "p-6"]);
+    // "the engine has nothing on the floor, the map draws p-2."
+    const empty = victimsAt(set("9p2i").games, "headless-seed-0", 18);
+    expect(empty.served).toEqual([]);
+    expect(empty.shipped).toEqual([]);
+    expect(empty.retired).toEqual(["p-2"]);
+
+    // "FOUR corpses drawn while the engine state has one."
+    const pile = victimsAt(set("9p2i").games, "headless-seed-6", 39);
+    expect(pile.served).toEqual(["p-4"]);
+    expect(pile.shipped).toEqual(["p-4"]);
+    expect(pile.retired).toEqual(["p-2", "p-3", "p-4", "p-5"]);
   });
 });
 

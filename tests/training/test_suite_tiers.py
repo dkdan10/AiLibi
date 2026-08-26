@@ -86,8 +86,13 @@ _MIXED_TIER_CAMPAIGN_TESTS: Final[tuple[str, ...]] = (
 )
 _MIXED_TIER_ALWAYS_ON_TESTS: Final[tuple[str, ...]] = (
     "test_corpus_census_pins",
-    "test_committed_artifact_round_trips_and_matches_refit",
-    "test_committed_verdict_reproduces_from_the_frozen_weights",
+    # Both renamed at the baseline-7 record: the corpus moved under a frozen fit,
+    # so each pin now states what the committed artifact IS (a baseline-6 fit) and
+    # how the live corpus reads against it, rather than asserting a reproduction
+    # that the pending ML re-ground owns (audits/audit-phase-20-baseline-7.md
+    # §10.2). Same KEEP-row duty, same default tier.
+    "test_committed_artifact_round_trips_and_the_refit_no_longer_matches",
+    "test_the_committed_verdict_is_baseline6_and_the_weights_still_clear_the_bar",
 )
 
 

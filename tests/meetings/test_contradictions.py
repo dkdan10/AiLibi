@@ -83,6 +83,7 @@ from meetings.transcript import (
     whereabouts_interior_flags_enabled,
 )
 from orchestrator.replay import MeetingReplayEntry, read_all_entries
+from tests._helpers.committed import sighting_records_from_recorded_flags
 
 # --- Builders --------------------------------------------------------------
 
@@ -3292,41 +3293,6 @@ def _vent_records_from_recorded_flags(
     return {speaker: tuple(rows) for speaker, rows in records.items()}
 
 
-def _sighting_records_from_recorded_flags(
-    entry: MeetingReplayEntry,
-) -> dict[str, tuple[SightingRecord, ...]]:
-    """Rebuild each speaker's groundable sighting channel from the RECORDED flags.
-
-    The same inversion :func:`_vent_records_from_recorded_flags` makes, for the
-    grounded-prosecution rule: a recorded flag carrying
-    :data:`WEAK_REASON_UNGROUNDED_SIGHTING` says the speaker's own record did NOT
-    back that sighting, so no record is minted for it; every other spoken
-    sighting was grounded at record time and re-grounds by construction.
-    """
-
-    ungrounded = {
-        event_id
-        for flag in entry.contradictions
-        if WEAK_REASON_UNGROUNDED_SIGHTING in flag.description
-        for event_id in (flag.event_a_id, flag.event_b_id)
-    }
-    records: dict[str, list[SightingRecord]] = {}
-    for turn in entry.transcript.turns:
-        for index, observation in enumerate(turn.observations):
-            if not isinstance(observation, SawPlayerObservation):
-                continue
-            if _turn_observation_id(turn=turn, index=index) in ungrounded:
-                continue
-            records.setdefault(turn.speaker, []).append(
-                SightingRecord(
-                    subject=observation.subject,
-                    room=observation.room,
-                    tick=observation.tick,
-                )
-            )
-    return {speaker: tuple(rows) for speaker, rows in records.items()}
-
-
 # The vent-record TICK is provably unrecoverable from replay bytes: the flag
 # description embeds ``VentWitnessRecord.tick`` (the real observed vent tick),
 # which the replay does not persist, while the rebuild above uses the SPOKEN
@@ -3437,7 +3403,7 @@ def _rederive(
         entry.transcript,
         roster=_living_roster(entry),
         vent_witness_records=_vent_records_from_recorded_flags(entry),
-        sighting_records=_sighting_records_from_recorded_flags(entry),
+        sighting_records=sighting_records_from_recorded_flags(entry),
         **kwargs,  # type: ignore[arg-type]
     )
 

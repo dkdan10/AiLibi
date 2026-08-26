@@ -40,6 +40,8 @@ if TYPE_CHECKING:
     from eval.kill_craft import KillCraftReport
     from eval.meeting_quality import TournamentEvalReport
     from eval.solvability import SolvabilityReport
+    from meetings.schemas import PlayerId, SightingRecord
+    from orchestrator.replay import MeetingReplayEntry
 
 #: The checkout root, derived from this file rather than the process working
 #: directory: a test that builds a fixture path from the cwd only passes when
@@ -115,3 +117,50 @@ def solvability_report(sample_dir: Path) -> SolvabilityReport:
     from eval.solvability import compute_solvability_report
 
     return compute_solvability_report(sample_dir)
+
+
+def sighting_records_from_recorded_flags(
+    entry: MeetingReplayEntry,
+) -> dict[PlayerId, tuple[SightingRecord, ...]]:
+    """Rebuild one meeting's groundable sighting channel from its RECORDED flags.
+
+    The graduated ``grounded_prosecution`` lever (audits/audit-phase-20-baseline-7.md
+    §6.1) reads each speaker's typed sighting channel, which the replay does not
+    persist -- so a test that re-runs the detector or the belief fold over
+    committed bytes WITHOUT it is not re-running production, and measures the
+    missing channel instead. The channel is recoverable by inversion: a recorded
+    flag carrying :data:`WEAK_REASON_UNGROUNDED_SIGHTING` says the speaker's own
+    record did NOT back that sighting, so no record is minted for it; every other
+    spoken sighting was grounded at record time and re-grounds by construction.
+
+    The sibling channels do not invert the same way, and callers must not assume
+    they do: ``vent_witness_records`` embeds a tick the replay drops, and the
+    movement channel is not recoverable at all (a spoken transition is prosecuted
+    at its destination, decided against private perception). Record audit §10.3
+    holds what that costs.
+    """
+
+    from meetings.schemas import SawPlayerObservation, SightingRecord
+    from meetings.transcript import WEAK_REASON_UNGROUNDED_SIGHTING
+
+    ungrounded = {
+        event_id
+        for flag in entry.contradictions
+        if WEAK_REASON_UNGROUNDED_SIGHTING in flag.description
+        for event_id in (flag.event_a_id, flag.event_b_id)
+    }
+    records: dict[PlayerId, list[SightingRecord]] = {}
+    for turn in entry.transcript.turns:
+        for index, observation in enumerate(turn.observations):
+            if not isinstance(observation, SawPlayerObservation):
+                continue
+            if f"turn:{turn.turn_id}:obs:{index}" in ungrounded:
+                continue
+            records.setdefault(turn.speaker, []).append(
+                SightingRecord(
+                    subject=observation.subject,
+                    room=observation.room,
+                    tick=observation.tick,
+                )
+            )
+    return {speaker: tuple(rows) for speaker, rows in records.items()}

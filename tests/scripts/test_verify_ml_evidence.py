@@ -274,17 +274,37 @@ def test_availability_registry_covers_the_document() -> None:
     ] * len(vme._OFF_TREE_ANCHORS)
 
 
-def test_recompute_reproduces_every_committed_verdict() -> None:
-    """The three instruments re-derive from the FROZEN weights, to the pin.
+def test_recompute_reads_every_committed_verdict_against_the_declared_gap() -> None:
+    """The three instruments re-derive from the FROZEN weights, and land STALE.
 
     The slow leg (~30s: two corpus tables plus the composed fidelity). It is the
     command's whole point — the Codex audit's executed-evidence row, run as one
     check — so it is asserted end to end rather than sampled.
+
+    The baseline-7 record re-recorded ``replays/ml_corpus`` without re-fitting
+    the ML artifacts (a named follow-up, audits/audit-phase-20-baseline-7.md
+    §10.2), so every recomputed figure now measures a frozen fit against a corpus
+    it never saw. The leg reports that as STALE rather than FAIL, and this test
+    pins the whole shape of it: NOTHING may FAIL, the grounding row must be the
+    one saying why, and the re-derived figures are pinned as measurements in
+    their own right. The committed side of each row still carries the baseline-6
+    number, so the two are readable against each other here and in the output.
     """
 
     result = vme.run_recompute(_context(_REPO_ROOT))
-    failed = [row for row in result.rows if row.status != "OK"]
+    failed = [row for row in result.rows if row.status == "FAIL"]
     assert not failed, "\n".join(f"{row.name}: {row.detail}" for row in failed)
+
+    # The gap is declared by ONE row, and every other non-OK row points at it.
+    grounding = _row(result.rows, "ML grounding")
+    assert grounding.status == "STALE"
+    assert "§10.2" in grounding.detail
+    stale = [row for row in result.rows if row.status == "STALE"]
+    assert len(stale) > 1  # non-vacuous: the recomputations are read, not skipped
+    for row in stale:
+        if row.name != "ML grounding":
+            assert "ML grounding" in row.detail, row.name
+
     # The six figures the audit's executed-evidence table names, by name.
     assert {row.name for row in result.rows} >= {
         "surrogate top-1 (ranking channel)",
@@ -294,21 +314,51 @@ def test_recompute_reproduces_every_committed_verdict() -> None:
         "composed decision accuracy",
         "composed exact-outcome match",
     }
-    assert _row(result.rows, "surrogate top-1 (ranking channel)").measured.startswith(
-        "0.7666666"
+    # Left: measured on the baseline-7 corpus. Right: the committed baseline-6
+    # figure the row is read against. Pinned in pairs so neither can drift alone.
+    for name, measured, committed in (
+        ("surrogate top-1 (ranking channel)", "0.8181818", "0.7666666"),
+        ("surrogate SKIP-vs-eject decision accuracy", "0.3908045", "0.3750000"),
+        ("conviction flag-count Spearman", "0.6991081", "0.5781584"),
+        ("conviction conversion-label accuracy", "0.9310344", "0.9375000"),
+        ("composed decision accuracy", "0.8620689", "0.8645833"),
+        ("composed exact-outcome match", "0.8160919", "0.7916666"),
+    ):
+        row = _row(result.rows, name)
+        assert row.measured.startswith(measured), row.measured
+        assert row.committed.startswith(committed), row.committed
+
+
+def test_an_undeclared_corpus_still_fails_the_grounding_row(tmp_path: Path) -> None:
+    """STALE is granted to ONE declared pair of digests, not to any mismatch.
+
+    The planted case behind the leniency above: a corpus that is neither the fit
+    corpus nor the one this checkout declares as the pending re-ground is an
+    undeclared substrate, and the grounding row FAILS on it. Without this, the
+    STALE branch would be an unconditional amnesty for corpus drift.
+    """
+
+    root = tmp_path / "repo"
+    _manifests(root)
+    _link(
+        root,
+        f"{vme.SURROGATE_DIR}/fit-corpus.json",
+        f"{vme.SURROGATE_DIR}/ballot-predictor.json",
+        f"{vme.SURROGATE_DIR}/ballot-predictor.json.sha256",
     )
-    assert _row(
-        result.rows, "surrogate SKIP-vs-eject decision accuracy"
-    ).measured.startswith("0.3750000")
-    assert _row(
-        result.rows, "conviction conversion-label accuracy"
-    ).measured.startswith("0.9375000")
-    assert _row(result.rows, "composed decision accuracy").measured.startswith(
-        "0.8645833"
+    corpus = root / vme.CORPUS_SET
+    corpus.mkdir(parents=True)
+    for child in sorted((_REPO_ROOT / vme.CORPUS_SET).iterdir()):
+        (corpus / child.name).symlink_to(child)
+    # One added recording moves the fingerprint off the declared digit string.
+    (corpus / "replay-seed-999999.jsonl").symlink_to(
+        _REPO_ROOT / vme.CORPUS_SET / "replay-seed-1000.jsonl"
     )
-    assert _row(result.rows, "composed exact-outcome match").measured.startswith(
-        "0.7916666"
-    )
+
+    row, stale = vme._grounding_row(root)
+    assert not stale
+    assert row.status == "FAIL"
+    assert "undeclared substrate" in row.detail
 
 
 def test_main_runs_the_cheap_legs_green_at_head(
@@ -318,7 +368,7 @@ def test_main_runs_the_cheap_legs_green_at_head(
 
     assert (
         vme.main(["--only", "sidecars", "--only", "paired", "--only", "availability"])
-        == 1
+        == 0
     )
     out = capsys.readouterr().out
     assert "PARTIAL RUN — only: sidecars, paired, availability" in out
@@ -459,7 +509,11 @@ def test_perturbed_replay_fails_the_corpus_leg(tmp_path: Path) -> None:
     assert "headless-seed-0" in row.detail
     # The unperturbed legs of the same run stay green, so the failure is located
     # rather than merely global.
-    assert _row(result.rows, "fit-corpus identity fingerprint").status == "FAIL"
+    # STALE, not OK: this checkout declares one grounding gap (the corpus was
+    # re-recorded under a frozen fit). What matters here is that it is not FAIL —
+    # the perturbation above is located in the row it perturbed, not smeared
+    # across the leg.
+    assert _row(result.rows, "fit-corpus identity fingerprint").status == "STALE"
     assert result.notes and "SAMPLE" in result.notes[0]
 
 
@@ -1410,7 +1464,7 @@ def test_every_counted_registry_row_matches_the_index() -> None:
     row = _row(
         vme.run_availability(_context(_REPO_ROOT)).rows, "in-tree family inventory"
     )
-    assert row.status == "FAIL", row.detail
+    assert row.status == "OK", row.detail
     counted = int(row.committed.split(" row(s)", 1)[0])
     assert counted >= 10, row.committed
     # Every in-tree registry row has a scope; a row nothing enumerates raises.
