@@ -370,18 +370,23 @@ class TestReportedTestimonyRender:
 
         full_budget = 1500
         full = render_for_prompt(memory, token_budget=full_budget)
-        assert all(f"You saw {pid}" in full for pid in sightings)
+        # The tick-0 whole-roster group renders as ONE summary line naming every
+        # subject (the coalesced render, unconditional since the baseline-7
+        # record); baseline 6 rendered one "You saw p-N" line per subject.
+        spawn = "- [tick 0] You saw every other player in CAFETERIA: "
+        assert spawn + ", ".join(sightings) + "." in full
         assert "CLAIM by p-3" in full
 
-        # Walk the budget down; the first level that sheds the reported line must
-        # still retain all first-hand sightings.
-        for budget in range(full_budget, 20, -1):
+        # Walk the budget down. The reported band outranks bare co-presence, so
+        # the ORDER inverted: the level that sheds the first-hand row still
+        # carries the reported line, and the reported line is the last standing.
+        for budget in range(full_budget, 5, -1):
             tight = render_for_prompt(memory, token_budget=budget)
-            if "CLAIM by p-3" not in tight:
-                assert all(f"You saw {pid}" in tight for pid in sightings)
+            if spawn not in tight:
+                assert "CLAIM by p-3" in tight
                 break
         else:  # pragma: no cover - defensive
-            raise AssertionError("reported line never dropped as budget shrank")
+            raise AssertionError("the first-hand row never dropped")
 
     def test_render_without_ingested_testimony_carries_no_reported_or_alibi_artifacts(
         self,
@@ -648,28 +653,28 @@ class TestVentSightingSurvivesAsContent:
         (line,) = _testimony_lines(render_for_prompt(memory, env=_ON))
         assert "CLAIM by p-8 (unverified):" in line
 
-    def test_off_path_drops_the_vent_statement_before_it_becomes_a_row(self) -> None:
-        # OFF the reduction never reaches the episodic log at all, so neither the
-        # rows nor the observation-id sequence they would shift can move.
+    def test_the_vent_statement_becomes_a_row(self) -> None:
+        # The reduction is unconditional since the baseline-7 record: a spoken
+        # vent sighting reaches the episodic log as CONTENT (baseline 6 dropped
+        # it at ingest, so neither the rows nor the observation-id sequence they
+        # shift could move).
         memory = _memory_at_meeting(1)
-        absorb_reported_testimony(memory, statements=(_VENT_SIGHTING,), env={})
-        assert _reported_rows(memory) == ()
+        absorb_reported_testimony(memory, statements=(_VENT_SIGHTING,))
+        assert len(_reported_rows(memory)) == 1
 
-    def test_off_path_render_is_byte_identical_to_the_pre_vent_fold(self) -> None:
+    def test_the_vent_statement_changes_the_render(self) -> None:
         accusation = ReportedStatement(speaker="p-3", kind="accusation", subject="p-2")
         with_vent = _memory_at_meeting(1)
-        absorb_reported_testimony(
-            with_vent, statements=(_VENT_SIGHTING, accusation), env={}
-        )
+        absorb_reported_testimony(with_vent, statements=(_VENT_SIGHTING, accusation))
         without_vent = _memory_at_meeting(1)
-        absorb_reported_testimony(without_vent, statements=(accusation,), env={})
+        absorb_reported_testimony(without_vent, statements=(accusation,))
 
-        assert render_for_prompt(with_vent, env={}) == render_for_prompt(
-            without_vent, env={}
-        )
-        # And the frame OFF carries no meeting index — the committed bytes.
-        assert _testimony_lines(render_for_prompt(with_vent, env={})) == [
-            "- [tick 15] [meeting] CLAIM by p-3 (unverified): accused p-2."
+        assert render_for_prompt(with_vent) != render_for_prompt(without_vent)
+        # And the frame carries the meeting index it was spoken at.
+        assert _testimony_lines(render_for_prompt(with_vent)) == [
+            "- [tick 15] [meeting 1] CLAIM by p-3 (unverified): accused p-2.",
+            "- [tick 15] [meeting 1] CLAIM by p-8 (unverified): "
+            "saw p-4 VENT in ENGINEERING @ tick 11.",
         ]
 
     def test_an_agent_with_no_boundary_record_gets_the_untagged_frame(self) -> None:
@@ -748,7 +753,11 @@ _CORPUS_9P2I: Final[Path] = (
     Path(__file__).resolve().parents[2] / "replays" / "ml_corpus" / "9p2i"
 )
 _CANDIDATE_BUCKETS: Final[tuple[str, ...]] = ("<=60", "61-100", "101-150", ">150")
-_TESTIMONY_ROW: Final[str] = "[meeting] CLAIM by "
+# The rendered testimony frame. The meeting-outcome channel tags it with the
+# meeting index it was spoken at ("[meeting 3] CLAIM by …"), so the stable part
+# is the CLAIM half -- matching on the untagged frame counted the candidate rows
+# and none of the rendered ones.
+_TESTIMONY_ROW: Final[str] = "CLAIM by "
 _SURVIVAL_FLOOR: Final[float] = 0.80
 
 
@@ -911,18 +920,18 @@ def test_reported_rows_survive_in_every_candidate_bucket(
         "101-150": 6835,
         ">150": 3361,
     }
-    assert survival.kept_off == {"<=60": 0, "61-100": 0, "101-150": 0, ">150": 0}
-    assert survival.kept_on == {"<=60": 0, "61-100": 0, "101-150": 0, ">150": 0}
+    # The raised reported band is unconditional since the baseline-7 record, so
+    # the two legs are ONE walk and read identically -- the differential the C-73
+    # register measured is what graduating the lever spent. Kept can exceed
+    # offered in a bucket: the candidate scan counts rows the selector was HANDED,
+    # and a render can carry a testimony line composed from several candidates.
+    kept = {"<=60": 11707, "61-100": 13622, "101-150": 7074, ">150": 3331}
+    assert survival.kept_off == kept
+    assert survival.kept_on == kept
+    # Every bucket clears the survival floor now, including the largest render --
+    # the bucket the register measured keeping NO reported row at all.
     for bucket in _CANDIDATE_BUCKETS:
         offered = survival.offered[bucket]
         assert survival.kept_on[bucket] / offered >= _SURVIVAL_FLOOR, (
             f"{bucket}: kept {survival.kept_on[bucket]} of {offered} ON"
         )
-    # The band change is what moved them: OFF, three of the four buckets sit under
-    # the floor and the largest render keeps no reported row at all.
-    under_off = [
-        bucket
-        for bucket in _CANDIDATE_BUCKETS
-        if survival.kept_off[bucket] / survival.offered[bucket] < _SURVIVAL_FLOOR
-    ]
-    assert under_off == ["61-100", "101-150", ">150"]
