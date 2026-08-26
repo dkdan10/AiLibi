@@ -1886,9 +1886,13 @@ def test_committed_turn_marker_census_and_zero_served_leak() -> None:
     turns carries a structured annotation instead once the lever is adopted.
     """
 
+    # Baseline 6 read (971, 53, {invalid_accusation_target: 53}) and (117, 0, {}).
+    # The marked count collapsed to ONE: the structured-turn-marker channel is
+    # unconditional now, so the guards record annotations instead of splicing
+    # prose, and the accusation guard itself fires far less on the v4 openings.
     expected = {
-        _COMMITTED_9P2I_DIR: (971, 53, {"invalid_accusation_target": 53}),
-        _COMMITTED_4P1I_DIR: (117, 0, {}),
+        _COMMITTED_9P2I_DIR: (871, 1, {"invalid_accusation_target": 1}),
+        _COMMITTED_4P1I_DIR: (120, 0, {}),
     }
     for directory, (
         expected_turns,
@@ -2007,13 +2011,13 @@ def test_meeting_outcome_memory_on_reconstruction_matches_the_store_render(
     assert _meetings_block(view.rendered_memory_text) == expected
 
 
-def test_the_meeting_outcome_channel_is_inert_while_the_lever_is_off(
+def test_the_meeting_outcome_channel_reaches_the_served_memory(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # The neutrality half, asserted rather than assumed: the walk folds the
-    # outcomes unconditionally, but with the lever OFF (the substrate every
-    # committed recording was made in) the channel reaches no rendered byte -- the
-    # served memory is exactly what it was before the fold existed.
+    # The channel is UNCONDITIONAL since the baseline-7 record, so the served
+    # memory for a second meeting carries the FIRST meeting's announced outcome
+    # -- with no AILIBI_* export in the process at all. (Baseline 6 rendered
+    # nothing here, which is what made the fold measurement-neutral then.)
     _delete_ailibi_env(monkeypatch)
     loader = ReplayLoader(replay_dir=_COMMITTED_9P2I_DIR)
     replay = loader.load_replay(f"headless-seed-{_MULTI_MEETING_SEED}")
@@ -2023,4 +2027,4 @@ def test_the_meeting_outcome_channel_is_inert_while_the_lever_is_off(
     view = loader.get_meeting_memory(
         f"headless-seed-{_MULTI_MEETING_SEED}", second.meeting_id, voter
     )
-    assert _MEETINGS_HEADER not in view.rendered_memory_text
+    assert _MEETINGS_HEADER in view.rendered_memory_text

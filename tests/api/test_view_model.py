@@ -437,35 +437,37 @@ def test_gate_marker_chips_on_committed_9p2i_bytes(
         for b in meeting.ballots
     ]
 
-    # The 16.5 observation-null scenario class stays collapsed: no
-    # invalid-observation-id (16.5) ballot survives on the baseline-6 committed set.
-    assert not [b for b in ballots if "invalid_observation_id" in b.rewrite_reasons]
-    # The 16.6 coercion re-appears with the vent-widening trajectories: exactly one
-    # uncited-coerced ballot (seed 36 m0, stacked with invalid_reason_id).
+    # The 16.5 observation-null class RE-OPENED on the baseline-7 bytes: eight
+    # ballots carry it (baseline 6 read zero, which is why the chip needed a
+    # live anchor at all).
+    nulled = [b for b in ballots if "invalid_observation_id" in b.rewrite_reasons]
+    assert len(nulled) == 8
+    # The 16.6 coercion: exactly one uncited-coerced ballot (unchanged).
     coerced = [b for b in ballots if "uncited_coerced" in b.rewrite_reasons]
     assert len(coerced) == 1
 
-    # The live gate-marker chip: the under-gate eject redirect. 13 ballots carry it.
+    # The live gate-marker chip: the under-gate eject redirect. 36 ballots carry
+    # it (baseline 6: 13).
     redirected = [b for b in ballots if "under_gate_redirect" in b.rewrite_reasons]
-    assert len(redirected) == 13
+    assert len(redirected) == 36
 
-    # Anchor seed 22 m2: an under-gate eject redirected off the sub-gate target,
+    # Anchor seed 22 m0: two under-gate ejects redirected off the sub-gate target,
     # the marker stripped from the served render (the chip is NOT a fabricated
     # addition -- the clean prose is a suffix of the raw text).
     replay_22 = nine_p_two_i_loader.load_replay("headless-seed-22")
     anchored = [
         b
-        for b in replay_22.meetings[2].ballots
+        for b in replay_22.meetings[0].ballots
         if "under_gate_redirect" in b.rewrite_reasons
     ]
-    assert len(anchored) == 1
-    (ballot_22,) = anchored
-    assert ballot_22.rewrite_reasons == ("under_gate_redirect",)
-    assert ballot_22.rationale_text_clean
-    assert BALLOT_TARGET_REDIRECT_MARKER.partition("{")[0] not in (
-        ballot_22.rationale_text_clean
-    )
-    assert ballot_22.rationale_text.endswith(ballot_22.rationale_text_clean)
+    assert len(anchored) == 2
+    for ballot_22 in anchored:
+        assert ballot_22.rewrite_reasons == ("under_gate_redirect",)
+        assert ballot_22.rationale_text_clean
+        assert BALLOT_TARGET_REDIRECT_MARKER.partition("{")[0] not in (
+            ballot_22.rationale_text_clean
+        )
+        assert ballot_22.rationale_text.endswith(ballot_22.rationale_text_clean)
 
 
 # ---------------------------------------------------------------------------
@@ -760,8 +762,10 @@ def test_finale_pins_committed_wrong_ejection_game(
     assert recaps["p-1"].final_vote_named_impostor is False
     # An authored ballot: the meeting layer rewrote nothing on this one.
     assert recaps["p-1"].final_vote_rewritten is False
-    # Neither impostor was ever ejected; both survive to the end.
-    assert all(recaps[pid].alive_at_end is True for pid in ("p-1", "p-9"))
+    # One impostor was ejected (p-9 at tick 25) and the other survives to the
+    # end; baseline 6 ejected neither.
+    assert recaps["p-1"].alive_at_end is True
+    assert recaps["p-9"].alive_at_end is False
 
 
 def test_finale_recap_flags_a_rewritten_ballot_and_withholds_judgment(
@@ -770,10 +774,9 @@ def test_finale_recap_flags_a_rewritten_ballot_and_withholds_judgment(
     """A REWRITTEN ballot is flagged and never judged as belief (Task 19.10
     review).
 
-    seed-22's last meeting records p-5's ballot with the ``under_gate_redirect``
-    audit marker: the authored target was redirected to the tallied ``p-7``, and
-    the recorded rationale explicitly OPPOSES p-7's ejection ("the herd is wrong
-    to eject p-7"). Presenting that target under "what they knew" — worse,
+    seed-8's LAST meeting records p-5's ballot with the ``under_gate_redirect``
+    audit marker: the authored target was redirected to the tallied ``p-1``.
+    Presenting that target under "what they knew" — worse,
     stamping it "named an impostor" — would invert the agent's recorded
     reasoning, so the recap carries ``final_vote_rewritten=True`` and a ``None``
     judgment for it, while an unmarked co-voter on the same meeting keeps the
@@ -782,22 +785,22 @@ def test_finale_recap_flags_a_rewritten_ballot_and_withholds_judgment(
     target intact and stays unflagged.
     """
 
-    replay = nine_p_two_i_loader.load_replay("headless-seed-22")
-    last = replay.meetings[-1]
-    redirected = next(b for b in last.ballots if b.voter == "p-5")
+    replay = nine_p_two_i_loader.load_replay("headless-seed-8")
+    marked = replay.meetings[-1]
+    redirected = next(b for b in marked.ballots if b.voter == "p-5")
     assert "under_gate_redirect" in redirected.rewrite_reasons
-    assert redirected.target == "p-7"
+    assert redirected.target == "p-1"
 
     finale = replay.finale
     assert finale is not None
     recaps = {recap.agent_id: recap for recap in finale.agent_recaps}
     # The rewritten ballot: tallied target shown, flagged, judgment withheld.
-    assert recaps["p-5"].final_vote_target == "p-7"
+    assert recaps["p-5"].final_vote_target == "p-1"
     assert recaps["p-5"].final_vote_rewritten is True
     assert recaps["p-5"].final_vote_named_impostor is None
-    # An unmarked co-voter on the SAME ballot sheet keeps the judgment: p-4 also
-    # voted p-7 (an impostor — the ejection was right), authored and unflagged.
-    assert recaps["p-4"].final_vote_target == "p-7"
+    # An unmarked co-voter on the SAME ballot sheet keeps the judgment: p-4
+    # voted p-5 (an impostor — the ejection was right), authored and unflagged.
+    assert recaps["p-4"].final_vote_target == "p-5"
     assert recaps["p-4"].final_vote_rewritten is False
     assert recaps["p-4"].final_vote_named_impostor is True
 
