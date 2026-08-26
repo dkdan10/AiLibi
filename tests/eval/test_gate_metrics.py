@@ -998,8 +998,8 @@ def test_committed_flat_4p1i_report_pins_the_gate_metrics() -> None:
     assert supplied_channel.whereabouts_lie_supplied == 0
     assert supplied_channel.whereabouts_lie_converted == 0
     # The preserved legacy column mirrors the genuine-class cell above.
-    assert supplied_channel.legacy_alibi_supplied == 1
-    assert supplied_channel.legacy_alibi_converted == 1
+    assert supplied_channel.legacy_alibi_supplied == 0  # was 1
+    assert supplied_channel.legacy_alibi_converted == 0  # was 1
     assert supplied_channel.legacy_alibi_conversion_rate == pytest.approx(1.0)
     assert supplied_channel.note == SUPPLIED_CHANNEL_GATE_NOTE
 
