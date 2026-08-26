@@ -115,8 +115,8 @@ Decisions baked into this metric (recorded in the PR's ``## Decisions`` block):
   ejections) while ``ejection_accuracy`` was ``0.5`` (3 impostor / 6 total
   ejections), because the rate silently dropped the 3 wrong crewmate
   ejections. The gap survives on the recorded sets: samples/9p2i reads
-  ``vote_correctness_rate`` 0.9231 beside ``ejection_accuracy`` 78/101 =
-  0.7723, because 23 of those 101 ejections took a crewmate.
+  ``vote_correctness_rate`` 0.9176 beside ``ejection_accuracy`` 85/99 =
+  0.8586, because 14 of those 99 ejections took a crewmate.
   Like the rate it is :data:`None` (undefined, not ``0.0``) when there were
   zero ejections at all. :class:`eval.meeting_quality.ConversionReport`
   mirrors it (same fold, never recomputed) so both Wave-1 leads read from one

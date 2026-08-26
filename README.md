@@ -130,12 +130,12 @@ The system as built: [docs/architecture.md](docs/architecture.md).
 | Committed sample replays that reconstruct byte-identically | 100 of 100 | every commit — `scripts/verify_samples.sh` |
 | Observation-firewall violations, all phases | zero | never breached in CI: the [import-linter contracts](.importlinter), the planted-leak test in [tests/test_firewall.py](tests/test_firewall.py), the recursive sweep in [eval/leak_scan.py](eval/leak_scan.py) |
 | Impostor win rate, committed samples | 36% (4p1i), 24% (9p2i) | the 2026-08-25 record — [4p1i](replays/samples/4p1i/MANIFEST.md), [9p2i](replays/samples/9p2i/MANIFEST.md) |
-| Eject ballots carrying a valid citation, a turn or an observation id (9p2i) | 520 / 520, zero dangling | reference recording 6, 2026-07-20 — [instrument](tests/eval/test_vj_instruments.py) |
+| Eject ballots carrying a valid citation, a turn or an observation id (9p2i) | 538 / 538, zero dangling | reference recording 7, 2026-08-25 — [instrument](tests/eval/test_vj_instruments.py) |
 | Ejection accuracy with engine-certified proof of the ejectee's role, against without | 310 / 310 = 1.000 vs 46 / 125 = 0.368 | measured 2026-08-18 across the four recordings of that date — [phase-19 close](audits/audit-phase-19-close.md) §4.1; 79 of 79 innocent ejections sit in the no-proof cell |
 | Correct 9p ejections riding an ejectee-specific vent sighting | 68 / 78 = 87% | reference recording 6, 2026-07-20 — [triage audit](audits/audit-phase-19-triage.md). Reading: general social deduction, **not** demonstrated |
 | Learned tactical policies that became the default | none, ruled twice | 2026-07-18 and 2026-08-01 — [phase 17](audits/audit-phase-17-close.md), [phase 18](audits/audit-phase-18-close.md) |
 
-*Valid* in the citation row means resolvable, not supported: each of those 520 ballots points at a transcript turn or an observation its voter really held, and nothing checks that the cited line bears out the accusation built on it.
+*Valid* in the citation row means resolvable, not supported: each of those 538 ballots points at a transcript turn or an observation its voter really held, and nothing checks that the cited line bears out the accusation built on it.
 
 **The headline finding is a negative one, and that is the point.** Almost nine in ten of the crew's correct 9-player ejections ride an engine-certified vent sighting; without one, ejection accuracy is roughly chance and innocents go down two to one. So the corpus demonstrates LLM evidence-processing of certified facts, plus real deception on top — and *not* general social deduction. The cross-tab is in the [reading guide](docs/reading-guide.md).
 
@@ -148,7 +148,7 @@ The system as built: [docs/architecture.md](docs/architecture.md).
 
 Active. Phases 0–5 built the MVP; phases 6–19 pushed how well the agents reason, moved the eval onto a hosted model, and ran a four-phase ML program. Phase 19 closed 2026-08-18; phase 20 is open.
 
-Four learned tactical policies each beat the scripted one on wins. None became the default, because each failed an evidence-quality bar I had written down *before* the measurement that judged it — so both of those phases closed having adopted nothing and moved no reference recording. That is what those two closes mean: the bar was pre-registered, the honest answer was "not yet", and I record the miss rather than move it. The current reference recording is the sixth, which the audits call [baseline 6](docs/glossary.md#baseline-n-the-reference-recording).
+Four learned tactical policies each beat the scripted one on wins. None became the default, because each failed an evidence-quality bar I had written down *before* the measurement that judged it — so both of those phases closed having adopted nothing and moved no reference recording. That is what those two closes mean: the bar was pre-registered, the honest answer was "not yet", and I record the miss rather than move it. The current reference recording is the seventh, which the audits call [baseline 7](docs/glossary.md#baseline-n-the-reference-recording).
 
 Close audits start at the MVP close and resume at phase 13; earlier rows link the contract. One paragraph per phase: [docs/history.md](docs/history.md).
 
