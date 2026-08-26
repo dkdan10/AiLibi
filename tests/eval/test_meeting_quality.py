@@ -638,25 +638,27 @@ def test_extended_invariant_holds_over_every_committed_meeting(
 # committed bytes. The ml_corpus tables are recorded in the PR rather than
 # pinned here (this file's committed-bytes pins are the samples sets).
 _EXPECTED_RECOUNTS: Mapping[str, ThresholdInversionRecount] = {
+    # Baseline 6 read 87 / 87 / 36 / 81 / 5 / 1 / 78 / 8 / 1 on 9p2i and a single
+    # inversion on 4p1i; the 4p1i class is now empty.
     "9p2i": ThresholdInversionRecount(
-        threshold_inversions=87,
-        marker_free=87,
-        rendered_at_threshold=36,
-        rendered_below_0_70=81,
-        rendered_0_70_to_0_80=5,
-        rendered_at_or_above_0_80=1,
-        in_skipped_meetings=78,
-        in_crew_ejected_meetings=8,
-        in_impostor_ejected_meetings=1,
+        threshold_inversions=46,
+        marker_free=46,
+        rendered_at_threshold=7,
+        rendered_below_0_70=40,
+        rendered_0_70_to_0_80=6,
+        rendered_at_or_above_0_80=0,
+        in_skipped_meetings=39,
+        in_crew_ejected_meetings=1,
+        in_impostor_ejected_meetings=6,
     ),
     "4p1i": ThresholdInversionRecount(
-        threshold_inversions=1,
-        marker_free=1,
+        threshold_inversions=0,
+        marker_free=0,
         rendered_at_threshold=0,
-        rendered_below_0_70=1,
+        rendered_below_0_70=0,
         rendered_0_70_to_0_80=0,
         rendered_at_or_above_0_80=0,
-        in_skipped_meetings=1,
+        in_skipped_meetings=0,
         in_crew_ejected_meetings=0,
         in_impostor_ejected_meetings=0,
     ),
@@ -683,10 +685,10 @@ def test_committed_recount_pins_the_by_cause_table(
     cell: it pins that NO by-design rewrite (invalid target, teammate coercion,
     parse default, ballot redirect, citation gate) leaks into the remainder, so
     what is left is genuinely the voter's own decision. The rendered bands then
-    say what kind of decision it was — on samples/9p2i the mass sits AT the
-    advisory line (81 of 87 below 0.70, 36 of those exactly at the 0.60
-    reference) rather than deep above it, which is a conservatism reading, not
-    a disobedience reading. The two ml_corpus tables are recorded in the PR.
+    say what kind of decision it was — on samples/9p2i the mass still sits below
+    the advisory line (40 of 46 below 0.70, 7 of those exactly at the 0.60
+    reference), which is a conservatism reading, not a disobedience reading.
+    The two ml_corpus tables are recorded in the PR.
 
     Equality against a whole :class:`ThresholdInversionRecount` literal (not
     field-by-field asserts) makes a new cell a loud failure rather than a

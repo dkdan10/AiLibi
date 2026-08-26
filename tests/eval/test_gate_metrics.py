@@ -1010,12 +1010,12 @@ def test_committed_flat_4p1i_report_pins_the_gate_metrics() -> None:
     assert gate.accused_impostor_survivals == 15
     assert gate.survivals_rendered_met == 1
     assert gate.survivals_sheltered_sub_gate == 0
-    assert gate.survivals_unevidenced == 19
+    assert gate.survivals_unevidenced == 14
 
     # JSON-level guard, mirroring the 9p2i pin above: the committed file itself
     # serves the successor cell with its canary label.
     raw = json.loads(_COMMITTED_FLAT_REPORT.read_text(encoding="utf-8"))
-    assert raw["gate_metrics"]["supplied_channel_conversion"]["supplied"] == 11
+    assert raw["gate_metrics"]["supplied_channel_conversion"]["supplied"] == 19
     assert (
         "canary-eligible" in raw["gate_metrics"]["supplied_channel_conversion"]["note"]
     )
