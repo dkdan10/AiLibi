@@ -639,11 +639,23 @@ equals the baseline-6 stamp; there is no third substrate" — but it does not sa
 FINDING record's bytes live**. Task 20.36's files-in-scope place them in the canonical set dirs,
 which is coherent only under ADOPTED.
 
-The consequence is mechanical: `scripts/verify_samples.sh`, `scripts/verify_ml_evidence.py`,
-`tests/_helpers/committed.py` and therefore `uv run pytest` and `bash scripts/check.sh` cannot be
-green while lever-ON bytes sit in the canonical set dirs and the levers remain toggles. The
-byte-coupled re-pin sweep is not merely un-run — under FINDING it is un-runnable, because the
-affected tests raise on reconstruction rather than fail on a number.
+The consequence is mechanical: `scripts/verify_samples.sh`, the API's serving path and every
+test that asserts the committed bytes load under the DEFAULT substrate cannot pass while
+lever-ON bytes sit in the canonical set dirs and the levers remain toggles.
+
+**Measured, so the ruling is made on numbers rather than on this paragraph.** The full suite is
+`432 failed, 4911 passed, 48 errors` under the recorded slate and `434 failed, 4909 passed, 48
+errors` in a bare shell — the exports barely move it, which is the useful finding. The failures
+split into three classes, and only the first is blocked:
+
+| class | evidence | blocked by the ruling? |
+|---|---|---|
+| tests that assert the committed bytes load under the DEFAULT substrate | 182 `ReplaySubstrateMismatchError` occurrences, **identical under both environments** — these tests build a bare environment deliberately, which is the invariant FINDING breaks | **yes** — no re-pin fixes them |
+| reconstruction-path divergence | 78 `reconstructed state_hash_after` mismatches, chiefly the prompt byte golden's meeting rebuild | **partly** — a real fix, whose shape depends on the answer |
+| stale value pins | the remainder: ordinary before/after numbers with well-defined new values (e.g. `meetings_total` 165 → 152, I-2 `(152, 723)` → `(3, 659)`) | **no** — these are the census-driven sweep and are re-pinnable today |
+
+So the sweep is not "un-runnable": most of it is ordinary re-pinning. What no amount of re-pinning
+reaches is the first class, and `check.sh` cannot go green while it stands.
 
 **The bytes are not what is in question.** Under the recorded slate the same commands are clean:
 `verify_samples.sh` reports 100/100 and `verify_ml_evidence.py` reports 300/300 reconstruction

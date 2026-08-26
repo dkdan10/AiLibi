@@ -33,6 +33,7 @@ from pathlib import Path
 import pytest
 
 from eval.watchability import (
+    _BASELINE_SUPPLY_FLOORS,
     FloorPin,
     SupplyFloors,
     SupplyGaugeValues,
@@ -744,6 +745,73 @@ def test_baseline_6_floor_pins_equal_the_measured_bytes() -> None:
             gauge = by_name[name]
             assert gauge.measured == fraction, f"{sample_dir.name} {name} measured"
             assert gauge.floor == fraction, f"{sample_dir.name} {name} floor pin"
+
+
+def test_baseline_7_floor_pins_equal_the_measured_bytes() -> None:
+    """EXACT ANCHOR: each baseline-7 floor equals the bytes it was pinned from.
+
+    Same both-sides discipline as the baseline-6 anchor above — the measured
+    gauge IS the recorded fraction and the pinned floor IS the measured gauge —
+    so an under-pinned floor cannot silently weaken the block while the comments
+    still claim self-consistency.
+
+    Reconstruction is substrate-coupled, so this reads the Phase-20 slate the
+    bytes were recorded at; the planted case below carries the "can it fail" half
+    and needs no bytes at all.
+    """
+
+    expected = {
+        _NINE: {
+            "witnessed_event_rate": 3 / 177,  # crew-witnessed kills (was 6/177)
+            "flags_per_meeting": 134 / 152,  # 92 vent + 42 transcript (was 180/165)
+            "testimony_backed_conversion": 80 / 115,  # SUBJECT-AWARE (was 78/136)
+        },
+        _FOUR: {
+            "witnessed_event_rate": 1 / 65,  # numerator 1 -> ADVISORY (was 1/61)
+            "flags_per_meeting": 20 / 40,  # 20 vent + 0 transcript (was 16/39)
+            "testimony_backed_conversion": 19 / 31,  # SUBJECT-AWARE (was 9/30)
+        },
+    }
+    for sample_dir, fractions in expected.items():
+        report = compute_watchability(sample_dir, baseline_id="baseline-7")
+        assert report.referee_passed is True
+        assert all(gauge.passed for gauge in report.supply_gauges)
+        by_name = {gauge.name: gauge for gauge in report.supply_gauges}
+        assert set(by_name) == set(fractions)
+        for name, fraction in fractions.items():
+            gauge = by_name[name]
+            assert gauge.measured == fraction, f"{sample_dir.name} {name} measured"
+            assert gauge.floor == fraction, f"{sample_dir.name} {name} floor pin"
+
+
+def test_a_gauge_below_a_baseline_7_floor_is_rejected() -> None:
+    """PLANTED: the baseline-7 block bites — a starved supply fails its referee.
+
+    Drives the committed block's own floors, so a mistyped pin or a broken
+    population-relative derivation shows up here rather than passing quietly. The
+    flag census is held at the pin so the conversion floor derives to the pin
+    itself, and only the conversion is dropped below it.
+    """
+
+    floors = _BASELINE_SUPPLY_FLOORS["baseline-7"]["9p2i"]
+    starved = SupplyGaugeValues(
+        witnessed_event_rate=3 / 177,  # at the pin
+        total_kills=177,
+        crew_witnessed_kills=3,
+        flags_per_meeting=134 / 152,  # at the pin -> ratio 1.0 -> floor == pin
+        total_flags=134,
+        persisted_vent_flags=92,
+        meetings_total=152,
+        testimony_backed_conversion=79 / 115,  # ONE conversion short of the pin
+        backed_conversion_attempted=115,
+        backed_conversion_converted=79,
+    )
+    passed, rows = evaluate_supply_floors(starved, floors)
+    assert passed is False, "a below-floor conversion must fail the referee"
+    conversion = next(r for r in rows if r.name == "testimony_backed_conversion")
+    assert conversion.passed is False
+    assert conversion.floor == 80 / 115
+    assert conversion.advisory is False
 
 
 def test_hardened_patches_fire_on_the_committed_9p2i_bytes() -> None:
