@@ -11,7 +11,6 @@ through (audit R-6, `audits/audit-2026-05-15-0225-reconciled.md`).
 
 from __future__ import annotations
 
-import os
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from typing import Any, Final, TypeAlias
@@ -262,46 +261,37 @@ def observation_id_rendering_enabled(env: Mapping[str, str] | None = None) -> bo
     return True
 
 
-# Completed-task-from-events lever -- DEFAULT-OFF, live (the
-# ``agents.strategic.prompts.loader.impostor_roll_call_enabled`` shape). It is not
-# registered in ``orchestrator.replay._TOGGLEABLE_LEVER_RESOLVERS``: Task 20.33
-# wires the whole Phase-20 slate into the substrate stamp at once.
+# Completed-task-from-events lever -- UNCONDITIONAL since the baseline-7 record.
+# A completion is minted from the tasks that LEAVE an agent's owned set, never
+# inferred from a changed pending id. Stamped ON via
+# ``orchestrator.replay._RETIRED_ALWAYS_ON_LEVERS``;
+# ``ENV_TASK_COMPLETION_FROM_EVENTS`` is retained (no longer read) for the stamp
+# key's naming provenance and backward-compatible imports.
 ENV_TASK_COMPLETION_FROM_EVENTS: Final[str] = "AILIBI_TASK_COMPLETION_FROM_EVENTS"
-_TASK_COMPLETION_FROM_EVENTS_FLAG_TRUE: Final[frozenset[str]] = frozenset(
-    {"1", "true", "yes", "on"}
-)
 
 
 def task_completion_from_events_enabled(env: Mapping[str, str] | None = None) -> bool:
-    """Whether completed-task memory is read off the owned set. DEFAULT OFF.
+    """Whether completed-task memory is read off the owned set -- now always True.
 
-    Reads :data:`ENV_TASK_COMPLETION_FROM_EVENTS` from ``env`` (defaulting to the
-    process environment), accepting ``1/true/yes/on`` case-insensitively; passing
-    ``env`` lets a caller toggle the lever without mutating ``os.environ``.
+    A completion is emitted for every map task id that LEAVES the agent's
+    ``owned_task_ids``: a redistributed instance can displace the pending id but
+    can only ADD to a living agent's owned set, so the rule mints nothing it did
+    not observe. The ``env`` argument is accepted and ignored, so the read sites
+    and the substrate stamp keep one source of truth without a signature churn.
 
-    OFF infers a completion from any change of a crewmate's ``pending_task_id``,
-    which is what the committed recordings and the prompt byte-golden render. ON
-    emits one for every map task id that LEAVES the agent's ``owned_task_ids``:
-    a redistributed instance can displace the pending id but can only ADD to a
-    living agent's owned set, so the ON rule mints nothing it did not observe.
-
-    Phase 20 G-3 / C-2 (audits/review-2026-08-19/D/FINAL-synthesis.md §1 RC3).
+    Graduated at the baseline-7 record (audits/audit-phase-20-baseline-7.md §6.1).
     """
 
-    environment = env if env is not None else os.environ
-    return (
-        environment.get(ENV_TASK_COMPLETION_FROM_EVENTS, "").strip().lower()
-        in _TASK_COMPLETION_FROM_EVENTS_FLAG_TRUE
-    )
+    del env  # retired: the lever is unconditional, no environment is consulted
+    return True
 
 
-# Self-location trail lever -- DEFAULT-OFF, live (the sibling shape above). It is
-# not registered in ``orchestrator.replay._TOGGLEABLE_LEVER_RESOLVERS``: Task 20.33
-# wires the whole Phase-20 slate into the substrate stamp at once.
+# Self-location trail lever -- UNCONDITIONAL since the baseline-7 record. Every
+# rendered memory carries the agent's own room-by-tick route. Stamped ON via
+# ``orchestrator.replay._RETIRED_ALWAYS_ON_LEVERS``; ``ENV_SELF_LOCATION_TRAIL``
+# is retained (no longer read) for the stamp key's naming provenance and
+# backward-compatible imports.
 ENV_SELF_LOCATION_TRAIL: Final[str] = "AILIBI_SELF_LOCATION_TRAIL"
-_SELF_LOCATION_TRAIL_FLAG_TRUE: Final[frozenset[str]] = frozenset(
-    {"1", "true", "yes", "on"}
-)
 
 # Most spans the trail block renders; past it the OLDEST are dropped and the block
 # says so. Sized from the committed sets: the furthest back a crew ``whereabouts``
@@ -323,69 +313,53 @@ _TRAIL_GAP_STEP: Final[str] = "(no record)"
 
 
 def self_location_trail_enabled(env: Mapping[str, str] | None = None) -> bool:
-    """Whether the agent's own room-by-tick trail renders. DEFAULT OFF.
+    """Whether the agent's own room-by-tick trail renders -- now always True.
 
-    Reads :data:`ENV_SELF_LOCATION_TRAIL` from ``env`` (defaulting to the process
-    environment), accepting ``1/true/yes/on`` case-insensitively; passing ``env``
-    lets a caller toggle the lever without mutating ``os.environ``.
+    The ``## Where you were:`` block renders, and the completed-task line takes
+    its room from the SAME self-state row that dates it. The ``env`` argument is
+    accepted and ignored, so the read sites and the substrate stamp keep one
+    source of truth without a signature churn.
 
-    ON adds the ``## Where you were:`` block and takes the completed-task line's
-    room from the SAME self-state row that dates it. OFF renders neither, which is
-    what the committed recordings and the prompt byte-golden hold.
-
-    Phase 20 G-1 (audits/review-2026-08-19/D/FINAL-synthesis.md §1 RC1).
+    Graduated at the baseline-7 record (audits/audit-phase-20-baseline-7.md §6.1).
     """
 
-    environment = env if env is not None else os.environ
-    return (
-        environment.get(ENV_SELF_LOCATION_TRAIL, "").strip().lower()
-        in _SELF_LOCATION_TRAIL_FLAG_TRUE
-    )
+    del env  # retired: the lever is unconditional, no environment is consulted
+    return True
 
 
-# Meeting-outcome memory lever -- DEFAULT-OFF, live (the sibling shape above). It
-# is not registered in ``orchestrator.replay._TOGGLEABLE_LEVER_RESOLVERS``: Task
-# 20.33 wires the whole Phase-20 slate into the substrate stamp at once.
+# Meeting-outcome memory lever -- UNCONDITIONAL since the baseline-7 record.
+# Concluded meetings render as a record and a spoken vent sighting stays CONTENT.
+# Stamped ON via ``orchestrator.replay._RETIRED_ALWAYS_ON_LEVERS``;
+# ``ENV_MEETING_OUTCOME_MEMORY`` is retained (no longer read) for the stamp key's
+# naming provenance and backward-compatible imports.
 ENV_MEETING_OUTCOME_MEMORY: Final[str] = "AILIBI_MEETING_OUTCOME_MEMORY"
-_MEETING_OUTCOME_MEMORY_FLAG_TRUE: Final[frozenset[str]] = frozenset(
-    {"1", "true", "yes", "on"}
-)
 
 _MEETINGS_HEADER: Final[str] = "## Meetings so far:"
 
 
 def meeting_outcome_memory_enabled(env: Mapping[str, str] | None = None) -> bool:
-    """Whether concluded meetings render as a record. DEFAULT OFF.
+    """Whether concluded meetings render as a record -- now always True.
 
-    Reads :data:`ENV_MEETING_OUTCOME_MEMORY` from ``env`` (defaulting to the
-    process environment), accepting ``1/true/yes/on`` case-insensitively; passing
-    ``env`` lets a caller toggle the lever without mutating ``os.environ``.
+    The ``## Meetings so far:`` block renders one line per concluded meeting (the
+    ejection or the skip, its tally, the ejected player's announced role and the
+    impostors-remaining count), and a spoken vent sighting is kept as CONTENT
+    with every reported line naming the meeting it was spoken at. The ``env``
+    argument is accepted and ignored, so the read sites and the substrate stamp
+    keep one source of truth without a signature churn.
 
-    ON adds the ``## Meetings so far:`` block (one line per concluded meeting:
-    the ejection or the skip, its tally, the ejected player's announced role and
-    the impostors-remaining count) and keeps a spoken vent sighting as CONTENT,
-    with every reported line naming the meeting it was spoken at. OFF renders
-    neither and drops the vent reduction at ingest, which is what the committed
-    recordings and the prompt byte-golden hold.
-
-    Phase 20 G-35 / G-23 (audits/review-2026-08-19/D/FINAL-synthesis.md
-    §Wave 2 row 2.10).
+    Graduated at the baseline-7 record (audits/audit-phase-20-baseline-7.md §6.1).
     """
 
-    environment = env if env is not None else os.environ
-    return (
-        environment.get(ENV_MEETING_OUTCOME_MEMORY, "").strip().lower()
-        in _MEETING_OUTCOME_MEMORY_FLAG_TRUE
-    )
+    del env  # retired: the lever is unconditional, no environment is consulted
+    return True
 
 
-# Coalesced-render lever -- DEFAULT-OFF, live (the sibling shape above). It is not
-# registered in ``orchestrator.replay._TOGGLEABLE_LEVER_RESOLVERS``: Task 20.33
-# wires the whole Phase-20 slate into the substrate stamp at once.
+# Coalesced-render lever -- UNCONDITIONAL since the baseline-7 record. Routine
+# sightings fold and reported testimony outranks bare co-presence. Stamped ON via
+# ``orchestrator.replay._RETIRED_ALWAYS_ON_LEVERS``;
+# ``ENV_COALESCED_MEMORY_RENDER`` is retained (no longer read) for the stamp key's
+# naming provenance and backward-compatible imports.
 ENV_COALESCED_MEMORY_RENDER: Final[str] = "AILIBI_COALESCED_MEMORY_RENDER"
-_COALESCED_MEMORY_RENDER_FLAG_TRUE: Final[frozenset[str]] = frozenset(
-    {"1", "true", "yes", "on"}
-)
 
 # The one-line summary that replaces a full-roster tick-0 sighting group. It names
 # every subject it stands for, so the fold costs a line instead of a roster.
@@ -393,28 +367,21 @@ _SPAWN_GROUP_PREFIX: Final[str] = "You saw every other player in "
 
 
 def coalesced_memory_render_enabled(env: Mapping[str, str] | None = None) -> bool:
-    """Whether routine sightings coalesce and testimony outranks them. DEFAULT OFF.
+    """Whether routine sightings coalesce and testimony outranks them -- always True.
 
-    Reads :data:`ENV_COALESCED_MEMORY_RENDER` from ``env`` (defaulting to the
-    process environment), accepting ``1/true/yes/on`` case-insensitively; passing
-    ``env`` lets a caller toggle the lever without mutating ``os.environ``.
-
-    ON folds three changes under one key: a run of same-subject, same-room,
+    Three changes apply under one key: a run of same-subject, same-room,
     same-action sightings with an unchanged companion set renders as ONE line
     carrying its tick range; a tick-0 group that names the whole known roster
     renders as one summary line; and reported testimony ranks above bare
-    co-presence so a budget-tight render sheds routine rows first. OFF renders
-    one line per sighting and sheds testimony first, which is what the committed
-    recordings and the prompt byte-golden hold.
+    co-presence so a budget-tight render sheds routine rows first. The ``env``
+    argument is accepted and ignored, so the read sites and the substrate stamp
+    keep one source of truth without a signature churn.
 
-    Phase 20 G-34 / C-73 (audits/review-2026-08-19/D/FINAL-synthesis.md §4 row 2.11).
+    Graduated at the baseline-7 record (audits/audit-phase-20-baseline-7.md §6.1).
     """
 
-    environment = env if env is not None else os.environ
-    return (
-        environment.get(ENV_COALESCED_MEMORY_RENDER, "").strip().lower()
-        in _COALESCED_MEMORY_RENDER_FLAG_TRUE
-    )
+    del env  # retired: the lever is unconditional, no environment is consulted
+    return True
 
 
 def _impostors_remaining_clause(remaining: int | None) -> str:

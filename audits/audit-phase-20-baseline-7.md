@@ -1,8 +1,14 @@
 # Phase-20 adopting record — baseline 7: the four legs, the pre-registered read, the decision executed (Task 20.36)
 
-**Verdict: FINDING.** Bars 1 and 2 are MISSED on their pooled point estimates. Under the
-ratified decision rule (`audits/audit-phase-20-preregistration.md` §6) that is FINDING, no lever
-graduates, and **the ladder tip stands at baseline 6**. The bytes and the read are the
+**Verdict per the pre-registered rule: FINDING.** Bars 1 and 2 are MISSED on their pooled point
+estimates. Under the ratified decision rule (`audits/audit-phase-20-preregistration.md` §6) that
+is FINDING, and nothing in this record re-prices it: §3's read is immutable and no bar passed.
+
+**Adopted anyway, by owner override.** On 2026-08-26 the owner adopted the baseline-7 substrate
+as canon by explicit prerogative, on stated grounds, *over* a FINDING verdict — §6.1 carries the
+ruling and its grounds in full. So **the ladder tip stands at baseline 7**, the eight
+evidence-honesty levers are graduated, and every surface that states this says the same thing:
+the bars were missed and the owner adopted regardless. The bytes and the read are still the
 deliverable, and they are published here because that is the discipline the phase exists for.
 
 **Reads against:** `audits/audit-phase-20-preregistration.md` §4 (the eight primary bars), §4.1
@@ -483,17 +489,11 @@ or the pooled `per_victim_precision` denominator has fallen below 20. **FINDING*
 | 7 | adjacent-room STRONG share ≤ 5% pooled | 0/0 (count 148 → 0) | **reported both ways; not decision-bearing** |
 | 8 | ≥ 3 of 4 fixtures flip | 4 of 4 | **MET** |
 
-**Bars 1 and 2 are MISSED. The verdict is FINDING.**
-
-Executed in this PR, per §6 and the contract:
-
-* **The registry is unchanged.** The eight `*_enabled` resolvers stay env-gated, their keys stay
-  in `_TOGGLEABLE_LEVER_RESOLVERS`, and `substrate_flag_snapshot({})` still stamps them False.
-* **No lever graduates.** Partial adoption graduates nothing: a subset slate matches neither
-  committed record's stamp, so all eight graduate together under ADOPTED or none does. None
-  does.
-* **`_DEFAULT_BASELINE_ID` stays `"baseline-6"`.**
-* **The ladder tip stands at baseline 6.**
+**Bars 1 and 2 are MISSED. The verdict per the rule is FINDING.** That verdict is final and is
+not re-priced anywhere in this record. What the rule would have executed under FINDING — the
+registry unchanged, no lever graduated, `_DEFAULT_BASELINE_ID` left at `"baseline-6"`, the ladder
+tip left at baseline 6 — is **not** what this PR executes, because the owner overrode it. §6.1 is
+that ruling, and §6.2 is what it executed.
 
 **What the record actually found, stated plainly.** The evidence-honesty substrate did what it
 was built to do and then some: false self-placement fell 20.1% → 0.77%, fabricated completion
@@ -514,6 +514,68 @@ that memo correctly declared NOT PREDICTABLE OFFLINE, are what actually decided 
 instrument was right about the outcome and right about its own limits, which is the more useful
 of the two.
 
+### 6.1 THE OWNER'S ADOPTION RULING (2026-08-26)
+
+**This is an OWNER OVERRIDE OF A FINDING VERDICT.** It is not a bar that passed, not a re-priced
+cell, and not an amendment to the pre-registration. The rule returned FINDING on the numbers in
+§3 and that stands. Separately, and by explicit owner prerogative, the owner adopts the
+baseline-7 substrate as canon.
+
+The ruling, as given and recorded on PR #389:
+
+> The pre-registered decision rule's verdict STANDS AS FINDING — bars 1 and 2 missed as
+> measured, nothing is re-priced, and the §3 read is immutable. Separately, and by explicit owner
+> prerogative, the owner ADOPTS the baseline-7 substrate as canon, on stated grounds: bar 1
+> missed by less than one ejection (61/103 vs ≥ 0.60); innocent ejections 79 → 42; every
+> fabrication channel at zero; bars 4–7 vacuous by the extinction of the diseased classes they
+> measured; and the qualitative transformation of the recorded meetings.
+
+The grounds, each traceable to a cell in §3 or §5:
+
+| ground | where it is measured |
+|---|---|
+| bar 1 missed by less than one ejection — 61/103 = 0.5922 against ≥ 0.60; 62/103 = 0.6019 passes | §3 bar 1 |
+| innocent ejections 79 → 42 | §3 bar 2 |
+| every fabrication channel at zero — fabricated completion lines 0 on all four sets, false self-placement 20.1% → 0.77% | §3 bars 6 and 3 |
+| bars 4–7 vacuous because the classes they measured went extinct, not because they were waived | §3 bars 4, 5 and 7 |
+| the qualitative transformation of the recorded meetings — all four I-13 injustice fixtures flipped | §3 bar 8, §4 |
+
+**What no surface may say.** No document, comment, docstring, README row or commit message in
+this repository may state or imply that the pre-registered bars passed, that the verdict was
+ADOPTED under the rule, or that baseline 7 was adopted on the arithmetic. The adoption is an
+owner override of a FINDING verdict and is written that way everywhere it appears. Bar 1 missing
+by 0.0078 is still reported as a miss (§6), and pre-registration still did its job: it is why the
+override had to be made explicitly, in writing, by the one person entitled to make it, instead of
+being absorbed into a rounded number.
+
+### 6.2 What the ruling executed, in this PR
+
+Under the override the ADOPTED-branch mechanics run in full — and, per §6's no-subset ruling,
+they run for all eight levers together or not at all:
+
+* **The eight `*_enabled` resolvers hard-return `True`.** `agents/memory/store.py`
+  (`task_completion_from_events`, `self_location_trail`, `meeting_outcome_memory`,
+  `coalesced_memory_render`), `meetings/transcript.py` (`movement_claim_shape`,
+  `grounded_prosecution`, `map_aware_arbitration`) and `meetings/manager.py`
+  (`structured_turn_markers`). Their `ENV_*` names are retained, unread, for the stamp key's
+  naming provenance.
+* **The eight keys move** from `_TOGGLEABLE_LEVER_RESOLVERS` into `_RETIRED_ALWAYS_ON_LEVERS`
+  (`orchestrator/replay.py`), which drops the live-toggle registry from nine entries to one
+  (`impostor_roll_call`) and grows the retired set from thirteen to twenty-one. Because the
+  retired half is ordered first, `impostor_roll_call` moves from index 13 to index 21 of
+  `SUBSTRATE_FLAG_KEYS`; every pinned key-order assertion moved with it.
+* **`substrate_flag_snapshot({})` stamps all twenty-one unconditionally True**, so a bare
+  environment now reproduces the committed baseline-7 stamp exactly. `verify_samples.sh` reports
+  100/100 in a shell with no `AILIBI_*` exports at all — the invariant the FINDING branch would
+  have broken.
+* **`_DEFAULT_BASELINE_ID` moves to `"baseline-7"`** (`eval/watchability.py`), and the
+  baseline-7 floor block of §8 becomes the referee's default.
+* **The ladder tip stands at baseline 7**, with `.env.example`'s graduated-levers note, README's
+  provenance paragraph, the recorder pin blocks and the corpus README all re-derived from these
+  bytes.
+* **The v3 prompt archive retires** and the byte-golden's one-byte perturbation gate retargets to
+  the live v4 set (§10.3).
+
 ---
 
 ## 7. The per-lever eligibility verdict — narrative only, never executed
@@ -522,7 +584,10 @@ of the two.
 (ii) 20.34's published OFF/ON table predicted that direction and magnitude for that lever's own
 cell before the record was spent, and (iii) it is independently stampable — which 20.33
 guarantees for all eight. Published lever by lever below; **executed as a graduation for none of
-them**, because under FINDING nothing graduates and no subset may graduate under any verdict.
+them**. The eight did graduate — but as one slate, on the owner's override of §6 (§6.1), and no
+subset may graduate under any verdict. Nothing in this table selected a lever, and nothing in it
+should be read as having done so; it is the eligibility test's own record of what the arithmetic
+could and could not carry.
 
 | lever | its bar | bar met? | 20.34 predicted the direction? | ELIGIBLE |
 |---|---|---|---|---|
@@ -541,9 +606,10 @@ The two bug-class levers §6 named as the expected members — `task_completion_
 because no offline table predicted it in advance; that is the eligibility test working as
 designed rather than a comment on the lever.
 
-An eligible lever keeps its default-OFF gate. Its ON-path evidence is carried forward —
-published here, counterfactual-predicted where it could be, fixture-pinned — and it graduates at
-the next record made at its own slate.
+Had the rule alone decided, an eligible lever would have kept its default-OFF gate and carried
+its ON-path evidence forward to the next record made at its own slate. The override made that
+moot: all eight are unconditional as of this record, and this table survives as the evidence of
+which of them the offline instrument could and could not have predicted in advance.
 
 ---
 

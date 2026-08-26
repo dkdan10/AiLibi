@@ -27,9 +27,10 @@ conversion rate (the RECALL lead).
 What the recorded sets read (evidence-backed / impostor ejections). All four were
 recorded at the Phase-20 evidence-honesty slate -- model ``Qwen/Qwen3.6-27B``,
 every template at ``qwen3_6_27b.v4``, the eight levers ON -- as each set's
-``MANIFEST.md`` records. The substrate ladder still stands at ``baseline-6``:
-that record missed two of its own pre-registered bars, so nothing graduated
-(``audits/audit-phase-20-baseline-7.md``).
+``MANIFEST.md`` records. That slate is now the ``baseline-7`` substrate: the
+record missed two of its own pre-registered bars -- the rule's verdict is FINDING
+-- and the owner adopted it as canon regardless, by explicit override
+(``audits/audit-phase-20-baseline-7.md`` §6.1).
 
 * ``replays/samples/9p2i``: 78/85 = 0.9176
 * ``replays/samples/4p1i``: 19/20 = 0.9500

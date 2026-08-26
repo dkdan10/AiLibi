@@ -98,7 +98,6 @@ schema-validation failure.
 from __future__ import annotations
 
 import asyncio
-import os
 import re
 from collections.abc import Callable, Coroutine, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
@@ -921,38 +920,27 @@ def roll_call_round_enabled(env: Mapping[str, str] | None = None) -> bool:
     return True
 
 
-# The structured-turn-marker lever -- DEFAULT-OFF, live. Not registered in
-# ``orchestrator.replay._TOGGLEABLE_LEVER_RESOLVERS``: Task 20.33 wires the whole
-# Phase-20 slate into the substrate stamp at once.
+# The structured-turn-marker lever -- UNCONDITIONAL since the baseline-7 record.
+# ``ENV_STRUCTURED_TURN_MARKERS`` is retained (no longer read) for the stamp key's
+# naming provenance and backward-compatible imports.
 ENV_STRUCTURED_TURN_MARKERS: Final[str] = "AILIBI_STRUCTURED_TURN_MARKERS"
-_STRUCTURED_TURN_MARKERS_FLAG_TRUE: Final[frozenset[str]] = frozenset(
-    {"1", "true", "yes", "on"}
-)
 
 
 def structured_turn_markers_enabled(env: Mapping[str, str] | None = None) -> bool:
-    """Whether a turn's audit markers stay OUT of its ``free_text``. DEFAULT OFF.
+    """Whether a turn's audit markers stay OUT of its ``free_text`` -- always True.
 
-    Reads :data:`ENV_STRUCTURED_TURN_MARKERS` from ``env`` (defaulting to the
-    process environment), accepting ``1/true/yes/on`` case-insensitively;
-    passing ``env`` lets a caller toggle the lever without mutating
-    ``os.environ``.
+    :meth:`MeetingManager._collect_turn` records what its guards changed as typed
+    :class:`~meetings.schemas.TurnAnnotation` rows on the turn, and ``free_text``
+    is exactly what the model authored, so no later speaker's prompt renders an
+    audit marker inside quoted dialogue. The ``env`` argument is accepted and
+    ignored, so the read sites and the substrate stamp keep one source of truth
+    without a signature churn.
 
-    ON, :meth:`MeetingManager._collect_turn` records what its guards changed as
-    typed :class:`~meetings.schemas.TurnAnnotation` rows on the turn, and
-    ``free_text`` is exactly what the model authored. OFF, the same facts are
-    prepended to ``free_text`` as the audit-marker strings the committed
-    recordings hold -- byte-identical to the pre-lever path -- where every later
-    speaker's prompt renders them inside quoted dialogue.
-
-    Phase 20 G-25 (audits/review-2026-08-19/D/FINAL-synthesis.md §4 row 2.8).
+    Graduated at the baseline-7 record (audits/audit-phase-20-baseline-7.md §6.1).
     """
 
-    environment = env if env is not None else os.environ
-    return (
-        environment.get(ENV_STRUCTURED_TURN_MARKERS, "").strip().lower()
-        in _STRUCTURED_TURN_MARKERS_FLAG_TRUE
-    )
+    del env  # retired: the lever is unconditional, no environment is consulted
+    return True
 
 
 # The turn-side audit markers, keyed by the annotation kind that replaces them.

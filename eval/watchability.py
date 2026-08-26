@@ -901,18 +901,17 @@ _BASELINE_SUPPLY_FLOORS: Final[Mapping[str, Mapping[str, SupplyFloors]]] = {
     },
 }
 
-# baseline 6 is the committed canonical SAMPLES set since Task 18.12 (the
-# meeting-layer adopting record on the graduated slate), so a bare
-# ``measure_baseline.py --watchability`` reads baseline 6's own floors — the
-# referee accepts the committed bytes at equality. (Baselines 3, 4, and 5 moved
-# here from Tasks 15.7, 16.14, and 16.17 the same way; their blocks above stay
-# scoreable via an explicit --baseline-id.) NOTE the bake-off lag REOPENS at this
-# record: ``BAKEOFF_BASELINE_ID`` (training/bakeoff/harness.py) stays
-# ``baseline-5`` until Task 18.14 flips it, so the training-side selection floors
-# deliberately lag this default until the surrogate re-ground
-# (audits/audit-phase-18-baseline-6.md §8; the corpus canary denominator is
-# restored at the 18.13 corpus re-record).
-_DEFAULT_BASELINE_ID: Final[str] = "baseline-6"
+# baseline 7 is the committed canonical SAMPLES set, so a bare
+# ``measure_baseline.py --watchability`` reads baseline 7's own floors — the
+# referee accepts the committed bytes at equality. (Baselines 3-6 moved here from
+# Tasks 15.7, 16.14, 16.17 and 18.12 the same way; their blocks above stay
+# scoreable via an explicit --baseline-id.) NOTE the bake-off lag: the
+# training-side selection floors deliberately lag this default —
+# ``BAKEOFF_BASELINE_ID`` (training/bakeoff/harness.py) still reads
+# ``baseline-5`` — until the surrogate is re-ground on the new corpus, which is a
+# routed follow-up rather than part of this record
+# (audits/audit-phase-20-baseline-7.md §10.2).
+_DEFAULT_BASELINE_ID: Final[str] = "baseline-7"
 
 
 @dataclass(frozen=True)

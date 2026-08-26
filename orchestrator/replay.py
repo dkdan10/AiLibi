@@ -81,17 +81,12 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from agents.memory.store import (
     AgentMemory,
-    coalesced_memory_render_enabled,
-    meeting_outcome_memory_enabled,
     record_meeting_outcome,
-    self_location_trail_enabled,
-    task_completion_from_events_enabled,
 )
 from engine.actions import Action
 from engine.world import WorldState
 from meetings.manager import (
     derive_meeting_outcome_summary,
-    structured_turn_markers_enabled,
 )
 from meetings.schemas import (
     ContradictionRef,
@@ -100,11 +95,6 @@ from meetings.schemas import (
     MeetingTranscript,
     PlayerId,
     VoteBallot,
-)
-from meetings.transcript import (
-    grounded_prosecution_enabled,
-    map_aware_arbitration_enabled,
-    movement_claim_shape_enabled,
 )
 
 # The Task-18.10 impostor-answer lever, resolved LOCALLY instead of importing
@@ -516,35 +506,21 @@ ReplayLogEntry: TypeAlias = Annotated[
 ]
 
 
-# The canonical key order for a substrate-flag snapshot (Task 14.7). Mirrors
-# ``experiments.lab.probe_backends.active_substrate_flags`` exactly so the
-# recorded MANIFEST ``flags`` column, the sweep result rows, and the replay
-# stamp all describe the same substrate levers with identical keys. The four
-# merged Phase-13.5 levers (Task 14.9), the Task-14.10 ``evidence_quality_lift``
-# lever (retired to unconditional at the Task-14.12 close, once baseline 2 adopted
-# it), Task 15.5's ``reporter_exculpation`` (graduated to unconditional at the
-# Task-15.7 baseline-3 record, once baseline 3 adopted it), AND the three
-# Phase-16 levers graduated at the Task-16.17 baseline-5 record per the
-# graduation slate (16.4's ``hard_evidence_gate``, 16.5's
-# ``observation_id_rendering``, 16.6's ``citation_gate`` — the slate rulings are
-# audits/audit-phase-16-close.md §0.1) are ALL RETIRED as toggles —
-# unconditionally ON, env gates deleted — but stay in the snapshot as
-# provenance. The FOUR meeting-layer levers the Task-18.12 baseline-6 record
-# graduated on the CREW-ONLY ruling (audits/audit-phase-18-meeting-gate.md §9;
-# audits/audit-phase-18-baseline-6.md §0.1) JOIN them: Task 16.8's
-# ``absence_prior`` (the Phase-16 slate's recorded STAY-OFF, re-routed to Phase 18
-# by audits/audit-phase-17-absence-gate.md Ruling 3 and cleared at the 18.11
-# gate), 18.8's ``roll_call_round`` (the turn-allocation surface), and 18.9's
-# ``whereabouts_interior_flags`` (the endpoint-band exemption) and
-# ``vent_placement_contradictions`` (the grounded-vent flag variant). They were
-# built default-OFF and env-gated at Wave 1, registered into the substrate stamp
-# at Task 18.11 (the meeting-layer gate, so a probe/adoption recording
-# self-describes its arms), and retired to unconditional HERE once baseline 6
-# adopted them. 18.10's ``impostor_roll_call`` (the impostor-answer template arm)
-# did NOT ship under that ruling, so it stayed a DEFAULT-OFF toggle and sits in
-# ``_TOGGLEABLE_LEVER_RESOLVERS`` below beside the eight Phase-20 levers. A
-# bare-environment recording stamps every lever in THIS tuple ``True`` and every
-# live toggle ``False`` — exactly the committed baseline-6 substrate.
+# The substrate levers a baseline record has ADOPTED: unconditionally ON, their
+# ``AILIBI_*`` env gates deleted, kept in the snapshot as provenance so the
+# loader can still refuse a legacy stamp that recorded one of them OFF. Mirrors
+# ``experiments.lab.probe_backends.active_substrate_flags`` exactly, so the
+# recorded MANIFEST ``flags`` column, the sweep result rows and the replay stamp
+# all describe the same levers with identical keys. A bare-environment recording
+# stamps every key in THIS tuple ``True`` and every live toggle below ``False`` —
+# which IS the committed baseline-7 substrate.
+#
+# Order is graduation order and only ever grows at the end, so every already
+# recorded key keeps its index. The adopting records: Task 14.9 (the four
+# Phase-13.5 levers), 14.12, 15.7, 16.17 (the three Phase-16 levers), 18.12 (the
+# four meeting-layer levers, CREW-ONLY ruling) and the baseline-7 record (the
+# eight Phase-20 evidence-honesty levers, adopted by owner override of a FINDING
+# verdict — audits/audit-phase-20-baseline-7.md §6.1).
 _RETIRED_ALWAYS_ON_LEVERS: Final[tuple[str, ...]] = (
     "testimony_as_content",
     "witnessed_kill_evidence",
@@ -559,6 +535,14 @@ _RETIRED_ALWAYS_ON_LEVERS: Final[tuple[str, ...]] = (
     "roll_call_round",
     "whereabouts_interior_flags",
     "vent_placement_contradictions",
+    "task_completion_from_events",
+    "self_location_trail",
+    "movement_claim_shape",
+    "grounded_prosecution",
+    "map_aware_arbitration",
+    "structured_turn_markers",
+    "meeting_outcome_memory",
+    "coalesced_memory_render",
 )
 
 # (key, resolver) pairs for every lever that still consults an ``AILIBI_*`` env
@@ -567,36 +551,23 @@ _RETIRED_ALWAYS_ON_LEVERS: Final[tuple[str, ...]] = (
 # silently change a replay stamp or the loader's mismatch check mid-process. Each
 # resolver takes the optional ``env`` mapping and returns the lever's live state.
 #
-# NINE live toggles, every one DEFAULT-OFF: the impostor-answer template arm plus
-# the eight Phase-20 belief-substrate levers. The eight bind their home-module
-# resolvers BY IDENTITY — the read-site and the stamp are the same function
-# object, so they cannot drift apart. ``impostor_roll_call`` is the single
-# exception: it binds the LOCAL :func:`_impostor_roll_call_enabled` mirror,
-# because importing ``agents.strategic.prompts.loader`` would run that module's
-# prompt-set-sensitive Jinja build inside every replay-only consumer (the mirror's
-# own comment block states it); a CI equivalence pin stands in for the identity.
+# ONE live toggle since the baseline-7 record graduated the Phase-20 slate:
+# 18.10's impostor-answer template arm, DEFAULT-OFF. It binds the LOCAL
+# :func:`_impostor_roll_call_enabled` mirror rather than
+# ``agents.strategic.prompts.loader``'s resolver, because importing that module
+# would run its prompt-set-sensitive Jinja build inside every replay-only
+# consumer (the mirror's own comment block states it); a CI equivalence pin
+# stands in for the identity.
 #
-# Registration order, newest last. The tuple is documentary — appending keeps
-# every earlier key's index in ``SUBSTRATE_FLAG_KEYS`` fixed, so registering a
-# lever is a pure append to the pinned key order rather than a reshuffle.
-#
-# A bare environment stamps all nine ``False``, which IS the committed baseline-6
+# A bare environment stamps it ``False``, which IS the committed baseline-7
 # substrate: the missing-key-reads-False rule makes a stamp recorded before a key
 # existed agree with a build that has it. A lever graduates by moving into
-# ``_RETIRED_ALWAYS_ON_LEVERS`` at the record that adopts it.
+# ``_RETIRED_ALWAYS_ON_LEVERS`` at the record that adopts it — which appends it
+# to the retired half and so shifts every remaining toggle's index in
+# ``SUBSTRATE_FLAG_KEYS``. Registration order, newest last.
 _TOGGLEABLE_LEVER_RESOLVERS: Final[
     tuple[tuple[str, Callable[[Mapping[str, str] | None], bool]], ...]
-] = (
-    ("impostor_roll_call", _impostor_roll_call_enabled),
-    ("task_completion_from_events", task_completion_from_events_enabled),
-    ("self_location_trail", self_location_trail_enabled),
-    ("movement_claim_shape", movement_claim_shape_enabled),
-    ("grounded_prosecution", grounded_prosecution_enabled),
-    ("map_aware_arbitration", map_aware_arbitration_enabled),
-    ("structured_turn_markers", structured_turn_markers_enabled),
-    ("meeting_outcome_memory", meeting_outcome_memory_enabled),
-    ("coalesced_memory_render", coalesced_memory_render_enabled),
-)
+] = (("impostor_roll_call", _impostor_roll_call_enabled),)
 
 # The still-toggleable subset of ``SUBSTRATE_FLAG_KEYS`` (Task 14.10):
 # levers whose active state is an ``AILIBI_*`` env read, so a stamp/ambient
@@ -622,19 +593,19 @@ def substrate_flag_snapshot(
 ) -> dict[str, bool]:
     """Snapshot the live substrate-lever config a recording stamps.
 
-    The thirteen retired levers report unconditionally ``True``: their
+    The twenty-one retired levers report unconditionally ``True``: their
     ``*_enabled()`` env gates were deleted at the records that adopted them, so
     the unconditional derivation is the only substrate this build can produce.
     They stay in the snapshot as provenance, which is what lets the loader's
     mismatch guard still refuse a legacy stamp recording one of them OFF.
 
-    The nine live toggles resolve from the immutable
+    The single live toggle resolves from the immutable
     ``_TOGGLEABLE_LEVER_RESOLVERS`` table with ``env`` threaded through
-    (defaulting to the live process environment). All nine are DEFAULT-OFF, so a
-    bare environment reproduces the committed baseline-6 stamp and each
-    ``AILIBI_*`` export flips exactly its own key — the deterministic seam the
-    recorders, the MANIFEST ``flags`` column and the sweep configs rely on to
-    prove which arms a recording ran under.
+    (defaulting to the live process environment). It is DEFAULT-OFF, so a bare
+    environment reproduces the committed baseline-7 stamp and its ``AILIBI_*``
+    export flips exactly its own key — the deterministic seam the recorders, the
+    MANIFEST ``flags`` column and the sweep configs rely on to prove which arms a
+    recording ran under.
     """
 
     snapshot = dict.fromkeys(_RETIRED_ALWAYS_ON_LEVERS, True)
