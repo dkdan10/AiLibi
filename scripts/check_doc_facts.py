@@ -697,6 +697,11 @@ def check_sample_provenance(repo_root: Path, readme: str, errors: list[str]) -> 
             )
         dates.extend(set_dates)
 
+    # Before the paragraph check, not after: the front door's other documents
+    # repeat these facts on their own account, and a README that lost its
+    # provenance paragraph must not take their gate down with it.
+    check_repeated_claims(repo_root, rates, max(dates) if dates else None, errors)
+
     paragraph = provenance_paragraph(readme)
     if paragraph is None:
         errors.append(
@@ -792,8 +797,6 @@ def check_sample_provenance(repo_root: Path, readme: str, errors: list[str]) -> 
                     f"name the {kind} {token!r} — the manifest "
                     "`prompt_versions` column records it."
                 )
-
-    check_repeated_claims(repo_root, rates, max(dates) if dates else None, errors)
 
 
 def check_repeated_claims(
@@ -1737,7 +1740,7 @@ def check_before_columns(readme: str, guide: str, errors: list[str]) -> None:
     a cell in it, and the shared rows must agree.
     """
 
-    columns = {}
+    columns: dict[str, dict[str, str]] = {}
     for document, text in ((_README, readme), (_READING_GUIDE, guide)):
         before = results_before_column(text)
         if before is None:
@@ -1747,8 +1750,10 @@ def check_before_columns(readme: str, guide: str, errors: list[str]) -> None:
                 "recording before this one read, including the rows nothing "
                 "moved."
             )
-            return
+            continue
         columns[document] = before
+    if len(columns) < 2:
+        return
     for claim, stated in columns[_README].items():
         recorded = columns[_READING_GUIDE].get(claim)
         if recorded is None:
@@ -2269,11 +2274,15 @@ def compare_result_figure(
 
 
 def compare_before_figure(
-    markdown: str, claim: str, expected: str, source: str, errors: list[str]
+    readme: str, claim: str, expected: str, source: str, errors: list[str]
 ) -> None:
-    """One results row's before cell, held to the recording that owns it."""
+    """One README results row's before cell, held to the recording that owns it.
 
-    before = results_before_column(markdown)
+    The README's table is the one checked here; the guide's is held to it, cell
+    for cell, by :func:`check_before_columns`.
+    """
+
+    before = results_before_column(readme)
     if before is None:
         errors.append(
             f"{_README}: the results table has no {_BEFORE_COLUMN_HEADER!r} "

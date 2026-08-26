@@ -243,11 +243,16 @@ def test_paragraph_date_drift_not_alibied_elsewhere(doc_tree: Path) -> None:
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 2
-    assert "'regenerated 2026-08-19'" in errors[0]
-    assert "refresh date '2026-08-25'" in errors[0]
+    assert any(
+        "'regenerated 2026-08-19'" in error and "refresh date '2026-08-25'" in error
+        for error in errors
+    )
     # The same clause is a dated claim wherever it appears, so the widened
     # scan names it a second time, by line.
-    assert "'regenerated 2026-08-19' dates the current reference recording" in errors[1]
+    assert any(
+        "'regenerated 2026-08-19' dates the current reference recording" in error
+        for error in errors
+    )
 
 
 def test_duplicate_stale_date_clause_detected(doc_tree: Path) -> None:
@@ -261,9 +266,14 @@ def test_duplicate_stale_date_clause_detected(doc_tree: Path) -> None:
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 2
-    assert "'regenerated 2026-08-19'" in errors[0]
-    assert "refresh date '2026-08-25'" in errors[0]
-    assert "'regenerated 2026-08-19' dates the current reference recording" in errors[1]
+    assert any(
+        "'regenerated 2026-08-19'" in error and "refresh date '2026-08-25'" in error
+        for error in errors
+    )
+    assert any(
+        "'regenerated 2026-08-19' dates the current reference recording" in error
+        for error in errors
+    )
 
 
 def test_wrong_total_sample_count_detected(doc_tree: Path) -> None:
@@ -335,6 +345,24 @@ def test_missing_provenance_paragraph_fails_loud(doc_tree: Path) -> None:
     assert "exactly one sample-provenance paragraph" in errors[0]
 
 
+def test_repeated_claims_survive_a_lost_provenance_paragraph(doc_tree: Path) -> None:
+    # ...and it must not take the rest of the front door's gate down with it:
+    # the other documents repeat these facts on their own account.
+    _substitute(doc_tree, _README, "regenerated 2026-08-25", "refreshed 2026-08-25")
+    _substitute(
+        doc_tree,
+        _READING_GUIDE,
+        "| 36% (4p1i), 24% (9p2i) |",
+        "| 36% (4p1i), 22% (9p2i) |",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert any("exactly one sample-provenance paragraph" in error for error in errors)
+    assert any(
+        error.startswith(_READING_GUIDE) and "claim '22% (9p2i)' disagrees" in error
+        for error in errors
+    )
+
+
 def test_wrong_win_rate_detected(doc_tree: Path) -> None:
     # (b) A win rate that no longer matches the manifest it is drawn from:
     # the paragraph misses the expected substring AND carries a claim that
@@ -342,9 +370,8 @@ def test_wrong_win_rate_detected(doc_tree: Path) -> None:
     _substitute(doc_tree, _README, "rates 36% (4p1i)", "rates 30% (4p1i)")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 2
-    assert "'36% (4p1i)'" in errors[0]
-    assert "18/50" in errors[0]
-    assert "claim '30% (4p1i)' disagrees" in errors[1]
+    assert any("'36% (4p1i)'" in error and "18/50" in error for error in errors)
+    assert any("claim '30% (4p1i)' disagrees" in error for error in errors)
 
 
 def test_stale_ladder_tip_sentence_detected(doc_tree: Path) -> None:
@@ -598,8 +625,7 @@ def test_manifest_outcome_flip_detected(doc_tree: Path) -> None:
     assert "| IMPOSTORS |" in text
     _write(doc_tree, _MANIFEST_4P1I, text.replace("| IMPOSTORS |", "| CREWMATES |", 1))
     errors = check_doc_facts.check_facts(doc_tree)
-    assert "'34% (4p1i)'" in errors[0]
-    assert "17/50" in errors[0]
+    assert any("'34% (4p1i)'" in error and "17/50" in error for error in errors)
     # Every document that repeats the rate names it, not README alone.
     stale = [error for error in errors if "claim '36% (4p1i)' disagrees" in error]
     assert {error.split(":")[0] for error in stale} == {
