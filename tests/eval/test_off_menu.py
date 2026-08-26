@@ -104,38 +104,38 @@ def _assert_all_on_menu(
 
 
 def test_samples_four_all_on_menu(samples_four: OffMenuActionReport) -> None:
-    """samples/4p1i (50 games): all-on-menu, N == 632 impostor decisions."""
+    """samples/4p1i (50 games): all-on-menu, N == 551 impostor decisions."""
 
-    _assert_all_on_menu(samples_four, games=50, decisions=632)
+    _assert_all_on_menu(samples_four, games=50, decisions=551)
     assert (samples_four.num_players, samples_four.num_impostors) == (4, 1)
 
 
 def test_samples_nine_all_on_menu(samples_nine: OffMenuActionReport) -> None:
-    """samples/9p2i (50 games): all-on-menu, N == 2461 impostor decisions."""
+    """samples/9p2i (50 games): all-on-menu, N == 1750 impostor decisions."""
 
-    _assert_all_on_menu(samples_nine, games=50, decisions=2461)
+    _assert_all_on_menu(samples_nine, games=50, decisions=1750)
     assert (samples_nine.num_players, samples_nine.num_impostors) == (9, 2)
 
 
 def test_corpus_four_all_on_menu(corpus_four: OffMenuActionReport) -> None:
-    """ml_corpus/4p1i (50 games): all-on-menu, N == 579 impostor decisions."""
+    """ml_corpus/4p1i (50 games): all-on-menu, N == 529 impostor decisions."""
 
-    _assert_all_on_menu(corpus_four, games=50, decisions=579)
+    _assert_all_on_menu(corpus_four, games=50, decisions=529)
 
 
 def test_corpus_nine_all_on_menu(corpus_nine: OffMenuActionReport) -> None:
-    """ml_corpus/9p2i (150 games): the canary denominator — all-on-menu, N == 6663.
+    """ml_corpus/9p2i (150 games): the canary denominator — all-on-menu, N == 5528.
 
-    The largest committed corpus (6663 impostor decisions) and hence the most
+    The largest committed corpus (5528 impostor decisions) and hence the most
     sensitive rate-0 pin: this is the set the definition-of-done's "committed
     FSM-generated corpus bytes read all-on-menu (rate 0)" most directly targets.
-    The denominator moved 7693 -> 6663 at the Task-18.13 baseline-6 re-record: the
-    graduated meeting layer resolves games in fewer ticks, so the impostors get
-    fewer tactical decisions. The menu discipline is unchanged — still exactly 0
-    off-menu at the larger-N read.
+    The denominator moved 7693 -> 6663 at the Task-18.13 baseline-6 re-record and
+    6663 -> 5528 at the baseline-7 record: each graduated layer resolves games in
+    fewer ticks, so the impostors get fewer tactical decisions. The menu
+    discipline is unchanged — still exactly 0 off-menu at every read.
     """
 
-    _assert_all_on_menu(corpus_nine, games=150, decisions=6663)
+    _assert_all_on_menu(corpus_nine, games=150, decisions=5528)
     assert (corpus_nine.num_players, corpus_nine.num_impostors) == (9, 2)
 
 
