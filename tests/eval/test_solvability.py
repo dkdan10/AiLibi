@@ -576,7 +576,9 @@ def test_pooled_denominators_and_headline_cells(
 
     assert sum(report.games_total for report in reports) == 300
     assert sum(report.body_meetings for report in reports) == 618  # was 626
-    assert sum(report.ejections_at_body_meetings for report in reports) == 379  # was 354
+    assert (
+        sum(report.ejections_at_body_meetings for report in reports) == 379
+    )  # was 354
     assert pooled == {
         "killer_in_set": (544, 626),  # [REVIEW-DERIVED] 581/626
         "singleton_sets": (126, 626),  # [REVIEW-DERIVED] 109/626

@@ -191,10 +191,14 @@ def test_committed_4p1i_report_validates_against_current_model() -> None:
     # 1: one SKIPPED meeting carried a still-flagged transcript contradiction that
     # did not convert to an ejection (was 0 pre-widening).
     assert report.vote_correctness.total_ejections == 21  # was 12
-    assert report.vote_correctness.ejection_accuracy == pytest.approx(20 / 21)  # was 10 / 12
+    assert report.vote_correctness.ejection_accuracy == pytest.approx(
+        20 / 21
+    )  # was 10 / 12
     assert report.vote_correctness.impostor_ejections == 20  # was 10
     assert report.vote_correctness.crewmate_ejections == 1  # was 2
-    assert report.vote_correctness.vote_correctness_rate == pytest.approx(0.95)  # was 1.0
+    assert report.vote_correctness.vote_correctness_rate == pytest.approx(
+        0.95
+    )  # was 1.0
     assert report.vote_correctness.vote_correctness_small_n is False
     assert report.vote_correctness.contradictions_flagged_but_ignored == 0  # was 1
     assert isinstance(report.accusation_calibration.vote_ballot_low_power, bool)

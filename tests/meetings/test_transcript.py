@@ -2809,7 +2809,9 @@ class TestCommittedBytes106Pins:
                         weak += 1
                     else:
                         strong += 1
-        assert strong == 94  # the R7 detector surface (vent + graduated levers)  # was 160
+        assert (
+            strong == 94
+        )  # the R7 detector surface (vent + graduated levers)  # was 160
         assert weak == 50  # the weak band stays alive (gated, not killed)  # was 26
 
     def test_seed2_m0_surviving_corroborations_are_interior_tick(self) -> None:

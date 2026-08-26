@@ -1618,7 +1618,9 @@ def test_render_budget_pins(reports: Mapping[Path, EvidenceHonestyReport]) -> No
     # Every rendered memory row, not only the citable ``[obs …]`` half: heard
     # testimony is rendered budget too and a compression lever spends against it.
     assert budget.rendered_lines_total == 64_654  # was 99_959
-    assert budget.rendered_lines_mean == pytest.approx(37.02978235967927, abs=1e-4)  # was 51.1038
+    assert budget.rendered_lines_mean == pytest.approx(
+        37.02978235967927, abs=1e-4
+    )  # was 51.1038
     assert budget.testimony_rows_total == 26735  # was 18319
     assert dict(budget.testimony_rows_by_living_bucket) == {
         "<=4": 2794,

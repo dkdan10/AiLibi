@@ -639,7 +639,9 @@ def test_9p2i_pooling_reads_the_live_roll_call_channel(
     assert nine_pooling.meetings_total == 152  # was 165
     assert nine_pooling.whereabouts_claims_total == 763  # was 843
     assert nine_pooling.roll_call_meetings == 152  # was 165
-    assert nine_pooling.roll_call_coverage_mean == pytest.approx(0.8590225563909776)  # was 0.8628354978354977
+    assert nine_pooling.roll_call_coverage_mean == pytest.approx(
+        0.8590225563909776
+    )  # was 0.8628354978354977
     assert nine_pooling.whereabouts_lies_detected == 29  # was 50
     assert nine_pooling.whereabouts_lie_detection_rate == pytest.approx(
         0.05931198102016608
@@ -652,10 +654,18 @@ def test_9p2i_pooling_reproduces_baseline_5_exactly(
     # Vouching and the unplaced share on committed bytes. Re-derived from the
     # committed baseline-5 9p2i bytes (Task 16.17 re-record) via eval.funnel.
     assert nine_pooling.vouch_observations_total == 819  # was 1389
-    assert nine_pooling.vouch_rate_mean == pytest.approx(0.5555372807017543)  # was 0.709040404040404
-    assert nine_pooling.grounded_vouch_rate_mean == pytest.approx(0.4753054511278195)  # was 0.587034632034632
-    assert nine_pooling.grounded_vouch_share == pytest.approx(0.8622754491017964)  # was 0.8333333333333334
-    assert nine_pooling.absence_set_size_mean == pytest.approx(0.3881578947368421)  # was 0.22424242424242424
+    assert nine_pooling.vouch_rate_mean == pytest.approx(
+        0.5555372807017543
+    )  # was 0.709040404040404
+    assert nine_pooling.grounded_vouch_rate_mean == pytest.approx(
+        0.4753054511278195
+    )  # was 0.587034632034632
+    assert nine_pooling.grounded_vouch_share == pytest.approx(
+        0.8622754491017964
+    )  # was 0.8333333333333334
+    assert nine_pooling.absence_set_size_mean == pytest.approx(
+        0.3881578947368421
+    )  # was 0.22424242424242424
     assert nine_pooling.absence_set_size_median == pytest.approx(0.0)
     assert dict(nine_pooling.absence_set_size_histogram) == {
         0: 129,
@@ -675,7 +685,9 @@ def test_4p1i_pooling_reproduces_baseline_5_exactly(
     assert four_pooling.games_total == 50
     assert four_pooling.meetings_total == 40  # was 39
     assert four_pooling.whereabouts_claims_total == 85  # was 86
-    assert four_pooling.roll_call_coverage_mean == pytest.approx(0.7083333333333333)  # was 0.735042735042735
+    assert four_pooling.roll_call_coverage_mean == pytest.approx(
+        0.7083333333333333
+    )  # was 0.735042735042735
     assert four_pooling.whereabouts_lie_detection_rate == pytest.approx(
         0.03488372093023256
     )

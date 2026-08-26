@@ -784,7 +784,9 @@ def test_corpus_census_pins(corpus_conviction: ConvictionTable) -> None:
     splits = corpus_conviction.splits
     assert splits is not None
     fit_seeds = frozenset(splits.train) | frozenset(splits.val)
-    assert sum(1 for r in corpus_conviction.rows if r.seed in fit_seeds) == 345  # was 367
+    assert (
+        sum(1 for r in corpus_conviction.rows if r.seed in fit_seeds) == 345
+    )  # was 367
 
 
 def test_committed_artifact_round_trips_and_matches_refit(

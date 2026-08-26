@@ -21,12 +21,12 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 # The flat 4p1i baseline now lives under replays/samples/4p1i/ (Task 12.12).
 _REAL_SAMPLES = _REPO_ROOT / "replays" / "samples" / "4p1i"
 # Task 16.17 baseline-5 re-record: the 4p/1i set is re-recorded on Qwen/Qwen3.6-27B
-# + the bespoke qwen3_6_27b prompt set (all FOUR templates at .qwen3_6_27b.v3) with
+# + the bespoke qwen3_6_27b prompt set (all FOUR templates at .qwen3_6_27b.v4) with
 # the nine retired substrate levers still stamped ON. It stays meeting-dense
 # (39/50 seeds carry a meeting), so _NO_MEETING_SEED is seed 12 (still meeting-free)
 # and seed 22 stays meeting-bearing. The recorded prompt versions are now the
-# bespoke set: accusation_round.qwen3_6_27b.v3 / crewmate_report.qwen3_6_27b.v3 /
-# impostor_report.qwen3_6_27b.v3 / vote_ballot.qwen3_6_27b.v3.
+# bespoke set: accusation_round.qwen3_6_27b.v4 / crewmate_report.qwen3_6_27b.v4 /
+# impostor_report.qwen3_6_27b.v4 / vote_ballot.qwen3_6_27b.v4.
 _MEETING_SEED = 22
 _NO_MEETING_SEED = 12
 
@@ -74,21 +74,23 @@ def test_provenance_meeting_seed(small_samples: Path) -> None:
     # FSM default).
     assert policy == mw._FSM_DEFAULT_POLICY == "fsm-default"
     # The union of the recorded prompt-version *values*, sorted — using the
-    # actual recorded values (e.g. "vote_ballot.qwen3_6_27b.v3"), not the hint.
-    assert "accusation_round.qwen3_6_27b.v3" in prompt_versions
-    assert "vote_ballot.qwen3_6_27b.v3" in prompt_versions
+    # actual recorded values (e.g. "vote_ballot.qwen3_6_27b.v4"), not the hint.
+    assert "accusation_round.qwen3_6_27b.v4" in prompt_versions
+    assert "vote_ballot.qwen3_6_27b.v4" in prompt_versions
     parts = prompt_versions.split(", ")
     assert parts == sorted(parts)
-    # The Task-18.12 baseline-6 re-record keeps all THIRTEEN retired substrate
-    # levers ON (the earlier graduations plus the four meeting-layer levers —
-    # absence_prior, roll_call_round, whereabouts_interior_flags,
-    # vent_placement_contradictions), stamped onto the replay's game_over record, so
-    # the flags column reports all thirteen ON levers (sorted); impostor_roll_call
-    # stays default-OFF and is NOT listed.
+    # The baseline-7 record keeps all TWENTY-ONE retired substrate levers ON (the
+    # earlier graduations plus the eight Phase-20 evidence-honesty levers),
+    # stamped onto the replay's game_over record, so the flags column reports all
+    # twenty-one ON levers (sorted); impostor_roll_call stays default-OFF and is
+    # NOT listed.
     assert flags == (
-        "absence_prior, citation_gate, evidence_quality_lift, hard_evidence_gate, "
+        "absence_prior, citation_gate, coalesced_memory_render, "
+        "evidence_quality_lift, grounded_prosecution, hard_evidence_gate, "
+        "map_aware_arbitration, meeting_outcome_memory, movement_claim_shape, "
         "movement_perception, observation_id_rendering, reporter_exculpation, "
-        "roll_call_round, testimony_as_content, unfreeze_memory, "
+        "roll_call_round, self_location_trail, structured_turn_markers, "
+        "task_completion_from_events, testimony_as_content, unfreeze_memory, "
         "vent_placement_contradictions, whereabouts_interior_flags, "
         "witnessed_kill_evidence"
     )
@@ -110,14 +112,16 @@ def test_provenance_no_meeting_seed(small_samples: Path) -> None:
     assert prompt_versions == mw._NO_MEETINGS
     # No stamp on the committed baseline -> FSM-default label.
     assert policy == "fsm-default"
-    # A no-meeting seed records no prompt versions, but the Task-18.12 substrate
-    # stamp lives on the game_over record (not a meeting), so a flag-ON re-record
-    # still reports all thirteen ON levers (the earlier graduations + the four
-    # meeting-layer levers graduated at the baseline-6 record) in the flags column.
+    # A no-meeting seed records no prompt versions, but the substrate stamp lives
+    # on the game_over record (not a meeting), so a flag-ON re-record still
+    # reports all twenty-one ON levers in the flags column.
     assert flags == (
-        "absence_prior, citation_gate, evidence_quality_lift, hard_evidence_gate, "
+        "absence_prior, citation_gate, coalesced_memory_render, "
+        "evidence_quality_lift, grounded_prosecution, hard_evidence_gate, "
+        "map_aware_arbitration, meeting_outcome_memory, movement_claim_shape, "
         "movement_perception, observation_id_rendering, reporter_exculpation, "
-        "roll_call_round, testimony_as_content, unfreeze_memory, "
+        "roll_call_round, self_location_trail, structured_turn_markers, "
+        "task_completion_from_events, testimony_as_content, unfreeze_memory, "
         "vent_placement_contradictions, whereabouts_interior_flags, "
         "witnessed_kill_evidence"
     )
@@ -150,9 +154,12 @@ def test_provenance_reads_stamped_substrate_flags(tmp_path: Path) -> None:
         samples, 5, "Qwen/Qwen3.6-27B"
     )
     assert flags == (
-        "absence_prior, citation_gate, evidence_quality_lift, hard_evidence_gate, "
+        "absence_prior, citation_gate, coalesced_memory_render, "
+        "evidence_quality_lift, grounded_prosecution, hard_evidence_gate, "
+        "map_aware_arbitration, meeting_outcome_memory, movement_claim_shape, "
         "movement_perception, observation_id_rendering, reporter_exculpation, "
-        "roll_call_round, testimony_as_content, unfreeze_memory, "
+        "roll_call_round, self_location_trail, structured_turn_markers, "
+        "task_completion_from_events, testimony_as_content, unfreeze_memory, "
         "vent_placement_contradictions, whereabouts_interior_flags, "
         "witnessed_kill_evidence"
     )
@@ -184,24 +191,26 @@ def test_provenance_reports_the_evidence_quality_lever_when_stamped_on(
 
     _, _, flags, _, _, _ = mw.sample_provenance(samples, 7, "Qwen/Qwen3.6-27B")
     assert flags == (
-        "absence_prior, citation_gate, evidence_quality_lift, hard_evidence_gate, "
+        "absence_prior, citation_gate, coalesced_memory_render, "
+        "evidence_quality_lift, grounded_prosecution, hard_evidence_gate, "
+        "map_aware_arbitration, meeting_outcome_memory, movement_claim_shape, "
         "movement_perception, observation_id_rendering, reporter_exculpation, "
-        "roll_call_round, testimony_as_content, unfreeze_memory, "
+        "roll_call_round, self_location_trail, structured_turn_markers, "
+        "task_completion_from_events, testimony_as_content, unfreeze_memory, "
         "vent_placement_contradictions, whereabouts_interior_flags, "
         "witnessed_kill_evidence"
     )
 
 
-def test_a_phase20_lever_stamped_on_renders_in_the_flags_cell(
+def test_the_live_toggle_stamped_on_renders_in_the_flags_cell(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # The registered Phase-20 levers round-trip the same way: export ->
-    # substrate_flag_snapshot -> game_over stamp -> read_substrate_flags ->
-    # MANIFEST flags cell, so a lever-ON recording self-describes in the one
-    # column an operator reads. Only ONE lever is exported, and only that key
-    # joins the thirteen graduated ones -- the cell names the arms the recording
-    # actually ran under, not the arms that exist.
-    monkeypatch.setenv("AILIBI_GROUNDED_PROSECUTION", "1")
+    # The one live toggle round-trips: export -> substrate_flag_snapshot ->
+    # game_over stamp -> read_substrate_flags -> MANIFEST flags cell, so a
+    # lever-ON recording self-describes in the one column an operator reads. The
+    # cell names the arms the recording actually ran under, so the toggle joins
+    # the twenty-one graduated keys rather than replacing any of them.
+    monkeypatch.setenv("AILIBI_IMPOSTOR_ROLL_CALL", "1")
     samples = tmp_path / "samples"
     samples.mkdir()
     log = ReplayLog(samples / "replay-seed-9.jsonl", game_id="headless-seed-9")
@@ -210,33 +219,24 @@ def test_a_phase20_lever_stamped_on_renders_in_the_flags_cell(
 
     _, _, flags, _, _, _ = mw.sample_provenance(samples, 9, "Qwen/Qwen3.6-27B")
     assert flags == (
-        "absence_prior, citation_gate, evidence_quality_lift, grounded_prosecution, "
-        "hard_evidence_gate, movement_perception, observation_id_rendering, "
-        "reporter_exculpation, roll_call_round, testimony_as_content, "
-        "unfreeze_memory, vent_placement_contradictions, "
+        "absence_prior, citation_gate, coalesced_memory_render, "
+        "evidence_quality_lift, grounded_prosecution, hard_evidence_gate, "
+        "impostor_roll_call, map_aware_arbitration, meeting_outcome_memory, "
+        "movement_claim_shape, movement_perception, observation_id_rendering, "
+        "reporter_exculpation, roll_call_round, self_location_trail, "
+        "structured_turn_markers, task_completion_from_events, "
+        "testimony_as_content, unfreeze_memory, vent_placement_contradictions, "
         "whereabouts_interior_flags, witnessed_kill_evidence"
     )
 
 
-def test_an_all_off_phase20_slate_renders_the_unchanged_baseline6_cell(
+def test_a_bare_environment_renders_the_committed_baseline7_cell(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # The registration's neutrality half, asserted rather than assumed: with every
-    # live toggle OFF (a bare environment) the cell is byte-identical to the one
-    # the committed MANIFESTs carry -- _render_flags emits only ON keys, so the
-    # eight new registry entries add nothing to a bare recording's provenance row.
-    for key in (
-        "TASK_COMPLETION_FROM_EVENTS",
-        "SELF_LOCATION_TRAIL",
-        "MOVEMENT_CLAIM_SHAPE",
-        "GROUNDED_PROSECUTION",
-        "MAP_AWARE_ARBITRATION",
-        "STRUCTURED_TURN_MARKERS",
-        "MEETING_OUTCOME_MEMORY",
-        "COALESCED_MEMORY_RENDER",
-        "IMPOSTOR_ROLL_CALL",
-    ):
-        monkeypatch.delenv(f"AILIBI_{key}", raising=False)
+    # The neutrality half, asserted rather than assumed: with the live toggle OFF
+    # (a bare environment) the cell is byte-identical to the one the committed
+    # MANIFESTs carry -- _render_flags emits only ON keys.
+    monkeypatch.delenv("AILIBI_IMPOSTOR_ROLL_CALL", raising=False)
     samples = tmp_path / "samples"
     samples.mkdir()
     log = ReplayLog(samples / "replay-seed-11.jsonl", game_id="headless-seed-11")
@@ -245,9 +245,12 @@ def test_an_all_off_phase20_slate_renders_the_unchanged_baseline6_cell(
 
     _, _, flags, _, _, _ = mw.sample_provenance(samples, 11, "Qwen/Qwen3.6-27B")
     assert flags == (
-        "absence_prior, citation_gate, evidence_quality_lift, hard_evidence_gate, "
+        "absence_prior, citation_gate, coalesced_memory_render, "
+        "evidence_quality_lift, grounded_prosecution, hard_evidence_gate, "
+        "map_aware_arbitration, meeting_outcome_memory, movement_claim_shape, "
         "movement_perception, observation_id_rendering, reporter_exculpation, "
-        "roll_call_round, testimony_as_content, unfreeze_memory, "
+        "roll_call_round, self_location_trail, structured_turn_markers, "
+        "task_completion_from_events, testimony_as_content, unfreeze_memory, "
         "vent_placement_contradictions, whereabouts_interior_flags, "
         "witnessed_kill_evidence"
     )
@@ -265,7 +268,7 @@ def test_rebuild_writes_sorted_rows(small_samples: Path, tmp_path: Path) -> None
         _NO_MEETING_SEED,
         _MEETING_SEED,
     ]  # parsed in file order -> ascending
-    assert rows[22].prompt_versions.startswith("accusation_round.qwen3_6_27b.v3")
+    assert rows[22].prompt_versions.startswith("accusation_round.qwen3_6_27b.v4")
     assert rows[_NO_MEETING_SEED].prompt_versions == mw._NO_MEETINGS
 
 
@@ -277,9 +280,9 @@ def test_rebuild_real_samples_have_50_rows(tmp_path: Path) -> None:
     assert set(rows) == set(range(50))
     # Meeting-bearing seeds in the Task 16.17 baseline-5 flat 4p/1i re-record
     # (39/50 seeds carry a meeting; 22/24/26/39 are all meeting-bearing, recording
-    # the qwen3_6_27b.v3 bespoke prompt versions).
+    # the qwen3_6_27b.v4 bespoke prompt versions).
     for seed in (22, 24, 26, 39):
-        assert "accusation_round.qwen3_6_27b.v3" in rows[seed].prompt_versions
+        assert "accusation_round.qwen3_6_27b.v4" in rows[seed].prompt_versions
         assert rows[seed].git_sha  # non-empty provenance
     assert rows[_NO_MEETING_SEED].prompt_versions == mw._NO_MEETINGS
 

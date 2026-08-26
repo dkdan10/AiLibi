@@ -320,7 +320,9 @@ def test_build_meeting_table_consumes_the_frozen_corpus() -> None:
     table = build_meeting_table(Path("replays/ml_corpus/4p1i"))
     assert table.games_total == 50
     assert table.meetings_total == 44  # was 40
-    assert table.ballots_total == 132  # == validity-gate ballot count: 100% join  # was 120
+    assert (
+        table.ballots_total == 132
+    )  # == validity-gate ballot count: 100% join  # was 120
     assert len(table.rows) == 132  # was 120
     assert table.splits is not None
     assert (len(table.splits.train), len(table.splits.val), len(table.splits.test)) == (

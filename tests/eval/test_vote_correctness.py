@@ -1903,7 +1903,9 @@ def test_committed_9p2i_report_pins_the_audited_conversion_values() -> None:
     assert conversion.ejection_accuracy == pytest.approx(85 / 99)  # was 78 / 101
     assert conversion.impostor_accused_meetings == 122  # was 134
     assert conversion.impostor_accused_conversions == 85  # was 78
-    assert conversion.impostor_accused_conversion_rate == pytest.approx(85 / 122)  # was 78 / 134
+    assert conversion.impostor_accused_conversion_rate == pytest.approx(
+        85 / 122
+    )  # was 78 / 134
     assert conversion.skip_ballots == 333  # was 451
     assert conversion.correct_skip_ballots == 236  # was 321
     assert conversion.missed_skip_ballots == 96  # was 129
@@ -1917,7 +1919,9 @@ def test_committed_9p2i_report_pins_the_audited_conversion_values() -> None:
 
     # The sentinel reads the recorded truth: 72 of the 78 impostor ejections are
     # transcript-evidence-backed (see docstring).
-    assert report.vote_correctness.vote_correctness_rate == pytest.approx(78 / 85)  # was 72 / 78
+    assert report.vote_correctness.vote_correctness_rate == pytest.approx(
+        78 / 85
+    )  # was 72 / 78
     assert report.vote_correctness.evidence_backed_impostor_ejections == 72
     assert report.vote_correctness.impostor_ejections == 78
     # The wrapper mirrors, never re-derives: the two surfaces agree exactly.

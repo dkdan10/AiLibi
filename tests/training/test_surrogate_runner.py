@@ -673,7 +673,9 @@ def test_bakeoff_reloads_the_committed_artifact_and_reproduces_the_numbers(
     assert calibration.predicted_skips == 401  # was 457
     # Inference from FIXED committed weights; tolerance covers libm exp variance
     # across platforms, nothing more.
-    assert calibration.brier == pytest.approx(0.3061476258037689, abs=1e-9)  # was 0.2541857827042379
+    assert calibration.brier == pytest.approx(
+        0.3061476258037689, abs=1e-9
+    )  # was 0.2541857827042379
 
 
 def test_surrogate_fidelity_reproduces_pinned_numbers(
@@ -707,8 +709,12 @@ def test_surrogate_fidelity_reproduces_pinned_numbers(
     assert report.honest_ceiling.reachable == 44  # was 51
     # Floats — deterministic, pinned to the exact literals.
     assert report.top1 == pytest.approx(0.8, abs=1e-12)  # was 0.7666666666666667
-    assert report.top2 == pytest.approx(0.9454545454545454, abs=1e-12)  # was 0.9166666666666666
-    assert report.skip_vs_eject_accuracy == pytest.approx(0.39080459770114945, abs=1e-12)  # was 0.375
+    assert report.top2 == pytest.approx(
+        0.9454545454545454, abs=1e-12
+    )  # was 0.9166666666666666
+    assert report.skip_vs_eject_accuracy == pytest.approx(
+        0.39080459770114945, abs=1e-12
+    )  # was 0.375
     assert report.always_eject_baseline == pytest.approx(0.625, abs=1e-12)
     assert report.brier == pytest.approx(0.06785997153616342, abs=1e-12)
     assert report.ece == pytest.approx(0.09477687280149634, abs=1e-12)
@@ -739,7 +745,9 @@ def test_go_no_go_reproduces_the_re_measured_no_go_verdict(
     assert verdict.beats_always_eject is False
     assert verdict.training_time_runner == "fake-provider-meeting-manager"
     assert verdict.surrogate_role == "diagnostic-only"
-    assert verdict.top1_bar == pytest.approx(0.6000000000000001, abs=1e-12)  # was 0.6375
+    assert verdict.top1_bar == pytest.approx(
+        0.6000000000000001, abs=1e-12
+    )  # was 0.6375
 
 
 def test_no_go_verdict_holds_on_live_served_clamped_features(
@@ -1444,7 +1452,9 @@ def test_predicted_ballot_calibration_is_a_distinct_channel(
     calib = model.predicted_ballot_calibration(test_views)
     assert calib.predicted_ballots == 107  # was 100
     assert calib.predicted_skips == 391  # was 457
-    assert calib.brier == pytest.approx(0.33399645935635536, abs=1e-12)  # was 0.2541857827042379
+    assert calib.brier == pytest.approx(
+        0.33399645935635536, abs=1e-12
+    )  # was 0.2541857827042379
     # Distinct channel by construction.
     assert calib.brier != surrogate_report.ballot_brier
 

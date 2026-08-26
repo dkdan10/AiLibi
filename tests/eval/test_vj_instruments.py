@@ -544,8 +544,12 @@ def test_9p2i_ballot_calibration_pins_the_baseline_5_cell(
     # vote_ballot_total (one sample stream). n=520 populates >=5 decile bins,
     # so the calibration is no longer flagged low-power.
     assert nine.ballot_calibration_total == 538  # was 520
-    assert nine.ballot_confidence_ece == pytest.approx(0.14983271375464421)  # was 0.16863461538461605
-    assert nine.ballot_confidence_brier == pytest.approx(0.1844589219330855)  # was 0.20346480769230768
+    assert nine.ballot_confidence_ece == pytest.approx(
+        0.14983271375464421
+    )  # was 0.16863461538461605
+    assert nine.ballot_confidence_brier == pytest.approx(
+        0.1844589219330855
+    )  # was 0.20346480769230768
     # LOW POWER on these bytes: the ballots concentrate in fewer decile bins
     # than the >=5 the gauge asks for (baseline 6 populated enough at n=520).
     assert nine.ballot_calibration_low_power is True
@@ -555,11 +559,17 @@ def test_9p2i_voice_tier_pins(nine: VJInstrumentReport) -> None:
     assert nine.voice_ballots_total == 871  # was 971
     assert nine.echo_ballots == 0
     assert nine.within_meeting_echo_rate == pytest.approx(0.0)
-    assert nine.response_skeleton_share == pytest.approx(0.01722158438576349)  # was 0.026776519052523172
+    assert nine.response_skeleton_share == pytest.approx(
+        0.01722158438576349
+    )  # was 0.026776519052523172
     assert nine.distinct_skeletons == 850  # was 929
-    assert nine.distinct_skeleton_ratio == pytest.approx(0.9758897818599311)  # was 0.956745623069001
+    assert nine.distinct_skeleton_ratio == pytest.approx(
+        0.9758897818599311
+    )  # was 0.956745623069001
     assert nine.distinct_1 == pytest.approx(0.10613751730503)  # was 0.09441071802386435
-    assert nine.distinct_2 == pytest.approx(0.3636308439587128)  # was 0.33246953740971497
+    assert nine.distinct_2 == pytest.approx(
+        0.3636308439587128
+    )  # was 0.33246953740971497
 
 
 def test_9p2i_pooling_rides_the_same_report(nine: VJInstrumentReport) -> None:
@@ -590,8 +600,12 @@ def test_4p1i_reproduces_baseline_5_exactly(four: VJInstrumentReport) -> None:
     assert four.turn_citations_valid == 47  # was 22
     assert four.turn_citations_dangling == 0
     assert four.cited_eject_ballots == 59  # was 27
-    assert four.ballot_confidence_ece == pytest.approx(0.1483050847457627)  # was 0.0877777777777777
-    assert four.ballot_confidence_brier == pytest.approx(0.14504237288135594)  # was 0.09643333333333333
+    assert four.ballot_confidence_ece == pytest.approx(
+        0.1483050847457627
+    )  # was 0.0877777777777777
+    assert four.ballot_confidence_brier == pytest.approx(
+        0.14504237288135594
+    )  # was 0.09643333333333333
     assert four.echo_ballots == 0
     assert four.distinct_skeletons == 117  # was 106
 

@@ -16,9 +16,14 @@ with four different fixes, and merging them would lose exactly the distinction
 the decision turns on.
 
 Nothing here asserts a bug in the code as specified. Each anchor records what
-the frozen pipeline actually does on frozen bytes, so a future phase can tell at
+the pipeline actually does on the committed bytes, so a future phase can tell at
 a glance whether its change moved the mechanism — and so a change that moves it
 by accident fails loudly here.
+
+The baseline-7 record is that future phase. All four mechanisms are FLIPPED on
+its bytes: each anchor now records the baseline-7 reading, and each carries the
+baseline-6 reading it replaced as one frozen line, so the flip is legible here
+rather than only in the audit (audits/audit-phase-20-baseline-7.md §4).
 """
 
 from __future__ import annotations
@@ -67,6 +72,9 @@ class MechanismAnchor:
     impostors: tuple[str, ...]
     # Every flag the meeting carries, in recorded order.
     flags: tuple[MechanismFlag, ...]
+    # What this meeting read on the baseline-6 bytes, in one line. Frozen: the
+    # bytes it describes are gone, and this is the only record of them here.
+    baseline6: str
 
     @property
     def game_id(self) -> str:
@@ -84,6 +92,8 @@ class EvidenceMechanism:
     # What a future phase would have to add for this mechanism to be closed.
     missing_check: str
     audit_ref: str
+    # FLIPPED / SURVIVING / RE-ANCHORED, as the baseline-7 record read it.
+    status: str
     anchors: tuple[MechanismAnchor, ...]
 
 
@@ -109,32 +119,23 @@ PROVENANCE_IMPOSSIBLE_SIGHTING: Final[EvidenceMechanism] = EvidenceMechanism(
         "against the speaker's own visibility at the tick it names."
     ),
     audit_ref="audits/audit-phase-19-input-claude.md §5.2 (9p2i seed 23 M1)",
+    status="FLIPPED",
     anchors=(
         MechanismAnchor(
             seedset="9p2i",
             seed=23,
             meeting_index=1,
             tick=12,
-            outcome="EJECTED",
-            ejected_player_id="p-4",
-            ejected_role="CREWMATE",
+            outcome="SKIPPED",
+            ejected_player_id=None,
+            ejected_role=None,
             impostors=("p-6", "p-7"),
-            flags=(
-                MechanismFlag(
-                    kind="alibi_vs_sighting",
-                    category="cross_statement",
-                    subjects=("p-4",),
-                    # The impostor authors the sighting; the crewmate it names
-                    # authored the alibi it "contradicts".
-                    speaker_a="p-4",
-                    speaker_b="p-7",
-                    self_linked=False,
-                    weak=False,
-                    description_contains=(
-                        "Alibi places p-4 in MEDBAY (ticks 12-12); "
-                        "sighting reports p-4 in CAFETERIA at tick 12."
-                    ),
-                ),
+            # The mechanism's flag is GONE, not demoted: the meeting carries no
+            # contradiction at all, and the table skipped.
+            flags=(),
+            baseline6=(
+                "EJECTED p-4 (CREWMATE) on one STRONG alibi_vs_sighting whose "
+                "sighting side was authored by impostor p-7"
             ),
         ),
     ),
@@ -159,16 +160,19 @@ CONTENT_VS_OWN_MEMORY_MISS: Final[EvidenceMechanism] = EvidenceMechanism(
         "restated observation passes as evidence against a third party."
     ),
     audit_ref="audits/audit-phase-19-input-claude.md §5.2 (9p2i seed 12 M0)",
+    status="FLIPPED",
     anchors=(
         MechanismAnchor(
             seedset="9p2i",
             seed=12,
             meeting_index=0,
             tick=7,
-            outcome="EJECTED",
-            ejected_player_id="p-3",
-            ejected_role="CREWMATE",
+            outcome="SKIPPED",
+            ejected_player_id=None,
+            ejected_role=None,
             impostors=("p-1", "p-7"),
+            # The fatal STRONG flag against p-3 is gone. What survives names
+            # p-5, and BOTH survivors are weak-banded.
             flags=(
                 MechanismFlag(
                     kind="alibi_conflict",
@@ -180,31 +184,23 @@ CONTENT_VS_OWN_MEMORY_MISS: Final[EvidenceMechanism] = EvidenceMechanism(
                     weak=True,
                     description_contains="[weak signal: self-stated alibi pair;",
                 ),
-                # The fatal flag. Both sides are innocents: p-3's own alibi and
-                # p-9's sighting. No impostor authored either statement.
-                MechanismFlag(
-                    kind="alibi_vs_sighting",
-                    category="cross_statement",
-                    subjects=("p-3",),
-                    speaker_a="p-3",
-                    speaker_b="p-9",
-                    self_linked=False,
-                    weak=False,
-                    description_contains=(
-                        "Alibi places p-3 in LABS (ticks 3-3); "
-                        "sighting reports p-3 in MEDBAY at tick 3."
-                    ),
-                ),
                 MechanismFlag(
                     kind="alibi_vs_sighting",
                     category="weak_signal",
                     subjects=("p-5",),
-                    speaker_a="p-1",
-                    speaker_b="p-5",
+                    speaker_a="p-5",
+                    speaker_b="p-7",
                     self_linked=False,
                     weak=True,
-                    description_contains="[weak signal: endpoint-tick sighting]",
+                    description_contains=(
+                        "[weak signal: endpoint-tick sighting; "
+                        "adjacent room one tick away]"
+                    ),
                 ),
+            ),
+            baseline6=(
+                "EJECTED p-3 (CREWMATE) on a STRONG alibi_vs_sighting built "
+                "from two innocents' statements (p-3's alibi, p-9's sighting)"
             ),
         ),
     ),
@@ -230,40 +226,33 @@ ONE_TICK_INTERVAL_ARTIFACT: Final[EvidenceMechanism] = EvidenceMechanism(
         "at its own tick carries the same conviction weight as a real window."
     ),
     audit_ref="audits/audit-phase-19-input-claude.md §5.2 (4p1i seeds 41/49)",
+    status="FLIPPED",
     anchors=(
         MechanismAnchor(
             seedset="4p1i",
             seed=49,
             meeting_index=0,
-            tick=9,
+            tick=6,
             outcome="EJECTED",
-            ejected_player_id="p-3",
-            ejected_role="CREWMATE",
+            ejected_player_id="p-4",
+            ejected_role="IMPOSTOR",
             impostors=("p-4",),
+            # The interval flags are gone entirely; what convicts is engine
+            # -certified role proof.
             flags=(
                 MechanismFlag(
-                    kind="alibi_conflict",
-                    category="weak_signal",
-                    subjects=("p-3",),
-                    speaker_a="p-3",
-                    speaker_b="p-3",
-                    self_linked=False,
-                    weak=True,
-                    description_contains=(
-                        "[weak signal: self-stated alibi pair; "
-                        "narrow alibi window; endpoint-tick overlap]"
-                    ),
+                    kind="vent_sighting",
+                    category="role_proof",
+                    subjects=("p-4",),
+                    speaker_a="p-1",
+                    speaker_b="p-1",
+                    self_linked=True,
+                    weak=False,
+                    description_contains="venting is impostor-only",
                 ),
-                MechanismFlag(
-                    kind="alibi_vs_sighting",
-                    category="weak_signal",
-                    subjects=("p-3",),
-                    speaker_a="p-2",
-                    speaker_b="p-3",
-                    self_linked=False,
-                    weak=True,
-                    description_contains="[weak signal: endpoint-tick sighting]",
-                ),
+            ),
+            baseline6=(
+                "EJECTED p-3 (CREWMATE) at tick 9 on two weak-stamped interval flags"
             ),
         ),
         MechanismAnchor(
@@ -272,27 +261,10 @@ ONE_TICK_INTERVAL_ARTIFACT: Final[EvidenceMechanism] = EvidenceMechanism(
             meeting_index=0,
             tick=9,
             outcome="EJECTED",
-            ejected_player_id="p-4",
-            ejected_role="CREWMATE",
+            ejected_player_id="p-3",
+            ejected_role="IMPOSTOR",
             impostors=("p-3",),
             flags=(
-                # A single-tick roll-call placement (ticks 3-3) contradicted at
-                # that exact tick — and NOT weak-stamped, because the Task-18.9
-                # whereabouts-interior exemption adjudicates the lone tick as
-                # the claim's interior rather than its edge.
-                MechanismFlag(
-                    kind="alibi_vs_sighting",
-                    category="cross_statement",
-                    subjects=("p-4",),
-                    speaker_a="p-1",
-                    speaker_b="p-4",
-                    self_linked=False,
-                    weak=False,
-                    description_contains=(
-                        "Alibi places p-4 in MEDBAY (ticks 3-3); "
-                        "sighting reports p-4 in LABS at tick 3."
-                    ),
-                ),
                 MechanismFlag(
                     kind="vent_sighting",
                     category="role_proof",
@@ -303,6 +275,10 @@ ONE_TICK_INTERVAL_ARTIFACT: Final[EvidenceMechanism] = EvidenceMechanism(
                     weak=False,
                     description_contains="venting is impostor-only",
                 ),
+            ),
+            baseline6=(
+                "EJECTED p-4 (CREWMATE) on a STRONG one-tick roll-call "
+                "placement, beside the vent flag naming the real impostor"
             ),
         ),
     ),
@@ -331,6 +307,7 @@ EQUAL_WEIGHT_CONFLICT: Final[EvidenceMechanism] = EvidenceMechanism(
         "own hard-evidence doctrine."
     ),
     audit_ref="audits/audit-phase-19-input-claude.md §5.1, §5.2 (4p1i seed 41)",
+    status="FLIPPED",
     anchors=(
         MechanismAnchor(
             seedset="4p1i",
@@ -338,10 +315,13 @@ EQUAL_WEIGHT_CONFLICT: Final[EvidenceMechanism] = EvidenceMechanism(
             meeting_index=0,
             tick=9,
             outcome="EJECTED",
-            ejected_player_id="p-4",
-            ejected_role="CREWMATE",
+            ejected_player_id="p-3",
+            ejected_role="IMPOSTOR",
             impostors=("p-3",),
+            # There is no longer a conflict to weigh: the cross-statement flag
+            # against the crewmate is gone and the role proof stands alone.
             flags=ONE_TICK_INTERVAL_ARTIFACT.anchors[1].flags,
+            baseline6=ONE_TICK_INTERVAL_ARTIFACT.anchors[1].baseline6,
         ),
     ),
 )

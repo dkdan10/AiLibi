@@ -892,7 +892,9 @@ def test_committed_9p2i_report_pins_the_audited_gate_metrics() -> None:
     # The preserved legacy column mirrors the genuine-class cell above.
     assert supplied_channel.legacy_alibi_supplied == 1  # was 4
     assert supplied_channel.legacy_alibi_converted == 0  # was 3
-    assert supplied_channel.legacy_alibi_conversion_rate == pytest.approx(0.0)  # was 0.75
+    assert supplied_channel.legacy_alibi_conversion_rate == pytest.approx(
+        0.0
+    )  # was 0.75
     assert supplied_channel.note == SUPPLIED_CHANNEL_GATE_NOTE
 
     assert gate.lost_opening_accusations == 0

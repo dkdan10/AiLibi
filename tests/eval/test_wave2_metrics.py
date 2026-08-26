@@ -474,8 +474,12 @@ class TestIndistinguishability:
         assert result.crewmate_do_task == 3163  # was 3703
         assert result.impostor_wait_share is not None
         assert result.crewmate_wait_share is not None
-        assert result.impostor_wait_share == pytest.approx(0.10171428571428572, abs=1e-3)  # was 0.0683
-        assert result.crewmate_wait_share == pytest.approx(0.06418039895923677, abs=1e-3)  # was 0.1739
+        assert result.impostor_wait_share == pytest.approx(
+            0.10171428571428572, abs=1e-3
+        )  # was 0.0683
+        assert result.crewmate_wait_share == pytest.approx(
+            0.06418039895923677, abs=1e-3
+        )  # was 0.1739
         # The fingerprint is gone: impostor wait-share no longer dwarfs crew's —
         # impostors now idle LESS than the task-burdened crew.
         assert result.impostor_wait_share < 2 * result.crewmate_wait_share

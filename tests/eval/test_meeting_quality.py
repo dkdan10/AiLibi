@@ -558,7 +558,9 @@ def test_committed_9p2i_recompute_pins_the_coerced_bucket() -> None:
     assert result.ejection_accuracy == pytest.approx(85 / 99)  # was 78 / 101
     assert result.impostor_accused_meetings == 122  # was 134
     assert result.impostor_accused_conversions == 85  # was 78
-    assert result.impostor_accused_conversion_rate == pytest.approx(85 / 122)  # was 78 / 134
+    assert result.impostor_accused_conversion_rate == pytest.approx(
+        85 / 122
+    )  # was 78 / 134
     assert result.skip_ballots == 333  # was 451
     assert result.correct_skip_ballots == 236  # was 321
     assert result.missed_skip_ballots == 96  # was 129
