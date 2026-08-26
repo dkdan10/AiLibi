@@ -730,6 +730,8 @@ class TestRollCallRound:
         assert default.phase == "opt_in"
         assert default.agent_id == "p-2"
         assert default.trigger == "deadline"
+
+
 # --- Turn ids --------------------------------------------------------------
 
 
@@ -7479,6 +7481,8 @@ def _run_planted_meeting(
         )
     )
     return result, [call.prompt for call in client.calls]
+
+
 class TestTurnAnnotationRecordShape:
     """The annotation channel is the manager's, and stays off the wire."""
 

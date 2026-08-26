@@ -848,6 +848,7 @@ class TestCompletedTaskFromEvents:
     A living agent's owned set loses a map id only when that instance completes;
     redistribution only ADDS one. Unconditional since the baseline-7 record.
     """
+
     def test_redistributed_task_displacing_pending_mints_no_completion(self) -> None:
         # The confirmed defect's shape: a crewmate holding ``upload_logs`` inherits
         # a victim's ``align_engine_output``, which sorts first and takes over
@@ -1595,6 +1596,7 @@ class TestSelfLocationTrail:
 
     Unconditional since the baseline-7 record.
     """
+
     def test_the_golden_comparison_bites(self) -> None:
         # The perturbation craft rule 2 asks for: one altered byte in the
         # expectation must fail the comparison the golden tests make.
@@ -2181,6 +2183,7 @@ class TestCoalescedMemoryRender:
 
     Unconditional since the baseline-7 record.
     """
+
     def test_render_matches_the_coalesced_golden(self) -> None:
         fixture, expected = _load_fixture("coalesced_memory_render")
         memory = _build_memory_from_fixture(fixture)

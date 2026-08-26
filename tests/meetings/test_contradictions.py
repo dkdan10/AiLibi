@@ -157,8 +157,6 @@ def _move_record(
     )
 
 
-
-
 # --- Empty / non-contradictory transcripts ---------------------------------
 
 
@@ -2056,6 +2054,8 @@ class TestBothLeversCompose:
 # transition outright.
 
 _ROSTER_3 = frozenset({"p-3", "p-5", "p-9"})
+
+
 def _origin_spoken_transcript(
     *,
     witness: str = "p-9",
@@ -3527,7 +3527,6 @@ class TestLiveDetectorCommittedBytesByteIdentity:
 # ``reconstruct_stated_paths``).
 
 
-
 @functools.cache
 def _roles_by_seed(set_name: str) -> dict[int, dict[str, str]]:
     """``seed -> {player_id: role}`` from a set's tournament-eval-report.json.
@@ -4161,6 +4160,8 @@ def _corridor_transcript(
             ),
         )
     )
+
+
 class TestMapAwareArbitrationDemotion:
     """ON, a corridor informs; it no longer convicts."""
 

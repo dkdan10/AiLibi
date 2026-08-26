@@ -141,9 +141,7 @@ _PHASE20_KEYS: frozenset[str] = frozenset(
 # The stamp the baseline-6 sets carried, kept as the legacy shape the
 # missing-key-reads-False rule has to keep accepting.
 _BASELINE6_STAMP: dict[str, bool] = {
-    key: value
-    for key, value in _BASELINE7_STAMP.items()
-    if key not in _PHASE20_KEYS
+    key: value for key, value in _BASELINE7_STAMP.items() if key not in _PHASE20_KEYS
 }
 
 

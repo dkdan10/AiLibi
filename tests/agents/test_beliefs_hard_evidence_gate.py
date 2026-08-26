@@ -163,6 +163,8 @@ class TestHardEvidenceGatedSuspicionHelper:
         provenance = SuspicionProvenance(carried_soft=0.20, unattributed=1e-12)
         hard_evidence_gated_suspicion(0.70, provenance)
         assert provenance == SuspicionProvenance(carried_soft=0.20, unattributed=1e-12)
+
+
 # --------------------------------------------------------------------------- #
 # C. The mandatory cross-meeting persistent-hard fixture (DoD bullet 2)        #
 # --------------------------------------------------------------------------- #

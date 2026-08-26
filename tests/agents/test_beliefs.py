@@ -2724,6 +2724,8 @@ def _same_claim_flag_stack(
         )
         for index in range(count)
     ]
+
+
 class TestCertainGuiltRenderCeiling:
     """Bound 1 (audit §3a): flag/testimony lift never renders at the 1.0 clamp.
 

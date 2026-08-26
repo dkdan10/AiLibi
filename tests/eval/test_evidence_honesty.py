@@ -1909,7 +1909,6 @@ def test_self_placement_coverage_pins(
         )
 
 
-
 @pytest.mark.slow
 def test_the_trail_s_budget_cost_is_measured_not_assumed(
     placement: Mapping[Path, _SelfPlacementCensus],
@@ -1986,7 +1985,6 @@ def test_the_completed_task_row_names_the_engine_truth_room(
 # directions: the origin flags that stop minting, and the flags that newly mint
 # because a resolved destination placement now contradicts a subject who was
 # agreeing with the mis-spoken origin.
-
 
 
 def _move_witness_records(
@@ -3111,7 +3109,6 @@ def test_the_sole_flag_wrongful_ejections_lose_their_strong_flag(
 # the map lever OFF (the recorded substrate) and ON, reads the I-6 cell off both
 # legs with the INSTRUMENT's own classifier, and pins the one place the gauge and
 # the mechanism deliberately disagree.
-
 
 
 class _CorridorCensus(NamedTuple):

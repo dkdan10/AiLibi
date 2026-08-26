@@ -409,6 +409,7 @@ class TestObservationIdRender:
         # The meeting-outcome channel tags the frame with the meeting it was
         # spoken at (baseline 6 rendered the untagged "[meeting] CLAIM by …").
         assert "[meeting 1] CLAIM by p2 (unverified): accused p4." in rendered
+
     def test_ids_survive_a_tight_token_budget_shed(self) -> None:
         # The id is folded BEFORE the salience sort and budget shed, so a surviving
         # line keeps its ORIGINAL id even when lower-salience lines are dropped. The

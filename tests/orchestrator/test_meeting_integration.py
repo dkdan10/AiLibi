@@ -2914,6 +2914,7 @@ class TestVentWitnessRecordsAccessor:
 # player's role, never a living player's and never a kill victim's.
 # ---------------------------------------------------------------------------
 
+
 class _PacingScriptedAgent:
     """A real :class:`TacticalAgent` behind a scripted intent stream.
 
