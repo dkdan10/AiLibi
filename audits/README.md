@@ -250,3 +250,7 @@ recorded measurements, not prose.
 - [audit-phase-20-smoke.md](audit-phase-20-smoke.md) — the smoke record: live
   seeds at the full slate into a scratch directory, the validity gate, the
   observed lever coverage, and the GO/ABANDON call before the record starts.
+- [audit-phase-20-baseline-7.md](audit-phase-20-baseline-7.md) — the record
+  itself: 300 games at the frozen slate, the pre-registered read bar by bar, and
+  the decision the arithmetic selected. FINDING — the ladder tip stands at
+  baseline 6.

@@ -129,9 +129,9 @@ The system as built: [docs/architecture.md](docs/architecture.md).
 |---|---|---|
 | Committed sample replays that reconstruct byte-identically | 100 of 100 | every commit — `scripts/verify_samples.sh` |
 | Observation-firewall violations, all phases | zero | never breached in CI: the [import-linter contracts](.importlinter), the planted-leak test in [tests/test_firewall.py](tests/test_firewall.py), the recursive sweep in [eval/leak_scan.py](eval/leak_scan.py) |
-| Impostor win rate, committed samples | 34% (4p1i), 30% (9p2i) | reference recording 6, 2026-07-20 — [4p1i](replays/samples/4p1i/MANIFEST.md), [9p2i](replays/samples/9p2i/MANIFEST.md) |
+| Impostor win rate, committed samples | 36% (4p1i), 24% (9p2i) | the 2026-08-25 record — [4p1i](replays/samples/4p1i/MANIFEST.md), [9p2i](replays/samples/9p2i/MANIFEST.md) |
 | Eject ballots carrying a valid citation, a turn or an observation id (9p2i) | 520 / 520, zero dangling | reference recording 6, 2026-07-20 — [instrument](tests/eval/test_vj_instruments.py) |
-| Ejection accuracy with engine-certified proof of the ejectee's role, against without | 310 / 310 = 1.000 vs 46 / 125 = 0.368 | measured 2026-08-18 across all four committed recordings — [phase-19 close](audits/audit-phase-19-close.md) §4.1; 79 of 79 innocent ejections sit in the no-proof cell |
+| Ejection accuracy with engine-certified proof of the ejectee's role, against without | 310 / 310 = 1.000 vs 46 / 125 = 0.368 | measured 2026-08-18 across the four recordings of that date — [phase-19 close](audits/audit-phase-19-close.md) §4.1; 79 of 79 innocent ejections sit in the no-proof cell |
 | Correct 9p ejections riding an ejectee-specific vent sighting | 68 / 78 = 87% | reference recording 6, 2026-07-20 — [triage audit](audits/audit-phase-19-triage.md). Reading: general social deduction, **not** demonstrated |
 | Learned tactical policies that became the default | none, ruled twice | 2026-07-18 and 2026-08-01 — [phase 17](audits/audit-phase-17-close.md), [phase 18](audits/audit-phase-18-close.md) |
 
@@ -190,9 +190,9 @@ The spectator API is an unauthenticated game-master view, so it is loopback-only
 
 **Providers.** `AILIBI_LLM_PROVIDER` selects one: `fake` (the default — deterministic, offline, $0, what CI runs), `anthropic`, `ollama` for a local open model, or `featherless` for the hosted model every recorded number came from. CI never selects a real provider.
 
-**The fake provider's report is empty on purpose.** Every fake ballot's vote target is a minted placeholder that the meeting layer normalizes to SKIP, so a fake tournament ejects nobody and its rates come out null. A real one is committed: [replays/samples/9p2i/tournament-eval-report.json](replays/samples/9p2i/tournament-eval-report.json) records 101 ejections, vote correctness 0.923, ejection accuracy 0.772.
+**The fake provider's report is empty on purpose.** Every fake ballot's vote target is a minted placeholder that the meeting layer normalizes to SKIP, so a fake tournament ejects nobody and its rates come out null. A real one is committed: [replays/samples/9p2i/tournament-eval-report.json](replays/samples/9p2i/tournament-eval-report.json) records 99 ejections, vote correctness 0.918, ejection accuracy 0.859.
 
-**The samples.** A fresh clone ships 100 sample replays under `replays/samples/`: two 50-game tournaments, one per roster preset (`4p1i` and `9p2i`), regenerated 2026-07-20 against `Qwen/Qwen3.6-27B` on the `qwen3_6_27b` `v3` prompt set, impostor win rates 34% (4p1i) and 30% (9p2i). Each set's `MANIFEST.md` is the row-by-row provenance record. Replays you generate into `replays/` override the bundled ones.
+**The samples.** A fresh clone ships 100 sample replays under `replays/samples/`: two 50-game tournaments, one per roster preset (`4p1i` and `9p2i`), regenerated 2026-08-25 against `Qwen/Qwen3.6-27B` on the `qwen3_6_27b` `v4` prompt set, impostor win rates 36% (4p1i) and 24% (9p2i). Each set's `MANIFEST.md` is the row-by-row provenance record. Replays you generate into `replays/` override the bundled ones.
 
 **Cloning.** `git clone --filter=blob:none https://github.com/dkdan10/AiLibi.git` is the fast path — roughly the 256 MiB the working tree needs, not every blob version. A full clone still pays for the committed evidence; [docs/artifacts.md](docs/artifacts.md) has the retention rules and the restore script.
 

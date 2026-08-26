@@ -139,6 +139,24 @@ No §8 abandon criterion fired during recording: no validity FAIL, no guard trip
 mismatch. The two defaulted seeds are the `(deadline_default)` criterion — handled by the
 standing re-record rule (§0.4), which is what that rule is for.
 
+### 1.1 Byte-verification and reconstruction
+
+Run under the recorded slate, because the reconstruction is substrate-coupled (§10.1):
+
+* `bash scripts/verify_samples.sh` — **100/100 clean**, 50 on each committed samples set.
+* `uv run python scripts/verify_ml_evidence.py` (FULL, not `--fast`) — **corpus reconstruction
+  300/300** across all four declared sets: 50/50 `samples/4p1i`, 50/50 `samples/9p2i`, 50/50
+  `ml_corpus/4p1i`, 150/150 `ml_corpus/9p2i`.
+
+The same run reports **11 FAILs, and every one of them is an ML-fit pin** ground on the
+baseline-6 corpus this record replaced — the surrogate's ranking and SKIP-vs-eject channels, the
+conviction model's Spearman / label / verdict fields, the composed runner's four cells, and the
+fit-corpus identity fingerprint that moved because the corpus moved. Five further rows report
+EVIDENCE-BRANCH-ABSENT, the expected state of a checkout that has not run
+`scripts/fetch_evidence.sh`. **None of the eleven is a defect in these bytes**; they are the
+measured size of the ML re-ground §10.2 names and does not discharge. Recording that the debt is
+now quantified rather than merely stated is the point of running the command in full.
+
 ## 2. The recorded substrate stamp
 
 Every MANIFEST row on every set carries the same twenty-one-key flags cell — the thirteen
@@ -537,13 +555,14 @@ own gauge seam, with the raw numerators:
 | gauge | `samples/9p2i` | `samples/4p1i` |
 |---|---|---|
 | `witnessed_event_rate` | **3/177 = 0.01694915254237288** | **1/65 = 0.015384615384615385** |
-| `flags_per_meeting` | **134/152 = 0.881578947368421** | **20/40 = 0.5** |
-| `testimony_backed_conversion` | **16/23 = 0.6956521739130435** | **19/31 = 0.6129032258064516** |
+| `flags_per_meeting` | **134/152 = 0.881578947368421** (92 persisted vent + 42 re-derived transcript flags) | **20/40 = 0.5** (20 persisted vent + 0 re-derived) |
+| `testimony_backed_conversion` | **80/115 = 0.6956521739130435** | **19/31 = 0.6129032258064516** |
 
-Both `witnessed_event_rate` numerators (3 and 1) are rare-event counts under the standing 15.19
-rule; the 4p1i gauge is already ADVISORY at numerator 1 on baseline 6 and stays advisory here,
-and the 9p2i one is close enough to it that the block says so rather than pinning a floor that
-cannot meaningfully fail.
+Both `witnessed_event_rate` numerators (3 and 1) are rare counts. The 4p1i gauge is marked
+ADVISORY by the standing 15.19 rule at numerator 1, as it already was on baseline 6; the 9p2i
+gauge at numerator 3 is **not** marked advisory by that rule, and the block says so rather than
+claiming a label the machinery does not apply — one witnessed kill still moves it by a third of
+itself, which is how it should be read.
 
 Scored against the **baseline-6** floors it is still the default for, the record reads:
 `samples/9p2i` referee **FAIL** (witnessed 0.0169 < 0.0339; flags 0.8816 < 1.0909; conversion
@@ -625,6 +644,17 @@ The consequence is mechanical: `scripts/verify_samples.sh`, `scripts/verify_ml_e
 green while lever-ON bytes sit in the canonical set dirs and the levers remain toggles. The
 byte-coupled re-pin sweep is not merely un-run — under FINDING it is un-runnable, because the
 affected tests raise on reconstruction rather than fail on a number.
+
+**The bytes are not what is in question.** Under the recorded slate the same commands are clean:
+`verify_samples.sh` reports 100/100 and `verify_ml_evidence.py` reports 300/300 reconstruction
+(§1.1). What is in question is which substrate the repository declares as ambient.
+
+**A second, independent sweep item is recorded here so the ruling is made with it in view.**
+`tests/meetings/test_prompt_byte_golden.py` diverges on the meeting-level `state_hash_after`
+rebuild for `9p2i` seed 0 meeting 0 **even under the recorded slate** — its rebuild path needs
+substantive updating for a lever-ON meeting fold, not just a re-pinned constant. That work is
+part of the `tests/meetings/` sweep and is only worth doing once the substrate question is
+settled, because the shape of the fix depends on the answer.
 
 Amending the pre-registration is not available: §11's convention is that amendments "land BEFORE
 the record or not at all for this phase's claims."

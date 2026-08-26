@@ -160,7 +160,7 @@ from orchestrator.replay import (  # noqa: E402
 
 _README: Final = "README.md"
 _ENV_EXAMPLE: Final = ".env.example"
-_LADDER_TIP_AUDIT: Final = "audits/audit-phase-18-close.md"
+_LADDER_TIP_AUDIT: Final = "audits/audit-phase-20-baseline-7.md"
 _GLOSSARY: Final = "docs/glossary.md"
 _HISTORY: Final = "docs/history.md"
 _READING_GUIDE: Final = "docs/reading-guide.md"

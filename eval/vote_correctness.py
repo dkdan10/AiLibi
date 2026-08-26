@@ -24,14 +24,17 @@ prompt A/B on this rate: the published conversion leads live on
 PRECISION lead, defined below) and the impostor-accused -> impostor-ejected
 conversion rate (the RECALL lead).
 
-What the recorded sets read (evidence-backed / impostor ejections). All four
-were recorded on the baseline-6 substrate -- model ``Qwen/Qwen3.6-27B``, every
-template at ``qwen3_6_27b.v3`` -- as each set's ``MANIFEST.md`` records:
+What the recorded sets read (evidence-backed / impostor ejections). All four were
+recorded at the Phase-20 evidence-honesty slate -- model ``Qwen/Qwen3.6-27B``,
+every template at ``qwen3_6_27b.v4``, the eight levers ON -- as each set's
+``MANIFEST.md`` records. The substrate ladder still stands at ``baseline-6``:
+that record missed two of its own pre-registered bars, so nothing graduated
+(``audits/audit-phase-20-baseline-7.md``).
 
-* ``replays/samples/9p2i``: 72/78 = 0.9231
-* ``replays/samples/4p1i``: 10/10 = 1.0000
-* ``replays/ml_corpus/9p2i``: 235/248 = 0.9476
-* ``replays/ml_corpus/4p1i``: 20/20 = 1.0000
+* ``replays/samples/9p2i``: 78/85 = 0.9176
+* ``replays/samples/4p1i``: 19/20 = 0.9500
+* ``replays/ml_corpus/9p2i``: 229/254 = 0.9016
+* ``replays/ml_corpus/4p1i``: 26/28 = 0.9286
 
 ``scripts/check_doc_facts.py`` re-derives all four rates from the committed
 reports and the model and prompt-set tokens from the four manifests, and fails
