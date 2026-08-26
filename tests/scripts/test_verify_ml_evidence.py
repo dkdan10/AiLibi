@@ -274,6 +274,63 @@ def test_availability_registry_covers_the_document() -> None:
     ] * len(vme._OFF_TREE_ANCHORS)
 
 
+#: The finalist report's availability-erratum headings. The errata are additive,
+#: so the LAST one is the current record: a later section supersedes an earlier
+#: one's promise instead of rewriting it.
+_AVAILABILITY_ERRATUM = re.compile(r"^## \d+\. Availability erratum.*$", re.MULTILINE)
+
+
+def _latest_availability_erratum(report: str) -> str:
+    """The text of the finalist report's most recent availability erratum."""
+
+    sections = re.split(r"^(?=## )", report, flags=re.MULTILINE)
+    errata = [section for section in sections if _AVAILABILITY_ERRATUM.match(section)]
+    assert errata, f"{vme.FINALIST_REPORT} carries no availability erratum"
+    return errata[-1]
+
+
+def _erratum_disagreements(
+    erratum: str, *, pinned_sha: str, ruling: vme.Ruling | None
+) -> list[str]:
+    """Where the erratum's availability story and the machinery's disagree."""
+
+    if ruling is not None and ruling.lost:
+        if ruling.outcome not in erratum:
+            return [f"the ruling is {ruling.outcome}; the erratum does not say so"]
+        return []
+    if pinned_sha not in erratum:
+        return [f"the erratum names no evidence commit at {pinned_sha}"]
+    return []
+
+
+def test_the_report_availability_erratum_agrees_with_the_machinery() -> None:
+    """The research reader's document states the availability the gate measures.
+
+    On the recovery path the erratum has to name the evidence commit's pinned sha
+    — that is what turns "where the raw slate lives" into one fetch a stranger can
+    run — and on a recorded loss it has to carry the ruling word instead. Both
+    sides are read (`read_pinned_sha`, `read_slate_ruling`), never transcribed.
+
+    The perturbation leg moves exactly that token in a COPY of the erratum text
+    and must be caught: a report naming the wrong commit reads as verified while
+    pointing nowhere, which is the failure this pin exists for.
+    """
+
+    report = (_REPO_ROOT / vme.FINALIST_REPORT).read_text(encoding="utf-8")
+    erratum = _latest_availability_erratum(report)
+    pinned_sha = vme.read_pinned_sha(_REPO_ROOT)
+    ruling = vme.read_slate_ruling(_REPO_ROOT)
+
+    assert not _erratum_disagreements(erratum, pinned_sha=pinned_sha, ruling=ruling)
+
+    if ruling is not None and ruling.lost:
+        drifted = erratum.replace(ruling.outcome, "MISLAID")
+    else:
+        drifted = erratum.replace(pinned_sha, "0" * len(pinned_sha))
+    assert drifted != erratum, "the perturbation changed nothing"
+    assert _erratum_disagreements(drifted, pinned_sha=pinned_sha, ruling=ruling)
+
+
 def test_recompute_reads_every_committed_verdict_against_the_declared_gap() -> None:
     """The three instruments re-derive from the FROZEN weights, and land STALE.
 

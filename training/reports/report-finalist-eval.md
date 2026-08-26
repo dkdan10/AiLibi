@@ -2682,3 +2682,63 @@ and **nothing was re-recorded** (item 4).
    **58.705 h** span / **57.1589 busy hours**. That price is named and declined
    by charter: these are the original `2026-07-29T07:17:48Z →
    2026-07-31T18:00:06Z` bytes, preserved, not reproduced.
+
+## 20. Availability erratum II (coordination, 2026-08-26 — the fold completed and verified; additive, no in-place rewrites)
+
+Anchor: `audits/review-2026-08-19/C/p2-ml-research-lead.md` §3 item 3, the
+research read of this report — "the 449-game finalist raw slate behind the
+adoption ruling is not in the repo — the derived cells reproduce, the raw evidence
+does not." §19 above answered half of that on 2026-08-15 and left the other half a
+promise: it put the bytes on a **temporary** `evidence/raw-slate-staging` ref and
+said Task 19.22 would fold them into the durable evidence commit. That promise
+carried no destination sha, no restore command, and no result from the fold itself
+— §19 item 2's 1,569/1,569 OK is the check on the **staged** copy, taken before it
+— so a reader had no way to watch it be kept. This section supplies exactly those
+three. Additive in the sense §18 and §19 are: no cell, table, statistic or verdict
+above it moves, and nothing was re-recorded.
+
+1. **Where the bytes are, by sha.** The fold is done. All 1,569 files /
+   298.157 MiB sit on the ONE orphan evidence commit **`evidence/phase-18-coevo`
+   @ `476a1f85492439277350af9708f1d120eb1c0a71`**, under `finalist-eval-raw/`.
+   That sha is pinned in `training/artifacts/coevo/EVIDENCE-MANIFEST.md` §1 and
+   the fetch is by sha, never by branch name — a branch is a moving pointer and
+   the sha is the whole immutability guarantee (`docs/artifacts.md`, class (c)).
+   §19 item 2's staging ref `evidence/raw-slate-staging` @
+   `c27ab7b5f5e7e10bfab5c6dc752362b137862cac` is **superseded**: nothing reads it,
+   and deleting it is the one owner step still open (`EVIDENCE-MANIFEST.md` §4,
+   with the current status in `docs/artifacts.md`'s class-(c) detail).
+
+2. **The one command that restores them, and what it printed.**
+
+   ```bash
+   bash scripts/fetch_evidence.sh   # fetch by the pinned sha, restore, verify
+   ```
+
+   Its verification leg is the result §19 owed and did not have. At the Phase-19
+   close it read **"OK: 2953/2953 files match
+   476a1f85492439277350af9708f1d120eb1c0a71."** — every file of both class-(c)
+   payloads (this slate's 1,569, the co-evolution prune's 1,383, and the branch
+   README) hashed against its manifest, quoted in `audits/audit-phase-19-close.md`
+   §1. `uv run python scripts/verify_ml_evidence.py --complete` re-asks the same
+   question on demand and carries the slate as an availability row of its own.
+
+3. **What that makes checkable in this report.** Three places above describe the
+   slate as repo-external. Each is correct as recorded and none is rewritten:
+   §2's provenance separation (:115-118) — "the raw recordings … live **outside**
+   the repo tree"; §16's source line (:1066-1070), which reads every recorded cell
+   from a `~/ailibi-campaign-1826/scoring/<arm>/` JSON; and the nine
+   `/Users/danielkeinan/ailibi-campaign-1826/…` `replay_set_dir` values kept
+   **verbatim** in `training/reports/results-finalist-eval.jsonl` under §9.2's
+   as-recorded rule. All three name the operator working root this campaign ran
+   in, and the bytes that root held are the bytes on the pinned commit in item 1 —
+   so a reader who wants the event-level lineage under any §16 cell runs item 2's
+   command and reads it at `training/reports/_finalist_eval_raw/`. The recorded
+   paths stay exactly as recorded; this section is the map from them to the
+   archive, not an edit to them.
+
+4. **What recovery still does not buy.** §19 item 3's boundary stands unchanged:
+   these are real-provider recordings (`Qwen/Qwen3.6-27B` on Featherless), so a
+   seed does not regenerate them and the recording itself is the determinism
+   boundary. Auditability is what the pin buys. Separately and as before, every
+   derived statistic here was already reproducible without the slate — §18 item 1
+   recomputed the paired tests from `results-finalist-eval.jsonl` alone.
