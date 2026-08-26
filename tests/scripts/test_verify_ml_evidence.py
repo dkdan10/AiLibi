@@ -329,6 +329,79 @@ def test_recompute_reads_every_committed_verdict_against_the_declared_gap() -> N
         assert row.committed.startswith(committed), row.committed
 
 
+def test_the_stale_amnesty_stops_at_the_corpus_dependent_rows() -> None:
+    """A corpus-INDEPENDENT disagreement still FAILS during the stale period.
+
+    The grounding gap explains rows whose value is a measurement of frozen
+    weights against the corpus. It explains nothing about the weight hashes, the
+    manifest's configuration identity, or the composed adoption constraints:
+    those are the same on any corpus, so a regression in one of them must turn
+    the command red even while the ML fits are stale. This pins the boundary
+    from both sides — the amnesty's membership, and that it is not the whole leg.
+    """
+
+    result = vme.run_recompute(_context(_REPO_ROOT))
+    emitted = {row.name for row in result.rows}
+    # Every named row is a row the leg actually produces (run_recompute raises
+    # otherwise, so this is the readable statement of the same guard).
+    assert vme._CORPUS_DEPENDENT_RECOMPUTE_ROWS <= emitted
+    # And the leg is MORE than the amnesty: the corpus-independent rows exist,
+    # are outside it, and are green on this checkout rather than downgraded.
+    outside = emitted - vme._CORPUS_DEPENDENT_RECOMPUTE_ROWS - {"ML grounding"}
+    assert outside == {
+        "composed adoption constraints",
+        "composed manifest.json reproduces",
+        "surrogate weights sha256",
+        "conviction weights sha256",
+    }
+    for name in outside:
+        assert _row(result.rows, name).status == "OK", name
+    # No row outside the amnesty was downgraded.
+    for row in result.rows:
+        if row.status == "STALE" and row.name != "ML grounding":
+            assert row.name in vme._CORPUS_DEPENDENT_RECOMPUTE_ROWS, row.name
+
+
+def test_a_perturbed_weight_hash_fails_even_while_the_fits_are_stale(
+    tmp_path: Path,
+) -> None:
+    """The planted case: perturb a corpus-INDEPENDENT row and it goes red.
+
+    ``composed/manifest.json`` records the weight digests the composed runner was
+    assembled from — a fact about the artifacts, not about any corpus. Moving one
+    of them must FAIL, and the declared grounding gap must not launder it into
+    STALE. Without this, the amnesty's boundary would be asserted only by the
+    membership list above and never exercised.
+    """
+
+    import json
+
+    scratch = tmp_path / "repo"
+    _manifests(scratch)
+    for rel in (
+        vme.CORPUS_SET,
+        vme.SURROGATE_DIR,
+        vme.CONVICTION_DIR,
+        vme.ARTIFACTS_DOC,
+        "training/reports/report-ballot-surrogate.md",
+        "training/reports/report-conviction-model.md",
+        "training/reports/report-composed-runner.md",
+    ):
+        _link(scratch, rel)
+    composed = _copy(scratch, f"{vme.COMPOSED_DIR}/manifest.json")
+    for rel in sorted(path.name for path in (_REPO_ROOT / vme.COMPOSED_DIR).iterdir()):
+        if rel != "manifest.json":
+            _link(scratch, f"{vme.COMPOSED_DIR}/{rel}")
+    payload = json.loads(composed.read_text(encoding="utf-8"))
+    payload["surrogate_weights_sha256"] = "b" * 64
+    composed.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+    result = vme.run_recompute(_context(scratch))
+    assert _row(result.rows, "ML grounding").status == "STALE"  # the gap is declared
+    assert _row(result.rows, "surrogate weights sha256").status == "FAIL"
+    assert vme._failed(result.rows, complete=False)
+
+
 def test_an_undeclared_corpus_still_fails_the_grounding_row(tmp_path: Path) -> None:
     """STALE is granted to ONE declared pair of digests, not to any mismatch.
 

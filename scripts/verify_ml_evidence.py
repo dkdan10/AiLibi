@@ -1536,6 +1536,35 @@ def _float_row(
     )
 
 
+#: The recompute rows a grounding gap can explain, named one by one.
+#:
+#: These are the rows whose value is a MEASUREMENT of frozen weights against the
+#: corpus: change the corpus and they move, whatever the artifacts say. They are
+#: the only rows the grounding gap downgrades.
+#:
+#: Every other row in the leg is corpus-INDEPENDENT — the composed adoption
+#: constraints, the manifest's configuration identity, the two weight hashes —
+#: and a disagreement there is a defect on any corpus. Downgrading them along
+#: with the rest would mean that during the stale period a regression in an
+#: invariant that has nothing to do with the corpus exits 0.
+#:
+#: Named explicitly rather than derived, so a NEW recompute row is not silently
+#: enrolled in the amnesty: ``run_recompute`` asserts every name here is a row it
+#: actually emitted, and a row not named here keeps its own status.
+_CORPUS_DEPENDENT_RECOMPUTE_ROWS: Final[frozenset[str]] = frozenset(
+    {
+        "surrogate top-1 (ranking channel)",
+        "surrogate SKIP-vs-eject decision accuracy",
+        "conviction flag-count Spearman",
+        "conviction conversion-label accuracy",
+        "conviction verdict.json reproduces",
+        "composed decision accuracy",
+        "composed exact-outcome match",
+        "composed convicting top-1",
+        "composed verdict.json reproduces",
+    }
+)
+
 #: Printed beside every recompute row a proven grounding gap explains.
 _STALE_GROUNDING_NOTE: Final[str] = (
     "the committed fit and the corpus under it are grounded on different "
@@ -1618,7 +1647,11 @@ def run_recompute(ctx: Context) -> LegResult:
     is a defect (FAIL) or a declared grounding gap (STALE). Rows that AGREE stay
     OK either way — a frozen fit still reproducing a number on a corpus it never
     saw is a stronger result than one reproducing on its own fit corpus, not a
-    weaker one.
+    weaker one. And only the CORPUS-DEPENDENT rows are eligible for that reading
+    (:data:`_CORPUS_DEPENDENT_RECOMPUTE_ROWS`): the weight hashes, the manifest's
+    configuration identity and the composed adoption constraints are the same on
+    any corpus, so they FAIL during the stale period exactly as they would
+    outside it.
     """
 
     from training.composed_runner import (
@@ -1890,10 +1923,19 @@ def run_recompute(ctx: Context) -> LegResult:
             )
         )
     grounding, stale = _grounding_row(ctx.repo_root)
+    emitted = {row.name for row in rows}
+    missing = sorted(_CORPUS_DEPENDENT_RECOMPUTE_ROWS - emitted)
+    if missing:
+        raise EvidenceError(
+            "the corpus-dependent recompute rows named in "
+            f"_CORPUS_DEPENDENT_RECOMPUTE_ROWS were not emitted: {missing}. A "
+            "renamed or deleted row must be re-stated there, or the grounding "
+            "gap would silently stop covering it."
+        )
     if stale:
         rows = [
             row
-            if row.status != "FAIL"
+            if row.status != "FAIL" or row.name not in _CORPUS_DEPENDENT_RECOMPUTE_ROWS
             else replace(
                 row,
                 status="STALE",

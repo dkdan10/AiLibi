@@ -3408,6 +3408,84 @@ def _rederive(
     )
 
 
+#: The committed meetings whose re-derivation the movement channel decides.
+#: Named individually rather than counted: see the walk below for why.
+_MOVEMENT_CHANNEL_DIVERGING_MEETINGS: frozenset[str] = frozenset(
+    {
+        "ml_corpus/9p2i:1000:headless-seed-1000:meeting-0",
+        "ml_corpus/9p2i:1001:headless-seed-1001:meeting-1",
+        "ml_corpus/9p2i:1003:headless-seed-1003:meeting-0",
+        "ml_corpus/9p2i:1012:headless-seed-1012:meeting-0",
+        "ml_corpus/9p2i:1013:headless-seed-1013:meeting-0",
+        "ml_corpus/9p2i:1014:headless-seed-1014:meeting-2",
+        "ml_corpus/9p2i:1015:headless-seed-1015:meeting-0",
+        "ml_corpus/9p2i:1015:headless-seed-1015:meeting-1",
+        "ml_corpus/9p2i:1016:headless-seed-1016:meeting-0",
+        "ml_corpus/9p2i:1020:headless-seed-1020:meeting-0",
+        "ml_corpus/9p2i:1020:headless-seed-1020:meeting-2",
+        "ml_corpus/9p2i:1023:headless-seed-1023:meeting-0",
+        "ml_corpus/9p2i:1024:headless-seed-1024:meeting-1",
+        "ml_corpus/9p2i:1035:headless-seed-1035:meeting-0",
+        "ml_corpus/9p2i:1038:headless-seed-1038:meeting-0",
+        "ml_corpus/9p2i:1042:headless-seed-1042:meeting-0",
+        "ml_corpus/9p2i:1043:headless-seed-1043:meeting-1",
+        "ml_corpus/9p2i:1044:headless-seed-1044:meeting-0",
+        "ml_corpus/9p2i:1046:headless-seed-1046:meeting-0",
+        "ml_corpus/9p2i:1046:headless-seed-1046:meeting-1",
+        "ml_corpus/9p2i:1048:headless-seed-1048:meeting-2",
+        "ml_corpus/9p2i:1049:headless-seed-1049:meeting-0",
+        "ml_corpus/9p2i:1053:headless-seed-1053:meeting-0",
+        "ml_corpus/9p2i:1055:headless-seed-1055:meeting-0",
+        "ml_corpus/9p2i:1056:headless-seed-1056:meeting-0",
+        "ml_corpus/9p2i:1056:headless-seed-1056:meeting-2",
+        "ml_corpus/9p2i:1059:headless-seed-1059:meeting-0",
+        "ml_corpus/9p2i:1060:headless-seed-1060:meeting-0",
+        "ml_corpus/9p2i:1064:headless-seed-1064:meeting-0",
+        "ml_corpus/9p2i:1071:headless-seed-1071:meeting-0",
+        "ml_corpus/9p2i:1072:headless-seed-1072:meeting-0",
+        "ml_corpus/9p2i:1073:headless-seed-1073:meeting-0",
+        "ml_corpus/9p2i:1079:headless-seed-1079:meeting-0",
+        "ml_corpus/9p2i:1080:headless-seed-1080:meeting-0",
+        "ml_corpus/9p2i:1089:headless-seed-1089:meeting-0",
+        "ml_corpus/9p2i:1090:headless-seed-1090:meeting-1",
+        "ml_corpus/9p2i:1093:headless-seed-1093:meeting-0",
+        "ml_corpus/9p2i:1097:headless-seed-1097:meeting-0",
+        "ml_corpus/9p2i:1101:headless-seed-1101:meeting-0",
+        "ml_corpus/9p2i:1101:headless-seed-1101:meeting-1",
+        "ml_corpus/9p2i:1102:headless-seed-1102:meeting-0",
+        "ml_corpus/9p2i:1103:headless-seed-1103:meeting-0",
+        "ml_corpus/9p2i:1104:headless-seed-1104:meeting-1",
+        "ml_corpus/9p2i:1105:headless-seed-1105:meeting-0",
+        "ml_corpus/9p2i:1110:headless-seed-1110:meeting-0",
+        "ml_corpus/9p2i:1112:headless-seed-1112:meeting-0",
+        "ml_corpus/9p2i:1114:headless-seed-1114:meeting-0",
+        "ml_corpus/9p2i:1123:headless-seed-1123:meeting-0",
+        "ml_corpus/9p2i:1125:headless-seed-1125:meeting-3",
+        "ml_corpus/9p2i:1126:headless-seed-1126:meeting-0",
+        "ml_corpus/9p2i:1134:headless-seed-1134:meeting-0",
+        "ml_corpus/9p2i:1146:headless-seed-1146:meeting-0",
+        "ml_corpus/9p2i:1147:headless-seed-1147:meeting-0",
+        "samples/9p2i:11:headless-seed-11:meeting-0",
+        "samples/9p2i:13:headless-seed-13:meeting-0",
+        "samples/9p2i:1:headless-seed-1:meeting-0",
+        "samples/9p2i:21:headless-seed-21:meeting-2",
+        "samples/9p2i:26:headless-seed-26:meeting-0",
+        "samples/9p2i:27:headless-seed-27:meeting-0",
+        "samples/9p2i:2:headless-seed-2:meeting-0",
+        "samples/9p2i:30:headless-seed-30:meeting-0",
+        "samples/9p2i:38:headless-seed-38:meeting-1",
+        "samples/9p2i:39:headless-seed-39:meeting-0",
+        "samples/9p2i:40:headless-seed-40:meeting-0",
+        "samples/9p2i:44:headless-seed-44:meeting-1",
+        "samples/9p2i:4:headless-seed-4:meeting-0",
+        "samples/9p2i:4:headless-seed-4:meeting-1",
+        "samples/9p2i:5:headless-seed-5:meeting-0",
+        "samples/9p2i:6:headless-seed-6:meeting-1",
+        "samples/9p2i:8:headless-seed-8:meeting-0",
+    }
+)
+
+
 class TestLiveDetectorCommittedBytesByteIdentity:
     """The graduated ``detect_contradictions`` against every committed meeting.
 
@@ -3417,7 +3495,7 @@ class TestLiveDetectorCommittedBytesByteIdentity:
     absent and env={} must agree -- and the two private channels a recorded flag
     can be inverted back into (vents, sightings) are rebuilt from the recorded
     verdicts. The movement channel cannot be inverted, so the meetings it
-    re-paired are pinned by count rather than reproduced.
+    re-paired are pinned by IDENTITY and by mechanism rather than reproduced.
     """
 
     def test_re_derivation_equals_recorded_on_every_committed_meeting(self) -> None:
@@ -3435,28 +3513,47 @@ class TestLiveDetectorCommittedBytesByteIdentity:
             if rederived != _rederive(entry):
                 problems.append(f"{set_name} seed {seed} {entry.meeting_id}: nondet")
             if not _flags_match(rederived, entry.contradictions):
-                diverged.append(
-                    f"{set_name} seed {seed} {entry.meeting_id}: "
-                    f"{len(rederived)} re-derived vs {len(entry.contradictions)} recorded"
-                )
+                diverged.append(f"{set_name}:{seed}:{entry.meeting_id}")
         assert problems == []
-        assert len(diverged) == _MOVEMENT_CHANNEL_DIVERGENCES, diverged
+        # WHICH meetings, not how many. A count alone lets one movement
+        # divergence disappear and an unrelated detector defect take its place
+        # without failing anything; the identities close that substitution.
+        assert set(diverged) == _MOVEMENT_CHANNEL_DIVERGING_MEETINGS
+        assert len(diverged) == _MOVEMENT_CHANNEL_DIVERGENCES
 
     def test_the_divergences_are_the_movement_channel_and_nothing_else(self) -> None:
-        # The count above would be a magic number if nothing tied it to a cause.
-        # Every diverging meeting must hold a spoken ``saw_player`` the movement
-        # channel could have re-read; a meeting with none of them and a divergence
-        # would be a different defect wearing this pin's number.
+        # The identities above name WHERE; this names WHY, at the mechanism.
+        #
+        # Every diverging meeting must be one the movement channel can actually
+        # move: supplying a channel changes what the detector emits there. The
+        # predicate cuts the set — 440 of the 668 committed meetings are
+        # movement-sensitive, 228 are not — so a divergence in a meeting the
+        # channel cannot touch is a different defect and fails here rather than
+        # inheriting this pin's number.
+        #
+        # ``_planted_move_channel`` is the probe, not a reconstruction: it moves
+        # every spoken placement somewhere it was not, which is the only channel
+        # recoverable from replay bytes (the real MoveWitnessRecords are private
+        # and unpersisted — audits/audit-phase-20-baseline-7.md §10.3). It
+        # answers "could movement have decided this meeting", never "what did".
+        sensitive = 0
         for set_name, seed, entry in _committed_meeting_entries():
-            if _flags_match(_rederive(entry), entry.contradictions):
+            plain = _rederive(entry)
+            moved = (
+                _rederive(entry, move_witness_records=_planted_move_channel(entry))
+                != plain
+            )
+            sensitive += moved
+            if _flags_match(plain, entry.contradictions):
                 continue
-            spoken = [
-                observation
-                for turn in entry.transcript.turns
-                for observation in turn.observations
-                if isinstance(observation, SawPlayerObservation)
-            ]
-            assert spoken, f"{set_name} seed {seed} {entry.meeting_id}"
+            assert moved, (
+                f"{set_name} seed {seed} {entry.meeting_id} diverges but no "
+                "movement channel can move it — not this pin's class"
+            )
+        # Non-vacuous in BOTH directions: the predicate holds for the diverging
+        # meetings and is false for a third of the set.
+        assert sensitive == 440
+        assert sensitive < _COMMITTED_MEETINGS
 
     def test_the_planted_movement_channel_is_live(self) -> None:
         # The pin above would be untethered if the movement channel could not move

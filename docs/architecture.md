@@ -147,18 +147,20 @@ the recording — not the seed — is the determinism boundary (the README's
 "Three reproducibility scopes" states the exact claims). That is what makes
 every metric attributable and every regression bisectable. Behavioral changes to the belief substrate land as
 **levers**, registered in `orchestrator/replay.py`: `SUBSTRATE_FLAG_KEYS` is
-thirteen graduated levers (`_RETIRED_ALWAYS_ON_LEVERS` — env gates deleted,
-unconditionally ON, kept in the stamp for provenance) plus nine live toggles
-(`TOGGLEABLE_SUBSTRATE_FLAG_KEYS` — `impostor_roll_call` and the eight Phase-20
-belief-substrate levers, each read from its own `AILIBI_*` variable, all default
-OFF; `.env.example` documents them). Every recording stamps the snapshot
+twenty-one graduated levers (`_RETIRED_ALWAYS_ON_LEVERS` — env gates deleted,
+unconditionally ON, kept in the stamp for provenance) plus one live toggle
+(`TOGGLEABLE_SUBSTRATE_FLAG_KEYS` — `impostor_roll_call`, read from its own
+`AILIBI_*` variable, default OFF; `.env.example` documents it). Every recording
+stamps the snapshot
 onto its `game_over` record and into the set's `MANIFEST.md` `flags` column, and
 the loader refuses a recording made under a different substrate. Graduating a
 lever also carries the prose-sweep obligation in `AGENTS.md`.
 
 **Baselines are adopting records**, not tags: a baseline is the recording that
-adopts a substrate. The ladder tip is baseline 6 — the Task-18.12 meeting-layer
-adopting record (`audits/audit-phase-18-close.md`). The three reproducibility
+adopts a substrate. The ladder tip is baseline 7 — the evidence-honesty adopting
+record (`audits/audit-phase-20-baseline-7.md`), where the pre-registered rule
+returned **FINDING** and the owner adopted it anyway, by explicit override; §6.1
+holds the ruling. The three reproducibility
 scopes this project claims — replay integrity, same-runtime repeatability, and
 cross-platform optimizer portability (designed for, not yet confirmed) — are
 stated under the README's "Three reproducibility scopes"; never restate them
