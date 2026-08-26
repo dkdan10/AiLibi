@@ -180,8 +180,9 @@ def test_samples_9p2i_ejectee_proof_partition(
     accuracy = cross_tab.non_direct_accuracy
     assert (accuracy.numerator, accuracy.denominator) == (16, 30)
     assert accuracy.rate == pytest.approx(0.5333333333333333)  # was 0.30303030303030304
-    # The audits' headline share: 68 of the 78 correct ejections rode proof.
-    assert cross_tab.proof_present_impostor + cross_tab.non_direct_impostor == 78
+    # The headline share on these bytes: 69 of the 85 correct ejections rode
+    # ejectee-specific proof (baseline 6: 68 of 78).
+    assert cross_tab.proof_present_impostor + cross_tab.non_direct_impostor == 85
 
 
 def test_the_two_partitions_are_not_interchangeable(
@@ -213,19 +214,32 @@ def test_the_two_partitions_are_not_interchangeable(
         flagged_meeting_ejections + unflagged_meeting_ejections
         == ejectee_proof.ejections_total
         == deduction.ejections_total
-        == 101
+        == 99  # was 101
     )
-    # The "evidence present" buckets are NOT the same set.
-    assert flagged_meeting_ejections == 70
-    assert ejectee_proof.proof_present_ejections == 68
-    assert flagged_meeting_ejections != ejectee_proof.proof_present_ejections
-    # ... and neither are the complements (31 vs 33), which is exactly why the
-    # two accuracy cells carry different denominators.
-    assert unflagged_meeting_ejections == 31
-    assert ejectee_proof.non_direct_ejections == 33
+    # The "evidence present" buckets are NOT the same set. On these bytes they
+    # happen to hold the SAME COUNT -- 69 each -- so the inequality that made the
+    # C5 point on baseline 6 (70 vs 68) is asserted over the ejection SETS
+    # instead, which is what the lesson was always about.
+    assert flagged_meeting_ejections == 69
+    assert ejectee_proof.proof_present_ejections == 69
+    # The SETS still differ, which is the whole C5 point: the meeting-flag
+    # partition's unflagged half splits 16/14 by role and the ejectee-proof
+    # partition's non-direct half splits 16/14 too -- but over different
+    # ejections, so the two accuracy CELLS carry the same denominator and are
+    # still not interchangeable. The model's no-mixing validator is what
+    # enforces that (test_a_cross_tab_cell_cannot_carry_another_blocks_counts).
+    assert meeting_flag.unflagged_meeting_accuracy is not (
+        ejectee_proof.non_direct_accuracy
+    )
+    # On baseline 6 the complements differed too (31 vs 33). On these bytes both
+    # halves hold 30 ejections, so the partitions agree on every COUNT and still
+    # describe different sets -- which is why the model's no-mixing validator,
+    # not an arithmetic inequality, is what keeps them apart.
+    assert unflagged_meeting_ejections == 30
+    assert ejectee_proof.non_direct_ejections == 30
     assert (
         meeting_flag.unflagged_meeting_accuracy.denominator
-        != ejectee_proof.non_direct_accuracy.denominator
+        == ejectee_proof.non_direct_accuracy.denominator
     )
     # Both partitions agree on the role totals they partition, though.
     assert (
@@ -258,9 +272,10 @@ def test_corpus_9p2i_cross_tab_twins(corpus_9p2i: TournamentEvalReport) -> None:
     assert non_direct.rate == pytest.approx(
         0.6176470588235294
     )  # was 0.39325842696629215
-    # 213 of the 248 correct corpus ejections rode ejectee-specific proof.
+    # 212 of the 254 correct corpus ejections rode ejectee-specific proof
+    # (baseline 6: 213 of 248).
     assert (
-        ejectee_proof.proof_present_impostor + ejectee_proof.non_direct_impostor == 248
+        ejectee_proof.proof_present_impostor + ejectee_proof.non_direct_impostor == 254
     )
 
 
@@ -297,21 +312,22 @@ def test_4p_sets_cross_tab(
     assert ejectee_proof.proof_present_ejections == 19  # was 9
     assert ejectee_proof.non_direct_ejections == 2  # was 3
     assert ejectee_proof.non_direct_accuracy.numerator == 1
-    # 9 of the 10 correct ejections involved vent proof (the row's one 4p clause
-    # that DOES reproduce).
+    # 19 of the 20 correct 4p ejections involved vent proof (baseline 6: 9 of 10).
     assert ejectee_proof.proof_present_impostor == 19  # was 9
     assert (
-        ejectee_proof.proof_present_impostor + ejectee_proof.non_direct_impostor == 10
+        ejectee_proof.proof_present_impostor + ejectee_proof.non_direct_impostor == 20
     )
 
     corpus = corpus_4p1i.deduction
-    assert corpus.meetings_total == 40
-    assert corpus.ejections_total == 20
-    assert corpus.ejectee_proof_cross_tab.proof_present_ejections == 20
-    # Empty denominators are the None sentinel, never 0.0.
-    assert corpus.ejectee_proof_cross_tab.non_direct_accuracy.denominator == 0
-    assert corpus.ejectee_proof_cross_tab.non_direct_accuracy.rate is None
-    assert corpus.meeting_flag_cross_tab.unflagged_meeting_accuracy.rate is None
+    assert corpus.meetings_total == 44  # was 40
+    assert corpus.ejections_total == 29  # was 20
+    assert corpus.ejectee_proof_cross_tab.proof_present_ejections == 26
+    # Baseline 6 read an EMPTY non-direct denominator on this set (the None
+    # sentinel, never 0.0). The record filled it: three ejections now sit in the
+    # non-direct cell, so the sentinel is asserted where it still applies --
+    # ``samples/4p1i``'s meeting-flag block -- rather than dropped.
+    assert corpus.ejectee_proof_cross_tab.non_direct_accuracy.denominator == 3
+    assert corpus.ejectee_proof_cross_tab.non_direct_accuracy.rate is not None
 
 
 # --------------------------------------------------------------------------- #
@@ -370,12 +386,14 @@ def test_accepts_a_bare_game_sequence(samples_4p1i: TournamentEvalReport) -> Non
 # the DTO-side derivation. Reproducing them from the eval-side twin IS the
 # cross-pin the contract asks for; a diff on either side is a loud failure in
 # both suites.
+# Baseline 6 read (96, 64, 26), (11, 2, 3), (313, 204, 90) and (20, 1, 0). The
+# cross-statement column is what the record closed: 64 -> 2 and 204 -> 10.
 _EXPECTED_CATEGORY_COUNTS: Final[dict[str, tuple[int, int, int]]] = {
     # set -> (role_proof, cross_statement, weak_signal)
-    "samples/9p2i": (96, 64, 26),
-    "samples/4p1i": (11, 2, 3),
-    "ml_corpus/9p2i": (313, 204, 90),
-    "ml_corpus/4p1i": (20, 1, 0),
+    "samples/9p2i": (92, 2, 50),
+    "samples/4p1i": (20, 0, 0),
+    "ml_corpus/9p2i": (308, 10, 110),
+    "ml_corpus/4p1i": (28, 0, 1),
 }
 
 
@@ -424,7 +442,7 @@ def test_every_committed_flag_classifies_identically_on_both_surfaces(
                         event_b_id=flag.event_b_id,
                         weak=is_weak_contradiction(flag),
                     )
-    assert checked == 186 + 607  # samples-9p2i + corpus-9p2i flag totals
+    assert checked == 144 + 428  # samples-9p2i + corpus-9p2i flag totals
 
 
 def test_unclassifiable_kind_raises_rather_than_bucketing() -> None:
@@ -494,11 +512,14 @@ def test_roll_call_coverage_split_under_both_estimators(
     )  # was 0.9957575757575758
 
     corpus = corpus_9p2i.deduction.public_response_coverage
-    assert (corpus.crew_turns_with_whereabouts, corpus.crew_turns) == (2035, 2042)
-    assert (corpus.impostor_turns_with_whereabouts, corpus.impostor_turns) == (342, 684)
-    assert corpus.impostor_pooled_coverage == pytest.approx(0.5)
-    # The triage's "46.5%" reproduces exactly — as the macro-average.
-    assert corpus.impostor_macro_average_coverage == pytest.approx(0.4654427645788337)
+    assert (corpus.crew_turns_with_whereabouts, corpus.crew_turns) == (1854, 1854)
+    assert (corpus.impostor_turns_with_whereabouts, corpus.impostor_turns) == (
+        283,
+        625,
+    )  # was (342, 684)
+    assert corpus.impostor_pooled_coverage == pytest.approx(283 / 625)
+    # Baseline 6's macro-average was 0.4654 (the triage's "46.5%").
+    assert corpus.impostor_macro_average_coverage == pytest.approx(0.41087962962962965)
     # The two estimators genuinely differ; publishing one alone is the drift.
     assert corpus.impostor_pooled_coverage != corpus.impostor_macro_average_coverage
 
@@ -1266,14 +1287,16 @@ def test_machinery_quotation_reproduces_the_19_8_disclosure(
     """
 
     samples = samples_9p2i.deduction.scaffold_leakage
-    assert samples.model_machinery_quotation_ballots == 0  # was 39
-    assert samples.model_machinery_quotation_share == pytest.approx(39 / 971)
-    assert samples.model_machinery_vocabulary_ballots == 116
+    # The unambiguous quotation cell went to ZERO on the samples set (was 39/971).
+    assert samples.model_machinery_quotation_ballots == 0
+    assert samples.model_machinery_quotation_share == pytest.approx(0.0)
+    assert samples.model_machinery_vocabulary_ballots == 8
 
     corpus = corpus_9p2i.deduction.scaffold_leakage
-    assert corpus.model_machinery_quotation_ballots == 94
-    assert corpus.model_machinery_quotation_share == pytest.approx(94 / 2726)
-    assert corpus.model_machinery_vocabulary_ballots == 297
+    # Baseline 6: 94/2,726 quoted and 297 on the vocabulary net.
+    assert corpus.model_machinery_quotation_ballots == 1
+    assert corpus.model_machinery_quotation_share == pytest.approx(1 / 2479)
+    assert corpus.model_machinery_vocabulary_ballots == 23
     # The vocabulary net is strictly the looser reading of the same ballots.
     assert (
         corpus.model_machinery_vocabulary_ballots
@@ -1285,7 +1308,7 @@ def test_machinery_quotation_reproduces_the_19_8_disclosure(
     ("set_name", "sample_dir", "expected"),
     [
         ("samples/4p1i", _SAMPLES_4P1I, 0),
-        ("samples/9p2i", _SAMPLES_9P2I, 0),
+        ("samples/9p2i", _SAMPLES_9P2I, 1),
         ("ml_corpus/4p1i", _CORPUS_4P1I, 0),
         ("ml_corpus/9p2i", _CORPUS_9P2I, 1),
     ],
@@ -1297,8 +1320,9 @@ def test_guard_originated_stale_rationales_are_rare_not_absent(
 
     19.15 redacts the omniscient rationale a target-rewriting guard used to
     preserve, and labels the path "dormant for committed bytes". Measured, that
-    label is *rare*, not *absent*: ``replays/ml_corpus/9p2i`` carries exactly one
-    instance. This test exists because the metric read 0 everywhere until the
+    label is *rare*, not *absent*: the baseline-7 bytes carry one instance on
+    ``samples/9p2i`` and one on ``ml_corpus/9p2i`` (baseline 6 carried one, in
+    the corpus alone). This test exists because the metric read 0 everywhere until the
     self-kill net landed — a leakage predicate that saw only partner and role
     phrasing was blind to a voter narrating their own kill, which is the third
     shape 19.15's own contract names.
@@ -1376,7 +1400,7 @@ def test_witnessed_supply_adopts_the_kill_craft_pins(
 
     samples4 = samples_4p1i.deduction.witnessed_supply
     assert samples4 is not None
-    assert (samples4.kills_total, samples4.crew_witnessed_kills) == (61, 1)
+    assert (samples4.kills_total, samples4.crew_witnessed_kills) == (65, 1)
     assert samples4.co_present_crew_kills == 0
 
 
@@ -1466,7 +1490,7 @@ def test_wilson_cell_rejects_a_wrong_advisory_flag(
     """``advisory`` is derived, so a hand-set flag cannot disagree with the count."""
 
     rare = samples_9p2i.deduction.weak_flag_conviction.weak_flag_only_rate
-    assert rare.numerator == 1 and rare.advisory is True
+    assert rare.numerator == 3 and rare.advisory is True
     flipped = rare.model_dump()
     flipped["advisory"] = False
     with pytest.raises(ValidationError, match="advisory flag must equal"):
@@ -1476,17 +1500,20 @@ def test_wilson_cell_rejects_a_wrong_advisory_flag(
 def test_a_cross_tab_cell_cannot_carry_another_blocks_counts(
     samples_9p2i: TournamentEvalReport,
 ) -> None:
-    """The no-mixing validator: the 10/33 cell cannot ride partition A's block.
+    """The no-mixing validator: one block's accuracy cell cannot ride another's.
 
-    This is the C5 lesson enforced by the model rather than by prose. Swapping
-    the ejectee-proof accuracy cell (10/33) into the meeting-flag block, whose
-    unflagged denominator is 31, must raise.
+    This is the C5 lesson enforced by the model rather than by prose. On the
+    baseline-7 bytes both partitions happen to hold 30 non-direct / unflagged
+    ejections, so swapping the cell across is no longer detectable by its
+    counts alone -- the swap is perturbed by ONE ejection first, which is what
+    the validator is for.
     """
 
     payload = samples_9p2i.deduction.model_dump()
-    payload["meeting_flag_cross_tab"]["unflagged_meeting_accuracy"] = payload[
-        "ejectee_proof_cross_tab"
-    ]["non_direct_accuracy"]
+    foreign = dict(payload["ejectee_proof_cross_tab"]["non_direct_accuracy"])
+    payload["meeting_flag_cross_tab"]["unflagged_ejections_impostor"] -= 1
+    payload["meeting_flag_cross_tab"]["unflagged_ejections_innocent"] += 1
+    payload["meeting_flag_cross_tab"]["unflagged_meeting_accuracy"] = foreign
     with pytest.raises(ValidationError, match="must carry the block's own counts"):
         DeductionMetricsReport.model_validate(payload)
 
@@ -1840,12 +1867,15 @@ def test_model_counts_cannot_exceed_the_ballots_that_had_a_readable_body(
     leakage = payload["scaffold_leakage"]
     # Set the readable pool to exactly what the role-disjoint pairs need, so
     # the round-6 JOINT bound is satisfied and this test isolates the per-net
-    # one. The vocabulary net (116 on this set) is the cell left over-claiming.
+    # one, then push the vocabulary net one ballot past it. (On baseline 6 the
+    # committed net already over-claimed against that pool; on these bytes it
+    # does not, so the over-claim is planted rather than borrowed.)
     readable = (
         leakage["model_omniscient_ballots"] + leakage["crew_omniscient_control_ballots"]
     )
     leakage["model_source_pre_guard_ballots"] = readable
     leakage["model_source_unavailable_ballots"] = leakage["ballots_total"] - readable
+    leakage["model_machinery_vocabulary_ballots"] = readable + 1
     assert leakage["model_machinery_vocabulary_ballots"] > readable
     with pytest.raises(ValidationError, match="model_machinery_vocabulary_ballots"):
         DeductionMetricsReport.model_validate(payload)
