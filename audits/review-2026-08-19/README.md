@@ -8,8 +8,8 @@ The interesting part is that the reviews **disproved four of their own headline 
 corrected severities in both directions, because each track's flagship conclusions were then
 handed to an adversarial verifier whose job was to falsify them. That is what this index is
 titled by, and it is why the tree is published at all: an unverified pile of self-criticism is
-noise. A pile that audits itself, in public, with each surviving finding linked to the change
-that closed it, is a measurement.
+noise. A pile that audits itself, in public, with every surviving finding linked either to the
+change that closed it or to the record of why it did not, is a measurement.
 
 The narrative half — what the review taught the author — is [docs/lessons.md](../../docs/lessons.md).
 
@@ -45,9 +45,9 @@ The verifier was not a rubber stamp in one direction only.
 ## 2. What each track was, and how it was run
 
 The three review tracks were run **blind to one another** — no track saw another's findings
-until the synthesis track collated them. The tree below is **49 markdown files, 16,849 lines,
-roughly 249,000 words, 1.7 MB**. Nobody should read it end to end; this index exists so that
-nobody has to.
+until the synthesis track collated them. The four track directories below hold **49 markdown
+files, 16,849 lines, roughly 249,000 words, 1.7 MB** between them, not counting this index.
+Nobody should read that end to end; this index exists so that nobody has to.
 
 | Track | Files | What it did | Adversarial verdicts |
 |---|---|---|---|
@@ -57,9 +57,10 @@ nobody has to.
 | [`D/`](D/FINAL-synthesis.md) — synthesis | 5 | Three independent syntheses of the same inputs (ambition, pragmatic, credibility), a cross-track map, and one final synthesis that ruled where they disagreed | none — it adjudicates the other three |
 
 The single most useful output of the synthesis is its reconciliation of the two technical
-tracks' disagreement about severity: they were using different definitions, and every
-gameplay defect was a faithful implementation of correct code
-([`D/FINAL-synthesis.md`](D/FINAL-synthesis.md) §0, ruling R11).
+tracks' disagreement about severity: they were using different definitions, and *nearly* every
+gameplay defect was a faithful implementation of correct code — the qualifier matters, because
+some of them (the spectator painting corpses the engine had deleted, for one) were plain code
+defects ([`D/FINAL-synthesis.md`](D/FINAL-synthesis.md) §0, ruling R11).
 
 ---
 
@@ -89,21 +90,17 @@ the task that made the change, not every task that mentions it.
 | `C-35` | The suite pinned 1 of 43 environment variables, so ambient settings moved results | 20.17 | [#361](https://github.com/dkdan10/AiLibi/pull/361) |
 | `C-42` | A fresh template environment was built per game, recompiling every template | 20.19 | [#362](https://github.com/dkdan10/AiLibi/pull/362) |
 | `C-43` | The memory read rescanned the whole log, quadratic in game length | 20.19 | [#362](https://github.com/dkdan10/AiLibi/pull/362) |
-| `C-46` | The tournament ran strictly serially over independent games | 20.18 | [#368](https://github.com/dkdan10/AiLibi/pull/368) |
 | `C-48` | The default test tier ran serially with no parallel runner | 20.18 | [#368](https://github.com/dkdan10/AiLibi/pull/368) |
 | `C-64` | Retired settings left ten no-op resolvers, their constants and their branches behind | 20.37 | [#391](https://github.com/dkdan10/AiLibi/pull/391) |
 | `C-67` | Guard activity survived only as marker substrings parsed out of spoken text | 20.28 | [#380](https://github.com/dkdan10/AiLibi/pull/380) |
 | `C-73` | Reported testimony was starved out of the memory render in the games it targets | 20.30 | [#382](https://github.com/dkdan10/AiLibi/pull/382) |
 | `C-74` | The multi-hour recording script had no coverage of its real worker paths | 20.21 | [#359](https://github.com/dkdan10/AiLibi/pull/359) |
-| `C-83` | Import-time side effects in the prompt loader forced a mirrored resolver elsewhere | 20.5 | [#351](https://github.com/dkdan10/AiLibi/pull/351) |
 | `C-88` | Fake-provider meetings are degenerate — every fake vote normalises to a skip | 20.12 | [#371](https://github.com/dkdan10/AiLibi/pull/371) |
 | `C-96` | The documented evidence restore and the documented gate excluded each other | 20.17 | [#361](https://github.com/dkdan10/AiLibi/pull/361) |
 | `C-104` | Tests pinned retired settings, with names and docstrings saying the opposite | 20.37 | [#391](https://github.com/dkdan10/AiLibi/pull/391) |
 | `C-113` | Docstring, front door and committed data disagreed about one eval metric | 20.6 | [#353](https://github.com/dkdan10/AiLibi/pull/353) |
 | `C-125` | CONTRIBUTING overstated the gate; the README overstated the enforcement | 20.9 | [#352](https://github.com/dkdan10/AiLibi/pull/352) |
-| `C-126` | Operator environment knobs were documented nowhere | 20.5 | [#351](https://github.com/dkdan10/AiLibi/pull/351) |
 | `C-129` | The live prompt set said "a hidden impostor" in every two-impostor game | 20.31 | [#383](https://github.com/dkdan10/AiLibi/pull/383) |
-| `C-130` | Dead prompt-set weight, and a default set no committed replay used | 20.5 | [#351](https://github.com/dkdan10/AiLibi/pull/351) |
 | `G-1` | Nothing in memory said where the agent itself had been | 20.24 | [#376](https://github.com/dkdan10/AiLibi/pull/376) |
 | `G-2` | The one channel that decides meetings was anti-informative and labelled verified | 20.26 | [#378](https://github.com/dkdan10/AiLibi/pull/378) |
 | `G-3` | Redistribution minted false first-hand completion memories | 20.23 | [#375](https://github.com/dkdan10/AiLibi/pull/375) |
@@ -112,22 +109,27 @@ the task that made the change, not every task that mentions it.
 | `G-23` | The prompt mandated re-litigating a vent whose subject was already ejected | 20.31 | [#383](https://github.com/dkdan10/AiLibi/pull/383) |
 | `G-25` | Development markers inside quoted dialogue reached other agents' prompts | 20.28 | [#380](https://github.com/dkdan10/AiLibi/pull/380) |
 | `G-27` | Every two-impostor meeting was told there was "a hidden impostor", singular | 20.31 | [#383](https://github.com/dkdan10/AiLibi/pull/383) |
-| `G-29` | Threshold arithmetic and stock rationales came out of the characters' mouths | 20.31 | [#383](https://github.com/dkdan10/AiLibi/pull/383) |
 | `G-34` | The memory render was two-thirds co-presence noise and duplicates | 20.30 | [#382](https://github.com/dkdan10/AiLibi/pull/382) |
 | `G-35` | Testimony was absorbed as unverified stubs and meeting outcomes never recorded | 20.29 | [#381](https://github.com/dkdan10/AiLibi/pull/381) |
 | `G-37` | Agent tick stamps run +1 against the replay timeline | 20.2 | [#360](https://github.com/dkdan10/AiLibi/pull/360) |
 | `G-38` | The spectator misrepresented four action classes and never cleared bodies | 20.16 | [#370](https://github.com/dkdan10/AiLibi/pull/370) |
 | `G-41` | Internal jargon and task numbers were on the product surface | 20.2 | [#360](https://github.com/dkdan10/AiLibi/pull/360) |
 
-Two rows want a qualification, and it is better stated than glossed. `G-37` was *labelled*
+Three rows want a qualification, and it is better stated than glossed. `G-37` was *labelled*
 rather than changed — the clock convention is documented on the spectator surface, because
 changing it would move every recorded tick stamp
 ([`../audit-phase-20-planning.md`](../audit-phase-20-planning.md) §5). `C-88` was *disclosed*:
 the front door now explains why a run against the offline provider ejects nobody and reports
 null rates, and hands the reader a real report instead. Both are the whole response the
-finding was ruled to need. Findings a task only *began* answering are not in this table at
-all — they are in §4 below, because a map that calls a first brick a closed wall is the exact
-overstatement this index exists to police.
+finding was ruled to need. `G-2` took **two** changes rather than one: the credited task
+grounded every spoken sighting and split the strength rule, and the "VERIFIED evidence"
+wording it complained of was removed with the prompt family in 20.31
+([#383](https://github.com/dkdan10/AiLibi/pull/383)) — the column holds one task, so the
+second is named here.
+
+Findings a task only *began* answering are not in this table at all — they are in §4 below,
+because a map that calls a first brick a closed wall is the exact overstatement this index
+exists to police.
 
 ---
 
@@ -142,20 +144,31 @@ re-argued here; each points at the ruling or the record that owns it.
   roll-call (`G-22`), sabotage as a real clock (`G-40`), and a second act for the small roster.
   Chartered as its own wave with its own recording, because every one of them changes the game
   rather than its honesty ([`../audit-phase-20-planning.md`](../audit-phase-20-planning.md) §7).
-- **Begun, not finished.** Four structural findings had one symptom addressed and the finding
-  left standing, so none of them is in the map above. `C-79` (the app shell is a God module
+- **Begun, not finished.** Six findings had one symptom addressed and the finding itself left
+  standing, so none of them is in the map above. `C-79` (the app shell is a God module
   contradicting its own no-edit header) saw its focus-trap and layout defects fixed while the
   shell itself is still roughly 1,200 lines. `C-80` (the frontend derivation layer is
   half-built, which is why `C-7` went unnoticed) had its first derivation extracted and
   tested — the task that did it calls that the first brick and says so. `C-101` (frontend
   coverage an order of magnitude behind Python, by configuration) gained the first
   component-level render test. `C-107` (no test-infrastructure layer) gained the first
-  session-scoped fixture, behind a parallel runner. Each remains open at its own scope.
-- **Cited as context, not closed** — `C-36` (the tick-and-meeting loop hand-rolled at eight
-  sites) is cited for the agent-clock seam it explains rather than for its own decomposition,
-  and `C-72` (half the belief model never reaches production) was graded UNDERMINED and needed
-  no front-door repair, because the claim it undermined had already been removed. Both stay in
-  the tail.
+  session-scoped fixture, behind a parallel runner. `C-126` (operator environment knobs
+  documented nowhere) gained the one variable the front door prints, and the rest of the
+  surface is still undocumented. `G-29` (threshold arithmetic and stock rationales in the
+  characters' mouths) lost the threshold talk when the prompt family was rewritten; the
+  repeated stock rationales are untouched. Each remains open at its own scope.
+- **Named by a contract, deliberately not closed by it.** `C-83` (import-time side effects in
+  the prompt loader) is called out in its task's contract as a separate defect that must *not*
+  be addressed there, because removing the import-time build changes what a stray prompt-set
+  export does to every replay-only consumer. `C-130` (dead prompt-set weight, and a default set
+  no committed replay uses) is cited in the same contract as the reason not to hand-maintain a
+  list of prompt directories; the unused sets are unchanged. `C-46` (the tournament runs
+  strictly serially) is cited beside the test-tier work that did land — the default test tier
+  now runs in parallel, the tournament loop does not. `C-36` (the tick-and-meeting loop
+  hand-rolled at eight sites) is cited for the agent-clock seam it explains rather than for its
+  own decomposition. `C-72` (half the belief model never reaches production) was graded
+  UNDERMINED and needed no front-door repair, because the claim it undermined had already been
+  removed.
 - **The refuted items** — `G-6`, `G-7`'s headline, `G-4`'s vent half and `C-33`'s load-bearing
   risk are in §1 above. Nothing was built for a claim its own verifier withdrew.
 - **The decomposition refusals** — the God-module split (`C-62`) and the forked option

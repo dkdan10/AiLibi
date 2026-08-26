@@ -76,14 +76,14 @@ disk. A gate only sees the axis it was pointed at. The fix is another axis.
 
 ## Documentation drift is a defect, not untidiness
 
-I found sentences on the front page describing behaviour the repository had stopped having,
-and they had been true when they were written. Prose rots silently because nothing runs it. So
-the front door now has a check in the same gate as the tests: outcomes are recomputed from the
-recording manifests, the results table is re-derived from the instruments rather than compared
-against a second copy of itself, every relative link is resolved, every count that ages
-without an edit carries the date it was taken, and any private vocabulary either does not
-appear or links a glossary entry that exists. Treating a stale claim as a failing test — not
-as a chore — is the only version of this I have seen survive a moving codebase.
+I found sentences on the front page describing behaviour the repository had stopped having, and
+they had been true when they were written. Prose rots silently because nothing runs it. So the
+front door now has a check in the same gate as the tests: outcomes are recomputed from the
+recording manifests, results are re-derived from the instruments rather than compared against a
+second copy of themselves, every relative link is resolved, every count that ages without an
+edit carries the date it was taken, and private vocabulary either stays off the page or links a
+glossary entry that exists. Treating a stale claim as a failing test — not as a chore — is the
+only version of this I have seen survive a moving codebase.
 
 ## Writing the bar down before the measurement
 
@@ -110,19 +110,19 @@ over the measurement that makes it concrete: **95,824 lines of process narration
 generated prompts, audits — against **57,776 lines of core product Python**, a ratio of 1.66
 to 1, against **3,358 lines of durable engineering documentation**.
 
-Half of that ratio I would defend. The contracts are not commentary on the work; they *are*
-the work, in the sense that they are what the agents executed, and a project built this way
-has to write down more than one built by hand. The third number is the indictment. The
-durable half — the pages someone else could read to understand the system — is the smallest of
-the three, and it stayed smallest for nineteen phases for one reason: it was the only one no
-gate required. When the critique arrived my instinct was to answer it with another instrument,
-which is precisely the behaviour it names. The honest answer is that some of the apparatus
-should have stopped being built two phases before it did, that I could not have seen that from
-the inside, and that an outside read was the cheapest way to find out. This page is the
-answer, not a tool.
+Half of that ratio I would defend. The contracts are not commentary on the work; they *are* the
+work, in the sense that they are what the agents executed, and a project built this way has to
+write down more than one built by hand. The third number is the indictment. The durable half —
+the pages someone else could read to understand the system — is the smallest of the three, and
+it stayed smallest for nineteen phases for one reason: no gate required it. When the critique
+arrived my instinct was to answer it with another instrument, which is precisely the behaviour
+it names. The honest answer is that some of the apparatus should have stopped being built two
+phases before it did, that I could not have seen that from the inside, and that an outside read
+was the cheapest way to find out. This page is the answer, not a tool.
 
 ---
 
 **The review that found most of this is published**, curated and indexed, each finding linked
-to the change that closed it — and titled by the four of its own headline claims it disproved:
+either to the change that closed it or to the record of why it did not — and titled by the four
+of its own headline claims it disproved:
 [the 2026-08-19 three-track review](../audits/review-2026-08-19/README.md).
