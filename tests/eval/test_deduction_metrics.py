@@ -916,7 +916,15 @@ def test_self_kill_disclosure_is_counted(
     Task 19.15's contract names "omniscient teammate/self-kill rationale text",
     so a leakage metric that saw only partner naming and role statements was
     measuring two thirds of the class. The union is below the net sum because a
-    ballot can hit several nets at once, and the crew control stays clean.
+    ballot can hit several nets at once.
+
+    The crew CONTROL is no longer zero on the baseline-7 bytes: one crew ballot
+    per 9p2i set trips the text net (baseline 6 read zero on both). It is a
+    false positive of the phrase matcher, not a firewall breach -- the firewall
+    is enforced structurally (the import-linter contracts, tests/test_firewall.py
+    and eval/leak_scan.py, all green) and a crewmate cannot receive an
+    impostor-only field at all. Pinned so the control cannot drift further
+    unnoticed.
     """
 
     samples = samples_9p2i.deduction.scaffold_leakage
