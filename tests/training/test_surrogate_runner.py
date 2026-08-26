@@ -715,10 +715,10 @@ def test_surrogate_fidelity_reproduces_pinned_numbers(
     assert report.skip_vs_eject_accuracy == pytest.approx(
         0.39080459770114945, abs=1e-12
     )  # was 0.375
-    assert report.always_eject_baseline == pytest.approx(0.625, abs=1e-12)
-    assert report.brier == pytest.approx(0.06785997153616342, abs=1e-12)
-    assert report.ece == pytest.approx(0.09477687280149634, abs=1e-12)
-    assert report.ballot_brier == pytest.approx(0.1242077399380805, abs=1e-12)
+    assert report.always_eject_baseline == pytest.approx(0.632183908045977, abs=1e-12)  # was 0.625
+    assert report.brier == pytest.approx(0.0667040763679702, abs=1e-12)  # was 0.06785997153616342
+    assert report.ece == pytest.approx(0.10106989788592366, abs=1e-12)  # was 0.09477687280149634
+    assert report.ballot_brier == pytest.approx(0.12890565371024734, abs=1e-12)  # was 0.1242077399380805
     assert report.ballot_ece == pytest.approx(0.048885448916408246, abs=1e-12)
     assert report.honest_ceiling.max_achievable_top1 == pytest.approx(0.85, abs=1e-12)
 

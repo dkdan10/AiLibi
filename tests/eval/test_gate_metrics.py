@@ -901,15 +901,15 @@ def test_committed_9p2i_report_pins_the_audited_gate_metrics() -> None:
     assert gate.cap_defaulted_turns == 0
 
     assert gate.accused_impostor_events == 137  # was 148
-    assert gate.accused_impostor_survivals == 70
+    assert gate.accused_impostor_survivals == 52  # was 70
     # The 70 accused-impostor survivals partition into rendered-met (voters saw a
     # §4.6-gate-meeting suspicion yet the impostor survived), sheltered sub-gate,
     # and unevidenced. On the baseline-6 re-record the sheltered class is empty, so
     # survivors split rendered-met (34), sheltered (0), and unevidenced (36), the
     # largest share still unevidenced.
-    assert gate.survivals_rendered_met == 34
+    assert gate.survivals_rendered_met == 18  # was 34
     assert gate.survivals_sheltered_sub_gate == 0
-    assert gate.survivals_unevidenced == 36
+    assert gate.survivals_unevidenced == 34  # was 36
 
     # Per-seed identities re-derived from the same committed games: the
     # genuine-class supply and conversions sit exactly where documented above. The

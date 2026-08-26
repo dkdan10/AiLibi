@@ -1922,16 +1922,16 @@ def test_committed_9p2i_report_pins_the_audited_conversion_values() -> None:
     assert report.vote_correctness.vote_correctness_rate == pytest.approx(
         78 / 85
     )  # was 72 / 78
-    assert report.vote_correctness.evidence_backed_impostor_ejections == 72
-    assert report.vote_correctness.impostor_ejections == 78
+    assert report.vote_correctness.evidence_backed_impostor_ejections == 78  # was 72
+    assert report.vote_correctness.impostor_ejections == 85  # was 78
     # The wrapper mirrors, never re-derives: the two surfaces agree exactly.
     assert conversion.ejection_accuracy == report.vote_correctness.ejection_accuracy
 
     # JSON-level guard: the committed file itself serves both leads (a reader
     # pulling the raw report sees the published metric surface, gp-2's ask).
     raw = json.loads(_COMMITTED_9P2I_REPORT.read_text(encoding="utf-8"))
-    assert raw["conversion"]["ejection_accuracy"] == pytest.approx(78 / 101, abs=1e-4)
-    assert raw["conversion"]["missed_skip_ballots"] == 129
+    assert raw["conversion"]["ejection_accuracy"] == pytest.approx(85 / 99, abs=1e-4)  # was 78 / 101
+    assert raw["conversion"]["missed_skip_ballots"] == 96  # was 129
 
 
 # ---------------------------------------------------------------------------

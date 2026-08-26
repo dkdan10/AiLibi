@@ -679,82 +679,62 @@ fold and never against the frozen baseline.
 
 ## 10. What this record does NOT discharge
 
-### 10.1 The open ruling: where a FINDING record's bytes live
+### 10.1 The substrate question, answered
 
-**This is the one thing blocking the rest of the task, and it is an owner decision, not an agent
-judgment call.**
+The one thing that blocked the rest of this task was where a FINDING record's bytes live. The
+owner's adoption ruling (§6.1) answers it: **they live in the canonical set directories, and the
+build reproduces them.**
 
 `api/replay_loader.py::_assert_substrate_matches` raises on ANY differing `SUBSTRATE_FLAG_KEYS`
-entry. Under ADOPTED the eight levers become unconditional, a bare-environment snapshot equals
-the baseline-7 stamp, and the committed bytes reconstruct. **Under FINDING they stay toggles, a
-bare snapshot stamps them False, and the committed baseline-7 bytes cannot reconstruct in a bare
-shell.** Proven, not argued — `bash scripts/verify_samples.sh replays/samples/9p2i` in a shell
-with no lever exports:
+entry. Under FINDING the eight levers would have stayed toggles, a bare snapshot would stamp them
+False, and the committed baseline-7 bytes could not have reconstructed in a bare shell — 182
+`ReplaySubstrateMismatchError` occurrences that no re-pin reaches. Under the adoption the eight
+are unconditional, a bare-environment snapshot equals the baseline-7 stamp, and the invariant
+holds. Measured, not argued:
 
 ```
-api.replay_loader.ReplaySubstrateMismatchError: replay substrate mismatch for 'headless-seed-0':
-recorded with {... all eight True ...} but reconstructing under {... all eight False ...}
-(differing levers: ['coalesced_memory_render', 'grounded_prosecution', 'map_aware_arbitration',
-'meeting_outcome_memory', 'movement_claim_shape', 'self_location_trail',
-'structured_turn_markers', 'task_completion_from_events'])
+$ bash scripts/verify_samples.sh              # no AILIBI_* export in the shell
+All 50 samples verified clean.                # replays/samples/4p1i
+All 50 samples verified clean.                # replays/samples/9p2i
 ```
 
-Pre-registration §6 states the mechanism — "under ADOPTED all eight graduate and the bare
-snapshot equals the baseline-7 stamp; under FINDING all eight stay toggles and the bare snapshot
-equals the baseline-6 stamp; there is no third substrate" — but it does not say **where a
-FINDING record's bytes live**. Task 20.36's files-in-scope place them in the canonical set dirs,
-which is coherent only under ADOPTED.
+**What the sweep cost, for the record.** Before the ruling the suite read `432 failed, 4911
+passed, 48 errors` under the recorded slate and `434 failed, 4909 passed, 48 errors` bare. The
+graduation dissolved the whole first class at once; the rest was ordinary value re-pinning, plus
+two real defects the sweep surfaced:
 
-The consequence is mechanical: `scripts/verify_samples.sh`, the API's serving path and every
-test that asserts the committed bytes load under the DEFAULT substrate cannot pass while
-lever-ON bytes sit in the canonical set dirs and the levers remain toggles.
-
-**Measured, so the ruling is made on numbers rather than on this paragraph.** The full suite is
-`432 failed, 4911 passed, 48 errors` under the recorded slate and `434 failed, 4909 passed, 48
-errors` in a bare shell — the exports barely move it, which is the useful finding. The failures
-split into three classes, and only the first is blocked:
-
-| class | evidence | blocked by the ruling? |
-|---|---|---|
-| tests that assert the committed bytes load under the DEFAULT substrate | 182 `ReplaySubstrateMismatchError` occurrences, **identical under both environments** — these tests build a bare environment deliberately, which is the invariant FINDING breaks | **yes** — no re-pin fixes them |
-| reconstruction-path divergence | 78 `reconstructed state_hash_after` mismatches, chiefly the prompt byte golden's meeting rebuild | **partly** — a real fix, whose shape depends on the answer |
-| stale value pins | the remainder: ordinary before/after numbers with well-defined new values (e.g. `meetings_total` 165 → 152, I-2 `(152, 723)` → `(3, 659)`) | **no** — these are the census-driven sweep and are re-pinnable today |
-
-So the sweep is not "un-runnable": most of it is ordinary re-pinning. What no amount of re-pinning
-reaches is the first class, and `check.sh` cannot go green while it stands.
-
-**The bytes are not what is in question.** Under the recorded slate the same commands are clean:
-`verify_samples.sh` reports 100/100 and `verify_ml_evidence.py` reports 300/300 reconstruction
-(§1.1). What is in question is which substrate the repository declares as ambient.
-
-**Two further sweep items are recorded here so the ruling is made with them in view.**
-
-1. `tests/meetings/test_prompt_byte_golden.py` diverges on the meeting-level `state_hash_after`
-   rebuild for `9p2i` seed 0 meeting 0 **even under the recorded slate** — its rebuild path needs
-   substantive updating for a lever-ON meeting fold, not just a re-pinned constant. That work is
-   part of the `tests/meetings/` sweep and is only worth doing once the substrate question is
-   settled, because the shape of the fix depends on the answer. It is also why the v3
-   prompt-archive retirement is not taken here: retiring the archive without being able to run
-   the golden or its one-byte perturbation leg would be an unverified change to a gate.
-2. **The byte-coupled pin census is wider than the contract's.** The contract's census starts
-   from `grep -rln 'replays/samples\|replays/ml_corpus' tests/` (38 files) plus the Phase-20
-   instrument tests. It misses at least one pin outside `tests/`:
-   `frontend/src/lib/bodies.test.ts` recomputes a `corpusSha256` digest over
-   `replays/samples/<set>` on every run and compares it to `bodies.fixture.json`, alongside
-   census assertions (`games`, `frames`, body-state counts) folded from the same bytes. The
-   frontend suite therefore fails on this record, and regenerating the fixture alone would not
-   fix it — the census assertions in the test body move too. Whoever runs the sweep should start
-   from a repo-wide grep, not a `tests/`-scoped one.
-
-Amending the pre-registration is not available: §11's convention is that amendments "land BEFORE
-the record or not at all for this phase's claims."
+1. **The byte-golden's meeting rebuild** (`tests/meetings/test_prompt_byte_golden.py`) never
+   threaded 20.31's render-only `impostor_count` into `MeetingManager.run`, so every 9p2i meeting
+   re-rendered in 4p1i persona wording, every recorded prompt missed the response stub, and the
+   walk stopped on a `state_hash_after` divergence at seed 0 meeting 0. It did not bite before
+   because the committed bytes stamped v3 and resolved through the prompt archive, whose bodies
+   predate the parameter. Fixed here by deriving the count from world state exactly as
+   `orchestrator.game._run_meeting` does. It is a gate again, not a routed defect.
+2. **The byte-coupled pin census is wider than the contract's.** The contract's census starts from
+   `grep -rln 'replays/samples\|replays/ml_corpus' tests/` plus the Phase-20 instrument tests. It
+   misses `frontend/src/lib/bodies.test.ts`, which recomputes a `corpusSha256` digest over
+   `replays/samples/<set>` on every run and compares it to `bodies.fixture.json`, alongside census
+   assertions folded from the same bytes. Whoever runs the next sweep should start from a
+   repo-wide grep, not a `tests/`-scoped one.
 
 ### 10.2 Deliberately out of scope, and named so nobody assumes otherwise
 
-* **The ML re-ground.** `training/` artifacts and fits are frozen. The corpus this record
-  re-recorded is the surrogate's calibration corpus; the surrogate has not been re-ground on it
-  and `BAKEOFF_BASELINE_ID` still reads `baseline-5`. Whoever re-grounds it owns that task; the
-  staleness rule is STATED here, not discharged.
+* **The ML re-ground — A NAMED FOLLOW-UP, not a silent debt.** `training/` artifacts and fits are
+  frozen by this contract. The corpus this record re-recorded IS the surrogate's calibration
+  corpus, so replacing it leaves every committed fit keyed to bytes that no longer exist:
+  `uv run python scripts/verify_ml_evidence.py` reconstructs 300/300 and then exits 1 on **11**
+  ML-fit FAILs — a changed fit-corpus fingerprint plus ten model/report mismatches (§1.1 lists
+  them). `BAKEOFF_BASELINE_ID` (`training/bakeoff/harness.py`) still reads `baseline-5` and
+  `eval/watchability.py`'s training-side selection floors deliberately lag the new
+  `_DEFAULT_BASELINE_ID`.
+
+  **Routed as: "re-ground the ML program on the baseline-7 corpus" — re-fit the surrogate and the
+  conviction model on `replays/ml_corpus/`, re-stamp the fit-corpus fingerprint, move
+  `BAKEOFF_BASELINE_ID`, and re-publish `docs/ml-program.md`'s arms from the re-ground.** It is a
+  future owner decision on the ML program's cadence, not a repair this record could make: the
+  contract freezes `training/` precisely so a record cannot move the ML baseline and the substrate
+  baseline in the same PR. Until it lands, `verify_ml_evidence.py` is RED on its ML legs and green
+  on reconstruction, and that split is the honest state.
 * **The ladder-tip prose, the results table's before/after column and its narrative reading.**
   Task 20.38 owns them. Note that the raw win-rate and citation-compliance CELLS still have to
   move — `check_sample_provenance`'s win-rate sweep runs file-wide over README, and
@@ -771,6 +751,25 @@ the record or not at all for this phase's claims."
   regenerates the table only and would drop it, and a re-record invalidates its numbers, so
   re-measure and re-add it after any refresh"). Its baseline-6 figures are invalid on these
   bytes and it must be re-measured, not restored.
+
+### 10.3 What the re-derivation can no longer prove, and why
+
+Two committed-bytes mirrors lost a claim at this record, and both are recorded rather than
+weakened silently:
+
+* **The records-free contradiction re-derivation** (`tests/meetings/test_contradictions.py`)
+  reproduced every recorded flag on baseline 6, because the rules that read a speaker's private
+  channels were OFF. They are now unconditional, and the replay persists no `MoveWitnessRecord`
+  rows — the same class of loss as the vent record's TICK. The walk rebuilds the vent and sighting
+  channels by inverting the recorded verdicts (a flag carrying the ungrounded marker says its
+  sighting was not backed), which recovers 598 of 668 meetings exactly; the remaining **70** are
+  meetings the movement channel re-paired, and they are pinned by count with every diverging
+  meeting named on failure.
+* **The three 20.26 grounded-prosecution exemplars** (samples/9p2i seeds 17 M0, 23 M1 and 8 M4)
+  were baseline-6 meetings. They are RETIRED, not re-anchored, and what replaces them is the
+  class-wide statement: no committed meeting ejects a player carrying a STRONG
+  `alibi_vs_sighting`, and no committed STRONG `alibi_vs_sighting` names two rooms one doorway
+  apart. Both are the cells §3 bars 4 and 7 read at 0/0.
 
 ---
 
