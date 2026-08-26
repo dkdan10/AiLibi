@@ -115,6 +115,9 @@ _DEDUCTION_INSTRUMENT = "tests/eval/test_deduction_metrics.py"
 # pre-registered bar read the results row publishes, and the win split whose
 # before column the front door quotes.
 _LADDER_TIP_AUDIT = "audits/audit-phase-20-baseline-7.md"
+_CITATION_ROW_CLAIM = (
+    "Eject ballots carrying a valid citation, a turn or an observation id (9p2i)"
+)
 # The reading guide's §3 cross-tab, as committed.
 _FLAGGED_ROW = "| yes (69 meetings) | 69 | 0 |"
 _UNFLAGGED_ROW = "| no (83 meetings) | 16 | 14 |"
@@ -889,15 +892,17 @@ def test_repeated_results_claim_detected(doc_tree: Path) -> None:
         doc_tree, _README, text.replace(row, f"{stale} an earlier count |\n{row}", 1)
     )
     errors = check_doc_facts.check_facts(doc_tree)
-    assert len(errors) == 3
+    assert len(errors) == 4
     assert (
         "states 'Committed sample replays that reconstruct byte-identically' twice"
         in (errors[0])
     )
     assert "'99 of 100'" in errors[1]
-    # The stale copy carries a stale before cell with it, and that is compared
-    # too: the page would otherwise answer the history question twice as well.
-    assert "'an earlier count'" in errors[2]
+    # The stale copy is too narrow to reach the history column, so it has no
+    # before cell at all — and the page then answers the history question two
+    # ways as well.
+    assert any("has no 'At baseline 6' cell" in error for error in errors)
+    assert any("reads ''" in error for error in errors)
 
 
 def test_new_undefined_dialect_term_detected(doc_tree: Path) -> None:
@@ -1407,9 +1412,19 @@ def test_partition_innocent_total_contradicting_its_own_accuracy_detected(
         "41 of 41 innocent ejections sit in the no-proof cell",
     )
     errors = check_doc_facts.check_facts(doc_tree)
-    assert len(errors) == 1
-    assert "its non-direct accuracy bar reads 61/103" in errors[0]
-    assert "wrongful-ejection bar reads 41" in errors[0]
+    assert any(
+        "its non-direct accuracy bar reads 61/103" in error
+        and "wrongful-ejection bar reads 41" in error
+        for error in errors
+    )
+    # ...and every surface still narrating the record's own 42 is now naming a
+    # count the record no longer records, which is the same drift read forward.
+    stale = [error for error in errors if "wrongful-ejection sentence" in error]
+    assert {error.split(":")[0] for error in stale} == {
+        _README,
+        _READING_GUIDE,
+        _HISTORY,
+    }
 
 
 def test_missing_ml_results_table_fails_loud(doc_tree: Path) -> None:
@@ -1518,8 +1533,9 @@ def test_moved_figure_quoted_without_its_baseline_stamp_detected(
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert any(
-        "'At baseline 6' cell of results row" in error
-        and "reads 'reference recording 7, 2026-08-25" in error
+        error.startswith(_README)
+        and "has no 'At baseline 6' cell" in error
+        and _CITATION_ROW_CLAIM in error
         for error in errors
     )
 
@@ -1714,7 +1730,81 @@ def test_guide_only_row_losing_its_before_cell_detected(doc_tree: Path) -> None:
     assert len(errors) == 1
     assert errors[0].startswith(_READING_GUIDE)
     assert "'Impostor ballots cast against a partner (9p2i)'" in errors[0]
-    assert "empty 'At baseline 6' cell" in errors[0]
+    assert "has no 'At baseline 6' cell" in errors[0]
+
+
+def test_truncated_row_losing_its_before_cell_detected(doc_tree: Path) -> None:
+    # Removing the cell AND its delimiter must fail like an emptied one: a row
+    # narrower than the header has no history cell, and reading whatever cell
+    # happens to sit at the index would check it against the wrong column.
+    _substitute(doc_tree, _READING_GUIDE, "| 0 of 219 | 0 of 245 |", "| 0 of 219 |")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert errors[0].startswith(_READING_GUIDE)
+    assert "'Impostor ballots cast against a partner (9p2i)'" in errors[0]
+    assert "not as wide as the header" in errors[0]
+
+
+def test_unowned_moved_history_cell_detected(doc_tree: Path) -> None:
+    # A row whose history cell differs from its figure claims something moved.
+    # Either this checker re-derives that value or the row is named as one it
+    # only compares — otherwise the two tables can drift together, which is the
+    # one failure the before/after column exists to prevent.
+    row = "| Observation-firewall violations, all phases | zero | zero |"
+    drifted = "| Observation-firewall violations, all phases | zero | one |"
+    _substitute(doc_tree, _README, row, drifted)
+    # One-sided first: that is the agreement check's finding, not this one.
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "'one'" in errors[0] and "records 'zero'" in errors[0]
+    # Made in BOTH tables it survives agreement, and only this check sees it.
+    _substitute(doc_tree, _READING_GUIDE, row, drifted)
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "states a moved figure" in errors[0]
+    assert "'one'" in errors[0]
+
+
+def test_verdict_rate_that_contradicts_its_own_fraction_detected(
+    doc_tree: Path,
+) -> None:
+    # The verdict passage states the same cell the results row states. Every
+    # "k of n = rate" on the front door is its own arithmetic, so a moved
+    # denominator in the prose cannot survive a correct table.
+    _substitute(doc_tree, _README, "61 of 103 = 0.5922", "61 of 104 = 0.5922")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "'61 of 104 = 0.5922' does not recompute" in errors[0]
+    assert "61/104 is 0.5865" in errors[0]
+
+
+def test_verdict_wrongful_ejection_count_drift_detected(doc_tree: Path) -> None:
+    # ...and the bare count beside it is held to the record the same way a
+    # "ladder tip" sentence is held to the baseline.
+    _substitute(
+        doc_tree,
+        _README,
+        "wrongful ejections came to 42",
+        "wrongful ejections came to 43",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "a wrongful-ejection sentence names neither the count" in errors[0]
+    assert "(42)" in errors[0]
+
+
+def test_wrongful_ejection_sentence_may_state_the_previous_count(
+    doc_tree: Path,
+) -> None:
+    # The front door is allowed to say what the recording before this one read,
+    # which is the whole point of the before column.
+    guide = _read(doc_tree, _READING_GUIDE)
+    _write(
+        doc_tree,
+        _READING_GUIDE,
+        guide + "\nThe recording before it recorded 79 wrongful ejections.\n",
+    )
+    assert check_doc_facts.check_facts(doc_tree) == []
 
 
 def test_vent_row_without_its_population_fails_loud(doc_tree: Path) -> None:

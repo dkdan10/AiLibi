@@ -10,7 +10,7 @@ class the 19.1 sweep cleaned (a stale refresh date, a stale win rate, a stale
 ladder tip, a graduated lever still documented as a live knob) is exactly what
 regenerates silently otherwise.
 
-Sixteen checks. Each accumulates precise errors; all of them are reported
+Seventeen checks. Each accumulates precise errors; all of them are reported
 together, so one run names every drifted fact rather than the first.
 
 1. **Sample provenance.** ``replays/samples/<set>/MANIFEST.md`` owns each sample
@@ -139,6 +139,12 @@ together, so one run names every drifted fact rather than the first.
     (frontend/src/components/ReplayPicker.tsx), the committed curated list; a
     guide naming a seed the strip dropped points a reader at a card that does
     not exist.
+17. **The verdict figures survive being retold.** The front door recounts the
+    record's two decided bars in prose as well as in its table, so every prose
+    ``k of n = rate`` is held to its own arithmetic at the precision it prints,
+    and every sentence naming a wrongful or innocent ejection must name the
+    count the record read — or the count the recording before it read, which
+    is what the before column is for.
 
 ``--repo-root`` points the document and source reads at another tree (the unit
 tests perturb a copy); it defaults to this checkout. The lever registry ALWAYS
@@ -535,6 +541,35 @@ _EMPHASIS: Final = re.compile(r"[*`]")
 _INJUSTICE_CLAIM: Final = (
     "{count} of {count} innocent ejections sit in the no-proof cell"
 )
+# A results row whose history cell this checker RE-DERIVES from the audit that
+# owns it, rather than only comparing the two tables' copies.
+_WIN_RATE_ROW_CLAIM: Final = "Impostor win rate, committed samples"
+_DERIVED_BEFORE_CLAIMS: Final[frozenset[str]] = frozenset(
+    {_WIN_RATE_ROW_CLAIM, _PROOF_CLAIM}
+)
+# ...and the ones it only compares, because their baseline-6 values live in
+# audit prose no parser here reads. Naming them is the point: a row that moves
+# without landing in one of these two sets fails, so the unchecked set cannot
+# grow by accident.
+_QUOTED_BEFORE_CLAIMS: Final[frozenset[str]] = frozenset(
+    {
+        _CITATION_CLAIM,
+        _VENT_CLAIM,
+        _PARTNER_BALLOT_CLAIM,
+    }
+)
+# Rows whose FIGURE :func:`check_result_sources` re-derives. A wrong figure
+# there is reported precisely, so the history cell beside it must not be
+# reported a second time for the same edit.
+_DERIVED_FIGURE_CLAIMS: Final[frozenset[str]] = frozenset({_REPLAY_COUNT_CLAIM})
+# Every front-door sentence about wrongful convictions names the count the
+# record read, the way every "ladder tip" sentence names the baseline.
+_INJUSTICE_SENTENCE: Final = re.compile(
+    r"\b(?:wrongful|innocent) ejections?\b", re.IGNORECASE
+)
+# ``k of n = rate`` / ``k / n = rate`` — checked against its own arithmetic at
+# the precision it prints, wherever the front door writes one.
+_RATE_CLAIM: Final = re.compile(r"(\d+)\s*(?:of|/)\s*(\d+)\s*=\s*(0\.\d+|1\.0+)")
 
 # The ML page's results table and the committed measurement it is derived from.
 # The table is located by its own header cells, so renaming the section above it
@@ -648,6 +683,7 @@ def check_facts(repo_root: Path) -> list[str]:
     check_audits_index(repo_root, errors)
     check_guide_line_citations(repo_root, errors)
     check_guide_narrative(repo_root, errors)
+    check_verdict_figures(repo_root, errors)
     check_featured_exhibits(repo_root, errors)
     check_relative_links(repo_root, errors)
     check_ml_results_table(repo_root, errors)
@@ -1773,15 +1809,17 @@ def check_before_columns(readme: str, guide: str, errors: list[str]) -> None:
     if len(columns) < 2:
         return
     # Every row of BOTH tables, not only the shared ones: the guide carries
-    # rows the README does not, and a row with an empty history cell states a
-    # moved figure with nothing to read it against.
+    # rows the README does not, and a row with no history cell states a moved
+    # figure with nothing to read it against.
     for document, before in columns.items():
         for claim, stated in before.items():
             if not stated.strip():
                 errors.append(
-                    f"{document}: the results row {claim!r} has an empty "
-                    f"{_BEFORE_COLUMN_HEADER!r} cell."
+                    f"{document}: the results row {claim!r} has no "
+                    f"{_BEFORE_COLUMN_HEADER!r} cell — it is empty, or the row "
+                    "is not as wide as the header."
                 )
+    check_unowned_history(readme, guide, columns, errors)
     for claim, stated in columns[_README].items():
         recorded = columns[_READING_GUIDE].get(claim)
         if recorded is None:
@@ -1792,6 +1830,47 @@ def check_before_columns(readme: str, guide: str, errors: list[str]) -> None:
                 f"{claim!r} reads {stated!r}, but {_READING_GUIDE} records "
                 f"{recorded!r} for the same claim."
             )
+
+
+def check_unowned_history(
+    readme: str, guide: str, columns: dict[str, dict[str, str]], errors: list[str]
+) -> None:
+    """No row may claim its figure moved unless something owns the old value.
+
+    Agreement between the two tables catches a one-sided edit of a history
+    cell; it cannot catch the same edit made in both, which is the failure the
+    before/after column exists to prevent. So each row whose history cell
+    differs from its figure — the rows claiming something moved — must be one
+    this module re-derives, or one it names as only compared. A row in neither
+    set fails, which is what keeps the unchecked set from growing by accident.
+
+    Only rows the two tables already agree on are examined: where they disagree
+    the agreement checks report it, and reporting it twice for one drift would
+    name the wrong cause the second time.
+    """
+
+    figures = {
+        _README: dict(results_rows(readme) or []),
+        _READING_GUIDE: dict(results_rows(guide) or []),
+    }
+    owned = _DERIVED_BEFORE_CLAIMS | _QUOTED_BEFORE_CLAIMS | _DERIVED_FIGURE_CLAIMS
+    for claim, stated in columns[_README].items():
+        if claim in owned or not stated.strip():
+            continue
+        agreed = (
+            columns[_READING_GUIDE].get(claim),
+            figures[_READING_GUIDE].get(claim),
+        )
+        if agreed != (stated, figures[_README].get(claim)):
+            continue  # a one-sided edit, reported where it is one
+        if strip_links(stated) == strip_links(figures[_README].get(claim, "")):
+            continue  # nothing moved, so the figure's own source covers it
+        errors.append(
+            f"{_README}: the results row {claim!r} states a moved figure, but "
+            f"its {_BEFORE_COLUMN_HEADER!r} cell {stated!r} is neither "
+            "re-derived here nor named as one this module only compares — a "
+            "history cell nothing owns is the drift the column exists to stop."
+        )
 
 
 def check_result_sources(repo_root: Path, readme: str, errors: list[str]) -> None:
@@ -2328,10 +2407,16 @@ def compare_before_figure(
 
 
 def results_before_column(markdown: str) -> dict[str, str] | None:
-    """Claim -> before cell for the results table, or ``None`` if it has none."""
+    """Claim -> before cell for the results table, or ``None`` if it has none.
+
+    A row whose width does not match the header's maps to the empty string
+    rather than dropping out or reading a neighbour's cell: a truncated row has
+    no history cell, which is the same finding as an empty one, and a row that
+    dropped a delimiter would otherwise be checked against the wrong column.
+    """
 
     before: dict[str, str] | None = None
-    index = 0
+    index = width = 0
     for line in markdown.splitlines():
         cells = table_cells(line)
         if cells is None or len(cells) < 2:
@@ -2343,12 +2428,15 @@ def results_before_column(markdown: str) -> dict[str, str] | None:
             if tuple(cells[:2]) == _RESULTS_TABLE_HEADER:
                 if _BEFORE_COLUMN_HEADER not in plain:
                     return None
-                before, index = {}, plain.index(_BEFORE_COLUMN_HEADER)
+                before, index, width = (
+                    {},
+                    plain.index(_BEFORE_COLUMN_HEADER),
+                    len(cells),
+                )
             continue
         if all(_TABLE_RULE_CELL.match(cell) for cell in cells):
             continue
-        if index < len(cells):
-            before.setdefault(cells[0], cells[index])
+        before.setdefault(cells[0], cells[index] if len(cells) == width else "")
     return before
 
 
@@ -2867,6 +2955,66 @@ def citation_pins(repo_root: Path, errors: list[str]) -> dict[str, int]:
         match.group(1): int(match.group(2))
         for match in _CITATION_PIN.finditer(instrument)
     }
+
+
+def check_verdict_figures(repo_root: Path, errors: list[str]) -> None:
+    """The record's two decided bars, wherever the front door recounts them.
+
+    The verdict passage is the most-read prose in this repository and it states
+    the same two cells the results row states — a conviction accuracy and a
+    wrongful-ejection count. Both are held to the record here, so an account of
+    why the recording returned a finding cannot contradict the finding.
+
+    Two rules, deliberately different in shape. Every ``k of n = rate`` claim
+    in PROSE must be its own arithmetic at the precision it prints — that
+    catches a moved numerator, denominator or rate; table rows are skipped
+    because each table already has a per-cell check that names the drift more
+    precisely. And every sentence about wrongful convictions must name the
+    count the record read, the way every "ladder tip" sentence must name the
+    baseline; a sentence about the recording before it says that count instead.
+    """
+
+    # Both partitions are located by :func:`check_conviction_partition`, which
+    # already reports a record whose read cannot be found; a second report here
+    # would name the same drift twice.
+    partition = audit_partition(repo_root, _LADDER_TIP_AUDIT, record_partition, [])
+    previous = audit_partition(
+        repo_root, _PROOF_PARTITION_AUDIT, phase_19_partition, []
+    )
+    if partition is None or previous is None:
+        return
+    counts = {str(partition[2]), str(previous[2])}
+    for document in _CLAIM_DOCUMENTS:
+        text = read_document(repo_root, document, errors)
+        if text is None:
+            continue
+        for number, line in enumerate(text.splitlines(), 1):
+            if table_cells(line) is not None:
+                continue  # every table has a per-cell check of its own
+            for match in _RATE_CLAIM.finditer(line):
+                numerator, denominator = int(match.group(1)), int(match.group(2))
+                printed = match.group(3)
+                if not denominator:
+                    continue
+                recomputed = f"{numerator / denominator:.{len(printed) - 2}f}"
+                if recomputed == printed:
+                    continue
+                errors.append(
+                    f"{document}:{number}: the claim "
+                    f"{match.group(0)!r} does not recompute — "
+                    f"{numerator}/{denominator} is {recomputed} at the "
+                    "precision it prints."
+                )
+        for match in _INJUSTICE_SENTENCE.finditer(text):
+            sentence = sentence_around(text, match.start(), match.end())
+            if any(count in sentence for count in counts):
+                continue
+            errors.append(
+                f"{document}:{line_number(text, match.start())}: a "
+                "wrongful-ejection sentence names neither the count the record "
+                f"read ({partition[2]}) nor the one before it ({previous[2]}) "
+                f"— “{' '.join(sentence.split())}”."
+            )
 
 
 def check_featured_exhibits(repo_root: Path, errors: list[str]) -> None:
