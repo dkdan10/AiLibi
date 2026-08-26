@@ -7200,11 +7200,11 @@ def _run_prosecution_meeting(
 class TestGroundedProsecutionWiring:
     """``MeetingParticipant.sighting_records`` reaches ALL FOUR detector calls.
 
-    The lever (:func:`meetings.transcript.grounded_prosecution_enabled`) is
-    DEFAULT-OFF, so the wiring is inert at rest; these tests turn it on and read
-    the same meeting several ways. The mid-chain turn derivation and the
-    recorded flag set must agree — one grounding source per meeting, the 15.4
-    threading convention.
+    Grounded prosecution is gated on the DATA -- the rules bind only when a
+    caller supplies the records to ground against -- so these tests read the
+    same meeting several ways with the mapping fed. The mid-chain turn
+    derivation and the recorded flag set must agree — one grounding source per
+    meeting, the 15.4 threading convention.
     """
 
     _MATCHING_RECORD = SightingRecord(subject="p-1", room="EAST_HALL", tick=150)

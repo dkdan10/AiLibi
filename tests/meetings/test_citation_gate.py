@@ -2,8 +2,7 @@
 
 Pins the enforcement tooth of the citation chain
 (audits/post-phase-14-Voice-and-Judgment-planning.md §3.4 J2) end to end,
-behind the ``citation_gate_enabled`` lever (graduated to unconditional at Task
-16.17):
+unconditional since the Task-16.17 baseline-5 record:
 
 * the pure guard (:func:`meetings.manager.guard_ballot_citation`): a zero-flag
   EJECT ballot (its target carries NO contradiction flag this meeting) whose
@@ -16,10 +15,10 @@ behind the ``citation_gate_enabled`` lever (graduated to unconditional at Task
 * the guard ORDERING pin: the citation gate runs AFTER
   :func:`meetings.manager.guard_ballot_target_graph`, so a redirected eject is
   judged on the REDIRECTED target's flag status, never the original's;
-* lever scope: the gate is UNCONDITIONAL since the Task-16.17 graduation, so an
-  uncited zero-flag eject is always coerced -- the guard renders nothing (the
-  byte-identity instruments ``scripts/verify_samples.sh`` + the 16.3 prompt-byte
-  golden stay blind to it); only the gated case is ever changed;
+* scope: an uncited zero-flag eject is always coerced -- the guard renders
+  nothing (the byte-identity instruments ``scripts/verify_samples.sh`` + the
+  16.3 prompt-byte golden stay blind to it); only the gated case is ever
+  changed;
 * the Task 16.8 non-interaction pin: the gate's zero-flag predicate reads
   ONLY this meeting's detected ``contradictions`` -- suspicion never reaches
   it, so an absence-prior suspicion delta (which mints no flag) cannot move

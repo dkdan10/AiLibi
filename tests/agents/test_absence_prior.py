@@ -28,12 +28,11 @@ pin -- the 16.8 side mirrors
 :class:`tests.meetings.test_citation_gate.TestAbsenceDeltaNonInteraction`).
 
 Layout mirrors the Task-16.4 hard-evidence-gate suite
-(:mod:`tests.agents.test_beliefs_hard_evidence_gate`): the resolver's default-OFF
-/ truthy-ON contract, the sizing invariants, the documented boundary table, the
-transient-only + guard + reporter + ceiling + joint-cap composition pins, the
-flag-independence pin, the OFF-path byte-identity pins, and the offline
-counterfactual RE-MEASURED on the committed baseline-5 9p2i bytes (the DoD-bullet-4
-calibration evidence, cloned from
+(:mod:`tests.agents.test_beliefs_hard_evidence_gate`): the sizing invariants,
+the documented boundary table, the transient-only + guard + reporter + ceiling +
+joint-cap composition pins, the flag-independence pin, the empty-absent-set
+no-op pins, and the offline counterfactual RE-MEASURED on the committed 9p2i
+bytes (the DoD-bullet-4 calibration evidence, cloned from
 :class:`tests.agents.test_beliefs_hard_evidence_gate.TestHardEvidenceGateOnCommittedBytes`).
 
 Task 17.5 extends the committed-bytes sweep with the DOUBLE-COUNT counterfactual
@@ -846,8 +845,8 @@ class TestAbsencePriorOnCommittedBytes:
     ``fellow_impostor_ids`` (from the recorded roles) and the manager's exact
     reporter predicate so the measurement is production-faithful:
     ``_collect_one_ballot`` passes ``reporter=None`` for an EMERGENCY meeting
-    (``_trigger_is_emergency``), and since ``reporter_exculpation_enabled`` is
-    unconditional, getting this wrong is NOT inert -- a spuriously-threaded
+    (``_trigger_is_emergency``), and since the reporter damp is unconditional,
+    getting this wrong is NOT inert -- a spuriously-threaded
     emergency reporter would have its soft lift zeroed on both sides of the
     re-derivation (the committed set has 9 emergency meetings; the recorded
     ``MeetingReplayEntry`` carries no trigger description, so the kind rides

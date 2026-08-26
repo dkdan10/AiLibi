@@ -8,10 +8,9 @@ The unit home for the C8 identity substrate
   (:func:`agents.memory.episodic.derive_observation_id`), stamped at write time
   by :func:`agents.perception.ingest_packet` on every first-hand OBSERVED row and
   guarded for uniqueness by :meth:`agents.memory.episodic.MemoryStore.append`;
-* the ``AILIBI_OBSERVATION_ID_RENDERING`` render lever
-  (:func:`agents.memory.store.observation_id_rendering_enabled`), graduated to
-  unconditional at Task 16.17, which folds ``[obs {id}]`` into each first-hand
-  remembered observation line.
+* the render fold (:func:`agents.memory.store.render_for_prompt`), which puts
+  ``[obs {id}]`` on each first-hand remembered observation line -- unconditional
+  since the Task-16.17 baseline-5 record.
 
 This file also hosts the committed-set two-walk determinism pin (added by the
 second worker), which walks committed replays twice and asserts the two

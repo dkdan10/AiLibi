@@ -3928,10 +3928,8 @@ def _drop_non_roster_claims(
     Returns ``(surviving_claims, annotations)``, both in claim order. Each
     drop yields one :class:`~meetings.schemas.TurnAnnotation` naming the
     field and carrying the original value, which the caller records on the
-    turn (:func:`structured_turn_markers_enabled`) or renders as the
-    equivalent ``free_text`` audit marker
-    (:func:`_turn_annotation_marker`). Either way the original stays
-    auditable and downstream eval can count drops per field. The original is
+    turn -- ``free_text`` stays exactly what the model authored. The original
+    is therefore auditable and downstream eval can count drops per field. The original is
     bounded (:func:`_bounded_original`): a hallucinated mega-value -- the
     seed-35 3499-char reasoning blob emitted AS an alibi subject -- can no
     longer balloon the recorded turn; real player ids pass through verbatim.

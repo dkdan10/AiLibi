@@ -45,6 +45,20 @@ from orchestrator.replay import (  # noqa: PLC2701
 _REPO_ROOT: Final[Path] = Path(__file__).resolve().parents[2]
 _SWEPT_PACKAGES: Final[tuple[str, ...]] = ("agents", "meetings", "orchestrator")
 
+# The eight keys the baseline-7 record appended -- absent from any baseline-6-era
+# stamp, which is what makes such a stamp a legacy substrate this build cannot
+# reproduce rather than a merely older spelling of the same one.
+_PHASE20_ADOPTED: Final[tuple[str, ...]] = (
+    "task_completion_from_events",
+    "self_location_trail",
+    "movement_claim_shape",
+    "grounded_prosecution",
+    "map_aware_arbitration",
+    "structured_turn_markers",
+    "meeting_outcome_memory",
+    "coalesced_memory_render",
+)
+
 
 def _is_bare_true_return(node: ast.stmt) -> bool:
     """``return True`` -- the whole body of an accept-and-ignore resolver."""
@@ -180,10 +194,22 @@ def test_a_legacy_stamp_naming_a_retired_lever_off_is_refused() -> None:
     current["impostor_roll_call"] = False
     assert retired_levers_stamped_off(current) == []
 
-    # An UNSTAMPED recording is unknown, not OFF, and a stamp that predates a
-    # key cannot have recorded that key OFF on purpose -- both read clean.
+    # An UNSTAMPED recording is unknown, not OFF: never checked, exactly as the
+    # API replay loader skips an unstamped replay.
     assert retired_levers_stamped_off(None) == []
-    assert retired_levers_stamped_off({"testimony_as_content": True}) == []
+
+    # But within a stamp that IS present, a MISSING key reads OFF -- the same
+    # ``bool(recorded.get(key))`` the loader applies. A baseline-6-era stamp
+    # (the eight Phase-20 keys absent) therefore names all eight, because that
+    # recording genuinely ran without them.
+    baseline6 = {
+        key: True for key in _RETIRED_ALWAYS_ON_LEVERS if key not in _PHASE20_ADOPTED
+    }
+    assert retired_levers_stamped_off(baseline6) == list(_PHASE20_ADOPTED)
+    # A one-key stamp names every OTHER retired lever, never nothing.
+    assert len(retired_levers_stamped_off({"testimony_as_content": True})) == (
+        len(_RETIRED_ALWAYS_ON_LEVERS) - 1
+    )
 
 
 def test_the_one_live_resolver_in_the_tree_is_not_reported() -> None:

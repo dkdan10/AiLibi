@@ -10,10 +10,8 @@ unknown class -- renders untouched. The clamp is a render-time lever, never a
 fold-time cap: the stored :class:`~agents.memory.beliefs.BeliefState` scalar and the
 belief-fold arithmetic are never mutated -- only the two render read-sites clamp.
 
-The clamp is UNCONDITIONAL since the Task-16.17 baseline-5 graduation
-(:func:`~agents.memory.beliefs.hard_evidence_gate_enabled` now ignores its ``env``
-and always returns ``True`` -- the Task-15.7 ``reporter_exculpation`` move applied to
-this lever) and applies at exactly two read-sites: the store's §6.6 belief lines
+The clamp is UNCONDITIONAL since the Task-16.17 baseline-5 graduation and
+applies at exactly two read-sites: the store's §6.6 belief lines
 (:func:`agents.memory.store._build_belief_lines`) and the vote-ballot suspicion-graph
 builder (:meth:`orchestrator.game.TacticalAgent.suspicion_graph_for_meeting`). The
 pure classification predicate
@@ -638,13 +636,12 @@ def _entry_provenance(entry: SuspicionEntry) -> SuspicionProvenance:
 
 
 def _unclamped_seed(entry: SuspicionEntry) -> SuspicionEntry:
-    """Recover the RAW (lever-OFF) scalar from a recorded builder row.
+    """Recover the RAW (unclamped) scalar from a recorded builder row.
 
-    Since the Task-16.17 baseline-5 re-record the builder clamp is unconditional
-    (:func:`~agents.memory.beliefs.hard_evidence_gate_enabled` always ON), so the
-    committed ``suspicion_graph`` rows are the CLAMPED (lever-ON) graph -- a
+    Since the Task-16.17 baseline-5 re-record the builder clamp is unconditional,
+    so the committed ``suspicion_graph`` rows are the CLAMPED graph -- a
     soft-only row's ``suspicion`` reads the sub-gate ceil while its eight
-    provenance kwargs stay the untouched Task-16.3 decomposition. The lever-OFF
+    provenance kwargs stay the untouched Task-16.3 decomposition. The unclamped
     scalar is exactly ``0.5 + sum(the eight components)`` (the module sum
     invariant, which holds verbatim for every un-clamped row and reconstructs the
     pre-clamp scalar for a clamped one), so recomputing it restores the raw OFF

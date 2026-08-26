@@ -633,17 +633,18 @@ def retired_levers_stamped_off(
     result, rather than silently scoring legacy bytes with the current detector.
 
     An UNSTAMPED recording (``None``) returns empty: its substrate is unknown,
-    not OFF. A stamp MISSING a key returns empty for that key too -- a recording
-    made before the key existed cannot have recorded it OFF on purpose, which is
-    the missing-key-reads-False rule the loader already applies.
+    not OFF, and it is never checked -- mirroring
+    :class:`api.replay_loader.ReplaySubstrateMismatchError`, which skips an
+    unstamped replay entirely. Within a stamp that IS present, a MISSING key
+    reads OFF exactly as the loader's ``bool(recorded.get(key))`` reads it: a
+    recording made before a lever existed ran without it, which is precisely the
+    substrate this build can no longer produce.
     """
 
     if substrate_flags is None:
         return []
     return [
-        key
-        for key in _RETIRED_ALWAYS_ON_LEVERS
-        if key in substrate_flags and not bool(substrate_flags[key])
+        key for key in _RETIRED_ALWAYS_ON_LEVERS if not bool(substrate_flags.get(key))
     ]
 
 

@@ -3,8 +3,9 @@
 The conversion report's SKIP partition learns
 :data:`~meetings.manager.UNCITED_ZERO_FLAG_EJECT_MARKER` as a FOURTH by-design
 bucket (``citation_coerced_skip_ballots``, beside correct / missed /
-unclassified). The Task 16.6 citation gate (``citation_gate_enabled`` lever ON)
-rewrites an uncited zero-flag EJECT to SKIP; the gate working is never the
+unclassified). The citation gate
+(:func:`meetings.manager.guard_ballot_citation`) rewrites an uncited zero-flag
+EJECT to SKIP; the gate working is never the
 voter's decision, so a marker-anchored SKIP is neither a missed skip nor a §4.6
 ``threshold_inversions`` entry (audits/audit-phase-16-close.md §8 routed
 contract (b); the 17.2 designer ruling tasks/phase-17.md). The divert is role-

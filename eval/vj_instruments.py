@@ -78,9 +78,17 @@ the tolerance.
 The accessors and the fold read no environment at all: every lever they once
 consulted graduated, so the instrument is pure and $0 (no ``AILIBI_*`` reads)
 and the reconstruction runs the baseline-7 substrate the committed sets were
-recorded under, matching the recorded bytes exactly. On a recording made under
-an EARLIER substrate only the J1-clamped rendered SCALAR can diverge (counted
-by ``rendered_row_mismatches``), never the raw decomposition the split reads.
+recorded under, matching the recorded bytes exactly.
+
+The walk reads the replay through :mod:`eval.replay_walk`, which calls
+``read_all_entries`` directly and performs NO substrate check -- so nothing on
+this path refuses a recording made under an EARLIER substrate the way the API
+replay loader and the audit workflows' re-extraction spine do. Against such a
+recording the reconstruction would run today's always-on rules over legacy
+bytes, and the divergence would NOT be confined to the J1-clamped rendered
+scalar ``rendered_row_mismatches`` counts: retired rules (the absence prior, the
+evidence-quality fold) move the typed decomposition the split reads as well.
+These cells are therefore stated for the committed sets only.
 
 JSON report schema (``VJInstrumentReport.model_dump()`` / the
 ``scripts/measure_baseline.py --vj --json`` rows), consumed by the Task 16.17

@@ -52,8 +52,6 @@ from orchestrator.replay import MeetingReplayEntry, read_all_entries
 from orchestrator.scheduler import TickScheduler
 
 _FIXTURE_DIR = Path("tests/fixtures/memory_rendering")
-# The completed-task lever, toggled through ``render_for_prompt(env=...)`` so no
-# test mutates ``os.environ`` (the suite runs parallel).
 _ROLE_LINE_PATTERN = re.compile(r"^## Your role: .+$\n?", re.MULTILINE)
 _ROLE_VALUE_PATTERN = re.compile(r"^## Your role: (.+)$", re.MULTILINE)
 
@@ -1523,7 +1521,7 @@ class TestMovementPerceptionRender:
 
 
 # --------------------------------------------------------------------------- #
-# The self-location trail (AILIBI_SELF_LOCATION_TRAIL, default-OFF).           #
+# The self-location trail.                                                     #
 # --------------------------------------------------------------------------- #
 
 _TRAIL_HEADER = "## Where you were:"

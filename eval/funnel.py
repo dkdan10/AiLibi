@@ -1061,11 +1061,19 @@ def compute_information_funnel(sample_dir: Path) -> InformationFunnelReport:
 #                                                                              #
 # The accessors read no environment at all: every lever they once consulted    #
 # graduated, so the instrument is pure and $0 (no ``AILIBI_*`` reads) and the   #
-# snapshots reproduce the baseline-7 substrate the committed sets were         #
-# recorded under. A recording made under an EARLIER substrate diverges only in #
-# the J1-clamped rendered SCALAR, never in the raw decomposition this region    #
-# reads — the vj rendered cross-check counts any such divergence, and the       #
-# replay loader refuses a stamp naming a retired lever OFF outright.            #
+# snapshots reproduce the baseline-7 substrate the committed sets were          #
+# recorded under.                                                               #
+#                                                                               #
+# This walk reads the replay through ``eval.replay_walk``, which calls          #
+# ``read_all_entries`` directly and performs NO substrate check — unlike the    #
+# API replay loader, and unlike the audit workflows' re-extraction spine, which #
+# refuses a stamp naming a retired lever OFF. Run against a recording made      #
+# under an EARLIER substrate this region would therefore reconstruct current    #
+# always-on memory and belief state over legacy bytes, and the divergence is    #
+# NOT confined to the J1-clamped rendered scalar: retired rules (the absence    #
+# prior, the evidence-quality fold) move the typed decomposition too. The vj    #
+# rendered cross-check counts a rendered divergence but does not gate it, so    #
+# the committed sets are the only inputs these numbers are stated for.          #
 # --------------------------------------------------------------------------- #
 
 
