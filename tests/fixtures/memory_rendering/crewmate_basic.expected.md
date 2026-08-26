@@ -1,6 +1,9 @@
 ## Your role: CREWMATE
 ## Tasks completed (global): 7 / 14
 
+## Where you were:
+- Your route (t = tick): ADMIN t200 -> (no record) -> ADMIN t380
+
 ## Recent observations (most salient first):
 - [tick 410] You discovered p-2's body in MEDBAY.
 - [tick 395] You saw p-5 in ELECTRICAL.
