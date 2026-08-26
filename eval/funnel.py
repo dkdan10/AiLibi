@@ -1059,12 +1059,13 @@ def compute_information_funnel(sample_dir: Path) -> InformationFunnelReport:
 # cross-check (every per-player suspicion in the committed vote prompts        #
 # reproduces exactly).                                                         #
 #                                                                              #
-# Accessor levers resolve against an EMPTY environment (``env={}``): the       #
-# instrument is pure and $0 (no ``AILIBI_*`` reads), and every committed set   #
-# was recorded lever-OFF, so the snapshots match the recorded bytes. A future  #
-# lever-ON recording diverges only in the J1-clamped rendered SCALAR, never in #
-# the raw decomposition this region reads — the vj rendered cross-check counts #
-# any such divergence instead of failing.                                      #
+# The accessors read no environment at all: every lever they once consulted    #
+# graduated, so the instrument is pure and $0 (no ``AILIBI_*`` reads) and the   #
+# snapshots reproduce the baseline-7 substrate the committed sets were         #
+# recorded under. A recording made under an EARLIER substrate diverges only in #
+# the J1-clamped rendered SCALAR, never in the raw decomposition this region    #
+# reads — the vj rendered cross-check counts any such divergence, and the       #
+# replay loader refuses a stamp naming a retired lever OFF outright.            #
 # --------------------------------------------------------------------------- #
 
 
@@ -1215,8 +1216,8 @@ def _walk_game_vj(
                     )
 
                 # Meeting-open snapshots off the PRODUCTION accessors, sorted
-                # like ``_build_participants``. ``env={}`` resolves every
-                # accessor lever OFF deterministically (see the region banner).
+                # like ``_build_participants``. The accessors consult no
+                # environment (see the region banner).
                 graph_by_voter: dict[PlayerId, tuple[SuspicionEntry, ...]] = {}
                 sightings_by_speaker: dict[PlayerId, tuple[SightingRecord, ...]] = {}
                 obs_ids_by_voter: dict[PlayerId, frozenset[str]] = {}
@@ -1428,7 +1429,7 @@ def _whereabouts_lies_detected(meeting: _VJMeeting) -> int:
 # coverage sits where it does: whether the ~⅓ answer rate is uniform silence   #
 # or STRUCTURED refusal. The impostor prompt templates instruct impostors to   #
 # explain nothing about their own whereabouts, so the crew-vs-impostor split   #
-# is the calibration signal the §0.1.4 absence-prior re-measure needs (a lever #
+# is the calibration signal the §0.1.4 absence-prior re-measure needs (a rule  #
 # that removes roll-call answerers from the absent set must know whether a     #
 # non-answerer is crew going quiet or an impostor refusing by design); and the #
 # living − asked gap separates never-took-the-mic from the asked − answered    #

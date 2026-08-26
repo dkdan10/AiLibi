@@ -166,6 +166,7 @@ from orchestrator.replay import (
     ReplayEntry,
     _state_hash,
     read_all_entries,
+    retired_levers_stamped_off,
 )
 from orchestrator.seeder import seed_initial_state
 
@@ -2156,6 +2157,27 @@ def main() -> int:
             if game_end is not None
             else False
         )
+        # A recording whose stamp names a RETIRED lever OFF describes a
+        # substrate this build cannot reproduce: the OFF derivation was deleted
+        # at the record that adopted the lever, so re-deriving its
+        # contradictions here would silently score legacy bytes with the
+        # current detector. ``read_all_entries`` performs no substrate check of
+        # its own (unlike the API replay loader), so the refusal lives here.
+        # A stamp MISSING a key reads as OFF only for keys that postdate it,
+        # which is why an unstamped legacy recording is skipped entirely rather
+        # than read as an all-OFF slate.
+        retired_off = retired_levers_stamped_off(
+            game_end.substrate_flags if game_end is not None else None
+        )
+        if retired_off:
+            raise SystemExit(
+                f"seed {seed}: recording stamps retired lever(s) {retired_off} "
+                "OFF, but their env gates were deleted at the records that "
+                "adopted them — this build can only re-derive the unconditional "
+                "substrate, so its contradiction-derived facts would not "
+                "describe the recorded game. Re-record, or extract with a build "
+                "that predates the graduation."
+            )
         # Task 13.3: re-derive each meeting's contradictions from the recorded
         # transcript with the CURRENT detector (the $0 re-extraction spine), so
         # a detector change is reflected without a re-record. A byte-for-byte

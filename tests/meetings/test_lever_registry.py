@@ -21,6 +21,13 @@ The gate ships with a planted counter-case: a fixture module written into
 predicate the sweep uses. A live resolver (one that reads ``env``) is asserted
 clean by the same predicate, so the gate discriminates rather than matching on
 the name alone.
+
+The second half of the same rule lives here too:
+:func:`orchestrator.replay.retired_levers_stamped_off`, the refusal a re-deriver
+owes a LEGACY recording. Once a lever's OFF derivation is deleted, a stamp
+naming it OFF describes a substrate this build cannot reproduce, so scoring
+those bytes with the current detector would report facts about a game that never
+happened. Pinned here with a planted legacy stamp beside the clean cases.
 """
 
 from __future__ import annotations
@@ -28,6 +35,12 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 from typing import Final
+
+from orchestrator.replay import (  # noqa: PLC2701
+    SUBSTRATE_FLAG_KEYS,
+    _RETIRED_ALWAYS_ON_LEVERS,
+    retired_levers_stamped_off,
+)
 
 _REPO_ROOT: Final[Path] = Path(__file__).resolve().parents[2]
 _SWEPT_PACKAGES: Final[tuple[str, ...]] = ("agents", "meetings", "orchestrator")
@@ -147,6 +160,30 @@ def test_the_gate_leaves_a_live_resolver_alone(tmp_path: Path) -> None:
     )
 
     assert accept_and_ignore_resolvers(live.read_text(encoding="utf-8")) == []
+
+
+def test_a_legacy_stamp_naming_a_retired_lever_off_is_refused() -> None:
+    # The other half of "retire means delete": once the OFF derivation is gone,
+    # a recording that STAMPED it OFF describes a substrate this build cannot
+    # reproduce, so the $0 re-extraction spine must refuse it rather than score
+    # legacy bytes with the current detector. Planted counter-case first, so the
+    # clean cases below are a discrimination rather than a vacuous pass.
+    legacy = dict.fromkeys(_RETIRED_ALWAYS_ON_LEVERS, True)
+    legacy["citation_gate"] = False
+    legacy["absence_prior"] = False
+    assert retired_levers_stamped_off(legacy) == ["citation_gate", "absence_prior"]
+
+    # A baseline-7 stamp passes; so does the live toggle at either polarity,
+    # because it is the one lever whose OFF derivation still exists.
+    current = dict.fromkeys(SUBSTRATE_FLAG_KEYS, True)
+    assert retired_levers_stamped_off(current) == []
+    current["impostor_roll_call"] = False
+    assert retired_levers_stamped_off(current) == []
+
+    # An UNSTAMPED recording is unknown, not OFF, and a stamp that predates a
+    # key cannot have recorded that key OFF on purpose -- both read clean.
+    assert retired_levers_stamped_off(None) == []
+    assert retired_levers_stamped_off({"testimony_as_content": True}) == []
 
 
 def test_the_one_live_resolver_in_the_tree_is_not_reported() -> None:

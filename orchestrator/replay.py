@@ -620,6 +620,33 @@ def env_var_for_lever(key: str) -> str:
     return f"AILIBI_{key.upper()}"
 
 
+def retired_levers_stamped_off(
+    substrate_flags: Mapping[str, bool] | None,
+) -> list[str]:
+    """Retired levers a recording's stamp claims were OFF, in registry order.
+
+    A retired lever has no env gate: its OFF derivation was deleted at the
+    record that adopted it, so a stamp naming one OFF describes a substrate this
+    build cannot reproduce. Consumers that re-derive from recorded bytes WITHOUT
+    going through the API replay loader's own substrate guard -- the audit
+    workflows' ``$0`` re-extraction spine -- call this and refuse on a non-empty
+    result, rather than silently scoring legacy bytes with the current detector.
+
+    An UNSTAMPED recording (``None``) returns empty: its substrate is unknown,
+    not OFF. A stamp MISSING a key returns empty for that key too -- a recording
+    made before the key existed cannot have recorded it OFF on purpose, which is
+    the missing-key-reads-False rule the loader already applies.
+    """
+
+    if substrate_flags is None:
+        return []
+    return [
+        key
+        for key in _RETIRED_ALWAYS_ON_LEVERS
+        if key in substrate_flags and not bool(substrate_flags[key])
+    ]
+
+
 def substrate_slate_mismatches(
     expected_on: Iterable[str],
     *,

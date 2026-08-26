@@ -75,12 +75,12 @@ value proxy misclassifies (a soft accumulation can climb into the ``>= 0.70``
 band; a hard pin can mix with soft deltas) — that documented divergence is
 the tolerance.
 
-Accessor/fold levers resolve against an EMPTY environment (``env={}``): the
-instrument is pure and $0 (no ``AILIBI_*`` reads), and every committed set
-was recorded lever-OFF, so the reconstruction matches the recorded bytes
-exactly. On a future lever-ON recording only the J1-clamped rendered SCALAR
-can diverge (counted by ``rendered_row_mismatches``), never the raw
-decomposition the split reads.
+The accessors and the fold read no environment at all: every lever they once
+consulted graduated, so the instrument is pure and $0 (no ``AILIBI_*`` reads)
+and the reconstruction runs the baseline-7 substrate the committed sets were
+recorded under, matching the recorded bytes exactly. On a recording made under
+an EARLIER substrate only the J1-clamped rendered SCALAR can diverge (counted
+by ``rendered_row_mismatches``), never the raw decomposition the split reads.
 
 JSON report schema (``VJInstrumentReport.model_dump()`` / the
 ``scripts/measure_baseline.py --vj --json`` rows), consumed by the Task 16.17
@@ -355,10 +355,9 @@ def _pre_vote_graphs(
     voter's meeting-open snapshot with the meeting's RECORDED contradictions
     and the evidence derived exactly as the manager derives it before ballot
     collection (``derive_belief_evidence`` over the final transcript, no
-    trigger kind — mirroring the production call). ``env={}`` resolves the
-    fold's levers OFF deterministically. These are the rows the ballot
-    render reads; the rendered cross-check pins them against the recorded
-    prompt bytes.
+    trigger kind — mirroring the production call). The fold consults no
+    environment. These are the rows the ballot render reads; the rendered
+    cross-check pins them against the recorded prompt bytes.
     """
 
     evidence = derive_belief_evidence(
