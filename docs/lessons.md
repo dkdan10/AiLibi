@@ -39,10 +39,11 @@ correctness against a specification, and nobody has tested the specification.
 
 ## What the gates could catch, and what they structurally could not
 
-On the day the reviewer measured it — 2026-08-18 — the default gate ran 4,621 tests and four
-import contracts, and it was green. On the same corpus, a fifth of what crewmates said about
-their own movements did not match where they had been. Three findings explain how both are
-true, and not one of them is a missing test.
+On the day [the reviewer](../audits/review-2026-08-19/B/repo-health-architecture.md) measured
+it — 2026-08-18 — the default gate ran 4,621 tests and four import contracts, and it was green.
+On the same corpus, a fifth of what crewmates said about their own movements did not match
+where they had been. Three findings explain how both are true, and not one of them is a
+missing test.
 
 - **An invariant that stopped being true.** A comment in the memory layer justified an
   inference on the rule that an agent's own job list only ever shrinks. A map setting flipped
@@ -59,18 +60,19 @@ true, and not one of them is a missing test.
   everyone survived all four suites. Fixed since: the scanner recomputes visibility
   independently and compares it against what was handed out.
 - **Contracts that covered a quarter of the tree.** The import contracts that enforce the rule
-  at the centre of this project — agents may not import the engine — covered 89 of 383 Python
-  files when the review measured them. A file placed inside the agent package that imported
+  at the centre of this project — agents may not import the engine — covered
+  [89 of 383 Python files](../audits/review-2026-08-19/B/collated-findings.md) when the review
+  measured them. A file placed inside the agent package that imported
   the orchestrator, which imports the engine, passed all four. Fixed since: the contracts now
   run over every top-level package, and the test that plants a forbidden import plants it in a
   temporary tree instead of the live one.
 
-The counterweight belongs in the same breath, because the lesson is not that tests are
-useless. The prompt golden re-runs the real meeting assembly over two hundred committed
-meetings and ships a one-byte perturbation whose only job is to prove the golden can fail; the
-reviewer followed every audit and contract path cited from Python and found 43 of 44 still
-resolve on disk. A gate only sees the axis it was pointed at. The fix is another axis, not
-more of the same one.
+The counterweight belongs in the same breath, because the lesson is not that tests are useless.
+One test re-runs the real meeting machinery over two hundred committed meetings, compares what
+comes out byte for byte, and ships a deliberately corrupted copy alongside it whose only job is
+to prove that the comparison can fail; and [the reviewer](../audits/review-2026-08-19/B/repo-health-architecture.md)
+followed every audit and contract path cited from the code and found 43 of 44 still resolve on
+disk. A gate only sees the axis it was pointed at. The fix is another axis.
 
 ## Documentation drift is a defect, not untidiness
 
@@ -101,9 +103,10 @@ published miss.
 ## The critique I am keeping
 
 The sharpest thing anyone said about this project is not a defect report. The review's
-research-lead read closed with: *"strong on measurement, weak on knowing when to stop building
-measurement."* Nobody rebutted it, and the code track then handed over the
-measurement that makes it concrete: **95,824 lines of process narration** — contracts,
+[research-lead read](../audits/review-2026-08-19/C/p2-ml-research-lead.md) closed with:
+*"strong on measurement, weak on knowing when to stop building measurement."* Nobody rebutted
+it, and [the code track](../audits/review-2026-08-19/B/repo-health-architecture.md) then handed
+over the measurement that makes it concrete: **95,824 lines of process narration** — contracts,
 generated prompts, audits — against **57,776 lines of core product Python**, a ratio of 1.66
 to 1, against **3,358 lines of durable engineering documentation**.
 

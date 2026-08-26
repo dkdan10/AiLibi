@@ -95,14 +95,10 @@ the task that made the change, not every task that mentions it.
 | `C-67` | Guard activity survived only as marker substrings parsed out of spoken text | 20.28 | [#380](https://github.com/dkdan10/AiLibi/pull/380) |
 | `C-73` | Reported testimony was starved out of the memory render in the games it targets | 20.30 | [#382](https://github.com/dkdan10/AiLibi/pull/382) |
 | `C-74` | The multi-hour recording script had no coverage of its real worker paths | 20.21 | [#359](https://github.com/dkdan10/AiLibi/pull/359) |
-| `C-79` | The app shell was a God module contradicting its own no-edit header | 20.3 | [#367](https://github.com/dkdan10/AiLibi/pull/367) |
-| `C-80` | The frontend derivation layer was half-built, which is why `C-7` went unnoticed | 20.1 | [#354](https://github.com/dkdan10/AiLibi/pull/354) |
 | `C-83` | Import-time side effects in the prompt loader forced a mirrored resolver elsewhere | 20.5 | [#351](https://github.com/dkdan10/AiLibi/pull/351) |
 | `C-88` | Fake-provider meetings are degenerate — every fake vote normalises to a skip | 20.12 | [#371](https://github.com/dkdan10/AiLibi/pull/371) |
 | `C-96` | The documented evidence restore and the documented gate excluded each other | 20.17 | [#361](https://github.com/dkdan10/AiLibi/pull/361) |
-| `C-101` | Frontend coverage was an order of magnitude behind Python, by configuration | 20.1 | [#354](https://github.com/dkdan10/AiLibi/pull/354) |
 | `C-104` | Tests pinned retired settings, with names and docstrings saying the opposite | 20.37 | [#391](https://github.com/dkdan10/AiLibi/pull/391) |
-| `C-107` | No test-infrastructure layer: 184 files behind two conftests and one fixture | 20.18 | [#368](https://github.com/dkdan10/AiLibi/pull/368) |
 | `C-113` | Docstring, front door and committed data disagreed about one eval metric | 20.6 | [#353](https://github.com/dkdan10/AiLibi/pull/353) |
 | `C-125` | CONTRIBUTING overstated the gate; the README overstated the enforcement | 20.9 | [#352](https://github.com/dkdan10/AiLibi/pull/352) |
 | `C-126` | Operator environment knobs were documented nowhere | 20.5 | [#351](https://github.com/dkdan10/AiLibi/pull/351) |
@@ -123,27 +119,43 @@ the task that made the change, not every task that mentions it.
 | `G-38` | The spectator misrepresented four action classes and never cleared bodies | 20.16 | [#370](https://github.com/dkdan10/AiLibi/pull/370) |
 | `G-41` | Internal jargon and task numbers were on the product surface | 20.2 | [#360](https://github.com/dkdan10/AiLibi/pull/360) |
 
-Four rows want a qualification, and it is better stated than glossed. `G-37` was *labelled*
+Two rows want a qualification, and it is better stated than glossed. `G-37` was *labelled*
 rather than changed — the clock convention is documented on the spectator surface, because
 changing it would move every recorded tick stamp
 ([`../audit-phase-20-planning.md`](../audit-phase-20-planning.md) §5). `C-88` was *disclosed*:
 the front door now explains why a run against the offline provider ejects nobody and reports
-null rates, and hands the reader a real report instead. `C-101` and `C-107` name structural
-gaps that one task each *began* closing — the first component-level render test, and the first
-session-scoped fixture behind a parallel runner — rather than gaps a single change could
-close; the remainder of both sits in the tail below.
+null rates, and hands the reader a real report instead. Both are the whole response the
+finding was ruled to need. Findings a task only *began* answering are not in this table at
+all — they are in §4 below, because a map that calls a first brick a closed wall is the exact
+overstatement this index exists to police.
 
 ---
 
-## 4. What was not acted on, and where that is recorded
+## 4. What was not closed, and where that is recorded
 
-None of these are re-argued here; each points at the ruling that owns it.
+Everything the review raised that the map above does not carry: the classes ruled out of this
+phase, the ones a task only began, and the ones its own verifier withdrew. None of them is
+re-argued here; each points at the ruling or the record that owns it.
 
 - **The balance wave** — post-meeting position and cooldown reset (`G-5`), finished-crew idle
   jobs (`G-15`), the vent peek (`G-13`), a speakable witnessed kill (`G-8`), a symmetric
   roll-call (`G-22`), sabotage as a real clock (`G-40`), and a second act for the small roster.
   Chartered as its own wave with its own recording, because every one of them changes the game
   rather than its honesty ([`../audit-phase-20-planning.md`](../audit-phase-20-planning.md) §7).
+- **Begun, not finished.** Four structural findings had one symptom addressed and the finding
+  left standing, so none of them is in the map above. `C-79` (the app shell is a God module
+  contradicting its own no-edit header) saw its focus-trap and layout defects fixed while the
+  shell itself is still roughly 1,200 lines. `C-80` (the frontend derivation layer is
+  half-built, which is why `C-7` went unnoticed) had its first derivation extracted and
+  tested — the task that did it calls that the first brick and says so. `C-101` (frontend
+  coverage an order of magnitude behind Python, by configuration) gained the first
+  component-level render test. `C-107` (no test-infrastructure layer) gained the first
+  session-scoped fixture, behind a parallel runner. Each remains open at its own scope.
+- **Cited as context, not closed** — `C-36` (the tick-and-meeting loop hand-rolled at eight
+  sites) is cited for the agent-clock seam it explains rather than for its own decomposition,
+  and `C-72` (half the belief model never reaches production) was graded UNDERMINED and needed
+  no front-door repair, because the claim it undermined had already been removed. Both stay in
+  the tail.
 - **The refuted items** — `G-6`, `G-7`'s headline, `G-4`'s vent half and `C-33`'s load-bearing
   risk are in §1 above. Nothing was built for a claim its own verifier withdrew.
 - **The decomposition refusals** — the God-module split (`C-62`) and the forked option

@@ -146,13 +146,17 @@ together, so one run names every drifted fact rather than the first.
     and every sentence naming a wrongful or innocent ejection must name the
     count the record read — or the count the recording before it read, which
     is what the before column is for.
-18. **The published review index's acted-on map resolves.** Every row of
-    ``audits/review-2026-08-19/README.md``'s finding -> task -> pull-request
-    table must credit a task that exists as a contract in ``tasks/phase-20.md``
-    AND whose contract actually names that finding, so a row cannot be moved to
-    a neighbouring task and still read as true. Whether the pull-request number
-    was merged is resolved in the unit tests, which need full git history and
-    skip rather than pass without it.
+18. **The published review index accounts for every finding, and its map
+    resolves.** Every register id named on a ``**Section refs:**`` line of
+    ``tasks/phase-20.md`` must appear somewhere in
+    ``audits/review-2026-08-19/README.md`` — mapped to its fix, retracted, or
+    listed as not acted on — so a dropped row fails instead of quietly shrinking
+    the index. Every row of that index's finding -> task -> pull-request table
+    must then credit a task that exists as a contract AND whose contract
+    actually names that finding, cite this repository's pull-request URL with a
+    label matching it, and appear exactly once. Whether the number was merged,
+    and whether it belongs to the row's own task, is resolved in the unit tests,
+    which need full git history and skip rather than pass without it.
 
 ``--repo-root`` points the document and source reads at another tree (the unit
 tests perturb a copy); it defaults to this checkout. The lever registry ALWAYS
@@ -418,10 +422,18 @@ _REVIEW_MAP_HEADER: Final[tuple[str, ...]] = (
 )
 _REVIEW_FINDING: Final = re.compile(r"\A`([GC]-\d{1,3})`\Z")
 _REVIEW_TASK: Final = re.compile(r"\A(\d+\.\d+)\Z")
+# The repository whose pull requests this index may cite. Pinned rather than
+# captured: a row pointing at someone else's fork would resolve against a number
+# this history happens to carry and read as verified.
+_REVIEW_REPOSITORY: Final = "dkdan10/AiLibi"
 _REVIEW_PULL_REQUEST: Final = re.compile(
-    r"\A\[#(\d+)\]\(https://github\.com/[\w.-]+/[\w.-]+/pull/(\d+)\)\Z"
+    rf"\A\[#(\d+)\]\(https://github\.com/{re.escape(_REVIEW_REPOSITORY)}/pull/(\d+)\)\Z"
 )
 _PHASE_TASK_HEADING: Final = re.compile(r"^### Task (\d+\.\d+) — ", re.MULTILINE)
+# A review register id, and the contract line that declares which ones a task
+# acts on. The index must account for every id the phase's contracts declare.
+_FINDING_ID: Final = re.compile(r"\b([GC]-\d{1,3})\b")
+_SECTION_REFS_PREFIX: Final = "**Section refs:**"
 
 # A `path.ext:NN` citation — the shape that rots on the next edit of the file it
 # names. The extensions are the ones this tree's prose actually cites.
@@ -685,8 +697,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         f"features; the claim-shaped facts hold across "
         f"{len(_CLAIM_DOCUMENTS)} documents; every relative link in "
         f"{len(_LINKED_DOCUMENTS) + len(_PUBLISHED_DOCUMENTS)} front-door and "
-        f"published documents resolves; and every {_REVIEW_INDEX} map row "
-        f"credits a {_PHASE_20_CONTRACT} contract that names its finding."
+        f"published documents resolves; and {_REVIEW_INDEX} accounts for every "
+        f"finding {_PHASE_20_CONTRACT} names, each mapped row crediting a "
+        "contract that names it back."
     )
     print(
         f"{_ML_PAGE} verified: every published arm's wins, comparator wins, "
@@ -3154,15 +3167,17 @@ def relative_targets(
 
 
 def check_review_map(repo_root: Path, errors: list[str]) -> None:
-    """The review index's acted-on map points at real contracts and real work.
+    """The review index accounts for every finding, and its map resolves.
 
-    "The process caught it and here is the fix" is only a checkable claim while
-    the third and fourth columns resolve. Each row is held to the contract that
-    owns the change: the task id must name a section of the phase document, and
-    that section must actually cite the finding — a row moved to a neighbouring
-    task would otherwise read as true. The pull-request number's own resolution
-    needs full git history, so it lives in the unit tests, which can skip on a
-    shallow clone rather than pass on one.
+    Two halves. **Coverage**: every finding id the phase's contracts declare
+    they act on must appear somewhere in the index — mapped to its fix,
+    retracted, or listed as not acted on — so a deleted row is a failure rather
+    than a quiet omission, which is the difference between an index and a
+    highlight reel. **Resolution**: each map row is held to the contract that
+    owns the change, whose section must actually cite the finding, because a row
+    moved to a neighbouring task would otherwise read as true. The pull-request
+    number's own resolution needs full git history, so it lives in the unit
+    tests, which can skip on a shallow clone rather than pass on one.
     """
 
     index = read_document(repo_root, _REVIEW_INDEX, errors)
@@ -3178,7 +3193,23 @@ def check_review_map(repo_root: Path, errors: list[str]) -> None:
         )
         return
 
+    declared = phase_finding_ids(contract)
+    if not declared:
+        errors.append(
+            f"{_PHASE_20_CONTRACT}: no '{_SECTION_REFS_PREFIX}' line names a "
+            "review finding — the index's coverage cannot be checked against a "
+            "contract document that parses to nothing."
+        )
+    named = set(_FINDING_ID.findall(index))
+    for missing in sorted(declared - named, key=finding_order):
+        errors.append(
+            f"{_REVIEW_INDEX}: {missing} is named by a {_PHASE_20_CONTRACT} "
+            "contract but appears nowhere in the index — every finding the phase "
+            "touched is mapped to its fix, retracted, or listed as not acted on."
+        )
+
     sections = phase_task_sections(contract)
+    mapped: dict[str, int] = {}
     for number, cells in rows:
         finding = _REVIEW_FINDING.match(cells[0])
         task = _REVIEW_TASK.match(cells[2])
@@ -3210,6 +3241,36 @@ def check_review_map(repo_root: Path, errors: list[str]) -> None:
                 f"task {task.group(1)}, whose contract in {_PHASE_20_CONTRACT} "
                 f"never names {finding.group(1)}."
             )
+        first = mapped.setdefault(finding.group(1), number)
+        if first != number:
+            errors.append(
+                f"{_REVIEW_INDEX}:{number}: {finding.group(1)} is mapped twice "
+                f"(also at line {first}) — one finding, one closing change, or "
+                "the two rows drift apart."
+            )
+
+
+def phase_finding_ids(contract: str) -> set[str]:
+    """Every review finding id the phase's contracts declare they act on.
+
+    Read from the ``**Section refs:**`` lines rather than from whole sections: a
+    contract's section-reference line is where it states what it addresses, and
+    the surrounding prose cites neighbouring findings as context.
+    """
+
+    return {
+        finding
+        for line in contract.splitlines()
+        if line.startswith(_SECTION_REFS_PREFIX)
+        for finding in _FINDING_ID.findall(line)
+    }
+
+
+def finding_order(finding: str) -> tuple[str, int]:
+    """``G-7`` before ``G-12``: sort a register id by number, not by string."""
+
+    register, _, number = finding.partition("-")
+    return register, int(number)
 
 
 def review_map_cells(index: str) -> list[tuple[int, list[str]]] | None:
@@ -3237,15 +3298,19 @@ def review_map_cells(index: str) -> list[tuple[int, list[str]]] | None:
     return rows
 
 
-def review_map_rows(index: str) -> list[tuple[int, str, int]]:
-    """``(line, finding id, pull-request number)`` for each parseable map row."""
+def review_map_rows(index: str) -> list[tuple[int, str, str, int]]:
+    """``(line, finding, task id, pull request)`` for each parseable map row."""
 
-    parsed: list[tuple[int, str, int]] = []
+    parsed: list[tuple[int, str, str, int]] = []
     for number, cells in review_map_cells(index) or []:
         finding = _REVIEW_FINDING.match(cells[0])
+        task = _REVIEW_TASK.match(cells[2])
         pull_request = _REVIEW_PULL_REQUEST.match(cells[3])
-        if finding is not None and pull_request is not None:
-            parsed.append((number, finding.group(1), int(pull_request.group(2))))
+        if finding is None or task is None or pull_request is None:
+            continue
+        parsed.append(
+            (number, finding.group(1), task.group(1), int(pull_request.group(2)))
+        )
     return parsed
 
 
