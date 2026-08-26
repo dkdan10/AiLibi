@@ -148,7 +148,20 @@ Every figure is the current reference recording, made 2026-08-25, with the one i
 
 **Four learned impostor policies beat the scripted one on wins; none became the default.** Two phases of evolutionary search over the impostor's tactical decisions produced policies that won more games than the same-seed scripted comparator, and every one of them failed an evidence-quality gate written down *before* the measurement that judged it — so both phases closed having adopted nothing. Two qualifications ride with that result, and they cut against it: the edge of the one learned policy this repo committed is not statistically significant at 50 games, and the scripted comparator those runs were measured against carried two measured target-selection defects that depress it, so each edge is an upper bound. Both defects are repaired now and nothing was retrained, so those edges were never re-measured and are stale by construction. The whole account in research shape — problem, environment, method, results, limitations — is [the ML program page](docs/ml-program.md).
 
-<!-- ANCHOR: a later contract adds "What I learned" and a lessons page. -->
+## What I learned
+
+Eight claims I would not have made in May, in one page: [docs/lessons.md](docs/lessons.md).
+
+- A written contract — files in scope, files out of scope, a definition of done ending in a command — is the unit of work when the implementer is an agent; a conversation is not.
+- Re-reading every file and line a contract cites *before* dispatching it prevents more wasted agent-hours than any improvement to the prompt wording.
+- A green build and a broken game are not a contradiction: the tests defend correctness against a specification, and nobody tests the specification.
+- The three defects my gates structurally could not see were an invariant that a later configuration change quietly falsified, a check that validated shape instead of entitlement, and architecture contracts that covered a quarter of the tree — all three now closed.
+- A gate only ever sees the axis it was pointed at, so the answer to a gate that missed something is a different axis, not more of the same one.
+- Documentation drift is a defect with a test, not untidiness with a chore: the result figures on this page are recomputed from the bytes that own them wherever a source can be counted, held against the second table that states them where one cannot, and every count that ages without an edit — commits, merged pull requests, tests — has to carry the date it was taken.
+- A bar written down before the measurement is worth nothing until it is allowed to say no in public — two of mine did, and the miss is [in the section above](#what-the-measurements-said).
+- The sharpest review of this project was not a defect report but a line about judgment, and quoting a critic verbatim on your own front page is a stronger claim than any number in the table above.
+
+The review those lessons came out of is published in full — curated, indexed, and titled by the four of its own headline claims it disproved: [the 2026-08-19 three-track review](audits/review-2026-08-19/README.md).
 
 ## Project status
 

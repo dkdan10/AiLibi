@@ -55,6 +55,11 @@ _COPIED = (
     "frontend/src/components/ReplayPicker.tsx",
     "docs/ml-program.md",
     "training/reports/results-finalist-eval.jsonl",
+    # The two published pages and the phase contract the review index's
+    # acted-on map is resolved against.
+    "docs/lessons.md",
+    "audits/review-2026-08-19/README.md",
+    "tasks/phase-20.md",
 )
 
 # The front-door checks also ENUMERATE paths whose contents they never open:
@@ -90,6 +95,15 @@ _HISTORY = "docs/history.md"
 _READING_GUIDE = "docs/reading-guide.md"
 _CITATION_INSTRUMENT = "tests/eval/test_vj_instruments.py"
 _AUDITS_INDEX = "audits/README.md"
+_LESSONS = "docs/lessons.md"
+_REVIEW_INDEX = "audits/review-2026-08-19/README.md"
+# One acted-on map row, cell by cell: the finding, the task credited with
+# closing it, and the pull request that carries the change.
+_MAP_FINDING = "`C-31`"
+_MAP_TASK_CELL = "| 20.8 |"
+# A finding the index names ONLY in its map row, so deleting that row really
+# does remove it from the document (C-31 is also named in the severity block).
+_MAP_ONLY_FINDING = "`C-9`"
 _PROOF_AUDIT = "audits/audit-phase-19-close.md"
 _PROOF_ROW = (
     "| **direct-proof accuracy** | **68/68 = 1.000** [0.947, 1.0] | "
@@ -171,7 +185,9 @@ def _stand_in_enumerated_paths(root: Path) -> None:
         for child in (_REPO_ROOT / "audits").iterdir()
         if child.is_dir()
     )
-    for document in check_doc_facts._LINKED_DOCUMENTS:
+    for document in (
+        check_doc_facts._LINKED_DOCUMENTS + check_doc_facts._PUBLISHED_DOCUMENTS
+    ):
         text = (root / document).read_text(encoding="utf-8")
         for _, resolved in check_doc_facts.relative_targets(_REPO_ROOT, document, text):
             relative = resolved.relative_to(_REPO_ROOT).as_posix()
@@ -198,6 +214,14 @@ def _write(root: Path, relative: str, text: str) -> None:
     path = root / relative
     path.unlink(missing_ok=True)
     path.write_text(text, encoding="utf-8")
+
+
+def _map_row(index: str, finding: str) -> str:
+    """The acted-on map row for ``finding`` (backticked), asserting it is there."""
+
+    rows = [line for line in index.splitlines() if line.startswith(f"| {finding} |")]
+    assert len(rows) == 1, f"{finding} is not mapped exactly once"
+    return rows[0]
 
 
 def _substitute(root: Path, relative: str, old: str, new: str) -> None:
@@ -2134,6 +2158,114 @@ def test_broken_relative_link_detected(doc_tree: Path) -> None:
     assert "does not exist" in errors[0]
 
 
+def test_broken_relative_link_on_a_published_page_detected(doc_tree: Path) -> None:
+    # The lessons page and the review index carry the same link rule as the
+    # front door: they are published surfaces, not scratch notes.
+    _substitute(
+        doc_tree,
+        _LESSONS,
+        "(../CONTRIBUTING.md)",
+        "(../CONTRIBUTING.markdown)",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert errors[0].startswith(f"{_LESSONS}: ")
+    assert "'../CONTRIBUTING.markdown'" in errors[0]
+    assert "does not exist" in errors[0]
+
+
+def test_broken_relative_link_on_the_review_index_detected(doc_tree: Path) -> None:
+    _substitute(
+        doc_tree,
+        _REVIEW_INDEX,
+        "(A/verdicts.md)",
+        "(A/verdict.md)",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert errors and all(error.startswith(f"{_REVIEW_INDEX}: ") for error in errors)
+    assert all("'A/verdict.md'" in error for error in errors)
+
+
+def test_mapped_task_with_no_contract_detected(doc_tree: Path) -> None:
+    # The map's whole claim is "here is the change that closed it": a task id
+    # no contract owns makes that unverifiable, and the row is named.
+    _substitute(doc_tree, _REVIEW_INDEX, _MAP_TASK_CELL, "| 20.99 |")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert _MAP_FINDING.strip("`") in errors[0]
+    assert "20.99" in errors[0]
+    assert "not a contract" in errors[0]
+
+
+def test_map_row_moved_to_a_neighbouring_task_detected(doc_tree: Path) -> None:
+    # A real contract that never names this finding: the id has to appear in
+    # the section credited with closing it, or the row is decoration.
+    _substitute(doc_tree, _REVIEW_INDEX, _MAP_TASK_CELL, "| 20.11 |")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert f"never names {_MAP_FINDING.strip('`')}" in errors[0]
+
+
+def test_map_row_whose_link_disagrees_with_its_label_detected(doc_tree: Path) -> None:
+    _substitute(
+        doc_tree,
+        _REVIEW_INDEX,
+        "[#363](https://github.com/dkdan10/AiLibi/pull/363)",
+        "[#363](https://github.com/dkdan10/AiLibi/pull/633)",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "#363 but links pull request #633" in errors[0]
+
+
+def test_map_row_pointing_at_another_repository_detected(doc_tree: Path) -> None:
+    # A number this history carries says nothing about someone else's fork.
+    _substitute(
+        doc_tree,
+        _REVIEW_INDEX,
+        "[#363](https://github.com/dkdan10/AiLibi/pull/363)",
+        "[#363](https://github.com/someone-else/a-fork/pull/363)",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert _MAP_FINDING in errors[0]
+    assert "does not parse" in errors[0]
+
+
+def test_dropped_map_row_detected(doc_tree: Path) -> None:
+    # The index's stated invariant is that it accounts for every finding the
+    # phase touched. Deleting one row must fail, not quietly shrink the table.
+    index = _read(doc_tree, _REVIEW_INDEX)
+    row = _map_row(index, _MAP_ONLY_FINDING)
+    _write(doc_tree, _REVIEW_INDEX, index.replace(row + "\n", ""))
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    finding = _MAP_ONLY_FINDING.strip("`")
+    assert errors[0].startswith(f"{_REVIEW_INDEX}: {finding} is named")
+    assert "appears nowhere in the index" in errors[0]
+
+
+def test_duplicated_map_row_detected(doc_tree: Path) -> None:
+    index = _read(doc_tree, _REVIEW_INDEX)
+    row = _map_row(index, _MAP_ONLY_FINDING)
+    _write(doc_tree, _REVIEW_INDEX, index.replace(row + "\n", row + "\n" + row + "\n"))
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "is mapped twice" in errors[0]
+    assert _MAP_ONLY_FINDING.strip("`") in errors[0]
+
+
+def test_deleted_acted_on_map_fails_loud(doc_tree: Path) -> None:
+    # An emptied table must not read as "nothing drifted".
+    index = _read(doc_tree, _REVIEW_INDEX)
+    header = "| " + " | ".join(check_doc_facts._REVIEW_MAP_HEADER) + " |"
+    kept = [line for line in index.splitlines() if not line.startswith("| `")]
+    _write(doc_tree, _REVIEW_INDEX, "\n".join(kept))
+    assert header in index
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert errors and "no acted-on map rows found" in errors[0]
+
+
 def test_missing_document_reported(doc_tree: Path) -> None:
     (doc_tree / _ENV_EXAMPLE).unlink()
     errors = check_doc_facts.check_facts(doc_tree)
@@ -2275,6 +2407,10 @@ _FENCE = re.compile(r"^```[^\n]*\n(.*?)^```", re.MULTILINE | re.DOTALL)
 _EXHIBIT_REPO = "dkdan10/AiLibi"
 _PULL_REQUEST_URL = re.compile(r"https://github\.com/([\w.-]+/[\w.-]+)/pull/(\d+)")
 _PR_SUBJECT_SUFFIX = re.compile(r"\(#(\d+)\)\s*\Z")
+# A squashed task merge: the task it closed and the pull request it arrived on.
+# "follow-up" merges carry the same task id, so the LAST one read wins and the
+# map may credit either — both are that task's work.
+_TASK_SUBJECT = re.compile(r"\Atask (\d+\.\d+)(?: follow-up)?: .*\(#(\d+)\)\s*\Z")
 
 
 def _committed(name: str) -> str:
@@ -2539,6 +2675,72 @@ def _pull_request_numbers(repo_root: Path) -> set[int] | None:
     return numbers
 
 
+def _merged_task_ids(repo_root: Path) -> dict[int, str] | None:
+    """``{pull request: task id}`` from the merge subjects, or ``None``.
+
+    ``None`` under the same conditions as :func:`_pull_request_numbers`: without
+    full history the mapping would be missing arbitrary rows.
+    """
+
+    try:
+        shallow = subprocess.run(
+            ["git", "rev-parse", "--is-shallow-repository"],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if shallow.returncode != 0 or shallow.stdout.strip() != "false":
+            return None
+        log = subprocess.run(
+            ["git", "log", "--format=%s"],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return None
+    if log.returncode != 0:
+        return None
+    tasks: dict[int, str] = {}
+    for subject in log.stdout.splitlines():
+        match = _TASK_SUBJECT.match(subject)
+        if match is not None:
+            tasks[int(match.group(2))] = match.group(1)
+    return tasks
+
+
+def _map_pull_request_problems(
+    index: str, pull_requests: set[int], merged_tasks: dict[int, str]
+) -> list[str]:
+    """Every acted-on map row whose pull request does not resolve to its task.
+
+    The git-history half of the map check: ``check_doc_facts`` resolves the task
+    id against the phase contract, and this resolves the number against the
+    subjects merged onto this branch — both that some commit carries it, and
+    that the commit carrying it is the row's OWN task, so two valid numbers
+    cannot be swapped between rows. It lives here because the caller can skip on
+    a shallow clone, which a gate script running in CI could not.
+    """
+
+    problems: list[str] = []
+    for line, finding, task, number in check_doc_facts.review_map_rows(index):
+        if number not in pull_requests:
+            problems.append(
+                f"{_REVIEW_INDEX}:{line}: the {finding} row credits pull request "
+                f"#{number}, which closed nothing reachable from HEAD — no commit "
+                "subject ends in its number."
+            )
+        elif merged_tasks.get(number) != task:
+            problems.append(
+                f"{_REVIEW_INDEX}:{line}: the {finding} row credits task {task} "
+                f"with pull request #{number}, whose merge subject names "
+                f"{merged_tasks.get(number, 'no task')}."
+            )
+    return problems
+
+
 def _exhibit_problems(
     readme: str, repo_root: Path, pull_requests: set[int]
 ) -> list[str]:
@@ -2675,6 +2877,46 @@ def test_an_exhibit_pull_request_in_another_repository_is_rejected() -> None:
     )
     problems = _exhibit_problems(elsewhere, _REPO_ROOT, {328})
     assert any("someone-else/a-fork" in problem for problem in problems), problems
+
+
+def test_the_review_maps_pull_requests_resolve() -> None:
+    """ "Here is the fix" is a claim, so every number in it is resolved."""
+
+    pull_requests = _pull_request_numbers(_REPO_ROOT)
+    merged_tasks = _merged_task_ids(_REPO_ROOT)
+    if pull_requests is None or merged_tasks is None:
+        pytest.skip("no full git history here; the map's PRs cannot be resolved")
+    index = _committed(_REVIEW_INDEX)
+    assert check_doc_facts.review_map_rows(index), "the acted-on map parsed to no rows"
+    assert _map_pull_request_problems(index, pull_requests, merged_tasks) == []
+
+
+def test_a_mapped_pull_request_absent_from_history_is_rejected() -> None:
+    index = _committed(_REVIEW_INDEX)
+    rows = check_doc_facts.review_map_rows(index)
+    merged = {number: task for _, _, task, number in rows}
+    dropped = rows[0][3]
+    named = {finding for _, finding, _, number in rows if number == dropped}
+    problems = _map_pull_request_problems(index, set(merged) - {dropped}, merged)
+    assert len(problems) == len(named), problems
+    assert all(any(finding in problem for finding in named) for problem in problems)
+    assert all("reachable from HEAD" in problem for problem in problems), problems
+
+
+def test_two_valid_pull_requests_swapped_between_rows_are_rejected() -> None:
+    """Reachability alone is not resolution: the number must be the row's own."""
+
+    index = _committed(_REVIEW_INDEX)
+    by_task = {
+        task: number for _, _, task, number in check_doc_facts.review_map_rows(index)
+    }
+    first, second = sorted(by_task)[:2]
+    swapped = dict(by_task)
+    swapped[first], swapped[second] = by_task[second], by_task[first]
+    merged = {number: task for task, number in swapped.items()}
+    problems = _map_pull_request_problems(index, set(merged), merged)
+    assert problems, "a swapped pull request has to be caught"
+    assert all("whose merge subject names" in problem for problem in problems), problems
 
 
 def test_a_low_contrast_palette_is_rejected() -> None:
