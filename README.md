@@ -36,7 +36,10 @@ Three commands, three claims, all free and offline.
 bash scripts/setup_env.sh   # one-time: uv sync + npm ci
 
 # 1. Proves determinism — the same seed twice, byte-identical replay JSONL.
-#    (A fresh dir each time: the recorder refuses to overwrite a replay path.)
+#    (A fresh dir each time: the recorder refuses to overwrite a replay path.
+#    Each run also leaves r1.audit.jsonl / r2.audit.jsonl beside its replay —
+#    the log of what each agent was allowed to see, explained in
+#    docs/deployment.md under "The audit sidecar beside a replay".)
 d=$(mktemp -d)
 uv run python scripts/run_game.py --seed 42 --replay-path "$d/r1.jsonl" &&
   uv run python scripts/run_game.py --seed 42 --replay-path "$d/r2.jsonl" &&
@@ -114,7 +117,7 @@ Rather than take the paragraph above on trust, read the authorship out of git yo
 
 ## What it is
 
-A deterministic testbed for studying multi-agent reasoning under hidden information, not a game with AI players bolted on. Three decisions carry the weight. They are recorded verbatim in [ADR-0001](docs/adr/0001-three-load-bearing-decisions.md).
+A deterministic testbed for studying multi-agent reasoning under hidden information, not a game with AI players bolted on. Three decisions carry the weight. The three below restate them in this page's words; the decision record is [ADR-0001](docs/adr/0001-three-load-bearing-decisions.md), which takes them from [DESIGN.md](DESIGN.md) §0 and states two design targets the restatement drops — a 2 Hz tick rate, and no more than 100 LLM calls in a full game.
 
 1. **A deterministic engine behind a strict observation firewall.** The engine advances world state as a pure tick function — no wall clock, no unseeded randomness, no global state — so the same seed and inputs always produce the same bytes. Agents cannot import the engine, directly or transitively: an agent physically cannot read the state it must deduce. It sees an `ObservationPacket` and a `PublicMapView`, and emits an `ActionIntent`. The firewall covers the *agent* surface; the spectator is privileged by design.
 2. **Two-tier reasoning.** Movement, tasks and venting are rule-based, every tick. Meeting speech, voting and suspicion updates call an LLM, only at meetings and triggers. Without that split, cost and latency make the system unviable.

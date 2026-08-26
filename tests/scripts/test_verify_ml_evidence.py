@@ -274,6 +274,101 @@ def test_availability_registry_covers_the_document() -> None:
     ] * len(vme._OFF_TREE_ANCHORS)
 
 
+#: The finalist report's availability-erratum headings. The errata are additive,
+#: so the LAST one is the current record: a later section supersedes an earlier
+#: one's promise instead of rewriting it.
+_AVAILABILITY_ERRATUM = re.compile(r"^## \d+\. Availability erratum.*$", re.MULTILINE)
+
+
+def _latest_availability_erratum(report: str) -> str:
+    """The text of the finalist report's most recent availability erratum."""
+
+    sections = re.split(r"^(?=## )", report, flags=re.MULTILINE)
+    errata = [section for section in sections if _AVAILABILITY_ERRATUM.match(section)]
+    assert errata, f"{vme.FINALIST_REPORT} carries no availability erratum"
+    return errata[-1]
+
+
+#: The destination PAIRING the erratum has to state: the evidence branch, then
+#: the sha it is pinned at. Presence of the sha somewhere in the section is not
+#: the claim — the section also cites the superseded staging ref by its own sha,
+#: so a pairing naming the wrong commit while the real pin survived nearby as
+#: history would read as verified (Codex review, PR #394).
+_ERRATUM_DESTINATION = re.compile(
+    r"evidence/phase-18-coevo[`*\s]*@[`*\s]*([0-9a-f]{40})"
+)
+
+
+def _erratum_disagreements(
+    erratum: str, *, pinned_sha: str, ruling: vme.Ruling | None
+) -> list[str]:
+    """Where the erratum's availability story and the machinery's disagree."""
+
+    if ruling is not None and ruling.lost:
+        return [
+            f"the erratum omits {token!r}, which the recorded "
+            f"{ruling.outcome} ruling of {ruling.date} states"
+            for token in (ruling.outcome, ruling.date)
+            if token not in erratum
+        ]
+    named: list[str] = _ERRATUM_DESTINATION.findall(erratum)
+    if not named:
+        return ["the erratum states no `evidence/phase-18-coevo` @ <sha> destination"]
+    return [
+        f"the erratum pins the evidence commit at {sha}, not {pinned_sha}"
+        for sha in sorted(set(named))
+        if sha != pinned_sha
+    ]
+
+
+def _perturbed_errata(
+    erratum: str, *, pinned_sha: str, ruling: vme.Ruling | None
+) -> list[str]:
+    """Copies of the erratum text a gate worth having has to reject."""
+
+    if ruling is not None and ruling.lost:
+        return [
+            erratum.replace(ruling.outcome, "MISLAID"),
+            erratum.replace(ruling.date, "1999-01-01"),
+        ]
+    decoy = "b" * len(pinned_sha)
+    return [
+        erratum.replace(pinned_sha, decoy),
+        # The case mere presence cannot catch: the destination pairing names
+        # another commit while the real pin survives as superseded history.
+        _ERRATUM_DESTINATION.sub(
+            lambda m: m.group(0).replace(m.group(1), decoy), erratum, count=1
+        )
+        + f"\n\n(superseded: {pinned_sha})\n",
+    ]
+
+
+def test_the_report_availability_erratum_agrees_with_the_machinery() -> None:
+    """The research reader's document states the availability the gate measures.
+
+    On the recovery path the erratum has to pin the evidence branch to the sha
+    `read_pinned_sha` reads — the pairing, not the token, because that is what
+    turns "where the raw slate lives" into one fetch a stranger can run. On a
+    recorded loss it has to carry `read_slate_ruling`'s outcome AND its date.
+    Both sides are read, never transcribed.
+
+    The perturbation legs are copies of the erratum a correct gate must reject,
+    including the one substring presence cannot see: a destination naming another
+    commit while the real pin survives beside it as superseded history.
+    """
+
+    report = (_REPO_ROOT / vme.FINALIST_REPORT).read_text(encoding="utf-8")
+    erratum = _latest_availability_erratum(report)
+    pinned_sha = vme.read_pinned_sha(_REPO_ROOT)
+    ruling = vme.read_slate_ruling(_REPO_ROOT)
+
+    assert not _erratum_disagreements(erratum, pinned_sha=pinned_sha, ruling=ruling)
+
+    for drifted in _perturbed_errata(erratum, pinned_sha=pinned_sha, ruling=ruling):
+        assert drifted != erratum, "the perturbation changed nothing"
+        assert _erratum_disagreements(drifted, pinned_sha=pinned_sha, ruling=ruling)
+
+
 def test_recompute_reads_every_committed_verdict_against_the_declared_gap() -> None:
     """The three instruments re-derive from the FROZEN weights, and land STALE.
 

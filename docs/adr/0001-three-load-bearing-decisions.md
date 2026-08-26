@@ -42,3 +42,25 @@ quotes the parenthetical gets a claim the tree does not support.
 
 This note records the gap. Repairing the substrate is a separate contract; until one
 lands, "trust scores" above is a design intent, not a description of HEAD.
+
+## Note — 2026-08-26: "verbatim" is exact to within one clause, and ≤ 100 calls is a target no gate holds
+
+Additive note on a 2026-05-01 record: nothing above is rewritten. Two readings turn
+on it, and both are one diff away from checkable.
+
+- **Context's "verbatim" drops one parenthetical.** DESIGN.md §0's decision 2
+  carries a qualifier on the call figure that decision 2 above does not: "≤ 100 LLM
+  calls (a design target, not an enforced invariant — `llm/budget.py` enforces USD
+  and token ceilings, not a per-game call counter)". Where the two lists differ,
+  DESIGN.md §0 is the source and this record is the restatement.
+- **So read ≤ 100 calls as a sizing assumption, not a property of a run.** A
+  recorded game does count its calls — each meeting entry carries one
+  `LLMCallRecord` per call — but nothing *enforces* a per-game ceiling on that
+  count. `llm/budget.py`'s `GameBudget` charges `cost_usd`, `input_tokens` and
+  `output_tokens` and raises on those three dimensions only, so no gate fails
+  when a game passes 100. The figure is what the two-tier split was sized
+  against.
+
+README.md's "What it is" restates these three decisions in its own words, names
+this record and DESIGN.md §0 as where they are kept, and says outright that the two
+figures above live here rather than repeating them as claims of its own.

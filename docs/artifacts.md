@@ -109,7 +109,7 @@ than its output preserved.
 | `design/phase-12/` — the design-artifact record (map reference renders + briefs) | (b) | in git | 1.9 MB / 18 files |
 | `experiments/lab/`, `experiments/model_probe/` — recorded read-only harness outputs and their syntheses (`experiments/` outputs are artifacts, not behavior — `docs/architecture.md`) | (b) | in git | 7.3 MB / 164 files |
 | **`coevo/` on `evidence/phase-18-coevo`** — every unpinned Phase-18 co-evolution byte | **(c)** | pinned sha | **101.097 MiB / 1,383 files** |
-| **`finalist-eval-raw/` on `evidence/phase-18-coevo`** — the Phase-18 finalist raw slate (Task 19.21's outcome, below) | **(c)** | pinned sha | **298.157 MiB / 1,569 files** |
+| **`finalist-eval-raw/` on `evidence/phase-18-coevo`** — the Phase-18 finalist raw slate: recovered, folded onto the pinned commit and hash-verified, with one owner step still open (below) | **(c)** | pinned sha | **298.157 MiB / 1,569 files** |
 | local `replays/*.jsonl`, tournament report dirs, the firewall's `**/*.audit.jsonl` packet logs, `frontend/dist/`, the demo bundle | (d) | regenerated (`.gitignore`d) | — |
 
 **Why the other `training/artifacts/` families are class (a) and coevo mostly is
@@ -154,13 +154,31 @@ decision still existed. **Ruling 2026-08-15: RECOVERED** — 1,569 files /
 `training/reports/_finalist_eval_raw/MANIFEST.md` and staged on a temporary
 `evidence/raw-slate-staging` ref. Task 19.22 re-verified all 1,569 files against
 that manifest (1,569/1,569 OK, 0 failures) and folded them into the evidence
-commit, which **supersedes and retires that ref** — its actual deletion is the
-one step that task could not execute (GitHub refused the delete-push with 403),
-and `EVIDENCE-MANIFEST.md` §4 carries the one-command owner step and the current
-status. Nothing was re-recorded; the slate's ~57
+commit, which **supersedes and retires that ref**. The fold was then checked end
+to end at the Phase-19 close: `bash scripts/fetch_evidence.sh` printed
+*"OK: 2953/2953 files match 476a1f85492439277350af9708f1d120eb1c0a71."* over both
+class-(c) payloads plus the branch README (`audits/audit-phase-19-close.md` §1),
+and `uv run python scripts/verify_ml_evidence.py --complete` reports the slate as
+its own row. Nothing was re-recorded; the slate's ~57
 busy-hour price is named and declined by the Phase-19 charter. Preserving the
 bytes makes the lineage *auditable* — these are real-provider draws, so it does
-not make the run re-runnable.
+not make the run re-runnable. The research reader's own entry point into all of
+this is the report the slate was measured into: `training/reports/report-finalist-eval.md` §20.
+
+**The one step still open, and how to see whether it is.** Deleting the
+superseded staging ref is the one part of the fold Task 19.22 could not execute
+— GitHub refused its delete-push with HTTP 403 — so `evidence/raw-slate-staging`
+is still on the remote as a second copy of bytes the pinned commit already
+carries and hashes. `EVIDENCE-MANIFEST.md` §4 holds the one-command owner step
+and is the authority on that ref's status; whether it has been run yet is a
+question the remote answers directly:
+
+```bash
+git ls-remote origin refs/heads/evidence/raw-slate-staging   # empty once the owner step has run
+```
+
+Nothing depends on that ref — no manifest, restore, or verification path reads
+it — so its deletion is hygiene, not a gate.
 
 ## What does not move, and why
 
