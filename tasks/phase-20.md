@@ -5980,40 +5980,44 @@ Finally, the doctrinal risk: if the decision rule says FINDING, resist the tempt
 ### Task 20.37 — Retire means delete: the post-record graduation sweep and the old accept-and-ignore residue
 **Branch:** `phase-20-graduation-sweep`
 **Depends on:** 20.36 — the adopting record is the ruling that says which levers graduated, and a lever may only be deleted after its verdict exists; the record's own graduation flips are the commit this sweep deletes on top of, so it cannot run in parallel with them
-**Section refs:** C-64 and C-104 in `audits/review-2026-08-19/B/collated-findings.md` §4 and §5; RC6 in `audits/review-2026-08-19/D/FINAL-synthesis.md` §1 ("the render-version stamp, plus one deletion pass"); the per-area sources `audits/review-2026-08-19/B/repo-health-architecture.md` §2 F6, `audits/review-2026-08-19/B/agents-memory.md` §2 F4, `audits/review-2026-08-19/B/meetings-transcript-voting.md` §2 F5, `audits/review-2026-08-19/B/meetings-manager.md` §2 P1-3, `audits/review-2026-08-19/B/orchestrator.md` §2 (the `suspicion_graph_for_meeting` dead-kwarg leg). Anchors RE-VERIFIED at HEAD: the nine accept-and-ignore resolvers `agents/memory/store.py:189`, `agents/memory/beliefs.py:190,224,292,407`, `meetings/constants.py:54`, `meetings/transcript.py:1362,1389`, `meetings/manager.py:859` (200 source lines in total, each ending `del env  # retired: the lever is unconditional, no environment is consulted`); their nine `ENV_*` constants `agents/memory/store.py:186`, `agents/memory/beliefs.py:187,221,289,404`, `meetings/constants.py:51`, `meetings/manager.py:856`, `meetings/transcript.py:1354,1359` and the nine matching `__all__` entries; the thirteen production read sites `agents/memory/store.py:280,286,1632,1652`, `agents/memory/beliefs.py:1463,1465,1502,1826,1835,1841`, `meetings/manager.py:1185,1759,2018,2448`, `meetings/transcript.py:1554,1555`, `orchestrator/game.py:2713`; the dead private-helper parameter `meetings/transcript.py:2380-2385` with its own "survives only for direct callers" comment at `:2407-2410`; the stamp registry `orchestrator/replay.py:531-545` (`_RETIRED_ALWAYS_ON_LEVERS`, thirteen keys) and `:570-572` (`_TOGGLEABLE_LEVER_RESOLVERS`, one live entry); the rule this task amends, `AGENTS.md:62-75` (Graduation sweeps) beside craft rule 3 at `AGENTS.md:91-94`; `.env.example:68-97` (the graduated always-ON note); the test residue `tests/agents/test_absence_prior.py:166-216`, `tests/agents/test_beliefs_hard_evidence_gate.py:86-115`, `tests/agents/test_beliefs.py:2634-2660`, `tests/agents/test_episodic_ids.py:383-458`, `tests/meetings/test_citation_gate.py:127-158`, `tests/meetings/test_manager.py:475-512` and `:772` (`TestRollCallOffPath`, whose docstring says the round is skipped while its test asserts the round fires), `tests/meetings/test_contradictions.py:1531-1617`
-**Complexity:** Medium
+**Section refs:** C-64 and C-104 in `audits/review-2026-08-19/B/collated-findings.md` §4 and §5; RC6 in `audits/review-2026-08-19/D/FINAL-synthesis.md` §1 ("the render-version stamp, plus one deletion pass"); the per-area sources `audits/review-2026-08-19/B/repo-health-architecture.md` §2 F6, `audits/review-2026-08-19/B/agents-memory.md` §2 F4, `audits/review-2026-08-19/B/meetings-transcript-voting.md` §2 F5, `audits/review-2026-08-19/B/meetings-manager.md` §2 P1-3, `audits/review-2026-08-19/B/orchestrator.md` §2 (the `suspicion_graph_for_meeting` dead-kwarg leg). Anchors RE-VERIFIED at HEAD: the seventeen accept-and-ignore resolvers `agents/memory/store.py:242,273,315,340,369`, `agents/memory/beliefs.py:190,224,292,407`, `meetings/constants.py:54`, `meetings/transcript.py:1515,1542,1575,1600,1628`, `meetings/manager.py:887,929` (332 source lines in total, each ending `del env  # retired: the lever is unconditional, no environment is consulted`); their seventeen `ENV_*` constants `agents/memory/store.py:239,270,294,335,362`, `agents/memory/beliefs.py:187,221,289,404`, `meetings/constants.py:51`, `meetings/manager.py:884,926`, `meetings/transcript.py:1507,1512,1572,1597,1625` and the seventeen matching `__all__` entries; the twenty-two production read sites `agents/memory/store.py:563,566,568,571,574,836,2357` (paired guards `:602`, `:2377`), `agents/memory/beliefs.py:1463,1826,1835,1841` (paired guards `:1465`, `:1502`), `meetings/manager.py:1323,1514,1941,2201,2631`, `meetings/transcript.py:1841,1842,1844,1849,1852`, `orchestrator/game.py:2795` — the original thirteen for the nine older levers plus nine more for the eight Phase-20 levers; the dead private-helper parameters `meetings/transcript.py:2924-2932` — `_detect_alibi_vs_sightings` now takes THREE lever booleans (`whereabouts_interior_flags`, `grounded_prosecution`, `map_aware_arbitration`), of which only `grounded_prosecution` stays live-shaped because `detect_contradictions:1849` ANDs the resolver with `bool(sighting_records)` — with the "survives only for direct callers" comment at `:2953-2956` and the `interior_exempt` expression at `:2963-2965`; the stamp registry `orchestrator/replay.py:524-546` (`_RETIRED_ALWAYS_ON_LEVERS`, TWENTY-ONE keys since the baseline-7 record) and `:568-570` (`_TOGGLEABLE_LEVER_RESOLVERS`, still one live entry); the rule this task amends, `AGENTS.md:62-75` (Graduation sweeps) beside craft rule 3 at `AGENTS.md:91-94`; `.env.example:88-118` (the graduated always-ON note, ALREADY rewritten to twenty-one levers with their adopting records by the baseline-7 record — verify rather than re-author); the test residue `tests/agents/test_absence_prior.py:166-216`, `tests/agents/test_beliefs_hard_evidence_gate.py:86-115`, `tests/agents/test_beliefs.py:2735-2761`, `tests/agents/test_episodic_ids.py:391-467`, `tests/meetings/test_citation_gate.py:127-158`, `tests/meetings/test_manager.py:494-529` and `:791` (`TestRollCallOffPath`, whose docstring says the round is skipped while its test asserts the round fires), `tests/meetings/test_contradictions.py:1581-1667` (TWO resolver classes: `TestWhereaboutsInteriorFlagsResolver:1581` and `TestVentPlacementContradictionsResolver:1621`); and the Phase-20 residue this task inherits — `tests/eval/test_evidence_honesty.py` ON-slates `_TRAIL_ON:1632`, `_MOVEMENT_ON:2002`, `_GROUNDED_ON:2583`, `_MAP_AWARE_ON:3137`, `_COALESCE_ON:3456` plus resolver tautologies at `:1417` and `:1920-1922`, `tests/agents/test_memory_rendering.py`, `tests/agents/test_reported_testimony.py`, `tests/agents/test_memory_meeting_history.py`, `tests/observation/test_leak_property.py`, `tests/orchestrator/test_meeting_integration.py`
+**Complexity:** Integration
 **Record impact:** post-record
-**Measurement:** `grep -rnE 'def [a-z_]+_enabled\(' agents meetings orchestrator | wc -l` reads 11 at HEAD and must read 2 plus one per Phase-20 lever the record did NOT adopt; `grep -rnE 'ENV_(ROLL_CALL_ROUND|WHEREABOUTS_INTERIOR_FLAGS|VENT_PLACEMENT_CONTRADICTIONS|ABSENCE_PRIOR|CITATION_GATE|HARD_EVIDENCE_GATE|OBSERVATION_ID_RENDERING|EVIDENCE_QUALITY_LIFT|REPORTER_EXCULPATION)' tests/ | wc -l` reads 152 at HEAD and must read 0; `grep -rnE "accepted and ignored|no longer read|now always True" --include="*.py" agents meetings orchestrator | wc -l` reads 29 at HEAD and must read 0; `bash scripts/verify_samples.sh` stays 100/100 and `bash scripts/check.sh` is green.
+**Measurement:** `grep -rnE 'def [a-z_]+_enabled\(' agents meetings orchestrator | wc -l` reads 19 at HEAD (seventeen dead plus two live) and must read 2 — the baseline-7 record adopted ALL EIGHT Phase-20 levers, so the only survivors are the live 18.10 pair; `grep -rnE 'ENV_(ROLL_CALL_ROUND|WHEREABOUTS_INTERIOR_FLAGS|VENT_PLACEMENT_CONTRADICTIONS|ABSENCE_PRIOR|CITATION_GATE|HARD_EVIDENCE_GATE|OBSERVATION_ID_RENDERING|EVIDENCE_QUALITY_LIFT|REPORTER_EXCULPATION|TASK_COMPLETION_FROM_EVENTS|SELF_LOCATION_TRAIL|MEETING_OUTCOME_MEMORY|COALESCED_MEMORY_RENDER|MOVEMENT_CLAIM_SHAPE|GROUNDED_PROSECUTION|MAP_AWARE_ARBITRATION|STRUCTURED_TURN_MARKERS)' tests/ | wc -l` reads 227 at HEAD across 14 files and must read 0 (the nine-name alternation alone reads 144); `grep -rnE "accepted and ignored|no longer read|now always True" --include="*.py" agents meetings orchestrator | wc -l` reads 50 at HEAD (store.py 15, transcript.py 14, beliefs.py 13, manager.py 5, constants.py 3) and must read 0; `bash scripts/verify_samples.sh` stays 100/100 and `bash scripts/check.sh` is green.
 
 Graduating a lever in this repo has so far meant deleting the env *read* and keeping the
-*shape*. Nine resolvers of the form `def x_enabled(env: Mapping[str, str] | None = None) ->
-bool: del env; return True` survive at HEAD — 200 source lines, each carrying a 12-to-31-line
-docstring explaining a switch that no longer exists — with nine `ENV_*` constants "retained
-for naming provenance", nine `__all__` exports, and thirteen production read sites that still
-spell an unconditional behaviour as `if always_true():`. The review reproduced the tax three
-ways and all three numbers reproduce byte-for-byte at HEAD today: 29 comment lines in
-`agents/`, `meetings/` and `orchestrator/` say "accepted and ignored" / "no longer read" /
-"now always True", and 152 lines of the test suite set environment variables that no
+*shape*. SEVENTEEN resolvers of the form `def x_enabled(env: Mapping[str, str] | None = None)
+-> bool: del env; return True` survive at HEAD — 332 source lines, each carrying a
+9-to-30-line docstring explaining a switch that no longer exists — with seventeen `ENV_*`
+constants "retained for naming provenance", seventeen `__all__` exports, and twenty-two
+production read sites that still spell an unconditional behaviour as `if always_true():`. The
+review reproduced the tax three ways; all three numbers have GROWN since, because the
+baseline-7 record graduated the Phase-20 slate on top of the review's nine: 50 comment lines
+in `agents/`, `meetings/` and `orchestrator/` say "accepted and ignored" / "no longer read" /
+"now always True", and 227 lines of the test suite set environment variables that no
 production code reads (`audits/review-2026-08-19/B/repo-health-architecture.md` §2 F6 — the
-review's own grep, re-run by this contract with the same result). Of those 152, 94 live in a
-single 538-line test class (`tests/orchestrator/test_replay.py:212-749`) whose job is to
-assert that constants are constant.
+review's own grep, widened by this contract to the whole graduated slate). Of those 227, 102
+live in `tests/orchestrator/test_replay.py` and 62 inside a single 549-line test class
+(`:321-869`) whose job is to assert that constants are constant.
 
 One correction to the register, made at HEAD and to be carried into the phase file: C-64
 counts **ten** accept-and-ignore resolvers, listing `agents/strategic/prompts/loader.py:264`
 and `orchestrator/replay.py:110` among them. Both are LIVE — they read
 `AILIBI_IMPOSTOR_ROLL_CALL` and return its parsed value; the 18.10 impostor-answer arm is
 still default-OFF because the CREW-ONLY ruling did not ship it. The true count of
-accept-and-ignore resolvers is **nine**, and the eleven-hit `def *_enabled(` grep is nine
-dead plus two live. Likewise C-64's "13 `ENV_*` constants" is the size of
-`_RETIRED_ALWAYS_ON_LEVERS`, not the constant count: the four Phase-13.5 levers were swept
+accept-and-ignore resolvers was **nine** when C-64 was written and is **seventeen** at HEAD;
+the nineteen-hit `def *_enabled(` grep is seventeen dead plus the same two live (now
+`agents/strategic/prompts/loader.py:330` and `orchestrator/replay.py:117`). Likewise C-64's
+"13 `ENV_*` constants" was the size of `_RETIRED_ALWAYS_ON_LEVERS` at review time (twenty-one
+at HEAD), not the constant count: the four Phase-13.5 levers were swept
 properly at Task 14.9 and left nothing behind, which is the existence proof that this sweep
 is achievable.
 
-The class doubles the moment the adopting record lands. If the pre-registered decision rule
-adopts baseline 7, the eight Phase-20 levers built default-OFF in wave 2 have their bodies
-hard-return `True` and their keys move into `_RETIRED_ALWAYS_ON_LEVERS` — by construction
-they become exactly the same residue, in exactly the same three modules. This task is the
+The class HAS doubled. Task 20.36 (merged efcd43b8) recorded baseline 7 and, by owner
+override of a FINDING verdict (`audits/audit-phase-20-baseline-7.md` §6.1), graduated all
+eight Phase-20 levers built default-OFF in wave 2: their bodies now hard-return `True` and
+their keys sit in `_RETIRED_ALWAYS_ON_LEVERS` — by construction exactly the same residue, in
+exactly the same three modules, and it is already on disk to be swept. This task is the
 first execution of craft rule 3 (`AGENTS.md:91-94`, "Retire means delete"), applied to both
 generations at once, and it closes the loop by amending the older Graduation-sweeps rule at
 `AGENTS.md:62-75`, which today demands only a *prose* sweep and explicitly blesses keeping
@@ -6036,20 +6040,27 @@ asserts (C-104's flagship example).
 - agents/memory/store.py; (same for `observation_id_rendering_enabled` and the `hard_evidence_gate_enabled` import; collapse `ids_on` at :280-286 and `gate_on` at :1632-1652; plus every Phase-20 store lever the record adopted)
 - meetings/transcript.py; (same for `whereabouts_interior_flags_enabled` and `vent_placement_contradictions_enabled`; collapse :1554-1555 and delete the `whereabouts_interior_flags` parameter and its dead `False` branch at :2380-2410; plus every Phase-20 transcript lever the record adopted)
 - meetings/manager.py; (same for `roll_call_round_enabled`; collapse :1185, :1759, :2018, :2448 and drop the `env` plumbing that only fed them; plus every Phase-20 manager lever the record adopted)
-- meetings/constants.py; (delete `citation_gate_enabled`, `ENV_CITATION_GATE` and their `__all__` entries; `UNCITED_ZERO_FLAG_EJECT_MARKER` and the threshold constants stay)
-- agents/strategic/prompts/loader.py; (the live 18.10 resolver STAYS — only its dangling `:func:` cross-references to deleted siblings at :253, :269, :271 are rewritten)
+- meetings/constants.py; (delete `citation_gate_enabled`, `ENV_CITATION_GATE` and their `__all__` entries; every threshold constant STAYS — `DEFAULT_SKIP_CONFIDENCE_THRESHOLD:36`, and the Phase-20 additions `GROUNDED_PROSECUTION_MIN_SOURCES:84`, `MAP_ARBITRATION_MAX_HOPS:100`, `MAP_ARBITRATION_MAX_TICK_GAP:101`, whose levers graduated but whose thresholds are live policy; `UNCITED_ZERO_FLAG_EJECT_MARKER` is homed at `meetings/manager.py:369`, NOT here, and also stays)
+- agents/strategic/prompts/loader.py; (the live 18.10 resolver STAYS, now at :330 — only its dangling `:func:` cross-references to deleted siblings at :319, :335, :337 are rewritten)
 - orchestrator/replay.py; (the keys stay in `_RETIRED_ALWAYS_ON_LEVERS`; the resolver imports and any identity bindings for graduated levers go)
 - tests/agents/; (the resolver-only classes and the tautology halves deleted; behaviour tests kept)
 - tests/meetings/; (same, plus the new deletion-guard pin and its planted counter-case)
 - AGENTS.md; (the Graduation-sweeps rule amended to "delete the mechanism, keep the stamp key and one history line", naming this task as its precedent)
 - .env.example; (the newly graduated keys join the always-ON note; no lever gains a variable)
-- orchestrator/game.py; (the hard_evidence_gate_enabled import and read-site; the stale narration beside it)
+- orchestrator/game.py; (the `hard_evidence_gate_enabled` import at :45 and the `gate_on` read-site at :2795; the stale narration at :2791-2794 beside it)
 - tests/orchestrator/test_replay.py; (the graduated resolver/constant imports and parameter pins)
 - meetings/render_contract.py; (one dangling resolver reference)
 - eval/meeting_quality.py; (one dangling resolver reference)
 - tests/eval/test_meeting_quality.py; (same)
+- tests/eval/test_evidence_honesty.py; (the graduated-lever ON slates and resolver tautologies listed in Section refs go, and its eight `detect_contradictions(env=…)` / `render_for_prompt(env=…)` sites follow the signature ruling; every CENSUS assertion is a keeper — this file holds the ratified §10/§11 instrument cells the baseline-7 record was read against, so no cell VALUE may move)
+- tests/observation/test_leak_property.py and tests/orchestrator/test_meeting_integration.py; (three and two graduated `ENV_*` lines respectively, plus one `render_for_prompt(env=…)` at test_meeting_integration.py:3129)
+- scripts/counterfactual_phase20.py; (the `env=` call sites at :538, :772, :942; `orchestrator/replay.py::env_var_for_lever:617` is a pure `f"AILIBI_{key.upper()}"` derivation, so the slate builders at :172-234 do NOT depend on the deleted `ENV_*` constants, and the memo's already-committed "the OFF column can no longer be produced" note at :140-143 stands)
+- eval/funnel.py and eval/vj_instruments.py; (`agent.suspicion_graph_for_meeting(env={})` at funnel.py:1226 and `_suspicion_graph_with_contradictions(env={})` at vj_instruments.py:380, with the `env={}` narration at vj_instruments.py:78 and :358)
+- audits/workflows/extract_gameplay_facts.py; (imports `ENV_WHEREABOUTS_INTERIOR_FLAGS` / `ENV_VENT_PLACEMENT_CONTRADICTIONS` at :127-128 and both resolvers at :141-142; builds a detector env from the stamp at :544-550; calls the resolvers at :2227-2234 inside an ambient-vs-stamp mismatch guard the graduation has made vacuous; and passes `detect_contradictions(env=…)` at :385, :591. `audits/` is NOT in the mypy/ruff exclude list, so this file BREAKS on the deletion)
 
-Coordination note (routed from PR #384): eight comment-only forward references in the lever home modules are now FALSE — each reads 'Not registered in orchestrator.replay._TOGGLEABLE_LEVER_RESOLVERS: Task 20.33 wires the whole Phase-20 slate…' at agents/memory/store.py:265-267, :298-299, :349 block, :382-383; meetings/transcript.py:1567-1568, :1603-1604, :1643-1644; meetings/manager.py:924-925 (lines as of fc5cf719). Sweep them here with the other residue (comment-only, re-verify lines at HEAD first).
+Coordination note (routed from PR #384), RE-MEASURED at HEAD: seven of the eight comment-only forward references were already swept by the baseline-7 record. Exactly ONE survives, at meetings/transcript.py:1567-1569, and it is now doubly false — it still reads 'The movement-claim lever -- DEFAULT-OFF, live. Not registered in ``orchestrator.replay._TOGGLEABLE_LEVER_RESOLVERS``: Task 20.33 wires the whole Phase-20 slate…' when 20.33 DID register it and the baseline-7 record then graduated it. Sweep it here with the other residue; `grep -rn 'Not registered in' --include='*.py' agents meetings orchestrator` must read 0.
+
+Orchestrator rulings (2026-08-26, pre-dispatch): (1) the WIDENED scope is adopted in ONE PR — both generations swept together (17 resolvers / 332 lines / 227 test env-lines), the seven newly-named consumer files included; Complexity re-rated Integration. (2) The 131-site mechanical `env=` call-site pass RIDES in this PR, audits/workflows/extract_gameplay_facts.py included — retire-means-delete does not leave the tree half-swept. (3) Deleting the ON-slate plumbing in tests/eval/test_evidence_honesty.py is ACCEPTED with the conservative bullet as written: no census assertion VALUE may move — 20.38/20.40/20.41 read those cells. (4) The grounded_prosecution parameter of _detect_alibi_vs_sightings is DATA-gated (`and bool(sighting_records)`), not lever-gated — folding it to True kills the 18.9 interior exemption; the reverifier's edit stands.
 
 **Files NOT in scope:**
 - any lever the record did NOT adopt (it stays a live env-gated toggle with its resolver, parameter, tests and `.env.example` entry intact — the 18.10 impostor arm is the standing example)
@@ -6060,10 +6071,10 @@ Coordination note (routed from PR #384): eight comment-only forward references i
 
 **Definition of done:**
 - [ ] Zero accept-and-ignore resolvers remain for graduated levers: a new AST-walking pin in `tests/meetings/test_lever_registry.py` parses every module under `agents/`, `meetings/` and `orchestrator/` and fails on any function whose name ends `_enabled` and whose body neither reads its `env` argument nor returns anything but a bare `True`; the pin ships with a planted counter-case (a fixture module written into `tmp_path` carrying exactly that shape) proving it bites.
-- [ ] No `if <graduated>_enabled():` branch survives: each of the thirteen verified read sites is replaced by its always-taken side, with `ids_on`, `gate_on`, `lift_enabled`, `render_reporter` and the `absence_prior` disjunct in `meetings/manager.py:2448` folded into unconditional code, and `meetings/transcript.py::_detect_alibi_vs_sightings` loses its `whereabouts_interior_flags` parameter along with the `False` branch its own comment describes as reachable only by direct callers.
-- [ ] The nine graduated `ENV_*` constants and their `__all__` entries are deleted; the nine snake_case keys remain in `orchestrator/replay.py::_RETIRED_ALWAYS_ON_LEVERS`, `SUBSTRATE_FLAG_KEYS` is unchanged in content and order, and `substrate_flag_snapshot()` in a bare environment still stamps every retired key `True` — pinned by one consolidated test that replaces the nine per-lever repeats.
-- [ ] An `env` parameter survives on a public function only where a LIVE resolver still reads it: `render_for_prompt`, `detect_contradictions`, `apply_contradiction_rule`, `apply_meeting_evidence_rules`, `_build_belief_lines`, `_suspicion_graph_with_contradictions` and `TacticalAgent.suspicion_graph_for_meeting` each either keep `env` with a named live reader or lose it, and the PR states which and why for each.
-- [ ] The test residue is gone and the keepers survive: the seven resolver-only classes named in Section refs are deleted, `TestRollCallOffPath` at `tests/meetings/test_manager.py:772` is deleted or renamed so no test name or docstring describes an OFF path that cannot exist, `test_marker_literal_pinned_exactly` and the behaviour halves of `TestObservationIdRenderLever` are preserved verbatim, and the three ON-path assertions in `tests/agents/test_impostor_answer_arm.py` are untouched because that lever is live.
+- [ ] No `if <graduated>_enabled():` branch survives: each of the twenty-two verified read sites is replaced by its always-taken side. From the older nine: `ids_on`, `gate_on`, `lift_enabled`, `render_reporter` and the `absence_prior` disjunct in `meetings/manager.py:2631`. From the Phase-20 eight: the threaded booleans `completion_from_events`, `trail_on`, `meetings_on`, `coalesce_on` into `agents/memory/store.py::_build_observations`, `vents_are_content` at `agents/memory/store.py:836`, `structured_turn_markers` at `meetings/manager.py:1514`, and `movement_claim_shape` / `map_aware_arbitration` in `meetings/transcript.py::detect_contradictions`. `meetings/transcript.py::_detect_alibi_vs_sightings` loses its `whereabouts_interior_flags` and `map_aware_arbitration` parameters along with the `False` branch its own comment describes as reachable only by direct callers; its `grounded_prosecution` parameter STAYS, because `detect_contradictions:1849` ANDs the resolver with `bool(sighting_records)` and the caller-data half of that gate is live — the PR must show `interior_exempt` still evaluating both ways after the fold.
+- [ ] The seventeen graduated `ENV_*` constants and their `__all__` entries are deleted; all twenty-one snake_case keys remain in `orchestrator/replay.py::_RETIRED_ALWAYS_ON_LEVERS` in graduation order, `SUBSTRATE_FLAG_KEYS` is unchanged in content and order (twenty-one retired + `impostor_roll_call`), and `substrate_flag_snapshot()` in a bare environment still stamps every retired key `True` — pinned by one consolidated test that replaces the per-lever repeats. `orchestrator/replay.py::env_var_for_lever:617` stays: it is the string derivation the recorder preflight and `scripts/counterfactual_phase20.py` read, and it depends on no deleted constant.
+- [ ] An `env` parameter survives on a public function only where a LIVE resolver still reads it: `render_for_prompt`, `detect_contradictions`, `apply_contradiction_rule`, `apply_meeting_evidence_rules`, `_build_belief_lines`, `_suspicion_graph_with_contradictions`, `agents/memory/store.py::absorb_reported_testimony:762` (added with the Phase-20 meeting-outcome lever) and `TacticalAgent.suspicion_graph_for_meeting` each either keep `env` with a named live reader or lose it, and the PR states which and why for each. NOTE: after the baseline-7 record NO live resolver is reachable from any of these chains — the one live lever (`impostor_roll_call`) is read only in `agents/strategic/prompts/loader.py` — so the honest answer is that all of them lose `env`, which invalidates roughly 130 `env=` call sites across `scripts/`, `eval/`, `audits/` and `tests/`. The PR must land that as one mechanical pass, not leave a parameter nothing reads.
+- [ ] The test residue is gone and the keepers survive: the eight resolver-only classes named in Section refs are deleted (`TestAbsencePriorResolver`, `TestHardEvidenceGateResolver`, `TestEvidenceQualityLiftResolver`, `TestObservationIdRenderLever`, `TestCitationGateLever`, `TestRollCallResolver`, `TestWhereaboutsInteriorFlagsResolver`, `TestVentPlacementContradictionsResolver`), `TestRollCallOffPath` at `tests/meetings/test_manager.py:791` is deleted or renamed so no test name or docstring describes an OFF path that cannot exist, `test_marker_literal_pinned_exactly` and the behaviour halves of `TestObservationIdRenderLever` are preserved verbatim, and the three ON-path assertions in `tests/agents/test_impostor_answer_arm.py` are untouched because that lever is live.
 - [ ] The three Measurement greps read their target values and the PR Summary pastes all three with before/after; the default pytest tier is smaller by the deleted line count, which the PR quotes from `git diff --stat`.
 - [ ] `bash scripts/verify_samples.sh` reports 100/100 and `tests/meetings/test_prompt_byte_golden.py` is green over every committed meeting; the golden still fails on a one-byte perturbation of a template body, demonstrated in the PR, so the no-behaviour-moved claim rests on a gate that can fail.
 - [ ] `AGENTS.md`'s Graduation-sweeps section states the amended rule — delete the resolver, its parameter, the dead branch and the parameter-pinning tests; keep the stamp key and one history line; the prose sweep remains the smaller half — and names this task as the precedent, with craft rule 3 cross-referencing it instead of restating it.
@@ -6075,6 +6086,10 @@ Coordination note (routed from PR #384): eight comment-only forward references i
 - [ ] `uv run python scripts/validate_task_docs.py` passes.
 - [ ] `uv run pytest` passes.
 - [ ] `bash scripts/check.sh` passes locally.
+
+**Integration risk:**
+
+The sweep touches five production modules and fourteen test files at once, and its failure mode is silent behavior change dressed as deletion — a data-gated parameter folded to a constant (the grounded_prosecution trap), a census value drifting under the plumbing rewrite, or a consumer script left importing a deleted symbol; every deletion must be proven behavior-neutral by the untouched census values and a green full gate, and the 131-site env pass must be purely mechanical (signature-following, no logic edits).
 
 **Implementation hint:**
 
@@ -6092,8 +6107,11 @@ Step 2 — per symbol, grep the consumers before deleting. For each resolver nam
 and read every hit. Expect hits in three shapes: real read sites (collapse them), `__all__`
 entries (delete), and prose `:func:` cross-references in modules that are not in scope
 (rewrite where the module is in scope, and report the rest rather than widening scope
-silently). Two known consumers sit outside this contract's files and are called out in the
-notes below; if a third appears, stop and ask.
+silently). SEVEN consumer files sit outside the original contract's list and are now
+named in Files in scope: `tests/eval/test_evidence_honesty.py`,
+`tests/observation/test_leak_property.py`, `tests/orchestrator/test_meeting_integration.py`,
+`scripts/counterfactual_phase20.py`, `eval/funnel.py`, `eval/vj_instruments.py` and
+`audits/workflows/extract_gameplay_facts.py`. If an EIGHTH appears, stop and ask.
 
 Step 3 — collapse, do not comment out. `ids_on = observation_id_rendering_enabled(env)`
 followed by `if ids_on:` becomes the body of the `if`, dedented, with the guard gone. A
@@ -6128,23 +6146,29 @@ converts a deletion into a move and the reader is no better off.
 ### Task 20.38 — The results on corrected bytes: re-curated featured games, the before/after column, the ML page amended
 **Branch:** `phase-20-results-after-record`
 **Depends on:** 20.13, 20.20, 20.36 — the results table and the ML page must exist before a column can be added to them; the architecture and contract-exhibit sections settle the README shape this task edits around; and the record must be committed before any of its numbers can be quoted.
-**Section refs:** audits/review-2026-08-19/D/FINAL-synthesis.md §4 wave 3 rows 3.1 and 3.2 ("the results table gains its before/after column … *pre-registered, measured, reported — including the part that did not move*") and §7 (the post-wave-2 pitch paragraph; endorsement edit (b): every volatile number carries its baseline stamp from day one "so wave 3 adds a column instead of rewriting the page"); audits/review-2026-08-19/C/collated-portfolio.md §A6 (state the results once, plainly — the enabling move this task completes) and §B3 (the reading guide is 3,239 words / 378 lines against an advertised five minutes, with `file:line` anchors already drifting); byte-coupled front-door anchors re-verified at HEAD — README.md:84 (the status/ladder-tip paragraph), README.md:149 (the single sample-provenance paragraph: `regenerated 2026-07-20`, the recording model, the `qwen3_6_27b` `v3` prompt set, "34% (4p1i) and 30% (9p2i)"); docs/reading-guide.md:39-50 (the numbers table), :45 (the row that states in prose that only *the README's* copy of the win rates is re-derived), :101-105 and :109-117 (the featured table and its claim to mirror `FEATURED_GAMES` exactly), :175-184 (the vent cross-tab, 70/95 meetings); scripts/check_doc_facts.py:87 (`_README` — the only document the checker reads), :89 (`_LADDER_TIP_AUDIT` = `audits/audit-phase-18-close.md`), :99-101 (the `ladder tip stands at baseline N` parse), :160-169 (`check_facts`), :172 (`check_sample_provenance`), :360 (`check_ladder_tip`); the pins the record moves — tests/eval/test_deduction_metrics.py:163 and :237 (the proof / non-proof cells; pooled 310/310 = 1.000 and 46/125 = 0.368 at audits/audit-phase-19-close.md:233), tests/eval/test_vj_instruments.py:509 (520/520 citation compliance), tests/api/test_sets.py:431 and :376 (the featured-seed and spoiler-free pins), frontend/src/components/ReplayPicker.tsx:102 (`FEATURED_GAMES`).
+**Section refs:** audits/review-2026-08-19/D/FINAL-synthesis.md §4 wave 3 rows 3.1 and 3.2 ("the results table gains its before/after column … *pre-registered, measured, reported — including the part that did not move*") and §7 (the post-wave-2 pitch paragraph; endorsement edit (b): every volatile number carries its baseline stamp from day one "so wave 3 adds a column instead of rewriting the page"); audits/review-2026-08-19/C/collated-portfolio.md §A6 (state the results once, plainly — the enabling move this task completes) and §B3 (the reading guide measured at review time as 3,239 words / 378 lines against an advertised five minutes, with `file:line` anchors already drifting — B3 has since been EXECUTED: the guide is 112 lines / 988 words at HEAD, and `check_guide_line_citations` at scripts/check_doc_facts.py:2104 already fails on any `file:line` citation in it); byte-coupled front-door anchors re-verified at HEAD, post-20.36 — README.md:128-136 (the results table) and README.md:144 (the `<!-- ANCHOR: a later contract adds the results table's before/after column once the next reference recording lands. -->` comment this task consumes and deletes), README.md:140 (the unstamped "almost nine in ten" headline paragraph, which rests on the moved cross-tab), README.md:151 (the status/ladder-tip paragraph, ALREADY re-quoted by the record to "the seventh … baseline 7"), README.md:195 (the single sample-provenance paragraph, ALREADY re-quoted by the record: `regenerated 2026-08-25`, `Qwen/Qwen3.6-27B`, the `qwen3_6_27b` `v4` prompt set, "36% (4p1i) and 24% (9p2i)"; the baseline-6 values it replaced, and which the before-column now carries, were `2026-07-20`, `v3`, "34% (4p1i) and 30% (9p2i)"); docs/reading-guide.md:13-23 (the numbers table — :17 and :18 were already re-quoted at the record; the guide is 112 lines at HEAD, carries NO prose row crediting the guard to *the README's* copy, and carries NO featured table at all: see the open ruling on the featured mirror in the DoD), :60 (the STALE prose "all 520 eject ballots", left behind when the record moved the same figure to 538/538 in both tables), :48-56 (the §2 exhibit paragraph, falsified by the record: `9p2i` seed 23 now carries no flags and ejects nobody, and `4p1i` seed 41 now ejects the impostor on one grounded proof — audits/audit-phase-20-baseline-7.md §4(a) and §4(d)), :70-78 (the vent cross-tab, still baseline 6: "all 165 committed 9p2i meetings", 70 flagged against 95 unflagged, 68/2 and 10/21); scripts/check_doc_facts.py:161 (`_README`), :163 (`_LADDER_TIP_AUDIT`, ALREADY re-pointed by the record to `audits/audit-phase-20-baseline-7.md`), :166 (`_READING_GUIDE`), :174-179 (`_LINKED_DOCUMENTS`), :182-188 (`_LADDER_TIP_DOCUMENTS` — README, glossary, history and the reading guide are all already scanned for the tip), :226 (`_AUDIT_LADDER_TIP`, the `ladder tip stands at baseline N` parse), :238-240 (`_REGENERATED_DATE` and `_WIN_RATE_CLAIM` — the two claim-shaped scans, still README-only), :509-528 (`check_facts`), :532 and :688 (`check_sample_provenance` and its README-bound win-rate loop), :720 (`check_ladder_tip`, whose docstring still says the tip is parsed from *the phase-18 close audit* — a stale in-code claim to repair while here), :1384 (`check_results_agreement`, which already equates the README results table against the guide's row for row), :1636 (`check_ml_results_table`), :2068 (`check_volatile_stamps`), :2104 (`check_guide_line_citations`); the pins the record MOVED, re-verified at HEAD — tests/eval/test_deduction_metrics.py:152-154 (samples-9p2i meetings 152, flagged 69, unflagged 83; was 165/70/95), :176-185 and :213-239 (the ejectee-proof and meeting-flag cells: 99 ejections, flagged 69/0, unflagged 16/14; was 101, 68/2, 10/21), :259-270 (the corpus twins); the pooled 310/310 = 1.000 vs 46/125 = 0.368 keeps its own baseline-6 stamp at audits/audit-phase-19-close.md:233, and its baseline-7 counterparts are the record's pooled cells — direct proof 326/326 = 1.000, non-direct 61/103 = 0.5922, innocent ejections 42 — at audits/audit-phase-20-baseline-7.md §3 bars 1 and 2; tests/eval/test_vj_instruments.py:524-532 (citation compliance now 538/538, was 520/520); tests/api/test_sets.py:431 (`test_featured_seeds_exist_in_their_committed_sets`) and :376 (`test_featured_labels_are_spoiler_free`), both still at those lines and both re-anchored at the record; frontend/src/components/ReplayPicker.tsx:103 (`FEATURED_GAMES`, re-curated at the record to `9p2i` seeds 2, 23, 13, 46 and `4p1i` seeds 29, 2, 11).
 **Complexity:** Small
 **Record impact:** post-record (the record's bytes, MANIFESTs and re-pinned cells already exist; nothing recorded moves here)
 **Measurement:** `uv run python scripts/check_doc_facts.py` green; `uv run pytest tests/scripts/test_check_doc_facts.py tests/api/test_sets.py -q` green, including the new perturbation cases — a stale reading-guide win rate, a featured row the picker no longer carries, and a moved figure quoted without its baseline stamp each fail the check.
 
 This is the payoff task. The phase pre-registered its bars before any fix existed, measured them on a
-23-hour record, and now has to report the answer — including the part that did not move. The front
-door is still quoting the previous baseline: README.md:149 says the samples were `regenerated
-2026-07-20` on the `qwen3_6_27b` `v3` prompt set with impostor win rates "34% (4p1i) and 30% (9p2i)",
-README.md:84 names the ladder tip at baseline 6, and docs/reading-guide.md:39-50 repeats both win
-rates at :45 while crediting the guard to "the README's copy", beside two further rows the record
-touches: 520/520 citation compliance (tests/eval/test_vj_instruments.py:509) and the 87% vent
-cross-tab at :175-184 (70 flagged meetings against 95 unflagged). The pooled deduction cells the
-results table states — 310/310 = 1.000 with proof against 46/125 = 0.368 without
-(audits/audit-phase-19-close.md:233, pinned by tests/eval/test_deduction_metrics.py:163 and :237) —
-are re-derived on the new bytes by those same pins. Every one of those is a cell the record either
-moved or deliberately left standing. The whole argument of this phase — that a measurement made
+23-hour record, and now has to report the answer — including the part that did not move. The record's own PR already
+re-quoted every mechanical fact its gate reads — README.md:195's provenance paragraph (`regenerated
+2026-08-25`, `Qwen/Qwen3.6-27B`, the `v4` set, 36% and 24%), README.md:151's ladder tip at baseline
+7, the moved win-rate and citation rows in both the README table and the guide's, README.md:138's
+"538 ballots" sentence, and the re-curated `FEATURED_GAMES` — so those are re-verified here and left
+alone, and this diff is the reporting. What the record left behind is the prose no gate reads:
+docs/reading-guide.md:60 still says "all 520 eject ballots" against a table row that now reads
+538 / 538; the guide's §3 cross-tab at :70-78 still narrates "all 165 committed 9p2i meetings", 70
+flagged against 95 unflagged, 68/2 and 10/21, whose baseline-7 pins are 152 meetings, 69/83, 69/0 and
+16/14 (tests/eval/test_deduction_metrics.py:152-154, :230-233); README.md:140's unstamped "almost
+nine in ten" headline rests on that same moved cross-tab; and the guide's §2 exhibit paragraph at
+:48-56 still tells two stories the record deleted (§4(a): `9p2i` seed 23 now carries no flags and
+ejects nobody; §4(d): `4p1i` seed 41 now ejects the impostor on one grounded proof). The pooled
+deduction cells the results table states — 310/310 = 1.000 with proof against 46/125 = 0.368 without
+(audits/audit-phase-19-close.md:233) — are a baseline-6 measurement that keeps its own stamp; their
+baseline-7 counterparts are the record's pooled cells at audits/audit-phase-20-baseline-7.md §3 bars
+1 and 2. Every one of those is a cell the record either moved or deliberately left standing. The whole argument of this phase — that a measurement made
 after a pre-registration is worth more than a measurement made after a result — is only visible if
 both columns are on the page.
 
@@ -6152,46 +6176,72 @@ The mechanical work is small because the earlier tasks built for it: the results
 each volatile row with its baseline and record date, so the edit is one added column and a header,
 not a rewrite. What makes the task worth a contract is the discipline around the numbers. Quote; do
 not compute. Every figure in this diff comes from `audits/audit-phase-20-baseline-7.md` or from the
-test pin that owns it, and a figure with no pin does not go in the front door. The review-measured
-bars the phase registered — false crew `whereabouts` 20.5%, sole-`alibi_vs_sighting` precision 14.6%,
-grounded sighting side 36.5%, adjacent-room STRONG share 63.2% (all review-measured over the
-committed baseline-6 bytes, re-pinned as committed cells by the honesty instrument set) and the
-solvability y-axis (killer inside the crew's own candidate set in 581/626 body meetings = 92.8%, a
-correct singleton in 103 of 109, and 61 of 354 ejections landing on a player the crew's pooled
-perception had already cleared — same provenance) — are read off their new pins here, never
-re-derived by hand.
+test pin that owns it, and a figure with no pin does not go in the front door. The bars the phase
+registered are quoted at their PINNED baseline-6 cells, never at the review figures the
+pre-registration superseded (`audits/audit-phase-20-preregistration.md` §1 and §3.2 rule this
+explicitly, and name this contract's own class of divergence: the pin replaces the cell, the bar's
+target does not move with it, and a contract still naming a superseded cell is re-anchored at its
+pre-dispatch review) — false crew `whereabouts` 152/723 = 21.0% on `samples/9p2i` (NOT the review's
+20.5%), sole-`alibi_vs_sighting` precision 12/82 = 14.6%, grounded sighting side 124/234 = 53.0% at
+tick (NOT the review's 36.5% over 170 resolvable sides), adjacent-room STRONG share 148/234 = 63.2%,
+and the solvability y-axis (containment 544/626, a correct singleton in 114 of 126, and 83 of 354
+ejections landing on a player the crew's pooled perception had already cleared; the review's
+581/626, 103/109 and 61/354 are the last-kill-anchor re-scoring, quoted beside the pins with their
+cause). Their baseline-7 values are read off the new pins, never re-derived by hand:
+tests/eval/test_evidence_honesty.py:1261-1288 (I-2 now 3/659, 17/1892, 1/80, 0/91), :1292 (I-3 now
+0/0), :1354-1375 (I-4 now 0/0 on every set), :1423-1450 (I-6 now 0/0), and
+tests/eval/test_solvability.py:578-590 (618 body meetings, containment 555/618, singleton 80/618
+with 72/80 correct, 68/379 cleared-player ejections, 586/618 under the review's anchor).
 
-The verdict sentence is the other half. The record's decision rule produced one of two outcomes, and
-this task publishes whichever one happened in one sentence titled by its result: ADOPTED, in which
-case baseline 7 is the ladder tip and `scripts/check_doc_facts.py:89` must point at the audit that
-records it; or FINDING, in which case the record is published in full, the tip stands where it stood,
-and the front door says so. The FINDING sentence is the stronger of the two and must not be softened
-or buried — a project whose thesis is that it does not publish numbers it knows are confounded
-cannot flinch at publishing a bar it missed. The decision itself belongs to the record audit; this
-task states it and links it, and re-argues nothing.
+The verdict sentence is the other half, and the record produced NEITHER of the two branches this
+contract was written against. The pre-registered rule returned **FINDING**: bars 1 and 2 missed —
+non-direct conviction accuracy 61/103 = 0.5922 against a bar of ≥ 0.60, missed by 0.0078, less than
+one ejection, and 42 innocent ejections against < 35. That verdict stands and is not re-priced
+anywhere. Separately, by explicit owner prerogative recorded at
+audits/audit-phase-20-baseline-7.md §6.1 (2026-08-26), the owner OVERRODE it and adopted the
+baseline-7 substrate as canon — which is why the ladder tip already stands at baseline 7 and
+`scripts/check_doc_facts.py:163` already points at the record audit. §6.1's standing constraint
+binds every byte written here: no document, comment, docstring, README row or commit message may
+state or imply that the pre-registered bars passed, that the verdict was ADOPTED under the rule, or
+that baseline 7 was adopted on the arithmetic. So the front door says both things, in that order —
+the FINDING with the bars it missed, then the override with its owner and its date. The FINDING half
+must not be softened or buried; a project whose thesis is that it does not publish numbers it knows
+are confounded cannot flinch at publishing a bar it missed. The decision itself belongs to the
+record audit; this task states it and links it, and re-argues nothing.
 
-There is one guard gap to close while the numbers are being touched. `scripts/check_doc_facts.py`
-reads exactly one document (`_README` at :87, the only path threaded through `check_facts` at
-:160-169), so the same win rates, refresh date and ladder-tip claim repeated in
-docs/reading-guide.md are unguarded — the guide's own row at :45 says as much in prose, crediting the
-check to "the README's copy". That is precisely the drift class the checker exists to kill, and after
-a record it is the class most likely to fire: the guide and the ML page now repeat figures whose
-committed source just moved. Widening the checker to the front-door document set, with a perturbation
-test per new check, is what stops this page rotting the next time a baseline lands.
+There is still a guard gap to close while the numbers are being touched, but it is narrower and
+differently placed than this contract first assumed. `scripts/check_doc_facts.py` has since grown a
+front-door document set — `_LINKED_DOCUMENTS` (:174-179), `_LADDER_TIP_DOCUMENTS` (:182-188: README,
+glossary, history and the reading guide all scanned for the tip), `check_results_agreement` (:1384),
+which already equates the README results table against the guide's row for row,
+`check_ml_results_table` (:1636) and `check_guide_line_citations` (:2104) — and it is green at HEAD.
+What is still README-only is the claim-shaped scan: `_REGENERATED_DATE` and `_WIN_RATE_CLAIM`
+(:238-240) are read over `readme` alone inside `check_sample_provenance` (:532, :688). And nothing
+reads any document's PROSE, which is exactly where the record's drift survived — docs/reading-guide.md
+:60, :48-56 and :70-78 are all wrong at HEAD while every table the checker compares is right. That is
+precisely the drift class the checker exists to kill, and after a record it is the class most likely
+to fire. Widening the claim-shaped scans to the front-door document tuple, adding the check nothing
+yet does — binding a document's narrative figures to the pins that own them — and giving each new
+check its perturbation test is what stops this page rotting the next time a baseline lands.
 
 Finally, docs/ml-program.md needs an honest amendment rather than an update. The impostor mover's
-target-selection defects are repaired now, so the comparator the Phase-17 and Phase-18 win edges
-(+0.12 to +0.30) were measured against no longer exists in that form — and nothing was retrained, so
-those figures were not re-measured. The page states that plainly: the erratum stands, the numbers are
+target-selection defects are repaired now (Task 20.32, merged), so the comparator the Phase-17 and
+Phase-18 win edges (+0.12 to +0.30, re-verified against the page's own table at HEAD) were measured
+against no longer exists in that form — and nothing was retrained, so those figures were not
+re-measured. The page currently promises the opposite: its comparator section closes with "The
+repair is Task 20.32; the re-measurement, Task 20.38" (docs/ml-program.md:138) — a forward reference
+this task falsifies rather than fulfils, and must therefore rewrite rather than leave standing. The page states that plainly: the erratum stands, the numbers are
 stale by construction, and re-grounding them is a future owner decision, not a quiet edit.
 
 **Files in scope:**
-- README.md; (the results table's before/after column from audits/audit-phase-20-baseline-7.md; the status line; the demo sentence)
+- README.md; (the results table's before/after column from audits/audit-phase-20-baseline-7.md; the `<!-- ANCHOR: … before/after column … -->` comment at :144 that this task consumes; the verdict/override sentence; the unstamped "almost nine in ten" headline at :140; the demo sentence — but NOT the two living project-status/roadmap sentences under `## Project status`, which Task 20.42's contract claims as "the status line only")
 - docs/ml-program.md; (the Phase-20 read: what moved, what did not, the comparator note now that the FSM is repaired)
-- docs/reading-guide.md; (the numbers table and the cross-tab re-quoted from the new pins; the featured table mirrors FEATURED_GAMES)
+- docs/reading-guide.md; (the numbers table and the §3 cross-tab re-quoted from the new pins; the stale "all 520 eject ballots" prose at :60; the §2 exhibit paragraph at :48-56, whose named games the record's §4 falsified; the featured mirror only if the open ruling in the DoD re-introduces the table)
 - docs/history.md; (Phase 20 row)
 - scripts/check_doc_facts.py; (the new numbers checked against the new pins)
 - tests/scripts/test_check_doc_facts.py
+
+Orchestrator rulings (2026-08-26, pre-dispatch): (1) the featured-mirror bullet is RETIRED as written — docs/reading-guide.md deliberately carries no table since the 20.12 trim; instead the §2 exhibit prose is corrected against the baseline-7 bytes, every seed it names must be in ReplayPicker.tsx's FEATURED_GAMES, and a doc-fact check binds the named seeds to the picker source (the Measurement perturbation names a seed the picker no longer carries). (2) The two-part verdict shape is RATIFIED into the DoD: every results surface states verdict-per-rule FINDING (bars 1 and 2 missed, bar 1 by 0.0078) plus the dated §6.1 owner override that adopted baseline 7 — no surface may state or imply the bars passed or that adoption was on the arithmetic.
 
 **Files NOT in scope:**
 - replays/ (the record is done; no recorded byte moves in this PR)
@@ -6204,12 +6254,12 @@ stale by construction, and re-grounding them is a future owner decision, not a q
 
 **Definition of done:**
 - [ ] Every figure in README.md, docs/reading-guide.md and docs/ml-program.md that the record moved is re-quoted from its new pin, carrying the baseline-7 stamp with its baseline-6 value beside it in the before/after column; the PR body lists each row with the pin or audit section it came from, and no figure in the diff was computed by this task.
-- [ ] The README states the record's verdict in one sentence titled by its result — ADOPTED, naming the new ladder tip, or FINDING, naming the bar that did not clear — and links `audits/audit-phase-20-baseline-7.md`; the sentence names at least one pre-registered bar that did not move.
-- [ ] README's sample-provenance paragraph agrees with the new MANIFESTs on the refresh date, recording model, prompt-set family and version and both per-set impostor win rates, and every "ladder tip" sentence names the baseline the owning audit records; `scripts/check_doc_facts.py:89` points at that audit, and `uv run python scripts/check_doc_facts.py` is green at HEAD.
-- [ ] `scripts/check_doc_facts.py` checks the moved facts wherever the front door repeats them — the win rates, the refresh date and the ladder-tip claim in docs/reading-guide.md and docs/ml-program.md, not README alone — and each new check has a perturbation case in tests/scripts/test_check_doc_facts.py that fails when the fact is drifted in the newly-covered document; docs/reading-guide.md:45's prose about which copy is guarded is updated to match.
-- [ ] The reading guide's featured table equals `FEATURED_GAMES` seed-for-seed and in curated order, pinned by a check that parses the picker source and fails on an added, removed or re-ordered row; the guide's blurbs stay spoiler-free under the existing rule.
+- [ ] The README states the record's outcome the way the record states it, in that order: **FINDING** under the pre-registered rule, naming bars 1 and 2 and bar 1's 0.0078 margin, THEN the owner's explicit adoption override (audits/audit-phase-20-baseline-7.md §6.1, 2026-08-26) that moved the ladder tip to baseline 7; the passage links the record audit and names at least one pre-registered bar that did not move, and no sentence anywhere in the diff states or implies that the bars passed, that the verdict was ADOPTED under the rule, or that baseline 7 was adopted on the arithmetic (§6.1's standing constraint on every surface in this repository).
+- [ ] README's sample-provenance paragraph agrees with the new MANIFESTs on the refresh date, recording model, prompt-set family and version and both per-set impostor win rates, and every "ladder tip" sentence names the baseline the owning audit records; `scripts/check_doc_facts.py:163` (`_LADDER_TIP_AUDIT`) points at that audit, and `uv run python scripts/check_doc_facts.py` is green at HEAD. Every clause in this bullet was already satisfied by the record's own PR and the checker is green at HEAD today: re-verify each and leave the correct ones untouched — the diff is the reporting, not churn.
+- [ ] `scripts/check_doc_facts.py` checks the moved facts wherever the front door repeats them — the win rates and the refresh date in docs/reading-guide.md and docs/ml-program.md, not README alone (the ladder-tip claim is already scanned across `_LADDER_TIP_DOCUMENTS` at :182-188 and needs no new check), and the guide's PROSE figures as well as its table, since the record's drift survived exactly there (:60, :70-78) while `check_results_agreement` kept the tables right — and each new check has a perturbation case in tests/scripts/test_check_doc_facts.py that fails when the fact is drifted in the newly-covered document or paragraph; `check_ladder_tip`'s docstring at :720, which still credits the phase-18 close audit, is corrected to name the constant it actually reads.
+- [ ] **[OPEN RULING — orchestrator/owner, before dispatch]** The reading guide's featured table equals `FEATURED_GAMES` seed-for-seed and in curated order, pinned by a check that parses the picker source and fails on an added, removed or re-ordered row; the guide's blurbs stay spoiler-free under the existing rule. At HEAD there is NO featured table in docs/reading-guide.md — 20.12/20.13 rewrote the guide to 112 lines and left only the §2 prose at :44-56, which names three AUDIT exhibits (`9p2i` seeds 17 and 23, `4p1i` seed 41), not the record's re-curated list (`9p2i` 2, 23, 13, 46 and `4p1i` 29, 2, 11 at frontend/src/components/ReplayPicker.tsx:103), and whose seed-23 and seed-41 stories the record's §4 falsified. The ruling to make: either the table is re-introduced in the guide and pinned exactly as written above, or this bullet retires and the §2 exhibit paragraph is corrected against the new bytes instead — with the mirror pin landing on whichever front-door surface ends up listing curated games.
 - [ ] docs/ml-program.md carries the Phase-20 read — which pre-registered bars moved, which did not, and the win split as the observed-not-gated secondary — plus the amended comparator note: the FSM target-selection defects are repaired, the Phase-17/18 win edges were measured against the defective comparator, nothing was retrained, so the erratum stands and the figures are stale by construction.
-- [ ] docs/history.md gains the Phase-20 row in the file's existing shape, linking the record audit.
+- [ ] docs/history.md's phase-20 narrative is brought to the record's reality in the file's existing prose shape, linking the record audit: the section already exists at :160-164 ("## In progress: phase 20") and the record already re-wrote "## Where the sample sets came from" (:168 onward) for baseline 7, so this is an amendment, not an addition, and "in progress" stays true until Task 20.42 closes the phase.
 - [ ] A grep for each baseline-6 figure the record moved returns only before-column cells explicitly stamped baseline 6; the PR quotes the grep.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
@@ -6224,7 +6274,7 @@ stale by construction, and re-grounding them is a future owner decision, not a q
 Step 1 — build the number ledger before touching a document. Read
 audits/audit-phase-20-baseline-7.md cell by cell and, for each figure, find the pin that owns it:
 tests/eval/test_deduction_metrics.py for the proof / non-proof cross-tab, tests/eval/test_evidence_honesty.py
-for the honesty bars, tests/eval/test_solvability.py for the y-axis, tests/eval/test_vj_instruments.py:509
+for the honesty bars, tests/eval/test_solvability.py:578-590 for the y-axis, tests/eval/test_vj_instruments.py:524-532
 for citation compliance, the set MANIFESTs for win rates and provenance, scripts/verify_samples.sh for
 the reconstruction claim. Put the ledger in the PR body first. Anything without a pin does not enter
 the front door — it goes in the PR as a question instead.
@@ -6233,27 +6283,37 @@ Step 2 — the before/after column is a column. The results table already stamps
 with its baseline and record date, so add one cell per row plus a header and leave the source column
 untouched. Rows the record did not move still get a cell, and it says so.
 
-Step 3 — the verdict sentence is one sentence, titled by its result, immediately followed by the
-link to the record audit. Under FINDING, resist every instinct to add a mitigating clause; the
-record audit already carries the reasoning and the next decision.
+Step 3 — the verdict passage is two sentences and no more, immediately followed by the link to the
+record audit: the FINDING first, with the bars it missed, then the owner's adoption override with
+its date. Resist every instinct to add a mitigating clause to the first, and every instinct to let
+the second retroactively soften it; the record audit already carries the reasoning and the next
+decision, and its §6.1 fixes the words the front door may not use.
 
 Step 4 — extend the fact checker by widening the documents it reads rather than by copying checks.
-`check_sample_provenance` and `check_ladder_tip` already take the document text as a parameter, so
-the cheap change is a front-door document tuple threaded through the claim-shaped checks (the
-`_WIN_RATE_CLAIM`, `_REGENERATED_DATE` and `_LADDER_TIP_PHRASE` scans) while the paragraph-anchored
-provenance check stays bound to README, where the one provenance paragraph lives. Keep the error
+The front-door tuples already exist (`_LINKED_DOCUMENTS` :174-179, `_LADDER_TIP_DOCUMENTS` :182-188)
+and `check_ladder_tip` (:720) already loops over the second of them — it takes no document parameter
+— so the `_LADDER_TIP_PHRASE` scan needs nothing. The cheap change is threading a document tuple
+through the two claim-shaped scans that are still README-bound, `_WIN_RATE_CLAIM` and
+`_REGENERATED_DATE` (:238-240), read only inside `check_sample_provenance` (:532, :688), while the
+paragraph-anchored provenance check stays bound to README, where the one provenance paragraph lives;
+and then adding the check nothing yet does, which is binding a document's PROSE figures to the pins
+that own them. Keep the error
 strings naming the file and line they came from. Every new check needs its perturbation test, and the
 existing fixture pattern in tests/scripts/test_check_doc_facts.py (copy the tree, substitute one
 string, assert the failure) is the shape to follow.
 
-Step 5 — the featured mirror. Parse `FEATURED_GAMES` out of frontend/src/components/ReplayPicker.tsx:102
-the way tests/api/test_sets.py:58-78 already does, compare the parsed set/seed sequence against the
-guide's table rows in order, and fail loud on any difference. Do not edit the picker or the api test:
+Step 5 — the featured mirror, and only if the open ruling keeps it. Parse `FEATURED_GAMES` out of
+frontend/src/components/ReplayPicker.tsx:103 the way tests/api/test_sets.py:59-78 already does
+(`_FEATURED_BLOCK`, `_FEATURED_ENTRY`, `_parse_featured_games`), compare the parsed set/seed sequence
+against the guide's rows in order, and fail loud on any difference. Do not edit the picker or the api test:
 the curation is the record's, and this task mirrors it.
 
-Step 6 — sequencing. The record's own PR may already have re-quoted the mechanical provenance facts
-to keep its gate green. Re-verify each one rather than assuming either way, and leave anything that is
-already correct alone; the diff should be the reporting, not churn.
+Step 6 — sequencing. The record's own PR (efcd43b8) DID re-quote the mechanical provenance facts to
+keep its gate green — both tables' win-rate and citation rows, README's provenance paragraph and
+ladder tip, README's "538 ballots" sentence, `FEATURED_GAMES`, and `_LADDER_TIP_AUDIT` — and
+`scripts/check_doc_facts.py` is green at HEAD. Re-verify each one anyway, and leave everything
+already correct alone; the diff should be the reporting plus the prose the gate cannot see, not
+churn.
 
 **Ready-to-paste prompt:** `agent_prompts/task-20-38-results-after-record.md`
 
