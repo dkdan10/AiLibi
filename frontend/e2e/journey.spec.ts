@@ -431,11 +431,23 @@ test.describe("spectator journey", () => {
       }
       return Number(parsed[2]);
     });
-    expect(grouped.reduce((sum, n) => sum + n, 0)).toBe(
-      declared.reduce((sum, n) => sum + n, 0),
-    );
-    // …and a heading only exists when a group does, in both directions.
+    const declaredTotal = declared.reduce((sum, n) => sum + n, 0);
+    const groupedTotal = grouped.reduce((sum, n) => sum + n, 0);
+    expect(groupedTotal).toBe(declaredTotal);
+    // …and a heading only exists when a group does, in both directions — which
+    // is how the empty meeting is COVERED rather than skipped.
     expect(declared.length === 0).toBe(grouped.length === 0);
+
+    // Non-vacuity, because everything above is satisfied by 0 = 0: deleting
+    // `EvidenceSection` outright, or dropping the meeting's flags before the
+    // render, would empty BOTH arrays and still pass. The curated featured head
+    // is picked for having contradictions on the table — ReplayPicker's blurb for
+    // it says in as many words that every one is stamped a weak signal — so the
+    // surface has to BE there. Today it reads `Evidence (3)` over
+    // `Weak signals (3)`; the count is read rather than pinned, because a
+    // re-record can move it, but it may not fall to zero.
+    expect(declaredTotal).toBeGreaterThan(0);
+    expect(grouped.length).toBeGreaterThan(0);
 
     // ── to the end ───────────────────────────────────────────────────────────
     await page.keyboard.press("Escape"); // the meeting's own keyboard exit
