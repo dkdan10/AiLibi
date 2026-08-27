@@ -121,6 +121,14 @@ from orchestrator.replay import FailedCallReplayEntry, LLMCallRecord, WinnerSide
 # inner report (no persisted report/replay field changes shape), and both
 # committed reports plus the prompt-regression baseline are regenerated in the
 # same PR, so no pre-10.4 wrapper JSON survives to be read.
+#
+# Task 21.3 (recorded ballot provenance) STAYS at 2 for the reason the policy
+# actually names: it grows :class:`meetings.schemas.VoteBallot` by two optional
+# fields with ``None`` defaults, so a reader on this build interprets a report
+# written before them AND one written after — the only condition §11.4 makes
+# the bump depend on. Unlike 9.6 / 10.4 the shape here IS inside the persisted
+# tree, and no report is regenerated in that PR; both facts are survivable
+# precisely because the fields are additive and defaulted.
 CURRENT_FORMAT_VERSION: Final[int] = 2
 
 

@@ -59,6 +59,29 @@ class _FrozenModel(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
 
+def _core_schema_without_serializer(core_schema: CoreSchema) -> CoreSchema:
+    """The same core schema with the model's custom serializer removed.
+
+    A ``model_serializer`` whose return type is a bare mapping collapses the
+    SERIALIZATION-mode JSON schema to ``{"type": "object"}``, which is what
+    FastAPI publishes and what a generated client would read -- so every model
+    that installs one hands the generator this stripped copy instead
+    (``__get_pydantic_json_schema__``). The ``serialization`` key is not always
+    at the top: a ``model_validator(mode="after")`` wraps the model schema in a
+    ``function-after`` node, so the walk follows ``schema`` until it finds the
+    node that carries it. Structure-preserving and non-mutating; a schema with
+    no serializer comes back unchanged.
+    """
+
+    node = dict(core_schema)
+    if node.pop("serialization", None) is not None:
+        return cast(CoreSchema, node)
+    inner = node.get("schema")
+    if isinstance(inner, dict):
+        node["schema"] = _core_schema_without_serializer(cast(CoreSchema, inner))
+    return cast(CoreSchema, node)
+
+
 # ---------------------------------------------------------------------------
 # Observation claims carried by a MeetingTurn (DESIGN.md §5.3)
 # ---------------------------------------------------------------------------
@@ -400,10 +423,25 @@ _CLAIM_DROP_ANNOTATION_KINDS: frozenset[TurnAnnotationKind] = frozenset(
 # m1's opener hallucinated a 3499-char reasoning blob AS an alibi subject: an
 # unbounded quote balloons the recorded turn. A longer value is truncated to this
 # many chars plus :data:`MARKER_TRUNCATION_SUFFIX` before it is quoted
-# (:func:`meetings.manager._bounded_original`), and :class:`TurnAnnotation`
-# rejects anything longer, so the bound holds at the record boundary too.
+# (:func:`bounded_marker_original`), and :class:`TurnAnnotation` rejects
+# anything longer, so the bound holds at the record boundary too.
 MARKER_QUOTED_ORIGINAL_MAX_CHARS: Final[int] = 60
 MARKER_TRUNCATION_SUFFIX: Final[str] = "..."
+
+
+def bounded_marker_original(value: str) -> str:
+    """Truncate a quoted-original to the audit-safe bound above.
+
+    Values at or under :data:`MARKER_QUOTED_ORIGINAL_MAX_CHARS` chars pass
+    through verbatim (every real player id does); a longer value keeps its head
+    plus a literal :data:`MARKER_TRUNCATION_SUFFIX`, so the original stays
+    identifiable without ballooning the record. Shared by every marker and
+    structured provenance field that quotes what a guard replaced.
+    """
+
+    if len(value) <= MARKER_QUOTED_ORIGINAL_MAX_CHARS:
+        return value
+    return value[:MARKER_QUOTED_ORIGINAL_MAX_CHARS] + MARKER_TRUNCATION_SUFFIX
 
 
 class TurnAnnotation(_FrozenModel):
@@ -525,10 +563,7 @@ class MeetingTurn(_FrozenModel):
         present.
         """
 
-        without_serializer = {
-            key: value for key, value in core_schema.items() if key != "serialization"
-        }
-        return handler(cast(CoreSchema, without_serializer))
+        return handler(_core_schema_without_serializer(core_schema))
 
 
 # ---------------------------------------------------------------------------
@@ -590,7 +625,49 @@ class ReportedStatement(_FrozenModel):
 # ---------------------------------------------------------------------------
 
 
-class VoteBallot(_FrozenModel):
+BallotTargetRewriteReason: TypeAlias = Literal[
+    "under_gate_redirect",
+    "teammate_coerced",
+    "uncited_coerced",
+    "invalid_target",
+    "parse_default",
+]
+"""Why a recorded ballot's ``target`` is not the one the voter authored.
+
+The five classes under which the meeting layer redirected, coerced,
+normalized, or wholly defaulted a target -- as opposed to the citation-only
+rewrites, which null a reference and leave the authored target intact. A
+consumer that judges what a voter BELIEVED must exclude a ballot carrying any
+of these.
+"""
+
+
+class ModelAuthoredVoteBallot(_FrozenModel):
+    """The ballot a VOTER authors -- the schema the LLM client is handed.
+
+    Exactly :class:`VoteBallot` minus the two fields the meeting layer owns
+    outright (``guard_redirected_from`` / ``guard_rewrite_reason``), and
+    :class:`VoteBallot`'s own base, so the two can never drift apart. Every
+    adapter validates the model's completion against the schema it was given
+    before returning it (``llm/provider.py``, ``llm/ollama_client.py``,
+    ``llm/featherless_client.py``), and the Ollama adapter constrains decoding
+    on it -- so handing over THIS model is what keeps the guard-provenance
+    field names out of the model's reach entirely, rather than nulling a value
+    it was invited to invent.
+
+    Field semantics live on :class:`VoteBallot`; this class adds no behaviour.
+    """
+
+    voter: PlayerId
+    target: PlayerId | Literal["SKIP"]
+    confidence: float = Field(ge=0.0, le=1.0)
+    primary_reason_id: TurnId | None
+    primary_reason_observation_id: ObservationId | None = None
+    considered_alternatives: tuple[PlayerId, ...] = ()
+    rationale_text: str
+
+
+class VoteBallot(ModelAuthoredVoteBallot):
     """Voting output (DESIGN.md §5.5).
 
     The structured fields drive the tally; the rationale is logged
@@ -612,15 +689,88 @@ class VoteBallot(_FrozenModel):
     default is what lets every committed replay -- recorded before the
     field existed -- parse unchanged under ``_FrozenModel``'s config;
     ``None`` means the voter cited no private observation.
+
+    ``guard_redirected_from`` / ``guard_rewrite_reason`` are the meeting
+    layer's typed testimony about its own target rewrite -- the machine channel
+    beside the bracketed marker it prepends to ``rationale_text`` for display.
+    ``guard_redirected_from`` holds the target AS THE VOTER AUTHORED IT, bounded
+    by :func:`bounded_marker_original`; under ``invalid_target`` that is a
+    hallucinated id and need not name a live player, and under ``parse_default``
+    it is ``None`` because an unparseable ballot authored no target at all.
+    ``confidence`` is the voter's confidence in the AUTHORED target, not in the
+    recorded one -- the guards rewrite ``target`` and leave ``confidence``
+    untouched. Both fields are ADDITIVE with ``None`` defaults, the same rule
+    ``primary_reason_observation_id`` states above, so every replay recorded
+    before them parses unchanged; ``None`` on both means either no rewrite or a
+    recording that predates the fields, which is why a reader falls back to the
+    marker parse rather than reading ``None`` as "the voter authored this".
+    They are meeting-layer output only, and NOT part of the schema the model is
+    asked to fill: the client is handed :class:`ModelAuthoredVoteBallot`
+    instead, so the names never reach constrained decoding, and the parse path
+    strips them from the raw payload as the belt to that brace.
     """
 
-    voter: PlayerId
-    target: PlayerId | Literal["SKIP"]
-    confidence: float = Field(ge=0.0, le=1.0)
-    primary_reason_id: TurnId | None
-    primary_reason_observation_id: ObservationId | None = None
-    considered_alternatives: tuple[PlayerId, ...] = ()
-    rationale_text: str
+    guard_redirected_from: str | None = None
+    guard_rewrite_reason: BallotTargetRewriteReason | None = None
+
+    @model_validator(mode="after")
+    def _guard_provenance_is_whole(self) -> VoteBallot:
+        """The pair is one guard's testimony; a half-written one fails loud.
+
+        Three combinations are records nobody can act on, so none of them
+        parses: an authored target with no reason (which rewrite?), a rewrite
+        reason with no authored target (rewritten from WHAT?), and
+        ``parse_default`` naming one (nothing parsed, so nothing was authored).
+        """
+
+        reason = self.guard_rewrite_reason
+        authored = self.guard_redirected_from
+        expects_authored = reason is not None and reason != "parse_default"
+        if expects_authored == (authored is not None):
+            return self
+        raise ValueError(
+            f"guard_rewrite_reason={reason!r} with "
+            f"guard_redirected_from={authored!r}: every reason but "
+            "'parse_default' names the target the voter authored, and no other "
+            "combination is a record a consumer can read"
+        )
+
+    @model_serializer(mode="wrap")
+    def _serialize(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        """Serialize the ballot, omitting the guard pair when no guard rewrote it.
+
+        The overwhelming majority of ballots keep the target their voter
+        authored, and a key that appears only when a guard fired keeps a
+        recorded ballot's bytes to what actually happened -- so a ballot
+        recorded without a rewrite is byte-identical to one recorded before the
+        fields existed. When a guard DID fire both keys are written, including
+        the ``null`` ``guard_redirected_from`` a ``parse_default`` carries:
+        "rewritten, and nothing was authored" is a fact worth recording.
+        Reading is unaffected; both fields default to ``None``.
+        """
+
+        data: dict[str, Any] = handler(self)
+        if self.guard_rewrite_reason is None:
+            data.pop("guard_redirected_from", None)
+            data.pop("guard_rewrite_reason", None)
+        return data
+
+    @classmethod
+    def __get_pydantic_json_schema__(
+        cls, core_schema: CoreSchema, handler: GetJsonSchemaHandler
+    ) -> JsonSchemaValue:
+        """Publish the field-typed schema in BOTH modes.
+
+        A custom model serializer with an untyped return would otherwise reduce
+        the serialization-mode schema to a bare object -- the schema FastAPI
+        publishes for every response reaching a ballot, and the one the
+        structured-output adapters build a ballot against. Dropping the
+        serializer from the core schema handed to the generator restores the
+        field list; the only thing the serializer changes is whether two keys
+        with defaults are present.
+        """
+
+        return handler(_core_schema_without_serializer(core_schema))
 
 
 # ---------------------------------------------------------------------------
@@ -741,6 +891,7 @@ class MeetingResult(_FrozenModel):
 __all__ = [
     "AccusationClaim",
     "AlibiClaim",
+    "BallotTargetRewriteReason",
     "BodyId",
     "Claim",
     "CompletedTaskObservation",
@@ -754,6 +905,7 @@ __all__ = [
     "MeetingResult",
     "MeetingTranscript",
     "MeetingTurn",
+    "ModelAuthoredVoteBallot",
     "MoveWitnessRecord",
     "ObservationClaim",
     "ObservationId",
@@ -773,4 +925,5 @@ __all__ = [
     "VentWitnessRecord",
     "VoteBallot",
     "WhereaboutsClaim",
+    "bounded_marker_original",
 ]

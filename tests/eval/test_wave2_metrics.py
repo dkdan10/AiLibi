@@ -9,8 +9,11 @@ experiments/lab/report-deception-battery*.md. Four layers:
 * **Effective deflection** — the active-deflection subcount split from
   SKIP-saved survival (:func:`compute_effective_deflection`).
 * **Indistinguishability** — the "never-tasks" fingerprint over the per-tick
-  action-by-role ingest (:func:`eval.action_ingest.tally_actions_by_role` +
-  :func:`compute_indistinguishability`).
+  action-by-role ingest (:func:`eval.action_ingest.ingest_actions_by_role` and
+  its tally-only wrapper + :func:`compute_indistinguishability`), including
+  both directions of the discarded-action exclusion: 0 excluded and identical
+  cells on the committed bytes, and the discards leaving the tally on a
+  disposition-bearing fixture.
 * **The inform channel** — the 10.15 single-witness lever as a fifth
   decompose channel: 1 on the committed W2 bytes (the inform parser's header
   anchor survives the qwen3_6_27b restyle, but the collapsed transcript
@@ -25,6 +28,7 @@ unconditionally ON) re-record exactly (123/46/40, effective 16 = 7 named +
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -32,7 +36,7 @@ import pytest
 from pydantic import ValidationError
 
 from engine.entities import Role
-from eval.action_ingest import tally_actions_by_role
+from eval.action_ingest import ingest_actions_by_role, tally_actions_by_role
 from eval.meeting_quality import (
     CHANNEL_BODY_PROXIMITY,
     CHANNEL_SINGLE_WITNESS_INFORM,
@@ -500,6 +504,97 @@ class TestIndistinguishability:
         )  # replay-seed-0 has p-0..p-8
         with pytest.raises(ValueError, match="absent from game"):
             tally_actions_by_role(_COMMITTED_9P2I_DIR, (broken,))
+
+    def test_committed_bytes_exclude_nothing_and_tally_identically(
+        self, committed_9p2i_report: TournamentEvalReport
+    ) -> None:
+        # The committed corpus carries no dispositions, so the ingest has
+        # nothing to exclude and every published cell above is byte-identical
+        # to what the pre-migration fold produced.
+        games = committed_9p2i_report.report.games
+        ingest = ingest_actions_by_role(_COMMITTED_9P2I_DIR, games)
+
+        assert ingest.discarded_excluded == 0
+        assert ingest.tally == tally_actions_by_role(_COMMITTED_9P2I_DIR, games)
+
+    def test_a_disposition_bearing_recording_drops_the_discarded_actions(
+        self, tmp_path: Path
+    ) -> None:
+        # The other direction, on a fixture that DOES carry the field: the two
+        # actions a meeting discarded leave the tally and are counted instead.
+        # Without the exclusion the crew wait count reads 2 higher — which is
+        # exactly the bias B-1 measured on the committed corpus.
+        replay_path = tmp_path / "replay-seed-99.jsonl"
+        rows = [
+            {
+                "kind": "tick",
+                "game_id": "g-1",
+                "tick": 0,
+                "actions": [
+                    {"type": "do_task", "actor": "p-1", "payload": {"task_id": "t"}},
+                    {"type": "wait", "actor": "p-2", "payload": {}},
+                    {"type": "wait", "actor": "p-3", "payload": {}},
+                ],
+                "action_dispositions": [
+                    "applied",
+                    "discarded_by_meeting",
+                    "discarded_by_meeting",
+                ],
+                "state_hash": "0" * 64,
+            },
+            {
+                "kind": "tick",
+                "game_id": "g-1",
+                "tick": 1,
+                "actions": [{"type": "wait", "actor": "p-2", "payload": {}}],
+                "action_dispositions": ["applied"],
+                "state_hash": "1" * 64,
+            },
+        ]
+        replay_path.write_text(
+            "\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8"
+        )
+        game = _game(
+            meetings=(),
+            roles={"p-1": "IMPOSTOR", "p-2": "CREWMATE", "p-3": "CREWMATE"},
+            seed=99,
+        )
+
+        ingest = ingest_actions_by_role(tmp_path, (game,))
+
+        assert ingest.discarded_excluded == 2
+        assert ingest.tally.impostor_action_counts == {"do_task": 1}
+        assert ingest.tally.crewmate_action_counts == {"wait": 1}
+        assert ingest.tally.per_game_player_wait_counts == ((1,),)
+
+    def test_an_unseeded_actor_in_a_discarded_slot_still_fails_loud(
+        self, tmp_path: Path
+    ) -> None:
+        # Excluding a row must never become a way for a corrupt actor id to
+        # enter the corpus unchallenged: the roster check runs on every recorded
+        # action, discarded included.
+        replay_path = tmp_path / "replay-seed-98.jsonl"
+        replay_path.write_text(
+            json.dumps(
+                {
+                    "kind": "tick",
+                    "game_id": "g-1",
+                    "tick": 0,
+                    "actions": [
+                        {"type": "wait", "actor": "p-1", "payload": {}},
+                        {"type": "wait", "actor": "ghost", "payload": {}},
+                    ],
+                    "action_dispositions": ["applied", "discarded_by_meeting"],
+                    "state_hash": "0" * 64,
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        game = _game(meetings=(), roles={"p-1": "CREWMATE"}, seed=98)
+
+        with pytest.raises(ValueError, match="absent from game"):
+            ingest_actions_by_role(tmp_path, (game,))
 
 
 # ---------------------------------------------------------------------------

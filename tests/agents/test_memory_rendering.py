@@ -37,7 +37,7 @@ from llm.budget import GameBudget
 from llm.client import CallKind, LLMResponse
 from llm.fake_provider import FakeProvider
 from meetings.manager import INVALID_OBSERVATION_ID_MARKER, MeetingTrigger
-from meetings.schemas import VoteBallot
+from meetings.schemas import ModelAuthoredVoteBallot
 from agents.base import AgentInterface
 from orchestrator.game import (
     DEFAULT_TASKS_PER_CREWMATE,
@@ -2531,7 +2531,7 @@ class _CitingFakeProvider:
     ``primary_reason_observation_id`` -- which leaves the production citation
     path (participant construction -> the manager's validator -> the recorded
     ballot) unexercised by any fake-provider game. This answers exactly as the
-    fake does except on a :class:`VoteBallot` call, where it copies the FIRST
+    fake does except on a ballot call, where it copies the FIRST
     coalesced row the voter's own prompt offers into that field, or
     ``fabricated_id`` when one is given -- the perturbation that proves the
     production path validates rather than passes ids through.
@@ -2562,7 +2562,9 @@ class _CitingFakeProvider:
             model=model,
             agent_id=agent_id,
         )
-        if schema is not VoteBallot or agent_id is None:
+        # The vote call is the one handed the AUTHORED ballot shape: the
+        # model never sees the meeting layer's own guard-provenance fields.
+        if schema is not ModelAuthoredVoteBallot or agent_id is None:
             return response
         coalesced = _coalesced_ids(prompt)
         if not coalesced:

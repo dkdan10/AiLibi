@@ -20,9 +20,12 @@ Pure replay-layer tests: no full game loop, no LLM call.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
+from typing import Final
 
 import pytest
+from pydantic import TypeAdapter, ValidationError
 
 from agents.memory.store import AgentMemory
 from meetings.schemas import MeetingResult, MeetingTranscript, VoteBallot
@@ -37,19 +40,27 @@ from orchestrator.replay import (
     LLMCallRecord,
     ReplayEntry,
     ReplayLog,
+    classify_action_dispositions,
     compute_cost_usd,
     env_var_for_lever,
     fold_meeting_outcome_into_memories,
     read_all_entries,
     read_failed_call_entries,
     read_game_outcome,
+    read_replay_entries,
     read_substrate_flags,
     substrate_flag_snapshot,
     substrate_slate_mismatches,
 )
-from engine.world import WorldState
+from engine.actions import Action
+from engine.events import EngineEvent
+from engine.tick import advance_tick
+from engine.world import WorldState, load_canonical_map
 from orchestrator import replay as replay_module
+from orchestrator.action_ordering import order_actions_for_tick
 from tests._helpers.world_state import scripted_initial_world_state
+
+_ACTION_ADAPTER: Final[TypeAdapter[Action]] = TypeAdapter(Action)
 
 # The one LIVE toggle's snapshot key: Task 18.10's impostor-answer arm, the one
 # lever the CREW-ONLY ruling did not ship. Its resolver is
@@ -156,6 +167,16 @@ def _clear_lever_env(monkeypatch: pytest.MonkeyPatch) -> None:
 # re-record itself is Task 9.11).
 _COMMITTED_9P2I_REPLAYS = (
     Path(__file__).resolve().parents[2] / "replays" / "samples" / "9p2i"
+)
+
+# All four committed sets, for the assertions that must hold over the whole
+# corpus rather than one set.
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_COMMITTED_SET_DIRS: Final[tuple[Path, ...]] = (
+    _REPO_ROOT / "replays" / "samples" / "9p2i",
+    _REPO_ROOT / "replays" / "samples" / "4p1i",
+    _REPO_ROOT / "replays" / "ml_corpus" / "9p2i",
+    _REPO_ROOT / "replays" / "ml_corpus" / "4p1i",
 )
 
 
@@ -1303,3 +1324,223 @@ class TestSubstrateMismatchOnAPhase20Lever:
         )
         with pytest.raises(ReplaySubstrateMismatchError):
             _assert_substrate_matches("g-legacy", [legacy])
+
+
+# --------------------------------------------------------------------------- #
+# Recorded action dispositions                                                 #
+# --------------------------------------------------------------------------- #
+
+
+def _advance_scripted(
+    actions: list[Action],
+) -> tuple[tuple[Action, ...], WorldState, list[EngineEvent]]:
+    """Drive one tick of the scripted 4-player fixture through the real engine.
+
+    Returns the ORDERED batch (what a recorder holds) beside the engine's own
+    post-state and events, so the classifier is pinned against real output
+    rather than a hand-built event list.
+    """
+
+    ordered = order_actions_for_tick(actions)
+    state, events = advance_tick(
+        scripted_initial_world_state(seed=7),
+        ordered,
+        game_map=load_canonical_map(),
+    )
+    return ordered, state, events
+
+
+def _action(payload: dict[str, object]) -> Action:
+    return _ACTION_ADAPTER.validate_python(payload)
+
+
+# Every player spawns in CAFETERIA, which is also the emergency button room, and
+# MEDBAY is not adjacent to it — so one batch can carry an applied action, an
+# engine-refused one, a meeting trigger and a discarded straggler, in actor order.
+_WAIT_P1: Final[dict[str, object]] = {"type": "wait", "actor": "p-1", "payload": {}}
+_UNREACHABLE_MOVE_P2: Final[dict[str, object]] = {
+    "type": "move",
+    "actor": "p-2",
+    "payload": {"to_room": "MEDBAY"},
+}
+_EMERGENCY_P3: Final[dict[str, object]] = {
+    "type": "emergency",
+    "actor": "p-3",
+    "payload": {},
+}
+_WAIT_P4: Final[dict[str, object]] = {"type": "wait", "actor": "p-4", "payload": {}}
+
+
+class TestClassifyActionDispositions:
+    """The classifier's table, driven through ``advance_tick``."""
+
+    def test_mixed_batch_labels_each_actor_by_what_the_engine_did(self) -> None:
+        ordered, state, events = _advance_scripted(
+            [
+                _action(_WAIT_P1),
+                _action(_UNREACHABLE_MOVE_P2),
+                _action(_EMERGENCY_P3),
+                _action(_WAIT_P4),
+            ]
+        )
+
+        assert state.phase == "MEETING"
+        dispositions = classify_action_dispositions(ordered, events)
+
+        assert dict(
+            zip((action.actor for action in ordered), dispositions, strict=True)
+        ) == {
+            "p-1": "applied",
+            "p-2": "rejected",
+            "p-3": "applied",
+            "p-4": "discarded_by_meeting",
+        }
+
+    def test_a_tick_with_no_meeting_discards_nothing(self) -> None:
+        ordered, state, events = _advance_scripted(
+            [
+                _action(_WAIT_P1),
+                _action(_UNREACHABLE_MOVE_P2),
+                _action(
+                    {
+                        "type": "move",
+                        "actor": "p-3",
+                        "payload": {"to_room": "EAST_HALL"},
+                    }
+                ),
+                _action(_WAIT_P4),
+            ]
+        )
+
+        assert state.phase == "PLAY"
+
+        assert classify_action_dispositions(ordered, events) == (
+            "applied",
+            "rejected",
+            "applied",
+            "applied",
+        )
+
+    def test_a_trigger_in_last_position_discards_nothing(self) -> None:
+        # The cutoff is exclusive of the trigger itself, so a meeting convened by
+        # the last-ordered action leaves nothing behind it to discard.
+        ordered, state, events = _advance_scripted(
+            [
+                _action(_WAIT_P1),
+                _action({"type": "wait", "actor": "p-2", "payload": {}}),
+                _action({"type": "wait", "actor": "p-3", "payload": {}}),
+                _action({"type": "emergency", "actor": "p-4", "payload": {}}),
+            ]
+        )
+
+        assert state.phase == "MEETING"
+
+        assert classify_action_dispositions(ordered, events) == (
+            "applied",
+            "applied",
+            "applied",
+            "applied",
+        )
+
+    def test_an_empty_batch_classifies_to_an_empty_tuple(self) -> None:
+        _ordered, _state, events = _advance_scripted([])
+
+        assert classify_action_dispositions([], events) == ()
+
+
+class TestReplayEntryDispositionField:
+    """The additive field, its length validator, and the omitted-key path."""
+
+    def test_a_row_without_the_key_parses_to_none(self) -> None:
+        entry = ReplayEntry.model_validate_json(
+            '{"kind":"tick","game_id":"g-1","tick":0,"actions":[],'
+            '"state_hash":"deadbeef"}'
+        )
+
+        assert entry.action_dispositions is None
+
+    def test_a_short_tuple_is_refused_rather_than_padded(self) -> None:
+        # The perturbation: three actions, two dispositions. The tuple is
+        # positional, so a gap mis-attributes every entry after it.
+        with pytest.raises(ValidationError) as excinfo:
+            ReplayEntry(
+                game_id="g-1",
+                tick=0,
+                actions=(
+                    {"type": "wait", "actor": "p-1", "payload": {}},
+                    {"type": "wait", "actor": "p-2", "payload": {}},
+                    {"type": "wait", "actor": "p-3", "payload": {}},
+                ),
+                action_dispositions=("applied", "applied"),
+                state_hash="deadbeef",
+            )
+
+        assert "action_dispositions has 2 entries for 3 actions" in str(excinfo.value)
+
+    def test_a_matching_tuple_is_accepted(self) -> None:
+        entry = ReplayEntry(
+            game_id="g-1",
+            tick=0,
+            actions=({"type": "wait", "actor": "p-1", "payload": {}},),
+            action_dispositions=("discarded_by_meeting",),
+            state_hash="deadbeef",
+        )
+
+        assert entry.action_dispositions == ("discarded_by_meeting",)
+
+    def test_an_unknown_disposition_label_is_refused(self) -> None:
+        with pytest.raises(ValidationError):
+            ReplayEntry.model_validate_json(
+                '{"kind":"tick","game_id":"g-1","tick":0,'
+                '"actions":[{"type":"wait","actor":"p-1","payload":{}}],'
+                '"action_dispositions":["maybe"],"state_hash":"deadbeef"}'
+            )
+
+    def test_every_committed_tick_row_parses_to_none(self) -> None:
+        # The committed corpus predates the field; the additive default is what
+        # lets all four sets load unchanged. Asserted over the real files.
+        rows = 0
+        for set_dir in _COMMITTED_SET_DIRS:
+            for replay_path in sorted(set_dir.glob("replay-seed-*.jsonl")):
+                for entry in read_replay_entries(replay_path):
+                    rows += 1
+                    assert entry.action_dispositions is None
+        assert rows == 5960
+
+
+class TestRecordTickEventsKeyword:
+    """``events`` is keyword-only with a ``None`` default; omitting it omits the key."""
+
+    def test_omitting_events_omits_the_key_entirely(self, tmp_path: Path) -> None:
+        # Not written as ``null``: a recorder with no event stream must stay
+        # distinguishable from one that recorded an all-applied tick.
+        path = tmp_path / "no-events.jsonl"
+        state = scripted_initial_world_state(seed=1)
+        ReplayLog(path, game_id="g-1").record_tick(0, [], state)
+
+        row = json.loads(path.read_text(encoding="utf-8"))
+
+        assert "action_dispositions" not in row
+
+    def test_passing_events_records_the_classified_tuple(self, tmp_path: Path) -> None:
+        path = tmp_path / "with-events.jsonl"
+        ordered, state, events = _advance_scripted(
+            [
+                _action(_WAIT_P1),
+                _action(_UNREACHABLE_MOVE_P2),
+                _action(_EMERGENCY_P3),
+                _action(_WAIT_P4),
+            ]
+        )
+        ReplayLog(path, game_id="g-1").record_tick(
+            0, list(ordered), state, events=events
+        )
+
+        row = json.loads(path.read_text(encoding="utf-8"))
+
+        assert row["action_dispositions"] == [
+            "applied",
+            "rejected",
+            "applied",
+            "discarded_by_meeting",
+        ]
