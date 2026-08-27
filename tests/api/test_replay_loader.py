@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import shutil
 from collections import Counter, defaultdict
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -2225,3 +2226,128 @@ def test_the_meeting_outcome_channel_reaches_the_served_memory(
         f"headless-seed-{_MULTI_MEETING_SEED}", second.meeting_id, voter
     )
     assert _MEETINGS_HEADER in view.rendered_memory_text
+
+
+# -- the stamp's OTHER direction: a key this build's registry does not have ----
+#
+# The substrate registry is append-only, so a stamp from an OLDER build is a
+# strict subset of this build's keys and compares clean. A stamp from a NEWER
+# build carries a lever this one never registered — a substrate nothing here can
+# reproduce or even name — and the guard used to iterate only the BUILD's keys,
+# so it saw an empty diff and reconstructed silently.
+
+_UNKNOWN_LEVER_STAMP = {**_ALL_FLAGS_ON, "a_lever_from_the_future": True}
+
+
+def test_assert_substrate_matches_raises_on_a_key_this_build_does_not_know(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The finding's exact repro: the live snapshot plus ONE unknown key. Every
+    # key this build knows agrees, so the old build-keys-only diff was empty.
+    _delete_ailibi_env(monkeypatch)
+    entries = [
+        GameEndReplayEntry(
+            game_id="g",
+            tick=1,
+            winner="CREWMATES",
+            reason="TASKS",
+            substrate_flags=_UNKNOWN_LEVER_STAMP,
+        )
+    ]
+
+    with pytest.raises(ReplaySubstrateMismatchError) as excinfo:
+        replay_loader._assert_substrate_matches("g", entries)
+
+    message = str(excinfo.value)
+    assert "a_lever_from_the_future" in message
+    assert "BEHIND" in message  # the hint names WHICH build can read it
+    assert excinfo.value.unknown == ["a_lever_from_the_future"]
+    assert excinfo.value.differing == []
+
+
+def test_the_paired_known_lever_flip_still_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The half that already worked, kept beside the new one so the pair reads
+    # as one contract: a lever this build KNOWS, recorded the other way.
+    _delete_ailibi_env(monkeypatch)
+    entries = [
+        GameEndReplayEntry(
+            game_id="g",
+            tick=1,
+            winner="CREWMATES",
+            reason="TASKS",
+            substrate_flags={**_ALL_FLAGS_ON, "impostor_roll_call": True},
+        )
+    ]
+
+    with pytest.raises(ReplaySubstrateMismatchError) as excinfo:
+        replay_loader._assert_substrate_matches("g", entries)
+
+    assert excinfo.value.differing == ["impostor_roll_call"]
+    assert excinfo.value.unknown == []
+
+
+def _mixed_substrate_set(tmp_path: Path, *, seed: int) -> Path:
+    """The WHOLE committed 9p2i set, with ONE game_over restamped off-substrate.
+
+    The whole set, not one file: a directory holding a single replay fails its
+    own tick-0 state hash, so a one-file fixture would prove nothing about the
+    substrate path — it would fail for an unrelated reason. Returns the PARENT
+    of the set subdir, which is what :func:`api.main.create_app` takes.
+    """
+
+    parent = tmp_path / "samples"
+    set_dir = parent / "9p2i"
+    shutil.copytree(_COMMITTED_9P2I_DIR, set_dir)
+    path = set_dir / f"replay-seed-{seed}.jsonl"
+    out: list[str] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        record = json.loads(line)
+        if record.get("kind") == "game_over":
+            record["substrate_flags"] = dict(_UNKNOWN_LEVER_STAMP)
+            line = json.dumps(record, sort_keys=True, separators=(",", ":"))
+        out.append(line)
+    path.write_text("\n".join(out) + "\n", encoding="utf-8")
+    return parent
+
+
+def test_listing_drops_a_substrate_mismatched_replay_but_cost_still_counts_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    # The asymmetry, pinned so it is a decision rather than a discovery. The
+    # picker promises a replay it can OPEN, so a recording this build cannot
+    # reconstruct is dropped and logged. The cost summary promises what the run
+    # SPENT, and cost/winner/ticks are read straight off the bytes with no
+    # reconstruction — so a mismatched game is a real game that really cost that
+    # much, and dropping it would understate the total.
+    _delete_ailibi_env(monkeypatch)
+    parent = _mixed_substrate_set(tmp_path, seed=0)
+    loader = ReplayLoader(replay_dir=parent / "9p2i")
+
+    with caplog.at_level(logging.WARNING):
+        listed = loader.list_replays()
+    summary = loader.cost_summary()
+
+    assert "headless-seed-0" not in {view.game_id for view in listed}
+    assert len(listed) == summary.total_replays - 1
+    assert any("substrate mismatch" in record.message for record in caplog.records)
+    # And the drop is not a blanket one: every other seed still lists.
+    assert len(listed) == len(list((parent / "9p2i").glob("replay-seed-*.jsonl"))) - 1
+
+
+def test_the_analysis_override_still_lists_a_mismatched_replay(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The Task-14.8 ablation loader deliberately reads across substrates, so the
+    # listing guard must honor the same override the reconstruction guard does —
+    # otherwise the ablation could not even find the games it exists to compare.
+    _delete_ailibi_env(monkeypatch)
+    parent = _mixed_substrate_set(tmp_path, seed=0)
+    loader = ReplayLoader(replay_dir=parent / "9p2i", allow_substrate_mismatch=True)
+
+    listed = loader.list_replays()
+
+    assert "headless-seed-0" in {view.game_id for view in listed}

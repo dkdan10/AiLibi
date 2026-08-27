@@ -139,7 +139,9 @@ FAST_SAMPLE_PER_SET: Final = 8
 
 #: Directories the sidecar walk never descends into: build output, caches and
 #: dependency trees hold no committed artifact, and `.git` holds every historical
-#: version of the ones that count.
+#: version of the ones that count. A nested checkout is skipped by name-independent
+#: rule instead (see :func:`walk_sidecars`): its files belong to its own index, not
+#: to this one, so hashing them here would judge this checkout on another's bytes.
 WALK_SKIP_DIRS: Final[frozenset[str]] = frozenset(
     {
         ".git",
@@ -903,11 +905,25 @@ def bonferroni_from_report(repo_root: Path) -> BonferroniClaim:
 
 
 def walk_sidecars(repo_root: Path) -> list[Path]:
-    """Every ``*.sha256`` in the working tree, skipping caches and build output."""
+    """Every ``*.sha256`` in THIS checkout, skipping caches, build output and nested checkouts.
+
+    A directory holding a ``.git`` entry is a checkout of its own — a linked
+    worktree marks itself with a ``.git`` FILE, a clone with a directory — and
+    its sidecars answer to its index, not this one. Descending into it would
+    make this checkout's verdict depend on whatever another branch has staged
+    there. Applied to DESCENDANTS only: ``.git`` is already in
+    :data:`WALK_SKIP_DIRS`, so the root the walk starts at is never re-tested and
+    never excluded.
+    """
 
     found: list[Path] = []
     for dirpath, dirnames, filenames in os.walk(repo_root):
-        dirnames[:] = sorted(name for name in dirnames if name not in WALK_SKIP_DIRS)
+        dirnames[:] = sorted(
+            name
+            for name in dirnames
+            if name not in WALK_SKIP_DIRS
+            and not (Path(dirpath) / name / ".git").exists()
+        )
         for filename in sorted(filenames):
             if filename.endswith(_SIDECAR_SUFFIX):
                 found.append(Path(dirpath) / filename)

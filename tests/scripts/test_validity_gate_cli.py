@@ -520,3 +520,95 @@ def test_json_failure_names_failing_checks(
     assert "Validity gate FAILED" in text
     assert "no_tick_1_kills" in text
     assert "no_friendly_fire_kills" in text
+
+
+# --------------------------------------------------------------------------- #
+# --expected-prompt-versions: the per-template pin (Task 21.10)                #
+# --------------------------------------------------------------------------- #
+#
+# ``eval.validity`` has implemented this pin end to end since Task 15.1, and no
+# operator-facing command could reach it — so the acceptance line both recorders
+# print could only catch a MIXED set, never a set recorded homogeneously at the
+# WRONG version, which is exactly the shape a full re-record after a prompt bump
+# produces.
+
+
+def _locked_pin() -> str:
+    """The committed sets' own recorded versions, as the CLI takes them."""
+
+    from orchestrator.game import PROMPT_VERSION_SETS
+
+    return ",".join(
+        f"{template}={version}"
+        for template, version in sorted(PROMPT_VERSION_SETS["qwen3_6_27b"].items())
+    )
+
+
+def test_expected_prompt_versions_passes_against_the_recorded_map() -> None:
+    assert (
+        validity_gate.main([str(_NINE), "--expected-prompt-versions", _locked_pin()])
+        == 0
+    )
+
+
+def test_expected_prompt_versions_fails_a_homogeneous_wrong_pin(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # The case the coherence check alone cannot see: the set is internally
+    # consistent, every game agrees, and every game is at the wrong version.
+    wrong = _locked_pin().replace(".v4", ".v3")
+    assert wrong != _locked_pin()
+
+    assert validity_gate.main([str(_NINE), "--expected-prompt-versions", wrong]) == 1
+
+    text = capsys.readouterr().out
+    assert "cost_and_provenance_exact" in text
+    assert "prompt-version provenance does not match expected" in text
+
+
+def test_expected_prompt_versions_rejects_a_malformed_value(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # A bare template name is a half-written pin, and a half-written pin that
+    # silently degraded to "no pin" is worse than no flag at all. Exit 2 is the
+    # file's documented usage code.
+    with pytest.raises(SystemExit) as excinfo:
+        validity_gate.main([str(_NINE), "--expected-prompt-versions", "vote_ballot"])
+
+    assert excinfo.value.code == 2
+    assert "expected KEY=VERSION pairs" in capsys.readouterr().err
+
+
+def test_expected_prompt_versions_rejects_an_empty_value() -> None:
+    with pytest.raises(SystemExit) as excinfo:
+        validity_gate.main([str(_NINE), "--expected-prompt-versions", ","])
+
+    assert excinfo.value.code == 2
+
+
+def test_expected_prompt_versions_rejects_a_repeated_template() -> None:
+    # Two values for one template is ambiguous, and last-wins would silently
+    # discard the operator's first answer.
+    with pytest.raises(SystemExit) as excinfo:
+        validity_gate.main([str(_NINE), "--expected-prompt-versions", "a=one,a=two"])
+
+    assert excinfo.value.code == 2
+
+
+def test_both_recorder_acceptance_lines_carry_the_version_pin() -> None:
+    # A flag on the dry-run preview alone never reaches the operator who copies
+    # the POST-RECORD next-steps block, which is the one that runs at acceptance.
+    script = (_REPO_ROOT / "scripts" / "record_ml_corpus.sh").read_text(
+        encoding="utf-8"
+    )
+    acceptance_lines = [
+        line
+        for line in script.splitlines()
+        if "validity_gate.py" in line and "--expected-model" in line
+    ]
+
+    assert len(acceptance_lines) == 2, acceptance_lines
+    assert all(
+        "--expected-prompt-versions $REQUIRED_PROMPT_VERSIONS_CLI" in line
+        for line in acceptance_lines
+    )

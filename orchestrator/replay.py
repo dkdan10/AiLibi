@@ -794,6 +794,10 @@ def retired_levers_stamped_off(
     reads OFF exactly as the loader's ``bool(recorded.get(key))`` reads it: a
     recording made before a lever existed ran without it, which is precisely the
     substrate this build can no longer produce.
+
+    One half of one axis: :func:`substrate_stamp_mismatches` is the full
+    comparison, which also reports live toggles set the other way and keys the
+    recording carries that this build's registry does not.
     """
 
     if substrate_flags is None:
@@ -801,6 +805,68 @@ def retired_levers_stamped_off(
     return [
         key for key in _RETIRED_ALWAYS_ON_LEVERS if not bool(substrate_flags.get(key))
     ]
+
+
+class SubstrateStampMismatch(BaseModel):
+    """How a recording's substrate stamp diverges from an ambient snapshot.
+
+    Two classes, reported separately because they mean different things and
+    remediate differently. ``differing`` names registry keys whose recorded
+    boolean disagrees with the ambient one -- a lever this build knows, recorded
+    the other way. ``unknown`` names keys the recording carries that this
+    build's registry does not: the stamp was written by a build that had
+    registered a lever this one has never heard of, so no export can reach that
+    substrate and the recording is simply from the future.
+
+    Empty on both axes is a match, which is what ``bool()`` reports, so a caller
+    reads the verdict rather than re-deriving it.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    differing: tuple[str, ...]
+    unknown: tuple[str, ...]
+
+    def __bool__(self) -> bool:
+        return bool(self.differing or self.unknown)
+
+
+def substrate_stamp_mismatches(
+    recorded: Mapping[str, bool] | None,
+    *,
+    ambient: Mapping[str, bool] | None = None,
+) -> SubstrateStampMismatch:
+    """Compare a recording's substrate stamp against a snapshot, BOTH directions.
+
+    The shared comparison behind every substrate refusal: the API loader's
+    reconstruction guard and the audit workflows' ``$0`` re-extraction spine both
+    call it, so a stamp is judged the same way wherever it is read. ``ambient``
+    defaults to :func:`substrate_flag_snapshot`, the live slate.
+
+    Both directions matter because the registry is append-only at each half's own
+    end: a stamp from an OLDER build is a strict SUBSET of this one's keys, and
+    the missing ones read OFF on both sides, so it compares cleanly. A stamp from
+    a NEWER build carries keys this registry never had -- a lever whose behavior
+    this build cannot reproduce and cannot even name -- and comparing only the
+    keys this build knows would wave it through silently.
+
+    An UNSTAMPED recording (``None``) is never checked: its substrate is unknown,
+    not divergent.
+    """
+
+    if recorded is None:
+        return SubstrateStampMismatch(differing=(), unknown=())
+    snapshot = ambient if ambient is not None else substrate_flag_snapshot()
+    return SubstrateStampMismatch(
+        differing=tuple(
+            sorted(
+                key
+                for key in SUBSTRATE_FLAG_KEYS
+                if bool(recorded.get(key)) != bool(snapshot.get(key))
+            )
+        ),
+        unknown=tuple(sorted(set(recorded) - set(SUBSTRATE_FLAG_KEYS))),
+    )
 
 
 def substrate_slate_mismatches(
@@ -1584,6 +1650,7 @@ __all__ = [
     "ReplayEntry",
     "ReplayLog",
     "ReplayLogEntry",
+    "SubstrateStampMismatch",
     "TacticalPolicyStamp",
     "WinnerSide",
     "classify_action_dispositions",
@@ -1602,4 +1669,5 @@ __all__ = [
     "read_tactical_policy_stamp",
     "substrate_flag_snapshot",
     "substrate_slate_mismatches",
+    "substrate_stamp_mismatches",
 ]

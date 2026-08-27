@@ -160,13 +160,14 @@ from eval.vote_correctness import (
 from experiments.lab.rubric_score import score as _rubric_score
 from orchestrator.game import apply_meeting_result
 from orchestrator.replay import (
+    TOGGLEABLE_SUBSTRATE_FLAG_KEYS,
     FailedCallReplayEntry,
     GameEndReplayEntry,
     MeetingReplayEntry,
     ReplayEntry,
     _state_hash,
     read_all_entries,
-    retired_levers_stamped_off,
+    substrate_stamp_mismatches,
 )
 from orchestrator.seeder import seed_initial_state
 
@@ -2157,18 +2158,22 @@ def main() -> int:
             if game_end is not None
             else False
         )
-        # A recording whose stamp names a RETIRED lever OFF describes a
-        # substrate this build cannot reproduce: the OFF derivation was deleted
-        # at the record that adopted the lever, so re-deriving its
-        # contradictions here would silently score legacy bytes with the
-        # current detector. ``read_all_entries`` performs no substrate check of
-        # its own (unlike the API replay loader), so the refusal lives here.
-        # A stamp MISSING a key reads as OFF only for keys that postdate it,
-        # which is why an unstamped legacy recording is skipped entirely rather
-        # than read as an all-OFF slate.
-        retired_off = retired_levers_stamped_off(
+        # A recording whose substrate stamp disagrees with this build describes a
+        # game whose contradictions this detector cannot re-derive, so the facts
+        # below would not describe the recorded game. ``read_all_entries``
+        # performs no substrate check of its own (unlike the API replay loader),
+        # so the refusal lives here — on the SAME full comparison the loader
+        # enforces, in all three of its classes. A stamp MISSING a key reads as
+        # OFF only for keys that postdate it, which is why an unstamped legacy
+        # recording is skipped entirely rather than read as an all-OFF slate.
+        substrate_diff = substrate_stamp_mismatches(
             game_end.substrate_flags if game_end is not None else None
         )
+        retired_off = [
+            key
+            for key in substrate_diff.differing
+            if key not in TOGGLEABLE_SUBSTRATE_FLAG_KEYS
+        ]
         if retired_off:
             raise SystemExit(
                 f"seed {seed}: recording stamps retired lever(s) {retired_off} "
@@ -2177,6 +2182,22 @@ def main() -> int:
                 "substrate, so its contradiction-derived facts would not "
                 "describe the recorded game. Re-record, or extract with a build "
                 "that predates the graduation."
+            )
+        if substrate_diff.differing:
+            raise SystemExit(
+                f"seed {seed}: recording stamps toggleable lever(s) "
+                f"{list(substrate_diff.differing)} differently from this "
+                "environment, so the detector would re-derive contradictions "
+                "under a substrate the game never ran. Match the environment to "
+                "the stamp and re-run."
+            )
+        if substrate_diff.unknown:
+            raise SystemExit(
+                f"seed {seed}: recording stamps lever(s) "
+                f"{list(substrate_diff.unknown)} this build's substrate registry "
+                "does not have, so it was made by a build this one is BEHIND and "
+                "its substrate cannot be reproduced here. Extract with the build "
+                "that recorded it, or re-record."
             )
         # Task 13.3: re-derive each meeting's contradictions from the recorded
         # transcript with the CURRENT detector (the $0 re-extraction spine), so

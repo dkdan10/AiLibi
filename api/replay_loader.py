@@ -164,7 +164,6 @@ from orchestrator.game import (
     apply_meeting_result,
 )
 from orchestrator.replay import (
-    SUBSTRATE_FLAG_KEYS,
     TOGGLEABLE_SUBSTRATE_FLAG_KEYS,
     ActionDisposition,
     FailedCallReplayEntry,
@@ -182,6 +181,7 @@ from orchestrator.replay import (
     fsm_default_tactical_policy_stamp,
     read_all_entries,
     substrate_flag_snapshot,
+    substrate_stamp_mismatches,
 )
 from orchestrator.seeder import seed_initial_state
 
@@ -400,9 +400,12 @@ class ReplaySubstrateMismatchError(RuntimeError):
     differs from the stamp — recoverable by matching the environment to the
     stamp (a stamp that predates the lever's key reads as OFF, so baseline 1
     loads under the default-OFF env and mismatches only when the lever is
-    exported ON). A legacy replay carrying NO stamp is never checked, so the
-    committed final-9B baseline reconstructs unchanged. Surfaced as HTTP 500
-    with the offending game id in the response body.
+    exported ON). A THIRD mode is a stamp carrying a key this build's registry
+    does not have: the recording was made by a NEWER build, and the lever it
+    names cannot be reproduced or even resolved here. A legacy replay carrying
+    NO stamp is never checked, so the committed final-9B baseline reconstructs
+    unchanged. Surfaced as HTTP 500 with the offending game id and the
+    divergence in the response body.
     """
 
     def __init__(
@@ -415,19 +418,21 @@ class ReplaySubstrateMismatchError(RuntimeError):
         self.game_id = game_id
         self.recorded = dict(recorded)
         self.ambient = dict(ambient)
-        differing = sorted(
-            key
-            for key in SUBSTRATE_FLAG_KEYS
-            if bool(recorded.get(key)) != bool(ambient.get(key))
-        )
+        mismatch = substrate_stamp_mismatches(recorded, ambient=ambient)
+        #: Registry levers whose recorded boolean differs from the ambient one.
+        self.differing: list[str] = list(mismatch.differing)
+        #: Stamp keys this build's substrate registry does not have.
+        self.unknown: list[str] = list(mismatch.unknown)
         # The remediation hint depends on WHICH lever diverged. A TOGGLEABLE
-        # lever still reads an AILIBI_* variable — nine of them do today, every
-        # one default-OFF — so the divergence is env-remediable: match the
-        # environment to the stamp (a stamp without the key reads as OFF). A
-        # RETIRED lever has no env gate any more (it is unconditionally ON), so
-        # its stamp names a substrate this build can no longer produce.
-        toggleable = sorted(set(differing) & set(TOGGLEABLE_SUBSTRATE_FLAG_KEYS))
-        retired = sorted(set(differing) - set(TOGGLEABLE_SUBSTRATE_FLAG_KEYS))
+        # lever still reads an AILIBI_* variable — every key in
+        # TOGGLEABLE_SUBSTRATE_FLAG_KEYS does, each default-OFF — so the
+        # divergence is env-remediable: match the environment to the stamp (a
+        # stamp without the key reads as OFF). A RETIRED lever has no env gate any
+        # more (it is unconditionally ON), so its stamp names a substrate this
+        # build can no longer produce. An UNKNOWN key names a lever this build has
+        # never registered, so there is nothing to match it to.
+        toggleable = sorted(set(self.differing) & set(TOGGLEABLE_SUBSTRATE_FLAG_KEYS))
+        retired = sorted(set(self.differing) - set(TOGGLEABLE_SUBSTRATE_FLAG_KEYS))
         hints: list[str] = []
         if toggleable:
             variables = ", ".join(env_var_for_lever(key) for key in toggleable)
@@ -443,10 +448,18 @@ class ReplaySubstrateMismatchError(RuntimeError):
                 "at the Task-14.12 close), so this stamp records a substrate the "
                 "build can no longer reproduce."
             )
+        if self.unknown:
+            hints.append(
+                f"Unknown lever(s) {self.unknown} are in the stamp but not in "
+                "this build's substrate registry: the recording was made by a "
+                "build this one is BEHIND, so its substrate cannot be reproduced "
+                "here. Read it with the build that recorded it, or re-record."
+            )
         super().__init__(
             f"replay substrate mismatch for {game_id!r}: recorded with "
             f"{self.recorded!r} but reconstructing under {self.ambient!r} "
-            f"(differing levers: {differing}). " + " ".join(hints) + " (This is "
+            f"(differing levers: {self.differing}; unknown levers: "
+            f"{self.unknown}). " + " ".join(hints) + " (This is "
             "not a determinism break — the per-tick state hash is "
             "substrate-independent.)"
         )
@@ -483,7 +496,8 @@ class ReplayPolicyMismatchError(RuntimeError):
         self.game_id = game_id
         self.recorded = recorded
         self.expected = expected
-        differing = sorted(
+        #: Stamp fields whose recorded value contradicts the served claim.
+        self.differing: list[str] = sorted(
             field
             for field in TacticalPolicyStamp.model_fields
             if getattr(recorded, field) != getattr(expected, field)
@@ -492,7 +506,7 @@ class ReplayPolicyMismatchError(RuntimeError):
             f"replay tactical-policy mismatch for {game_id!r}: recorded "
             f"{recorded.model_dump()!r} but the loader is serving under a "
             f"conflicting policy claim {expected.model_dump()!r} (differing "
-            f"fields: {differing}). Replay reconstruction re-feeds the recorded "
+            f"fields: {self.differing}). Replay reconstruction re-feeds the recorded "
             "actions and never re-invokes a policy, so the stamp is provenance, "
             "not a replay input; this guard refuses to SERVE a stamped replay "
             "under a conflicting policy claim (an unstamped replay reads as the "
@@ -524,17 +538,22 @@ def _log_skipped_replay(path: Path, exc: Exception) -> None:
     """Log the one WARNING that records a replay the collection views skipped.
 
     Names the path and which class of failure it hit, so an operator can tell
-    the three apart without opening the file: ``doubled write`` (the
+    them apart without opening the file: ``doubled write`` (the
     :class:`ReplayLog.CorruptedFileError` pattern of two games concatenated),
-    ``no replay records`` (:class:`EmptyReplayError`), or ``unparseable row``
-    (any other ``ValueError`` — a truncated JSON line, a schema-invalid row via
-    pydantic's ``ValidationError``, or an unknown entry kind).
+    ``no replay records`` (:class:`EmptyReplayError`), ``substrate mismatch``
+    (:class:`ReplaySubstrateMismatchError` — a readable recording of a substrate
+    this build cannot reconstruct, so the picker must not advertise it), or
+    ``unparseable row`` (any other ``ValueError`` — a truncated JSON line, a
+    schema-invalid row via pydantic's ``ValidationError``, or an unknown entry
+    kind).
     """
 
     if isinstance(exc, EmptyReplayError):
         reason = "no replay records"
     elif isinstance(exc, ReplayLog.CorruptedFileError):
         reason = "doubled write"
+    elif isinstance(exc, ReplaySubstrateMismatchError):
+        reason = "substrate mismatch"
     else:
         reason = "unparseable row"
     _LOGGER.warning("Skipping unreadable replay file %s (%s): %s", path, reason, exc)
@@ -655,26 +674,45 @@ def _assert_substrate_matches(
     WARNING (never silent) naming the divergent levers.
     """
 
-    recorded = _recorded_substrate_flags(entries)
+    _assert_recorded_substrate(
+        game_id,
+        _recorded_substrate_flags(entries),
+        allow_substrate_mismatch=allow_substrate_mismatch,
+    )
+
+
+def _assert_recorded_substrate(
+    game_id: str,
+    recorded: Mapping[str, bool] | None,
+    *,
+    allow_substrate_mismatch: bool = False,
+) -> None:
+    """Compare one already-extracted stamp against the live substrate.
+
+    The single comparison point behind both the reconstruction guard
+    (:func:`_assert_substrate_matches`, off the walk's entry list) and the
+    picker's listing guard (off the cheap summary pass), so a replay cannot be
+    advertised by one and refused by the other. The comparison itself is
+    :func:`orchestrator.replay.substrate_stamp_mismatches`, which reports levers
+    recorded the other way AND keys this build's registry does not have.
+    """
+
     if recorded is None:
         return
     ambient = substrate_flag_snapshot()
-    differing = sorted(
-        key
-        for key in SUBSTRATE_FLAG_KEYS
-        if bool(recorded.get(key)) != bool(ambient.get(key))
-    )
-    if not differing:
+    mismatch = substrate_stamp_mismatches(recorded, ambient=ambient)
+    if not mismatch:
         return
     if allow_substrate_mismatch:
         _LOGGER.warning(
             "Deliberate substrate mismatch permitted for %r (analysis-only "
             "override, Task 14.8): recorded %r, reconstructing under %r "
-            "(differing levers: %r).",
+            "(differing levers: %r; unknown levers: %r).",
             game_id,
             dict(recorded),
             dict(ambient),
-            differing,
+            list(mismatch.differing),
+            list(mismatch.unknown),
         )
         return
     raise ReplaySubstrateMismatchError(
@@ -723,6 +761,10 @@ class _ReplaySummary:
     final_tick: int | None
     total_cost_usd: float
     prompt_versions: Mapping[str, str]
+    # The recorded substrate stamp, so the listing can refuse a replay it cannot
+    # reconstruct without a second read. ``None`` for an unstamped (legacy)
+    # recording, which is never checked.
+    substrate_flags: Mapping[str, bool] | None
 
 
 class ReplayLoader:
@@ -791,16 +833,24 @@ class ReplayLoader:
         rather than the whole directory; absent params (``limit=None,
         offset=0``) list every replay.
 
-        A file the summary reader cannot use is excluded from the listing and
-        logged once at WARNING with its path and failure class, so no single bad
-        file can 500 the whole picker. Three classes are skipped here: the
+        A file the picker cannot honestly advertise is excluded from the listing
+        and logged once at WARNING with its path and failure class, so no single
+        bad file can 500 the whole picker. Four classes are skipped here: the
         doubled-write :class:`ReplayLog.CorruptedFileError`, any unparseable or
         schema-invalid row (a ``ValueError``, which pydantic's
         ``ValidationError`` subclasses — the shape an interrupted tournament
-        write leaves behind), and :class:`EmptyReplayError` (a file holding no
-        replay records). The degradation stops at this collection view:
-        :meth:`load_replay` of a skipped game id still raises, so a half-written
-        game is never served as if it were whole.
+        write leaves behind), :class:`EmptyReplayError` (a file holding no
+        replay records), and :class:`ReplaySubstrateMismatchError` — a perfectly
+        readable recording of a substrate this build cannot reconstruct, which
+        the picker would otherwise advertise and then 500 on when opened. The
+        stamp comes from the same memoized summary pass the metadata view reads,
+        so the guard adds no second parse. The degradation stops at this
+        collection view: :meth:`load_replay` of a skipped game id still raises,
+        so a half-written or off-substrate game is never served as if it were
+        whole.
+
+        :meth:`cost_summary` deliberately does NOT skip the substrate class —
+        see its docstring for why a mismatched game's cost is still real.
 
         Audits G-G-3, K-K-8.
         """
@@ -810,8 +860,17 @@ class ReplayLoader:
         views: list[ReplayMetadataView] = []
         for seed, path in window:
             try:
+                _assert_recorded_substrate(
+                    _game_id_for_seed(seed),
+                    self._file_summary(path).substrate_flags,
+                    allow_substrate_mismatch=self._allow_substrate_mismatch,
+                )
                 views.append(self._metadata_view(path, seed))
-            except (ReplayLog.CorruptedFileError, ValueError) as exc:
+            except (
+                ReplayLog.CorruptedFileError,
+                ValueError,
+                ReplaySubstrateMismatchError,
+            ) as exc:
                 _log_skipped_replay(path, exc)
         return views
 
@@ -844,6 +903,14 @@ class ReplayLoader:
         :meth:`list_replays`, so one corrupt file cannot 500 the eval dashboard;
         ``total_replays`` counts only the files actually reduced, keeping
         ``mean_cost_per_replay`` a mean over real games.
+
+        A substrate-mismatched replay is deliberately KEPT here, unlike in
+        :meth:`list_replays`. Everything this summary reduces — cost, winner,
+        ticks, meeting count — is read straight off the recorded bytes and needs
+        no reconstruction, so a game recorded under another lever slate is a real
+        game that really cost that much and really ended that way. Dropping it
+        would understate the spend; only the reconstruction-dependent picker,
+        which promises a replay it can actually open, has to refuse it.
 
         Audit G-G-2.
         """
@@ -1832,6 +1899,7 @@ class ReplayLoader:
         final_tick: int | None = None
         total_cost = 0.0
         prompt_versions: dict[str, str] = {}
+        substrate_flags: dict[str, bool] | None = None
         entries = read_all_entries(path)
         if not entries:
             # A file that contributes no records is an unusable artifact, not a
@@ -1852,6 +1920,8 @@ class ReplayLoader:
                 # It was dropped before 19.10 because no consumer needed it; it
                 # is optional on the record, so it stays ``None``-able here.
                 final_tick = entry.tick
+                if entry.substrate_flags is not None:
+                    substrate_flags = dict(entry.substrate_flags)
             elif isinstance(entry, FailedCallReplayEntry):
                 total_cost += entry.cost_usd
         return _ReplaySummary(
@@ -1862,6 +1932,7 @@ class ReplayLoader:
             final_tick=final_tick,
             total_cost_usd=total_cost,
             prompt_versions=prompt_versions,
+            substrate_flags=substrate_flags,
         )
 
     def _metadata_view(self, path: Path, seed: int) -> ReplayMetadataView:

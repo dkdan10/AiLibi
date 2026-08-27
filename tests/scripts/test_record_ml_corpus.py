@@ -21,6 +21,7 @@ import os
 import re
 import shutil
 import subprocess
+import time
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -439,17 +440,28 @@ def test_preflight_refuses_non_featherless_provider(tmp_path: Path) -> None:
     assert not corpus_root.exists()  # refused before any record
 
 
-def test_preflight_refuses_fake_provider(tmp_path: Path) -> None:
-    corpus_root = tmp_path / "ml_corpus"
+def test_preflight_refuses_fake_provider_at_the_committed_corpus_tree() -> None:
+    # RETARGETED from the blanket provider refusal (Task 15.12): `fake` is now
+    # reachable by name, because the recording engine cannot be tested at all
+    # without it. What protects the committed corpus is therefore WHERE a fake
+    # run may write, not whether it may run. The default corpus root IS the
+    # committed tree, so a bare `fake` run is refused, names both committed set
+    # dirs, and stages nothing. (`fake` pointed at a scratch corpus root is
+    # allowed — see the hermetic recording family below.)
     env = dict(
-        _clean_env(),
-        AILIBI_LLM_PROVIDER="fake",
-        AILIBI_ML_CORPUS_ROOT=str(corpus_root),
+        _clean_env(), AILIBI_LLM_PROVIDER="fake", AILIBI_PROMPT_SET="qwen3_6_27b"
     )
-    proc = _run("--set", "4p1i", env=env)
+    proc = _run(env=env, timeout=180)
+    out = proc.stdout + proc.stderr
+
     assert proc.returncode != 0
-    assert "records ONLY on featherless" in proc.stdout + proc.stderr
-    assert not corpus_root.exists()
+    assert "may not write into the repository's replays/ tree" in out
+    assert "replays/ml_corpus/9p2i" in out
+    assert "replays/ml_corpus/4p1i" in out
+    assert "nothing was staged" in out
+    assert not list(
+        (_REPO_ROOT / "replays" / "ml_corpus").glob("**/.ailibi-corpus-stage-*")
+    )
 
 
 def test_preflight_requires_api_key_before_record(tmp_path: Path) -> None:
@@ -1122,3 +1134,865 @@ def test_splits_only_both_sets(tmp_path: Path) -> None:
         doc = json.loads((corpus_root / set_name / "splits.json").read_text())
         assert doc["set"] == set_name
         assert doc["total_games"] == total
+
+
+# -- the seed subset (--seeds) ------------------------------------------------
+#
+# The operator mode the sibling recorder has carried since its first version:
+# repairing one bad seed of a 150-seed locked range takes minutes instead of a
+# whole multi-hour leg. It never widens what may be FROZEN — the finalize still
+# demands the exact locked set.
+
+
+def test_usage_documents_the_seed_subset() -> None:
+    proc = _run("--help")
+    assert proc.returncode == 0
+    assert "--seeds N,N,N" in proc.stdout
+    assert "operator" in proc.stdout.lower()
+
+
+def test_seeds_requires_a_value() -> None:
+    proc = _run("--seeds")
+    assert proc.returncode != 0
+    assert "--seeds requires a comma-separated seed list" in proc.stdout + proc.stderr
+
+
+def test_seeds_refuses_an_empty_list() -> None:
+    proc = _run("--seeds", ",", "--dry-run")
+    assert proc.returncode != 0
+    assert "--seeds names no seed" in proc.stdout + proc.stderr
+
+
+def test_seeds_refuses_a_non_numeric_entry() -> None:
+    proc = _run("--seeds", "1000,ten", "--dry-run")
+    assert proc.returncode != 0
+    assert "invalid --seeds entry" in proc.stdout + proc.stderr
+
+
+def test_seeds_and_splits_only_are_mutually_exclusive() -> None:
+    proc = _run("--seeds", "1000", "--splits-only")
+    assert proc.returncode != 0
+    assert "--seeds and --splits-only are mutually exclusive" in (
+        proc.stdout + proc.stderr
+    )
+
+
+def test_seeds_composes_with_dry_run_and_set() -> None:
+    proc = _run("--set", "4p1i", "--dry-run", "--seeds", "1000, 1001,1000")
+    assert proc.returncode == 0
+    # De-duplicated and normalized, so a typo cannot double-record a seed.
+    assert "[dry-run] seed subset: --seeds 1000,1001" in proc.stdout
+    assert "a subset run finalizes NOTHING" in proc.stdout
+
+
+def test_seeds_refuses_a_digit_string_that_would_overflow_bash_arithmetic() -> None:
+    # $(( )) is fixed-width: 18446744073709552616 wraps to exactly 1000, which is
+    # inside BOTH locked ranges, so converting before validating would silently
+    # record or replace a real game from a nonsense input. Rejected on width,
+    # before any arithmetic touches it.
+    assert 18446744073709552616 % 2**64 == 1000  # the alias this refuses
+
+    proc = _run("--set", "4p1i", "--dry-run", "--seeds", "18446744073709552616")
+
+    assert proc.returncode != 0
+    out = proc.stdout + proc.stderr
+    assert "has more digits than any seed can" in out
+    assert "18446744073709552616" in out
+
+
+def test_seeds_still_accepts_a_leading_zero_alias() -> None:
+    # The width guard must not cost the canonicalization it replaced: 01000 is
+    # still seed 1000, and naming it twice still de-duplicates to one.
+    proc = _run("--set", "4p1i", "--dry-run", "--seeds", "01000,1000")
+
+    assert proc.returncode == 0
+    assert "[dry-run] seed subset: --seeds 1000" in proc.stdout
+
+
+def test_seeds_refuses_a_seed_outside_the_locked_range(tmp_path: Path) -> None:
+    # Before the set dir is created: a typo costs nothing.
+    corpus_root = tmp_path / "ml_corpus"
+    proc = _run(
+        "--set",
+        "4p1i",
+        "--seeds",
+        "1049,1050",
+        env=_fake_env(corpus_root),
+        timeout=180,
+    )
+    assert proc.returncode != 0
+    out = proc.stdout + proc.stderr
+    assert "--seeds names seed 1050, outside 4p1i's locked range 1000..1049" in out
+    assert not (corpus_root / "4p1i").exists()
+
+
+def test_the_dry_run_refuses_an_out_of_range_seed_too() -> None:
+    # An operator previewing a repair command must learn there that the seed does
+    # not exist — a preview that says the plan is fine and a real run that
+    # refuses it describe different commands.
+    proc = _run("--set", "4p1i", "--dry-run", "--seeds", "1050")
+    assert proc.returncode != 0
+    assert "--seeds names seed 1050, outside 4p1i's locked range 1000..1049" in (
+        proc.stdout + proc.stderr
+    )
+
+
+def test_a_seed_valid_for_one_set_is_still_refused_before_the_first_set_records(
+    tmp_path: Path,
+) -> None:
+    # 9p2i locks 1000..1149 and 4p1i 1000..1049, so `--set both --seeds 1100` is
+    # half-valid — and `both` is the DEFAULT. Validating per set inside the
+    # record loop would be too late: the 9p2i leg would record (on the hosted
+    # provider, for hours) and could even freeze before the run failed on a seed
+    # the SECOND set never had. The refusal must land before either set is
+    # touched, which is what "nothing recorded" has to mean here.
+    corpus_root = tmp_path / "ml_corpus"
+    proc = _run("--seeds", "1100", env=_fake_env(corpus_root), timeout=300)
+    out = proc.stdout + proc.stderr
+
+    assert proc.returncode != 0
+    assert "--seeds names seed 1100, outside 4p1i's locked range 1000..1049" in out
+    assert not corpus_root.exists()  # NEITHER set was created
+    assert "Recording corpus set 9p2i" not in out
+
+    # The dry-run refuses identically, so the preview and the real run can never
+    # describe different commands.
+    preview = _run("--dry-run", "--seeds", "1100")
+    assert preview.returncode != 0
+    assert "outside 4p1i's locked range" in preview.stdout + preview.stderr
+
+
+# -- the hermetic recording path ----------------------------------------------
+#
+# `fake` is the only provider that can drive the worker pool without spending, so
+# these cases are what cover record_set's ~355-line recording engine: run_worker /
+# claim_next_seed / record_one_seed / acquire_lock and the lock-guarded MANIFEST
+# merge. Every one records into a scratch corpus root under tmp_path; the script
+# refuses a target under replays/ outright, which is what protects the committed
+# corpus now that `fake` is reachable at all.
+#
+# COVERAGE BOUNDARY, stated rather than implied: a fake recording can never reach
+# the FREEZE. check_seed_count refuses a short set and check_replay_provenance
+# refuses non-baseline bytes, both before freeze_manifest — correctly. So the
+# family ends at the loud "NOT freezing" refusal with its replays and MANIFEST
+# rows on disk, and freeze_manifest gets its own verbatim-extraction driver below.
+
+_FAKE_MODEL = "fake-meeting"
+
+
+def _fake_env(corpus_root: Path) -> dict[str, str]:
+    """A hermetic recording env: the fake provider into a scratch corpus root."""
+
+    return dict(
+        _clean_env(),
+        AILIBI_LLM_PROVIDER="fake",
+        AILIBI_PROMPT_SET="qwen3_6_27b",
+        AILIBI_ML_CORPUS_ROOT=str(corpus_root),
+    )
+
+
+def _manifest_data_rows(manifest: Path) -> list[list[str]]:
+    """Every data row of a rendered MANIFEST, as its stripped cells.
+
+    A list (not a seed-keyed dict) so a duplicated seed row stays visible
+    instead of collapsing.
+    """
+
+    rows: list[list[str]] = []
+    for line in manifest.read_text(encoding="utf-8").splitlines():
+        if not line.startswith("|"):
+            continue
+        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        if cells and cells[0].isdigit():
+            rows.append(cells)
+    return rows
+
+
+def test_default_fake_model_mirrors_the_fake_client() -> None:
+    # A fake row must be attributable as a fake row: the shell constant used for
+    # MANIFEST attribution is pinned against the id the fake client actually
+    # reports, so a hermetic recording can never render as a Featherless row.
+    from llm.fake_provider import _FAKE_MEETING_MODEL
+
+    script = _RECORD_SH.read_text(encoding="utf-8")
+    match = re.search(r'^DEFAULT_FAKE_MODEL="([^"]+)"$', script, re.MULTILINE)
+    assert match is not None, "DEFAULT_FAKE_MODEL constant missing from script"
+    assert match.group(1) == _FAKE_MEETING_MODEL == _FAKE_MODEL
+
+
+def test_fake_run_records_seeds_end_to_end_and_stops_at_the_freeze_refusal(
+    tmp_path: Path,
+) -> None:
+    # The whole recording engine, hermetically: two seeds are claimed, recorded,
+    # moved into the set dir and manifested; the per-run stage dir is discarded;
+    # and the run ends at the exact-set refusal rather than freezing a subset.
+    corpus_root = tmp_path / "ml_corpus"
+    proc = _run(
+        "--set", "4p1i", "--seeds", "1000,1001", env=_fake_env(corpus_root), timeout=900
+    )
+    combined = proc.stdout + proc.stderr
+    # The abort this path dies on under macOS's stock Bash 3.2 if the lock owner
+    # pid is not written as ${BASHPID:-$$}.
+    assert "unbound variable" not in combined
+
+    set_dir = corpus_root / "4p1i"
+    assert (set_dir / "replay-seed-1000.jsonl").is_file()
+    assert (set_dir / "replay-seed-1001.jsonl").is_file()
+
+    rows = _manifest_data_rows(set_dir / "MANIFEST.md")
+    assert [int(cells[0]) for cells in rows] == [1000, 1001]
+    for cells in rows:
+        # No fake row renders as a real one: the fake client's own model id, and
+        # the $0 the hermetic provider actually cost.
+        assert cells[1] == _FAKE_MODEL
+        assert cells[7] == "0.0000"
+    assert (set_dir / "MANIFEST.md").read_text(encoding="utf-8").count(
+        "# Sample Replay Manifest"
+    ) == 1
+
+    # The per-run stage dir is gone (the RETURN trap discarded it).
+    assert not list(set_dir.glob(".ailibi-corpus-stage-*"))
+
+    # ... and the run stopped at the freeze refusal, with the bytes preserved.
+    assert proc.returncode != 0
+    assert "is not the exact locked seed set; NOT freezing" in combined
+    assert "**FROZEN**" not in (set_dir / "MANIFEST.md").read_text(encoding="utf-8")
+    assert not (set_dir / "splits.json").exists()
+
+
+def test_a_subset_run_finalizes_nothing_even_on_a_complete_set(
+    tmp_path: Path,
+) -> None:
+    # The repair case the seed-count check alone cannot express: every locked
+    # seed IS on disk after the repair, so the count passes — and the finalize
+    # would then rebuild the eval report, rewrite splits.json and re-stamp the
+    # FROZEN line under the REPAIR run's sha. A one-seed operation must not
+    # restamp set-level provenance as a side effect, so a subset run finalizes
+    # nothing and says which command does.
+    # The committed 4p1i corpus is the real, FROZEN, provenance-clean set an
+    # operator would be repairing — copied to scratch, with one seed dropped as
+    # if it had been found bad. Real bytes are required: the pre-spend
+    # provenance guard reads every replay already present, so stubs would be
+    # refused long before the finalize this case is about.
+    corpus_root = tmp_path / "ml_corpus"
+    set_dir = corpus_root / "4p1i"
+    shutil.copytree(_REPO_ROOT / "replays" / "ml_corpus" / "4p1i", set_dir)
+    (set_dir / "replay-seed-1000.jsonl").unlink()
+    manifest = set_dir / "MANIFEST.md"
+    frozen_before = [
+        line
+        for line in manifest.read_text(encoding="utf-8").splitlines()
+        if line.startswith("**FROZEN**")
+    ]
+    assert len(frozen_before) == 1, "the committed corpus should arrive frozen"
+    # The set-level artifacts a finalize would rewrite, as they stand.
+    set_level_before = {
+        name: (set_dir / name).read_bytes()
+        for name in ("splits.json", "tournament-eval-report.json")
+        if (set_dir / name).is_file()
+    }
+    assert set_level_before, "the committed corpus should ship its set-level artifacts"
+
+    proc = _run(
+        "--set", "4p1i", "--seeds", "1000", env=_fake_env(corpus_root), timeout=900
+    )
+    out = proc.stdout + proc.stderr
+
+    # The repair itself worked...
+    assert (set_dir / "replay-seed-1000.jsonl").is_file(), out
+    # ... and every locked seed is now present, so the count check PASSED — only
+    # the subset guard can be what stopped the finalize.
+    assert "is not the exact locked seed set" not in out
+    assert "--seeds recorded a subset, so the finalize is skipped; NOT freezing" in out
+    assert "Re-run without --seeds" in out
+    # Nothing set-level was rebuilt.
+    assert {
+        name: (set_dir / name).read_bytes() for name in set_level_before
+    } == set_level_before
+    # And the set does not claim to be frozen: the per-seed MANIFEST update
+    # re-renders the table and drops the stale FROZEN line (by design — an
+    # incomplete or repaired set must never be left LOOKING frozen), while the
+    # skipped finalize adds no new one. So a repair leaves the set honestly
+    # unfrozen rather than re-stamped under the repair run's sha, which is the
+    # whole point of refusing to finalize here.
+    frozen_after = [
+        line
+        for line in manifest.read_text(encoding="utf-8").splitlines()
+        if line.startswith("**FROZEN**")
+    ]
+    assert frozen_after == []
+    assert frozen_before[0] not in manifest.read_text(encoding="utf-8")
+    # ... and the closing block does not print acceptance commands for a set it
+    # never froze.
+    assert "no set was finalized or frozen" in proc.stdout
+    assert "validity_gate.py" not in proc.stdout
+
+
+def test_fake_run_bash_trace_names_the_worker_pool(tmp_path: Path) -> None:
+    # Coverage proof that survives a reworded progress string: the xtrace of a
+    # real (non-dry-run) recording must show the four pool functions invoked.
+    corpus_root = tmp_path / "ml_corpus"
+    proc = subprocess.run(
+        ["bash", "-x", str(_RECORD_SH), "--set", "4p1i", "--seeds", "1000"],
+        cwd=_REPO_ROOT,
+        capture_output=True,
+        text=True,
+        env=_fake_env(corpus_root),
+        timeout=900,
+    )
+    assert (corpus_root / "4p1i" / "replay-seed-1000.jsonl").is_file(), proc.stderr[
+        -4000:
+    ]
+    for function in (
+        "run_worker",
+        "claim_next_seed",
+        "record_one_seed",
+        "acquire_lock",
+    ):
+        assert re.search(rf"^\++ {function}\b", proc.stderr, re.MULTILINE), function
+
+
+def test_two_workers_lose_no_manifest_row(tmp_path: Path) -> None:
+    # MANIFEST.md is a whole-file read-modify-write
+    # (_manifest_writer.update_manifest), so two workers updating different seeds
+    # concurrently would leave one row silently missing — and a missing row is
+    # fatal at the next verify gate. The lock-guarded merge is what prevents it;
+    # this pins that it holds. (Replays are staged per-seed and land via an atomic
+    # `mv -f`, so the race could never TRUNCATE a replay: the exposure is the
+    # lost row.)
+    corpus_root = tmp_path / "ml_corpus"
+    env = dict(_fake_env(corpus_root), AILIBI_REFRESH_WORKERS="2")
+    proc = _run("--set", "4p1i", "--seeds", "1000,1001,1002,1003", env=env, timeout=900)
+    out = proc.stdout + proc.stderr
+    assert "Recording 4 seeds with 2 parallel workers" in proc.stdout, out
+
+    set_dir = corpus_root / "4p1i"
+    rows = _manifest_data_rows(set_dir / "MANIFEST.md")
+    # None lost, none doubled.
+    assert [int(cells[0]) for cells in rows] == [1000, 1001, 1002, 1003]
+    for seed in range(1000, 1004):
+        assert (set_dir / f"replay-seed-{seed}.jsonl").is_file()
+        # The claim counter is lock-guarded, so no seed is recorded twice.
+        assert proc.stdout.count(f"recording 4p1i seed {seed} ---") == 1
+    # WHICH worker drains which seed is up to the scheduler, so asserting a
+    # particular split would be a timing assumption. What holds under every
+    # split: every seed was claimed by a worker of the spawned pool, once.
+    claims = re.findall(r"--- \[worker (\d+)\] recording 4p1i seed", proc.stdout)
+    assert len(claims) == 4
+    assert set(claims) <= {"1", "2"}
+
+
+def _failing_uv_shim(tmp_path: Path, *, fail_seed: int) -> str:
+    """A PATH entry whose ``uv`` fails ONE seed's tournament and passes the rest.
+
+    Deterministic by construction: the failure is keyed on the seed argument, not
+    on timing, so ``record_one_seed``'s fail-loud branch is exercised without a
+    race. Every other ``uv run`` (the preflights, the manifest writer) execs the
+    real binary.
+    """
+
+    real_uv = shutil.which("uv")
+    assert real_uv is not None, "uv is required to drive the recorder"
+    bin_dir = tmp_path / "shim-bin"
+    bin_dir.mkdir()
+    shim = bin_dir / "uv"
+    shim.write_text(
+        "#!/usr/bin/env bash\n"
+        'prev=""\n'
+        'for arg in "$@"; do\n'
+        f'  if [[ "$prev" == "--start-seed" && "$arg" == "{fail_seed}" ]]; then\n'
+        "    echo 'injected tournament failure' >&2\n"
+        "    exit 7\n"
+        "  fi\n"
+        '  prev="$arg"\n'
+        "done\n"
+        f'exec "{real_uv}" "$@"\n',
+        encoding="utf-8",
+    )
+    shim.chmod(0o755)
+    return str(bin_dir)
+
+
+def test_a_failed_seed_fails_the_run_loud_and_preserves_what_recorded(
+    tmp_path: Path,
+) -> None:
+    # The contract behind every resumable leg: a seed that cannot be recorded
+    # stops the set rather than letting it finalize short, says so in the words
+    # an operator acts on, and leaves the already-recorded seeds + their MANIFEST
+    # rows on disk to resume from.
+    corpus_root = tmp_path / "ml_corpus"
+    env = dict(
+        _fake_env(corpus_root),
+        AILIBI_REFRESH_WORKERS="1",
+        AILIBI_SEED_MAX_ATTEMPTS="1",
+        PATH=_failing_uv_shim(tmp_path, fail_seed=1001)
+        + os.pathsep
+        + os.environ["PATH"],
+    )
+    proc = _run("--set", "4p1i", "--seeds", "1000,1001", env=env, timeout=900)
+    out = proc.stdout + proc.stderr
+
+    assert proc.returncode == 1
+    assert "run_tournament failed after 1 attempts" in out
+    assert "INCOMPLETE and must NOT be frozen/committed" in out
+    assert "Already-recorded seeds + their MANIFEST rows are preserved" in out
+
+    set_dir = corpus_root / "4p1i"
+    assert (set_dir / "replay-seed-1000.jsonl").is_file()
+    assert not (set_dir / "replay-seed-1001.jsonl").exists()
+    assert [
+        int(cells[0]) for cells in _manifest_data_rows(set_dir / "MANIFEST.md")
+    ] == [1000]
+    assert not list(set_dir.glob(".ailibi-corpus-stage-*"))
+
+
+# -- the provider seam: `fake` on the sibling's terms, and no looser -----------
+
+
+def test_the_dry_run_plan_describes_the_provider_the_real_run_would_use(
+    tmp_path: Path,
+) -> None:
+    # --dry-run is documented as "the resolved plan", so under an explicit
+    # `fake` it must not print a Featherless plan, claim an API key is needed, or
+    # show AILIBI_LLM_PROVIDER=featherless in the invocation it previews — the
+    # identical real command runs fake, and a preview that describes a different
+    # command is worse than no preview.
+    corpus_root = tmp_path / "ml_corpus"
+    proc = _run("--set", "4p1i", "--dry-run", env=_fake_env(corpus_root), timeout=180)
+    out = proc.stdout
+
+    assert proc.returncode == 0, out + proc.stderr
+    assert "[dry-run] provider: fake (hermetic $0" in out
+    assert "would require no API key" in out
+    assert f"[dry-run] model: {_FAKE_MODEL}" in out
+    assert "AILIBI_LLM_PROVIDER=fake AILIBI_PROMPT_SET=qwen3_6_27b" in out
+    assert "would require FEATHERLESS_API_KEY" not in out
+    assert "AILIBI_LLM_PROVIDER=featherless" not in out
+    # A preview writes nothing, including under fake.
+    assert not corpus_root.exists()
+
+
+def test_the_fake_dry_run_previews_the_refusal_it_will_actually_hit(
+    tmp_path: Path,
+) -> None:
+    # A full fake run (no --seeds) records every locked seed and is then refused
+    # by check_replay_provenance, because fake rows carry the fake model and the
+    # guard demands the locked one. The preview must say so rather than promise
+    # a report, a splits.json, a FROZEN line and an acceptance command pinned to
+    # a model these bytes will never carry — a plan that advertises exactly what
+    # the run is guaranteed to refuse is worse than no plan.
+    corpus_root = tmp_path / "ml_corpus"
+    proc = _run("--set", "4p1i", "--dry-run", env=_fake_env(corpus_root), timeout=180)
+    out = proc.stdout
+
+    assert proc.returncode == 0, out + proc.stderr
+    assert "would STOP at check_replay_provenance" in out
+    assert f"fake rows are stamped {_FAKE_MODEL}" in out
+    assert "eval report / splits / freeze: NONE" in out
+    assert "acceptance: N/A" in out
+    # None of the featherless finalize promises survive on this path.
+    assert "would append a FROZEN line" not in out
+    assert "would write $" not in out.replace(str(corpus_root), "$")
+    assert "validity_gate.py" not in out
+
+
+def test_fake_model_bytes_are_refused_by_the_provenance_guard(
+    tmp_path: Path,
+) -> None:
+    # The other half of the pin above: the preview's claim is only honest if the
+    # guard really refuses fake-model bytes. Driven over a whole set of them —
+    # the committed 4p1i replays copied to scratch and re-stamped with the fake
+    # model, which is what a full fake run leaves on disk — so the refusal is
+    # reached without recording 50 games. check_replay_provenance is invoked
+    # twice per set (pre-spend over what is already present, and again before
+    # the freeze); this fixture trips the first, which is the same function and
+    # the same verdict: the run stops there and nothing is ever frozen.
+    corpus_root = tmp_path / "ml_corpus"
+    set_dir = corpus_root / "4p1i"
+    shutil.copytree(_REPO_ROOT / "replays" / "ml_corpus" / "4p1i", set_dir)
+    rewritten = 0
+    for replay in set_dir.glob("replay-seed-*.jsonl"):
+        text = replay.read_text(encoding="utf-8")
+        if f'"model":"{_BASELINE_MODEL}"' in text:
+            rewritten += 1
+        replay.write_text(
+            text.replace(f'"model":"{_BASELINE_MODEL}"', f'"model":"{_FAKE_MODEL}"'),
+            encoding="utf-8",
+        )
+    assert rewritten, "the fixture must actually carry fake-model rows"
+
+    proc = _run("--set", "4p1i", env=_fake_env(corpus_root), timeout=900)
+    out = proc.stdout + proc.stderr
+
+    assert proc.returncode != 0
+    assert "check_replay_provenance" in out
+    assert _FAKE_MODEL in out
+    assert "complete and FROZEN" not in out
+    assert "do not commit" in out
+
+
+def test_the_dry_run_refuses_a_fake_target_inside_the_committed_tree() -> None:
+    # A preview that cannot refuse would let an operator confirm a plan the real
+    # run rejects — the reason the lever preflight already runs in the dry-run.
+    env = dict(
+        _clean_env(), AILIBI_LLM_PROVIDER="fake", AILIBI_PROMPT_SET="qwen3_6_27b"
+    )
+    proc = _run("--dry-run", env=env, timeout=180)
+
+    assert proc.returncode != 0
+    assert "may not write into the repository's replays/ tree" in (
+        proc.stdout + proc.stderr
+    )
+
+
+def test_the_dry_run_still_describes_featherless_by_default() -> None:
+    # The default path is untouched: no provider export still previews the
+    # locked hosted plan, key and all.
+    proc = _run("--set", "4p1i", "--dry-run")
+
+    assert proc.returncode == 0
+    assert "[dry-run] provider: featherless (LOCKED" in proc.stdout
+    assert "would require FEATHERLESS_API_KEY" in proc.stdout
+    assert f"[dry-run] model: {_BASELINE_MODEL}" in proc.stdout
+    assert "AILIBI_LLM_PROVIDER=featherless" in proc.stdout
+
+
+def test_the_dry_run_refuses_an_unsupported_provider() -> None:
+    env = dict(_clean_env(), AILIBI_LLM_PROVIDER="anthropic")
+    proc = _run("--dry-run", env=env)
+
+    assert proc.returncode != 0
+    assert "records ONLY on featherless" in proc.stdout + proc.stderr
+
+
+def test_fake_target_guard_resolves_symlinks_and_dot_dot(tmp_path: Path) -> None:
+    # Physical paths are compared, so neither a symlink nor a `..` can smuggle
+    # the target back under replays/. The decoy lives in the committed tree and
+    # must stay empty.
+    decoy = _REPO_ROOT / "replays" / "ml_corpus" / ".test-corpus-decoy"
+    link = tmp_path / "corpus-link"
+    target = f"{tmp_path}/not-there/../corpus-link/scratch"
+    env = dict(
+        _clean_env(),
+        AILIBI_LLM_PROVIDER="fake",
+        AILIBI_PROMPT_SET="qwen3_6_27b",
+        AILIBI_ML_CORPUS_ROOT=target,
+    )
+    decoy.mkdir()
+    link.symlink_to(decoy)
+    try:
+        proc = _run("--set", "4p1i", env=env, timeout=180)
+        out = proc.stdout + proc.stderr
+        assert proc.returncode != 0
+        assert "may not write into the repository's replays/ tree" in out
+        assert str(decoy) in out  # resolved all the way through the symlink
+        assert list(decoy.iterdir()) == []
+        assert not (tmp_path / "not-there").exists()
+    finally:
+        shutil.rmtree(decoy)
+
+
+def test_fake_provider_skips_the_api_key_preflight(tmp_path: Path) -> None:
+    # There is no key to preflight on a hermetic $0 run, and demanding one would
+    # make the seam unusable. The featherless path is untouched (see
+    # test_preflight_requires_api_key_before_record).
+    corpus_root = tmp_path / "ml_corpus"
+    proc = _run(
+        "--set", "4p1i", "--seeds", "1000", env=_fake_env(corpus_root), timeout=900
+    )
+    out = proc.stdout + proc.stderr
+
+    assert "FEATHERLESS_API_KEY must be set" not in out
+    assert "Fake-provider target OK" in out
+    assert (corpus_root / "4p1i" / "replay-seed-1000.jsonl").is_file()
+
+
+def test_fake_provider_still_fires_the_substrate_lever_preflight(
+    tmp_path: Path,
+) -> None:
+    # The seam relaxes the KEY, nothing else: a stale lever export is still
+    # refused before any seed stages, under fake exactly as under featherless.
+    corpus_root = tmp_path / "ml_corpus"
+    env = dict(_fake_env(corpus_root), AILIBI_IMPOSTOR_ROLL_CALL="1")
+    proc = _run("--set", "4p1i", "--seeds", "1000", env=env, timeout=300)
+    out = proc.stdout + proc.stderr
+
+    assert proc.returncode != 0
+    assert "does not match --expect-levers" in out
+    assert "impostor_roll_call" in out
+    assert not (corpus_root / "4p1i" / "replay-seed-1000.jsonl").exists()
+
+
+def test_fake_provider_still_fires_the_prompt_set_pins(tmp_path: Path) -> None:
+    # Both prompt pins survive the seam: the SET the run must be under, and the
+    # registry's per-template versions the corpus is frozen at.
+    corpus_root = tmp_path / "ml_corpus"
+    env = dict(_fake_env(corpus_root), AILIBI_PROMPT_SET="wrong_set")
+    proc = _run("--set", "4p1i", "--seeds", "1000", env=env, timeout=300)
+    out = proc.stdout + proc.stderr
+
+    assert proc.returncode != 0
+    assert "AILIBI_PROMPT_SET must be 'qwen3_6_27b'" in out
+    assert not corpus_root.exists()
+
+
+def test_an_unset_provider_still_resolves_to_featherless(tmp_path: Path) -> None:
+    # The silent-fake path stays closed: `fake` is reachable ONLY by naming it.
+    corpus_root = tmp_path / "ml_corpus"
+    env = dict(_clean_env(), AILIBI_ML_CORPUS_ROOT=str(corpus_root))
+    proc = _run("--set", "4p1i", env=env, timeout=180)
+
+    assert proc.returncode != 0
+    assert "FEATHERLESS_API_KEY must be set" in proc.stdout + proc.stderr
+
+
+def test_an_empty_provider_still_resolves_to_featherless(tmp_path: Path) -> None:
+    corpus_root = tmp_path / "ml_corpus"
+    env = dict(
+        _clean_env(), AILIBI_LLM_PROVIDER="", AILIBI_ML_CORPUS_ROOT=str(corpus_root)
+    )
+    proc = _run("--set", "4p1i", env=env, timeout=180)
+
+    assert proc.returncode != 0
+    assert "FEATHERLESS_API_KEY must be set" in proc.stdout + proc.stderr
+
+
+def test_every_other_provider_is_still_refused(tmp_path: Path) -> None:
+    corpus_root = tmp_path / "ml_corpus"
+    for provider in ("anthropic", "ollama", "openai"):
+        env = dict(
+            _clean_env(),
+            AILIBI_LLM_PROVIDER=provider,
+            AILIBI_ML_CORPUS_ROOT=str(corpus_root),
+        )
+        proc = _run("--set", "4p1i", env=env, timeout=180)
+        assert proc.returncode != 0, provider
+        assert "records ONLY on featherless" in proc.stdout + proc.stderr
+        assert not corpus_root.exists()
+
+
+# -- the lock's dead-owner verdict --------------------------------------------
+#
+# acquire_lock's liveness probe (cat owner, then kill -0) inherently races the
+# holder's release: a holder that releases the lock and exits between the two
+# steps — a worker draining the queue, or the seed-claim command-substitution
+# subshell whose pid dies with the claim — probes as dead though it finished
+# cleanly. The lock therefore requires the SAME dead pid to stay the recorded
+# owner across consecutive polls before declaring death. Driven off the committed
+# implementation, extracted verbatim, so these bite on the real script.
+
+_LOCK_DRIVER = """\
+set -euo pipefail
+stage_dir="$1"
+lockdir="$stage_dir/.lock"
+{functions}
+if acquire_lock; then
+  echo ACQUIRED
+  release_lock
+else
+  echo REFUSED
+  exit 1
+fi
+"""
+
+
+def _dedent_two(block: str) -> str:
+    """Strip the two-space nesting the pool functions carry inside record_set."""
+
+    return "\n".join(
+        line[2:] if line.startswith("  ") else line for line in block.splitlines()
+    )
+
+
+def _lock_driver(tmp_path: Path) -> Path:
+    """A driver script around the committed acquire_lock/release_lock."""
+
+    script = _RECORD_SH.read_text(encoding="utf-8")
+    functions = []
+    for pattern in (
+        r"(?ms)^  acquire_lock\(\) \{\n.*?\n  \}$",
+        r"(?m)^  release_lock\(\) \{ .*\}$",
+    ):
+        match = re.search(pattern, script)
+        assert match is not None, f"lock function not found: {pattern}"
+        functions.append(_dedent_two(match.group(0)))
+    driver = tmp_path / "lock_driver.sh"
+    driver.write_text(
+        _LOCK_DRIVER.format(functions="\n".join(functions)), encoding="utf-8"
+    )
+    return driver
+
+
+def _reaped_pid() -> str:
+    """The pid of a process that has already exited and been reaped."""
+
+    proc = subprocess.run(
+        ["bash", "-c", "echo $$"], capture_output=True, text=True, timeout=60
+    )
+    assert proc.returncode == 0
+    return proc.stdout.strip()
+
+
+def test_lock_fails_loud_when_a_dead_owner_stays_the_owner(tmp_path: Path) -> None:
+    # The safety net the stability window must NOT lose: a holder SIGKILLed/OOMed
+    # mid-critical-section leaves the mkdir lock held forever, and every waiter
+    # would spin while the parent hangs in `wait`. A lock whose recorded owner is
+    # dead and never released must be refused, flagged in .failed, and named —
+    # and only after the streak of polls, never on a single probe.
+    stage = tmp_path / "stage"
+    lockdir = stage / ".lock"
+    lockdir.mkdir(parents=True)
+    (lockdir / "owner").write_text(_reaped_pid(), encoding="utf-8")
+    start = time.monotonic()
+
+    proc = subprocess.run(
+        ["bash", str(_lock_driver(tmp_path)), str(stage)],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "REFUSED" in proc.stdout
+    assert "died holding the lock" in proc.stderr
+    assert (stage / ".failed").exists()
+    # The verdict took at least the confirmation window (10 polls x 0.1s sleep);
+    # an instant verdict would mean the single-probe race is back.
+    assert time.monotonic() - start >= 0.5
+
+
+def test_lock_tolerates_a_release_racing_the_dead_owner_probe(tmp_path: Path) -> None:
+    # A dead owner pid may belong to a holder that RELEASED the lock and finished
+    # between the waiter's cat and its kill -0 — a clean handoff, not a corpse,
+    # and it must not fail the set. This is the corpus recorder's own version of
+    # the race that fired three times in CI on the sibling (PRs #369/#372/#378),
+    # and it is structural here: claim_next_seed's only call site is a command
+    # substitution, so ${BASHPID:-$$} records a pid that dies with the claim.
+    # The waiter provably probes the dead owner first (gated on the xtrace showing
+    # kill -0), then the lock is released out from under it; it must acquire and
+    # flag nothing.
+    stage = tmp_path / "stage"
+    lockdir = stage / ".lock"
+    lockdir.mkdir(parents=True)
+    dead = _reaped_pid()
+    (lockdir / "owner").write_text(dead, encoding="utf-8")
+    trace = tmp_path / "trace.txt"
+    probe = re.compile(rf"kill -0 {dead}\b")
+    with (
+        trace.open("w", encoding="utf-8") as trace_fh,
+        subprocess.Popen(
+            ["bash", "-x", str(_lock_driver(tmp_path)), str(stage)],
+            stdout=subprocess.PIPE,
+            stderr=trace_fh,
+            text=True,
+        ) as proc,
+    ):
+        # On any failure below the waiter may still be spinning on the held lock,
+        # and Popen.__exit__ waits for it unboundedly — kill it so the gate
+        # reports the failure instead of hanging.
+        try:
+            deadline = time.monotonic() + 60
+            while not probe.search(trace.read_text(encoding="utf-8")):
+                assert time.monotonic() < deadline, "waiter never probed the dead owner"
+                assert proc.poll() is None, (
+                    "waiter exited on a single dead probe: "
+                    + trace.read_text(encoding="utf-8")
+                )
+                time.sleep(0.01)
+            shutil.rmtree(lockdir)  # the release the probe raced
+            stdout, _ = proc.communicate(timeout=60)
+        except BaseException:
+            proc.kill()
+            raise
+
+    assert proc.returncode == 0, stdout + trace.read_text(encoding="utf-8")
+    assert "ACQUIRED" in stdout
+    assert not (stage / ".failed").exists()
+
+
+# -- the freeze, driven verbatim ----------------------------------------------
+#
+# freeze_manifest is unreachable from a hermetic recording by design (the
+# provenance guards above it correctly refuse fake bytes), so it is driven
+# directly out of the committed script rather than left uncovered.
+
+_FREEZE_DRIVER = """\
+set -euo pipefail
+REQUIRED_PROMPT_SET="qwen3_6_27b"
+expect_levers_desc="(none — the bare slate: every live toggle OFF)"
+POLICY_STAMP="fsm-default"
+SPLIT_RULE_DESC="seed mod 5: {{0,1,2}}=train, {{3}}=val, {{4}}=test"
+{functions}
+freeze_manifest "$1" "$2" "$3" "$4"
+"""
+
+
+def _freeze_driver(tmp_path: Path) -> Path:
+    """A driver script around the committed freeze_manifest."""
+
+    script = _RECORD_SH.read_text(encoding="utf-8")
+    match = re.search(r"(?ms)^freeze_manifest\(\) \{\n.*?\n\}$", script)
+    assert match is not None, "freeze_manifest not found in the script"
+    driver = tmp_path / "freeze_driver.sh"
+    driver.write_text(_FREEZE_DRIVER.format(functions=match.group(0)), encoding="utf-8")
+    return driver
+
+
+def _run_freeze(
+    tmp_path: Path, manifest: Path, sha: str
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [
+            "bash",
+            str(_freeze_driver(tmp_path)),
+            str(manifest),
+            "4p1i",
+            sha,
+            "2026-08-27",
+        ],
+        cwd=_REPO_ROOT,
+        capture_output=True,
+        text=True,
+        env=_clean_env(),
+        timeout=300,
+    )
+
+
+def test_freeze_appends_one_frozen_line_naming_the_code_state_sha(
+    tmp_path: Path,
+) -> None:
+    manifest = tmp_path / "MANIFEST.md"
+    manifest.write_text("# Sample Replay Manifest\n\n| seed |\n|---|\n| 1000 |\n")
+
+    proc = _run_freeze(tmp_path, manifest, "abc1234")
+
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    text = manifest.read_text(encoding="utf-8")
+    assert text.count("**FROZEN**") == 1
+    assert "abc1234" in text
+    assert "4p1i" in text
+    assert "qwen3_6_27b" in text
+    assert "fsm-default" in text
+    # The line says what the sha IS, because reading it as a pointer to the bytes
+    # sends an auditor to the wrong tree.
+    assert "NOT the commit containing these bytes" in text
+    # The table it was appended to is untouched.
+    assert "| 1000 |" in text
+
+
+def test_re_freezing_replaces_rather_than_stacks_the_frozen_line(
+    tmp_path: Path,
+) -> None:
+    # A no-op re-finalize skips the per-seed table rewrite, so without the strip
+    # each re-run would append another FROZEN line and the set would carry two
+    # contradicting freeze shas.
+    manifest = tmp_path / "MANIFEST.md"
+    manifest.write_text("# Sample Replay Manifest\n\n| seed |\n|---|\n| 1000 |\n")
+
+    assert _run_freeze(tmp_path, manifest, "abc1234").returncode == 0
+    assert _run_freeze(tmp_path, manifest, "def5678").returncode == 0
+
+    text = manifest.read_text(encoding="utf-8")
+    assert text.count("**FROZEN**") == 1
+    assert "def5678" in text
+    assert "abc1234" not in text

@@ -575,6 +575,83 @@ def test_perturbed_artifact_byte_fails_the_in_tree_sidecar_class(
     assert "!= sidecar" in perturbed.detail
 
 
+def _broken_sidecar_pair(directory: Path) -> Path:
+    """A sidecar and a target whose bytes do NOT hash to it. Returns the sidecar.
+
+    Deliberately broken so the exclusion tests below cannot pass vacuously: if
+    the walk reaches this pair, ``_verify_sidecar`` fails on it.
+    """
+
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / "weights.json").write_text('{"w": 1}\n', encoding="utf-8")
+    sidecar = directory / "weights.json.sha256"
+    sidecar.write_text(f"{'0' * 64}  weights.json\n", encoding="utf-8")
+    return sidecar
+
+
+@pytest.mark.parametrize("marker_is_a_file", [True, False])
+def test_a_nested_checkout_is_excluded_from_the_sidecar_walk(
+    tmp_path: Path, marker_is_a_file: bool
+) -> None:
+    """A directory that marks itself as a checkout answers to its own index.
+
+    A linked worktree writes a ``.git`` FILE, a clone a ``.git`` directory; both
+    mean the same thing, so both are skipped. Without this, a developer with
+    sibling worktrees checked out under the repo hashes THEIR staged bytes and
+    reads a red row that says nothing about this checkout.
+    """
+
+    root = tmp_path / "repo"
+    _manifests(root)
+    nested = root / ".claude" / "worktrees" / "agent-1"
+    sidecar = _broken_sidecar_pair(nested / "training" / "artifacts")
+    marker = nested / ".git"
+    if marker_is_a_file:
+        marker.write_text(
+            "gitdir: /elsewhere/.git/worktrees/agent-1\n", encoding="utf-8"
+        )
+    else:
+        marker.mkdir()
+
+    # The planted pair really is broken: it is excluded, not benign.
+    assert vme._verify_sidecar(sidecar, root)[1]  # noqa: PLC2701
+    assert sidecar not in vme.walk_sidecars(root)
+    assert (
+        _row(vme.run_sidecars(_context(root)).rows, "sidecars[IN-TREE]").status == "OK"
+    )
+
+
+def test_a_mismatched_sidecar_outside_a_nested_checkout_still_fails(
+    tmp_path: Path,
+) -> None:
+    """The leg still bites: the nested-checkout rule narrows it, never disarms it."""
+
+    root = tmp_path / "repo"
+    _manifests(root)
+    sidecar = _broken_sidecar_pair(root / "training" / "artifacts")
+
+    assert sidecar in vme.walk_sidecars(root)
+    row = _row(vme.run_sidecars(_context(root)).rows, "sidecars[IN-TREE]")
+    assert row.status == "FAIL"
+    assert "weights.json" in row.detail
+    assert "!= sidecar" in row.detail
+
+
+def test_the_walk_never_excludes_the_root_it_starts_at(tmp_path: Path) -> None:
+    """The rule applies to DESCENDANTS: a checkout does not skip itself.
+
+    Every real repo root holds a ``.git``, so a rule tested at the root would
+    make the whole walk empty — and an empty walk also reports "0 failure(s)".
+    """
+
+    root = tmp_path / "repo"
+    _manifests(root)
+    sidecar = _broken_sidecar_pair(root / "training" / "artifacts")
+    (root / ".git").mkdir()
+
+    assert sidecar in vme.walk_sidecars(root)
+
+
 def test_absent_sidecar_target_fails_rather_than_passing_vacuously(
     tmp_path: Path,
 ) -> None:
