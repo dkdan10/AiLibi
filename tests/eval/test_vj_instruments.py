@@ -812,3 +812,21 @@ def test_cli_vj_human_render_names_the_gauges(
     assert "zero-flag convictions: 2/21" in out
     assert "voice:" in out
     assert "pooling:" in out
+    # The excluded count is PUBLISHED on the human surface, not only in the
+    # JSON — a cell a reader cannot see is a cell that gets absorbed. Pinned
+    # with its value, because naming the gauge alone would not notice the
+    # cell being dropped from the f-string run that builds this line.
+    assert "guard-authored excluded 0" in out
+
+
+def test_cli_vj_human_render_publishes_a_nonzero_exclusion(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # The 4p1i control reads 0, so it cannot show the cell MOVING. 9p2i has
+    # the five recorded redactions and its voice denominator sits below its
+    # ballot count — both visible on the one line a reader actually reads.
+    assert measure_baseline.main([str(_NINE), "--vj"]) == 0
+    out = capsys.readouterr().out
+
+    assert "guard-authored excluded 5" in out
+    assert "echo 0/866" in out
