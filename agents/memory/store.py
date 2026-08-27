@@ -2138,17 +2138,11 @@ def _record_last_seen_sightings(
             and (player_id, cached.tick, cached.room) in suppressed
         ):
             # The firewall RETRACTING a placement it once allowed. ``last_seen``
-            # persists between renders, so a value recorded while the row was
-            # sayable outlives the evidence that suppresses it -- a body surfacing
-            # in that room afterwards -- and would keep disclosing the
-            # teammate-at-scene placement the sighting line itself now drops.
-            #
-            # Gated with the rest of the repair because the retraction moves
-            # rendered bytes on its own (unconditional, it breaks the committed
-            # byte-golden at ``headless-seed-9:meeting-2``), so it rides the same
-            # re-record. The OFF path therefore still carries this leak through
-            # its one reachable channel, a witnessed transition; Task 21.15's flip
-            # closes it with the rest.
+            # outlives the render that filled it, so a value recorded while its
+            # row was still sayable would survive the evidence that suppresses it
+            # -- a body surfacing in that room afterwards -- and keep publishing
+            # the teammate-at-scene placement the sighting line itself now drops.
+            # Gated because the retraction moves rendered bytes on its own.
             working.forget_sighting(player_id)
             cached = None
         entry = latest.get(player_id)
