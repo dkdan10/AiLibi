@@ -405,10 +405,14 @@ test.describe("spectator journey", () => {
     // its group counts, and every group is one of the three taxonomy headings.
     // `EvidenceSection` renders nothing at all on an empty flag list, so the
     // empty meeting falls out of the same arithmetic instead of being skipped —
-    // no `Evidence` heading has to mean no group heading, i.e. 0 = 0. These are
-    // the only h4 and h5 in the dialog, so neither locator can drift onto
-    // something else. Read as text CONTENT, not innerText: the headings are
-    // CSS-uppercased and innerText would return the transformed string.
+    // no `Evidence` heading has to mean no group heading, i.e. 0 = 0.
+    //
+    // Located by heading LEVEL, not by a name pattern: a name-filtered locator
+    // can only ever match the headings it already expects, which would make "every
+    // group heading is one of the three" vacuous. `EvidenceSection`'s are the only
+    // h4 and h5 anywhere in this panel, so neither locator can drift. Read as text
+    // CONTENT, not innerText — the headings are CSS-uppercased, and innerText
+    // would hand back the transformed string.
     const evidenceHeadings = await transcript.getByRole("heading", { level: 4 }).allTextContents();
     const groupHeadings = await transcript.getByRole("heading", { level: 5 }).allTextContents();
 
