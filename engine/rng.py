@@ -97,7 +97,10 @@ class EngineRng:
         if state.startswith(_FAST_STATE_MARKER):
             return cls._from_fast_state(state)
         payload = json.loads(state.decode("utf-8"))
-        inner = random.Random()
+        # ``random.Random()`` would seed a 624-word Mersenne state that the next
+        # line discards — safe to skip ONLY because ``setstate`` follows
+        # immediately: a bare ``__new__`` object has no ``gauss_next`` until then.
+        inner = random.Random.__new__(random.Random)
         inner.setstate((payload["v"], tuple(payload["s"]), payload["g"]))
         return cls(_random=inner)
 
@@ -111,7 +114,7 @@ class EngineRng:
         words = array("Q")
         words.frombytes(state[header_end:])
         gauss = gauss_value if has_gauss else None
-        inner = random.Random()
+        inner = random.Random.__new__(random.Random)
         inner.setstate((version, tuple(words), gauss))
         return cls(_random=inner)
 
