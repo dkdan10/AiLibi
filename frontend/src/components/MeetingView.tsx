@@ -29,6 +29,7 @@
 import { useEffect, useRef } from "react";
 import type { ReactNode } from "react";
 
+import { OBSERVATION_EVENT_SEGMENTS } from "../lib/contradictions";
 import { MEETING_COPY } from "../lib/copy";
 import { useReplayStore } from "../store/replayStore";
 import { useFocusTrap } from "../hooks/useFocusTrap";
@@ -309,17 +310,20 @@ const TURN_KIND_LABEL: Record<TurnView["turn_kind"], string> = {
   opt_in: "opt-in",
 };
 
-// A contradiction event id is `turn:<turn_id>:<segment>:<i>` (mirrors
-// meetings/transcript.py). Pull the turn id out so the link can name the turn it
-// references; greedy `.+` captures the whole id before the final suffix.
+// A contradiction event id is `turn:<turn_id>:<segment>:<i>`. Pull the turn id
+// out so `link()` below can name WHO said each half of a flag; greedy `.+`
+// captures the whole turn id before the final suffix.
 //
-// `whereabouts` is Task 16.7's roll-call self-placement segment, added to the
-// meeting layer after this helper was written and never taught to it — so every
-// flag with a roll-call endpoint (230 of the 830 committed flags) silently lost
-// its turn attribution and fell back to the bare subject id. Teaching the
-// segment here is what makes `link()` below able to say WHO said each half.
+// The segment alternation is built from `lib/contradictions.ts`'s exported list
+// rather than hand-written here, because that list is also what mints the ids on
+// the cards — one vocabulary, two readers, no way to teach a new segment to only
+// one of them.
+const EVENT_ID_PATTERN = new RegExp(
+  `^turn:(.+):(?:${OBSERVATION_EVENT_SEGMENTS.join("|")}):\\d+$`,
+);
+
 function eventTurnId(eventId: string): string | null {
-  const match = /^turn:(.+):(?:claim|obs|whereabouts):\d+$/.exec(eventId);
+  const match = EVENT_ID_PATTERN.exec(eventId);
   return match ? match[1]! : null;
 }
 
