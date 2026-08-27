@@ -126,9 +126,12 @@ the offline counterfactual's, published before any bar is written.
 - tests/agents/test_prompt_loader.py; (routing: OFF binds the default filenames, ON binds the variants, ON with a set that has no variant fails loud)
 - tests/agents/test_bespoke_prompt_sets.py; (the variant bodies differ from the default bodies ONLY in the two named regions)
 - tests/eval/test_deduction_metrics.py; (the new cells, their crew control, and the exclusion list's planted case)
+- orchestrator/replay.py; (register `testimony_shapes` in `_TOGGLEABLE_LEVER_RESOLVERS`, newest last — this lever registers ITSELF, the same as its two siblings)
+- .env.example; (the new toggle's commented bare default and its paragraph, in the voice of the two entries above it)
+- tests/orchestrator/test_replay.py; (the stamp key appears, a bare env stamps it False, and a recording predating the key still reads False)
 
 **Files NOT in scope:**
-- orchestrator/replay.py and .env.example (the substrate-stamp registration of the Wave-2 levers is ONE task's, the 20.33 precedent; this task ships the resolver and names the key `testimony_shapes`, registers nothing, and adds no `SUBSTRATE_FLAG_KEYS` entry — see Integration risk)
+- `SUBSTRATE_FLAG_KEYS`' ordering convention and the retired half of the registry (this task appends ONE live-toggle entry; the retired block is 21.24's on ADOPTED and no key changes index here)
 - observation/service.py, agents/perception.py (naming the victim in the witnessed-kill line needs the perception packet widened; that is a firewall-crossing entitlement change and is deliberately not this task's — the shape carries killer/room/tick, which is exactly what the memory line already holds)
 - meetings/transcript.py (this task mints NO contradiction flag and changes NO band; a spoken `saw_kill` is content, and the detector is untouched)
 - agents/memory/beliefs.py (`record_alibi` is CALLED with a new source, never redefined; no suspicion delta moves)
@@ -150,6 +153,10 @@ the offline counterfactual's, published before any bar is written.
 - [ ] The variant stamps name the variant FILES on their own `v1` lineage (`crewmate_report_testimony_shapes.qwen3_6_27b.v1`, `accusation_round_testimony_shapes.qwen3_6_27b.v1`), the other two keys inherit the default registry's values, and `tests/agents/test_prompt_loader.py` pins that no variant body can ever share a stamp with any default body of that set, past or future.
 - [ ] `eval/deduction_metrics.py` runs the self-kill and role nets over the PLAYER-VISIBLE surface — `turn.free_text` plus each claim's `reason` and `evidence`, since the turn render puts the reason on the table — and publishes them as role-split cells beside `player_visible_leak_turns`, with the impostor-side cell documented as an explicit UPPER BOUND and the crew-side cell as its false-positive control. A documented exclusion list drops the quotation/conditional forms the verifier measured as the noise ("how do you know I killed", "if I killed", "you claim I killed"), and a planted case proves the exclusion bites in both directions.
 - [ ] The adjacent claim in the same docstring block is corrected in the same edit: `crew_omniscient_control_ballots` is NOT "0 on every committed set" — re-derived at HEAD it reads 1 on both 9p2i sets and 0 on both 4p1i sets. The corrected sentence names the control's actual reading and the command that recomputes it (craft rule 5).
+- [ ] The lever REGISTERS itself: `testimony_shapes` is appended to `orchestrator.replay._TOGGLEABLE_LEVER_RESOLVERS` bound to `meetings.constants.testimony_shapes_enabled` (no local mirror), so `SUBSTRATE_FLAG_KEYS` grows by a pure append at the live-toggle end and every already-recorded key keeps its index. `tests/orchestrator/test_replay.py` pins that a bare env stamps the key `False` and that a stamp recorded before the key existed still reads `False` through the missing-key rule at `orchestrator/replay.py:562-564`. Registering here rather than in a later collecting task is what lets the offline counterfactual price a three-lever slate: it reads the live registry and refuses before printing if a priced lever is absent.
+- [ ] The re-derivation seam is closed by that registration and the closure is pinned, not promised: a recording whose `game_over` stamp carries `testimony_shapes: False` loaded with the lever ON is REFUSED by `api/replay_loader.py`'s substrate check rather than silently re-derived through `derive_reported_testimony`, and the test asserts the refusal names the diverging key. The PR states which consumers re-derive at load time and that all of them now sit behind that guard.
+- [ ] `.env.example` documents `AILIBI_TESTIMONY_SHAPES` as a commented bare default in the voice of the two Wave-2 entries above it, including the warning that flipping it for a serving or verify run against committed bytes produces a substrate mismatch; `uv run python scripts/check_doc_facts.py` is green, since `check_lever_registry` couples that file to the registry.
+- [ ] `tests/meetings/test_lever_registry.py`'s resolver sweep is re-run and still reports zero accept-and-ignore resolvers with the third Wave-2 key present; the count assertions its siblings generalised are updated to name all live resolvers rather than a number typed in prose.
 - [ ] No cell, count or threshold in this task is pinned to a committed-corpus number: every gate is a fixture or a class invariant, because the bytes those numbers describe are replaced by the re-record this task depends on. The PR states this in one line.
 - [ ] The PR quotes a lever-ON re-derivation over the committed bytes for orientation only — reported rows added per meeting by each arm, and the alibi-map coverage before and after — labelled as an OFFLINE re-derivation of superseded bytes, with no bar, no verdict and no claim about what the record will show.
 - [ ] The blast radius is stated in the PR from a fresh grep of every `derive_reported_testimony` / `absorb_reported_testimony` consumer: orchestrator/game.py:2363, api/replay_loader.py:1378, eval/off_menu.py:509, eval/funnel.py, eval/evidence_honesty.py:1321, scripts/counterfactual_phase20.py:527 — naming which of them read the ambient environment and which are handed one.
@@ -245,7 +252,19 @@ and why, and its planted case asserts both directions — an excluded quotation
 does not count, and a bare first-person admission does. While in that
 docstring, fix the false control sentence at :257-258.
 
-BLOCK 7 — before pushing. Run the byte-golden and `verify_samples.sh` with a
+BLOCK 7 — registration, last and in one commit with the resolver. Append
+`("testimony_shapes", testimony_shapes_enabled)` to `_TOGGLEABLE_LEVER_RESOLVERS`
+(orchestrator/replay.py:568), importing the resolver from `meetings.constants` —
+that module is a stdlib-only leaf, so there is no import-contract obstacle and no
+local mirror is needed. Two sibling levers registered ahead of you, so read the
+tuple at HEAD rather than at this contract's line number, and append at the live
+end so no already-recorded key moves index. Then `.env.example` in the voice of
+the two entries above yours, and the `tests/orchestrator/test_replay.py` pair
+(bare env stamps False; a pre-key recording reads False). This is what makes the
+downstream counterfactual able to price a three-lever slate — it reads the live
+registry and refuses before printing if a priced lever is missing.
+
+BLOCK 8 — before pushing. Run the byte-golden and `verify_samples.sh` with a
 clean environment FIRST; if either moves with the lever unset, the OFF path is
 not identical and nothing else matters. Then run the ON path over the committed
 bytes to produce the PR's orientation numbers, toggling through the resolver's
@@ -270,20 +289,27 @@ lever that changes what a template OFFERS.
 
 Risk 1 — the re-derivation seam. `derive_reported_testimony` is re-run at LOAD
 time by `api/replay_loader.py:1378` and by four eval consumers, so a recording
-made with the lever OFF and re-derived with it ON reconstructs memory the game
-never held. The substrate stamp is the defence, and this task does not register
-the key (above). Until the registration lands, every consumer that re-derives
-must be run with the same environment the recording was made under, and the PR
-must say so plainly rather than implying the guard already covers it. The pin
-that closes it — an OFF-stamped recording loaded with the lever ON is REFUSED,
-not silently re-derived — belongs with the registration and must be named there.
+made with the lever OFF and re-derived with it ON would reconstruct memory the
+game never held. The substrate stamp is the defence and this task installs it:
+the registration above is in scope precisely because the seam it closes is this
+task's own. Ship the two together or neither — a resolver without a registered
+key is a behaviour change no recording identifies, and the pin that proves the
+closure (an OFF-stamped recording loaded with the lever ON is REFUSED, not
+silently re-derived) is a DoD item here rather than a promise made to a later
+task.
 
-Risk 2 — three levers, one prompt surface, no ordering between them. The other
-two Wave-2 levers also thread `meetings/manager.py` and the same template set,
-and the fixed dependency graph orders none of the three. Whichever lands
-second inherits a merge, not a conflict, only if each keeps its lever read
-local: read the resolver once per entry point, never store a module-level
-boolean, and never widen a shared signature for two levers in one commit.
+Risk 2 — three levers, one prompt surface, landing in a fixed order. The
+dependency graph serializes them 21.18 → 21.19 → 21.20, so this is NOT a merge
+race: it is inherited serial edits. This task lands LAST on `meetings/manager.py`,
+`agents/strategic/prompts/loader.py`, `orchestrator/replay.py`, `.env.example`
+and the `prompt_versions_for_set` overlay seam, so every surface it touches
+already carries two levers' worth of changes and the anchors in this contract
+were read at the pre-Wave-2 HEAD. Re-read each one before editing rather than
+trusting a line number, extend the seam 21.18 built rather than forking it, and
+keep this lever's read local — resolve once per entry point, never store a
+module-level boolean, never widen a shared signature for two levers at once. If
+a sibling's edit has already changed the shape this contract assumes, say so in
+the PR and stop; do not reshape a merged lever to fit this one.
 
 Risk 3 — variant drift. Two copied template bodies are two future places for a
 default fix to miss, and this phase's own Wave-1 work rewrites those defaults.

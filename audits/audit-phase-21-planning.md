@@ -110,6 +110,56 @@ lists (21.14, 21.15, 21.21, 21.22, 21.23, 21.24) and ride those PRs as a standin
 (21.26) keeps both as scope because nothing follows it to collide with. 21.25 was named in the
 handoff's list but lands no audit, so the amendment is a no-op there and was not added.
 
+### 2.1 Corrections taken at review, before the charter merged
+
+An adversarial review of the assembled charter found nine defects in it. They are recorded here
+because three of them changed what the phase DOES, not merely how it reads.
+
+**The FINDING branch no longer replaces the canonical sets.** 21.24 records with all three Wave-2
+keys stamped `True`. On ADOPTED those keys graduate, so a bare shell stamps them `True` and the new
+bytes reconstruct — replacing the canonical sets is correct. On FINDING they stay live toggles that
+resolve `False` on a bare shell, so `api/replay_loader.py:603` would compare a recorded `True`
+against a live `False` and REFUSE every canonical game: the bare `verify_samples.sh` leg, the served
+frontend and the close's own gate rerun would all break on bytes that are perfectly valid under
+their own slate. The contract now preserves the FINDING recording as named, non-canonical evidence
+under `replays/records/phase-21-wave2-finding/` — outside `replays/samples/` (which the bare gate
+walks whole) and outside the declared corpus sets — and leaves the canonical baseline-8 bytes in
+place. Every downstream DoD item that assumed replacement is now branch-aware, and the ones that
+become no-ops on FINDING must be recorded as checked no-ops rather than passed in silence.
+
+**21.20 registers its own lever.** The draft deferred `_TOGGLEABLE_LEVER_RESOLVERS` and
+`.env.example` to "one collecting task", which left `testimony_shapes` unregistered while 21.21's
+live-slate guard refuses to print if a priced lever is absent from that registry — the counterfactual
+could not have run. `orchestrator/replay.py`, `.env.example` and `tests/orchestrator/test_replay.py`
+are now in 21.20's scope with matching DoD items; the DAG serializes 21.18 → 21.19 → 21.20, so the
+three levers register in a fixed order and nothing races. The same serialization made 21.20's
+"no ordering between the three levers" integration risk false, and it is rewritten around what the
+risk actually is: inherited serial edits on shared surfaces, with anchors that must be re-read.
+
+**Three assertions were unconditional where the contract itself branches**, and each would have made
+a valid outcome unreachable: 21.16's measurement demanded a green campaign tier that only 21.17 —
+which depends on it — can produce (it now expects exactly the eight residual §10.2 failures and zero
+new ones, the shape 21.13 already uses); 21.25's resolver census demanded two resolvers, which is the
+ADOPTED reading only (it now derives the expected count from the live registry: two on ADOPTED, five
+on FINDING); and 21.26's close checklist demanded `_DEFAULT_BASELINE_ID == "baseline-7"` and zero
+STALE rows, contradicting both 21.15 and an adopting 21.24 (it now reads baseline 8 or 9 by branch,
+and zero STALE on FINDING against exactly one declared pair on ADOPTED).
+
+Three smaller ones: 21.15's audit no longer has to say baseline 7 *remains* canon while the same task
+mints baseline 8 — it states baseline 7's history exactly and states that the tip has succeeded to 8,
+because the "what no surface may say" constraint binds the bars story, not the tip's succession;
+21.26 UPDATES the Phase-21 README row this planning commit added rather than appending a second one;
+and the dead `vent_use_heard` read path — ingest, memory render, feature slot — is now scoped to
+21.25's post-record sweep, since 21.5 removes its only producer and 21.15 replaces the last bytes
+that carried it, which is exactly when a compatibility argument expires (craft rule 3).
+
+The review also caught the charter head's "four waves" against five wave headings, and five
+collision-discipline chains whose membership or arrow direction disagreed with the contracts' actual
+Files-in-scope lists — including two arrows pointing the wrong way (`eval/evidence_honesty.py` and
+its test read 21.9 → 21.8, not the reverse). Both classes are now checked mechanically rather than
+by eye: every stated chain's membership equals the set of tasks that name the file, and every arrow
+is a real transitive dependency.
+
 ## 3. The routing table
 
 `audits/review-2026-08-26/README.md` §3 published a PROPOSED routing. The owner's merge of the
