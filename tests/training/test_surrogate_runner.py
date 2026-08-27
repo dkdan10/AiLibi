@@ -659,7 +659,7 @@ def test_writing_a_verdict_that_names_no_weights_is_refused(tmp_path: Path) -> N
     unkeyed = load_surrogate_verdict(_ARTIFACT_DIR).model_copy(
         update={"weights_sha256": None}
     )
-    with pytest.raises(ValueError, match="keyed on the weights"):
+    with pytest.raises(ValueError, match="must name the weights it authorizes"):
         write_surrogate_verdict_artifact(unkeyed, tmp_path)
 
 

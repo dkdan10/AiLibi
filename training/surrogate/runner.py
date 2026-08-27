@@ -468,8 +468,8 @@ def write_surrogate_verdict_artifact(
 
     if verdict.weights_sha256 is None:
         raise ValueError(
-            "a committed surrogate verdict must be keyed on the weights it "
-            "judged; pass weights_sha256= to decide_go_no_go"
+            "a committed surrogate verdict must name the weights it authorizes; "
+            "pass weights_sha256= to decide_go_no_go"
         )
     artifact_dir.mkdir(parents=True, exist_ok=True)
     (artifact_dir / SURROGATE_VERDICT_FILENAME).write_text(
