@@ -734,6 +734,29 @@ class BallotPredictor:
         return predictor
 
 
+def _plurality_confidence(ballots: Sequence[VoteBallot]) -> float:
+    """The confidence the real tally would gate an ejection on for ``ballots``.
+
+    ``meetings.voting.tally_ballots`` rule 4: the MAX confidence among the ballots
+    naming the single non-SKIP plurality target. Returns ``0.0`` when the tally
+    reaches no such target — SKIP leads, or two targets tie at the top — because
+    the confidence gate is then never consulted and no confidence could eject.
+    Reported so the fidelity harness can say whether that gate is reachable at all.
+    """
+
+    tallies: dict[str, int] = {}
+    for ballot in ballots:
+        tallies[ballot.target] = tallies.get(ballot.target, 0) + 1
+    if not tallies:
+        return 0.0
+    max_votes = max(tallies.values())
+    leaders = [target for target, count in tallies.items() if count == max_votes]
+    if SKIP_TARGET in leaders or len(leaders) > 1:
+        return 0.0
+    leader = leaders[0]
+    return max(ballot.confidence for ballot in ballots if ballot.target == leader)
+
+
 class BallotSurrogateModel:
     """The :class:`~training.surrogate.fidelity.MeetingModel` adapter (Task 15.13).
 
@@ -875,7 +898,12 @@ class BallotSurrogateModel:
         ranking = tuple(
             sorted(meeting.candidates, key=lambda cand: (-shares[cand], cand))
         )
-        return MeetingPrediction(ranking=ranking, ejected=ejected, ejection_prob=shares)
+        return MeetingPrediction(
+            ranking=ranking,
+            ejected=ejected,
+            ejection_prob=shares,
+            plurality_confidence=_plurality_confidence(ballots),
+        )
 
     def predicted_ballot_calibration(
         self, meetings: Sequence[MeetingView]

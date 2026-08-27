@@ -12,8 +12,11 @@ re-tuples the inner state list before ``setstate``.
 from __future__ import annotations
 
 import json
+import random
 
-from engine.rng import EngineRng
+import pytest
+
+from engine.rng import EngineRng, RngStateHashPolicy
 
 
 def test_snapshot_then_restore_produces_same_sequence() -> None:
@@ -78,3 +81,80 @@ def test_snapshot_returns_utf8_json_bytes() -> None:
     assert isinstance(payload["s"], list)
     assert all(isinstance(value, int) for value in payload["s"])
     assert payload["g"] is None or isinstance(payload["g"], float)
+
+
+# --------------------------------------------------------------------------- #
+# The restore path skips the seeding it would discard                          #
+# --------------------------------------------------------------------------- #
+#
+# ``from_state`` builds its generator with ``random.Random.__new__`` instead of
+# ``random.Random()``: the constructor seeds a 624-word Mersenne state that the
+# very next ``setstate`` overwrites. These three pin why the substitution is
+# behaviour-identical AND why it is safe only where ``setstate`` follows
+# immediately.
+
+
+def _restored_state() -> tuple[int, tuple[int, ...], float | None]:
+    version, internal, gauss = random.Random(20260827).getstate()
+    return version, internal, gauss
+
+
+def test_new_restored_generator_draws_identically_to_a_seeded_one() -> None:
+    """1000 identical draws from a FULL-restored and a ``__new__``-restored gen."""
+
+    state = _restored_state()
+    seeded = random.Random()
+    seeded.setstate(state)
+    bare = random.Random.__new__(random.Random)
+    bare.setstate(state)
+
+    assert [seeded.random() for _ in range(1000)] == [
+        bare.random() for _ in range(1000)
+    ]
+
+
+def test_new_restored_generator_holds_the_same_state_after_those_draws() -> None:
+    """...and the two generators' ``getstate()`` agree afterwards, not just their
+    outputs: the Mersenne cursor advanced identically, so a chain of snapshots
+    restored either way stays byte-identical."""
+
+    state = _restored_state()
+    seeded = random.Random()
+    seeded.setstate(state)
+    bare = random.Random.__new__(random.Random)
+    bare.setstate(state)
+    for _ in range(1000):
+        seeded.random()
+        bare.random()
+
+    assert seeded.getstate() == bare.getstate()
+
+
+def test_getstate_on_a_bare_new_object_raises_before_setstate() -> None:
+    """The gotcha the substitution rests on: ``__new__`` leaves ``gauss_next``
+    unset, so ``getstate()`` raises until ``setstate`` supplies it. That is why
+    :meth:`EngineRng.from_state` may skip the constructor ONLY where the
+    ``setstate`` is on the next line — and why nothing else in the engine may
+    copy the pattern."""
+
+    bare = random.Random.__new__(random.Random)
+    with pytest.raises(AttributeError):
+        bare.getstate()
+    # ...and it is fully usable the moment setstate lands.
+    bare.setstate(_restored_state())
+    assert isinstance(bare.getstate(), tuple)
+
+
+def test_engine_rng_restore_round_trips_through_both_codecs() -> None:
+    """Both ``from_state`` branches — committed JSON and the fast codec — restore
+    to the same draws, which is what the substitution had to preserve."""
+
+    seeded = EngineRng.from_seed(99)
+    json_state = seeded.snapshot()
+    fast_state = seeded.snapshot(hash_policy=RngStateHashPolicy.TRAINING_FAST)
+
+    from_json = EngineRng.from_state(json_state)
+    from_fast = EngineRng.from_state(fast_state)
+    assert [from_json.randint(0, 10**9)[0] for _ in range(64)] == [
+        from_fast.randint(0, 10**9)[0] for _ in range(64)
+    ]

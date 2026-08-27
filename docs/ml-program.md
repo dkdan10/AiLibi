@@ -30,13 +30,30 @@ the pure predicates in `engine/rules.py` and `engine/tick.py`, mirrored agent-si
 packet; it splits engine-legal *resolved* actions from observation-meaningful
 *submissions*, which keeps the impostor's engine-rejected pretend `do_task` submittable as
 camouflage. The **reward** (`training/rewards.py`) reads
-side-specific terms off the typed event log (kills, un-witnessed-ness, survival, meetings
-survived) plus the terminal win, and adds potential-based shaping in the Ng-1999 *form*
-that is **not policy-invariant, as that module now says**: the potential is a cumulative
-count, so at γ = 1 the shaping sum equals the terminal kill count. Telescoping is not
-invariance — it is a real +1-per-kill incentive that can change the optimal policy, a
-correction the campaign report carries as errata
+side-specific terms off the typed event log — impostor: the un-witnessed share of kills,
+impostor survival, the share of meetings survived; crew: task progress, survival, the
+share of impostors routed out by a crew body report, patrol coverage — plus the terminal
+win, and adds potential-based shaping in the Ng-1999 *form*. Every dense term and the
+shaping are **bounded fractions in [0, 1]**: the potential is a progress count over the
+side's own win total (kills over the initial crew; completed tasks over the task total),
+so the shaping pays the win condition once rather than once per unit of progress, and the
+terminal weight is derived from the count of bounded channels — which is what makes every
+reachable win outrank every reachable loss (`training/rewards.py::derive_terminal_weight`,
+gated by the ordering test in `tests/training/test_rewards.py`).
+
+The shaping is still **not policy-invariant, as that module says**: the potential is a
+cumulative count, so at γ = 1 the shaping sum equals the terminal progress share.
+Telescoping is not invariance — it is a real per-kill incentive that can change the
+optimal policy, now at 1/`initial_crew` per kill (1/`tasks_total` per task) instead of
++1. Bounding shrinks the magnitude; it does not remove the non-invariance. The correction
+is carried as errata by the campaign report
 ([`report-finalist-eval.md`](../training/reports/report-finalist-eval.md) §18).
+
+The arm table below, and every fitness number in `training/reports/`, was produced under
+the PREVIOUS raw-count objective and is republished by the ML re-ground, not edited here.
+`training.rewards.FITNESS_OBJECTIVE_ID` names the current objective and no committed row
+carries it, so a number from one objective can never be silently compared against a number
+from the other.
 
 ```
 seed ─▶ HeadlessGame, real loop, intent selector interposed at the agent factory
@@ -59,8 +76,11 @@ That scorer is 19 weights — 18 per-option features on the
 no torch**, because BLAS reductions are not bit-stable across machines.
 
 Search is a `(1 + λ)` evolution strategy (`training/bakeoff/es.py`) on an inner fitness of
-tactically-reachable impostor terms plus the shaping, minus a cross-entropy anchor toward
-the frozen FSM. Selection is separate and held out: `eval/watchability.py` is a
+the bounded tactically-reachable impostor terms plus the shaping, weighted by the side's
+objective profile so the terminal win dominates, minus a cross-entropy anchor toward the
+frozen FSM whose weight is capped at the largest value any committed harness uses (a
+heavier one would make stalling the scheduler score better than playing). Selection is
+separate and held out: `eval/watchability.py` is a
 **selection-only** referee — evidence-supply floors plus a geometric mean, applied *after*
 training and **never a training reward** (its SELECTION-ONLY DOCTRINE, owner-ratified
 2026-07-05); optimized directly it produces the stealth simulator above.

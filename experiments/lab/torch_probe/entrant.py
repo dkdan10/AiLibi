@@ -79,7 +79,13 @@ from training.env import (  # noqa: E402
     TacticalRolloutEnv,
     build_action_mask,
 )
-from training.rewards import PotentialShaper, compute_shaped_reward  # noqa: E402
+from training.rewards import (  # noqa: E402
+    DEFAULT_OBJECTIVE_WEIGHTS,
+    PotentialShaper,
+    ShapedReward,
+    compute_shaped_reward,
+    potential_scale,
+)
 from training.rollout import EpisodeRollout  # noqa: E402
 
 ENTRANT_NAME = "torch-ppo-gru"
@@ -407,6 +413,25 @@ class TorchProbePolicy:
 # --------------------------------------------------------------------------- #
 
 
+def impostor_shaped_reward(rollout: EpisodeRollout) -> ShapedReward:
+    """The episode's impostor reward under the DEFAULT objective profile.
+
+    The same profile ``training.bakeoff.harness.inner_episode_fitness`` composes
+    with, so the probe's training signal and its evaluation scalar are the same
+    quantity — an unweighted 1/1/1 read here would let a loss outscore a win in
+    training only.
+    """
+
+    profile = DEFAULT_OBJECTIVE_WEIGHTS["IMPOSTOR"]
+    return compute_shaped_reward(
+        rollout,
+        "IMPOSTOR",
+        dense_weight=profile.dense_weight,
+        shaping_weight=profile.shaping_weight,
+        terminal_weight=profile.terminal_weight,
+    )
+
+
 def per_decision_rewards(
     rollout: EpisodeRollout,
     decision_ticks: Mapping[str, Sequence[int]],
@@ -419,9 +444,11 @@ def per_decision_rewards(
     latest decision at-or-before the transition's arrival tick (pre-first-
     decision deltas fold into the first decision), and the episode-level dense
     terms + terminal reward land on the agent's LAST decision — so each
-    impostor trajectory's reward sum equals
-    ``compute_shaped_reward(rollout, "IMPOSTOR").total()`` exactly (γ=1
-    telescoping), the same scalar the 15.15 inner fitness starts from. A
+    impostor trajectory's reward sum equals :func:`impostor_shaped_reward`'s
+    ``total()`` exactly (γ=1 telescoping), the same scalar the 15.15 inner fitness
+    starts from. Both sides read the impostor entry of
+    ``training.rewards.DEFAULT_OBJECTIVE_WEIGHTS``, so the probe optimizes the
+    objective it is later evaluated under rather than an unweighted twin of it. A
     truncated episode mirrors the harness's documented
     ``TRUNCATED_EPISODE_FITNESS`` as a single terminal penalty instead —
     never a silent skip.
@@ -447,7 +474,7 @@ def per_decision_rewards(
 
     shaping = [float(value) for value in shaper.shaping_series(rollout)]
     arrival_ticks = [frame.tick for frame in rollout.frames[1:]]
-    shaped = compute_shaped_reward(rollout, "IMPOSTOR")
+    shaped = impostor_shaped_reward(rollout)
     episode_terms = (
         shaped.terminal_weight * shaped.terminal_reward
         + shaped.dense_weight * math.fsum(shaped.dense_terms.values())
@@ -547,7 +574,6 @@ class TorchProbeEntrant:
             no_replay=True,
             rng_hash_policy=RngStateHashPolicy.TRAINING_FAST,
         )
-        shaper = PotentialShaper(side="IMPOSTOR")
         seeds = self._config.train_seeds
         cursor = 0
         episodes = 0
@@ -560,13 +586,18 @@ class TorchProbeEntrant:
                 decision_ticks.clear()
                 selector.begin_episode()
                 rollout = self.rollout_env.rollout(seed)
+                # Built per episode: Φ's scale is that episode's win total, so a
+                # shaper hoisted out of the loop would compute a different Φ than
+                # ``compute_shaped_reward`` does and break the sum identity
+                # ``per_decision_rewards`` asserts.
+                shaper = PotentialShaper(
+                    side="IMPOSTOR", scale=potential_scale(rollout, "IMPOSTOR")
+                )
                 rewards = per_decision_rewards(rollout, decision_ticks, shaper=shaper)
                 self._learner.episode_result(rewards, truncated=not rollout.complete)
                 episodes += 1
                 if rollout.complete:
-                    shaped_totals.append(
-                        compute_shaped_reward(rollout, "IMPOSTOR").total()
-                    )
+                    shaped_totals.append(impostor_shaped_reward(rollout).total())
                 else:
                     shaped_totals.append(TRUNCATED_EPISODE_FITNESS)
             update_stats.append(dict(self._learner.update()))

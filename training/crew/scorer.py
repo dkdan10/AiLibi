@@ -147,6 +147,7 @@ from training.bakeoff.harness import (
     SupplyGaugeRow,
     TrainedCandidate,
     _conviction_serving_factory,
+    _validated_anchor_weight,
     intent_key,
     load_conviction_fitness_term,
     load_conviction_row_provenance,
@@ -166,7 +167,11 @@ from training.crew.options import (
 )
 from training.determinism import PolicyFrame, run_policy_determinism
 from training.env import build_action_mask
-from training.rewards import compute_shaped_reward
+from training.rewards import (
+    DEFAULT_OBJECTIVE_WEIGHTS,
+    ObjectiveWeights,
+    compute_shaped_reward,
+)
 from training.rollout import (
     DESCRIPTOR_VECTOR_FIELDS,
     EpisodeRollout,
@@ -958,23 +963,47 @@ def rollout_crew_candidate(
     )
 
 
+def _crew_shaped_total(
+    rollout: EpisodeRollout, weights: ObjectiveWeights | None = None
+) -> float:
+    """The crew shaped total under ``weights`` (the derived profile by default).
+
+    One place both :func:`crew_inner_episode_fitness` and the reported
+    ``mean_shaped_reward`` read, so a published row can never carry two columns
+    computed under two different objectives.
+    """
+
+    profile = weights if weights is not None else DEFAULT_OBJECTIVE_WEIGHTS["CREWMATE"]
+    return compute_shaped_reward(
+        rollout,
+        "CREWMATE",
+        dense_weight=profile.dense_weight,
+        shaping_weight=profile.shaping_weight,
+        terminal_weight=profile.terminal_weight,
+    ).total()
+
+
 def crew_inner_episode_fitness(
     rollout: EpisodeRollout,
     trace: CrewDecisionTrace,
     *,
     anchor_weight: float = DEFAULT_ANCHOR_PENALTY_WEIGHT,
     conviction: ConvictionFitnessTerm | None = None,
+    weights: ObjectiveWeights | None = None,
 ) -> float:
     """The per-episode crew inner fitness the ES entrant optimizes (15.16).
 
     The tactically-reachable crew terms + potential shaping
     (:func:`training.rewards.compute_shaped_reward` with side ``"CREWMATE"`` —
     task progress, survival, correctly-routed reports, the engine-truth
-    ``patrol_coverage`` proxy, the terminal win), MINUS the anchor penalty
-    toward the frozen crew FSM (``anchor_weight`` × the episode's mean anchor
-    cross-entropy) — the same shape as 15.15's ``inner_episode_fitness`` with
-    the side flipped — PLUS, under a GO verdict only, the 18.16 conviction term
-    (``conviction.weight`` × the episode's mean predicted supply).
+    ``patrol_coverage`` proxy, the terminal win), weighted by ``weights`` — the
+    crew entry of :data:`~training.rewards.DEFAULT_OBJECTIVE_WEIGHTS` when unset,
+    whose derived terminal weight ranks every win above every loss — MINUS the
+    anchor penalty toward the frozen crew FSM (``anchor_weight`` × the episode's
+    mean anchor cross-entropy) — the same shape as 15.15's
+    ``inner_episode_fitness`` with the side flipped — PLUS, under a GO verdict
+    only, the 18.16 conviction term (``conviction.weight`` × the episode's mean
+    predicted supply).
 
     The validity gate and the referee are NEVER terms here — they are selection
     filters :func:`evaluate_crew_candidate` applies after training. The
@@ -990,12 +1019,19 @@ def crew_inner_episode_fitness(
     :class:`~training.bakeoff.harness.ConvictionFitnessTerm` object used on the
     impostor side — pass the SAME object to both sides. A truncated episode
     scores the documented
-    :data:`~training.bakeoff.harness.TRUNCATED_EPISODE_FITNESS`.
+    :data:`~training.bakeoff.harness.TRUNCATED_EPISODE_FITNESS`, returning before
+    any weighting.
+
+    Raises ``ValueError`` when ``anchor_weight`` is negative or above
+    :data:`~training.bakeoff.harness.MAX_ANCHOR_PENALTY_WEIGHT`, the bound the
+    truncation sentinel is derived against.
     """
 
+    # Validated BEFORE the truncation branch, for the reason on the impostor twin.
+    _validated_anchor_weight(anchor_weight)
     if not rollout.complete:
         return TRUNCATED_EPISODE_FITNESS
-    shaped = compute_shaped_reward(rollout, "CREWMATE").total()
+    shaped = _crew_shaped_total(rollout, weights)
     fitness = shaped - anchor_weight * trace.mean_anchor_ce()
     if conviction is not None:
         fitness += conviction.weight * trace.mean_predicted_supply()
@@ -1547,7 +1583,10 @@ def _score_crew_eval_pass(
             )
         )
         if rollout.complete:
-            shaped_totals.append(compute_shaped_reward(rollout, "CREWMATE").total())
+            # The SAME profile ``crew_inner_episode_fitness`` composes with, so a
+            # row's ``mean_shaped_reward_real`` and ``inner_fitness_real`` answer
+            # one question rather than two.
+            shaped_totals.append(_crew_shaped_total(rollout))
             if conviction is not None:
                 composed_supply_means.append(episode_trace.mean_predicted_supply())
         else:

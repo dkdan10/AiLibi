@@ -59,6 +59,7 @@ from pydantic import BaseModel, ConfigDict
 
 from agents.memory.beliefs import CONTRADICTION_RENDER_CEIL
 from engine.entities import PlayerId
+from meetings.constants import DEFAULT_SKIP_CONFIDENCE_THRESHOLD
 from training.surrogate.dataset import MeetingTable, MeetingTableRow
 
 # The by-game CV fold count when the set ships no committed ``splits.json``. Five is
@@ -118,11 +119,20 @@ class MeetingPrediction:
     model's most-suspected). ``ejected`` is the model's SKIP-vs-eject decision
     (``None`` == SKIP). ``ejection_prob`` is the per-candidate P(this candidate is
     ejected) the calibration channel scores against the binary outcome.
+
+    ``plurality_confidence`` is the quantity the REAL tally gates an ejection on
+    (``meetings.voting.tally_ballots`` rule 4): the MAX confidence among the
+    predicted ballots naming the single non-SKIP plurality target, or ``0.0`` when
+    the predicted tally reaches no such target (SKIP leads, or the top is tied — the
+    confidence gate is then never consulted). It is deliberately NOT
+    ``ejection_prob``, which is a mean of per-voter target-probability mass. A
+    ballot-free model leaves it ``None``: the cell is unmeasured there, not zero.
     """
 
     ranking: tuple[PlayerId, ...]
     ejected: PlayerId | None
     ejection_prob: dict[PlayerId, float]
+    plurality_confidence: float | None = None
 
 
 def _validate_prediction(
@@ -161,6 +171,11 @@ def _validate_prediction(
             raise ValueError(
                 f"{where}: ejection_prob[{cand!r}] = {prob} is outside [0, 1]"
             )
+    confidence = prediction.plurality_confidence
+    if confidence is not None and not 0.0 <= confidence <= 1.0:
+        raise ValueError(
+            f"{where}: plurality_confidence = {confidence} is outside [0, 1]"
+        )
 
 
 @runtime_checkable
@@ -302,6 +317,49 @@ def build_meeting_views(table: MeetingTable) -> list[MeetingView]:
     return views
 
 
+class ThresholdScan(BaseModel):
+    """One FO-6 fit's tuned SKIP threshold and the whole curve it was chosen from.
+
+    Published so a reader can see the margin the tuned tau actually won by.
+    ``curve`` is every ``(tau, exact-target-correct)`` pair the scan visited over the
+    fit-side meetings; ``fit_skip_meetings`` is the score a trivial always-SKIP head
+    would post on the same population, so a tuned head that merely tracks the
+    meeting mix is visible as a curve that plateaus at that count.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    fit_meetings: int
+    fit_ejection_meetings: int
+    fit_skip_meetings: int
+    tuned_tau: float
+    tuned_correct: int
+    curve: tuple[tuple[float, int], ...]
+
+
+class DecisionHeadReport(BaseModel):
+    """What produced a model's SKIP-vs-eject decisions, and how it was tuned.
+
+    ``label`` names the decision channel in the report itself so a published census
+    cannot be read as more than it is. ``scans`` carries one
+    :class:`ThresholdScan` per fold fit, in fold order.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    label: str
+    scans: tuple[ThresholdScan, ...]
+
+
+# What FO-6's tuned binary head is, stated where its census is published: a tracker
+# of the fit-side meeting mix, not a physical baseline. Its tau scan maximises
+# exact-target accuracy over ALL meetings including SKIPs, so the trivial always-SKIP
+# constant is its floor and it has flipped SKIP -> all-EJECT -> SKIP across three
+# records (audits/audit-phase-20-baseline-7.md §10.2). FO-6's RANKING is unaffected
+# and remains the bar's valid comparator floor.
+FO6_DECISION_HEAD_LABEL: Final[str] = "meeting-mix tracker (not a physical baseline)"
+
+
 class Fo6Logistic:
     """The re-run FO-6 physical vote-surrogate (Task 15.11; the failed prior).
 
@@ -311,9 +369,13 @@ class Fo6Logistic:
     ``experiments/lab/ml_spike/fo6_learned_vote_surrogate.py`` Part B, re-run here
     (never imported: the spike is mypy-excluded). Full-batch gradient descent (no
     RNG — the spike's SGD shuffle is replaced by a deterministic full pass so the
-    re-baseline is replay-stable). The SKIP threshold is tuned on the training
-    meetings exactly as FO-6 tuned it; the harness then surfaces that the tuned
-    decision head degenerates to always-SKIP.
+    re-baseline is replay-stable).
+
+    The SKIP threshold is tuned on the training meetings exactly as FO-6 tuned it,
+    and :attr:`threshold_scan` publishes the whole curve — the tuned head is a
+    :data:`FO6_DECISION_HEAD_LABEL`, not a physical prior. The RANKING is
+    threshold-independent (:meth:`predict` sorts by probability; tau touches only
+    ``ejected``), which is why the bar's comparator floor reads the ranking alone.
     """
 
     def __init__(self, *, epochs: int = 300, lr: float = 0.3) -> None:
@@ -324,6 +386,15 @@ class Fo6Logistic:
         self._weights: NDArray[np.float64] | None = None
         self._bias: float = 0.0
         self._tau: float = 0.5
+        self._scan: ThresholdScan | None = None
+
+    @property
+    def threshold_scan(self) -> ThresholdScan:
+        """The tuned tau and its full curve; raises before :meth:`fit`."""
+
+        if self._scan is None:
+            raise RuntimeError("Fo6Logistic.threshold_scan read before fit")
+        return self._scan
 
     def _matrix(self, meetings: Sequence[MeetingView]) -> NDArray[np.float64]:
         rows = [
@@ -371,7 +442,8 @@ class Fo6Logistic:
         self._std = std
         self._weights = weights
         self._bias = bias
-        self._tau = self._tune_threshold(meetings)
+        self._scan = self._tune_threshold(meetings)
+        self._tau = self._scan.tuned_tau
 
     def _prob(self, meeting: MeetingView) -> dict[PlayerId, float]:
         if self._weights is None or self._mean is None or self._std is None:
@@ -387,8 +459,17 @@ class Fo6Logistic:
             out[cand] = 1.0 / (1.0 + float(np.exp(-max(min(logit, 30.0), -30.0))))
         return out
 
-    def _tune_threshold(self, meetings: Sequence[MeetingView]) -> float:
-        best_tau, best_acc = 0.5, -1.0
+    def _tune_threshold(self, meetings: Sequence[MeetingView]) -> ThresholdScan:
+        """Scan tau for maximum exact-target accuracy and publish the whole curve.
+
+        Ties break toward the HIGHER tau: raising tau only ever converts an eject
+        into a SKIP, so the top of a tied plateau is the conservative pole and the
+        bottom is the all-EJECT one. The ascending scan therefore keeps replacing
+        the incumbent on an equal score.
+        """
+
+        best_tau, best_correct = 0.5, -1
+        curve: list[tuple[float, int]] = []
         for step in range(1, 20):
             tau = step / 20.0
             correct = 0
@@ -397,9 +478,18 @@ class Fo6Logistic:
                 decision = self._decide(meeting, probs, tau)
                 if decision == meeting.ejected:
                     correct += 1
-            if correct > best_acc:
-                best_acc, best_tau = float(correct), tau
-        return best_tau
+            curve.append((tau, correct))
+            if correct >= best_correct:
+                best_correct, best_tau = correct, tau
+        ejections = sum(1 for meeting in meetings if meeting.is_ejection)
+        return ThresholdScan(
+            fit_meetings=len(meetings),
+            fit_ejection_meetings=ejections,
+            fit_skip_meetings=len(meetings) - ejections,
+            tuned_tau=best_tau,
+            tuned_correct=best_correct,
+            curve=tuple(curve),
+        )
 
     @staticmethod
     def _decide(
@@ -537,7 +627,10 @@ class SurrogateFidelityReport(BaseModel):
     # the model's eject/skip choice matches the outcome, regardless of which player
     # it named (exact-target accuracy is the separate top-1 channel).
     skip_vs_eject_accuracy: float
+    # The scored population's TWO trivial decision constants, published together so
+    # a tuned head is read against both poles rather than only the eject one.
     always_eject_baseline: float
+    always_skip_baseline: float
     predicted_ejections: int
     predicted_skips: int
     correct_skip_decisions: int
@@ -560,6 +653,24 @@ class SurrogateFidelityReport(BaseModel):
     ballot_brier: float
     ballot_ece: float
     ballot_rows: int
+    # Whether the tally's own eject gate is REACHABLE at all under this model:
+    # ``decision_reachable_meetings`` counts the scored meetings whose predicted
+    # plurality-target confidence clears
+    # ``meetings.constants.DEFAULT_SKIP_CONFIDENCE_THRESHOLD``, and
+    # ``plurality_confidence_meetings`` how many predictions carried that cell at all
+    # — 0 for a ballot-free model, so an unmeasured channel never reads as a
+    # measured zero.
+    #
+    # For a model that decides through the real tally this necessarily EQUALS
+    # ``predicted_ejections`` — the tally ejects exactly when this gate clears — and
+    # that is the point: it names WHICH gate holds the decision channel shut, on the
+    # verdict, where someone decides whether axis 3 is worth a fit at all.
+    decision_reachable_meetings: int
+    decision_reachability: float
+    plurality_confidence_meetings: int
+    # What produced the decisions above (``None`` when the model publishes no
+    # tuned head — the ballot surrogate decides through the real tally).
+    decision_head: DecisionHeadReport | None = None
     # The honest ceiling (a measurement, not a target).
     honest_ceiling: HonestCeiling
 
@@ -660,7 +771,12 @@ def run_surrogate_fidelity(
     """Judge a meeting model over ``table`` under by-GAME CV + the honest ceiling.
 
     ``model_factory`` is a zero-arg callable returning a fresh :class:`MeetingModel`
-    (a new model is fit per fold on that fold's TRAIN games only). Pools the
+    and EVERY fold RE-FITS: this function calls ``model.fit(train_views)`` on the
+    model the factory produced, once per fold, so the reported numbers are never
+    "frozen weights" — a factory that pre-installs an artifact-loaded predictor
+    scores identically to one that does not, because
+    :meth:`training.surrogate.ballots.BallotSurrogateModel.fit` REPLACES the
+    installed predictor rather than refining it. Pools the
     per-fold TEST predictions into the four fidelity channels and the decision
     census, and attaches the honest ceiling measured over the SAME scored
     (test-side) meetings every other channel reports on — under K-fold CV that is
@@ -697,6 +813,8 @@ def run_surrogate_fidelity(
     correct_eject = 0
     meetings_scored = 0
     ejection_pred_skips = 0
+    decision_reachable = 0
+    plurality_confidence_meetings = 0
     brier_terms: list[float] = []
     calib: list[tuple[float, int]] = []
 
@@ -734,6 +852,14 @@ def run_surrogate_fidelity(
                 predicted_skips += 1
             else:
                 predicted_ejections += 1
+            # Accumulated in the SAME walk that scores every other channel: a
+            # second pass would re-run the model and drift from this one the
+            # moment the folds change.
+            confidence = prediction.plurality_confidence
+            if confidence is not None:
+                plurality_confidence_meetings += 1
+                if confidence >= DEFAULT_SKIP_CONFIDENCE_THRESHOLD:
+                    decision_reachable += 1
             # SKIP-vs-eject is a BINARY decision (Codex review): correct iff the
             # model's eject/skip CHOICE matches the outcome's, regardless of WHICH
             # player it named (that exactness is the separate top-1 channel, and the
@@ -810,6 +936,9 @@ def run_surrogate_fidelity(
         top2_hits=top2_hits,
         skip_vs_eject_accuracy=decision_accuracy,
         always_eject_baseline=always_eject_baseline,
+        always_skip_baseline=(
+            skip_meetings / meetings_scored if meetings_scored else 0.0
+        ),
         predicted_ejections=predicted_ejections,
         predicted_skips=predicted_skips,
         correct_skip_decisions=correct_skip,
@@ -825,6 +954,11 @@ def run_surrogate_fidelity(
         ballot_brier=ballot_brier,
         ballot_ece=ballot_ece,
         ballot_rows=len(ballot_calib),
+        decision_reachable_meetings=decision_reachable,
+        decision_reachability=(
+            decision_reachable / meetings_scored if meetings_scored else 0.0
+        ),
+        plurality_confidence_meetings=plurality_confidence_meetings,
         # Measured over the SCORED (test-side) views only, the same population as
         # top1/ejection_meetings — under a committed split the ceiling bounds the
         # held-out score, never a train/val distribution (Codex review).
@@ -859,21 +993,41 @@ def fo6_rebaseline(
 ) -> SurrogateFidelityReport:
     """Re-run the FO-6 physical logistic under this harness (§2.1, §5.2).
 
-    Pins the true prior baseline: FO-6's headline top-1 64% collapsed to 26%/43% on
-    baseline 2, and its binary head degenerates to always-SKIP. This runs the same
-    six-feature logistic (re-implemented, :class:`Fo6Logistic` — the spike is
-    mypy-excluded and never imported) under by-GAME CV, surfacing the ranking, the
-    always-SKIP collapse, and the calibration TOGETHER. FO-6 predicts ejections, not
-    ballots, so — unlike the 15.13 ballot surrogate, whose decision comes from the
-    real tally at ``meetings.constants.DEFAULT_SKIP_CONFIDENCE_THRESHOLD`` (0.60) —
-    its decision head is its own tuned threshold, which is exactly what collapses.
+    Pins the true prior baseline the GO bar's comparator axis reads: FO-6's RANKING,
+    which is threshold-independent. Runs the same six-feature logistic
+    (re-implemented, :class:`Fo6Logistic` — the spike is mypy-excluded and never
+    imported) under by-GAME CV, surfacing the ranking, the decision census and the
+    calibration TOGETHER.
+
+    Its DECISION head is published as what it is — a
+    :data:`FO6_DECISION_HEAD_LABEL` — beside the population's two trivial constants
+    (``always_eject_baseline`` / ``always_skip_baseline``) and its full tau curve,
+    so the margin the tuned threshold won by is visible rather than implied. The
+    15.13 ballot surrogate instead decides through the real tally at
+    ``meetings.constants.DEFAULT_SKIP_CONFIDENCE_THRESHOLD`` and publishes no tuned
+    head at all.
     """
 
-    return run_surrogate_fidelity(
+    fits: list[Fo6Logistic] = []
+
+    def factory() -> Fo6Logistic:
+        model = Fo6Logistic()
+        fits.append(model)
+        return model
+
+    report = run_surrogate_fidelity(
         table,
-        Fo6Logistic,
+        factory,
         model_name="fo6-physical-logistic",
         folds=folds,
+    )
+    return report.model_copy(
+        update={
+            "decision_head": DecisionHeadReport(
+                label=FO6_DECISION_HEAD_LABEL,
+                scans=tuple(model.threshold_scan for model in fits),
+            )
+        }
     )
 
 
@@ -891,6 +1045,13 @@ def fo6_rebaseline(
 # compared against.
 GO_TOP1_CEILING_RATIO: Final[float] = 0.75
 
+# The identity of the bar a verdict was decided under, stamped on every verdict so
+# a published GO/NO-GO can never be re-read against a differently-shaped successor.
+# ``split-ranking-decision.v1`` reports the ranking and decision claims separately
+# and composes them; the axes, their constants and their strictness are the same
+# three the ratified bar committed.
+GO_BAR_ID: Final[str] = "split-ranking-decision.v1"
+
 
 class GoNoGoVerdict(BaseModel):
     """The pre-stated GO/NO-GO verdict for the ballot surrogate (Task 15.13).
@@ -906,6 +1067,14 @@ class GoNoGoVerdict(BaseModel):
     3. ``surrogate skip-vs-eject accuracy > always_eject_baseline`` — the
        scored population's OWN trivial constant (never the samples-set 78.4%).
 
+    The verdict also REPORTS the two claims separately, because they are two
+    different claims about two different instruments: ``ranking_verdict`` is axes
+    1 ∧ 2 — the suspicion-ranking claim the surrogate actually supports — and
+    ``decision_verdict`` is axis 3, the decision channel. Reporting is ALL the
+    split does: ``verdict`` remains their conjunction, so no input that was NO-GO
+    under the unsplit bar can become GO under this one, and the consequence
+    mapping below is untouched.
+
     Pre-committed in the same breath: NO-GO ⇒ fallback (a) — the fake-provider
     MeetingManager stays the bake-off's training-time runner and the surrogate
     ships as a DIAGNOSTIC only (its fidelity report still lands; nothing trains
@@ -916,6 +1085,7 @@ class GoNoGoVerdict(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
+    bar_id: str
     replay_set_dir: str
     surrogate_model_name: str
     baseline_model_name: str
@@ -927,6 +1097,18 @@ class GoNoGoVerdict(BaseModel):
     ceiling_top1: float
     top1_bar: float
     meets_ceiling_bar: bool
+    # How much ranking headroom is left: ``ceiling_top1 − surrogate_top1``. At 0.0
+    # the surrogate is AT the measured ceiling — it is not "above a floor with room
+    # to grow", it has taken every reachable ejection the physical+belief channels
+    # expose.
+    top1_ceiling_gap: float
+    # WHY the ceiling sits where it does — the ceiling's own overlapping channel
+    # counts, carried so a reader need not re-open the fidelity report.
+    ceiling_flag_present: int
+    ceiling_proximity_present: int
+    ceiling_belief_lead: int
+    ceiling_reachable: int
+    ceiling_voice_driven_share: float
     # Axis 2 — held-out top-1 against the corpus-re-baselined FO-6 prior.
     baseline_top1: float
     beats_prior_baseline: bool
@@ -934,6 +1116,21 @@ class GoNoGoVerdict(BaseModel):
     surrogate_skip_vs_eject_accuracy: float
     always_eject_baseline: float
     beats_always_eject: bool
+    # Whether axis 3 is REACHABLE before anyone spends a fit on it: the scored
+    # meetings whose predicted plurality-target confidence clears the tally's own
+    # eject gate (``meetings.constants.DEFAULT_SKIP_CONFIDENCE_THRESHOLD``).
+    # ``plurality_confidence_meetings`` is the COVERAGE that reachability was
+    # measured over — 0 for a ballot-free model, which is why it rides along: a
+    # 0.0 reachability with zero coverage is UNMEASURED, not "every meeting fell
+    # below the gate", and the two must not read alike in a published verdict.
+    decision_reachable_meetings: int
+    decision_reachability: float
+    plurality_confidence_meetings: int
+    decision_reachability_measured: bool
+    # The two claims, reported apart...
+    ranking_verdict: Literal["GO", "NO-GO"]
+    decision_verdict: Literal["GO", "NO-GO"]
+    # ...and the composed verdict that drives the consequence mapping.
     verdict: Literal["GO", "NO-GO"]
     training_time_runner: Literal["surrogate", "fake-provider-meeting-manager"]
     surrogate_role: Literal["training-time-runner", "diagnostic-only"]
@@ -995,8 +1192,15 @@ def decide_go_no_go(
     beats_always_eject = (
         surrogate.skip_vs_eject_accuracy > surrogate.always_eject_baseline
     )
-    is_go = meets_ceiling_bar and beats_prior_baseline and beats_always_eject
+    # The split is a REPORTING split: the ranking claim and the decision claim are
+    # stated apart, and the composed verdict is still every axis conjoined, so
+    # nothing that failed before can pass now.
+    ranking_go = meets_ceiling_bar and beats_prior_baseline
+    decision_go = beats_always_eject
+    is_go = ranking_go and decision_go
+    ceiling = surrogate.honest_ceiling
     return GoNoGoVerdict(
+        bar_id=GO_BAR_ID,
         replay_set_dir=surrogate.replay_set_dir,
         surrogate_model_name=surrogate.model_name,
         baseline_model_name=prior_baseline.model_name,
@@ -1006,11 +1210,27 @@ def decide_go_no_go(
         ceiling_top1=ceiling_top1,
         top1_bar=top1_bar,
         meets_ceiling_bar=meets_ceiling_bar,
+        top1_ceiling_gap=ceiling_top1 - surrogate.top1,
+        ceiling_flag_present=ceiling.flag_present,
+        ceiling_proximity_present=ceiling.proximity_present,
+        ceiling_belief_lead=ceiling.belief_lead,
+        ceiling_reachable=ceiling.reachable,
+        ceiling_voice_driven_share=ceiling.voice_driven_share,
         baseline_top1=prior_baseline.top1,
         beats_prior_baseline=beats_prior_baseline,
         surrogate_skip_vs_eject_accuracy=surrogate.skip_vs_eject_accuracy,
         always_eject_baseline=surrogate.always_eject_baseline,
         beats_always_eject=beats_always_eject,
+        decision_reachable_meetings=surrogate.decision_reachable_meetings,
+        decision_reachability=surrogate.decision_reachability,
+        plurality_confidence_meetings=surrogate.plurality_confidence_meetings,
+        # Complete coverage or nothing: a partial measurement would let a reader
+        # divide by the wrong denominator without knowing it.
+        decision_reachability_measured=(
+            surrogate.plurality_confidence_meetings == surrogate.meetings_scored
+        ),
+        ranking_verdict="GO" if ranking_go else "NO-GO",
+        decision_verdict="GO" if decision_go else "NO-GO",
         verdict="GO" if is_go else "NO-GO",
         # The pre-committed fallback mapping: a NO-GO surrogate is a diagnostic,
         # never a training-time runner — fallback (a) keeps the bake-off unblocked.
@@ -1023,8 +1243,11 @@ def decide_go_no_go(
 
 __all__ = [
     "DEFAULT_CV_FOLDS",
+    "FO6_DECISION_HEAD_LABEL",
     "FO6_FEATURE_NAMES",
+    "GO_BAR_ID",
     "GO_TOP1_CEILING_RATIO",
+    "DecisionHeadReport",
     "Fo6Logistic",
     "GoNoGoVerdict",
     "HonestCeiling",
@@ -1032,6 +1255,7 @@ __all__ = [
     "MeetingPrediction",
     "MeetingView",
     "SurrogateFidelityReport",
+    "ThresholdScan",
     "build_meeting_views",
     "compute_honest_ceiling",
     "decide_go_no_go",
