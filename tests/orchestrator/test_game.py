@@ -23,6 +23,7 @@ from meetings.schemas import (
     MeetingResult,
     MeetingTranscript,
     MeetingTurn,
+    ModelAuthoredVoteBallot,
     ObservationId,
     SightingRecord,
     VentWitnessRecord,
@@ -533,6 +534,49 @@ def test_headless_game_orders_intents_through_action_boundary(
     assert len(entries) == 1
     actors = [action["actor"] for action in entries[0].actions]
     assert actors == sorted(actors)
+
+
+def test_every_recorded_tick_row_carries_its_action_dispositions(
+    tmp_path: Path,
+) -> None:
+    """The production recorder always hands the engine's events to the log.
+
+    Pins the row shape a full fake-provider game writes: one disposition per
+    submitted action on EVERY tick row, so the path can never silently regress
+    to the omitted shape. It also pins that the class this task exists for
+    actually occurs — a meeting convened mid-batch discards the actions ordered
+    behind it, and those are recorded as discarded rather than as events that
+    happened.
+    """
+
+    replay_path = tmp_path / "dispositions.jsonl"
+    game = HeadlessGame(
+        seed=0,
+        game_map=load_canonical_map(),
+        agent_factory=build_default_agent_factory(),
+        replay_path=replay_path,
+        num_players=9,
+        num_impostors=2,
+        tasks_per_crewmate=DEFAULT_TASKS_PER_CREWMATE,
+        scheduler=TickScheduler(max_ticks=60),
+        meeting_runner=build_default_meeting_runner(llm_client=FakeProvider()),
+    )
+    game.run()
+
+    entries = read_replay_entries(replay_path)
+    assert entries
+    for entry in entries:
+        assert entry.action_dispositions is not None
+        assert len(entry.action_dispositions) == len(entry.actions)
+
+    discarded = sum(
+        1
+        for entry in entries
+        if entry.action_dispositions is not None
+        for disposition in entry.action_dispositions
+        if disposition == "discarded_by_meeting"
+    )
+    assert discarded > 0
 
 
 def test_headless_game_default_agents_run_without_crashing(
@@ -1110,7 +1154,7 @@ class _InvalidTurnClient:
     ) -> LLMResponse:
         if schema is MeetingTurn:
             text = "{}"  # missing required fields -> MeetingTurn validation fails
-        elif schema is VoteBallot:
+        elif schema is ModelAuthoredVoteBallot:
             text = VoteBallot(
                 voter="x",
                 target="SKIP",
@@ -1231,7 +1275,7 @@ class _ProviderRaisesTurnClient:
                 )
                 raise
             raise AssertionError("unreachable")  # pragma: no cover
-        if schema is VoteBallot:
+        if schema is ModelAuthoredVoteBallot:
             return LLMResponse(
                 text=VoteBallot(
                     voter="x",
@@ -1421,7 +1465,7 @@ class _OpeningDefaultsThenBallotTransportAbortsClient:
         model: str | None = None,
         agent_id: str | None = None,
     ) -> LLMResponse:
-        if schema is VoteBallot:
+        if schema is ModelAuthoredVoteBallot:
             raise TimeoutError("provider transport timeout")
         return LLMResponse(
             text="{}",
@@ -1541,7 +1585,7 @@ class _RaiseFirstTurnThenSucceedClient:
                 cost_usd=0.0,
                 model=model or "recovered",
             )
-        if schema is VoteBallot:
+        if schema is ModelAuthoredVoteBallot:
             return LLMResponse(
                 text=VoteBallot(
                     voter="x",

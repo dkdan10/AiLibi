@@ -11,7 +11,7 @@ outcomes are deterministic across replays even when the LLM is
 non-deterministic (DESIGN.md §0 rule 1: tick-based deterministic
 engine).
 
-This module exposes two pure functions:
+This module exposes three pure functions:
 
 * :func:`normalize_ballot_target` — defensive normalisation of a
   parsed :class:`VoteBallot`. Targets that are neither
@@ -23,13 +23,20 @@ This module exposes two pure functions:
   non-participant — corrupting outcome application and replay
   integrity.
 
+* :func:`ballot_target_rewrite_provenance` — the typed half of that
+  same audit trail, shared by every guard that replaces a ballot's
+  target (here and in :mod:`meetings.manager`): who the voter named,
+  and which of the five
+  :data:`~meetings.schemas.BallotTargetRewriteReason` classes replaced
+  it. Reading a field is what spares a consumer the marker regex.
+
 * :func:`tally_ballots` — plurality tally with the confidence
   threshold enforced. :data:`SKIP_TARGET` is a first-class tally
   target (DESIGN.md §5.5 schemas ``VoteBallot.target`` as
   ``PlayerId | Literal["SKIP"]``); see the function docstring for
   the full resolution rules.
 
-Both functions take a :class:`VoteBallot` (already parsed from the
+All three take a :class:`VoteBallot` (already parsed from the
 structured LLM output by the caller) and return Python values; no
 LLM call, no I/O, no shared mutable state. They are safe to call
 from anywhere — the orchestrator's meeting-resolution step, replay
@@ -77,7 +84,13 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Final
 
-from meetings.schemas import MeetingOutcome, PlayerId, VoteBallot
+from meetings.schemas import (
+    BallotTargetRewriteReason,
+    MeetingOutcome,
+    PlayerId,
+    VoteBallot,
+    bounded_marker_original,
+)
 
 SKIP_TARGET: Final[str] = "SKIP"
 """Sentinel :attr:`VoteBallot.target` value indicating the voter skips.
@@ -105,6 +118,32 @@ identical audit-trail strings on the same input.
 """
 
 
+def ballot_target_rewrite_provenance(
+    ballot: VoteBallot, reason: BallotTargetRewriteReason
+) -> dict[str, str | None]:
+    """The typed provenance a target-rewriting guard records on its ballot.
+
+    Returns the ``model_copy`` update naming the target the VOTER authored
+    (:attr:`VoteBallot.guard_redirected_from`, bounded) and why it was replaced
+    (:attr:`VoteBallot.guard_rewrite_reason`). Empty when the ballot already
+    carries a reason: the meeting chain can rewrite one target twice — a
+    10.9.2 under-gate redirect whose result the 16.6 citation gate then coerces
+    to SKIP — and the fields name what the VOTER wrote, so the first rewrite
+    owns them and a later one leaves them untouched. Every rewrite still
+    prepends its own marker, so the display channel keeps the whole stack.
+
+    Not for :func:`meetings.manager._vote_parse_default`, whose ballot authored
+    no target to preserve.
+    """
+
+    if ballot.guard_rewrite_reason is not None:
+        return {}
+    return {
+        "guard_redirected_from": bounded_marker_original(ballot.target),
+        "guard_rewrite_reason": reason,
+    }
+
+
 def normalize_ballot_target(
     ballot: VoteBallot,
     *,
@@ -128,7 +167,9 @@ def normalize_ballot_target(
 
     The rewrite uses :meth:`VoteBallot.model_copy` to preserve the
     frozen-model invariants on :class:`VoteBallot`; the input is not
-    mutated.
+    mutated. Alongside the marker it records the same fact typed, via
+    :func:`ballot_target_rewrite_provenance` under the ``invalid_target``
+    reason, so a consumer reads a field instead of parsing the marker.
     """
 
     if ballot.target == SKIP_TARGET or ballot.target in candidate_targets:
@@ -138,6 +179,7 @@ def normalize_ballot_target(
         update={
             "target": SKIP_TARGET,
             "rationale_text": marker + ballot.rationale_text,
+            **ballot_target_rewrite_provenance(ballot, "invalid_target"),
         }
     )
 

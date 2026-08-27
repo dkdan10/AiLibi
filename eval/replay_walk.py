@@ -109,6 +109,16 @@ selfcheck)
 (eval/leak_scan)
 =========================  =====  ====  ============  ====  =====  ====  ==========================
 
+``verify_action_dispositions`` has no column above because it is off in every
+profile listed: the committed sets were recorded before ``ReplayEntry`` carried
+``action_dispositions``, so the check has nothing to compare on any recording
+this repo ships and turning it on would be a gate that cannot fail. The
+consumer that adopts it is the one that first walks a recording carrying the
+field. ``tests/eval/test_replay_walk.py`` pins the option's two behaviours on
+a rewritten fixture — it raises on a doctored tuple, and skips a row without
+one. ``api.replay_loader`` does not go through this walker but runs the same
+comparison inline and unconditionally, because it SERVES the tuple.
+
 What each profile deliberately relaxes, and why:
 
 * ``validity-gate`` / ``win-condition-selfcheck`` / ``kill-gift`` — a MEETING
@@ -194,6 +204,7 @@ from orchestrator.replay import (
     ReplayEntry,
     WinnerSide,
     _state_hash,
+    classify_action_dispositions,
     read_all_entries,
 )
 from orchestrator.seeder import seed_initial_state
@@ -203,6 +214,7 @@ _ACTION_ADAPTER: Final[TypeAdapter[Action]] = TypeAdapter(Action)
 WalkViolationKind: TypeAlias = Literal[
     "duplicate_meeting_rows",
     "tick_hash_mismatch",
+    "action_disposition_mismatch",
     "missing_meeting_row",
     "meeting_pre_hash_mismatch",
     "ballot_tally_mismatch",
@@ -225,9 +237,11 @@ class WalkViolation:
     """One failed profile check, with the data every consumer message needs.
 
     ``expected`` / ``actual`` are the recorded vs reconstructed state hashes on
-    the hash kinds; ``phase`` / ``state_tick`` are the walk-final engine phase
-    and tick on ``missing_terminal_tick``; ``terminal_tick`` is set on
-    ``trailing_replay_rows``. Fields not meaningful for a kind are ``None``.
+    the hash kinds, and the recorded vs reconstructed comma-joined disposition
+    tuples on ``action_disposition_mismatch``; ``phase`` / ``state_tick`` are
+    the walk-final engine phase and tick on ``missing_terminal_tick``;
+    ``terminal_tick`` is set on ``trailing_replay_rows``. Fields not meaningful
+    for a kind are ``None``.
     """
 
     kind: WalkViolationKind
@@ -252,11 +266,18 @@ class ReplayWalkConfig:
     compares each meeting row's ``state_hash_before`` against the
     reconstructed post-advance hash of its trigger tick (equal to the recorded
     tick hash whenever the tick-hash check is also on).
+    ``verify_action_dispositions`` re-derives each row's
+    ``action_dispositions`` from the events the re-walk produced and rejects a
+    disagreement; a row that carries none is skipped, since an absent field is
+    not a claim (:class:`orchestrator.replay.ReplayEntry`). The state hash
+    cannot catch this class on its own — a discarded action was never applied,
+    so a row that mislabels one still reconstructs byte-identically.
     """
 
     profile: str
     on_violation: Callable[[WalkViolation], NoReturn]
     verify_tick_hashes: bool = False
+    verify_action_dispositions: bool = False
     reject_duplicate_meeting_rows: bool = False
     missing_meeting_row: MissingMeetingRowPolicy = "truncate"
     verify_meeting_pre_hashes: bool = False
@@ -436,6 +457,19 @@ def walk_replay(
                     actual=actual,
                 ),
             )
+        if config.verify_action_dispositions and entry.action_dispositions is not None:
+            reconstructed = classify_action_dispositions(actions, events)
+            if reconstructed != entry.action_dispositions:
+                _violate(
+                    config,
+                    WalkViolation(
+                        kind="action_disposition_mismatch",
+                        game_id=game_id,
+                        tick=entry.tick,
+                        expected=",".join(entry.action_dispositions),
+                        actual=",".join(reconstructed),
+                    ),
+                )
         for event in events:
             if isinstance(event, GameOverEvent):
                 reconstructed_winner = event.winner

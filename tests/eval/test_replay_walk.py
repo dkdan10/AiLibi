@@ -27,7 +27,9 @@ from pathlib import Path
 from typing import NoReturn, cast
 
 import pytest
+from pydantic import TypeAdapter
 
+from engine.actions import Action
 from engine.entities import PlayerId, Role
 from engine.world import Map, load_canonical_map
 from eval._suspicion_parse import SKIP_SUSPICION_THRESHOLD
@@ -51,9 +53,11 @@ from eval.replay_walk import (
     WalkViolation,
     walk_replay,
 )
+from orchestrator.replay import classify_action_dispositions
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _FOUR = _REPO_ROOT / "replays" / "samples" / "4p1i"
+_ACTION_ADAPTER: TypeAdapter[Action] = TypeAdapter(Action)
 
 
 # --------------------------------------------------------------------------- #
@@ -767,3 +771,171 @@ def test_leak_scan_profile_tolerates_doubled_meeting_row(
     assert [packet.model_dump() for packet, _ in collapsed] == [
         packet.model_dump() for packet, _ in baseline
     ]
+
+
+# --------------------------------------------------------------------------- #
+# verify_action_dispositions — the check that makes a recorded row trustworthy. #
+# --------------------------------------------------------------------------- #
+
+
+def _dispositions_by_tick(
+    path: Path, *, seed: int, knobs: tuple[int, int, int], game_map: Map
+) -> dict[int, tuple[str, ...]]:
+    """The TRUE disposition tuple for each tick row, from the engine's own events."""
+
+    off = ReplayWalkConfig(profile="test-derive", on_violation=_raise_violation)
+    derived: dict[int, tuple[str, ...]] = {}
+    for event in _drain(path, seed=seed, knobs=knobs, game_map=game_map, config=off):
+        if not isinstance(event, TickAdvanced):
+            continue
+        actions = [
+            _ACTION_ADAPTER.validate_python(dict(raw)) for raw in event.entry.actions
+        ]
+        derived[event.entry.tick] = classify_action_dispositions(actions, event.events)
+    return derived
+
+
+def _game_with_a_discarded_action(
+    tmp_path: Path, knobs: tuple[int, int, int], game_map: Map
+) -> tuple[int, list[str], int]:
+    """A committed 4p1i game whose truthful dispositions include a discard.
+
+    Returns ``(seed, lines_carrying_true_dispositions, tick_of_a_discard)``.
+    """
+
+    for seed in _seeds():
+        lines = _game_lines(seed)
+        path = _write_game(tmp_path / f"derive-{seed}", seed, lines)
+        derived = _dispositions_by_tick(path, seed=seed, knobs=knobs, game_map=game_map)
+        discard_tick = next(
+            (
+                tick
+                for tick, tuple_ in sorted(derived.items())
+                if "discarded_by_meeting" in tuple_
+            ),
+            None,
+        )
+        if discard_tick is None:
+            continue
+        stamped: list[str] = []
+        for line in lines:
+            row = json.loads(line)
+            if row["kind"] == "tick" and row["tick"] in derived:
+                row["action_dispositions"] = list(derived[row["tick"]])
+            stamped.append(json.dumps(row))
+        return seed, stamped, discard_tick
+    pytest.fail("no committed 4p1i sample game discards an action behind a meeting")
+
+
+def _relabel_discards_as_applied(lines: list[str], tick: int) -> list[str]:
+    """The plant: one tick's discarded actions claim they were carried out."""
+
+    doctored: list[str] = []
+    for line in lines:
+        row = json.loads(line)
+        if row["kind"] == "tick" and row["tick"] == tick:
+            row["action_dispositions"] = [
+                "applied" if value == "discarded_by_meeting" else value
+                for value in row["action_dispositions"]
+            ]
+        doctored.append(json.dumps(row))
+    return doctored
+
+
+def test_action_disposition_check_bites_a_doctored_tuple(
+    tmp_path: Path, knobs: tuple[int, int, int], game_map: Map
+) -> None:
+    """The planted case: a discarded action relabelled ``applied`` is caught.
+
+    The tick hash cannot see this class — a discarded action was never applied,
+    so the doctored row still reconstructs byte-identically. Both checks run
+    here, and only the disposition one fires.
+    """
+
+    seed, stamped, discard_tick = _game_with_a_discarded_action(
+        tmp_path, knobs, game_map
+    )
+    path = _write_game(
+        tmp_path / "doctored", seed, _relabel_discards_as_applied(stamped, discard_tick)
+    )
+
+    on = ReplayWalkConfig(
+        profile="test-on",
+        on_violation=_raise_violation,
+        verify_tick_hashes=True,
+        verify_action_dispositions=True,
+    )
+    with pytest.raises(_Violation) as info:
+        _drain(path, seed=seed, knobs=knobs, game_map=game_map, config=on)
+
+    assert info.value.violation.kind == "action_disposition_mismatch"
+    assert info.value.violation.tick == discard_tick
+    # ``expected`` is what the doctored row CLAIMS, ``actual`` what the engine did.
+    assert "discarded_by_meeting" not in cast(str, info.value.violation.expected)
+    assert "discarded_by_meeting" in cast(str, info.value.violation.actual)
+
+
+def test_action_disposition_check_passes_a_truthful_recording(
+    tmp_path: Path, knobs: tuple[int, int, int], game_map: Map
+) -> None:
+    seed, stamped, _discard_tick = _game_with_a_discarded_action(
+        tmp_path, knobs, game_map
+    )
+    path = _write_game(tmp_path / "truthful", seed, stamped)
+
+    on = ReplayWalkConfig(
+        profile="test-on",
+        on_violation=_raise_violation,
+        verify_tick_hashes=True,
+        verify_action_dispositions=True,
+    )
+    events = _drain(path, seed=seed, knobs=knobs, game_map=game_map, config=on)
+
+    assert isinstance(events[-1], WalkComplete)
+
+
+def test_a_row_without_dispositions_is_skipped_not_failed(
+    tmp_path: Path, knobs: tuple[int, int, int], game_map: Map
+) -> None:
+    """An absent field is not a claim, so the check has nothing to disagree with.
+
+    This is what lets the option be turned on over the committed corpus, which
+    carries no dispositions at all.
+    """
+
+    seed, _lines, _discard_tick = _game_with_a_discarded_action(
+        tmp_path, knobs, game_map
+    )
+    path = _write_game(tmp_path / "committed-shape", seed, _game_lines(seed))
+
+    on = ReplayWalkConfig(
+        profile="test-on",
+        on_violation=_raise_violation,
+        verify_tick_hashes=True,
+        verify_action_dispositions=True,
+    )
+    events = _drain(path, seed=seed, knobs=knobs, game_map=game_map, config=on)
+
+    assert isinstance(events[-1], WalkComplete)
+
+
+def test_action_disposition_check_is_an_option(
+    tmp_path: Path, knobs: tuple[int, int, int], game_map: Map
+) -> None:
+    """OFF, the same doctored bytes walk clean — no check is core-mandatory."""
+
+    seed, stamped, discard_tick = _game_with_a_discarded_action(
+        tmp_path, knobs, game_map
+    )
+    path = _write_game(
+        tmp_path / "doctored-off",
+        seed,
+        _relabel_discards_as_applied(stamped, discard_tick),
+    )
+
+    off = ReplayWalkConfig(
+        profile="test-off", on_violation=_raise_violation, verify_tick_hashes=True
+    )
+    events = _drain(path, seed=seed, knobs=knobs, game_map=game_map, config=off)
+
+    assert isinstance(events[-1], WalkComplete)

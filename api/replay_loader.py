@@ -36,7 +36,7 @@ from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Final, Literal
+from typing import Any, Final, Literal, get_args
 
 from fastapi import HTTPException, Query, Request
 from pydantic import TypeAdapter
@@ -138,6 +138,7 @@ from meetings.manager import (
 from meetings.schemas import (
     AccusationClaim,
     AlibiClaim,
+    BallotTargetRewriteReason,
     Claim,
     CompletedTaskObservation,
     ContradictionRef,
@@ -165,6 +166,7 @@ from orchestrator.game import (
 from orchestrator.replay import (
     SUBSTRATE_FLAG_KEYS,
     TOGGLEABLE_SUBSTRATE_FLAG_KEYS,
+    ActionDisposition,
     FailedCallReplayEntry,
     GameEndReplayEntry,
     LLMCallRecord,
@@ -174,6 +176,7 @@ from orchestrator.replay import (
     TacticalPolicyStamp,
     WinnerSide,
     _state_hash,
+    classify_action_dispositions,
     env_var_for_lever,
     fold_meeting_outcome_into_memories,
     fsm_default_tactical_policy_stamp,
@@ -247,17 +250,14 @@ _FINALE_EVENT_ORDER: Final[Mapping[str, int]] = {
 # normalized, or wholly defaulted it — so the finale recap must not present it
 # as evidence of what the voter believed (Task 19.10 review; the committed 9p2i
 # seed 22 carries an ``under_gate_redirect`` whose rationale explicitly opposes
-# the tallied target). The two citation-only labels (``invalid_reason_id``,
-# ``invalid_observation_id``) null a reference but leave the authored target
-# intact, so they are deliberately NOT in this set.
+# the tallied target). DERIVED from
+# ``meetings.schemas.BallotTargetRewriteReason``, the same union a recording
+# stamps on ``VoteBallot.guard_rewrite_reason``, so the display class and the
+# recorded class cannot drift apart. The two citation-only labels
+# (``invalid_reason_id``, ``invalid_observation_id``) null a reference but leave
+# the authored target intact, so they are deliberately not in that union.
 _TARGET_REWRITE_LABELS: Final[frozenset[str]] = frozenset(
-    {
-        "parse_default",
-        "invalid_target",
-        "teammate_coerced",
-        "under_gate_redirect",
-        "uncited_coerced",
-    }
+    get_args(BallotTargetRewriteReason)
 )
 
 # Per-set roster descriptor (Task 7.4; DESIGN.md §11.4). A committed sample set
@@ -332,12 +332,17 @@ class RosterConfig:
 
 
 class ReplayStateMismatchError(RuntimeError):
-    """Reconstructed ``state_hash`` diverged from the recorded one.
+    """A reconstructed tick diverged from the row that recorded it.
 
-    Indicates a replay-determinism break (DESIGN.md §0, §11.4): either
-    non-determinism in :func:`engine.tick.advance_tick`, wrong action
-    deserialization, or wrong meeting-result application. Surfaced as HTTP 500
-    with the offending tick + game id in the response body.
+    Raised for the recorded ``state_hash``, and by
+    :class:`ReplayDispositionMismatchError` for the recorded
+    ``action_dispositions`` — the two facts a tick row asserts about its own
+    reconstruction. Indicates a replay-determinism break or a doctored
+    recording (DESIGN.md §0, §11.4): non-determinism in
+    :func:`engine.tick.advance_tick`, wrong action deserialization, wrong
+    meeting-result application, or a row whose claim about its own actions the
+    engine does not bear out. Surfaced as HTTP 500 with the offending tick +
+    game id in the response body (:mod:`api.main`), for either kind.
     """
 
     def __init__(self, *, game_id: str, tick: int, expected: str, actual: str) -> None:
@@ -346,9 +351,35 @@ class ReplayStateMismatchError(RuntimeError):
         self.expected = expected
         self.actual = actual
         super().__init__(
-            f"replay state-hash mismatch for {game_id!r} at tick {tick}: "
+            f"{self._headline(game_id=game_id, tick=tick)}: "
             f"recorded {expected!r}, reconstructed {actual!r}"
         )
+
+    @staticmethod
+    def _headline(*, game_id: str, tick: int) -> str:
+        """The kind of divergence, which each subclass names for itself."""
+
+        return f"replay state-hash mismatch for {game_id!r} at tick {tick}"
+
+
+class ReplayDispositionMismatchError(ReplayStateMismatchError):
+    """A recorded ``action_dispositions`` tuple contradicts the re-walked tick.
+
+    The tick hash cannot catch this class by construction: a discarded action
+    was never applied, so a row that calls one ``applied`` still reconstructs
+    byte-identically while moving a served ``current_action`` off ``BLOCKED``.
+    The loader re-derives the tuple from the events it already has
+    (:func:`orchestrator.replay.classify_action_dispositions`) and refuses the
+    recording rather than serving the row's claim. A recording that carries no
+    dispositions can never raise it -- an absent field is not a claim.
+
+    A subclass so the app-level handler that already turns a divergent
+    reconstruction into a 500-with-tick covers this one too.
+    """
+
+    @staticmethod
+    def _headline(*, game_id: str, tick: int) -> str:
+        return f"replay action-disposition mismatch for {game_id!r} at tick {tick}"
 
 
 class ReplaySubstrateMismatchError(RuntimeError):
@@ -1226,6 +1257,19 @@ class ReplayLoader:
                         expected=entry.state_hash,
                         actual=actual,
                     )
+                # The disposition tuple is served (it decides who reads BLOCKED)
+                # and the hash above cannot vouch for it, so it is verified
+                # against the events this walk just produced before any frame
+                # is built from it. Skipped when the row carries none.
+                if entry.action_dispositions is not None:
+                    reconstructed = classify_action_dispositions(actions, events)
+                    if reconstructed != entry.action_dispositions:
+                        raise ReplayDispositionMismatchError(
+                            game_id=game_id,
+                            tick=entry.tick,
+                            expected=",".join(entry.action_dispositions),
+                            actual=",".join(reconstructed),
+                        )
 
                 meeting_entry: MeetingReplayEntry | None = None
                 meeting_id: str | None = None
@@ -1264,6 +1308,7 @@ class ReplayLoader:
                         meeting_id,
                         tick_visibility,
                         actions=actions,
+                        action_dispositions=entry.action_dispositions,
                         fixed_tasks_required_total=fixed_tasks_required_total,
                     )
                 )
@@ -1506,12 +1551,15 @@ class ReplayLoader:
         visibility_by_agent: Mapping[str, AgentVisibilityView] | None = None,
         *,
         actions: Sequence[Action],
+        action_dispositions: Sequence[ActionDisposition] | None = None,
         fixed_tasks_required_total: int,
     ) -> TickView:
         # ``actions`` is this tick's recorded intents; with ``events`` it says what
         # each agent TRIED and whether the engine carried it out, which is what
         # ``current_action`` reports (see :func:`_current_action`).
-        intents = _tick_intents(actions, events)
+        # ``action_dispositions`` is the row's own answer where a recording
+        # carries one; ``None`` falls back to re-deriving it from ``events``.
+        intents = _tick_intents(actions, events, action_dispositions)
         agent_states = tuple(
             self._agent_tick_state(state, pid, visibility_by_agent, intents)
             for pid in sorted(state.players)
@@ -2338,9 +2386,19 @@ class _TickIntents:
 
 
 def _tick_intents(
-    actions: Sequence[Action], events: Sequence[EngineEvent]
+    actions: Sequence[Action],
+    events: Sequence[EngineEvent],
+    dispositions: Sequence[ActionDisposition] | None = None,
 ) -> _TickIntents:
-    """Index one tick's recorded intents against the events they produced."""
+    """Index one tick's recorded intents against the events they produced.
+
+    ``dispositions`` is the row's recorded ``action_dispositions`` when it
+    carries them; the meeting cutoff is then READ rather than re-derived. Both
+    paths land on the same set — the recorded tuple is written by the same
+    actor-index rule this function has run since Phase 12
+    (:func:`orchestrator.replay.classify_action_dispositions`) — so the served
+    ``current_action`` labels do not move with the migration.
+    """
 
     index_by_actor = {action.actor: i for i, action in enumerate(actions)}
     rejected = frozenset(
@@ -2351,11 +2409,18 @@ def _tick_intents(
     # A meeting cuts the tick off at the triggering actor's own action: nothing
     # positioned after it in the recorded list was attempted (engine/tick.py's
     # early return), so those actors emitted no event at all.
-    for event in events:
-        if isinstance(event, MeetingTriggeredEvent):
-            cutoff = index_by_actor.get(event.actor)
-            if cutoff is not None:
-                preempted.update(action.actor for action in actions[cutoff + 1 :])
+    if dispositions is not None:
+        preempted.update(
+            action.actor
+            for action, disposition in zip(actions, dispositions, strict=True)
+            if disposition == "discarded_by_meeting"
+        )
+    else:
+        for event in events:
+            if isinstance(event, MeetingTriggeredEvent):
+                cutoff = index_by_actor.get(event.actor)
+                if cutoff is not None:
+                    preempted.update(action.actor for action in actions[cutoff + 1 :])
     # A victim killed earlier in the same tick is dead by the time its own action
     # is reached, so the rejection says nothing about what it tried to do.
     for event in events:
