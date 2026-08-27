@@ -660,6 +660,11 @@ class SurrogateFidelityReport(BaseModel):
     # ``plurality_confidence_meetings`` how many predictions carried that cell at all
     # — 0 for a ballot-free model, so an unmeasured channel never reads as a
     # measured zero.
+    #
+    # For a model that decides through the real tally this necessarily EQUALS
+    # ``predicted_ejections`` — the tally ejects exactly when this gate clears — and
+    # that is the point: it names WHICH gate holds the decision channel shut, on the
+    # verdict, where someone decides whether axis 3 is worth a fit at all.
     decision_reachable_meetings: int
     decision_reachability: float
     plurality_confidence_meetings: int

@@ -857,19 +857,25 @@ def test_split_verdict_separates_the_ranking_and_decision_claims(
 
 def test_axis_one_still_discriminates_a_weaker_candidate(
     surrogate_report: SurrogateFidelityReport,
+    fo6_report: SurrogateFidelityReport,
 ) -> None:
     """The ceiling axis is saturated in headroom, NOT dead.
 
-    The floor is 0.75 x ceiling = 0.6000 on this population, so a candidate ranking
-    below it fails axis 1 — the axis discriminates, which is why the split reports
-    it rather than retiring it.
+    The floor is 0.75 x ceiling = 0.6000 on this population. A candidate ranking
+    just below it is run through the REAL ``decide_go_no_go`` and fails axis 1, so
+    the axis still discriminates — which is why the split reports it rather than
+    retiring it.
     """
 
     bar = GO_TOP1_CEILING_RATIO * surrogate_report.honest_ceiling.max_achievable_top1
     assert bar == pytest.approx(0.6000000000000001, abs=1e-12)
-    assert surrogate_report.top1 >= bar
+    assert decide_go_no_go(surrogate_report, fo6_report).meets_ceiling_bar is True
+
     weaker = surrogate_report.model_copy(update={"top1": bar - 0.01})
-    assert weaker.top1 < bar
+    verdict = decide_go_no_go(weaker, fo6_report)
+    assert verdict.meets_ceiling_bar is False
+    assert verdict.ranking_verdict == "NO-GO"
+    assert verdict.top1_ceiling_gap == pytest.approx(0.01 + (0.8 - bar), abs=1e-12)
 
 
 def test_the_reshaped_bar_cannot_manufacture_a_promotion(
