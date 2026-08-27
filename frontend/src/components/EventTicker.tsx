@@ -41,9 +41,10 @@
 //                      `_ObservedAction` records a single witnessed room, so a
 //                      `from → to` line would invent perception.
 //   unwitnessed vent → nothing at all, through any channel. (`vent_use_heard` is
-//                      not a second chance: `observation/service.py` derives the
-//                      audible cue from the SAME witness-gated observed action,
-//                      so heard-but-unseen is not a state the bytes contain.)
+//                      not a second chance: no audible cue is minted for a vent
+//                      the observer did not witness, so heard-but-unseen is not a
+//                      state the bytes contain. Where the cue does appear it
+//                      duplicates the sighting beside it.)
 //
 // A fifth case sits beside them: the agent's OWN kill or vent. The engine
 // excludes an actor from its own witness sets, so the four rules above would

@@ -189,11 +189,13 @@ class AudibleEventView(_FrozenView):
     """One audio cue inside an agent's field of view at a tick (Task 12.3;
     DESIGN.md §3.2, §4.2).
 
-    Shadows ``observation.packet.AudibleEvent`` — the SEPARATE audio firewall
-    channel (``observation.service.ObservationService._audible_events``), distinct
-    from the visual field: ``vent_use_heard`` (an impostor vent heard from the
-    source / destination room) or ``sabotage_alarm`` (the global alarm, ``room``
-    is ``None``).
+    Shadows ``observation.packet.AudibleEvent`` — the audio channel
+    (``observation.service.ObservationService._audible_events``), read alongside
+    the visual field rather than independently of it. ``sabotage_alarm`` is the
+    global alarm and carries ``room=None``. ``vent_use_heard`` names a vent the
+    observer WITNESSED, never one heard through a wall: it duplicates a sighting
+    the same packet already carries as a visible action, and the single-mint gate
+    decides whether it is minted at all, so a recording may carry it or not.
     """
 
     kind: Literal["vent_use_heard", "sabotage_alarm"]
