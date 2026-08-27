@@ -99,6 +99,7 @@ from training.bakeoff.harness import (
     PRESCREEN_FLAGS_PER_MEETING_FLOOR,
     TRUNCATED_EPISODE_FITNESS,
     TrainedCandidate,
+    _impostor_shaped_total,
     conviction_prescreen,
     evaluate_candidate,
     inner_episode_fitness,
@@ -1313,6 +1314,55 @@ def test_inner_fitness_refuses_an_anchor_weight_above_the_cap(tmp_path: Path) ->
     for bad in (MAX_ANCHOR_PENALTY_WEIGHT + 0.0001, -0.5):
         with pytest.raises(ValueError, match="MAX_ANCHOR_PENALTY_WEIGHT"):
             inner_episode_fitness(rollout, trace, anchor_weight=bad)
+
+
+def test_anchor_weight_refusal_fires_on_a_truncated_episode_too(
+    tmp_path: Path,
+) -> None:
+    """The refusal precedes the truncation branch.
+
+    A campaign whose episodes all hit the tick budget would otherwise run to
+    completion under a weight the cap exists to reject, never reaching a complete
+    episode to be refused on. The sentinel itself still returns before any
+    weighting, so it stays one constant.
+    """
+
+    policy = _DelegatingDistributionPolicy()
+    trace = DecisionTrace()
+    rollout = rollout_candidate(
+        policy, 1004, output_dir=tmp_path / "rollout", max_ticks=3, trace=trace
+    )
+    assert not rollout.complete
+    assert inner_episode_fitness(rollout, trace) == TRUNCATED_EPISODE_FITNESS
+    with pytest.raises(ValueError, match="MAX_ANCHOR_PENALTY_WEIGHT"):
+        inner_episode_fitness(
+            rollout, trace, anchor_weight=MAX_ANCHOR_PENALTY_WEIGHT + 0.0001
+        )
+
+
+def test_reported_shaped_mean_uses_the_same_profile_as_the_fitness(
+    tmp_path: Path,
+) -> None:
+    """A row's two reward columns answer ONE question.
+
+    ``mean_shaped_reward_real`` and ``inner_fitness_real`` are published side by
+    side, so the shaped total the report averages must be composed with the same
+    objective profile the fitness composes with — otherwise a re-ground reads two
+    objectives off one row.
+    """
+
+    policy = _DelegatingDistributionPolicy()
+    trace = DecisionTrace()
+    rollout = rollout_candidate(
+        policy, 1004, output_dir=tmp_path / "rollout", trace=trace
+    )
+    assert rollout.complete
+    assert _impostor_shaped_total(rollout) == _default_shaped_total(rollout)
+    # ...and it is the exact term the fitness starts from.
+    assert inner_episode_fitness(rollout, trace) == (
+        _impostor_shaped_total(rollout)
+        - DEFAULT_ANCHOR_PENALTY_WEIGHT * trace.mean_anchor_ce()
+    )
 
 
 def _stamped(row: Mapping[str, object]) -> bool:

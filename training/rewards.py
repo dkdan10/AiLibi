@@ -382,11 +382,26 @@ class ObjectiveWeights:
     :func:`compute_shaped_reward`, so an experiment re-weights the objective
     through a parameter instead of an edit. :data:`DEFAULT_OBJECTIVE_WEIGHTS`
     carries each side's derived profile.
+
+    Every weight must be FINITE. A NaN or infinite weight would not raise anywhere
+    downstream — it would quietly turn a whole ES generation's fitnesses into NaN or
+    infinity, where they poison every comparison instead of naming the malformed
+    config. Sign is deliberately unconstrained: a zero or negative weight is a
+    legitimate ablation.
     """
 
     dense_weight: float = 1.0
     shaping_weight: float = 1.0
     terminal_weight: float = 1.0
+
+    def __post_init__(self) -> None:
+        for name in ("dense_weight", "shaping_weight", "terminal_weight"):
+            value = getattr(self, name)
+            if not math.isfinite(value):
+                raise ValueError(
+                    f"ObjectiveWeights.{name} must be finite, got {value!r}; a "
+                    "non-finite weight silently NaNs every fitness it composes"
+                )
 
 
 # Read-only for the same reason as :data:`DENSE_TERM_NAMES`:

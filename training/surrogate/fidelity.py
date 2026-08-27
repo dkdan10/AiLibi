@@ -1119,8 +1119,14 @@ class GoNoGoVerdict(BaseModel):
     # Whether axis 3 is REACHABLE before anyone spends a fit on it: the scored
     # meetings whose predicted plurality-target confidence clears the tally's own
     # eject gate (``meetings.constants.DEFAULT_SKIP_CONFIDENCE_THRESHOLD``).
+    # ``plurality_confidence_meetings`` is the COVERAGE that reachability was
+    # measured over — 0 for a ballot-free model, which is why it rides along: a
+    # 0.0 reachability with zero coverage is UNMEASURED, not "every meeting fell
+    # below the gate", and the two must not read alike in a published verdict.
     decision_reachable_meetings: int
     decision_reachability: float
+    plurality_confidence_meetings: int
+    decision_reachability_measured: bool
     # The two claims, reported apart...
     ranking_verdict: Literal["GO", "NO-GO"]
     decision_verdict: Literal["GO", "NO-GO"]
@@ -1217,6 +1223,12 @@ def decide_go_no_go(
         beats_always_eject=beats_always_eject,
         decision_reachable_meetings=surrogate.decision_reachable_meetings,
         decision_reachability=surrogate.decision_reachability,
+        plurality_confidence_meetings=surrogate.plurality_confidence_meetings,
+        # Complete coverage or nothing: a partial measurement would let a reader
+        # divide by the wrong denominator without knowing it.
+        decision_reachability_measured=(
+            surrogate.plurality_confidence_meetings == surrogate.meetings_scored
+        ),
         ranking_verdict="GO" if ranking_go else "NO-GO",
         decision_verdict="GO" if decision_go else "NO-GO",
         verdict="GO" if is_go else "NO-GO",

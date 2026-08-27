@@ -705,3 +705,20 @@ def test_potential_shaper_rejects_a_non_finite_scale() -> None:
     for bad in (float("nan"), float("inf"), float("-inf")):
         with pytest.raises(ValueError, match="finite positive"):
             PotentialShaper(side="IMPOSTOR", scale=bad)
+
+
+def test_objective_weights_reject_a_non_finite_weight() -> None:
+    """A NaN or infinite weight NaNs a whole ES generation's fitnesses silently.
+
+    Sign stays unconstrained — a zero or negative weight is a legitimate ablation —
+    but a non-finite one names the malformed config instead of poisoning every
+    comparison downstream.
+    """
+
+    for bad in (float("nan"), float("inf"), float("-inf")):
+        for field in ("dense_weight", "shaping_weight", "terminal_weight"):
+            with pytest.raises(ValueError, match=f"ObjectiveWeights.{field}"):
+                ObjectiveWeights(**{field: bad})
+    # ...and the legitimate ablations still construct.
+    assert ObjectiveWeights(dense_weight=0.0).dense_weight == 0.0
+    assert ObjectiveWeights(shaping_weight=-1.0).shaping_weight == -1.0

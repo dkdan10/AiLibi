@@ -947,6 +947,8 @@ def test_decision_reachability_is_the_tallys_own_gate_quantity(
     verdict = decide_go_no_go(surrogate_report, fo6_report)
     assert verdict.decision_reachable_meetings == 2
     assert verdict.decision_reachability == pytest.approx(2 / 87, abs=1e-12)
+    assert verdict.plurality_confidence_meetings == 87
+    assert verdict.decision_reachability_measured is True
 
     # A ballot-free model leaves the cell unmeasured rather than reporting zero:
     # FO-6 predicts ejections, not ballots, so it has no plurality confidence.
@@ -956,6 +958,47 @@ def test_decision_reachability_is_the_tallys_own_gate_quantity(
     fo6 = Fo6Logistic()
     fo6.fit(views)
     assert fo6.predict(views[0]).plurality_confidence is None
+
+
+def test_an_unmeasured_reachability_never_reads_as_a_measured_zero(
+    surrogate_report: SurrogateFidelityReport,
+    fo6_report: SurrogateFidelityReport,
+) -> None:
+    """0.0 reachability with zero coverage is UNMEASURED, not "gate never cleared".
+
+    A ballot-free model reports both cells at zero. Without the coverage cell the
+    verdict would publish the same 0.0 a genuinely unreachable ballot model
+    produces, and a reader could not tell "the decision channel is shut" from "no
+    one measured it". ``decision_reachability_measured`` is the distinction, and it
+    requires COMPLETE coverage — a partial measurement would silently divide by the
+    wrong denominator.
+    """
+
+    # A ballot model that published no confidences at all: same 0.0, but unmeasured.
+    unmeasured = surrogate_report.model_copy(
+        update={
+            "decision_reachable_meetings": 0,
+            "decision_reachability": 0.0,
+            "plurality_confidence_meetings": 0,
+        }
+    )
+    verdict = decide_go_no_go(unmeasured, fo6_report)
+    assert verdict.decision_reachability == 0.0
+    assert verdict.decision_reachability_measured is False
+
+    # ...and a genuinely unreachable channel, fully measured, reads apart from it.
+    measured_zero = surrogate_report.model_copy(
+        update={"decision_reachable_meetings": 0, "decision_reachability": 0.0}
+    )
+    genuine = decide_go_no_go(measured_zero, fo6_report)
+    assert genuine.decision_reachability == 0.0
+    assert genuine.decision_reachability_measured is True
+
+    # Partial coverage is not coverage.
+    partial = surrogate_report.model_copy(
+        update={"plurality_confidence_meetings": surrogate_report.meetings_scored - 1}
+    )
+    assert decide_go_no_go(partial, fo6_report).decision_reachability_measured is False
 
 
 def test_the_report_is_a_re_fit_not_frozen_weights(

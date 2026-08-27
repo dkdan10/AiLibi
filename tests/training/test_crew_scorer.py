@@ -105,6 +105,7 @@ from training.crew.scorer import (
     CrewOptionScorer,
     CrewProtocolConfig,
     FsmCrewBaseline,
+    _crew_shaped_total,
     _CrewCandidateAgent,
     crew_es_budget,
     crew_inner_episode_fitness,
@@ -655,6 +656,54 @@ def test_crew_inner_fitness_refuses_an_anchor_weight_above_the_cap(
     for bad in (MAX_ANCHOR_PENALTY_WEIGHT + 0.0001, -0.5):
         with pytest.raises(ValueError, match="MAX_ANCHOR_PENALTY_WEIGHT"):
             crew_inner_episode_fitness(rollout, trace, anchor_weight=bad)
+
+
+def test_crew_anchor_weight_refusal_fires_on_a_truncated_episode_too(
+    tmp_path: Path,
+) -> None:
+    """The refusal precedes the truncation branch on the crew side too.
+
+    A crew campaign whose episodes all hit the tick budget must not run to
+    completion under a weight the cap exists to reject.
+    """
+
+    trace = CrewDecisionTrace()
+    rollout = rollout_crew_candidate(
+        FsmCrewBaseline(), 1000, output_dir=tmp_path, max_ticks=3, trace=trace
+    )
+    assert not rollout.complete
+    assert crew_inner_episode_fitness(rollout, trace) == TRUNCATED_EPISODE_FITNESS
+    with pytest.raises(ValueError, match="MAX_ANCHOR_PENALTY_WEIGHT"):
+        crew_inner_episode_fitness(
+            rollout, trace, anchor_weight=MAX_ANCHOR_PENALTY_WEIGHT + 0.0001
+        )
+
+
+def test_crew_reported_shaped_mean_uses_the_same_profile_as_the_fitness(
+    tmp_path: Path,
+) -> None:
+    """The crew row's two reward columns answer ONE question."""
+
+    trace = CrewDecisionTrace()
+    rollout = rollout_crew_candidate(
+        FsmCrewBaseline(), load_train_seeds()[0], output_dir=tmp_path, trace=trace
+    )
+    assert rollout.complete
+    profile = DEFAULT_OBJECTIVE_WEIGHTS["CREWMATE"]
+    assert (
+        _crew_shaped_total(rollout)
+        == compute_shaped_reward(
+            rollout,
+            "CREWMATE",
+            dense_weight=profile.dense_weight,
+            shaping_weight=profile.shaping_weight,
+            terminal_weight=profile.terminal_weight,
+        ).total()
+    )
+    assert crew_inner_episode_fitness(rollout, trace) == (
+        _crew_shaped_total(rollout)
+        - DEFAULT_ANCHOR_PENALTY_WEIGHT * trace.mean_anchor_ce()
+    )
 
 
 def test_crew_objective_profile_travels_through_the_parameter(tmp_path: Path) -> None:

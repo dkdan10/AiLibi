@@ -933,6 +933,26 @@ def load_conviction_row_provenance(artifact_dir: Path) -> ConvictionGoVerdict:
     return verdict
 
 
+def _impostor_shaped_total(
+    rollout: EpisodeRollout, weights: ObjectiveWeights | None = None
+) -> float:
+    """The impostor shaped total under ``weights`` (the derived profile by default).
+
+    One place both :func:`inner_episode_fitness` and the reported
+    ``mean_shaped_reward`` read, so a published row can never carry two columns
+    computed under two different objectives.
+    """
+
+    profile = weights if weights is not None else DEFAULT_OBJECTIVE_WEIGHTS["IMPOSTOR"]
+    return compute_shaped_reward(
+        rollout,
+        "IMPOSTOR",
+        dense_weight=profile.dense_weight,
+        shaping_weight=profile.shaping_weight,
+        terminal_weight=profile.terminal_weight,
+    ).total()
+
+
 def _validated_anchor_weight(anchor_weight: float) -> float:
     """Refuse an anchor weight that would invert the truncation ordering.
 
@@ -994,17 +1014,14 @@ def inner_episode_fitness(
     derived against.
     """
 
+    # Validated BEFORE the truncation branch: a campaign whose episodes all hit the
+    # tick budget would otherwise run to completion under a weight the refusal
+    # exists to reject. The sentinel itself still returns before any weighting, so
+    # it stays one constant rather than a profile-dependent value.
+    _validated_anchor_weight(anchor_weight)
     if not rollout.complete:
         return TRUNCATED_EPISODE_FITNESS
-    _validated_anchor_weight(anchor_weight)
-    profile = weights if weights is not None else DEFAULT_OBJECTIVE_WEIGHTS["IMPOSTOR"]
-    shaped = compute_shaped_reward(
-        rollout,
-        "IMPOSTOR",
-        dense_weight=profile.dense_weight,
-        shaping_weight=profile.shaping_weight,
-        terminal_weight=profile.terminal_weight,
-    ).total()
+    shaped = _impostor_shaped_total(rollout, weights)
     fitness = shaped - anchor_weight * trace.mean_anchor_ce()
     if conviction is not None:
         fitness += conviction.weight * trace.mean_predicted_supply()
@@ -1692,7 +1709,10 @@ def _score_eval_pass(
             )
         )
         if rollout.complete:
-            shaped_totals.append(compute_shaped_reward(rollout, "IMPOSTOR").total())
+            # The SAME profile ``inner_episode_fitness`` composes with, so a row's
+            # ``mean_shaped_reward_real`` and ``inner_fitness_real`` answer one
+            # question rather than two.
+            shaped_totals.append(_impostor_shaped_total(rollout))
             if conviction is not None:
                 composed_supply_means.append(episode_trace.mean_predicted_supply())
         else:
