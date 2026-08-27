@@ -19,6 +19,27 @@ needed (the lighter option the contract names — the replay loader already
 exposes the tick actions), and an action whose actor is absent from the game's
 roles is a corrupt replay and fails loud (AGENTS.md "no silent fallbacks").
 
+A tick row's ``actions`` is the SUBMITTED batch, which is not the same as what
+the engine did: a meeting convened mid-batch ends the tick, and every
+later-ordered action is recorded but never executed. The fingerprint measures
+BEHAVIOUR, so a recording that says which those were
+(``ReplayEntry.action_dispositions``) has them excluded and counted; a
+recording that does not carry the field is tallied exactly as before, since an
+absent field is not a claim that everything applied.
+
+**What this module verifies, and what it does not.** It reads the row as fact —
+that is the seam above, and the reason it is the only cheap path to the
+per-tick stream. The recorded disposition tuple is NOT covered by the tick
+``state_hash`` (a discarded action was never applied, so mislabelling one
+still reconstructs byte-identically), so a set whose recordings carry the field
+must be walked with ``eval.replay_walk.ReplayWalkConfig.verify_action_dispositions``
+before its report is built — the same gate that already re-derives the hashes.
+No committed set carries the field, so the exclusion branch is unreachable over
+every byte in this repository today and every published cell is unmoved; the
+first re-record that carries it (Task 21.15) is what must turn that check on in
+the set-level walk. :class:`api.replay_loader.ReplayLoader` does not depend on
+this: it re-derives and refuses a divergent tuple itself, because it SERVES it.
+
 The replay file for a game is ``sample_dir / game.replay_ref`` (the bare
 ``replay-seed-{seed}.jsonl`` name the loader records), so the ingest is keyed
 to the SAME games the report was built from.
@@ -29,32 +50,56 @@ from __future__ import annotations
 from collections.abc import Sequence
 from pathlib import Path
 
+from pydantic import BaseModel, ConfigDict, Field
+
 from eval.meeting_quality import ActionRoleTally
 from eval.report_schema import GameReport
 from orchestrator.replay import read_replay_entries
 
 
-def tally_actions_by_role(
+class ActionIngest(BaseModel):
+    """One ingest pass: the role tally plus what it refused to count.
+
+    ``discarded_excluded`` is the number of recorded actions the recording
+    itself marks ``discarded_by_meeting`` and this pass therefore left out of
+    ``tally``. It rides here rather than on
+    :class:`eval.meeting_quality.ActionRoleTally` so the published tally model
+    keeps its shape; 0 over every recording that carries no dispositions.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    tally: ActionRoleTally
+    discarded_excluded: int = Field(ge=0)
+
+
+def ingest_actions_by_role(
     sample_dir: Path, games: Sequence[GameReport]
-) -> ActionRoleTally:
-    """Tally every recorded per-tick action by the actor's seeded role.
+) -> ActionIngest:
+    """Tally executed per-tick actions by seeded role, reporting the exclusions.
 
     Reads each game's committed ``replay-seed-{seed}.jsonl`` under
     ``sample_dir`` and folds its tick rows into an
-    :class:`~eval.meeting_quality.ActionRoleTally`. The only I/O in the Wave-2
-    metric path; deterministic over a fixed sample dir. See the module
-    docstring for the role-from-seeder seam.
+    :class:`~eval.meeting_quality.ActionRoleTally`, skipping every action the
+    row marks ``discarded_by_meeting``. The only I/O in the Wave-2 metric path;
+    deterministic over a fixed sample dir. See the module docstring for the
+    role-from-seeder seam and the submitted-vs-executed one.
     """
 
     crewmate_counts: dict[str, int] = {}
     impostor_counts: dict[str, int] = {}
     per_game_player_wait_counts: list[tuple[int, ...]] = []
+    discarded_excluded = 0
 
     for game in games:
         replay_path = sample_dir / game.replay_ref
         waits: dict[str, int] = {}
         for entry in read_replay_entries(replay_path):
-            for action in entry.actions:
+            dispositions = entry.action_dispositions
+            for index, action in enumerate(entry.actions):
+                # The roster check runs on EVERY recorded action, discarded
+                # included: excluding a row must never become a way for a
+                # corrupt actor id to enter the corpus unchallenged.
                 actor = action["actor"]
                 if actor not in game.roles:
                     raise ValueError(
@@ -63,6 +108,11 @@ def tally_actions_by_role(
                         "tally cannot classify it, so this fails loud rather than "
                         "silently dropping or mis-attributing it."
                     )
+                if dispositions is not None and (
+                    dispositions[index] == "discarded_by_meeting"
+                ):
+                    discarded_excluded += 1
+                    continue
                 action_type = action["type"]
                 counts = (
                     impostor_counts
@@ -74,8 +124,22 @@ def tally_actions_by_role(
                     waits[actor] = waits.get(actor, 0) + 1
         per_game_player_wait_counts.append(tuple(waits.values()))
 
-    return ActionRoleTally(
-        crewmate_action_counts=crewmate_counts,
-        impostor_action_counts=impostor_counts,
-        per_game_player_wait_counts=tuple(per_game_player_wait_counts),
+    return ActionIngest(
+        tally=ActionRoleTally(
+            crewmate_action_counts=crewmate_counts,
+            impostor_action_counts=impostor_counts,
+            per_game_player_wait_counts=tuple(per_game_player_wait_counts),
+        ),
+        discarded_excluded=discarded_excluded,
     )
+
+
+def tally_actions_by_role(
+    sample_dir: Path, games: Sequence[GameReport]
+) -> ActionRoleTally:
+    """The role tally alone, for callers that do not need the exclusion count.
+
+    Delegates to :func:`ingest_actions_by_role`; identical folding.
+    """
+
+    return ingest_actions_by_role(sample_dir, games).tally

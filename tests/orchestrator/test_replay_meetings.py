@@ -47,6 +47,7 @@ from meetings.schemas import (
     ContradictionRef,
     MeetingTranscript,
     MeetingTurn,
+    ModelAuthoredVoteBallot,
     ObservationId,
     SightingRecord,
     TurnKind,
@@ -146,7 +147,7 @@ class _DeterministicLLMClient:
                 claims=claims,
                 free_text="turn",
             ).model_dump_json()
-        elif schema is VoteBallot:
+        elif schema is ModelAuthoredVoteBallot:
             text = VoteBallot(
                 voter="placeholder",
                 target=self._vote_target,

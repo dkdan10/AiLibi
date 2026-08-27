@@ -5,9 +5,12 @@ per line. The replay log has two kinds of records, discriminated by the
 ``kind`` field:
 
 * ``"tick"`` — a :class:`ReplayEntry` written each tick by
-  :meth:`ReplayLog.record_tick`. Carries the input actions and a state
-  hash. This shape pre-dates Task 3.12 and is preserved for the
-  existing engine-determinism tests (Task 2.8 byte-identity gate).
+  :meth:`ReplayLog.record_tick`. Carries the SUBMITTED actions, a state
+  hash, and — when the recorder hands over the tick's engine events — an
+  ``action_dispositions`` tuple saying which of those actions the engine
+  applied, refused, or never reached because a meeting cut the tick off.
+  This shape pre-dates Task 3.12 and is preserved for the existing
+  engine-determinism tests (Task 2.8 byte-identity gate).
 * ``"meeting"`` — a :class:`MeetingReplayEntry` written each time the
   orchestrator dispatches to ``MeetingManager`` and applies the
   :class:`MeetingResult`. Carries every artifact needed to reconstruct
@@ -77,13 +80,14 @@ import os
 from pathlib import Path
 from typing import Annotated, Any, Final, Literal, NamedTuple, TextIO, TypeAlias
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from agents.memory.store import (
     AgentMemory,
     record_meeting_outcome,
 )
 from engine.actions import Action
+from engine.events import ActionRejectedEvent, EngineEvent, MeetingTriggeredEvent
 from engine.world import WorldState
 from meetings.manager import (
     derive_meeting_outcome_summary,
@@ -156,8 +160,76 @@ class LLMCallRecord(BaseModel):
     agent_id: str | None = None
 
 
+ActionDisposition: TypeAlias = Literal["applied", "rejected", "discarded_by_meeting"]
+"""What the engine did with one submitted action on the tick that recorded it.
+
+``applied`` -- the engine carried the action out. ``rejected`` -- the engine
+attempted it and refused it (an ``ActionRejected`` event names the actor).
+``discarded_by_meeting`` -- the action was never visited: an earlier-ordered
+action in the same batch convened a meeting and ``engine.tick.advance_tick``
+returned from inside the apply loop, so the action produced no effect and no
+event of any kind.
+"""
+
+
+def classify_action_dispositions(
+    actions: Sequence[Action], events: Sequence[EngineEvent]
+) -> tuple[ActionDisposition, ...]:
+    """Say what the engine did with each submitted action, in submitted order.
+
+    ``events`` is the list :func:`engine.tick.advance_tick` returned for the
+    SAME ``actions`` batch. Returns one :data:`ActionDisposition` per action,
+    positionally aligned with ``actions``. Pure: no RNG, no clock, no I/O.
+
+    Classification is by ACTOR, never by event position -- ``advance_tick``
+    appends passive-effect events and a possible ``GameOver`` after the apply
+    loop, so the event list is not positionally aligned with the action list.
+    An actor index over ``actions`` is total because the orchestrator boundary
+    admits exactly one action per actor per tick
+    (:func:`orchestrator.action_ordering.order_actions_for_tick` raises
+    ``ActionBatchValidationError`` on a duplicate).
+
+    The two non-``applied`` verdicts are disjoint on engine output by
+    construction: everything after the meeting cutoff is unreachable, so it can
+    emit no rejection to be classified.
+    """
+
+    index_by_actor = {action.actor: index for index, action in enumerate(actions)}
+    rejected_actors = frozenset(
+        event.actor for event in events if isinstance(event, ActionRejectedEvent)
+    )
+    # A meeting cuts the tick off at the triggering actor's own action; every
+    # later-ordered action in the batch is discarded unattempted.
+    cutoff: int | None = None
+    for event in events:
+        if not isinstance(event, MeetingTriggeredEvent):
+            continue
+        triggered_at = index_by_actor.get(event.actor)
+        if triggered_at is None:
+            continue
+        cutoff = triggered_at if cutoff is None else min(cutoff, triggered_at)
+
+    dispositions: list[ActionDisposition] = []
+    for index, action in enumerate(actions):
+        if action.actor in rejected_actors:
+            dispositions.append("rejected")
+        elif cutoff is not None and index > cutoff:
+            dispositions.append("discarded_by_meeting")
+        else:
+            dispositions.append("applied")
+    return tuple(dispositions)
+
+
 class ReplayEntry(BaseModel):
-    """One per-tick replay record written by :meth:`ReplayLog.record_tick`."""
+    """One per-tick replay record written by :meth:`ReplayLog.record_tick`.
+
+    ``action_dispositions`` says what the engine DID with each submitted
+    action, positionally aligned with :attr:`actions` (see
+    :data:`ActionDisposition`). Additive and optional per the DESIGN.md §11.4
+    unversioned-replay policy: ``None`` means the recording predates the field
+    or was written without an event stream, and is NOT a claim that every
+    action applied. A non-``None`` tuple must cover every action.
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -165,7 +237,21 @@ class ReplayEntry(BaseModel):
     game_id: str
     tick: int
     actions: tuple[dict[str, Any], ...]
+    action_dispositions: tuple[ActionDisposition, ...] | None = None
     state_hash: str
+
+    @model_validator(mode="after")
+    def _dispositions_cover_every_action(self) -> ReplayEntry:
+        if self.action_dispositions is None:
+            return self
+        if len(self.action_dispositions) != len(self.actions):
+            raise ValueError(
+                f"action_dispositions has {len(self.action_dispositions)} entries "
+                f"for {len(self.actions)} actions; the tuple is positional, so a "
+                "length mismatch mis-attributes every entry past the gap and "
+                "fails loud rather than being padded or truncated"
+            )
+        return self
 
 
 class MeetingReplayEntry(BaseModel):
@@ -842,14 +928,35 @@ class ReplayLog:
     def game_id(self) -> str:
         return self._game_id
 
-    def record_tick(self, tick: int, actions: list[Action], state: WorldState) -> None:
-        entry = {
+    def record_tick(
+        self,
+        tick: int,
+        actions: list[Action],
+        state: WorldState,
+        *,
+        events: Sequence[EngineEvent] | None = None,
+    ) -> None:
+        """Persist one tick: the submitted actions and the post-advance hash.
+
+        Pass ``events`` -- the list :func:`engine.tick.advance_tick` returned
+        for this same batch -- and the row also records what the engine DID
+        with each action (:func:`classify_action_dispositions`). Omit it and the
+        ``action_dispositions`` key is left OUT of the row entirely: a recorder
+        with no event stream cannot claim a disposition, and an absent key must
+        stay distinguishable from a recorded all-``applied`` tick.
+        """
+
+        entry: dict[str, Any] = {
             "kind": "tick",
             "game_id": self._game_id,
             "tick": tick,
             "actions": _serialize_actions(actions),
             "state_hash": _state_hash(state),
         }
+        if events is not None:
+            entry["action_dispositions"] = list(
+                classify_action_dispositions(actions, events)
+            )
         self._append(entry)
 
     def record_meeting(
@@ -1398,6 +1505,7 @@ __all__ = [
     "FSM_DEFAULT_POLICY_ID",
     "SUBSTRATE_FLAG_KEYS",
     "TOGGLEABLE_SUBSTRATE_FLAG_KEYS",
+    "ActionDisposition",
     "CrewTacticalPolicyStamp",
     "FailedCallReplayEntry",
     "GameEndReplayEntry",
@@ -1409,6 +1517,7 @@ __all__ = [
     "ReplayLogEntry",
     "TacticalPolicyStamp",
     "WinnerSide",
+    "classify_action_dispositions",
     "compute_cost_usd",
     "env_var_for_lever",
     "fold_meeting_outcome_into_memories",

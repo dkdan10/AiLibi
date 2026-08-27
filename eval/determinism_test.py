@@ -58,8 +58,10 @@ def _write_fixture_replay(fixture_name: str, path: Path) -> bytes:
     for tick in range(max(actions_by_tick, default=-1) + 1):
         assert state.tick == tick
         actions = actions_by_tick.get(tick, [])
-        state, _ = advance_tick(state, actions, game_map=game_map)
-        replay.record_tick(tick, actions, state)
+        state, events = advance_tick(state, actions, game_map=game_map)
+        # Same call shape as the production recorder (orchestrator/game.py), so
+        # the byte-identity gate runs over the row shape production writes.
+        replay.record_tick(tick, actions, state, events=events)
         if state.phase == "GAME_OVER":
             break
 

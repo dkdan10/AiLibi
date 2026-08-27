@@ -22,15 +22,35 @@ from training.surrogate.dataset import (
     build_meeting_table,
 )
 from training.surrogate.fidelity import (
+    FO6_DECISION_HEAD_LABEL,
     Fo6Logistic,
     MeetingPrediction,
     MeetingView,
+    ThresholdScan,
     _game_folds,
     build_meeting_views,
     compute_honest_ceiling,
     fo6_rebaseline,
     run_surrogate_fidelity,
 )
+
+
+class _LowestTiedTauFo6(Fo6Logistic):
+    """FO-6 under the PRE-21.16 scan, which broke ties toward the LOWEST tau.
+
+    The control the tie-break tests compare against: same fit, same curve, only the
+    selection from a tied plateau differs — so any channel that moves between the
+    two is threshold-dependent and any channel that does not is not.
+    """
+
+    def _tune_threshold(self, meetings: Sequence[MeetingView]) -> ThresholdScan:
+        scan = super()._tune_threshold(meetings)
+        best_tau, best_correct = 0.5, -1
+        for tau, correct in scan.curve:
+            if correct > best_correct:
+                best_correct, best_tau = correct, tau
+        return scan.model_copy(update={"tuned_tau": best_tau})
+
 
 # Task 19.27: campaign tier (training/README.md §2 FREEZE — the fidelity harnesses).
 # Excluded from the default gate; runs weekly in CI's campaign-tier job and
@@ -40,6 +60,9 @@ pytestmark = pytest.mark.campaign
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _NINE = _REPO_ROOT / "replays" / "samples" / "9p2i"
 _FOUR = _REPO_ROOT / "replays" / "samples" / "4p1i"
+# The committed 15.12 corpus — the population the GO bar is measured on, and the
+# one the FO-6 tau curve below is pinned against.
+_CORPUS = _REPO_ROOT / "replays" / "ml_corpus" / "9p2i"
 
 
 # --------------------------------------------------------------------------- #
@@ -422,6 +445,130 @@ def test_fidelity_runs_on_the_small_preset() -> None:
     report = fo6_rebaseline(build_meeting_table(_FOUR))
     assert report.meetings_scored > 0
     assert report.top1 > 0.0
+
+
+# --------------------------------------------------------------------------- #
+# FO-6's decision head is a meeting-mix tracker, published as one              #
+# --------------------------------------------------------------------------- #
+
+
+def test_report_publishes_both_trivial_decision_constants() -> None:
+    """A tuned head is read against BOTH poles, not only the eject one.
+
+    ``always_skip_baseline`` is the score a head that never ejects posts on the
+    scored population; together with ``always_eject_baseline`` the two partition it,
+    so a head that merely tracks the mix is visible instead of implied.
+    """
+
+    report = fo6_rebaseline(build_meeting_table(_NINE))
+    assert report.always_skip_baseline == pytest.approx(
+        report.skip_meetings / report.meetings_scored
+    )
+    assert report.always_eject_baseline + report.always_skip_baseline == pytest.approx(
+        1.0
+    )
+
+
+def test_fo6_decision_head_is_published_as_a_meeting_mix_tracker() -> None:
+    """The head carries its label and the full tau curve it was chosen from.
+
+    On the committed 9p2i corpus the curve is FLAT at 120 across tau in
+    [0.40, 0.95] — exactly the fit side's SKIP count (120 of 345 meetings, 225
+    ejections) — and the tuned tau beats that trivial always-SKIP constant by 7
+    meetings (127 of 345, 2.0%). A head whose whole margin is 7 of 345 tracks the
+    meeting mix, which is why it is labelled and published rather than read as a
+    physical baseline.
+    """
+
+    report = fo6_rebaseline(build_meeting_table(_CORPUS))
+    head = report.decision_head
+    assert head is not None
+    assert head.label == FO6_DECISION_HEAD_LABEL
+    # The committed corpus ships a split, so the harness fits exactly once.
+    assert len(head.scans) == 1
+    scan = head.scans[0]
+    assert scan.fit_meetings == 345
+    assert scan.fit_ejection_meetings == 225
+    assert scan.fit_skip_meetings == 120
+
+    plateau = {correct for tau, correct in scan.curve if tau >= 0.40}
+    assert plateau == {scan.fit_skip_meetings}  # the always-SKIP constant, exactly
+    assert scan.tuned_correct == 127
+    assert scan.tuned_correct - scan.fit_skip_meetings == 7
+    # ...and the curve is the whole grid, not a summary of it.
+    assert [tau for tau, _ in scan.curve] == [step / 20.0 for step in range(1, 20)]
+
+
+def test_tuned_threshold_breaks_ties_toward_the_higher_tau() -> None:
+    """Ties go to the conservative pole, and it is a REAL tie on this corpus.
+
+    tau 0.20 and 0.25 both score 127 on the fit side; raising tau only ever turns
+    an eject into a SKIP, so the top of a tied plateau is the conservative end and
+    the bottom is the all-EJECT one. The scan takes the top.
+    """
+
+    table = build_meeting_table(_CORPUS)
+    report = fo6_rebaseline(table)
+    assert report.decision_head is not None
+    scan = report.decision_head.scans[0]
+    tied = [tau for tau, correct in scan.curve if correct == scan.tuned_correct]
+    assert len(tied) > 1, "no tie on this corpus — the tie-break would be untested"
+    assert scan.tuned_tau == max(tied)
+    assert scan.tuned_tau == 0.25  # was 0.20, the all-EJECT end of the same tie
+
+
+def test_the_ranking_channel_is_untouched_by_the_tie_break() -> None:
+    """Axis 2 does not move when the decision census does.
+
+    FO-6's top-1 comes from ``ranking[0]``, a probability sort that never sees tau,
+    so demoting the decision head cannot move the comparator floor the GO bar reads.
+    Proven by re-scoring the SAME corpus under the OLD lowest-tied-tau rule: the
+    ranking channels are identical, the decision census is not.
+    """
+
+    table = build_meeting_table(_CORPUS)
+    new = fo6_rebaseline(table)
+    old = run_surrogate_fidelity(
+        table, _LowestTiedTauFo6, model_name="fo6-physical-logistic"
+    )
+
+    # Ranking + calibration: identical under both tie-breaks.
+    assert old.top1 == new.top1
+    assert old.top1_hits == new.top1_hits
+    assert old.top2 == new.top2
+    assert old.brier == new.brier
+    assert old.ece == new.ece
+    # ...and the tie-break really did select a different tau, so the control is not
+    # vacuous. (The corpus TEST side happens to decide identically at 0.20 and 0.25;
+    # the samples set below is where the census actually moves.)
+    assert old.decision_head is None  # the plain factory publishes no head
+    assert new.decision_head is not None
+    assert new.decision_head.scans[0].tuned_tau == 0.25
+
+
+def test_the_tie_break_moves_the_decision_census_but_not_the_ranking() -> None:
+    """The asymmetry, on the set where the census actually moves.
+
+    On ``replays/samples/9p2i`` the higher tie-break skips 3 more true ejections
+    (94 -> 97) and its binary accuracy falls, while every ranking and calibration
+    channel is bit-identical — the whole content of "the tuned head enters no axis
+    of the bar".
+    """
+
+    table = build_meeting_table(_NINE)
+    new = fo6_rebaseline(table)
+    old = run_surrogate_fidelity(
+        table, _LowestTiedTauFo6, model_name="fo6-physical-logistic"
+    )
+
+    assert old.top1 == new.top1
+    assert old.top2 == new.top2
+    assert old.brier == new.brier
+    assert old.ece == new.ece
+
+    assert old.ejection_predicted_skips == 94
+    assert new.ejection_predicted_skips == 97
+    assert new.skip_vs_eject_accuracy < old.skip_vs_eject_accuracy
 
 
 # --------------------------------------------------------------------------- #

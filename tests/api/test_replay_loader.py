@@ -35,6 +35,7 @@ from api.replay_loader import (
     _TURN_PREFIX_MARKERS,  # noqa: PLC2701
     _turn_view,  # noqa: PLC2701
     EmptyReplayError,
+    ReplayDispositionMismatchError,
     ReplayLoader,
     ReplayStateMismatchError,
     ReplaySubstrateMismatchError,
@@ -57,7 +58,9 @@ from meetings.manager import (
     OPENING_UNSURE_DEGRADE_MARKER,
 )
 from meetings.schemas import (
+    BallotTargetRewriteReason,
     MeetingTurn,
+    VoteBallot,
     SawMoveObservation,
     TurnAnnotation,
     TurnAnnotationKind,
@@ -82,6 +85,7 @@ from orchestrator.replay import (
     ReplayEntry,
     ReplayLogEntry,
     _stable_json,  # noqa: PLC2701
+    classify_action_dispositions,
     read_all_entries,
     substrate_flag_snapshot,
 )
@@ -852,6 +856,118 @@ def test_multi_impostor_replay_reconstructs_with_matching_roster(
 _MI_MEETING_SEED = 1
 
 
+def test_serving_a_disposition_bearing_recording_changes_no_label(
+    tmp_path: Path,
+) -> None:
+    """End-to-end: the recorded field and the event derivation serve one timeline.
+
+    The recorder now stamps ``action_dispositions`` on every tick row. Serving
+    the same game with the key stripped — the shape all 300 committed replays
+    carry — must produce a byte-identical tick timeline, which is what keeps
+    every committed spectator number pinned across the migration.
+    """
+
+    with_field = tmp_path / "with-field"
+    without_field = tmp_path / "without-field"
+    with_field.mkdir()
+    without_field.mkdir()
+    recorded = with_field / f"replay-seed-{_MI_MEETING_SEED}.jsonl"
+    _run_multi_impostor_game(recorded, seed=_MI_MEETING_SEED)
+    for directory in (with_field, without_field):
+        _write_roster(directory, num_players=7, num_impostors=2, tasks_per_crewmate=2)
+
+    lines = recorded.read_text(encoding="utf-8").splitlines()
+    rows = [json.loads(line) for line in lines]
+    assert any(
+        "discarded_by_meeting" in row.get("action_dispositions", [])
+        for row in rows
+        if row["kind"] == "tick"
+    ), "the fixture must exercise the class the field exists to record"
+    (without_field / recorded.name).write_text(
+        "\n".join(
+            _stable_json({k: v for k, v in row.items() if k != "action_dispositions"})
+            for row in rows
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    game_id = f"headless-seed-{_MI_MEETING_SEED}"
+    served = ReplayLoader(replay_dir=with_field).load_replay(game_id)
+    derived = ReplayLoader(replay_dir=without_field).load_replay(game_id)
+
+    assert [tick.model_dump() for tick in served.ticks] == [
+        tick.model_dump() for tick in derived.ticks
+    ]
+
+
+def test_a_doctored_disposition_tuple_is_refused_before_it_is_served(
+    tmp_path: Path,
+) -> None:
+    """The served tuple is verified against the walk that just produced it.
+
+    The state hash cannot vouch for a disposition — a discarded action was
+    never applied, so a row that relabels one ``applied`` still reconstructs
+    byte-identically while moving that agent's served ``current_action`` off
+    ``BLOCKED``. The loader re-derives and refuses.
+    """
+
+    doctored_dir = tmp_path / "doctored"
+    doctored_dir.mkdir()
+    recorded = doctored_dir / f"replay-seed-{_MI_MEETING_SEED}.jsonl"
+    _run_multi_impostor_game(recorded, seed=_MI_MEETING_SEED)
+    _write_roster(doctored_dir, num_players=7, num_impostors=2, tasks_per_crewmate=2)
+
+    rows = [
+        json.loads(line) for line in recorded.read_text(encoding="utf-8").splitlines()
+    ]
+    doctored_tick: int | None = None
+    for row in rows:
+        if row["kind"] != "tick":
+            continue
+        if "discarded_by_meeting" not in row.get("action_dispositions", []):
+            continue
+        doctored_tick = row["tick"]
+        row["action_dispositions"] = [
+            "applied" if value == "discarded_by_meeting" else value
+            for value in row["action_dispositions"]
+        ]
+        break
+    assert doctored_tick is not None, "the fixture must carry a discarded action"
+    recorded.write_text(
+        "\n".join(_stable_json(row) for row in rows) + "\n", encoding="utf-8"
+    )
+
+    with pytest.raises(ReplayDispositionMismatchError) as excinfo:
+        ReplayLoader(replay_dir=doctored_dir).load_replay(
+            f"headless-seed-{_MI_MEETING_SEED}"
+        )
+
+    assert excinfo.value.tick == doctored_tick
+    assert "discarded_by_meeting" in excinfo.value.actual
+    assert "discarded_by_meeting" not in excinfo.value.expected
+    # The app-level handler that turns a divergent reconstruction into a
+    # 500-with-tick covers this kind too.
+    assert isinstance(excinfo.value, ReplayStateMismatchError)
+
+
+def test_the_served_ballot_schema_publishes_every_field_in_both_modes() -> None:
+    """The OpenAPI component a generated client reads keeps the ballot contract.
+
+    ``VoteBallot`` carries a custom ``model_serializer``, which collapses the
+    SERIALIZATION-mode schema — the one FastAPI publishes — to a bare object
+    unless the model strips the serializer from the core schema it hands the
+    generator. Reverting that hook drops every property here.
+    """
+
+    component = create_app().openapi()["components"]["schemas"]["VoteBallot"]
+
+    assert set(component["properties"]) == set(VoteBallot.model_fields)
+    assert component.get("additionalProperties") is not True
+    for field in ("guard_redirected_from", "guard_rewrite_reason", "target", "voter"):
+        assert field in component["properties"]
+
+
 def test_multi_impostor_memory_walk_holds_firewall(tmp_path: Path) -> None:
     # The multi-impostor reconstruction also drives the collect_memory walk:
     # get_meeting_memory rebuilds every per-tick packet through ObservationService,
@@ -1557,6 +1673,87 @@ def test_meeting_freezes_later_intents_into_blocked() -> None:
     # After it: never attempted. BLOCKED outranks PRETEND_TASK — the impostor's
     # fake task did not happen at all on this tick.
     assert replay_loader._current_action(intents, "p-3", "IMPOSTOR") == "BLOCKED"
+
+
+def test_recorded_dispositions_and_the_event_derivation_agree() -> None:
+    """The migration is a no-op on behaviour: both paths build one ``_TickIntents``.
+
+    ``_tick_intents`` prefers the row's recorded ``action_dispositions`` and
+    falls back to re-deriving the cutoff from the ``MeetingTriggered`` event,
+    so the served ``CurrentAction`` labels are the same either way — which is
+    what lets every committed cell stay pinned across the change.
+    """
+
+    game_map = load_canonical_map()
+    actions = replay_loader._deserialize_actions(
+        [
+            {"type": "move", "actor": "p-1", "payload": {"to_room": "ADMIN"}},
+            {"type": "report", "actor": "p-2", "payload": {"body_id": "body-p-9-0"}},
+            {"type": "do_task", "actor": "p-3", "payload": {"task_id": "swipe_card"}},
+        ]
+    )
+    state, events = advance_tick(_fidelity_state(), actions, game_map=game_map)
+    assert state.phase == "MEETING"
+    recorded = classify_action_dispositions(actions, events)
+    assert "discarded_by_meeting" in recorded
+
+    derived = replay_loader._tick_intents(actions, events)
+    read_off = replay_loader._tick_intents(actions, events, recorded)
+
+    assert read_off == derived
+    assert read_off.preempted == frozenset({"p-3"})
+
+    # The gate bites: a row claiming nothing was discarded lands on a DIFFERENT
+    # intents object, so the preference is real rather than decorative.
+    doctored = replay_loader._tick_intents(
+        actions, events, tuple("applied" for _ in recorded)
+    )
+    assert doctored.preempted == frozenset()
+
+
+def test_the_killed_victim_arm_survives_the_recorded_path() -> None:
+    # The kill lands before the victim's own action is reached, so the engine
+    # REFUSES that action for being dead — a rejection that says nothing about
+    # what the agent tried to do. Nothing marks it `discarded_by_meeting`, so
+    # the KILL arm (which reads events) is what preempts it, on both paths.
+    game_map = load_canonical_map()
+    actions = replay_loader._deserialize_actions(
+        [
+            {"type": "kill", "actor": "p-3", "payload": {"target": "p-1"}},
+            {"type": "move", "actor": "p-1", "payload": {"to_room": "UPPER_HALL"}},
+        ]
+    )
+    _state, events = advance_tick(_fidelity_state(), actions, game_map=game_map)
+    recorded = classify_action_dispositions(actions, events)
+    assert recorded == ("applied", "rejected")
+
+    read_off = replay_loader._tick_intents(actions, events, recorded)
+    assert read_off == replay_loader._tick_intents(actions, events)
+    assert read_off.preempted == frozenset({"p-1"})
+
+
+def test_the_target_rewrite_labels_are_the_five_typed_reasons() -> None:
+    """The display class is DERIVED from the recorded union, not restated.
+
+    Pinning the five keeps the contract explicit: a sixth reason added to
+    ``BallotTargetRewriteReason`` reaches the finale recap automatically, and a
+    citation-only label never does.
+    """
+
+    assert replay_loader._TARGET_REWRITE_LABELS == frozenset(
+        {
+            "parse_default",
+            "invalid_target",
+            "teammate_coerced",
+            "under_gate_redirect",
+            "uncited_coerced",
+        }
+    )
+    assert replay_loader._TARGET_REWRITE_LABELS == frozenset(
+        get_args(BallotTargetRewriteReason)
+    )
+    assert "invalid_reason_id" not in replay_loader._TARGET_REWRITE_LABELS
+    assert "invalid_observation_id" not in replay_loader._TARGET_REWRITE_LABELS
 
 
 def test_agent_with_no_recorded_intent_reads_idle() -> None:

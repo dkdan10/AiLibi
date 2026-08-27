@@ -35,6 +35,7 @@ provider env is needed (the root autouse fixture pins it anyway).
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 from pathlib import Path
 from typing import cast
@@ -42,6 +43,7 @@ from typing import cast
 import pytest
 
 from agents.memory.store import AgentMemory
+from engine.entities import Role
 from observation.action_intent import ActionIntent
 from observation.packet import ObservationPacket
 from observation.public_map import PublicMapView
@@ -53,7 +55,9 @@ from orchestrator.replay import (
     read_policy_stamps,
 )
 from training.bakeoff.harness import (
+    ANCHOR_CE_EPSILON,
     DEFAULT_ANCHOR_PENALTY_WEIGHT,
+    MAX_ANCHOR_PENALTY_WEIGHT,
     TRUNCATED_EPISODE_FITNESS,
     BakeoffPolicy,
     DecisionTrace,
@@ -74,7 +78,8 @@ from training.crew.scorer import (
     crew_inner_episode_fitness,
     rollout_crew_candidate,
 )
-from training.rewards import compute_shaped_reward
+from training.rewards import DEFAULT_OBJECTIVE_WEIGHTS, compute_shaped_reward
+from training.rollout import EpisodeRollout
 
 # Task 19.27: campaign tier (training/README.md §2 FREEZE — co-evolution / campaign machinery).
 # Excluded from the default gate; runs weekly in CI's campaign-tier job and
@@ -246,6 +251,28 @@ def test_truncated_episode_scores_the_sentinel_on_both_sides(
     assert not result.rollout.complete
     assert result.impostor_fitness == TRUNCATED_EPISODE_FITNESS
     assert result.crew_fitness == TRUNCATED_EPISODE_FITNESS
+    # The sentinel is DERIVED from the objective, so re-derive the ordering it
+    # exists for on BOTH sides rather than re-typing its value: a stalled episode
+    # must score below the worst COMPLETE one (a loss with every bounded channel at
+    # zero, minus the largest admissible anchor penalty).
+    for side in ("IMPOSTOR", "CREWMATE"):
+        worst_complete = -DEFAULT_OBJECTIVE_WEIGHTS[
+            side
+        ].terminal_weight - MAX_ANCHOR_PENALTY_WEIGHT * -math.log(ANCHOR_CE_EPSILON)
+        assert TRUNCATED_EPISODE_FITNESS < worst_complete
+
+
+def _composed(rollout: EpisodeRollout, side: Role) -> float:
+    """The side's shaped total under its default objective profile."""
+
+    profile = DEFAULT_OBJECTIVE_WEIGHTS[side]
+    return compute_shaped_reward(
+        rollout,
+        side,
+        dense_weight=profile.dense_weight,
+        shaping_weight=profile.shaping_weight,
+        terminal_weight=profile.terminal_weight,
+    ).total()
 
 
 def test_anchor_weight_seam_is_exact_arithmetic(
@@ -258,7 +285,7 @@ def test_anchor_weight_seam_is_exact_arithmetic(
     # Impostor side: weight 0 == the shaped total; the default-weight fitness ==
     # shaped minus weight × mean anchor CE. Both computed over the SAME returned
     # rollout/trace (the fitness functions are pure) — no extra games.
-    imp_shaped = compute_shaped_reward(first.rollout, "IMPOSTOR").total()
+    imp_shaped = _composed(first.rollout, "IMPOSTOR")
     assert (
         inner_episode_fitness(first.rollout, first.impostor_trace, anchor_weight=0.0)
         == imp_shaped
@@ -268,7 +295,7 @@ def test_anchor_weight_seam_is_exact_arithmetic(
         - DEFAULT_ANCHOR_PENALTY_WEIGHT * first.impostor_trace.mean_anchor_ce()
     )
     # Crew side: the same seam with the reward side flipped.
-    crew_shaped = compute_shaped_reward(first.rollout, "CREWMATE").total()
+    crew_shaped = _composed(first.rollout, "CREWMATE")
     assert (
         crew_inner_episode_fitness(first.rollout, first.crew_trace, anchor_weight=0.0)
         == crew_shaped

@@ -90,6 +90,7 @@ schema-validation failure.
 from __future__ import annotations
 
 import asyncio
+import json
 import re
 from collections.abc import Callable, Coroutine, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
@@ -128,6 +129,7 @@ from meetings.schemas import (
     MeetingResult,
     MeetingTranscript,
     MeetingTurn,
+    ModelAuthoredVoteBallot,
     MoveWitnessRecord,
     ObservationClaim,
     ObservationId,
@@ -141,6 +143,7 @@ from meetings.schemas import (
     TurnKind,
     VentWitnessRecord,
     VoteBallot,
+    bounded_marker_original,
 )
 from meetings.transcript import (
     MeetingTriggerKind,
@@ -156,7 +159,7 @@ from meetings.transcript import (
     next_chain_step,
     triggering_body_rooms,
 )
-from meetings.voting import tally_ballots
+from meetings.voting import ballot_target_rewrite_provenance, tally_ballots
 
 Role = Literal["CREWMATE", "IMPOSTOR"]
 
@@ -264,7 +267,7 @@ TEAMMATE_COERCED_VOTE_RATIONALE: Final[str] = (
 # to the lowest player id), or coerces to SKIP when no eligible candidate
 # meets the gate (an impostor voter whose only over-gate row is a
 # teammate); either way this marker preserves the original target,
-# bounded per the Task 10.6 rule (:func:`_bounded_original`). The guard
+# bounded per the Task 10.6 rule (:func:`bounded_marker_original`). The guard
 # NEVER fires on a SKIP ballot or under a MUST-skip verdict -- a vote
 # against a MUST-skip verdict stays a recorded inversion (frozen
 # measurement semantics). Downstream eval counts redirects on this
@@ -285,7 +288,7 @@ BALLOT_TARGET_REDIRECT_MARKER: Final[str] = (
 # while the vote path caught only the deadline. A twice-failed ballot now
 # degrades to the existing default SKIP with this marker carrying a
 # BOUNDED head of the unparseable response (the Task 10.6 60-char rule,
-# :func:`_bounded_original`) so the runaway stays auditable in the replay
+# :func:`bounded_marker_original`) so the runaway stays auditable in the replay
 # without splicing kilobytes into the ballot record. Unlike the sibling
 # markers above this is the WHOLE ``rationale_text``, not a prefix to
 # model-authored text -- nothing parsed, so there is no rationale to
@@ -1878,7 +1881,13 @@ class MeetingManager:
                 _isolate_provider_timeout(
                     self._llm_client.complete(
                         prompt=prompt,
-                        schema=VoteBallot,
+                        # The AUTHORED shape, not the recorded one: every
+                        # adapter validates the completion against the schema
+                        # it was handed and the Ollama one constrains decoding
+                        # on it, so the guard-provenance names never reach the
+                        # model. The strip below is the belt to that brace, for
+                        # a client that validates nothing.
+                        schema=ModelAuthoredVoteBallot,
                         max_tokens=self._config.vote_max_tokens,
                         temperature=self._config.vote_temperature,
                         call_kind="meeting",
@@ -1887,7 +1896,9 @@ class MeetingManager:
                 ),
                 timeout=self._config.deadlines.vote_seconds,
             )
-            parsed = VoteBallot.model_validate_json(response.text)
+            parsed = VoteBallot.model_validate_json(
+                _without_model_authored_provenance(response.text)
+            )
         except asyncio.TimeoutError:
             # Deadline miss: surface the fired default so the orchestrator
             # records it (audit gp-2). Deadline-free headless recording never
@@ -2575,6 +2586,44 @@ def _default_vote(*, voter: PlayerId) -> VoteBallot:
     )
 
 
+# The ballot fields the meeting layer owns outright: they are its testimony
+# about its OWN target rewrite, never anything a voter says.
+_GUARD_PROVENANCE_FIELDS: Final[tuple[str, ...]] = (
+    "guard_redirected_from",
+    "guard_rewrite_reason",
+)
+
+
+def _without_model_authored_provenance(raw_response: str) -> str:
+    """Drop the meeting-owned provenance keys from a model's ballot payload.
+
+    :class:`VoteBallot` is the schema handed to
+    :meth:`llm.client.LLMClient.complete`, so an adapter that constrains
+    decoding on it shows the model these field names, and ``extra="forbid"``
+    stops an unknown key but never a real one the model filled. Stripping
+    BEFORE validation rather than nulling after is what keeps a fabricated
+    value from mattering at all: the pair validates jointly, so a model that
+    sent half of it would otherwise fail the schema and degrade the whole vote
+    to :func:`_vote_parse_default` instead of simply losing the field.
+
+    Byte-conservative: a payload that is not a JSON object, or carries neither
+    key -- every real completion -- is returned verbatim, so the common path's
+    parse and its error messages are unchanged.
+    """
+
+    try:
+        payload = json.loads(raw_response)
+    except ValueError:
+        return raw_response
+    if not isinstance(payload, dict):
+        return raw_response
+    if not any(key in payload for key in _GUARD_PROVENANCE_FIELDS):
+        return raw_response
+    for key in _GUARD_PROVENANCE_FIELDS:
+        payload.pop(key, None)
+    return json.dumps(payload)
+
+
 def _vote_parse_default(*, voter: PlayerId, raw_response: str) -> VoteBallot:
     """Degraded SKIP ballot for a twice-failed ballot completion (Task 10.9.1).
 
@@ -2582,14 +2631,26 @@ def _vote_parse_default(*, voter: PlayerId, raw_response: str) -> VoteBallot:
     ``0.0``, no reason id -- the tally can never eject off it) and records
     :data:`VOTE_PARSE_DEFAULT_MARKER` as the whole ``rationale_text``,
     quoting a bounded head of the unparseable response per the Task 10.6
-    rule (:func:`_bounded_original`) so the seed-8 runaway class stays
+    rule (:func:`bounded_marker_original`) so the seed-8 runaway class stays
     auditable without splicing the full blob into the ballot. A pure
     function of ``(voter, raw_response)`` -- no clock, no RNG, no state --
     so replaying the same recorded bytes yields the same ballot.
+
+    ``guard_rewrite_reason`` records ``parse_default`` with
+    ``guard_redirected_from`` left ``None``: nothing parsed, so the voter
+    authored no target for the field to preserve.
     """
 
-    marker = VOTE_PARSE_DEFAULT_MARKER.format(head=_bounded_original(raw_response))
-    return _default_vote(voter=voter).model_copy(update={"rationale_text": marker})
+    marker = VOTE_PARSE_DEFAULT_MARKER.format(
+        head=bounded_marker_original(raw_response)
+    )
+    return _default_vote(voter=voter).model_copy(
+        update={
+            "rationale_text": marker,
+            "guard_redirected_from": None,
+            "guard_rewrite_reason": "parse_default",
+        }
+    )
 
 
 def _normalize_self_alibi_subjects(
@@ -2662,26 +2723,11 @@ def _opening_retry_feedback(*, dropped_targets: tuple[PlayerId, ...]) -> str:
             if target in seen:
                 continue
             seen.add(target)
-            names.append(repr(_bounded_original(target)))
+            names.append(repr(bounded_marker_original(target)))
         reason = OPENING_RETRY_FEEDBACK_DEAD_TARGET.format(targets=", ".join(names))
     else:
         reason = OPENING_RETRY_FEEDBACK_NO_POSITION
     return OPENING_RETRY_FEEDBACK_HEADER + reason + OPENING_RETRY_FEEDBACK_DEMAND
-
-
-def _bounded_original(value: str) -> str:
-    """Truncate a marker's quoted-original to the audit-safe bound (Task 10.6).
-
-    Values at or under :data:`MARKER_QUOTED_ORIGINAL_MAX_CHARS` chars pass
-    through verbatim (every real player id does); a longer value -- the
-    seed-35 3499-char reasoning blob hallucinated as an alibi subject --
-    keeps its head plus a literal ``"..."`` so the marker cannot balloon
-    the recorded turn while the original stays identifiable.
-    """
-
-    if len(value) <= MARKER_QUOTED_ORIGINAL_MAX_CHARS:
-        return value
-    return value[:MARKER_QUOTED_ORIGINAL_MAX_CHARS] + MARKER_TRUNCATION_SUFFIX
 
 
 def _opening_takes_position(
@@ -2745,9 +2791,12 @@ def _normalize_ballot_target(
     Returns the ballot unchanged when ``target`` is ``"SKIP"`` or in
     ``candidate_targets``. When the LLM hallucinates an unknown id, the
     ballot is rewritten to ``"SKIP"`` with a marker prefix on
-    ``rationale_text`` preserving the original (invalid) target. The tally
-    cannot then resolve to ``EJECTED`` against a non-participant id; the
-    audit trail records what the LLM actually emitted.
+    ``rationale_text`` preserving the original (invalid) target, and the same
+    fact recorded typed via
+    :func:`meetings.voting.ballot_target_rewrite_provenance` under the
+    ``invalid_target`` reason. The tally cannot then resolve to ``EJECTED``
+    against a non-participant id; the audit trail records what the LLM
+    actually emitted.
     """
 
     if ballot.target == _SKIP_TARGET or ballot.target in candidate_targets:
@@ -2757,6 +2806,7 @@ def _normalize_ballot_target(
         update={
             "target": _SKIP_TARGET,
             "rationale_text": marker + ballot.rationale_text,
+            **ballot_target_rewrite_provenance(ballot, "invalid_target"),
         }
     )
 
@@ -3108,6 +3158,7 @@ def coerce_teammate_ballot_to_skip(
             "rationale_text": (
                 marker + upstream_markers + TEAMMATE_COERCED_VOTE_RATIONALE
             ),
+            **ballot_target_rewrite_provenance(ballot, "teammate_coerced"),
         }
     )
 
@@ -3176,7 +3227,10 @@ def guard_ballot_target_graph(
     exactly as :func:`coerce_teammate_ballot_to_skip` does. Either way
     :data:`BALLOT_TARGET_REDIRECT_MARKER` is prepended to
     ``rationale_text`` preserving the original target (bounded per the
-    Task 10.6 rule). A redirected eject keeps its ``primary_reason_id``:
+    Task 10.6 rule), and the SAME bounded original is recorded typed on
+    ``VoteBallot.guard_redirected_from`` under the
+    ``under_gate_redirect`` reason, so a consumer reads a field instead of
+    parsing the marker. A redirected eject keeps its ``primary_reason_id``:
     the cited turn still drove the decision to EJECT -- the guard
     constrains only the target.
 
@@ -3213,9 +3267,8 @@ def guard_ballot_target_graph(
     target_row = rendered.get(ballot.target)
     if target_row is not None and _render_gate_value(target_row) >= gate:
         return ballot
-    marker = BALLOT_TARGET_REDIRECT_MARKER.format(
-        target=_bounded_original(ballot.target)
-    )
+    authored = bounded_marker_original(ballot.target)
+    marker = BALLOT_TARGET_REDIRECT_MARKER.format(target=authored)
     eligible = {
         player_id: suspicion
         for player_id, suspicion in rendered.items()
@@ -3230,6 +3283,7 @@ def guard_ballot_target_graph(
                 "target": _SKIP_TARGET,
                 "primary_reason_id": None,
                 "rationale_text": marker + ballot.rationale_text,
+                **ballot_target_rewrite_provenance(ballot, "under_gate_redirect"),
             }
         )
     redirect = min(eligible, key=lambda player_id: (-eligible[player_id], player_id))
@@ -3237,6 +3291,7 @@ def guard_ballot_target_graph(
         update={
             "target": redirect,
             "rationale_text": marker + ballot.rationale_text,
+            **ballot_target_rewrite_provenance(ballot, "under_gate_redirect"),
         }
     )
 
@@ -3328,6 +3383,7 @@ def guard_ballot_citation(
         update={
             "target": _SKIP_TARGET,
             "rationale_text": marker + ballot.rationale_text,
+            **ballot_target_rewrite_provenance(ballot, "uncited_coerced"),
         }
     )
 
@@ -3930,7 +3986,7 @@ def _drop_non_roster_claims(
     field and carrying the original value, which the caller records on the
     turn -- ``free_text`` stays exactly what the model authored. The original
     is therefore auditable and downstream eval can count drops per field. The original is
-    bounded (:func:`_bounded_original`): a hallucinated mega-value -- the
+    bounded (:func:`bounded_marker_original`): a hallucinated mega-value -- the
     seed-35 3499-char reasoning blob emitted AS an alibi subject -- can no
     longer balloon the recorded turn; real player ids pass through verbatim.
     Deterministic and a no-op when every claim names a living participant, so
@@ -3944,21 +4000,21 @@ def _drop_non_roster_claims(
             annotations.append(
                 TurnAnnotation(
                     kind="invalid_accusation_target",
-                    original=_bounded_original(claim.against),
+                    original=bounded_marker_original(claim.against),
                 )
             )
         elif isinstance(claim, AlibiClaim) and claim.subject not in living_ids:
             annotations.append(
                 TurnAnnotation(
                     kind="invalid_alibi_subject",
-                    original=_bounded_original(claim.subject),
+                    original=bounded_marker_original(claim.subject),
                 )
             )
         elif isinstance(claim, CorroborationClaim) and claim.supports not in living_ids:
             annotations.append(
                 TurnAnnotation(
                     kind="invalid_corroboration_supports",
-                    original=_bounded_original(claim.supports),
+                    original=bounded_marker_original(claim.supports),
                 )
             )
         else:
