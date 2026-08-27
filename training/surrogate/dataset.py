@@ -238,14 +238,25 @@ def ballot_rewrite_labels(ballot: VoteBallot) -> tuple[str, ...]:
     """Every audit rewrite the meeting layer applied to one recorded ballot.
 
     :attr:`~meetings.schemas.VoteBallot.guard_rewrite_reason` is the PREFERRED
-    source — the meeting layer's own structured testimony about the rewrite it
-    performed — and it always leads the result, so a parse can never contradict
-    it away or leave it out. It cannot REPLACE the marker chain, though: the
-    field holds one reason while a ballot can pass two guards (an under-gate
-    redirect whose redirected eject the citation gate then coerces to SKIP), and
-    reading the field alone would lose the second rewrite and undercount the
-    per-kind census. So the markers are read too and their labels merge in,
-    deduplicated: the structured value is authoritative, never exhaustive.
+    source — the meeting layer's own structured testimony — and it always leads
+    the result, so a parse can never contradict it away or leave it out. It
+    cannot REPLACE the marker chain, though: the field holds ONE reason while a
+    ballot can pass two guards, and it is the FIRST rewrite that owns it
+    (``meetings.voting.ballot_target_rewrite_provenance``: "the first rewrite
+    owns them and a later one leaves them untouched. Every rewrite still
+    prepends its own marker"). Reading the field alone would lose the second
+    rewrite and undercount the per-kind census, so the markers are read too and
+    merge in, deduplicated: the structured value is authoritative, never
+    exhaustive.
+
+    That same rule BOUNDS the parse. Markers are prepended, so the first
+    rewrite's marker is the innermost one, and the guard region of the string
+    ends where it ends — everything past it is the voter's own words. When the
+    structured reason is present the strip therefore stops as soon as it
+    consumes the marker naming it, so a rationale that merely opens with
+    marker-shaped text cannot mint a rewrite that never happened. A legacy
+    recording carries no such bound and strips to exhaustion, exactly as the
+    display layer's parse does.
 
     The chain is stripped front-to-back through :data:`BALLOT_AUDIT_MARKERS` so
     a stacked ordering cannot hide the inner label behind the outer one. The
@@ -262,8 +273,9 @@ def ballot_rewrite_labels(ballot: VoteBallot) -> tuple[str, ...]:
         if label not in labels:
             labels.append(label)
 
-    if ballot.guard_rewrite_reason is not None:
-        keep(ballot.guard_rewrite_reason)
+    first_rewrite = ballot.guard_rewrite_reason
+    if first_rewrite is not None:
+        keep(first_rewrite)
     text = ballot.rationale_text
     if _VOTE_PARSE_DEFAULT_PATTERN.match(text) is not None:
         keep(_VOTE_PARSE_DEFAULT_LABEL)
@@ -277,6 +289,9 @@ def ballot_rewrite_labels(ballot: VoteBallot) -> tuple[str, ...]:
                 continue
             keep(label)
             text = text[match.end() :]
+            if label == first_rewrite:
+                # The innermost guard marker; the rest is the voter's own text.
+                return tuple(labels)
             stripped = True
             break
     return tuple(labels)

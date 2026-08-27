@@ -984,34 +984,80 @@ def test_the_structured_guard_reason_leads_and_no_parse_can_remove_it() -> None:
 
 
 def test_a_second_guard_survives_the_structured_reason_that_names_the_first() -> None:
-    """The structured field is authoritative, never exhaustive.
+    """The structured field is authoritative, never exhaustive — and it bounds.
 
     ``guard_rewrite_reason`` holds ONE reason, but a ballot can pass two guards:
     an under-gate redirect whose redirected eject the citation gate then coerces
-    to SKIP. Reading the field alone would report only the redirect, silently
-    losing the coercion — the per-kind census would undercount it and
-    ``ballot_coerced_skip`` would read False on a ballot the citation gate really
-    did coerce. Planted as the actual two-guard recording, because today's bytes
-    carry no structured field and cannot exhibit it.
+    to SKIP. ``meetings.voting.ballot_target_rewrite_provenance`` settles both
+    halves of how to read that — the FIRST rewrite owns the field and a later
+    one leaves it untouched, while every rewrite still PREPENDS its own marker.
+    So the production stack is citation-gate-outermost with the redirect inside,
+    and the field names the inner one.
+
+    Reading the field alone would report only the redirect, losing the coercion:
+    the per-kind census would undercount it and ``ballot_coerced_skip`` would
+    read False on a ballot the citation gate really did coerce. Reading past the
+    inner marker is the opposite error, and the next case plants it. Both are
+    planted because today's bytes carry no structured field at all.
     """
 
     stacked = _guarded_ballot(
-        BALLOT_TARGET_REDIRECT_MARKER.format(original="p-2", target="p-5")
-        + UNCITED_ZERO_FLAG_EJECT_MARKER.format(target="p-5")
+        UNCITED_ZERO_FLAG_EJECT_MARKER.format(target="p-5")
+        + BALLOT_TARGET_REDIRECT_MARKER.format(original="p-2", target="p-5")
         + "they vented",
         "under_gate_redirect",
     )
     assert ballot_rewrite_labels(stacked) == ("under_gate_redirect", "uncited_coerced")
     assert _ballot_is_coerced_skip(stacked)
 
-    # The same bytes WITHOUT the structured field must read identically, or the
-    # field's arrival would move a census it is supposed to leave alone.
+    # The same bytes WITHOUT the structured field must read the same labels, or
+    # the field's arrival would move a census it is supposed to leave alone.
     legacy = _guarded_ballot(stacked.rationale_text, None)
     assert set(ballot_rewrite_labels(legacy)) == set(ballot_rewrite_labels(stacked))
     assert _ballot_is_coerced_skip(legacy)
 
     # And the label the structured field names is not double-counted.
     assert ballot_rewrite_labels(stacked).count("under_gate_redirect") == 1
+
+
+def test_the_structured_reason_bounds_the_parse_at_the_first_rewrites_marker(
+    row_template: MeetingTableRow,
+) -> None:
+    """Past the innermost guard marker the string is the voter's own words.
+
+    Markers are prepended and the FIRST rewrite owns the structured field, so
+    that rewrite's marker is the innermost one and the guard region ends there.
+    Planted: a ballot the under-gate guard alone rewrote, whose model-authored
+    rationale then opens with marker-shaped text. Parsing on past the boundary
+    would mint an ``uncited_coerced`` that never happened — turning
+    ``ballot_coerced_skip`` True on a ballot no citation gate touched and
+    corrupting the per-kind census.
+
+    The legacy half of the same bytes is asserted too, and it DOES take the
+    false label: without a structured field there is no bound to apply, exactly
+    as the display layer's own parse behaves. That contrast is what shows the
+    bound is doing the work rather than the marker shapes.
+    """
+
+    authored_looks_like_a_marker = (
+        UNCITED_ZERO_FLAG_EJECT_MARKER.format(target="p-9") + "and I stand by it"
+    )
+    bounded = _guarded_ballot(
+        BALLOT_TARGET_REDIRECT_MARKER.format(original="p-2", target="p-5")
+        + authored_looks_like_a_marker,
+        "under_gate_redirect",
+    )
+    assert ballot_rewrite_labels(bounded) == ("under_gate_redirect",)
+    assert not _ballot_is_coerced_skip(bounded)
+    # Still dropped from the fit — the redirect alone is a rewritten target.
+    assert _target_was_rewritten(
+        row_template.model_copy(
+            update={"ballot_rewrite_labels": ballot_rewrite_labels(bounded)}
+        )
+    )
+
+    unbounded = _guarded_ballot(bounded.rationale_text, None)
+    assert "uncited_coerced" in ballot_rewrite_labels(unbounded)
 
 
 def test_the_training_marker_table_cannot_drift_from_the_display_one() -> None:
