@@ -450,6 +450,7 @@ def _render_vj_human(report: VJInstrumentReport) -> str:
             f"{', LOW POWER' if report.ballot_calibration_low_power else ''})",
             f"  voice: echo {report.echo_ballots}/{report.voice_ballots_total}"
             f" (rate {_round(report.within_meeting_echo_rate)});"
+            f" guard-authored excluded {report.guard_authored_ballots_excluded};"
             f" skeleton share {_round(report.response_skeleton_share)};"
             f" distinct skeletons {report.distinct_skeletons}"
             f" ({_round(report.distinct_skeleton_ratio)});"

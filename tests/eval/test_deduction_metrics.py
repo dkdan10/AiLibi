@@ -58,6 +58,7 @@ from eval.deduction_metrics import (
     DeductionMetricsReport,
     UnclassifiableFlagError,
     WilsonRateCell,
+    _LEGACY_TEAMMATE_COERCED_VOTE_RATIONALE,
     _authored_target,
     _matches,
     _scan_marker_chain,
@@ -743,6 +744,79 @@ def test_authored_target_recovers_the_pre_guard_ballot() -> None:
         rationale_text="they lied about Reactor.",
     )
     assert _authored(untouched, "they lied about Reactor.") == ("p-2", False)
+
+
+class TestTheRedactionRecognizerIsGenerationAware:
+    """This module reads FROZEN bytes, so it must know every redaction body.
+
+    The committed corpus was recorded before the teammate note was rewritten to
+    state the redirect, so recognizing only the LIVE constant would file 18
+    well-understood guard redactions as ``guard_provenance_unverifiable`` —
+    a recorded fact re-read through today's vocabulary. Both generations
+    verify; anything else still falls through, so a genuinely unregistered
+    writer-side body surfaces rather than passing.
+    """
+
+    @staticmethod
+    def _coerced(body: str) -> VoteBallot:
+        return VoteBallot(
+            voter="p-1",
+            target="SKIP",
+            confidence=0.4,
+            primary_reason_id=None,
+            considered_alternatives=(),
+            rationale_text=TEAMMATE_VOTE_TARGET_MARKER.format(target="p-5") + body,
+        )
+
+    def test_both_generations_verify_as_guard_authored(self) -> None:
+        for body in (
+            TEAMMATE_COERCED_VOTE_RATIONALE,
+            _LEGACY_TEAMMATE_COERCED_VOTE_RATIONALE,
+        ):
+            split = _split_rationale(self._coerced(body).rationale_text, None)
+
+            assert split.verified is True, body
+            assert split.body_region == body
+            assert split.marker_region == TEAMMATE_VOTE_TARGET_MARKER.format(
+                target="p-5"
+            )
+
+    def test_the_two_generations_are_distinct_bodies(self) -> None:
+        # Otherwise the case above proves nothing about the legacy entry.
+        assert (
+            TEAMMATE_COERCED_VOTE_RATIONALE != _LEGACY_TEAMMATE_COERCED_VOTE_RATIONALE
+        )
+        assert "no confident read" in _LEGACY_TEAMMATE_COERCED_VOTE_RATIONALE
+        assert "no confident read" not in TEAMMATE_COERCED_VOTE_RATIONALE
+
+    def test_a_mangled_body_still_lands_unverifiable(self) -> None:
+        # The planted case: the recognizer must bite BOTH ways, or it is a
+        # rubber stamp that would wave through a real unregistered body.
+        mangled = _LEGACY_TEAMMATE_COERCED_VOTE_RATIONALE.replace(
+            "no confident read", "no confident READING"
+        )
+        split = _split_rationale(self._coerced(mangled).rationale_text, None)
+
+        assert split.verified is False
+        assert split.marker_region == ""
+        assert split.body_region == self._coerced(mangled).rationale_text
+
+    def test_the_legacy_body_is_what_the_committed_bytes_carry(self) -> None:
+        # Pins the literal against the record it exists for: if no committed
+        # ballot carried it, the entry would be dead on arrival.
+        carried = sum(
+            1
+            for path in sorted(_SAMPLES_9P2I.glob("replay-seed-*.jsonl"))
+            for line in path.read_text(encoding="utf-8").splitlines()
+            for record in (json.loads(line),)
+            if record.get("kind") == "meeting"
+            for ballot in record["ballots"]
+            if ballot["rationale_text"].endswith(
+                _LEGACY_TEAMMATE_COERCED_VOTE_RATIONALE
+            )
+        )
+
+        assert carried == 5
 
 
 @pytest.mark.parametrize(

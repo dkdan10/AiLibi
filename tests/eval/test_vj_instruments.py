@@ -32,6 +32,7 @@ Three layers:
 from __future__ import annotations
 
 import json
+import shutil
 import statistics
 import sys
 from pathlib import Path
@@ -79,6 +80,11 @@ from eval.vj_instruments import (  # noqa: E402
     _strip_leading_markers,
     _typed_split,
     compute_vj_instruments,
+    has_model_authored_body,
+)
+from meetings.manager import (  # noqa: E402
+    TEAMMATE_COERCED_VOTE_RATIONALE,
+    TEAMMATE_VOTE_TARGET_MARKER,
 )
 from meetings.render_contract import SuspicionEntry  # noqa: E402
 from meetings.schemas import (  # noqa: E402
@@ -305,6 +311,42 @@ def test_near_dup_trigram_jaccard() -> None:
     # Sub-trigram texts compare by exact equality.
     assert _is_near_dup(("hi",), ("hi",))
     assert not _is_near_dup(("hi",), ("ho",))
+
+
+def test_has_model_authored_body_reads_what_survives_the_strip() -> None:
+    coerced = TEAMMATE_VOTE_TARGET_MARKER.format(target="p-5")
+    assert not has_model_authored_body(coerced + TEAMMATE_COERCED_VOTE_RATIONALE)
+    assert not has_model_authored_body("")
+    # A marked ballot that still carries the voter's own sentence HAS a voice.
+    # This is the deliberate difference from
+    # ``eval.accusation_calibration._is_guard_authored``, which drops any
+    # ballot that merely OPENS with a marker.
+    assert has_model_authored_body(coerced + "p-5 never explained the vent.")
+    assert has_model_authored_body("p-5 never explained the vent.")
+
+
+def test_the_predicate_keeps_exactly_the_non_empty_skeletons() -> None:
+    # The coherence invariant the exclusion rests on: the predicate and the
+    # skeleton normalizer read the SAME strip, so the fold keeps a ballot iff
+    # that ballot contributes a skeleton. A stricter, provenance-based
+    # predicate would keep a body the normalizer still flattens to "" and put
+    # an empty skeleton back into the clusters — the defect being removed.
+    coerced = TEAMMATE_VOTE_TARGET_MARKER.format(target="p-5")
+    for text in (
+        "p-5 never explained the vent.",
+        coerced + "p-5 never explained the vent.",
+        coerced + TEAMMATE_COERCED_VOTE_RATIONALE,
+        "",
+        "   ",
+        "[note] [another]",
+        # A bracket-only MODEL body stripped like guard prose: the §2.5 recipe
+        # cannot tell them apart, so predicate and normalizer must at least
+        # agree about it. No committed ballot carries this shape.
+        "[I saw p-3 vent]",
+    ):
+        assert has_model_authored_body(text) == bool(
+            _normalize_voice(text, _ROOM_RE)
+        ), text
 
 
 def test_meeting_echo_moves_on_identical_ballots() -> None:
@@ -558,20 +600,39 @@ def test_9p2i_ballot_calibration_pins_the_baseline_5_cell(
 
 
 def test_9p2i_voice_tier_pins(nine: VJInstrumentReport) -> None:
-    assert nine.voice_ballots_total == 871  # was 971
+    # The voice denominator is the MODEL-authored ballots, so it sits below
+    # ``ballots_total`` by exactly the guard-authored rows the tier drops.
+    assert nine.ballots_total == 871
+    assert nine.guard_authored_ballots_excluded == 5
+    assert nine.voice_ballots_total == 866  # was 871
     assert nine.echo_ballots == 0
     assert nine.within_meeting_echo_rate == pytest.approx(0.0)
     assert nine.response_skeleton_share == pytest.approx(
-        0.01722158438576349
-    )  # was 0.026776519052523172
-    assert nine.distinct_skeletons == 850  # was 929
+        0.013856812933025405
+    )  # was 0.01722158438576349
+    assert nine.distinct_skeletons == 849  # was 850
     assert nine.distinct_skeleton_ratio == pytest.approx(
-        0.9758897818599311
-    )  # was 0.956745623069001
-    assert nine.distinct_1 == pytest.approx(0.10613751730503)  # was 0.09441071802386435
-    assert nine.distinct_2 == pytest.approx(
-        0.3636308439587128
-    )  # was 0.33246953740971497
+        0.9803695150115473
+    )  # was 0.9758897818599311
+    # UNCHANGED by the exclusion: an empty skeleton contributes no n-grams.
+    assert nine.distinct_1 == pytest.approx(0.10613751730503)
+    assert nine.distinct_2 == pytest.approx(0.3636308439587128)
+
+
+def test_9p2i_voice_denominator_is_not_the_judgment_denominator(
+    nine: VJInstrumentReport,
+) -> None:
+    # The seam, stated as an equation: the judgment tier counts every recorded
+    # ballot and the voice tier counts only those with a model-authored body.
+    assert nine.voice_ballots_total + nine.guard_authored_ballots_excluded == (
+        nine.ballots_total
+    )
+    assert nine.voice_ballots_total == sum(
+        row.voice_ballots for row in nine.per_meeting
+    )
+    assert nine.ballots_total == sum(row.ballots for row in nine.per_meeting)
+    # ... and the citation cells still divide by every recorded ballot.
+    assert nine.eject_ballots == nine.ballots_total - nine.skip_ballots
 
 
 def test_9p2i_pooling_rides_the_same_report(nine: VJInstrumentReport) -> None:
@@ -610,6 +671,12 @@ def test_4p1i_reproduces_baseline_5_exactly(four: VJInstrumentReport) -> None:
     )  # was 0.09643333333333333
     assert four.echo_ballots == 0
     assert four.distinct_skeletons == 117  # was 106
+    # The natural control for the voice-tier exclusion: no 4p1i meeting has a
+    # teammate to coerce a ballot away from, so nothing is dropped and every
+    # voice cell is byte-identical to its pre-exclusion value.
+    assert four.guard_authored_ballots_excluded == 0
+    assert four.voice_ballots_total == 120
+    assert four.distinct_skeleton_ratio == pytest.approx(0.975)
 
 
 def test_ballot_calibration_matches_the_committed_fold(
@@ -666,6 +733,68 @@ def test_per_meeting_rows_pair_voice_with_judgment(nine: VJInstrumentReport) -> 
     assert all(r.zero_flag_conviction is None for r in skipped_rows)
 
 
+def _plant_guard_authored_ballots(source: Path, dest: Path, count: int) -> str:
+    """Copy a replay set and redact ``count`` ballots of ONE meeting.
+
+    Returns the planted meeting's id. Only ``rationale_text`` moves — target,
+    outcome and every state hash are untouched — so the walk reconstructs the
+    same game and the only thing that can change is the voice fold.
+    """
+
+    shutil.copytree(source, dest)
+    redacted = TEAMMATE_VOTE_TARGET_MARKER.format(target="p-2") + (
+        TEAMMATE_COERCED_VOTE_RATIONALE
+    )
+    for path in sorted(dest.glob("replay-seed-*.jsonl")):
+        records = [json.loads(line) for line in path.read_text().splitlines()]
+        for record in records:
+            if record.get("kind") != "meeting" or len(record["ballots"]) < count:
+                continue
+            for ballot in record["ballots"][:count]:
+                ballot["rationale_text"] = redacted
+            path.write_text(
+                "".join(
+                    json.dumps(r, sort_keys=True, separators=(",", ":")) + "\n"
+                    for r in records
+                )
+            )
+            return str(record["meeting_id"])
+    raise AssertionError(f"no meeting with >= {count} ballots under {source}")
+
+
+def test_planted_guard_authored_ballots_are_excluded_not_clustered(
+    four: VJInstrumentReport, tmp_path: Path
+) -> None:
+    # The gate that proves the exclusion bites. Two IDENTICAL guard-authored
+    # bodies in one meeting is the shape the shipped fold got wrong twice
+    # over: both normalize to "" (a cluster), and ``_is_near_dup((), ())`` is
+    # True (a mutual echo), so the guard's prose would publish as the corpus's
+    # most stereotyped model voice AND as an echoing pair.
+    room_re = _room_pattern(("MEDBAY", "ENGINEERING"))
+    redacted = TEAMMATE_VOTE_TARGET_MARKER.format(target="p-2") + (
+        TEAMMATE_COERCED_VOTE_RATIONALE
+    )
+    assert _normalize_voice(redacted, room_re) == ""
+    assert _is_near_dup((), ()) is True
+
+    planted_dir = tmp_path / "4p1i"
+    meeting_id = _plant_guard_authored_ballots(_FOUR, planted_dir, 2)
+    planted = compute_vj_instruments(planted_dir)
+
+    # The judgment tier is untouched: every recorded ballot still counts.
+    assert planted.ballots_total == four.ballots_total
+    assert planted.eject_ballots == four.eject_ballots
+    # The voice tier drops them, and SAYS how many.
+    assert planted.guard_authored_ballots_excluded == 2
+    assert planted.voice_ballots_total == four.voice_ballots_total - 2
+    # Neither clustered nor echoed — both would be nonzero without the drop.
+    assert planted.echo_ballots == 0
+    row = next(r for r in planted.per_meeting if r.meeting_id == meeting_id)
+    assert row.voice_ballots == row.ballots - 2
+    assert row.echo_ballots == 0
+    assert row.distinct_skeletons == row.voice_ballots
+
+
 def test_double_run_is_identical(four: VJInstrumentReport) -> None:
     # DoD: the voice tier (and the whole report) is deterministic — a second
     # walk of the same bytes returns an identical value object.
@@ -707,3 +836,21 @@ def test_cli_vj_human_render_names_the_gauges(
     assert "zero-flag convictions: 2/21" in out
     assert "voice:" in out
     assert "pooling:" in out
+    # The excluded count is PUBLISHED on the human surface, not only in the
+    # JSON — a cell a reader cannot see is a cell that gets absorbed. Pinned
+    # with its value, because naming the gauge alone would not notice the
+    # cell being dropped from the f-string run that builds this line.
+    assert "guard-authored excluded 0" in out
+
+
+def test_cli_vj_human_render_publishes_a_nonzero_exclusion(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # The 4p1i control reads 0, so it cannot show the cell MOVING. 9p2i has
+    # the five recorded redactions and its voice denominator sits below its
+    # ballot count — both visible on the one line a reader actually reads.
+    assert measure_baseline.main([str(_NINE), "--vj"]) == 0
+    out = capsys.readouterr().out
+
+    assert "guard-authored excluded 5" in out
+    assert "echo 0/866" in out

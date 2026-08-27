@@ -217,41 +217,45 @@ TEAMMATE_VOTE_TARGET_MARKER: Final[str] = (
 
 # Replacement ``rationale_text`` body recorded BEHIND
 # ``TEAMMATE_VOTE_TARGET_MARKER`` when the teammate firewall guard coerces a
-# ballot to SKIP (Task 19.15; audits/audit-phase-19-triage.md §7 item 16).
-# The model authored that rationale to justify the betrayal target, so it can
-# state the impostor's private knowledge outright ("p-3 is my partner", "I did
-# the kill") -- and the coerced ballot rides ``rationale_text`` straight onto
-# the spectator surface, where the marker is stripped to a chip and the
-# remainder renders as the voter's stated reason. Keeping that text is
-# omniscience leaking through the guard's own output, so the guard REPLACES it
-# rather than preserving it. Two properties are load-bearing:
+# ballot to SKIP. The model authored that rationale to justify the betrayal
+# target, so it can state the impostor's private knowledge outright ("p-3 is
+# my partner", "I did the kill") -- and the coerced ballot rides
+# ``rationale_text`` straight onto the spectator surface, where the marker is
+# stripped to a chip and the remainder renders as the voter's stated reason.
+# Keeping that text is omniscience leaking through the guard's own output, so
+# the guard REPLACES it. Two properties are load-bearing:
 #
-# * the substitution is SELF-DECLARING -- a silent swap to plausible in-world
-#   prose would attribute a fabricated sentence to the model, which is the
-#   laundering this task exists to avoid;
-# * it names no role, no teammate, and no kill. The marker carries the
-#   auditable fact that the guard rewrote the target, and gating that
-#   marker's DISPLAY is a separate task (19.11, the display-side twin), so
-#   the note itself says only "the vote guard", never WHICH guard.
+# * the note is SELF-DECLARING and states the REDIRECT -- a silent swap to
+#   plausible in-world prose would attribute a fabricated sentence to the
+#   model, and a note asserting a reason nobody gave ("no confident read")
+#   is read as the voter's own account by every consumer of
+#   ``rationale_text``. What happened is that a guard rewrote the target, so
+#   that is what the sentence says;
+# * it names no role, no teammate, and no kill -- only "the vote guard",
+#   never WHICH guard, so the note is no more disclosing standalone than the
+#   ballot it replaces.
+#
+# This is the HUMAN-readable half of the rewrite record. The machine-readable
+# half is the ``guard_redirected_from`` / ``guard_rewrite_reason`` pair the
+# SAME ``model_copy`` writes (:func:`meetings.voting.
+# ballot_target_rewrite_provenance`), which names the redirect kind outright.
+# The two agree and neither is the other's only source: a reader of the prose
+# and a reader of the typed field learn the same fact.
 #
 # BRACKETED, not parenthesized like ``DEFAULT_VOTE_RATIONALE``: the leading
 # ``[...]`` form is the repo's established "system text, not model voice"
-# shape, and ``eval.vj_instruments._strip_leading_markers`` drops exactly that
-# form before a ballot body enters the §2.5 echo / skeleton / distinct-n voice
-# fold. A parenthesized note would survive that strip and feed the SAME
-# guard-authored sentence into the model-voice diversity metrics on every
-# coerced ballot -- measuring the guard's prose as the model's. The bracket is
-# what keeps this synthetic body out of an instrument it was never model
-# output for. It carries no ``{...!r}`` payload, so it is not a marker: the
+# shape. It carries no ``{...!r}`` payload, so it is not a marker: the
 # display-side parse (``api.replay_loader._parse_rewrite_reasons``) registers
-# no chip for it and leaves it as the ballot's clean body.
-#
-# Forward-looking only: committed replay bytes are frozen and unaffected (no
-# recorded ballot is rewritten), so this changes what a FUTURE recording
-# carries and nothing that already exists on disk.
+# no chip for it and leaves it as the ballot's clean body. No nested ``]``,
+# which would stop ``eval.vj_instruments._strip_leading_markers`` early and
+# leak a fragment. Keeping this synthetic body out of the §2.5 model-voice
+# fold is enforced by :func:`eval.vj_instruments.has_model_authored_body`,
+# which drops a ballot with nothing left after the strip -- not by the strip
+# happening to leave an empty string.
 TEAMMATE_COERCED_VOTE_RATIONALE: Final[str] = (
-    "[rationale redacted by the vote guard; recorded reason: "
-    "no confident read this round]"
+    "[rationale redacted by the vote guard; this ballot's target was "
+    "rewritten, so the voter's stated reason no longer describes the "
+    "recorded vote]"
 )
 
 # Audit-trail marker prepended to ``rationale_text`` when the ballot-target

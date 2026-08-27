@@ -244,7 +244,7 @@ const CHAIN_BALLOTS: BallotView[] = [
     "p-2",
     "SKIP",
     0.4,
-    "[rationale redacted by the vote guard; recorded reason: no confident read this round]",
+    "[rationale redacted by the vote guard; this ballot's target was rewritten, so the voter's stated reason no longer describes the recorded vote]",
     ["teammate_coerced"],
   ),
   // Task 16.7.1: a firsthand vote — the voter cites its own episodic

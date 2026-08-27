@@ -43,8 +43,13 @@ Three groups, one report:
   names -> ``room``, digit runs -> ``n``, lowercased, whitespace
   collapsed; leading bracketed audit markers (the manager's
   ``[... ] ``-prefixed coercion/normalization notes) are stripped first —
-  they are system text, not model voice. Pure string folds: $0,
-  deterministic, double-run identical. The LLM-judged voice tier is
+  they are system text, not model voice. A ballot with NOTHING left after
+  that strip is manager prose end to end and carries no voice to measure,
+  so :func:`has_model_authored_body` drops it from this tier and
+  ``guard_authored_ballots_excluded`` publishes the count; the judgment and
+  citation cells still count every recorded ballot, which is why
+  ``voice_ballots_total`` and ``ballots_total`` differ. Pure string folds:
+  $0, deterministic, double-run identical. The LLM-judged voice tier is
   explicitly OUT (the task's $0 discipline).
 
 * **The pooling census.** :class:`eval.funnel.PoolingFunnelReport`
@@ -131,20 +136,25 @@ close for the before/after finding — STABLE::
       "ballot_confidence_ece": float | null,
       "ballot_calibration_total": int,
       "ballot_calibration_low_power": bool,     # < 5 populated decile bins
-      # -- deterministic voice tier --
-      "voice_ballots_total": int, "echo_ballots": int,
+      # -- deterministic voice tier (denominator: model-authored ballots) --
+      "voice_ballots_total": int,               # ballots_total - excluded
+      "guard_authored_ballots_excluded": int,   # nothing left after the strip
+      "echo_ballots": int,
       "within_meeting_echo_rate": float | null,
       "response_skeleton_share": float | null,
       "distinct_skeletons": int, "distinct_skeleton_ratio": float | null,
       "distinct_1": float | null, "distinct_2": float | null,
       # -- the pooling census (eval.funnel.PoolingFunnelReport schema) --
       "pooling": { ... },
-      "per_meeting": [ VJMeetingRow, ... ]      # judgment + voice per meeting
+      # judgment + voice per meeting; each row's "voice_ballots" is the
+      # denominator behind its own "distinct_skeletons" and "echo_rate"
+      "per_meeting": [ VJMeetingRow, ... ]
     }
 
 Pure + offline: no network, no ``AILIBI_*`` env, no LLM. The public surface
 (stable — downstream tasks import these): :func:`compute_vj_instruments`,
-:class:`VJInstrumentReport`, :class:`VJMeetingRow`.
+:func:`has_model_authored_body`, :class:`VJInstrumentReport`,
+:class:`VJMeetingRow`.
 """
 
 from __future__ import annotations
@@ -243,9 +253,14 @@ class VJMeetingRow(BaseModel):
 
     The judgment fields (``ejected_is_impostor`` .. ``splits_agree_on_hard``)
     are ``None`` on a ``SKIPPED`` meeting — there is no conviction to
-    classify. ``echo_rate`` is ``None`` when the meeting recorded no ballots.
-    Voice rides the same row as judgment so the 16.17 close reads them
-    together per meeting.
+    classify. Voice rides the same row as judgment so the 16.17 close reads
+    them together per meeting.
+
+    ``ballots`` counts every recorded ballot; ``voice_ballots`` counts the
+    subset with a model-authored body (:func:`has_model_authored_body`) and is
+    the denominator behind ``echo_rate`` and ``distinct_skeletons``.
+    ``echo_rate`` is ``None`` when the meeting contributed no ballot to the
+    voice tier.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -270,6 +285,7 @@ class VJMeetingRow(BaseModel):
     observation_citations_dangling: int
     cited_eject_ballots: int
     # deterministic voice tier
+    voice_ballots: int
     echo_ballots: int
     echo_rate: float | None
     distinct_skeletons: int
@@ -336,6 +352,7 @@ class VJInstrumentReport(BaseModel):
     ballot_calibration_low_power: bool
     # deterministic voice tier
     voice_ballots_total: int
+    guard_authored_ballots_excluded: int
     echo_ballots: int
     within_meeting_echo_rate: float | None
     response_skeleton_share: float | None
@@ -666,6 +683,38 @@ def _strip_leading_markers(text: str) -> str:
         text = stripped
 
 
+def has_model_authored_body(rationale: str) -> bool:
+    """Whether a recorded rationale still says something once markers are gone.
+
+    A ballot whose whole body is manager-authored audit prose — the teammate
+    firewall's redaction is the shipped case — leaves nothing behind
+    :func:`_strip_leading_markers`, and an empty string is not a quiet
+    non-participant in the voice tier: it clusters like any other skeleton,
+    so guard prose ranks as the corpus's most stereotyped model voice. The
+    voice fold measures only ballots this returns ``True`` for, and publishes
+    how many it dropped.
+
+    Deliberately NOT the same predicate as
+    ``eval.accusation_calibration._is_guard_authored``, which drops any ballot
+    OPENING with a guard marker. A marked ballot that still carries the
+    voter's own sentence has a real voice to measure; only a ballot with no
+    model-authored body left has none.
+
+    Bound to :func:`_normalize_voice` by construction: both read the same
+    :func:`_strip_leading_markers`, so this returns ``True`` for exactly the
+    ballots that produce a non-empty skeleton. That coupling is the point — a
+    stricter, provenance-based predicate would KEEP a body the normalizer
+    still strips to ``""`` and put an empty skeleton back into the clusters,
+    which is the defect this exclusion removes. The corollary is that the
+    §2.5 recipe cannot tell a bracket-only MODEL body from guard prose; it
+    strips both. No committed ballot has that shape (0 of 171 bracket-opening
+    ballots across the four sets), and the fix belongs to the normalization
+    recipe, not here — moving it would re-price every voice cell.
+    """
+
+    return bool(_strip_leading_markers(rationale).strip())
+
+
 def _normalize_voice(text: str, room_re: re.Pattern[str]) -> str:
     """The §2.5 skeleton normalization: ids -> ``player``, rooms -> ``room``,
     digit runs -> ``n``, lowercased, whitespace collapsed."""
@@ -855,9 +904,13 @@ def compute_vj_instruments(sample_dir: Path) -> VJInstrumentReport:
                 ejects,
             ) = _citation_counts(meeting)
 
-            skeletons = [
-                _normalize_voice(ballot.rationale_text, room_re)
+            voiced = [
+                ballot
                 for ballot in meeting.ballots
+                if has_model_authored_body(ballot.rationale_text)
+            ]
+            skeletons = [
+                _normalize_voice(ballot.rationale_text, room_re) for ballot in voiced
             ]
             echo, distinct_in_meeting = _meeting_echo(skeletons)
             all_skeletons.extend(skeletons)
@@ -883,8 +936,9 @@ def compute_vj_instruments(sample_dir: Path) -> VJInstrumentReport:
                     observation_citations_valid=obs_valid,
                     observation_citations_dangling=obs_dangling,
                     cited_eject_ballots=cited_ejects,
+                    voice_ballots=len(voiced),
                     echo_ballots=echo,
-                    echo_rate=echo / len(meeting.ballots) if meeting.ballots else None,
+                    echo_rate=echo / len(voiced) if voiced else None,
                     distinct_skeletons=distinct_in_meeting,
                 )
             )
@@ -901,6 +955,7 @@ def compute_vj_instruments(sample_dir: Path) -> VJInstrumentReport:
     )
 
     ballots_total = sum(row.ballots for row in rows)
+    voice_ballots_total = sum(row.voice_ballots for row in rows)
     skip_ballots = sum(row.skip_ballots for row in rows)
     eject_ballots = ballots_total - skip_ballots
     turn_valid_total = sum(row.turn_citations_valid for row in rows)
@@ -963,17 +1018,18 @@ def compute_vj_instruments(sample_dir: Path) -> VJInstrumentReport:
         ballot_confidence_ece=ece,
         ballot_calibration_total=calibration_total,
         ballot_calibration_low_power=populated < MIN_POPULATED_BINS_FOR_POWER,
-        voice_ballots_total=ballots_total,
+        voice_ballots_total=voice_ballots_total,
+        guard_authored_ballots_excluded=ballots_total - voice_ballots_total,
         echo_ballots=echo_total,
         within_meeting_echo_rate=(
-            echo_total / ballots_total if ballots_total else None
+            echo_total / voice_ballots_total if voice_ballots_total else None
         ),
         response_skeleton_share=(
-            top_cluster_ballots / ballots_total if ballots_total else None
+            top_cluster_ballots / voice_ballots_total if voice_ballots_total else None
         ),
         distinct_skeletons=len(skeleton_counts),
         distinct_skeleton_ratio=(
-            len(skeleton_counts) / ballots_total if ballots_total else None
+            len(skeleton_counts) / voice_ballots_total if voice_ballots_total else None
         ),
         distinct_1=_distinct_n(all_token_lists, 1),
         distinct_2=_distinct_n(all_token_lists, 2),
@@ -988,4 +1044,5 @@ __all__ = [
     "VJInstrumentReport",
     "VJMeetingRow",
     "compute_vj_instruments",
+    "has_model_authored_body",
 ]
