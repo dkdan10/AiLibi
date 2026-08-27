@@ -816,7 +816,6 @@ def compute_vj_instruments(sample_dir: Path) -> VJInstrumentReport:
     nulled_reason = 0
     nulled_observation = 0
     coerced_zero_flag = 0
-    guard_authored_excluded = 0
     all_token_lists: list[tuple[str, ...]] = []
     all_skeletons: list[str] = []
 
@@ -899,7 +898,6 @@ def compute_vj_instruments(sample_dir: Path) -> VJInstrumentReport:
                 for ballot in meeting.ballots
                 if has_model_authored_body(ballot.rationale_text)
             ]
-            guard_authored_excluded += len(meeting.ballots) - len(voiced)
             skeletons = [
                 _normalize_voice(ballot.rationale_text, room_re) for ballot in voiced
             ]
@@ -1010,7 +1008,7 @@ def compute_vj_instruments(sample_dir: Path) -> VJInstrumentReport:
         ballot_calibration_total=calibration_total,
         ballot_calibration_low_power=populated < MIN_POPULATED_BINS_FOR_POWER,
         voice_ballots_total=voice_ballots_total,
-        guard_authored_ballots_excluded=guard_authored_excluded,
+        guard_authored_ballots_excluded=ballots_total - voice_ballots_total,
         echo_ballots=echo_total,
         within_meeting_echo_rate=(
             echo_total / voice_ballots_total if voice_ballots_total else None
