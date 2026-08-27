@@ -150,21 +150,21 @@ DEFAULT_FAKE_MODEL="fake-meeting"
 # AILIBI_FEATHERLESS_BASE_URL, so the preflight pins it — a leftover mock/staging
 # export must never record the "hosted-$0" corpus against an alternate endpoint.
 DEFAULT_FEATHERLESS_BASE_URL="https://api.featherless.ai/v1"
-# The locked prompt set the corpus records under (baseline 7; Task 16.13/16.17,
-# bumped to v4 at Task 20.31). A featherless run with any other set would
-# SILENTLY record the wrong substrate.
+# The locked prompt set the corpus records under. A featherless run with any
+# other set would SILENTLY record the wrong substrate.
 REQUIRED_PROMPT_SET="qwen3_6_27b"
-# The per-template prompt versions the set must resolve to (all four at v4 since
-# Task 20.31's evidence-honesty bump; the lineage is v1 bespoke port -> v2
-# elicitation batch -> v3 persona voice -> v4). The set NAME alone is not a
-# version pin — the registry entry can be bumped by a later task — so the
-# preflight asserts orchestrator.game.PROMPT_VERSION_SETS still resolves
-# $REQUIRED_PROMPT_SET to exactly this map, and the finalize refuses to freeze a
-# set whose MANIFEST rows carry any other version string. Sorted, comma+space-
-# joined (the MANIFEST cell rendering). A corpus recorded before this constant
-# moved carries the older stamps in its own MANIFEST; re-locking it is an owner
-# decision (re-record + re-freeze), which is what a stamp mismatch here forces.
-REQUIRED_PROMPT_VERSIONS="accusation_round.qwen3_6_27b.v4, crewmate_report.qwen3_6_27b.v4, impostor_report.qwen3_6_27b.v4, vote_ballot.qwen3_6_27b.v4"
+# The per-template prompt versions the set must resolve to (all four at v5 since
+# Task 21.1's in-world register bump; the lineage is v1 bespoke port -> v2
+# elicitation batch -> v3 persona voice -> v4 evidence honesty -> v5). The set
+# NAME alone is not a version pin — the registry entry can be bumped by a later
+# task — so the preflight asserts orchestrator.game.PROMPT_VERSION_SETS still
+# resolves $REQUIRED_PROMPT_SET to exactly this map, and the finalize refuses to
+# freeze a set whose MANIFEST rows carry any other version string. Sorted,
+# comma+space-joined (the MANIFEST cell rendering). The committed baseline-7
+# corpus carries v4 in its own MANIFEST, so this constant no longer re-freezes
+# it — that re-lock is the owner decision Phase 21 already took: Task 21.15
+# re-records all four sets from scratch on the corrected substrate.
+REQUIRED_PROMPT_VERSIONS="accusation_round.qwen3_6_27b.v5, crewmate_report.qwen3_6_27b.v5, impostor_report.qwen3_6_27b.v5, vote_ballot.qwen3_6_27b.v5"
 # The same locked map rendered as the acceptance CLI's KEY=VER pairs
 # (scripts/validity_gate.py --expected-prompt-versions). Each locked version
 # string is "<template>.<set>.<version>", so its template key is the first

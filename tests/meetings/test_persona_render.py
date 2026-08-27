@@ -417,7 +417,7 @@ _WEAK_FLAG = ContradictionRef(
 )
 _ALL_FLAGS = (_PROOF_FLAG, _CONFLICT_FLAG, _WEAK_FLAG)
 
-_PROOF_HEADING = "Proof. The engine certified these"
+_PROOF_HEADING = "Proof. Only an impostor can vent"
 _CONFLICT_HEADING = "Conflicting accounts. Two statements that cannot both be true"
 _WEAK_HEADING = "Weak signals. The same kind of conflict"
 

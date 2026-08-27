@@ -534,13 +534,20 @@ def test_json_failure_names_failing_checks(
 
 
 def _locked_pin() -> str:
-    """The committed sets' own recorded versions, as the CLI takes them."""
+    """The committed sets' own recorded versions, as the CLI takes them.
 
-    from orchestrator.game import PROMPT_VERSION_SETS
+    Sourced from the byte golden's archive of RECORDED stamps, not from the
+    live registry: these two tests assert against the committed ``9p2i`` corpus,
+    whose games stamp v4 while the live registry has moved to v5. Reading the
+    live registry would make the passing case expect a version the corpus does
+    not carry, and would collapse the wrong-pin case into a no-op.
+    """
 
+    from tests.meetings.test_prompt_byte_golden import ARCHIVED_PROMPT_VERSION_SETS
+
+    recorded = ARCHIVED_PROMPT_VERSION_SETS["qwen3_6_27b_v4"]
     return ",".join(
-        f"{template}={version}"
-        for template, version in sorted(PROMPT_VERSION_SETS["qwen3_6_27b"].items())
+        f"{template}={version}" for template, version in sorted(recorded.items())
     )
 
 
@@ -557,7 +564,7 @@ def test_expected_prompt_versions_fails_a_homogeneous_wrong_pin(
     # The case the coherence check alone cannot see: the set is internally
     # consistent, every game agrees, and every game is at the wrong version.
     wrong = _locked_pin().replace(".v4", ".v3")
-    assert wrong != _locked_pin()
+    assert wrong != _locked_pin(), "the substitution must actually change the pin"
 
     assert validity_gate.main([str(_NINE), "--expected-prompt-versions", wrong]) == 1
 

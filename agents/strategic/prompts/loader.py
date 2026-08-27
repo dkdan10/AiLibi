@@ -104,6 +104,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, replace
 from functools import lru_cache, partial
 from pathlib import Path
+from types import MappingProxyType
 from typing import Final, Literal
 
 from jinja2 import Environment, FileSystemLoader, StrictUndefined, TemplateNotFound
@@ -368,7 +369,49 @@ def impostor_roll_call_enabled(env: Mapping[str, str] | None = None) -> bool:
 # --------------------------------------------------------------------------- #
 
 
-def _map_card_from_neighbors(neighbors: Mapping[str, Iterable[str]]) -> str:
+# The prose name each walkable room answers to, paired with its id everywhere
+# the map card names a room. This is the ONLY authored surface that spells a
+# room out, so it is what anchors the register agents speak rooms in; the id
+# rides alongside because the JSON contract asks for the id. Frozen DATA, the
+# same discipline CANONICAL_ROOM_NEIGHBORS uses -- a test cross-pins it against
+# ``engine.world.load_canonical_map()``, so the card cannot drift off the map.
+CANONICAL_ROOM_DISPLAY_NAMES: Final[Mapping[str, str]] = MappingProxyType(
+    {
+        "ADMIN": "Admin",
+        "CAFETERIA": "Cafeteria",
+        "EAST_HALL": "East Hallway",
+        "ENGINEERING": "Engineering",
+        "LABS": "Labs",
+        "MEDBAY": "MedBay",
+        "REACTOR": "Reactor",
+        "STORAGE": "Storage",
+        "UPPER_HALL": "Upper Hall",
+        "WEST_HALL": "West Hallway",
+    }
+)
+
+
+def _named_room(room: str, names: Mapping[str, str]) -> str:
+    """Render one room as ``Prose Name (ROOM_ID)``.
+
+    An unnamed room raises rather than falling back to the bare id: a card that
+    silently drops the prose half would un-anchor the register it exists to set
+    (AGENTS.md "no silent fallbacks").
+    """
+
+    if room not in names:
+        raise ValueError(
+            f"room {room!r} has no display name; CANONICAL_ROOM_DISPLAY_NAMES "
+            f"must name every walkable room the map card renders"
+        )
+    return f"{names[room]} ({room})"
+
+
+def _map_card_from_neighbors(
+    neighbors: Mapping[str, Iterable[str]],
+    *,
+    names: Mapping[str, str] = CANONICAL_ROOM_DISPLAY_NAMES,
+) -> str:
     """Render the room-and-doorway card from a walkable-room adjacency table."""
 
     lines = [
@@ -376,15 +419,17 @@ def _map_card_from_neighbors(neighbors: Mapping[str, Iterable[str]]) -> str:
         "players in rooms that share a door can be one tick apart:"
     ]
     for room in sorted(neighbors):
-        lines.append(f"- {room}: {', '.join(sorted(neighbors[room]))}")
+        doors = ", ".join(_named_room(n, names) for n in sorted(neighbors[room]))
+        lines.append(f"- {_named_room(room, names)}: {doors}")
     return "\n".join(lines)
 
 
 def render_map_card(map_view: PublicMapView) -> str:
-    """Render the compact adjacency card the v4 meeting templates show.
+    """Render the compact adjacency card every meeting template shows.
 
     One header line stating the one-tick doorway fact, then one line per
-    walkable room naming the rooms it shares a door with. Reads
+    walkable room, each room written ``Prose Name (ROOM_ID)`` so the table has
+    an authored spelling to speak and the id the JSON contract asks for. Reads
     :attr:`PublicMapView.room_neighbors` and nothing else: ``vent_graph`` and
     ``vent_rooms`` are impostor-only knowledge the same public view happens to
     carry, and publishing them to the table would turn a legibility fix into a
@@ -925,6 +970,7 @@ def build_prompt_renderers(
     *,
     root: Path = _PROMPTS_ROOT,
     env: Mapping[str, str] | None = None,
+    map_card: str = CANONICAL_MAP_CARD,
 ) -> PromptRenderers:
     """Build the four renderers bound to a single resolved prompt set.
 
@@ -946,6 +992,12 @@ def build_prompt_renderers(
     ``prompt_versions_for_set`` reads the same lever from the same ``env``,
     which is what keeps a recording's rendered bytes and recorded stamps on
     one routing decision.
+
+    ``map_card`` defaults to the live :data:`CANONICAL_MAP_CARD` and exists for
+    one caller: the bump-in-flight archive, which pairs an older set's template
+    bytes with the card THOSE bytes rendered. The card is a render input, not a
+    template, so pointing ``root`` at an archived set is not by itself enough to
+    reproduce its recordings once the card's own format has moved.
     """
 
     environment = build_environment(prompt_set, root=root, env=env)
@@ -972,24 +1024,24 @@ def build_prompt_renderers(
         crewmate_report=partial(
             crewmate_report_prompt,
             environment=environment,
-            map_card=CANONICAL_MAP_CARD,
+            map_card=map_card,
         ),
         impostor_report=partial(
             impostor_report_prompt,
             environment=environment,
             template_name=impostor_report_template,
-            map_card=CANONICAL_MAP_CARD,
+            map_card=map_card,
         ),
         statement=partial(
             accusation_round_prompt,
             environment=environment,
             template_name=statement_template,
-            map_card=CANONICAL_MAP_CARD,
+            map_card=map_card,
         ),
         vote=partial(
             vote_ballot_prompt,
             environment=environment,
-            map_card=CANONICAL_MAP_CARD,
+            map_card=map_card,
         ),
     )
 
@@ -998,6 +1050,7 @@ __all__ = [
     "ACCUSATION_ROUND_ROLL_CALL_TEMPLATE",
     "ACCUSATION_ROUND_TEMPLATE",
     "CANONICAL_MAP_CARD",
+    "CANONICAL_ROOM_DISPLAY_NAMES",
     "CREWMATE_REPORT_TEMPLATE",
     "DEFAULT_IMPOSTOR_COUNT",
     "DEFAULT_PROMPT_SET",
