@@ -35,8 +35,12 @@ What this module pins:
   untrusted value does not;
 * the replacement body is BRACKETED, the repo's "system text, not model voice"
   shape, so ``eval.vj_instruments._strip_leading_markers`` drops it before a
-  ballot body reaches the §2.5 voice fold. The guard's prose is never measured
-  as the model's;
+  ballot body reaches the §2.5 voice fold -- and because nothing survives that
+  strip, ``eval.vj_instruments.has_model_authored_body`` excludes the ballot
+  from the fold outright. The guard's prose is never measured as the model's;
+* the replacement states the REDIRECT, agreeing with the
+  ``guard_rewrite_reason`` the same rewrite records. It asserts no reason the
+  voter never gave;
 * the redacted body carries zero teammate / self-kill / role phrasing. The
   scan runs on the BODY, not the whole string: the marker legitimately
   contains the word "teammate" (it is the audit channel), and gating its
@@ -63,7 +67,10 @@ import pytest
 from pydantic import BaseModel
 
 from api.replay_loader import _parse_rewrite_reasons  # noqa: PLC2701
-from eval.vj_instruments import _strip_leading_markers  # noqa: PLC2701
+from eval.vj_instruments import (
+    _strip_leading_markers,  # noqa: PLC2701
+    has_model_authored_body,
+)
 from meetings.manager import (
     INVALID_OBSERVATION_ID_MARKER,
     INVALID_REASON_ID_MARKER,
@@ -162,8 +169,9 @@ class TestCoercedRationaleIsRedacted:
         assert coerced.target == "SKIP"
         assert coerced.rationale_text == (
             "[teammate target 'p-5' coerced to SKIP] "
-            "[rationale redacted by the vote guard; "
-            "recorded reason: no confident read this round]"
+            "[rationale redacted by the vote guard; this ballot's target was "
+            "rewritten, so the voter's stated reason no longer describes the "
+            "recorded vote]"
         )
         assert coerced.rationale_text == (
             _marker_for("p-5") + TEAMMATE_COERCED_VOTE_RATIONALE
@@ -457,12 +465,15 @@ class TestMarkerShapedModelTextCannotSurviveTheRedaction:
 class TestRedactedBodyStaysOutOfTheVoiceFold:
     """The guard's prose is system text and must never be measured as a voice.
 
-    ``eval.vj_instruments._normalize_voice`` strips leading ``[...]`` markers
-    and folds whatever remains into the §2.5 echo / skeleton / distinct-n
-    metrics. A parenthesized note (the ``DEFAULT_VOTE_RATIONALE`` shape) would
-    survive that strip and feed the SAME guard-authored sentence into the
-    model-voice diversity figures on every coerced ballot. The bracketed form
-    is dropped with the markers.
+    Two independent properties, and the fold needs BOTH. The bracketed
+    ``[...]`` form is what ``eval.vj_instruments._normalize_voice`` strips, so
+    a parenthesized note (the ``DEFAULT_VOTE_RATIONALE`` shape) would survive
+    the strip and feed the SAME guard-authored sentence into the §2.5 echo /
+    skeleton / distinct-n figures on every coerced ballot. But a stripped body
+    is an EMPTY body, and an empty string clusters and echoes like any other
+    skeleton — so the exclusion itself is enforced by
+    ``eval.vj_instruments.has_model_authored_body``, which drops a ballot with
+    no model-authored body left, and publishes the count it dropped.
     """
 
     def test_the_note_is_bracketed_system_text(self) -> None:
@@ -478,6 +489,42 @@ class TestRedactedBodyStaysOutOfTheVoiceFold:
         )
 
         assert _strip_leading_markers(coerced.rationale_text) == ""
+
+    def test_the_shipped_fold_excludes_a_coerced_ballot(self) -> None:
+        # The property this class used to CLAIM and the code did not deliver:
+        # nothing survives the strip, so the shipped predicate drops the
+        # ballot outright rather than folding an empty skeleton into the
+        # clusters. A voter's own sentence behind the same marker still counts.
+        coerced = coerce_teammate_ballot_to_skip(
+            ballot=_ballot(), fellow_impostor_ids=("p-5",)
+        )
+
+        assert not has_model_authored_body(coerced.rationale_text)
+        assert has_model_authored_body(
+            _marker_for("p-5") + "p-5 never explained the vent."
+        )
+
+    def test_the_note_agrees_with_the_structured_rewrite_label(self) -> None:
+        # Human-readable beside machine-readable: the same ``model_copy``
+        # records WHY the target moved, and the prose says the target moved.
+        # Neither channel is the other's only source.
+        coerced = coerce_teammate_ballot_to_skip(
+            ballot=_ballot(), fellow_impostor_ids=("p-5",)
+        )
+
+        assert coerced.guard_rewrite_reason == "teammate_coerced"
+        assert coerced.guard_redirected_from == "p-5"
+        assert "target was rewritten" in TEAMMATE_COERCED_VOTE_RATIONALE
+
+    def test_the_note_asserts_no_reason_the_voter_never_gave(self) -> None:
+        # It reports the REDIRECT, not a state of mind: a note claiming the
+        # voter had "no confident read" is read as the voter's own account by
+        # everything that renders ``rationale_text``.
+        lowered = TEAMMATE_COERCED_VOTE_RATIONALE.lower()
+
+        assert "no confident read" not in lowered
+        for word in ("impostor", "crewmate", "teammate", "partner", "kill"):
+            assert word not in lowered
 
     def test_it_carries_no_marker_payload_so_registers_no_chip(self) -> None:
         # Bracketed but NOT a marker: no ``{...!r}`` payload, so the display

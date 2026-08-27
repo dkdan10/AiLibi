@@ -691,6 +691,21 @@ Step 8 — before pushing, run `uv run pytest tests/meetings/test_prompt_byte_go
 - `eval.vj_instruments.VJInstrumentReport.guard_authored_ballots_excluded`
 - `eval.vj_instruments.VJMeetingRow.voice_ballots`
 
+**Merge-reality record (2026-08-27, orchestrator-ratified at the #408 merge):** the contract's
+"symbolic throughout, so a value change is absorbed with no edit" claim about
+`eval/deduction_metrics.py` was empirically false — the instrument compares the LIVE
+`TEAMMATE_COERCED_VOTE_RATIONALE` against RECORDED rationales, so the new sentence dropped the
+18 committed redaction rows into the unverifiable bucket. The implementer STOPPED per craft
+rule 6 (a draft PR, not a widened diff), Codex independently converged on the same fix, and the
+orchestrator ruled option (A): the module gains `_LEGACY_TEAMMATE_COERCED_VOTE_RATIONALE` +
+`_TEAMMATE_COERCED_BODIES` (newest-first), both generations verify, a mangled body stays
+unverifiable, and every committed `deduction` cell diffs to nothing on a report-only recompute.
+The legacy literal retires when no committed byte carries the old sentence — 21.15's re-record
+is that moment, and its sweep may delete it then. A second ratified refinement from the Codex
+cap: the transcript parity gate ships as a one-directional subsequence relation (drop and
+reorder fail, addition passes), never whole-string equality, with the relation's own shape
+pinned.
+
 **Ready-to-paste prompt:** `agent_prompts/task-21-2-ballot-render.md`
 
 ### Task 21.3 — The replay stops recording fiction: discarded actions are marked, redirected ballots carry provenance
