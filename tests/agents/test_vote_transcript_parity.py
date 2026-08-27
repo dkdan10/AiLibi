@@ -7,17 +7,25 @@ ballot is where those turns are actually weighed. Nothing keeps the two bodies
 in step except this gate, and without it the ballot render silently narrowed to
 a single ``free_text`` line.
 
-The invariant is one-directional: every turn field the statement render exposes
-must reach the vote render. The two templates legitimately differ elsewhere —
-their empty-transcript lines, their surrounding prose, their evidence blocks —
-so parity is asserted over the TURN BODY only, field by field and line by line,
-never by whole-prompt equality.
+The invariant is ONE-DIRECTIONAL and nothing more: every turn field the
+statement render exposes must reach the vote render. The two templates
+legitimately differ elsewhere — their empty-transcript lines, their surrounding
+prose, their evidence blocks — so parity is asserted over the TURN BODY only,
+field by field, never by whole-string equality.
+
+The two bodies happen to render identically today. That is deliberately NOT
+what is asserted: a gate pinning byte equality would also forbid a future
+vote-only line that drops nothing, which is a legitimate evolution this
+invariant has no business blocking. What is asserted is that the statement's
+body lines all reach the vote body, in order, and that the copied block gained
+no blank line — the Jinja regression the field sweep alone would miss.
 """
 
 from __future__ import annotations
 
 import json
 import shutil
+from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
@@ -167,6 +175,25 @@ def _body_lines(section: str) -> list[str]:
     return [line for line in section.splitlines() if line.strip()]
 
 
+def _is_subsequence(needle: Sequence[str], haystack: Sequence[str]) -> bool:
+    """Whether every element of ``needle`` appears in ``haystack``, in order."""
+
+    remaining = iter(haystack)
+    return all(line in remaining for line in needle)
+
+
+def _turn_block(section: str, turn_id: str) -> list[str]:
+    """One turn's rendered lines: its header through the line before the next."""
+
+    lines = section.splitlines()
+    starts = [i for i, line in enumerate(lines) if line.startswith("- [")]
+    for position, start in enumerate(starts):
+        if lines[start].startswith(f"- [{turn_id}]"):
+            end = starts[position + 1] if position + 1 < len(starts) else len(lines)
+            return lines[start:end]
+    raise AssertionError(f"no rendered turn {turn_id!r} in section")
+
+
 def _turn_fields(turn: MeetingTurn) -> list[str]:
     """Every value a full turn render must put on the page for this turn.
 
@@ -205,6 +232,20 @@ def _turn_fields(turn: MeetingTurn) -> list[str]:
     return fields
 
 
+def test_the_parity_relation_drops_but_does_not_forbid_addition() -> None:
+    """The gate's own shape, pinned: it catches a DROP and permits an ADDITION.
+
+    Asserted because the tolerance is the deliberate half. A stricter relation
+    would pass every test in this file today and silently convert a future
+    vote-only line into a failure.
+    """
+
+    assert not _is_subsequence(["a", "b"], ["a"])  # a dropped line fails
+    assert not _is_subsequence(["a", "b"], ["b", "a"])  # reordering fails
+    assert _is_subsequence(["a", "b"], ["a", "x", "b"])  # a vote-only line is fine
+    assert _is_subsequence(["a", "b"], ["a", "b"])
+
+
 class TestTheVoteRenderMatchesTheStatementRender:
     """The ballot shows the voter everything the table was shown."""
 
@@ -217,23 +258,35 @@ class TestTheVoteRenderMatchesTheStatementRender:
             assert field in spoken, field
             assert field in voted, field
 
-    def test_the_two_turn_bodies_render_line_for_line(self) -> None:
-        # Stronger than the field sweep and the real anti-drift property: a
-        # voter reads ONE register across both prompts, so the turn body is
-        # the same bytes in both.
+    def test_every_statement_body_line_reaches_the_vote_body(self) -> None:
+        # ONE-DIRECTIONAL, deliberately: the vote render may add context of its
+        # own, but it may not DROP a line the table was already shown. Whole-
+        # section equality would also pass today and would additionally forbid
+        # any future vote-only line — an invariant this gate does not need and
+        # should not enforce.
         statement, vote = _renders(_TRANSCRIPT)
+        spoken = _body_lines(_transcript_section(statement))
+        voted = _body_lines(_transcript_section(vote))
 
-        assert _body_lines(_transcript_section(statement)) == _body_lines(
-            _transcript_section(vote)
-        )
+        assert _is_subsequence(spoken, voted), (spoken, voted)
 
-    def test_no_blank_line_the_statement_body_did_not_have(self) -> None:
+    def test_no_blank_line_the_statement_turn_body_did_not_have(self) -> None:
         # Jinja whitespace control is the easy half to get wrong: a block tag
-        # moved onto a content line changes the rendered bytes without
-        # changing a word.
+        # moved onto a content line changes the rendered bytes without changing
+        # a word. Compared PER TURN, so the check stays about the copied block
+        # rather than about the sections' surrounding prose.
         statement, vote = _renders(_TRANSCRIPT)
+        spoken = _transcript_section(statement)
+        voted = _transcript_section(vote)
 
-        assert _transcript_section(statement) == _transcript_section(vote)
+        for turn in _TRANSCRIPT.turns:
+            blanks_spoken = [
+                line for line in _turn_block(spoken, turn.turn_id) if not line.strip()
+            ]
+            blanks_voted = [
+                line for line in _turn_block(voted, turn.turn_id) if not line.strip()
+            ]
+            assert blanks_voted == blanks_spoken, turn.turn_id
 
     def test_the_turn_line_still_opens_with_the_copyable_turn_id(self) -> None:
         # ``primary_reason_id`` is copied VERBATIM off this line, and the
@@ -299,8 +352,9 @@ class TestTheVoteRenderMatchesTheStatementRender:
         assert "walked out of the room the body was in" in missing
         assert "empty_trash" in missing
         assert "I stood beside them the whole window" in missing
-        assert _body_lines(_transcript_section(statement)) != _body_lines(section)
-        assert _transcript_section(statement) != section
+        assert not _is_subsequence(
+            _body_lines(_transcript_section(statement)), _body_lines(section)
+        )
 
 
 def _committed_meeting_transcripts() -> list[tuple[str, MeetingTranscript]]:
@@ -351,7 +405,7 @@ class TestParityOverTheCommittedCorpus:
         spoken = _transcript_section(statement)
         voted = _transcript_section(vote)
 
-        assert _body_lines(spoken) == _body_lines(voted), meeting_id
+        assert _is_subsequence(_body_lines(spoken), _body_lines(voted)), meeting_id
         for turn in transcript.turns:
             for field in _turn_fields(turn):
                 assert field in voted, (meeting_id, turn.turn_id, field)

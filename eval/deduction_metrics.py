@@ -823,24 +823,25 @@ class _RationaleSplit(BaseModel):
     verified: bool
 
 
-# The pre-#408 teammate redaction body. Committed recordings carry it; the
-# live constant supersedes it for everything recorded since.
+# The redaction body the committed recordings carry. Kept so this module can
+# decode a recording made before the teammate note was reworded; the live
+# constant is what every recording since carries.
 _LEGACY_TEAMMATE_COERCED_VOTE_RATIONALE: Final[str] = (
     "[rationale redacted by the vote guard; recorded reason: "
     "no confident read this round]"
 )
 
 # Every redaction body the teammate firewall has written, newest first. A
-# recorded rationale is guard-authored when it ends with ANY of them: this
-# module reads FROZEN bytes, so recognising only the live value would read a
-# past recording through today's vocabulary and file 18 well-understood
-# redactions as unverifiable — the exact silent under-count the accountability
-# rule below exists to prevent. An unrecognised body still falls through to
+# recorded rationale is guard-authored when it ends with ANY of them, because
+# this module reads FROZEN bytes: recognising only the live value would read a
+# past recording through today's vocabulary and file its well-understood
+# redactions as unverifiable — the silent under-count the accountability rule
+# below exists to prevent. An unrecognised body still falls through to
 # unverifiable, so a genuinely new writer-side body surfaces rather than
 # passing.
 #
-# Retire at 21.15's re-record: those bytes carry only the live constant, at
-# which point the legacy entry is dead and that task's sweep may delete it.
+# Entries retire when no committed recording carries them: 21.15's re-record
+# leaves only the live constant, so its sweep may drop the legacy entry.
 _TEAMMATE_COERCED_BODIES: Final[tuple[str, ...]] = (
     TEAMMATE_COERCED_VOTE_RATIONALE,
     _LEGACY_TEAMMATE_COERCED_VOTE_RATIONALE,
