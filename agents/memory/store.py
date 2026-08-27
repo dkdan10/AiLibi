@@ -965,13 +965,13 @@ def _collect_movement_breadcrumbs(
     recent ORDINARY sighting, so exactly one line per moving subject carries a
     suffix and the vent / kill lines stay clean (they are witnessed events with
     their own high-salience rendering, and :func:`_render_saw_player` returns them
-    before any suffix is computed). Which rows may supply the PRIOR room is gated:
-    ordinary rows always, and behind the last-seen repair gate
-    (:func:`last_seen_from_sightings_enabled`) vent / kill rows too, restricted to
-    ticks at or before the anchor. A witnessed vent is the strongest placement
-    evidence a game produces; dropping it from the path under-reports the subject
-    as last seen in that room at an EARLIER tick than the render itself states one
-    line above.
+    before any suffix is computed). The PRIOR room is the subject's most recent
+    different-room row at or before that anchor -- ordinary rows always, and
+    behind the last-seen repair gate (:func:`last_seen_from_sightings_enabled`)
+    vent / kill rows too. A witnessed vent is the strongest placement evidence a
+    game produces; dropping it from the path under-reports the subject as last
+    seen in that room at an EARLIER tick than the render itself states one line
+    above.
 
     The SAME §4.7 suppressions the renderer applies are mirrored here
     (self-subject, teammate kill-window), so a suppressed sighting never
@@ -979,7 +979,7 @@ def _collect_movement_breadcrumbs(
     breadcrumb.
     """
 
-    fold_active_rows = last_seen_from_sightings_enabled()
+    fold_vent_and_kill_rows = last_seen_from_sightings_enabled()
     # ``(tick, room, is_ordinary)``: the flag separates anchor candidates (ordinary
     # only) from prior-room candidates (all recorded rows).
     paths: dict[str, list[tuple[int, str, bool]]] = {}
@@ -993,7 +993,7 @@ def _collect_movement_breadcrumbs(
         action = event.payload.get("action")
         action_str = action if isinstance(action, str) else None
         is_ordinary = action_str not in ("vent", "kill")
-        if not is_ordinary and not fold_active_rows:
+        if not is_ordinary and not fold_vent_and_kill_rows:
             continue
         if _sighting_is_suppressed(
             player_id=player_id,
