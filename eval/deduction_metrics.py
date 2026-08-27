@@ -823,6 +823,30 @@ class _RationaleSplit(BaseModel):
     verified: bool
 
 
+# The pre-#408 teammate redaction body. Committed recordings carry it; the
+# live constant supersedes it for everything recorded since.
+_LEGACY_TEAMMATE_COERCED_VOTE_RATIONALE: Final[str] = (
+    "[rationale redacted by the vote guard; recorded reason: "
+    "no confident read this round]"
+)
+
+# Every redaction body the teammate firewall has written, newest first. A
+# recorded rationale is guard-authored when it ends with ANY of them: this
+# module reads FROZEN bytes, so recognising only the live value would read a
+# past recording through today's vocabulary and file 18 well-understood
+# redactions as unverifiable — the exact silent under-count the accountability
+# rule below exists to prevent. An unrecognised body still falls through to
+# unverifiable, so a genuinely new writer-side body surfaces rather than
+# passing.
+#
+# Retire at 21.15's re-record: those bytes carry only the live constant, at
+# which point the legacy entry is dead and that task's sweep may delete it.
+_TEAMMATE_COERCED_BODIES: Final[tuple[str, ...]] = (
+    TEAMMATE_COERCED_VOTE_RATIONALE,
+    _LEGACY_TEAMMATE_COERCED_VOTE_RATIONALE,
+)
+
+
 def _split_rationale(rationale: str, model_body: str | None) -> _RationaleSplit:
     """Cut a recorded rationale along its provenance boundary (see the class)."""
 
@@ -875,8 +899,11 @@ def _split_rationale(rationale: str, model_body: str | None) -> _RationaleSplit:
             model_body=model_body,
             verified=True,
         )
-    if rationale.endswith(TEAMMATE_COERCED_VOTE_RATIONALE):
-        cut = len(rationale) - len(TEAMMATE_COERCED_VOTE_RATIONALE)
+    coerced_body = next(
+        (body for body in _TEAMMATE_COERCED_BODIES if rationale.endswith(body)), None
+    )
+    if coerced_body is not None:
+        cut = len(rationale) - len(coerced_body)
         prefix = rationale[:cut]
         # Same accountability rule as the suffix branch above, for the same
         # reason: an unregistered leading marker stops the walk early, so the
@@ -892,7 +919,7 @@ def _split_rationale(rationale: str, model_body: str | None) -> _RationaleSplit:
             )
         return _RationaleSplit(
             marker_region=prefix,
-            body_region=TEAMMATE_COERCED_VOTE_RATIONALE,
+            body_region=coerced_body,
             model_body=model_body,
             verified=True,
         )

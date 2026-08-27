@@ -699,6 +699,17 @@ def has_model_authored_body(rationale: str) -> bool:
     OPENING with a guard marker. A marked ballot that still carries the
     voter's own sentence has a real voice to measure; only a ballot with no
     model-authored body left has none.
+
+    Bound to :func:`_normalize_voice` by construction: both read the same
+    :func:`_strip_leading_markers`, so this returns ``True`` for exactly the
+    ballots that produce a non-empty skeleton. That coupling is the point — a
+    stricter, provenance-based predicate would KEEP a body the normalizer
+    still strips to ``""`` and put an empty skeleton back into the clusters,
+    which is the defect this exclusion removes. The corollary is that the
+    §2.5 recipe cannot tell a bracket-only MODEL body from guard prose; it
+    strips both. No committed ballot has that shape (0 of 171 bracket-opening
+    ballots across the four sets), and the fix belongs to the normalization
+    recipe, not here — moving it would re-price every voice cell.
     """
 
     return bool(_strip_leading_markers(rationale).strip())

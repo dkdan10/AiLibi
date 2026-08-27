@@ -325,6 +325,30 @@ def test_has_model_authored_body_reads_what_survives_the_strip() -> None:
     assert has_model_authored_body("p-5 never explained the vent.")
 
 
+def test_the_predicate_keeps_exactly_the_non_empty_skeletons() -> None:
+    # The coherence invariant the exclusion rests on: the predicate and the
+    # skeleton normalizer read the SAME strip, so the fold keeps a ballot iff
+    # that ballot contributes a skeleton. A stricter, provenance-based
+    # predicate would keep a body the normalizer still flattens to "" and put
+    # an empty skeleton back into the clusters — the defect being removed.
+    coerced = TEAMMATE_VOTE_TARGET_MARKER.format(target="p-5")
+    for text in (
+        "p-5 never explained the vent.",
+        coerced + "p-5 never explained the vent.",
+        coerced + TEAMMATE_COERCED_VOTE_RATIONALE,
+        "",
+        "   ",
+        "[note] [another]",
+        # A bracket-only MODEL body stripped like guard prose: the §2.5 recipe
+        # cannot tell them apart, so predicate and normalizer must at least
+        # agree about it. No committed ballot carries this shape.
+        "[I saw p-3 vent]",
+    ):
+        assert has_model_authored_body(text) == bool(
+            _normalize_voice(text, _ROOM_RE)
+        ), text
+
+
 def test_meeting_echo_moves_on_identical_ballots() -> None:
     echoed, distinct = _meeting_echo(
         [
