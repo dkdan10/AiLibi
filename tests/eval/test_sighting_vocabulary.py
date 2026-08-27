@@ -17,7 +17,7 @@ sixth cannot appear without failing here.
 from __future__ import annotations
 
 import ast
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from pathlib import Path
 from typing import Final
 
@@ -70,16 +70,75 @@ _ALLOW_LIST: Final[dict[str, str]] = {
 }
 
 
-def _isinstance_type_names(node: ast.Call) -> frozenset[str]:
-    """The type names one ``isinstance(x, T)`` / ``isinstance(x, (A, B))`` names."""
+def _type_alias_map(tree: ast.Module) -> dict[str, frozenset[str]]:
+    """Module-level ``NAME = (A, B)`` bindings, so a tuple alias cannot hide a check.
+
+    Without this an author could move the type tuple into a constant and the
+    walk would see a bare name it does not recognise — a narrow site that reports
+    clean. Only module-level bindings are resolved; a locally-built tuple is
+    still visible as its literal at the call site.
+    """
+
+    aliases: dict[str, frozenset[str]] = {}
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            targets = node.targets
+            value = node.value
+        elif isinstance(node, ast.AnnAssign) and node.value is not None:
+            targets = [node.target]
+            value = node.value
+        else:
+            continue
+        # ``frozenset({A, B})`` / ``tuple((A, B))`` — read the single argument.
+        if isinstance(value, ast.Call) and len(value.args) == 1:
+            value = value.args[0]
+        if not isinstance(value, (ast.Tuple, ast.List, ast.Set)):
+            continue
+        names = _names_in(value)
+        if not names:
+            continue
+        for target in targets:
+            if isinstance(target, ast.Name):
+                aliases[target.id] = names
+    return aliases
+
+
+def _names_in(node: ast.expr) -> frozenset[str]:
+    """Every type NAME an expression mentions, unqualified.
+
+    ``ast.Name`` yields its id; ``ast.Attribute`` yields its TAIL, so
+    ``schemas.SawPlayerObservation`` reads as ``SawPlayerObservation`` and a
+    qualified import cannot slip a narrow check past the walk. A tuple/list/set
+    recurses.
+    """
+
+    if isinstance(node, ast.Name):
+        return frozenset({node.id})
+    if isinstance(node, ast.Attribute):
+        return frozenset({node.attr})
+    if isinstance(node, (ast.Tuple, ast.List, ast.Set)):
+        return frozenset().union(*(_names_in(elt) for elt in node.elts)) or frozenset()
+    return frozenset()
+
+
+def _isinstance_type_names(
+    node: ast.Call, aliases: Mapping[str, frozenset[str]]
+) -> frozenset[str]:
+    """The type names one ``isinstance(x, T)`` / ``isinstance(x, (A, B))`` names.
+
+    Qualified names resolve to their tail and a module-level tuple alias expands
+    to its members, so neither spelling can hide a narrow check.
+    """
 
     if not isinstance(node.func, ast.Name) or node.func.id != "isinstance":
         return frozenset()
     if len(node.args) != 2:
         return frozenset()
-    checked = node.args[1]
-    entries = checked.elts if isinstance(checked, ast.Tuple) else [checked]
-    return frozenset(entry.id for entry in entries if isinstance(entry, ast.Name))
+    names = _names_in(node.args[1])
+    expanded: set[str] = set()
+    for name in names:
+        expanded |= aliases.get(name, frozenset({name}))
+    return frozenset(expanded)
 
 
 def _narrow_sighting_sites(tree: ast.Module, label: str) -> Iterator[str]:
@@ -92,6 +151,7 @@ def _narrow_sighting_sites(tree: ast.Module, label: str) -> Iterator[str]:
     that already names ``SawMoveObservation``.
     """
 
+    aliases = _type_alias_map(tree)
     for node in ast.walk(tree):
         if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
@@ -100,7 +160,7 @@ def _narrow_sighting_sites(tree: ast.Module, label: str) -> Iterator[str]:
         for inner in ast.walk(node):
             if not isinstance(inner, ast.Call):
                 continue
-            names = _isinstance_type_names(inner)
+            names = _isinstance_type_names(inner, aliases)
             if _PLACEMENT_TYPE in names and _MOVEMENT_TYPE not in names:
                 yield f"{label}::{node.name}"
                 break
@@ -144,14 +204,22 @@ def test_the_allow_list_has_exactly_five_entries_each_with_a_reason() -> None:
 
 
 def test_the_walk_bites_on_a_planted_new_site(tmp_path: Path) -> None:
-    """PLANTED: a sixth narrow site is found, and the two shapes outside are not.
+    """PLANTED: every narrow spelling is found, and the shapes outside are not.
 
-    Proves the predicate is the one B-9 states — a vent-only check and a check
-    that already names the movement type are NOT narrow, so they are outside the
-    walk rather than quietly allow-listed.
+    Four ways to write a narrow check — bare, tuple, QUALIFIED
+    (``schemas.SawPlayerObservation``) and via a module-level tuple ALIAS — all
+    bite, because a walk that only reads bare ``ast.Name`` entries would report
+    clean on the last two while the predicate they express is exactly the one
+    B-9 is about. And a vent-only check and a check that already names the
+    movement type are NOT narrow, so they stay outside the walk rather than
+    being quietly allow-listed.
     """
 
     source = """
+_NARROW_TYPES = (SawPlayerObservation, FoundBodyObservation)
+_WIDE_TYPES = (SawPlayerObservation, SawMoveObservation)
+
+
 def _planted_narrow(turn):
     return any(isinstance(obs, SawPlayerObservation) for obs in turn.observations)
 
@@ -163,6 +231,20 @@ def _planted_narrow_tuple(turn):
     )
 
 
+def _planted_narrow_qualified(turn):
+    return any(
+        isinstance(obs, schemas.SawPlayerObservation) for obs in turn.observations
+    )
+
+
+def _planted_narrow_via_alias(turn):
+    return any(isinstance(obs, _NARROW_TYPES) for obs in turn.observations)
+
+
+def _planted_wide_via_alias(turn):
+    return any(isinstance(obs, _WIDE_TYPES) for obs in turn.observations)
+
+
 def _planted_vent_only(turn):
     return any(isinstance(obs, SawVentObservation) for obs in turn.observations)
 
@@ -170,6 +252,13 @@ def _planted_vent_only(turn):
 def _planted_already_wide(turn):
     return any(
         isinstance(obs, (SawPlayerObservation, SawMoveObservation))
+        for obs in turn.observations
+    )
+
+
+def _planted_already_wide_qualified(turn):
+    return any(
+        isinstance(obs, (schemas.SawPlayerObservation, schemas.SawMoveObservation))
         for obs in turn.observations
     )
 
@@ -184,6 +273,8 @@ def sighting_placement(artifact):
     assert found == {
         "planted.py::_planted_narrow",
         "planted.py::_planted_narrow_tuple",
+        "planted.py::_planted_narrow_qualified",
+        "planted.py::_planted_narrow_via_alias",
     }
 
 

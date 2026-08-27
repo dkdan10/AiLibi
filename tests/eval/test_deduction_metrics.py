@@ -2292,6 +2292,11 @@ _ORACLE_IN_FICTION_CONTROLS: Final[tuple[str, ...]] = (
     "I was busy tending to the engines in Engineering",
     "aligning engine output in Engineering",
     "down in the engine room",
+    # The POSSESSIVE forms of the same two in-fiction nouns. An exclusion that
+    # stops at the bare noun lets these through while their non-possessive
+    # twins above are refused, which is the leak this pair pins shut.
+    "The engine's output confirms nominal power.",
+    "The engine's room report says the core is stable.",
 )
 
 

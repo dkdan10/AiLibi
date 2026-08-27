@@ -566,9 +566,12 @@ _ORACLE_IN_FICTION: Final[str] = r"room|output|bay|core"
 # A machinery ACTOR: the game's own scoring apparatus named as an agent. The
 # ``\b`` after ``engine`` is load-bearing — it keeps "Engineering" (the ship's
 # wing) and "the engines" (its machinery) out, which is most of the excess a
-# substring net returns.
+# substring net returns. The exclusion spans an optional possessive, so "the
+# engine's output" is refused exactly like "the engine output"; leaving the
+# possessive to a later group would let it walk past the lookahead.
 _ORACLE_ACTOR: Final[str] = (
-    rf"the\s+(?:engine\b(?!\s+(?:{_ORACLE_IN_FICTION}))|system\b|detector\b)"
+    rf"the\s+(?:engine\b(?!(?:'s|’s)?\s+(?:{_ORACLE_IN_FICTION}))"
+    r"|system\b|detector\b)"
 )
 # A VERDICT act: the apparatus deciding, certifying or announcing a fact.
 _ORACLE_VERDICT: Final[str] = (

@@ -45,26 +45,38 @@ rate). A game with no accusations, no meetings, or all-``SKIP`` ballots yields
 all-empty bins and a ``None`` calibration error without raising.
 
 **The accuser-role split, and the ceiling it exposes.** ``accusation_claim_*``
-pools every accuser, and on both roster shapes an IMPOSTOR accuser sits under a
-structural ceiling that no amount of calibration can lift, so the pooled curve
-reads a fact about the machinery as agent overconfidence.
+pools every accuser, but an IMPOSTOR accuser is scored against a target set the
+machinery has already narrowed, so the pooled curve reads a fact about the
+roster as agent overconfidence. A hit needs ``roles[against] == "IMPOSTOR"``, so
+only a fellow impostor or the accuser THEMSELVES can score:
 
-* On a 2-impostor roster the only target that scores as a hit is the accuser's
-  teammate, and the teammate firewall deletes exactly that accusation at the
-  per-turn chokepoint (``meetings.manager._guard_teammate_turn_claims`` and
-  ``exclude_teammate_vent_observations``). So every impostor accusation that
-  survives to the record names a crewmate and misses by construction.
-* On a 1-impostor roster the roster itself is the ceiling: the sole impostor's
-  only scoring-correct target is themselves, and a self-accusation is not a
-  lawful accusation. The firewall never runs on this shape.
+* On a 2-impostor roster the teammate is the one other scoring-correct target,
+  and the teammate firewall deletes exactly that accusation at the per-turn
+  chokepoint (``meetings.manager._guard_teammate_turn_claims`` and
+  ``exclude_teammate_vent_observations``). Every impostor accusation of ANOTHER
+  player that survives to the record therefore names a crewmate and misses by
+  construction.
+* On a 1-impostor roster there is no teammate to begin with, so the roster
+  itself does the narrowing and the firewall never runs.
+
+What is left on both shapes is the SELF-accusation, and it is a real recordable
+shape rather than an impossible one: the firewall drops only OTHER impostors
+(``fellow_impostor_ids`` excludes self), a self-accusation scores as a hit under
+the rule above, and a prior baseline's prompts produced a few
+(``tests/eval/test_validity.py::test_betrayal_ignores_impostor_self_accusation_and_self_vote``).
+So the 0-hit reading on the committed sets is STRUCTURAL on the teammate channel
+and CORPUS-SPECIFIC on the self channel — no impostor on these bytes accused
+themselves — and a future record could move it without the instrument changing.
 
 ``accusation_claim_crew_accuser`` and ``accusation_claim_impostor_accuser``
-therefore ship beside the pooled curve as a PARTITION of it (their totals sum to
-``accusation_claim_total``), so a reader can price the artifact instead of
-absorbing it. On the committed sets the impostor curves hit zero on all four,
-and the crew-only curve still falls with confidence by itself — the mid-range
-inversion is roughly a fifth attributable to the impostor block, and the pooled
-accusation base rate is about 0.50 on the 9p2i corpus, not a low chance prior.
+ship beside the pooled curve as a PARTITION of it (their totals sum to
+``accusation_claim_total``), so a reader can price that narrowing instead of
+absorbing it. Self-accusations are deliberately NOT filtered out of either
+curve: removing them would break the partition and move the pooled cells.
+On the committed sets the impostor curves hit zero on all four, and the
+crew-only curve still falls with confidence by itself — the mid-range inversion
+is roughly a fifth attributable to the impostor block, and the pooled accusation
+base rate is about 0.50 on the 9p2i corpus, not a low chance prior.
 
 **Guard-authored ballots are excluded.** A ballot whose recorded rationale opens
 with one of the six audit markers the meeting layer prepends carries a target
@@ -252,9 +264,11 @@ class AccusationCalibrationReport(_FrozenModel):
     ``accusation_claim_crew_accuser`` / ``accusation_claim_impostor_accuser``
     are the same claim curve conditioned on the ACCUSER's true role — a
     partition of the pooled one, validated to sum to
-    ``accusation_claim_total`` — because an impostor accuser's hit rate is
-    ceilinged by the roster and the teammate firewall rather than by
-    calibration (see the module docstring).
+    ``accusation_claim_total`` — because an impostor accuser's scoring-correct
+    target set is narrowed by the roster and the teammate firewall before
+    calibration is measured at all (see the module docstring, including which
+    half of the committed 0-hit reading is structural and which is
+    corpus-specific).
     ``vote_ballot_guard_authored_excluded`` counts the ballots left out of the
     vote curve because the meeting layer, not the voter, authored their target.
     """

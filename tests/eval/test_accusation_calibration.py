@@ -716,15 +716,19 @@ def _committed_calibration(sample_dir: str) -> AccusationCalibrationReport:
 
 @pytest.mark.parametrize("sample_dir", sorted(_COMMITTED_SPLIT))
 def test_committed_sets_pin_the_accuser_role_split(sample_dir: str) -> None:
-    """The role-conditioned curves on the committed bytes, with their ceiling.
+    """The role-conditioned curves on the committed bytes, and what they mean.
 
     The pooled curve is UNMOVED by the split — same ece, same total — and the
     two conditioned curves partition it. The impostor curve hits ZERO on every
-    set: on 9p2i the teammate firewall deletes the impostor's only
-    scoring-correct target, and on 4p1i the roster does (the sole impostor
-    cannot lawfully accuse themselves). So its ece is essentially its mean
-    stated confidence, and reading the pooled number as agent overconfidence
-    prices that ceiling as a behaviour.
+    set, and the reading is two-part: on 9p2i the teammate firewall deletes the
+    accusation of the one other scoring-correct target, and on 4p1i there is no
+    teammate at all, which is STRUCTURAL; the remaining scoring-correct target
+    on both shapes is a SELF-accusation, which is recordable and would score, so
+    its absence here is a fact about this corpus (see
+    ``test_a_self_accusation_by_an_impostor_does_score_as_a_hit``). So the
+    impostor curve's ece is essentially its mean stated confidence, and reading
+    the pooled number as agent overconfidence prices that narrowing as a
+    behaviour.
     """
 
     result = _committed_calibration(sample_dir)
@@ -741,6 +745,67 @@ def test_committed_sets_pin_the_accuser_role_split(sample_dir: str) -> None:
     # The ceiling itself: not one impostor accusation on the record scores.
     assert sum(b.impostor_hits for b in impostor.bins) == 0
     assert all(b.actual_impostor_rate == 0.0 for b in impostor.bins if b.count > 0)
+
+
+def test_a_self_accusation_by_an_impostor_does_score_as_a_hit() -> None:
+    """PLANTED: the impostor curve's zero is not an arithmetic impossibility.
+
+    A hit is ``roles[against] == "IMPOSTOR"``, and the teammate firewall drops
+    only OTHER impostors, so an impostor accusing THEMSELVES is both recordable
+    and scoring — a prior baseline's prompts produced a few
+    (``tests/eval/test_validity.py::
+    test_betrayal_ignores_impostor_self_accusation_and_self_vote``). This pins
+    that the committed 0-hit reading is a fact about the corpus on that channel
+    rather than a property of the instrument, so the docstrings may not call the
+    whole ceiling structural.
+
+    Self-accusations stay IN both conditioned curves: filtering them would break
+    the partition and move the pooled cells.
+    """
+
+    roles: Mapping[PlayerId, Role] = {"p-0": "CREWMATE", "p-3": "IMPOSTOR"}
+    transcript = MeetingTranscript(
+        turns=(
+            MeetingTurn(
+                turn_id="m-0:turn-0",
+                turn_index=0,
+                speaker="p-3",
+                turn_kind="opening",
+                reply_to=None,
+                observations=(),
+                claims=(_acc("p-3", 0.95),),
+                free_text="",
+            ),
+        ),
+    )
+    meeting = MeetingReport(
+        meeting_id="m-0",
+        tick=10,
+        triggered_by="p-0",
+        trigger="report",
+        outcome="SKIPPED",
+        ejected_player_id=None,
+        transcript=transcript,
+        ballots=(),
+        contradictions=(),
+        llm_calls=(),
+    )
+    result = compute_accusation_calibration(
+        _tournament(_game(game_id="g", roles=roles, meetings=(meeting,)))
+    )
+
+    impostor = result.accusation_claim_impostor_accuser
+    assert impostor.total == 1
+    assert result.accusation_claim_crew_accuser.total == 0
+    # The hit the committed corpus never produced.
+    assert sum(b.impostor_hits for b in impostor.bins) == 1
+    assert impostor.bins[9].impostor_hits == 1
+    # ...and the partition still holds with it in.
+    assert (
+        result.accusation_claim_crew_accuser.total + impostor.total
+        == result.accusation_claim_total
+        == 1
+    )
 
 
 def test_the_4p1i_impostor_curves_are_honestly_low_power() -> None:
