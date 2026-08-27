@@ -36,7 +36,7 @@ from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Final, Literal
+from typing import Any, Final, Literal, get_args
 
 from fastapi import HTTPException, Query, Request
 from pydantic import TypeAdapter
@@ -138,6 +138,7 @@ from meetings.manager import (
 from meetings.schemas import (
     AccusationClaim,
     AlibiClaim,
+    BallotTargetRewriteReason,
     Claim,
     CompletedTaskObservation,
     ContradictionRef,
@@ -165,6 +166,7 @@ from orchestrator.game import (
 from orchestrator.replay import (
     SUBSTRATE_FLAG_KEYS,
     TOGGLEABLE_SUBSTRATE_FLAG_KEYS,
+    ActionDisposition,
     FailedCallReplayEntry,
     GameEndReplayEntry,
     LLMCallRecord,
@@ -247,17 +249,14 @@ _FINALE_EVENT_ORDER: Final[Mapping[str, int]] = {
 # normalized, or wholly defaulted it — so the finale recap must not present it
 # as evidence of what the voter believed (Task 19.10 review; the committed 9p2i
 # seed 22 carries an ``under_gate_redirect`` whose rationale explicitly opposes
-# the tallied target). The two citation-only labels (``invalid_reason_id``,
-# ``invalid_observation_id``) null a reference but leave the authored target
-# intact, so they are deliberately NOT in this set.
+# the tallied target). DERIVED from
+# ``meetings.schemas.BallotTargetRewriteReason``, the same union a recording
+# stamps on ``VoteBallot.guard_rewrite_reason``, so the display class and the
+# recorded class cannot drift apart. The two citation-only labels
+# (``invalid_reason_id``, ``invalid_observation_id``) null a reference but leave
+# the authored target intact, so they are deliberately not in that union.
 _TARGET_REWRITE_LABELS: Final[frozenset[str]] = frozenset(
-    {
-        "parse_default",
-        "invalid_target",
-        "teammate_coerced",
-        "under_gate_redirect",
-        "uncited_coerced",
-    }
+    get_args(BallotTargetRewriteReason)
 )
 
 # Per-set roster descriptor (Task 7.4; DESIGN.md §11.4). A committed sample set
@@ -1264,6 +1263,7 @@ class ReplayLoader:
                         meeting_id,
                         tick_visibility,
                         actions=actions,
+                        action_dispositions=entry.action_dispositions,
                         fixed_tasks_required_total=fixed_tasks_required_total,
                     )
                 )
@@ -1506,12 +1506,15 @@ class ReplayLoader:
         visibility_by_agent: Mapping[str, AgentVisibilityView] | None = None,
         *,
         actions: Sequence[Action],
+        action_dispositions: Sequence[ActionDisposition] | None = None,
         fixed_tasks_required_total: int,
     ) -> TickView:
         # ``actions`` is this tick's recorded intents; with ``events`` it says what
         # each agent TRIED and whether the engine carried it out, which is what
         # ``current_action`` reports (see :func:`_current_action`).
-        intents = _tick_intents(actions, events)
+        # ``action_dispositions`` is the row's own answer where a recording
+        # carries one; ``None`` falls back to re-deriving it from ``events``.
+        intents = _tick_intents(actions, events, action_dispositions)
         agent_states = tuple(
             self._agent_tick_state(state, pid, visibility_by_agent, intents)
             for pid in sorted(state.players)
@@ -2338,9 +2341,19 @@ class _TickIntents:
 
 
 def _tick_intents(
-    actions: Sequence[Action], events: Sequence[EngineEvent]
+    actions: Sequence[Action],
+    events: Sequence[EngineEvent],
+    dispositions: Sequence[ActionDisposition] | None = None,
 ) -> _TickIntents:
-    """Index one tick's recorded intents against the events they produced."""
+    """Index one tick's recorded intents against the events they produced.
+
+    ``dispositions`` is the row's recorded ``action_dispositions`` when it
+    carries them; the meeting cutoff is then READ rather than re-derived. Both
+    paths land on the same set — the recorded tuple is written by the same
+    actor-index rule this function has run since Phase 12
+    (:func:`orchestrator.replay.classify_action_dispositions`) — so the served
+    ``current_action`` labels do not move with the migration.
+    """
 
     index_by_actor = {action.actor: i for i, action in enumerate(actions)}
     rejected = frozenset(
@@ -2351,11 +2364,18 @@ def _tick_intents(
     # A meeting cuts the tick off at the triggering actor's own action: nothing
     # positioned after it in the recorded list was attempted (engine/tick.py's
     # early return), so those actors emitted no event at all.
-    for event in events:
-        if isinstance(event, MeetingTriggeredEvent):
-            cutoff = index_by_actor.get(event.actor)
-            if cutoff is not None:
-                preempted.update(action.actor for action in actions[cutoff + 1 :])
+    if dispositions is not None:
+        preempted.update(
+            action.actor
+            for action, disposition in zip(actions, dispositions, strict=True)
+            if disposition == "discarded_by_meeting"
+        )
+    else:
+        for event in events:
+            if isinstance(event, MeetingTriggeredEvent):
+                cutoff = index_by_actor.get(event.actor)
+                if cutoff is not None:
+                    preempted.update(action.actor for action in actions[cutoff + 1 :])
     # A victim killed earlier in the same tick is dead by the time its own action
     # is reached, so the rejection says nothing about what it tried to do.
     for event in events:

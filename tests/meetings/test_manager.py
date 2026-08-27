@@ -28,7 +28,7 @@ is also exercised to confirm Protocol compatibility + determinism.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
@@ -76,6 +76,7 @@ from meetings.manager import (
     OPENING_UNSURE_MARKER,
     OPENING_UNSURE_MAX_FREE_TEXT_CHARS,
     TEAMMATE_VOTE_TARGET_MARKER,
+    UNCITED_ZERO_FLAG_EJECT_MARKER,
     VOTE_PARSE_DEFAULT_MARKER,
     LLMProviderError,
     MeetingBeliefEvidence,
@@ -89,13 +90,16 @@ from meetings.manager import (
     _drop_non_roster_claims,  # noqa: PLC2701
     _opening_takes_position,  # noqa: PLC2701
     _normalize_self_alibi_subjects,  # noqa: PLC2701
+    _normalize_ballot_target,  # noqa: PLC2701
     _suspicion_graph_with_contradictions,  # noqa: PLC2701
     _trigger_is_emergency,  # noqa: PLC2701
+    _vote_parse_default,  # noqa: PLC2701
     coerce_teammate_ballot_to_skip,
     derive_belief_evidence,
     drop_teammate_statement_target,
     exclude_teammate_accusation_claims,
     extract_belief_evidence,
+    guard_ballot_citation,
     guard_ballot_target_graph,
 )
 from meetings.schemas import (
@@ -3903,13 +3907,26 @@ class TestDetectorCorroborationFold:
 import json  # noqa: E402
 import re  # noqa: E402
 
+from api.replay_loader import (  # noqa: E402, PLC2701
+    _TARGET_REWRITE_LABELS,
+    _parse_rewrite_reasons,
+)
+from meetings.voting import normalize_ballot_target  # noqa: E402
 from orchestrator.replay import (  # noqa: E402
     MeetingReplayEntry,
     read_all_entries,
+    read_meeting_entries,
 )
 
 _COMMITTED_9P2I_DIR = (
     Path(__file__).resolve().parents[2] / "replays" / "samples" / "9p2i"
+)
+
+# All four committed sets, for the ballot-wide assertions.
+_COMMITTED_BALLOT_SET_DIRS: tuple[Path, ...] = tuple(
+    Path(__file__).resolve().parents[2] / "replays" / corpus / roster
+    for corpus in ("samples", "ml_corpus")
+    for roster in ("9p2i", "4p1i")
 )
 
 # The committed vote_ballot.j2 renders the voter's suspicion graph as
@@ -7791,3 +7808,369 @@ def _rendered_transcript_surfaces(turns: tuple[MeetingTurn, ...]) -> list[str]:
         )
     )
     return surfaces
+
+
+# --------------------------------------------------------------------------- #
+# Typed ballot-rewrite provenance                                              #
+# --------------------------------------------------------------------------- #
+
+
+class TestBallotRewriteProvenanceSites:
+    """Each target-rewriting site records WHO the voter named and WHY it moved."""
+
+    _CANDIDATES = ("p-2", "p-3", "p-4", "p-5")
+
+    def test_under_gate_redirect_records_the_authored_target(self) -> None:
+        guarded = guard_ballot_target_graph(
+            ballot=_guard_ballot(voter="p-1", target="p-4"),
+            voter_id="p-1",
+            suspicion_graph=_graph(("p-2", 0.75), ("p-4", 0.30)),
+            candidate_targets=self._CANDIDATES,
+            skip_confidence_threshold=0.6,
+        )
+
+        assert guarded.target == "p-2"
+        assert guarded.guard_redirected_from == "p-4"
+        assert guarded.guard_rewrite_reason == "under_gate_redirect"
+
+    def test_the_redirect_guards_skip_branch_records_it_too(self) -> None:
+        guarded = guard_ballot_target_graph(
+            ballot=_guard_ballot(voter="p-1", target="p-3"),
+            voter_id="p-1",
+            suspicion_graph=_graph(("p-5", 0.90), ("p-3", 0.40)),
+            candidate_targets=self._CANDIDATES,
+            skip_confidence_threshold=0.6,
+            fellow_impostor_ids=("p-5",),
+        )
+
+        assert guarded.target == "SKIP"
+        assert guarded.guard_redirected_from == "p-3"
+        assert guarded.guard_rewrite_reason == "under_gate_redirect"
+
+    def test_teammate_coercion_records_the_teammate_it_refused(self) -> None:
+        coerced = coerce_teammate_ballot_to_skip(
+            ballot=_guard_ballot(voter="p-1", target="p-5"),
+            fellow_impostor_ids=("p-5",),
+        )
+
+        assert coerced.target == "SKIP"
+        assert coerced.guard_redirected_from == "p-5"
+        assert coerced.guard_rewrite_reason == "teammate_coerced"
+
+    def test_citation_gate_records_the_uncited_target(self) -> None:
+        coerced = guard_ballot_citation(
+            ballot=_guard_ballot(voter="p-1", target="p-4"), contradictions=()
+        )
+
+        assert coerced.target == "SKIP"
+        assert coerced.guard_redirected_from == "p-4"
+        assert coerced.guard_rewrite_reason == "uncited_coerced"
+
+    def test_invalid_target_normalization_records_the_hallucinated_id(self) -> None:
+        normalized = _normalize_ballot_target(
+            ballot=_guard_ballot(voter="p-1", target="p-99"),
+            candidate_targets=self._CANDIDATES,
+        )
+
+        assert normalized.target == "SKIP"
+        assert normalized.guard_redirected_from == "p-99"
+        assert normalized.guard_rewrite_reason == "invalid_target"
+
+    def test_the_canonical_normalizer_records_the_identical_pair(self) -> None:
+        # meetings.voting's twin and the manager's private copy must not drift.
+        ballot = _guard_ballot(voter="p-1", target="p-99")
+
+        assert normalize_ballot_target(
+            ballot, candidate_targets=self._CANDIDATES
+        ) == _normalize_ballot_target(ballot=ballot, candidate_targets=self._CANDIDATES)
+
+    def test_the_recorded_original_is_bounded(self) -> None:
+        blob = "p-" + "9" * 3000
+        normalized = _normalize_ballot_target(
+            ballot=_guard_ballot(voter="p-1", target=blob),
+            candidate_targets=self._CANDIDATES,
+        )
+
+        assert normalized.guard_redirected_from == (
+            blob[:MARKER_QUOTED_ORIGINAL_MAX_CHARS] + MARKER_TRUNCATION_SUFFIX
+        )
+
+    def test_parse_default_names_a_reason_but_no_authored_target(self) -> None:
+        degraded = _vote_parse_default(voter="p-1", raw_response="{not json")
+
+        assert degraded.guard_rewrite_reason == "parse_default"
+        assert degraded.guard_redirected_from is None
+
+    def test_a_second_rewrite_leaves_the_authored_target_alone(self) -> None:
+        # The one stack the chain allows: a 10.9.2 redirect whose uncited
+        # result the 16.6 gate then coerces. The fields name what the VOTER
+        # wrote, so the first rewrite owns them; both markers still stack.
+        redirected = guard_ballot_target_graph(
+            ballot=_guard_ballot(voter="p-1", target="p-4"),
+            voter_id="p-1",
+            suspicion_graph=_graph(("p-2", 0.75), ("p-4", 0.30)),
+            candidate_targets=self._CANDIDATES,
+            skip_confidence_threshold=0.6,
+        )
+        coerced = guard_ballot_citation(ballot=redirected, contradictions=())
+
+        assert coerced.target == "SKIP"
+        assert coerced.guard_redirected_from == "p-4"
+        assert coerced.guard_rewrite_reason == "under_gate_redirect"
+        assert coerced.rationale_text.startswith(
+            UNCITED_ZERO_FLAG_EJECT_MARKER.format(target="p-2")
+            + BALLOT_TARGET_REDIRECT_MARKER.format(target="p-4")
+        )
+
+    def test_an_untouched_ballot_carries_neither_field(self) -> None:
+        ballot = _guard_ballot(
+            voter="p-1", target="p-2", primary_reason_id="m-1:turn-0"
+        )
+        guarded = guard_ballot_target_graph(
+            ballot=ballot,
+            voter_id="p-1",
+            suspicion_graph=_graph(("p-2", 0.75)),
+            candidate_targets=self._CANDIDATES,
+            skip_confidence_threshold=0.6,
+        )
+
+        assert guarded.guard_redirected_from is None
+        assert guarded.guard_rewrite_reason is None
+        # And it writes no extra bytes: the pair is elided when nothing fired,
+        # so a ballot recorded today is byte-identical to a pre-field one.
+        assert "guard_rewrite_reason" not in guarded.model_dump_json()
+
+    def test_an_authored_target_without_a_reason_is_refused(self) -> None:
+        # The pair is one guard's testimony; half of it is a half-written record.
+        with pytest.raises(ValidationError, match="without guard_rewrite_reason"):
+            VoteBallot(
+                voter="p-1",
+                target="SKIP",
+                confidence=0.5,
+                primary_reason_id=None,
+                considered_alternatives=(),
+                rationale_text="body",
+                guard_redirected_from="p-4",
+            )
+
+
+@dataclass
+class _ProvenanceForgingVoteClient:
+    """Returns a ballot that fills the guard-provenance fields itself.
+
+    The laundering attempt the parse-time neutralization exists to stop:
+    ``VoteBallot`` is the schema handed to ``LLMClient.complete``, so a
+    constrained-decoding adapter shows the model these field names.
+    """
+
+    async def complete(
+        self,
+        *,
+        prompt: str,
+        schema: type[BaseModel] | None,
+        max_tokens: int,
+        temperature: float,
+        call_kind: CallKind = "meeting",
+        model: str | None = None,
+        agent_id: str | None = None,
+    ) -> LLMResponse:
+        if "PHASE=VOTE" in prompt:
+            voter = _extract_marker(prompt, "voter=")
+            text = json.dumps(
+                {
+                    "voter": voter,
+                    "target": "SKIP",
+                    "confidence": 0.8,
+                    "primary_reason_id": None,
+                    "primary_reason_observation_id": None,
+                    "considered_alternatives": [],
+                    "rationale_text": f"stub-vote-{voter}",
+                    "guard_redirected_from": "p-4",
+                    "guard_rewrite_reason": "under_gate_redirect",
+                }
+            )
+        else:
+            text = _turn_json(speaker=_extract_marker(prompt, "agent_id="))
+        return LLMResponse(
+            text=text,
+            usage=TokenUsage(input_tokens=1, output_tokens=1),
+            cost_usd=0.0,
+            model=model or "provenance-forger",
+        )
+
+
+def test_a_model_authored_provenance_value_never_reaches_the_record() -> None:
+    """The laundering guard: the fields are the meeting layer's, never the model's.
+
+    A ballot that arrives already claiming ``under_gate_redirect`` is neutralized
+    before any guard runs, so nothing in the recorded meeting reports a rewrite
+    that did not happen.
+    """
+
+    manager = _make_manager(
+        llm_client=_ProvenanceForgingVoteClient(),
+        deadlines=MeetingDeadlines(turn_seconds=None, vote_seconds=None),
+    )
+    result = _run(
+        manager.run(
+            meeting_id="m-1",
+            trigger=_default_trigger(),
+            participants=_crew_participants(),
+        )
+    )
+
+    assert result.ballots
+    for ballot in result.ballots:
+        assert ballot.guard_redirected_from is None
+        assert ballot.guard_rewrite_reason is None
+
+
+def _guarded_one_of_each_kind() -> tuple[VoteBallot, ...]:
+    """One ballot out of each of the five target-rewriting sites, plus an untouched one."""
+
+    candidates = ("p-2", "p-3", "p-4", "p-5")
+    return (
+        guard_ballot_target_graph(
+            ballot=_guard_ballot(voter="p-1", target="p-4"),
+            voter_id="p-1",
+            suspicion_graph=_graph(("p-2", 0.75), ("p-4", 0.30)),
+            candidate_targets=candidates,
+            skip_confidence_threshold=0.6,
+        ),
+        coerce_teammate_ballot_to_skip(
+            ballot=_guard_ballot(voter="p-2", target="p-5"),
+            fellow_impostor_ids=("p-5",),
+        ),
+        guard_ballot_citation(
+            ballot=_guard_ballot(voter="p-3", target="p-4"), contradictions=()
+        ),
+        _normalize_ballot_target(
+            ballot=_guard_ballot(voter="p-4", target="p-99"),
+            candidate_targets=candidates,
+        ),
+        _vote_parse_default(voter="p-5", raw_response="{not json"),
+        _guard_ballot(voter="p-6", target="p-2", primary_reason_id="m-1:turn-0"),
+    )
+
+
+class TestMarkerAndFieldAgree:
+    """The two provenance channels say the same thing, or the check bites.
+
+    A rewritten ballot carries the fact twice — as a bracketed marker in
+    ``rationale_text`` (display, and the only channel the committed corpus has)
+    and as the typed pair. Two copies of a fact drift; this is what stops it.
+    """
+
+    @staticmethod
+    def _marker_labels(ballot: VoteBallot) -> frozenset[str]:
+        reasons, _clean = _parse_rewrite_reasons(ballot.rationale_text)
+        return frozenset(reasons) & _TARGET_REWRITE_LABELS
+
+    @classmethod
+    def _disagreeing_voters(cls, ballots: Sequence[VoteBallot]) -> list[PlayerId]:
+        """Voters whose two provenance channels disagree, within ONE recording.
+
+        A recording where NO ballot carries ``guard_rewrite_reason`` predates
+        the field and is skipped whole: an absent field is not a claim, and
+        that is exactly what lets the 3,602 committed ballots pass. Once ANY
+        ballot in the recording carries it, every ballot in that recording is
+        judged — marker present iff reason present, and the reason among the
+        markers the ballot's own rationale carries. Judging per BALLOT instead
+        would make a stripped field indistinguishable from a pre-field
+        recording, and the drift this check exists to catch would walk through.
+        """
+
+        if all(ballot.guard_rewrite_reason is None for ballot in ballots):
+            return []
+        disagreeing: list[PlayerId] = []
+        for ballot in ballots:
+            labels = cls._marker_labels(ballot)
+            consistent = (
+                ballot.guard_rewrite_reason in labels
+                if ballot.guard_rewrite_reason is not None
+                else not labels
+            )
+            if not consistent:
+                disagreeing.append(ballot.voter)
+        return disagreeing
+
+    def test_every_freshly_guarded_ballot_agrees_on_both_channels(self) -> None:
+        guarded = _guarded_one_of_each_kind()
+
+        assert [ballot.guard_rewrite_reason for ballot in guarded] == [
+            "under_gate_redirect",
+            "teammate_coerced",
+            "uncited_coerced",
+            "invalid_target",
+            "parse_default",
+            None,
+        ]
+        assert self._disagreeing_voters(guarded) == []
+
+    def test_a_freshly_RECORDED_meeting_agrees_on_both_channels(self) -> None:
+        # The same invariant over bytes that went through the record boundary:
+        # a fake-provider meeting's ballots, serialized and re-parsed exactly as
+        # ``ReplayLog.record_meeting`` writes and ``read_meeting_entries`` reads
+        # them. The fake provider's hallucinated targets normalize, so the
+        # recording DOES carry the field and the check has something to judge.
+        manager = _make_manager(llm_client=FakeProvider())
+        result = _run(
+            manager.run(
+                meeting_id="m-fake",
+                trigger=_default_trigger(),
+                participants=_crew_participants(),
+            )
+        )
+        recorded = tuple(
+            VoteBallot.model_validate_json(ballot.model_dump_json())
+            for ballot in result.ballots
+        )
+
+        assert any(ballot.guard_rewrite_reason is not None for ballot in recorded)
+        assert self._disagreeing_voters(recorded) == []
+
+    def test_stripping_the_field_from_one_ballot_fails_the_check(self) -> None:
+        # The perturbation the DoD names: the marker still says p-4's target was
+        # rewritten, but the typed pair is gone. Because a sibling ballot in the
+        # same recording carries the field, the recording is judged and the
+        # stripped one is named.
+        guarded = list(_guarded_one_of_each_kind())
+        stripped = guarded[3].model_copy(
+            update={"guard_redirected_from": None, "guard_rewrite_reason": None}
+        )
+        guarded[3] = stripped
+
+        assert self._marker_labels(stripped) == frozenset({"invalid_target"})
+        assert self._disagreeing_voters(guarded) == ["p-4"]
+
+    def test_a_mislabelled_reason_fails_the_check(self) -> None:
+        guarded = list(_guarded_one_of_each_kind())
+        guarded[3] = guarded[3].model_copy(
+            update={"guard_rewrite_reason": "teammate_coerced"}
+        )
+
+        assert self._disagreeing_voters(guarded) == ["p-4"]
+
+    def test_a_bare_reason_with_no_marker_fails_the_check(self) -> None:
+        guarded = list(_guarded_one_of_each_kind())
+        guarded[5] = guarded[5].model_copy(
+            update={
+                "guard_redirected_from": "p-4",
+                "guard_rewrite_reason": "invalid_target",
+            }
+        )
+
+        assert self._disagreeing_voters(guarded) == ["p-6"]
+
+    def test_the_committed_corpus_is_skipped_rather_than_failed(self) -> None:
+        # 3,602 recorded ballots carry the marker and no field; the predicate
+        # must not fail them, which is what lets the invariant ship today.
+        seen = 0
+        for set_dir in _COMMITTED_BALLOT_SET_DIRS:
+            for replay_path in sorted(set_dir.glob("replay-seed-*.jsonl")):
+                for meeting in read_meeting_entries(replay_path):
+                    assert self._disagreeing_voters(meeting.ballots) == []
+                    for ballot in meeting.ballots:
+                        seen += 1
+                        assert ballot.guard_rewrite_reason is None
+        assert seen == 3602

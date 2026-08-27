@@ -552,6 +552,13 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "guard_preserved_omniscient_rate",
         "guard_provenance_unverifiable_ballots",
         "guard_provenance_verified_ballots",
+        # What a meeting guard changed about a BALLOT (VoteBallot): the target
+        # the voter authored and which of the five rewrite classes replaced it.
+        # The typed twin of the bracketed marker the same rationale already
+        # carries on this surface, so it moves no information across any
+        # boundary — and it is meeting-layer testimony, never engine state.
+        "guard_redirected_from",
+        "guard_rewrite_reason",
         "guard_rewritten_ballots_unwound",
         "guard_target_rewrite_ballots",
         "hi",

@@ -1857,7 +1857,7 @@ class HeadlessGame:
             )
             last_events = tuple(events)
             if replay is not None:
-                replay.record_tick(input_tick, actions, state)
+                replay.record_tick(input_tick, actions, state, events=events)
             if trace is not None:
                 trace.record_tick(
                     input_tick=input_tick,

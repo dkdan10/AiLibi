@@ -7,7 +7,9 @@ The contract exercised here:
   target and the uncertainty-aware confidence-threshold check.
 * :func:`meetings.voting.normalize_ballot_target` rewrites
   hallucinated / out-of-set targets to ``SKIP`` and preserves the
-  original target in the audit-log marker on ``rationale_text``.
+  original target in the audit-log marker on ``rationale_text`` and,
+  typed, on the ballot's own ``guard_redirected_from`` /
+  ``guard_rewrite_reason`` pair.
 * The threshold check is inclusive at the cutoff: ``confidence ==
   skip_confidence_threshold`` ejects ("below threshold, skip").
 * The "max confidence across the target's ballots" reading from
@@ -21,10 +23,15 @@ from __future__ import annotations
 
 import pytest
 
-from meetings.schemas import VoteBallot
+from meetings.schemas import (
+    MARKER_QUOTED_ORIGINAL_MAX_CHARS,
+    MARKER_TRUNCATION_SUFFIX,
+    VoteBallot,
+)
 from meetings.voting import (
     INVALID_VOTE_TARGET_MARKER,
     SKIP_TARGET,
+    ballot_target_rewrite_provenance,
     normalize_ballot_target,
     tally_ballots,
 )
@@ -403,6 +410,48 @@ class TestNormalizeInvalid:
         assert normalized.target == SKIP_TARGET
         marker = INVALID_VOTE_TARGET_MARKER.format(target="p-9")
         assert normalized.rationale_text.startswith(marker)
+
+    def test_the_rewrite_is_recorded_typed_beside_the_marker(self) -> None:
+        ballot = _ballot(voter="p-1", target="ghost", rationale_text="ghost did it")
+        normalized = normalize_ballot_target(ballot, candidate_targets=("p-2", "p-3"))
+
+        assert normalized.guard_redirected_from == "ghost"
+        assert normalized.guard_rewrite_reason == "invalid_target"
+
+    def test_the_recorded_original_is_bounded(self) -> None:
+        # A hallucinated target can be a reasoning blob; the typed field is
+        # bounded exactly like the marker's quoted original.
+        blob = "g" * 3000
+        normalized = normalize_ballot_target(
+            _ballot(voter="p-1", target=blob), candidate_targets=("p-2", "p-3")
+        )
+
+        assert normalized.guard_redirected_from == (
+            blob[:MARKER_QUOTED_ORIGINAL_MAX_CHARS] + MARKER_TRUNCATION_SUFFIX
+        )
+
+    def test_a_passthrough_ballot_records_no_provenance(self) -> None:
+        ballot = _ballot(voter="p-1", target="p-3")
+        normalized = normalize_ballot_target(ballot, candidate_targets=("p-2", "p-3"))
+
+        assert normalized.guard_redirected_from is None
+        assert normalized.guard_rewrite_reason is None
+
+    def test_an_already_marked_ballot_keeps_its_first_authored_target(self) -> None:
+        # ``ballot_target_rewrite_provenance`` names what the VOTER wrote, so a
+        # second rewrite in the same chain leaves the pair alone.
+        first = normalize_ballot_target(
+            _ballot(voter="p-1", target="ghost"), candidate_targets=("p-2", "p-3")
+        )
+        second = first.model_copy(update={"target": "p-9"})
+
+        assert ballot_target_rewrite_provenance(second, "teammate_coerced") == {}
+        assert ballot_target_rewrite_provenance(
+            _ballot(voter="p-1", target="p-5"), "teammate_coerced"
+        ) == {
+            "guard_redirected_from": "p-5",
+            "guard_rewrite_reason": "teammate_coerced",
+        }
 
     def test_normalized_ballot_is_a_new_object(self) -> None:
         # ``VoteBallot`` is frozen; the normaliser must return a
