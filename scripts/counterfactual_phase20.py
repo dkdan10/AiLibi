@@ -675,6 +675,12 @@ def _walk_game(
                         pid for pid, p in state.players.items() if p.alive and p.in_vent
                     ),
                     body_triggered=walk_event.body_id is not None,
+                    # The flag folds read what a speaker had perceived by now,
+                    # not what the walk goes on to append, so the log lengths
+                    # are captured here — off the store those folds are handed.
+                    memory_prefix={
+                        pid: len(store) for pid, store in off_stores.items()
+                    },
                 )
                 roster = frozenset(ballot.voter for ballot in walk_event.entry.ballots)
                 _fold_one_meeting(
@@ -807,6 +813,7 @@ def _fold_one_meeting(
                 living=facts.living,
                 venting=facts.venting,
                 body_triggered=facts.body_triggered,
+                memory_prefix=facts.memory_prefix,
             ),
             roles=roles,
             memories=off_stores,

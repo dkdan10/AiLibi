@@ -108,6 +108,7 @@ from training.conviction.model import (
 )
 from training.conviction.serving import assemble_live_conviction_features
 from training.surrogate.ballots import (
+    MASKED_IS_REPORTER,
     BallotPredictor,
     PredictedBallot,
     SurrogateStalenessCap,
@@ -115,9 +116,12 @@ from training.surrogate.ballots import (
     load_ballot_predictor_artifact,
 )
 from training.surrogate.runner import (
+    SurrogateFitCorpus,
     SurrogateMeetingRunner,
     SurrogateStalenessExceededError,
     SurrogateUseCounter,
+    fit_corpus_fingerprint,
+    load_fit_corpus_record,
     load_surrogate_runner_factory,
 )
 
@@ -363,7 +367,7 @@ def _independent_ranking(
                     float(graph[cand].suspicion) if cand in graph else 0.5
                 ),
                 "belief_trust": float(graph[cand].trust) if cand in graph else 0.5,
-                "is_reporter": float(cand == triggered_by),
+                "is_reporter": MASKED_IS_REPORTER,
                 "witnessed_vent": float(cand in vent),
                 "meeting_index": meeting_index,
                 "alive_count": alive_count,
@@ -942,6 +946,71 @@ def test_corrupt_surrogate_weights_fail_loud(tmp_path: Path) -> None:
         )
 
 
+def test_the_conviction_corpus_fence_is_attributable_to_its_own_leg(
+    tmp_path: Path,
+) -> None:
+    """``corpus_dir`` now fences BOTH components, and the conviction half bites.
+
+    The surrogate leg is fenced first, so a refusal on a stale checkout could
+    only ever be attributed to it. Here the copied surrogate record is
+    re-pointed at the LIVE corpus so its fence passes, which makes every refusal
+    below the conviction leg's own: a mismatched conviction record refuses, an
+    ABSENT one refuses and names the ML re-ground as its writer, and a matching
+    one loads. With no ``corpus_dir`` the load is exactly what it is at HEAD —
+    which is why the committed conviction artifact, which ships no record yet,
+    keeps working.
+    """
+
+    conviction_dir, surrogate_dir = _copy_artifacts(tmp_path)
+    live = fit_corpus_fingerprint(_CORPUS)
+    (surrogate_dir / "fit-corpus.json").write_text(
+        load_fit_corpus_record(surrogate_dir)
+        .model_copy(update={"corpus_sha256": live})
+        .model_dump_json(indent=2)
+        + "\n"
+    )
+    _, conviction_sha = load_conviction_model_artifact(conviction_dir)
+
+    # Opt-out: unchanged, and the committed artifacts have no conviction record.
+    assert not (conviction_dir / "fit-corpus.json").exists()
+    assert load_composed_components(
+        conviction_artifact_dir=conviction_dir, surrogate_artifact_dir=surrogate_dir
+    )
+
+    with pytest.raises(FileNotFoundError, match="ML re-ground"):
+        load_composed_components(
+            conviction_artifact_dir=conviction_dir,
+            surrogate_artifact_dir=surrogate_dir,
+            corpus_dir=_CORPUS,
+        )
+
+    record = SurrogateFitCorpus(
+        corpus_set="9p2i",
+        corpus_sha256=live,
+        fit_side_meetings=345,
+        weights_sha256=conviction_sha,
+    )
+    (conviction_dir / "fit-corpus.json").write_text(
+        record.model_dump_json(indent=2) + "\n"
+    )
+    assert load_composed_components(
+        conviction_artifact_dir=conviction_dir,
+        surrogate_artifact_dir=surrogate_dir,
+        corpus_dir=_CORPUS,
+    )
+
+    (conviction_dir / "fit-corpus.json").write_text(
+        record.model_copy(update={"corpus_sha256": "c" * 64}).model_dump_json(indent=2)
+        + "\n"
+    )
+    with pytest.raises(ValueError, match="the substrate drifted"):
+        load_composed_components(
+            conviction_artifact_dir=conviction_dir,
+            surrogate_artifact_dir=surrogate_dir,
+            corpus_dir=_CORPUS,
+        )
+
+
 def test_no_go_conviction_verdict_makes_the_runner_unbuildable(
     tmp_path: Path,
 ) -> None:
@@ -1336,7 +1405,7 @@ def test_go_verdict_holds_under_the_live_teammate_exclusion_ranking(
                 features[feat.candidate] = {
                     "belief_suspicion": float(feat.belief_suspicion),
                     "belief_trust": float(feat.belief_trust),
-                    "is_reporter": float(feat.is_reporter),
+                    "is_reporter": MASKED_IS_REPORTER,
                     "witnessed_vent": float(feat.witnessed_vent),
                     "meeting_index": float(row.meeting_index),
                     "alive_count": float(len(row.candidates)),

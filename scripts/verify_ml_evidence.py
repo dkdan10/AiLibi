@@ -1571,6 +1571,7 @@ _CORPUS_DEPENDENT_RECOMPUTE_ROWS: Final[frozenset[str]] = frozenset(
     {
         "surrogate top-1 (ranking channel)",
         "surrogate SKIP-vs-eject decision accuracy",
+        "surrogate verdict.json reproduces",
         "conviction flag-count Spearman",
         "conviction conversion-label accuracy",
         "conviction verdict.json reproduces",
@@ -1579,6 +1580,17 @@ _CORPUS_DEPENDENT_RECOMPUTE_ROWS: Final[frozenset[str]] = frozenset(
         "composed convicting top-1",
         "composed verdict.json reproduces",
     }
+)
+
+#: The instrument artifact directories whose grounding this leg does not measure
+#: but EXTRAPOLATES from the surrogate's committed fit-corpus record: they hold
+#: no ``fit-corpus.json`` of their own, and the leg reads their rows against the
+#: one question :func:`_grounding_row` answers. The extrapolation is sound only
+#: while it stays an extrapolation — an instrument that gains its own record must
+#: be fingerprinted rather than assumed, so a test fails if any directory named
+#: here starts shipping one.
+_GROUNDING_EXTRAPOLATED_DIRS: Final[frozenset[str]] = frozenset(
+    {CONVICTION_DIR, COMPOSED_DIR}
 )
 
 #: Printed beside every recompute row a proven grounding gap explains.
@@ -1603,6 +1615,12 @@ def _grounding_row(repo_root: Path) -> tuple[CheckRow, bool]:
     under a frozen fit, which is a declared state, not a defect — the rows report
     STALE and this row says why.
 
+    Only the surrogate's grounding is MEASURED. The conviction and composed rows
+    are read against the same answer by extrapolation
+    (:data:`_GROUNDING_EXTRAPOLATED_DIRS`), because those directories commit no
+    fit-corpus record to fingerprint; the row says so rather than leaving it
+    implicit, and a test refuses the day one of them ships a record.
+
     The distinction is the whole point: before it existed, a re-record made every
     recompute row FAIL at once, which reads like a broken model and is in fact a
     bookkeeping debt with a name.
@@ -1621,7 +1639,10 @@ def _grounding_row(repo_root: Path) -> tuple[CheckRow, bool]:
             name="ML grounding",
             measured=f"{live[:16]}… (corpus on disk)",
             committed=f"{record.corpus_sha256[:16]}… (corpus the fit was made on)",
-            source=f"{SURROGATE_DIR}/fit-corpus.json vs {CORPUS_SET}",
+            source=(
+                f"{SURROGATE_DIR}/fit-corpus.json vs {CORPUS_SET}; "
+                f"extrapolated to {', '.join(sorted(_GROUNDING_EXTRAPOLATED_DIRS))}"
+            ),
             status=(
                 "STALE" if stale else "OK" if live == record.corpus_sha256 else "FAIL"
             ),
@@ -1689,7 +1710,13 @@ def run_recompute(ctx: Context) -> LegResult:
         load_ballot_predictor_artifact,
     )
     from training.surrogate.dataset import build_meeting_table
-    from training.surrogate.fidelity import build_meeting_views
+    from training.surrogate.fidelity import (
+        build_meeting_views,
+        decide_go_no_go,
+        fo6_rebaseline,
+        run_surrogate_fidelity,
+    )
+    from training.surrogate.runner import load_surrogate_verdict
 
     corpus = ctx.repo_root / CORPUS_SET
     surrogate_dir = ctx.repo_root / SURROGATE_DIR
@@ -1747,6 +1774,42 @@ def run_recompute(ctx: Context) -> LegResult:
             f"{SURROGATE_REPORT} §3 ('SKIP-vs-eject decision accuracy' "
             f"= {decision_num}/{decision_den})",
             census=f"{correct_decisions}/{len(test_views)}",
+        )
+    )
+
+    # The committed GO/NO-GO verdict, re-derived from the harness's own two
+    # same-population reports (the surrogate under the committed split's single
+    # fold, and the FO-6 re-baseline the comparator axis reads) and compared
+    # field for field — the strongest pin this verdict admits.
+    #
+    # NOT a frozen-weights row, unlike the two surrogate channels above:
+    # ``run_surrogate_fidelity`` re-fits per fold by construction (its own
+    # docstring), so every axis of this bar has always described a re-fit on the
+    # scored population rather than a measurement of the committed artifact. The
+    # ``weights_sha256`` it carries names the artifact the verdict AUTHORIZES —
+    # cross-checked where that authorization is spent, in
+    # ``load_surrogate_runner_factory``'s install gate — and this row is what
+    # stops the rest of the object being hand-edited.
+    surrogate_verdict_committed = load_surrogate_verdict(surrogate_dir)
+    surrogate_verdict_rederived = decide_go_no_go(
+        run_surrogate_fidelity(
+            table, lambda: BallotSurrogateModel(table), model_name="ballot-surrogate.v1"
+        ),
+        fo6_rebaseline(table),
+        weights_sha256=surrogate_sha,
+    )
+    rows.append(
+        _verdict_identity_row(
+            "surrogate verdict.json reproduces",
+            rederived=surrogate_verdict_rederived.model_dump(),
+            committed=surrogate_verdict_committed.model_dump(),
+            repo_root=ctx.repo_root,
+            path_fields=("replay_set_dir",),
+            source=(
+                f"{SURROGATE_DIR}/verdict.json (re-fit on the scored population, "
+                "the only form this bar has; weights_sha256 names the artifact "
+                "the verdict authorizes)"
+            ),
         )
     )
 

@@ -23,7 +23,11 @@ trigger-time inputs the :class:`~orchestrator.game.MeetingRunner` protocol hands
   :class:`~agents.memory.beliefs.BeliefState` via
   ``MeetingAwareAgent.suspicion_graph_for_meeting()``. This is the §5.4 headline
   feature — it already integrates the accumulators the LLM votes on.
-* ``is_reporter`` — candidate == ``trigger.triggered_by``.
+* ``is_reporter`` — MASKED to :data:`MASKED_IS_REPORTER` at every fit and every
+  inference site. The reporter is a crewmate on every committed row, so the slot
+  is an exclusion oracle over roles ground truth rather than a ballot signal; the
+  layout keeps it because the weights artifact serializes and validates the
+  layout, so a shortened tuple would refuse the committed predictor.
 * ``witnessed_vent`` — the voter-local role-proving pin. Offline: the table's
   event-derived witness set. Live: the voter's OWN typed
   ``vent_witness_records_for_meeting()`` channel naming the candidate.
@@ -51,15 +55,18 @@ its side-channel back into the 15.11 table's per-voter rows is fenced —
 outside the declared fit-side seed set. The committed leakage test poisons the
 labels of every non-fit row and proves both directions byte-identical.
 
-**Coerced-SKIP fit exclusion (Task 17.10 designer ruling).** A J2 citation-gate
-coerced ballot records ``target="SKIP"`` but was a FORCED eject, not a chosen
-skip — poison for the decision channel the GO/NO-GO verdict hinges on. Both fit
-paths (:meth:`BallotSurrogateModel.fit` and
-:func:`fit_corpus_ballot_predictor`) DROP rows whose
-``MeetingTableRow.ballot_coerced_skip`` flag is set (the 15.11 table detects
-the production coercion marker at reconstruction); the dropped count is
-reported in ``training/reports/report-ballot-surrogate.md``. Fit-side only:
-the fidelity replay scores the recorded bytes unfiltered.
+**Rewritten-target fit exclusion.** A ballot whose recorded ``target`` the
+meeting layer redirected, coerced, normalized or wholly defaulted is a poisoned
+label: :class:`BallotExample` carries ONE ``target`` field feeding both the
+per-candidate softmax and the SKIP alternative, so there is no channel to poison
+in isolation. Both fit paths (:meth:`BallotSurrogateModel.fit` and
+:func:`fit_corpus_ballot_predictor`) DROP every row whose
+``MeetingTableRow.ballot_rewrite_labels`` meets
+:data:`~training.surrogate.dataset.TARGET_REWRITE_LABELS`; the two citation-only
+labels stay in the fit, because they null a reference and leave the authored
+target intact. The dropped count is reported in
+``training/reports/report-ballot-surrogate.md``. Fit-side only: the fidelity
+replay scores the recorded bytes unfiltered.
 
 The predictor itself is a standardized CONDITIONAL LOGIT (the determinism-safe
 default the task hint names): one shared weight vector over the per-candidate
@@ -101,7 +108,11 @@ from engine.entities import PlayerId
 from meetings.constants import DEFAULT_SKIP_CONFIDENCE_THRESHOLD
 from meetings.schemas import VoteBallot
 from meetings.voting import SKIP_TARGET, tally_ballots
-from training.surrogate.dataset import MeetingTable, MeetingTableRow
+from training.surrogate.dataset import (
+    TARGET_REWRITE_LABELS,
+    MeetingTable,
+    MeetingTableRow,
+)
 from training.surrogate.fidelity import (
     MeetingPrediction,
     MeetingView,
@@ -119,6 +130,16 @@ BALLOT_FEATURE_NAMES: Final[tuple[str, ...]] = (
     "meeting_index",
     "alive_count",
 )
+
+# The value every consumer of :data:`BALLOT_FEATURE_NAMES` writes into the
+# ``is_reporter`` slot. The reporter identity is an exclusion ORACLE, not a
+# ballot signal — a reporter is a crewmate on every committed row — so a fit that
+# reads it learns roles ground truth through a side channel instead of learning a
+# vote. The slot is masked rather than removed: the layout is serialized into the
+# weights artifact and validated on load, so a shortened tuple would refuse the
+# committed predictor. Fit and serve write the same constant, which is what keeps
+# the frozen weights meaningful at inference.
+MASKED_IS_REPORTER: Final[float] = 0.0
 
 # The per-voter SKIP-alternative feature order. ``max_belief_suspicion`` is the
 # §4.6 gate signal itself (the production heuristic skips when the max rendered
@@ -265,11 +286,13 @@ def ballot_features_from_row(row: MeetingTableRow) -> VoterBallotView:
     """Reduce a table row to the live-parity FEATURE view (never a label).
 
     The predict-side half of the leakage fence: reads only feature columns —
-    ``belief_suspicion`` / ``belief_trust`` / ``is_reporter`` /
-    ``witnessed_vent`` off each non-self candidate, plus ``meeting_index`` and
-    the living-roster size. It NEVER touches ``ballot_target`` /
-    ``ballot_confidence`` / ``ejected_player_id`` / ``outcome`` /
-    ``is_ejected`` / ``is_impostor`` (the committed poison test proves it).
+    ``belief_suspicion`` / ``belief_trust`` / ``witnessed_vent`` off each
+    non-self candidate, plus ``meeting_index`` and the living-roster size. It
+    NEVER touches ``ballot_target`` / ``ballot_confidence`` /
+    ``ejected_player_id`` / ``outcome`` / ``is_ejected`` / ``is_impostor`` (the
+    committed poison test proves it). The ``is_reporter`` slot is written as
+    :data:`MASKED_IS_REPORTER` rather than read off the row — the row's own
+    column stays available to diagnostics, but the fit may not see it.
     """
 
     alive_count = float(len(row.candidates))
@@ -282,7 +305,7 @@ def ballot_features_from_row(row: MeetingTableRow) -> VoterBallotView:
         features[feat.candidate] = {
             "belief_suspicion": float(feat.belief_suspicion),
             "belief_trust": float(feat.belief_trust),
-            "is_reporter": float(feat.is_reporter),
+            "is_reporter": MASKED_IS_REPORTER,
             "witnessed_vent": float(feat.witnessed_vent),
             "meeting_index": float(row.meeting_index),
             "alive_count": alive_count,
@@ -290,6 +313,17 @@ def ballot_features_from_row(row: MeetingTableRow) -> VoterBallotView:
     return VoterBallotView(
         voter=row.voter, candidates=tuple(candidates), features=features
     )
+
+
+def _target_was_rewritten(row: MeetingTableRow) -> bool:
+    """Whether this row's recorded target is not the voter's authored choice.
+
+    The fit-side drop rule, one definition for both fit paths: the row's
+    recovered rewrite labels meeting
+    :data:`~training.surrogate.dataset.TARGET_REWRITE_LABELS`.
+    """
+
+    return bool(TARGET_REWRITE_LABELS.intersection(row.ballot_rewrite_labels))
 
 
 def ballot_example_from_row(row: MeetingTableRow) -> BallotExample:
@@ -819,15 +853,14 @@ class BallotSurrogateModel:
         return rows
 
     def fit(self, meetings: Sequence[MeetingView]) -> None:
-        """Fit on the given meetings' rows minus coerced-SKIP rows (labels here ONLY).
+        """Fit on the given meetings' rows minus rewritten targets (labels here ONLY).
 
         The fit half of the leakage fence: when a fit-side seed set is declared
         (a committed split), a view from outside it is refused — the fidelity
-        run must never fold a held-out game's labels into the fit. Rows whose
-        ``ballot_coerced_skip`` flag is set are DROPPED before the fit (Task
-        17.10 designer ruling — a J2-coerced ballot's SKIP label records a
-        forced eject, never a chosen skip); predict/fidelity still score the
-        recorded bytes unfiltered.
+        run must never fold a held-out game's labels into the fit. A row whose
+        recorded target the meeting layer rewrote is DROPPED, because its
+        ``target`` label records a choice the voter never authored;
+        predict/fidelity still score the recorded bytes unfiltered.
         """
 
         if not meetings:
@@ -842,16 +875,11 @@ class BallotSurrogateModel:
                 f"fit received meetings from seeds {leaked} outside the declared "
                 f"fit-side seed set — refusing to read held-out labels"
             )
-        # J2-coerced SKIP rows are EXCLUDED from every fit (Task 17.10 designer
-        # ruling): a coerced ballot records ``target="SKIP"`` but was a forced
-        # eject, not a chosen skip — a poisoned label for the decision channel.
-        # Fit-side only: predict/fidelity still score the recorded bytes
-        # unfiltered (a coerced meeting is still scored exactly as recorded).
         examples = [
             ballot_example_from_row(row)
             for meeting in meetings
             for row in self._rows(meeting)
-            if not row.ballot_coerced_skip
+            if not _target_was_rewritten(row)
         ]
         predictor = BallotPredictor(epochs=self._epochs, lr=self._lr)
         predictor.fit(examples)
@@ -945,7 +973,7 @@ def fit_corpus_ballot_predictor(
     epochs: int = DEFAULT_EPOCHS,
     lr: float = DEFAULT_LEARNING_RATE,
 ) -> BallotPredictor:
-    """The training entry: fit on the committed corpus split's fit side.
+    """The training entry: fit on the fit side, minus rewritten-target rows.
 
     Requires a committed split (the 15.12 corpus ships one) — the artifact-fit
     is the same fit the fidelity harness performs for its single
@@ -964,14 +992,14 @@ def fit_corpus_ballot_predictor(
             "use the 15.12 corpus, not a baseline sample set"
         )
     fit_seeds = frozenset(table.splits.train) | frozenset(table.splits.val)
-    # Coerced-SKIP rows are dropped from the fit (Task 17.10 designer ruling —
-    # see :meth:`BallotSurrogateModel.fit`); the dropped count is reported in
-    # ``training/reports/report-ballot-surrogate.md`` (0 on the committed
-    # baseline-5 corpus), never silently absorbed.
+    # Rows whose recorded target the meeting layer rewrote are dropped from the
+    # fit (see :meth:`BallotSurrogateModel.fit`); the dropped count is reported
+    # in ``training/reports/report-ballot-surrogate.md``, never silently
+    # absorbed.
     examples = [
         ballot_example_from_row(row)
         for row in table.rows
-        if row.seed in fit_seeds and not row.ballot_coerced_skip
+        if row.seed in fit_seeds and not _target_was_rewritten(row)
     ]
     predictor = BallotPredictor(epochs=epochs, lr=lr)
     predictor.fit(examples)
@@ -1065,6 +1093,7 @@ __all__ = [
     "BALLOT_FEATURE_NAMES",
     "DEFAULT_EPOCHS",
     "DEFAULT_LEARNING_RATE",
+    "MASKED_IS_REPORTER",
     "SKIP_FEATURE_NAMES",
     "STALENESS_FILENAME",
     "STALENESS_USES_PER_FIT_MEETING",
