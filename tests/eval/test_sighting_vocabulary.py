@@ -17,7 +17,7 @@ sixth cannot appear without failing here.
 from __future__ import annotations
 
 import ast
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterable, Iterator, Mapping
 from pathlib import Path
 from typing import Final
 
@@ -70,20 +70,32 @@ _ALLOW_LIST: Final[dict[str, str]] = {
 }
 
 
-def _type_alias_map(tree: ast.Module) -> dict[str, frozenset[str]]:
+def _type_alias_map(tree: ast.Module) -> dict[str, tuple[frozenset[str], ...]]:
     """Module-level ``NAME = (A, B)`` bindings, so a tuple alias cannot hide a check.
 
     Without this an author could move the type tuple into a constant and the
     walk would see a bare name it does not recognise — a narrow site that reports
-    clean. Only module-level bindings are resolved; a locally-built tuple is
-    still visible as its literal at the call site.
+    clean. This is the MODULE scope; :func:`_narrow_sighting_sites` overlays each
+    function's own bindings on top, because a tuple built inside the predicate
+    hides the check exactly as well as one built beside it.
     """
 
-    aliases: dict[str, frozenset[str]] = {}
-    for node in tree.body:
+    return _alias_map(tree.body)
+
+
+def _alias_map(nodes: Iterable[ast.AST]) -> dict[str, tuple[frozenset[str], ...]]:
+    """``NAME = (A, B)`` bindings among ``nodes``, as ``{name: bindings}``.
+
+    A name bound more than once keeps EVERY binding rather than the last or the
+    union: a site referring to it is judged narrow if ANY of them is, so a
+    second, wider assignment elsewhere cannot mask a narrow one.
+    """
+
+    aliases: dict[str, tuple[frozenset[str], ...]] = {}
+    for node in nodes:
         if isinstance(node, ast.Assign):
-            targets = node.targets
-            value = node.value
+            targets: list[ast.expr] = list(node.targets)
+            value: ast.expr = node.value
         elif isinstance(node, ast.AnnAssign) and node.value is not None:
             targets = [node.target]
             value = node.value
@@ -99,7 +111,7 @@ def _type_alias_map(tree: ast.Module) -> dict[str, frozenset[str]]:
             continue
         for target in targets:
             if isinstance(target, ast.Name):
-                aliases[target.id] = names
+                aliases[target.id] = (*aliases.get(target.id, ()), names)
     return aliases
 
 
@@ -121,24 +133,31 @@ def _names_in(node: ast.expr) -> frozenset[str]:
     return frozenset()
 
 
-def _isinstance_type_names(
-    node: ast.Call, aliases: Mapping[str, frozenset[str]]
-) -> frozenset[str]:
-    """The type names one ``isinstance(x, T)`` / ``isinstance(x, (A, B))`` names.
+def _isinstance_resolutions(
+    node: ast.Call, aliases: Mapping[str, tuple[frozenset[str], ...]]
+) -> tuple[frozenset[str], ...]:
+    """Every type set one ``isinstance(x, ...)`` call could be checking.
 
-    Qualified names resolve to their tail and a module-level tuple alias expands
-    to its members, so neither spelling can hide a narrow check.
+    Qualified names resolve to their tail and a tuple alias — module-level or
+    function-local — expands to its members, so neither spelling can hide a
+    narrow check. A name with several bindings yields one resolution PER
+    binding, and the caller treats the site as narrow if any of them is.
     """
 
     if not isinstance(node.func, ast.Name) or node.func.id != "isinstance":
-        return frozenset()
+        return ()
     if len(node.args) != 2:
-        return frozenset()
+        return ()
     names = _names_in(node.args[1])
-    expanded: set[str] = set()
-    for name in names:
-        expanded |= aliases.get(name, frozenset({name}))
-    return frozenset(expanded)
+    if not names:
+        return ()
+    resolutions: list[frozenset[str]] = [frozenset()]
+    for name in sorted(names):
+        bindings = aliases.get(name) or (frozenset({name}),)
+        resolutions = [
+            current | binding for current in resolutions for binding in bindings
+        ]
+    return tuple(resolutions)
 
 
 def _narrow_sighting_sites(tree: ast.Module, label: str) -> Iterator[str]:
@@ -151,17 +170,25 @@ def _narrow_sighting_sites(tree: ast.Module, label: str) -> Iterator[str]:
     that already names ``SawMoveObservation``.
     """
 
-    aliases = _type_alias_map(tree)
+    module_aliases = _type_alias_map(tree)
     for node in ast.walk(tree):
         if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
         if node.name == _SHARED_HELPER:
             continue
+        # This function's OWN bindings shadow the module's, so one predicate's
+        # local tuple is never read as another's.
+        aliases: dict[str, tuple[frozenset[str], ...]] = {
+            **module_aliases,
+            **_alias_map(ast.walk(node)),
+        }
         for inner in ast.walk(node):
             if not isinstance(inner, ast.Call):
                 continue
-            names = _isinstance_type_names(inner, aliases)
-            if _PLACEMENT_TYPE in names and _MOVEMENT_TYPE not in names:
+            if any(
+                _PLACEMENT_TYPE in names and _MOVEMENT_TYPE not in names
+                for names in _isinstance_resolutions(inner, aliases)
+            ):
                 yield f"{label}::{node.name}"
                 break
 
@@ -206,13 +233,14 @@ def test_the_allow_list_has_exactly_five_entries_each_with_a_reason() -> None:
 def test_the_walk_bites_on_a_planted_new_site(tmp_path: Path) -> None:
     """PLANTED: every narrow spelling is found, and the shapes outside are not.
 
-    Four ways to write a narrow check — bare, tuple, QUALIFIED
-    (``schemas.SawPlayerObservation``) and via a module-level tuple ALIAS — all
-    bite, because a walk that only reads bare ``ast.Name`` entries would report
-    clean on the last two while the predicate they express is exactly the one
-    B-9 is about. And a vent-only check and a check that already names the
-    movement type are NOT narrow, so they stay outside the walk rather than
-    being quietly allow-listed.
+    Five ways to write a narrow check — bare, tuple, QUALIFIED
+    (``schemas.SawPlayerObservation``), via a module-level tuple ALIAS, and via
+    a FUNCTION-LOCAL one — all bite. A walk that reads only bare ``ast.Name``
+    entries reports clean on the qualified and alias forms, and one that reads
+    only ``tree.body`` reports clean on the local form, while the predicate all
+    five express is exactly the one B-9 is about. A vent-only check and the
+    three checks that already name the movement type are NOT narrow, so they
+    stay outside the walk rather than being quietly allow-listed.
     """
 
     source = """
@@ -241,8 +269,18 @@ def _planted_narrow_via_alias(turn):
     return any(isinstance(obs, _NARROW_TYPES) for obs in turn.observations)
 
 
+def _planted_narrow_via_local_alias(turn):
+    types = (SawPlayerObservation, FoundBodyObservation)
+    return any(isinstance(obs, types) for obs in turn.observations)
+
+
 def _planted_wide_via_alias(turn):
     return any(isinstance(obs, _WIDE_TYPES) for obs in turn.observations)
+
+
+def _planted_wide_via_local_alias(turn):
+    types = (schemas.SawPlayerObservation, schemas.SawMoveObservation)
+    return any(isinstance(obs, types) for obs in turn.observations)
 
 
 def _planted_vent_only(turn):
@@ -275,6 +313,7 @@ def sighting_placement(artifact):
         "planted.py::_planted_narrow_tuple",
         "planted.py::_planted_narrow_qualified",
         "planted.py::_planted_narrow_via_alias",
+        "planted.py::_planted_narrow_via_local_alias",
     }
 
 

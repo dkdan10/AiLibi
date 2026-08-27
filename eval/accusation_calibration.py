@@ -82,7 +82,10 @@ base rate is about 0.50 on the 9p2i corpus, not a low chance prior.
 with one of the six audit markers the meeting layer prepends carries a target
 the voter did not author beside a confidence in the target they did, so no
 calibration curve bins it; ``vote_ballot_guard_authored_excluded`` publishes how
-many were dropped rather than leaving the exclusion invisible.
+many were dropped rather than leaving the exclusion invisible. It counts the
+DROP, not the marker census: a marked ballot whose recorded target is already
+``"SKIP"`` was never binnable, so it is not counted here and the field
+reconciles exactly against ``vote_ballot_total``.
 
 **Per-bin counts and the low-power flag (audit F-F-3 / gp-7).** Each curve's
 per-bin ``count`` is already on its :class:`CalibrationBin` entries, so the
@@ -269,8 +272,10 @@ class AccusationCalibrationReport(_FrozenModel):
     calibration is measured at all (see the module docstring, including which
     half of the committed 0-hit reading is structural and which is
     corpus-specific).
-    ``vote_ballot_guard_authored_excluded`` counts the ballots left out of the
-    vote curve because the meeting layer, not the voter, authored their target.
+    ``vote_ballot_guard_authored_excluded`` counts the ballots the vote curve
+    DROPPED because the meeting layer, not the voter, authored their target —
+    marked ballots already excluded as ``"SKIP"`` are not counted, so the field
+    reconciles against ``vote_ballot_total``.
     """
 
     n_bins: int
@@ -449,14 +454,20 @@ def _vote_ballot_samples(report: TournamentReport) -> list[tuple[float, bool]]:
 
 
 def _guard_authored_ballot_count(report: TournamentReport) -> int:
-    """How many recorded ballots the vote curve dropped as guard-authored."""
+    """How many ballots the vote curve dropped BECAUSE they are guard-authored.
+
+    A marked ballot whose recorded target is already ``"SKIP"`` was never
+    binnable — the SKIP rule excluded it before this one existed — so counting
+    it here would publish a number that cannot be reconciled against the curve's
+    own total. The count is exactly the drop: marked AND otherwise binnable.
+    """
 
     return sum(
         1
         for game in report.games
         for meeting in game.meetings
         for ballot in meeting.ballots
-        if _is_guard_authored(ballot.rationale_text)
+        if ballot.target != "SKIP" and _is_guard_authored(ballot.rationale_text)
     )
 
 

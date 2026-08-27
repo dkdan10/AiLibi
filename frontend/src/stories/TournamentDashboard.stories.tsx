@@ -182,13 +182,15 @@ function baseReport(): TournamentEvalReport {
       // ceilinged — its only scoring-correct target is a teammate the firewall
       // deletes — so it hits zero and legitimately flags low power.
       accusation_claim_crew_accuser: {
+        // Every bin's hits <= its count, as the analyzer guarantees — the
+        // dashboard renders impostor_hits / count as a rate.
         bins: calibrationBins([
           [2, 14, 3],
           [3, 31, 9],
           [4, 39, 17],
           [5, 29, 18],
           [6, 23, 19],
-          [7, 19, 20],
+          [7, 19, 17],
         ]),
         total: 155,
         ece: 0.182,

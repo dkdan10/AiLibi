@@ -28,7 +28,10 @@ from eval.accusation_calibration import (
     CalibrationCurve,
     compute_accusation_calibration,
 )
-from meetings.manager import BALLOT_TARGET_REDIRECT_MARKER
+from meetings.manager import (
+    BALLOT_TARGET_REDIRECT_MARKER,
+    TEAMMATE_VOTE_TARGET_MARKER,
+)
 from eval.report_schema import (
     CURRENT_FORMAT_VERSION,
     GameCostSummary,
@@ -936,6 +939,76 @@ def test_a_guard_redirected_ballot_is_excluded_from_the_vote_curve() -> None:
     assert planted_result.vote_ballot_total == 0
     assert planted_result.vote_ballot_guard_authored_excluded == 1
     assert planted_result.vote_ballot_ece is None
+
+
+def test_a_marked_skip_ballot_is_not_counted_as_a_guard_drop() -> None:
+    """PLANTED: the published count is the DROP, not the marker census.
+
+    A marked ballot whose recorded target is already ``"SKIP"`` was never
+    binnable, so counting it would publish a number that cannot be reconciled
+    against ``vote_ballot_total`` — the exact defect this pins shut.
+    """
+
+    marked_skip = _ballot("SKIP", 0.4, voter="p-0").model_copy(
+        update={
+            "rationale_text": (
+                TEAMMATE_VOTE_TARGET_MARKER.format(target="p-3") + "no confident read"
+            )
+        }
+    )
+    marked_eject = _ballot("p-3", 0.9, voter="p-1").model_copy(
+        update={
+            "target": "p-1",
+            "rationale_text": (
+                BALLOT_TARGET_REDIRECT_MARKER.format(target="p-3") + "p-3 vented."
+            ),
+        }
+    )
+    clean = _ballot("p-3", 0.8, voter="p-2")
+
+    result = compute_accusation_calibration(
+        _tournament(
+            _game(
+                game_id="g",
+                roles=_ROLES,
+                meetings=(_meeting(ballots=(marked_skip, marked_eject, clean)),),
+            )
+        )
+    )
+
+    # Three ballots carry a marker or a SKIP; only ONE was dropped BY the guard
+    # rule, because the marked SKIP was never binnable in the first place.
+    assert result.vote_ballot_guard_authored_excluded == 1
+    assert result.vote_ballot_total == 1
+
+
+def test_the_committed_guard_drop_reconciles_against_the_vote_curve() -> None:
+    """The published drop equals the curve's own shortfall, per set.
+
+    Recomputes both sides from the committed bytes: the binnable population
+    ignoring the guard rule, minus the curve's total, must equal the published
+    count. A census that over-counted marked SKIPs would fail here.
+    """
+
+    for sample_dir in sorted(_COMMITTED_SPLIT):
+        served = _committed_calibration(sample_dir)
+        raw = json.loads(
+            (_REPO_ROOT / sample_dir / "tournament-eval-report.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        non_skip = sum(
+            1
+            for game in raw["report"]["games"]
+            for meeting in game["meetings"]
+            for ballot in meeting["ballots"]
+            if ballot["target"] != "SKIP"
+        )
+        assert (
+            non_skip - served.vote_ballot_total
+            == served.vote_ballot_guard_authored_excluded
+        ), sample_dir
+        assert served.vote_ballot_guard_authored_excluded > 0, sample_dir
 
 
 def test_marker_shaped_prose_the_model_wrote_is_not_treated_as_a_guard_marker() -> None:
