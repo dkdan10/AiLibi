@@ -1023,11 +1023,21 @@ class TestVersionMarkersMatchTheRegistry:
             header = _template_header(root / f"{stamp.split('.')[0]}.j2")
             assert _marker_version(header) == stamp, key
 
-    def test_a_stale_marker_fails_the_checker(self) -> None:
-        # The gate can fail: a header left on the previous version is exactly
-        # the drift this test exists to catch.
-        stale = "   prompt_id: vote_ballot  --  version vote_ballot.qwen3_6_27b.v4\n"
-        assert (
-            _marker_version(stale)
-            != prompt_versions_for_set("qwen3_6_27b")["vote_ballot"]
+    def test_a_stale_marker_fails_the_checker(self, tmp_path: Path) -> None:
+        # The gate can fail: rewind one real template's marker to the previous
+        # version and the SAME read-and-compare path must reject it. Exercised
+        # end to end (file read included), not just through the regex.
+        stale_file = tmp_path / "vote_ballot.j2"
+        live = (_PROMPTS_ROOT / "qwen3_6_27b" / "vote_ballot.j2").read_text(
+            encoding="utf-8"
         )
+        stale_file.write_text(
+            live.replace("vote_ballot.qwen3_6_27b.v5", "vote_ballot.qwen3_6_27b.v4", 1),
+            encoding="utf-8",
+        )
+
+        stamp = prompt_versions_for_set("qwen3_6_27b")["vote_ballot"]
+        assert _marker_version(_template_header(stale_file)) != stamp
+        # ...and the unmodified file still passes, so the check is not vacuous.
+        live_file = _PROMPTS_ROOT / "qwen3_6_27b" / "vote_ballot.j2"
+        assert _marker_version(_template_header(live_file)) == stamp
