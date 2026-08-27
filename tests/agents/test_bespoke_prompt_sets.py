@@ -21,11 +21,18 @@ unchanged. These tests pin that contract OFFLINE (no LLM, no network):
 
 from __future__ import annotations
 
+import re
+import shutil
+from pathlib import Path
+
 import pytest
 
 from agents.strategic.prompts.loader import (
     CANONICAL_MAP_CARD,
+    CANONICAL_ROOM_DISPLAY_NAMES,
     DEFAULT_PROMPT_SET,
+    _map_card_from_neighbors,
+    _PROMPTS_ROOT,
     build_prompt_renderers,
     render_map_card,
     resolve_prompt_set,
@@ -42,10 +49,14 @@ from meetings.schemas import (
     SawVentObservation,
     VoteBallot,
 )
-from meetings.transcript import CANONICAL_ROOM_NEIGHBORS
+from meetings.transcript import (
+    CANONICAL_ROOM_NEIGHBORS,
+    WEAK_CONTRADICTION_MARKER_PREFIX,
+)
 from orchestrator.boundary import public_map_from_engine_map
 from orchestrator.game import (
     DEFAULT_PROMPT_VERSIONS,
+    IMPOSTOR_ROLL_CALL_PROMPT_VERSION_SETS,
     PROMPT_VERSION_SETS,
     prompt_versions_for_set,
 )
@@ -502,41 +513,41 @@ class TestQwen332bV5VentElicitation:
                 assert self._SHAPE_MARKER not in text, set_name
 
 
-class TestQwen3627bV4EvidenceHonesty:
+class TestQwen3627bV5InWorldRegister:
     """Version pin for the locked set's current lineage.
 
     Each layer is exactly one registry entry, so every prompt change is
     separately attributable at the record that adopts it: v1 the baseline-4
     bespoke port, v2 the 16.15 elicitation batch, v3 the 16.16 persona voice
-    layer, v4 the Task-20.31 evidence-honesty batch (the proof/conflict flag
-    split, the impostor count, the dead-subject vent exemption, the threshold
-    arithmetic leaving the voter's voice, the map card). No two bodies can
-    share a stamp: the committed sample sets stamp *.qwen3_6_27b.v3 and
-    re-render through the archived v3 bytes until the adopting re-record. The
-    per-ask mechanism fixtures live in
+    layer, v4 the 20.31 evidence-honesty batch, v5 the Task-21.1 in-world
+    register (the machinery nouns out of every rendered line, the map card's
+    prose-name anchor). No two bodies can share a stamp: the committed sample
+    sets stamp *.qwen3_6_27b.v4 and re-render through the archived v4 bytes
+    until the adopting re-record. The per-ask mechanism fixtures live in
     ``tests/meetings/test_elicitation_fixtures.py``; the persona render
     fixtures in ``tests/meetings/test_persona_render.py``; this pin holds the
     stamp.
     """
 
-    def test_registry_stamps_all_four_templates_v4(self) -> None:
+    def test_registry_stamps_all_four_templates_v5(self) -> None:
         versions = prompt_versions_for_set("qwen3_6_27b")
         assert versions == {
-            "crewmate_report": "crewmate_report.qwen3_6_27b.v4",
-            "impostor_report": "impostor_report.qwen3_6_27b.v4",
-            "accusation_round": "accusation_round.qwen3_6_27b.v4",
-            "vote_ballot": "vote_ballot.qwen3_6_27b.v4",
+            "crewmate_report": "crewmate_report.qwen3_6_27b.v5",
+            "impostor_report": "impostor_report.qwen3_6_27b.v5",
+            "accusation_round": "accusation_round.qwen3_6_27b.v5",
+            "vote_ballot": "vote_ballot.qwen3_6_27b.v5",
         }
 
     def test_bumped_stamps_never_collide_with_prior_bodies(self) -> None:
         # Every earlier lineage stamp is still worn by committed bytes (the
-        # sample sets stamp .v3; the ML corpus stamps its own). The bumped
-        # registry must never re-mint one for the v4 bodies.
+        # sample sets and the ML corpus stamp .v4). The bumped registry must
+        # never re-mint one for the v5 bodies.
         for value in prompt_versions_for_set("qwen3_6_27b").values():
-            assert value.endswith(".qwen3_6_27b.v4")
+            assert value.endswith(".qwen3_6_27b.v5")
             assert ".v1" not in value
             assert ".v2" not in value
             assert ".v3" not in value
+            assert ".v4" not in value
 
 
 def test_cross_set_parse_invariant_is_shared() -> None:
@@ -580,12 +591,12 @@ class TestBespokeSetRegistration:
         assert set_name != DEFAULT_PROMPT_SET
 
 
-class TestQwen3627bV4RenderPins:
-    """Task 20.31 render pins for the locked set's v4 bodies.
+class TestQwen3627bV5RenderPins:
+    """Render pins for the locked set's live v5 bodies.
 
-    The committed bytes still stamp v3 and re-render through the archive, so
-    the prompt-byte golden does not exercise these bodies during the
-    bump-in-flight window. These renders are what guards them instead.
+    The committed bytes stamp v4 and re-render through the archive, so the
+    prompt-byte golden does not exercise these bodies during the bump-in-flight
+    window. These renders are what guards them instead.
     """
 
     def _render(self, *, impostor_count: int) -> dict[str, str]:
@@ -719,8 +730,12 @@ class TestQwen3627bV4RenderPins:
         rooms = sorted(CANONICAL_ROOM_NEIGHBORS)
         assert len(rooms) == 10
         for room in rooms:
-            neighbours = ", ".join(sorted(CANONICAL_ROOM_NEIGHBORS[room]))
-            assert f"- {room}: {neighbours}" in CANONICAL_MAP_CARD
+            neighbours = ", ".join(
+                f"{CANONICAL_ROOM_DISPLAY_NAMES[n]} ({n})"
+                for n in sorted(CANONICAL_ROOM_NEIGHBORS[room])
+            )
+            named = f"{CANONICAL_ROOM_DISPLAY_NAMES[room]} ({room})"
+            assert f"- {named}: {neighbours}" in CANONICAL_MAP_CARD
         # The gate can fail: drop one doorway and the card stops matching.
         thinned = engine_view.model_copy(
             update={
@@ -731,6 +746,40 @@ class TestQwen3627bV4RenderPins:
             }
         )
         assert render_map_card(thinned) != CANONICAL_MAP_CARD
+
+    def test_room_display_names_are_the_engine_maps_own_names(self) -> None:
+        # A-48: the agents speak raw ids because no authored surface ever
+        # spelled a room out. The card publishes the map's OWN name for each
+        # room, so the anchored register cannot drift into a spelling the game
+        # does not use ("East Hall" for EAST_HALL, the habit the corpus shows).
+        # Tests sit outside the §1.3 firewall, so the engine import is legal
+        # exactly here.
+        game_map = load_canonical_map()
+        assert dict(CANONICAL_ROOM_DISPLAY_NAMES) == {
+            room: game_map.rooms[room].name for room in game_map.rooms
+        }
+        assert CANONICAL_ROOM_DISPLAY_NAMES["EAST_HALL"] == "East Hallway"
+        assert CANONICAL_ROOM_DISPLAY_NAMES["WEST_HALL"] == "West Hallway"
+
+    def test_a_wrong_display_name_fails_the_card(self) -> None:
+        # The gate can fail: one name off the map's own spelling and the
+        # rendered card stops matching the committed one.
+        wrong = dict(CANONICAL_ROOM_DISPLAY_NAMES) | {"EAST_HALL": "East Hall"}
+        assert (
+            _map_card_from_neighbors(CANONICAL_ROOM_NEIGHBORS, names=wrong)
+            != CANONICAL_MAP_CARD
+        )
+
+    def test_an_unnamed_room_fails_loud(self) -> None:
+        # No silent fallback to the bare id: a card that quietly dropped the
+        # prose half would un-anchor the register it exists to set.
+        missing = {
+            room: name
+            for room, name in CANONICAL_ROOM_DISPLAY_NAMES.items()
+            if room != "REACTOR"
+        }
+        with pytest.raises(ValueError, match="no display name"):
+            _map_card_from_neighbors(CANONICAL_ROOM_NEIGHBORS, names=missing)
 
     def test_map_card_never_publishes_vent_topology(self) -> None:
         # Vents are impostor-only knowledge the same public view carries;
@@ -758,3 +807,237 @@ class TestQwen3627bV4RenderPins:
             assert '"type": "saw_move"' in rendered[label], label
             assert '"from_room"' in rendered[label], label
             assert '"to_room"' in rendered[label], label
+
+
+# --------------------------------------------------------------------------- #
+# The dialect net: what a rendered prompt may NOT teach the table to say       #
+# --------------------------------------------------------------------------- #
+
+# Out-of-world vocabulary. A prompt that uses these words teaches them: over the
+# committed corpus the oracle register appears in 45 of the 326 meetings where
+# the proof block rendered and in 0 of the 342 where it did not. The net runs
+# over RENDER OUTPUT only — the templates' Jinja identifiers (``flag_groups``,
+# ``contradiction_flags``) are control-flow names that never render.
+_BANNED_RENDER_VOCABULARY: tuple[str, ...] = (
+    "the engine",
+    "the system",
+    "the detector",
+    "certif",
+    "flag",
+)
+
+_PROOF_FLAG = ContradictionRef(
+    contradiction_id="c-proof",
+    kind="vent_sighting",
+    event_a_id="e-a",
+    event_b_id="e-b",
+    subjects=("p-3",),
+    description="p-2 witnessed p-3 vent in MEDBAY",
+)
+_CONFLICT_FLAG = ContradictionRef(
+    contradiction_id="c-conflict",
+    kind="alibi_vs_sighting",
+    event_a_id="e-c",
+    event_b_id="e-d",
+    subjects=("p-5",),
+    description="p-5's alibi conflicts with a sighting",
+)
+_WEAK_FLAG = ContradictionRef(
+    contradiction_id="c-weak",
+    kind="alibi_conflict",
+    event_a_id="e-e",
+    event_b_id="e-f",
+    subjects=("p-5",),
+    description=(
+        f"p-5's two alibis disagree {WEAK_CONTRADICTION_MARKER_PREFIX}self-pair]"
+    ),
+)
+_ALL_GROUPS = (_PROOF_FLAG, _CONFLICT_FLAG, _WEAK_FLAG)
+
+# A soft-only row, so the ballot renders the provenance tag and the legend that
+# explains it — two more surfaces the sweep has to cover.
+_PROV_ROWS = (
+    SuspicionEntry(player_id="p-3", suspicion=0.8, trust=0.5, flag_lift=0.2),
+    SuspicionEntry(
+        player_id="p-5",
+        suspicion=0.3,
+        trust=0.5,
+        testimony_spread=0.2,
+        carried_soft=0.1,
+    ),
+)
+
+
+def _render_locked_set(root: Path | None = None) -> dict[str, str]:
+    """Render all four default templates with every flag group present."""
+
+    r = (
+        build_prompt_renderers("qwen3_6_27b")
+        if root is None
+        else build_prompt_renderers("qwen3_6_27b", root=root)
+    )
+    inputs = PromptRenderInputs(impostor_count=2)
+    return {
+        "crewmate_report": r.crewmate_report(
+            agent_id="p-2",
+            current_tick=410,
+            meeting_trigger="p-2 reported body of p-7 at tick 410",
+            rendered_memory=_MEMORY,
+            public_transcript="",
+            living_ids=("p-3", "p-5"),
+            dead_ids=("p-7",),
+            render_inputs=inputs,
+        ),
+        "impostor_report": r.impostor_report(
+            agent_id="p-3",
+            current_tick=410,
+            meeting_trigger="p-3 reported body of p-7 at tick 410",
+            rendered_memory=_MEMORY,
+            public_transcript="",
+            fellow_impostor_ids=("p-9",),
+            living_ids=("p-2", "p-5"),
+            dead_ids=("p-7",),
+            render_inputs=inputs,
+        ),
+        "accusation_round": r.statement(
+            agent_id="p-3",
+            rendered_memory=_MEMORY,
+            transcript=_TRANSCRIPT,
+            contradictions=_ALL_GROUPS,
+            prior_turn=_PRIOR,
+            turn_kind="reply",
+            fellow_impostor_ids=(),
+            living_ids=("p-2", "p-5"),
+            dead_ids=("p-7",),
+            is_impostor=False,
+            is_body_report=True,
+            render_inputs=inputs,
+        ),
+        "vote_ballot": r.vote(
+            voter_id="p-2",
+            rendered_memory=_MEMORY,
+            transcript=_TRANSCRIPT,
+            contradiction_flags=_ALL_GROUPS,
+            suspicion_graph=_SUSP,
+            candidate_targets=("p-3", "p-5"),
+            skip_confidence_threshold=0.6,
+            fellow_impostor_ids=(),
+            suspicion_provenance=_PROV_ROWS,
+            render_inputs=inputs,
+        ),
+    }
+
+
+def _dialect_hits(rendered: str) -> list[str]:
+    """Every banned out-of-world word this render would teach the table."""
+
+    lowered = rendered.lower()
+    return [word for word in _BANNED_RENDER_VOCABULARY if word in lowered]
+
+
+class TestNoTaughtDialect:
+    """No rendered prompt hands the table an out-of-world word to repeat."""
+
+    def test_no_default_render_carries_machinery_vocabulary(self) -> None:
+        # Every flag group renders at once, so the proof line, the conflicting
+        # paragraph, the weak paragraph, the provenance tag and the ballot's
+        # decision prose are all on the page being swept.
+        for label, rendered in _render_locked_set().items():
+            assert _dialect_hits(rendered) == [], (label, _dialect_hits(rendered))
+
+    def test_the_flag_groups_actually_rendered(self) -> None:
+        # The sweep above proves nothing if the block it sweeps was empty.
+        for label in ("accusation_round", "vote_ballot"):
+            rendered = _render_locked_set()[label]
+            assert "<contradictions>" in rendered, label
+            assert "Proof. Only an impostor can vent" in rendered, label
+            assert "Conflicting accounts." in rendered, label
+            assert "Weak signals." in rendered, label
+        assert (
+            "no contradiction; carried/soft only" in _render_locked_set()["vote_ballot"]
+        )
+
+    def test_the_net_bites_a_reworded_body(self, tmp_path: Path) -> None:
+        # The gate can fail: restore the v4 oracle sentence in a scratch copy of
+        # the set and the same net must catch it.
+        root = tmp_path / "prompts"
+        shutil.copytree(_PROMPTS_ROOT / "qwen3_6_27b", root / "qwen3_6_27b")
+        victim = root / "qwen3_6_27b" / "vote_ballot.j2"
+        victim.write_text(
+            victim.read_text(encoding="utf-8").replace(
+                "Proof. Only an impostor can vent, so a witnessed vent here",
+                "Proof. The engine certified these: only an impostor can vent, "
+                "so a flag here",
+            ),
+            encoding="utf-8",
+        )
+
+        hits = _dialect_hits(_render_locked_set(root=root)["vote_ballot"])
+        assert "the engine" in hits
+        assert "certif" in hits
+        assert "flag" in hits
+
+
+# --------------------------------------------------------------------------- #
+# The version marker: every template header names the stamp the registry serves #
+# --------------------------------------------------------------------------- #
+
+_MARKER_RE = re.compile(r"version\s+(\S+)")
+
+
+def _marker_version(header: str) -> str:
+    """Read the ``version <template>.<set>.<vN>`` marker out of a header."""
+
+    match = _MARKER_RE.search(header)
+    if match is None:
+        raise AssertionError(f"no version marker in header: {header!r}")
+    return match.group(1)
+
+
+def _template_header(path: Path) -> str:
+    with path.open(encoding="utf-8") as handle:
+        return "".join(line for _, line in zip(range(8), handle, strict=False))
+
+
+class TestVersionMarkersMatchTheRegistry:
+    """A marker left behind renders nothing, so only a test can catch it.
+
+    The markers live inside the ``{#- ... -#}`` header and never reach a model,
+    which is exactly why a stale one survives every render assertion in this
+    file. Both registries are covered: the four default bodies and the two
+    ``*_roll_call.j2`` variant bodies on their own v1 lineage.
+    """
+
+    def test_every_default_marker_equals_its_registry_stamp(self) -> None:
+        root = _PROMPTS_ROOT / "qwen3_6_27b"
+        for key, stamp in prompt_versions_for_set("qwen3_6_27b").items():
+            header = _template_header(root / f"{key}.j2")
+            assert _marker_version(header) == stamp, key
+
+    def test_every_variant_marker_equals_its_registry_stamp(self) -> None:
+        root = _PROMPTS_ROOT / "qwen3_6_27b"
+        variant = IMPOSTOR_ROLL_CALL_PROMPT_VERSION_SETS["qwen3_6_27b"]
+        for key in ("impostor_report", "accusation_round"):
+            stamp = variant[key]
+            # The stamp's template component names the variant FILE on disk.
+            header = _template_header(root / f"{stamp.split('.')[0]}.j2")
+            assert _marker_version(header) == stamp, key
+
+    def test_a_stale_marker_fails_the_checker(self, tmp_path: Path) -> None:
+        # The gate can fail: rewind one real template's marker to the previous
+        # version and the SAME read-and-compare path must reject it. Exercised
+        # end to end (file read included), not just through the regex.
+        stale_file = tmp_path / "vote_ballot.j2"
+        live = (_PROMPTS_ROOT / "qwen3_6_27b" / "vote_ballot.j2").read_text(
+            encoding="utf-8"
+        )
+        stale_file.write_text(
+            live.replace("vote_ballot.qwen3_6_27b.v5", "vote_ballot.qwen3_6_27b.v4", 1),
+            encoding="utf-8",
+        )
+
+        stamp = prompt_versions_for_set("qwen3_6_27b")["vote_ballot"]
+        assert _marker_version(_template_header(stale_file)) != stamp
+        # ...and the unmodified file still passes, so the check is not vacuous.
+        live_file = _PROMPTS_ROOT / "qwen3_6_27b" / "vote_ballot.j2"
+        assert _marker_version(_template_header(live_file)) == stamp

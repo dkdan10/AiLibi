@@ -1,6 +1,6 @@
 {#- Reactive accusation-chain turn (reply / opt_in) — bespoke qwen3_6_27b set (Task 16.13; elicitation batch Task 16.15; persona voice layer Task 16.16).
 
-   prompt_id: accusation_round  --  version accusation_round.qwen3_6_27b.v5
+   prompt_id: accusation_round  --  version accusation_round.qwen3_6_27b.v4
 
    Baseline-4 merge (v1, Task 16.13): the scratch-ladder style base
    (qwen36_prompt_scratch/v5/) with the qwen3_32b v5 mechanics restyled in. On
@@ -65,10 +65,10 @@
    Evidence honesty (v4, Task 20.31):
 
    * the flag block speaks the committed evidence taxonomy — "Proof"
-     (role-proving: a witnessed vent names an impostor outright) above
-     "Conflicting accounts" (two statements that cannot both be true), with
-     the detector's own weak stamp as a subordinate third group. The grouping
-     is computed in Python (``flag_groups``); this template only loops;
+     (role-proving, engine-certified) above "Conflicting accounts" (two
+     statements that cannot both be true), with the detector's own weak stamp
+     as a subordinate third group. The grouping is computed in Python
+     (``flag_groups``); this template only loops;
    * the persona and the win condition are parameterised by the game's
      impostor count (``impostors``), and the teammate line agrees in number;
    * the vent-first mandate exempts a subject already dead or ejected, in BOTH
@@ -83,12 +83,6 @@
      is_body_report, persona (rendered since v3 — Task 16.16), flag_groups +
      impostors + map_card (rendered since v4 — Task 20.31;
      suspicion_provenance is accepted by the loader and unreferenced here).
-
-   In-world register (v5, Task 21.1): the evidence section speaks only of what
-   a player at the table could say. The rendered block is ``<contradictions>``,
-   the proof line states the vent mechanic instead of citing an engine, and no
-   rendered line names a flag, a detector or a certification — the register the
-   templates dictate is the register the transcript comes back in.
 
    The scratch persona's "Nobody suspects you yet." is DROPPED (PR #260
    review, round 3): on a reply turn the same prompt shows the accusation
@@ -165,9 +159,9 @@ This terminal turn does not extend the chain — it is your chance to put eviden
 </transcript>
 {% if contradictions %}
 
-<contradictions>
+<flagged_contradictions>
 {% if flag_groups.proof %}
-Proof. Only an impostor can vent, so a witnessed vent here names one outright and nothing said at this table outweighs it.
+Proof. The engine certified these: only an impostor can vent, so a flag here names one outright and nothing said at this table outweighs it.
 {% for c in flag_groups.proof %}
 - [{{ c.kind }}] {{ c.description }}{% if c.subjects %} (subjects: {{ c.subjects | join(", ") }}){% endif %}
 {% endfor %}
@@ -179,12 +173,12 @@ Conflicting accounts. Two statements that cannot both be true. Nothing here says
 {% endfor %}
 {% endif %}
 {% if flag_groups.weak %}
-Weak signals. The same kind of conflict, but an innocent reading already fits it — a narrow window, a transit tick, a speaker recalling their own movements. Weigh these last.
+Weak signals. The same kind of conflict, but the detector already found an innocent reading for it — a narrow window, a transit tick, a speaker recalling their own movements. Weigh these last.
 {% for c in flag_groups.weak %}
 - [{{ c.kind }}] {{ c.description }}{% if c.subjects %} (subjects: {{ c.subjects | join(", ") }}){% endif %}
 {% endfor %}
 {% endif %}
-</contradictions>
+</flagged_contradictions>
 {% endif %}
 {% if prior_turn %}
 
@@ -255,7 +249,7 @@ Fill "observations" with the 3-5 MOST PROBATIVE first-hand rows — the sighting
   {"type": "whereabouts", "tick": <int>, "room": "<room id>"} — your roll-call answer: the room YOU were in at the tick that matters, copied from your own record (one room, one tick; the speaker is always you, so it names no subject).
 Each "claims" item is one of:
   {"type": "alibi", "subject": "{{ agent_id }}", "from_tick": <int>, "to_tick": <int>, "room": "<room id>", "evidence": ["<short ref>", ...]} with from_tick <= to_tick — ONE room, and only the tick range you were ACTUALLY in it; a range that spans rooms you moved between contradicts your own record and gets you ejected.
-  {"type": "accusation", "against": "<one living player id>", "confidence": <0.0-1.0>, "reason": "<one short phrase>"} — at most one, and "against" must come from the living list above; the chain follows whoever you accuse. Calibrate "confidence" honestly: 1.0 only for a kill or a vent you watched happen first-hand; ~0.7 for a case a second account or a contradiction corroborates; ~0.5 for a hunch read off movement alone.
+  {"type": "accusation", "against": "<one living player id>", "confidence": <0.0-1.0>, "reason": "<one short phrase>"} — at most one, and "against" must come from the living list above; the chain follows whoever you accuse. Calibrate "confidence" honestly: 1.0 only for a kill or a vent you watched happen first-hand; ~0.7 for a case a second account or a contradiction flag corroborates; ~0.5 for a hunch read off movement alone.
   {"type": "corroboration", "supports": "<player id>", "on_tick": <int>, "reason": "<one short phrase>"}
 {% endif %}
 Reference only ticks, rooms, players, and tasks that appear above — an invented identifier fails validation. Keep "free_text" consistent with your claims.

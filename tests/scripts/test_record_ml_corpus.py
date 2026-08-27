@@ -221,9 +221,9 @@ def test_dry_run_announces_endpoint_and_prompt_version_locks() -> None:
         "AILIBI_FEATHERLESS_BASE_URL override is refused)" in proc.stdout
     )
     assert (
-        "prompt versions: locked to [accusation_round.qwen3_6_27b.v4, "
-        "crewmate_report.qwen3_6_27b.v4, impostor_report.qwen3_6_27b.v4, "
-        "vote_ballot.qwen3_6_27b.v4]" in proc.stdout
+        "prompt versions: locked to [accusation_round.qwen3_6_27b.v5, "
+        "crewmate_report.qwen3_6_27b.v5, impostor_report.qwen3_6_27b.v5, "
+        "vote_ballot.qwen3_6_27b.v5]" in proc.stdout
     )
 
 
@@ -610,11 +610,11 @@ def test_preflight_refuses_non_default_base_url(tmp_path: Path) -> None:
 
 
 def test_prompt_version_registry_matches_locked_script_constant() -> None:
-    # The corpus contract freezes the baseline-6 prompt VERSIONS (all four
-    # templates at v3), not just the set name — the recorder's preflight asserts
-    # the live registry still resolves qwen3_6_27b to its locked constant. Pin the
-    # two together here: if a later task bumps the registry entry, this test
-    # fails and forces the corpus re-lock conversation instead of letting the
+    # The corpus contract freezes the prompt VERSIONS (all four templates at
+    # v5), not just the set name — the recorder's preflight asserts the live
+    # registry still resolves qwen3_6_27b to its locked constant. Pin the two
+    # together here: if a later task bumps the registry entry, this test fails
+    # and forces the corpus re-lock conversation instead of letting the
     # recorder's guard and the registry drift apart silently.
     from orchestrator.game import PROMPT_VERSION_SETS
 

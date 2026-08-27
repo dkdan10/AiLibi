@@ -120,7 +120,7 @@ _UNATTRIBUTED_ROW = SuspicionEntry(
 )
 _PROV_ROWS = (_HARD_ROW, _SOFT_ONLY_ROW, _UNATTRIBUTED_ROW)
 
-_SOFT_ONLY_MARKER = "no flag; carried/soft only"
+_SOFT_ONLY_MARKER = "no contradiction; carried/soft only"
 _SPLIT_MARKER = "built from: this meeting"
 
 
@@ -232,7 +232,7 @@ class TestProvenanceSurface:
         # p-5: testimony 0.20 this meeting, 0.10 carried — the soft-only class.
         assert (
             "- `p-5`: suspicion 0.80, trust 0.50 — built from: this meeting +0.20, "
-            "carried prior +0.10 — no flag; carried/soft only" in rendered
+            "carried prior +0.10 — no contradiction; carried/soft only" in rendered
         )
         # The legend that explains the split renders beside the rows.
         assert "carried prior" in rendered
