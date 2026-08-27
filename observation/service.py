@@ -395,12 +395,11 @@ class ObservationService:
     ) -> tuple[AudibleEvent, ...]:
         """The tick's audio cues for this observer, ordered vents-then-alarm.
 
-        Under :func:`vent_single_mint_enabled` this emits the global
-        ``sabotage_alarm`` alone: a witnessed vent is delivered ONCE, as the
-        visible action, so one physical event yields one perception. OFF it also
-        mints a ``vent_use_heard`` per witnessed vent room — the co-emitting
-        derivation the committed prompt bytes were recorded under, kept until
-        Task 21.15's re-record replaces them.
+        Emits the global ``sabotage_alarm`` (``room=None``) while a sabotage is
+        active, and — unless :func:`vent_single_mint_enabled` — one
+        ``vent_use_heard`` per witnessed vent room. Under that gate a witnessed
+        vent is delivered ONCE, as the visible action, so one physical event
+        yields one perception.
         """
 
         events: list[AudibleEvent] = []

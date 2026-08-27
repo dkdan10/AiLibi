@@ -191,11 +191,11 @@ class AudibleEventView(_FrozenView):
 
     Shadows ``observation.packet.AudibleEvent`` — the audio channel
     (``observation.service.ObservationService._audible_events``), read alongside
-    the visual field rather than independently of it: ``sabotage_alarm`` is the
-    global alarm (``room`` is ``None``), and ``vent_use_heard`` names a vent the
-    observer WITNESSED, never one heard through a wall. The repair gate stops
-    minting the vent kind — the sight is the whole perception — so it appears only
-    in recordings made before that gate, which this view still has to render.
+    the visual field rather than independently of it. ``sabotage_alarm`` is the
+    global alarm and carries ``room=None``. ``vent_use_heard`` names a vent the
+    observer WITNESSED, never one heard through a wall: it duplicates a sighting
+    the same packet already carries as a visible action, and the single-mint gate
+    decides whether it is minted at all, so a recording may carry it or not.
     """
 
     kind: Literal["vent_use_heard", "sabotage_alarm"]

@@ -43,8 +43,8 @@
 //   unwitnessed vent → nothing at all, through any channel. (`vent_use_heard` is
 //                      not a second chance: no audible cue is minted for a vent
 //                      the observer did not witness, so heard-but-unseen is not a
-//                      state the bytes contain. Older recordings carry the cue as
-//                      a duplicate of the sighting beside it.)
+//                      state the bytes contain. Where the cue does appear it
+//                      duplicates the sighting beside it.)
 //
 // A fifth case sits beside them: the agent's OWN kill or vent. The engine
 // excludes an actor from its own witness sets, so the four rules above would
