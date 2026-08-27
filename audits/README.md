@@ -267,3 +267,10 @@ directory's `README.md`, which carries the tallies and the proposed routing.
   whole gate re-run at close HEAD in both evidence states, every dispatched
   contract re-verified, the before/after read back bar by bar, the defects it
   found, and the balance wave put to the owner.
+
+## Phase 21 — the re-ground on corrected bytes
+
+- [audit-phase-21-planning.md](audit-phase-21-planning.md) — the plan: the
+  Wave-0 grounding and its method, the phase shape, the routing of the 2026-08-26
+  review's proposed buckets to contracts, the strike procedures for the two owner
+  decision points, the cut line, and the divergences from the handoff.

@@ -1,0 +1,214 @@
+# Agent Prompt — 21.26 THE PHASE CLOSE (owner): the close audit, the gate rerun on re-ground bytes, the ledger, the routed next decision
+
+You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-21.md.
+
+## Role and context
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly; it names the authoritative architecture routing. The task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+
+## Exact section reference
+Implement Task 21.26 — THE PHASE CLOSE (owner): the close audit, the gate rerun on re-ground bytes, the ledger, the routed next decision, anchored to [L] the prior close's pattern, reprised — audits/audit-phase-20-close.md §1 (the whole gate re-run at close HEAD by the verifiers' actual invocation paths, with the **state** column beside every row, and its F1: `uv run pytest -m campaign` **"9 failed, 308 passed, 5327 deselected in 185.78s (0:03:05)"**, routed to the ML re-ground and not fixed), §2 (the ledger — every dispatched contract verified-or-deviation-recorded, none silent; tally 39 VERIFIED / 3 DEVIATION-RECORDED), §3 (the before/after story in generated numbers only), §3.3 (both halves of the recorded outcome verified present in the tree), §3.4 (the review's findings → outcomes), §4 (the routed decision, recommendation first, the committed cells doing the arguing), §5 (the Decisions section, including the two mechanical scope admissions this close will face again), §6 (provenance + the frontier), §7 (the reproduction block); audits/audit-phase-20-close.md F2/F3/F4/F5 (the four items routed forward into this phase — the stale narrations, the un-gated word budgets, the ladder-tip gate-coverage gap, and the carried `evidence/raw-slate-staging` ref, which is an owner one-command step and not a task); audits/audit-phase-20-baseline-7.md §6 (THE VERDICT — the rule returned **FINDING**: bar 1 non-direct accuracy 61/103 = 0.5922 against ≥ 0.60, bar 2 innocent ejections 42 against < 35, both **MISSED**, nothing re-priced), §6.1 (THE OWNER'S ADOPTION RULING of 2026-08-26 — an explicit owner override of that FINDING verdict, with its "what no surface may say" paragraph, which binds every surface this phase wrote), §6.2 (what the ruling executed, the tree-side facts this close re-verifies), §10.2 (the ML re-ground named as a follow-up, the STALE amnesty's declared shape, and the FO-6 comparator's three-record flip history); audits/review-2026-08-26/README.md §1 (the two tracks and their tallies — track A 48 canonical findings, 13 CONFIRMED / 35 ADJUSTED / 0 REFUTED; track B 56 canonical, 18 / 37 / 1 REFUTED), §2 (the ten items the plan was built on: A-6, B-6, A-3+A-26, A-14+B-1, A-10/A-4/A-5/A-24/A-25, A-20, B-11, B-7/B-8/B-9, A-8/A-9, A-15), §3 (the routing table the planning PR ratifies — the map this close's outcome column is read against), §4 ("What this review is not", including the rule that any number becoming load-bearing in a Phase-21 contract is re-derived by that contract's own Measurement command); audits/review-2026-08-26/A/collated-findings.md and B/collated-findings.md (the two registers — the close reads them for the finding→outcome map and never re-verifies a verdict); AGENTS.md:91-124 (the seven craft rules every ledger row is audited against; rule 2 "a gate must be able to fail" is the one this close applies to its own map), AGENTS.md:62-89 (the graduation-sweep rule the Wave-2 slate is verified against, if the adopting record adopted one). Anchors re-verified at HEAD `4002f19b`: scripts/check.sh:27-32 (the six non-pytest legs) and :37-42 (the pytest leg — parallel `uv run pytest -n auto --dist loadfile`, with the `AILIBI_PYTEST_SERIAL=1` serial hatch validated at :21-25) and :57-68 (the four frontend legs); pyproject.toml:86 (`addopts = "--strict-markers -m 'not campaign'"`) and :88 (the registered `campaign` marker — the opt-in tier); .github/workflows/ci.yml, .github/workflows/campaign-tier.yml:26-27 (the weekly `cron: "17 6 * * 1"` job that keeps `-m campaign` from becoming an orphan) and .github/workflows/pages.yml:85 (the `Deploy to GitHub Pages` job whose status this close quotes); docs/artifacts.md:107 (the counted `audits/` registry row, stated as `7.9 MB / 158 files`, matching `git ls-files audits | wc -l` = 158 at `4002f19b` — re-derive at close HEAD, since the close audit itself moves it) enforced by scripts/verify_ml_evidence.py:2347 (`"audits/": (("audits",), ())`) and :2359 (`inventory_problems`) via tests/scripts/test_verify_ml_evidence.py:1624 (`test_every_counted_registry_row_matches_the_index`, unmarked and therefore in the DEFAULT tier); scripts/check_doc_facts.py:1722 (`check_audits_index` — fails the DEFAULT tier on any top-level `audits/*.md` the index does not link exactly once, which is what forces this PR's `audits/README.md` entry), :1119 (`check_ladder_tip`) and :237-242 (`_LADDER_TIP_DOCUMENTS` — README, glossary, history, reading guide), :3169 (`check_review_map`) with :224 (`_REVIEW_INDEX` = the 2026-08-19 index), :226 (`_PHASE_20_CONTRACT`) and :423/:435 (the `[GC]-\d{1,3}` finding-id patterns — the reason this phase's `A-`/`B-` map is unguarded); scripts/compute_next_task.py:94 (`compute_frontier`, the frontier cross-check); orchestrator/replay.py:524-545 (`_RETIRED_ALWAYS_ON_LEVERS`, twenty-one keys at HEAD), :568-570 (`_TOGGLEABLE_LEVER_RESOLVERS`, the single live toggle `impostor_roll_call`) and :584-587 (`SUBSTRATE_FLAG_KEYS`, twenty-two); eval/watchability.py:914 (`_DEFAULT_BASELINE_ID = "baseline-7"`) and training/bakeoff/harness.py:181 (`BAKEOFF_BASELINE_ID`, `"baseline-6"` at HEAD and moved by the re-ground); README.md:169 (`## Project status`), :171 and :173 (the two living status/roadmap sentences — re-locate by the heading, since the post-record pass restructures this section before the close) and the phase table headed at :177, whose last row is `| 20 |` at :200; tasks/phase-20.md:3 and tasks/phase-19.md:3 (the STATUS-banner exemplars).. Do not implement work outside these references.
+
+## Task contract
+The authoritative task contract is copied below from tasks/phase-21.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
+
+**Branch:** `phase-21-phase-close`
+**Depends on:** 21.17, 21.25
+**Section refs:** [L] the prior close's pattern, reprised — audits/audit-phase-20-close.md §1 (the whole gate re-run at close HEAD by the verifiers' actual invocation paths, with the **state** column beside every row, and its F1: `uv run pytest -m campaign` **"9 failed, 308 passed, 5327 deselected in 185.78s (0:03:05)"**, routed to the ML re-ground and not fixed), §2 (the ledger — every dispatched contract verified-or-deviation-recorded, none silent; tally 39 VERIFIED / 3 DEVIATION-RECORDED), §3 (the before/after story in generated numbers only), §3.3 (both halves of the recorded outcome verified present in the tree), §3.4 (the review's findings → outcomes), §4 (the routed decision, recommendation first, the committed cells doing the arguing), §5 (the Decisions section, including the two mechanical scope admissions this close will face again), §6 (provenance + the frontier), §7 (the reproduction block); audits/audit-phase-20-close.md F2/F3/F4/F5 (the four items routed forward into this phase — the stale narrations, the un-gated word budgets, the ladder-tip gate-coverage gap, and the carried `evidence/raw-slate-staging` ref, which is an owner one-command step and not a task); audits/audit-phase-20-baseline-7.md §6 (THE VERDICT — the rule returned **FINDING**: bar 1 non-direct accuracy 61/103 = 0.5922 against ≥ 0.60, bar 2 innocent ejections 42 against < 35, both **MISSED**, nothing re-priced), §6.1 (THE OWNER'S ADOPTION RULING of 2026-08-26 — an explicit owner override of that FINDING verdict, with its "what no surface may say" paragraph, which binds every surface this phase wrote), §6.2 (what the ruling executed, the tree-side facts this close re-verifies), §10.2 (the ML re-ground named as a follow-up, the STALE amnesty's declared shape, and the FO-6 comparator's three-record flip history); audits/review-2026-08-26/README.md §1 (the two tracks and their tallies — track A 48 canonical findings, 13 CONFIRMED / 35 ADJUSTED / 0 REFUTED; track B 56 canonical, 18 / 37 / 1 REFUTED), §2 (the ten items the plan was built on: A-6, B-6, A-3+A-26, A-14+B-1, A-10/A-4/A-5/A-24/A-25, A-20, B-11, B-7/B-8/B-9, A-8/A-9, A-15), §3 (the routing table the planning PR ratifies — the map this close's outcome column is read against), §4 ("What this review is not", including the rule that any number becoming load-bearing in a Phase-21 contract is re-derived by that contract's own Measurement command); audits/review-2026-08-26/A/collated-findings.md and B/collated-findings.md (the two registers — the close reads them for the finding→outcome map and never re-verifies a verdict); AGENTS.md:91-124 (the seven craft rules every ledger row is audited against; rule 2 "a gate must be able to fail" is the one this close applies to its own map), AGENTS.md:62-89 (the graduation-sweep rule the Wave-2 slate is verified against, if the adopting record adopted one). Anchors re-verified at HEAD `4002f19b`: scripts/check.sh:27-32 (the six non-pytest legs) and :37-42 (the pytest leg — parallel `uv run pytest -n auto --dist loadfile`, with the `AILIBI_PYTEST_SERIAL=1` serial hatch validated at :21-25) and :57-68 (the four frontend legs); pyproject.toml:86 (`addopts = "--strict-markers -m 'not campaign'"`) and :88 (the registered `campaign` marker — the opt-in tier); .github/workflows/ci.yml, .github/workflows/campaign-tier.yml:26-27 (the weekly `cron: "17 6 * * 1"` job that keeps `-m campaign` from becoming an orphan) and .github/workflows/pages.yml:85 (the `Deploy to GitHub Pages` job whose status this close quotes); docs/artifacts.md:107 (the counted `audits/` registry row, stated as `7.9 MB / 158 files`, matching `git ls-files audits | wc -l` = 158 at `4002f19b` — re-derive at close HEAD, since the close audit itself moves it) enforced by scripts/verify_ml_evidence.py:2347 (`"audits/": (("audits",), ())`) and :2359 (`inventory_problems`) via tests/scripts/test_verify_ml_evidence.py:1624 (`test_every_counted_registry_row_matches_the_index`, unmarked and therefore in the DEFAULT tier); scripts/check_doc_facts.py:1722 (`check_audits_index` — fails the DEFAULT tier on any top-level `audits/*.md` the index does not link exactly once, which is what forces this PR's `audits/README.md` entry), :1119 (`check_ladder_tip`) and :237-242 (`_LADDER_TIP_DOCUMENTS` — README, glossary, history, reading guide), :3169 (`check_review_map`) with :224 (`_REVIEW_INDEX` = the 2026-08-19 index), :226 (`_PHASE_20_CONTRACT`) and :423/:435 (the `[GC]-\d{1,3}` finding-id patterns — the reason this phase's `A-`/`B-` map is unguarded); scripts/compute_next_task.py:94 (`compute_frontier`, the frontier cross-check); orchestrator/replay.py:524-545 (`_RETIRED_ALWAYS_ON_LEVERS`, twenty-one keys at HEAD), :568-570 (`_TOGGLEABLE_LEVER_RESOLVERS`, the single live toggle `impostor_roll_call`) and :584-587 (`SUBSTRATE_FLAG_KEYS`, twenty-two); eval/watchability.py:914 (`_DEFAULT_BASELINE_ID = "baseline-7"`) and training/bakeoff/harness.py:181 (`BAKEOFF_BASELINE_ID`, `"baseline-6"` at HEAD and moved by the re-ground); README.md:169 (`## Project status`), :171 and :173 (the two living status/roadmap sentences — re-locate by the heading, since the post-record pass restructures this section before the close) and the phase table headed at :177, whose last row is `| 20 |` at :200; tasks/phase-20.md:3 and tasks/phase-19.md:3 (the STATUS-banner exemplars).
+**Complexity:** Small
+**Record impact:** post-record — the close verifies and banners the tree the two records left. It moves no rendered prompt byte, no detector output and no replay byte; the only bytes it adds are an audit, two banners, one index entry and one counted registry row.
+**Measurement:** `bash scripts/check.sh` green at close HEAD in a clean worktree AND again in the restored-evidence state, quoted leg by leg with its wall clock, plus `uv run pytest -m campaign`, `bash scripts/fetch_evidence.sh` followed by `uv run python scripts/verify_ml_evidence.py --complete`, `bash scripts/verify_samples.sh` in a bare environment, `uv run python scripts/check_doc_facts.py`, and the Pages deploy job's status on the close commit — every leg green or recorded as a named finding with a routed destination; every number in the close audit's before/after table equals a committed pin, a cell quoted from one of the two record audits, or a command reproduced in the audit's own method section.
+
+Phase 21 is the re-ground on corrected bytes, and it is the first phase in this project's history to
+spend two operator records in one arc: the combined re-record that repairs the substrate without
+judging it, and the adopting record that the pre-registration's rule reads. This contract is the last
+one dispatched and the only one whose job is to distrust the others. The convention three closes have
+now established is that a merge is not a verification — the phase-18 close found real defects inside
+otherwise-green merges, the phase-19 close's own first `bash scripts/check.sh` at close HEAD exited 1,
+and the phase-20 close found four defects (F1–F4) in a phase that had just shipped an evidence-honesty
+substrate, plus one carried forward. The count of contracts this close must verify is **derived at
+close HEAD, never quoted from the plan**: two of this phase's contracts are owner decision points that
+the planning merge may strike, and the prior phase added a contract mid-phase out of its smoke's
+ABANDON verdict, so the ledger's row count comes from `grep -c '^### Task 21\.' tasks/phase-21.md`
+minus this one.
+
+Two of this phase's contracts were dispatched as owner decision points — a latent-correctness repair to
+the win-condition ordering, and one candidate testimony lever — either of which the planning merge may
+have struck. A struck contract leaves a hole in the id sequence, and a hole reads to a stranger like a
+merge that went missing. The ledger closes that reading explicitly: every id in the phase's range is
+accounted for as merged-and-verified, merged-with-a-deviation, or struck-before-dispatch with the
+striking commit named. This is the same discipline the ledger applies to a mid-phase addition, in the
+other direction.
+
+The gate this close re-runs is the same shape as the last one and a different result in two legs, and
+those two legs are the phase's whole point. The phase-20 close recorded its F1 as
+`uv run pytest -m campaign` exiting 1 — **"9 failed, 308 passed, 5327 deselected in 185.78s"** — with
+the nine diagnosed by class (three substrate-sha self-consistency pins reading `f5865c53…` against a
+live `9bc00af0…`, five corpus-derived fit pins including `87 ≠ 96` held-out meetings, and one scenario
+pin that pre-dated the record) and routed, not fixed, to the ML re-ground. It recorded the same debt on
+the evidence leg: `--complete` green at **"checks: 55 | OK 39 | FAIL 0 | STALE 11 | ABSENT 0 | INFO 5"**,
+where the eleven STALE rows were the declared grounding gap of `audits/audit-phase-20-baseline-7.md`
+§10.2. This phase executed that routing. So for the first time since the record, the opt-in tier and the
+STALE count are **results this close reads**, not defects it re-routes — and if either is still red, that
+is a finding of this close, named and routed, never softened into a pass by re-running it in a friendlier
+state. The pairing that made the prior close quotable at all — the documented restore and the documented
+gate, mutually exclusive at the phase-19 close and repaired since — is run again in one session, with the
+state recorded beside every row, because that is how the prior close found its F1 in the first place.
+
+The ledger is a three-owner surface and the close owns only one third of it. The re-record's ruling is
+that it made none: it is maintenance-of-record, no bars and no verdict, whose audit publishes every
+instrument cell before and after and whose surprising moves were STOP-and-report items to the owner
+while it ran. The adopting record's ruling belongs to the adopting record and to its own merge, read by
+the rule the pre-registration ratified — and whatever that rule returned is carried forward here exactly
+as recorded, including a FINDING. Underneath both sits a fact that binds every sentence this close
+writes: **baseline 7 is canon by explicit owner override of a FINDING verdict.** The phase-20
+pre-registered rule returned FINDING with bar 1 at 61/103 = 0.5922 against ≥ 0.60 and bar 2 at 42
+innocent ejections against < 35, both MISSED, and nothing anywhere re-prices them; separately and by
+explicit prerogative the owner adopted the substrate over that verdict on 2026-08-26
+(`audits/audit-phase-20-baseline-7.md` §6, §6.1). That document's "what no surface may say" paragraph
+binds this phase's tree exactly as it bound the last one, and this close re-verifies it holds across
+everything Phase 21 wrote — every new audit, README row, docstring, prompt template and commit message.
+A close that lets an owner override read as a passing bar is the single failure the whole pre-registration
+apparatus exists to make impossible.
+
+The before/after table therefore carries two columns and two records, and it quotes rather than
+recomputes. Every pre-record figure is the instrument pin the pre-registration cites or the cell the
+re-record's audit publishes as its before column; every post-record figure is read from the adopting
+record's audit; and where a bar could not be read at all, the close says which one and why with the same
+prominence as the bars that moved. Beside the bars sit the record-free rows, which this phase has an
+unusual number of: the re-ground's fingerprints (each one moved, the STALE amnesty deleted, the campaign
+tier's nine pins re-grounded or converted), the corrected substrate's own counts (the ~2,160 recorded-
+but-never-applied actions that now carry a disposition, the double-minted vent records, the belief line's
+19% of rendered rows that contradicted the agent's own sightings, the machinery-dialect leak net over the
+committed bytes), and the four items the prior close routed forward. A pre-registered null on a fixed
+instrument is a result and is published as one; so is a repair that moved a count to zero.
+
+Then the map, and the honest thing about it. The two registers published 48 canonical findings on track A
+(13 CONFIRMED, 35 ADJUSTED, 0 REFUTED) and 56 on track B (18, 37, 1 REFUTED), and every id this phase
+acted on must resolve to exactly one outcome — fixed, lever-ON-and-adopted, recorded-as-finding, or
+triaged backlog — with the untouched remainder named as a backlog and sized, which is the registers' own
+instruction. Unlike the prior phase's map, **no gate holds this one**:
+`scripts/check_doc_facts.py::check_review_map` (:3169) is pinned to the 2026-08-19 index (:224) and to
+`tasks/phase-20.md` (:226), and its finding-id patterns are `[GC]-\d{1,3}` (:423, :435), which the
+`A-`/`B-` ids of the 2026-08-26 registers do not match. The close states that plainly, publishes the map
+in the audit where a reader can check it by hand, and routes the generalization — with its own
+perturbation case, per craft rule 2 — rather than reaching into `scripts/` on a close. Claiming a gate
+that does not exist would be the same defect class in a different file.
+
+Finally the close routes. The prior close's recommendation — charter the balance wave as its own phase
+with its own recording, six levers named with their measured evidence — was ratified as a route and
+chartered nothing, and this phase spent itself on the re-ground and the injustice levers instead. So the
+menu is re-priced against what the tree now knows: the balance wave's six, the backlog rows the two
+registers added, and whatever the adopting record left unadopted. Two standing decisions do not ride that
+ruling and are stated separately, as the prior close stated them: the ML program's cadence now that the
+re-ground is spent, and the live-API deployment, which stays refused with the static bundle as the
+sanctioned path. Recommendation first, per-option outcomes and costs, the committed cells doing the
+arguing, the operator wall clock priced honestly against what these records actually took — and no
+unilateral ruling. The owner's merge ratifies the close reading; the owner's ruling, when given, is
+recorded here.
+
+**Files in scope:**
+- audits/audit-phase-21-close.md; (new — the close audit, in the prior close's section shape)
+- audits/README.md; (the index entry for the close audit ONLY — `scripts/check_doc_facts.py:1722` fails the DEFAULT tier on any un-indexed top-level `audits/*.md`, so landing the audit forces exactly this one entry)
+- tasks/phase-21.md; (the STATUS line only — CLOSED, the date, the outcome in one sentence, the close audit's path)
+- README.md; (the status surface only — the two living sentences under `## Project status` at :171/:173 and this phase's own row appended to the phase table headed at :177, whose last row is `| 20 |` at :200, flipped from "in progress" to the close's outcome; no other README content moves)
+- docs/artifacts.md; (the `audits/` registry row count at :107 only, re-derived from the git index — landing the close audit moves it by one)
+
+**Files NOT in scope:**
+- every production package, `eval/`, `scripts/`, `tests/`, `training/`, `frontend/` (the close verifies; it does not fix — a close-found defect is recorded as a named finding and routed to the next phase's inputs, exactly as F1–F4 were at the prior close)
+- replays/ (both records are done and their bytes are canonical; the close reads them)
+- audits/audit-phase-21-preregistration.md, audits/audit-phase-21-counterfactual.md, audits/audit-phase-21-smoke.md, audits/audit-phase-21-rerecord.md and the adopting record's audit (records — the close quotes them; a correction is an additive dated erratum in the owning document, never a rewrite, and no cell is re-priced)
+- audits/review-2026-08-26/ (the two registers and the routing table the planning PR ratified; the close reads them and publishes its outcome map in its own audit rather than editing a ratified record)
+- audits/audit-phase-20-close.md, audits/audit-phase-20-baseline-7.md (the prior phase's records; their findings are carried forward by citation, and their verdicts are never restated in a form the source does not use)
+- docs/history.md, docs/reading-guide.md, docs/ml-program.md, docs/lessons.md, docs/glossary.md (the post-record pass owns them and lands before this close)
+- agents/strategic/prompts/ (the prompt set is substrate; a close never edits a rendered byte)
+
+**Definition of done:**
+- [ ] `audits/audit-phase-21-close.md` re-runs the WHOLE gate at close HEAD by the verifiers' actual invocation paths, each output quoted verbatim with its wall clock AND its state: `bash scripts/check.sh` in a clean worktree, `bash scripts/fetch_evidence.sh`, `bash scripts/check.sh` again in the restored state, `uv run pytest -m campaign`, `uv run python scripts/verify_ml_evidence.py --complete`, `bash scripts/verify_samples.sh` in a bare environment (`env -i`, zero `AILIBI_*` exports), `uv run python scripts/check_doc_facts.py`, `bash scripts/fetch_evidence.sh --clean` with `git status --porcelain` empty afterwards, and the `Deploy to GitHub Pages` job's status on close HEAD — with the Pages run on the merge commit itself stated as what it is, unclaimable before the merge, rather than asserted in advance.
+- [ ] The campaign tier and the evidence leg are read as RESULTS against the prior close's routed F1, not re-routed: `audits/audit-phase-20-close.md` §1 recorded `uv run pytest -m campaign` at **"9 failed, 308 passed, 5327 deselected in 185.78s"** and `--complete` at **"STALE 11"**, and this close states the reading at close HEAD beside them, names each of the nine pins with its disposition (re-grounded by the ML re-ground contract, or the scenario pin by its own contract), and records any pin still red as a named finding with a routed destination — never as a pass obtained by choosing a friendlier state or a serial re-run. This leg is read green at the ML re-ground's grounding, with any gap the adopting record DECLARED read as declared, not as red: if that record adopted, it re-declares one named, dated digest pair in §10.2's shape and the second re-fit is a routed owner decision — a declared gap is a priced consequence this phase wrote down in advance, and the close records it as such while still requiring that any OTHER fingerprint mismatch FAILS.
+- [ ] Every other dispatched contract has a ledger row carrying a fresh contract-specific command taken from that contract's own `**Measurement:**` field, its quoted output, and a verdict of VERIFIED or DEVIATION-RECORDED; the row count is derived at close HEAD (`grep -c '^### Task 21\.' tasks/phase-21.md` minus this contract) and reconciled against the merged PR list, never quoted from the plan; no row is silent, no row's verdict rests on the merge alone, and the boilerplate tail is verified once by the gate rerun rather than re-quoted per row.
+- [ ] Every task id in this phase's range is accounted for in the ledger as merged-and-verified, merged-with-a-deviation, or struck-before-dispatch with the striking commit named — so the two owner decision points, whichever way the planning merge ruled on them, cannot read as merges that went missing; the same accounting covers any contract added mid-phase and names what routed it.
+- [ ] The two records are carried forward as their own contracts' rulings and never flattened into one: the combined re-record is stated as maintenance-of-record — no bars, no verdict — with its audit's before/after instrument publication cited; the adopting record's verdict is quoted exactly as the pre-registered rule returned it, with the graduation outcome verified in the tree either way (`orchestrator/replay.py:524-545` / :568-570 read at close HEAD, the lever-key counts stated as measured, and any adopted slate checked against the graduation-sweep rule at AGENTS.md:62-89 — mechanism deleted, stamp key and one history line kept).
+- [ ] The baseline-7 override sentence is re-verified across everything this phase wrote: a repo-wide sweep at close HEAD shows no document, table row, docstring, prompt byte or commit message stating or implying that the phase-20 pre-registered bars passed, and every surface naming the reference recording writes it as canon by explicit owner override of a FINDING verdict (bar 1 61/103 = 0.5922 against ≥ 0.60 and bar 2 42 innocent ejections against < 35, both MISSED, nothing re-priced — `audits/audit-phase-20-baseline-7.md` §6, §6.1); the audit asserts in its own words that this close neither re-ruled a verdict nor re-priced a cell.
+- [ ] The before/after table states every pre-registered bar of this phase with its before value, its after value or the stated reason there is none, and the verdict the ratified decision rule produced — quoted from the two record audits and the committed pins, never recomputed in the close — and the record-free rows sit in the same table with their own sources: the re-ground's moved fingerprints, the STALE count, the campaign tier, and the corrected-substrate counts this phase drove to their new values.
+- [ ] The ML re-ground is verified present in the tree by command rather than by reading: `uv run python scripts/verify_ml_evidence.py --complete` reports no `STALE` row, the fit-corpus fingerprint and the MAP-Elites pool substrate stamp read the committed corpus, `training/bakeoff/harness.py:181`'s `BAKEOFF_BASELINE_ID` reads what the re-ground set it to, `eval/watchability.py:914`'s `_DEFAULT_BASELINE_ID` is unchanged at `"baseline-7"`, and `docs/ml-program.md`'s arms are the re-ground's — each with the command and its output quoted.
+- [ ] The finding→outcome map resolves every `A-`/`B-` id this phase acted on to exactly one outcome (fixed / lever-ON-and-adopted / recorded-as-finding / triaged backlog), reconciles its tallies against the registers' published counts (track A 48 canonical, 13 CONFIRMED / 35 ADJUSTED / 0 REFUTED; track B 56 canonical, 18 / 37 / 1 REFUTED — `audits/review-2026-08-26/README.md` §1), sizes the untouched backlog, and states plainly that no gate holds this map because `scripts/check_doc_facts.py::check_review_map` (:3169) is pinned to the 2026-08-19 index (:224), to `tasks/phase-20.md` (:226) and to `[GC]-n` ids (:423, :435) — recorded as a close finding whose destination is a generalized check with its own perturbation case, not a drive-by edit.
+- [ ] The four items the prior close routed forward each get a stated disposition — CLOSED by measurement with the command quoted, or CARRIED with the reason: its F1 (the red campaign tier), F2 (the two stale narrations), F3 (the un-gated word budgets and this phase's ruling on them), the gate-coverage half of F4 (`audits/README.md` absent from `_LADDER_TIP_DOCUMENTS`, `scripts/check_doc_facts.py:237-242`), and F5 (the `evidence/raw-slate-staging` ref, an owner one-command step observed read-only).
+- [ ] The routed next decision is framed with a costed recommendation first — the balance wave re-priced against this phase's own operator wall clock, the backlog rows the two registers added, and whatever the adopting record left unadopted — with the two decisions that do not ride it stated separately (the ML program's cadence after the re-ground; the live-API deployment, still refused, the static bundle sanctioned); the close makes no unilateral ruling and records the owner's ruling in the audit when it is given.
+- [ ] The phase-complete frontier is cross-checked with `scripts/compute_next_task.py::compute_frontier` (:94) against a git-log title index PINNED to close HEAD so the snippet still reproduces after this close merges, and the provenance section records close HEAD, the phase's merged-PR range, the coordination commits, the evidence pin and any observed remote tags — with the clone unshallowed (guarded so a complete clone does not error) before any history-derived claim.
+- [ ] `tasks/phase-21.md`'s STATUS line and README's `## Project status` sentences and phase row state the close, its date, its outcome and the close audit's path; a reader who opens either surface after the merge cannot conclude the phase is still under way.
+- [ ] `docs/artifacts.md:107`'s `audits/` row count equals `git ls-files audits | wc -l` at close HEAD (158 at `4002f19b`; the close audit itself moves it, and the count is re-derived from the index rather than incremented by hand), and `audits/README.md` links the close audit exactly once — both proven by `uv run python scripts/check_doc_facts.py` and `uv run pytest tests/scripts/test_check_doc_facts.py tests/scripts/test_verify_ml_evidence.py -q` green rather than by reading.
+- [ ] `uv run mypy .` passes.
+- [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
+- [ ] `uv run lint-imports` passes.
+- [ ] `uv run python scripts/generate_prompts.py --check` passes.
+- [ ] `uv run python scripts/validate_task_docs.py` passes.
+- [ ] `uv run pytest` passes.
+- [ ] `bash scripts/check.sh` passes locally.
+
+## Dependency contract check
+Run these before editing. If any fail, stop and report — your dependencies are not where this task expects them.
+
+- `uv run python -c "import counterfactual_phase21"`
+- `uv run python -c "import meetings.constants"`
+- `uv run python -c "import meetings.schemas"`
+- `uv run python -c "import agents.strategic.prompts.loader"`
+- `uv run python -c "import orchestrator.game"`
+- `uv run python -c "import eval.deduction_metrics"`
+- `uv run python -c "import meetings.corroboration"`
+- `uv run python -c "import meetings.transcript"`
+- `uv run python -c "import meetings.manager"`
+- `uv run python -c "import meetings.render_contract"`
+- `uv run python -c "import orchestrator.game.TacticalAgent"`
+- `uv run python -c "import eval.reporter_justice"`
+- `uv run python -c "import training.rewards"`
+- `uv run python -c "import training.bakeoff.harness"`
+- `uv run python -c "import training.surrogate.fidelity"`
+- `uv run python -c "import orchestrator.replay"`
+- `uv run python -c "import eval.replay_walk.ReplayWalkConfig"`
+- `uv run python -c "import engine.tick"`
+- `uv run python -c "import training.surrogate.dataset"`
+- `uv run python -c "import training.surrogate.runner"`
+- `uv run python -c "import training.conviction.fidelity"`
+- `uv run python -c "import eval.accusation_calibration"`
+- `uv run python -c "import eval.meeting_quality"`
+- `uv run python -c "import eval.watchability.SupplyFloors"`
+- `uv run python -c "import eval.vj_instruments"`
+- `uv run python -c "import eval.vj_instruments.VJInstrumentReport"`
+- `uv run python -c "import eval.vj_instruments.VJMeetingRow"`
+- `uv run python -c "import frontend/src/lib/contradictions"`
+- `uv run python -c "import check_doc_facts"`
+- `uv run python -c "import scripts.verify_ml_evidence"`
+
+## Pre-flight checklist
+- Read AGENTS.md, the architecture routing it names, and the task section before editing.
+- Inspect the current implementation before editing.
+- Identify the existing local patterns for the files in scope and follow them.
+- Re-verify every file:line anchor the contract cites at HEAD before editing; if an anchor has moved, record the true location under `## Decisions` — never edit from a stale line number.
+- Grep every consumer of each symbol, path, or constant you will change (the blast radius); if a hit lies outside the files in scope, stop and ask rather than widening scope silently.
+
+## Craft rules (AGENTS.md "Craft rules" — non-negotiable for every file you touch)
+- Lead with intent: a docstring or comment states what the code does and why, now; provenance (task ids, audit paths) is at most one trailing line. Do not narrate history in source.
+- A gate must be able to fail: every new test or check that guards an invariant ships with a planted or perturbed case proving it bites, and checks the semantics it claims, not only the shape.
+- Retire means delete: when a lever graduates or a branch dies, delete the resolver, the parameter, the branch and the tests that pin them; keep only the stamp key and one history line.
+- No internal dialect on user-facing surfaces: UI copy, rendered game prompts, spoken text and README carry no task or audit ids, no threshold arithmetic, and no undefined jargon.
+- Claims are verifiable-shaped: a doc claim names the mechanism that enforces it; a number is recomputed from committed bytes and its command goes in the PR.
+
+## Constraints and non-goals
+Do not modify DESIGN.md.
+Do not modify AGENT_IMPLEMENTATION.md.
+Do not modify tasks/phase-*.md unless this task explicitly lists those files in scope.
+Do not implement work outside this task.
+
+## Verification checklist
+- Run every command listed in the Definition of done.
+- If the contract carries a `**Measurement:**` field, run that command and paste its output into the PR's `## Summary`; a Measurement that cannot be run is reported under `## Questions`, never asserted.
+- Run `git diff --name-only` and confirm the diff stays within scope.
+- If any Definition of done item is unchecked, report it explicitly in the PR description instead of declaring the task complete.
+
+## Decisions vs questions
+- If something is **ambiguous and blocking** (you cannot make a reasonable choice without further information): stop, open a draft PR, add a `## Questions` section, request review.
+- If something is **ambiguous but resolvable by judgment** (a default value, a tie-break, a naming choice): document the choice in a `## Decisions` section in the PR description and proceed.
+
+## Output expectation
+Open a PR from branch `phase-21-phase-close` with a title like `task 21.26: the phase close (owner): the close audit, the gate rerun on re-ground bytes, the ledger, the routed next decision`.
+The PR description must follow `.github/pull_request_template.md` and include `## Summary` (1–3 bullets referencing [L] the prior close's pattern, reprised — audits/audit-phase-20-close.md §1 (the whole gate re-run at close HEAD by the verifiers' actual invocation paths, with the **state** column beside every row, and its F1: `uv run pytest -m campaign` **"9 failed, 308 passed, 5327 deselected in 185.78s (0:03:05)"**, routed to the ML re-ground and not fixed), §2 (the ledger — every dispatched contract verified-or-deviation-recorded, none silent; tally 39 VERIFIED / 3 DEVIATION-RECORDED), §3 (the before/after story in generated numbers only), §3.3 (both halves of the recorded outcome verified present in the tree), §3.4 (the review's findings → outcomes), §4 (the routed decision, recommendation first, the committed cells doing the arguing), §5 (the Decisions section, including the two mechanical scope admissions this close will face again), §6 (provenance + the frontier), §7 (the reproduction block); audits/audit-phase-20-close.md F2/F3/F4/F5 (the four items routed forward into this phase — the stale narrations, the un-gated word budgets, the ladder-tip gate-coverage gap, and the carried `evidence/raw-slate-staging` ref, which is an owner one-command step and not a task); audits/audit-phase-20-baseline-7.md §6 (THE VERDICT — the rule returned **FINDING**: bar 1 non-direct accuracy 61/103 = 0.5922 against ≥ 0.60, bar 2 innocent ejections 42 against < 35, both **MISSED**, nothing re-priced), §6.1 (THE OWNER'S ADOPTION RULING of 2026-08-26 — an explicit owner override of that FINDING verdict, with its "what no surface may say" paragraph, which binds every surface this phase wrote), §6.2 (what the ruling executed, the tree-side facts this close re-verifies), §10.2 (the ML re-ground named as a follow-up, the STALE amnesty's declared shape, and the FO-6 comparator's three-record flip history); audits/review-2026-08-26/README.md §1 (the two tracks and their tallies — track A 48 canonical findings, 13 CONFIRMED / 35 ADJUSTED / 0 REFUTED; track B 56 canonical, 18 / 37 / 1 REFUTED), §2 (the ten items the plan was built on: A-6, B-6, A-3+A-26, A-14+B-1, A-10/A-4/A-5/A-24/A-25, A-20, B-11, B-7/B-8/B-9, A-8/A-9, A-15), §3 (the routing table the planning PR ratifies — the map this close's outcome column is read against), §4 ("What this review is not", including the rule that any number becoming load-bearing in a Phase-21 contract is re-derived by that contract's own Measurement command); audits/review-2026-08-26/A/collated-findings.md and B/collated-findings.md (the two registers — the close reads them for the finding→outcome map and never re-verifies a verdict); AGENTS.md:91-124 (the seven craft rules every ledger row is audited against; rule 2 "a gate must be able to fail" is the one this close applies to its own map), AGENTS.md:62-89 (the graduation-sweep rule the Wave-2 slate is verified against, if the adopting record adopted one). Anchors re-verified at HEAD `4002f19b`: scripts/check.sh:27-32 (the six non-pytest legs) and :37-42 (the pytest leg — parallel `uv run pytest -n auto --dist loadfile`, with the `AILIBI_PYTEST_SERIAL=1` serial hatch validated at :21-25) and :57-68 (the four frontend legs); pyproject.toml:86 (`addopts = "--strict-markers -m 'not campaign'"`) and :88 (the registered `campaign` marker — the opt-in tier); .github/workflows/ci.yml, .github/workflows/campaign-tier.yml:26-27 (the weekly `cron: "17 6 * * 1"` job that keeps `-m campaign` from becoming an orphan) and .github/workflows/pages.yml:85 (the `Deploy to GitHub Pages` job whose status this close quotes); docs/artifacts.md:107 (the counted `audits/` registry row, stated as `7.9 MB / 158 files`, matching `git ls-files audits | wc -l` = 158 at `4002f19b` — re-derive at close HEAD, since the close audit itself moves it) enforced by scripts/verify_ml_evidence.py:2347 (`"audits/": (("audits",), ())`) and :2359 (`inventory_problems`) via tests/scripts/test_verify_ml_evidence.py:1624 (`test_every_counted_registry_row_matches_the_index`, unmarked and therefore in the DEFAULT tier); scripts/check_doc_facts.py:1722 (`check_audits_index` — fails the DEFAULT tier on any top-level `audits/*.md` the index does not link exactly once, which is what forces this PR's `audits/README.md` entry), :1119 (`check_ladder_tip`) and :237-242 (`_LADDER_TIP_DOCUMENTS` — README, glossary, history, reading guide), :3169 (`check_review_map`) with :224 (`_REVIEW_INDEX` = the 2026-08-19 index), :226 (`_PHASE_20_CONTRACT`) and :423/:435 (the `[GC]-\d{1,3}` finding-id patterns — the reason this phase's `A-`/`B-` map is unguarded); scripts/compute_next_task.py:94 (`compute_frontier`, the frontier cross-check); orchestrator/replay.py:524-545 (`_RETIRED_ALWAYS_ON_LEVERS`, twenty-one keys at HEAD), :568-570 (`_TOGGLEABLE_LEVER_RESOLVERS`, the single live toggle `impostor_roll_call`) and :584-587 (`SUBSTRATE_FLAG_KEYS`, twenty-two); eval/watchability.py:914 (`_DEFAULT_BASELINE_ID = "baseline-7"`) and training/bakeoff/harness.py:181 (`BAKEOFF_BASELINE_ID`, `"baseline-6"` at HEAD and moved by the re-ground); README.md:169 (`## Project status`), :171 and :173 (the two living status/roadmap sentences — re-locate by the heading, since the post-record pass restructures this section before the close) and the phase table headed at :177, whose last row is `| 20 |` at :200; tasks/phase-20.md:3 and tasks/phase-19.md:3 (the STATUS-banner exemplars).), `## Definition of done` (the checklist from this contract, ticked), `## Decisions` (every judgment call), and (only when blocking) `## Questions`.
