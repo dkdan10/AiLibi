@@ -2255,6 +2255,19 @@ from a fresh census and a fresh code read at HEAD 4002f19b, and the PR's numbers
 - `training.surrogate.runner.load_surrogate_verdict`
 - `training.conviction.fidelity.conversion_trivial_baseline`
 
+**Merge-reality record (2026-08-27, orchestrator-ratified at the #407 merge):** one contract
+deviation and two forced out-of-scope touches, all named in the PR rather than absorbed. The
+deviation: the structured `guard_rewrite_reason` read is AUTHORITATIVE (always leads, no parse
+removes it), NOT EXHAUSTIVE (a later guard's marker merges in) and BOUNDING (nothing past its
+own marker counts) — stronger than the DoD's absent-only fallback rule, which would have
+silently undercounted stacked guards from 21.15 onward; inert on today's bytes (0 of 3,602
+ballots carry the field) and the census unmoved. The touches: `scripts/counterfactual_phase20.py`
+(two mechanical lines a required `_MeetingFacts` field forced) and `docs/artifacts.md` (the new
+surrogate-verdict registry row). Substantive fact routed to Task 21.17: the `is_reporter` mask
+costs the FROZEN baseline-6 artifact real accuracy — surrogate top-1 45/55 → 42/55, composed
+exact-outcome 0.8161 → 0.7816 — because those weights were fitted WITH the oracle; both rows
+were already STALE under the declared grounding gap, and the re-ground is what closes it.
+
 **Ready-to-paste prompt:** `agent_prompts/task-21-8-fit-hygiene.md`
 
 ### Task 21.9 — Two instruments re-aimed: calibration without the firewall artifact, a dialect gauge that overlaps the dialect
