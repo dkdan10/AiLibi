@@ -2,15 +2,21 @@ from __future__ import annotations
 
 import os
 import sys
+from collections.abc import Callable
 from pathlib import Path
-from typing import Final, Literal
+from typing import Any, Final, Literal, Protocol, cast
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict
 
-from api.replay_loader import ReplayStateMismatchError, SetLoaderRegistry
+from api.replay_loader import (
+    ReplayPolicyMismatchError,
+    ReplayStateMismatchError,
+    ReplaySubstrateMismatchError,
+    SetLoaderRegistry,
+)
 from api.routes import eval as eval_routes
 from api.routes import replays as replays_routes
 from api.routes import sets as sets_routes
@@ -154,15 +160,44 @@ def _resolve_replay_dir(
     )
 
 
-async def _handle_state_mismatch(request: Request, exc: Exception) -> JSONResponse:
-    """Surface a replay-determinism break as a 500 with the offending tick."""
+class _NamesItsGame(Protocol):
+    """What every replay-provenance refusal has in common: it names its game."""
 
-    if not isinstance(exc, ReplayStateMismatchError):  # pragma: no cover
-        raise exc
-    return JSONResponse(
-        status_code=500,
-        content={"detail": str(exc), "tick": exc.tick, "game_id": exc.game_id},
-    )
+    game_id: str
+
+
+#: The replay-provenance refusals the app surfaces, each with the extra body
+#: fields its own comparison already computed — the divergence is named by the
+#: loader, never re-derived at the edge. Every one of these errors promises a 500
+#: carrying the offending game id, and each promise needs a registration to be
+#: true. Ordered specific-first: ``ReplayDispositionMismatchError`` subclasses the
+#: state error and is covered by that entry, which carries the tick both need.
+_REPLAY_MISMATCH_HANDLERS: Final[
+    tuple[tuple[type[Exception], Callable[[Any], dict[str, object]]], ...]
+] = (
+    (ReplayStateMismatchError, lambda exc: {"tick": exc.tick}),
+    (
+        ReplaySubstrateMismatchError,
+        lambda exc: {"differing_levers": exc.differing, "unknown_levers": exc.unknown},
+    ),
+    (ReplayPolicyMismatchError, lambda exc: {"differing_fields": exc.differing}),
+)
+
+
+async def _handle_replay_mismatch(request: Request, exc: Exception) -> JSONResponse:
+    """Surface a replay-provenance refusal as a 500 naming what diverged."""
+
+    for error_type, extra_fields in _REPLAY_MISMATCH_HANDLERS:
+        if isinstance(exc, error_type):
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "detail": str(exc),
+                    "game_id": cast(_NamesItsGame, exc).game_id,
+                    **extra_fields(exc),
+                },
+            )
+    raise exc  # pragma: no cover — only the registered classes reach here
 
 
 def _parse_cors_origins(raw: str | None) -> list[str]:
@@ -228,7 +263,8 @@ def create_app(*, replay_dir: Path | None = None) -> FastAPI:
     registry = SetLoaderRegistry(parent_dir)
     _announce(parent_dir, registry.available_sets())
     app.state.loader_registry = registry
-    app.add_exception_handler(ReplayStateMismatchError, _handle_state_mismatch)
+    for error_type, _extra_fields in _REPLAY_MISMATCH_HANDLERS:
+        app.add_exception_handler(error_type, _handle_replay_mismatch)
     app.add_api_route("/", root, methods=["GET"], response_model=ServiceInfoResponse)
     app.add_api_route("/health", health, methods=["GET"], response_model=HealthResponse)
     app.include_router(replays_routes.router, prefix="/replays", tags=["replays"])

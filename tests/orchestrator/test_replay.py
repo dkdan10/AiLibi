@@ -55,6 +55,7 @@ from orchestrator.replay import (
     read_substrate_flags,
     substrate_flag_snapshot,
     substrate_slate_mismatches,
+    substrate_stamp_mismatches,
 )
 from engine.actions import Action
 from engine.events import EngineEvent
@@ -1742,3 +1743,152 @@ class TestRecordTickEventsKeyword:
             "applied",
             "discarded_by_meeting",
         ]
+
+
+def _committed_substrate_stamps() -> dict[str, dict[str, bool]]:
+    """Every committed replay's substrate stamp, keyed by repo-relative path.
+
+    Reads the ``game_over`` line directly instead of parsing 300 whole replays
+    through pydantic: the stamp is the only field wanted, and the full parse is
+    what would make this a minute-long test.
+    """
+
+    repo_root = Path(__file__).resolve().parents[2]
+    stamps: dict[str, dict[str, bool]] = {}
+    for path in sorted((repo_root / "replays").rglob("replay-seed-*.jsonl")):
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if '"game_over"' not in line:
+                continue
+            flags = json.loads(line).get("substrate_flags")
+            if flags is not None:
+                stamps[str(path.relative_to(repo_root))] = flags
+    return stamps
+
+
+class TestSubstrateStampMismatches:
+    """The full stamp comparison the loader and the audit spine share.
+
+    ``retired_levers_stamped_off`` reads one half of one axis. This reads both
+    directions, and the second — keys the recording carries that this build's
+    registry does not — is the one nothing checked before.
+    """
+
+    def test_a_matching_stamp_is_no_mismatch(self) -> None:
+        ambient = substrate_flag_snapshot(env={})
+
+        mismatch = substrate_stamp_mismatches(dict(ambient), ambient=ambient)
+
+        assert mismatch.differing == ()
+        assert mismatch.unknown == ()
+        assert not mismatch
+
+    def test_an_unstamped_recording_is_never_checked(self) -> None:
+        # Its substrate is unknown, not divergent — the loader skips it too.
+        assert not substrate_stamp_mismatches(None)
+
+    def test_a_toggleable_lever_recorded_the_other_way_is_reported(self) -> None:
+        ambient = substrate_flag_snapshot(env={})
+
+        mismatch = substrate_stamp_mismatches(
+            {**ambient, "impostor_roll_call": True}, ambient=ambient
+        )
+
+        assert mismatch.differing == ("impostor_roll_call",)
+        assert mismatch.unknown == ()
+        assert mismatch
+
+    def test_a_retired_lever_stamped_off_is_reported_as_differing(self) -> None:
+        ambient = substrate_flag_snapshot(env={})
+
+        mismatch = substrate_stamp_mismatches(
+            {**ambient, "testimony_as_content": False}, ambient=ambient
+        )
+
+        assert mismatch.differing == ("testimony_as_content",)
+        assert mismatch.unknown == ()
+
+    def test_a_key_the_registry_does_not_have_is_reported_as_unknown(self) -> None:
+        # The half nothing enforced before: a stamp written by a NEWER build
+        # carries a lever this one never registered, so its substrate cannot be
+        # reproduced here — and comparing only the keys this build knows would
+        # wave it through with an empty diff.
+        ambient = substrate_flag_snapshot(env={})
+
+        mismatch = substrate_stamp_mismatches(
+            {**ambient, "a_lever_from_the_future": True}, ambient=ambient
+        )
+
+        assert mismatch.differing == ()
+        assert mismatch.unknown == ("a_lever_from_the_future",)
+        assert mismatch
+
+    def test_an_unknown_key_recorded_false_still_counts(self) -> None:
+        # Presence is the signal, not the value: a key this build cannot resolve
+        # means the recording ran a substrate this one has no derivation for,
+        # whichever way that lever was set.
+        ambient = substrate_flag_snapshot(env={})
+
+        mismatch = substrate_stamp_mismatches(
+            {**ambient, "a_lever_from_the_future": False}, ambient=ambient
+        )
+
+        assert mismatch.unknown == ("a_lever_from_the_future",)
+
+    def test_both_classes_are_reported_separately(self) -> None:
+        # Separate lists, because the remediations differ: one is an export away,
+        # the other is a build away. Collapsing them loses that.
+        ambient = substrate_flag_snapshot(env={})
+
+        mismatch = substrate_stamp_mismatches(
+            {
+                **ambient,
+                "testimony_as_content": False,
+                "a_lever_from_the_future": True,
+            },
+            ambient=ambient,
+        )
+
+        assert mismatch.differing == ("testimony_as_content",)
+        assert mismatch.unknown == ("a_lever_from_the_future",)
+
+    def test_an_older_stamp_missing_a_default_off_key_still_matches(self) -> None:
+        # The append-only registry's payoff: a stamp recorded before a lever
+        # existed is a strict SUBSET of this build's keys, and the missing key
+        # reads OFF on both sides — which is why every committed recording
+        # compares clean against a build that has since registered more levers.
+        ambient = substrate_flag_snapshot(env={})
+        recorded = {
+            key: value
+            for key, value in ambient.items()
+            if key not in TOGGLEABLE_SUBSTRATE_FLAG_KEYS
+        }
+
+        assert not substrate_stamp_mismatches(recorded, ambient=ambient)
+
+    def test_ambient_defaults_to_the_live_snapshot(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv(ENV_IMPOSTOR_ROLL_CALL, "1")
+
+        # The stamp is the bare slate; the live environment has the toggle ON.
+        mismatch = substrate_stamp_mismatches(dict(substrate_flag_snapshot(env={})))
+
+        assert mismatch.differing == ("impostor_roll_call",)
+
+    def test_every_committed_stamp_is_a_clean_subset_of_this_build(self) -> None:
+        # The claim the unknown-key guard rests on, recomputed from the bytes
+        # rather than asserted: no committed recording carries a key this
+        # registry lacks, so the new half cannot fire on anything in the tree.
+        ambient = substrate_flag_snapshot(env={})
+        stamps = _committed_substrate_stamps()
+        assert stamps, "no committed substrate stamps found to check"
+
+        offenders = {
+            rel: mismatch
+            for rel, flags in stamps.items()
+            if (mismatch := substrate_stamp_mismatches(flags, ambient=ambient))
+        }
+
+        assert not offenders, offenders
+        # Every stamp is a strict subset: the build knows keys they predate.
+        assert all(set(flags) <= set(ambient) for flags in stamps.values())

@@ -46,7 +46,8 @@
 #
 # Acceptance (run per set, by the operator, before the PR merges — NOT here):
 #   uv run python scripts/validity_gate.py replays/ml_corpus/<set> \
-#       --expected-model Qwen/Qwen3.6-27B --require-zero-cost
+#       --expected-model Qwen/Qwen3.6-27B --require-zero-cost \
+#       --expected-prompt-versions <the locked KEY=VER pairs the run echoes>
 #   scripts/verify_samples.sh replays/ml_corpus/<set>        # byte-verify
 #
 # Hosted models do NOT byte-reproduce FRESH generation; RECORDINGS replay
@@ -56,12 +57,15 @@
 #
 # Usage:
 #   scripts/record_ml_corpus.sh [--set 9p2i|4p1i|both] [--dry-run | --splits-only]
-#                               [--expect-levers KEY,KEY]
+#                               [--seeds N,N,N] [--expect-levers KEY,KEY]
 #
 #   --set 9p2i|4p1i|both  which set(s) to record (default: both)
 #   --dry-run             print the resolved plan; touch nothing, no network
 #   --splits-only         (re)write splits.json for the selected set(s) from the
 #                         replays already on disk, then exit — no network, no record
+#   --seeds N,N,N         record only these seeds of the selected set's locked
+#                         range (an operator mode: re-record one bad seed without
+#                         a multi-hour leg). A subset can never freeze
 #   --expect-levers       the toggleable substrate levers this record expects ON
 #                         (comma-separated registry keys; default: none). The live
 #                         slate must match it exactly, and every recorded game_over
@@ -70,8 +74,9 @@
 #
 # Operator gate: requires FEATHERLESS_API_KEY and AILIBI_PROMPT_SET=qwen3_6_27b; the
 # corpus is baseline-6, so the FULL substrate is LOCKED: the provider (a run under
-# any other provider — including the fake CI provider — is refused, so a corpus
-# game can never be silently recorded off-substrate, AGENTS.md "no silent
+# any provider other than featherless — or the explicitly-named hermetic `fake`
+# arm, which may only write OUTSIDE replays/ — is refused, so a corpus game can
+# never be silently recorded off-substrate, AGENTS.md "no silent
 # fallbacks"), the meeting/trigger models (a non-baseline AILIBI_LLM_MEETING_MODEL
 # / AILIBI_LLM_TRIGGER_MODEL override is refused), the endpoint (a non-default
 # AILIBI_FEATHERLESS_BASE_URL override is refused), the LEVER SLATE (the live
@@ -134,6 +139,11 @@ CORPUS_ROOT="${AILIBI_ML_CORPUS_ROOT:-$REPO_ROOT/replays/ml_corpus}"
 # llm.featherless_client.DEFAULT_FEATHERLESS_MODEL and refresh_samples.sh. Stamped
 # onto no-meeting rows and asserted by the operator's --expected-model gate.
 DEFAULT_FEATHERLESS_MODEL="Qwen/Qwen3.6-27B"
+# The fake client's meeting-tier model id; mirrors
+# llm.fake_provider._FAKE_MEETING_MODEL. A hermetic `fake` run attributes its
+# MANIFEST rows to this id, so scratch bytes can never render as a Featherless
+# row.
+DEFAULT_FAKE_MODEL="fake-meeting"
 # The hosted Featherless endpoint; mirrors
 # llm.featherless_client.DEFAULT_FEATHERLESS_BASE_URL. build_default_client honors
 # AILIBI_FEATHERLESS_BASE_URL, so the preflight pins it — a leftover mock/staging
@@ -154,6 +164,17 @@ REQUIRED_PROMPT_SET="qwen3_6_27b"
 # moved carries the older stamps in its own MANIFEST; re-locking it is an owner
 # decision (re-record + re-freeze), which is what a stamp mismatch here forces.
 REQUIRED_PROMPT_VERSIONS="accusation_round.qwen3_6_27b.v4, crewmate_report.qwen3_6_27b.v4, impostor_report.qwen3_6_27b.v4, vote_ballot.qwen3_6_27b.v4"
+# The same locked map rendered as the acceptance CLI's KEY=VER pairs
+# (scripts/validity_gate.py --expected-prompt-versions). Each locked version
+# string is "<template>.<set>.<version>", so its template key is the first
+# dot-segment — one literal above, two renderings, and no way for the acceptance
+# command this script prints to drift from the map it freezes against.
+REQUIRED_PROMPT_VERSIONS_CLI=""
+IFS=', ' read -ra _locked_versions <<<"$REQUIRED_PROMPT_VERSIONS"
+for _locked_version in "${_locked_versions[@]}"; do
+  REQUIRED_PROMPT_VERSIONS_CLI="${REQUIRED_PROMPT_VERSIONS_CLI:+$REQUIRED_PROMPT_VERSIONS_CLI,}${_locked_version%%.*}=$_locked_version"
+done
+unset _locked_versions _locked_version
 # The 15.9 tactical-policy stamp for the canonical scripted FSMs. Every corpus
 # game is FSM-default (no learned mover exists yet); the stamp makes that explicit
 # provenance rather than the absent = FSM-default default, so the MANIFEST policy
@@ -170,12 +191,19 @@ SPLIT_RULE_DESC="seed mod 5: {0,1,2}=train, {3}=val, {4}=test"
 usage() {
   cat <<EOF
 Usage: $(basename "$0") [--set 9p2i|4p1i|both] [--dry-run | --splits-only]
-                        [--expect-levers KEY,KEY]
+                        [--seeds N,N,N] [--expect-levers KEY,KEY]
 
   --set 9p2i|4p1i|both  which corpus set(s) to record (default: both)
   --dry-run             print the resolved plan; touch nothing, make no API call
   --splits-only         (re)write splits.json for the selected set(s) from the
                         replays already on disk, then exit (no network, no record)
+  --seeds N,N,N         record only these seeds of the selected set's LOCKED
+                        range, comma-separated. The operator mode for repairing a
+                        recorded set: one bad seed re-records in minutes instead
+                        of a whole multi-hour leg. A seed outside the range is
+                        refused before anything stages, and a subset never
+                        freezes — the finalize demands the exact locked set.
+                        Mutually exclusive with --splits-only.
   --expect-levers       the toggleable substrate levers this record expects ON,
                         comma-separated (default: none — the bare slate). The
                         live slate must match it EXACTLY before any seed stages,
@@ -207,6 +235,8 @@ set_config() {
 set_arg="both"
 dry_run=0
 splits_only=0
+# The explicit seed subset (--seeds). Empty is the whole locked range.
+seeds_arg=""
 # The toggleable levers this record expects ON (comma-separated registry keys).
 # Empty is the bare slate: every live toggle OFF.
 expect_levers=""
@@ -224,6 +254,15 @@ while [[ $# -gt 0 ]]; do
       ;;
     --dry-run) dry_run=1 ;;
     --splits-only) splits_only=1 ;;
+    --seeds)
+      shift
+      seeds_arg="${1:-}"
+      if [[ -z "$seeds_arg" ]]; then
+        echo "Error: --seeds requires a comma-separated seed list." >&2
+        usage
+        exit 1
+      fi
+      ;;
     --expect-levers)
       # An explicitly EMPTY value is the bare slate (every live toggle OFF), so
       # automation can pass "$LEVERS" unconditionally; only a MISSING argument is
@@ -254,6 +293,55 @@ if [[ "$dry_run" -eq 1 && "$splits_only" -eq 1 ]]; then
   echo "Error: --dry-run and --splits-only are mutually exclusive." >&2
   usage
   exit 1
+fi
+
+# --splits-only partitions whatever is on disk, so a seed subset would describe a
+# selection it cannot act on; --dry-run and --set both compose with it.
+if [[ -n "$seeds_arg" && "$splits_only" -eq 1 ]]; then
+  echo "Error: --seeds and --splits-only are mutually exclusive." >&2
+  usage
+  exit 1
+fi
+
+# Validate a comma-separated seed list and echo the normalized, de-duplicated
+# form. Surrounding whitespace around a seed is tolerated; whitespace *inside* a
+# token (e.g. "1 2") is rejected rather than silently collapsed to seed 12.
+# Mirrors scripts/refresh_samples.sh's validator.
+validate_seeds() {
+  local csv="$1" token seen=""
+  local -a normalized=()
+  IFS=',' read -ra tokens <<<"$csv"
+  for token in "${tokens[@]}"; do
+    [[ -z "${token//[[:space:]]/}" ]] && continue # blank (e.g. a trailing comma)
+    if [[ ! "$token" =~ ^[[:space:]]*([0-9]+)[[:space:]]*$ ]]; then
+      echo "Error: invalid --seeds entry (want a non-negative integer): '$token'" >&2
+      return 1
+    fi
+    token="${BASH_REMATCH[1]}"
+    token="$((10#$token))" # canonicalize (01 -> 1) so numeric aliases de-dup
+    # De-duplicate (keep first occurrence) so a typo like "1000,1000" or
+    # "1000,01000" cannot double-record a seed.
+    case ",$seen," in
+      *",$token,"*) continue ;;
+    esac
+    seen="${seen:+$seen,}$token"
+    normalized+=("$token")
+  done
+  if [[ ${#normalized[@]} -eq 0 ]]; then
+    echo "Error: --seeds names no seed (an empty or comma-only list)." >&2
+    return 1
+  fi
+  (
+    IFS=','
+    echo "${normalized[*]}"
+  )
+}
+
+requested_seeds=""
+if [[ -n "$seeds_arg" ]]; then
+  if ! requested_seeds="$(validate_seeds "$seeds_arg")"; then
+    exit 1
+  fi
 fi
 
 # One human-readable rendering of the expected slate, so the preview echo, the
@@ -803,6 +891,9 @@ if [[ "$dry_run" -eq 1 ]]; then
     echo "[dry-run] seed workers: 1 (sequential)"
   fi
   echo "[dry-run] seed crash-retry: up to $SEED_MAX_ATTEMPTS attempt(s) per seed on a transport/crash error (recorded parse failures are non-fatal)"
+  if [[ -n "$requested_seeds" ]]; then
+    echo "[dry-run] seed subset: --seeds $requested_seeds (only these of the locked range record; a seed outside it is refused, and the finalize will NOT freeze a subset)"
+  fi
   echo "[dry-run] resume: seeds whose replay already exists in the set dir are skipped (a re-run records only the missing ones; a present replay must carry the explicit $POLICY_STAMP tactical-policy stamp or the run is refused)"
   echo "[dry-run] split rule: $SPLIT_RULE_DESC (by game; no game in two splits)"
   for set_name in "${sets[@]}"; do
@@ -821,7 +912,7 @@ if [[ "$dry_run" -eq 1 ]]; then
     echo "[dry-run]   splits: would write $set_dir/splits.json ($SPLIT_RULE_DESC)"
     echo "[dry-run]   freeze: would append a FROZEN line naming the git_sha to $set_dir/MANIFEST.md"
   done
-  echo "[dry-run] acceptance (per set, before merge): scripts/validity_gate.py <set> --expected-model $DEFAULT_FEATHERLESS_MODEL --require-zero-cost; scripts/verify_samples.sh <set>"
+  echo "[dry-run] acceptance (per set, before merge): scripts/validity_gate.py <set> --expected-model $DEFAULT_FEATHERLESS_MODEL --require-zero-cost --expected-prompt-versions $REQUIRED_PROMPT_VERSIONS_CLI; scripts/verify_samples.sh <set>"
   echo "[dry-run] no API calls made; no files written."
   if ! substrate_lever_preflight; then
     exit 1
@@ -831,22 +922,102 @@ fi
 
 # --- real path: preflight (provider LOCKED to featherless) -------------------
 
-# The corpus is baseline 6 == Featherless. Refuse any other provider so a corpus
-# game can never be silently recorded off-substrate (the fake CI provider, an
-# anthropic/ollama misconfiguration). Read the ambient AILIBI_LLM_PROVIDER only to
-# REJECT a wrong one; the recorder always exports featherless below.
+# Collapse `.` and `..` segments in an absolute path, textually. Used only on the
+# not-yet-created tail below, where the kernel cannot resolve them but `mkdir -p`
+# will: it creates each missing component in turn, so `a/../b` ends up at `b`.
+# Iterates with parameter expansion rather than word splitting, so a segment
+# containing a glob character is never expanded. A copy of the sibling
+# recorder's helper, the same way the two mutexes are copies.
+normalize_path_segments() {
+  local rest="${1#/}" out="" segment
+  while [[ -n "$rest" ]]; do
+    segment="${rest%%/*}"
+    if [[ "$segment" == "$rest" ]]; then rest=""; else rest="${rest#*/}"; fi
+    case "$segment" in
+      '' | .) ;;
+      ..) out="${out%/*}" ;;
+      *) out="$out/$segment" ;;
+    esac
+  done
+  printf '%s' "${out:-/}"
+}
+
+# Echo the PHYSICAL absolute path of $1, which need not exist yet. Each pass
+# resolves the longest existing prefix through `cd` + `pwd -P` (collapsing
+# symlinks), appends the not-yet-created tail, and normalizes `.`/`..` out of it.
+# Normalizing can expose a prefix the previous pass could not see — `missing/../
+# link/new` only reveals `link` once `missing/..` is collapsed — so the two steps
+# run to a fixed point. Used by the fake provider's target guard, which must not
+# be defeatable by a symlink, a `..`, or the two combined. Fails loud rather than
+# returning a path it could not resolve.
+resolve_physical_path() {
+  local target="$1" suffix="" previous="" physical passes=0
+  [[ "$target" != /* ]] && target="$PWD/$target"
+  while [[ "$target" != "$previous" ]]; do
+    previous="$target"
+    suffix=""
+    while [[ ! -d "$target" ]]; do
+      suffix="/$(basename "$target")$suffix"
+      target="$(dirname "$target")"
+    done
+    if ! physical="$(cd "$target" 2>/dev/null && pwd -P)"; then
+      echo "Error: cannot resolve '$1' ('$target' is unreadable or loops)." >&2
+      return 1
+    fi
+    target="$(normalize_path_segments "$physical$suffix")"
+    passes=$((passes + 1))
+    if [[ "$passes" -ge 32 ]]; then
+      echo "Error: cannot resolve '$1' (symlink chain too deep)." >&2
+      return 1
+    fi
+  done
+  printf '%s' "$target"
+}
+
+# The corpus is baseline 7 == Featherless. Refuse every provider but featherless
+# and the explicitly-named hermetic `fake`, so a corpus game can never be
+# silently recorded off-substrate (an anthropic/ollama misconfiguration). An
+# UNSET or empty variable still resolves to featherless, so the silent-fake path
+# stays closed: `fake` is reachable only by naming it, and the target guard below
+# then confines such a run to a scratch dir outside replays/.
 PROVIDER="$(printf '%s' "${AILIBI_LLM_PROVIDER:-featherless}" | tr '[:upper:]' '[:lower:]')"
-if [[ "$PROVIDER" != "featherless" ]]; then
+if [[ "$PROVIDER" != "featherless" && "$PROVIDER" != "fake" ]]; then
   echo "Error: the ML-calibration corpus is baseline-6, so it records ONLY on featherless." >&2
   echo "       Unset AILIBI_LLM_PROVIDER or set it to 'featherless' (got '$PROVIDER')." >&2
   exit 1
 fi
 
-if [[ -z "${FEATHERLESS_API_KEY:-}" ]]; then
+if [[ "$PROVIDER" == "fake" ]]; then
+  # The fake provider is hermetic and $0, so there is no key to preflight — what
+  # must be checked instead is where it WRITES. Fake bytes in a committed corpus
+  # set are indistinguishable from a real recording at a glance and would poison
+  # every model trained or calibrated on it, so refuse when the resolved corpus
+  # root lands in the repository's replays/ tree. Compare PHYSICAL paths (neither
+  # need exist yet), so a symlink or a `..` cannot smuggle the target back under
+  # replays/. Runs before any mkdir or staging, so a refused run leaves nothing.
+  _replays_root="$(cd "$REPO_ROOT/replays" && pwd -P)"
+  if ! _corpus_root_phys="$(resolve_physical_path "$CORPUS_ROOT")"; then
+    exit 1
+  fi
+  if [[ "$_corpus_root_phys" == "$_replays_root" || "$_corpus_root_phys" == "$_replays_root"/* ]]; then
+    echo "Error: a fake-provider corpus run may not write into the repository's replays/ tree." >&2
+    echo "       Offending path: $_corpus_root_phys (from AILIBI_ML_CORPUS_ROOT)" >&2
+    for _selected_set in "${sets[@]}"; do
+      echo "       Would have recorded into: $CORPUS_ROOT/$_selected_set" >&2
+    done
+    echo "       Rule:     the committed corpus sets are REAL recordings; the fake provider" >&2
+    echo "                 records hermetic \$0 bytes, so its corpus root must lie outside" >&2
+    echo "                 $_replays_root." >&2
+    echo "       Point AILIBI_ML_CORPUS_ROOT at a scratch dir; nothing was staged." >&2
+    exit 1
+  fi
+  echo "Fake-provider target OK: $_corpus_root_phys is outside $_replays_root (hermetic \$0 recording, no API key)."
+elif [[ -z "${FEATHERLESS_API_KEY:-}" ]]; then
   echo "Error: FEATHERLESS_API_KEY must be set to record the ML-calibration corpus." >&2
   exit 1
+else
+  echo "Using Featherless API key prefix: ${FEATHERLESS_API_KEY:0:8}"
 fi
-echo "Using Featherless API key prefix: ${FEATHERLESS_API_KEY:0:8}"
 
 if [[ "${AILIBI_PROMPT_SET:-}" != "$REQUIRED_PROMPT_SET" ]]; then
   echo "Error: the corpus must record the locked baseline-6 substrate (Task 18.13)." >&2
@@ -912,15 +1083,27 @@ if ! check_prompt_version_registry; then
 fi
 echo "Locked prompt versions OK: $REQUIRED_PROMPT_SET resolves to the baseline-6 map ($REQUIRED_PROMPT_VERSIONS)."
 
-# Export the resolved provider so run_tournament.py records on Featherless — never
-# fall through to build_default_client()'s fake default (which would silently
-# record fake output at $0 with the wrong model).
-export AILIBI_LLM_PROVIDER="featherless"
+# Export the RESOLVED provider so run_tournament.py records on it — never fall
+# through to build_default_client()'s fake default, which would silently record
+# fake output at $0 with the wrong model. An unset variable resolved to
+# featherless above, so that silent-fake path stays closed.
+export AILIBI_LLM_PROVIDER="$PROVIDER"
+
+# The model this run actually records with, and therefore the model its MANIFEST
+# rows are attributed to. The fake client answers with its own tier id whatever
+# the env says, so a hermetic run must never stamp the Featherless id onto rows
+# it did not record — that is the one way a scratch row could later read as a
+# corpus row.
+if [[ "$PROVIDER" == "fake" ]]; then
+  ACTIVE_MODEL="$DEFAULT_FAKE_MODEL"
+else
+  ACTIVE_MODEL="$DEFAULT_FEATHERLESS_MODEL"
+fi
 
 # Provenance shared by every seed in this run.
 git_sha="$(git -C "$REPO_ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
 refreshed_at="$(date -u +%F)"
-echo "Recording at git_sha $git_sha, model $DEFAULT_FEATHERLESS_MODEL, policy $POLICY_STAMP."
+echo "Recording at git_sha $git_sha, model $ACTIVE_MODEL, policy $POLICY_STAMP."
 
 corpus_start="$(date +%s)"
 
@@ -933,6 +1116,27 @@ record_set() {
   set_dir="$CORPUS_ROOT/$set_name"
   manifest="$set_dir/MANIFEST.md"
   local last=$((start + count - 1))
+
+  # --seeds: every requested seed must lie in THIS set's locked range, checked
+  # before the set dir is created so a typo costs nothing. The subset is
+  # intersected with the resume scan below rather than replacing it, so the
+  # "already recorded" skip keeps working and the finalize's exact-set check is
+  # still what refuses to freeze a subset. Fenced with commas so a membership
+  # test cannot match a prefix (seed 100 inside "1000").
+  local requested_fence=""
+  if [[ -n "$requested_seeds" ]]; then
+    local -a requested_list=()
+    local requested
+    IFS=',' read -ra requested_list <<<"$requested_seeds"
+    for requested in "${requested_list[@]}"; do
+      if [[ "$requested" -lt "$start" || "$requested" -gt "$last" ]]; then
+        echo "ERROR: --seeds names seed $requested, outside $set_name's locked range $start..$last; nothing recorded." >&2
+        return 1
+      fi
+    done
+    requested_fence=",$requested_seeds,"
+  fi
+
   echo "===================================================================="
   echo "Recording corpus set $set_name: seeds $start..$last ($count games), "
   echo "  roster ${np}p/${ni}i @ ${tpc} task(s)/crewmate -> $set_dir"
@@ -978,8 +1182,12 @@ record_set() {
   # the set dir is always complete. A fully-recorded set records nothing here and
   # jumps straight to the finalize (report + splits + freeze), which is idempotent.
   local -a seed_list=()
-  local s already=0
+  local s already=0 selected=0
   for ((s = start; s <= last; s++)); do
+    if [[ -n "$requested_fence" && "$requested_fence" != *",$s,"* ]]; then
+      continue
+    fi
+    selected=$((selected + 1))
     if [[ -s "$set_dir/replay-seed-$s.jsonl" ]]; then
       already=$((already + 1))
       continue
@@ -987,8 +1195,11 @@ record_set() {
     seed_list+=("$s")
   done
   local total_seeds="${#seed_list[@]}"
+  if [[ -n "$requested_fence" ]]; then
+    echo "Seed subset: $selected of $set_name's $count locked seed(s) selected (--seeds $requested_seeds)."
+  fi
   if [[ "$already" -gt 0 ]]; then
-    echo "Resume: $already/$count seed(s) already recorded; $total_seeds remaining."
+    echo "Resume: $already/$selected selected seed(s) already recorded; $total_seeds remaining."
   fi
 
   # Stage per-seed runs on the same filesystem as the set dir so the replay can be
@@ -1019,9 +1230,11 @@ record_set() {
   # audit-phase-18-close.md §7 item 5 — the recorder lock-race): the Bash-3.2
   # dead-owner degradation recorded below is the known limitation; frozen as-is.
   # Portable mkdir mutex with DEAD-OWNER detection: the holder records its PID; a
-  # waiter that finds the lock owned by a dead process marks the run failed (the
-  # half-written MANIFEST is unsafe to freeze) and gives up. Returns non-zero when
-  # the lock was NOT acquired — callers must not enter the critical section then.
+  # waiter that finds the lock owned by a dead process — stably, across repeated
+  # polls, so a holder observed mid-release is never mistaken for a corpse — marks
+  # the run failed (the half-written MANIFEST is unsafe to freeze) and gives up.
+  # Returns non-zero when the lock was NOT acquired — callers must not enter the
+  # critical section then.
   # The owner PID uses $BASHPID (the WORKER subshell's own PID) when available, and
   # falls back to $$ on macOS's stock Bash 3.2, which predates $BASHPID (the ${:-}
   # form is exempt from `set -u`, so an undefined $BASHPID never fatally aborts the
@@ -1030,18 +1243,42 @@ record_set() {
   # correctly; only the rare "a worker was SIGKILLed mid-critical-section" safety
   # net is lost. Install a newer bash (`brew install bash`) to restore it.
   acquire_lock() {
-    local owner
+    local owner last_dead_owner dead_polls
+    # Give up the moment any worker has flagged a failure -- even if the lock is
+    # free right now -- so a doomed set stops touching MANIFEST.md.
     [[ -e "$stage_dir/.failed" ]] && return 1
+    last_dead_owner=""
+    dead_polls=0
     while ! mkdir "$lockdir" 2>/dev/null; do
       if [[ -e "$stage_dir/.failed" ]]; then
         return 1
       fi
       owner="$(cat "$lockdir/owner" 2>/dev/null || true)"
       if [[ -n "$owner" ]] && ! kill -0 "$owner" 2>/dev/null; then
-        echo "ERROR: corpus lock owner (pid $owner) died holding the lock" \
-          "(killed/crashed mid critical section); the set is incomplete." >&2
-        touch "$stage_dir/.failed"
-        return 1
+        # One dead probe is a race, not a verdict: between this waiter's cat and
+        # its kill -0 the holder may have released the lock and exited (a worker
+        # draining the queue, or a seed-claim command-substitution subshell whose
+        # pid dies with the claim). A holder that truly died mid-critical-section
+        # leaves the owner file frozen -- only a release removes it -- so the same
+        # dead pid must stay the recorded owner across 10 consecutive polls (~1s)
+        # before the set is failed. A benign race can't sustain the streak:
+        # the release removes the owner file with the lock dir, so the next poll
+        # either acquires or reads a different owner and resets the count.
+        if [[ "$owner" == "$last_dead_owner" ]]; then
+          dead_polls=$((dead_polls + 1))
+        else
+          last_dead_owner="$owner"
+          dead_polls=1
+        fi
+        if [[ "$dead_polls" -ge 10 ]]; then
+          echo "ERROR: corpus lock owner (pid $owner) died holding the lock" \
+            "(killed/crashed mid critical section); the set is incomplete." >&2
+          touch "$stage_dir/.failed"
+          return 1
+        fi
+      else
+        last_dead_owner=""
+        dead_polls=0
       fi
       sleep 0.1
     done
@@ -1129,7 +1366,7 @@ record_set() {
       --seeds "$seed" \
       --git-sha "$git_sha" \
       --refreshed-at "$refreshed_at" \
-      --model "$DEFAULT_FEATHERLESS_MODEL" \
+      --model "$ACTIVE_MODEL" \
       --sample-dir "$set_dir" \
       --manifest "$manifest"; then
       release_lock
@@ -1236,7 +1473,7 @@ record_set() {
       --seeds "$missing_csv" \
       --git-sha "$git_sha" \
       --refreshed-at "$refreshed_at" \
-      --model "$DEFAULT_FEATHERLESS_MODEL" \
+      --model "$ACTIVE_MODEL" \
       --sample-dir "$set_dir" \
       --manifest "$manifest"; then
       echo "ERROR: the MANIFEST backfill failed for $set_name; NOT freezing." >&2
@@ -1298,7 +1535,7 @@ if [[ "$overall_status" -eq 0 ]]; then
   echo "Corpus recording complete in $((corpus_wall / 60))m$((corpus_wall % 60))s."
   echo "Acceptance (run per set before committing the PR):"
   for set_name in "${sets[@]}"; do
-    echo "  uv run python scripts/validity_gate.py $CORPUS_ROOT/$set_name --expected-model $DEFAULT_FEATHERLESS_MODEL --require-zero-cost"
+    echo "  uv run python scripts/validity_gate.py $CORPUS_ROOT/$set_name --expected-model $DEFAULT_FEATHERLESS_MODEL --require-zero-cost --expected-prompt-versions $REQUIRED_PROMPT_VERSIONS_CLI"
     echo "  scripts/verify_samples.sh $CORPUS_ROOT/$set_name"
   done
 else

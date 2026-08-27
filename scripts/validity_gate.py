@@ -11,6 +11,9 @@ Usage::
 
     uv run python scripts/validity_gate.py replays/samples/9p2i
     uv run python scripts/validity_gate.py replays/samples/4p1i --json
+    uv run python scripts/validity_gate.py replays/ml_corpus/9p2i \
+        --expected-model Qwen/Qwen3.6-27B --require-zero-cost \
+        --expected-prompt-versions vote_ballot=vote_ballot.qwen3_6_27b.v4,...
 
 ``--json`` emits the :class:`~eval.validity.ValidityGateReport` as the
 machine-readable report the 15.15 harness and the 15.7 / 15.18 audits consume
@@ -39,6 +42,35 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from eval.validity import ValidityGateReport, run_validity_gate  # noqa: E402
+
+
+def _parse_prompt_versions(raw: str) -> dict[str, str]:
+    """Parse ``KEY=VER,KEY=VER`` into the per-template version map.
+
+    The map the gate compares against each game's recorded ``prompt_versions``.
+    Every token must name a template and its full version string; a malformed
+    value raises, which argparse turns into the documented usage exit (``2``)
+    rather than a silently-partial pin.
+    """
+
+    versions: dict[str, str] = {}
+    for token in raw.split(","):
+        token = token.strip()
+        if not token:
+            continue
+        key, sep, version = token.partition("=")
+        key, version = key.strip(), version.strip()
+        if not sep or not key or not version:
+            raise argparse.ArgumentTypeError(
+                f"expected KEY=VERSION pairs, got {token!r} (e.g. "
+                "accusation_round=accusation_round.qwen3_6_27b.v4)"
+            )
+        if key in versions:
+            raise argparse.ArgumentTypeError(f"template {key!r} named twice")
+        versions[key] = version
+    if not versions:
+        raise argparse.ArgumentTypeError(f"names no template: {raw!r}")
+    return versions
 
 
 def _render_human(report: ValidityGateReport) -> str:
@@ -84,6 +116,21 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     parser.add_argument(
+        "--expected-prompt-versions",
+        type=_parse_prompt_versions,
+        default=None,
+        metavar="KEY=VER,KEY=VER",
+        help=(
+            "pin every game's prompt-version provenance to this exact "
+            "per-template map, e.g. "
+            "accusation_round=accusation_round.qwen3_6_27b.v4,"
+            "crewmate_report=crewmate_report.qwen3_6_27b.v4 (a version string "
+            "carries its own template prefix, so the pairs read doubled); "
+            "omitted, the set is only checked for a COHERENT version map, which "
+            "a set recorded homogeneously at the wrong version still satisfies"
+        ),
+    )
+    parser.add_argument(
         "--require-zero-cost",
         action="store_true",
         help=(
@@ -95,6 +142,7 @@ def main(argv: list[str] | None = None) -> int:
     replay_set_dir: Path = args.replay_set_dir
     emit_json: bool = args.json
     expected_model: str | None = args.expected_model
+    expected_prompt_versions: dict[str, str] | None = args.expected_prompt_versions
     require_zero_cost: bool = args.require_zero_cost
 
     if not replay_set_dir.is_dir():
@@ -104,6 +152,7 @@ def main(argv: list[str] | None = None) -> int:
         report = run_validity_gate(
             replay_set_dir,
             expected_model=expected_model,
+            expected_prompt_versions=expected_prompt_versions,
             require_zero_cost=require_zero_cost,
         )
     except ValueError as exc:
