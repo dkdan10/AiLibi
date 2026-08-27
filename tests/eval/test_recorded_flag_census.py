@@ -15,16 +15,18 @@ The instruments read the record instead --
 ``training/conviction/dataset.py`` where the firewall forbids an ``eval.*``
 import. This module is the structural gate that keeps it that way: it walks
 ``eval/`` and ``training/`` with :mod:`ast` and fails on any
-``detect_contradictions`` call that does not thread ALL THREE private grounding
+``detect_contradictions`` call that does not SUPPLY all three private grounding
 channels.
 
 Requiring all three, rather than banning one known-bad keyword shape, is what
 makes the gate hold. The defect is the ABSENCE of the channels, so every way of
 spelling that absence has to fail: ``roster=`` alone, a bare call with no
-keywords at all, positional arguments, and a partial thread that supplies
-``trigger_kind=`` while still leaving the private channels defaulted to
-``None``. A ``**kwargs`` splat is reported too -- the gate cannot see what it
-contains, and a check that waves through what it cannot verify is not a check.
+keywords at all, positional arguments, a partial thread that supplies
+``trigger_kind=`` while leaving the private channels defaulted, and the channel
+keywords spelled but assigned the literal ``None`` -- which the detector reads
+as an absent channel, so it grounds nothing while looking like compliance. A
+``**kwargs`` splat is reported too: the gate cannot see what it contains, and a
+check that waves through what it cannot verify is not a check.
 
 The walk is restricted to those two packages by construction, not by an
 allowlist. ``audits/workflows/extract_gameplay_facts.py`` re-derives on purpose
@@ -74,19 +76,37 @@ def _callee_name(func: ast.expr) -> str | None:
     return None
 
 
+def _is_literal_none(value: ast.expr) -> bool:
+    """Whether the argument is the literal ``None`` written at the call site.
+
+    ``detect_contradictions`` reads ``None`` as an ABSENT channel, so spelling
+    the keyword and assigning ``None`` grounds nothing — it only looks grounded.
+    The gate has to judge the value, not the keyword name.
+    """
+
+    return isinstance(value, ast.Constant) and value.value is None
+
+
 def record_free_rederivations(source: str) -> list[int]:
     """Line numbers of the record-free ``detect_contradictions`` calls in ``source``.
 
     A call whose callee resolves to ``detect_contradictions`` is reported unless
-    it threads every name in :data:`_RECORD_CHANNELS` as an explicit keyword.
-    That is the whole rule, and it is deliberately about what is PRESENT: the
-    defect is the absent grounding, so ``roster=`` alone, a bare call, a
-    positional call and a partial thread that stops at ``trigger_kind=`` all
-    fail the same way rather than needing a pattern each.
+    it SUPPLIES every name in :data:`_RECORD_CHANNELS` — spelled as a keyword
+    AND given something other than the literal ``None``, which the detector
+    reads as an absent channel. That is the whole rule, and it is deliberately
+    about what is present: the defect is the absent grounding, so ``roster=``
+    alone, a bare call, a positional call, a partial thread that stops at
+    ``trigger_kind=``, and all three channels spelled but set to ``None`` fail
+    the same way rather than needing a pattern each.
 
     A ``**kwargs`` splat is reported: its contents are not statically knowable,
     and a gate that passes what it cannot verify is prose. Spell the channels,
     or add the site to :data:`_ALLOWED_REDERIVATIONS` with a reason.
+
+    A channel bound to a NAME the walk cannot resolve counts as supplied: the
+    gate is a structural check on the call site, not a value analysis, and the
+    committed reconstructions all pass names. Only the literal ``None`` — the
+    one spelling that is provably absent from the source alone — is refused.
     """
 
     found: list[int] = []
@@ -95,8 +115,12 @@ def record_free_rederivations(source: str) -> list[int]:
             continue
         if _callee_name(node.func) != "detect_contradictions":
             continue
-        threaded = {keyword.arg for keyword in node.keywords if keyword.arg is not None}
-        if not _RECORD_CHANNELS <= threaded:
+        supplied = {
+            keyword.arg
+            for keyword in node.keywords
+            if keyword.arg is not None and not _is_literal_none(keyword.value)
+        }
+        if not _RECORD_CHANNELS <= supplied:
             found.append(node.lineno)
     return found
 
@@ -205,6 +229,53 @@ def test_the_gate_bites_on_a_bare_and_a_positional_call(tmp_path: Path) -> None:
     )
 
     assert record_free_rederivations(bare.read_text(encoding="utf-8")) == [5, 6]
+
+
+def test_the_gate_bites_on_channels_spelled_but_set_to_none(tmp_path: Path) -> None:
+    # The evasion a name-only check invites, and the one that would look most
+    # like compliance in review: all three channels spelled, every one of them
+    # None. The detector reads None as an absent channel, so this call performs
+    # exactly the record-free reconstruction the gate exists to forbid.
+    nulled = tmp_path / "nulled_instrument.py"
+    nulled.write_text(
+        "from meetings.transcript import detect_contradictions\n"
+        "\n"
+        "\n"
+        "def census(meeting, roster):\n"
+        "    return detect_contradictions(\n"
+        "        meeting.transcript,\n"
+        "        roster=roster,\n"
+        "        trigger_kind=meeting.trigger,\n"
+        "        vent_witness_records=None,\n"
+        "        move_witness_records=None,\n"
+        "        sighting_records=None,\n"
+        "    )\n",
+        encoding="utf-8",
+    )
+
+    assert record_free_rederivations(nulled.read_text(encoding="utf-8")) == [5]
+
+
+def test_the_gate_bites_when_one_channel_alone_is_nulled(tmp_path: Path) -> None:
+    # The subtler half: two channels really supplied, one quietly None. The
+    # census is still missing a channel, so it is still a different game.
+    partly_nulled = tmp_path / "partly_nulled_instrument.py"
+    partly_nulled.write_text(
+        "from meetings.transcript import detect_contradictions\n"
+        "\n"
+        "\n"
+        "def census(meeting, roster, vents, moves):\n"
+        "    return detect_contradictions(\n"
+        "        meeting.transcript,\n"
+        "        roster=roster,\n"
+        "        vent_witness_records=vents,\n"
+        "        move_witness_records=moves,\n"
+        "        sighting_records=None,\n"
+        "    )\n",
+        encoding="utf-8",
+    )
+
+    assert record_free_rederivations(partly_nulled.read_text(encoding="utf-8")) == [5]
 
 
 def test_the_gate_bites_on_a_kwargs_splat(tmp_path: Path) -> None:
