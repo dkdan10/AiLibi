@@ -2467,6 +2467,18 @@ mirror you changed is exactly what it pins.
 - `eval.deduction_metrics.MACHINERY_ORACLE_PATTERNS`
 - `meetings.transcript.sighting_placement`
 
+**Merge-reality record (2026-08-27, orchestrator-ratified at the #402 merge):** four files
+outside the Files-in-scope list were touched, each mechanically forced by an in-scope change and
+none a source module — `tests/eval/test_watchability_reanchor.py` and
+`tests/scripts/test_verify_ml_evidence.py` (measured pins the mandated gauge widening moves),
+`tests/eval/test_vj_instruments.py` (one test asserted the exact identity the A-3 guard exclusion
+deliberately breaks; rewritten to pin the divergence), and
+`frontend/src/stories/TournamentDashboard.stories.tsx` (a consumer of the in-scope regenerated
+`api.ts`). Recorded as prose per the 20.34 precedent, never as scope entries; Codex's P1 on the
+same point is answered on the PR. The shipped dialect census (81 utterances = A-6's 78 + 1
+pre-guard ballot + 3 article-less `System flag` reasons − 1 in-fiction survivor) supersedes the
+contract's net-dependent "100 hits" narrative figure.
+
 **Ready-to-paste prompt:** `agent_prompts/task-21-9-instrument-aim.md`
 
 ### Task 21.10 — The recorders earn the next record: the dead-owner streak, a tested recording engine, the version pin's CLI, and the loader guard sweep

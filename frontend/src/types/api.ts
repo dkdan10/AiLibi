@@ -499,11 +499,14 @@ export interface AccusationCalibrationReport {
   accusation_claim_ece: number | null;
   accusation_claim_populated_bins: number;
   accusation_claim_low_power: boolean;
+  accusation_claim_crew_accuser: CalibrationCurve;
+  accusation_claim_impostor_accuser: CalibrationCurve;
   vote_ballot_bins: CalibrationBin[];
   vote_ballot_total: number;
   vote_ballot_ece: number | null;
   vote_ballot_populated_bins: number;
   vote_ballot_low_power: boolean;
+  vote_ballot_guard_authored_excluded: number;
 }
 
 export interface CalibrationBin {
@@ -515,6 +518,14 @@ export interface CalibrationBin {
   impostor_hits: number;
   actual_impostor_rate: number | null;
   mean_confidence: number | null;
+}
+
+export interface CalibrationCurve {
+  bins: CalibrationBin[];
+  total: number;
+  ece: number | null;
+  populated_bins: number;
+  low_power: boolean;
 }
 
 export interface AlibiFabricationReport {
@@ -724,6 +735,10 @@ export interface ScaffoldLeakageCells {
   model_machinery_quotation_ballots: number;
   model_machinery_vocabulary_ballots: number;
   model_machinery_quotation_share: number | null;
+  claim_reasons_total: number;
+  model_oracle_register_ballots: number;
+  oracle_register_turns: number;
+  oracle_register_claim_reasons: number;
   model_source_pre_guard_ballots: number;
   model_source_unavailable_ballots: number;
   guard_provenance_verified_ballots: number;

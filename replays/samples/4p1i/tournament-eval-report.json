@@ -10580,6 +10580,222 @@
     "accusation_claim_ece": 0.24866071428571437,
     "accusation_claim_populated_bins": 5,
     "accusation_claim_low_power": false,
+    "accusation_claim_crew_accuser": {
+      "bins": [
+        {
+          "bin_index": 0,
+          "lo": 0.0,
+          "hi": 0.1,
+          "midpoint": 0.05,
+          "count": 0,
+          "impostor_hits": 0,
+          "actual_impostor_rate": null,
+          "mean_confidence": null
+        },
+        {
+          "bin_index": 1,
+          "lo": 0.1,
+          "hi": 0.2,
+          "midpoint": 0.15000000000000002,
+          "count": 0,
+          "impostor_hits": 0,
+          "actual_impostor_rate": null,
+          "mean_confidence": null
+        },
+        {
+          "bin_index": 2,
+          "lo": 0.2,
+          "hi": 0.3,
+          "midpoint": 0.25,
+          "count": 0,
+          "impostor_hits": 0,
+          "actual_impostor_rate": null,
+          "mean_confidence": null
+        },
+        {
+          "bin_index": 3,
+          "lo": 0.3,
+          "hi": 0.4,
+          "midpoint": 0.35,
+          "count": 0,
+          "impostor_hits": 0,
+          "actual_impostor_rate": null,
+          "mean_confidence": null
+        },
+        {
+          "bin_index": 4,
+          "lo": 0.4,
+          "hi": 0.5,
+          "midpoint": 0.45,
+          "count": 0,
+          "impostor_hits": 0,
+          "actual_impostor_rate": null,
+          "mean_confidence": null
+        },
+        {
+          "bin_index": 5,
+          "lo": 0.5,
+          "hi": 0.6,
+          "midpoint": 0.55,
+          "count": 15,
+          "impostor_hits": 8,
+          "actual_impostor_rate": 0.5333333333333333,
+          "mean_confidence": 0.5
+        },
+        {
+          "bin_index": 6,
+          "lo": 0.6,
+          "hi": 0.7,
+          "midpoint": 0.6499999999999999,
+          "count": 18,
+          "impostor_hits": 9,
+          "actual_impostor_rate": 0.5,
+          "mean_confidence": 0.6055555555555554
+        },
+        {
+          "bin_index": 7,
+          "lo": 0.7,
+          "hi": 0.8,
+          "midpoint": 0.75,
+          "count": 4,
+          "impostor_hits": 1,
+          "actual_impostor_rate": 0.25,
+          "mean_confidence": 0.7250000000000001
+        },
+        {
+          "bin_index": 8,
+          "lo": 0.8,
+          "hi": 0.9,
+          "midpoint": 0.8500000000000001,
+          "count": 1,
+          "impostor_hits": 1,
+          "actual_impostor_rate": 1.0,
+          "mean_confidence": 0.8
+        },
+        {
+          "bin_index": 9,
+          "lo": 0.9,
+          "hi": 1.0,
+          "midpoint": 0.95,
+          "count": 35,
+          "impostor_hits": 35,
+          "actual_impostor_rate": 1.0,
+          "mean_confidence": 0.9928571428571429
+        }
+      ],
+      "total": 73,
+      "ece": 0.06506849315068489,
+      "populated_bins": 5,
+      "low_power": false
+    },
+    "accusation_claim_impostor_accuser": {
+      "bins": [
+        {
+          "bin_index": 0,
+          "lo": 0.0,
+          "hi": 0.1,
+          "midpoint": 0.05,
+          "count": 0,
+          "impostor_hits": 0,
+          "actual_impostor_rate": null,
+          "mean_confidence": null
+        },
+        {
+          "bin_index": 1,
+          "lo": 0.1,
+          "hi": 0.2,
+          "midpoint": 0.15000000000000002,
+          "count": 0,
+          "impostor_hits": 0,
+          "actual_impostor_rate": null,
+          "mean_confidence": null
+        },
+        {
+          "bin_index": 2,
+          "lo": 0.2,
+          "hi": 0.3,
+          "midpoint": 0.25,
+          "count": 0,
+          "impostor_hits": 0,
+          "actual_impostor_rate": null,
+          "mean_confidence": null
+        },
+        {
+          "bin_index": 3,
+          "lo": 0.3,
+          "hi": 0.4,
+          "midpoint": 0.35,
+          "count": 0,
+          "impostor_hits": 0,
+          "actual_impostor_rate": null,
+          "mean_confidence": null
+        },
+        {
+          "bin_index": 4,
+          "lo": 0.4,
+          "hi": 0.5,
+          "midpoint": 0.45,
+          "count": 0,
+          "impostor_hits": 0,
+          "actual_impostor_rate": null,
+          "mean_confidence": null
+        },
+        {
+          "bin_index": 5,
+          "lo": 0.5,
+          "hi": 0.6,
+          "midpoint": 0.55,
+          "count": 3,
+          "impostor_hits": 0,
+          "actual_impostor_rate": 0.0,
+          "mean_confidence": 0.5166666666666667
+        },
+        {
+          "bin_index": 6,
+          "lo": 0.6,
+          "hi": 0.7,
+          "midpoint": 0.6499999999999999,
+          "count": 24,
+          "impostor_hits": 0,
+          "actual_impostor_rate": 0.0,
+          "mean_confidence": 0.6020833333333332
+        },
+        {
+          "bin_index": 7,
+          "lo": 0.7,
+          "hi": 0.8,
+          "midpoint": 0.75,
+          "count": 11,
+          "impostor_hits": 0,
+          "actual_impostor_rate": 0.0,
+          "mean_confidence": 0.7000000000000001
+        },
+        {
+          "bin_index": 8,
+          "lo": 0.8,
+          "hi": 0.9,
+          "midpoint": 0.8500000000000001,
+          "count": 1,
+          "impostor_hits": 0,
+          "actual_impostor_rate": 0.0,
+          "mean_confidence": 0.8
+        },
+        {
+          "bin_index": 9,
+          "lo": 0.9,
+          "hi": 1.0,
+          "midpoint": 0.95,
+          "count": 0,
+          "impostor_hits": 0,
+          "actual_impostor_rate": null,
+          "mean_confidence": null
+        }
+      ],
+      "total": 39,
+      "ece": 0.6282051282051283,
+      "populated_bins": 4,
+      "low_power": true
+    },
     "vote_ballot_bins": [
       {
         "bin_index": 0,
@@ -10646,10 +10862,10 @@
         "lo": 0.6,
         "hi": 0.7,
         "midpoint": 0.6499999999999999,
-        "count": 12,
+        "count": 11,
         "impostor_hits": 4,
-        "actual_impostor_rate": 0.3333333333333333,
-        "mean_confidence": 0.6458333333333335
+        "actual_impostor_rate": 0.36363636363636365,
+        "mean_confidence": 0.6454545454545456
       },
       {
         "bin_index": 7,
@@ -10682,10 +10898,11 @@
         "mean_confidence": 0.9576923076923077
       }
     ],
-    "vote_ballot_total": 59,
-    "vote_ballot_ece": 0.1483050847457627,
+    "vote_ballot_total": 58,
+    "vote_ballot_ece": 0.1396551724137931,
     "vote_ballot_populated_bins": 4,
-    "vote_ballot_low_power": true
+    "vote_ballot_low_power": true,
+    "vote_ballot_guard_authored_excluded": 1
   },
   "alibi_fabrication": {
     "total_impostor_alibis": 1,
@@ -10934,6 +11151,10 @@
       "model_machinery_quotation_ballots": 0,
       "model_machinery_vocabulary_ballots": 0,
       "model_machinery_quotation_share": 0.0,
+      "claim_reasons_total": 135,
+      "model_oracle_register_ballots": 1,
+      "oracle_register_turns": 1,
+      "oracle_register_claim_reasons": 1,
       "model_source_pre_guard_ballots": 120,
       "model_source_unavailable_ballots": 0,
       "guard_provenance_verified_ballots": 120,

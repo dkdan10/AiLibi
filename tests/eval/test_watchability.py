@@ -741,14 +741,14 @@ def test_baseline_7_floor_pins_equal_the_measured_bytes() -> None:
         _NINE: {
             "witnessed_event_rate": 3 / 177,  # crew-witnessed kills
             "flags_per_meeting": 144 / 152,  # 92 vent + 52 transcript (was 134/152)
-            "testimony_backed_conversion": 80 / 115,  # SUBJECT-AWARE
+            "testimony_backed_conversion": 84 / 132,  # SUBJECT-AWARE + saw_move
             "transcript_flags_per_meeting": 52 / 152,  # the deduction component
             "persisted_vent_flags_per_meeting": 92 / 152,  # the vent component
         },
         _FOUR: {
             "witnessed_event_rate": 1 / 65,  # numerator 1 -> ADVISORY
             "flags_per_meeting": 20 / 40,  # 20 vent + 0 transcript
-            "testimony_backed_conversion": 19 / 31,  # SUBJECT-AWARE
+            "testimony_backed_conversion": 20 / 34,  # SUBJECT-AWARE + saw_move
             "transcript_flags_per_meeting": 0 / 40,  # numerator 0 -> ADVISORY
             "persisted_vent_flags_per_meeting": 20 / 40,
         },
@@ -783,15 +783,15 @@ def test_a_gauge_below_a_baseline_7_floor_is_rejected() -> None:
         total_flags=144,
         persisted_vent_flags=92,
         meetings_total=152,
-        testimony_backed_conversion=79 / 115,  # ONE conversion short of the pin
-        backed_conversion_attempted=115,
-        backed_conversion_converted=79,
+        testimony_backed_conversion=83 / 132,  # ONE conversion short of the pin
+        backed_conversion_attempted=132,
+        backed_conversion_converted=83,
     )
     passed, rows = evaluate_supply_floors(starved, floors)
     assert passed is False, "a below-floor conversion must fail the referee"
     conversion = next(r for r in rows if r.name == "testimony_backed_conversion")
     assert conversion.passed is False
-    assert conversion.floor == 80 / 115
+    assert conversion.floor == 84 / 132
     assert conversion.advisory is False
 
 
@@ -1398,6 +1398,63 @@ def test_saw_vent_observation_counts_as_backed_evidence() -> None:
     assert backed_any2 is False  # frozen bit: vent-only turn, no Saw/FoundBody
 
 
+def test_saw_move_backs_the_live_bit_and_leaves_the_frozen_bit_alone() -> None:
+    """A spoken transition places its subject; the frozen parity bit ignores it.
+
+    The LIVE subject-aware bit reads a :class:`SawMoveObservation` through
+    :func:`meetings.transcript.sighting_placement` — the destination placement
+    the detector itself mints flags from — so an accusation backed only by a
+    spoken transition converts in D2. The FROZEN ``backed_any`` bit mirrors the
+    15.2-era extractor's ``(SawPlayerObservation, FoundBodyObservation)`` tuple
+    and must stay blind to the type, which is what
+    ``test_historical_15_2_geomean_parity_frozen_pin_on_9p2i`` enforces on the
+    committed bytes.
+    """
+
+    from eval.watchability import _testimony_vehicle
+    from meetings.schemas import AccusationClaim, MeetingTurn, SawMoveObservation
+
+    move = SawMoveObservation(
+        type="saw_move",
+        tick=100,
+        subject="p-0",
+        from_room="CAFETERIA",
+        to_room="STORAGE",
+    )
+    accuse_turn = MeetingTurn(
+        turn_id="m:turn-1",
+        turn_index=1,
+        speaker="p-1",
+        turn_kind="reply",
+        reply_to=None,
+        observations=(move,),
+        claims=(
+            AccusationClaim(
+                type="accusation", against="p-0", confidence=0.9, reason="transit"
+            ),
+        ),
+        free_text="p-0 slipped from the Cafeteria into Storage.",
+    )
+    vehicle, backed, backed_any = _testimony_vehicle(accuse_turn, "p-0")
+    assert vehicle == "accusation"
+    assert backed is True  # LIVE: the transition places the accused p-0
+    assert backed_any is False  # FROZEN: no SawPlayer/FoundBody in the turn
+
+    # A transition about someone ELSE still cannot back an accusation of p-0 —
+    # the 15.19 subject-awareness the widening must not undo.
+    other_move = SawMoveObservation(
+        type="saw_move",
+        tick=100,
+        subject="p-3",
+        from_room="CAFETERIA",
+        to_room="STORAGE",
+    )
+    misaimed = accuse_turn.model_copy(update={"observations": (other_move,)})
+    _, backed_other, backed_any_other = _testimony_vehicle(misaimed, "p-0")
+    assert backed_other is False
+    assert backed_any_other is False
+
+
 def test_none_conversion_floor_is_vacuously_cleared() -> None:
     """A None conversion floor (baseline supplied no accused-impostor meeting) passes."""
 
@@ -1481,8 +1538,10 @@ def test_cli_watchability_json_emits_per_game_and_aggregate() -> None:
     # The HARDENED mean over the committed baseline-6 bytes (was 54.97 pre-widening,
     # 42.25 on baseline 5 — the meeting-layer graduation's richer flag supply and
     # higher conversion lift the geomean; the conversion-coupled D2 gate still sinks
-    # the suspicion-theater games).
-    assert report["mean_score"] == pytest.approx(50.69)  # was 54.58
+    # the suspicion-theater games). Re-derived on the same bytes when the backing
+    # vocabulary gained the spoken saw_move placement: more attempts enter D2 than
+    # convert, so the mean eases.
+    assert report["mean_score"] == pytest.approx(50.05)  # was 50.69
 
 
 def test_cli_watchability_human_output() -> None:

@@ -2478,6 +2478,42 @@ def _move_observation_matches_record(
     )
 
 
+def sighting_placement(artifact: object) -> SawPlayerObservation | None:
+    """The placement one spoken artifact puts on the record, or ``None``.
+
+    Two sayable shapes place another player, and every first-hand-sighting
+    predicate must read the pair as one placement:
+
+    * a :class:`~meetings.schemas.SawPlayerObservation` places its subject in
+      the room it names;
+    * a :class:`~meetings.schemas.SawMoveObservation` "``subject`` moved A -> B,
+      arriving at ``tick``" places the subject at the DESTINATION, ``to_room``
+      at ``tick``, and nowhere else — the origin half is deliberately not placed
+      at ``tick - 1``.
+
+    Every other observation shape places nobody: a whereabouts locates only the
+    speaker, a vent sighting is a first-hand sighting but names no room the
+    subject can be placed in for a geometry compare, and a found-body names a
+    dead victim.
+
+    This is the same :class:`~meetings.schemas.SawPlayerObservation`
+    :func:`_iter_move_placements` builds from a grounded transition, so an
+    instrument reading it agrees with the detector by construction rather than
+    by a re-derivation that can drift.
+    """
+
+    if isinstance(artifact, SawPlayerObservation):
+        return artifact
+    if isinstance(artifact, SawMoveObservation):
+        return SawPlayerObservation(
+            type="saw_player",
+            tick=artifact.tick,
+            subject=artifact.subject,
+            room=artifact.to_room,
+        )
+    return None
+
+
 def _iter_move_placements(
     transcript: MeetingTranscript,
     *,
@@ -4127,6 +4163,7 @@ __all__ = [
     "next_chain_step",
     "reconstruct_stated_paths",
     "self_refuted_alibi_claim_ids",
+    "sighting_placement",
     "sort_turns_canonically",
     "triggering_body_rooms",
     "walk_chain",

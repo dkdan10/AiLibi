@@ -924,9 +924,9 @@ def test_committed_9p2i_report_pins_the_audited_gate_metrics() -> None:
     gate = report.gate_metrics
     genuine = gate.genuine_class_conversion
 
-    assert genuine.supplied == 1  # was 4
-    assert genuine.converted == 0  # was 3
-    assert genuine.conversion_rate == 0.0  # was 0.75
+    assert genuine.supplied == 0  # was 1
+    assert genuine.converted == 0
+    assert genuine.conversion_rate is None  # was 0.0
     assert genuine.note == GENUINE_CLASS_GATE_NOTE
 
     # The Task-19.5 canary cell: the successor instrument the canary bands read.
@@ -941,11 +941,9 @@ def test_committed_9p2i_report_pins_the_audited_gate_metrics() -> None:
     assert supplied_channel.whereabouts_lie_supplied == 5  # was 7
     assert supplied_channel.whereabouts_lie_converted == 2  # was 5
     # The preserved legacy column mirrors the genuine-class cell above.
-    assert supplied_channel.legacy_alibi_supplied == 1  # was 4
-    assert supplied_channel.legacy_alibi_converted == 0  # was 3
-    assert supplied_channel.legacy_alibi_conversion_rate == pytest.approx(
-        0.0
-    )  # was 0.75
+    assert supplied_channel.legacy_alibi_supplied == 0  # was 1
+    assert supplied_channel.legacy_alibi_converted == 0
+    assert supplied_channel.legacy_alibi_conversion_rate is None  # was 0.0
     assert supplied_channel.note == SUPPLIED_CHANNEL_GATE_NOTE
 
     assert gate.lost_opening_accusations == 0
@@ -962,14 +960,13 @@ def test_committed_9p2i_report_pins_the_audited_gate_metrics() -> None:
     assert gate.survivals_sheltered_sub_gate == 0
     assert gate.survivals_unevidenced == 34  # was 36
 
-    # Per-seed identities RE-DERIVED from the same committed games. Everything
-    # above is read from the committed sidecar, which was built by the old
-    # record-free census and is not rebuilt here (Task 21.15 rebuilds it), so
-    # the two sides no longer agree and the fold is the corrected reading: the
-    # sidecar's one genuine-class supply was a flag the transcript-only
-    # re-derivation minted and the record never carried, so on the recorded
-    # census no seed supplies at all. There are no lost openings and no
-    # sheltered survivals on these bytes either, so those fold to empty too.
+    # Per-seed identities RE-DERIVED from the same committed games. Task 21.9
+    # rebuilt the sidecar, so the stored block above and this fold now AGREE:
+    # the sidecar's one genuine-class supply was a flag the retired
+    # transcript-only re-derivation minted and the record never carried, and on
+    # the recorded census no seed supplies at all. There are no lost openings
+    # and no sheltered survivals on these bytes either, so those fold to empty
+    # too.
     supplied_seeds = {
         game.seed
         for game in report.report.games
@@ -999,8 +996,9 @@ def test_committed_9p2i_report_pins_the_audited_gate_metrics() -> None:
     # the era-invalidity note (a reader pulling the raw report sees the
     # PRIMARY gate and the warning, the gp-7 ask).
     raw = json.loads(_COMMITTED_9P2I_REPORT.read_text(encoding="utf-8"))
-    assert raw["gate_metrics"]["genuine_class_conversion"]["supplied"] == 1
+    assert raw["gate_metrics"]["genuine_class_conversion"]["supplied"] == 0
     assert raw["gate_metrics"]["genuine_class_conversion"]["converted"] == 0
+    assert raw["gate_metrics"]["genuine_class_conversion"]["conversion_rate"] is None
     assert (
         "ejection_accuracy" in raw["gate_metrics"]["genuine_class_conversion"]["note"]
     )

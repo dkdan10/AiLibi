@@ -444,11 +444,25 @@ FORBIDDEN_EVAL_ENGINE_FIELDS: Final[frozenset[str]] = frozenset(
 # role-SPLIT totals over a finished game's transcript, which this privileged
 # post-game GM surface already exposes as ``roles``. So the whole block stays
 # out of ``FORBIDDEN_EVAL_ENGINE_FIELDS``.
+#
+# The Task-21.9 additions keep that note true. The two accuser-role curves
+# (``accusation_claim_crew_accuser`` / ``accusation_claim_impostor_accuser``,
+# each a ``CalibrationCurve`` of ``bins`` / ``total`` / ``ece`` /
+# ``populated_bins`` / ``low_power``) are a role PARTITION of a curve this
+# surface already serves, over ``roles`` it already exposes.
+# ``vote_ballot_guard_authored_excluded`` counts ballots this codebase's own
+# guard authored. The oracle-register cells
+# (``model_oracle_register_ballots`` / ``oracle_register_turns`` /
+# ``oracle_register_claim_reasons``, against ``claim_reasons_total``) are
+# regex-net COUNTS over already-served spoken text — no text, no speaker, no
+# player id crosses the model boundary.
 EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
     {
         "accusation_calibration",
         "accusation_claim_bins",
+        "accusation_claim_crew_accuser",
         "accusation_claim_ece",
+        "accusation_claim_impostor_accuser",
         "accusation_claim_low_power",
         "accusation_claim_populated_bins",
         "accusation_claim_total",
@@ -470,12 +484,14 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "ballots",
         "ballots_total",
         "bin_index",
+        "bins",
         "body_of",
         "body_report_meetings",
         "by_model",
         "call_kind",
         "cap_defaulted_turns",
         "citation_coerced_skip_ballots",
+        "claim_reasons_total",
         "claims",
         "co_present",
         "co_present_crew_kill_rate",
@@ -511,6 +527,7 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "denominator",
         "description",
         "direct_proof_accuracy",
+        "ece",
         "ejected_meetings",
         "ejected_player_id",
         "ejectee_proof_cross_tab",
@@ -591,6 +608,7 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "llm_calls",
         "lo",
         "lost_opening_accusations",
+        "low_power",
         "mean_confidence",
         "mean_cost_per_game",
         "mean_instances_complete_at_win",
@@ -611,6 +629,7 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "model_machinery_vocabulary_ballots",
         "model_omniscient_ballots",
         "model_omniscient_rate",
+        "model_oracle_register_ballots",
         "model_partner_naming_ballots",
         "model_partner_naming_rate",
         "model_role_statement_ballots",
@@ -627,11 +646,14 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "observations",
         "on_tick",
         # The dropped value a TurnAnnotation quotes (bounded).
+        "oracle_register_claim_reasons",
+        "oracle_register_turns",
         "original",
         "outcome",
         "output_tokens",
         "per_prompt_version",
         "player_visible_leak_turns",
+        "populated_bins",
         "primary_reason_id",
         "primary_reason_observation_id",
         "prompt",
@@ -682,6 +704,7 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "tick",
         "to_room",
         "to_tick",
+        "total",
         "total_cost_usd",
         "total_ejections",
         "total_impostor_alibis",
@@ -705,6 +728,7 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "version",
         "vote_ballot_bins",
         "vote_ballot_ece",
+        "vote_ballot_guard_authored_excluded",
         "vote_ballot_low_power",
         "vote_ballot_populated_bins",
         "vote_ballot_total",

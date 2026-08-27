@@ -11,7 +11,10 @@ behaviour when an accusation target is absent from the role ground truth.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
+from pathlib import Path
+from typing import Final
 
 import pytest
 from pydantic import ValidationError
@@ -22,7 +25,12 @@ from eval.accusation_calibration import (
     MIN_POPULATED_BINS_FOR_POWER,
     AccusationCalibrationReport,
     CalibrationBin,
+    CalibrationCurve,
     compute_accusation_calibration,
+)
+from meetings.manager import (
+    BALLOT_TARGET_REDIRECT_MARKER,
+    TEAMMATE_VOTE_TARGET_MARKER,
 )
 from eval.report_schema import (
     CURRENT_FORMAT_VERSION,
@@ -157,6 +165,40 @@ def _tournament(*games: GameReport) -> TournamentReport:
         format_version=CURRENT_FORMAT_VERSION,
         games=games,
         seeds_used=tuple(g.seed for g in games),
+    )
+
+
+_EMPTY_BINS: tuple[CalibrationBin, ...] = tuple(
+    CalibrationBin(
+        bin_index=i,
+        lo=i / DEFAULT_N_BINS,
+        hi=(i + 1) / DEFAULT_N_BINS,
+        midpoint=(i + 0.5) / DEFAULT_N_BINS,
+        count=0,
+        impostor_hits=0,
+        actual_impostor_rate=None,
+        mean_confidence=None,
+    )
+    for i in range(DEFAULT_N_BINS)
+)
+
+
+def _empty_curve(bins: tuple[CalibrationBin, ...]) -> CalibrationCurve:
+    """A zero-sample curve over ``bins`` — the filler for validator fixtures."""
+
+    return _curve_with_total(bins, 0)
+
+
+def _curve_with_total(bins: tuple[CalibrationBin, ...], total: int) -> CalibrationCurve:
+    """A curve declaring ``total`` samples over ``bins``, populated bins derived."""
+
+    populated = sum(1 for b in bins if b.count > 0)
+    return CalibrationCurve(
+        bins=bins,
+        total=total,
+        ece=None,
+        populated_bins=populated,
+        low_power=populated < MIN_POPULATED_BINS_FOR_POWER,
     )
 
 
@@ -528,11 +570,14 @@ def test_report_validates_bin_count_matches_n_bins() -> None:
             accusation_claim_ece=None,
             accusation_claim_populated_bins=0,
             accusation_claim_low_power=True,
+            accusation_claim_crew_accuser=_empty_curve(one_bin),
+            accusation_claim_impostor_accuser=_empty_curve(one_bin),
             vote_ballot_bins=one_bin,
             vote_ballot_total=0,
             vote_ballot_ece=None,
             vote_ballot_populated_bins=0,
             vote_ballot_low_power=True,
+            vote_ballot_guard_authored_excluded=0,
         )
 
 
@@ -617,9 +662,476 @@ def test_report_rejects_mismatched_populated_bin_count() -> None:
             accusation_claim_ece=0.05,
             accusation_claim_populated_bins=5,  # actual is 1
             accusation_claim_low_power=True,
+            accusation_claim_crew_accuser=_curve_with_total(bins, 1),
+            accusation_claim_impostor_accuser=_empty_curve(_EMPTY_BINS),
             vote_ballot_bins=bins,
             vote_ballot_total=1,
             vote_ballot_ece=0.05,
             vote_ballot_populated_bins=1,
             vote_ballot_low_power=True,
+            vote_ballot_guard_authored_excluded=0,
         )
+
+
+# ---------------------------------------------------------------------------
+# Task 21.9 — the accuser-role split and the guard-authored exclusion (A-8/A-3)
+# ---------------------------------------------------------------------------
+
+_REPO_ROOT: Final[Path] = Path(__file__).resolve().parents[2]
+
+# Each committed set's re-derived claim curves: pooled, crew-accuser and
+# impostor-accuser, as (ece, total). Re-derived from the committed reports; a
+# re-record regenerates them.
+_COMMITTED_SPLIT: Final[
+    Mapping[str, tuple[tuple[float, int], tuple[float, int], tuple[float, int]]]
+] = {
+    "replays/samples/9p2i": (
+        (0.30033244680851046, 752),
+        (0.18190730837789656, 561),
+        (0.6769633507853406, 191),
+    ),
+    "replays/ml_corpus/9p2i": (
+        (0.28170283018867964, 2120),
+        (0.17446038677479642, 1603),
+        (0.671856866537717, 517),
+    ),
+    "replays/samples/4p1i": (
+        (0.24866071428571437, 112),
+        (0.06506849315068489, 73),
+        (0.6282051282051283, 39),
+    ),
+    "replays/ml_corpus/4p1i": (
+        (0.26585365853658544, 123),
+        (0.09493670886075953, 79),
+        (0.6409090909090909, 44),
+    ),
+}
+
+
+def _committed_calibration(sample_dir: str) -> AccusationCalibrationReport:
+    raw = (_REPO_ROOT / sample_dir / "tournament-eval-report.json").read_text(
+        encoding="utf-8"
+    )
+    return AccusationCalibrationReport.model_validate(
+        json.loads(raw)["accusation_calibration"]
+    )
+
+
+@pytest.mark.parametrize("sample_dir", sorted(_COMMITTED_SPLIT))
+def test_committed_sets_pin_the_accuser_role_split(sample_dir: str) -> None:
+    """The role-conditioned curves on the committed bytes, and what they mean.
+
+    The pooled curve is UNMOVED by the split — same ece, same total — and the
+    two conditioned curves partition it. The impostor curve hits ZERO on every
+    set, and the reading is two-part: on 9p2i the teammate firewall deletes the
+    accusation of the one other scoring-correct target, and on 4p1i there is no
+    teammate at all, which is STRUCTURAL; the remaining scoring-correct target
+    on both shapes is a SELF-accusation, which is recordable and would score, so
+    its absence here is a fact about this corpus (see
+    ``test_a_self_accusation_by_an_impostor_does_score_as_a_hit``). So the
+    impostor curve's ece is essentially its mean stated confidence, and reading
+    the pooled number as agent overconfidence prices that narrowing as a
+    behaviour.
+    """
+
+    result = _committed_calibration(sample_dir)
+    (pooled_ece, pooled_total), crew_pin, impostor_pin = _COMMITTED_SPLIT[sample_dir]
+    assert result.accusation_claim_ece == pooled_ece
+    assert result.accusation_claim_total == pooled_total
+
+    crew = result.accusation_claim_crew_accuser
+    impostor = result.accusation_claim_impostor_accuser
+    assert (crew.ece, crew.total) == crew_pin
+    assert (impostor.ece, impostor.total) == impostor_pin
+    # A partition, asserted on both sides of the identity.
+    assert crew.total + impostor.total == result.accusation_claim_total
+    # The ceiling itself: not one impostor accusation on the record scores.
+    assert sum(b.impostor_hits for b in impostor.bins) == 0
+    assert all(b.actual_impostor_rate == 0.0 for b in impostor.bins if b.count > 0)
+
+
+def _populated_bins(index: int, count: int, hits: int) -> tuple[CalibrationBin, ...]:
+    """``n_bins`` bins with ``count``/``hits`` at ``index`` and nothing elsewhere."""
+
+    return tuple(
+        CalibrationBin(
+            bin_index=i,
+            lo=i / DEFAULT_N_BINS,
+            hi=(i + 1) / DEFAULT_N_BINS,
+            midpoint=(i + 0.5) / DEFAULT_N_BINS,
+            count=(count if i == index else 0),
+            impostor_hits=(hits if i == index else 0),
+            actual_impostor_rate=(hits / count if i == index and count else None),
+            mean_confidence=(
+                (i + 0.5) / DEFAULT_N_BINS if i == index and count else None
+            ),
+        )
+        for i in range(DEFAULT_N_BINS)
+    )
+
+
+def _report(
+    *,
+    pooled: tuple[CalibrationBin, ...],
+    pooled_total: int,
+    crew: CalibrationCurve,
+    impostor: CalibrationCurve,
+) -> AccusationCalibrationReport:
+    """A report over ``pooled`` with the given role curves (validators run)."""
+
+    return AccusationCalibrationReport(
+        n_bins=DEFAULT_N_BINS,
+        accusation_claim_bins=pooled,
+        accusation_claim_total=pooled_total,
+        accusation_claim_ece=None,
+        accusation_claim_populated_bins=sum(1 for b in pooled if b.count > 0),
+        accusation_claim_low_power=True,
+        accusation_claim_crew_accuser=crew,
+        accusation_claim_impostor_accuser=impostor,
+        vote_ballot_bins=_EMPTY_BINS,
+        vote_ballot_total=0,
+        vote_ballot_ece=None,
+        vote_ballot_populated_bins=0,
+        vote_ballot_low_power=True,
+        vote_ballot_guard_authored_excluded=0,
+    )
+
+
+def test_a_curve_total_that_no_bin_supports_is_rejected() -> None:
+    """PLANTED: a scalar total must be the sum of the distribution beside it.
+
+    Aggregate totals that merely add up are not enough — a report whose bins are
+    all empty while the totals claim a sample is impossible, and used to pass.
+    """
+
+    with pytest.raises(ValidationError, match="counts must sum to the curve's total"):
+        _report(
+            pooled=_EMPTY_BINS,
+            pooled_total=1,
+            crew=_curve_with_total(_EMPTY_BINS, 1),
+            impostor=_empty_curve(_EMPTY_BINS),
+        )
+
+
+def test_a_split_that_sums_in_aggregate_but_not_per_bin_is_rejected() -> None:
+    """PLANTED: the partition is asserted BIN BY BIN, not just on the totals.
+
+    A crew curve holding its one accusation in a different bin from the pooled
+    curve adds up correctly in aggregate and is still not a partition.
+    """
+
+    pooled = _populated_bins(9, 1, 1)
+    misplaced = _populated_bins(2, 1, 1)
+    with pytest.raises(ValidationError, match="bin by bin"):
+        _report(
+            pooled=pooled,
+            pooled_total=1,
+            crew=_curve_with_total(misplaced, 1),
+            impostor=_empty_curve(_EMPTY_BINS),
+        )
+
+    # ...and the HITS half of the same rule: right bin, wrong hit count.
+    with pytest.raises(ValidationError, match="bin by bin"):
+        _report(
+            pooled=pooled,
+            pooled_total=1,
+            crew=_curve_with_total(_populated_bins(9, 1, 0), 1),
+            impostor=_empty_curve(_EMPTY_BINS),
+        )
+
+    # The well-formed version of the same report is accepted, so the rule is
+    # rejecting the defect rather than the shape.
+    accepted = _report(
+        pooled=pooled,
+        pooled_total=1,
+        crew=_curve_with_total(pooled, 1),
+        impostor=_empty_curve(_EMPTY_BINS),
+    )
+    assert accepted.accusation_claim_total == 1
+
+
+def test_a_self_accusation_by_an_impostor_does_score_as_a_hit() -> None:
+    """PLANTED: the impostor curve's zero is not an arithmetic impossibility.
+
+    A hit is ``roles[against] == "IMPOSTOR"``, and the teammate firewall drops
+    only OTHER impostors, so an impostor accusing THEMSELVES is both recordable
+    and scoring — a prior baseline's prompts produced a few
+    (``tests/eval/test_validity.py::
+    test_betrayal_ignores_impostor_self_accusation_and_self_vote``). This pins
+    that the committed 0-hit reading is a fact about the corpus on that channel
+    rather than a property of the instrument, so the docstrings may not call the
+    whole ceiling structural.
+
+    Self-accusations stay IN both conditioned curves: filtering them would break
+    the partition and move the pooled cells.
+    """
+
+    roles: Mapping[PlayerId, Role] = {"p-0": "CREWMATE", "p-3": "IMPOSTOR"}
+    transcript = MeetingTranscript(
+        turns=(
+            MeetingTurn(
+                turn_id="m-0:turn-0",
+                turn_index=0,
+                speaker="p-3",
+                turn_kind="opening",
+                reply_to=None,
+                observations=(),
+                claims=(_acc("p-3", 0.95),),
+                free_text="",
+            ),
+        ),
+    )
+    meeting = MeetingReport(
+        meeting_id="m-0",
+        tick=10,
+        triggered_by="p-0",
+        trigger="report",
+        outcome="SKIPPED",
+        ejected_player_id=None,
+        transcript=transcript,
+        ballots=(),
+        contradictions=(),
+        llm_calls=(),
+    )
+    result = compute_accusation_calibration(
+        _tournament(_game(game_id="g", roles=roles, meetings=(meeting,)))
+    )
+
+    impostor = result.accusation_claim_impostor_accuser
+    assert impostor.total == 1
+    assert result.accusation_claim_crew_accuser.total == 0
+    # The hit the committed corpus never produced.
+    assert sum(b.impostor_hits for b in impostor.bins) == 1
+    assert impostor.bins[9].impostor_hits == 1
+    # ...and the partition still holds with it in.
+    assert (
+        result.accusation_claim_crew_accuser.total + impostor.total
+        == result.accusation_claim_total
+        == 1
+    )
+
+
+def test_the_4p1i_impostor_curves_are_honestly_low_power() -> None:
+    """Four populated bins under the five-bin power bar is signal, not a bug.
+
+    A single-impostor roster gives the impostor accuser few lawful confidences
+    to spread, so the conditioned curve legitimately flags. The 9p2i curves,
+    with two impostors accusing, do not.
+    """
+
+    for sample_dir in ("replays/samples/4p1i", "replays/ml_corpus/4p1i"):
+        curve = _committed_calibration(sample_dir).accusation_claim_impostor_accuser
+        assert curve.populated_bins == 4
+        assert curve.populated_bins < MIN_POPULATED_BINS_FOR_POWER
+        assert curve.low_power is True
+    for sample_dir in ("replays/samples/9p2i", "replays/ml_corpus/9p2i"):
+        curve = _committed_calibration(sample_dir).accusation_claim_impostor_accuser
+        assert curve.low_power is False
+
+
+def test_the_split_is_a_partition_on_constructed_data() -> None:
+    """SYNTHETIC: moving one accusation between speakers moves exactly one curve.
+
+    Pinned on hand-built data as well as the corpus, so the conditioning is a
+    property of the code rather than of the committed bytes.
+    """
+
+    roles: Mapping[PlayerId, Role] = {
+        "p-0": "CREWMATE",
+        "p-1": "CREWMATE",
+        "p-2": "IMPOSTOR",
+        "p-3": "IMPOSTOR",
+    }
+
+    def report(second_speaker: str) -> TournamentReport:
+        transcript = MeetingTranscript(
+            turns=(
+                MeetingTurn(
+                    turn_id="m-0:turn-0",
+                    turn_index=0,
+                    speaker="p-0",
+                    turn_kind="opening",
+                    reply_to=None,
+                    observations=(),
+                    claims=(_acc("p-2", 0.85),),
+                    free_text="",
+                ),
+                MeetingTurn(
+                    turn_id="m-0:turn-1",
+                    turn_index=1,
+                    speaker=second_speaker,
+                    turn_kind="reply",
+                    reply_to=None,
+                    observations=(),
+                    claims=(_acc("p-1", 0.45),),
+                    free_text="",
+                ),
+            ),
+        )
+        meeting = MeetingReport(
+            meeting_id="m-0",
+            tick=10,
+            triggered_by="p-0",
+            trigger="report",
+            outcome="SKIPPED",
+            ejected_player_id=None,
+            transcript=transcript,
+            ballots=(),
+            contradictions=(),
+            llm_calls=(),
+        )
+        return _tournament(_game(game_id="g", roles=roles, meetings=(meeting,)))
+
+    crew_authored = compute_accusation_calibration(report("p-0"))
+    impostor_authored = compute_accusation_calibration(report("p-3"))
+
+    for result in (crew_authored, impostor_authored):
+        assert result.accusation_claim_total == 2
+        assert (
+            result.accusation_claim_crew_accuser.total
+            + result.accusation_claim_impostor_accuser.total
+            == result.accusation_claim_total
+        )
+
+    # The pooled curve cannot tell the two apart; the split does, and exactly
+    # one sample crosses.
+    assert crew_authored.accusation_claim_ece == impostor_authored.accusation_claim_ece
+    assert crew_authored.accusation_claim_crew_accuser.total == 2
+    assert crew_authored.accusation_claim_impostor_accuser.total == 0
+    assert impostor_authored.accusation_claim_crew_accuser.total == 1
+    assert impostor_authored.accusation_claim_impostor_accuser.total == 1
+    # The 0.85 accusation stayed with the crew speaker; only the 0.45 one moved.
+    assert impostor_authored.accusation_claim_crew_accuser.bins[8].count == 1
+    assert impostor_authored.accusation_claim_impostor_accuser.bins[4].count == 1
+
+
+def test_a_guard_redirected_ballot_is_excluded_from_the_vote_curve() -> None:
+    """PLANTED: a guard-authored ballot leaves the curve and is counted.
+
+    The redirect rewrites the TARGET while preserving the voter's confidence in
+    the target they authored, so the recorded pair is not one agent's act. The
+    exclusion is by predicate over the marker constant, so the marker's wording
+    can change without the predicate going quietly blind.
+    """
+
+    marker = BALLOT_TARGET_REDIRECT_MARKER.format(target="p-3")
+    authored = _ballot("p-3", 0.9, voter="p-0")
+    redirected = authored.model_copy(
+        update={
+            "target": "p-1",
+            "rationale_text": marker + "p-3 vented. Vote p-3.",
+        }
+    )
+
+    clean = _tournament(
+        _game(game_id="g", roles=_ROLES, meetings=(_meeting(ballots=(authored,)),))
+    )
+    planted = _tournament(
+        _game(game_id="g", roles=_ROLES, meetings=(_meeting(ballots=(redirected,)),))
+    )
+
+    clean_result = compute_accusation_calibration(clean)
+    planted_result = compute_accusation_calibration(planted)
+
+    assert clean_result.vote_ballot_total == 1
+    assert clean_result.vote_ballot_guard_authored_excluded == 0
+    # The redirected ballot is dropped, not binned as a 0.9-confidence miss.
+    assert planted_result.vote_ballot_total == 0
+    assert planted_result.vote_ballot_guard_authored_excluded == 1
+    assert planted_result.vote_ballot_ece is None
+
+
+def test_a_marked_skip_ballot_is_not_counted_as_a_guard_drop() -> None:
+    """PLANTED: the published count is the DROP, not the marker census.
+
+    A marked ballot whose recorded target is already ``"SKIP"`` was never
+    binnable, so counting it would publish a number that cannot be reconciled
+    against ``vote_ballot_total`` — the exact defect this pins shut.
+    """
+
+    marked_skip = _ballot("SKIP", 0.4, voter="p-0").model_copy(
+        update={
+            "rationale_text": (
+                TEAMMATE_VOTE_TARGET_MARKER.format(target="p-3") + "no confident read"
+            )
+        }
+    )
+    marked_eject = _ballot("p-3", 0.9, voter="p-1").model_copy(
+        update={
+            "target": "p-1",
+            "rationale_text": (
+                BALLOT_TARGET_REDIRECT_MARKER.format(target="p-3") + "p-3 vented."
+            ),
+        }
+    )
+    clean = _ballot("p-3", 0.8, voter="p-2")
+
+    result = compute_accusation_calibration(
+        _tournament(
+            _game(
+                game_id="g",
+                roles=_ROLES,
+                meetings=(_meeting(ballots=(marked_skip, marked_eject, clean)),),
+            )
+        )
+    )
+
+    # Three ballots carry a marker or a SKIP; only ONE was dropped BY the guard
+    # rule, because the marked SKIP was never binnable in the first place.
+    assert result.vote_ballot_guard_authored_excluded == 1
+    assert result.vote_ballot_total == 1
+
+
+def test_the_committed_guard_drop_reconciles_against_the_vote_curve() -> None:
+    """The published drop equals the curve's own shortfall, per set.
+
+    Recomputes both sides from the committed bytes: the binnable population
+    ignoring the guard rule, minus the curve's total, must equal the published
+    count. A census that over-counted marked SKIPs would fail here.
+    """
+
+    for sample_dir in sorted(_COMMITTED_SPLIT):
+        served = _committed_calibration(sample_dir)
+        raw = json.loads(
+            (_REPO_ROOT / sample_dir / "tournament-eval-report.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        non_skip = sum(
+            1
+            for game in raw["report"]["games"]
+            for meeting in game["meetings"]
+            for ballot in meeting["ballots"]
+            if ballot["target"] != "SKIP"
+        )
+        assert (
+            non_skip - served.vote_ballot_total
+            == served.vote_ballot_guard_authored_excluded
+        ), sample_dir
+        assert served.vote_ballot_guard_authored_excluded > 0, sample_dir
+
+
+def test_marker_shaped_prose_the_model_wrote_is_not_treated_as_a_guard_marker() -> None:
+    """The predicate is anchored and repr-aware, so a quoted marker mid-body misses.
+
+    Without the anchor a voter who quotes the marker in their own rationale would
+    be silently dropped from the curve — the mirror-image failure of missing a
+    real one.
+    """
+
+    quoting = _ballot("p-3", 0.9, voter="p-0").model_copy(
+        update={
+            "rationale_text": (
+                "I saw the log say "
+                + BALLOT_TARGET_REDIRECT_MARKER.format(target="p-1")
+                + "so I distrust the tally."
+            )
+        }
+    )
+    result = compute_accusation_calibration(
+        _tournament(
+            _game(game_id="g", roles=_ROLES, meetings=(_meeting(ballots=(quoting,)),))
+        )
+    )
+    assert result.vote_ballot_total == 1
+    assert result.vote_ballot_guard_authored_excluded == 0
