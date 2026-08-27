@@ -416,7 +416,9 @@ def test_recompute_reads_every_committed_verdict_against_the_declared_gap() -> N
         ("surrogate SKIP-vs-eject decision accuracy", "0.3908045", "0.3750000"),
         # was 0.6991081 — the corrected recorded flag label fits BETTER
         ("conviction flag-count Spearman", "0.7145778975", "0.5781584"),
-        ("conviction conversion-label accuracy", "0.9310344", "0.9375000"),
+        # was 0.9310344 — the conversion label now admits a spoken saw_move at
+        # its destination, so it carries conversions the frozen fit never saw
+        ("conviction conversion-label accuracy", "0.9080459", "0.9375000"),
         ("composed decision accuracy", "0.8620689", "0.8645833"),
         ("composed exact-outcome match", "0.8160919", "0.7916666"),
     ):

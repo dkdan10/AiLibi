@@ -19,11 +19,13 @@ from meetings.schemas import (
     AccusationClaim,
     AlibiClaim,
     ContradictionRef,
+    FoundBodyObservation,
     MeetingTranscript,
     MeetingTurn,
     SawMoveObservation,
     SawPlayerObservation,
     SawVentObservation,
+    WhereaboutsClaim,
 )
 from meetings.transcript import (
     CANONICAL_ROOMS,
@@ -49,6 +51,7 @@ from meetings.transcript import (
     is_relevant_sighting,
     is_weak_contradiction,
     next_chain_step,
+    sighting_placement,
     sort_turns_canonically,
     triggering_body_rooms,
     walk_chain,
@@ -2068,8 +2071,6 @@ class TestCommittedBytesSeedPins:
 # bytes exactly like the 10.1/10.5 pin classes above.
 # ---------------------------------------------------------------------------
 
-from meetings.schemas import FoundBodyObservation  # noqa: E402
-
 
 def _body_report_turn(
     *, turn_index: int, speaker: str, body_of: str, tick: int, room: str
@@ -3764,3 +3765,60 @@ class TestCommittedBytes107VoicePins:
         voices = independent_voices(entry.transcript, roster=_living_roster(entry))
 
         assert voices.get("p-6") == ("p-1", "p-3", "p-4", "p-5", "p-7", "p-8", "p-9")
+
+
+class TestSightingPlacement:
+    """``sighting_placement`` — the one definition of what a spoken artifact places."""
+
+    def test_a_saw_player_places_its_subject_where_it_says(self) -> None:
+        observation = SawPlayerObservation(
+            type="saw_player", tick=7, subject="p-2", room="STORAGE", co_present=()
+        )
+        placement = sighting_placement(observation)
+
+        # Identity, not a copy: a static sighting IS its own placement.
+        assert placement is observation
+
+    def test_a_saw_move_places_its_subject_at_the_DESTINATION(self) -> None:
+        """The arrival the transition asserts, never the origin at tick - 1.
+
+        This is the same ``SawPlayerObservation`` ``_iter_move_placements``
+        builds from a grounded transition, so an instrument reading it agrees
+        with the detector by construction.
+        """
+
+        observation = SawMoveObservation(
+            type="saw_move",
+            tick=7,
+            subject="p-2",
+            from_room="CAFETERIA",
+            to_room="STORAGE",
+        )
+        placement = sighting_placement(observation)
+
+        assert placement == SawPlayerObservation(
+            type="saw_player", tick=7, subject="p-2", room="STORAGE"
+        )
+        assert placement is not None
+        assert placement.room == "STORAGE"
+        assert placement.tick == 7
+
+    def test_every_other_shape_places_nobody(self) -> None:
+        """A whereabouts, a vent sighting and a body report all return None.
+
+        A whereabouts locates only the speaker; a vent sighting is first-hand but
+        places nobody in a room a geometry compare can use; a found-body names a
+        dead victim. Returning ``None`` is what keeps each caller's second
+        condition explicit instead of hidden in here.
+        """
+
+        for observation in (
+            WhereaboutsClaim(type="whereabouts", tick=7, room="STORAGE"),
+            SawVentObservation(type="saw_vent", tick=7, subject="p-2", room="STORAGE"),
+            FoundBodyObservation(
+                type="found_body", tick=7, body_of="p-4", room="STORAGE"
+            ),
+        ):
+            assert sighting_placement(observation) is None
+        assert sighting_placement(None) is None
+        assert sighting_placement("saw_player") is None

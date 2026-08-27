@@ -3100,8 +3100,8 @@ def test_committed_9p2i_report_pins_the_successor_instrument() -> None:
     0/0 — the record carries no CANON-interior alibi lie on this set.
 
     Task 19.5 wires this cell onto ``GateMetricsReport``; the STORED block is
-    pinned against the recompute below, including the one column on which the
-    committed sidecar is knowingly behind it.
+    pinned against the recompute below, and the two now AGREE on every column —
+    Task 21.9's rebuild flushed the divergence Task 21.7 pinned here.
     """
 
     report = TournamentEvalReport.model_validate_json(
@@ -3127,9 +3127,8 @@ def test_committed_9p2i_report_pins_the_successor_instrument() -> None:
     assert result.legacy_alibi_converted == 0
     assert result.legacy_alibi_conversion_rate is None  # was 0.0
     # One home: the legacy column IS compute_genuine_class_conversion over the
-    # same games, mirrored. Asserted against the LIVE fold rather than the
-    # stored gate block, because both stored blocks are behind by that same one
-    # column until 21.15 rebuilds the sidecar.
+    # same games, mirrored — and since the rebuild the stored gate block agrees
+    # with the live fold too, which the STORED-vs-RECOMPUTE block below asserts.
     live_legacy = compute_genuine_class_conversion(report.report)
     assert result.legacy_alibi_supplied == live_legacy.supplied
     assert result.legacy_alibi_converted == live_legacy.converted
@@ -3138,20 +3137,21 @@ def test_committed_9p2i_report_pins_the_successor_instrument() -> None:
     assert result.note == SUPPLIED_CHANNEL_GATE_NOTE
     assert result.legacy_note == LEGACY_ALIBI_CELL_NOTE
 
-    # STORED vs RECOMPUTE: the committed sidecar was built by the old
-    # record-free census and is rebuilt by Task 21.15, not here, so the stored
-    # block is BEHIND the analyzer on exactly the legacy column and nowhere
-    # else. Pinned as a divergence rather than waved through, so the rebuild
-    # has to come back through this test.
+    # STORED vs RECOMPUTE: the committed sidecar was rebuilt by Task 21.9, so
+    # the stored block and the analyzer now agree on every column — the legacy
+    # one included, where the sidecar reported a flag the transcript-only
+    # re-derivation minted and the record never carried. The behind-set is
+    # asserted EMPTY rather than dropped, so a future divergence still fails
+    # loud here instead of being read as a fresh number.
     stored = report.gate_metrics.supplied_channel_conversion
     behind = {
         field
         for field in type(stored).model_fields
         if getattr(stored, field) != getattr(result, field)
     }
-    assert behind == {"legacy_alibi_supplied", "legacy_alibi_conversion_rate"}
-    assert stored.legacy_alibi_supplied == 1
-    assert stored.legacy_alibi_conversion_rate == pytest.approx(0.0)
+    assert behind == set()
+    assert stored.legacy_alibi_supplied == 0
+    assert stored.legacy_alibi_conversion_rate is None
 
     # Cross-surface sanity: converted pairs are impostor ejections, so the
     # successor's numerator is bounded by the recorded impostor-ejection

@@ -53,6 +53,8 @@ from agents.memory.beliefs import (  # noqa: E402
     SUSPICION_PROVENANCE_ATOL,
 )
 from eval.accusation_calibration import (  # noqa: E402
+    DEFAULT_N_BINS,
+    _bin_samples,
     _vote_ballot_samples,
     compute_accusation_calibration,
 )
@@ -613,22 +615,41 @@ def test_4p1i_reproduces_baseline_5_exactly(four: VJInstrumentReport) -> None:
 def test_ballot_calibration_matches_the_committed_fold(
     four: VJInstrumentReport,
 ) -> None:
-    # One sample stream, two instruments: the vj ballot ECE must equal the
-    # Task-5.3 accusation-calibration fold's vote_ballot_ece on the same
-    # bytes, and the Brier must equal the mean squared error over the same
-    # (confidence, conviction-correctness) samples.
+    # One recorded ballot stream, two instruments, and ONE deliberate
+    # difference. This instrument reports the stream as recorded;
+    # eval/accusation_calibration excludes a ballot whose rationale opens with a
+    # guard audit marker, because the meeting layer rewrote its target while
+    # preserving the voter's confidence in the target they authored, so the
+    # recorded pair is not one agent's act (audit A-3). Both folds are rebuilt
+    # here from the same bytes, so the divergence is pinned as a quantity rather
+    # than absorbed as an approximation.
     report = assemble_tournament_report(_FOUR)
     calibration = compute_accusation_calibration(report)
-    assert four.ballot_confidence_ece == pytest.approx(
-        calibration.vote_ballot_ece, abs=1e-12
-    )
-    samples = _vote_ballot_samples(report)
-    assert four.ballot_calibration_total == len(samples)
+
+    as_recorded = [
+        (ballot.confidence, walk_roles[ballot.target] == "IMPOSTOR")
+        for game in report.games
+        for walk_roles in (game.roles,)
+        for meeting in game.meetings
+        for ballot in meeting.ballots
+        if ballot.target != "SKIP"
+    ]
+    assert four.ballot_calibration_total == len(as_recorded)
     expected_brier = statistics.fmean(
         (confidence - (1.0 if impostor else 0.0)) ** 2
-        for confidence, impostor in samples
+        for confidence, impostor in as_recorded
     )
     assert four.ballot_confidence_brier == pytest.approx(expected_brier, abs=1e-12)
+    _bins, _total, as_recorded_ece = _bin_samples(as_recorded, DEFAULT_N_BINS)
+    assert four.ballot_confidence_ece == pytest.approx(as_recorded_ece, abs=1e-12)
+
+    # The calibration fold is the same stream MINUS the guard-authored ballots,
+    # and its own binnable set reproduces its published ECE exactly.
+    binnable = _vote_ballot_samples(report)
+    assert len(binnable) == calibration.vote_ballot_total < len(as_recorded)
+    _bins, _total, binnable_ece = _bin_samples(binnable, DEFAULT_N_BINS)
+    assert calibration.vote_ballot_ece == pytest.approx(binnable_ece, abs=1e-12)
+    assert calibration.vote_ballot_guard_authored_excluded > 0
 
 
 def test_per_meeting_rows_pair_voice_with_judgment(nine: VJInstrumentReport) -> None:

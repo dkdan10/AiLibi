@@ -259,11 +259,13 @@ def test_fsm_baseline_sets_pass_at_exact_equality_under_the_reanchor() -> None:
     the derived floor IS the pin — an exact float identity, not an approximate
     one (the derivation multiplies the pin by the ratio, in that order, so
     "the baseline passes at equality" survives the re-anchor bit-exact). Re-pinned
-    to the baseline-7 conversion cells (9p2i 80/115, 4p1i 19/31; baseline 6 read
-    78/136 and 9/30).
+    to the baseline-7 conversion cells as the corrected gauge reads them (9p2i
+    84/132, 4p1i 20/34; the ratified block read 80/115 and 19/31 before the
+    backing vocabulary admitted a spoken saw_move at its destination, and
+    baseline 6 read 78/136 and 9/30).
     """
 
-    expected = {_NINE: 80 / 115, _FOUR: 19 / 31}
+    expected = {_NINE: 84 / 132, _FOUR: 20 / 34}
     for sample_dir, fraction in expected.items():
         report = compute_watchability(sample_dir)
         assert report.referee_passed is True, sample_dir.name
@@ -290,7 +292,7 @@ def test_remeasured_corpus_sets_at_baseline6_referee_verdicts() -> None:
     * 9p2i still FAILS the referee, on ``witnessed_event_rate`` (0.0304 < the
       0.0339 floor, a real rate miss, NOT the one-event advisory case) and on
       ``flags_per_meeting`` (0.9907 < the 1.0909 floor). Its conversion clears
-      with room (0.711 against a derived 0.632). A starved-supply rejection is
+      with room (0.668 against a derived 0.632). A starved-supply rejection is
       the instrument working, never silent. The surrogate/bake-off consume the
       corpus as a TRAINING substrate regardless of this watchability verdict.
 
@@ -319,7 +321,7 @@ def test_remeasured_corpus_sets_at_baseline6_referee_verdicts() -> None:
     conversion_nine = next(
         g for g in corpus_nine.supply_gauges if g.name == "testimony_backed_conversion"
     )
-    assert conversion_nine.measured == 0.7113095238095238
+    assert conversion_nine.measured == 0.6675603217158177  # was 0.7113095238095238
     assert (
         conversion_nine.floor == 0.6315158178819531
     )  # derived population-relative  # was 0.6271201161333547
@@ -336,7 +338,7 @@ def test_remeasured_corpus_sets_at_baseline6_referee_verdicts() -> None:
     conversion_four = next(
         g for g in corpus_four.supply_gauges if g.name == "testimony_backed_conversion"
     )
-    assert conversion_four.measured == 0.75  # was 0.5882352941176471
+    assert conversion_four.measured == 0.6829268292682927  # was 0.75
     assert (
         conversion_four.floor == 0.186737400530504
     )  # derived population-relative  # was 0.23443223443223438
