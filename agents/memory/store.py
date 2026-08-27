@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
+import os
 from typing import Any, Final, TypeAlias
 
 from agents.memory.beliefs import (
@@ -114,6 +115,35 @@ _EVENT_COOLDOWN_STATUS: Final[str] = "cooldown_status"
 _EVENT_MEETING_BOUNDARY: Final[str] = "meeting_boundary"
 
 _ACTIVE_PLAYER_ACTIONS: Final[frozenset[str]] = frozenset({"report", "task"})
+
+# The last-seen repair gate. ON, the "last seen in ROOM at tick T" suffix is the
+# argmax over EVERY first-hand sighting the agent holds (ordinary looks included,
+# not transitions alone) and the movement breadcrumb keeps the placement a
+# witnessed vent/kill carries; OFF is the movement-only derivation the committed
+# prompt bytes were recorded under. Accepts ``1/true/yes/on`` case-insensitively;
+# anything else, unset included, is OFF.
+#
+# DEFAULT-OFF only to hold the byte-identity seam: every committed replay
+# reconstructs against the OFF path, which is the code this build ships. The gate
+# flips unconditional and is deleted at Task 21.15's combined re-record.
+ENV_LAST_SEEN_FROM_SIGHTINGS: Final[str] = "AILIBI_LAST_SEEN_FROM_SIGHTINGS"
+_LAST_SEEN_FROM_SIGHTINGS_FLAG_TRUE: Final[frozenset[str]] = frozenset(
+    {"1", "true", "yes", "on"}
+)
+
+
+def last_seen_from_sightings_enabled(env: Mapping[str, str] | None = None) -> bool:
+    """Whether the render derives last-seen from every sighting (see the gate above).
+
+    ``orchestrator.replay`` mirrors this resolver for the substrate stamp; the two
+    are pinned equivalent over the env grid in ``tests/orchestrator/test_replay.py``.
+    """
+
+    environment = env if env is not None else os.environ
+    return (
+        environment.get(ENV_LAST_SEEN_FROM_SIGHTINGS, "").strip().lower()
+        in _LAST_SEEN_FROM_SIGHTINGS_FLAG_TRUE
+    )
 
 
 @dataclass

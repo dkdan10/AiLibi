@@ -128,6 +128,32 @@ def _impostor_roll_call_enabled(env: Mapping[str, str] | None = None) -> bool:
     )
 
 
+# The Wave-1a last-seen REPAIR gate, resolved locally in the shape above rather
+# than bound to ``agents.memory.store.last_seen_from_sightings_enabled``: the
+# stamp side of a lever stays readable from a replay-only consumer (sample
+# byte-verification, MANIFEST reads, the API replay loader) without depending on
+# what the render module happens to import. The env name and truthy-token set
+# mirror the store's ``ENV_LAST_SEEN_FROM_SIGHTINGS`` /
+# ``_LAST_SEEN_FROM_SIGHTINGS_FLAG_TRUE`` byte-for-byte, and
+# ``tests/orchestrator/test_replay.py`` pins the two resolvers EQUIVALENT over
+# the env grid — the CI substitute for an identity binding, so the read site and
+# the stamp cannot drift apart.
+ENV_LAST_SEEN_FROM_SIGHTINGS: Final[str] = "AILIBI_LAST_SEEN_FROM_SIGHTINGS"
+_LAST_SEEN_FROM_SIGHTINGS_FLAG_TRUE: Final[frozenset[str]] = frozenset(
+    {"1", "true", "yes", "on"}
+)
+
+
+def _last_seen_from_sightings_enabled(env: Mapping[str, str] | None = None) -> bool:
+    """The 21.4 repair gate's stamp-side resolver (mirrors the store's, see above)."""
+
+    environment = env if env is not None else os.environ
+    return (
+        environment.get(ENV_LAST_SEEN_FROM_SIGHTINGS, "").strip().lower()
+        in _LAST_SEEN_FROM_SIGHTINGS_FLAG_TRUE
+    )
+
+
 class LLMCallRecord(BaseModel):
     """One LLM call captured during a meeting (DESIGN.md §11.4).
 
@@ -637,15 +663,21 @@ _RETIRED_ALWAYS_ON_LEVERS: Final[tuple[str, ...]] = (
 # silently change a replay stamp or the loader's mismatch check mid-process. Each
 # resolver takes the optional ``env`` mapping and returns the lever's live state.
 #
-# ONE live toggle since the baseline-7 record graduated the Phase-20 slate:
-# 18.10's impostor-answer template arm, DEFAULT-OFF. It binds the LOCAL
-# :func:`_impostor_roll_call_enabled` mirror rather than
-# ``agents.strategic.prompts.loader``'s resolver, because importing that module
-# would run its prompt-set-sensitive Jinja build inside every replay-only
-# consumer (the mirror's own comment block states it); a CI equivalence pin
-# stands in for the identity.
+# TWO live toggles, both DEFAULT-OFF and both bound to a LOCAL mirror with a CI
+# equivalence pin standing in for the identity (each mirror's own comment block
+# states why it is local):
 #
-# A bare environment stamps it ``False``, which IS the committed baseline-7
+# * ``impostor_roll_call`` — 18.10's impostor-answer template arm, a LEVER: an
+#   arm a future gate may decide to ship, which would graduate it into
+#   ``_RETIRED_ALWAYS_ON_LEVERS`` at its adopting record.
+# * ``last_seen_from_sightings`` — the Wave-1a last-seen REPAIR gate, not a
+#   lever: nothing is decided on it and no record runs it ON. It holds the
+#   byte-identity seam between its merge and Task 21.15's combined re-record,
+#   which flips the render unconditional and DELETES this key outright rather
+#   than retiring it — so the retired half's twenty-one-key string, and the
+#   MANIFEST ``flags`` cell derived from it, stay byte-identical across the flip.
+#
+# A bare environment stamps both ``False``, which IS the committed baseline-7
 # substrate: the missing-key-reads-False rule makes a stamp recorded before a key
 # existed agree with a build that has it. A lever graduates by moving into
 # ``_RETIRED_ALWAYS_ON_LEVERS`` at the record that adopts it — which appends it
@@ -653,7 +685,10 @@ _RETIRED_ALWAYS_ON_LEVERS: Final[tuple[str, ...]] = (
 # ``SUBSTRATE_FLAG_KEYS``. Registration order, newest last.
 _TOGGLEABLE_LEVER_RESOLVERS: Final[
     tuple[tuple[str, Callable[[Mapping[str, str] | None], bool]], ...]
-] = (("impostor_roll_call", _impostor_roll_call_enabled),)
+] = (
+    ("impostor_roll_call", _impostor_roll_call_enabled),
+    ("last_seen_from_sightings", _last_seen_from_sightings_enabled),
+)
 
 # The still-toggleable subset of ``SUBSTRATE_FLAG_KEYS`` (Task 14.10):
 # levers whose active state is an ``AILIBI_*`` env read, so a stamp/ambient
@@ -685,13 +720,14 @@ def substrate_flag_snapshot(
     They stay in the snapshot as provenance, which is what lets the loader's
     mismatch guard still refuse a legacy stamp recording one of them OFF.
 
-    The single live toggle resolves from the immutable
-    ``_TOGGLEABLE_LEVER_RESOLVERS`` table with ``env`` threaded through
-    (defaulting to the live process environment). It is DEFAULT-OFF, so a bare
-    environment reproduces the committed baseline-7 stamp and its ``AILIBI_*``
-    export flips exactly its own key — the deterministic seam the recorders, the
-    MANIFEST ``flags`` column and the sweep configs rely on to prove which arms a
-    recording ran under.
+    The live toggles resolve from the immutable ``_TOGGLEABLE_LEVER_RESOLVERS``
+    table with ``env`` threaded through (defaulting to the live process
+    environment). Each is DEFAULT-OFF, so a bare environment agrees with the
+    committed baseline-7 stamp — which names ``impostor_roll_call`` OFF and
+    predates ``last_seen_from_sightings`` entirely, a key the missing-key rule
+    reads OFF on both sides — and each ``AILIBI_*`` export flips exactly its own
+    key: the deterministic seam the recorders, the MANIFEST ``flags`` column and
+    the sweep configs rely on to prove which arms a recording ran under.
     """
 
     snapshot = dict.fromkeys(_RETIRED_ALWAYS_ON_LEVERS, True)
