@@ -129,6 +129,8 @@ changed source, with every number re-derived.
 Run these before editing. If any fail, stop and report — your dependencies are not where this task expects them.
 
 - `uv run python -c "import orchestrator.replay"`
+- `uv run python -c "import eval.meeting_quality"`
+- `uv run python -c "import eval.watchability.SupplyFloors"`
 - `uv run python -c "import meetings.schemas"`
 - `uv run python -c "import eval.replay_walk.ReplayWalkConfig"`
 - `uv run python -c "import engine.tick"`
@@ -141,8 +143,6 @@ Run these before editing. If any fail, stop and report — your dependencies are
 - `uv run python -c "import eval.accusation_calibration"`
 - `uv run python -c "import eval.deduction_metrics"`
 - `uv run python -c "import meetings.transcript"`
-- `uv run python -c "import eval.meeting_quality"`
-- `uv run python -c "import eval.watchability.SupplyFloors"`
 - `uv run python -c "import eval.vj_instruments"`
 - `uv run python -c "import eval.vj_instruments.VJInstrumentReport"`
 - `uv run python -c "import eval.vj_instruments.VJMeetingRow"`

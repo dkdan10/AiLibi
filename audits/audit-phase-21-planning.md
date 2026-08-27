@@ -86,7 +86,8 @@ ids in one phase is the priced consequence of two records in it, and it is put t
 
 **Two divergences from the handoff's dependency table, recorded.** The planning inputs proposed
 seven day-one roots. Assembly added two edges, and neither was a preference — in both cases the
-contract could not otherwise satisfy its own stated Measurement.
+contract could not otherwise satisfy its own stated Measurement. (The day-one reverification later
+added two more, on the same principle; §2.2 carries them and is the current state.)
 
 **21.10 now depends on 21.3.** The two contracts both name `orchestrator/replay.py`,
 `api/replay_loader.py`, `tests/orchestrator/test_replay.py` and `tests/api/test_replay_loader.py`
@@ -105,8 +106,11 @@ scenario edit or an undeclared merge order. The edge is acyclic — 21.13 is a r
 on 21.16, so the chain is 21.13 → 21.16 → 21.8 — and it costs nothing on the critical path, which
 runs through 21.7 → 21.9 → 21.8 rather than through 21.16.
 
-Together the two edges leave the day-one frontier at **five roots**: 21.3, 21.4, 21.7, 21.12, 21.13.
-With them, assembly verified **zero** unordered scope collisions across all 26 contracts.
+Together the two edges left the day-one frontier, AS ASSEMBLED, at **five roots**: 21.3, 21.4, 21.7,
+21.12, 21.13. With them, assembly verified **zero** unordered scope collisions across all 26
+contracts. The reverification's two further edges moved 21.4 off that list; the frontier is **four
+roots** — 21.3, 21.7, 21.12, 21.13 — and the zero-collision property was re-derived and still holds
+(§2.2).
 
 Two smaller assembly rulings are recorded here rather than left implicit. **B-47's bake-off-lag
 comment block moved from 21.11 to 21.17**: the block at `eval/watchability.py:908-914` describes a
@@ -250,6 +254,72 @@ Files-in-scope lists — including two arrows pointing the wrong way (`eval/evid
 its test read 21.9 → 21.8, not the reverse). Both classes are now checked mechanically rather than
 by eye: every stated chain's membership equals the set of tasks that name the file, and every arrow
 is a real transitive dependency.
+
+### 2.2 Errata, 2026-08-27 — the day-one reverification
+
+The five day-one contracts (21.3, 21.4, 21.7, 21.12, 21.13) were re-verified against HEAD
+`772742c2` before dispatch, each by an independent reader with the tree in front of them. The pass
+returned 22 verbatim edits — anchor drift and false counts in 21.3, 21.4, 21.7 and 21.12, with
+21.13 CLEAN — and two BLOCKED verdicts that this section rules on. The edits are applied; what
+follows is the part that changed the phase's shape, and it supersedes §2's "two divergences" and
+§7's "five roots" wherever the two disagree. **The count is now four divergences from the handoff's
+dependency table, and the day-one frontier is four roots: 21.3, 21.7, 21.12, 21.13.**
+
+**21.4 gains a registered default-OFF repair gate, which resolves its BLOCKED verdict.** The
+reverification measured what 21.4 costs unmerged-and-ungated by monkeypatching the folded last-seen
+writer in and running the suite: 47 tests red, headed by
+`tests/meetings/test_prompt_byte_golden.py:611` reporting a reconstructed `state_hash_after` that
+does not match the recorded one. That golden RE-RENDERS recorded prompts rather than reading them
+as data, so a one-byte render drift is a stub miss and a diverged meeting; `verify_samples.sh`
+stayed clean under the same patch, which places the damage in the prompt reconstruction and not in
+the engine chain. The charter's locked decision 2 prescribes the remedy by name — Wave-1a repairs
+use byte-identity seams, "default-OFF gating where a seam does not exist" — and no archive seam
+exists for a memory render. So both halves of 21.4 (the last-seen writer and B-35's breadcrumb) land
+behind ONE gate: substrate key `last_seen_from_sightings`, environment variable
+`AILIBI_LAST_SEEN_FROM_SIGHTINGS`, registered in
+`orchestrator/replay.py::_TOGGLEABLE_LEVER_RESOLVERS` in the 18.11/20.33 shape with the
+`# AILIBI_LAST_SEEN_FROM_SIGHTINGS=0` line `scripts/check_doc_facts.py` demands for a registered
+key. A stamp recorded before a key is registered reads it OFF (orchestrator/replay.py:562-564 — the
+`impostor_roll_call` absence precedent), so every committed byte keeps reconstructing. The gate
+graduates at 21.15: flipped unconditional and its mechanism DELETED before the first seed stages,
+and deleted OUTRIGHT rather than promoted into `_RETIRED_ALWAYS_ON_LEVERS`, because a repair is not
+a lever and no committed record ever runs one ON — which is what leaves 21.15's MANIFEST `flags`
+cell byte-identical to today's twenty-one-key string. 21.15's contract now owns that sweep
+generically, reading the registry as the enumeration rather than a copied list.
+
+**Two new DAG edges follow, both forced rather than preferred.** **21.4 now depends on 21.3**: the
+gate puts `orchestrator/replay.py` and `tests/orchestrator/test_replay.py` into 21.4's scope, and
+21.3 already holds both, so `validate_parallel_file_scope` requires an order — and 21.3 first is the
+right direction for the same reason it precedes 21.10, since it establishes the recorded row shape
+the stamp rides in. **21.10 now depends on 21.3, 21.4 and 21.7**: on 21.4 for `orchestrator/replay.py`
+after the registration, and on 21.7 for `tests/scripts/test_verify_ml_evidence.py`, which is the one
+collision 21.7 could not resolve on its own authority. The critical path lengthens from 15 tasks to
+16 and its head moves: 21.3 → 21.4 → 21.10 → 21.8 → 21.6 → 21.11 → 21.15 → 21.18 → 21.19 → 21.20 →
+21.21 → 21.22 → 21.23 → 21.24 → 21.25 → 21.26. Re-derived mechanically from the assembled
+Depends-on and Files-in-scope fields: four roots, zero unordered scope collisions across all 26
+contracts, every stated chain's membership equal to the set of tasks naming the file.
+
+**21.7 gains one scope line, which resolves its BLOCKED verdict.** Correcting the flag census moves
+the corpus-dependent "conviction flag-count Spearman" recompute pin at
+`tests/scripts/test_verify_ml_evidence.py:417` — `0.6991081…` becomes `0.7145778975…`, i.e. the fit
+gets BETTER on the corrected label. The row's producer (`scripts/verify_ml_evidence.py:1554-1566`)
+is unchanged. The file joins 21.7's Files-in-scope and the 21.10 edge above is what makes that
+legal; omitting it would have left 21.7's own `uv run pytest` red inside its declared scope. 21.7's
+Risk 5 now records the ruling instead of the open question.
+
+**Expected to recur: 21.2 and 21.5 need the same repair-gate shape.** 21.5 declares the same
+"committed bytes do not move here" posture and its walk re-derives packets exactly as 21.4's does,
+so the reverification's evidence says it inherits the identical byte-golden problem; 21.2's ballot
+render is the same class. Both are expected to gain a registered default-OFF gate at their own
+pre-dispatch reverification rather than at dispatch, and 21.15's graduation sweep is written
+generically so that it costs nothing extra when they do.
+
+**One knock-on routed rather than fixed here.** 21.14 (the smoke) currently requires "no `AILIBI_*`
+lever export" and a bare-slate substrate stamp, which would smoke the OFF render — i.e. not the
+corrected substrate its own title claims. Repairing that means reworking several of its DoD items
+together (the export block, the stamp read, and STOP condition 3), so it is routed to 21.14's own
+pre-dispatch reverification, which happens well before it can dispatch: 21.14 waits on eight
+contracts.
 
 ## 3. The routing table
 
@@ -430,16 +500,19 @@ seeing an offline prediction are bars fitted to a prediction. Two mitigations ar
    requires each to state whether an offline prediction for its cell exists — which makes the
    dependency visible in the memo rather than hidden in its authorship.
 
-**The day-one frontier is five roots, not seven.** The handoff's dependency table listed 21.10 and
+**The day-one frontier is four roots, not seven.** The handoff's dependency table listed 21.10 and
 21.16 as roots. Assembly added two edges — 21.3 → 21.10 for a scope collision the table did not
 cover, and 21.13 → 21.16 because 21.16's campaign Measurement counts on the ninth failure already
-being gone. Rationale, the collision inventory and the acyclicity argument: §2.
+being gone. The day-one reverification then added two more — 21.3 → 21.4 and 21.7 → 21.10 — for the
+same reason in both cases: a contract could not satisfy its own Measurement inside its declared
+scope. Rationale, the collision inventory and the acyclicity argument: §2 and §2.2, the latter
+being the current state.
 
 ## 8. Reproduce
 
 ```
 uv run python scripts/validate_task_docs.py          # exit 0; 390 tasks / 390 prompts
-uv run python scripts/compute_next_task.py --phase 21 # 6 dispatchable, 20 blocked, 0 errors
+uv run python scripts/compute_next_task.py --phase 21 # 4 dispatchable, 22 blocked (§2.2; was 5/21 as assembled)
 bash scripts/check.sh                                 # the full default tier
 git ls-files audits | wc -l                           # the audits/ row in docs/artifacts.md
 ```
