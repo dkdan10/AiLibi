@@ -250,7 +250,6 @@ Run these before editing. If any fail, stop and report — your dependencies are
 
 - `uv run python -c "import orchestrator.replay"`
 - `uv run python -c "import meetings.schemas"`
-- `uv run python -c "import eval.replay_walk.ReplayWalkConfig"`
 
 ## Pre-flight checklist
 - Read AGENTS.md, the architecture routing it names, and the task section before editing.

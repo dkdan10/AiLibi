@@ -251,7 +251,6 @@ list does not cover, stop and ask rather than widening scope.
 - `orchestrator.replay.ActionDisposition`
 - `orchestrator.replay.classify_action_dispositions`
 - `meetings.schemas.BallotTargetRewriteReason`
-- `eval.replay_walk.ReplayWalkConfig.verify_action_dispositions`
 
 These are the symbols downstream tasks will import. Keep their signatures stable.
 

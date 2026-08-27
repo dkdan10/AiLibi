@@ -254,10 +254,8 @@ These are the symbols downstream tasks will import. Keep their signatures stable
 Run these before editing. If any fail, stop and report — your dependencies are not where this task expects them.
 
 - `uv run python -c "import eval.meeting_quality"`
-- `uv run python -c "import eval.watchability.SupplyFloors"`
 - `uv run python -c "import orchestrator.replay"`
 - `uv run python -c "import meetings.schemas"`
-- `uv run python -c "import eval.replay_walk.ReplayWalkConfig"`
 
 ## Pre-flight checklist
 - Read AGENTS.md, the architecture routing it names, and the task section before editing.
