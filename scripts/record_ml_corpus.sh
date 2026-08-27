@@ -344,6 +344,23 @@ if [[ -n "$seeds_arg" ]]; then
   fi
 fi
 
+# Refuse a --seeds entry outside a set's LOCKED range. Run by the DRY RUN as well
+# as the real path: an operator previewing a repair command must learn there that
+# the seed does not exist, not after the preview said the plan was fine.
+assert_seeds_in_range() {
+  local set_name="$1" start="$2" last="$3" seed
+  [[ -z "$requested_seeds" ]] && return 0
+  local -a wanted=()
+  IFS=',' read -ra wanted <<<"$requested_seeds"
+  for seed in "${wanted[@]}"; do
+    if [[ "$seed" -lt "$start" || "$seed" -gt "$last" ]]; then
+      echo "ERROR: --seeds names seed $seed, outside $set_name's locked range $start..$last; nothing recorded." >&2
+      return 1
+    fi
+  done
+  return 0
+}
+
 # One human-readable rendering of the expected slate, so the preview echo, the
 # refusal and the freeze guard all name the SAME slate.
 if [[ -n "$expect_levers" ]]; then
@@ -900,6 +917,9 @@ if [[ "$dry_run" -eq 1 ]]; then
     read -r start count np ni tpc <<<"$(set_config "$set_name")"
     last=$((start + count - 1))
     set_dir="$CORPUS_ROOT/$set_name"
+    if ! assert_seeds_in_range "$set_name" "$start" "$last"; then
+      exit 1
+    fi
     echo "[dry-run] --- set $set_name ---"
     echo "[dry-run]   seed range: $start..$last ($count games)"
     echo "[dry-run]   roster: num_players=$np num_impostors=$ni tasks_per_crewmate=$tpc"
@@ -1125,15 +1145,9 @@ record_set() {
   # test cannot match a prefix (seed 100 inside "1000").
   local requested_fence=""
   if [[ -n "$requested_seeds" ]]; then
-    local -a requested_list=()
-    local requested
-    IFS=',' read -ra requested_list <<<"$requested_seeds"
-    for requested in "${requested_list[@]}"; do
-      if [[ "$requested" -lt "$start" || "$requested" -gt "$last" ]]; then
-        echo "ERROR: --seeds names seed $requested, outside $set_name's locked range $start..$last; nothing recorded." >&2
-        return 1
-      fi
-    done
+    if ! assert_seeds_in_range "$set_name" "$start" "$last"; then
+      return 1
+    fi
     requested_fence=",$requested_seeds,"
   fi
 

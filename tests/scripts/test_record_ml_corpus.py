@@ -1202,6 +1202,25 @@ def test_seeds_refuses_a_seed_outside_the_locked_range(tmp_path: Path) -> None:
     assert not (corpus_root / "4p1i").exists()
 
 
+def test_the_dry_run_refuses_an_out_of_range_seed_too() -> None:
+    # An operator previewing a repair command must learn there that the seed does
+    # not exist — a preview that says the plan is fine and a real run that
+    # refuses it describe different commands.
+    proc = _run("--set", "4p1i", "--dry-run", "--seeds", "1050")
+    assert proc.returncode != 0
+    assert "--seeds names seed 1050, outside 4p1i's locked range 1000..1049" in (
+        proc.stdout + proc.stderr
+    )
+
+
+def test_a_seed_valid_for_one_set_is_still_refused_by_the_other() -> None:
+    # 9p2i locks 1000..1149 and 4p1i 1000..1049, so `--set both --seeds 1100`
+    # is half-valid. Half-valid is refused, loudly, naming the set it fails.
+    proc = _run("--dry-run", "--seeds", "1100")
+    assert proc.returncode != 0
+    assert "outside 4p1i's locked range" in proc.stdout + proc.stderr
+
+
 # -- the hermetic recording path ----------------------------------------------
 #
 # `fake` is the only provider that can drive the worker pool without spending, so
