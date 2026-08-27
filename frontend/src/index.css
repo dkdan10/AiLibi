@@ -160,12 +160,19 @@
    edge sat ABOVE the map canvas's, covering the map entirely, and no scroll
    position could fit the whole map into the room left above it.
 
+   The value is what the open dock actually costs. At a 1440-wide stage the map
+   ends 610 px down the page and the open dock stands 346 px tall, so anything
+   under 956 px lands with the dock over the map's bottom edge — which is what a
+   900-px laptop got. 960 is the first round height that clears it, and the
+   e2e journey asserts the arrival at 1440×900 against this token rather than
+   against a copy of the number.
+
    This is the ONE home for the threshold — the shell reads it back through
    `getComputedStyle` and builds its `(min-height: …)` media query from it, so the
    sheet and the default cannot drift apart. It sits below `tokens:end` because
    everything above that marker is regenerated from src/tokens.ts. */
 :root {
-  --transport-expanded-min-height: 860px;
+  --transport-expanded-min-height: 960px;
 }
 
 /* Map fills its stage (Task 12.11). The Pixi canvas renders at a fixed
