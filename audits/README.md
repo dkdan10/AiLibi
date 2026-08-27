@@ -39,6 +39,14 @@ early audits were commissioned with, and `workflows/` holds the scripts that
 extracted their gameplay facts. The `baseline*-final-measure.json` files are
 recorded measurements, not prose.
 
+## The 2026-08-26 Wave-0 audit — [`review-2026-08-26/`](review-2026-08-26/README.md)
+
+The two-track pre-phase audit that grounds Phase 21: **A** gameplay on the
+baseline-7 bytes, **B** code-up with the ML re-ground's readiness as its
+centerpiece — blind to each other, every finding adversarially re-verified,
+per-claim evidence in each track's `collated-findings.md`. Start at the
+directory's `README.md`, which carries the tallies and the proposed routing.
+
 ---
 
 ## Phases 0–2 — scaffolding and the engine
