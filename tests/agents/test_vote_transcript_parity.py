@@ -290,15 +290,17 @@ class TestTheVoteRenderMatchesTheStatementRender:
             encoding="utf-8",
         )
 
-        _statement, crippled = _renders(_TRANSCRIPT, root=root)
+        statement, _live_vote = _renders(_TRANSCRIPT)
+        _crippled_statement, crippled = _renders(_TRANSCRIPT, root=root)
         section = _transcript_section(crippled)
         missing = [field for field in _turn_fields(_RICH_TURN) if field not in section]
 
+        # Every assertion this file makes fails on the crippled render.
         assert "walked out of the room the body was in" in missing
         assert "empty_trash" in missing
-        with pytest.raises(AssertionError):
-            statement, _vote = _renders(_TRANSCRIPT)
-            assert _body_lines(_transcript_section(statement)) == _body_lines(section)
+        assert "I stood beside them the whole window" in missing
+        assert _body_lines(_transcript_section(statement)) != _body_lines(section)
+        assert _transcript_section(statement) != section
 
 
 def _committed_meeting_transcripts() -> list[tuple[str, MeetingTranscript]]:
