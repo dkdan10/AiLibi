@@ -1,6 +1,6 @@
 {#- Impostor OPENING-turn prompt — bespoke qwen3_6_27b set (Task 16.13; elicitation batch Task 16.15; persona voice layer Task 16.16).
 
-   prompt_id: impostor_report  --  version impostor_report.qwen3_6_27b.v5
+   prompt_id: impostor_report  --  version impostor_report.qwen3_6_27b.v4
 
    Elicitation batch (v2, Task 16.15 — wave-0 close, the 3/851 self-naming
    artifact): the accusation slot is closed to the speaker's own name in
@@ -54,11 +54,6 @@
    publishes the station's walkable adjacency (rooms and one-tick doorways) so
    a cover story can be built out of geography that actually holds. The
    accusation-only output contract is untouched.
-
-   In-world register (v5, Task 21.1): this template's own prose was already
-   machinery-free, so only the ``<map>`` card moves — each room now renders its
-   prose name before its id. The set stamps as a unit, so the marker above
-   reads v5 with no other change to what this file renders.
 
    Inputs (loader kwargs only — observation firewall, DESIGN.md §1.3):
      agent_id, current_tick, meeting_trigger, rendered_memory,

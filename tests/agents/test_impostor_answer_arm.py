@@ -677,10 +677,10 @@ class TestVariantVersionStamps:
 
     def test_lever_on_serves_the_variant_registry_entry(self) -> None:
         assert dict(prompt_versions_for_set(_VARIANT_SET, env=_ON)) == {
-            "crewmate_report": "crewmate_report.qwen3_6_27b.v4",
+            "crewmate_report": "crewmate_report.qwen3_6_27b.v5",
             "impostor_report": _VARIANT_IMPOSTOR_STAMP,
             "accusation_round": _VARIANT_ACCUSATION_STAMP,
-            "vote_ballot": "vote_ballot.qwen3_6_27b.v4",
+            "vote_ballot": "vote_ballot.qwen3_6_27b.v5",
         }
 
     def test_lever_off_serves_the_default_registry_byte_identically(self) -> None:

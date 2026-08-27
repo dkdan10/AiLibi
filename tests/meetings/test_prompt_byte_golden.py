@@ -78,14 +78,15 @@ its recorded stamps resolve instead through
 :data:`ARCHIVED_PROMPT_VERSION_SETS` — byte-copies of the recorded template
 bodies under ``tests/fixtures/prompt_archive/`` — so the walk renders each
 recorded meeting through the templates its own stamps name and every byte
-assertion keeps its meaning across the window. The Task 16.17 baseline-5
-re-record RE-ALIGNED both committed sets onto ``*.qwen3_6_27b.v3``, which HEAD's
-live registry resolves directly, so the ``qwen3_6_27b_v1`` archive entry (which
-served the baseline-4 v1 recordings) now covers no committed meeting and is
-RETIRED with those recordings — its fixture bytes are deleted and the registry
-is empty. The seam itself is kept (an empty, documented
-:data:`ARCHIVED_PROMPT_VERSION_SETS` plus the two-registry resolution in
-:func:`resolve_prompt_set`) so the next bump-in-flight can re-use it.
+assertion keeps its meaning across the window.
+
+The window is OPEN: all 300 committed games stamp ``*.qwen3_6_27b.v4`` and the
+live registry reads v5, so every recorded meeting of both sample sets resolves
+through ``qwen3_6_27b_v4/``. An archived set is pinned on BOTH halves of what it
+rendered — the template bytes (``root=_ARCHIVE_ROOT``) and the render inputs
+that moved with the bump (:data:`ARCHIVED_MAP_CARDS`, since v5 rewrote the map
+card's row format). Task 21.15 records v5 and retires the entry with its fixture
+bytes, leaving the seam itself in place for the next bump.
 """
 
 from __future__ import annotations
@@ -135,7 +136,7 @@ from meetings.manager import (
     SuspicionEntry,
 )
 from meetings.schemas import MeetingResult
-from meetings.transcript import MeetingTriggerKind
+from meetings.transcript import CANONICAL_ROOM_NEIGHBORS, MeetingTriggerKind
 from observation.service import ObservationService
 from orchestrator.game import (
     DEFAULT_NUM_IMPOSTORS,
@@ -175,12 +176,41 @@ _SAMPLE_SETS: tuple[Path, ...] = (
 # a bump-in-flight window. Retire an entry when no committed set stamps it any
 # longer (the adopting re-record).
 #
-# EMPTY: every committed set stamps ``*.qwen3_6_27b.v4``, which the live
-# registry resolves, so the golden walks the committed goldens through the live
-# registry alone. The baseline-7 record retired the ``qwen3_6_27b_v3`` entry
-# 20.31 opened, and its archived bodies with it.
+# OPEN: every committed set stamps ``*.qwen3_6_27b.v4`` while the live registry
+# has advanced to v5, so all 192 recorded meetings resolve through the archived
+# v4 bodies. Task 21.15 records v5 and retires this entry with the fixture bytes.
 _ARCHIVE_ROOT: Path = _REPO_ROOT / "tests" / "fixtures" / "prompt_archive"
-ARCHIVED_PROMPT_VERSION_SETS: Mapping[str, Mapping[str, str]] = {}
+ARCHIVED_PROMPT_VERSION_SETS: Mapping[str, Mapping[str, str]] = {
+    "qwen3_6_27b_v4": {
+        "crewmate_report": "crewmate_report.qwen3_6_27b.v4",
+        "impostor_report": "impostor_report.qwen3_6_27b.v4",
+        "accusation_round": "accusation_round.qwen3_6_27b.v4",
+        "vote_ballot": "vote_ballot.qwen3_6_27b.v4",
+    }
+}
+
+
+def _archived_v4_map_card() -> str:
+    """The ``<map>`` card the archived v4 bodies rendered: bare room ids.
+
+    The card is a RENDER INPUT, not a template, so the archived ``.j2`` bytes
+    alone do not reproduce a v4 prompt once the card's own format moves — v5
+    writes every room as ``Prose Name (ROOM_ID)``. This re-states the v4 row
+    shape off the same frozen adjacency table the live card reads, so the
+    archive pairs each recorded stamp with BOTH halves of what it rendered
+    through. A wrong byte here fails all 192 recorded meetings, not silently.
+    """
+
+    lines = [
+        "Rooms and doors. Every door below is ONE tick of walking, so two "
+        "players in rooms that share a door can be one tick apart:"
+    ]
+    for room in sorted(CANONICAL_ROOM_NEIGHBORS):
+        lines.append(f"- {room}: {', '.join(sorted(CANONICAL_ROOM_NEIGHBORS[room]))}")
+    return "\n".join(lines)
+
+
+ARCHIVED_MAP_CARDS: Mapping[str, str] = {"qwen3_6_27b_v4": _archived_v4_map_card()}
 
 # The four render kinds, labelled by the manager seam that emits each. The
 # opening is split crewmate/impostor (both are ``ReportPromptRenderer``s); the
@@ -849,15 +879,17 @@ def _canonical_renderers() -> dict[str, PromptRenderers]:
     """Renderers for every registered set, bound to the committed template root.
 
     Archived sets (Task 16.15) bind to their byte-copied template directory
-    under :data:`_ARCHIVE_ROOT` — the exact bodies the committed recordings
-    rendered through — so a recorded meeting always re-renders via the
-    templates its own stamps name.
+    under :data:`_ARCHIVE_ROOT` AND to the map card those bytes rendered
+    (:data:`ARCHIVED_MAP_CARDS`) — so a recorded meeting always re-renders via
+    the templates its own stamps name and the render inputs they were given.
     """
 
     renderers = {name: build_prompt_renderers(name) for name in PROMPT_VERSION_SETS}
     renderers.update(
         {
-            name: build_prompt_renderers(name, root=_ARCHIVE_ROOT)
+            name: build_prompt_renderers(
+                name, root=_ARCHIVE_ROOT, map_card=ARCHIVED_MAP_CARDS[name]
+            )
             for name in ARCHIVED_PROMPT_VERSION_SETS
         }
     )
@@ -1164,9 +1196,11 @@ def test_one_byte_template_perturbation_breaks_the_golden(
 ) -> None:
     """Flip one committed template byte; the byte golden must then FAIL.
 
-    The victim is the LIVE ``qwen3_6_27b/crewmate_report.j2`` — the body every
-    committed recording re-renders through now that the sets stamp
-    ``*.qwen3_6_27b.v4`` and the v3 archive entry has retired.
+    The victim is the ARCHIVED ``qwen3_6_27b_v4/crewmate_report.j2``, because
+    that is the body every committed recording re-renders through while the
+    sets stamp ``*.qwen3_6_27b.v4`` and the live registry reads v5. Perturbing
+    the LIVE v5 body would be a no-op here — no committed recording renders it
+    — so the leg would assert nothing.
 
     Copy the template dirs under a scratch root, append one byte to that victim,
     build renderers against the perturbed root, and re-run ONE recorded meeting.
@@ -1181,13 +1215,21 @@ def test_one_byte_template_perturbation_breaks_the_golden(
         shutil.copytree(_PROMPTS_ROOT / name, perturbed_root / name)
     for name in ARCHIVED_PROMPT_VERSION_SETS:
         shutil.copytree(_ARCHIVE_ROOT / name, perturbed_root / name)
-    victim = perturbed_root / "qwen3_6_27b" / "crewmate_report.j2"
+    victim = perturbed_root / "qwen3_6_27b_v4" / "crewmate_report.j2"
     victim.write_bytes(victim.read_bytes() + b"\n")  # one-byte perturbation
 
     perturbed_renderers = {
         name: build_prompt_renderers(name, root=perturbed_root)
-        for name in (*PROMPT_VERSION_SETS, *ARCHIVED_PROMPT_VERSION_SETS)
+        for name in PROMPT_VERSION_SETS
     }
+    perturbed_renderers.update(
+        {
+            name: build_prompt_renderers(
+                name, root=perturbed_root, map_card=ARCHIVED_MAP_CARDS[name]
+            )
+            for name in ARCHIVED_PROMPT_VERSION_SETS
+        }
+    )
     game_map = load_canonical_map()
     reproduced_all = True
     walked_a_meeting = False

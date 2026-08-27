@@ -378,17 +378,18 @@ PROMPT_VERSION_SETS: Final[Mapping[str, Mapping[str, str]]] = {
     # all four templates' instruction preambles (empty persona = the exact v2
     # bytes), so the voice layer is its own attributable prompt layer at the
     # 16.17 re-record, separable from the elicitation batch.
-    # Task 20.31 (the evidence-honesty batch): v3 -> v4 — the flag block speaks
-    # the committed evidence taxonomy (proof vs conflicting accounts, weak
-    # signals subordinate) with no "VERIFIED evidence" framing, the persona and
-    # win condition are parameterised by the game's impostor count, the
-    # vent-first mandate exempts a dead or ejected subject, the ballot's
-    # threshold arithmetic leaves the agent's voice, and every meeting template
-    # shows the room-and-doorway card. The committed sample sets still stamp
-    # *.qwen3_6_27b.v3 and re-render through the archived v3 bodies
-    # (tests/fixtures/prompt_archive/qwen3_6_27b_v3/) until the adopting
-    # record retires that entry.
-    "qwen3_6_27b": _bespoke_versions("qwen3_6_27b", version="v4"),
+    # Task 21.1 (the in-world register): v4 -> v5 — the evidence section speaks
+    # only what a player at the table could say. It renders as
+    # ``<contradictions>``, the proof line states the vent mechanic instead of
+    # citing an engine that certified anything, no rendered line names a flag,
+    # a detector or a certification, and the map card writes each room as
+    # ``Prose Name (ROOM_ID)`` so the spoken room register has an authored
+    # spelling to follow. All four templates render the card, so all four
+    # stamps move as a unit. The committed sample sets still stamp
+    # *.qwen3_6_27b.v4 and re-render through the archived v4 bodies
+    # (tests/fixtures/prompt_archive/qwen3_6_27b_v4/) until the adopting record
+    # retires that entry.
+    "qwen3_6_27b": _bespoke_versions("qwen3_6_27b", version="v5"),
 }
 
 
@@ -399,8 +400,9 @@ PROMPT_VERSION_SETS: Final[Mapping[str, Mapping[str, str]]] = {
 # only in the ``qwen3_6_27b`` set), so exactly those two keys carry variant
 # stamps; ``crewmate_report`` / ``vote_ballot`` render the default bodies and
 # inherit whatever version the default registry above serves. The two variant
-# BODIES are byte-untouched by the Task-20.31 bump — an unrecorded, default-OFF
-# arm, so they keep their own v1 lineage (and, deliberately, the singular
+# BODIES render no map card and carry no swept prose, so a default-set bump
+# leaves their rendered bytes untouched and they keep their own v1 lineage (an
+# unrecorded, default-OFF arm; deliberately, they also keep the singular
 # persona the default set has now dropped). The variant stamps follow the
 # ``<template>.<set>.<version>`` convention with the template component naming
 # the actual variant FILE (``impostor_report_roll_call``) on its OWN v1
@@ -414,7 +416,7 @@ PROMPT_VERSION_SETS: Final[Mapping[str, Mapping[str, str]]] = {
 # through it byte-identically.
 IMPOSTOR_ROLL_CALL_PROMPT_VERSION_SETS: Final[Mapping[str, Mapping[str, str]]] = {
     "qwen3_6_27b": {
-        **_bespoke_versions("qwen3_6_27b", version="v4"),
+        **_bespoke_versions("qwen3_6_27b", version="v5"),
         "impostor_report": "impostor_report_roll_call.qwen3_6_27b.v1",
         "accusation_round": "accusation_round_roll_call.qwen3_6_27b.v1",
     },
