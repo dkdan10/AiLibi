@@ -148,6 +148,12 @@ class BodyView(_FrozenModel):
 
 
 class AudibleEvent(_FrozenModel):
+    # A sound the observer perceives this tick, minted by
+    # ``observation.service.ObservationService._audible_events``. ``sabotage_alarm``
+    # is global and carries ``room=None``. ``vent_use_heard`` is the kind the
+    # committed recordings carry: it is derived from the witness-gated vent
+    # sighting, so it is a second delivery of a vent the observer already sees as
+    # a visible action, and the one-vent-one-record repair gate stops minting it.
     kind: Literal["vent_use_heard", "sabotage_alarm"]
     room: RoomId | None = None
 

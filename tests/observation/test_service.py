@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import dataclasses
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 import json
 from pathlib import Path
 
@@ -10,11 +10,16 @@ from pydantic import TypeAdapter
 
 from engine.actions import Action
 from engine.entities import BodyState, PlayerState, SabotageState, TaskState
+from engine.events import EngineEvent
 from engine.rng import EngineRng
 from engine.tick import advance_tick
 from engine.world import WorldState, load_canonical_map
-from observation.packet import MovedPlayerView, PlayerView
-from observation.service import ObservationService, impostor_pretend_task_id
+from observation.packet import MovedPlayerView, ObservationPacket, PlayerView
+from observation.service import (
+    ENV_VENT_SINGLE_MINT,
+    ObservationService,
+    impostor_pretend_task_id,
+)
 
 _ACTION_ADAPTER: TypeAdapter[Action] = TypeAdapter(Action)
 
@@ -127,6 +132,30 @@ def _visible_player(packet_id: str, packet_players: Sequence[PlayerView]) -> Pla
     return next(player for player in packet_players if player.id == packet_id)
 
 
+def _packet_on_arm(
+    build: Callable[[], ObservationPacket], *, single_mint: bool
+) -> ObservationPacket:
+    """Build one packet with the vent-single-mint gate forced ON or OFF.
+
+    Sets the variable IN-PROCESS rather than relying on an ambient export:
+    ``tests/conftest.py``'s hermetic guard strips every ``AILIBI_*`` name before
+    collection, so an exported gate never reaches a packet build inside pytest.
+    Driving both arms from the test itself is what makes a two-arm case possible
+    in one module, and it is what catches a gate leaking into the default path
+    here rather than at the byte-golden.
+
+    Takes a builder rather than a packet so each arm derives its own packet from
+    the same scripted world and event list.
+    """
+
+    with pytest.MonkeyPatch.context() as patch:
+        if single_mint:
+            patch.setenv(ENV_VENT_SINGLE_MINT, "1")
+        else:
+            patch.delenv(ENV_VENT_SINGLE_MINT, raising=False)
+        return build()
+
+
 def test_kill_witness_sees_killer_action(tmp_path: Path) -> None:
     game_map = load_canonical_map()
     state = _base_world_state()
@@ -202,27 +231,25 @@ def test_visible_player_action_does_not_reveal_unseen_kill(tmp_path: Path) -> No
     assert visible_impostor.action is None
 
 
-def test_vent_witness_sees_vent_action_and_audible_event(tmp_path: Path) -> None:
+def _admin_vent_scene(
+    *,
+    state: WorldState,
+    witness_room: str,
+) -> tuple[WorldState, list[EngineEvent]]:
+    """Place ``p-4`` in ADMIN, put the observer ``p-2`` in ``witness_room``, vent p-4.
+
+    Returns the post-tick world and the tick's engine events, ready to build a
+    packet for any agent. ``witness_room="ADMIN"`` makes ``p-2`` a witness of the
+    vent; any other room makes it a non-witness, since asymmetric visibility
+    (Task 13.8) gives a crewmate its own room only.
+    """
+
     game_map = load_canonical_map()
-    state = _base_world_state()
     players = dict(state.players)
     players["p-4"] = _player("p-4", "IMPOSTOR", "ADMIN", (1.0, 0.0))
-    players["p-2"] = _player("p-2", "CREWMATE", "ADMIN", (0.0, 0.0))
-    state = WorldState(
-        tick=state.tick,
-        phase=state.phase,
-        map=state.map,
-        players=players,
-        bodies=state.bodies,
-        tasks=state.tasks,
-        sabotage=state.sabotage,
-        cooldowns=state.cooldowns,
-        emergency_uses=state.emergency_uses,
-        rng_state=state.rng_state,
-        seed=state.seed,
-    )
-
-    state, events = advance_tick(
+    players["p-2"] = _player("p-2", "CREWMATE", witness_room, (0.0, 0.0))
+    state = dataclasses.replace(state, players=players)
+    return advance_tick(
         state,
         [
             _action(
@@ -236,16 +263,186 @@ def test_vent_witness_sees_vent_action_and_audible_event(tmp_path: Path) -> None
         game_map=game_map,
     )
 
-    packet = _observation_service(tmp_path).build_packet(
-        world_state=state,
-        agent_id="p-2",
-        engine_events=events,
+
+def _teammate_vent_world_state(*, seed: int = 1026) -> WorldState:
+    """A 7p/2i roster for the impostor-watches-teammate scene.
+
+    Both impostors (``p-2``, ``p-4``) and the victim (``p-1``) stand in ADMIN, the
+    only room whose vent the scene needs. The four spare crewmates are what keep
+    the kill from resolving the game: on the 5p roster one kill leaves two
+    impostors against two crewmates, and the parity win ends the tick before the
+    vent can be scripted.
+    """
+
+    game_map = load_canonical_map()
+    return WorldState(
+        tick=0,
+        phase="PLAY",
+        map=game_map.id,
+        players={
+            "p-1": _player("p-1", "CREWMATE", "ADMIN", (0.0, 0.0)),
+            "p-2": _player("p-2", "IMPOSTOR", "ADMIN", (2.0, 0.0)),
+            "p-3": _player("p-3", "CREWMATE", "STORAGE", (0.0, 0.0)),
+            "p-4": _player("p-4", "IMPOSTOR", "ADMIN", (1.0, 0.0)),
+            "p-5": _player("p-5", "CREWMATE", "STORAGE", (1.0, 0.0)),
+            "p-6": _player("p-6", "CREWMATE", "REACTOR", (0.0, 0.0)),
+            "p-7": _player("p-7", "CREWMATE", "REACTOR", (1.0, 0.0)),
+        },
+        bodies={},
+        tasks={},
+        sabotage=None,
+        cooldowns={"p-2": 0, "p-4": 0},
+        emergency_uses={},
+        rng_state=EngineRng.from_seed(seed).snapshot(),
+        seed=seed,
     )
 
-    visible_impostor = _visible_player("p-4", packet.visible_players)
-    assert visible_impostor.action == "vent"
-    assert [event.model_dump(mode="json") for event in packet.audible_events] == [
+
+def test_vent_witness_is_minted_once_as_the_visible_action(tmp_path: Path) -> None:
+    # One perception per physical event per agent. The vent reaches a witness as
+    # the actor's visible action on BOTH arms; the audible copy is what the gate
+    # removes. Two-arm, because the OFF arm IS the substrate the committed prompt
+    # bytes were recorded under and a gate that leaked into it would move them.
+    state, events = _admin_vent_scene(state=_base_world_state(), witness_room="ADMIN")
+    service = _observation_service(tmp_path)
+
+    def build() -> ObservationPacket:
+        return service.build_packet(
+            world_state=state, agent_id="p-2", engine_events=events
+        )
+
+    co_emitting = _packet_on_arm(build, single_mint=False)
+    assert _visible_player("p-4", co_emitting.visible_players).action == "vent"
+    assert [event.model_dump(mode="json") for event in co_emitting.audible_events] == [
         {"kind": "vent_use_heard", "room": "ADMIN"},
+    ]
+
+    single_mint = _packet_on_arm(build, single_mint=True)
+    assert _visible_player("p-4", single_mint.visible_players).action == "vent"
+    assert single_mint.audible_events == ()
+
+
+def test_impostor_witnessing_a_teammate_vent_gets_no_audible_residue(
+    tmp_path: Path,
+) -> None:
+    # The §4.7 team-internal firewall drops an impostor's sighting of a fellow
+    # impostor at a kill room and tick, so the "You witnessed <teammate> vent"
+    # row never reaches that impostor's prompt — but the audible derivative was
+    # minted from the same witness gate and rendered unconditionally, leaving a
+    # room-and-tick row the suppression never covered. Killing the mint is what
+    # makes that residue class unreachable rather than merely filtered: with the
+    # gate ON the packet the suppression reads carries no audible row at all.
+    #
+    # The shape is the verifier's anchor (ml_corpus/9p2i seed 1026): an impostor
+    # watching its teammate vent in the room where that teammate has just killed.
+    game_map = load_canonical_map()
+    state = _teammate_vent_world_state()
+
+    state, _ = advance_tick(
+        state,
+        [_action({"type": "kill", "actor": "p-4", "payload": {"target": "p-1"}})],
+        game_map=game_map,
+    )
+    state, events = advance_tick(
+        state,
+        [
+            _action(
+                {
+                    "type": "vent",
+                    "actor": "p-4",
+                    "payload": {"vent_id": "ADMIN_VENT"},
+                }
+            )
+        ],
+        game_map=game_map,
+    )
+    service = _observation_service(tmp_path)
+
+    def build() -> ObservationPacket:
+        return service.build_packet(
+            world_state=state, agent_id="p-2", engine_events=events
+        )
+
+    co_emitting = _packet_on_arm(build, single_mint=False)
+    assert _visible_player("p-4", co_emitting.visible_players).action == "vent"
+    assert [event.model_dump(mode="json") for event in co_emitting.audible_events] == [
+        {"kind": "vent_use_heard", "room": "ADMIN"},
+    ]
+
+    single_mint = _packet_on_arm(build, single_mint=True)
+    assert _visible_player("p-4", single_mint.visible_players).action == "vent"
+    assert single_mint.audible_events == ()
+
+
+def test_non_witness_gets_neither_the_vent_action_nor_a_sound(tmp_path: Path) -> None:
+    # Heard-but-unseen is not a state the bytes contain, on either arm. The
+    # audible copy was derived from the witness-gated observed action, so an
+    # agent outside both witness tuples already heard nothing — this ships as a
+    # regression guard proving the repair removes a duplicate rather than adding
+    # a non-witness channel (that widening is explicitly a NON-GOAL here).
+    state, events = _admin_vent_scene(
+        state=_base_world_state(), witness_room="ENGINEERING"
+    )
+    service = _observation_service(tmp_path)
+
+    def build() -> ObservationPacket:
+        return service.build_packet(
+            world_state=state, agent_id="p-2", engine_events=events
+        )
+
+    for single_mint in (False, True):
+        packet = _packet_on_arm(build, single_mint=single_mint)
+        assert "p-4" not in {player.id for player in packet.visible_players}
+        assert packet.audible_events == ()
+
+
+def _active_sabotage() -> SabotageState:
+    return SabotageState(
+        kind="reactor", remaining_ticks=5, affected_rooms=(), active=True
+    )
+
+
+def test_sabotage_alarm_is_unmoved_by_the_single_mint(tmp_path: Path) -> None:
+    # The global alarm is a LIVE producer sharing every surface the vent copy
+    # used, so it is pinned on both arms: an active sabotage puts exactly one
+    # ``sabotage_alarm`` (``room=None``) on the packet, and the gate does not
+    # touch it. Ships as a regression guard against a deletion that over-reaches.
+    state = dataclasses.replace(_base_world_state(), sabotage=_active_sabotage())
+    service = _observation_service(tmp_path)
+
+    def build() -> ObservationPacket:
+        return service.build_packet(world_state=state, agent_id="p-1", engine_events=[])
+
+    for single_mint in (False, True):
+        packet = _packet_on_arm(build, single_mint=single_mint)
+        assert [event.model_dump(mode="json") for event in packet.audible_events] == [
+            {"kind": "sabotage_alarm", "room": None},
+        ]
+
+
+def test_sabotage_alarm_survives_a_witnessed_vent_tick(tmp_path: Path) -> None:
+    # The over-reach pin on the tick where both sounds compete: OFF the packet
+    # carries the vent copy AND the alarm, ON it carries the alarm alone. This is
+    # what makes "the ON arm emits exactly the global alarm" a checked claim
+    # rather than an inference from the quiet-tick guard above.
+    state, events = _admin_vent_scene(state=_base_world_state(), witness_room="ADMIN")
+    state = dataclasses.replace(state, sabotage=_active_sabotage())
+    service = _observation_service(tmp_path)
+
+    def build() -> ObservationPacket:
+        return service.build_packet(
+            world_state=state, agent_id="p-2", engine_events=events
+        )
+
+    co_emitting = _packet_on_arm(build, single_mint=False)
+    assert [event.model_dump(mode="json") for event in co_emitting.audible_events] == [
+        {"kind": "vent_use_heard", "room": "ADMIN"},
+        {"kind": "sabotage_alarm", "room": None},
+    ]
+
+    single_mint = _packet_on_arm(build, single_mint=True)
+    assert [event.model_dump(mode="json") for event in single_mint.audible_events] == [
+        {"kind": "sabotage_alarm", "room": None},
     ]
 
 
