@@ -118,7 +118,38 @@ Let that voice color HOW you speak — the wording of your "rationale_text" only
 <transcript>
 {% if transcript.turns %}
 {% for turn in transcript.turns %}
-- [{{ turn.turn_id }}] turn {{ turn.turn_index }} ({{ turn.turn_kind }}) — {{ turn.speaker }}{% for claim in turn.claims %}{% if claim.type == "accusation" %} accuses {{ claim.against }} ({{ "%.2f" | format(claim.confidence) }}){% endif %}{% endfor %}: {{ turn.free_text }}
+- [{{ turn.turn_id }}] turn {{ turn.turn_index }} ({{ turn.turn_kind }}) — {{ turn.speaker }}
+{% if turn.observations %}
+  saw:
+{% for obs in turn.observations %}
+{% if obs.type == "saw_player" %}
+  - tick {{ obs.tick }}: {{ obs.subject }} in {{ obs.room }}{% if obs.co_present %} with {{ obs.co_present | join(", ") }}{% endif %}.
+{% elif obs.type == "saw_move" %}
+  - tick {{ obs.tick }}: {{ obs.subject }} moved {{ obs.from_room }} -> {{ obs.to_room }}, arriving in {{ obs.to_room }}.
+{% elif obs.type == "completed_task" %}
+  - tick {{ obs.tick }}: task {{ obs.task_id }} in {{ obs.room }}.
+{% elif obs.type == "found_body" %}
+  - tick {{ obs.tick }}: body of {{ obs.body_of }} in {{ obs.room }}.
+{% elif obs.type == "saw_vent" %}
+  - tick {{ obs.tick }}: witnessed {{ obs.subject }} VENT in {{ obs.room }} (only the impostor can vent).
+{% elif obs.type == "whereabouts" %}
+  - tick {{ obs.tick }}: {{ turn.speaker }} places THEMSELVES in {{ obs.room }} (roll-call answer).
+{% endif %}
+{% endfor %}
+{% endif %}
+{% if turn.claims %}
+  claims:
+{% for claim in turn.claims %}
+{% if claim.type == "alibi" %}
+  - alibi: {{ claim.subject }} in {{ claim.room }}, ticks {{ claim.from_tick }}-{{ claim.to_tick }}.
+{% elif claim.type == "accusation" %}
+  - accuses {{ claim.against }} ({{ "%.2f" | format(claim.confidence) }}): {{ claim.reason }}
+{% elif claim.type == "corroboration" %}
+  - corroborates {{ claim.supports }} on tick {{ claim.on_tick }}: {{ claim.reason }}
+{% endif %}
+{% endfor %}
+{% endif %}
+  said: "{{ turn.free_text }}"
 {% endfor %}
 {% else %}
 (no turns recorded)

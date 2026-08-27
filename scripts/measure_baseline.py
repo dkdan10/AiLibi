@@ -454,7 +454,9 @@ def _render_vj_human(report: VJInstrumentReport) -> str:
             f" distinct skeletons {report.distinct_skeletons}"
             f" ({_round(report.distinct_skeleton_ratio)});"
             f" distinct-1 {_round(report.distinct_1)}"
-            f" / distinct-2 {_round(report.distinct_2)}",
+            f" / distinct-2 {_round(report.distinct_2)}"
+            f" (guard-authored ballots excluded "
+            f"{report.guard_authored_ballots_excluded})",
             f"  pooling: roll-call {_round(pooling.roll_call_coverage_mean)}"
             f" ({pooling.whereabouts_claims_total} whereabouts claims);"
             f" vouch {_round(pooling.vouch_rate_mean)}"
