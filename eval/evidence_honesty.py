@@ -25,9 +25,10 @@ string the code computes.
 * **I-2 false crew self-placement** — numerator: spoken whereabouts claims by
   a living CREWMATE whose room matches the speaker's true room at NEITHER
   engine tick N nor engine tick N-1; denominator: all such claims; measured in
-  the spoken (agent) tick frame with both adjacent engine ticks admitted; it
-  does NOT measure intent, and a claim that is merely unverifiable is not
-  counted false.
+  the spoken (agent) tick frame with both adjacent engine ticks admitted, and
+  rooms compared as canonical SETS so case, a _TRANSITION suffix or a compound
+  A/B account does not score as a lie; it does NOT measure intent, and a claim
+  that is merely unverifiable or non-spatial is not counted false.
 * **I-3 sole-flag convicting precision** — numerator: ejections whose ejected
   player carried exactly one STRONG contradiction and it was
   alibi_vs_sighting, and the ejected player was an IMPOSTOR; denominator: all
@@ -69,10 +70,14 @@ string the code computes.
   measure whether the model acted on the contradiction.
 * **I-10 meeting physicality** — numerators: meetings with at least one living
   participant inside a vent, and meetings whose reporter was killed within
-  three ticks after it; denominator: all resolved meetings; ticks are engine
-  ticks and the kill window is inclusive of the first three ticks after the
-  meeting tick; the reporter cell is restricted to body-triggered meetings and
-  does NOT measure emergency meetings.
+  three ticks after it; denominator: all resolved meetings, except
+  reporter_killed_body_triggered whose denominator is the body-triggered
+  meetings alone; ticks are engine ticks and the kill window is inclusive of
+  the first three ticks after the meeting tick; a bar on reporter retaliation
+  is stated on reporter_killed_body_triggered, the coherent rate, because only
+  a body-triggered meeting HAS a reporter to kill; the all-meetings
+  reporter_killed_within_three is the context term and does NOT measure
+  emergency meetings in its numerator.
 * **I-11 impostor targeting** — numerators: free zero-witness kill
   opportunities the policy declined, and impostor decisions whose top-ranked
   target was already dead; denominators: the free-kill opportunities and all
@@ -199,7 +204,11 @@ from meetings.schemas import (
     SawPlayerObservation,
     WhereaboutsClaim,
 )
-from meetings.transcript import canonical_rooms, is_weak_contradiction
+from meetings.transcript import (
+    canonical_rooms,
+    is_weak_contradiction,
+    sighting_placement,
+)
 from observation.action_intent import ActionIntent
 from observation.public_map import PublicMapView
 from observation.service import ObservationService
@@ -295,8 +304,10 @@ CELL_DEFINITIONS: Final[Mapping[str, str]] = {
         "numerator: spoken whereabouts claims by a living CREWMATE whose room "
         "matches the speaker's true room at NEITHER engine tick N nor engine tick "
         "N-1; denominator: all such claims; measured in the spoken (agent) tick "
-        "frame with both adjacent engine ticks admitted; it does NOT measure "
-        "intent, and a claim that is merely unverifiable is not counted false."
+        "frame with both adjacent engine ticks admitted, and rooms compared as "
+        "canonical SETS so case, a _TRANSITION suffix or a compound A/B account "
+        "does not score as a lie; it does NOT measure intent, and a claim that "
+        "is merely unverifiable or non-spatial is not counted false."
     ),
     "I-3": (
         "numerator: ejections whose ejected player carried exactly one STRONG "
@@ -352,10 +363,14 @@ CELL_DEFINITIONS: Final[Mapping[str, str]] = {
     "I-10": (
         "numerators: meetings with at least one living participant inside a vent, "
         "and meetings whose reporter was killed within three ticks after it; "
-        "denominator: all resolved meetings; ticks are engine ticks and the kill "
-        "window is inclusive of the first three ticks after the meeting tick; the "
-        "reporter cell is restricted to body-triggered meetings and does NOT "
-        "measure emergency meetings."
+        "denominator: all resolved meetings, except reporter_killed_body_triggered "
+        "whose denominator is the body-triggered meetings alone; ticks are engine "
+        "ticks and the kill window is inclusive of the first three ticks after the "
+        "meeting tick; a bar on reporter retaliation is stated on "
+        "reporter_killed_body_triggered, the coherent rate, because only a "
+        "body-triggered meeting HAS a reporter to kill; the all-meetings "
+        "reporter_killed_within_three is the context term and does NOT measure "
+        "emergency meetings in its numerator."
     ),
     "I-11": (
         "numerators: free zero-witness kill opportunities the policy declined, and "
@@ -401,8 +416,10 @@ class FalseWhereaboutsCells(_FrozenModel):
     numerator: spoken whereabouts claims by a living CREWMATE whose room matches
     the speaker's true room at NEITHER engine tick N nor engine tick N-1;
     denominator: all such claims; measured in the spoken (agent) tick frame with
-    both adjacent engine ticks admitted; it does NOT measure intent, and a claim
-    that is merely unverifiable is not counted false.
+    both adjacent engine ticks admitted, and rooms compared as canonical SETS so
+    case, a _TRANSITION suffix or a compound A/B account does not score as a lie;
+    it does NOT measure intent, and a claim that is merely unverifiable or
+    non-spatial is not counted false.
 
     ``crew_false_agent_frame`` is the stricter reading of the same rule — the
     claim compared against the two AGENT-frame ticks N and N-1 (engine N-1 and
@@ -594,15 +611,27 @@ class MeetingPhysicalityCells(_FrozenModel):
 
     numerators: meetings with at least one living participant inside a vent, and
     meetings whose reporter was killed within three ticks after it; denominator:
-    all resolved meetings; ticks are engine ticks and the kill window is inclusive
-    of the first three ticks after the meeting tick; the reporter cell is restricted
-    to body-triggered meetings and does NOT measure emergency meetings.
+    all resolved meetings, except reporter_killed_body_triggered whose
+    denominator is the body-triggered meetings alone; ticks are engine ticks and
+    the kill window is inclusive of the first three ticks after the meeting tick;
+    a bar on reporter retaliation is stated on reporter_killed_body_triggered,
+    the coherent rate, because only a body-triggered meeting HAS a reporter to
+    kill; the all-meetings reporter_killed_within_three is the context term and
+    does NOT measure emergency meetings in its numerator.
+
+    The reporter numerator only ever counts body-triggered meetings — an
+    emergency meeting has no reporter to kill — so the two reporter cells differ
+    only in denominator. ``reporter_killed_body_triggered`` is the coherent rate
+    and the one a bar is stated on; ``reporter_killed_within_three`` keeps the
+    all-meetings denominator as the context term, understating the retaliation
+    rate by the emergency share.
     """
 
     meetings: int
     body_triggered_meetings: int
     venting_participants: WilsonRateCell
     reporter_killed_within_three: WilsonRateCell
+    reporter_killed_body_triggered: WilsonRateCell
 
 
 class ImpostorTargetingCells(_FrozenModel):
@@ -1035,6 +1064,9 @@ def _report(
             venting_participants=cell(tallies.venting_meetings, tallies.meetings),
             reporter_killed_within_three=cell(
                 tallies.reporter_killed_meetings, tallies.meetings
+            ),
+            reporter_killed_body_triggered=cell(
+                tallies.reporter_killed_meetings, tallies.body_meetings
             ),
         ),
         impostor_targeting=ImpostorTargetingCells(
@@ -1910,6 +1942,20 @@ def _fold_turns(transcript: MeetingTranscript, *, tallies: _Tallies) -> bool:
     return marked
 
 
+def _contradicts(spoken_rooms: frozenset[str], engine_rooms: Sequence[RoomId]) -> bool:
+    """Whether a spoken room label contradicts every engine room in the window.
+
+    Both sides are reduced to canonical room sets first; the claim is false only
+    when the spoken set is non-empty and intersects none of them. An empty
+    spoken set is a non-spatial label — uncomparable, and an uncomparable claim
+    is not a false one.
+    """
+
+    if not spoken_rooms:
+        return False
+    return not any(spoken_rooms & canonical_rooms(room) for room in engine_rooms)
+
+
 def _fold_whereabouts(
     *,
     transcript: MeetingTranscript,
@@ -1919,7 +1965,17 @@ def _fold_whereabouts(
     copyable: set[tuple[PlayerId, int, RoomId]],
     tallies: _Tallies,
 ) -> None:
-    """Fold I-2 over the meeting's spoken ``whereabouts`` claims."""
+    """Fold I-2 over the meeting's spoken ``whereabouts`` claims.
+
+    Both truth decisions — engine-frame and agent-frame — compare CANONICAL room
+    SETS, the comparison the detector and I-6 already make: a spoken label may be
+    lower-case, suffixed ``_TRANSITION`` or a compound ``A/B`` account of
+    movement, and a raw string compare would score a truthful crewmate as a liar
+    on formatting alone. A claim is false only when both sides canonicalise to
+    non-empty sets that do not intersect, so a non-spatial label is uncomparable
+    rather than false — the same rule
+    :func:`meetings.transcript.canonical_rooms` states for every comparison site.
+    """
 
     for turn in transcript.turns:
         speaker = turn.speaker
@@ -1949,13 +2005,14 @@ def _fold_whereabouts(
                 )
                 if room is not None
             )
-            false_here = observation.room not in engine_rooms
+            spoken_rooms = canonical_rooms(observation.room)
+            false_here = _contradicts(spoken_rooms, engine_rooms)
             if roles.get(speaker) == "CREWMATE":
                 tallies.crew_claims += 1
                 tallies.crew_false += int(false_here)
                 tallies.crew_false_agent_frame += int(
                     bool(agent_frame_rooms)
-                    and observation.room not in agent_frame_rooms
+                    and _contradicts(spoken_rooms, agent_frame_rooms)
                 )
                 if (speaker, observation.tick, observation.room) in copyable:
                     tallies.copyable_self_location += 1
@@ -2181,15 +2238,9 @@ def _event_index(
 def _sighting_placement(artifact: object) -> SawPlayerObservation | None:
     """The placement one spoken artifact puts on the record, or ``None``.
 
-    Two sayable shapes place another player, and the detector reads both as one
-    placement, so this instrument must too:
-
-    * a ``saw_player`` places the subject in the room it names;
-    * a ``saw_move`` "``subject`` moved A -> B, arriving at ``tick``" places the
-      subject at the DESTINATION, ``to_room`` at ``tick``, and nowhere else --
-      the origin half is deliberately not placed at ``tick - 1``
-      (``meetings.transcript::_iter_move_placements``, which builds exactly this
-      ``SawPlayerObservation`` from the transition before any detector sees it).
+    Delegates to :func:`meetings.transcript.sighting_placement`, the one
+    definition of "what a spoken artifact places", so this instrument and the
+    detector cannot disagree about a ``saw_move``'s destination.
 
     Reading the destination is what lets I-4's grounding, I-6's geometry and
     I-7's origin classification measure the side the flag was actually minted
@@ -2197,16 +2248,7 @@ def _sighting_placement(artifact: object) -> SawPlayerObservation | None:
     a room nobody was accused of being in.
     """
 
-    if isinstance(artifact, SawPlayerObservation):
-        return artifact
-    if isinstance(artifact, SawMoveObservation):
-        return SawPlayerObservation(
-            type="saw_player",
-            tick=artifact.tick,
-            subject=artifact.subject,
-            room=artifact.to_room,
-        )
-    return None
+    return sighting_placement(artifact)
 
 
 def _resolve_flag(

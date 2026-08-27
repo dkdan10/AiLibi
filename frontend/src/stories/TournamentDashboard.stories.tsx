@@ -177,6 +177,36 @@ function baseReport(): TournamentEvalReport {
       accusation_claim_ece: 0.248,
       accusation_claim_populated_bins: 6,
       accusation_claim_low_power: false,
+      // The accuser-role split: a partition of the pooled claim curve, so the
+      // two totals sum to accusation_claim_total. The impostor curve is
+      // ceilinged — its only scoring-correct target is a teammate the firewall
+      // deletes — so it hits zero and legitimately flags low power.
+      accusation_claim_crew_accuser: {
+        bins: calibrationBins([
+          [2, 14, 3],
+          [3, 31, 9],
+          [4, 39, 17],
+          [5, 29, 18],
+          [6, 23, 19],
+          [7, 19, 20],
+        ]),
+        total: 155,
+        ece: 0.182,
+        populated_bins: 6,
+        low_power: false,
+      },
+      accusation_claim_impostor_accuser: {
+        bins: calibrationBins([
+          [4, 13, 0],
+          [5, 10, 0],
+          [6, 8, 0],
+          [7, 21, 0],
+        ]),
+        total: 52,
+        ece: 0.677,
+        populated_bins: 4,
+        low_power: true,
+      },
       // 4 populated bins → low power (< 5).
       vote_ballot_bins: calibrationBins([
         [5, 88, 41],
@@ -188,6 +218,10 @@ function baseReport(): TournamentEvalReport {
       vote_ballot_ece: 0.103,
       vote_ballot_populated_bins: 4,
       vote_ballot_low_power: true,
+      // Ballots the meeting layer's own guard authored, left out of the vote
+      // curve because their recorded (target, confidence) pair is not one
+      // agent's act.
+      vote_ballot_guard_authored_excluded: 11,
     },
     alibi_fabrication: {
       total_impostor_alibis: 41,
@@ -377,6 +411,14 @@ function baseReport(): TournamentEvalReport {
         model_machinery_quotation_ballots: 27,
         model_machinery_vocabulary_ballots: 81,
         model_machinery_quotation_share: 27 / 679,
+        // The ORACLE register — a player crediting the engine with a verdict —
+        // over the three spoken surfaces. Unlike the vocabulary net above it has
+        // no innocent in-world reading, so these are leak counts. Each claim
+        // count ships against its own base.
+        claim_reasons_total: 812,
+        model_oracle_register_ballots: 9,
+        oracle_register_turns: 5,
+        oracle_register_claim_reasons: 2,
         // Every ballot's model-side nets came from the PRE-GUARD vote response,
         // and every record's marker boundary was established against it — so no
         // ballot scanned an envelope, and none had its markers taken on shape.

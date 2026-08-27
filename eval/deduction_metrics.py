@@ -255,7 +255,10 @@ pins say so.
   three are over impostor-voter ballots; ``model_omniscient_ballots`` is their
   UNION (a ballot can hit several nets, so the union is not their sum).
   ``crew_partner_naming_ballots`` and ``crew_omniscient_control_ballots`` are
-  the false-positive CONTROLS (both 0 on every committed set).
+  the false-positive CONTROLS. Re-derived over the committed reports the partner
+  control is 0 on all four sets and the omniscient control is **1** on each of
+  the two 9p2i sets and 0 on the two 4p1i ones — a small, non-zero base rate a
+  reader of the leak cells must know about.
   ``player_visible_leak_turns`` is the partner net over player-visible
   ``free_text``.
 
@@ -274,7 +277,14 @@ pins say so.
   ``model_machinery_vocabulary_ballots`` counts :data:`MACHINERY_VOCABULARY`
   ("threshold" / "suspicion") and is an explicit UPPER BOUND, because a
   deduction game says those words naturally. Both are over ALL ballots, not
-  just impostor ones — machinery talk is role-independent.
+  just impostor ones — machinery talk is role-independent. Beside them, the
+  ORACLE-REGISTER cells (:data:`MACHINERY_ORACLE_PATTERNS`) count a player
+  crediting the engine with a verdict — "the engine flagged it" — across all
+  three spoken surfaces: ``model_oracle_register_ballots`` over the pre-guard
+  ballot body, ``oracle_register_turns`` over ``free_text``, and
+  ``oracle_register_claim_reasons`` over accusation/corroboration ``reason``
+  against ``claim_reasons_total``. That register has no innocent in-world
+  reading, so these are leak counts rather than an upper bound.
 * GUARD-originated — text the deterministic machinery injected.
   ``guard_marked_ballots``: ballots whose LEADING CHAIN carries any pinned
   manager/voting marker.
@@ -379,6 +389,7 @@ from meetings.manager import (
 from meetings.schemas import (
     AccusationClaim,
     ContradictionRef,
+    CorroborationClaim,
     PlayerId,
     VoteBallot,
     WhereaboutsClaim,
@@ -544,6 +555,63 @@ A deduction game says "suspicion" and "threshold" naturally, so this net cannot
 distinguish quotation from ordinary play; Task 19.8 labelled it an upper bound
 and this module keeps that label rather than promoting it to a leak rate. It
 ships beside :data:`MACHINERY_DECIMAL_PATTERN`, never instead of it.
+"""
+
+
+# The in-world nouns a bare ``engine`` match would otherwise swallow: the ship's
+# engine room and the ``align_engine_output`` task (engine/maps/canonical_1.yaml)
+# are correct player speech, and a net that scores them is measuring the fiction
+# rather than the leak.
+_ORACLE_IN_FICTION: Final[str] = r"room|output|bay|core"
+# A machinery ACTOR: the game's own scoring apparatus named as an agent. The
+# ``\b`` after ``engine`` is load-bearing — it keeps "Engineering" (the ship's
+# wing) and "the engines" (its machinery) out, which is most of the excess a
+# substring net returns.
+_ORACLE_ACTOR: Final[str] = (
+    rf"the\s+(?:engine\b(?!\s+(?:{_ORACLE_IN_FICTION}))|system\b|detector\b)"
+)
+# A VERDICT act: the apparatus deciding, certifying or announcing a fact.
+_ORACLE_VERDICT: Final[str] = (
+    r"(?:flag|certif|confirm|verif|prove|proven|proof|declar|rul|seal|say|says"
+    r"|said|state|report|clear|log|settl|find|found)"
+)
+# The evidence nouns a possessive apparatus produces ("the engine's cold truth").
+_ORACLE_EVIDENCE_NOUN: Final[str] = (
+    r"(?:truth|verdict|certification|proof|flags?|ruling|judg\w*|word|call|readout)"
+)
+
+MACHINERY_ORACLE_PATTERNS: Final[tuple[re.Pattern[str], ...]] = (
+    re.compile(
+        rf"\b{_ORACLE_ACTOR}(?:'s|’s)?(?:\s+[\w'’-]+){{0,3}}\s+"
+        rf"{_ORACLE_VERDICT}",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        rf"\b{_ORACLE_VERDICT}\w*\s+(?:by|with|per)\s+{_ORACLE_ACTOR}",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        rf"\b(?:engine|system|detector)\b[-\s]{_ORACLE_VERDICT}",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        rf"\b{_ORACLE_ACTOR}(?:'s|’s)(?:\s+[\w'’-]+){{0,2}}\s+"
+        rf"{_ORACLE_EVIDENCE_NOUN}\b",
+        re.IGNORECASE,
+    ),
+)
+"""The ORACLE-REGISTER net — a player crediting the game engine with a verdict.
+
+"the engine flagged it", "certified by the system flags", "the engine's cold
+truth": the apparatus named as an authority that has already decided. Unlike
+:data:`MACHINERY_VOCABULARY` this register has no innocent in-world reading, so
+its counts are leak counts rather than an upper bound, and it ships as its own
+cells beside the vocabulary net rather than folded into it.
+
+Precision is the whole design. A match needs a machinery ACTOR next to a VERDICT
+act (or a machinery-qualified evidence noun), the ``engine`` alternative carries
+a word boundary so the ship's Engineering wing never matches, and the ship's
+engine room and ``align_engine_output`` task are excluded outright.
 """
 
 
@@ -1559,8 +1627,9 @@ class ScaffoldLeakageCells(_FrozenModel):
       several nets, so this is deliberately not their sum; it is the count the
       guard-side cell below is scoped against.
     * ``crew_partner_naming_ballots`` / ``crew_omniscient_control_ballots`` —
-      the false-positive CONTROLS over ``crew_ballots`` (both 0 on every
-      committed set).
+      the false-positive CONTROLS over ``crew_ballots``. Re-derived over the
+      committed reports: partner 0 on all four sets, omniscient 1 on each 9p2i
+      set and 0 on each 4p1i set.
     * ``player_visible_leak_turns`` — the partner net over player-visible
       ``free_text``; denominator ``turns_total``.
 
@@ -1573,6 +1642,15 @@ class ScaffoldLeakageCells(_FrozenModel):
     * ``model_machinery_vocabulary_ballots`` — :data:`MACHINERY_VOCABULARY`, an
       explicit UPPER BOUND rather than a leak count, kept labelled instead of
       being promoted or dropped.
+    * ``model_oracle_register_ballots`` / ``oracle_register_turns`` /
+      ``oracle_register_claim_reasons`` — :data:`MACHINERY_ORACLE_PATTERNS` over
+      the three surfaces a player speaks on: the pre-guard ballot body, turn
+      ``free_text``, and the ``reason`` of an accusation or corroboration claim.
+      Denominators ``ballots_total``, ``turns_total`` and
+      ``claim_reasons_total``. Unlike the vocabulary net this register has no
+      innocent in-world reading, so these are leak counts. ``AlibiClaim`` is not
+      scanned: it carries ``evidence``, not ``reason``, and the register is
+      absent from every committed ``evidence`` string.
 
     GUARD-originated (the deterministic machinery injected the text):
 
@@ -1621,6 +1699,10 @@ class ScaffoldLeakageCells(_FrozenModel):
     model_machinery_quotation_ballots: int
     model_machinery_vocabulary_ballots: int
     model_machinery_quotation_share: float | None
+    claim_reasons_total: int
+    model_oracle_register_ballots: int
+    oracle_register_turns: int
+    oracle_register_claim_reasons: int
     model_source_pre_guard_ballots: int
     model_source_unavailable_ballots: int
     guard_provenance_verified_ballots: int
@@ -1649,6 +1731,10 @@ class ScaffoldLeakageCells(_FrozenModel):
                 self.player_visible_leak_turns,
                 self.model_machinery_quotation_ballots,
                 self.model_machinery_vocabulary_ballots,
+                self.claim_reasons_total,
+                self.model_oracle_register_ballots,
+                self.oracle_register_turns,
+                self.oracle_register_claim_reasons,
                 self.model_source_pre_guard_ballots,
                 self.model_source_unavailable_ballots,
                 self.guard_provenance_verified_ballots,
@@ -1793,6 +1879,17 @@ class ScaffoldLeakageCells(_FrozenModel):
                 "model_machinery_vocabulary_ballots",
                 self.model_machinery_vocabulary_ballots,
                 readable,
+            ),
+            (
+                "model_oracle_register_ballots",
+                self.model_oracle_register_ballots,
+                readable,
+            ),
+            ("oracle_register_turns", self.oracle_register_turns, self.turns_total),
+            (
+                "oracle_register_claim_reasons",
+                self.oracle_register_claim_reasons,
+                self.claim_reasons_total,
             ),
             ("guard_marked_ballots", self.guard_marked_ballots, self.ballots_total),
             (
@@ -2130,6 +2227,16 @@ def _matches(text: str, phrases: Sequence[str]) -> bool:
     return any(phrase in lowered for phrase in phrases)
 
 
+def _is_oracle_register(text: str) -> bool:
+    """Whether one utterance credits the game engine with a verdict.
+
+    Any of :data:`MACHINERY_ORACLE_PATTERNS` matching is a hit; the patterns are
+    alternative shapes of the same register, not independent nets.
+    """
+
+    return any(pattern.search(text) for pattern in MACHINERY_ORACLE_PATTERNS)
+
+
 def _is_omniscient(rationale: str) -> bool:
     """Whether a rationale carries ANY of the three omniscience nets.
 
@@ -2255,6 +2362,10 @@ class _Accumulator:
         self.player_visible_leak = 0
         self.machinery_quotation = 0
         self.machinery_vocabulary = 0
+        self.claim_reasons_total = 0
+        self.oracle_ballots = 0
+        self.oracle_turns = 0
+        self.oracle_claim_reasons = 0
         self.guard_marked = 0
         self.guard_rewrite = 0
         self.guard_omniscient = 0
@@ -2349,6 +2460,17 @@ def _fold_meeting(
                 acc.crew_whereabouts += 1
         if _matches(turn.free_text, PARTNER_PHRASES):
             acc.player_visible_leak += 1
+        if _is_oracle_register(turn.free_text):
+            acc.oracle_turns += 1
+        # The claim REASON is spoken text like any other. ``AlibiClaim`` carries
+        # ``evidence``, not ``reason``, and is not scanned — a ruling backed by a
+        # census: the register is absent from every committed evidence string.
+        for claim in turn.claims:
+            if not isinstance(claim, (AccusationClaim, CorroborationClaim)):
+                continue
+            acc.claim_reasons_total += 1
+            if _is_oracle_register(claim.reason):
+                acc.oracle_claim_reasons += 1
     crew_answered, crew_spoke = per_meeting["CREWMATE"]
     if crew_spoke:
         acc.crew_macro_sum += crew_answered / crew_spoke
@@ -2417,6 +2539,8 @@ def _fold_meeting(
             acc.machinery_quotation += 1
         if _matches(model_body, MACHINERY_VOCABULARY):
             acc.machinery_vocabulary += 1
+        if _is_oracle_register(model_body):
+            acc.oracle_ballots += 1
         if roles[ballot.voter] == "IMPOSTOR":
             acc.impostor_ballots += 1
             if _matches(model_body, PARTNER_PHRASES):
@@ -2604,6 +2728,10 @@ def compute_deduction_metrics(
             model_machinery_quotation_share=_rate_or_none(
                 acc.machinery_quotation, acc.ballots_total
             ),
+            claim_reasons_total=acc.claim_reasons_total,
+            model_oracle_register_ballots=acc.oracle_ballots,
+            oracle_register_turns=acc.oracle_turns,
+            oracle_register_claim_reasons=acc.oracle_claim_reasons,
             model_source_pre_guard_ballots=acc.model_source_pre_guard,
             model_source_unavailable_ballots=acc.model_source_unavailable,
             guard_provenance_verified_ballots=acc.guard_provenance_verified,
@@ -2629,6 +2757,7 @@ def compute_deduction_metrics(
 __all__ = [
     "CROSS_STATEMENT_KINDS",
     "MACHINERY_DECIMAL_PATTERN",
+    "MACHINERY_ORACLE_PATTERNS",
     "MACHINERY_VOCABULARY",
     "PARTNER_PHRASES",
     "ROLE_PROOF_KINDS",

@@ -44,6 +44,34 @@ confused with a populated bin whose accusations all missed (a genuine ``0.0``
 rate). A game with no accusations, no meetings, or all-``SKIP`` ballots yields
 all-empty bins and a ``None`` calibration error without raising.
 
+**The accuser-role split, and the ceiling it exposes.** ``accusation_claim_*``
+pools every accuser, and on both roster shapes an IMPOSTOR accuser sits under a
+structural ceiling that no amount of calibration can lift, so the pooled curve
+reads a fact about the machinery as agent overconfidence.
+
+* On a 2-impostor roster the only target that scores as a hit is the accuser's
+  teammate, and the teammate firewall deletes exactly that accusation at the
+  per-turn chokepoint (``meetings.manager._guard_teammate_turn_claims`` and
+  ``exclude_teammate_vent_observations``). So every impostor accusation that
+  survives to the record names a crewmate and misses by construction.
+* On a 1-impostor roster the roster itself is the ceiling: the sole impostor's
+  only scoring-correct target is themselves, and a self-accusation is not a
+  lawful accusation. The firewall never runs on this shape.
+
+``accusation_claim_crew_accuser`` and ``accusation_claim_impostor_accuser``
+therefore ship beside the pooled curve as a PARTITION of it (their totals sum to
+``accusation_claim_total``), so a reader can price the artifact instead of
+absorbing it. On the committed sets the impostor curves hit zero on all four,
+and the crew-only curve still falls with confidence by itself — the mid-range
+inversion is roughly a fifth attributable to the impostor block, and the pooled
+accusation base rate is about 0.50 on the 9p2i corpus, not a low chance prior.
+
+**Guard-authored ballots are excluded.** A ballot whose recorded rationale opens
+with one of the six audit markers the meeting layer prepends carries a target
+the voter did not author beside a confidence in the target they did, so no
+calibration curve bins it; ``vote_ballot_guard_authored_excluded`` publishes how
+many were dropped rather than leaving the exclusion invisible.
+
 **Per-bin counts and the low-power flag (audit F-F-3 / gp-7).** Each curve's
 per-bin ``count`` is already on its :class:`CalibrationBin` entries, so the
 distribution behind a single ECE scalar is always inspectable. On top of that
@@ -60,12 +88,22 @@ no computed number.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterator, Mapping
+from typing import Final
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
 from engine.entities import Role
 from eval.report_schema import TournamentReport
+from meetings.manager import (
+    BALLOT_TARGET_REDIRECT_MARKER,
+    INVALID_OBSERVATION_ID_MARKER,
+    INVALID_REASON_ID_MARKER,
+    INVALID_VOTE_TARGET_MARKER,
+    TEAMMATE_VOTE_TARGET_MARKER,
+    UNCITED_ZERO_FLAG_EJECT_MARKER,
+)
 from meetings.schemas import AccusationClaim, MeetingTranscript, PlayerId
 
 # Default number of fixed-width confidence bins over [0, 1]: deciles. An
@@ -81,6 +119,52 @@ DEFAULT_N_BINS: int = 10
 # F-F-3). Chosen so such a near-degenerate curve is flagged while a curve
 # spread across half the range or more is not. It changes no computed metric.
 MIN_POPULATED_BINS_FOR_POWER: int = 5
+
+# Every marker interpolates its payload as a Python ``repr`` — always quoted,
+# with backslash escapes — so matching the payload as a quoted literal (rather
+# than scanning for the static tail) stops a payload that itself contains the
+# marker's tail from truncating the match.
+_MARKER_REPR_VALUE: Final[str] = r"(?:'(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\\.)*\")"
+
+
+def _marker_head_pattern(marker: str) -> re.Pattern[str]:
+    """An anchored pattern matching one whole audit marker at a string's head.
+
+    Built from the marker CONSTANT and generalized over the placeholder name, so
+    a rename or a wording change moves the predicate with it — the alternative,
+    a literal copy, is how a guard-authored ballot silently re-enters a metric.
+    """
+
+    head, brace, rest = marker.partition("{")
+    if not brace:
+        raise ValueError(f"marker constant carries no repr placeholder: {marker!r}")
+    _, _, tail = rest.partition("}")
+    return re.compile("^" + re.escape(head) + _MARKER_REPR_VALUE + re.escape(tail))
+
+
+# The six audit markers the meeting layer PREPENDS to a recorded
+# ``rationale_text``. A ballot whose rationale opens with one is machinery
+# testimony about its own rewrite, not the voter's own act, so no calibration
+# curve may bin it (audit A-3). Matched by PREDICATE over the marker constants,
+# never by literal text; Task 21.3's structured ``guard_redirected_from`` field
+# supersedes this once it lands, and Task 21.8 consolidates the entry point.
+_GUARD_MARKER_PATTERNS: Final[tuple[re.Pattern[str], ...]] = tuple(
+    _marker_head_pattern(marker)
+    for marker in (
+        INVALID_VOTE_TARGET_MARKER,
+        TEAMMATE_VOTE_TARGET_MARKER,
+        BALLOT_TARGET_REDIRECT_MARKER,
+        INVALID_REASON_ID_MARKER,
+        INVALID_OBSERVATION_ID_MARKER,
+        UNCITED_ZERO_FLAG_EJECT_MARKER,
+    )
+)
+
+
+def _is_guard_authored(rationale: str) -> bool:
+    """Whether a recorded rationale opens with a guard audit marker."""
+
+    return any(pattern.match(rationale) for pattern in _GUARD_MARKER_PATTERNS)
 
 
 class _FrozenModel(BaseModel):
@@ -120,6 +204,23 @@ class CalibrationBin(_FrozenModel):
     mean_confidence: float | None
 
 
+class CalibrationCurve(_FrozenModel):
+    """One calibration curve packaged as a value: bins, total, ECE, power.
+
+    The same five quantities the pooled ``accusation_claim_*`` /
+    ``vote_ballot_*`` field groups carry, gathered into one object so a
+    conditioned curve can be added without adding five parallel fields per
+    condition. The pooled groups keep their flat shape: refactoring them into
+    this model would change the served wire shape for no gain.
+    """
+
+    bins: tuple[CalibrationBin, ...]
+    total: int
+    ece: float | None
+    populated_bins: int
+    low_power: bool
+
+
 class AccusationCalibrationReport(_FrozenModel):
     """Per-source accusation-calibration curves for a tournament (§11.3).
 
@@ -147,6 +248,15 @@ class AccusationCalibrationReport(_FrozenModel):
     scalar, whether the ECE rests on a well-spread distribution or a couple of
     clustered confidence values whose ECE delta is unreliable (audit F-F-3).
     They are interpretation flags; the ECE value itself is unchanged.
+
+    ``accusation_claim_crew_accuser`` / ``accusation_claim_impostor_accuser``
+    are the same claim curve conditioned on the ACCUSER's true role — a
+    partition of the pooled one, validated to sum to
+    ``accusation_claim_total`` — because an impostor accuser's hit rate is
+    ceilinged by the roster and the teammate firewall rather than by
+    calibration (see the module docstring).
+    ``vote_ballot_guard_authored_excluded`` counts the ballots left out of the
+    vote curve because the meeting layer, not the voter, authored their target.
     """
 
     n_bins: int
@@ -155,16 +265,32 @@ class AccusationCalibrationReport(_FrozenModel):
     accusation_claim_ece: float | None
     accusation_claim_populated_bins: int
     accusation_claim_low_power: bool
+    accusation_claim_crew_accuser: CalibrationCurve
+    accusation_claim_impostor_accuser: CalibrationCurve
     vote_ballot_bins: tuple[CalibrationBin, ...]
     vote_ballot_total: int
     vote_ballot_ece: float | None
     vote_ballot_populated_bins: int
     vote_ballot_low_power: bool
+    vote_ballot_guard_authored_excluded: int
 
     @model_validator(mode="after")
     def _validate_bins(self) -> AccusationCalibrationReport:
         if self.n_bins < 1:
             raise ValueError(f"n_bins must be >= 1, got {self.n_bins}")
+        crew = self.accusation_claim_crew_accuser
+        impostor = self.accusation_claim_impostor_accuser
+        if crew.total + impostor.total != self.accusation_claim_total:
+            raise ValueError(
+                "the accuser-role split must PARTITION the pooled claim curve: "
+                f"{crew.total} + {impostor.total} != "
+                f"{self.accusation_claim_total}"
+            )
+        if self.vote_ballot_guard_authored_excluded < 0:
+            raise ValueError(
+                "vote_ballot_guard_authored_excluded must be >= 0, got "
+                f"{self.vote_ballot_guard_authored_excluded}"
+            )
         for label, bins, declared in (
             (
                 "accusation_claim_bins",
@@ -175,6 +301,12 @@ class AccusationCalibrationReport(_FrozenModel):
                 "vote_ballot_bins",
                 self.vote_ballot_bins,
                 self.vote_ballot_populated_bins,
+            ),
+            ("accusation_claim_crew_accuser.bins", crew.bins, crew.populated_bins),
+            (
+                "accusation_claim_impostor_accuser.bins",
+                impostor.bins,
+                impostor.populated_bins,
             ),
         ):
             if len(bins) != self.n_bins:
@@ -226,50 +358,70 @@ def _is_impostor(
 
 def _iter_accusation_claims(
     transcript: MeetingTranscript,
-) -> Iterator[AccusationClaim]:
-    """Yield every :class:`AccusationClaim` in a meeting transcript.
+) -> Iterator[tuple[PlayerId, AccusationClaim]]:
+    """Yield ``(speaker, claim)`` for every accusation in a meeting transcript.
 
     Accusations live on the turns of the reactive accusation chain (DESIGN.md
     §5.2, §5.3) -- the opening turn, every reply, and every opt-in turn -- and
     each is a distinct act that is counted. The ``Claim`` union is filtered by
     type via ``isinstance`` so the yielded value narrows to ``AccusationClaim``
-    for the caller.
+    for the caller. The SPEAKER rides along because the accuser's role
+    conditions the curve, and a second parallel walk to recover it could drift
+    from this one.
     """
 
     for turn in transcript.turns:
         for claim in turn.claims:
             if isinstance(claim, AccusationClaim):
-                yield claim
+                yield turn.speaker, claim
 
 
-def _accusation_claim_samples(report: TournamentReport) -> list[tuple[float, bool]]:
-    """Collect ``(confidence, is_impostor)`` for every accusation claim."""
+def _accusation_claim_samples(
+    report: TournamentReport,
+) -> list[tuple[float, bool, bool]]:
+    """Collect ``(confidence, is_impostor, accuser_is_impostor)`` per accusation."""
 
-    samples: list[tuple[float, bool]] = []
+    samples: list[tuple[float, bool, bool]] = []
     for game in report.games:
         for meeting in game.meetings:
-            for claim in _iter_accusation_claims(meeting.transcript):
+            for speaker, claim in _iter_accusation_claims(meeting.transcript):
                 hit = _is_impostor(
                     game.roles,
                     claim.against,
                     game_id=game.game_id,
                     source="accusation-claim",
                 )
-                samples.append((claim.confidence, hit))
+                accuser_is_impostor = _is_impostor(
+                    game.roles,
+                    speaker,
+                    game_id=game.game_id,
+                    source="accusation-claim-speaker",
+                )
+                samples.append((claim.confidence, hit, accuser_is_impostor))
     return samples
 
 
 def _vote_ballot_samples(report: TournamentReport) -> list[tuple[float, bool]]:
-    """Collect ``(confidence, is_impostor)`` for every non-SKIP ballot.
+    """Collect ``(confidence, is_impostor)`` for every BINNABLE ballot.
 
     A ``"SKIP"`` ballot accuses no one and is excluded *before* the role lookup,
     so ``roles`` is never queried for the non-player ``"SKIP"``.
+
+    A ballot whose rationale opens with a guard audit marker
+    (:func:`_is_guard_authored`) is excluded too: the meeting layer rewrote its
+    target while preserving the voter's confidence in the target they actually
+    authored, so the recorded ``(target, confidence)`` pair is not one act by
+    one agent and binning it scores the machinery's rewrite as agent
+    miscalibration (audit A-3). :func:`_guard_authored_ballot_count` publishes
+    how many were dropped, so the exclusion is never silent.
     """
 
     samples: list[tuple[float, bool]] = []
     for game in report.games:
         for meeting in game.meetings:
             for ballot in meeting.ballots:
+                if _is_guard_authored(ballot.rationale_text):
+                    continue
                 if ballot.target == "SKIP":
                     continue
                 hit = _is_impostor(
@@ -280,6 +432,18 @@ def _vote_ballot_samples(report: TournamentReport) -> list[tuple[float, bool]]:
                 )
                 samples.append((ballot.confidence, hit))
     return samples
+
+
+def _guard_authored_ballot_count(report: TournamentReport) -> int:
+    """How many recorded ballots the vote curve dropped as guard-authored."""
+
+    return sum(
+        1
+        for game in report.games
+        for meeting in game.meetings
+        for ballot in meeting.ballots
+        if _is_guard_authored(ballot.rationale_text)
+    )
 
 
 def _bin_samples(
@@ -351,8 +515,9 @@ def compute_accusation_calibration(
     if n_bins < 1:
         raise ValueError(f"n_bins must be >= 1, got {n_bins}")
 
+    claim_samples = _accusation_claim_samples(report)
     claim_bins, claim_total, claim_ece = _bin_samples(
-        _accusation_claim_samples(report), n_bins
+        [(confidence, hit) for confidence, hit, _ in claim_samples], n_bins
     )
     ballot_bins, ballot_total, ballot_ece = _bin_samples(
         _vote_ballot_samples(report), n_bins
@@ -366,11 +531,42 @@ def compute_accusation_calibration(
         accusation_claim_ece=claim_ece,
         accusation_claim_populated_bins=claim_populated,
         accusation_claim_low_power=claim_populated < MIN_POPULATED_BINS_FOR_POWER,
+        accusation_claim_crew_accuser=_curve(
+            [
+                (confidence, hit)
+                for confidence, hit, accuser_is_impostor in claim_samples
+                if not accuser_is_impostor
+            ],
+            n_bins,
+        ),
+        accusation_claim_impostor_accuser=_curve(
+            [
+                (confidence, hit)
+                for confidence, hit, accuser_is_impostor in claim_samples
+                if accuser_is_impostor
+            ],
+            n_bins,
+        ),
         vote_ballot_bins=ballot_bins,
         vote_ballot_total=ballot_total,
         vote_ballot_ece=ballot_ece,
         vote_ballot_populated_bins=ballot_populated,
         vote_ballot_low_power=ballot_populated < MIN_POPULATED_BINS_FOR_POWER,
+        vote_ballot_guard_authored_excluded=_guard_authored_ballot_count(report),
+    )
+
+
+def _curve(samples: list[tuple[float, bool]], n_bins: int) -> CalibrationCurve:
+    """Bin ``samples`` and package the result as a :class:`CalibrationCurve`."""
+
+    bins, total, ece = _bin_samples(samples, n_bins)
+    populated = _populated_bins(bins)
+    return CalibrationCurve(
+        bins=bins,
+        total=total,
+        ece=ece,
+        populated_bins=populated,
+        low_power=populated < MIN_POPULATED_BINS_FOR_POWER,
     )
 
 
@@ -383,6 +579,7 @@ def _populated_bins(bins: tuple[CalibrationBin, ...]) -> int:
 __all__ = [
     "AccusationCalibrationReport",
     "CalibrationBin",
+    "CalibrationCurve",
     "DEFAULT_N_BINS",
     "MIN_POPULATED_BINS_FOR_POWER",
     "compute_accusation_calibration",

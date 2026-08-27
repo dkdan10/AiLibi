@@ -307,6 +307,106 @@ def test_whereabouts_is_false_only_when_both_engine_ticks_disagree() -> None:
     assert (lying.crew_claims, lying.crew_false) == (1, 1)
 
 
+@pytest.mark.parametrize(
+    "spoken", ["LABS", "labs", "Labs", "LABS_TRANSITION", "LABS/MEDBAY"]
+)
+def test_a_reformatted_room_label_is_not_a_crewmate_lie(spoken: str) -> None:
+    """PLANTED: every canonical spelling of a TRUE placement scores truthful.
+
+    Each of these scored as a crewmate lie under the raw string compare this
+    replaced. They are inert on the committed bytes — all 3,117 recorded labels
+    are self-canonical uppercase single rooms — and latent on the next prompt or
+    parser change, which is exactly why the four sibling comparisons in this
+    module already route through ``canonical_rooms``.
+    """
+
+    transcript = MeetingTranscript(
+        turns=(
+            _turn(
+                index=0,
+                speaker="p-1",
+                observations=(
+                    WhereaboutsClaim(type="whereabouts", tick=5, room=spoken),
+                ),
+            ),
+        )
+    )
+    tallies = _Tallies()
+    _fold_whereabouts(
+        transcript=transcript,
+        living=frozenset({"p-1"}),
+        roles={"p-1": "CREWMATE"},
+        room_at={4: {"p-1": "LABS"}, 5: {"p-1": "LABS"}},
+        copyable=set(),
+        tallies=tallies,
+    )
+    # Still counted — the denominator is unchanged — and not a lie.
+    assert (tallies.crew_claims, tallies.crew_false) == (1, 0)
+    assert tallies.crew_false_agent_frame == 0
+
+
+def test_a_genuinely_disjoint_compound_label_is_still_a_lie() -> None:
+    """The canonicalisation must not turn every compound label into a pass.
+
+    A compound account whose member rooms are ALL wrong stays false; only an
+    intersection with the speaker's true rooms clears it.
+    """
+
+    transcript = MeetingTranscript(
+        turns=(
+            _turn(
+                index=0,
+                speaker="p-1",
+                observations=(
+                    WhereaboutsClaim(
+                        type="whereabouts", tick=5, room="ADMIN/CAFETERIA"
+                    ),
+                ),
+            ),
+        )
+    )
+    tallies = _Tallies()
+    _fold_whereabouts(
+        transcript=transcript,
+        living=frozenset({"p-1"}),
+        roles={"p-1": "CREWMATE"},
+        room_at={4: {"p-1": "LABS"}, 5: {"p-1": "LABS"}},
+        copyable=set(),
+        tallies=tallies,
+    )
+    assert (tallies.crew_claims, tallies.crew_false) == (1, 1)
+
+
+def test_a_non_spatial_label_is_uncomparable_not_false() -> None:
+    """A label with no canonical member is "no room", which is not a lie.
+
+    The rule ``canonical_rooms`` states for every comparison site: two labels are
+    contradictory only when both canonicalise to non-empty, disjoint sets.
+    """
+
+    transcript = MeetingTranscript(
+        turns=(
+            _turn(
+                index=0,
+                speaker="p-1",
+                observations=(
+                    WhereaboutsClaim(type="whereabouts", tick=5, room="the vents"),
+                ),
+            ),
+        )
+    )
+    tallies = _Tallies()
+    _fold_whereabouts(
+        transcript=transcript,
+        living=frozenset({"p-1"}),
+        roles={"p-1": "CREWMATE"},
+        room_at={4: {"p-1": "LABS"}, 5: {"p-1": "LABS"}},
+        copyable=set(),
+        tallies=tallies,
+    )
+    assert (tallies.crew_claims, tallies.crew_false) == (1, 0)
+
+
 def test_whereabouts_with_no_recorded_tick_is_unverifiable_not_false() -> None:
     transcript = MeetingTranscript(
         turns=(
@@ -1552,6 +1652,35 @@ def test_i10_meeting_physicality_pins(
     assert killed == [(17, 152), (60, 432), (1, 40), (2, 44)]
     assert (sum(n for n, _ in killed), sum(d for _, d in killed)) == (80, 668)
     assert reports[_SAMPLES_9P2I].meeting_physicality.body_triggered_meetings == 144
+
+    # The coherent reporter rate beside it: only a body-triggered meeting HAS a
+    # reporter to kill, so the numerator is identical and only the denominator
+    # narrows. The all-meetings cell understates itself by the emergency share —
+    # 60/432 published against 60/400 on the corpus, 7.4 % relative.
+    body_killed = [
+        _counts(reports[d].meeting_physicality.reporter_killed_body_triggered)
+        for d in (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I)
+    ]
+    assert body_killed == [(17, 144), (60, 400), (1, 37), (2, 37)]
+    assert [n for n, _ in body_killed] == [n for n, _ in killed]
+    assert (
+        reports[_CORPUS_9P2I].meeting_physicality.reporter_killed_body_triggered.rate
+        == 0.15
+    )
+    assert reports[
+        _SAMPLES_9P2I
+    ].meeting_physicality.reporter_killed_body_triggered.rate == pytest.approx(
+        0.1181, abs=5e-5
+    )
+    # The restricted denominator is never the looser one, and each set's
+    # body-triggered count is the denominator it uses.
+    for sample_dir in (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I):
+        physicality = reports[sample_dir].meeting_physicality
+        assert (
+            physicality.reporter_killed_body_triggered.denominator
+            == physicality.body_triggered_meetings
+            <= physicality.meetings
+        )
 
 
 @pytest.mark.slow

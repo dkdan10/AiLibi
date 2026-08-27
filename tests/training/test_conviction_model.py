@@ -296,11 +296,11 @@ def test_sample_conversion_census_pins(
     """
 
     assert nine_conviction.meetings_total == 152  # was 165
-    assert nine_conviction.conversion_attempts_total == 115  # was 136
-    assert nine_conviction.conversions_total == 80  # was 78
+    assert nine_conviction.conversion_attempts_total == 132  # was 115
+    assert nine_conviction.conversions_total == 84  # was 80
     assert four_conviction.meetings_total == 40  # was 39
-    assert four_conviction.conversion_attempts_total == 31  # was 30
-    assert four_conviction.conversions_total == 19  # was 9
+    assert four_conviction.conversion_attempts_total == 34  # was 31
+    assert four_conviction.conversions_total == 20  # was 19
 
 
 def _turn(
@@ -786,8 +786,8 @@ def test_corpus_census_pins(corpus_conviction: ConvictionTable) -> None:
     # The retired transcript re-derivation reached 431 by losing 43 recorded
     # flags and minting 46 the record never carried.
     assert corpus_conviction.flags_minted_total == 428  # was 431
-    assert corpus_conviction.conversion_attempts_total == 336  # was 394
-    assert corpus_conviction.conversions_total == 239
+    assert corpus_conviction.conversion_attempts_total == 373  # was 336
+    assert corpus_conviction.conversions_total == 249  # was 239
     splits = corpus_conviction.splits
     assert splits is not None
     fit_seeds = frozenset(splits.train) | frozenset(splits.val)
@@ -923,11 +923,11 @@ def test_the_committed_verdict_is_baseline6_and_the_weights_still_clear_the_bar(
     assert rederived.weights_sha256 == digest
     assert rederived.test_meetings == 87
     assert rederived.test_ejections == 55
-    assert rederived.conversions_test == 47
+    assert rederived.conversions_test == 51  # was 47
     assert rederived.flag_spearman == pytest.approx(
         0.71457789753481
     )  # was 0.6991081211401057 — the corrected label fits better
-    assert rederived.conversion_recall == pytest.approx(44 / 47)
+    assert rederived.conversion_recall == pytest.approx(45 / 51)  # was 44 / 47
     assert rederived.voice_driven_share == pytest.approx(0.2)
     assert rederived.conversion_bar == pytest.approx(0.6)
     # The verdict survives the substrate change on both bars.
@@ -941,7 +941,7 @@ def test_the_committed_verdict_is_baseline6_and_the_weights_still_clear_the_bar(
         report.false_positives,
         report.false_negatives,
         report.true_negatives,
-    ) == (44, 3, 3, 37)
+    ) == (45, 2, 6, 34)  # was (44, 3, 3, 37)
 
     # The tripwire: the two are NOT the same evaluation. When the re-ground
     # lands they converge again, and this assertion is what says so.

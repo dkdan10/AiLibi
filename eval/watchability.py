@@ -369,7 +369,7 @@ from meetings.schemas import (
     SawPlayerObservation,
     SawVentObservation,
 )
-from meetings.transcript import is_weak_contradiction
+from meetings.transcript import is_weak_contradiction, sighting_placement
 from orchestrator.replay import ReplayLog
 
 # --------------------------------------------------------------------------- #
@@ -888,17 +888,23 @@ _BASELINE_SUPPLY_FLOORS: Final[Mapping[str, Mapping[str, SupplyFloors]]] = {
         #                                 transcript flags)
         #     transcript component      = 52/152 = 0.34210526315789475
         #     persisted-vent component  = 92/152 = 0.6052631578947368
-        #   testimony_backed_conversion = 80/115 = 0.6956521739130435
+        #   testimony_backed_conversion = 84/132 = 0.6363636363636364
         #                                 (OBSERVATION-BACKED, SUBJECT-AWARE)
+        # The conversion pin reads 84/132 where the record was ratified at
+        # 80/115: the gauge's backing vocabulary was corrected to admit a
+        # spoken `saw_move` at its destination — the placement the detector
+        # already mints flags from — so it now sees 17 further attempts and 4
+        # further conversions on the SAME bytes. Supply did not change; the
+        # instrument did, and the pin caught up with it.
         # TASK 16.11 derivation (population_relative_conversion=True): the
         # evaluated floor per scored population is
-        #   floor = 0.6956521739130435 * (0.9473684210526315 / measured
+        #   floor = 0.6363636363636364 * (0.9473684210526315 / measured
         #           flags_per_meeting), capped at 1.0.
         # The baseline itself: flags 144/152 -> ratio exactly 1.0 -> derived
-        # floor = pin = 0.6956521739130435; measured 80/115 -> PASS at exact
+        # floor = pin = 0.6363636363636364; measured 84/132 -> PASS at exact
         # equality (self-consistency).
         # The flag census FALLS against baseline 6 (180/165 = 1.0909 -> 144/152 =
-        # 0.9474) while conversion RISES (78/136 = 0.5735 -> 80/115 = 0.6957):
+        # 0.9474) while conversion RISES (78/136 = 0.5735 -> 84/132 = 0.6364):
         # this substrate mints fewer STRONG flags on purpose — the ungrounded
         # alibi-versus-sighting class it stopped minting is the one the record's
         # bars 5 and 7 were about — and the ones it does mint convert more often.
@@ -910,7 +916,7 @@ _BASELINE_SUPPLY_FLOORS: Final[Mapping[str, Mapping[str, SupplyFloors]]] = {
             witnessed_event_rate=FloorPin(value=0.01694915254237288, numerator=3),
             flags_per_meeting=FloorPin(value=0.9473684210526315, numerator=144),
             testimony_backed_conversion=FloorPin(
-                value=0.6956521739130435, numerator=80
+                value=0.6363636363636364, numerator=84
             ),
             population_relative_conversion=True,
             transcript_flags_per_meeting=FloorPin(
@@ -928,13 +934,16 @@ _BASELINE_SUPPLY_FLOORS: Final[Mapping[str, Mapping[str, SupplyFloors]]] = {
         #                                 0 recorded transcript flags)
         #     transcript component      = 0/40 = 0.0 (numerator 0 -> ADVISORY)
         #     persisted-vent component  = 20/40 = 0.5
-        #   testimony_backed_conversion = 19/31 = 0.6129032258064516
+        #   testimony_backed_conversion = 20/34 = 0.5882352941176471
         #                                 (OBSERVATION-BACKED, SUBJECT-AWARE)
+        # As on 9p2i, the conversion pin moved from the ratified 19/31 because
+        # the backing vocabulary was corrected to admit a spoken `saw_move` at
+        # its destination, not because this record's supply changed.
         # TASK 16.11 derivation (same shape, this roster's pins):
-        #   floor = 0.6129032258064516 * (0.5 / measured flags_per_meeting),
+        #   floor = 0.5882352941176471 * (0.5 / measured flags_per_meeting),
         #           capped at 1.0.
         # The baseline itself: flags 20/40 -> ratio exactly 1.0 -> derived
-        # floor = pin = 0.6129032258064516; measured 19/31 -> PASS at exact
+        # floor = pin = 0.5882352941176471; measured 20/34 -> PASS at exact
         # equality (self-consistency). The small 4p1i games carry no transcript
         # flag at all, so every flag here is a vent sighting and the transcript
         # component pins at zero — a floor nothing can fall below, which the
@@ -943,7 +952,7 @@ _BASELINE_SUPPLY_FLOORS: Final[Mapping[str, Mapping[str, SupplyFloors]]] = {
             witnessed_event_rate=FloorPin(value=0.015384615384615385, numerator=1),
             flags_per_meeting=FloorPin(value=0.5, numerator=20),
             testimony_backed_conversion=FloorPin(
-                value=0.6129032258064516, numerator=19
+                value=0.5882352941176471, numerator=20
             ),
             population_relative_conversion=True,
             transcript_flags_per_meeting=FloorPin(value=0.0, numerator=0),
@@ -1399,6 +1408,26 @@ _REFEREE_WALK_CONFIG: Final[ReplayWalkConfig] = ReplayWalkConfig(
 # --------------------------------------------------------------------------- #
 
 
+def _observes_subject(observation: object, subject: PlayerId) -> bool:
+    """Whether one spoken observation is a first-hand sighting OF ``subject``.
+
+    Two shapes qualify. A PLACEMENT — a ``saw_player``, or a ``saw_move`` read at
+    its destination — is admitted through
+    :func:`meetings.transcript.sighting_placement`, the same definition the
+    detector mints its flags from, so the referee cannot be blind to a channel
+    the game supplies. A ``saw_vent`` is a first-hand, role-proving sighting that
+    places nobody, so it stays an explicit second condition rather than being
+    folded into the placement helper.
+    """
+
+    placement = sighting_placement(observation)
+    if placement is not None:
+        return placement.subject == subject
+    return (
+        isinstance(observation, SawVentObservation) and observation.subject == subject
+    )
+
+
 def _testimony_vehicle(
     turn: MeetingTurn, subject: PlayerId
 ) -> tuple[str | None, bool, bool]:
@@ -1425,12 +1454,16 @@ def _testimony_vehicle(
     subject-AGNOSTIC bit (ANY grounded observation in the turn — the audit
     extractor's definition), retained ONLY for the 15.2 historical parity pin.
 
-    VENT-AWARE (Task 15.4) — the LIVE bit only: a :class:`SawVentObservation`
-    is a first-hand, role-proving structured sighting (a witnessed impostor
-    vent — the game's HARDEST evidence), so it counts toward the subject-aware
-    ``observation_backed`` bit exactly like a :class:`SawPlayerObservation`,
-    keeping a vent-backed accusation from being scored as an unbacked vibe.
-    The FROZEN ``observation_backed_any`` bit deliberately does NOT count it:
+    VENT-AWARE and MOVE-AWARE — the LIVE bit only: a
+    :class:`SawVentObservation` is a first-hand, role-proving structured
+    sighting (a witnessed impostor vent — the game's HARDEST evidence) and a
+    :class:`SawMoveObservation` places its subject at the destination the
+    detector mints flags from (:func:`_observes_subject`), so both count toward
+    the subject-aware ``observation_backed`` bit exactly like a
+    :class:`SawPlayerObservation`. Refusing either would score a hard-evidence
+    accusation as an unbacked vibe and leave the referee blind to the ~29 % of
+    spoken placements the move channel carries.
+    The FROZEN ``observation_backed_any`` bit deliberately does NOT count them:
     that bit exists solely to reproduce the 15.2-era lab scorer
     (``extract_gameplay_facts._testimony_vehicle``), whose isinstance tuple is
     ``(SawPlayerObservation, FoundBodyObservation)`` — the vocabulary at the
@@ -1445,11 +1478,7 @@ def _testimony_vehicle(
         isinstance(obs, (SawPlayerObservation, FoundBodyObservation))
         for obs in turn.observations
     )
-    subject_observed = any(
-        isinstance(obs, (SawPlayerObservation, SawVentObservation))
-        and obs.subject == subject
-        for obs in turn.observations
-    )
+    subject_observed = any(_observes_subject(obs, subject) for obs in turn.observations)
     accuses = any(
         isinstance(claim, AccusationClaim) and claim.against == subject
         for claim in turn.claims

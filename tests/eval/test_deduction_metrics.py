@@ -53,15 +53,18 @@ from api.schemas import classify_evidence
 from engine.entities import Role
 from eval.deduction_metrics import (
     MACHINERY_DECIMAL_PATTERN,
+    MACHINERY_VOCABULARY,
     SELF_KILL_PHRASES,
     DeductionMetricsReport,
     UnclassifiableFlagError,
     WilsonRateCell,
     _authored_target,
+    _matches,
     _scan_marker_chain,
     _split_rationale,
     _wilson_interval,
     _is_omniscient,
+    _is_oracle_register,
     classify_flag,
     compute_deduction_metrics,
     witnessed_supply_from_kill_craft,
@@ -86,6 +89,7 @@ from meetings.manager import (
 )
 from meetings.schemas import (
     AccusationClaim,
+    AlibiClaim,
     ContradictionRef,
     MeetingTranscript,
     MeetingTurn,
@@ -1908,6 +1912,7 @@ def test_player_visible_leak_turns_is_not_bounded_by_ballot_provenance(
         "crew_omniscient_control_ballots",
         "model_machinery_quotation_ballots",
         "model_machinery_vocabulary_ballots",
+        "model_oracle_register_ballots",
     ):
         block[field] = 0
     block["model_partner_naming_rate"] = _zeroed(block["model_partner_naming_rate"])
@@ -1915,10 +1920,15 @@ def test_player_visible_leak_turns_is_not_bounded_by_ballot_provenance(
     block["model_machinery_quotation_share"] = 0.0
     block["model_source_pre_guard_ballots"] = 0
     block["model_source_unavailable_ballots"] = block["ballots_total"]
-    # ...and leave the TURN net at its real, positive value. It must survive.
+    # ...and leave the TURN nets at their real, positive values. They must
+    # survive: both read spoken turn text, not a ballot body.
     block["player_visible_leak_turns"] = 1
+    block["oracle_register_turns"] = 1
+    block["oracle_register_claim_reasons"] = 1
     restored = DeductionMetricsReport.model_validate(payload)
     assert restored.scaffold_leakage.player_visible_leak_turns == 1
+    assert restored.scaffold_leakage.oracle_register_turns == 1
+    assert restored.scaffold_leakage.oracle_register_claim_reasons == 1
 
 
 def _zeroed(cell: dict[str, object]) -> dict[str, object]:
@@ -2253,3 +2263,178 @@ def test_a_real_vote_payload_still_supplies_its_body() -> None:
     assert leakage.model_source_pre_guard_ballots == 1
     assert leakage.model_source_unavailable_ballots == 0
     assert leakage.model_partner_naming_ballots == 1
+
+
+# ---------------------------------------------------------------------------
+# Task 21.9 — the oracle-register net (A-6 / A-9)
+# ---------------------------------------------------------------------------
+
+# Verbatim from the committed bytes, one per set plus the two extra registers
+# A-6 names. Each is a player crediting the engine with a verdict.
+_ORACLE_TRUE_POSITIVES: Final[tuple[tuple[str, str], ...]] = (
+    ("samples/9p2i seed 20 free_text", "the engine has already flagged"),
+    ("samples/9p2i seed 19 ballot", "engine certified the vent sighting"),
+    ("ml_corpus/9p2i seed 1072 free_text", "The system flagged the vent"),
+    ("samples/4p1i seed 6 claim_reason", "certified by the system flags"),
+    (
+        "ml_corpus/4p1i seed 1035 free_text",
+        "The engine flagged it as a certifiable impostor action",
+    ),
+)
+
+# In-world speech about the ship's Engineering wing, its engine room and its
+# align_engine_output task. A net without a word boundary and an explicit
+# in-fiction exclusion scores every one of these.
+_ORACLE_IN_FICTION_CONTROLS: Final[tuple[str, ...]] = (
+    "p-1 broke away from the Engineering group",
+    "I cannot speak to the Engineering scene directly",
+    "far from the Engineering chaos",
+    "I was busy tending to the engines in Engineering",
+    "aligning engine output in Engineering",
+    "down in the engine room",
+)
+
+
+@pytest.mark.parametrize(("label", "utterance"), _ORACLE_TRUE_POSITIVES)
+def test_the_oracle_net_matches_recorded_oracle_speech(
+    label: str, utterance: str
+) -> None:
+    """PLANTED (positive): the register the committed bytes actually carry."""
+
+    assert _is_oracle_register(utterance), label
+
+
+@pytest.mark.parametrize("utterance", _ORACLE_IN_FICTION_CONTROLS)
+def test_the_oracle_net_scores_zero_on_in_fiction_engine_talk(utterance: str) -> None:
+    """PLANTED (negative): correct in-world speech is not a leak.
+
+    The gate bites in BOTH directions — a net that fires here is measuring the
+    ship's Engineering wing, which is most of the excess a substring net returns.
+    """
+
+    assert not _is_oracle_register(utterance), utterance
+
+
+def test_the_oracle_net_is_separate_from_the_vocabulary_net() -> None:
+    """The two registers stay two nets: neither swallows the other.
+
+    ``MACHINERY_VOCABULARY``'s two words are an upper bound with an innocent
+    in-world reading; the oracle register has none. Folding them together would
+    destroy that distinction and move Task 19.8's carried 8 / 23 pins.
+    """
+
+    assert MACHINERY_VOCABULARY == ("threshold", "suspicion")
+    # Ordinary deduction talk trips the upper-bound net and NOT the oracle one.
+    ordinary = "My suspicion of p-3 is over the threshold."
+    assert _matches(ordinary, MACHINERY_VOCABULARY)
+    assert not _is_oracle_register(ordinary)
+    # ...and the oracle register trips only the oracle net.
+    oracle = "The engine flagged the vent, so p-3 is the impostor."
+    assert not _matches(oracle, MACHINERY_VOCABULARY)
+    assert _is_oracle_register(oracle)
+
+
+_ORACLE_CENSUS: Final[Mapping[str, tuple[int, int, int, int]]] = {
+    # set -> (ballots, free_text turns, claim reasons, claim_reasons_total)
+    "samples/9p2i": (12, 6, 3, 1071),
+    "ml_corpus/9p2i": (25, 19, 8, 3170),
+    "samples/4p1i": (1, 1, 1, 135),
+    "ml_corpus/4p1i": (2, 2, 1, 147),
+}
+
+
+def test_committed_sets_pin_the_oracle_register_census(
+    samples_9p2i: TournamentEvalReport,
+    corpus_9p2i: TournamentEvalReport,
+    samples_4p1i: TournamentEvalReport,
+    corpus_4p1i: TournamentEvalReport,
+) -> None:
+    """The three surfaces, per set — the leak A-6 traced to two template lines.
+
+    The ballot cell reads the PRE-GUARD body, so its 40 across the four sets is
+    one more than the 39 A-6 counted on the recorded ``rationale_text``: on
+    ``replays/samples/9p2i`` seed 0 the vote guard replaced an oracle-carrying
+    body with its fixed redaction note. That is the same one-ballot divergence
+    the vocabulary net shows (33 pre-guard against 32 recorded), and it is the
+    reason the model-origin cells read the pre-guard body at all.
+
+    NOT immutable — a re-record or a prompt fix regenerates these.
+    """
+
+    served = {
+        "samples/9p2i": samples_9p2i,
+        "ml_corpus/9p2i": corpus_9p2i,
+        "samples/4p1i": samples_4p1i,
+        "ml_corpus/4p1i": corpus_4p1i,
+    }
+    for name, report in served.items():
+        leakage = report.deduction.scaffold_leakage
+        ballots, turns, reasons, reasons_total = _ORACLE_CENSUS[name]
+        assert leakage.model_oracle_register_ballots == ballots, name
+        assert leakage.oracle_register_turns == turns, name
+        assert leakage.oracle_register_claim_reasons == reasons, name
+        # No count ships without its base.
+        assert leakage.claim_reasons_total == reasons_total, name
+
+    totals = [
+        sum(
+            getattr(report.deduction.scaffold_leakage, field)
+            for report in served.values()
+        )
+        for field in (
+            "model_oracle_register_ballots",
+            "oracle_register_turns",
+            "oracle_register_claim_reasons",
+        )
+    ]
+    assert totals == [40, 28, 13]
+
+
+def test_the_oracle_net_does_not_read_alibi_evidence(
+    samples_9p2i: TournamentEvalReport,
+    corpus_9p2i: TournamentEvalReport,
+    samples_4p1i: TournamentEvalReport,
+    corpus_4p1i: TournamentEvalReport,
+) -> None:
+    """AlibiClaim carries ``evidence``, not ``reason``, and is out of scope.
+
+    The ruling is backed by a measurement rather than an assumption: the
+    register is absent from every committed ``evidence`` string, so scanning
+    them would add a surface and no signal.
+    """
+
+    scanned = 0
+    hits = 0
+    for report in (samples_9p2i, corpus_9p2i, samples_4p1i, corpus_4p1i):
+        for game in report.report.games:
+            for meeting in game.meetings:
+                for turn in meeting.transcript.turns:
+                    for claim in turn.claims:
+                        if not isinstance(claim, AlibiClaim):
+                            continue
+                        for evidence in claim.evidence:
+                            scanned += 1
+                            hits += int(_is_oracle_register(evidence))
+    assert scanned > 0
+    assert hits == 0
+
+
+def test_the_crew_omniscient_control_is_one_on_each_9p2i_set(
+    samples_9p2i: TournamentEvalReport,
+    corpus_9p2i: TournamentEvalReport,
+    samples_4p1i: TournamentEvalReport,
+    corpus_4p1i: TournamentEvalReport,
+) -> None:
+    """The false-positive control's base rate, re-derived — it is not zero.
+
+    Both module docstrings used to say the two controls read 0 on every
+    committed set. The partner control does; the omniscient one reads 1 on each
+    9p2i set. Pinned so the prose and the bytes cannot drift again.
+    """
+
+    assert samples_9p2i.deduction.scaffold_leakage.crew_omniscient_control_ballots == 1
+    assert corpus_9p2i.deduction.scaffold_leakage.crew_omniscient_control_ballots == 1
+    assert samples_4p1i.deduction.scaffold_leakage.crew_omniscient_control_ballots == 0
+    assert corpus_4p1i.deduction.scaffold_leakage.crew_omniscient_control_ballots == 0
+    for report in (samples_9p2i, corpus_9p2i, samples_4p1i, corpus_4p1i):
+        assert report.deduction.scaffold_leakage.crew_partner_naming_ballots == 0

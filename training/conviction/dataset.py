@@ -88,8 +88,9 @@ firewall test enforces it):
   conversion (``eval/watchability.py::_observation_backed_impostors`` + the
   subject-aware Task-15.19 backing bit): a true impostor named by a non-self
   ``AccusationClaim`` where some accusing turn ALSO carries a first-hand
-  ``SawPlayerObservation`` / ``SawVentObservation`` whose subject IS the
-  accused; converted when the meeting ejects exactly that subject. Roles ground
+  sighting whose subject IS the accused — a ``SawPlayerObservation``, a
+  ``SawMoveObservation`` read at its destination, or a ``SawVentObservation``;
+  converted when the meeting ejects exactly that subject. Roles ground
   truth comes from the deterministic engine re-seed
   (:func:`orchestrator.seeder.seed_initial_state` — the same recipe
   ``eval.validity.roles_by_seed`` runs; raw replays are role-free by firewall
@@ -128,9 +129,9 @@ from meetings.constants import DEFAULT_SKIP_CONFIDENCE_THRESHOLD
 from meetings.schemas import (
     AccusationClaim,
     MeetingTranscript,
-    SawPlayerObservation,
     SawVentObservation,
 )
+from meetings.transcript import sighting_placement
 from orchestrator.replay import MeetingReplayEntry, read_all_entries
 from orchestrator.seeder import seed_initial_state
 from training.surrogate.dataset import (
@@ -431,6 +432,25 @@ def _roles_for_seed(
     return {player_id: player.role for player_id, player in state.players.items()}
 
 
+def _observes_subject(observation: object, subject: PlayerId) -> bool:
+    """Whether one spoken observation is a first-hand sighting OF ``subject``.
+
+    The referee's own predicate (``eval/watchability.py::_observes_subject``),
+    reached through the same :func:`meetings.transcript.sighting_placement`
+    helper so the label and the gauge cannot drift: a placement (``saw_player``,
+    or a ``saw_move`` read at its destination) naming the subject, or a
+    ``saw_vent`` of the subject, which is first-hand and role-proving but places
+    nobody.
+    """
+
+    placement = sighting_placement(observation)
+    if placement is not None:
+        return placement.subject == subject
+    return (
+        isinstance(observation, SawVentObservation) and observation.subject == subject
+    )
+
+
 def _observation_backed_impostor_subjects(
     transcript: MeetingTranscript, roles: Mapping[PlayerId, Role]
 ) -> frozenset[PlayerId]:
@@ -441,10 +461,10 @@ def _observation_backed_impostor_subjects(
     the LIVE (subject-aware, Task-15.19) predicate, from the recorded transcript
     bytes: a subject enters the accused universe through a NON-self
     ``AccusationClaim`` edge; it is BACKED when some turn both accuses it and
-    carries a first-hand ``SawPlayerObservation`` / ``SawVentObservation``
-    whose subject IS the accused (a grounded observation about someone else
-    never backs — the exploit 15.19 closed; a ``FoundBodyObservation`` names a
-    dead victim and structurally cannot back). Only true impostors count — the
+    carries a first-hand sighting whose subject IS the accused
+    (:func:`_observes_subject` — a grounded observation about someone else never
+    backs, the exploit 15.19 closed; a ``FoundBodyObservation`` names a dead
+    victim and structurally cannot back). Only true impostors count — the
     referee's conversion is deception that convicts the RIGHT target.
     """
 
@@ -465,11 +485,7 @@ def _observation_backed_impostor_subjects(
             )
             if not accuses:
                 continue
-            if any(
-                isinstance(obs, (SawPlayerObservation, SawVentObservation))
-                and obs.subject == subject
-                for obs in turn.observations
-            ):
+            if any(_observes_subject(obs, subject) for obs in turn.observations):
                 backed.add(subject)
                 break
     return frozenset(backed)
