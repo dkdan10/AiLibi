@@ -131,7 +131,7 @@ column is itself over budget on all three**, which is the first half of the find
 
 | surface | contract target | at its own merge | at close HEAD |
 |---|---|---|---|
-| `README.md` | 20.12: ≤ ~1,800 (from 3,833) | **2,034 — over** (`d86f979c`) | **3,368** |
+| `README.md` | 20.12: ≤ ~1,800 (from 3,833) | **2,034 — over** (`d86f979c`) | **3,368** (3,425 after this PR) |
 | `docs/reading-guide.md` | 20.12: ≤ ~900 (from 3,239) | **940 — over** (`d86f979c`) | **1,303** |
 | `docs/ml-program.md` | 20.13: ≤ ~1,400 | **1,439 — over** (`dc9d73b7`) | **1,838** |
 | `docs/lessons.md` | 20.40: 800–1,500 | 1,491 — inside (`989f1ee2`) | 1,491 — **inside** |
@@ -143,10 +143,13 @@ Second, four later contracts widened all three: 20.13's results table, 20.38's b
 20.39's media block and 20.41's tail-truth pass each added prose to pages whose budgets were
 already breached, taking README from 2,034 to 3,368.
 
-The honest reading, which is why this is recorded rather than absorbed: the front door ended the
-phase **12% shorter than at charter (3,833 → 3,368)**, not the 53% the target implied. Routed as a
-next-phase item with the note that a budget nothing can fail is prose — Craft rule 2 applied to a
-documentation target.
+The close-HEAD column is the pre-close snapshot. **This close is itself the phase's 43rd contract and
+adds to it**: on the tree this PR leaves behind, `wc -w README.md` reads **3,425** — the status
+paragraph and the phase-table row. So the honest end-of-phase figure, which is why this is recorded
+rather than absorbed: the front door ended the phase **10.7% shorter than at charter (3,833 →
+3,425)**, not the 53% the target implied. The reading guide, ML page and lessons page are untouched
+by this PR and keep their close-HEAD counts. Routed as a next-phase item with the note that a budget
+nothing can fail is prose — Craft rule 2 applied to a documentation target.
 
 ### F4 — the audits index states the wrong ladder tip, and no gate can catch it there
 
@@ -199,12 +202,12 @@ silent).**
 | task (PR) | the fresh command at close HEAD | quoted output | verdict |
 |---|---|---|---|
 | 20.1 (#354) | `cd frontend && npx vitest run` (incl. `src/lib/bodies.test.ts`) | *"Test Files 8 passed (8) / Tests 435 passed (435)"* — the shipped rule reads **0 phantom frames of 1,217** on 9p2i and **0 of 601** on 4p1i; the retired accumulate rule, the negative control, reads **668/1,217** phantom frames and 1,371 phantom bodies, so the gate can fail | VERIFIED |
-| 20.2 (#360) | same vitest run (`src/lib/copy.test.ts`) + `grep -rnE 'DESIGN\.md §\|Task [0-9]+\.[0-9]+\|audits/\|sentinel\|KPI' frontend/src` | 435 frontend tests pass; the grep's 293 hits are **all on source-comment lines**, none on a rendered string | VERIFIED |
-| 20.3 (#367) | same vitest run (the layout/focus-trap suites) | 435 passed; `npm run lint`, `tsc:check` and `build` green in §1's frontend leg | VERIFIED |
+| 20.2 (#360) | same vitest run (`src/lib/copy.test.ts`) + `grep -rnE 'DESIGN\.md §\|Task [0-9]+\.[0-9]+\|audits/\|sentinel\|KPI' frontend/src`, classified line by line | 435 frontend tests pass. The grep's **293** hits split **274** comment-opening lines + **6** continuation lines inside multi-line or JSX comment blocks + **12** string literals in `*.test.ts(x)` used as planted inputs to the dialect matcher + **1** the matcher's own banned-word pattern (`frontend/src/lib/copy.ts:45`) = 293. **Zero are rendered product strings**, which is the invariant; the classifier is in §7 | VERIFIED |
+| 20.3 (#367) | `cd frontend && npm run e2e` — the contract's own Measurement, which `check.sh` deliberately excludes | **"9 passed (56.3s)", 3 skipped, exit 0** against auto-started dev servers, and the contract's two new steps are two of the nine by name: *"the guided tour owns Tab when it stacks over another overlay"* (`journey.spec.ts:495`) and *"the transport dock leaves the map on screen at laptop heights"* (`:526`). The 3 skipped are `media.spec.ts`'s capture cases, skipped without `AILIBI_CAPTURE_MEDIA=1` exactly as 20.39 specifies | VERIFIED |
 | 20.4 (#357) | `uv run pytest tests/api/test_replay_loader.py -q` | *"83 passed in 8.63s"* — the corrupt/empty/mistyped fixtures still return 200 through the listing and the cost endpoint | VERIFIED |
 | 20.5 (#351) | `uv run pytest tests/agents/test_prompt_loader.py -q` | *"56 passed in 0.28s"* — the one-notice-per-process pin holds; §1's bare-env `verify_samples.sh` emitted no notice line | VERIFIED |
 | 20.6 (#353) | `uv run pytest tests/eval/test_vote_correctness.py -q` + `check_doc_facts.py` | *"89 passed in 1.08s"*; the front-door check names *"eval/vote_correctness.py agrees with 4 recorded eval reports"* | VERIFIED |
-| 20.7 (#366) | `uv run pytest tests/scripts/test_build_demo_bundle.py -q` + the Pages job | *"28 passed in 2.94s"*, including the out-of-repo bake and the planted leg; `Deploy to GitHub Pages` **success on close HEAD** with its post-deploy verification step green. The run on the close *commit* fires at merge and is not claimed here (§1) | VERIFIED |
+| 20.7 (#366) | `uv run pytest tests/scripts/test_build_demo_bundle.py -q` + `npm run e2e`'s bundle spec + the Pages job | *"28 passed in 2.94s"*, including the out-of-repo bake and the planted leg; the Playwright run above carries *"the built bundle plays the featured journey with ZERO /api requests"* (`bundle.spec.ts:225`) green; `Deploy to GitHub Pages` **success on close HEAD** with its post-deploy verification step green. The run on the close *commit* fires at merge and is not claimed here (§1) | VERIFIED |
 | 20.8 (#363) | `uv run pytest eval/leak_test.py tests/observation tests/test_firewall.py tests/training/test_leak_gate.py -q` | *"154 passed in 16.30s"*. The entitlement gate can fail: `tests/test_firewall.py:908` plants **M6** (`_visible_body_ids` without its room filter) and `:1017` asserts the scan catches it, with M1, M10 and a widened `visible_rooms_for_player` beside it. Before the change the same suite ran **125 passed with M6 planted** (PR #363's own recorded run) | VERIFIED |
 | 20.9 (#352) | `uv run lint-imports` (§1) | *"Analyzed 152 files, 794 dependencies."* / *"Contracts: 4 kept, 0 broken."* against the review's `Analyzed 89 files, 379 dependencies`; the firewall suite's planted-route legs are inside the 154 above and `git status --porcelain` is empty after them | VERIFIED |
 | 20.10 (#356) | `uv run python scripts/validity_gate.py <set>` × 4 | *"Validity gate PASSED (all checks green)."* on all four recorded sets, each with *"byte_identical_reconstruction: 0 samples drifted"* and *"cost_and_provenance_exact: model='Qwen/Qwen3.6-27B', 4 prompt versions, substrate stamped exact"* over 50 / 150 / 50 / 50 games | VERIFIED |
@@ -222,7 +225,7 @@ silent).**
 | 20.22 (#369) | `uv run pytest -q -k "evidence_honesty or solvability or deduction_metrics"` | *"211 passed, 5433 deselected in 49.27s"* — every pin the ratified memo cites resolves at close HEAD | VERIFIED |
 | 20.23 (#375) | `uv run pytest tests/agents -q` | *"1007 passed in 47.18s"* (the completed-task memory rules, fixture-pinned); the lever is unconditional at close HEAD and its bar-6 cell is **0 fabricated lines on all four sets** (§3.1) | VERIFIED |
 | 20.24 (#376) | same `tests/agents` run | 1007 passed — the self-location trail's coverage and room/tick agreement pins; bar 3's recorded cell is **0.77% pooled** against 20.12% (§3.1) | VERIFIED |
-| 20.25 (#377) | `uv run pytest tests/meetings -q` | *"1050 passed in 13.96s"* — movement read as a destination claim; the I-7 movement-origin cell is **1/91** pooled against 38/313 (§3.1) | VERIFIED |
+| 20.25 (#377) | `uv run pytest tests/meetings -q` | *"1050 passed in 13.96s"* — movement read as a destination claim; the I-7 movement-origin cell is **1/91** pooled against 38/313 (`…baseline-7.md` §5.3, a secondary cell no bar rides) | VERIFIED |
 | 20.26 (#378) | `uv run pytest tests/api/test_evidence_mechanisms.py -q` + the meetings run | *"16 passed in 1.95s"* / 1050 passed — grounded prosecution and the two-source STRONG rule; bar 5's surviving-STRONG population is **0** (§3.1) | VERIFIED |
 | 20.27 (#379) | `uv run pytest tests/meetings -q` | 1050 passed — map-aware arbitration; the adjacent-room STRONG count is **148 → 0** (§3.1). Closes no review finding, so it correctly carries no row in the published map (§3.4) | VERIFIED |
 | 20.28 (#380) | `uv run pytest tests/meetings -q` (incl. `test_manager.py`) | 1050 passed; the I-8 marker cells are **0/3602 turns and 0/7211 prompts** on the recorded bytes (§3.1) | VERIFIED |
@@ -332,9 +335,18 @@ cell**, and states so here in its own words.
 docstring, README row or commit message in this repository may state or imply that the pre-registered
 bars passed, that the verdict was ADOPTED under the rule, or that baseline 7 was adopted on the
 arithmetic.* The sweep (§7 lists it) walked every tracked file naming baseline 7, every occurrence of
-"adopted"/"ADOPTED", every phrasing of "bars passed / met the bars / passed the bar", and the phase's
-own commit subjects and bodies. **It holds.** Every surface that carries the adoption carries the
-FINDING beside it, in that order:
+"adopted"/"ADOPTED", and every phrasing of "bars passed / met the bars / passed the bar".
+
+**The commit half was swept over the phase's whole history, not a window.** The range is explicit —
+`4a7bd9c0^..937bd805`, the planning commit through close HEAD, **88 commits**, `%s` and `%b`
+together — and the expression is the full forbidden set, not just `adopt`: `bars? (were )?(passed|met)`,
+`passed the bars?`, `met the bars?`, `met its bars?`, `adopted on the (arithmetic|numbers)`,
+`verdict was ADOPTED`, `ADOPTED under the rule`. **One line matches, and it is a negation** — a
+20.38 commit body reading *"Nothing says the bars passed"* while describing what it swept for. No
+subject or body in the phase asserts a pass. (`adopt` alone appears in 17 of those messages, every
+one of them naming the override.)
+
+**It holds.** Every surface that carries the adoption carries the FINDING beside it, in that order:
 
 * `README.md:150` — *"Under the rule as written that is a **finding, not an adoption**. I then adopted this recording as the reference anyway, by an explicit owner override of that verdict … The bars did not pass; the miss stays on this page."*
 * `docs/architecture.md:162` — *"returned **FINDING** and the owner adopted it anyway, by explicit override; §6.1"*
@@ -502,7 +514,8 @@ uv run python scripts/check_doc_facts.py                    # 7. front-door fact
 bash scripts/fetch_evidence.sh --clean                      # 8. removes the 2,952 restored files
 
 # §2 — the per-contract ledger, one fresh command per contract
-(cd frontend && npx vitest run)                             # 20.1, 20.2, 20.3
+(cd frontend && npx vitest run)                             # 20.1, 20.2
+(cd frontend && npm run e2e)                                # 20.3, 20.7 — 9 passed, 3 skipped (media)
 uv run pytest tests/api/test_replay_loader.py -q            # 20.4
 uv run pytest tests/agents/test_prompt_loader.py -q         # 20.5
 uv run pytest tests/eval/test_vote_correctness.py -q        # 20.6
@@ -531,6 +544,25 @@ wc -w README.md docs/reading-guide.md docs/ml-program.md docs/lessons.md        
 grep -c "VERIFIED evidence" agents/strategic/prompts/qwen3_6_27b/*.j2               # 20.31 — 0 on all six
 grep -rn 'fetch(' frontend/src --include='*.tsx' --include='*.ts' \
   | grep -v src/api/client | grep -v '\.test\.' | wc -l                             # 20.16 — 0
+
+# 20.2 (F-free) — the dialect grep's 293 hits, classified rather than asserted
+uv run python - <<'PY'
+import re, subprocess
+PAT = r"DESIGN\.md §|Task [0-9]+\.[0-9]+|audits/|sentinel|KPI"
+hits = subprocess.run(["grep", "-rnE", PAT, "frontend/src"],
+                      capture_output=True, text=True).stdout.splitlines()
+buckets = {"comment": 0, "test fixture": 0, "the matcher itself": 0, "other": []}
+for line in hits:
+    path, _, rest = line.partition(":")
+    text = rest.partition(":")[2].strip()
+    if re.match(r"^(//|\*|/\*|\{/\*)", text):            buckets["comment"] += 1
+    elif path.endswith((".test.ts", ".test.tsx")):       buckets["test fixture"] += 1
+    elif path.endswith("lib/copy.ts"):                   buckets["the matcher itself"] += 1
+    else:                                                buckets["other"].append(line)
+print(len(hits), {k: (v if not isinstance(v, list) else len(v)) for k, v in buckets.items()})
+for line in buckets["other"]:                            # 6, each mid-comment
+    print("  ", line)
+PY
 grep -n 'audit C-C-' docs/deployment.md | wc -l                                     # 20.41 — 4
 git ls-files docs/media | wc -l ; ls -l docs/media                                  # 20.39 — 6 files
 python3 -c "import xml.etree.ElementTree as E;E.parse('docs/media/architecture.svg')" ; wc -c docs/media/architecture.svg   # 20.20
@@ -552,11 +584,14 @@ print(_DEFAULT_BASELINE_ID, sorted(_BASELINE_SUPPLY_FLOORS))"
 grep -n 'ARCHIVED_PROMPT_VERSION_SETS: Mapping' tests/meetings/test_prompt_byte_golden.py
 ls tests/fixtures/prompt_archive 2>&1                       # No such file or directory
 
-# §3.3 — §6.1's "what no surface may say", swept
+# §3.3 — §6.1's "what no surface may say", swept over the tree AND the whole phase history
 git grep -lI -iE 'baseline[- ]7' -- .
 git grep -nI -iE 'ADOPTED' -- .
 git grep -nI -iE '(bars? (were )?(passed|met)|passed the bars?|met the bars?)' -- .
-git log 937bd805 --format='%h %s%n%b' -60 | grep -inE 'adopt'
+git rev-list --count 4a7bd9c0^..937bd805                    # 88 — the planning commit through close HEAD
+git log 4a7bd9c0^..937bd805 --format='%H%n%s%n%b%n---' | grep -inE \
+  'bars? (were )?(passed|met)|passed the bars?|met the bars?|met its bars?|adopted on the (arithmetic|numbers)|verdict was ADOPTED|ADOPTED under the rule'
+                                                            # one hit, and it is a negation
 
 # §3.3, F4 — the ladder-tip claim, swept everywhere rather than in the four gated documents
 git grep -nI -i "ladder tip" -- .
