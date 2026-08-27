@@ -1087,6 +1087,10 @@ class GoNoGoVerdict(BaseModel):
 
     bar_id: str
     replay_set_dir: str
+    # The committed weights artifact this verdict is keyed to. ``None`` means the
+    # verdict was taken without naming one, which is every in-memory verdict; the
+    # committed artifact's writer refuses it.
+    weights_sha256: str | None = None
     surrogate_model_name: str
     baseline_model_name: str
     # The shared scored population both reports were measured on.
@@ -1139,6 +1143,8 @@ class GoNoGoVerdict(BaseModel):
 def decide_go_no_go(
     surrogate: SurrogateFidelityReport,
     prior_baseline: SurrogateFidelityReport,
+    *,
+    weights_sha256: str | None = None,
 ) -> GoNoGoVerdict:
     """Apply the pre-stated bar to two same-population fidelity reports.
 
@@ -1148,6 +1154,10 @@ def decide_go_no_go(
     across populations is exactly the absolute-number mistake the ratified
     wording forbids, so any population mismatch fails loud instead of producing
     a verdict.
+
+    ``weights_sha256`` names the committed weights artifact the verdict is keyed
+    to; it is carried, never read by any axis. A committed verdict must name one
+    (the writer refuses ``None``); an in-memory verdict need not.
     """
 
     mismatches = [
@@ -1202,6 +1212,7 @@ def decide_go_no_go(
     return GoNoGoVerdict(
         bar_id=GO_BAR_ID,
         replay_set_dir=surrogate.replay_set_dir,
+        weights_sha256=weights_sha256,
         surrogate_model_name=surrogate.model_name,
         baseline_model_name=prior_baseline.model_name,
         meetings_scored=surrogate.meetings_scored,

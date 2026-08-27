@@ -52,12 +52,11 @@ when present (:func:`load_splits`), so it runs identically on the 15.12 corpus.
 
 Baseline-5 re-ground (Task 17.10) — two additions, both re-validated on the 17.9
 corpus bytes (which now carry whereabouts turns, observation-cited ballots, and
-marker-prefixed rationales): (1) every row carries ``ballot_coerced_skip`` —
-whether the recorded ballot's ``rationale_text`` opens with the J2 citation-gate
-coercion marker (:data:`meetings.manager.UNCITED_ZERO_FLAG_EJECT_MARKER`) — so
-the 15.13 fit can DROP coerced rows (designer ruling, tasks/phase-17.md: a
-coerced ballot records ``target="SKIP"`` but was a forced eject, not a chosen
-skip) while the fidelity replay still scores the recorded bytes unfiltered; and
+marker-prefixed rationales): (1) every row carries the audit rewrites the meeting
+layer applied to its ballot (``ballot_rewrite_labels``, plus the narrower
+``ballot_coerced_skip`` census column) — so the 15.13 fit can DROP every row
+whose recorded target is not the voter's authored choice while the fidelity
+replay still scores the recorded bytes unfiltered; and
 (2) :func:`measure_belief_render_parity` — the 16.10-precedent end-to-end
 cross-check of this module's hand-mirrored belief fold against the PRODUCTION
 fold (``eval.funnel``'s memory-augmented walk: real ``TacticalAgent`` instances
@@ -84,6 +83,7 @@ import re
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from pathlib import Path
+from typing import Final, get_args
 
 from pydantic import (
     BaseModel,
@@ -130,15 +130,25 @@ from eval.validity import (
     roles_by_seed,
     seeds_on_disk,
 )
-from meetings.manager import UNCITED_ZERO_FLAG_EJECT_MARKER, extract_belief_evidence
+from meetings.manager import (
+    BALLOT_TARGET_REDIRECT_MARKER,
+    INVALID_OBSERVATION_ID_MARKER,
+    INVALID_REASON_ID_MARKER,
+    TEAMMATE_VOTE_TARGET_MARKER,
+    UNCITED_ZERO_FLAG_EJECT_MARKER,
+    VOTE_PARSE_DEFAULT_MARKER,
+    extract_belief_evidence,
+)
 from meetings.render_contract import SuspicionEntry
 from meetings.schemas import (
+    BallotTargetRewriteReason,
     ContradictionRef,
     MeetingOutcome,
     MeetingResult,
     MeetingTranscript,
     VoteBallot,
 )
+from meetings.voting import INVALID_VOTE_TARGET_MARKER
 from meetings.transcript import MeetingTriggerKind, is_weak_contradiction
 from orchestrator.game import apply_meeting_result
 from orchestrator.replay import (
@@ -169,34 +179,100 @@ SPLITS_FILENAME: str = "splits.json"
 # itself contains the marker's tail.
 _MARKER_REPR_VALUE: str = r"(?:'(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\\.)*\")"
 
-# The J2 citation-gate coercion marker (Task 16.6), anchored ``^``: the gate is
-# the LAST guard in the manager's ballot chain, so on a coerced ballot this
-# marker is always the OUTERMOST rationale prefix (a stacked 16.5-era
-# nulled-citation marker rides INSIDE it). Built from the imported production
-# literal, never re-spelled — a marker rename must break loudly here.
-_UNCITED_ZERO_FLAG_MARKER_PATTERN: re.Pattern[str] = re.compile(
-    "^"
-    + re.escape(UNCITED_ZERO_FLAG_EJECT_MARKER.partition("{")[0])
-    + _MARKER_REPR_VALUE
-    + re.escape(UNCITED_ZERO_FLAG_EJECT_MARKER.partition("}")[2])
+# (label, marker) for every audit marker the meeting layer PREPENDS to a ballot's
+# ``rationale_text``, built from the imported production literals so a rename
+# breaks loudly here. Mirrors ``api.replay_loader._BALLOT_PREFIX_MARKERS`` — the
+# display layer's table over the same six kinds — and a test pins the two label
+# sets against each other. ``VOTE_PARSE_DEFAULT_MARKER`` is the seventh kind and
+# sits apart: it is the WHOLE rationale, not a prefix.
+BALLOT_AUDIT_MARKERS: Final[tuple[tuple[str, str], ...]] = (
+    ("invalid_target", INVALID_VOTE_TARGET_MARKER),
+    ("teammate_coerced", TEAMMATE_VOTE_TARGET_MARKER),
+    ("under_gate_redirect", BALLOT_TARGET_REDIRECT_MARKER),
+    ("invalid_reason_id", INVALID_REASON_ID_MARKER),
+    ("invalid_observation_id", INVALID_OBSERVATION_ID_MARKER),
+    ("uncited_coerced", UNCITED_ZERO_FLAG_EJECT_MARKER),
+)
+_VOTE_PARSE_DEFAULT_LABEL: Final[str] = "parse_default"
+
+#: The labels under which a recorded ballot's TARGET is not the voter's authored
+#: choice — the meeting layer redirected, coerced, normalized or wholly defaulted
+#: it. Read from the public :data:`meetings.schemas.BallotTargetRewriteReason`
+#: union, the same source ``api.replay_loader._TARGET_REWRITE_LABELS`` derives
+#: from, so the training class and the display class cannot drift apart. The two
+#: citation-only labels are deliberately outside it: they null a reference and
+#: leave the authored target intact.
+TARGET_REWRITE_LABELS: Final[frozenset[str]] = frozenset(
+    get_args(BallotTargetRewriteReason)
 )
 
 
-def _ballot_is_coerced_skip(ballot: VoteBallot) -> bool:
-    """Whether a recorded ballot is a J2 citation-gate coerced SKIP (Task 17.10).
+def _marker_pattern(marker: str) -> re.Pattern[str]:
+    """Anchored regex matching one whole audit marker at the head of a string.
 
-    True iff the ballot's ``rationale_text`` opens with the
-    :data:`meetings.manager.UNCITED_ZERO_FLAG_EJECT_MARKER` audit marker — the
-    mark-and-coerce trail production prepends when an uncited zero-flag eject
-    ballot is coerced to SKIP. Such a ballot records ``target="SKIP"`` but was
-    a FORCED eject, not a chosen skip (designer ruling, tasks/phase-17.md), so
-    a fit that read it as a skip label would learn the decision channel from a
-    choice the voter never made. Fit-side consumers
-    (``training/surrogate/ballots.py``) drop and count these rows; the
-    fidelity replay scores the recorded bytes unfiltered.
+    A ``.format()`` marker matches head + ``{x!r}`` repr payload + tail; matching
+    the QUOTED repr value (rather than the static tail alone) keeps the match at
+    the REAL marker boundary even when the rewritten value itself contains that
+    tail. A marker with no placeholder matches literally.
     """
 
-    return _UNCITED_ZERO_FLAG_MARKER_PATTERN.match(ballot.rationale_text) is not None
+    head, brace, rest = marker.partition("{")
+    if not brace:
+        return re.compile("^" + re.escape(marker))
+    _, _, tail = rest.partition("}")
+    return re.compile("^" + re.escape(head) + _MARKER_REPR_VALUE + re.escape(tail))
+
+
+_BALLOT_MARKER_PATTERNS: Final[tuple[tuple[str, re.Pattern[str]], ...]] = tuple(
+    (label, _marker_pattern(marker)) for label, marker in BALLOT_AUDIT_MARKERS
+)
+_VOTE_PARSE_DEFAULT_HEAD: Final[str] = VOTE_PARSE_DEFAULT_MARKER.partition("{")[0]
+
+
+def ballot_rewrite_labels(ballot: VoteBallot) -> tuple[str, ...]:
+    """Every audit rewrite the meeting layer applied to one recorded ballot.
+
+    Reads :attr:`~meetings.schemas.VoteBallot.guard_rewrite_reason` when the
+    recording carries it — the meeting layer's own structured testimony, so no
+    parse can disagree with it. A recording that predates that field falls back
+    to the marker prefixes, stripped front-to-back through
+    :data:`BALLOT_AUDIT_MARKERS` so a stacked ordering cannot hide the inner
+    label behind the outer one. The parse-default marker is the whole rationale
+    rather than a prefix and is recognised by its head.
+
+    Order is the order the labels were recovered in; callers read the SET.
+    """
+
+    if ballot.guard_rewrite_reason is not None:
+        return (ballot.guard_rewrite_reason,)
+    text = ballot.rationale_text
+    if text.startswith(_VOTE_PARSE_DEFAULT_HEAD):
+        return (_VOTE_PARSE_DEFAULT_LABEL,)
+    labels: list[str] = []
+    stripped = True
+    while stripped:
+        stripped = False
+        for label, pattern in _BALLOT_MARKER_PATTERNS:
+            match = pattern.match(text)
+            if match is None:
+                continue
+            labels.append(label)
+            text = text[match.end() :]
+            stripped = True
+            break
+    return tuple(labels)
+
+
+def _ballot_is_coerced_skip(ballot: VoteBallot) -> bool:
+    """Whether a recorded ballot is a J2 citation-gate coerced SKIP.
+
+    The narrow census the ballot-surrogate report quotes per kind: a ballot the
+    citation gate coerced records ``target="SKIP"`` but was a FORCED eject. It is
+    one member of the wider :data:`TARGET_REWRITE_LABELS` class the fit excludes,
+    kept as its own column because the report counts the kinds apart.
+    """
+
+    return "uncited_coerced" in ballot_rewrite_labels(ballot)
 
 
 class MeetingTableReconstructionError(RuntimeError):
@@ -304,13 +380,18 @@ class MeetingTableRow(BaseModel):
     ballot_target: PlayerId | str
     ballot_confidence: float
     ballot_primary_reason_id: str | None
-    # Whether the recorded ballot is a J2 citation-gate coerced SKIP — its
-    # ``rationale_text`` opens with the production coercion marker
-    # (:func:`_ballot_is_coerced_skip`), so ``target="SKIP"`` records a FORCED
-    # eject, never a chosen skip. Fit-side consumers drop and count these rows
-    # (Task 17.10 designer ruling); the fidelity replay scores recorded bytes
-    # unfiltered.
+    # Whether the recorded ballot is a J2 citation-gate coerced SKIP — one
+    # member of ``ballot_rewrite_labels`` below, carried as its own column
+    # because the ballot-surrogate report counts the marker kinds apart.
     ballot_coerced_skip: bool
+    # Every audit rewrite the meeting layer applied to this ballot
+    # (:func:`ballot_rewrite_labels`). A label in
+    # :data:`TARGET_REWRITE_LABELS` means the recorded ``ballot_target`` is not
+    # the voter's authored choice, so fit-side consumers DROP the row; the two
+    # citation-only labels null a reference and leave the target intact, so they
+    # stay in the fit, labelled and counted. The fidelity replay scores the
+    # recorded bytes unfiltered either way.
+    ballot_rewrite_labels: tuple[str, ...]
     candidates: tuple[CandidateFeatures, ...]
 
 
@@ -995,6 +1076,7 @@ def _walk_game(
                     ballot_confidence=ballot.confidence,
                     ballot_primary_reason_id=ballot.primary_reason_id,
                     ballot_coerced_skip=_ballot_is_coerced_skip(ballot),
+                    ballot_rewrite_labels=ballot_rewrite_labels(ballot),
                     candidates=candidate_features,
                 )
             )
@@ -1330,14 +1412,17 @@ def measure_belief_render_parity(sample_dir: Path) -> BeliefRenderParity:
 
 
 __all__ = [
+    "BALLOT_AUDIT_MARKERS",
     "SEEN_AT_KILL_WINDOW_TICKS",
     "SPLITS_FILENAME",
+    "TARGET_REWRITE_LABELS",
     "BeliefRenderParity",
     "CandidateFeatures",
     "MeetingTable",
     "MeetingTableReconstructionError",
     "MeetingTableRow",
     "SurrogateSplits",
+    "ballot_rewrite_labels",
     "build_meeting_table",
     "load_splits",
     "measure_belief_render_parity",

@@ -72,9 +72,12 @@ from orchestrator.seeder import seed_initial_state
 from training.env import TacticalRolloutEnv
 from training.rewards import compute_shaped_reward
 from training.surrogate.ballots import (
+    BALLOT_FEATURE_NAMES,
+    MASKED_IS_REPORTER,
     BallotSurrogateModel,
     PredictedBallot,
     SurrogateStalenessCap,
+    _target_was_rewritten,
     ballot_features_from_row,
     derive_max_uses,
     fit_corpus_ballot_predictor,
@@ -98,6 +101,7 @@ from training.surrogate.fidelity import (
     run_surrogate_fidelity,
 )
 from training.surrogate.runner import (
+    SURROGATE_VERDICT_FILENAME,
     SurrogateMeetingRunner,
     SurrogateStalenessExceededError,
     SurrogateUseCounter,
@@ -105,6 +109,8 @@ from training.surrogate.runner import (
     fit_corpus_fingerprint,
     load_fit_corpus_record,
     load_surrogate_runner_factory,
+    load_surrogate_verdict,
+    write_surrogate_verdict_artifact,
 )
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -602,6 +608,112 @@ def test_fit_corpus_fence_fails_loud_on_substrate_and_key_drift(
         load_surrogate_runner_factory(tmp_path)
 
 
+# --------------------------------------------------------------------------- #
+# 6b. THE COMMITTED VERDICT + THE TRAINING-TIME INSTALL GATE                   #
+# --------------------------------------------------------------------------- #
+
+
+def test_the_committed_verdict_is_keyed_on_the_weights_and_reproduces(
+    surrogate_report: SurrogateFidelityReport,
+    fo6_report: SurrogateFidelityReport,
+) -> None:
+    """The verdict artifact is the machine-readable NO-GO, keyed to the weights.
+
+    Mirrors the conviction verdict byte for byte: sorted keys, one trailing
+    newline, and a ``weights_sha256`` naming the artifact it sits beside — so a
+    reader never has to take the consequence mapping out of the report's prose.
+    Field for field it is what ``decide_go_no_go`` returns for the two
+    same-population reports this module already measures, so it is a recorded
+    output rather than a hand-written one.
+    """
+
+    _, weights_sha256 = load_ballot_predictor_artifact(_ARTIFACT_DIR)
+    verdict = load_surrogate_verdict(_ARTIFACT_DIR)
+    assert verdict.weights_sha256 == weights_sha256
+    assert verdict.bar_id == GO_BAR_ID
+    assert verdict.verdict == "NO-GO"
+    assert (verdict.ranking_verdict, verdict.decision_verdict) == ("GO", "NO-GO")
+    assert verdict.surrogate_role == "diagnostic-only"
+    assert verdict.training_time_runner == "fake-provider-meeting-manager"
+
+    committed = (_ARTIFACT_DIR / SURROGATE_VERDICT_FILENAME).read_text()
+    assert committed.endswith("}\n")
+    assert json.loads(committed) == verdict.model_dump()
+
+    rederived = decide_go_no_go(
+        surrogate_report, fo6_report, weights_sha256=weights_sha256
+    )
+    # The artifact stores the corpus path REPO-RELATIVE; this run built its
+    # table from an absolute one, so that one field is resolved and the rest
+    # compare raw.
+    assert Path(rederived.replay_set_dir).resolve() == _CORPUS.resolve()
+    assert rederived.model_dump() == {
+        **verdict.model_dump(),
+        "replay_set_dir": rederived.replay_set_dir,
+    }
+
+
+def test_writing_a_verdict_that_names_no_weights_is_refused(tmp_path: Path) -> None:
+    """An unkeyed verdict cannot say which artifact it judged, so it is refused."""
+
+    unkeyed = load_surrogate_verdict(_ARTIFACT_DIR).model_copy(
+        update={"weights_sha256": None}
+    )
+    with pytest.raises(ValueError, match="keyed on the weights"):
+        write_surrogate_verdict_artifact(unkeyed, tmp_path)
+
+
+def test_the_install_gate_refuses_the_committed_no_go_as_a_training_runner(
+    tmp_path: Path,
+) -> None:
+    """Both directions of the gate, on committed bytes rather than a fixture.
+
+    The committed verdict is NO-GO, so asking for the training-time role refuses
+    — the pre-committed fallback mapping enforced by the load path rather than by
+    convention. The diagnostic role, which is what every production call site
+    holds, still loads the same artifact: a NO-GO surrogate remains a legal
+    fidelity and probe runner, and a gate that blocked it would have retired a
+    live capability instead of guarding one.
+
+    The planted GO case proves the refusal is keyed on the COMPOSED ``verdict``
+    field: the same artifact with a GO composed field installs, and — with the
+    reporting halves left NO-GO to make the point — the gate neither reads them
+    nor re-conjoins them.
+    """
+
+    with pytest.raises(ValueError, match="DIAGNOSTIC-ONLY"):
+        load_surrogate_runner_factory(
+            _ARTIFACT_DIR, install_role="training-time-runner"
+        )
+    assert callable(load_surrogate_runner_factory(_ARTIFACT_DIR))
+    assert callable(
+        load_surrogate_runner_factory(_ARTIFACT_DIR, install_role="diagnostic")
+    )
+
+    for name in (
+        "ballot-predictor.json",
+        "ballot-predictor.json.sha256",
+        "max-uses.json",
+        "fit-corpus.json",
+    ):
+        (tmp_path / name).write_text((_ARTIFACT_DIR / name).read_text())
+    promoted = load_surrogate_verdict(_ARTIFACT_DIR).model_copy(
+        update={"verdict": "GO", "surrogate_role": "training-time-runner"}
+    )
+    assert (promoted.ranking_verdict, promoted.decision_verdict) == ("GO", "NO-GO")
+    write_surrogate_verdict_artifact(promoted, tmp_path)
+    assert callable(
+        load_surrogate_runner_factory(tmp_path, install_role="training-time-runner")
+    )
+
+    # And an artifact with no verdict at all cannot be installed as the runner,
+    # while it still loads for the diagnostic paths.
+    (tmp_path / SURROGATE_VERDICT_FILENAME).unlink()
+    with pytest.raises(FileNotFoundError, match="no committed surrogate verdict"):
+        load_surrogate_runner_factory(tmp_path, install_role="training-time-runner")
+    assert callable(load_surrogate_runner_factory(tmp_path))
+
+
 def test_committed_artifact_round_trips_and_the_refit_no_longer_matches(
     corpus_table: MeetingTable,
 ) -> None:
@@ -720,19 +832,23 @@ def test_bakeoff_reloads_the_committed_artifact_and_reproduces_the_numbers(
             predicted_ejections += 1
         if view.is_ejection and prediction.ranking[0] == view.ejected:
             top1_hits += 1
-    assert top1_hits == 45  # was 46
+    # The reporter column is masked at every fit and inference site, so the
+    # frozen weights no longer receive the exclusion oracle they were fitted
+    # with: three held-out ejections leave the top-1 hit set and the decision
+    # census is untouched.
+    assert top1_hits == 42  # was 45
     assert predicted_ejections == 2  # was 0
     assert predicted_skips == 85  # was 96
     assert correct_skips == 32  # was 36
 
     calibration = frozen.predicted_ballot_calibration(test_views)
-    assert calibration.predicted_ballots == 97  # was 100
-    assert calibration.predicted_skips == 401  # was 457
+    assert calibration.predicted_ballots == 106  # was 97
+    assert calibration.predicted_skips == 392  # was 401
     # Inference from FIXED committed weights; tolerance covers libm exp variance
     # across platforms, nothing more.
     assert calibration.brier == pytest.approx(
-        0.3061476258037689, abs=1e-9
-    )  # was 0.2541857827042379
+        0.33818288663917795, abs=1e-9
+    )  # was 0.3061476258037689
 
 
 def test_surrogate_fidelity_reproduces_pinned_numbers(
@@ -753,7 +869,7 @@ def test_surrogate_fidelity_reproduces_pinned_numbers(
     assert report.meetings_scored == 87  # was 96
     assert report.ejection_meetings == 55  # was 60
     assert report.skip_meetings == 32  # was 36
-    assert report.top1_hits == 44  # was 46
+    assert report.top1_hits == 42  # was 44
     assert report.top2_hits == 52  # was 55
     assert report.predicted_ejections == 2  # was 0
     assert report.predicted_skips == 85  # was 96
@@ -765,7 +881,7 @@ def test_surrogate_fidelity_reproduces_pinned_numbers(
     assert report.honest_ceiling.ejections_total == 55  # was 60
     assert report.honest_ceiling.reachable == 44  # was 51
     # Floats — deterministic, pinned to the exact literals.
-    assert report.top1 == pytest.approx(0.8, abs=1e-12)  # was 0.7666666666666667
+    assert report.top1 == pytest.approx(0.7636363636363637, abs=1e-12)  # was 0.8
     assert report.top2 == pytest.approx(
         0.9454545454545454, abs=1e-12
     )  # was 0.9166666666666666
@@ -776,11 +892,11 @@ def test_surrogate_fidelity_reproduces_pinned_numbers(
         0.632183908045977, abs=1e-12
     )  # was 0.625
     assert report.brier == pytest.approx(
-        0.0667040763679702, abs=1e-12
-    )  # was 0.06785997153616342
+        0.0668811387729836, abs=1e-12
+    )  # was 0.0667040763679702
     assert report.ece == pytest.approx(
-        0.10106989788592366, abs=1e-12
-    )  # was 0.09477687280149634
+        0.10356921746389862, abs=1e-12
+    )  # was 0.10106989788592366
     assert report.ballot_brier == pytest.approx(
         0.12890565371024734, abs=1e-12
     )  # was 0.1242077399380805
@@ -843,10 +959,15 @@ def test_split_verdict_separates_the_ranking_and_decision_claims(
     assert verdict.verdict == "NO-GO"
     assert verdict.surrogate_role == "diagnostic-only"
     assert verdict.top1_bar == pytest.approx(0.6000000000000001, abs=1e-12)
-    # AT the measured ceiling, not above a floor with headroom left: axis 1 is
-    # saturated in HEADROOM, which is a different statement from a dead axis.
-    assert verdict.top1_ceiling_gap == pytest.approx(0.0, abs=1e-12)
-    assert verdict.surrogate_top1 == pytest.approx(0.8, abs=1e-12)
+    # Just under the measured ceiling: the three ejections the reporter oracle
+    # used to carry are the whole remaining headroom, and axis 1 clears its bar
+    # without them.
+    assert verdict.top1_ceiling_gap == pytest.approx(
+        0.036363636363636376, abs=1e-12
+    )  # was 0.0
+    assert verdict.surrogate_top1 == pytest.approx(
+        0.7636363636363637, abs=1e-12
+    )  # was 0.8
     assert verdict.ceiling_top1 == pytest.approx(0.8, abs=1e-12)
     # WHY the ceiling sits at 0.8 — the overlapping channel decomposition.
     assert verdict.ceiling_flag_present == 45
@@ -1124,7 +1245,7 @@ def test_no_go_verdict_holds_on_live_served_clamped_features(
                 correct_skips += 1
         if view.is_ejection and live_pred.ranking[0] == view.ejected:
             top1_hits += 1
-    assert top1_hits == 45  # was 46
+    assert top1_hits == 42  # was 45
     assert predicted_skips == 85  # was 96
     assert correct_skips == 32  # was 36
     # Third-rank-and-below shuffles only, BOUNDED not pinned: the reorder count
@@ -1455,10 +1576,13 @@ def test_impostor_ballot_never_names_a_fellow_impostor() -> None:
 def _poison_labels(row: MeetingTableRow) -> MeetingTableRow:
     """Replace a row's LABEL columns with garbage; keep FEATURE columns intact.
 
-    The label set covers the ballot join targets, the coercion flag, the meeting
-    outcome, AND the roles ground truth (``voter_role`` / ``voter_is_impostor`` /
+    The label set covers the ballot join targets, the fit-side exclusion columns
+    (``ballot_coerced_skip`` / ``ballot_rewrite_labels``), the meeting outcome,
+    AND the roles ground truth (``voter_role`` / ``voter_is_impostor`` /
     per-candidate ``role`` / ``is_impostor`` / ``is_ejected``) — a predict path
-    that read ANY of them would diverge from the clean model.
+    that read ANY of them would diverge from the clean model. That is the
+    assertion that the fidelity replay scores the recorded bytes UNFILTERED:
+    the widened drop rule is fit-side only.
     """
 
     return row.model_copy(
@@ -1467,6 +1591,7 @@ def _poison_labels(row: MeetingTableRow) -> MeetingTableRow:
             "ballot_confidence": 0.0,
             "ballot_primary_reason_id": None,
             "ballot_coerced_skip": True,
+            "ballot_rewrite_labels": ("under_gate_redirect",),
             "ejected_player_id": "poisoned-label",
             "outcome": "EJECTED",
             "voter_role": "IMPOSTOR",
@@ -1494,6 +1619,7 @@ def _poison_everything(row: MeetingTableRow) -> MeetingTableRow:
             "ballot_confidence": 0.0,
             "ballot_primary_reason_id": None,
             "ballot_coerced_skip": True,
+            "ballot_rewrite_labels": ("under_gate_redirect",),
             "ejected_player_id": "poisoned-label",
             "outcome": "EJECTED",
             "voter_role": "IMPOSTOR",
@@ -1608,40 +1734,41 @@ def test_fit_fence_raises_on_a_held_out_view(corpus_table: MeetingTable) -> None
 # --------------------------------------------------------------------------- #
 
 
-def test_committed_corpus_carries_zero_coerced_skip_rows(
+def test_the_corpus_rows_the_fit_drops_are_the_whole_rewrite_class(
     corpus_table: MeetingTable,
 ) -> None:
-    """The baseline-6 corpus records ONE J2-coerced ballot — the census moved.
+    """What the fit excludes on committed bytes, counted per rule.
 
-    A FINDING, not a stale pin. Through baseline 5 this bucket was honestly EMPTY
-    on committed bytes: the 17.9 re-record produced zero
-    ``UNCITED_ZERO_FLAG_EJECT_MARKER`` ballots on either set, and the 18.12 samples
-    record likewise ("the coerced-SKIP bucket is honestly 0"), so the fit-side
-    exclusion had never actually dropped a row outside a synthetic fixture. At
-    baseline 6 it drops exactly ONE — ``headless-seed-1027:meeting-4`` on 9p2i
-    (4p1i stays 0) — so the citation gate's coercion path is now exercised by
-    committed corpus bytes for the first time, and the fit-side exclusion is
-    load-bearing rather than merely proven-in-fixture.
+    The J2 coercion census is the narrow column and stays reported: 7 rows on
+    9p2i, 0 on 4p1i. The rule the fit reads is the wider one — every row whose
+    recorded target the meeting layer rewrote, not just the coercions — and it
+    drops 102 and 2 on the same two sets. The gap between the two numbers is the
+    finding: 95 of those rows were riding into the fit as the voter's own choice.
 
-    One row of 468 meetings is far too small to move any fit, so this is reported,
-    not banded. The fence itself is still proven on a synthetic marking below (a
-    rule that cannot move is not a rule).
+    Both are pinned together so neither can move alone, and the census test in
+    ``tests/training/test_surrogate_dataset.py`` holds the per-kind split behind
+    them.
     """
 
-    assert sum(row.ballot_coerced_skip for row in corpus_table.rows) == 7  # was 1
+    assert sum(row.ballot_coerced_skip for row in corpus_table.rows) == 7
+    assert sum(_target_was_rewritten(row) for row in corpus_table.rows) == 102  # was 7
     four = build_meeting_table(_REPO_ROOT / "replays" / "ml_corpus" / "4p1i")
     assert sum(row.ballot_coerced_skip for row in four.rows) == 0
+    assert sum(_target_was_rewritten(row) for row in four.rows) == 2  # was 0
 
 
 def _mark_coerced(
     table: MeetingTable, seeds: frozenset[int], *, poison_labels: bool
 ) -> MeetingTable:
-    """Flag every row of ``seeds`` as coerced; optionally poison its labels."""
+    """Flag every row of ``seeds`` as target-rewritten; optionally poison labels."""
 
     def mark(row: MeetingTableRow) -> MeetingTableRow:
         if row.seed not in seeds:
             return row
-        update: dict[str, object] = {"ballot_coerced_skip": True}
+        update: dict[str, object] = {
+            "ballot_coerced_skip": True,
+            "ballot_rewrite_labels": ("uncited_coerced",),
+        }
         if poison_labels:
             update["ballot_target"] = "poisoned-label"
             update["ballot_confidence"] = 0.0
@@ -1735,13 +1862,43 @@ def test_predicted_ballot_calibration_is_a_distinct_channel(
 
     model, test_views = module_model
     calib = model.predicted_ballot_calibration(test_views)
-    assert calib.predicted_ballots == 107  # was 100
-    assert calib.predicted_skips == 391  # was 457
+    assert calib.predicted_ballots == 105  # was 107
+    assert calib.predicted_skips == 393  # was 391
     assert calib.brier == pytest.approx(
-        0.33399645935635536, abs=1e-12
-    )  # was 0.2541857827042379
+        0.3315434258019645, abs=1e-12
+    )  # was 0.33399645935635536
     # Distinct channel by construction.
     assert calib.brier != surrogate_report.ballot_brier
+
+
+def test_every_live_feature_build_writes_the_same_masked_reporter_value() -> None:
+    """Fit and serve write ONE named constant into the ``is_reporter`` slot.
+
+    The mask is only meaningful if it is the same everywhere: a frozen weight
+    vector fitted against a masked column and served an unmasked one is a
+    silent mis-multiply. The three sites that build a
+    :data:`~training.surrogate.ballots.BALLOT_FEATURE_NAMES` vector are pinned
+    to name the shared constant, so a hard-coded literal at any of them fails
+    here rather than at the next re-fit.
+
+    ``training/surrogate/fidelity.py``'s ``FO6_FEATURE_NAMES`` is a DIFFERENT
+    head — the FO-6 physical baseline — and is deliberately not in this list.
+    """
+
+    sites = (
+        _REPO_ROOT / "training" / "surrogate" / "ballots.py",
+        _REPO_ROOT / "training" / "surrogate" / "runner.py",
+        _REPO_ROOT / "training" / "composed_runner.py",
+    )
+    for path in sites:
+        written = re.findall(r'"is_reporter":\s*([^,\n]+)', path.read_text())
+        assert written, f"{path} builds no is_reporter feature slot"
+        assert set(written) == {"MASKED_IS_REPORTER"}, (str(path), written)
+    assert MASKED_IS_REPORTER == 0.0
+    # The layout is NOT shortened: the committed artifact serializes and
+    # validates it, so the mask has to live inside a six-wide tuple.
+    assert "is_reporter" in BALLOT_FEATURE_NAMES
+    assert len(BALLOT_FEATURE_NAMES) == 6
 
 
 def test_predict_reads_only_feature_columns_directly(

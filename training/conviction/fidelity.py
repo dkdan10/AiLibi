@@ -22,6 +22,14 @@ first evaluation ran):
    so a fenced model structurally cannot flag it, exactly as the honest
    ceiling bounds the surrogate's top-1 (``training/surrogate/fidelity.py``).
    Precision and accuracy are reported beside it, never substituted for it.
+3. **Trivial-constant channel** — held-out ``conversion_accuracy`` strictly above
+   the population's own best constant answer
+   (:func:`conversion_trivial_baseline`). Recall alone cannot see a degenerate
+   head: an always-convert model has no false negatives, so its recall is 1.0 on
+   any corpus and axis 2 waves it through. The surrogate bar has carried exactly
+   this comparator (``always_eject_baseline``) since it was written; this is its
+   conviction-side twin, a strict inequality against a MEASURED constant, so it
+   adds no tunable threshold.
 
 ``voice_driven_share`` is the honest ceiling's complement measured on the
 held-out rows via the table's per-row ``ceiling_reachable`` bit
@@ -33,7 +41,7 @@ measured on the SAME held-out population by this harness; nothing is compared
 against a previous baseline's absolute figure.
 
 **The verdict is machine-readable for 18.16** (:class:`ConvictionGoVerdict`):
-GO ⇔ both axes hold, and the consequence mapping is pre-committed in the same
+GO ⇔ every axis holds, and the consequence mapping is pre-committed in the same
 breath — GO ⇒ the fitness term SHIPS on both sides and the referee pre-screen
 GATES real-path spend; NO-GO ⇒ the term is structurally ABSENT (not
 zero-weighted) and the pre-screen is ADVISORY only, the model surviving as a
@@ -44,8 +52,8 @@ verdict's fields — never a prose reading of the report.
 Public surface (stable — downstream tasks import these):
 :class:`ConvictionFidelityReport`, :class:`ConvictionGoVerdict`,
 :func:`run_conviction_fidelity`, :func:`decide_conviction_go`,
-:func:`spearman_rank_correlation`, :func:`write_conviction_verdict_artifact`,
-:func:`load_conviction_verdict`.
+:func:`spearman_rank_correlation`, :func:`conversion_trivial_baseline`,
+:func:`write_conviction_verdict_artifact`, :func:`load_conviction_verdict`.
 """
 
 from __future__ import annotations
@@ -81,6 +89,26 @@ CONVICTION_CONVERSION_DECISION_THRESHOLD: Final[float] = 0.5
 
 # The committed verdict filename beside the weights artifact.
 VERDICT_FILENAME: Final[str] = "verdict.json"
+
+
+def conversion_trivial_baseline(*, conversions: int, meetings: int) -> float:
+    """The accuracy a constant conversion head reaches on this population.
+
+    ``max(base_rate, 1 - base_rate)`` over ``conversions / meetings`` — whichever
+    constant answer, "always convert" or "never convert", the population itself
+    rewards more. A measured constant, so the axis it feeds introduces no tunable
+    threshold; the surrogate bar has compared against its own such constant
+    (``always_eject_baseline``) since the bar was written, and axis 3 below is
+    the conviction side of the same comparator.
+    """
+
+    if meetings <= 0:
+        raise ValueError(
+            "the trivial conversion baseline is undefined on an empty held-out "
+            "population"
+        )
+    base_rate = conversions / meetings
+    return max(base_rate, 1.0 - base_rate)
 
 
 def _average_ranks(values: NDArray[np.float64]) -> NDArray[np.float64]:
@@ -301,12 +329,16 @@ def run_conviction_fidelity(
 class ConvictionGoVerdict(BaseModel):
     """The pre-stated GO/NO-GO verdict for the conviction model (frozen).
 
-    GO ⇔ BOTH axes hold on the held-out population, judged by this harness:
+    GO ⇔ ALL THREE axes hold on the held-out population, judged by this harness:
 
     1. ``flag_spearman >= CONVICTION_SPEARMAN_BAR`` (0.5);
     2. ``conversion_recall >= CONVICTION_CONVERSION_CEILING_RATIO ×
        (1 − voice_driven_share)`` — the voice-driven share measured on the
-       SAME population, never a previous baseline's figure.
+       SAME population, never a previous baseline's figure;
+    3. ``conversion_accuracy > conversion_trivial_baseline`` — the population's
+       own best constant answer (:func:`conversion_trivial_baseline`). A head
+       that always calls conversion has recall 1.0 and clears axis 2 on any
+       corpus; axis 3 is what a degenerate head cannot pass.
 
     Pre-committed in the same breath (the task contract): NO-GO ⇒ the model is
     DIAGNOSTIC-ONLY — the fitness term does not ship (structurally absent from
@@ -336,6 +368,15 @@ class ConvictionGoVerdict(BaseModel):
     conversion_ceiling_ratio: float
     conversion_bar: float
     meets_conversion_bar: bool
+    # Axis 3 — held-out conversion accuracy against the population's own trivial
+    # constant. ``None`` means exactly one thing: this verdict predates axis 3.
+    # :func:`decide_conviction_go` always populates all three (a test pins that),
+    # so the only artifact that can read ``None`` is one committed before the
+    # axis existed, which still loads rather than taking the composed runner's
+    # GO gate down with it.
+    conversion_accuracy: float | None = None
+    conversion_trivial_baseline: float | None = None
+    beats_trivial_conversion: bool | None = None
     verdict: Literal["GO", "NO-GO"]
     # The machine-readable consequence mapping for 18.16.
     fitness_term: Literal["ships", "absent"]
@@ -359,7 +400,11 @@ def decide_conviction_go(
     conversion_ceiling = 1.0 - report.voice_driven_share
     conversion_bar = CONVICTION_CONVERSION_CEILING_RATIO * conversion_ceiling
     meets_conversion = report.conversion_recall >= conversion_bar
-    is_go = meets_spearman and meets_conversion
+    trivial_baseline = conversion_trivial_baseline(
+        conversions=report.conversions_test, meetings=report.test_meetings
+    )
+    beats_trivial = report.conversion_accuracy > trivial_baseline
+    is_go = meets_spearman and meets_conversion and beats_trivial
     return ConvictionGoVerdict(
         replay_set_dir=report.replay_set_dir,
         weights_sha256=weights_sha256,
@@ -375,6 +420,9 @@ def decide_conviction_go(
         conversion_ceiling_ratio=CONVICTION_CONVERSION_CEILING_RATIO,
         conversion_bar=conversion_bar,
         meets_conversion_bar=meets_conversion,
+        conversion_accuracy=report.conversion_accuracy,
+        conversion_trivial_baseline=trivial_baseline,
+        beats_trivial_conversion=beats_trivial,
         verdict="GO" if is_go else "NO-GO",
         # The pre-committed consequence mapping: a NO-GO model is a diagnostic
         # — the fitness term is structurally absent and the pre-screen only
@@ -420,6 +468,7 @@ __all__ = [
     "VERDICT_FILENAME",
     "ConvictionFidelityReport",
     "ConvictionGoVerdict",
+    "conversion_trivial_baseline",
     "decide_conviction_go",
     "load_conviction_verdict",
     "run_conviction_fidelity",

@@ -91,9 +91,10 @@ Nothing here was force-deleted.
 from __future__ import annotations
 
 import hashlib
+import json
 from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import Final
+from typing import Final, Literal, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -106,12 +107,20 @@ from meetings.schemas import MeetingResult, MeetingTranscript, VoteBallot
 from meetings.voting import tally_ballots
 from orchestrator.game import MeetingArtifacts, MeetingAwareAgent
 from training.surrogate.ballots import (
+    MASKED_IS_REPORTER,
     BallotPredictor,
     SurrogateStalenessCap,
     VoterBallotView,
     load_ballot_predictor_artifact,
     load_staleness_cap,
 )
+from training.surrogate.fidelity import GoNoGoVerdict
+
+#: What a caller is installing the loaded surrogate AS. ``"diagnostic"`` covers
+#: every path a NO-GO surrogate may still serve (fidelity replays, probes, the
+#: composed runner's verification fence); ``"training-time-runner"`` is the role
+#: the pre-committed consequence mapping grants only to a GO verdict.
+SurrogateInstallRole: TypeAlias = Literal["diagnostic", "training-time-runner"]
 
 # The orchestrator's meeting-id format (``orchestrator/game.py::_game_id`` +
 # ``_run_and_apply_meeting``): ``"{game_id}:meeting-{meeting_index}"``. The
@@ -131,6 +140,13 @@ _SURROGATE_RATIONALE: Final[str] = (
 # against a re-recorded (baseline-N+1) corpus while nothing raised. This sidecar
 # records the fit corpus's identity beside the weights so the loader can catch it.
 FIT_CORPUS_FILENAME: Final[str] = "fit-corpus.json"
+
+# The committed GO/NO-GO verdict beside the weights artifact, mirroring the
+# conviction model's own ``verdict.json``. ``load_surrogate_runner_factory``
+# reads it when a caller asks to install the surrogate as a TRAINING-TIME
+# runner, so the pre-committed fallback mapping is enforced by the load path
+# rather than by convention.
+SURROGATE_VERDICT_FILENAME: Final[str] = "verdict.json"
 
 # The repo-relative root under which the canonical corpora live (``9p2i`` / ``4p1i``).
 # ``load_surrogate_runner_factory`` uses ``_DEFAULT_CORPUS_ROOT / corpus_set`` only as
@@ -323,7 +339,9 @@ class SurrogateMeetingRunner:
                         float(entry.suspicion) if entry is not None else 0.5
                     ),
                     "belief_trust": float(entry.trust) if entry is not None else 0.5,
-                    "is_reporter": float(cand == trigger.triggered_by),
+                    # Masked identically to the fit side, so the frozen weights
+                    # multiply the same column here as they were fitted on.
+                    "is_reporter": MASKED_IS_REPORTER,
                     "witnessed_vent": float(cand in vent_subjects),
                     "meeting_index": meeting_index,
                     "alive_count": alive_count,
@@ -416,17 +434,57 @@ def fit_corpus_fingerprint(corpus_dir: Path) -> str:
 
 
 def load_fit_corpus_record(artifact_dir: Path) -> SurrogateFitCorpus:
-    """Read the committed fit-corpus provenance beside the weights (fail loud)."""
+    """Read the committed fit-corpus provenance beside the weights (fail loud).
+
+    Generic over the artifact directory — the surrogate and the conviction model
+    both record their fit corpus in this shape — so the message names the
+    directory that was asked for rather than one instrument.
+    """
 
     path = artifact_dir / FIT_CORPUS_FILENAME
     if not path.is_file():
         raise FileNotFoundError(
-            f"no committed fit-corpus provenance at {path}; the surrogate must "
-            "record the corpus it was fitted on so the load path can catch "
-            "substrate drift (Task 18.14 — training/reports/"
+            f"no committed fit-corpus provenance at {path}; an instrument must "
+            f"record the corpus it was fitted on so a load against {artifact_dir}"
+            " can catch substrate drift (training/reports/"
             "report-ballot-surrogate.md §7)"
         )
     return SurrogateFitCorpus.model_validate_json(path.read_text())
+
+
+def write_surrogate_verdict_artifact(
+    verdict: GoNoGoVerdict, artifact_dir: Path
+) -> None:
+    """Commit the machine-readable verdict beside the weights artifact.
+
+    Sorted keys + one trailing newline (byte-stable re-serialization), the same
+    shape ``write_conviction_verdict_artifact`` commits. A verdict that names no
+    weights is refused: an unkeyed verdict cannot say WHICH artifact it judged,
+    and the install gate below would then guard nothing in particular.
+    """
+
+    if verdict.weights_sha256 is None:
+        raise ValueError(
+            "a committed surrogate verdict must be keyed on the weights it "
+            "judged; pass weights_sha256= to decide_go_no_go"
+        )
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    (artifact_dir / SURROGATE_VERDICT_FILENAME).write_text(
+        json.dumps(verdict.model_dump(), indent=2, sort_keys=True) + "\n"
+    )
+
+
+def load_surrogate_verdict(artifact_dir: Path) -> GoNoGoVerdict:
+    """Read the committed surrogate verdict beside the weights (fail loud)."""
+
+    path = artifact_dir / SURROGATE_VERDICT_FILENAME
+    if not path.is_file():
+        raise FileNotFoundError(
+            f"no committed surrogate verdict at {path}; installing the "
+            "surrogate as a training-time runner consumes the machine-readable "
+            "verdict, never a prose reading of the report"
+        )
+    return GoNoGoVerdict.model_validate_json(path.read_text())
 
 
 def load_surrogate_runner_factory(
@@ -434,6 +492,7 @@ def load_surrogate_runner_factory(
     *,
     use_counter: SurrogateUseCounter | None = None,
     corpus_dir: Path | None = None,
+    install_role: SurrogateInstallRole = "diagnostic",
 ) -> Callable[[], SurrogateMeetingRunner]:
     """Build a per-game runner factory over the COMMITTED weights artifact.
 
@@ -466,6 +525,16 @@ def load_surrogate_runner_factory(
     it is opt-in); ``replays/ml_corpus/<corpus_set>`` is where the recorded
     ``corpus_set`` lives. A mismatch fails loud rather than scoring a bake-off
     against a stale surrogate.
+
+    **The install gate.** ``install_role="training-time-runner"`` asks for the
+    role only a GO verdict grants — the surrogate driving the bake-off's
+    meetings — so the committed verdict is loaded and its COMPOSED ``verdict``
+    field must read ``GO``. That composed field is the one the consequence
+    mapping is defined on; the reporting split's ``ranking_verdict`` /
+    ``decision_verdict`` halves are neither read here nor re-conjoined. The
+    default ``"diagnostic"`` is the role every current caller holds — the
+    fidelity and probe paths a NO-GO surrogate is explicitly still allowed to
+    serve — and loads no verdict at all.
     """
 
     predictor, weights_sha256 = load_ballot_predictor_artifact(artifact_dir)
@@ -495,6 +564,16 @@ def load_surrogate_runner_factory(
                 "before scoring against this corpus "
                 "(training/reports/report-ballot-surrogate.md §8)"
             )
+    if install_role == "training-time-runner":
+        verdict = load_surrogate_verdict(artifact_dir)
+        if verdict.verdict != "GO":
+            raise ValueError(
+                f"the committed surrogate verdict under {artifact_dir} is "
+                f"{verdict.verdict!r} (surrogate_role={verdict.surrogate_role!r})"
+                " — a NO-GO surrogate is DIAGNOSTIC-ONLY and never the "
+                "training-time meeting runner; the fake-provider MeetingManager "
+                "is the pre-committed fallback (no silent fallbacks)"
+            )
     if use_counter is not None:
         if use_counter.cap.weights_sha256 != weights_sha256:
             raise ValueError(
@@ -523,11 +602,15 @@ def load_surrogate_runner_factory(
 
 __all__ = [
     "FIT_CORPUS_FILENAME",
+    "SURROGATE_VERDICT_FILENAME",
     "SurrogateFitCorpus",
+    "SurrogateInstallRole",
     "SurrogateMeetingRunner",
     "SurrogateStalenessExceededError",
     "SurrogateUseCounter",
     "fit_corpus_fingerprint",
     "load_fit_corpus_record",
     "load_surrogate_runner_factory",
+    "load_surrogate_verdict",
+    "write_surrogate_verdict_artifact",
 ]

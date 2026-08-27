@@ -15,11 +15,16 @@ mismatches) while measuring the graduated-J1 live-parity divergence.
 from __future__ import annotations
 
 import json
+import re
+from collections import Counter
 from dataclasses import replace
 from pathlib import Path
+from typing import Final, get_args
 
+import numpy as np
 import pytest
 
+from api import replay_loader
 from agents.memory.beliefs import (
     MEETING_SUSPICION_DECAY_RATE,
     BeliefState,
@@ -32,12 +37,14 @@ from engine.tick import advance_tick
 from engine.world import load_canonical_map
 from eval.validity import assemble_tournament_report
 from meetings.manager import (
+    BALLOT_TARGET_REDIRECT_MARKER,
     INVALID_OBSERVATION_ID_MARKER,
     TEAMMATE_VOTE_TARGET_MARKER,
     UNCITED_ZERO_FLAG_EJECT_MARKER,
 )
 from meetings.schemas import AlibiClaim as SchemaAlibiClaim
 from meetings.schemas import (
+    BallotTargetRewriteReason,
     CompletedTaskObservation,
     ContradictionRef,
     MeetingTranscript,
@@ -45,18 +52,39 @@ from meetings.schemas import (
     VoteBallot,
 )
 from meetings.transcript import WEAK_CONTRADICTION_MARKER_PREFIX
+from orchestrator.replay import MeetingReplayEntry, read_all_entries
 from orchestrator.seeder import seed_initial_state
+from training.surrogate.ballots import (
+    MASKED_IS_REPORTER,
+    _target_was_rewritten,
+    ballot_features_from_row,
+)
 from training.surrogate.dataset import (
+    BALLOT_AUDIT_MARKERS,
+    TARGET_REWRITE_LABELS,
     BeliefRenderParity,
     MeetingTableReconstructionError,
     MeetingTableRow,
     _ballot_is_coerced_skip,
     _contradiction_lifts,
     _WindowStats,
+    ballot_rewrite_labels,
     build_meeting_table,
     load_splits,
     measure_belief_render_parity,
 )
+
+#: The four committed replay sets, in the order every per-set pin below reads.
+_COMMITTED_SETS: Final[tuple[Path, ...]] = (
+    Path("replays/samples/9p2i"),
+    Path("replays/ml_corpus/9p2i"),
+    Path("replays/samples/4p1i"),
+    Path("replays/ml_corpus/4p1i"),
+)
+
+#: Any bracketed annotation, whatever produced it — the census denominator, so
+#: the marker parser cannot define away a kind by failing to recognise it.
+_BRACKETED: Final[re.Pattern[str]] = re.compile(r"\[[^\]]*\]")
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _NINE = _REPO_ROOT / "replays" / "samples" / "9p2i"
@@ -330,11 +358,11 @@ def test_build_meeting_table_consumes_the_frozen_corpus() -> None:
         10,
         10,
     )
-    # The 17.10 coerced-SKIP census: the baseline-5 re-record produced ZERO
-    # J2-coerced ballots on this set (the report §2.1 count), so the fit-side
-    # exclusion drops nothing on committed bytes — the fence is proven on
-    # synthetic markings instead.
+    # The fit-side drop census on this set: no J2-coerced ballot, but TWO rows
+    # whose target the meeting layer rewrote (both under-gate redirects), so the
+    # exclusion is load-bearing on committed bytes rather than fixture-only.
     assert sum(row.ballot_coerced_skip for row in table.rows) == 0
+    assert sum(_target_was_rewritten(row) for row in table.rows) == 2  # was 0
 
 
 def test_splits_count_metadata_must_agree_with_seed_lists(tmp_path: Path) -> None:
@@ -842,6 +870,222 @@ def test_coerced_skip_detection_follows_the_marker_convention() -> None:
     assert not _ballot_is_coerced_skip(_skip_ballot(teammate + "skipping"))
     assert not _ballot_is_coerced_skip(_skip_ballot("no marker at all"))
     assert not _ballot_is_coerced_skip(_skip_ballot("prefix " + marker))
+
+
+# --------------------------------------------------------------------------- #
+# The whole rewrite class: the table, the sources it reads, and the census    #
+# --------------------------------------------------------------------------- #
+
+
+def test_the_marker_chain_is_walked_front_to_back_not_matched_once() -> None:
+    """A stacked ordering cannot hide the inner label behind the outer one.
+
+    Every one of the eight uncited markers on committed bytes is LEADING, so a
+    single anchored ``.match()`` recovers them all today and an evasion would go
+    unnoticed until a recording produced one. Plant that recording: an under-gate
+    redirect wrapping an uncited coercion, an order no committed byte carries.
+    Both labels come back, and the same ballot with only the outer marker gives
+    back only the outer label — so the assertion is not passing on a parser that
+    returns everything.
+    """
+
+    stacked = (
+        BALLOT_TARGET_REDIRECT_MARKER.format(original="p-2", target="p-5")
+        + UNCITED_ZERO_FLAG_EJECT_MARKER.format(target="p-5")
+        + "they vented"
+    )
+    assert set(ballot_rewrite_labels(_skip_ballot(stacked))) == {
+        "under_gate_redirect",
+        "uncited_coerced",
+    }
+    outer_only = (
+        BALLOT_TARGET_REDIRECT_MARKER.format(original="p-2", target="p-5")
+        + "they vented"
+    )
+    assert ballot_rewrite_labels(_skip_ballot(outer_only)) == ("under_gate_redirect",)
+
+
+def test_the_structured_guard_reason_wins_over_a_contradicting_marker() -> None:
+    """A recording that carries the meeting layer's own testimony is believed.
+
+    ``guard_rewrite_reason`` is the meeting layer stating what it did; the marker
+    prefix is the legacy string a reader has to parse back out. When a recording
+    carries both and they disagree, the structured field is the answer — planted
+    here because no committed byte carries the field at all (0 of 3,602 recorded
+    ballots across the four committed sets), so only a plant can distinguish the
+    two sources.
+    """
+
+    contradicting = VoteBallot(
+        voter="p-1",
+        target="SKIP",
+        confidence=0.2,
+        primary_reason_id=None,
+        considered_alternatives=(),
+        rationale_text=(
+            UNCITED_ZERO_FLAG_EJECT_MARKER.format(target="p-5") + "they vented"
+        ),
+        guard_redirected_from="p-2",
+        guard_rewrite_reason="under_gate_redirect",
+    )
+    assert ballot_rewrite_labels(contradicting) == ("under_gate_redirect",)
+
+
+def test_the_training_marker_table_cannot_drift_from_the_display_one() -> None:
+    """One vocabulary, two layers: training and display read the same sources.
+
+    The label set is pinned against ``api.replay_loader._BALLOT_PREFIX_MARKERS``
+    and the drop set against the public
+    ``meetings.schemas.BallotTargetRewriteReason`` union (which the display
+    layer's own ``_TARGET_REWRITE_LABELS`` is derived from), so the two tables
+    are pinned to ONE source rather than to each other. Perturbed copies of both
+    prove the comparison bites.
+    """
+
+    assert {label for label, _ in BALLOT_AUDIT_MARKERS} == {
+        label for label, _ in replay_loader._BALLOT_PREFIX_MARKERS
+    }
+    assert dict(BALLOT_AUDIT_MARKERS) == dict(replay_loader._BALLOT_PREFIX_MARKERS)
+    assert TARGET_REWRITE_LABELS == frozenset(get_args(BallotTargetRewriteReason))
+    assert TARGET_REWRITE_LABELS == replay_loader._TARGET_REWRITE_LABELS
+
+    perturbed_table = BALLOT_AUDIT_MARKERS[:-1]
+    assert {label for label, _ in perturbed_table} != {
+        label for label, _ in replay_loader._BALLOT_PREFIX_MARKERS
+    }
+    perturbed_drop = TARGET_REWRITE_LABELS - {"under_gate_redirect"}
+    assert perturbed_drop != frozenset(get_args(BallotTargetRewriteReason))
+
+
+def test_the_citation_only_rewrites_stay_in_the_fit() -> None:
+    """Nulling a reference is not rewriting a target, and the rule says so."""
+
+    assert "invalid_reason_id" not in TARGET_REWRITE_LABELS
+    assert "invalid_observation_id" not in TARGET_REWRITE_LABELS
+    nulled = _skip_ballot(
+        INVALID_OBSERVATION_ID_MARKER.format(observation_id="p-9:12:3")
+        + "cited a ghost observation"
+    )
+    labels = ballot_rewrite_labels(nulled)
+    assert labels == ("invalid_observation_id",)
+    row = build_meeting_table(_COMMITTED_SETS[3]).rows[0]
+    assert not _target_was_rewritten(
+        row.model_copy(update={"ballot_rewrite_labels": labels})
+    )
+    assert _target_was_rewritten(
+        row.model_copy(update={"ballot_rewrite_labels": ("under_gate_redirect",)})
+    )
+
+
+@pytest.mark.slow
+def test_the_ballot_audit_marker_census_over_the_four_committed_sets() -> None:
+    """What the fit actually consumes, counted — so a re-record cannot move it.
+
+    Recomputed from the recorded bytes: every ballot in every committed set, its
+    bracketed annotations counted and its rewrite labels parsed. Six of the seven
+    kinds are the prefix markers this module's table parses; the seventh, the
+    vote-guard rationale redaction, is a replacement BODY rather than a prefix,
+    so the census counts it and the parser does not claim it.
+    """
+
+    ballots: list[VoteBallot] = []
+    games = 0
+    marked_games = 0
+    annotations = 0
+    kinds: Counter[str] = Counter()
+    per_set_rewritten: list[int] = []
+    for set_dir in _COMMITTED_SETS:
+        rewritten = 0
+        for path in sorted(set_dir.rglob("*.jsonl")):
+            games += 1
+            game_marked = False
+            for entry in read_all_entries(path):
+                if not isinstance(entry, MeetingReplayEntry):
+                    continue
+                for ballot in entry.ballots:
+                    ballots.append(ballot)
+                    brackets = _BRACKETED.findall(ballot.rationale_text)
+                    annotations += len(brackets)
+                    game_marked = game_marked or bool(brackets)
+                    labels = ballot_rewrite_labels(ballot)
+                    kinds.update(labels)
+                    kinds["rationale_redaction"] += sum(
+                        1 for text in brackets if "redact" in text.lower()
+                    )
+                    if TARGET_REWRITE_LABELS.intersection(labels):
+                        rewritten += 1
+            marked_games += int(game_marked)
+        per_set_rewritten.append(rewritten)
+
+    assert (games, len(ballots), annotations, marked_games) == (300, 3602, 204, 94)
+    assert dict(kinds) == {
+        "under_gate_redirect": 120,
+        "invalid_observation_id": 27,
+        "teammate_coerced": 18,
+        "rationale_redaction": 18,
+        "invalid_reason_id": 9,
+        "uncited_coerced": 8,
+        "invalid_target": 4,
+    }
+    assert sum(kinds.values()) == 204
+    # samples-9p2i, ml_corpus-9p2i, samples-4p1i, ml_corpus-4p1i.
+    assert per_set_rewritten == [45, 102, 1, 2]
+    assert sum(per_set_rewritten) == 150
+    # 8 of those 150 were already dropped by the J2-only rule; 142 rode into the
+    # fit as the voter's own choice before this rule widened.
+    assert kinds["uncited_coerced"] == 8
+    # No recorded ballot carries the structured field yet, which is why the
+    # marker table above is load-bearing rather than belt-and-braces.
+    assert sum(b.guard_rewrite_reason is not None for b in ballots) == 0
+
+
+@pytest.mark.slow
+def test_the_reporter_column_is_an_exclusion_oracle_the_fit_may_not_read() -> None:
+    """Why ``is_reporter`` is masked: a head on it separates the roles perfectly.
+
+    The census first — over every candidate cell of the four committed sets, a
+    reporter is a CREWMATE without exception. Then the head: restore the feature
+    into the fit-side vector, fit the one-feature logistic on it against the
+    IMPOSTOR label, and it calls every reporter cell crewmate with no error. That
+    is roles ground truth reached through a feature column, not a ballot signal
+    learned, which is why the slot is masked at every fit and inference site. The
+    mask does not expire when the census moves on the next corpus: the reason it
+    exists is that the column CAN carry the label, not that it currently does.
+    """
+
+    reporter_roles: Counter[str] = Counter()
+    features: list[float] = []
+    labels: list[float] = []
+    for set_dir in _COMMITTED_SETS:
+        for row in build_meeting_table(set_dir).rows:
+            for feat in row.candidates:
+                if feat.is_reporter:
+                    reporter_roles[feat.role] += 1
+                features.append(float(feat.is_reporter))
+                labels.append(float(feat.is_impostor))
+    assert reporter_roles == Counter({"CREWMATE": 3602})
+    assert reporter_roles["IMPOSTOR"] == 0
+
+    # The fit-side vector never sees it: every built view writes the constant.
+    served = {
+        cell["is_reporter"]
+        for row in build_meeting_table(_COMMITTED_SETS[3]).rows
+        for cell in ballot_features_from_row(row).features.values()
+    }
+    assert served == {MASKED_IS_REPORTER}
+
+    # The head, on the restored feature: deterministic full-batch GD, zeros init.
+    x = np.array(features, dtype=np.float64)
+    y = np.array(labels, dtype=np.float64)
+    weight = bias = 0.0
+    for _ in range(400):
+        prob = 1.0 / (1.0 + np.exp(-(weight * x + bias)))
+        error = prob - y
+        weight -= 0.5 * float((error * x).mean())
+        bias -= 0.5 * float(error.mean())
+    predicted_impostor = (1.0 / (1.0 + np.exp(-(weight * x + bias)))) >= 0.5
+    assert not predicted_impostor[x == 1.0].any()
+    assert float((predicted_impostor[x == 1.0] == (y[x == 1.0] == 1.0)).mean()) == 1.0
 
 
 def test_walk_reproduces_the_production_fold_on_the_4p1i_corpus() -> None:
