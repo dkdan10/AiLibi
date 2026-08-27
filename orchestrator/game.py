@@ -362,33 +362,18 @@ PROMPT_VERSION_SETS: Final[Mapping[str, Mapping[str, str]]] = {
     "qwen3_30b_a3b": _bespoke_versions("qwen3_30b_a3b", version="v2"),
     "glm_4_32b": _bespoke_versions("glm_4_32b", version="v3"),
     "cydonia_24b": _bespoke_versions("cydonia_24b", version="v2"),
-    # Task 16.13 (the model-lock GO path): the locked-model bespoke set — the
-    # scratch-ladder style base (experiments/lab/qwen36_prompt_scratch/) with the
-    # baseline-3 qwen3_32b v5/v6 mechanics merged in. This line serializes
-    # 16.13 -> 16.15 -> 16.16 (each later task bumps versions here).
-    # Task 16.15 (the elicitation batch): the single set-level v1 -> v2 bump for
-    # the five coordinated asks (J2a provenance surface, J3 citation-required
-    # confidence, roll-call, the vent tail, the self-accusation fix) — one
-    # attributable prompt layer at the 16.17 re-record. The committed baseline-4
-    # samples still stamp *.qwen3_6_27b.v1; the prompt-byte golden walks them
-    # through the archived v1 bytes (tests/fixtures/prompt_archive/) until 16.17
-    # re-records, so pre- and post-batch bodies never share a version stamp.
-    # Task 16.16 (the persona voice layer): the second set-level bump, v2 -> v3
-    # — each participant's persona card renders as a guarded <voice> block in
-    # all four templates' instruction preambles (empty persona = the exact v2
-    # bytes), so the voice layer is its own attributable prompt layer at the
-    # 16.17 re-record, separable from the elicitation batch.
-    # Task 21.1 (the in-world register): v4 -> v5 — the evidence section speaks
-    # only what a player at the table could say. It renders as
-    # ``<contradictions>``, the proof line states the vent mechanic instead of
-    # citing an engine that certified anything, no rendered line names a flag,
-    # a detector or a certification, and the map card writes each room as
-    # ``Prose Name (ROOM_ID)`` so the spoken room register has an authored
-    # spelling to follow. All four templates render the card, so all four
-    # stamps move as a unit. The committed sample sets still stamp
-    # *.qwen3_6_27b.v4 and re-render through the archived v4 bodies
-    # (tests/fixtures/prompt_archive/qwen3_6_27b_v4/) until the adopting record
-    # retires that entry.
+    # The locked-model bespoke set, and the one every operational surface runs.
+    # Its live bodies keep the evidence section inside the fiction: the block
+    # renders as ``<contradictions>``, the proof line states the vent mechanic
+    # rather than citing an engine, no rendered line names a flag, a detector or
+    # a certification, and the ``<map>`` card writes each room as
+    # ``Prose Name (ROOM_ID)`` so the table has an authored spelling to speak.
+    # Every template renders that card, so the four stamps bump as a unit and no
+    # two bodies can ever share one. The committed sample sets stamp v4 and
+    # resolve through tests/fixtures/prompt_archive/qwen3_6_27b_v4/ until the
+    # adopting record retires that entry.
+    # Lineage: 16.13 port, 16.15 elicitation, 16.16 persona, 20.31 evidence
+    # honesty, 21.1 in-world register.
     "qwen3_6_27b": _bespoke_versions("qwen3_6_27b", version="v5"),
 }
 
