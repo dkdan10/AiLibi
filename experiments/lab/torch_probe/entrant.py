@@ -79,7 +79,11 @@ from training.env import (  # noqa: E402
     TacticalRolloutEnv,
     build_action_mask,
 )
-from training.rewards import PotentialShaper, compute_shaped_reward  # noqa: E402
+from training.rewards import (  # noqa: E402
+    PotentialShaper,
+    compute_shaped_reward,
+    potential_scale,
+)
 from training.rollout import EpisodeRollout  # noqa: E402
 
 ENTRANT_NAME = "torch-ppo-gru"
@@ -547,7 +551,6 @@ class TorchProbeEntrant:
             no_replay=True,
             rng_hash_policy=RngStateHashPolicy.TRAINING_FAST,
         )
-        shaper = PotentialShaper(side="IMPOSTOR")
         seeds = self._config.train_seeds
         cursor = 0
         episodes = 0
@@ -560,6 +563,13 @@ class TorchProbeEntrant:
                 decision_ticks.clear()
                 selector.begin_episode()
                 rollout = self.rollout_env.rollout(seed)
+                # Built per episode: Φ's scale is that episode's win total, so a
+                # shaper hoisted out of the loop would compute a different Φ than
+                # ``compute_shaped_reward`` does and break the sum identity
+                # ``per_decision_rewards`` asserts.
+                shaper = PotentialShaper(
+                    side="IMPOSTOR", scale=potential_scale(rollout, "IMPOSTOR")
+                )
                 rewards = per_decision_rewards(rollout, decision_ticks, shaper=shaper)
                 self._learner.episode_result(rewards, truncated=not rollout.complete)
                 episodes += 1

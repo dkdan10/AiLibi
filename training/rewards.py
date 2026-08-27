@@ -19,26 +19,37 @@ post-phase-14-ML-training-signal.md §3; DESIGN.md §"balance is a finding"):
    here).** A per-step shaping term ``F(s_t, s_{t+1}) = γ·Φ(s_{t+1}) − Φ(s_t)``
    over a side-specific potential Φ read from the per-step engine-state scalars
    (:class:`training.rollout.EpisodeFrame`). At ``γ = 1`` the shaping TELESCOPES:
-   ``Σ_t F = Φ(terminal) − Φ(initial)`` for ANY episode. Φ is a pure integer count
-   (impostor: cumulative kills; crew: completed task instances) — no float belief
-   state — so the identity is exact.
+   ``Σ_t F = Φ(terminal) − Φ(initial)`` for ANY episode. Φ is a progress count
+   divided by that episode's own win-condition total (:func:`potential_scale` —
+   impostor: kills over the initial crew; crew: completed task instances over the
+   task total), so Φ ∈ [0, 1] and the shaping pays the side's win condition ONCE
+   rather than once per unit of progress. The scale is a per-episode constant, so
+   it factors straight through ``Φ(terminal) − Φ(initial)`` and the telescoping
+   identity is untouched.
 
    TELESCOPING IS NOT INVARIANCE. Ng-1999 policy invariance needs one more
    hypothesis this module does not satisfy: a trajectory-INdependent terminal
    potential (canonically ``Φ ≡ 0`` at the absorbing/terminal state, or an
    infinite-horizon discounted setting). Here Φ is a CUMULATIVE count, so
    ``Φ(terminal)`` is trajectory-DEPENDENT: with ``Φ(initial) = 0`` the shaping sum
-   EQUALS the episode's terminal kill count (impostor) / completed-task count
-   (crew). The shaping is therefore exactly a real ``+1``-per-kill (impostor) /
-   ``+1``-per-completed-task (crew) incentive added to the return — two episodes
-   with equal environment reward and different terminal counts get different shaped
-   returns — and it CAN change the optimal policy. The prior claim here ("so it
-   cannot change the optimal policy") was mathematically FALSE; the telescoping
-   test pinned telescoping only, never invariance. Finding + disposition: Task 19.4,
+   EQUALS the episode's terminal progress FRACTION. The shaping is therefore a real
+   ``+1/initial_crew``-per-kill (impostor) / ``+1/tasks_total``-per-completed-task
+   (crew) incentive added to the return — two episodes with equal environment reward
+   and different terminal counts get different shaped returns — and it CAN change
+   the optimal policy. The prior claim here ("so it cannot change the optimal
+   policy") was mathematically FALSE; the telescoping test pins telescoping only,
+   never invariance. Finding + disposition: Task 19.4,
    audits/audit-phase-19-triage.md §7 item 4 (§8 row 2, VERIFIED) — DOCUMENTED, NOT
-   REPAIRED. The ML program is frozen: nothing was retrained and no computed value
-   moved, so the shaping term below still carries this real per-kill / per-task
-   incentive by design-of-record.
+   REPAIRED; bounding Φ shrinks the incentive's magnitude, it does not remove it.
+
+3. **Weights that rank a win above a loss.** Every dense term and the shaping sit
+   in [0, 1], which lets the sparse terminal's weight be DERIVED rather than
+   guessed: at :func:`derive_terminal_weight` — one more than the count of bounded
+   channels — the worst reachable WIN outranks the best reachable LOSS by
+   ``bounded_term_count + 2``. :class:`ObjectiveWeights` is the profile the two
+   inner-fitness functions forward, and :data:`FITNESS_OBJECTIVE_ID` names the
+   objective a fitness number was produced under, so numbers from two different
+   objectives can never be silently compared.
 
 The reward channel REFUSES to score a truncated episode as a full game
 (:class:`TruncatedEpisodeError`): :func:`compute_shaped_reward` gates on
@@ -51,7 +62,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import TypeAlias, get_args
+from typing import Final, TypeAlias, get_args
 
 import numpy as np
 from numpy.typing import NDArray
@@ -96,25 +107,44 @@ class TruncatedEpisodeError(ValueError):
     """
 
 
-def _side_potential(side: Role, frame: EpisodeFrame) -> float:
-    """The side-specific potential Φ at one step.
+def potential_scale(rollout: EpisodeRollout, side: Role) -> float:
+    """The episode constant Φ is expressed as a fraction of: the side's win total.
 
-    A pure, monotonic integer count of engine-truth progress toward the side's
-    win — impostor: cumulative resolved kills; crew: completed task instances.
-    No float belief state crosses into Φ, so the telescoping identity is exact
-    and byte-stable (the §7 determinism note).
+    Impostor: the INITIAL crew count — the kills that end the game. Crew: the
+    episode's total task instances. Both are fixed for the whole episode, so
+    dividing by one is a per-episode rescale that leaves ``Φ(terminal) −
+    Φ(initial)`` proportional and the telescoping identity intact, while capping
+    the shaping's contribution at the side's win condition instead of re-paying it
+    once per unit of progress. Never zero (``max(1, …)``, the module's existing
+    denominator style).
+    """
+
+    _validate_side(side)
+    if side == "IMPOSTOR":
+        return float(max(1, rollout.num_players - rollout.num_impostors))
+    last = rollout.frames[-1] if rollout.frames else None
+    return float(max(1, last.tasks_total)) if last is not None else 1.0
+
+
+def _side_potential(side: Role, frame: EpisodeFrame, scale: float) -> float:
+    """The side-specific potential Φ at one step, as a fraction of the win total.
+
+    A monotonic count of engine-truth progress toward the side's win — impostor:
+    cumulative resolved kills; crew: completed task instances — over the episode's
+    :func:`potential_scale`. No float belief state crosses into Φ, so Φ is a
+    byte-stable function of the engine's integer scalars (the §7 determinism note)
+    and lands in [0, 1].
 
     Being CUMULATIVE is precisely why the shaping is NOT policy-invariant (Task
     19.4; module docstring item 2): a cumulative count makes ``Φ(terminal)``
     trajectory-DEPENDENT, which is the one hypothesis Ng-1999 invariance requires
-    and this Φ does not supply. From ``Φ(initial) = 0`` the γ = 1 shaping sum is
-    the terminal kill count / completed-task count itself — a real ``+1``-per-kill
-    / ``+1``-per-completed-task incentive, not a wash. Left exactly as-is by
-    disposition (documented, not repaired; the ML program is frozen)."""
+    and this Φ does not supply. From ``Φ(initial) = 0`` the γ = 1 shaping sum is the
+    terminal progress FRACTION — a real, bounded per-kill / per-task incentive, not
+    a wash."""
 
     if side == "IMPOSTOR":
-        return float(frame.cumulative_kills)
-    return float(frame.tasks_completed)
+        return frame.cumulative_kills / scale
+    return frame.tasks_completed / scale
 
 
 class PotentialShaper:
@@ -124,20 +154,36 @@ class PotentialShaper:
     shaping sum telescopes to ``Φ(terminal) − Φ(initial)`` — the identity the
     telescoping test pins, and ALL it pins. That is NOT a policy-invariance
     guarantee: Φ is a cumulative count, so ``Φ(terminal)`` is trajectory-dependent
-    and the shaping is a real ``+1``-per-kill (impostor) / ``+1``-per-completed-task
+    and the shaping is a real bounded per-kill (impostor) / per-completed-task
     (crew) incentive (Task 19.4; module docstring item 2 carries the finding and its
-    documented-not-repaired disposition). numpy carries the per-step vector math
-    (numpy is training-confined by the import-linter contract).
+    documented-not-repaired disposition).
+
+    ``scale`` is REQUIRED and keyword-only: it is the episode's own
+    :func:`potential_scale`, and a shaper built with a different one computes a
+    different Φ than :func:`compute_shaped_reward` does for the same rollout. A
+    default would let a caller's own shaper diverge silently, so there is none.
+    numpy carries the per-step vector math (numpy is training-confined by the
+    import-linter contract).
     """
 
-    def __init__(self, *, side: Role, gamma: float = 1.0) -> None:
+    def __init__(self, *, side: Role, scale: float, gamma: float = 1.0) -> None:
         _validate_side(side)
+        if scale <= 0.0:
+            raise ValueError(
+                f"PotentialShaper scale must be positive, got {scale!r}; use "
+                "training.rewards.potential_scale(rollout, side)"
+            )
         self._side = side
+        self._scale = scale
         self._gamma = gamma
 
     @property
     def side(self) -> Role:
         return self._side
+
+    @property
+    def scale(self) -> float:
+        return self._scale
 
     @property
     def gamma(self) -> float:
@@ -147,7 +193,10 @@ class PotentialShaper:
         """The per-frame potential Φ series (numpy lands here)."""
 
         return np.asarray(
-            [_side_potential(self._side, frame) for frame in rollout.frames],
+            [
+                _side_potential(self._side, frame, self._scale)
+                for frame in rollout.frames
+            ],
             dtype=np.float64,
         )
 
@@ -168,11 +217,11 @@ class PotentialShaper:
         At ``γ = 1`` this equals ``Φ(terminal) − Φ(initial)`` for ANY episode —
         the telescoping identity, which is true and pinned by test. Telescoping is
         NOT invariance: ``Φ(terminal)`` is a trajectory-dependent cumulative count,
-        so from ``Φ(initial) = 0`` this total IS the episode's kill count (impostor)
-        / completed-task count (crew). Two trajectories with equal environment
-        reward and different terminal counts therefore get different shaped returns
-        — the shaping CAN change the optimal policy (Task 19.4; module docstring
-        item 2).
+        so from ``Φ(initial) = 0`` this total IS the episode's terminal kill share
+        (impostor) / completed-task share (crew). Two trajectories with equal
+        environment reward and different terminal counts therefore get different
+        shaped returns — the shaping CAN change the optimal policy (Task 19.4;
+        module docstring item 2).
         """
 
         return float(self.shaping_series(rollout).sum())
@@ -212,6 +261,11 @@ class ShapedReward:
 
 
 def _impostor_terms(rollout: EpisodeRollout) -> dict[str, float]:
+    # Kill VOLUME is not a term here: the shaping already pays exactly the kill
+    # count (as a share of the initial crew), so a raw ``kills`` term would price
+    # the same quantity a second time and rank arms by kill volume rather than by
+    # winning. What survives is what kills cannot buy — stealth, survival, and
+    # riding out the meetings.
     kills = [event for event in rollout.events if isinstance(event, KilledEvent)]
     # Un-witnessed-ness is CREW evidence (the stealth signal): a kill seen only by
     # a fellow impostor produced no crew testimony, so it counts as un-witnessed
@@ -226,10 +280,9 @@ def _impostor_terms(rollout: EpisodeRollout) -> dict[str, float]:
         or rollout.roles.get(meeting.ejected_player_id) != "IMPOSTOR"
     )
     return {
-        "kills": float(len(kills)),
-        "unwitnessed_kills": float(unwitnessed),
+        "unwitnessed_kills": unwitnessed / max(1, len(kills)),
         "survival": impostors_alive / max(1, rollout.num_impostors),
-        "meetings_survived": float(meetings_survived),
+        "meetings_survived": meetings_survived / max(1, len(rollout.meetings)),
     }
 
 
@@ -271,9 +324,71 @@ def _crew_terms(rollout: EpisodeRollout) -> dict[str, float]:
     return {
         "task_progress": task_progress,
         "survival": crew_alive / initial_crew,
-        "correct_reports": float(correct_reports),
+        # As a SHARE of the impostors there are to route out: a meeting ejects at
+        # most one player and an ejected player is never ejected twice, so the
+        # count cannot exceed ``num_impostors`` and the share stays in [0, 1].
+        "correct_reports": correct_reports / max(1, rollout.num_impostors),
         "patrol_coverage": patrol_coverage,
     }
+
+
+# The dense terms each side scores, in the order the term functions emit them.
+# EVERY name here is a bounded share in [0, 1] — that boundedness is what makes
+# :func:`derive_terminal_weight` a derivation rather than a guess, so a new term
+# belongs in this map only once it is bounded too.
+DENSE_TERM_NAMES: Final[Mapping[Role, tuple[str, ...]]] = {
+    "IMPOSTOR": ("unwitnessed_kills", "survival", "meetings_survived"),
+    "CREWMATE": ("task_progress", "survival", "correct_reports", "patrol_coverage"),
+}
+
+
+def bounded_term_count(side: Role) -> int:
+    """How many [0, 1] channels the side's shaped reward carries: dense + shaping."""
+
+    _validate_side(side)
+    return len(DENSE_TERM_NAMES[side]) + 1
+
+
+def derive_terminal_weight(side: Role) -> float:
+    """The terminal weight at which the worst WIN outranks the best LOSS.
+
+    With every dense term and the shaping in [0, 1], the worst reachable WIN scores
+    ``+w`` and the best reachable LOSS ``−w + bounded_term_count``, so any
+    ``w > bounded_term_count / 2`` orders wins above losses. This returns
+    ``bounded_term_count + 1``, which additionally leaves a margin of
+    ``bounded_term_count + 2`` between them — comfortably above the float noise of
+    summing that many shares, and DERIVED from the term census so adding a term
+    moves the weight instead of quietly shrinking the margin.
+    """
+
+    return float(bounded_term_count(side) + 1)
+
+
+@dataclass(frozen=True)
+class ObjectiveWeights:
+    """How one side's fitness weights the three shaped-reward channels.
+
+    The profile the inner-fitness functions forward to
+    :func:`compute_shaped_reward`, so an experiment re-weights the objective
+    through a parameter instead of an edit. :data:`DEFAULT_OBJECTIVE_WEIGHTS`
+    carries each side's derived profile.
+    """
+
+    dense_weight: float = 1.0
+    shaping_weight: float = 1.0
+    terminal_weight: float = 1.0
+
+
+DEFAULT_OBJECTIVE_WEIGHTS: Final[Mapping[Role, ObjectiveWeights]] = {
+    side: ObjectiveWeights(terminal_weight=derive_terminal_weight(side))
+    for side in DENSE_TERM_NAMES
+}
+
+# Names the objective the code below computes. A fitness number is only comparable
+# to another produced under the SAME id, so a re-ground stamps its own rows with
+# this and never compares them against rows that carry no id (those predate the
+# bounded-term objective and were produced under raw-count dense terms).
+FITNESS_OBJECTIVE_ID: Final[str] = "bounded-terms-win-dominant.v1"
 
 
 def side_specific_terms(rollout: EpisodeRollout, side: Role) -> dict[str, float]:
@@ -322,7 +437,9 @@ def compute_shaped_reward(
             f"(seed={rollout.seed}, boundary={rollout.episode_boundary!r}, "
             f"truncated={rollout.truncated}, winner={rollout.winner!r})"
         )
-    shaper = PotentialShaper(side=side, gamma=gamma)
+    shaper = PotentialShaper(
+        side=side, scale=potential_scale(rollout, side), gamma=gamma
+    )
     phi = shaper.potentials(rollout)
     potential_initial = float(phi[0]) if phi.shape[0] else 0.0
     potential_terminal = float(phi[-1]) if phi.shape[0] else 0.0
@@ -341,10 +458,17 @@ def compute_shaped_reward(
 
 
 __all__ = [
+    "DEFAULT_OBJECTIVE_WEIGHTS",
+    "DENSE_TERM_NAMES",
+    "FITNESS_OBJECTIVE_ID",
+    "ObjectiveWeights",
     "PotentialShaper",
     "RewardSide",
     "ShapedReward",
     "TruncatedEpisodeError",
+    "bounded_term_count",
     "compute_shaped_reward",
+    "derive_terminal_weight",
+    "potential_scale",
     "side_specific_terms",
 ]

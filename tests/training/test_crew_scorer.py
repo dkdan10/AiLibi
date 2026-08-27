@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import ast
 import json
+import math
 import tempfile
 from pathlib import Path
 
@@ -65,8 +66,10 @@ from observation.packet import (
 from observation.public_map import PublicMapView, RoomId
 from orchestrator.game import TacticalAgent
 from training.bakeoff.harness import (
+    ANCHOR_CE_EPSILON,
     DEFAULT_ANCHOR_PENALTY_WEIGHT,
     DEFAULT_CONVICTION_WEIGHT,
+    MAX_ANCHOR_PENALTY_WEIGHT,
     TRUNCATED_EPISODE_FITNESS,
     BakeoffPolicy,
     TrainedCandidate,
@@ -112,7 +115,11 @@ from training.crew.scorer import (
 )
 from training.determinism import FramePolicy
 from training.env import TacticalRolloutEnv
-from training.rewards import compute_shaped_reward
+from training.rewards import (
+    DEFAULT_OBJECTIVE_WEIGHTS,
+    ObjectiveWeights,
+    compute_shaped_reward,
+)
 
 # Task 19.27: campaign tier (training/README.md §2 FREEZE — the crew stack).
 # Excluded from the default gate; runs weekly in CI's campaign-tier job and
@@ -615,6 +622,66 @@ def test_crew_inner_fitness_scores_the_truncated_sentinel(tmp_path: Path) -> Non
     )
     assert not rollout.complete
     assert crew_inner_episode_fitness(rollout, trace) == TRUNCATED_EPISODE_FITNESS
+    # The sentinel is derived, so re-derive the ordering it exists for rather than
+    # re-typing its value: stalling must never outscore the worst complete crew
+    # episode (a loss with every bounded channel at zero, minus the largest
+    # admissible anchor penalty).
+    worst_complete = -DEFAULT_OBJECTIVE_WEIGHTS[
+        "CREWMATE"
+    ].terminal_weight - MAX_ANCHOR_PENALTY_WEIGHT * -math.log(ANCHOR_CE_EPSILON)
+    assert TRUNCATED_EPISODE_FITNESS < worst_complete
+
+
+def test_crew_inner_fitness_refuses_an_anchor_weight_above_the_cap(
+    tmp_path: Path,
+) -> None:
+    """The crew twin of the impostor refusal: the same cap, the same reason.
+
+    A heavier anchor penalty could drop a complete crew episode below the
+    truncation sentinel and pay the optimizer for stalling the scheduler.
+    """
+
+    trace = CrewDecisionTrace()
+    rollout = rollout_crew_candidate(
+        FsmCrewBaseline(), load_train_seeds()[0], output_dir=tmp_path, trace=trace
+    )
+    assert rollout.complete
+    assert isinstance(
+        crew_inner_episode_fitness(
+            rollout, trace, anchor_weight=MAX_ANCHOR_PENALTY_WEIGHT
+        ),
+        float,
+    )
+    for bad in (MAX_ANCHOR_PENALTY_WEIGHT + 0.0001, -0.5):
+        with pytest.raises(ValueError, match="MAX_ANCHOR_PENALTY_WEIGHT"):
+            crew_inner_episode_fitness(rollout, trace, anchor_weight=bad)
+
+
+def test_crew_objective_profile_travels_through_the_parameter(tmp_path: Path) -> None:
+    """The crew seam: a non-default profile through ``weights`` alone.
+
+    No edit to ``crew_inner_episode_fitness``; the default profile reproduces the
+    function's own composed value exactly.
+    """
+
+    trace = CrewDecisionTrace()
+    rollout = rollout_crew_candidate(
+        FsmCrewBaseline(), load_train_seeds()[0], output_dir=tmp_path, trace=trace
+    )
+    assert rollout.complete
+    default = DEFAULT_OBJECTIVE_WEIGHTS["CREWMATE"]
+    assert crew_inner_episode_fitness(rollout, trace, weights=default) == (
+        crew_inner_episode_fitness(rollout, trace)
+    )
+    shaped = compute_shaped_reward(rollout, "CREWMATE")
+    dense_off = ObjectiveWeights(
+        dense_weight=0.0,
+        shaping_weight=default.shaping_weight,
+        terminal_weight=default.terminal_weight,
+    )
+    assert crew_inner_episode_fitness(rollout, trace) - crew_inner_episode_fitness(
+        rollout, trace, weights=dense_off
+    ) == pytest.approx(default.dense_weight * math.fsum(shaped.dense_terms.values()))
 
 
 # --------------------------------------------------------------------------- #
@@ -794,8 +861,15 @@ def test_crew_conviction_term_absent_under_no_go(tmp_path: Path) -> None:
         None, load_train_seeds()[0], output_dir=tmp_path / "roll", trace=trace
     )
     assert rollout.complete
+    profile = DEFAULT_OBJECTIVE_WEIGHTS["CREWMATE"]
     expected = (
-        compute_shaped_reward(rollout, "CREWMATE").total()
+        compute_shaped_reward(
+            rollout,
+            "CREWMATE",
+            dense_weight=profile.dense_weight,
+            shaping_weight=profile.shaping_weight,
+            terminal_weight=profile.terminal_weight,
+        ).total()
         - DEFAULT_ANCHOR_PENALTY_WEIGHT * trace.mean_anchor_ce()
     )
     assert crew_inner_episode_fitness(rollout, trace, conviction=None) == expected

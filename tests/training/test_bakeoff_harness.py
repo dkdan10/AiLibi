@@ -84,6 +84,7 @@ from training.bakeoff.es import ESConfig
 from training.bakeoff.goodhart import run_goodhart_probe
 from training.bakeoff.harness import (
     ANCHOR_CE_CEILING,
+    ANCHOR_CE_EPSILON,
     BAKEOFF_BASELINE_ID,
     BakeoffPolicy,
     BakeoffProtocolConfig,
@@ -92,8 +93,11 @@ from training.bakeoff.harness import (
     DEFAULT_ANCHOR_PENALTY_WEIGHT,
     DEFAULT_CONVICTION_WEIGHT,
     DecisionTrace,
+    MAX_ANCHOR_PENALTY_WEIGHT,
+    MIN_FULL_GAME_FITNESS,
     PRESCREEN_CONVERSION_PIN,
     PRESCREEN_FLAGS_PER_MEETING_FLOOR,
+    TRUNCATED_EPISODE_FITNESS,
     TrainedCandidate,
     conviction_prescreen,
     evaluate_candidate,
@@ -124,7 +128,12 @@ from training.conviction.model import (
 from training.conviction.serving import ConvictionServingMeetingRunner
 from training.determinism import PolicyFrame
 from training.env import build_action_mask
-from training.rewards import compute_shaped_reward
+from training.rewards import (
+    DEFAULT_OBJECTIVE_WEIGHTS,
+    FITNESS_OBJECTIVE_ID,
+    ObjectiveWeights,
+    compute_shaped_reward,
+)
 from training.rollout import DESCRIPTOR_VECTOR_FIELDS, EpisodeRollout
 
 from tests.training._regrounding import (
@@ -1187,10 +1196,157 @@ def test_inner_fitness_has_no_ghost_term_when_conviction_none(tmp_path: Path) ->
     rollout = rollout_candidate(policy, 1004, output_dir=rollout_dir, trace=trace)
     assert rollout.complete
     expected = (
-        compute_shaped_reward(rollout, "IMPOSTOR").total()
+        _default_shaped_total(rollout)
         - DEFAULT_ANCHOR_PENALTY_WEIGHT * trace.mean_anchor_ce()
     )
     assert inner_episode_fitness(rollout, trace) == expected
+
+
+# --------------------------------------------------------------------------- #
+# The objective seam: a profile through the parameter, a derived floor,         #
+# a refused anchor weight, and a fence over the recorded rows.                  #
+# --------------------------------------------------------------------------- #
+
+
+def _default_shaped_total(rollout: EpisodeRollout) -> float:
+    """The impostor shaped total under the default objective profile."""
+
+    profile = DEFAULT_OBJECTIVE_WEIGHTS["IMPOSTOR"]
+    return compute_shaped_reward(
+        rollout,
+        "IMPOSTOR",
+        dense_weight=profile.dense_weight,
+        shaping_weight=profile.shaping_weight,
+        terminal_weight=profile.terminal_weight,
+    ).total()
+
+
+def test_objective_profile_travels_through_the_parameter(tmp_path: Path) -> None:
+    """A non-default objective is expressed through ``weights`` alone.
+
+    No edit to ``inner_episode_fitness`` and no module-level constant moves: the
+    profile is a parameter, and passing the default one reproduces the function's
+    own composed value exactly.
+    """
+
+    policy = _DelegatingDistributionPolicy()
+    trace = DecisionTrace()
+    rollout = rollout_candidate(
+        policy, 1004, output_dir=tmp_path / "rollout", trace=trace
+    )
+    assert rollout.complete
+
+    default = DEFAULT_OBJECTIVE_WEIGHTS["IMPOSTOR"]
+    assert inner_episode_fitness(rollout, trace, weights=default) == (
+        inner_episode_fitness(rollout, trace)
+    )
+
+    # A profile that zeroes the dense channel changes the number by exactly the
+    # dense contribution — the seam is real, not decorative.
+    shaped = compute_shaped_reward(rollout, "IMPOSTOR")
+    dense_only_off = ObjectiveWeights(
+        dense_weight=0.0,
+        shaping_weight=default.shaping_weight,
+        terminal_weight=default.terminal_weight,
+    )
+    assert inner_episode_fitness(rollout, trace) - inner_episode_fitness(
+        rollout, trace, weights=dense_only_off
+    ) == pytest.approx(default.dense_weight * math.fsum(shaped.dense_terms.values()))
+
+
+@pytest.mark.parametrize("side", ["IMPOSTOR", "CREWMATE"])
+def test_truncation_sentinel_sits_below_every_reachable_full_game(side: str) -> None:
+    """The sentinel is DERIVED and strictly below the worst complete episode.
+
+    The worst COMPLETE episode is a loss with every bounded channel at zero, minus
+    the largest admissible anchor penalty: the CE is clamped at
+    ``-log(ANCHOR_CE_EPSILON)`` and weighted at most
+    ``MAX_ANCHOR_PENALTY_WEIGHT``. Both ends are recomputed here from the same
+    constants the module derives from, so this is an ordering check rather than a
+    restatement of a literal.
+    """
+
+    worst_complete = (
+        -DEFAULT_OBJECTIVE_WEIGHTS[side].terminal_weight  # type: ignore[index]
+        - MAX_ANCHOR_PENALTY_WEIGHT * -math.log(ANCHOR_CE_EPSILON)
+    )
+    assert MIN_FULL_GAME_FITNESS <= worst_complete
+    assert TRUNCATED_EPISODE_FITNESS < MIN_FULL_GAME_FITNESS
+    assert TRUNCATED_EPISODE_FITNESS < worst_complete
+
+
+def test_truncation_ordering_gate_bites_on_a_looser_sentinel() -> None:
+    """The planted case: the pre-derivation sentinel FAILS this ordering.
+
+    ``-10.0`` was the value the comment claimed sat "well below any reachable
+    full-game fitness"; against the clamped anchor CE it does not, which is exactly
+    what the derivation fixes and what this proves the gate can catch.
+    """
+
+    planted = -10.0
+    worst_complete = min(
+        -weights.terminal_weight for weights in DEFAULT_OBJECTIVE_WEIGHTS.values()
+    ) - MAX_ANCHOR_PENALTY_WEIGHT * -math.log(ANCHOR_CE_EPSILON)
+    assert planted > worst_complete
+
+
+def test_inner_fitness_refuses_an_anchor_weight_above_the_cap(tmp_path: Path) -> None:
+    """A weight past the cap is refused, not silently allowed to invert the order.
+
+    4.0 is the largest weight any committed harness uses
+    (``training/artifacts/coevo/provenance/harnesses/harness_run_c{1,2}.py.txt``);
+    at 4.0001 the refusal bites, and a negative weight — which would PAY a candidate
+    for drifting off the anchor — is refused too.
+    """
+
+    policy = _DelegatingDistributionPolicy()
+    trace = DecisionTrace()
+    rollout = rollout_candidate(
+        policy, 1004, output_dir=tmp_path / "rollout", trace=trace
+    )
+    assert rollout.complete
+    # The cap itself is admissible — the committed campaign harnesses run there.
+    assert isinstance(
+        inner_episode_fitness(rollout, trace, anchor_weight=MAX_ANCHOR_PENALTY_WEIGHT),
+        float,
+    )
+    for bad in (MAX_ANCHOR_PENALTY_WEIGHT + 0.0001, -0.5):
+        with pytest.raises(ValueError, match="MAX_ANCHOR_PENALTY_WEIGHT"):
+            inner_episode_fitness(rollout, trace, anchor_weight=bad)
+
+
+def _stamped(row: Mapping[str, object]) -> bool:
+    """Whether a results row claims to have been produced under THIS objective."""
+
+    return row.get("fitness_objective_id") == FITNESS_OBJECTIVE_ID
+
+
+def test_no_committed_results_row_claims_this_objective() -> None:
+    """Every committed fitness number predates this objective and says so.
+
+    ``training/reports/results-*.jsonl`` records real runs under the previous
+    raw-count objective. The rows are correct provenance and are NOT rewritten — the
+    fence is that none of them carries this id, so a re-ground that stamps its own
+    rows can never compare a new fitness against a number that answered a different
+    question.
+    """
+
+    reports = Path(__file__).resolve().parents[2] / "training" / "reports"
+    files = sorted(reports.glob("results-*.jsonl"))
+    assert files, "no committed results rows to fence"
+    rows = 0
+    for path in files:
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            rows += 1
+            assert not _stamped(json.loads(line)), (
+                f"{path.name} carries {FITNESS_OBJECTIVE_ID!r}: a row produced "
+                "under the previous objective must never claim this one"
+            )
+    assert rows > 0
+    # The planted case: the same predicate DOES bite on a stamped row.
+    assert _stamped({"fitness_objective_id": FITNESS_OBJECTIVE_ID})
 
 
 # --------------------------------------------------------------------------- #

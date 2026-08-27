@@ -151,7 +151,11 @@ from training.determinism import (
     run_policy_determinism,
 )
 from training.env import build_action_mask
-from training.rewards import compute_shaped_reward
+from training.rewards import (
+    DEFAULT_OBJECTIVE_WEIGHTS,
+    ObjectiveWeights,
+    compute_shaped_reward,
+)
 from training.rollout import (
     DESCRIPTOR_VECTOR_FIELDS,
     EpisodeRollout,
@@ -204,12 +208,31 @@ ANCHOR_CE_EPSILON: Final[float] = 1e-6
 # per-decision anchor cross-entropy.
 DEFAULT_ANCHOR_PENALTY_WEIGHT: Final[float] = 1.0
 
+# The largest anchor weight either inner fitness accepts. The anchor CE is clamped
+# at ``-log(ANCHOR_CE_EPSILON)`` nats, so the weight sets how far below the
+# terminal-dominant band a fully off-menu episode can fall — and
+# ``TRUNCATED_EPISODE_FITNESS`` is derived against exactly this worst case. 4.0 is
+# the largest weight any committed harness uses
+# (``training/artifacts/coevo/provenance/harnesses/harness_run_c1.py.txt`` and
+# ``harness_run_c2.py.txt``); a larger one would push a complete episode below the
+# truncation sentinel and make stalling the scheduler the better move, so the
+# fitness functions refuse it rather than silently re-opening that inversion.
+MAX_ANCHOR_PENALTY_WEIGHT: Final[float] = 4.0
+
+# The lowest fitness a COMPLETE episode can reach: the worst terminal-and-dense
+# total (a loss with every bounded term at 0) minus the largest anchor penalty
+# admissible. Derived, so it tracks the objective instead of restating it.
+MIN_FULL_GAME_FITNESS: Final[float] = min(
+    -weights.terminal_weight for weights in DEFAULT_OBJECTIVE_WEIGHTS.values()
+) - MAX_ANCHOR_PENALTY_WEIGHT * -math.log(ANCHOR_CE_EPSILON)
+
 # The explicit fitness assigned to a truncated (tick-budget-capped) episode.
-# ``training.rewards`` refuses to score a truncated episode as a full game; a
-# candidate that stalls the scheduler has no terminal outcome, so its episode
-# scores this documented constant — well below any reachable full-game fitness
-# — rather than raising out of the optimizer or being silently skipped.
-TRUNCATED_EPISODE_FITNESS: Final[float] = -10.0
+# ``training.rewards`` refuses to score a truncated episode as a full game, so a
+# candidate that stalls the scheduler scores this instead of raising out of the
+# optimizer or being silently skipped. One below MIN_FULL_GAME_FITNESS, so
+# truncating is strictly worse than the worst complete episode and the optimizer
+# can never buy fitness by stalling.
+TRUNCATED_EPISODE_FITNESS: Final[float] = MIN_FULL_GAME_FITNESS - 1.0
 
 # The committed 15.13 surrogate artifact (weights + sha256 sidecar + staleness
 # cap) the surrogate-path columns and the Goodhart re-run load.
@@ -908,17 +931,42 @@ def load_conviction_row_provenance(artifact_dir: Path) -> ConvictionGoVerdict:
     return verdict
 
 
+def _validated_anchor_weight(anchor_weight: float) -> float:
+    """Refuse an anchor weight that would invert the truncation ordering.
+
+    ``TRUNCATED_EPISODE_FITNESS`` is derived against
+    :data:`MAX_ANCHOR_PENALTY_WEIGHT`; a heavier penalty could drop a COMPLETE
+    episode below the truncation sentinel and make stalling the scheduler the
+    optimizer's better move. A negative weight would pay a candidate for drifting
+    off the anchor. Both fail loud (AGENTS.md "no silent fallbacks").
+    """
+
+    if not 0.0 <= anchor_weight <= MAX_ANCHOR_PENALTY_WEIGHT:
+        raise ValueError(
+            f"anchor_weight {anchor_weight!r} is outside [0.0, "
+            f"MAX_ANCHOR_PENALTY_WEIGHT={MAX_ANCHOR_PENALTY_WEIGHT}]; a larger "
+            "penalty would put a complete episode below "
+            f"TRUNCATED_EPISODE_FITNESS={TRUNCATED_EPISODE_FITNESS}, making a "
+            "stalled episode score better than a played one"
+        )
+    return anchor_weight
+
+
 def inner_episode_fitness(
     rollout: EpisodeRollout,
     trace: DecisionTrace,
     *,
     anchor_weight: float = DEFAULT_ANCHOR_PENALTY_WEIGHT,
     conviction: ConvictionFitnessTerm | None = None,
+    weights: ObjectiveWeights | None = None,
 ) -> float:
     """The SHARED per-episode inner fitness every ES/QD entrant optimizes.
 
     The tactically-reachable side-specific impostor terms + potential shaping
-    (:func:`training.rewards.compute_shaped_reward`), MINUS the anchor-KL
+    (:func:`training.rewards.compute_shaped_reward`), weighted by ``weights`` —
+    the impostor entry of
+    :data:`~training.rewards.DEFAULT_OBJECTIVE_WEIGHTS` when unset, whose derived
+    terminal weight ranks every win above every loss — MINUS the anchor-KL
     penalty toward the frozen FSM (``anchor_weight`` × the episode's mean
     anchor cross-entropy), PLUS — under a GO verdict only — the 18.16 conviction
     term (``conviction.weight`` × the episode's mean predicted supply).
@@ -936,12 +984,25 @@ def inner_episode_fitness(
     boundary statement — the gate/referee are selection filters, never fitness
     terms — DOES NOT MOVE. A truncated (tick-budget-capped) episode scores the
     documented :data:`TRUNCATED_EPISODE_FITNESS` — never a silent skip, never a
-    full-game read of a truncated record.
+    full-game read of a truncated record — and returns before any weighting, so
+    the sentinel is one constant rather than a profile-dependent value.
+
+    Raises ``ValueError`` when ``anchor_weight`` is negative or above
+    :data:`MAX_ANCHOR_PENALTY_WEIGHT`, the bound the truncation sentinel is
+    derived against.
     """
 
     if not rollout.complete:
         return TRUNCATED_EPISODE_FITNESS
-    shaped = compute_shaped_reward(rollout, "IMPOSTOR").total()
+    _validated_anchor_weight(anchor_weight)
+    profile = weights if weights is not None else DEFAULT_OBJECTIVE_WEIGHTS["IMPOSTOR"]
+    shaped = compute_shaped_reward(
+        rollout,
+        "IMPOSTOR",
+        dense_weight=profile.dense_weight,
+        shaping_weight=profile.shaping_weight,
+        terminal_weight=profile.terminal_weight,
+    ).total()
     fitness = shaped - anchor_weight * trace.mean_anchor_ce()
     if conviction is not None:
         fitness += conviction.weight * trace.mean_predicted_supply()

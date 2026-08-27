@@ -87,6 +87,9 @@ from training.surrogate.dataset import (
     build_meeting_table,
 )
 from training.surrogate.fidelity import (
+    GO_BAR_ID,
+    GO_TOP1_CEILING_RATIO,
+    Fo6Logistic,
     MeetingView,
     SurrogateFidelityReport,
     build_meeting_views,
@@ -814,6 +817,161 @@ def test_go_no_go_reproduces_the_re_measured_no_go_verdict(
     assert verdict.top1_bar == pytest.approx(
         0.6000000000000001, abs=1e-12
     )  # was 0.6375
+
+
+# --------------------------------------------------------------------------- #
+# The split bar: two claims reported apart, one conjunction driving consequence #
+# --------------------------------------------------------------------------- #
+
+
+def test_split_verdict_separates_the_ranking_and_decision_claims(
+    surrogate_report: SurrogateFidelityReport,
+    fo6_report: SurrogateFidelityReport,
+) -> None:
+    """The harness can now say WHICH half failed, on the current committed corpus.
+
+    Every cell re-measured here, none carried over from the previous bar: the
+    ranking instrument clears its bar (axes 1 and 2) and the decision channel does
+    not (axis 3), so the composed verdict is still NO-GO and the surrogate still
+    ships diagnostic-only under the pre-committed fallback mapping.
+    """
+
+    verdict = decide_go_no_go(surrogate_report, fo6_report)
+    assert verdict.bar_id == GO_BAR_ID
+    assert verdict.ranking_verdict == "GO"
+    assert verdict.decision_verdict == "NO-GO"
+    assert verdict.verdict == "NO-GO"
+    assert verdict.surrogate_role == "diagnostic-only"
+    assert verdict.top1_bar == pytest.approx(0.6000000000000001, abs=1e-12)
+    # AT the measured ceiling, not above a floor with headroom left: axis 1 is
+    # saturated in HEADROOM, which is a different statement from a dead axis.
+    assert verdict.top1_ceiling_gap == pytest.approx(0.0, abs=1e-12)
+    assert verdict.surrogate_top1 == pytest.approx(0.8, abs=1e-12)
+    assert verdict.ceiling_top1 == pytest.approx(0.8, abs=1e-12)
+    # WHY the ceiling sits at 0.8 — the overlapping channel decomposition.
+    assert verdict.ceiling_flag_present == 45
+    assert verdict.ceiling_proximity_present == 48
+    assert verdict.ceiling_belief_lead == 43
+    assert verdict.ceiling_reachable == 44
+
+
+def test_axis_one_still_discriminates_a_weaker_candidate(
+    surrogate_report: SurrogateFidelityReport,
+) -> None:
+    """The ceiling axis is saturated in headroom, NOT dead.
+
+    The floor is 0.75 x ceiling = 0.6000 on this population, so a candidate ranking
+    below it fails axis 1 — the axis discriminates, which is why the split reports
+    it rather than retiring it.
+    """
+
+    bar = GO_TOP1_CEILING_RATIO * surrogate_report.honest_ceiling.max_achievable_top1
+    assert bar == pytest.approx(0.6000000000000001, abs=1e-12)
+    assert surrogate_report.top1 >= bar
+    weaker = surrogate_report.model_copy(update={"top1": bar - 0.01})
+    assert weaker.top1 < bar
+
+
+def test_the_reshaped_bar_cannot_manufacture_a_promotion(
+    surrogate_report: SurrogateFidelityReport,
+    fo6_report: SurrogateFidelityReport,
+) -> None:
+    """No input that was NO-GO under the unsplit bar becomes GO under this one.
+
+    The one failure mode that would discredit the re-ground. Swept over every
+    combination of the three axis outcomes: the composed verdict is the conjunction
+    of all three, exactly as before the split, so GO requires all three and the
+    split is reporting only.
+    """
+
+    for meets_ceiling in (True, False):
+        for beats_baseline in (True, False):
+            for beats_eject in (True, False):
+                ceiling = surrogate_report.honest_ceiling.max_achievable_top1
+                bar = GO_TOP1_CEILING_RATIO * ceiling
+                top1 = ceiling if meets_ceiling else bar / 2.0
+                baseline_top1 = (top1 / 2.0) if beats_baseline else (top1 + 0.05)
+                accuracy = (
+                    surrogate_report.always_eject_baseline + 0.05
+                    if beats_eject
+                    else surrogate_report.always_eject_baseline - 0.05
+                )
+                surrogate = surrogate_report.model_copy(
+                    update={"top1": top1, "skip_vs_eject_accuracy": accuracy}
+                )
+                baseline = fo6_report.model_copy(update={"top1": baseline_top1})
+                verdict = decide_go_no_go(surrogate, baseline)
+
+                unsplit_go = meets_ceiling and beats_baseline and beats_eject
+                assert (verdict.verdict == "GO") is unsplit_go
+                assert (verdict.ranking_verdict == "GO") is (
+                    meets_ceiling and beats_baseline
+                )
+                assert (verdict.decision_verdict == "GO") is beats_eject
+                # ...and the consequence mapping still keys off the conjunction.
+                assert (verdict.surrogate_role == "training-time-runner") is unsplit_go
+                assert (verdict.training_time_runner == "surrogate") is unsplit_go
+
+
+def test_decision_reachability_is_the_tallys_own_gate_quantity(
+    corpus_table: MeetingTable,
+    surrogate_report: SurrogateFidelityReport,
+    fo6_report: SurrogateFidelityReport,
+) -> None:
+    """How many meetings could eject AT ALL before anyone spends a fit on axis 3.
+
+    The tally ejects only when the MAX confidence among the ballots naming the
+    single non-SKIP plurality target clears
+    ``DEFAULT_SKIP_CONFIDENCE_THRESHOLD`` (meetings/voting.py rule 4). That is the
+    quantity counted here — deliberately NOT ``ejection_prob``, which is a mean of
+    per-voter target-probability mass and a different number. On the committed
+    corpus only 2 of 87 held-out meetings reach it, which is the same 2 the model
+    actually ejects.
+    """
+
+    assert surrogate_report.plurality_confidence_meetings == 87
+    assert surrogate_report.decision_reachable_meetings == 2
+    assert surrogate_report.decision_reachability == pytest.approx(2 / 87, abs=1e-12)
+    # Reachability is the CEILING on the decision channel: a meeting whose gate is
+    # never reached cannot be ejected however the model ranks it.
+    assert surrogate_report.predicted_ejections == (
+        surrogate_report.decision_reachable_meetings
+    )
+
+    verdict = decide_go_no_go(surrogate_report, fo6_report)
+    assert verdict.decision_reachable_meetings == 2
+    assert verdict.decision_reachability == pytest.approx(2 / 87, abs=1e-12)
+
+    # A ballot-free model leaves the cell unmeasured rather than reporting zero:
+    # FO-6 predicts ejections, not ballots, so it has no plurality confidence.
+    assert fo6_report.plurality_confidence_meetings == 0
+    assert fo6_report.decision_reachable_meetings == 0
+    views = build_meeting_views(corpus_table)
+    fo6 = Fo6Logistic()
+    fo6.fit(views)
+    assert fo6.predict(views[0]).plurality_confidence is None
+
+
+def test_the_report_is_a_re_fit_not_frozen_weights(
+    corpus_table: MeetingTable,
+    surrogate_report: SurrogateFidelityReport,
+) -> None:
+    """``run_surrogate_fidelity`` re-fits every fold — the "frozen weights" reading
+    is wrong at the source.
+
+    The verifier's own control: a factory that PRE-INSTALLS the committed
+    artifact's predictor and one that does not produce byte-identical reports on
+    the same table, because ``BallotSurrogateModel.fit`` REPLACES the installed
+    predictor rather than refining it.
+    """
+
+    predictor, _ = load_ballot_predictor_artifact(_ARTIFACT_DIR)
+    preinstalled = run_surrogate_fidelity(
+        corpus_table,
+        lambda: BallotSurrogateModel(corpus_table, predictor=predictor),
+        model_name="ballot-surrogate.v1",
+    )
+    assert preinstalled == surrogate_report
 
 
 def test_no_go_verdict_holds_on_live_served_clamped_features(
