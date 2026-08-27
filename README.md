@@ -198,7 +198,7 @@ Close audits start at the MVP close and resume at phase 13; earlier rows link th
 | 18 | The ML phase: co-evolution, the finalist eval, no adoption | [audit](audits/audit-phase-18-close.md) |
 | 19 | Review and refresh: truth sweeps, spectator pass, ML close | [audit](audits/audit-phase-19-close.md) |
 | 20 | Evidence honesty: claims repaired, the inference channel rebuilt, one pre-registered recording | [audit](audits/audit-phase-20-close.md) |
-| 21 | Open: audited defects repaired, one maintenance recording, the ML re-ground, the last injustice | [contract](tasks/phase-21.md), [plan](audits/audit-phase-21-planning.md) |
+| 21 | Open: fixes the defects an audit found, re-records the games, re-fits the decision models on the repaired recordings, then attacks the two remaining fairness defects — the player who reports a body gets convicted for reporting it, and verdicts that form by echo rather than by evidence — under a measurement written down in advance | [contract](tasks/phase-21.md), [plan](audits/audit-phase-21-planning.md) |
 
 ## Run it
 

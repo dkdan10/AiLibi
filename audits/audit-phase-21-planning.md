@@ -153,7 +153,48 @@ and the dead `vent_use_heard` read path — ingest, memory render, feature slot 
 21.25's post-record sweep, since 21.5 removes its only producer and 21.15 replaces the last bytes
 that carried it, which is exactly when a compatibility argument expires (craft rule 3).
 
-The review also caught the charter head's "four waves" against five wave headings, and five
+A second review round found six more, all valid, and two of them are design rulings worth recording.
+
+**The Wave-2 prompt-version overlays COMPOSE; they do not exclude.** The drafts had each lever raise
+when a sibling overlay was active — which would have made the only slate this phase ever records
+(all three levers ON at 21.23 and 21.24) unable to construct a renderer or a stamp. 21.18's seam now
+defines composition and its two siblings register into it: application order is
+`_TOGGLEABLE_LEVER_RESOLVERS` order, so the result never depends on how the environment was spelled;
+each enabled combination resolves to a composite per-template stamp derived from the participating
+overlay names in that order; and the all-ON composite is materialised and pinned by name. The
+invariant Ruling 3(d) actually cares about is now proved exhaustively rather than by spot check — over
+every subset of the live overlay keys, no two subsets share a version string and none collides with a
+default value, so an ON ballot can never wear an OFF ballot's stamp. The one `ValueError` left at
+construction is for a set with no variant BODY, which is a real defect and not a sibling being on.
+
+**The `heard_vent_use` encoder slot is RETAINED, and the reason is blast radius.** The round-1 fix
+had 21.25 delete the scalar along with its producer path. `TacticalFeatureEncoderV3` subclasses
+`TacticalFeatureEncoder` and its `feature_layout()` / `encode()` call `super()` before appending
+(`agents/tactical/features.py:608-668`), so the v2 vector is a strict prefix of the v3 vector:
+deleting a v2 scalar re-shapes BOTH layouts while `ENCODER_VERSION_V3` stays `"v3"` and every
+training consumer — including the artifacts 21.17 has just re-ground — keeps identifying a
+now-different vector with the old stamp. Moving a vector shape means bumping and re-pinning two
+version stamps and every downstream consumer, which is a different size of change from a post-record
+sweep. So 21.25 deletes the PRODUCER read path (the ingest branch and the memory render) and keeps
+the slot: its docstring records that it has been structurally zero since baseline 8, a test pins that
+it encodes `0.0` on the new bytes, and the slot's true removal is routed to the next encoder revision
+and named in the close's ledger.
+
+Four smaller ones. 21.17's measurement asserted `STALE 0` in a summary line the same task deletes —
+it now asserts an `OK` grounding row plus `grep -c STALE scripts/verify_ml_evidence.py` reading 0,
+since a counter that could print `STALE 0` would be dead mechanism kept alive to satisfy a checklist;
+the same correction propagated to 21.24 (whose ADOPTED path RE-INTRODUCES a declaration with its own
+planted counter-case, rather than re-enabling something that no longer exists) and to 21.26's close
+readings. 21.24's implementation step still told the operator to flip resolvers to a constant `True`,
+contradicting the same task's delete-DoD and the AST gate that rejects exactly that shape — the step
+now deletes each resolver while collapsing its guard to the ON path in one commit. 21.15's standing
+index amendment named only the `audits/` registry row, but the prompt-archive retirement deletes six
+counted fixture bodies, so the amendment now names the `tests/fixtures/` row too. And the README
+phase row was written in this project's private dialect ("ML re-ground", "the last injustice"),
+neither term defined in the glossary, on the one surface craft rule 4 governs; it is now plain
+language.
+
+The first review round also caught the charter head's "four waves" against five wave headings, and five
 collision-discipline chains whose membership or arrow direction disagreed with the contracts' actual
 Files-in-scope lists — including two arrows pointing the wrong way (`eval/evidence_honesty.py` and
 its test read 21.9 → 21.8, not the reverse). Both classes are now checked mechanically rather than
