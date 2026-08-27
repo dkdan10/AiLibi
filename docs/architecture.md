@@ -148,10 +148,11 @@ the recording — not the seed — is the determinism boundary (the README's
 every metric attributable and every regression bisectable. Behavioral changes to the belief substrate land as
 **levers**, registered in `orchestrator/replay.py`: `SUBSTRATE_FLAG_KEYS` is
 twenty-one graduated levers (`_RETIRED_ALWAYS_ON_LEVERS` — env gates deleted,
-unconditionally ON, kept in the stamp for provenance) plus one live toggle
-(`TOGGLEABLE_SUBSTRATE_FLAG_KEYS` — `impostor_roll_call`, read from its own
-`AILIBI_*` variable, default OFF; `.env.example` documents it). Every recording
-stamps the snapshot
+unconditionally ON, kept in the stamp for provenance) plus two live toggles
+(`TOGGLEABLE_SUBSTRATE_FLAG_KEYS` — `impostor_roll_call` and the
+`last_seen_from_sightings` repair gate, each from its own `AILIBI_*` variable,
+default OFF; `.env.example` documents both. A repair gate records no arm, so it
+is deleted, not graduated). Every recording stamps the snapshot
 onto its `game_over` record and into the set's `MANIFEST.md` `flags` column, and
 the loader refuses a recording made under a different substrate. Graduating a
 lever also carries the prose-sweep obligation in `AGENTS.md`.

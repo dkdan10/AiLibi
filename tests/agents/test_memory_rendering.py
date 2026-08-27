@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any, Final, cast
 
@@ -23,6 +23,7 @@ from agents.memory.beliefs import ContradictionRef
 from agents.memory.episodic import EpisodicEvent
 from agents.memory.store import (
     DEFAULT_TOKEN_BUDGET,
+    ENV_LAST_SEEN_FROM_SIGHTINGS,
     SELF_LOCATION_TRAIL_MAX_SPANS,
     AgentMemory,
     render_for_prompt,
@@ -243,6 +244,29 @@ class TestGoldenFixtures:
             f"---- expected ----\n{expected}"
             f"---- rendered ----\n{rendered}"
         )
+
+    @pytest.mark.parametrize(
+        "fixture_name",
+        ["crewmate_basic", "tight_budget_drops_low_salience", "impostor_minimal"],
+    )
+    def test_these_three_goldens_are_identical_on_both_last_seen_arms(
+        self, fixture_name: str
+    ) -> None:
+        # Stated rather than assumed, because only two of the five committed
+        # fixtures move under the last-seen repair gate. These three do not, each
+        # for its own reason: crewmate_basic's seeded p-5 value already IS its
+        # tick-395 sighting, and the other two carry no off-neutral belief, so
+        # there is no row for a suffix to land on.
+        fixture, expected = _load_fixture(fixture_name)
+        budget = int(fixture["token_budget"])
+
+        repaired = _render_with_gate(
+            lambda: _build_memory_from_fixture(fixture),
+            enabled=True,
+            token_budget=budget,
+        )
+
+        assert repaired == expected
 
 
 class TestRequiredSections:
@@ -1521,6 +1545,624 @@ class TestMovementPerceptionRender:
 
 
 # --------------------------------------------------------------------------- #
+# Last-seen from every sighting (the Wave-1a repair gate).                     #
+# --------------------------------------------------------------------------- #
+
+
+def _render_with_gate(
+    build: Callable[[], AgentMemory],
+    *,
+    enabled: bool,
+    token_budget: int = DEFAULT_TOKEN_BUDGET,
+) -> str:
+    """Render a FRESH memory with the last-seen repair gate ON or OFF.
+
+    Sets the variable IN-PROCESS rather than relying on an ambient export:
+    ``tests/conftest.py``'s hermetic guard strips every ``AILIBI_*`` name before
+    collection, so an exported gate never reaches a render inside pytest. Both
+    arms therefore have to be driven from the test itself, which is also what
+    makes a two-arm case possible in one module.
+
+    Takes a builder rather than a memory because ``render_for_prompt`` writes into
+    ``working.last_seen`` as it renders: a memory rendered on one arm carries that
+    arm's cache into the other, which would test the mixture rather than either
+    arm.
+    """
+
+    with pytest.MonkeyPatch.context() as patch:
+        if enabled:
+            patch.setenv(ENV_LAST_SEEN_FROM_SIGHTINGS, "1")
+        else:
+            patch.delenv(ENV_LAST_SEEN_FROM_SIGHTINGS, raising=False)
+        return render_for_prompt(build(), token_budget=token_budget)
+
+
+def _sole_changed_line(before: str, after: str) -> tuple[str, str]:
+    """The one line two renders differ on, as ``(before, after)``.
+
+    Fails loud on any other shape -- a different line count, no change, or a
+    second changed line. Asserting the DIFF is what keeps the committed
+    ``.expected.md`` bytes the single golden while the repaired render is still
+    gated: a second moving line is a bug in the change, not a golden to re-bless.
+    """
+
+    old = before.splitlines()
+    new = after.splitlines()
+    assert len(old) == len(new), (
+        f"line count moved: {len(old)} -> {len(new)}\n"
+        f"---- before ----\n{before}---- after ----\n{after}"
+    )
+    changed = [(a, b) for a, b in zip(old, new) if a != b]
+    assert len(changed) == 1, (
+        f"expected exactly one changed line, got {len(changed)}: {changed!r}"
+    )
+    return changed[0]
+
+
+def _belief_row(view: str, player_id: str) -> str:
+    """The one rendered belief row for ``player_id`` (fails loud if absent)."""
+
+    rows = [line for line in view.splitlines() if line.startswith(f"- {player_id}: ")]
+    assert len(rows) == 1, f"expected one belief row for {player_id}, got {rows!r}"
+    return rows[0]
+
+
+def _firewall_filtered_last_seen(
+    memory: AgentMemory,
+    *,
+    own_agent_id: str | None,
+    teammate_ids: frozenset[str],
+) -> dict[str, tuple[int, str]]:
+    """The argmax-tick sighting per subject, recomputed independently here.
+
+    Deliberately NOT a call into ``agents.memory.store``: the invariant test
+    needs a second derivation of the same rule (latest first-hand sighting,
+    ordinary rows contributing ``room`` and move rows ``to_room``, §4.7-suppressed
+    rows contributing nothing) so a render that agrees with it is agreeing with
+    the RULE rather than with itself.
+    """
+
+    bodies = [
+        (str(event.payload["room"]), event.tick)
+        for event in memory.episodic.recent(since_tick=0)
+        if event.type == "saw_body" and isinstance(event.payload.get("room"), str)
+    ]
+    latest: dict[str, tuple[int, str]] = {}
+    for event in memory.episodic.recent(since_tick=0):
+        if event.type == "saw_player":
+            subject = event.payload.get("player_id")
+            room = event.payload.get("room")
+            action = event.payload.get("action")
+        elif event.type == "saw_player_move":
+            subject = event.payload.get("player_id")
+            room = event.payload.get("to_room")
+            action = None
+        else:
+            continue
+        if not isinstance(subject, str) or not isinstance(room, str):
+            continue
+        if subject == own_agent_id:
+            continue
+        kill_window = action == "kill" or any(
+            body_room == room and 0 <= body_tick - event.tick <= 3
+            for body_room, body_tick in bodies
+        )
+        if subject in teammate_ids and kill_window:
+            continue
+        latest[subject] = (event.tick, room)
+    return latest
+
+
+class TestLastSeenFromEverySighting:
+    """The belief row's "last seen in ROOM at tick T" against the agent's own log.
+
+    OFF (the default, and what the committed prompt bytes carry) the suffix is
+    written from ``saw_player_move`` rows alone, so an ordinary look at the
+    subject after its last witnessed transition leaves the row stale — and
+    contradicted by the observation lines printed above it in the same prompt.
+    ON, the suffix is the argmax-tick sighting of any kind, through the same §4.7
+    firewall the sighting line itself passes.
+
+    Every case here asserts BOTH arms, so a gate that leaked into the default
+    path fails here rather than at the byte-golden.
+    """
+
+    @staticmethod
+    def _probe() -> AgentMemory:
+        # The verifier's own probe shape (§B-8): one witnessed move into ADMIN at
+        # tick 2, then plain sightings in LABS at ticks 3-5.
+        memory = AgentMemory()
+        memory.episodic.append(_self_state_event(tick=0, agent_id="p-1"))
+        memory.beliefs.adjust_suspicion("p-3", delta=0.3)
+        memory.episodic.append(
+            _saw_player_move_event(
+                tick=2, player_id="p-3", from_room="CAFETERIA", to_room="ADMIN"
+            )
+        )
+        for tick in (3, 4, 5):
+            memory.episodic.append(
+                _saw_player_event(tick=tick, player_id="p-3", room="LABS")
+            )
+        return memory
+
+    def test_the_verifier_probe_renders_the_latest_sighting(self) -> None:
+        off = _render_with_gate(self._probe, enabled=False)
+        on = _render_with_gate(self._probe, enabled=True)
+
+        # OFF: the movement-only writer, which is the defect B-8 measured.
+        assert "last seen in ADMIN at tick 2" in off
+        assert "last seen in LABS at tick 5" not in off
+        # ON: the argmax over every sighting the agent holds.
+        assert "last seen in LABS at tick 5" in on
+        assert "last seen in ADMIN at tick 2" not in on
+
+    @staticmethod
+    def _seed_1001() -> AgentMemory:
+        # The committed seed-1001 shape (§B-8's byte-for-byte exemplar): an
+        # ordinary sighting, a witnessed transition, a witnessed vent, then an
+        # ordinary sighting one tick later.
+        memory = AgentMemory()
+        memory.episodic.append(_self_state_event(tick=0, agent_id="p-6"))
+        memory.beliefs.adjust_suspicion("p-3", delta=0.4)
+        memory.episodic.append(_saw_player_event(tick=6, player_id="p-3", room="LABS"))
+        memory.episodic.append(
+            _saw_player_move_event(
+                tick=8, player_id="p-3", from_room="LABS", to_room="MEDBAY"
+            )
+        )
+        memory.episodic.append(
+            _saw_player_event(tick=12, player_id="p-3", room="LABS", action="vent")
+        )
+        memory.episodic.append(
+            _saw_player_event(tick=13, player_id="p-3", room="MEDBAY")
+        )
+        return memory
+
+    def test_the_seed_1001_shape_renders_the_tick_13_room(self) -> None:
+        off = _render_with_gate(self._seed_1001, enabled=False)
+        on = _render_with_gate(self._seed_1001, enabled=True)
+
+        assert "last seen in MEDBAY at tick 8" in off
+        assert _belief_row(on, "p-3").endswith("(last seen in MEDBAY at tick 13)")
+
+    def test_the_argmax_holds_over_mixed_logs(self) -> None:
+        # The invariant, not an example: over several hand-built logs mixing both
+        # row kinds, every rendered suffix equals the argmax-tick entry of the
+        # firewall-filtered sightings recomputed independently above.
+        cases: tuple[tuple[str, Callable[[], AgentMemory]], ...] = (
+            ("verifier probe", self._probe),
+            ("seed-1001", self._seed_1001),
+            ("move last", self._move_after_sighting),
+            ("sighting only", self._sighting_only),
+        )
+        for label, build in cases:
+            view = _render_with_gate(build, enabled=True)
+            expected = _firewall_filtered_last_seen(
+                build(), own_agent_id="p-1", teammate_ids=frozenset()
+            )
+            for subject, (tick, room) in expected.items():
+                if f"- {subject}: " not in view:
+                    continue  # neutral belief: no row to suffix
+                assert _belief_row(view, subject).endswith(
+                    f"(last seen in {room} at tick {tick})"
+                ), (label, subject)
+
+    @staticmethod
+    def _move_after_sighting() -> AgentMemory:
+        memory = AgentMemory()
+        memory.episodic.append(_self_state_event(tick=0, agent_id="p-1"))
+        memory.beliefs.adjust_suspicion("p-4", delta=0.25)
+        memory.episodic.append(
+            _saw_player_event(tick=3, player_id="p-4", room="STORAGE")
+        )
+        memory.episodic.append(
+            _saw_player_move_event(
+                tick=9, player_id="p-4", from_room="STORAGE", to_room="REACTOR"
+            )
+        )
+        return memory
+
+    @staticmethod
+    def _sighting_only() -> AgentMemory:
+        memory = AgentMemory()
+        memory.episodic.append(_self_state_event(tick=0, agent_id="p-1"))
+        memory.beliefs.adjust_suspicion("p-5", delta=0.35)
+        memory.episodic.append(
+            _saw_player_event(tick=2, player_id="p-5", room="MEDBAY")
+        )
+        memory.episodic.append(
+            _saw_player_event(tick=7, player_id="p-5", room="ELECTRICAL")
+        )
+        return memory
+
+    def test_a_sighting_only_subject_gets_no_suffix_off_and_one_on(self) -> None:
+        # The class the repair MINTS: a subject the agent only ever looked at
+        # carries no suffix at all today, because it never moved within vision.
+        off = _render_with_gate(self._sighting_only, enabled=False)
+        on = _render_with_gate(self._sighting_only, enabled=True)
+
+        assert "last seen in" not in off
+        assert _belief_row(on, "p-5").endswith("(last seen in ELECTRICAL at tick 7)")
+
+    def test_perception_appends_visible_players_before_moved_players(self) -> None:
+        # The production fact the same-tick tie-break rests on, read off the real
+        # ingest rather than assumed: within ONE tick the ``saw_player`` row is
+        # appended first and the ``saw_player_move`` row second, so a
+        # last-write-wins pass settles the tie on the transition.
+        from agents.perception import ingest_packet
+        from observation.packet import MovedPlayerView, PlayerView
+        from tests.agents.test_perception import _packet
+
+        memory = AgentMemory()
+        ingest_packet(
+            packet=_packet(
+                tick=6,
+                agent_id="p-1",
+                visible_players=(PlayerView(id="p-3", room="MEDBAY", action=None),),
+                moved_players=(
+                    MovedPlayerView(id="p-3", from_room="LABS", to_room="MEDBAY"),
+                ),
+            ),
+            memory=memory.episodic,
+        )
+
+        rows = [
+            (event.type, event.tick)
+            for event in memory.episodic.recent(since_tick=0)
+            if event.type in ("saw_player", "saw_player_move")
+        ]
+        assert rows == [("saw_player", 6), ("saw_player_move", 6)]
+
+    def test_the_same_tick_tie_goes_to_the_transition(self) -> None:
+        # The tie is DECIDED, not left to iteration order. A real packet cannot
+        # discriminate it -- perception derives both rows from the same tick's
+        # state, so their rooms always agree -- so the log is PLANTED with
+        # different rooms, in the append order the test above pins as production's.
+        # Reversing the tie-break renders LABS, so this case can fail.
+        def build() -> AgentMemory:
+            memory = AgentMemory()
+            memory.episodic.append(_self_state_event(tick=0, agent_id="p-1"))
+            memory.beliefs.adjust_suspicion("p-3", delta=0.3)
+            memory.episodic.append(
+                _saw_player_event(tick=6, player_id="p-3", room="LABS")
+            )
+            memory.episodic.append(
+                _saw_player_move_event(
+                    tick=6, player_id="p-3", from_room="CAFETERIA", to_room="MEDBAY"
+                )
+            )
+            return memory
+
+        # OFF the ordinary row is not read at all, so only the transition can land.
+        off = _render_with_gate(build, enabled=False)
+        assert _belief_row(off, "p-3").endswith("(last seen in MEDBAY at tick 6)")
+
+        # ON both rows are candidates at the SAME tick and the transition still
+        # wins -- the row that also states where the subject came from.
+        on = _render_with_gate(build, enabled=True)
+        assert _belief_row(on, "p-3").endswith("(last seen in MEDBAY at tick 6)")
+        assert "last seen in LABS" not in on
+
+    def test_the_firewall_retracts_a_placement_it_once_allowed(self) -> None:
+        # The cache OUTLIVES the render that filled it, so suppression has to be
+        # retractive: an impostor renders a teammate sighting while it is still
+        # sayable, then a body surfaces in that room and the sighting line is
+        # dropped -- but a value left standing would keep publishing exactly the
+        # teammate-at-scene placement §4.7 exists to hide.
+        #
+        # OFF this leak survives through its one reachable channel (a witnessed
+        # transition), because closing it moves committed prompt bytes on its own;
+        # the retraction rides the repair gate and Task 21.15's flip. Both arms
+        # are asserted so the residue is pinned rather than merely known.
+        def build(row: str) -> AgentMemory:
+            memory = AgentMemory()
+            memory.episodic.append(
+                _self_state_event(
+                    tick=0,
+                    role="IMPOSTOR",
+                    agent_id="p-9",
+                    fellow_impostor_ids=("p-1",),
+                )
+            )
+            memory.beliefs.adjust_suspicion("p-1", delta=0.3)
+            if row == "saw_player":
+                memory.episodic.append(
+                    _saw_player_event(tick=5, player_id="p-1", room="ADMIN")
+                )
+            else:
+                memory.episodic.append(
+                    _saw_player_move_event(
+                        tick=5, player_id="p-1", from_room="CAFETERIA", to_room="ADMIN"
+                    )
+                )
+            return memory
+
+        for row in ("saw_player", "saw_player_move"):
+            for enabled in (False, True):
+                memory = build(row)
+                with pytest.MonkeyPatch.context() as patch:
+                    if enabled:
+                        patch.setenv(ENV_LAST_SEEN_FROM_SIGHTINGS, "1")
+                    else:
+                        patch.delenv(ENV_LAST_SEEN_FROM_SIGHTINGS, raising=False)
+                    first = render_for_prompt(memory)
+                    # The body arrives AFTER the placement was cached.
+                    memory.episodic.append(
+                        _saw_body_event(
+                            tick=6, body_id="b", victim_id="p-3", room="ADMIN"
+                        )
+                    )
+                    second = render_for_prompt(memory)
+
+                # The sighting LINE is suppressed in every arm -- that half never
+                # depended on the cache. (The body-discovery line names ADMIN and
+                # is meant to.)
+                assert "You saw p-1 in ADMIN" not in second, (row, enabled)
+                assert "You saw p-1 move" not in second, (row, enabled)
+
+                leaks_off_path = row == "saw_player_move" and not enabled
+                if leaks_off_path:
+                    # The committed-bytes residue, pinned so it cannot widen
+                    # unnoticed and so 21.15's flip has something to flip.
+                    assert "(last seen in ADMIN at tick 5)" in second
+                else:
+                    assert "last seen in ADMIN" not in second, (row, enabled)
+                    assert memory.working.last_seen("p-1") is None, (row, enabled)
+                # Either way the FIRST render is what cached the value, so the
+                # case is about retraction and not about a row never recorded.
+                if row == "saw_player_move" or enabled:
+                    assert "last seen in ADMIN at tick 5" in first, (row, enabled)
+
+    def test_the_firewall_covers_the_folded_rows_with_their_own_action(self) -> None:
+        # §4.7, ON: the folded ordinary rows pass the SAME firewall the sighting
+        # line passes, with the row's own action -- so an impostor's teammate
+        # carrying a `kill` action, and a teammate standing in a kill-window body
+        # room, are both suppressed from the suffix. A folded row that passed
+        # ``action=None`` (correct only for a move row) would leak the first case.
+        def build() -> AgentMemory:
+            memory = AgentMemory()
+            memory.episodic.append(
+                _self_state_event(
+                    tick=0,
+                    role="IMPOSTOR",
+                    agent_id="p-9",
+                    fellow_impostor_ids=("p-1", "p-2"),
+                )
+            )
+            memory.beliefs.adjust_suspicion("p-1", delta=0.3)
+            memory.beliefs.adjust_suspicion("p-2", delta=0.3)
+            # p-1: a witnessed KILL action, suppressed on the action alone.
+            memory.episodic.append(
+                _saw_player_event(tick=4, player_id="p-1", room="LABS", action="kill")
+            )
+            # p-2: an ordinary sighting in a room whose body the agent then sees.
+            memory.episodic.append(
+                _saw_player_event(tick=6, player_id="p-2", room="ADMIN")
+            )
+            memory.episodic.append(
+                _saw_body_event(tick=7, body_id="b", victim_id="p-4", room="ADMIN")
+            )
+            return memory
+
+        for enabled in (False, True):
+            view = _render_with_gate(build, enabled=enabled)
+            assert "last seen in LABS" not in view, enabled
+            assert "last seen in ADMIN" not in view, enabled
+
+    def test_the_self_subject_row_stays_suppressed_for_every_role(self) -> None:
+        # The other §4.7 suppression, on the folded path: the recipient's own
+        # ordinary sighting row never becomes its own last-seen, for crew or
+        # impostor. (A self row can be minted -- an impostor's own move passes the
+        # movement-witness gate -- so this is a live case, not a hypothetical.)
+        for role in ("CREWMATE", "IMPOSTOR"):
+
+            def build(role: str = role) -> AgentMemory:
+                memory = AgentMemory()
+                memory.episodic.append(
+                    _self_state_event(tick=0, role=role, agent_id="p-1")
+                )
+                memory.beliefs.adjust_suspicion("p-1", delta=0.3)
+                memory.episodic.append(
+                    _saw_player_event(tick=5, player_id="p-1", room="ADMIN")
+                )
+                return memory
+
+            for enabled in (False, True):
+                view = _render_with_gate(build, enabled=enabled)
+                assert "last seen in ADMIN" not in view, (role, enabled)
+
+    def test_repeated_render_of_a_sighting_only_memory_is_idempotent(self) -> None:
+        # The ON-arm twin of ``test_repeated_render_is_idempotent_after_two_moves``:
+        # a memory built from ORDINARY rows alone re-renders byte-identically and
+        # does not trip ``record_sighting``'s non-decreasing-tick guard on the
+        # replayed older row.
+        with pytest.MonkeyPatch.context() as patch:
+            patch.setenv(ENV_LAST_SEEN_FROM_SIGHTINGS, "1")
+            memory = self._sighting_only()
+            first = render_for_prompt(memory)
+            second = render_for_prompt(memory)  # must not raise on the tick-2 row
+
+        assert first == second
+        assert "last seen in ELECTRICAL at tick 7" in second
+
+    def test_the_encoder_diverges_only_where_the_firewall_bites(self) -> None:
+        # The ONE deliberate divergence from the reference derivation: the tactical
+        # encoder reads PRIVATE memory and needs no firewall, so an impostor whose
+        # teammate row is suppressed keeps the older render value while
+        # ``_episodic_last_seen`` holds the newer one. Everywhere else the two
+        # agree, which is what makes the render's convergence on the encoder a
+        # statement rather than a coincidence.
+        from agents.tactical.features import _combined_last_seen, _episodic_last_seen
+
+        def build() -> AgentMemory:
+            memory = AgentMemory()
+            memory.episodic.append(
+                _self_state_event(
+                    tick=0,
+                    role="IMPOSTOR",
+                    agent_id="p-9",
+                    fellow_impostor_ids=("p-1",),
+                )
+            )
+            memory.beliefs.adjust_suspicion("p-1", delta=0.3)
+            memory.episodic.append(
+                _saw_player_event(tick=3, player_id="p-1", room="STORAGE")
+            )
+            memory.episodic.append(
+                _saw_player_event(tick=8, player_id="p-1", room="LABS", action="kill")
+            )
+            return memory
+
+        view = _render_with_gate(build, enabled=True)
+
+        assert _episodic_last_seen(build().episodic)["p-1"] == (8, "LABS")
+        assert _belief_row(view, "p-1").endswith("(last seen in STORAGE at tick 3)")
+
+        # And the feature vector is arithmetically unchanged by the repair:
+        # ``_combined_last_seen`` takes the max by tick of the episodic derivation
+        # and the render cache, and the cache is a firewall-filtered SUBSET of the
+        # same rows, so the episodic value wins on both arms.
+        combined = []
+        for enabled in (False, True):
+            memory = build()
+            with pytest.MonkeyPatch.context() as patch:
+                if enabled:
+                    patch.setenv(ENV_LAST_SEEN_FROM_SIGHTINGS, "1")
+                else:
+                    patch.delenv(ENV_LAST_SEEN_FROM_SIGHTINGS, raising=False)
+                render_for_prompt(memory)
+            combined.append(
+                _combined_last_seen(
+                    "p-1", _episodic_last_seen(memory.episodic), memory.working
+                )
+            )
+        assert combined == [(8, "LABS"), (8, "LABS")]
+
+    def test_the_budget_pressure_is_bounded_to_the_added_suffix(self) -> None:
+        # The stated cost: the belief block is non-elastic, so a newly-suffixed row
+        # charges the budget before the elastic observations and the render sheds
+        # marginally sooner. Bounded rather than merely acknowledged -- the ON view
+        # is no longer than the OFF view plus the one suffix it adds, and the hard
+        # cap still holds.
+        budget = 200
+        off = _render_with_gate(self._sighting_only, enabled=False, token_budget=budget)
+        on = _render_with_gate(self._sighting_only, enabled=True, token_budget=budget)
+
+        added = " (last seen in ELECTRICAL at tick 7)"
+        assert len(on) <= len(off) + len(added)
+        assert (len(on) + 3) // 4 <= budget
+
+
+class TestBreadcrumbKeepsVentPlacements:
+    """The sighting line's "moved from X, last seen there at tick T" suffix.
+
+    OFF, ``vent`` / ``kill`` rows are dropped from the subject's PATH, so the
+    prior room is reported at the last ORDINARY tick in it — earlier than the
+    render's own vent line one line above states. ON they stay in the path as
+    prior-room candidates, while the ANCHOR (the one suffixed line) is still the
+    subject's most recent ordinary sighting, so the vent and kill lines stay
+    clean.
+    """
+
+    @staticmethod
+    def _seed_1001() -> AgentMemory:
+        # The committed seed-1001 shape: ordinary LABS at 7, a witnessed LABS vent
+        # at 12, then MEDBAY at 13. OFF the suffix says tick 7; the vent is the
+        # later, stronger placement in the same room.
+        memory = AgentMemory()
+        memory.episodic.append(_self_state_event(tick=0, agent_id="p-6"))
+        memory.episodic.append(_saw_player_event(tick=7, player_id="p-3", room="LABS"))
+        memory.episodic.append(
+            _saw_player_event(tick=12, player_id="p-3", room="LABS", action="vent")
+        )
+        memory.episodic.append(
+            _saw_player_event(tick=13, player_id="p-3", room="MEDBAY")
+        )
+        return memory
+
+    def test_the_vent_tick_becomes_the_prior_placement(self) -> None:
+        off = _render_with_gate(self._seed_1001, enabled=False)
+        on = _render_with_gate(self._seed_1001, enabled=True)
+
+        assert "(moved from LABS, last seen there at tick 7)" in off
+        assert "(moved from LABS, last seen there at tick 12)" in on
+        # The vent line itself is never suffixed, in either arm.
+        assert "[tick 12] You witnessed p-3 vent in LABS." in off
+        assert "[tick 12] You witnessed p-3 vent in LABS." in on
+        # Exactly one suffixed line per subject, still.
+        assert on.count("moved from LABS") == 1
+
+    @staticmethod
+    def _minted() -> AgentMemory:
+        # The newly-minted class: one ordinary room plus a vent elsewhere. The
+        # ordinary path alone has a single room, so OFF yields no breadcrumb at
+        # all; ON the vent supplies the prior room.
+        memory = AgentMemory()
+        memory.episodic.append(_self_state_event(tick=0, agent_id="p-6"))
+        memory.episodic.append(
+            _saw_player_event(tick=4, player_id="p-8", room="REACTOR", action="vent")
+        )
+        memory.episodic.append(
+            _saw_player_event(tick=9, player_id="p-8", room="CAFETERIA")
+        )
+        return memory
+
+    def test_a_vent_only_prior_mints_a_breadcrumb(self) -> None:
+        off = _render_with_gate(self._minted, enabled=False)
+        on = _render_with_gate(self._minted, enabled=True)
+
+        assert "moved from" not in off
+        assert (
+            "[tick 9] You saw p-8 in CAFETERIA "
+            "(moved from REACTOR, last seen there at tick 4)." in on
+        )
+
+    def test_a_vent_after_the_anchor_is_not_the_anchors_prior_room(self) -> None:
+        # The anchor rule, perturbed: a vent LATER than the subject's most recent
+        # ordinary sighting is not that sighting's prior room. Without the
+        # at-or-before restriction the render would claim the subject moved from a
+        # room it was seen in afterwards.
+        def build() -> AgentMemory:
+            memory = AgentMemory()
+            memory.episodic.append(_self_state_event(tick=0, agent_id="p-6"))
+            memory.episodic.append(
+                _saw_player_event(tick=2, player_id="p-8", room="ADMIN")
+            )
+            memory.episodic.append(
+                _saw_player_event(tick=5, player_id="p-8", room="STORAGE")
+            )
+            memory.episodic.append(
+                _saw_player_event(tick=9, player_id="p-8", room="LABS", action="vent")
+            )
+            return memory
+
+        on = _render_with_gate(build, enabled=True)
+
+        assert "(moved from ADMIN, last seen there at tick 2)" in on
+        assert "moved from LABS" not in on
+
+    def test_a_subject_with_only_a_vent_row_gets_no_breadcrumb(self) -> None:
+        # The anchor is an ORDINARY sighting or nothing: a subject the agent only
+        # ever saw vent has no line that may carry a suffix, so no breadcrumb is
+        # minted in either arm.
+        def build() -> AgentMemory:
+            memory = AgentMemory()
+            memory.episodic.append(_self_state_event(tick=0, agent_id="p-6"))
+            memory.episodic.append(
+                _saw_player_event(tick=3, player_id="p-8", room="LABS", action="vent")
+            )
+            memory.episodic.append(
+                _saw_player_event(
+                    tick=6, player_id="p-8", room="REACTOR", action="vent"
+                )
+            )
+            return memory
+
+        for enabled in (False, True):
+            assert "moved from" not in _render_with_gate(build, enabled=enabled)
+
+
+# --------------------------------------------------------------------------- #
 # The self-location trail.                                                     #
 # --------------------------------------------------------------------------- #
 
@@ -1634,6 +2276,25 @@ class TestSelfLocationTrail:
             render_for_prompt(thinned, token_budget=int(fixture["token_budget"]))
             != expected
         )
+
+    def test_the_trail_golden_gains_exactly_one_line_on_the_repaired_arm(self) -> None:
+        # The ON-arm pin for this fixture, asserted as a DIFF so the committed
+        # ``.expected.md`` stays the one golden until Task 21.15 re-derives it.
+        # p-4's single ``saw_player`` row is ADMIN at tick 9, so its belief row --
+        # unsuffixed today, because the agent never witnessed p-4 move -- gains
+        # exactly that placement, and nothing else in the render moves.
+        fixture, expected = _load_fixture("self_location_trail")
+        budget = int(fixture["token_budget"])
+
+        repaired = _render_with_gate(
+            lambda: _build_memory_from_fixture(fixture),
+            enabled=True,
+            token_budget=budget,
+        )
+
+        before, after = _sole_changed_line(expected, repaired)
+        assert before == "- p-4: suspicion 0.60"
+        assert after == "- p-4: suspicion 0.60 (last seen in ADMIN at tick 9)"
 
     def test_adjacent_ticks_in_one_room_coalesce_and_a_lone_tick_stands_alone(
         self,
@@ -2218,6 +2879,27 @@ class TestCoalescedMemoryRender:
         assert len(
             _observation_rows(render_for_prompt(broken, token_budget=budget))
         ) > len(_observation_rows(rendered))
+
+    def test_the_coalesced_golden_gains_exactly_one_line_on_the_repaired_arm(
+        self,
+    ) -> None:
+        # The ON-arm pin for this fixture, asserted as a DIFF so the committed
+        # ``.expected.md`` stays the one golden until Task 21.15 re-derives it.
+        # p-4's ``saw_player`` rows are ticks 0, 7, 8 and 10, so its belief row
+        # gains the tick-10 ADMIN placement -- and nothing else moves: no subject
+        # here has a vent or kill row, so every breadcrumb is unchanged.
+        fixture, expected = _load_fixture("coalesced_memory_render")
+        budget = int(fixture["token_budget"])
+
+        repaired = _render_with_gate(
+            lambda: _build_memory_from_fixture(fixture),
+            enabled=True,
+            token_budget=budget,
+        )
+
+        before, after = _sole_changed_line(expected, repaired)
+        assert before == "- p-4: suspicion 0.60"
+        assert after == "- p-4: suspicion 0.60 (last seen in ADMIN at tick 10)"
 
     def test_consecutive_identical_sightings_become_one_span(self) -> None:
         memory = _seen(
