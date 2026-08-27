@@ -108,7 +108,7 @@ class TruncatedEpisodeError(ValueError):
 
 
 def potential_scale(rollout: EpisodeRollout, side: Role) -> float:
-    """The episode constant Φ is expressed as a fraction of: the side's win total.
+    """The side's win total — the episode constant Φ is expressed as a fraction of.
 
     Impostor: the INITIAL crew count — the kills that end the game. Crew: the
     episode's total task instances. Both are fixed for the whole episode, so

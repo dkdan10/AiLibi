@@ -219,9 +219,11 @@ DEFAULT_ANCHOR_PENALTY_WEIGHT: Final[float] = 1.0
 # fitness functions refuse it rather than silently re-opening that inversion.
 MAX_ANCHOR_PENALTY_WEIGHT: Final[float] = 4.0
 
-# The lowest fitness a COMPLETE episode can reach: the worst terminal-and-dense
-# total (a loss with every bounded term at 0) minus the largest anchor penalty
-# admissible. Derived, so it tracks the objective instead of restating it.
+# The lowest fitness a COMPLETE episode can reach under either side's DEFAULT
+# objective profile: a loss with every bounded channel at 0, minus the largest
+# anchor penalty admissible. Derived, so it tracks the objective instead of
+# restating it; a caller that passes a custom profile with a heavier terminal
+# weight owns re-deriving the ordering for itself.
 MIN_FULL_GAME_FITNESS: Final[float] = min(
     -weights.terminal_weight for weights in DEFAULT_OBJECTIVE_WEIGHTS.values()
 ) - MAX_ANCHOR_PENALTY_WEIGHT * -math.log(ANCHOR_CE_EPSILON)
