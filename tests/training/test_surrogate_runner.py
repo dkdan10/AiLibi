@@ -678,7 +678,9 @@ def test_the_install_gate_refuses_the_committed_no_go_as_a_training_runner(
     The planted GO case proves the refusal is keyed on the COMPOSED ``verdict``
     field: the same artifact with a GO composed field installs, and — with the
     reporting halves left NO-GO to make the point — the gate neither reads them
-    nor re-conjoins them.
+    nor re-conjoins them. A GO verdict keyed to OTHER weights is refused before
+    the verdict is even consulted, so a stale or copied verdict cannot authorize
+    an artifact nobody judged.
     """
 
     with pytest.raises(ValueError, match="DIAGNOSTIC-ONLY"):
@@ -705,6 +707,15 @@ def test_the_install_gate_refuses_the_committed_no_go_as_a_training_runner(
     assert callable(
         load_surrogate_runner_factory(tmp_path, install_role="training-time-runner")
     )
+
+    # A GO verdict that judged OTHER weights authorizes nothing here — checked
+    # BEFORE the verdict value, so a stale copied GO cannot seat new weights.
+    write_surrogate_verdict_artifact(
+        promoted.model_copy(update={"weights_sha256": "a" * 64}), tmp_path
+    )
+    with pytest.raises(ValueError, match="a verdict that judged other weights"):
+        load_surrogate_runner_factory(tmp_path, install_role="training-time-runner")
+    assert callable(load_surrogate_runner_factory(tmp_path))
 
     # And an artifact with no verdict at all cannot be installed as the runner,
     # while it still loads for the diagnostic paths.
@@ -1737,24 +1748,42 @@ def test_fit_fence_raises_on_a_held_out_view(corpus_table: MeetingTable) -> None
 def test_the_corpus_rows_the_fit_drops_are_the_whole_rewrite_class(
     corpus_table: MeetingTable,
 ) -> None:
-    """What the fit excludes on committed bytes, counted per rule.
+    """What the fit excludes on committed bytes, counted per rule and per side.
 
-    The J2 coercion census is the narrow column and stays reported: 7 rows on
-    9p2i, 0 on 4p1i. The rule the fit reads is the wider one — every row whose
-    recorded target the meeting layer rewrote, not just the coercions — and it
-    drops 102 and 2 on the same two sets. The gap between the two numbers is the
-    finding: 95 of those rows were riding into the fit as the voter's own choice.
+    Two different numbers, pinned apart because they answer two different
+    questions and only one of them is the fit's:
 
-    Both are pinned together so neither can move alone, and the census test in
+    * the whole-table CENSUS — how many recorded rows carry a rewritten target
+      at all: 102 on 9p2i and 2 on 4p1i, against the 7 and 0 the narrow J2
+      coercion column reads (that column stays reported, unmoved);
+    * the FIT-SIDE exclusion — how many rows actually leave a fit, which reads
+      the committed ``train ∪ val`` seeds only: **7 → 82** on 9p2i and 0 → 2 on
+      4p1i. The 20-row difference on 9p2i is held-out test rows, which no fit
+      path ever consumed, so counting them as newly excluded would overstate
+      what changed.
+
+    All four are pinned together so none can move alone, and the census test in
     ``tests/training/test_surrogate_dataset.py`` holds the per-kind split behind
     them.
     """
 
+    four = build_meeting_table(_REPO_ROOT / "replays" / "ml_corpus" / "4p1i")
+
+    # The whole-table census.
     assert sum(row.ballot_coerced_skip for row in corpus_table.rows) == 7
     assert sum(_target_was_rewritten(row) for row in corpus_table.rows) == 102  # was 7
-    four = build_meeting_table(_REPO_ROOT / "replays" / "ml_corpus" / "4p1i")
     assert sum(row.ballot_coerced_skip for row in four.rows) == 0
     assert sum(_target_was_rewritten(row) for row in four.rows) == 2  # was 0
+
+    # The fit-side exclusion: what the two fit paths actually drop.
+    for table, coerced, rewritten in ((corpus_table, 7, 82), (four, 0, 2)):
+        assert table.splits is not None
+        fit_seeds = frozenset(table.splits.train) | frozenset(table.splits.val)
+        fit_rows = [row for row in table.rows if row.seed in fit_seeds]
+        assert sum(row.ballot_coerced_skip for row in fit_rows) == coerced
+        assert sum(_target_was_rewritten(row) for row in fit_rows) == rewritten
+    # Non-vacuous: the two readings genuinely differ on the bigger corpus.
+    assert sum(_target_was_rewritten(row) for row in corpus_table.rows) > 82
 
 
 def _mark_coerced(

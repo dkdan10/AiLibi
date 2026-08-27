@@ -225,7 +225,13 @@ def _marker_pattern(marker: str) -> re.Pattern[str]:
 _BALLOT_MARKER_PATTERNS: Final[tuple[tuple[str, re.Pattern[str]], ...]] = tuple(
     (label, _marker_pattern(marker)) for label, marker in BALLOT_AUDIT_MARKERS
 )
-_VOTE_PARSE_DEFAULT_HEAD: Final[str] = VOTE_PARSE_DEFAULT_MARKER.partition("{")[0]
+# The seventh kind, matched with the same repr-aware machinery: the WHOLE
+# marker, not its static head. A model-authored rationale that merely opens
+# with the head's words is not a defaulted ballot, and dropping it from the fit
+# for a phrase would be a false exclusion of an authored target.
+_VOTE_PARSE_DEFAULT_PATTERN: Final[re.Pattern[str]] = _marker_pattern(
+    VOTE_PARSE_DEFAULT_MARKER
+)
 
 
 def ballot_rewrite_labels(ballot: VoteBallot) -> tuple[str, ...]:
@@ -236,8 +242,9 @@ def ballot_rewrite_labels(ballot: VoteBallot) -> tuple[str, ...]:
     parse can disagree with it. A recording that predates that field falls back
     to the marker prefixes, stripped front-to-back through
     :data:`BALLOT_AUDIT_MARKERS` so a stacked ordering cannot hide the inner
-    label behind the outer one. The parse-default marker is the whole rationale
-    rather than a prefix and is recognised by its head.
+    label behind the outer one. The parse-default marker replaces the whole
+    rationale rather than prefixing it, so it is matched apart — as the WHOLE
+    marker, head and repr payload and tail, never the head alone.
 
     Order is the order the labels were recovered in; callers read the SET.
     """
@@ -245,7 +252,7 @@ def ballot_rewrite_labels(ballot: VoteBallot) -> tuple[str, ...]:
     if ballot.guard_rewrite_reason is not None:
         return (ballot.guard_rewrite_reason,)
     text = ballot.rationale_text
-    if text.startswith(_VOTE_PARSE_DEFAULT_HEAD):
+    if _VOTE_PARSE_DEFAULT_PATTERN.match(text) is not None:
         return (_VOTE_PARSE_DEFAULT_LABEL,)
     labels: list[str] = []
     stripped = True

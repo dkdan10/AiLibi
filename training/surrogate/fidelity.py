@@ -1087,9 +1087,14 @@ class GoNoGoVerdict(BaseModel):
 
     bar_id: str
     replay_set_dir: str
-    # The committed weights artifact this verdict is keyed to. ``None`` means the
-    # verdict was taken without naming one, which is every in-memory verdict; the
-    # committed artifact's writer refuses it.
+    # The committed weights artifact this verdict AUTHORIZES — the one
+    # ``load_surrogate_runner_factory`` refuses to install as a training-time
+    # runner unless this verdict names it and reads GO. It is deliberately NOT
+    # "the weights these numbers were produced by": every axis reads a
+    # :class:`SurrogateFidelityReport`, and :func:`run_surrogate_fidelity`
+    # re-fits per fold by construction, so no verdict on this bar has ever been
+    # a frozen-weights measurement. ``None`` means the verdict names no
+    # artifact, which is every in-memory verdict; the writer refuses it.
     weights_sha256: str | None = None
     surrogate_model_name: str
     baseline_model_name: str
@@ -1155,9 +1160,13 @@ def decide_go_no_go(
     wording forbids, so any population mismatch fails loud instead of producing
     a verdict.
 
-    ``weights_sha256`` names the committed weights artifact the verdict is keyed
-    to; it is carried, never read by any axis. A committed verdict must name one
-    (the writer refuses ``None``); an in-memory verdict need not.
+    ``weights_sha256`` names the committed weights artifact this verdict
+    AUTHORIZES — the install gate refuses to seat those weights as a
+    training-time runner unless the verdict names them and reads GO. It is
+    carried, never read by any axis, and it does not claim the numbers came from
+    those weights: this function's inputs are reports, and
+    :func:`run_surrogate_fidelity` re-fits per fold. A committed verdict must
+    name an artifact (the writer refuses ``None``); an in-memory one need not.
     """
 
     mismatches = [

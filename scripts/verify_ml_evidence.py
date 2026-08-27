@@ -1780,7 +1780,16 @@ def run_recompute(ctx: Context) -> LegResult:
     # The committed GO/NO-GO verdict, re-derived from the harness's own two
     # same-population reports (the surrogate under the committed split's single
     # fold, and the FO-6 re-baseline the comparator axis reads) and compared
-    # field for field — the strongest pin the verdict admits.
+    # field for field — the strongest pin this verdict admits.
+    #
+    # NOT a frozen-weights row, unlike the two surrogate channels above:
+    # ``run_surrogate_fidelity`` re-fits per fold by construction (its own
+    # docstring), so every axis of this bar has always described a re-fit on the
+    # scored population rather than a measurement of the committed artifact. The
+    # ``weights_sha256`` it carries names the artifact the verdict AUTHORIZES —
+    # cross-checked where that authorization is spent, in
+    # ``load_surrogate_runner_factory``'s install gate — and this row is what
+    # stops the rest of the object being hand-edited.
     surrogate_verdict_committed = load_surrogate_verdict(surrogate_dir)
     surrogate_verdict_rederived = decide_go_no_go(
         run_surrogate_fidelity(
@@ -1796,7 +1805,11 @@ def run_recompute(ctx: Context) -> LegResult:
             committed=surrogate_verdict_committed.model_dump(),
             repo_root=ctx.repo_root,
             path_fields=("replay_set_dir",),
-            source=f"{SURROGATE_DIR}/verdict.json",
+            source=(
+                f"{SURROGATE_DIR}/verdict.json (re-fit on the scored population, "
+                "the only form this bar has; weights_sha256 names the artifact "
+                "the verdict authorizes)"
+            ),
         )
     )
 

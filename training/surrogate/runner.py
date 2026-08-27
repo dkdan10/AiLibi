@@ -459,8 +459,11 @@ def write_surrogate_verdict_artifact(
 
     Sorted keys + one trailing newline (byte-stable re-serialization), the same
     shape ``write_conviction_verdict_artifact`` commits. A verdict that names no
-    weights is refused: an unkeyed verdict cannot say WHICH artifact it judged,
-    and the install gate below would then guard nothing in particular.
+    weights is refused: ``weights_sha256`` is what the install gate cross-checks
+    against the artifact it is about to seat, so an unkeyed verdict would guard
+    nothing in particular. It names the weights this verdict AUTHORIZES — the
+    bar's own harness re-fits per fold, so no surrogate verdict has ever been a
+    measurement OF a frozen artifact.
     """
 
     if verdict.weights_sha256 is None:
@@ -528,13 +531,15 @@ def load_surrogate_runner_factory(
 
     **The install gate.** ``install_role="training-time-runner"`` asks for the
     role only a GO verdict grants — the surrogate driving the bake-off's
-    meetings — so the committed verdict is loaded and its COMPOSED ``verdict``
-    field must read ``GO``. That composed field is the one the consequence
-    mapping is defined on; the reporting split's ``ranking_verdict`` /
-    ``decision_verdict`` halves are neither read here nor re-conjoined. The
-    default ``"diagnostic"`` is the role every current caller holds — the
-    fidelity and probe paths a NO-GO surrogate is explicitly still allowed to
-    serve — and loads no verdict at all.
+    meetings — so the committed verdict is loaded, its ``weights_sha256`` must
+    name THESE weights, and its COMPOSED ``verdict`` field must read ``GO``. The
+    sha cross-check comes first and is what stops a stale or copied GO verdict
+    authorizing weights nobody judged; the composed field is the one the
+    consequence mapping is defined on, so the reporting split's
+    ``ranking_verdict`` / ``decision_verdict`` halves are neither read here nor
+    re-conjoined. The default ``"diagnostic"`` is the role every current caller
+    holds — the fidelity and probe paths a NO-GO surrogate is explicitly still
+    allowed to serve — and loads no verdict at all.
     """
 
     predictor, weights_sha256 = load_ballot_predictor_artifact(artifact_dir)
@@ -566,6 +571,14 @@ def load_surrogate_runner_factory(
             )
     if install_role == "training-time-runner":
         verdict = load_surrogate_verdict(artifact_dir)
+        if verdict.weights_sha256 != weights_sha256:
+            raise ValueError(
+                f"the committed surrogate verdict under {artifact_dir} is keyed "
+                f"on weights {verdict.weights_sha256!r} but the committed "
+                f"weights hash to {weights_sha256!r} — a verdict that judged "
+                "other weights authorizes nothing here (a re-fit must re-write "
+                "both together)"
+            )
         if verdict.verdict != "GO":
             raise ValueError(
                 f"the committed surrogate verdict under {artifact_dir} is "

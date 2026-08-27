@@ -41,6 +41,7 @@ from meetings.manager import (
     INVALID_OBSERVATION_ID_MARKER,
     TEAMMATE_VOTE_TARGET_MARKER,
     UNCITED_ZERO_FLAG_EJECT_MARKER,
+    VOTE_PARSE_DEFAULT_MARKER,
 )
 from meetings.schemas import AlibiClaim as SchemaAlibiClaim
 from meetings.schemas import (
@@ -905,6 +906,42 @@ def test_the_marker_chain_is_walked_front_to_back_not_matched_once() -> None:
     assert ballot_rewrite_labels(_skip_ballot(outer_only)) == ("under_gate_redirect",)
 
 
+@pytest.fixture(scope="module")
+def row_template() -> MeetingTableRow:
+    """One real 4p1i row, used as the carrier for planted label sets."""
+
+    return build_meeting_table(_COMMITTED_SETS[3]).rows[0]
+
+
+def test_the_parse_default_marker_is_matched_whole_not_by_its_head(
+    row_template: MeetingTableRow,
+) -> None:
+    """A rationale that merely opens with the marker's words is not defaulted.
+
+    The parse-default marker replaces the whole rationale, so it is matched
+    apart from the prefix chain — but matching only its static head would
+    classify a model-authored rationale that happens to begin with that phrase
+    as a rewritten target and DROP it from the fit. The planted pair is the
+    real marker (recognised) beside its head followed by ordinary prose (not),
+    which no head-only test can tell apart.
+    """
+
+    real = ballot_rewrite_labels(
+        _skip_ballot(VOTE_PARSE_DEFAULT_MARKER.format(head="{'target': 'p-"))
+    )
+    assert real == ("parse_default",)
+    assert _target_was_rewritten(
+        row_template.model_copy(update={"ballot_rewrite_labels": real})
+    )
+
+    head = VOTE_PARSE_DEFAULT_MARKER.partition("{")[0]
+    authored = ballot_rewrite_labels(_skip_ballot(head + "so I am skipping"))
+    assert authored == ()
+    assert not _target_was_rewritten(
+        row_template.model_copy(update={"ballot_rewrite_labels": authored})
+    )
+
+
 def test_the_structured_guard_reason_wins_over_a_contradicting_marker() -> None:
     """A recording that carries the meeting layer's own testimony is believed.
 
@@ -957,7 +994,9 @@ def test_the_training_marker_table_cannot_drift_from_the_display_one() -> None:
     assert perturbed_drop != frozenset(get_args(BallotTargetRewriteReason))
 
 
-def test_the_citation_only_rewrites_stay_in_the_fit() -> None:
+def test_the_citation_only_rewrites_stay_in_the_fit(
+    row_template: MeetingTableRow,
+) -> None:
     """Nulling a reference is not rewriting a target, and the rule says so."""
 
     assert "invalid_reason_id" not in TARGET_REWRITE_LABELS
@@ -968,12 +1007,13 @@ def test_the_citation_only_rewrites_stay_in_the_fit() -> None:
     )
     labels = ballot_rewrite_labels(nulled)
     assert labels == ("invalid_observation_id",)
-    row = build_meeting_table(_COMMITTED_SETS[3]).rows[0]
     assert not _target_was_rewritten(
-        row.model_copy(update={"ballot_rewrite_labels": labels})
+        row_template.model_copy(update={"ballot_rewrite_labels": labels})
     )
     assert _target_was_rewritten(
-        row.model_copy(update={"ballot_rewrite_labels": ("under_gate_redirect",)})
+        row_template.model_copy(
+            update={"ballot_rewrite_labels": ("under_gate_redirect",)}
+        )
     )
 
 

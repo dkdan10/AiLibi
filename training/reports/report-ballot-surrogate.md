@@ -231,8 +231,11 @@ the exact `suspicion_graph_for_meeting()` accessor a live meeting consumes):
    > class `meetings.schemas.BallotTargetRewriteReason` names, read from that
    > union rather than re-spelled — while the two citation-only rewrites stay in
    > the fit, labelled and counted, because they null a reference and leave the
-   > target intact. On the corpus now on disk that moves the drop from 7 rows to
-   > 102 (9p2i) and from 0 to 2 (4p1i). Over the same window the `is_reporter`
+   > target intact. On the corpus now on disk the whole-table census moves from
+   > 7 rows to 102 (9p2i) and from 0 to 2 (4p1i); what a fit actually drops is
+   > the `train ∪ val` share of that — **7 → 82** on 9p2i and 0 → 2 on 4p1i, the
+   > other 20 being held-out rows no fit path ever consumed. Over the same
+   > window the `is_reporter`
    > slot is masked to a constant on the fit and the serve side alike: the
    > reporter is a crewmate on all 3,602 recorded ballots across the four
    > committed sets, so a fit that reads it learns roles ground truth rather than
