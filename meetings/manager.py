@@ -129,6 +129,7 @@ from meetings.schemas import (
     MeetingResult,
     MeetingTranscript,
     MeetingTurn,
+    ModelAuthoredVoteBallot,
     MoveWitnessRecord,
     ObservationClaim,
     ObservationId,
@@ -1880,7 +1881,13 @@ class MeetingManager:
                 _isolate_provider_timeout(
                     self._llm_client.complete(
                         prompt=prompt,
-                        schema=VoteBallot,
+                        # The AUTHORED shape, not the recorded one: every
+                        # adapter validates the completion against the schema
+                        # it was handed and the Ollama one constrains decoding
+                        # on it, so the guard-provenance names never reach the
+                        # model. The strip below is the belt to that brace, for
+                        # a client that validates nothing.
+                        schema=ModelAuthoredVoteBallot,
                         max_tokens=self._config.vote_max_tokens,
                         temperature=self._config.vote_temperature,
                         call_kind="meeting",

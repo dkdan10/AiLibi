@@ -23,6 +23,7 @@ from meetings.schemas import (
     MeetingResult,
     MeetingTranscript,
     MeetingTurn,
+    ModelAuthoredVoteBallot,
     ObservationId,
     SightingRecord,
     VentWitnessRecord,
@@ -1153,7 +1154,7 @@ class _InvalidTurnClient:
     ) -> LLMResponse:
         if schema is MeetingTurn:
             text = "{}"  # missing required fields -> MeetingTurn validation fails
-        elif schema is VoteBallot:
+        elif schema is ModelAuthoredVoteBallot:
             text = VoteBallot(
                 voter="x",
                 target="SKIP",
@@ -1274,7 +1275,7 @@ class _ProviderRaisesTurnClient:
                 )
                 raise
             raise AssertionError("unreachable")  # pragma: no cover
-        if schema is VoteBallot:
+        if schema is ModelAuthoredVoteBallot:
             return LLMResponse(
                 text=VoteBallot(
                     voter="x",
@@ -1464,7 +1465,7 @@ class _OpeningDefaultsThenBallotTransportAbortsClient:
         model: str | None = None,
         agent_id: str | None = None,
     ) -> LLMResponse:
-        if schema is VoteBallot:
+        if schema is ModelAuthoredVoteBallot:
             raise TimeoutError("provider transport timeout")
         return LLMResponse(
             text="{}",
@@ -1584,7 +1585,7 @@ class _RaiseFirstTurnThenSucceedClient:
                 cost_usd=0.0,
                 model=model or "recovered",
             )
-        if schema is VoteBallot:
+        if schema is ModelAuthoredVoteBallot:
             return LLMResponse(
                 text=VoteBallot(
                     voter="x",

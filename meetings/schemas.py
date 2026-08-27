@@ -642,7 +642,32 @@ of these.
 """
 
 
-class VoteBallot(_FrozenModel):
+class ModelAuthoredVoteBallot(_FrozenModel):
+    """The ballot a VOTER authors -- the schema the LLM client is handed.
+
+    Exactly :class:`VoteBallot` minus the two fields the meeting layer owns
+    outright (``guard_redirected_from`` / ``guard_rewrite_reason``), and
+    :class:`VoteBallot`'s own base, so the two can never drift apart. Every
+    adapter validates the model's completion against the schema it was given
+    before returning it (``llm/provider.py``, ``llm/ollama_client.py``,
+    ``llm/featherless_client.py``), and the Ollama adapter constrains decoding
+    on it -- so handing over THIS model is what keeps the guard-provenance
+    field names out of the model's reach entirely, rather than nulling a value
+    it was invited to invent.
+
+    Field semantics live on :class:`VoteBallot`; this class adds no behaviour.
+    """
+
+    voter: PlayerId
+    target: PlayerId | Literal["SKIP"]
+    confidence: float = Field(ge=0.0, le=1.0)
+    primary_reason_id: TurnId | None
+    primary_reason_observation_id: ObservationId | None = None
+    considered_alternatives: tuple[PlayerId, ...] = ()
+    rationale_text: str
+
+
+class VoteBallot(ModelAuthoredVoteBallot):
     """Voting output (DESIGN.md §5.5).
 
     The structured fields drive the tally; the rationale is logged
@@ -679,17 +704,12 @@ class VoteBallot(_FrozenModel):
     before them parses unchanged; ``None`` on both means either no rewrite or a
     recording that predates the fields, which is why a reader falls back to the
     marker parse rather than reading ``None`` as "the voter authored this".
-    They are meeting-layer output only: the parse path nulls whatever a model
-    returns in them before any guard runs.
+    They are meeting-layer output only, and NOT part of the schema the model is
+    asked to fill: the client is handed :class:`ModelAuthoredVoteBallot`
+    instead, so the names never reach constrained decoding, and the parse path
+    strips them from the raw payload as the belt to that brace.
     """
 
-    voter: PlayerId
-    target: PlayerId | Literal["SKIP"]
-    confidence: float = Field(ge=0.0, le=1.0)
-    primary_reason_id: TurnId | None
-    primary_reason_observation_id: ObservationId | None = None
-    considered_alternatives: tuple[PlayerId, ...] = ()
-    rationale_text: str
     guard_redirected_from: str | None = None
     guard_rewrite_reason: BallotTargetRewriteReason | None = None
 
@@ -885,6 +905,7 @@ __all__ = [
     "MeetingResult",
     "MeetingTranscript",
     "MeetingTurn",
+    "ModelAuthoredVoteBallot",
     "MoveWitnessRecord",
     "ObservationClaim",
     "ObservationId",

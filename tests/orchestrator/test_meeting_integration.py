@@ -59,6 +59,7 @@ from meetings.schemas import (
     MeetingResult,
     MeetingTranscript,
     MeetingTurn,
+    ModelAuthoredVoteBallot,
     ObservationClaim,
     ObservationId,
     SawPlayerObservation,
@@ -923,7 +924,7 @@ class _ScriptedLLMClient:
                 claims=(),
                 free_text="stub-turn (unsure)",
             ).model_dump_json()
-        elif schema is VoteBallot:
+        elif schema is ModelAuthoredVoteBallot:
             text = VoteBallot(
                 voter="placeholder",
                 target=self._vote_target,
@@ -1828,7 +1829,7 @@ class _Seed6BetrayalClient:
                 ),
                 free_text="t",
             ).model_dump_json()
-        elif schema is VoteBallot:
+        elif schema is ModelAuthoredVoteBallot:
             text = VoteBallot(
                 voter=agent_id or "x",
                 target=mate if mate is not None else "SKIP",
@@ -2302,7 +2303,7 @@ class _EmergencyChainLLMClient:
                     free_text="stub-defense (unsure)",
                 )
             text = turn.model_dump_json()
-        elif schema is VoteBallot:
+        elif schema is ModelAuthoredVoteBallot:
             text = VoteBallot(
                 voter="placeholder",
                 target=self._vote_target,

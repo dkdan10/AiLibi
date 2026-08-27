@@ -27,6 +27,19 @@ BEHAVIOUR, so a recording that says which those were
 recording that does not carry the field is tallied exactly as before, since an
 absent field is not a claim that everything applied.
 
+**What this module verifies, and what it does not.** It reads the row as fact —
+that is the seam above, and the reason it is the only cheap path to the
+per-tick stream. The recorded disposition tuple is NOT covered by the tick
+``state_hash`` (a discarded action was never applied, so mislabelling one
+still reconstructs byte-identically), so a set whose recordings carry the field
+must be walked with ``eval.replay_walk.ReplayWalkConfig.verify_action_dispositions``
+before its report is built — the same gate that already re-derives the hashes.
+No committed set carries the field, so the exclusion branch is unreachable over
+every byte in this repository today and every published cell is unmoved; the
+first re-record that carries it (Task 21.15) is what must turn that check on in
+the set-level walk. :class:`api.replay_loader.ReplayLoader` does not depend on
+this: it re-derives and refuses a divergent tuple itself, because it SERVES it.
+
 The replay file for a game is ``sample_dir / game.replay_ref`` (the bare
 ``replay-seed-{seed}.jsonl`` name the loader records), so the ingest is keyed
 to the SAME games the report was built from.
@@ -35,16 +48,16 @@ to the SAME games the report was built from.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
 from pathlib import Path
+
+from pydantic import BaseModel, ConfigDict, Field
 
 from eval.meeting_quality import ActionRoleTally
 from eval.report_schema import GameReport
 from orchestrator.replay import read_replay_entries
 
 
-@dataclass(frozen=True)
-class ActionIngest:
+class ActionIngest(BaseModel):
     """One ingest pass: the role tally plus what it refused to count.
 
     ``discarded_excluded`` is the number of recorded actions the recording
@@ -54,8 +67,10 @@ class ActionIngest:
     keeps its shape; 0 over every recording that carries no dispositions.
     """
 
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
     tally: ActionRoleTally
-    discarded_excluded: int
+    discarded_excluded: int = Field(ge=0)
 
 
 def ingest_actions_by_role(

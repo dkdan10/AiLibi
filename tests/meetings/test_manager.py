@@ -114,6 +114,7 @@ from meetings.schemas import (
     MeetingResult,
     MeetingTranscript,
     MeetingTurn,
+    ModelAuthoredVoteBallot,
     ObservationClaim,
     PlayerId,
     SawPlayerObservation,
@@ -5212,7 +5213,9 @@ class TestRenderAfterFoldConsistency:
         )
         prompts: dict[str, str] = {}
         for call in client.calls:
-            if call.schema_name == "VoteBallot":
+            # The vote call is the one handed the AUTHORED ballot shape (the
+            # model never sees the meeting layer's own provenance fields).
+            if call.schema_name == ModelAuthoredVoteBallot.__name__:
                 assert call.agent_id is not None
                 prompts[call.agent_id] = call.prompt
         return prompts
@@ -8015,20 +8018,39 @@ class TestBallotRewriteProvenanceSites:
             schema = MeetingTurn.model_json_schema(mode=mode)
             assert set(schema["properties"]) == expected, mode
 
+    def test_the_model_facing_schema_is_the_ballot_minus_the_guard_pair(self) -> None:
+        # DERIVED, not restated: the authored shape is VoteBallot's own base, so
+        # a field added to one appears on the other unless it is the pair.
+        assert set(VoteBallot.model_fields) - set(
+            ModelAuthoredVoteBallot.model_fields
+        ) == {"guard_redirected_from", "guard_rewrite_reason"}
+        assert issubclass(VoteBallot, ModelAuthoredVoteBallot)
+
+    def test_the_schema_handed_to_the_model_hides_the_guard_pair(self) -> None:
+        # The names never reach constrained decoding, which is what makes the
+        # firewall hold on a real provider rather than on the strip alone.
+        published = ModelAuthoredVoteBallot.model_json_schema()["properties"]
+
+        assert "guard_redirected_from" not in published
+        assert "guard_rewrite_reason" not in published
+        assert set(published) == set(ModelAuthoredVoteBallot.model_fields)
+
 
 @dataclass
 class _ProvenanceForgingVoteClient:
     """Returns a ballot that fills the guard-provenance fields itself.
 
-    The laundering attempt the pre-validation strip exists to stop:
-    ``VoteBallot`` is the schema handed to ``LLMClient.complete``, so a
-    constrained-decoding adapter shows the model these field names.
-    ``forged`` is the pair the model sends; the half-pair case is the one that
-    would otherwise fail the joint validator and degrade the WHOLE vote to the
-    parse default rather than merely losing the field.
+    The laundering attempt the firewall exists to stop. ``forged`` is the pair
+    the model sends; the half-pair case is the one that would otherwise fail the
+    joint validator and degrade the WHOLE vote to the parse default rather than
+    merely losing the field. Records ``vote_schema`` so the caller can pin WHICH
+    schema the manager hands over — the first half of the firewall, since every
+    real adapter validates against it and the Ollama one constrains decoding on
+    it.
     """
 
     forged: Mapping[str, object]
+    vote_schema: type[BaseModel] | None = None
 
     async def complete(
         self,
@@ -8042,6 +8064,7 @@ class _ProvenanceForgingVoteClient:
         agent_id: str | None = None,
     ) -> LLMResponse:
         if "PHASE=VOTE" in prompt:
+            self.vote_schema = schema
             voter = _extract_marker(prompt, "voter=")
             text = json.dumps(
                 {
@@ -8081,14 +8104,17 @@ def test_a_model_authored_provenance_value_never_reaches_the_record(
 ) -> None:
     """The laundering guard: the fields are the meeting layer's, never the model's.
 
-    The keys are stripped from the raw payload BEFORE validation, so a ballot
-    that arrives claiming a rewrite loses only that claim: nothing in the
-    recorded meeting reports a rewrite that did not happen, and no ballot
-    degrades to the parse default over it.
+    Two layers. The schema the client is handed does not contain the names, so
+    a constrained-decoding adapter cannot emit them at all; and the keys are
+    stripped from the raw payload BEFORE validation, so a client that validates
+    nothing still loses only that claim — nothing in the recorded meeting
+    reports a rewrite that did not happen, and no ballot degrades to the parse
+    default over it.
     """
 
+    client = _ProvenanceForgingVoteClient(forged=forged)
     manager = _make_manager(
-        llm_client=_ProvenanceForgingVoteClient(forged=forged),
+        llm_client=client,
         deadlines=MeetingDeadlines(turn_seconds=None, vote_seconds=None),
     )
     result = _run(
@@ -8099,6 +8125,7 @@ def test_a_model_authored_provenance_value_never_reaches_the_record(
         )
     )
 
+    assert client.vote_schema is ModelAuthoredVoteBallot
     assert result.ballots
     for ballot in result.ballots:
         assert ballot.guard_redirected_from is None
@@ -8106,6 +8133,65 @@ def test_a_model_authored_provenance_value_never_reaches_the_record(
         # And the vote itself survived: the model's OWN body is on the record,
         # so the strip cost it the forged field and nothing else.
         assert ballot.rationale_text.endswith(f"stub-vote-{ballot.voter}")
+    assert manager.defaulted_calls == ()
+
+
+def test_an_adapter_validating_ballot_passes_the_authored_schema() -> None:
+    """The real-provider shape: a client that validates like every adapter does.
+
+    ``llm/provider.py``, ``llm/ollama_client.py`` and ``llm/featherless_client.py``
+    all run ``schema.model_validate_json(text)`` before returning, so whatever
+    the manager hands over is the shape the model is held to. A well-formed
+    authored ballot must pass that validation and reach the record intact.
+    """
+
+    validated: list[type[BaseModel]] = []
+
+    @dataclass
+    class _AdapterShapedClient:
+        async def complete(
+            self,
+            *,
+            prompt: str,
+            schema: type[BaseModel] | None,
+            max_tokens: int,
+            temperature: float,
+            call_kind: CallKind = "meeting",
+            model: str | None = None,
+            agent_id: str | None = None,
+        ) -> LLMResponse:
+            if "PHASE=VOTE" in prompt:
+                text = _vote_json(
+                    voter=_extract_marker(prompt, "voter="), target="SKIP"
+                )
+            else:
+                text = _turn_json(speaker=_extract_marker(prompt, "agent_id="))
+            if schema is not None:
+                # The adapter-side gate, byte-for-byte what the three real
+                # clients do before returning.
+                schema.model_validate_json(text)
+                validated.append(schema)
+            return LLMResponse(
+                text=text,
+                usage=TokenUsage(input_tokens=1, output_tokens=1),
+                cost_usd=0.0,
+                model=model or "adapter-shaped",
+            )
+
+    manager = _make_manager(
+        llm_client=_AdapterShapedClient(),
+        deadlines=MeetingDeadlines(turn_seconds=None, vote_seconds=None),
+    )
+    result = _run(
+        manager.run(
+            meeting_id="m-1",
+            trigger=_default_trigger(),
+            participants=_crew_participants(),
+        )
+    )
+
+    assert ModelAuthoredVoteBallot in validated
+    assert result.ballots
     assert manager.defaulted_calls == ()
 
 
