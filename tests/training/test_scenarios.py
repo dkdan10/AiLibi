@@ -430,18 +430,76 @@ def test_scenario_episodes_score_dense_while_the_terminal_gate_refuses() -> None
         compute_shaped_reward(rollout, "CREWMATE")
 
 
-def test_kill_with_witness_fsm_hunts_elsewhere_and_earns_nothing() -> None:
-    # The scripted FSM impostor never takes the staged LABS window at all — it
-    # walks next door and kills through MEDBAY instead. Under an any-kill
-    # reading that unstaged rampage COLLECTED the kill credit (the exploit the
-    # staged-kill qualifier closes); keyed on the staged victim in the staged
-    # room, the scripted anchor earns 0.0 and only actually running the drill
-    # scores.
+def test_kill_with_witness_fsm_takes_the_staged_kill_then_forfeits_survival() -> None:
+    # The scripted FSM impostor takes the staged LABS window on the staged tick
+    # — its kill seam scans the whole target ranking for a free kill, so a
+    # higher-scoring remote lead no longer vetoes the victim standing beside it
+    # — and then keeps hunting inside the horizon. The second kill is the SOLE
+    # cause of the withheld survival credit: every other qualifier is met, since
+    # the staged corpse's own report meeting concluded and its reporter is crew.
+    # The no-impostor-ejected qualifier is vacuously true here — the default fake
+    # meeting layer can never eject, as _kill_with_witness_fitness itself states
+    # — so it is evidence of nothing and the assertions below do not lean on it.
+    # This is the file's only anchor where the exactly-one-kill forfeiture bites
+    # on an unscripted trajectory.
+    #
+    # The mover repair that made the FSM take this window is Task 20.32. No
+    # training code changed.
     rollout = _run(KILL_WITH_WITNESS_NEARBY, 7)
     kills = [e for e in rollout.events if isinstance(e, KilledEvent)]
-    assert len(kills) >= 2
-    assert all(k.target != "p-5" for k in kills)
-    assert KILL_WITH_WITNESS_NEARBY.fitness(rollout) == 0.0
+    staged = [
+        k
+        for k in kills
+        if k.target == "p-5"
+        and k.room == "LABS"
+        and k.tick == KILL_WITH_WITNESS_NEARBY.staged_tick
+    ]
+    assert len(staged) == 1
+    concluded_ticks = {m.tick for m in rollout.meetings if m.outcome is not None}
+    assert any(
+        isinstance(e, MeetingTriggeredEvent)
+        and e.trigger == "report"
+        and e.body_id == f"body-{staged[0].target}-{staged[0].tick}"
+        and rollout.roles.get(e.actor) == "CREWMATE"
+        and e.tick in concluded_ticks
+        for e in rollout.events
+    ), "the staged corpse was crew-reported and that meeting concluded"
+    # ...and yet the credit is withheld, because a second kill landed.
+    assert len(kills) > 1
+    assert KILL_WITH_WITNESS_NEARBY.fitness(rollout) == 1.0
+
+
+def _fsm_without_the_second_kill_selector(decision: MaskedDecision) -> ActionIntent:
+    """FSM everywhere, except the impostor's post-staged-tick kills become waits."""
+
+    packet = decision.packet
+    if (
+        packet.self_state.role == "IMPOSTOR"
+        and packet.tick > KILL_WITH_WITNESS_NEARBY.staged_tick
+        and isinstance(decision.fsm_intent, KillIntent)
+    ):
+        return _wait(decision)
+    return decision.fsm_intent
+
+
+def test_kill_with_witness_fsm_without_the_second_kill_earns_full_credit() -> None:
+    # The planted case for the anchor above: leave the FSM's staged kill alone
+    # and convert only its LATER kill intents to waits. Exactly the staged kill
+    # remains and the fitness rises 1.0 -> 2.0, so the point the anchor sees
+    # withheld is the second-kill clause and nothing else.
+    rollout = _run(
+        KILL_WITH_WITNESS_NEARBY,
+        7,
+        intent_selector=_fsm_without_the_second_kill_selector,
+    )
+    kills = [e for e in rollout.events if isinstance(e, KilledEvent)]
+    assert len(kills) == 1
+    assert (kills[0].target, kills[0].room, kills[0].tick) == (
+        "p-5",
+        "LABS",
+        KILL_WITH_WITNESS_NEARBY.staged_tick,
+    )
+    assert KILL_WITH_WITNESS_NEARBY.fitness(rollout) == 2.0
 
 
 def _kill_once_selector(decision: MaskedDecision) -> ActionIntent:
