@@ -41,11 +41,13 @@ def test_9p2i_reproduces_baseline_6_exactly() -> None:
     assert report.impostor_ejections == 85
     assert report.crewmate_ejections == 14
     assert report.ejection_accuracy == pytest.approx(85 / 99)  # was 78 / 101
-    # Genuine impostor-subject flag class: 1 supplied, 0 converted (baseline 6
-    # read 4 supplied / 3 converted -> 0.75).
-    assert report.genuine_class_supplied == 1
+    # The genuine impostor-subject flag class is EMPTY on the recorded census:
+    # exactly one recorded alibi_vs_sighting flag survives the three frozen
+    # weak-reason exclusions on this set, and it names a crewmate. So the rate
+    # is the None sentinel, not 0.0.
+    assert report.genuine_class_supplied == 0  # was 1
     assert report.genuine_class_converted == 0
-    assert report.genuine_class_conversion == pytest.approx(0.0)
+    assert report.genuine_class_conversion is None  # was 0.0
     # Task 19.5 wires the Task-17.6 successor here too: the CANARY cell, the
     # only canary-eligible genuine-class instrument from baseline 5 onward.
     # 76 supplied (meeting, impostor) pairs across the three recorded channels,

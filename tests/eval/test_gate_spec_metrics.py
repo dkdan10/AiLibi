@@ -53,6 +53,7 @@ from eval.vote_correctness import (
 from meetings.schemas import (
     AccusationClaim,
     AlibiClaim,
+    ContradictionRef,
     MeetingOutcome,
     MeetingTranscript,
     MeetingTurn,
@@ -250,9 +251,29 @@ def _meeting(
     ejected: PlayerId | None = None,
     turns: tuple[MeetingTurn, ...] = (),
     voters: tuple[PlayerId, ...] = _VOTERS,
+    contradictions: tuple[ContradictionRef, ...] | None = None,
     llm_calls: tuple[LLMCallRecord, ...] = (),
     meeting_id: str = "m-0",
 ) -> MeetingReport:
+    """A resolved meeting whose recorded flags are what the detector emitted.
+
+    The instruments read the RECORDED array, so a fixture that leaves it empty
+    while the transcript carries a contradiction records a meeting the game
+    never played. Recording the detector's own output keeps every fixture a
+    faithful recording of its transcript; pass ``contradictions`` explicitly
+    to record something the transcript alone cannot mint (a grounded
+    ``vent_sighting``) or to plant a row that disagrees with it.
+    """
+
+    ballots = tuple(_ballot(voter=voter) for voter in voters)
+    transcript = MeetingTranscript(turns=turns)
+    recorded = (
+        detect_contradictions(
+            transcript, roster=frozenset(ballot.voter for ballot in ballots)
+        )
+        if contradictions is None
+        else contradictions
+    )
     return MeetingReport(
         meeting_id=meeting_id,
         tick=40,
@@ -260,9 +281,9 @@ def _meeting(
         trigger="report",
         outcome=outcome,
         ejected_player_id=ejected,
-        transcript=MeetingTranscript(turns=turns),
-        ballots=tuple(_ballot(voter=voter) for voter in voters),
-        contradictions=(),
+        transcript=transcript,
+        ballots=ballots,
+        contradictions=recorded,
         llm_calls=llm_calls,
     )
 
@@ -894,12 +915,10 @@ class TestCommittedW2GateSpecPins:
     """The gp-7 pins over the committed Wave-2 bytes (baseline-6 canonical re-record).
 
     These re-derive from the committed 9p2i bytes. W2 first landed in Task 10.17
-    (W1 -> W2); the current bytes are the Task-18.12 canonical re-record ("baseline
-    6") on the qwen3_6_27b.v3 prompts (all four templates) for model
-    Qwen/Qwen3.6-27B with the substrate levers unconditionally ON. On the
-    baseline-6 model/set the transcript contradiction channel is live:
-    the census reads 78 impostor ejections and 84 flags split 26w/58s. The
-    frozen prior-era A/B anchors (corrected_w0_baseline.json and
+    (W1 -> W2); the current bytes are the baseline-7 record. Off the RECORDED
+    flag census the set reads 85 impostor ejections and 52 non-vent flags split
+    50w/2s across 152 meetings, beside 92 recorded vent flags the referee prices
+    on its own term. The frozen prior-era A/B anchors (corrected_w0_baseline.json and
     corrected_w1_baseline.json) are pinned separately by the two
     ``test_w*_baseline_fixture_carries_the_anchor_rows`` tests below.
     """
@@ -924,47 +943,46 @@ class TestCommittedW2GateSpecPins:
         assert channels_by_site == expected
 
     def test_multi_signal_conversion_reads_18_of_64(self) -> None:
-        # Re-extracted on the baseline-6 re-record (Qwen/Qwen3.6-27B, qwen3_6_27b.v3,
-        # all four templates, the substrate levers unconditionally ON; this test reads
-        # the committed report JSON directly, so the census re-derives under the bare
-        # env, no substrate guard). The gate ejects 78 impostors on this substrate.
-        # With the transcript contradiction channel live on baseline-6, 26 of 78 rows
-        # carry MULTIPLE signal channels, 52 carry a single channel, 0 unattributed —
-        # the multi-signal rate is 26/78. The channel decomposition per site is pinned
-        # below against the committed W2 baseline fixture.
+        # The gate ejects 85 impostors on the committed 9p2i bytes. Reading the
+        # RECORDED flag channel rather than a transcript re-derivation, 23 of the
+        # 85 rows carry MULTIPLE signal channels, 62 carry a single channel and 0
+        # are unattributed — one more multi-signal row than the re-derivation
+        # found (seed-33:m1 gains contradiction_flag beside its vent witness).
+        # The channel decomposition per site is pinned above against the
+        # committed W2 baseline fixture.
         report = _load_committed_9p2i()
         result = compute_multi_signal_conversion(report.report.games)
 
         assert result.impostor_ejections == 85  # was 78
-        assert result.multi_signal_conversions == 22  # was 26
-        assert result.single_signal_conversions == 63  # was 52
+        assert result.multi_signal_conversions == 23  # was 22
+        assert result.single_signal_conversions == 62  # was 63
         assert result.unattributed_conversions == 0
-        assert result.multi_signal_rate == pytest.approx(22 / 85)  # was 26 / 78
+        assert result.multi_signal_rate == pytest.approx(23 / 85)  # was 22 / 85
 
     def test_supply_gauges_read_the_corrected_instrument(self) -> None:
-        # The supply row, re-extracted on the baseline-6 re-record (Qwen/Qwen3.6-27B,
-        # qwen3_6_27b.v3, all four templates, the substrate levers unconditionally
-        # ON; this test reads the committed report JSON directly, so the flag census
-        # re-derives under the bare env). On the baseline-6 model/set the transcript
-        # contradiction channel is live: 84 flags split 26w/58s across 165 meetings,
-        # and the flag role split is 75 CREW / 9 IMP — 9 surviving flags name an
-        # impostor subject, so the impostor-subject flag census reads 9. 115
-        # zero-contradiction meetings, genuine-subject supply 41, accused-impostor
-        # 134, and 506 over-gate §6.6 listener rows (the vote graph still renders
-        # densely on this set).
+        # The supply row off the RECORDED non-vent census on the committed 9p2i
+        # bytes: 52 flags split 50w/2s across 152 meetings, role split 41 CREW /
+        # 11 IMP, 129 zero-contradiction meetings, genuine-subject supply 1,
+        # accused-impostor 122, and 450 over-gate §6.6 listener rows. The vent
+        # class is excluded here and rides the referee's own vent term, so this
+        # is the deduction-flag half of a 144-flag record (92 of them vents).
+        # Against the retired transcript re-derivation the census gains 10 flags
+        # net — it loses ones the transcript minted without the private channels
+        # and gains ones the record carries that no transcript can reconstruct —
+        # and the genuine-class supply collapses from 10 meetings to 1.
         report = _load_committed_9p2i()
         gauges = compute_supply_gauges(report.report.games)
 
-        assert gauges.meetings_total == 152  # was 165
-        assert gauges.total_flags == 42  # was 84
-        assert gauges.weak_flags == 39  # was 26
-        assert gauges.strong_flags == 3  # was 58
-        assert gauges.zero_contradiction_meetings == 127  # was 115
-        assert gauges.genuine_subject_meetings == 10  # was 41
-        assert gauges.flag_subjects_crew == 36  # was 75
-        assert gauges.flag_subjects_impostor == 6  # was 9
-        assert gauges.accused_impostor_meetings == 122  # was 134
-        assert gauges.over_gate_listener_rows == 450  # was 506
+        assert gauges.meetings_total == 152
+        assert gauges.total_flags == 52  # was 42
+        assert gauges.weak_flags == 50  # was 39
+        assert gauges.strong_flags == 2  # was 3
+        assert gauges.zero_contradiction_meetings == 129  # was 127
+        assert gauges.genuine_subject_meetings == 1  # was 10
+        assert gauges.flag_subjects_crew == 41  # was 36
+        assert gauges.flag_subjects_impostor == 11  # was 6
+        assert gauges.accused_impostor_meetings == 122
+        assert gauges.over_gate_listener_rows == 450
 
     def test_corrected_w2_baseline_matches_a_rederivation(
         self, committed_9p2i_report: TournamentEvalReport

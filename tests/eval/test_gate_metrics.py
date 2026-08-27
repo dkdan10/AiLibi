@@ -4,12 +4,13 @@ Three layers, mirroring the module split:
 
 * **Genuine-class conversion** (:mod:`eval.vote_correctness`) — the phase's
   PRIMARY progress gate. Synthetic fixtures pin the CANON-class definition
-  as an *import of the Task 10.1 detector classifier*: flags are re-derived
-  through :func:`meetings.transcript.detect_contradictions` (recorded
-  ``ContradictionRef`` rows are ignored — on pre-repair sets they are 93%
-  artifacts), the endpoint band disqualifies, the self-stated weak band does
-  NOT (audit D-D-3: a fabricated alibi is self-stated by construction), and
-  supplied pairs are deduped per (meeting, impostor).
+  over each meeting's RECORDED ``ContradictionRef`` rows
+  (:func:`eval.meeting_quality.recorded_contradiction_flags`): the endpoint
+  band disqualifies, the self-stated weak band does NOT (audit D-D-3: a
+  fabricated alibi is self-stated by construction), and supplied pairs are
+  deduped per (meeting, impostor). ``_meeting`` records what the detector
+  emitted over each fixture's transcript, so a fixture is a faithful
+  recording unless it deliberately plants otherwise.
 
 * **Gate surface** (:mod:`eval.meeting_quality.GateMetricsReport`) — lost
   opening accusations counted separately from cap-defaulted turns (H-H-5 vs
@@ -38,6 +39,7 @@ from eval.meeting_quality import (
     TournamentEvalReport,
     build_tournament_eval_report,
     compute_gate_metrics,
+    recorded_contradiction_flags,
 )
 from eval.report_schema import (
     CURRENT_FORMAT_VERSION,
@@ -65,6 +67,7 @@ from meetings.schemas import (
     SawPlayerObservation,
     VoteBallot,
 )
+from meetings.transcript import detect_contradictions
 from orchestrator.replay import FailedCallReplayEntry, LLMCallRecord
 
 # Default roster: p-3 is the impostor, the rest crewmates.
@@ -166,9 +169,9 @@ def _genuine_flag_turns() -> tuple[MeetingTurn, ...]:
 
     The impostor's self-stated alibi (CAFETERIA ticks 2-8) against a
     crewmate's sighting in a disjoint canonical room at an INTERIOR tick (5).
-    The re-derived flag is weak (self-stated — the D-D-3 band every
-    fabricated alibi rides) but carries no endpoint band, so it is exactly
-    the genuine class the gate counts.
+    The flag is weak (self-stated — the D-D-3 band every fabricated alibi
+    rides) but carries no endpoint band, so it is exactly the genuine class
+    the gate counts.
     """
 
     return (
@@ -193,10 +196,30 @@ def _meeting(
     ejected: PlayerId | None = None,
     turns: tuple[MeetingTurn, ...] = (),
     voters: tuple[PlayerId, ...] = _VOTERS,
-    contradictions: tuple[ContradictionRef, ...] = (),
+    contradictions: tuple[ContradictionRef, ...] | None = None,
     llm_calls: tuple[LLMCallRecord, ...] = (),
     meeting_id: str = "m-0",
 ) -> MeetingReport:
+    """A resolved meeting whose recorded flags are what the detector emitted.
+
+    The instruments read the RECORDED array, so a fixture that leaves it empty
+    while the transcript carries a contradiction is not a recording of anything
+    — it is a meeting the record says had no evidence. Recording the detector's
+    own output here keeps every fixture a faithful recording of its transcript.
+    Pass ``contradictions`` explicitly to record something the transcript alone
+    cannot mint (a grounded ``vent_sighting``) or to plant a row that disagrees
+    with it.
+    """
+
+    ballots = tuple(_ballot(voter=voter) for voter in voters)
+    transcript = MeetingTranscript(turns=turns)
+    recorded = (
+        detect_contradictions(
+            transcript, roster=frozenset(ballot.voter for ballot in ballots)
+        )
+        if contradictions is None
+        else contradictions
+    )
     return MeetingReport(
         meeting_id=meeting_id,
         tick=40,
@@ -204,9 +227,9 @@ def _meeting(
         trigger="report",
         outcome=outcome,
         ejected_player_id=ejected,
-        transcript=MeetingTranscript(turns=turns),
-        ballots=tuple(_ballot(voter=voter) for voter in voters),
-        contradictions=contradictions,
+        transcript=transcript,
+        ballots=ballots,
+        contradictions=recorded,
         llm_calls=llm_calls,
     )
 
@@ -427,29 +450,57 @@ def test_supplied_is_deduped_per_meeting_impostor_pair() -> None:
     assert compute_genuine_class_conversion(report).supplied == 1
 
 
-def test_recorded_artifact_contradictions_are_ignored() -> None:
-    """The metric re-derives through the repaired detector, never trusts rows.
+def test_a_recorded_flag_supplies_even_when_the_transcript_cannot_mint_it() -> None:
+    """PLANTED: the census is the RECORD, not a re-derivation of the transcript.
 
-    A recorded ContradictionRef naming the impostor (the pre-repair artifact
-    shape — 93% of recorded flags on the audited set) must not supply when
-    the transcript re-derives to nothing. This is what makes the pair honest
-    on pre-10.5 recordings; post-re-record the re-run is a byte-identical
-    no-op.
+    The recording-time detector held the meeting's trigger kind and its three
+    private grounding channels; none of them survive into the transcript, so a
+    recorded flag whose transcript re-derives to nothing is the common case the
+    gate must count — on ``replays/ml_corpus/9p2i`` the re-derivation loses 43
+    of the 120 recorded non-vent flags. This meeting records exactly one such
+    flag over an empty transcript: it supplies iff the reader is the record.
     """
 
-    artifact = ContradictionRef(
-        contradiction_id="c-artifact",
+    grounded = ContradictionRef(
+        contradiction_id="c-grounded",
         kind="alibi_vs_sighting",
         event_a_id="alibi:x",
         event_b_id="saw:x",
         subjects=(_IMPOSTOR,),
-        description="recorded by the pre-repair detector",
+        description="recorded against the speaker's private sighting record",
     )
     report = _tournament(
-        _game(meetings=(_meeting(turns=(), contradictions=(artifact,)),))
+        _game(meetings=(_meeting(turns=(), contradictions=(grounded,)),))
     )
 
-    assert compute_genuine_class_conversion(report).supplied == 0
+    assert compute_genuine_class_conversion(report).supplied == 1
+
+
+def test_a_recorded_vent_flag_never_enters_the_transcript_census() -> None:
+    """PLANTED: the vent class rides its own term and is filtered out here.
+
+    Dropping the ``vent_sighting`` filter from the shared reader would double
+    count every vent flag wherever a consumer merges the two terms, so the
+    filter is asserted at the reader's own boundary, not only downstream.
+    """
+
+    vent = ContradictionRef(
+        contradiction_id="c-vent",
+        kind="vent_sighting",
+        event_a_id="vent:x",
+        event_b_id="vent:x",
+        subjects=(_IMPOSTOR,),
+        description="witnessed vent, grounded by the speaker's vent record",
+    )
+    meeting = _meeting(turns=(), contradictions=(vent,))
+
+    assert recorded_contradiction_flags(meeting) == ()
+    assert (
+        compute_genuine_class_conversion(
+            _tournament(_game(meetings=(meeting,)))
+        ).supplied
+        == 0
+    )
 
 
 def test_strong_alibi_conflict_is_not_the_genuine_class() -> None:
@@ -911,18 +962,20 @@ def test_committed_9p2i_report_pins_the_audited_gate_metrics() -> None:
     assert gate.survivals_sheltered_sub_gate == 0
     assert gate.survivals_unevidenced == 34  # was 36
 
-    # Per-seed identities re-derived from the same committed games: the
-    # genuine-class supply and conversions sit exactly where documented above. The
-    # per-seed fold confirms each aggregate is the sum of its per-seed parts, not a
-    # masked cancellation. On baseline-6 the genuine-class supply spans seeds
-    # {1, 5, 31, 42} with conversions on {1, 5, 42}; there are no lost openings and
-    # no sheltered survivals on this re-record, so both fold to the empty set.
+    # Per-seed identities RE-DERIVED from the same committed games. Everything
+    # above is read from the committed sidecar, which was built by the old
+    # record-free census and is not rebuilt here (Task 21.15 rebuilds it), so
+    # the two sides no longer agree and the fold is the corrected reading: the
+    # sidecar's one genuine-class supply was a flag the transcript-only
+    # re-derivation minted and the record never carried, so on the recorded
+    # census no seed supplies at all. There are no lost openings and no
+    # sheltered survivals on these bytes either, so those fold to empty too.
     supplied_seeds = {
         game.seed
         for game in report.report.games
         if compute_genuine_class_conversion((game,)).supplied > 0
     }
-    assert supplied_seeds == {26}
+    assert supplied_seeds == set()  # was {26} — the sidecar's re-derived flag
     converted_seeds = {
         game.seed
         for game in report.report.games

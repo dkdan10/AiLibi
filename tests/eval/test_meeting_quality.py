@@ -37,6 +37,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from pathlib import Path
+from typing import Literal
 
 import pytest
 from pydantic import ValidationError
@@ -47,6 +48,7 @@ from eval.meeting_quality import (
     ThresholdInversionRecount,
     TournamentEvalReport,
     compute_conversion_report,
+    recorded_contradiction_flags,
     recount_threshold_inversions,
 )
 from eval.report_schema import (
@@ -61,6 +63,7 @@ from meetings.manager import (
     UNCITED_ZERO_FLAG_EJECT_MARKER,
 )
 from meetings.schemas import (
+    ContradictionRef,
     MeetingOutcome,
     MeetingTranscript,
     PlayerId,
@@ -704,3 +707,94 @@ def test_committed_recount_pins_the_by_cause_table(
     # Cross-pin: the recount folds the SAME per-ballot classification the
     # published census folds, so its total cannot drift from the stored block.
     assert recount.threshold_inversions == report.conversion.threshold_inversions
+
+
+# ---------------------------------------------------------------------------
+# The recorded-flag census reader — the one home every instrument reads
+# ---------------------------------------------------------------------------
+
+
+def _flag(
+    *,
+    kind: Literal[
+        "alibi_conflict", "alibi_vs_sighting", "alibi_vs_physical", "vent_sighting"
+    ],
+    contradiction_id: str,
+    subjects: tuple[PlayerId, ...] = ("p-3",),
+) -> ContradictionRef:
+    return ContradictionRef(
+        contradiction_id=contradiction_id,
+        kind=kind,
+        event_a_id=f"{contradiction_id}:a",
+        event_b_id=f"{contradiction_id}:b",
+        subjects=subjects,
+        description="",
+    )
+
+
+def _recorded(*flags: ContradictionRef) -> MeetingReport:
+    """A meeting whose record carries ``flags`` over an EMPTY transcript.
+
+    The empty transcript is the point: a transcript-only re-derivation returns
+    nothing here, so anything the reader returns came off the record.
+    """
+
+    meeting = _meeting(outcome="SKIPPED", ejected=None)
+    return meeting.model_copy(update={"contradictions": flags})
+
+
+def test_the_census_reads_the_record_not_the_transcript() -> None:
+    """The recorded flags come back whole, in recorded order, off no transcript."""
+
+    alibi = _flag(kind="alibi_vs_sighting", contradiction_id="c-1")
+    conflict = _flag(kind="alibi_conflict", contradiction_id="c-2")
+    physical = _flag(kind="alibi_vs_physical", contradiction_id="c-3")
+
+    assert recorded_contradiction_flags(_recorded(alibi, conflict, physical)) == (
+        alibi,
+        conflict,
+        physical,
+    )
+
+
+def test_the_census_excludes_the_vent_class() -> None:
+    """``vent_sighting`` rides the referee's own vent term and is filtered here.
+
+    Dropping this filter double counts every vent flag at the sites that merge
+    the two terms — on ``replays/samples/9p2i`` it would add 92 flags to a
+    144-flag census and inflate the referee's evidence floor by 60%.
+    """
+
+    alibi = _flag(kind="alibi_vs_sighting", contradiction_id="c-1")
+    vent = _flag(kind="vent_sighting", contradiction_id="c-2")
+
+    assert recorded_contradiction_flags(_recorded(alibi, vent)) == (alibi,)
+    assert recorded_contradiction_flags(_recorded(vent)) == ()
+
+
+def test_the_two_census_terms_are_disjoint_and_total() -> None:
+    """The invariant every consumer's merge depends on, asserted at the seam.
+
+    ``len(this census) + len(the vent census) == len(the recorded array)``, so a
+    consumer that adds the two recovers the record exactly once.
+    """
+
+    flags = (
+        _flag(kind="alibi_vs_sighting", contradiction_id="c-1"),
+        _flag(kind="vent_sighting", contradiction_id="c-2"),
+        _flag(kind="alibi_conflict", contradiction_id="c-3"),
+        _flag(kind="vent_sighting", contradiction_id="c-4"),
+    )
+    meeting = _recorded(*flags)
+
+    non_vent = recorded_contradiction_flags(meeting)
+    vent = tuple(f for f in meeting.contradictions if f.kind == "vent_sighting")
+
+    assert len(non_vent) + len(vent) == len(meeting.contradictions)
+    assert not {f.contradiction_id for f in non_vent} & {
+        f.contradiction_id for f in vent
+    }
+
+
+def test_a_meeting_the_record_flagged_nothing_for_censuses_to_empty() -> None:
+    assert recorded_contradiction_flags(_recorded()) == ()

@@ -257,12 +257,15 @@ def test_features_read_only_the_fenced_columns() -> None:
 def test_flag_labels_reproduce_the_referee_census(sample_dir: Path) -> None:
     """The mirrored flag label equals the production census, integer-exact.
 
-    The referee's ``flags_per_meeting`` numerator is the transcript-re-derived
-    census (``eval.meeting_quality.compute_supply_gauges``) plus the persisted
-    ``vent_sighting`` subset (``eval/watchability.py::_persisted_vent_flag_
-    count`` — disjoint by construction). The table's per-meeting labels must
-    sum to exactly that on the committed bytes; the eval import lives HERE
-    (tests are not firewalled) precisely so the package never needs it.
+    The referee's ``flags_per_meeting`` numerator is the RECORDED non-vent
+    census (``eval.meeting_quality.compute_supply_gauges``, which reads
+    ``recorded_contradiction_flags``) plus the recorded ``vent_sighting``
+    subset (``eval/watchability.py::_persisted_vent_flag_count`` — disjoint by
+    construction). This is the mirror invariant, not a value pin: both sides
+    move together at any re-record or census correction, and the equality is
+    what proves the ``training/`` mirror never drifted from the instrument it
+    mirrors. The eval import lives HERE (tests are not firewalled) precisely so
+    the package never needs it.
     """
 
     table = build_conviction_table(sample_dir)
@@ -778,7 +781,11 @@ def test_corpus_census_pins(corpus_conviction: ConvictionTable) -> None:
     assert corpus_conviction.games_total == 150
     assert corpus_conviction.meetings_total == 432  # was 463
     assert corpus_conviction.ejections_total == 280  # was 302
-    assert corpus_conviction.flags_minted_total == 431  # was 576
+    # Every recorded contradiction on the set, vents included: the label is now
+    # exactly len(entry.contradictions) per meeting (308 vent + 120 transcript).
+    # The retired transcript re-derivation reached 431 by losing 43 recorded
+    # flags and minting 46 the record never carried.
+    assert corpus_conviction.flags_minted_total == 428  # was 431
     assert corpus_conviction.conversion_attempts_total == 336  # was 394
     assert corpus_conviction.conversions_total == 239
     splits = corpus_conviction.splits
@@ -872,7 +879,7 @@ def test_the_committed_verdict_is_baseline6_and_the_weights_still_clear_the_bar(
     against the baseline-7 corpus. That is a fully out-of-sample read: the model
     was fitted on bytes that no longer exist, and it has never seen a single
     meeting in the corpus scoring it here. It still returns GO, on both bars, with
-    a HIGHER flag Spearman (0.699 vs the recorded 0.578) on a smaller held-out
+    a HIGHER flag Spearman (0.715 vs the recorded 0.578) on a smaller held-out
     split (87 meetings vs 96). That is evidence about the model, and it is NOT a
     substitute for the re-ground (a NAMED follow-up,
     audits/audit-phase-20-baseline-7.md §10.2): a re-fit would change the weights,
@@ -917,7 +924,9 @@ def test_the_committed_verdict_is_baseline6_and_the_weights_still_clear_the_bar(
     assert rederived.test_meetings == 87
     assert rederived.test_ejections == 55
     assert rederived.conversions_test == 47
-    assert rederived.flag_spearman == pytest.approx(0.6991081211401057)
+    assert rederived.flag_spearman == pytest.approx(
+        0.71457789753481
+    )  # was 0.6991081211401057 — the corrected label fits better
     assert rederived.conversion_recall == pytest.approx(44 / 47)
     assert rederived.voice_driven_share == pytest.approx(0.2)
     assert rederived.conversion_bar == pytest.approx(0.6)
