@@ -1127,6 +1127,19 @@ def test_the_reporter_column_is_an_exclusion_oracle_the_fit_may_not_read() -> No
     assert not predicted_impostor[x == 1.0].any()
     assert float((predicted_impostor[x == 1.0] == (y[x == 1.0] == 1.0)).mean()) == 1.0
 
+    # Non-vacuous. The impostor base rate is low, so a head that IGNORED the
+    # column would also call every cell crewmate and satisfy the two assertions
+    # above. What makes this an oracle is the separation: the empirical impostor
+    # rate is exactly 0 among reporter cells and strictly positive among the
+    # rest, and the fitted head reads the column in that direction rather than
+    # leaving its weight at the zeros it was initialised to.
+    assert float(y[x == 1.0].mean()) == 0.0
+    assert float(y[x == 0.0].mean()) > 0.0
+    assert weight < 0.0
+    reporter_odds = 1.0 / (1.0 + np.exp(-(weight + bias)))
+    other_odds = 1.0 / (1.0 + np.exp(-bias))
+    assert reporter_odds < other_odds
+
 
 def test_walk_reproduces_the_production_fold_on_the_4p1i_corpus() -> None:
     """The 17.10 re-validation: the hand-mirrored fold IS the production fold.
