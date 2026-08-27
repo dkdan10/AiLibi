@@ -193,7 +193,7 @@ from pydantic import TypeAdapter
 from engine.actions import Action
 from engine.entities import BodyId
 from engine.events import EngineEvent, GameOverEvent, MeetingTriggeredEvent
-from engine.tick import advance_tick
+from engine.tick import advance_tick, superseded_meeting_tick
 from engine.world import Map, WorldState
 from meetings.schemas import MeetingResult
 from meetings.voting import tally_ballots
@@ -446,6 +446,22 @@ def walk_replay(
         state, raw_events = advance_tick(state, actions, game_map=game_map)
         events = tuple(raw_events)
         actual = _state_hash(state) if hash_needed else None
+        if actual != entry.state_hash:
+            # Two committed recordings (samples/4p1i seed 3, ml_corpus/4p1i seed
+            # 1009) pinned a meeting-trigger tick the engine now concludes. The
+            # pre-ruling pair is accepted only when a meeting row exists for the
+            # tick AND it re-hashes to the recorded hash exactly, so this cannot
+            # mask a determinism break or a roster mismatch. Deliberately not
+            # gated on ``verify_tick_hashes``: the one profile that walks with
+            # it off still fails a missing meeting row, and would truncate at
+            # GAME_OVER instead. Retired by Task 21.15's re-record.
+            restored = superseded_meeting_tick(state, events)
+            if restored is not None and meeting_by_tick.get(entry.tick) is not None:
+                candidate_state, candidate_events = restored
+                if _state_hash(candidate_state) == entry.state_hash:
+                    state = candidate_state
+                    events = candidate_events
+                    actual = entry.state_hash
         if config.verify_tick_hashes and actual != entry.state_hash:
             _violate(
                 config,

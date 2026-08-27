@@ -597,6 +597,22 @@ def advance_tick(
             if event.type == "Killed":
                 cooldown_skip_players.add(action.actor)
             if working_state.phase == "MEETING":
+                # A tick that decides the game does not open a meeting. The win
+                # check runs here so the §3.5 order holds on every tick — a kill
+                # that reaches parity beside a report attributes to the offense
+                # instead of being handed to a meeting that can invert it.
+                # Task 21.6 overrides the Phase-1 skip.
+                win_result = resolve_win_conditions(working_state)
+                if win_result is not None:
+                    events.append(
+                        GameOverEvent(
+                            type="GameOver",
+                            tick=state.tick,
+                            winner=win_result.winner,
+                            reason=win_result.reason,
+                        )
+                    )
+                    return replace(working_state, phase="GAME_OVER"), events
                 return working_state, events
         except ActionRejectedError as exc:
             events.append(
@@ -656,3 +672,37 @@ def advance_tick(
 
     # 7) Tick increment happens in next_state above.
     return next_state, events
+
+
+def superseded_meeting_tick(
+    state: WorldState,
+    events: Sequence[EngineEvent],
+) -> tuple[WorldState, tuple[EngineEvent, ...]] | None:
+    """The pair an engine without the decided-trigger win check returned here.
+
+    ``None`` unless this tick is one that check newly concludes — a meeting
+    trigger whose state already satisfied a win condition, recognised from the
+    trailing ``GameOverEvent`` behind a ``MeetingTriggeredEvent`` on a
+    GAME_OVER state. For such a tick it returns the MEETING state and the
+    events without the ``GameOverEvent``, which is what a recording made before
+    the check pinned. It reads only its arguments: no seed list, no game id,
+    no environment.
+
+    Reconstruction homes call this on a tick-hash mismatch and accept the pair
+    only when it re-hashes to the recorded hash exactly. Task 21.15's re-record
+    retires it: when no committed recording needs it, delete this function and
+    the five call sites — eval/replay_walk.py, api/replay_loader.py,
+    training/surrogate/dataset.py, eval/off_menu.py and
+    tests/meetings/test_prompt_byte_golden.py.
+    """
+
+    if state.phase != "GAME_OVER" or len(events) < 2:
+        return None
+    if not isinstance(events[-1], GameOverEvent):
+        return None
+    if not isinstance(events[-2], MeetingTriggeredEvent):
+        return None
+    return (
+        replace(state, phase="MEETING"),
+        tuple(event for event in events if not isinstance(event, GameOverEvent)),
+    )

@@ -262,6 +262,13 @@ Module responsibilities are intentionally narrow. `engine/` is a pure function o
 
 ### 3.1 Game loop
 
+> **Superseded in part (2026-08-27) — the decided meeting trigger.** A tick whose action flips the
+> phase to `MEETING` now evaluates the win conditions before returning: if one is satisfied the
+> engine emits `GameOver`, returns a `GAME_OVER` state and no meeting convenes. Step 2's passive
+> effects are still skipped on that tick and the actions queued behind the trigger are still
+> dropped, so the only change is the win declaration. Step 3 and the meeting paragraph below are the
+> Phase-1 text, which returned from step 1 without checking.
+
 Single tick (`engine/tick.py::advance_tick`):
 
 1. **Apply queued actions** from the previous tick. Each action is re-validated against current state. Invalid actions become no-ops; an `ActionRejected` event is emitted. The orchestrator enforces exactly one submitted action per actor per tick before actions enter the engine.
@@ -346,6 +353,11 @@ deterministically with overlap allowed.
 - **Sabotage:** impostor-only; certain sabotages have global UI effects but the global task counter still progresses. Crewmates resolve active sabotages with `RepairSabotageAction`, which accumulates repair progress against the sabotage's configured repair threshold.
 
 ### 3.5 Win conditions
+
+> **Superseded in part (2026-08-27) — the order holds on every tick.** The order below is now
+> evaluated on the meeting-trigger tick too (§3.1), so a kill that reaches parity beside a report
+> attributes to the offense instead of being handed to a meeting that could re-score it as
+> `CREWMATE_EJECT`.
 
 Checked in order each tick:
 

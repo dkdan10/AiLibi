@@ -267,17 +267,35 @@ def _seed_with_corpse(
     *,
     game_map: Map,
     seed: int,
-    body_id: str = "body-p-2-1",
 ) -> str:
-    """Seed an initial state with a fresh body for ``p-1`` to report."""
+    """Seed an initial state with a fresh body for ``p-1`` to report.
+
+    The victim is read from the seeded roles rather than hard-coded: it must be
+    a CREWMATE, because a dead impostor leaves the seeded state already
+    satisfying ``CREWMATE_EJECT`` and a decided tick declares the win instead of
+    opening the meeting these tests are about. It is also neither the reporter
+    nor :data:`_ACCUSED`, so the opening → reply chain still has both speakers.
+    """
 
     initial = seed_initial_state(seed=seed, game_map=game_map, num_players=5)
+    victim = next(
+        player_id
+        for player_id in sorted(initial.players)
+        if player_id not in {"p-1", _ACCUSED}
+        and initial.players[player_id].role == "CREWMATE"
+    )
+    killer = next(
+        player_id
+        for player_id, player in sorted(initial.players.items())
+        if player.role == "IMPOSTOR"
+    )
+    body_id = f"body-{victim}-1"
     body = BodyState(
         id=body_id,
-        player_id="p-2",
+        player_id=victim,
         room=game_map.spawn.room,
         position=(0.0, 0.0),
-        killed_by="p-3",
+        killed_by=killer,
         discovered_by=None,
     )
     state_with_body = replace(
@@ -285,7 +303,7 @@ def _seed_with_corpse(
         bodies={body_id: body},
         players={
             **initial.players,
-            "p-2": replace(initial.players["p-2"], alive=False),
+            victim: replace(initial.players[victim], alive=False),
         },
     )
 
