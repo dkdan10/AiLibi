@@ -50,14 +50,13 @@ ballot. EVERY recorded ballot joins exactly one row (100% join rate, asserted by
 The builder takes ANY replay-set directory and reads a committed ``splits.json``
 when present (:func:`load_splits`), so it runs identically on the 15.12 corpus.
 
-Baseline-5 re-ground (Task 17.10) — two additions, both re-validated on the 17.9
-corpus bytes (which now carry whereabouts turns, observation-cited ballots, and
-marker-prefixed rationales): (1) every row carries the audit rewrites the meeting
-layer applied to its ballot (``ballot_rewrite_labels``, plus the narrower
-``ballot_coerced_skip`` census column) — so the 15.13 fit can DROP every row
-whose recorded target is not the voter's authored choice while the fidelity
-replay still scores the recorded bytes unfiltered; and
-(2) :func:`measure_belief_render_parity` — the 16.10-precedent end-to-end
+Every row also carries the audit rewrites the meeting layer applied to its ballot
+(``ballot_rewrite_labels``, plus the narrower ``ballot_coerced_skip`` census
+column), so the fit can DROP every row whose recorded target is not the voter's
+authored choice while the fidelity replay still scores the recorded bytes
+unfiltered.
+
+:func:`measure_belief_render_parity` is the end-to-end
 cross-check of this module's hand-mirrored belief fold against the PRODUCTION
 fold (``eval.funnel``'s memory-augmented walk: real ``TacticalAgent`` instances
 fed reconstructed packets, read through the exact
@@ -148,8 +147,8 @@ from meetings.schemas import (
     MeetingTranscript,
     VoteBallot,
 )
-from meetings.voting import INVALID_VOTE_TARGET_MARKER
 from meetings.transcript import MeetingTriggerKind, is_weak_contradiction
+from meetings.voting import INVALID_VOTE_TARGET_MARKER
 from orchestrator.game import apply_meeting_result
 from orchestrator.replay import (
     MeetingReplayEntry,
