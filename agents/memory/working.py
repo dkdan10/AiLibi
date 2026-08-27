@@ -8,18 +8,18 @@ This module ships the write paths that perception (Task 2.4) and tactical
 policies (Tasks 2.6 / 2.7) need to set and overwrite scratch state. Higher
 level rendering of working memory belongs to Task 3.3.
 
-CURRENT STATUS — ``last_seen`` is WIRED by Task 13.5.4 (movement perception);
-``set_goal`` / ``set_path`` remain without a production writer (2026-06-25
-memory-pipeline diagnosis, workflow `wg54kfoxy`). ``record_sighting`` is called
-by ``agents/memory/store.py`` (``_record_movement_sightings``, at render time)
-for every witnessed room→room transition, so ``_last_seen`` fills and the §6.6
-belief-line suffix renders -- unconditionally since Task 14.9 (the adopted
-13.5.4 lever is the default substrate).
-The writer is idempotent (skips a row not after the recorded
-last-seen) so the repeated renders a meeting drives never trip
-``record_sighting``'s non-decreasing-tick guard, and §4.7-firewall-suppressed.
-``set_goal`` / ``set_path`` are still scaffolding (zero non-test callers), NOT
-dead code to delete.
+CURRENT STATUS — ``last_seen`` is WIRED; ``set_goal`` / ``set_path`` remain
+without a production writer. ``record_sighting`` has exactly one production
+caller, ``agents/memory/store.py``'s ``_record_last_seen_sightings`` at render
+time, which records each subject's LATEST first-hand sighting so ``_last_seen``
+fills and the §6.6 belief-line suffix renders. Which rows count is gated: a
+witnessed room→room transition always, and an ordinary look as well behind the
+last-seen repair gate (``store.last_seen_from_sightings_enabled``, default OFF
+until its re-record). The writer is idempotent (it skips a row not after the
+recorded last-seen) so the repeated renders a meeting drives never trip
+``record_sighting``'s non-decreasing-tick guard, and it is
+§4.7-firewall-suppressed. ``set_goal`` / ``set_path`` are still scaffolding (zero
+non-test callers), NOT dead code to delete.
 """
 
 from __future__ import annotations

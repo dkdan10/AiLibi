@@ -466,11 +466,11 @@ def render_for_prompt(
         observations,
         key=lambda obs: (-obs.salience, -obs.tick, obs.line),
     )
-    # Fill ``working.last_seen`` ← perceived movement (Task 13.5.4), read by the
-    # belief-line suffix below (the R-6 composite-memory gate: render reads all
-    # three stores). Idempotent across repeated renders and firewall-suppressed
-    # (Codex P1/P2 -- see :func:`_record_movement_sightings`).
-    _record_movement_sightings(
+    # Fill ``working.last_seen`` ← the latest first-hand sighting of each subject,
+    # read by the belief-line suffix below (the R-6 composite-memory gate: render
+    # reads all three stores). Idempotent across repeated renders and
+    # firewall-suppressed -- see :func:`_record_last_seen_sightings`.
+    _record_last_seen_sightings(
         memory.episodic,
         memory.working,
         own_agent_id=own_agent_id,
@@ -961,15 +961,28 @@ def _collect_movement_breadcrumbs(
     rendered memory surfaces the subject's PATH and the model can state it as the
     who/where/when testimony the inferential detector reconstructs from.
 
-    Only ordinary sightings feed the path (``vent`` / ``kill`` are witnessed events
-    rendered as their own high-salience lines, never suffixed), and the SAME §4.7
-    suppressions the renderer applies are mirrored here (self-subject, teammate
-    kill-window), so a suppressed sighting never contributes a breadcrumb. A subject
-    seen in only one room (or once) yields no breadcrumb, so a render whose subjects
-    never move is byte-identical to the pre-13.6 output.
+    The ANCHOR -- the one line that gets suffixed -- is always the subject's most
+    recent ORDINARY sighting, so exactly one line per moving subject carries a
+    suffix and the vent / kill lines stay clean (they are witnessed events with
+    their own high-salience rendering, and :func:`_render_saw_player` returns them
+    before any suffix is computed). Which rows may supply the PRIOR room is gated:
+    ordinary rows always, and behind the last-seen repair gate
+    (:func:`last_seen_from_sightings_enabled`) vent / kill rows too, restricted to
+    ticks at or before the anchor. A witnessed vent is the strongest placement
+    evidence a game produces; dropping it from the path under-reports the subject
+    as last seen in that room at an EARLIER tick than the render itself states one
+    line above.
+
+    The SAME §4.7 suppressions the renderer applies are mirrored here
+    (self-subject, teammate kill-window), so a suppressed sighting never
+    contributes a breadcrumb. A subject seen in only one room (or once) yields no
+    breadcrumb.
     """
 
-    paths: dict[str, list[tuple[int, str]]] = {}
+    fold_active_rows = last_seen_from_sightings_enabled()
+    # ``(tick, room, is_ordinary)``: the flag separates anchor candidates (ordinary
+    # only) from prior-room candidates (all recorded rows).
+    paths: dict[str, list[tuple[int, str, bool]]] = {}
     for event in episodic.recent(since_tick=0):
         if event.type != _EVENT_SAW_PLAYER:
             continue
@@ -979,7 +992,8 @@ def _collect_movement_breadcrumbs(
             continue
         action = event.payload.get("action")
         action_str = action if isinstance(action, str) else None
-        if action_str in ("vent", "kill"):
+        is_ordinary = action_str not in ("vent", "kill")
+        if not is_ordinary and not fold_active_rows:
             continue
         if _sighting_is_suppressed(
             player_id=player_id,
@@ -991,20 +1005,26 @@ def _collect_movement_breadcrumbs(
             body_sightings=body_sightings,
         ):
             continue
-        paths.setdefault(player_id, []).append((event.tick, room))
+        paths.setdefault(player_id, []).append((event.tick, room, is_ordinary))
 
     breadcrumbs: dict[str, _Breadcrumb] = {}
     for subject, sightings in paths.items():
         # Stable sort by tick keeps recorded order for same-tick ties, so the
         # most-recent sighting and its prior different-room sighting are
         # replay-deterministic.
-        ordered = sorted(sightings, key=lambda tr: tr[0])
-        last_tick, last_room = ordered[-1]
+        ordered = sorted(sightings, key=lambda entry: entry[0])
+        anchors = [entry for entry in ordered if entry[2]]
+        if not anchors:
+            continue
+        last_tick, last_room, _ = anchors[-1]
         prior: tuple[int, str] | None = None
-        for tick, room in reversed(ordered[:-1]):
-            if room != last_room:
-                prior = (tick, room)
-                break
+        for tick, room, _is_ordinary in reversed(ordered):
+            # At or before the anchor only: a row the agent saw AFTER the
+            # suffixed line is not that line's prior room.
+            if tick > last_tick or room == last_room:
+                continue
+            prior = (tick, room)
+            break
         if prior is not None:
             breadcrumbs[subject] = _Breadcrumb(
                 subject_tick=last_tick,
@@ -2034,7 +2054,7 @@ def _render_heard(
     )
 
 
-def _record_movement_sightings(
+def _record_last_seen_sightings(
     episodic: MemoryStore,
     working: WorkingMemory,
     *,
@@ -2042,39 +2062,61 @@ def _record_movement_sightings(
     teammate_ids: frozenset[str],
     body_sightings: tuple[tuple[str, int], ...],
 ) -> None:
-    """Fill ``WorkingMemory.last_seen`` from witnessed movement (Task 13.5.4).
+    """Record each subject's LATEST non-suppressed first-hand sighting as last-seen.
 
-    The §6.6 render reads ``working.last_seen`` (the R-6 composite-memory gate),
-    so this writer fills it from the first-hand ``saw_player_move`` episodic rows:
-    each records the actor "last seen in ``to_room`` at the move tick", so the
-    belief-line suffix renders.
+    The §6.6 render reads ``working.last_seen`` for the belief row's "last seen in
+    ROOM at tick T" (the R-6 composite-memory gate), so this writer fills it with
+    the freshest thing the agent actually saw: a witnessed room→room transition
+    contributes its ``to_room``, an ordinary look contributes its ``room``, and
+    the later tick wins. That makes the rendered suffix the argmax over the
+    agent's own log, so it cannot contradict an observation printed above it in
+    the same prompt.
 
-    IDEMPOTENT across repeated renders (a refreshed meeting turn, a vote prompt,
-    the Task 13.5.5 per-turn re-render): ``working.last_seen`` persists between
+    Folding ordinary looks in is gated by :func:`last_seen_from_sightings_enabled`;
+    OFF the writer reads witnessed transitions alone, which is the derivation the
+    committed prompt bytes were recorded under.
+
+    The §4.7 firewall applies to every row with that row's OWN action
+    (:func:`_sighting_is_suppressed`, as the sighting render applies it): a
+    self-subject row, and -- for an impostor -- a teammate carrying a ``kill``
+    action or standing in a kill-window body room, are skipped, so the suffix can
+    never reintroduce the teammate-at-scene own-goal the sighting line itself
+    suppresses.
+
+    IDEMPOTENT across the repeated renders a meeting drives (a refreshed turn, a
+    vote prompt, the per-turn re-render): ``working.last_seen`` persists between
     renders, so a row whose tick is NOT after the player's already-recorded
     last-seen is skipped -- re-processing the same rows never trips
-    :meth:`WorkingMemory.record_sighting`'s non-decreasing-tick guard, which the
-    earlier unconditional writer did on the second render (Codex P1).
+    :meth:`WorkingMemory.record_sighting`'s non-decreasing-tick guard.
 
-    The §4.7 firewall is applied exactly as the sighting render
-    (:func:`_sighting_is_suppressed`): a self-subject row, and -- for an impostor
-    -- a TEAMMATE moving into a kill-window body room, are skipped, so the
-    last-seen suffix can never reintroduce the teammate-at-scene own-goal the
-    movement render line itself suppresses (Codex P2).
+    Events arrive in append order with non-decreasing ticks, and within one tick
+    perception appends visible players before moved players, so a plain
+    last-write-wins pass yields the argmax without sorting and settles the
+    same-tick tie on the transition -- the row that also states where the subject
+    came from.
     """
 
+    fold_ordinary_sightings = last_seen_from_sightings_enabled()
     for event in episodic.recent(since_tick=0):
-        if event.type != EVENT_SAW_PLAYER_MOVE:
+        action: str | None
+        if event.type == EVENT_SAW_PLAYER_MOVE:
+            player_id = event.payload.get("player_id")
+            room = event.payload.get("to_room")
+            action = None
+        elif fold_ordinary_sightings and event.type == _EVENT_SAW_PLAYER:
+            player_id = event.payload.get("player_id")
+            room = event.payload.get("room")
+            raw_action = event.payload.get("action")
+            action = raw_action if isinstance(raw_action, str) else None
+        else:
             continue
-        player_id = event.payload.get("player_id")
-        to_room = event.payload.get("to_room")
-        if not isinstance(player_id, str) or not isinstance(to_room, str):
+        if not isinstance(player_id, str) or not isinstance(room, str):
             continue
         if _sighting_is_suppressed(
             player_id=player_id,
-            room=to_room,
+            room=room,
             tick=event.tick,
-            action=None,
+            action=action,
             own_agent_id=own_agent_id,
             teammate_ids=teammate_ids,
             body_sightings=body_sightings,
@@ -2082,12 +2124,12 @@ def _record_movement_sightings(
             continue
         previous = working.last_seen(player_id)
         if previous is not None and event.tick < previous.tick:
-            # Idempotency guard (Codex P1): a re-render replays older rows into a
-            # ``last_seen`` that already holds a later tick; recording the older
-            # one would trip the backwards-tick guard. Skipping it leaves the
-            # latest-per-subject value, so repeated renders are stable.
+            # A re-render replays older rows into a ``last_seen`` that already
+            # holds a later tick; recording the older one would trip the
+            # backwards-tick guard. Skipping it leaves the latest-per-subject
+            # value, so repeated renders are stable.
             continue
-        working.record_sighting(player_id=player_id, room=to_room, tick=event.tick)
+        working.record_sighting(player_id=player_id, room=room, tick=event.tick)
 
 
 def _build_belief_lines(
@@ -2120,9 +2162,9 @@ def _build_belief_lines(
     §4.6 gate; a hard-backed row renders untouched.
 
     Reads ``working.last_seen`` for the last-seen suffix (the R-6
-    composite-memory gate: render reads all three stores). The field is filled
-    by :func:`_record_movement_sightings` from the witnessed ``saw_player_move``
-    rows (firewall-suppressed).
+    composite-memory gate: render reads all three stores). The field is filled by
+    :func:`_record_last_seen_sightings` from the agent's own sighting rows
+    (firewall-suppressed).
     """
 
     lines: list[str] = []
@@ -2149,10 +2191,10 @@ def _build_belief_lines(
                 belief.suspicion, belief.provenance
             )
         belief_text = _format_belief_score(belief, suspicion=effective_suspicion)
-        # last_seen render hook (Task 13.5.4): the "last seen in ROOM at tick T"
-        # suffix for a subject the agent witnessed move. Filled in
-        # ``working.last_seen`` by :func:`_record_movement_sightings`
-        # (firewall-suppressed); suffix absent for a never-witnessed subject.
+        # The "last seen in ROOM at tick T" suffix: the subject's latest
+        # non-suppressed first-hand sighting, filled into ``working.last_seen`` by
+        # :func:`_record_last_seen_sightings`. Absent for a subject the agent
+        # never saw.
         last_seen_suffix = _format_last_seen_suffix(working.last_seen(player_id))
         # alibi_map render (Task 13.5.2): the now-populated ``PlayerBelief.alibis``
         # list, written by :func:`absorb_reported_testimony` from each public
