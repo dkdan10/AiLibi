@@ -144,6 +144,18 @@ class WorkingMemory:
             )
         self._last_seen[player_id] = LastSeen(tick=tick, room=room)
 
+    def forget_sighting(self, player_id: PlayerId) -> None:
+        """Drop a recorded placement outright; a no-op if none is recorded.
+
+        The retraction :meth:`record_sighting`'s non-decreasing-tick guard cannot
+        express. A placement is not only superseded by a later one — it can stop
+        being sayable at all, when evidence appended since it was recorded makes
+        the sighting it came from §4.7-suppressed. Rewinding to an earlier tick is
+        still refused; erasing is the whole retraction.
+        """
+
+        self._last_seen.pop(player_id, None)
+
     def last_seen(self, player_id: PlayerId) -> LastSeen | None:
         return self._last_seen.get(player_id)
 

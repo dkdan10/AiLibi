@@ -2081,13 +2081,16 @@ def _record_last_seen_sightings(
     self-subject row, and -- for an impostor -- a teammate carrying a ``kill``
     action or standing in a kill-window body room, are skipped, so the suffix can
     never reintroduce the teammate-at-scene own-goal the sighting line itself
-    suppresses.
+    suppresses. Suppression is RETRACTIVE, because ``working.last_seen`` outlives
+    the render that filled it: a value whose source row a later body sighting has
+    since suppressed is erased rather than left standing.
 
     IDEMPOTENT across the repeated renders a meeting drives (a refreshed turn, a
-    vote prompt, the per-turn re-render): ``working.last_seen`` persists between
-    renders, so a row whose tick is NOT after the player's already-recorded
-    last-seen is skipped -- re-processing the same rows never trips
-    :meth:`WorkingMemory.record_sighting`'s non-decreasing-tick guard.
+    vote prompt, the per-turn re-render): the map is derived from the log each
+    time, and a value already fresher than anything in the log is left alone --
+    re-processing never trips :meth:`WorkingMemory.record_sighting`'s
+    non-decreasing-tick guard, and a hand-seeded value with no episodic row behind
+    it survives untouched.
 
     Events arrive in append order with non-decreasing ticks, and within one tick
     perception appends visible players before moved players, so a plain
@@ -2097,6 +2100,8 @@ def _record_last_seen_sightings(
     """
 
     fold_ordinary_sightings = last_seen_from_sightings_enabled()
+    latest: dict[str, tuple[int, str]] = {}
+    suppressed: set[tuple[str, int, str]] = set()
     for event in episodic.recent(since_tick=0):
         action: str | None
         if event.type == EVENT_SAW_PLAYER_MOVE:
@@ -2121,15 +2126,42 @@ def _record_last_seen_sightings(
             teammate_ids=teammate_ids,
             body_sightings=body_sightings,
         ):
+            suppressed.add((player_id, event.tick, room))
             continue
-        previous = working.last_seen(player_id)
-        if previous is not None and event.tick < previous.tick:
-            # A re-render replays older rows into a ``last_seen`` that already
-            # holds a later tick; recording the older one would trip the
-            # backwards-tick guard. Skipping it leaves the latest-per-subject
-            # value, so repeated renders are stable.
+        latest[player_id] = (event.tick, room)
+
+    for player_id in sorted(set(latest) | {subject for subject, _, _ in suppressed}):
+        cached = working.last_seen(player_id)
+        if (
+            fold_ordinary_sightings
+            and cached is not None
+            and (player_id, cached.tick, cached.room) in suppressed
+        ):
+            # The firewall RETRACTING a placement it once allowed. ``last_seen``
+            # persists between renders, so a value recorded while the row was
+            # sayable outlives the evidence that suppresses it -- a body surfacing
+            # in that room afterwards -- and would keep disclosing the
+            # teammate-at-scene placement the sighting line itself now drops.
+            #
+            # Gated with the rest of the repair because the retraction moves
+            # rendered bytes on its own (unconditional, it breaks the committed
+            # byte-golden at ``headless-seed-9:meeting-2``), so it rides the same
+            # re-record. The OFF path therefore still carries this leak through
+            # its one reachable channel, a witnessed transition; Task 21.15's flip
+            # closes it with the rest.
+            working.forget_sighting(player_id)
+            cached = None
+        entry = latest.get(player_id)
+        if entry is None:
             continue
-        working.record_sighting(player_id=player_id, room=room, tick=event.tick)
+        tick, room = entry
+        if cached is not None and tick < cached.tick:
+            # A re-render replays rows into a ``last_seen`` that already holds a
+            # later tick (a hand-seeded value, or one the caller set); recording
+            # the older one would trip the backwards-tick guard. Skipping it
+            # leaves the fresher value, so repeated renders are stable.
+            continue
+        working.record_sighting(player_id=player_id, room=room, tick=tick)
 
 
 def _build_belief_lines(

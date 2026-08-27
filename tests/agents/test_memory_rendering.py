@@ -1784,45 +1784,134 @@ class TestLastSeenFromEverySighting:
         assert "last seen in" not in off
         assert _belief_row(on, "p-5").endswith("(last seen in ELECTRICAL at tick 7)")
 
-    def test_the_same_tick_tie_goes_to_the_transition(self) -> None:
-        # The tie is DECIDED, not left to iteration order: perception appends
-        # visible players before moved players within one tick
-        # (agents/perception.py), and ``record_sighting`` allows an equal tick and
-        # overwrites, so the move row -- which also states where the subject came
-        # from -- is the one that lands. Driven through the real ingest so the
-        # ordering comes from production code rather than from this test's hand.
+    def test_perception_appends_visible_players_before_moved_players(self) -> None:
+        # The production fact the same-tick tie-break rests on, read off the real
+        # ingest rather than assumed: within ONE tick the ``saw_player`` row is
+        # appended first and the ``saw_player_move`` row second, so a
+        # last-write-wins pass settles the tie on the transition.
         from agents.perception import ingest_packet
         from observation.packet import MovedPlayerView, PlayerView
         from tests.agents.test_perception import _packet
 
+        memory = AgentMemory()
+        ingest_packet(
+            packet=_packet(
+                tick=6,
+                agent_id="p-1",
+                visible_players=(PlayerView(id="p-3", room="MEDBAY", action=None),),
+                moved_players=(
+                    MovedPlayerView(id="p-3", from_room="LABS", to_room="MEDBAY"),
+                ),
+            ),
+            memory=memory.episodic,
+        )
+
+        rows = [
+            (event.type, event.tick)
+            for event in memory.episodic.recent(since_tick=0)
+            if event.type in ("saw_player", "saw_player_move")
+        ]
+        assert rows == [("saw_player", 6), ("saw_player_move", 6)]
+
+    def test_the_same_tick_tie_goes_to_the_transition(self) -> None:
+        # The tie is DECIDED, not left to iteration order. A real packet cannot
+        # discriminate it -- perception derives both rows from the same tick's
+        # state, so their rooms always agree -- so the log is PLANTED with
+        # different rooms, in the append order the test above pins as production's.
+        # Reversing the tie-break renders LABS, so this case can fail.
         def build() -> AgentMemory:
             memory = AgentMemory()
+            memory.episodic.append(_self_state_event(tick=0, agent_id="p-1"))
             memory.beliefs.adjust_suspicion("p-3", delta=0.3)
-            ingest_packet(
-                packet=_packet(
-                    tick=6,
-                    agent_id="p-1",
-                    visible_players=(PlayerView(id="p-3", room="MEDBAY", action=None),),
-                    moved_players=(
-                        MovedPlayerView(id="p-3", from_room="LABS", to_room="MEDBAY"),
-                    ),
-                ),
-                memory=memory.episodic,
+            memory.episodic.append(
+                _saw_player_event(tick=6, player_id="p-3", room="LABS")
+            )
+            memory.episodic.append(
+                _saw_player_move_event(
+                    tick=6, player_id="p-3", from_room="CAFETERIA", to_room="MEDBAY"
+                )
             )
             return memory
 
-        rows = [
-            event.type
-            for event in build().episodic.recent(since_tick=0)
-            if event.type in ("saw_player", "saw_player_move")
-        ]
-        assert rows == ["saw_player", "saw_player_move"]
+        # OFF the ordinary row is not read at all, so only the transition can land.
+        off = _render_with_gate(build, enabled=False)
+        assert _belief_row(off, "p-3").endswith("(last seen in MEDBAY at tick 6)")
 
-        for enabled in (False, True):
-            view = _render_with_gate(build, enabled=enabled)
-            assert _belief_row(view, "p-3").endswith(
-                "(last seen in MEDBAY at tick 6)"
-            ), enabled
+        # ON both rows are candidates at the SAME tick and the transition still
+        # wins -- the row that also states where the subject came from.
+        on = _render_with_gate(build, enabled=True)
+        assert _belief_row(on, "p-3").endswith("(last seen in MEDBAY at tick 6)")
+        assert "last seen in LABS" not in on
+
+    def test_the_firewall_retracts_a_placement_it_once_allowed(self) -> None:
+        # The cache OUTLIVES the render that filled it, so suppression has to be
+        # retractive: an impostor renders a teammate sighting while it is still
+        # sayable, then a body surfaces in that room and the sighting line is
+        # dropped -- but a value left standing would keep publishing exactly the
+        # teammate-at-scene placement §4.7 exists to hide.
+        #
+        # OFF this leak survives through its one reachable channel (a witnessed
+        # transition), because closing it moves committed prompt bytes on its own;
+        # the retraction rides the repair gate and Task 21.15's flip. Both arms
+        # are asserted so the residue is pinned rather than merely known.
+        def build(row: str) -> AgentMemory:
+            memory = AgentMemory()
+            memory.episodic.append(
+                _self_state_event(
+                    tick=0,
+                    role="IMPOSTOR",
+                    agent_id="p-9",
+                    fellow_impostor_ids=("p-1",),
+                )
+            )
+            memory.beliefs.adjust_suspicion("p-1", delta=0.3)
+            if row == "saw_player":
+                memory.episodic.append(
+                    _saw_player_event(tick=5, player_id="p-1", room="ADMIN")
+                )
+            else:
+                memory.episodic.append(
+                    _saw_player_move_event(
+                        tick=5, player_id="p-1", from_room="CAFETERIA", to_room="ADMIN"
+                    )
+                )
+            return memory
+
+        for row in ("saw_player", "saw_player_move"):
+            for enabled in (False, True):
+                memory = build(row)
+                with pytest.MonkeyPatch.context() as patch:
+                    if enabled:
+                        patch.setenv(ENV_LAST_SEEN_FROM_SIGHTINGS, "1")
+                    else:
+                        patch.delenv(ENV_LAST_SEEN_FROM_SIGHTINGS, raising=False)
+                    first = render_for_prompt(memory)
+                    # The body arrives AFTER the placement was cached.
+                    memory.episodic.append(
+                        _saw_body_event(
+                            tick=6, body_id="b", victim_id="p-3", room="ADMIN"
+                        )
+                    )
+                    second = render_for_prompt(memory)
+
+                # The sighting LINE is suppressed in every arm -- that half never
+                # depended on the cache. (The body-discovery line names ADMIN and
+                # is meant to.)
+                assert "You saw p-1 in ADMIN" not in second, (row, enabled)
+                assert "You saw p-1 move" not in second, (row, enabled)
+
+                leaks_off_path = row == "saw_player_move" and not enabled
+                if leaks_off_path:
+                    # The committed-bytes residue, pinned so it cannot widen
+                    # unnoticed and so 21.15's flip has something to flip.
+                    assert "(last seen in ADMIN at tick 5)" in second
+                else:
+                    assert "last seen in ADMIN" not in second, (row, enabled)
+                    assert memory.working.last_seen("p-1") is None, (row, enabled)
+                # Either way the FIRST render is what cached the value, so the
+                # case is about retraction and not about a row never recorded.
+                if row == "saw_player_move" or enabled:
+                    assert "last seen in ADMIN at tick 5" in first, (row, enabled)
 
     def test_the_firewall_covers_the_folded_rows_with_their_own_action(self) -> None:
         # §4.7, ON: the folded ordinary rows pass the SAME firewall the sighting
