@@ -2297,6 +2297,12 @@ _ORACLE_IN_FICTION_CONTROLS: Final[tuple[str, ...]] = (
     # twins above are refused, which is the leak this pair pins shut.
     "The engine's output confirms nominal power.",
     "The engine's room report says the core is stable.",
+    # Ordinary ship-maintenance prose, where an in-fiction descriptor sits
+    # BETWEEN the noun and the verb. An exclusion that only looks at the word
+    # immediately after "engine" reads these as the apparatus speaking.
+    "The engine maintenance report says the output is stable",
+    "The engine's maintenance report says the output is stable",
+    "The engine repair log says we are fine",
 )
 
 

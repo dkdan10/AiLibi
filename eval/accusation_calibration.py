@@ -310,22 +310,30 @@ class AccusationCalibrationReport(_FrozenModel):
                 "vote_ballot_guard_authored_excluded must be >= 0, got "
                 f"{self.vote_ballot_guard_authored_excluded}"
             )
-        for label, bins, declared in (
+        for label, bins, declared, total in (
             (
                 "accusation_claim_bins",
                 self.accusation_claim_bins,
                 self.accusation_claim_populated_bins,
+                self.accusation_claim_total,
             ),
             (
                 "vote_ballot_bins",
                 self.vote_ballot_bins,
                 self.vote_ballot_populated_bins,
+                self.vote_ballot_total,
             ),
-            ("accusation_claim_crew_accuser.bins", crew.bins, crew.populated_bins),
+            (
+                "accusation_claim_crew_accuser.bins",
+                crew.bins,
+                crew.populated_bins,
+                crew.total,
+            ),
             (
                 "accusation_claim_impostor_accuser.bins",
                 impostor.bins,
                 impostor.populated_bins,
+                impostor.total,
             ),
         ):
             if len(bins) != self.n_bins:
@@ -344,6 +352,28 @@ class AccusationCalibrationReport(_FrozenModel):
                 raise ValueError(
                     f"{label} populated-bin count must equal the number of bins "
                     f"with count > 0: declared {declared}, found {actual_populated}"
+                )
+            # A curve's scalar total is the sum of the distribution it publishes.
+            # Without this a report can serve a total that no bin supports — and
+            # the partition check above would still pass on those totals alone.
+            binned = sum(current_bin.count for current_bin in bins)
+            if binned != total:
+                raise ValueError(
+                    f"{label} counts must sum to the curve's total: {binned} != {total}"
+                )
+        # The split is a partition BIN BY BIN, not merely in aggregate: every
+        # pooled bin's accusations and hits are dealt to exactly one role curve.
+        for index, pooled in enumerate(self.accusation_claim_bins):
+            split_count = crew.bins[index].count + impostor.bins[index].count
+            split_hits = (
+                crew.bins[index].impostor_hits + impostor.bins[index].impostor_hits
+            )
+            if split_count != pooled.count or split_hits != pooled.impostor_hits:
+                raise ValueError(
+                    "the accuser-role split must PARTITION the pooled claim curve "
+                    f"bin by bin: bin {index} has {split_count} accusations / "
+                    f"{split_hits} hits across the role curves against the pooled "
+                    f"{pooled.count} / {pooled.impostor_hits}"
                 )
         return self
 

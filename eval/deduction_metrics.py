@@ -561,8 +561,12 @@ ships beside :data:`MACHINERY_DECIMAL_PATTERN`, never instead of it.
 # The in-world nouns a bare ``engine`` match would otherwise swallow: the ship's
 # engine room and the ``align_engine_output`` task (engine/maps/canonical_1.yaml)
 # are correct player speech, and a net that scores them is measuring the fiction
-# rather than the leak.
-_ORACLE_IN_FICTION: Final[str] = r"room|output|bay|core"
+# rather than the leak. "the engine maintenance report" is the same class — an
+# engine-qualified ship-maintenance noun phrase, not the apparatus speaking.
+_ORACLE_IN_FICTION: Final[str] = (
+    r"room|rooms|output|outputs|bay|bays|core|cores|maintenance|repair|repairs"
+    r"|diagnostics|coolant|manifold|reactor"
+)
 # A machinery ACTOR: the game's own scoring apparatus named as an agent. The
 # ``\b`` after ``engine`` is load-bearing — it keeps "Engineering" (the ship's
 # wing) and "the engines" (its machinery) out, which is most of the excess a
@@ -570,9 +574,14 @@ _ORACLE_IN_FICTION: Final[str] = r"room|output|bay|core"
 # engine's output" is refused exactly like "the engine output"; leaving the
 # possessive to a later group would let it walk past the lookahead.
 _ORACLE_ACTOR: Final[str] = (
-    rf"the\s+(?:engine\b(?!(?:'s|’s)?\s+(?:{_ORACLE_IN_FICTION}))"
+    rf"the\s+(?:engine\b(?!(?:'s|’s)?\s+(?:{_ORACLE_IN_FICTION})\b)"
     r"|system\b|detector\b)"
 )
+# One word that may sit between the actor and its verdict verb. An in-fiction
+# noun may NOT: "the engine maintenance report says …" is the ship's paperwork
+# talking, and letting a descriptor slip through here would re-open the hole the
+# actor's own lookahead closes for the adjacent case.
+_ORACLE_GAP_WORD: Final[str] = rf"\s+(?!(?:{_ORACLE_IN_FICTION})\b)[\w'’-]+"
 # A VERDICT act: the apparatus deciding, certifying or announcing a fact.
 _ORACLE_VERDICT: Final[str] = (
     r"(?:flag|certif|confirm|verif|prove|proven|proof|declar|rul|seal|say|says"
@@ -585,7 +594,7 @@ _ORACLE_EVIDENCE_NOUN: Final[str] = (
 
 MACHINERY_ORACLE_PATTERNS: Final[tuple[re.Pattern[str], ...]] = (
     re.compile(
-        rf"\b{_ORACLE_ACTOR}(?:'s|’s)?(?:\s+[\w'’-]+){{0,3}}\s+"
+        rf"\b{_ORACLE_ACTOR}(?:'s|’s)?(?:{_ORACLE_GAP_WORD}){{0,3}}\s+"
         rf"{_ORACLE_VERDICT}",
         re.IGNORECASE,
     ),
@@ -598,7 +607,7 @@ MACHINERY_ORACLE_PATTERNS: Final[tuple[re.Pattern[str], ...]] = (
         re.IGNORECASE,
     ),
     re.compile(
-        rf"\b{_ORACLE_ACTOR}(?:'s|’s)(?:\s+[\w'’-]+){{0,2}}\s+"
+        rf"\b{_ORACLE_ACTOR}(?:'s|’s)(?:{_ORACLE_GAP_WORD}){{0,2}}\s+"
         rf"{_ORACLE_EVIDENCE_NOUN}\b",
         re.IGNORECASE,
     ),

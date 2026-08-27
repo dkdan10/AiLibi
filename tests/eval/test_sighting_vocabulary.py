@@ -121,7 +121,9 @@ def _names_in(node: ast.expr) -> frozenset[str]:
     ``ast.Name`` yields its id; ``ast.Attribute`` yields its TAIL, so
     ``schemas.SawPlayerObservation`` reads as ``SawPlayerObservation`` and a
     qualified import cannot slip a narrow check past the walk. A tuple/list/set
-    recurses.
+    recurses, and so does the PEP 604 union ``A | B`` — a legal second argument
+    to ``isinstance`` on this Python, and otherwise a spelling the walk would
+    read as no types at all.
     """
 
     if isinstance(node, ast.Name):
@@ -130,6 +132,8 @@ def _names_in(node: ast.expr) -> frozenset[str]:
         return frozenset({node.attr})
     if isinstance(node, (ast.Tuple, ast.List, ast.Set)):
         return frozenset().union(*(_names_in(elt) for elt in node.elts)) or frozenset()
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
+        return _names_in(node.left) | _names_in(node.right)
     return frozenset()
 
 
@@ -233,14 +237,16 @@ def test_the_allow_list_has_exactly_five_entries_each_with_a_reason() -> None:
 def test_the_walk_bites_on_a_planted_new_site(tmp_path: Path) -> None:
     """PLANTED: every narrow spelling is found, and the shapes outside are not.
 
-    Five ways to write a narrow check — bare, tuple, QUALIFIED
-    (``schemas.SawPlayerObservation``), via a module-level tuple ALIAS, and via
-    a FUNCTION-LOCAL one — all bite. A walk that reads only bare ``ast.Name``
-    entries reports clean on the qualified and alias forms, and one that reads
-    only ``tree.body`` reports clean on the local form, while the predicate all
-    five express is exactly the one B-9 is about. A vent-only check and the
-    three checks that already name the movement type are NOT narrow, so they
-    stay outside the walk rather than being quietly allow-listed.
+    Six ways to write a narrow check — bare, tuple, QUALIFIED
+    (``schemas.SawPlayerObservation``), via a module-level tuple ALIAS, via a
+    FUNCTION-LOCAL one, and as a PEP 604 UNION (``A | B``, a legal second
+    argument to ``isinstance`` here) — all bite. A walk that reads only bare
+    ``ast.Name`` entries reports clean on the qualified and alias forms, one
+    that reads only ``tree.body`` reports clean on the local form, and one that
+    ignores ``ast.BinOp`` reports clean on the union — while the predicate all
+    six express is exactly the one B-9 is about. A vent-only check and the four
+    checks that already name the movement type are NOT narrow, so they stay
+    outside the walk rather than being quietly allow-listed.
     """
 
     source = """
@@ -274,6 +280,13 @@ def _planted_narrow_via_local_alias(turn):
     return any(isinstance(obs, types) for obs in turn.observations)
 
 
+def _planted_narrow_union(turn):
+    return any(
+        isinstance(obs, SawPlayerObservation | FoundBodyObservation)
+        for obs in turn.observations
+    )
+
+
 def _planted_wide_via_alias(turn):
     return any(isinstance(obs, _WIDE_TYPES) for obs in turn.observations)
 
@@ -281,6 +294,13 @@ def _planted_wide_via_alias(turn):
 def _planted_wide_via_local_alias(turn):
     types = (schemas.SawPlayerObservation, schemas.SawMoveObservation)
     return any(isinstance(obs, types) for obs in turn.observations)
+
+
+def _planted_wide_union(turn):
+    return any(
+        isinstance(obs, SawPlayerObservation | SawMoveObservation)
+        for obs in turn.observations
+    )
 
 
 def _planted_vent_only(turn):
@@ -314,6 +334,7 @@ def sighting_placement(artifact):
         "planted.py::_planted_narrow_qualified",
         "planted.py::_planted_narrow_via_alias",
         "planted.py::_planted_narrow_via_local_alias",
+        "planted.py::_planted_narrow_union",
     }
 
 

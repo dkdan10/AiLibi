@@ -750,6 +750,106 @@ def test_committed_sets_pin_the_accuser_role_split(sample_dir: str) -> None:
     assert all(b.actual_impostor_rate == 0.0 for b in impostor.bins if b.count > 0)
 
 
+def _populated_bins(index: int, count: int, hits: int) -> tuple[CalibrationBin, ...]:
+    """``n_bins`` bins with ``count``/``hits`` at ``index`` and nothing elsewhere."""
+
+    return tuple(
+        CalibrationBin(
+            bin_index=i,
+            lo=i / DEFAULT_N_BINS,
+            hi=(i + 1) / DEFAULT_N_BINS,
+            midpoint=(i + 0.5) / DEFAULT_N_BINS,
+            count=(count if i == index else 0),
+            impostor_hits=(hits if i == index else 0),
+            actual_impostor_rate=(hits / count if i == index and count else None),
+            mean_confidence=(
+                (i + 0.5) / DEFAULT_N_BINS if i == index and count else None
+            ),
+        )
+        for i in range(DEFAULT_N_BINS)
+    )
+
+
+def _report(
+    *,
+    pooled: tuple[CalibrationBin, ...],
+    pooled_total: int,
+    crew: CalibrationCurve,
+    impostor: CalibrationCurve,
+) -> AccusationCalibrationReport:
+    """A report over ``pooled`` with the given role curves (validators run)."""
+
+    return AccusationCalibrationReport(
+        n_bins=DEFAULT_N_BINS,
+        accusation_claim_bins=pooled,
+        accusation_claim_total=pooled_total,
+        accusation_claim_ece=None,
+        accusation_claim_populated_bins=sum(1 for b in pooled if b.count > 0),
+        accusation_claim_low_power=True,
+        accusation_claim_crew_accuser=crew,
+        accusation_claim_impostor_accuser=impostor,
+        vote_ballot_bins=_EMPTY_BINS,
+        vote_ballot_total=0,
+        vote_ballot_ece=None,
+        vote_ballot_populated_bins=0,
+        vote_ballot_low_power=True,
+        vote_ballot_guard_authored_excluded=0,
+    )
+
+
+def test_a_curve_total_that_no_bin_supports_is_rejected() -> None:
+    """PLANTED: a scalar total must be the sum of the distribution beside it.
+
+    Aggregate totals that merely add up are not enough — a report whose bins are
+    all empty while the totals claim a sample is impossible, and used to pass.
+    """
+
+    with pytest.raises(ValidationError, match="counts must sum to the curve's total"):
+        _report(
+            pooled=_EMPTY_BINS,
+            pooled_total=1,
+            crew=_curve_with_total(_EMPTY_BINS, 1),
+            impostor=_empty_curve(_EMPTY_BINS),
+        )
+
+
+def test_a_split_that_sums_in_aggregate_but_not_per_bin_is_rejected() -> None:
+    """PLANTED: the partition is asserted BIN BY BIN, not just on the totals.
+
+    A crew curve holding its one accusation in a different bin from the pooled
+    curve adds up correctly in aggregate and is still not a partition.
+    """
+
+    pooled = _populated_bins(9, 1, 1)
+    misplaced = _populated_bins(2, 1, 1)
+    with pytest.raises(ValidationError, match="bin by bin"):
+        _report(
+            pooled=pooled,
+            pooled_total=1,
+            crew=_curve_with_total(misplaced, 1),
+            impostor=_empty_curve(_EMPTY_BINS),
+        )
+
+    # ...and the HITS half of the same rule: right bin, wrong hit count.
+    with pytest.raises(ValidationError, match="bin by bin"):
+        _report(
+            pooled=pooled,
+            pooled_total=1,
+            crew=_curve_with_total(_populated_bins(9, 1, 0), 1),
+            impostor=_empty_curve(_EMPTY_BINS),
+        )
+
+    # The well-formed version of the same report is accepted, so the rule is
+    # rejecting the defect rather than the shape.
+    accepted = _report(
+        pooled=pooled,
+        pooled_total=1,
+        crew=_curve_with_total(pooled, 1),
+        impostor=_empty_curve(_EMPTY_BINS),
+    )
+    assert accepted.accusation_claim_total == 1
+
+
 def test_a_self_accusation_by_an_impostor_does_score_as_a_hit() -> None:
     """PLANTED: the impostor curve's zero is not an arithmetic impossibility.
 
