@@ -783,15 +783,16 @@ class SuppliedChannelConversionReport(BaseModel):
     per-channel cells count the same pairs before the union, so they sum to
     at least the headline and each is bounded by it.
 
-    **Recorded rows, never a re-run.** Unlike the legacy cell (which
-    re-derives detection because pre-repair recordings carried artifact
-    flags), the successor reads the recorded rows byte-for-byte — 16.10's
-    recorded-contradiction-id discipline (``eval.funnel``'s whereabouts-lie
-    fold; ``eval.vj_instruments``' flagged-subject read). Post-repair
-    recordings are detector-pure by construction, and the ``vent_sighting``
-    kind exists ONLY as a recording-time artifact (its grounding channel is
-    private to the speaker and not reconstructible from report bytes), so
-    the recorded rows are both necessary and sufficient here.
+    **Recorded rows, never a re-run.** The successor reads the recorded rows
+    byte-for-byte — 16.10's recorded-contradiction-id discipline
+    (``eval.funnel``'s whereabouts-lie fold; ``eval.vj_instruments``'
+    flagged-subject read). The legacy cell reads the same rows through
+    :func:`eval.meeting_quality.recorded_contradiction_flags`, so the two now
+    differ in their membership rules rather than in their input. That the rows
+    are necessary as well as sufficient is not a preference: the private
+    grounding channels a transcript-only re-run would lack are what mint the
+    ``vent_sighting`` kind at all, and their absence also loses and invents
+    ordinary flags (43 lost, 46 invented on the committed corpus).
 
     **Witness-vs-testimony split — recorded as degenerate, not minted as a
     column (the 17.6 hint's design risk, answered).** A recorded

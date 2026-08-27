@@ -67,7 +67,7 @@ this module (audit audit-2026-06-11-2218 C-C-6):
   :func:`decompose_ejection_channels`). The genuine-class ruler credited 1
   of the Wave-0 set's 5 real conversions; the intended multi-signal
   pipeline produced the other 4 invisibly.
-* *Supply gauges* — the evidence-supply context (re-derived flag census,
+* *Supply gauges* — the evidence-supply context (recorded flag census,
   zero-contradiction share, genuine-subject share, flag-subject role split,
   over-gate listeners per accused-impostor meeting)
   (:func:`compute_supply_gauges` / :class:`SupplyGaugesReport`).
@@ -1618,7 +1618,7 @@ class GateMetricsReport(BaseModel):
         CREW-conversion failures; reading them as impostor deception is the
         exact misread D-D-2 warns against (32/45 on the audited set).
       - ``survivals_sheltered_sub_gate`` — a rendered row existed, stayed
-        below the threshold, AND at least one re-derived detector flag named
+        below the threshold, AND at least one RECORDED detector flag named
         the impostor: their account was actively challenged and the weak
         band genuinely sheltered them. This is the conversion-controlled
         deception-credit count Wave-2 claims must cite (n=1/45 audited:
@@ -1771,10 +1771,9 @@ def compute_gate_metrics(
                 continue
 
             rendered = _rendered_suspicion_by_target(meeting)
-            # Re-derived flag subjects, computed lazily: only a sub-gate
-            # survivor needs the shelter test (the detector re-run is pure
-            # and deterministic — the same one-home classifier the
-            # genuine-class pair imports).
+            # Recorded flag subjects, computed lazily: only a sub-gate
+            # survivor needs the shelter test (the same one-home recorded
+            # census the supply gauge and the genuine-class pair read).
             flagged_subjects: frozenset[PlayerId] | None = None
             for impostor in accused_impostors:
                 accused_impostor_events += 1
@@ -2256,15 +2255,18 @@ class SupplyGaugesReport(BaseModel):
     conversion number must be read against — supply, not follow-through,
     is the audited binding constraint (62% of Wave-0 meetings carried
     zero contradictions; crew compliance with the rendered verdict was
-    already 100%). Every flag-derived field re-runs the one-home detector
-    under the ballot-voter roster, so the gauges read the CORRECTED
-    instrument on any era's bytes:
+    already 100%). Every flag-derived field reads each meeting's RECORDED
+    non-vent flags through the one-home census
+    (:func:`recorded_contradiction_flags`), so the gauges measure the game
+    the meeting actually priced rather than a transcript reconstruction of
+    it:
 
     * ``meetings_total`` / ``total_flags`` / ``weak_flags`` /
-      ``strong_flags`` — the re-derived flag census (the corrected
-      Wave-0 baseline's headline volume row).
+      ``strong_flags`` — the recorded non-vent flag census (the headline
+      volume row; the ``vent_sighting`` class rides
+      :func:`eval.watchability._persisted_vent_flag_count`).
     * ``zero_contradiction_meetings`` (+ ``..._share``) — meetings whose
-      re-derived flag set is empty (B-B-3's 62%).
+      recorded non-vent flag set is empty (B-B-3's 62%).
     * ``genuine_subject_meetings`` (+ ``..._share``) — meetings
       supplying at least one genuine-class subject
       (:func:`eval.vote_correctness.genuine_class_subjects`, one home —
