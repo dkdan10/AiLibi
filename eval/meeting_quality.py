@@ -223,7 +223,7 @@ from meetings.manager import (
     derive_belief_evidence,
 )
 from meetings.schemas import AccusationClaim, ContradictionRef, PlayerId, VoteBallot
-from meetings.transcript import detect_contradictions, is_weak_contradiction
+from meetings.transcript import is_weak_contradiction
 
 # The literal prefixes (the marker text minus the ``{target!r}`` placeholder)
 # the meeting layer stamps onto ``rationale_text`` when it normalizes a
@@ -1707,9 +1707,9 @@ def compute_gate_metrics(
     coordinates; an unparseable ``deadline_default`` row fails loud. The
     survival partition reads each accused impostor's rendered suspicion off
     the other voters' §6.6 graph rows and — for the sub-gate shelter test
-    only — re-derives detector flags through
-    :func:`meetings.transcript.detect_contradictions` under the ballot-voter
-    roster (the same one-home classifier the genuine-class pair imports).
+    only — the meeting's RECORDED non-vent flags
+    (:func:`recorded_contradiction_flags`, the same one-home census the supply
+    gauge and the genuine-class pair read).
     """
 
     games = report.games if isinstance(report, TournamentReport) else tuple(report)
@@ -1792,12 +1792,9 @@ def compute_gate_metrics(
                     survivals_rendered_met += 1
                     continue
                 if flagged_subjects is None:
-                    roster = frozenset(ballot.voter for ballot in meeting.ballots)
                     flagged_subjects = frozenset(
                         subject
-                        for flag in detect_contradictions(
-                            meeting.transcript, roster=roster
-                        )
+                        for flag in recorded_contradiction_flags(meeting)
                         for subject in flag.subjects
                     )
                 if rendered_max is not None and impostor in flagged_subjects:
@@ -1893,8 +1890,10 @@ def decompose_ejection_channels(
     quantized §6.3 rule lattice. Pure and deterministic — a fold over
     recorded artifacts plus the one-home belief math:
 
-    * ``contradiction_flag`` — THIS meeting's re-derived flags name the
-      ejected player; the flag mass ``F`` is computed by running
+    * ``contradiction_flag`` — THIS meeting's RECORDED non-vent flags
+      (:func:`recorded_contradiction_flags`) name the ejected player; the
+      vent class is excluded because ``vent_witness`` below is its own
+      channel. The flag mass ``F`` is computed by running
       :func:`agents.memory.beliefs.apply_contradiction_rule` from the 0.5
       prior (the identical dedup-and-cap arithmetic the vote-time lift
       applied), never a parallel sum.
@@ -1978,8 +1977,10 @@ def decompose_ejection_channels(
 
     channels: set[str] = set()
 
+    # The ballot-voter roster is the recording-time scope the pre-vote belief
+    # fold ran under; only _ejected_in_inform_band needs it.
     roster = frozenset(ballot.voter for ballot in meeting.ballots)
-    all_flags = detect_contradictions(meeting.transcript, roster=roster)
+    all_flags = recorded_contradiction_flags(meeting)
     naming_flags = [flag for flag in all_flags if ejected in flag.subjects]
     flag_mass = 0.0
     if naming_flags:
@@ -2079,10 +2080,10 @@ def _ejected_in_inform_band(
     One home: the band is exactly ``derive_belief_evidence(...).pre_vote_informed``
     (:func:`meetings.manager.derive_belief_evidence` over the recorded transcript,
     the SAME producer the live pre-vote fold uses), never a parallel
-    re-implementation of the voice count. ``flags`` is the caller's already-derived
-    contradiction set under the ballot-voter roster (matching the recording-time
-    scope); it feeds the §6.3 Rule-5 ``contradicted`` exemption only and never the
-    voice count, so passing it threaded keeps the detector re-run single.
+    re-implementation of the voice count. ``flags`` is the caller's RECORDED
+    non-vent contradiction set (:func:`recorded_contradiction_flags`); it feeds
+    the §6.3 Rule-5 ``contradicted`` exemption only and never the voice count,
+    so threading it keeps this module on one census.
     """
 
     evidence = derive_belief_evidence(
@@ -2348,6 +2349,38 @@ class SupplyGaugesReport(BaseModel):
         return self
 
 
+def recorded_contradiction_flags(
+    meeting: MeetingReport,
+) -> tuple[ContradictionRef, ...]:
+    """One meeting's RECORDED contradiction flags, minus the vent-sighting class.
+
+    The single home of the evidence-supply census. The recorded array is the
+    byte-exact output of the production
+    :func:`meetings.transcript.detect_contradictions` call, which held the
+    meeting's trigger kind and all three private grounding channels — vent
+    witness records, move witness records, per-speaker sighting records — and
+    is what the meeting priced, what the ballots cited and what the replay
+    persisted. A re-derivation from the recorded transcript alone holds none of
+    those channels, so it answers a question about a different game.
+
+    Takes the meeting ROW rather than a transcript on purpose: the recorded
+    flags live on the row, so a transcript signature could be handed a
+    record-free object and silently fall back to the wrong census.
+
+    ``vent_sighting`` is excluded because the vent term rides its own reader at
+    every consumer — :func:`eval.watchability._persisted_vent_flag_count` and
+    the mirrored ``persisted_vent_flags`` column on
+    :class:`training.conviction.dataset.ConvictionMeetingRow`. The two sets are
+    disjoint by construction (this filter is the construction), so a consumer
+    that merges them recovers the full recorded total with nothing counted
+    twice.
+    """
+
+    return tuple(
+        flag for flag in meeting.contradictions if flag.kind != "vent_sighting"
+    )
+
+
 def compute_supply_gauges(
     report: TournamentReport | Sequence[GameReport],
 ) -> SupplyGaugesReport:
@@ -2355,11 +2388,12 @@ def compute_supply_gauges(
 
     Accepts either a :class:`~eval.report_schema.TournamentReport` or a
     bare sequence of :class:`~eval.report_schema.GameReport`. Pure: the
-    flag census re-runs the one-home detector per meeting, the genuine
-    share reads :func:`eval.vote_correctness.genuine_class_subjects`, and
-    the over-gate gauge reads each accused impostor's rendered row off the
-    other voters' recorded §6.6 graphs (``roles`` subscripts fail loud on
-    internal inconsistency, the module convention).
+    flag census reads each meeting's RECORDED non-vent flags
+    (:func:`recorded_contradiction_flags`), the genuine share reads
+    :func:`eval.vote_correctness.genuine_class_subjects`, and the over-gate
+    gauge reads each accused impostor's rendered row off the other voters'
+    recorded §6.6 graphs (``roles`` subscripts fail loud on internal
+    inconsistency, the module convention).
     """
 
     games = report.games if isinstance(report, TournamentReport) else tuple(report)
@@ -2378,8 +2412,7 @@ def compute_supply_gauges(
     for game in games:
         for meeting in game.meetings:
             meetings_total += 1
-            roster = frozenset(ballot.voter for ballot in meeting.ballots)
-            flags = detect_contradictions(meeting.transcript, roster=roster)
+            flags = recorded_contradiction_flags(meeting)
             total_flags += len(flags)
             if not flags:
                 zero_contradiction_meetings += 1
@@ -3098,5 +3131,6 @@ __all__ = [
     "compute_multi_signal_conversion",
     "compute_supply_gauges",
     "decompose_ejection_channels",
+    "recorded_contradiction_flags",
     "recount_threshold_inversions",
 ]

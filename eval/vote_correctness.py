@@ -198,7 +198,6 @@ from meetings.transcript import (
     WEAK_REASON_ENDPOINT_TICK,
     WEAK_REASON_PROXY_INTRA_TURN,
     WEAK_REASON_RETARGETED_PROXY,
-    detect_contradictions,
 )
 
 # Symmetric tick tolerance for the kill-witness chain: a sighting of the ejected
@@ -476,11 +475,11 @@ class GenuineClassConversionReport(BaseModel):
     flags naming impostors — 4 supplied / 0 converted on the audited set).
 
     **Genuine-class (CANON-class) definition — one home, imported.** A
-    (meeting, impostor) pair is SUPPLIED when re-running the repaired Task
-    10.1 detector (:func:`meetings.transcript.detect_contradictions`, with
-    the meeting's ballot-voter roster — every living participant casts
-    exactly one ballot, the same roster recording-time detection received)
-    over the recorded transcript emits at least one ``alibi_vs_sighting``
+    (meeting, impostor) pair is SUPPLIED when the meeting's RECORDED flags
+    (:func:`eval.meeting_quality.recorded_contradiction_flags` — the
+    byte-exact output of the recording-time detector, which held the private
+    grounding channels a transcript-only re-run cannot reach) carry at least
+    one ``alibi_vs_sighting``
     flag naming that true impostor whose sighting is NOT endpoint-banded
     (no :data:`meetings.transcript.WEAK_REASON_ENDPOINT_TICK` in the
     description). Under the repaired detector every emitted
@@ -498,12 +497,15 @@ class GenuineClassConversionReport(BaseModel):
       audited set are weak self-stated. Requiring an unmarked "strong" flag
       would define the gate to zero; recall past weak is the explicit D-D-3
       follow-on, not this metric's job.
-    * **Recorded ``ContradictionRef`` rows are IGNORED; the detector is
-      re-run.** On pre-repair recordings the recorded flags are 93%
-      artifacts; re-derivation through the one-home classifier is what makes
-      these numbers honest. The detector is a pure function of the
-      transcript, so on post-repair recordings (Task 10.5 onward) re-derived
-      flags equal recorded flags byte-for-byte and the re-run is a no-op.
+    * **The recorded ``ContradictionRef`` rows ARE the census.** The
+      recording-time detector held the meeting's trigger kind and its three
+      private grounding channels, none of which survive into the transcript,
+      so a transcript-only re-run prices a different game — on the committed
+      corpus it loses 43 of 120 non-vent flags and mints 46 the game never
+      had. The gate reads the record
+      (:func:`eval.meeting_quality.recorded_contradiction_flags`); the
+      pre-repair recordings whose flags were 93% artifacts left the tree at
+      the Task-10.5 re-record.
 
     ``supplied`` counts (meeting, impostor) pairs — deduped per meeting, so
     a compound alibi pairing against N interior sightings supplies once, not
@@ -554,10 +556,10 @@ class GenuineClassConversionReport(BaseModel):
 def genuine_class_subjects(meeting: MeetingReport) -> frozenset[PlayerId]:
     """One meeting's genuine-class (CANON-interior) subjects (Tasks 10.4, 10.6).
 
-    The single home of the genuine-class membership rule: re-derive flags
-    via :func:`meetings.transcript.detect_contradictions` under the
-    ballot-voter roster and keep every subject of an ``alibi_vs_sighting``
-    flag without the endpoint band (see
+    The single home of the genuine-class membership rule: read the meeting's
+    RECORDED flags via
+    :func:`eval.meeting_quality.recorded_contradiction_flags` and keep every
+    subject of an ``alibi_vs_sighting`` flag without the endpoint band (see
     :class:`GenuineClassConversionReport` for the full definitional
     rationale). Extracted from :func:`compute_genuine_class_conversion` in
     Task 10.6 so the gp-7 supply gauges (the genuine-subject share in
@@ -565,8 +567,7 @@ def genuine_class_subjects(meeting: MeetingReport) -> frozenset[PlayerId]:
     rule by import instead of re-deriving it. Role-blind by design: the
     caller applies ground truth (the conversion pair keeps impostors; the
     share gauge counts any genuine-class subject as supply). Pure and
-    deterministic; a meeting with no ballots derives nothing (an
-    explicitly-empty roster indexes nothing).
+    deterministic; a meeting the record carries no flags for derives nothing.
 
     Re-targeted proxy flags are NOT genuine class. A Task 10.6
     :data:`meetings.transcript.WEAK_REASON_RETARGETED_PROXY` flag (the
@@ -586,13 +587,18 @@ def genuine_class_subjects(meeting: MeetingReport) -> frozenset[PlayerId]:
     pins the DEFINITION, not these bytes.
     """
 
-    roster = frozenset(ballot.voter for ballot in meeting.ballots)
+    # Local import: :mod:`eval.meeting_quality` imports this module at module
+    # scope, so the shared census reaches this reader function-locally — the
+    # ``training.bakeoff.goodhart`` acyclic-graph precedent. One home, not a
+    # mirror.
+    from eval.meeting_quality import recorded_contradiction_flags
+
     subjects: set[PlayerId] = set()
     # FROZEN (Phase 19 tier map, training/README.md): weak-reason membership is
     # English-substring matching on ContradictionRef.description — unreliable
     # under flag-wording/prompt-shape change. Bug fixes and evidence readers
     # only; no new search.
-    for flag in detect_contradictions(meeting.transcript, roster=roster):
+    for flag in recorded_contradiction_flags(meeting):
         if flag.kind != "alibi_vs_sighting":
             continue
         if WEAK_REASON_ENDPOINT_TICK in flag.description:
@@ -613,7 +619,7 @@ def compute_genuine_class_conversion(
     Accepts either a :class:`~eval.report_schema.TournamentReport` or a bare
     sequence of :class:`~eval.report_schema.GameReport` (matching the other
     analyzers' signature). Pure: no I/O, no engine/agent/LLM calls — the
-    repaired detector re-run is a pure function of each recorded transcript.
+    census is a filter over each meeting's recorded flags.
 
     Per meeting: take the genuine CANON-interior subjects from the one-home
     :func:`genuine_class_subjects` (the import of the Task 10.1 classifier,

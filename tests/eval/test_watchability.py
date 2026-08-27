@@ -142,6 +142,12 @@ def test_historical_15_2_geomean_parity_frozen_pin_on_9p2i() -> None:
     was re-narrowed to mirror the extractor byte-for-byte
     (``eval/watchability.py::_testimony_vehicle``), so all 50 rows reproduce
     bit-exact again with no per-row exceptions.
+
+    Switching ``contradictions_by_subject`` from the transcript re-derivation to
+    the recorded census left this pin UNMOVED — all 50 rows still reproduce the
+    lab artifact to 1e-6 across the eleven components — so the frozen path needs
+    no basis flag of its own: the D1-D4 geomean never reads a flag the two
+    censuses disagree about on these bytes.
     """
 
     fixture = json.loads(_GEOMEAN_FIXTURE.read_text())
@@ -733,14 +739,18 @@ def test_baseline_7_floor_pins_equal_the_measured_bytes() -> None:
 
     expected = {
         _NINE: {
-            "witnessed_event_rate": 3 / 177,  # crew-witnessed kills (was 6/177)
-            "flags_per_meeting": 134 / 152,  # 92 vent + 42 transcript (was 180/165)
-            "testimony_backed_conversion": 80 / 115,  # SUBJECT-AWARE (was 78/136)
+            "witnessed_event_rate": 3 / 177,  # crew-witnessed kills
+            "flags_per_meeting": 144 / 152,  # 92 vent + 52 transcript (was 134/152)
+            "testimony_backed_conversion": 80 / 115,  # SUBJECT-AWARE
+            "transcript_flags_per_meeting": 52 / 152,  # the deduction component
+            "persisted_vent_flags_per_meeting": 92 / 152,  # the vent component
         },
         _FOUR: {
-            "witnessed_event_rate": 1 / 65,  # numerator 1 -> ADVISORY (was 1/61)
-            "flags_per_meeting": 20 / 40,  # 20 vent + 0 transcript (was 16/39)
-            "testimony_backed_conversion": 19 / 31,  # SUBJECT-AWARE (was 9/30)
+            "witnessed_event_rate": 1 / 65,  # numerator 1 -> ADVISORY
+            "flags_per_meeting": 20 / 40,  # 20 vent + 0 transcript
+            "testimony_backed_conversion": 19 / 31,  # SUBJECT-AWARE
+            "transcript_flags_per_meeting": 0 / 40,  # numerator 0 -> ADVISORY
+            "persisted_vent_flags_per_meeting": 20 / 40,
         },
     }
     for sample_dir, fractions in expected.items():
@@ -769,8 +779,8 @@ def test_a_gauge_below_a_baseline_7_floor_is_rejected() -> None:
         witnessed_event_rate=3 / 177,  # at the pin
         total_kills=177,
         crew_witnessed_kills=3,
-        flags_per_meeting=134 / 152,  # at the pin -> ratio 1.0 -> floor == pin
-        total_flags=134,
+        flags_per_meeting=144 / 152,  # at the pin -> ratio 1.0 -> floor == pin
+        total_flags=144,
         persisted_vent_flags=92,
         meetings_total=152,
         testimony_backed_conversion=79 / 115,  # ONE conversion short of the pin
@@ -783,6 +793,100 @@ def test_a_gauge_below_a_baseline_7_floor_is_rejected() -> None:
     assert conversion.passed is False
     assert conversion.floor == 80 / 115
     assert conversion.advisory is False
+
+
+def _vent_fed_candidate(
+    *, total_flags: int, persisted_vent_flags: int
+) -> SupplyGaugeValues:
+    """A candidate clearing every non-flag baseline-7 gauge, flags parameterized.
+
+    Kills, conversion and meeting count are held at the baseline-7 9p2i pins so
+    the only thing under test is where the flag supply comes from.
+    """
+
+    return SupplyGaugeValues(
+        witnessed_event_rate=3 / 177,
+        total_kills=177,
+        crew_witnessed_kills=3,
+        flags_per_meeting=total_flags / 152,
+        total_flags=total_flags,
+        persisted_vent_flags=persisted_vent_flags,
+        meetings_total=152,
+        testimony_backed_conversion=1.0,
+        backed_conversion_attempted=115,
+        backed_conversion_converted=115,
+    )
+
+
+def test_a_vent_fed_candidate_fails_the_transcript_component_floor() -> None:
+    """PLANTED: the merged flag floor cannot be cleared on vent sightings alone.
+
+    ``flags_per_meeting`` is one number over two sources, so a candidate whose
+    deduction-flag supply has collapsed can still clear it by minting vent
+    sightings — a selection floor that stops selecting for the evidence it
+    names. This candidate carries MORE merged supply than the baseline (200/152
+    against 144/152) with 190 of it vents, so the merged row passes and only the
+    transcript component (10/152, under the pinned 52/152) bites.
+    """
+
+    floors = _BASELINE_SUPPLY_FLOORS["baseline-7"]["9p2i"]
+    passed, rows = evaluate_supply_floors(
+        _vent_fed_candidate(total_flags=200, persisted_vent_flags=190), floors
+    )
+
+    assert passed is False, "a starved transcript component must fail the referee"
+    by_name = {row.name: row for row in rows}
+    assert by_name["flags_per_meeting"].passed is True, "the merged row must pass"
+    component = by_name["transcript_flags_per_meeting"]
+    assert component.passed is False
+    assert component.measured == 10 / 152
+    assert component.floor == 52 / 152
+    assert component.advisory is False
+    assert by_name["persisted_vent_flags_per_meeting"].passed is True
+    # The component row is what fails: every other row cleared.
+    assert {row.name for row in rows if not row.passed} == {
+        "transcript_flags_per_meeting"
+    }
+
+
+def test_the_same_merged_supply_with_a_healthy_component_passes() -> None:
+    """PERTURBED: the component gauge, not the merged floor, did the work above.
+
+    Same merged census (200/152), the split moved back inside the pins — so the
+    referee passes. Without this the failure above could be an artifact of any
+    row, not the component the test names.
+    """
+
+    floors = _BASELINE_SUPPLY_FLOORS["baseline-7"]["9p2i"]
+    passed, rows = evaluate_supply_floors(
+        _vent_fed_candidate(total_flags=200, persisted_vent_flags=100), floors
+    )
+
+    assert passed is True
+    assert all(row.passed for row in rows)
+    by_name = {row.name: row for row in rows}
+    assert by_name["transcript_flags_per_meeting"].measured == 100 / 152
+
+
+def test_a_block_without_component_pins_emits_no_component_rows() -> None:
+    """The earlier blocks stay evaluable: an unpinned component emits no row.
+
+    Their sample sets left the tree, so no component can be measured for them;
+    ``evaluate_supply_floors`` must skip rather than invent a floor.
+    """
+
+    floors = _BASELINE_SUPPLY_FLOORS["baseline-6"]["9p2i"]
+    assert floors.transcript_flags_per_meeting is None
+    assert floors.persisted_vent_flags_per_meeting is None
+
+    _, rows = evaluate_supply_floors(
+        _vent_fed_candidate(total_flags=200, persisted_vent_flags=190), floors
+    )
+    assert {row.name for row in rows} == {
+        "witnessed_event_rate",
+        "flags_per_meeting",
+        "testimony_backed_conversion",
+    }
 
 
 def test_hardened_patches_fire_on_the_committed_9p2i_bytes() -> None:
@@ -1346,10 +1450,18 @@ def test_cli_watchability_json_emits_per_game_and_aggregate() -> None:
     assert report["roster_key"] == "9p2i"
     assert report["baseline_id"] == "baseline-7"
     assert len(report["per_game"]) == 50
-    assert len(report["supply_gauges"]) == 3
+    # Three Layer-1 gauges plus the two flags-per-meeting components baseline-7
+    # pins; the components trail the merged row, in that order.
+    assert [g["name"] for g in report["supply_gauges"]] == [
+        "witnessed_event_rate",
+        "flags_per_meeting",
+        "testimony_backed_conversion",
+        "transcript_flags_per_meeting",
+        "persisted_vent_flags_per_meeting",
+    ]
     # Every gauge row carries the 15.19 advisory bit (False on 9p2i — no
     # one-event floor on this roster).
-    assert [g["advisory"] for g in report["supply_gauges"]] == [False, False, False]
+    assert [g["advisory"] for g in report["supply_gauges"]] == [False] * 5
     # The HARDENED mean over the committed baseline-6 bytes (was 54.97 pre-widening,
     # 42.25 on baseline 5 — the meeting-layer graduation's richer flag supply and
     # higher conversion lift the geomean; the conversion-coupled D2 gate still sinks

@@ -151,12 +151,13 @@ evidence than the baseline FAILS the referee even when meeting-rate stays high
   * ``witnessed_event_rate`` — crew-witnessed kills / total kills, recovered from
     the engine ``KilledEvent.witnesses`` on the reconstruction walk (baseline 2:
     6/160 = 3.75% crew-witnessed in 9p2i — the §6 perfect-stealth anchor).
-  * ``flags_per_meeting`` — contradiction flags per meeting, wired from
-    :func:`eval.meeting_quality.compute_supply_gauges` (``total_flags`` census) and
-    made VENT-AWARE: the grounded role-proving ``vent_sighting`` flag (Task 15.4)
-    cannot be re-derived from a transcript (its grounding channel carries no
-    transcript id), so the persisted vent flags are merged in — else a vent-rich
-    candidate's strongest evidence is undercounted (:func:`_persisted_vent_flag_count`).
+  * ``flags_per_meeting`` — recorded contradiction flags per meeting, the merge
+    of two disjoint halves of each meeting's recorded array:
+    :func:`eval.meeting_quality.compute_supply_gauges` (the non-vent census) and
+    :func:`_persisted_vent_flag_count` (the grounded role-proving
+    ``vent_sighting`` class, Task 15.4). Merged so a vent-rich candidate's
+    strongest evidence is not read as starvation; each half ALSO carries its own
+    floor on blocks that pin one, so the merge cannot be cleared on vents alone.
   * ``testimony_backed_conversion`` — the fraction of (meeting, OBSERVATION-BACKED-
     accused true impostor) pairs the meeting ejected, using the SAME
     evidence-grounded predicate as the geomean's D2 conversion
@@ -265,12 +266,10 @@ the vote prompts via :func:`eval.meeting_quality._parse_suspicion_graph`),
 observation-backed bit, plus the frozen subject-agnostic bit for the parity pin),
 ``accusations``, ``plurality_target``/``plurality_margin`` (the recorded ballot
 tally), ``ejected_rendered_suspicion_among_ejectors``, and
-``contradictions_by_subject`` (RE-DERIVED via
-:func:`meetings.transcript.detect_contradictions` under the ballot-voter roster,
-mirroring the extractor's ``_rederive_meeting_contradictions`` — on the committed
-set recorded == re-derived, verified by the parity test; on any future set it
-reads the CURRENT detector). The extractor's ``GEOMEAN_RESULTS_FILENAME``
-machinery and every field the geomean does not read are untouched.
+``contradictions_by_subject`` (the meeting's RECORDED non-vent flags, via
+:func:`eval.meeting_quality.recorded_contradiction_flags`). The extractor's
+``GEOMEAN_RESULTS_FILENAME`` machinery and every field the geomean does not
+read are untouched.
 
 The 9p2i/4p1i asymmetry is handled, not assumed away: the geomean runs on BOTH
 committed sets from bytes (4p1i has no committed rubric artifact — the parity
@@ -289,7 +288,8 @@ STABLE::
       "integrity_ok": bool,           # every game reconstructed byte-identically
       "referee_passed": bool,         # supply_floors_passed AND integrity_ok
       "supply_floors_passed": bool,   # AND over the NON-advisory gauges
-      "supply_gauges": [              # one per Layer-1 gauge, in order
+      "supply_gauges": [              # one per Layer-1 gauge, in order, then
+                                      # one per component floor the block pins
         {"name": str, "measured": float|null, "floor": float, "passed": bool,
          "advisory": bool},           # advisory = baseline numerator <= 1;
         ...                           # excluded from supply_floors_passed.
@@ -297,6 +297,12 @@ STABLE::
                                       # "floor" is the DERIVED population-
                                       # relative value on baseline-3 (the pin
                                       # exactly, when scoring the baseline).
+                                      # A block that pins the flags-per-meeting
+                                      # components adds the
+                                      # transcript_flags_per_meeting and
+                                      # persisted_vent_flags_per_meeting rows
+                                      # (baseline-7 on; earlier blocks' bytes
+                                      # left the tree, so they pin neither).
       ],
       "mean_score": float, "median_score": float,  # NEVER read without the
                                       # referee_passed / supply-floor gate
@@ -339,6 +345,7 @@ from eval._suspicion_parse import SKIP_SUSPICION_THRESHOLD
 from eval.meeting_quality import (
     _parse_suspicion_graph,
     compute_supply_gauges,
+    recorded_contradiction_flags,
 )
 from eval.report_schema import GameReport, MeetingReport, TournamentReport
 from eval.validity import (
@@ -361,7 +368,7 @@ from meetings.schemas import (
     SawPlayerObservation,
     SawVentObservation,
 )
-from meetings.transcript import detect_contradictions, is_weak_contradiction
+from meetings.transcript import is_weak_contradiction
 from orchestrator.replay import ReplayLog
 
 # --------------------------------------------------------------------------- #
@@ -427,7 +434,7 @@ class FloorPin:
 
 @dataclass(frozen=True)
 class SupplyFloors:
-    """The three evidence-supply floors for one (baseline, roster) (Layer 1).
+    """The evidence-supply floors for one (baseline, roster) (Layer 1).
 
     Each field pins the MEASURED baseline value as the floor: a candidate's
     gauge must be ``>= floor.value`` to clear it, so the baseline itself passes
@@ -435,6 +442,17 @@ class SupplyFloors:
     may be ``None`` when the baseline supplies no accused-impostor meeting (the
     undefined-not-zero convention); a ``None`` floor is vacuously cleared. A
     floor whose baseline ``numerator`` is ≤ 1 is advisory (:class:`FloorPin`).
+
+    ``transcript_flags_per_meeting`` and ``persisted_vent_flags_per_meeting``
+    split ``flags_per_meeting`` into the two sources it merges — the recorded
+    non-vent flags and the recorded ``vent_sighting`` ones. Without them the
+    merged rate is one number a candidate can clear by minting vent sightings
+    while its deduction-flag supply collapses to nothing, which is a
+    selection floor that no longer selects for what it names. Both are
+    ``None`` on the blocks whose sample sets left the tree — a component
+    cannot be pinned from bytes nobody can re-derive — and
+    :func:`evaluate_supply_floors` emits a gauge row only for a populated
+    component, so those blocks stay evaluable exactly as before.
 
     ``population_relative_conversion`` (Task 16.11 — the close audit §10 owner
     ruling, 2026-07-11) switches the conversion gauge's EVALUATED floor from
@@ -451,6 +469,8 @@ class SupplyFloors:
     flags_per_meeting: FloorPin
     testimony_backed_conversion: FloorPin | None
     population_relative_conversion: bool = False
+    transcript_flags_per_meeting: FloorPin | None = None
+    persisted_vent_flags_per_meeting: FloorPin | None = None
 
 
 def population_relative_conversion_floor(
@@ -543,6 +563,9 @@ _BASELINE_SUPPLY_FLOORS: Final[Mapping[str, Mapping[str, SupplyFloors]]] = {
     # against these floors faces a strictly conservative conversion gate; new
     # champions are gated by the canonical baseline-3 block below.
     "baseline-2": {
+        # No component pins: this record's sample bytes left the tree, so the
+        # transcript/vent split cannot be re-measured — and the merged pins below
+        # were measured under the retired re-derived census in any case.
         # Measured on replays/samples/9p2i (baseline 2, Qwen/Qwen3-32B qwen3_32b.v4;
         # the values are the baseline's OWN supply, so it passes at equality):
         #   witnessed_event_rate        = 6/160  = 0.0375 (crew-witnessed kills; §6)
@@ -583,6 +606,9 @@ _BASELINE_SUPPLY_FLOORS: Final[Mapping[str, Mapping[str, SupplyFloors]]] = {
     # same definition, so the relative gate stays sound (Phase-14 doctrine:
     # directions are findings, not pass bars).
     "baseline-3": {
+        # No component pins: this record's sample bytes left the tree, so the
+        # transcript/vent split cannot be re-measured — and the merged pins below
+        # were measured under the retired re-derived census in any case.
         # Measured on replays/samples/9p2i (baseline 3, re-measured at 15.19
         # with the committed CLIs; corpus-9p2i alongside per the Q3 rule):
         #   witnessed_event_rate        = 5/154  = 0.032467532467532464 (crew-witnessed
@@ -673,6 +699,9 @@ _BASELINE_SUPPLY_FLOORS: Final[Mapping[str, Mapping[str, SupplyFloors]]] = {
     # density-aware, so an evidence-starved candidate still faces a sharpened
     # demand rather than a free pass.
     "baseline-4": {
+        # No component pins: this record's sample bytes left the tree, so the
+        # transcript/vent split cannot be re-measured — and the merged pins below
+        # were measured under the retired re-derived census in any case.
         # Measured on replays/samples/9p2i (baseline 4, this record, via the
         # committed CLIs / the compute_watchability gauge seam):
         #   witnessed_event_rate        = 9/178  = 0.05056179775280899
@@ -720,6 +749,9 @@ _BASELINE_SUPPLY_FLOORS: Final[Mapping[str, Mapping[str, SupplyFloors]]] = {
         ),
     },
     "baseline-5": {
+        # No component pins: this record's sample bytes left the tree, so the
+        # transcript/vent split cannot be re-measured — and the merged pins below
+        # were measured under the retired re-derived census in any case.
         # Measured on replays/samples/9p2i (baseline 5, the Task-16.17 close
         # record: locked model + qwen3_6_27b v3 + the graduated slate — J1,
         # id-rendering, citation gate unconditional; absence_prior OFF), via
@@ -775,6 +807,9 @@ _BASELINE_SUPPLY_FLOORS: Final[Mapping[str, Mapping[str, SupplyFloors]]] = {
         ),
     },
     "baseline-6": {
+        # No component pins: this record's sample bytes left the tree, so the
+        # transcript/vent split cannot be re-measured — and the merged pins below
+        # were measured under the retired re-derived census in any case.
         # Measured on replays/samples/9p2i (baseline 6, the Task-18.12 adopting
         # record: locked model + qwen3_6_27b v3 + the meeting-layer graduation slate
         # — roll_call_round, whereabouts_interior_flags, vent_placement_contradictions,
@@ -847,40 +882,51 @@ _BASELINE_SUPPLY_FLOORS: Final[Mapping[str, Mapping[str, SupplyFloors]]] = {
         #                                 rule does not mark advisory, but one
         #                                 witnessed kill still moves it by a
         #                                 third of itself — read it that way)
-        #   flags_per_meeting           = 134/152 = 0.881578947368421 (92
-        #                                 persisted vent flags + 42 re-derived
+        #   flags_per_meeting           = 144/152 = 0.9473684210526315 (92
+        #                                 recorded vent flags + 52 recorded
         #                                 transcript flags)
+        #     transcript component      = 52/152 = 0.34210526315789475
+        #     persisted-vent component  = 92/152 = 0.6052631578947368
         #   testimony_backed_conversion = 80/115 = 0.6956521739130435
         #                                 (OBSERVATION-BACKED, SUBJECT-AWARE)
         # TASK 16.11 derivation (population_relative_conversion=True): the
         # evaluated floor per scored population is
-        #   floor = 0.6956521739130435 * (0.881578947368421 / measured
+        #   floor = 0.6956521739130435 * (0.9473684210526315 / measured
         #           flags_per_meeting), capped at 1.0.
-        # The baseline itself: flags 134/152 -> ratio exactly 1.0 -> derived
+        # The baseline itself: flags 144/152 -> ratio exactly 1.0 -> derived
         # floor = pin = 0.6956521739130435; measured 80/115 -> PASS at exact
         # equality (self-consistency).
-        # The flag census FALLS against baseline 6 (180/165 = 1.0909 -> 134/152 =
-        # 0.8816) while conversion RISES (78/136 = 0.5735 -> 80/115 = 0.6957):
+        # The flag census FALLS against baseline 6 (180/165 = 1.0909 -> 144/152 =
+        # 0.9474) while conversion RISES (78/136 = 0.5735 -> 80/115 = 0.6957):
         # this substrate mints fewer STRONG flags on purpose — the ungrounded
         # alibi-versus-sighting class it stopped minting is the one the record's
         # bars 5 and 7 were about — and the ones it does mint convert more often.
         # A baseline-6 floor scored against these bytes therefore FAILS, which is
         # the referee reading the supply it was pinned to and not a defect.
-        # audits/audit-phase-20-baseline-7.md §8 quotes this block.
+        # audits/audit-phase-20-baseline-7.md §8 quotes this block as recorded, so
+        # its table carries the pre-correction 134/152 split.
         "9p2i": SupplyFloors(
             witnessed_event_rate=FloorPin(value=0.01694915254237288, numerator=3),
-            flags_per_meeting=FloorPin(value=0.881578947368421, numerator=134),
+            flags_per_meeting=FloorPin(value=0.9473684210526315, numerator=144),
             testimony_backed_conversion=FloorPin(
                 value=0.6956521739130435, numerator=80
             ),
             population_relative_conversion=True,
+            transcript_flags_per_meeting=FloorPin(
+                value=0.34210526315789475, numerator=52
+            ),
+            persisted_vent_flags_per_meeting=FloorPin(
+                value=0.6052631578947368, numerator=92
+            ),
         ),
         # Measured on replays/samples/4p1i at the same slate:
         #   witnessed_event_rate        = 1/65 = 0.015384615384615385
         #                                 (numerator 1 -> ADVISORY, as on
         #                                 baseline 6)
-        #   flags_per_meeting           = 20/40 = 0.5 (20 persisted vent flags +
-        #                                 0 re-derived transcript flags)
+        #   flags_per_meeting           = 20/40 = 0.5 (20 recorded vent flags +
+        #                                 0 recorded transcript flags)
+        #     transcript component      = 0/40 = 0.0 (numerator 0 -> ADVISORY)
+        #     persisted-vent component  = 20/40 = 0.5
         #   testimony_backed_conversion = 19/31 = 0.6129032258064516
         #                                 (OBSERVATION-BACKED, SUBJECT-AWARE)
         # TASK 16.11 derivation (same shape, this roster's pins):
@@ -888,8 +934,10 @@ _BASELINE_SUPPLY_FLOORS: Final[Mapping[str, Mapping[str, SupplyFloors]]] = {
         #           capped at 1.0.
         # The baseline itself: flags 20/40 -> ratio exactly 1.0 -> derived
         # floor = pin = 0.6129032258064516; measured 19/31 -> PASS at exact
-        # equality (self-consistency). The small 4p1i games carry no re-derived
-        # transcript flag at all, so every flag here is a persisted vent sighting.
+        # equality (self-consistency). The small 4p1i games carry no transcript
+        # flag at all, so every flag here is a vent sighting and the transcript
+        # component pins at zero — a floor nothing can fall below, which the
+        # rare-event rule already marks advisory.
         "4p1i": SupplyFloors(
             witnessed_event_rate=FloorPin(value=0.015384615384615385, numerator=1),
             flags_per_meeting=FloorPin(value=0.5, numerator=20),
@@ -897,6 +945,8 @@ _BASELINE_SUPPLY_FLOORS: Final[Mapping[str, Mapping[str, SupplyFloors]]] = {
                 value=0.6129032258064516, numerator=19
             ),
             population_relative_conversion=True,
+            transcript_flags_per_meeting=FloorPin(value=0.0, numerator=0),
+            persisted_vent_flags_per_meeting=FloorPin(value=0.5, numerator=20),
         ),
     },
 }
@@ -988,9 +1038,18 @@ def evaluate_supply_floors(
     still reads the pin's baseline numerator; a ``None`` measured conversion
     (zero backed accusations — the starvation catch) still fails the derived
     floor regardless of the population's supply.
+
+    COMPONENT FLOORS: when the block pins ``transcript_flags_per_meeting`` /
+    ``persisted_vent_flags_per_meeting``, a row is emitted for each, gated the
+    same way. Splitting the merged census is what stops a candidate clearing
+    ``flags_per_meeting`` on vent sightings alone while its deduction-flag
+    supply starves. A component the block leaves ``None`` emits no row, so the
+    blocks whose bytes left the tree evaluate exactly as they did before.
     """
 
-    gauge_specs: tuple[tuple[str, float | None, FloorPin | None], ...] = (
+    meetings = gauges.meetings_total
+    transcript_flags = gauges.total_flags - gauges.persisted_vent_flags
+    gauge_specs: list[tuple[str, float | None, FloorPin | None]] = [
         (
             "witnessed_event_rate",
             gauges.witnessed_event_rate,
@@ -1002,7 +1061,28 @@ def evaluate_supply_floors(
             gauges.testimony_backed_conversion,
             floors.testimony_backed_conversion,
         ),
-    )
+    ]
+    for component_name, numerator, component_pin in (
+        (
+            "transcript_flags_per_meeting",
+            transcript_flags,
+            floors.transcript_flags_per_meeting,
+        ),
+        (
+            "persisted_vent_flags_per_meeting",
+            gauges.persisted_vent_flags,
+            floors.persisted_vent_flags_per_meeting,
+        ),
+    ):
+        if component_pin is None:
+            continue
+        gauge_specs.append(
+            (
+                component_name,
+                (numerator / meetings) if meetings else None,
+                component_pin,
+            )
+        )
     results: list[SupplyFloorGauge] = []
     for name, measured, pin in gauge_specs:
         advisory = pin is not None and pin.numerator <= 1
@@ -1409,7 +1489,7 @@ def _meeting_facts(
     ballot tally (plurality target/margin), the ejected player's rendered
     suspicion among the voters who ejected them, the testimony records (accusation
     vehicle + observation-backed bit) over verbally-accused subjects, and the
-    contradiction flags RE-DERIVED under the ballot-voter roster.
+    meeting's RECORDED non-vent contradiction flags.
 
     The extractor additionally filters accused subjects to the living roster at
     the meeting tick; that filter is a PROVABLE no-op on any valid recording — the
@@ -1462,12 +1542,14 @@ def _meeting_facts(
         if ej_values:
             ejected_among_ejectors = max(ej_values)
 
-    # Contradiction flags, RE-DERIVED under the ballot-voter roster (mirrors the
-    # extractor's _rederive_meeting_contradictions), grouped by subject with the
-    # strong/weak bit; presence of a subject key == "some flag names them".
-    roster = frozenset(b.voter for b in meeting.ballots)
+    # The meeting's RECORDED non-vent flags, grouped by subject with the
+    # strong/weak bit read from each recorded flag's own description; presence
+    # of a subject key == "some flag names them". The vent class rides
+    # _persisted_vent_flag_count, so the D2 leg's
+    # "contradictions_by_subject or persisted_vent_flags" composition keeps its
+    # meaning and no flag enters both terms.
     contradictions_by_subject: dict[PlayerId, list[bool]] = {}
-    for flag in detect_contradictions(meeting.transcript, roster=roster):
+    for flag in recorded_contradiction_flags(meeting):
         strong = not is_weak_contradiction(flag)
         for subject in flag.subjects:
             contradictions_by_subject.setdefault(subject, []).append(strong)
@@ -1998,17 +2080,21 @@ def _game_facts(
 
 
 def _persisted_vent_flag_count(report: TournamentReport) -> int:
-    """Count the persisted role-proving ``vent_sighting`` flags across a report.
+    """Count the recorded role-proving ``vent_sighting`` flags across a report.
 
-    The grounded ``vent_sighting`` flag (Task 15.4 — the game's HARDEST evidence,
-    a witnessed impostor vent) is minted only when the live meeting layer holds the
-    speaker's private :class:`~meetings.schemas.VentWitnessRecord` grounding
-    channel, which carries no transcript id by design. So the re-derivation
-    :func:`~meetings.transcript.detect_contradictions` runs from a recorded
-    transcript alone (with no grounding channel) can NEVER reproduce it — see
-    ``meetings/transcript.py``'s ``if vent_witness_records`` gate. The flag is
-    instead persisted on the recorded :attr:`~eval.report_schema.MeetingReport.contradictions`;
-    this reads it from there.
+    The vent term of the evidence-supply census. Its sibling
+    :func:`eval.meeting_quality.recorded_contradiction_flags` reads the same
+    recorded array with ``vent_sighting`` filtered OUT, so the two are disjoint
+    by construction and merging them recovers the recorded total exactly once
+    — the decomposition every consumer of ``flags_per_meeting`` relies on.
+
+    Kept a separate reader rather than folded into the sibling because the
+    grounded ``vent_sighting`` flag (Task 15.4 — the game's HARDEST evidence, a
+    witnessed impostor vent) is the one class the referee prices as its own
+    supply component: it is minted only when the live meeting layer holds the
+    speaker's private :class:`~meetings.schemas.VentWitnessRecord` channel, so
+    a set can be rich in vents and starved of deduction flags, or the reverse,
+    and the component floors gate each separately.
     """
 
     return sum(
@@ -2054,15 +2140,17 @@ def _supply_gauge_values(
 ) -> SupplyGaugeValues:
     """The three Layer-1 gauges over a report + reconstructed kills + game facts.
 
-    ``flags_per_meeting`` is VENT-AWARE: :func:`eval.meeting_quality.compute_supply_gauges`
-    re-derives flags from the transcript and cannot reproduce the grounded
-    ``vent_sighting`` flag (the grounding channel is not in the transcript), so the
-    persisted vent flags are MERGED in (:func:`_persisted_vent_flag_count`) — else a
-    vent-rich baseline-3 candidate's strongest evidence would be undercounted as
-    evidence-starved. Zero on the committed v4 sets (no vent turns), so the pinned
-    baseline-2 floors are unchanged; the persisted census and the re-derived
-    non-vent flags are disjoint (re-derivation never mints ``vent_sighting``), so no
-    double count.
+    ``flags_per_meeting`` is the MERGED census:
+    :func:`eval.meeting_quality.compute_supply_gauges` counts each meeting's
+    recorded NON-vent flags and :func:`_persisted_vent_flag_count` adds the
+    recorded ``vent_sighting`` ones — the two halves of the same recorded
+    array, split on kind, so nothing is counted twice and nothing is dropped.
+    The merge exists because a vent-rich candidate's strongest evidence must
+    not read as starvation. The split is far from academic on the committed
+    bytes: vent flags are 92 of the 144 on ``replays/samples/9p2i``, 20 of 20
+    on ``replays/samples/4p1i``, and 308 of 428 on ``replays/ml_corpus/9p2i``
+    — which is why :class:`SupplyFloors` gates each component as well as the
+    merge (a candidate must not clear the evidence floor on vents alone).
 
     ``testimony_backed_conversion`` is the OBSERVATION-BACKED conversion
     (:func:`_observation_backed_conversion`), consistent with the geomean's D2 —
