@@ -269,6 +269,45 @@ async function settledGeometry(page: Page) {
   return mapAndDockGeometry(page);
 }
 
+/**
+ * The arrival promise as ONE predicate: the whole map is on screen and clear of
+ * the dock. Returned as a named breakdown so a failure says which half broke.
+ */
+function mapWhollyVisible(geometry: {
+  mapTop: number;
+  mapBottom: number;
+  dockTop: number;
+  viewportHeight: number;
+}) {
+  return {
+    topOnScreen: geometry.mapTop >= 0,
+    bottomOnScreen: geometry.mapBottom <= geometry.viewportHeight,
+    clearOfDock: geometry.mapBottom <= geometry.dockTop,
+  };
+}
+
+/** Every half of the promise holding. */
+const MAP_WHOLLY_VISIBLE = {
+  topOnScreen: true,
+  bottomOnScreen: true,
+  clearOfDock: true,
+} as const;
+
+/**
+ * The viewport height at which the dock opens its timeline half, read back out
+ * of its ONE home in `src/index.css` — so the arrival test asserts the drawer
+ * state AGAINST the threshold instead of hardcoding a second copy of it.
+ */
+async function expandedMinHeight(page: Page): Promise<number> {
+  return page.evaluate(() =>
+    Number.parseFloat(
+      getComputedStyle(document.documentElement).getPropertyValue(
+        "--transport-expanded-min-height",
+      ),
+    ),
+  );
+}
+
 /** The Task-19.17 tail surfaces: the running beat feed and the spend chips. */
 function ticker(page: Page) {
   return page.getByRole("region", { name: "Event ticker" });
@@ -349,6 +388,50 @@ test.describe("spectator journey", () => {
     // the meeting's actual payload, not just a heading that rendered.
     await expect(ballots).toContainText("confidence");
     await expect(ballots.getByText(/^p-\d+$/).first()).toBeVisible();
+
+    // ── the reconstruction half ──────────────────────────────────────────────
+    // The dialog's other half is what the viewer exists for — the accusation
+    // chain, the turn cards, the evidence taxonomy — and the gate used to stop at
+    // the ballots, so a regression anywhere in it shipped green.
+    const transcript = meeting.getByRole("region", {
+      name: "Accusation chain & transcript",
+    });
+    await expect(transcript).toBeVisible();
+    // A turn card really rendered (`TurnCard`'s article), so "the panel is on
+    // screen" cannot pass over an empty transcript.
+    await expect(transcript.getByRole("article").first()).toBeVisible();
+
+    // The evidence readout has to RECONCILE: `Evidence (N)` equals the sum of
+    // its group counts, and every group is one of the three taxonomy headings.
+    // `EvidenceSection` renders nothing at all on an empty flag list, so the
+    // empty meeting falls out of the same arithmetic instead of being skipped —
+    // no `Evidence` heading has to mean no group heading, i.e. 0 = 0. These are
+    // the only h4 and h5 in the dialog, so neither locator can drift onto
+    // something else. Read as text CONTENT, not innerText: the headings are
+    // CSS-uppercased and innerText would return the transformed string.
+    const evidenceHeadings = await transcript.getByRole("heading", { level: 4 }).allTextContents();
+    const groupHeadings = await transcript.getByRole("heading", { level: 5 }).allTextContents();
+
+    expect(evidenceHeadings.length).toBeLessThanOrEqual(1);
+    const declared = evidenceHeadings.map((text) => {
+      const parsed = /^Evidence \((\d+)\)$/.exec(text.trim());
+      if (parsed === null) {
+        throw new Error(`the evidence heading does not read "Evidence (N)": ${text}`);
+      }
+      return Number(parsed[1]);
+    });
+    const grouped = groupHeadings.map((text) => {
+      const parsed = /^(Role proof|Contradictions|Weak signals) \((\d+)\)$/.exec(text.trim());
+      if (parsed === null) {
+        throw new Error(`"${text.trim()}" is not one of the three evidence taxonomy headings`);
+      }
+      return Number(parsed[2]);
+    });
+    expect(grouped.reduce((sum, n) => sum + n, 0)).toBe(
+      declared.reduce((sum, n) => sum + n, 0),
+    );
+    // …and a heading only exists when a group does, in both directions.
+    expect(declared.length === 0).toBe(grouped.length === 0);
 
     // ── to the end ───────────────────────────────────────────────────────────
     await page.keyboard.press("Escape"); // the meeting's own keyboard exit
@@ -558,6 +641,49 @@ test.describe("spectator journey", () => {
     await expect(disclosure).toHaveAttribute("aria-expanded", "false");
     await page.setViewportSize({ width: 1440, height: 960 });
     await expect(disclosure).toHaveAttribute("aria-expanded", "false");
+  });
+
+  // The most common desktop arrival. Both legs of the test above run against a
+  // COLLAPSED dock — 800 and 640 are below `--transport-expanded-min-height`, so
+  // the shell opens shorter and the spec asserts that before it measures. 900 is
+  // the height the dock is EXPANDED at, and until now nothing measured it.
+  test.describe("the 1440×900 arrival", () => {
+    test.use({ viewport: { width: 1440, height: 900 } });
+
+    test("shows the whole map, clear of the dock, with no scroll and no toggle", async ({
+      page,
+    }) => {
+      await openFeaturedReplay(page);
+
+      // What a visitor is owed is the PROMISE — the whole map on screen and clear
+      // of the dock at the position they land on — not a particular dock state.
+      // So nothing here scrolls and nothing toggles.
+      const arrival = await settledGeometry(page);
+      expect(mapWhollyVisible(arrival)).toEqual(MAP_WHOLLY_VISIBLE);
+
+      // Whether the drawer is open at 900 is a layout ruling that lives in ONE
+      // place. Reading the threshold back out of the sheet keeps this true from
+      // either side of it instead of pinning a second copy of the number here.
+      const threshold = await expandedMinHeight(page);
+      await expect(timelineDisclosure(page)).toHaveAttribute(
+        "aria-expanded",
+        String(arrival.viewportHeight >= threshold),
+      );
+
+      // ── the case that proves the predicate can say no ──────────────────────
+      // A green arrival is only a fact about the layout if the same predicate
+      // returns false somewhere. 1000×640 with the drawer deliberately opened is
+      // the state the review measured: the dock is taller than the room it
+      // leaves above itself, so no scroll position fits the whole map.
+      await page.setViewportSize({ width: 1000, height: 640 });
+      const disclosure = timelineDisclosure(page);
+      await expect(disclosure).toHaveAttribute("aria-expanded", "false");
+      await disclosure.click();
+      await expect(disclosure).toHaveAttribute("aria-expanded", "true");
+      await scrollMapToTop(page);
+      const buried = await settledGeometry(page);
+      expect(mapWhollyVisible(buried)).not.toEqual(MAP_WHOLLY_VISIBLE);
+    });
   });
 
   test("As-agent fog hides every omniscient-only fact", async ({ page }) => {
