@@ -237,24 +237,37 @@ _VOTE_PARSE_DEFAULT_PATTERN: Final[re.Pattern[str]] = _marker_pattern(
 def ballot_rewrite_labels(ballot: VoteBallot) -> tuple[str, ...]:
     """Every audit rewrite the meeting layer applied to one recorded ballot.
 
-    Reads :attr:`~meetings.schemas.VoteBallot.guard_rewrite_reason` when the
-    recording carries it — the meeting layer's own structured testimony, so no
-    parse can disagree with it. A recording that predates that field falls back
-    to the marker prefixes, stripped front-to-back through
-    :data:`BALLOT_AUDIT_MARKERS` so a stacked ordering cannot hide the inner
-    label behind the outer one. The parse-default marker replaces the whole
-    rationale rather than prefixing it, so it is matched apart — as the WHOLE
-    marker, head and repr payload and tail, never the head alone.
+    :attr:`~meetings.schemas.VoteBallot.guard_rewrite_reason` is the PREFERRED
+    source — the meeting layer's own structured testimony about the rewrite it
+    performed — and it always leads the result, so a parse can never contradict
+    it away or leave it out. It cannot REPLACE the marker chain, though: the
+    field holds one reason while a ballot can pass two guards (an under-gate
+    redirect whose redirected eject the citation gate then coerces to SKIP), and
+    reading the field alone would lose the second rewrite and undercount the
+    per-kind census. So the markers are read too and their labels merge in,
+    deduplicated: the structured value is authoritative, never exhaustive.
 
-    Order is the order the labels were recovered in; callers read the SET.
+    The chain is stripped front-to-back through :data:`BALLOT_AUDIT_MARKERS` so
+    a stacked ordering cannot hide the inner label behind the outer one. The
+    parse-default marker replaces the whole rationale rather than prefixing it,
+    so it is matched apart — as the WHOLE marker, head and repr payload and
+    tail, never the head alone.
+
+    Order is structured-first, then recovery order; callers read the SET.
     """
 
+    labels: list[str] = []
+
+    def keep(label: str) -> None:
+        if label not in labels:
+            labels.append(label)
+
     if ballot.guard_rewrite_reason is not None:
-        return (ballot.guard_rewrite_reason,)
+        keep(ballot.guard_rewrite_reason)
     text = ballot.rationale_text
     if _VOTE_PARSE_DEFAULT_PATTERN.match(text) is not None:
-        return (_VOTE_PARSE_DEFAULT_LABEL,)
-    labels: list[str] = []
+        keep(_VOTE_PARSE_DEFAULT_LABEL)
+        return tuple(labels)
     stripped = True
     while stripped:
         stripped = False
@@ -262,7 +275,7 @@ def ballot_rewrite_labels(ballot: VoteBallot) -> tuple[str, ...]:
             match = pattern.match(text)
             if match is None:
                 continue
-            labels.append(label)
+            keep(label)
             text = text[match.end() :]
             stripped = True
             break

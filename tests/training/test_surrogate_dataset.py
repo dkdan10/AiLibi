@@ -942,30 +942,76 @@ def test_the_parse_default_marker_is_matched_whole_not_by_its_head(
     )
 
 
-def test_the_structured_guard_reason_wins_over_a_contradicting_marker() -> None:
-    """A recording that carries the meeting layer's own testimony is believed.
+def _guarded_ballot(rationale: str, reason: str | None) -> VoteBallot:
+    """A ballot carrying the 21.3 structured provenance pair (planted)."""
 
-    ``guard_rewrite_reason`` is the meeting layer stating what it did; the marker
-    prefix is the legacy string a reader has to parse back out. When a recording
-    carries both and they disagree, the structured field is the answer — planted
-    here because no committed byte carries the field at all (0 of 3,602 recorded
-    ballots across the four committed sets), so only a plant can distinguish the
-    two sources.
-    """
-
-    contradicting = VoteBallot(
+    return VoteBallot(
         voter="p-1",
         target="SKIP",
         confidence=0.2,
         primary_reason_id=None,
         considered_alternatives=(),
-        rationale_text=(
-            UNCITED_ZERO_FLAG_EJECT_MARKER.format(target="p-5") + "they vented"
-        ),
-        guard_redirected_from="p-2",
-        guard_rewrite_reason="under_gate_redirect",
+        rationale_text=rationale,
+        guard_redirected_from=None if reason is None else "p-2",
+        guard_rewrite_reason=reason,  # type: ignore[arg-type]
     )
-    assert ballot_rewrite_labels(contradicting) == ("under_gate_redirect",)
+
+
+def test_the_structured_guard_reason_leads_and_no_parse_can_remove_it() -> None:
+    """The meeting layer's own testimony is believed, marker or no marker.
+
+    ``guard_rewrite_reason`` is the meeting layer stating what it did; the marker
+    prefix is the legacy string a reader has to parse back out. Planted, because
+    no committed byte carries the field at all (0 of 3,602 recorded ballots
+    across the four committed sets), so only a plant can distinguish the sources.
+
+    Two halves. A ballot whose structured reason names a rewrite its rationale
+    does NOT carry is still classified by that reason — the answer no parse of
+    those bytes could have produced, which is what PREFERRED means. And where
+    the two sources name different kinds, the structured one leads the result
+    rather than being displaced by the parse.
+    """
+
+    unmarked = _guarded_ballot("they vented", "under_gate_redirect")
+    assert ballot_rewrite_labels(unmarked) == ("under_gate_redirect",)
+    assert not ballot_rewrite_labels(_guarded_ballot("they vented", None))
+
+    disagreeing = _guarded_ballot(
+        UNCITED_ZERO_FLAG_EJECT_MARKER.format(target="p-5") + "they vented",
+        "under_gate_redirect",
+    )
+    assert ballot_rewrite_labels(disagreeing)[0] == "under_gate_redirect"
+
+
+def test_a_second_guard_survives_the_structured_reason_that_names_the_first() -> None:
+    """The structured field is authoritative, never exhaustive.
+
+    ``guard_rewrite_reason`` holds ONE reason, but a ballot can pass two guards:
+    an under-gate redirect whose redirected eject the citation gate then coerces
+    to SKIP. Reading the field alone would report only the redirect, silently
+    losing the coercion — the per-kind census would undercount it and
+    ``ballot_coerced_skip`` would read False on a ballot the citation gate really
+    did coerce. Planted as the actual two-guard recording, because today's bytes
+    carry no structured field and cannot exhibit it.
+    """
+
+    stacked = _guarded_ballot(
+        BALLOT_TARGET_REDIRECT_MARKER.format(original="p-2", target="p-5")
+        + UNCITED_ZERO_FLAG_EJECT_MARKER.format(target="p-5")
+        + "they vented",
+        "under_gate_redirect",
+    )
+    assert ballot_rewrite_labels(stacked) == ("under_gate_redirect", "uncited_coerced")
+    assert _ballot_is_coerced_skip(stacked)
+
+    # The same bytes WITHOUT the structured field must read identically, or the
+    # field's arrival would move a census it is supposed to leave alone.
+    legacy = _guarded_ballot(stacked.rationale_text, None)
+    assert set(ballot_rewrite_labels(legacy)) == set(ballot_rewrite_labels(stacked))
+    assert _ballot_is_coerced_skip(legacy)
+
+    # And the label the structured field names is not double-counted.
+    assert ballot_rewrite_labels(stacked).count("under_gate_redirect") == 1
 
 
 def test_the_training_marker_table_cannot_drift_from_the_display_one() -> None:
