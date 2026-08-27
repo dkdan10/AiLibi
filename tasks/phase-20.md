@@ -1,18 +1,21 @@
 # Phase 20 — Evidence honesty: the front door made true, the inference channel repaired, one pre-registered record
 
-STATUS: CLOSED 2026-08-26 (Task 20.42; `audits/audit-phase-20-close.md`) — all 43 dispatched
-contracts merged (2026-08-19 → 2026-08-26, PRs #351–#394) and the other 42 re-verified at close
-HEAD `937bd805` with two deviations recorded and none silent. The evidence-honesty substrate
-shipped and one pre-registered record was spent: the ratified decision rule returned **FINDING**
-(bar 1 non-direct accuracy 61/103 = 0.5922 against ≥ 0.60, bar 2 innocent ejections 42 against
-< 35 — both missed, neither re-priced), and on 2026-08-26 the owner **adopted the baseline-7
-substrate over that verdict by explicit override** (`audits/audit-phase-20-baseline-7.md` §6.1),
-so the eight levers graduated and the ladder tip stands at baseline 7. The default gate is green
-at close HEAD in BOTH the clean and the restored-evidence states — the pair the phase-19 close
-recorded as mutually exclusive, closed by Task 20.17 and re-run here; four findings are recorded
-and routed rather than fixed, the campaign tier's red among them. The next decision — the balance
-wave — is routed to the owner in the close audit's §4. The plan below is the ratified charter
-(the owner's merge of the planning PR ratified it, the 15.18 convention).
+STATUS: CLOSED 2026-08-26 (Task 20.42; `audits/audit-phase-20-close.md`) — 42 of the 43 dispatched
+contracts merged as PRs #351–#394 (2026-08-19 → 2026-08-26) and were re-verified at close HEAD
+`937bd805` with two deviations recorded and none silent; the 43rd is the close itself, whose own
+merge commit completes the phase. The evidence-honesty substrate shipped and one pre-registered
+record was spent: the ratified decision rule returned **FINDING** (bar 1 non-direct accuracy
+61/103 = 0.5922 against ≥ 0.60, bar 2 innocent ejections 42 against < 35 — both missed, neither
+re-priced), and on 2026-08-26 the owner **adopted the baseline-7 substrate over that verdict by
+explicit override** (`audits/audit-phase-20-baseline-7.md` §6.1), so the eight levers graduated
+and the ladder tip stands at baseline 7. The default gate is green at close HEAD in BOTH the clean
+and the restored-evidence states — the pair the phase-19 close recorded as mutually exclusive,
+closed by Task 20.17 and re-run here. Four defects were found at the close: three are recorded and
+routed rather than fixed (the campaign tier's red among them) and the fourth — a stale ladder-tip
+clause on the audits index — is corrected in the close's own PR, with the gate-coverage gap that
+let it survive routed. The next decision — the balance wave — is routed to the owner in the close
+audit's §4. The plan below is the ratified charter (the owner's merge of the planning PR ratified
+it, the 15.18 convention).
 Chartered from the three-track review of 2026-08-19
 (`audits/review-2026-08-19/`, the planning inputs, committed by this PR) and its synthesis
 (`audits/review-2026-08-19/D/FINAL-synthesis.md`); the phase shape, the decisions, the method

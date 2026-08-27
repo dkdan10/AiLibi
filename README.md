@@ -168,7 +168,7 @@ The review those lessons came out of is published in full — curated, indexed, 
 
 ## Project status
 
-Active. Phases 0–5 built the MVP; phases 6–19 pushed how well the agents reason, moved the eval onto a hosted model, and ran a four-phase ML program. Phase 20 — evidence honesty — closed 2026-08-26: its repairs shipped, its one pre-registered recording was spent, the rule returned a finding, and I adopted the new reference recording over that finding by explicit override. The whole close, including the defects it found in the tree it was closing, is in [audits/audit-phase-20-close.md](audits/audit-phase-20-close.md).
+Active. Phases 0–5 built the MVP; phases 6–19 pushed how well the agents reason, moved the eval onto a hosted model, and ran a four-phase ML program. Phase 20 — evidence honesty — closed 2026-08-26: its repairs shipped, its one pre-registered recording was spent, the rule returned a finding, and I adopted the new reference recording over that finding by explicit override. The whole close, including the defects it found in the tree it was closing, is in [the phase 20 close audit](audits/audit-phase-20-close.md).
 
 Four learned tactical policies each beat the scripted one on wins. None became the default, because each failed an evidence-quality bar I had written down *before* the measurement that judged it — so both of those phases closed having adopted nothing and moved no reference recording. That is what those two closes mean: the bar was pre-registered, the honest answer was "not yet", and I record the miss rather than move it. The current reference recording is the seventh, which the audits call [baseline 7](docs/glossary.md#baseline-n-the-reference-recording).
 

@@ -58,7 +58,16 @@ was in, so the state is recorded beside every row rather than assumed.
 | byte identity | `bash scripts/verify_samples.sh` | restored, **bare env** (`env -i`) | *"All 50 samples verified clean."* (4p1i) / *"All 50 samples verified clean."* (9p2i) — 100/100, with zero `AILIBI_*` exports of any kind. This is the invariant a FINDING-branch substrate could not have held (§3.3) | 2 s |
 | front-door truth | `uv run python scripts/check_doc_facts.py` | restored | *"Doc facts verified: README.md and .env.example agree with 2 sample manifests, audits/audit-phase-20-baseline-7.md, and the 22-lever substrate registry; eval/vote_correctness.py agrees with 4 recorded eval reports."* — exit 0 | 1 s |
 | evidence clean-up | `bash scripts/fetch_evidence.sh --clean` | → clean | *"Removed 2952 restored file(s). Tracked bytes are untouched."*; `git status --porcelain` empty afterwards | 23 s |
-| Pages deploy | `Deploy to GitHub Pages` (`.github/workflows/pages.yml:85`) | — | **success** on `937bd805` — run 33022737900, both jobs green (`Build the demo bundle` 39 s, `Deploy to GitHub Pages` 9 s incl. its own *"Verify the deployment answers"* step). The close commit's own deploy fires on merge, the workflow being `push`-on-`main` triggered | 57 s |
+| Pages deploy | `Deploy to GitHub Pages` (`.github/workflows/pages.yml:85`) | — | **success on `937bd805`** — run 33022737900, both jobs green (`Build the demo bundle` 39 s, `Deploy to GitHub Pages` 9 s incl. its own *"Verify the deployment answers"* step). **This is close HEAD, not the close commit** — see the note below | 57 s |
+
+**The Pages leg is the one that cannot complete before the merge, and it is not claimed as complete.**
+`pages.yml` triggers on `push` to `main`, so no run can exist for the close commit until the merge
+creates it. What is verified before the merge: the deploy is green on **close HEAD** (the row above),
+and the bundle builder that feeds it passes on **this PR's own tree** — `tests/scripts/test_build_demo_bundle.py`
+*"28 passed"* locally (§2, 20.7) and inside CI's `Project checks`. The remaining half — the run on
+the merge commit itself — fires automatically at merge and is the owner's to observe; the close does
+not assert it in advance. Nothing else in this audit depends on it: the bundle bakes the committed
+replay bytes, which the byte-identity and validity legs already certify.
 
 **And once more on the tree this close leaves behind.** The rows above are close HEAD itself, before
 this PR's own doc-only commits. Re-run on the final tree — the close audit landed, the registry row
@@ -117,21 +126,27 @@ Routed to the next phase's inputs as a prose-sweep item.
 
 Three contracts set a word budget in their Measurement field and no check enforces any of them
 (`grep -n 'word' scripts/check_doc_facts.py` finds no budget). Measured at close HEAD against each
-contract's own target, with the count at that contract's own merge beside it:
+contract's own target, with the count at that contract's own merge beside it — **and the merge
+column is itself over budget on all three**, which is the first half of the finding:
 
 | surface | contract target | at its own merge | at close HEAD |
 |---|---|---|---|
-| `README.md` | 20.12: ≤ ~1,800 (from 3,833) | 2,034 (`d86f979c`) | **3,368** |
-| `docs/reading-guide.md` | 20.12: ≤ ~900 (from 3,239) | 940 (`d86f979c`) | **1,303** |
-| `docs/ml-program.md` | 20.13: ≤ ~1,400 | 1,439 (`dc9d73b7`) | **1,838** |
-| `docs/lessons.md` | 20.40: 800–1,500 | 1,491 (`989f1ee2`) | 1,491 — **inside** |
+| `README.md` | 20.12: ≤ ~1,800 (from 3,833) | **2,034 — over** (`d86f979c`) | **3,368** |
+| `docs/reading-guide.md` | 20.12: ≤ ~900 (from 3,239) | **940 — over** (`d86f979c`) | **1,303** |
+| `docs/ml-program.md` | 20.13: ≤ ~1,400 | **1,439 — over** (`dc9d73b7`) | **1,838** |
+| `docs/lessons.md` | 20.40: 800–1,500 | 1,491 — inside (`989f1ee2`) | 1,491 — **inside** |
+
+**Two separate misses, and they are stated separately.** First, each budget was already exceeded at
+the merge of the contract that set it — README by 234 words, the reading guide by 40, the ML page
+by 39 — so the deviation originated at the owning merge and was not introduced by anything later.
+Second, four later contracts widened all three: 20.13's results table, 20.38's before/after column,
+20.39's media block and 20.41's tail-truth pass each added prose to pages whose budgets were
+already breached, taking README from 2,034 to 3,368.
 
 The honest reading, which is why this is recorded rather than absorbed: the front door ended the
-phase **12% shorter than at charter (3,833 → 3,368)**, not the 53% the target implied, and the two
-pages that grew most did so *after* the record, when 20.38's before/after column, 20.39's media
-block and 20.41's tail-truth pass each added their own prose. No single contract overshot by much;
-the sequence did. Routed as a next-phase item with the note that a budget nothing can fail is prose
-— Craft rule 2 applied to a documentation target.
+phase **12% shorter than at charter (3,833 → 3,368)**, not the 53% the target implied. Routed as a
+next-phase item with the note that a budget nothing can fail is prose — Craft rule 2 applied to a
+documentation target.
 
 ### F4 — the audits index states the wrong ladder tip, and no gate can catch it there
 
@@ -189,7 +204,7 @@ silent).**
 | 20.4 (#357) | `uv run pytest tests/api/test_replay_loader.py -q` | *"83 passed in 8.63s"* — the corrupt/empty/mistyped fixtures still return 200 through the listing and the cost endpoint | VERIFIED |
 | 20.5 (#351) | `uv run pytest tests/agents/test_prompt_loader.py -q` | *"56 passed in 0.28s"* — the one-notice-per-process pin holds; §1's bare-env `verify_samples.sh` emitted no notice line | VERIFIED |
 | 20.6 (#353) | `uv run pytest tests/eval/test_vote_correctness.py -q` + `check_doc_facts.py` | *"89 passed in 1.08s"*; the front-door check names *"eval/vote_correctness.py agrees with 4 recorded eval reports"* | VERIFIED |
-| 20.7 (#366) | `uv run pytest tests/scripts/test_build_demo_bundle.py -q` + the Pages job | *"28 passed in 2.94s"*; `Deploy to GitHub Pages` **success** on `937bd805` with its post-deploy verification step green (§1) | VERIFIED |
+| 20.7 (#366) | `uv run pytest tests/scripts/test_build_demo_bundle.py -q` + the Pages job | *"28 passed in 2.94s"*, including the out-of-repo bake and the planted leg; `Deploy to GitHub Pages` **success on close HEAD** with its post-deploy verification step green. The run on the close *commit* fires at merge and is not claimed here (§1) | VERIFIED |
 | 20.8 (#363) | `uv run pytest eval/leak_test.py tests/observation tests/test_firewall.py tests/training/test_leak_gate.py -q` | *"154 passed in 16.30s"*. The entitlement gate can fail: `tests/test_firewall.py:908` plants **M6** (`_visible_body_ids` without its room filter) and `:1017` asserts the scan catches it, with M1, M10 and a widened `visible_rooms_for_player` beside it. Before the change the same suite ran **125 passed with M6 planted** (PR #363's own recorded run) | VERIFIED |
 | 20.9 (#352) | `uv run lint-imports` (§1) | *"Analyzed 152 files, 794 dependencies."* / *"Contracts: 4 kept, 0 broken."* against the review's `Analyzed 89 files, 379 dependencies`; the firewall suite's planted-route legs are inside the 154 above and `git status --porcelain` is empty after them | VERIFIED |
 | 20.10 (#356) | `uv run python scripts/validity_gate.py <set>` × 4 | *"Validity gate PASSED (all checks green)."* on all four recorded sets, each with *"byte_identical_reconstruction: 0 samples drifted"* and *"cost_and_provenance_exact: model='Qwen/Qwen3.6-27B', 4 prompt versions, substrate stamped exact"* over 50 / 150 / 50 / 50 games | VERIFIED |
@@ -227,10 +242,11 @@ silent).**
 | 20.43 (#387) | `uv run pytest tests/eval/test_evidence_honesty.py -q` + the counterfactual pins | *"95 passed in 39.31s"* and *"5 passed"* — the movement-sided sighting resolves and a duplicated flag counts once. The production-side duplicate mint was routed POST-record and **rides inside the recorded bytes**, which the record states rather than hides (`…baseline-7.md` §10.2) | VERIFIED |
 
 **On the two deviations.** Both are F3 and both are the same shape: a word budget written into a
-contract's Measurement field, met (narrowly) at that contract's own merge, and exceeded at close HEAD
-because four later contracts each added prose to the same page. Neither is silent, neither is
-softened into a pass, and neither is fixed here — the close verifies; it does not edit the front
-door's content.
+contract's Measurement field, **already exceeded at that contract's own merge** (README 2,034
+against ≤ ~1,800, the reading guide 940 against ≤ ~900, the ML page 1,439 against ≤ ~1,400), and
+exceeded further at close HEAD because four later contracts each added prose to the same pages.
+Neither is silent, neither is softened into a pass, and neither is fixed here — the close verifies;
+it does not edit the front door's content.
 
 **Deviations already recorded at their own merges** are not re-litigated here; they live in
 `tasks/phase-20.md` beside their contracts as orchestrator-ratified prose records (20.24, 20.25,
@@ -345,15 +361,24 @@ place it slipped is the one place no gate looked.
 (`audits/review-2026-08-19/README.md`), which is one row per finding closed — the map's own rule
 since 20.40, enforced in the default tier by `scripts/check_doc_facts.py::check_review_map` and
 proved green in §1. This close **adds no row**: 20.42 and 20.43 close no review finding, and inventing
-one would fail that gate. Every finding this phase acted on resolves to exactly one outcome:
+one would fail that gate.
+
+**Those 40 acted-on ids partition exactly**, 24 + 14 + 2, across the first three rows below — no id
+appears twice and none is missing. The last two rows are **not** part of that partition and are not
+counted into it: they describe what happened to findings the phase did **not** act on, and two ids
+appear in them as *facets* rather than as whole findings, which is stated rather than glossed —
+`G-1`'s 73.4% headline was retracted while the finding's substance ("nothing in memory said where
+the agent itself had been") is what 20.24 closed, and `C-33`'s load-bearing risk was refuted while
+its duplication remains a maintenance item on the backlog. Those are the only two ids whose facets
+land in different rows.
 
 | outcome | count | the findings |
 |---|---|---|
 | **fixed** (RR-free repair, merged and re-verified) | 24 | `C-1`, `C-3`, `C-4`, `C-5`, `C-6`, `C-7`, `C-8`, `C-9`, `C-31`, `C-32`, `C-34`, `C-35`, `C-42`, `C-43`, `C-48`, `C-64`, `C-74`, `C-96`, `C-104`, `C-113`, `C-125`, `G-12`, `G-38`, `G-41` |
 | **lever-ON-and-graduated** (shipped default-OFF, measured, adopted at the record) | 14 | `C-2`/`G-3` (20.23), `G-1` (20.24), `G-9` (20.25), `C-11`/`G-2` (20.26), `C-67`/`G-25` (20.28), `G-35` (20.29), `C-73`/`G-34` (20.30), `C-129`/`G-23`/`G-27` (20.31) |
 | **recorded-as-finding** (answered by disclosure, not by change) | 2 | `G-37` — the +1 agent clock is *labelled* on the spectator surface, because changing it would move every recorded tick stamp; `C-88` — the degenerate fake-provider meeting is *disclosed* on the front door, with a real report handed to the reader instead |
-| **retracted by the review's own verifier** | 5 | `G-1`'s 73.4% headline, `G-6`, `G-7`'s headline, `G-4`'s vent half, `C-33`'s load-bearing risk (§1 of the index) |
-| **triaged backlog** | the remainder of 171 | the balance wave's seven (§4), six begun-not-finished (`C-79`, `C-80`, `C-101`, `C-107`, `C-126`, `G-29`), five named-but-deliberately-not-closed (`C-46`, `C-83`, `C-130`, `C-36`, `C-72`), two decomposition refusals (`C-62`, `C-33`'s merge), the history rewrite (`C-45`), and **roughly 94 P2 code findings** plus the text-hygiene remainder (`G-26`, `G-36`, `G-29` beyond the prompt change) and the walker flag matrix (`C-37`) |
+| *not acted on —* **retracted by the review's own verifier** | 5 claims | `G-1`'s 73.4% headline, `G-6`, `G-7`'s headline, `G-4`'s vent half, `C-33`'s load-bearing risk (§1 of the index) |
+| *not acted on —* **triaged backlog** | the rest of the 171 | the balance wave's seven (§4), six begun-not-finished (`C-79`, `C-80`, `C-101`, `C-107`, `C-126`, `G-29`), five named-but-deliberately-not-closed (`C-46`, `C-83`, `C-130`, `C-36`, `C-72`), two decomposition refusals (`C-62`, and `C-33`'s duplication), the history rewrite (`C-45`), and **roughly 94 P2 code findings** plus the text-hygiene remainder (`G-26`, `G-36`, `G-29` beyond the prompt change) and the walker flag matrix (`C-37`) |
 
 The backlog is named as a backlog with its size, which is the synthesis's own instruction: *"A
 triaged backlog reads better than a half-done sweep."* Nothing was built for a claim its own
