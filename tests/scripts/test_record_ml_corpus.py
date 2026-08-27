@@ -1182,7 +1182,31 @@ def test_seeds_composes_with_dry_run_and_set() -> None:
     assert proc.returncode == 0
     # De-duplicated and normalized, so a typo cannot double-record a seed.
     assert "[dry-run] seed subset: --seeds 1000,1001" in proc.stdout
-    assert "will NOT freeze a subset" in proc.stdout
+    assert "a subset run finalizes NOTHING" in proc.stdout
+
+
+def test_seeds_refuses_a_digit_string_that_would_overflow_bash_arithmetic() -> None:
+    # $(( )) is fixed-width: 18446744073709552616 wraps to exactly 1000, which is
+    # inside BOTH locked ranges, so converting before validating would silently
+    # record or replace a real game from a nonsense input. Rejected on width,
+    # before any arithmetic touches it.
+    assert 18446744073709552616 % 2**64 == 1000  # the alias this refuses
+
+    proc = _run("--set", "4p1i", "--dry-run", "--seeds", "18446744073709552616")
+
+    assert proc.returncode != 0
+    out = proc.stdout + proc.stderr
+    assert "has more digits than any seed can" in out
+    assert "18446744073709552616" in out
+
+
+def test_seeds_still_accepts_a_leading_zero_alias() -> None:
+    # The width guard must not cost the canonicalization it replaced: 01000 is
+    # still seed 1000, and naming it twice still de-duplicates to one.
+    proc = _run("--set", "4p1i", "--dry-run", "--seeds", "01000,1000")
+
+    assert proc.returncode == 0
+    assert "[dry-run] seed subset: --seeds 1000" in proc.stdout
 
 
 def test_seeds_refuses_a_seed_outside_the_locked_range(tmp_path: Path) -> None:
@@ -1336,6 +1360,74 @@ def test_fake_run_records_seeds_end_to_end_and_stops_at_the_freeze_refusal(
     assert not (set_dir / "splits.json").exists()
 
 
+def test_a_subset_run_finalizes_nothing_even_on_a_complete_set(
+    tmp_path: Path,
+) -> None:
+    # The repair case the seed-count check alone cannot express: every locked
+    # seed IS on disk after the repair, so the count passes — and the finalize
+    # would then rebuild the eval report, rewrite splits.json and re-stamp the
+    # FROZEN line under the REPAIR run's sha. A one-seed operation must not
+    # restamp set-level provenance as a side effect, so a subset run finalizes
+    # nothing and says which command does.
+    # The committed 4p1i corpus is the real, FROZEN, provenance-clean set an
+    # operator would be repairing — copied to scratch, with one seed dropped as
+    # if it had been found bad. Real bytes are required: the pre-spend
+    # provenance guard reads every replay already present, so stubs would be
+    # refused long before the finalize this case is about.
+    corpus_root = tmp_path / "ml_corpus"
+    set_dir = corpus_root / "4p1i"
+    shutil.copytree(_REPO_ROOT / "replays" / "ml_corpus" / "4p1i", set_dir)
+    (set_dir / "replay-seed-1000.jsonl").unlink()
+    manifest = set_dir / "MANIFEST.md"
+    frozen_before = [
+        line
+        for line in manifest.read_text(encoding="utf-8").splitlines()
+        if line.startswith("**FROZEN**")
+    ]
+    assert len(frozen_before) == 1, "the committed corpus should arrive frozen"
+    # The set-level artifacts a finalize would rewrite, as they stand.
+    set_level_before = {
+        name: (set_dir / name).read_bytes()
+        for name in ("splits.json", "tournament-eval-report.json")
+        if (set_dir / name).is_file()
+    }
+    assert set_level_before, "the committed corpus should ship its set-level artifacts"
+
+    proc = _run(
+        "--set", "4p1i", "--seeds", "1000", env=_fake_env(corpus_root), timeout=900
+    )
+    out = proc.stdout + proc.stderr
+
+    # The repair itself worked...
+    assert (set_dir / "replay-seed-1000.jsonl").is_file(), out
+    # ... and every locked seed is now present, so the count check PASSED — only
+    # the subset guard can be what stopped the finalize.
+    assert "is not the exact locked seed set" not in out
+    assert "--seeds recorded a subset, so the finalize is skipped; NOT freezing" in out
+    assert "Re-run without --seeds" in out
+    # Nothing set-level was rebuilt.
+    assert {
+        name: (set_dir / name).read_bytes() for name in set_level_before
+    } == set_level_before
+    # And the set does not claim to be frozen: the per-seed MANIFEST update
+    # re-renders the table and drops the stale FROZEN line (by design — an
+    # incomplete or repaired set must never be left LOOKING frozen), while the
+    # skipped finalize adds no new one. So a repair leaves the set honestly
+    # unfrozen rather than re-stamped under the repair run's sha, which is the
+    # whole point of refusing to finalize here.
+    frozen_after = [
+        line
+        for line in manifest.read_text(encoding="utf-8").splitlines()
+        if line.startswith("**FROZEN**")
+    ]
+    assert frozen_after == []
+    assert frozen_before[0] not in manifest.read_text(encoding="utf-8")
+    # ... and the closing block does not print acceptance commands for a set it
+    # never froze.
+    assert "no set was finalized or frozen" in proc.stdout
+    assert "validity_gate.py" not in proc.stdout
+
+
 def test_fake_run_bash_trace_names_the_worker_pool(tmp_path: Path) -> None:
     # Coverage proof that survives a reworded progress string: the xtrace of a
     # real (non-dry-run) recording must show the four pool functions invoked.
@@ -1455,6 +1547,63 @@ def test_a_failed_seed_fails_the_run_loud_and_preserves_what_recorded(
 
 
 # -- the provider seam: `fake` on the sibling's terms, and no looser -----------
+
+
+def test_the_dry_run_plan_describes_the_provider_the_real_run_would_use(
+    tmp_path: Path,
+) -> None:
+    # --dry-run is documented as "the resolved plan", so under an explicit
+    # `fake` it must not print a Featherless plan, claim an API key is needed, or
+    # show AILIBI_LLM_PROVIDER=featherless in the invocation it previews — the
+    # identical real command runs fake, and a preview that describes a different
+    # command is worse than no preview.
+    corpus_root = tmp_path / "ml_corpus"
+    proc = _run("--set", "4p1i", "--dry-run", env=_fake_env(corpus_root), timeout=180)
+    out = proc.stdout
+
+    assert proc.returncode == 0, out + proc.stderr
+    assert "[dry-run] provider: fake (hermetic $0" in out
+    assert "would require no API key" in out
+    assert f"[dry-run] model: {_FAKE_MODEL}" in out
+    assert "AILIBI_LLM_PROVIDER=fake AILIBI_PROMPT_SET=qwen3_6_27b" in out
+    assert "would require FEATHERLESS_API_KEY" not in out
+    assert "AILIBI_LLM_PROVIDER=featherless" not in out
+    # A preview writes nothing, including under fake.
+    assert not corpus_root.exists()
+
+
+def test_the_dry_run_refuses_a_fake_target_inside_the_committed_tree() -> None:
+    # A preview that cannot refuse would let an operator confirm a plan the real
+    # run rejects — the reason the lever preflight already runs in the dry-run.
+    env = dict(
+        _clean_env(), AILIBI_LLM_PROVIDER="fake", AILIBI_PROMPT_SET="qwen3_6_27b"
+    )
+    proc = _run("--dry-run", env=env, timeout=180)
+
+    assert proc.returncode != 0
+    assert "may not write into the repository's replays/ tree" in (
+        proc.stdout + proc.stderr
+    )
+
+
+def test_the_dry_run_still_describes_featherless_by_default() -> None:
+    # The default path is untouched: no provider export still previews the
+    # locked hosted plan, key and all.
+    proc = _run("--set", "4p1i", "--dry-run")
+
+    assert proc.returncode == 0
+    assert "[dry-run] provider: featherless (LOCKED" in proc.stdout
+    assert "would require FEATHERLESS_API_KEY" in proc.stdout
+    assert f"[dry-run] model: {_BASELINE_MODEL}" in proc.stdout
+    assert "AILIBI_LLM_PROVIDER=featherless" in proc.stdout
+
+
+def test_the_dry_run_refuses_an_unsupported_provider() -> None:
+    env = dict(_clean_env(), AILIBI_LLM_PROVIDER="anthropic")
+    proc = _run("--dry-run", env=env)
+
+    assert proc.returncode != 0
+    assert "records ONLY on featherless" in proc.stdout + proc.stderr
 
 
 def test_fake_target_guard_resolves_symlinks_and_dot_dot(tmp_path: Path) -> None:

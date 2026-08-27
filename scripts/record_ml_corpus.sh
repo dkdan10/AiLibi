@@ -65,7 +65,8 @@
 #                         replays already on disk, then exit — no network, no record
 #   --seeds N,N,N         record only these seeds of the selected set's locked
 #                         range (an operator mode: re-record one bad seed without
-#                         a multi-hour leg). A subset can never freeze
+#                         a multi-hour leg). A subset run finalizes nothing;
+#                         re-run without it to freeze
 #   --expect-levers       the toggleable substrate levers this record expects ON
 #                         (comma-separated registry keys; default: none). The live
 #                         slate must match it exactly, and every recorded game_over
@@ -200,9 +201,11 @@ Usage: $(basename "$0") [--set 9p2i|4p1i|both] [--dry-run | --splits-only]
   --seeds N,N,N         record only these seeds of the selected set's LOCKED
                         range, comma-separated. The operator mode for repairing a
                         recorded set: one bad seed re-records in minutes instead
-                        of a whole multi-hour leg. A seed outside the range is
-                        refused before anything stages, and a subset never
-                        freezes — the finalize demands the exact locked set.
+                        of a whole multi-hour leg. A seed outside the range of ANY
+                        selected set is refused before anything stages, and a
+                        subset run finalizes nothing — no eval report, no
+                        splits.json, no FROZEN line — so re-run WITHOUT --seeds to
+                        freeze once the repair is in.
                         Mutually exclusive with --splits-only.
   --expect-levers       the toggleable substrate levers this record expects ON,
                         comma-separated (default: none — the bare slate). The
@@ -308,7 +311,7 @@ fi
 # token (e.g. "1 2") is rejected rather than silently collapsed to seed 12.
 # Mirrors scripts/refresh_samples.sh's validator.
 validate_seeds() {
-  local csv="$1" token seen=""
+  local csv="$1" token raw seen=""
   local -a normalized=()
   IFS=',' read -ra tokens <<<"$csv"
   for token in "${tokens[@]}"; do
@@ -318,7 +321,19 @@ validate_seeds() {
       return 1
     fi
     token="${BASH_REMATCH[1]}"
-    token="$((10#$token))" # canonicalize (01 -> 1) so numeric aliases de-dup
+    raw="$token"
+    # Canonicalize (01 -> 1) so numeric aliases de-dup, TEXTUALLY: $(( )) is
+    # fixed-width, so converting first would let an over-long digit string WRAP
+    # into a valid-looking seed -- 18446744073709552616 becomes 1000, which is
+    # in both locked ranges and would record or replace the wrong game. Nothing
+    # arithmetic touches a seed until its width is known to be safe.
+    while [[ "$token" == 0* && ${#token} -gt 1 ]]; do
+      token="${token#0}"
+    done
+    if [[ ${#token} -gt 18 ]]; then
+      echo "Error: --seeds entry '$raw' has more digits than any seed can (it would overflow the shell's arithmetic and alias a real seed)." >&2
+      return 1
+    fi
     # De-duplicate (keep first occurrence) so a typo like "1000,1000" or
     # "1000,01000" cannot double-record a seed.
     case ",$seen," in
@@ -902,56 +917,7 @@ if [[ "$splits_only" -eq 1 ]]; then
   exit 0
 fi
 
-# --- dry-run: print the plan; touch nothing ---------------------------------
-
-if [[ "$dry_run" -eq 1 ]]; then
-  echo "[dry-run] sets: ${sets[*]}"
-  echo "[dry-run] corpus root: $CORPUS_ROOT"
-  echo "[dry-run] provider: featherless (LOCKED — the corpus is baseline-6)"
-  echo "[dry-run] preflight: would require FEATHERLESS_API_KEY (hosted run; \$0 provider-keyed cost)"
-  echo "[dry-run] prompt set: $REQUIRED_PROMPT_SET (must be exported as AILIBI_PROMPT_SET)"
-  echo "[dry-run] model: $DEFAULT_FEATHERLESS_MODEL (meeting + trigger pinned; a non-baseline AILIBI_LLM_MEETING_MODEL/AILIBI_LLM_TRIGGER_MODEL override is refused)"
-  echo "[dry-run] endpoint: $DEFAULT_FEATHERLESS_BASE_URL (pinned; a non-default AILIBI_FEATHERLESS_BASE_URL override is refused)"
-  echo "[dry-run] prompt versions: locked to [$REQUIRED_PROMPT_VERSIONS] (the registry is asserted at preflight; rows off this map are refused at freeze)"
-  echo "[dry-run] substrate flags: expected levers ON = $expect_levers_desc; every other live toggle OFF; the graduated levers unconditional ON"
-  echo "[dry-run] substrate-lever preflight: would require the live lever slate to equal that expectation exactly and refuse before any seed stages — an expected-ON lever left unexported and an unexpected AILIBI_* export are both named"
-  echo "[dry-run] tactical policy stamp: $POLICY_STAMP (15.9 FSM-default on every game)"
-  if [[ "$REFRESH_WORKERS" -gt 1 ]]; then
-    echo "[dry-run] seed workers: $REFRESH_WORKERS parallel (each records one seed, then pulls the next available seed from the queue; Featherless: 2 units per 27B request → 4-unit cap)"
-  else
-    echo "[dry-run] seed workers: 1 (sequential)"
-  fi
-  echo "[dry-run] seed crash-retry: up to $SEED_MAX_ATTEMPTS attempt(s) per seed on a transport/crash error (recorded parse failures are non-fatal)"
-  if [[ -n "$requested_seeds" ]]; then
-    echo "[dry-run] seed subset: --seeds $requested_seeds (only these of the locked range record; a seed outside it is refused, and the finalize will NOT freeze a subset)"
-  fi
-  echo "[dry-run] resume: seeds whose replay already exists in the set dir are skipped (a re-run records only the missing ones; a present replay must carry the explicit $POLICY_STAMP tactical-policy stamp or the run is refused)"
-  echo "[dry-run] split rule: $SPLIT_RULE_DESC (by game; no game in two splits)"
-  for set_name in "${sets[@]}"; do
-    read -r start count np ni tpc <<<"$(set_config "$set_name")"
-    last=$((start + count - 1))
-    set_dir="$CORPUS_ROOT/$set_name"
-    echo "[dry-run] --- set $set_name ---"
-    echo "[dry-run]   seed range: $start..$last ($count games)"
-    echo "[dry-run]   roster: num_players=$np num_impostors=$ni tasks_per_crewmate=$tpc"
-    echo "[dry-run]   output dir: $set_dir"
-    echo "[dry-run]   roster descriptor: would ensure $set_dir/roster.json = {num_players: $np, num_impostors: $ni, tasks_per_crewmate: $tpc}"
-    echo "[dry-run]   per seed, would run via a temp stage (then move the replay in and update that seed's manifest row):"
-    echo "[dry-run]     AILIBI_LLM_PROVIDER=featherless AILIBI_PROMPT_SET=$REQUIRED_PROMPT_SET uv run python scripts/run_tournament.py --start-seed <seed> --num-games 1 --output-dir <stage> --num-players $np --num-impostors $ni --tasks-per-crewmate $tpc --tactical-policy-stamp $POLICY_STAMP --force"
-    echo "[dry-run]   manifest: $set_dir/MANIFEST.md (rows carry the $POLICY_STAMP policy column)"
-    echo "[dry-run]   eval report: would rebuild $set_dir/tournament-eval-report.json (scripts/build_sample_report.py; \$0, no provider)"
-    echo "[dry-run]   splits: would write $set_dir/splits.json ($SPLIT_RULE_DESC)"
-    echo "[dry-run]   freeze: would append a FROZEN line naming the git_sha to $set_dir/MANIFEST.md"
-  done
-  echo "[dry-run] acceptance (per set, before merge): scripts/validity_gate.py <set> --expected-model $DEFAULT_FEATHERLESS_MODEL --require-zero-cost --expected-prompt-versions $REQUIRED_PROMPT_VERSIONS_CLI; scripts/verify_samples.sh <set>"
-  echo "[dry-run] no API calls made; no files written."
-  if ! substrate_lever_preflight; then
-    exit 1
-  fi
-  exit 0
-fi
-
-# --- real path: preflight (provider LOCKED to featherless) -------------------
+# --- provider resolution (BEFORE the dry-run: the plan must be the real one) --
 
 # Collapse `.` and `..` segments in an absolute path, textually. Used only on the
 # not-yet-created tail below, where the kernel cannot resolve them but `mkdir -p`
@@ -1011,11 +977,29 @@ resolve_physical_path() {
 # UNSET or empty variable still resolves to featherless, so the silent-fake path
 # stays closed: `fake` is reachable only by naming it, and the target guard below
 # then confines such a run to a scratch dir outside replays/.
+#
+# Resolved HERE, above the dry-run, because --dry-run prints "the resolved plan":
+# a preview that named featherless while the identical real invocation would run
+# fake describes a different command than the one the operator is about to type.
+# The refusals run in the preview too, for the reason the lever preflight already
+# does — reading the environment writes nothing, and a preview that cannot refuse
+# would let an operator confirm a plan the real run rejects.
 PROVIDER="$(printf '%s' "${AILIBI_LLM_PROVIDER:-featherless}" | tr '[:upper:]' '[:lower:]')"
 if [[ "$PROVIDER" != "featherless" && "$PROVIDER" != "fake" ]]; then
   echo "Error: the ML-calibration corpus is baseline-6, so it records ONLY on featherless." >&2
   echo "       Unset AILIBI_LLM_PROVIDER or set it to 'featherless' (got '$PROVIDER')." >&2
   exit 1
+fi
+
+# The model this run actually records with, and therefore the model its MANIFEST
+# rows are attributed to. The fake client answers with its own tier id whatever
+# the env says, so a hermetic run must never stamp the Featherless id onto rows
+# it did not record — that is the one way a scratch row could later read as a
+# corpus row.
+if [[ "$PROVIDER" == "fake" ]]; then
+  ACTIVE_MODEL="$DEFAULT_FAKE_MODEL"
+else
+  ACTIVE_MODEL="$DEFAULT_FEATHERLESS_MODEL"
 fi
 
 if [[ "$PROVIDER" == "fake" ]]; then
@@ -1043,10 +1027,73 @@ if [[ "$PROVIDER" == "fake" ]]; then
     exit 1
   fi
   echo "Fake-provider target OK: $_corpus_root_phys is outside $_replays_root (hermetic \$0 recording, no API key)."
-elif [[ -z "${FEATHERLESS_API_KEY:-}" ]]; then
-  echo "Error: FEATHERLESS_API_KEY must be set to record the ML-calibration corpus." >&2
-  exit 1
-else
+fi
+
+# --- dry-run: print the plan; touch nothing ---------------------------------
+
+if [[ "$dry_run" -eq 1 ]]; then
+  echo "[dry-run] sets: ${sets[*]}"
+  echo "[dry-run] corpus root: $CORPUS_ROOT"
+  if [[ "$PROVIDER" == "fake" ]]; then
+    echo "[dry-run] provider: fake (hermetic \$0 — NOT a corpus recording; the corpus root must lie outside $REPO_ROOT/replays)"
+    echo "[dry-run] preflight: would require no API key (the fake provider makes no call)"
+  else
+    echo "[dry-run] provider: featherless (LOCKED — the corpus is baseline-6)"
+    echo "[dry-run] preflight: would require FEATHERLESS_API_KEY (hosted run; \$0 provider-keyed cost)"
+  fi
+  echo "[dry-run] prompt set: $REQUIRED_PROMPT_SET (must be exported as AILIBI_PROMPT_SET)"
+  echo "[dry-run] model: $ACTIVE_MODEL (meeting + trigger pinned; a non-baseline AILIBI_LLM_MEETING_MODEL/AILIBI_LLM_TRIGGER_MODEL override is refused)"
+  echo "[dry-run] endpoint: $DEFAULT_FEATHERLESS_BASE_URL (pinned; a non-default AILIBI_FEATHERLESS_BASE_URL override is refused)"
+  echo "[dry-run] prompt versions: locked to [$REQUIRED_PROMPT_VERSIONS] (the registry is asserted at preflight; rows off this map are refused at freeze)"
+  echo "[dry-run] substrate flags: expected levers ON = $expect_levers_desc; every other live toggle OFF; the graduated levers unconditional ON"
+  echo "[dry-run] substrate-lever preflight: would require the live lever slate to equal that expectation exactly and refuse before any seed stages — an expected-ON lever left unexported and an unexpected AILIBI_* export are both named"
+  echo "[dry-run] tactical policy stamp: $POLICY_STAMP (15.9 FSM-default on every game)"
+  if [[ "$REFRESH_WORKERS" -gt 1 ]]; then
+    echo "[dry-run] seed workers: $REFRESH_WORKERS parallel (each records one seed, then pulls the next available seed from the queue; Featherless: 2 units per 27B request → 4-unit cap)"
+  else
+    echo "[dry-run] seed workers: 1 (sequential)"
+  fi
+  echo "[dry-run] seed crash-retry: up to $SEED_MAX_ATTEMPTS attempt(s) per seed on a transport/crash error (recorded parse failures are non-fatal)"
+  if [[ -n "$requested_seeds" ]]; then
+    echo "[dry-run] seed subset: --seeds $requested_seeds (only these record; a seed outside any selected set's locked range is already refused, and a subset run finalizes NOTHING — no report, no splits, no FROZEN line)"
+  fi
+  echo "[dry-run] resume: seeds whose replay already exists in the set dir are skipped (a re-run records only the missing ones; a present replay must carry the explicit $POLICY_STAMP tactical-policy stamp or the run is refused)"
+  echo "[dry-run] split rule: $SPLIT_RULE_DESC (by game; no game in two splits)"
+  for set_name in "${sets[@]}"; do
+    read -r start count np ni tpc <<<"$(set_config "$set_name")"
+    last=$((start + count - 1))
+    set_dir="$CORPUS_ROOT/$set_name"
+    echo "[dry-run] --- set $set_name ---"
+    echo "[dry-run]   seed range: $start..$last ($count games)"
+    echo "[dry-run]   roster: num_players=$np num_impostors=$ni tasks_per_crewmate=$tpc"
+    echo "[dry-run]   output dir: $set_dir"
+    echo "[dry-run]   roster descriptor: would ensure $set_dir/roster.json = {num_players: $np, num_impostors: $ni, tasks_per_crewmate: $tpc}"
+    echo "[dry-run]   per seed, would run via a temp stage (then move the replay in and update that seed's manifest row):"
+    echo "[dry-run]     AILIBI_LLM_PROVIDER=$PROVIDER AILIBI_PROMPT_SET=$REQUIRED_PROMPT_SET uv run python scripts/run_tournament.py --start-seed <seed> --num-games 1 --output-dir <stage> --num-players $np --num-impostors $ni --tasks-per-crewmate $tpc --tactical-policy-stamp $POLICY_STAMP --force"
+    echo "[dry-run]   manifest: $set_dir/MANIFEST.md (rows carry the $POLICY_STAMP policy column)"
+    echo "[dry-run]   eval report: would rebuild $set_dir/tournament-eval-report.json (scripts/build_sample_report.py; \$0, no provider)"
+    echo "[dry-run]   splits: would write $set_dir/splits.json ($SPLIT_RULE_DESC)"
+    echo "[dry-run]   freeze: would append a FROZEN line naming the git_sha to $set_dir/MANIFEST.md"
+  done
+  echo "[dry-run] acceptance (per set, before merge): scripts/validity_gate.py <set> --expected-model $DEFAULT_FEATHERLESS_MODEL --require-zero-cost --expected-prompt-versions $REQUIRED_PROMPT_VERSIONS_CLI; scripts/verify_samples.sh <set>"
+  echo "[dry-run] no API calls made; no files written."
+  if ! substrate_lever_preflight; then
+    exit 1
+  fi
+  exit 0
+fi
+
+# --- real path: the remaining preflights (the provider resolved above) -------
+
+# The API key is the one preflight the fake arm skips: a hermetic $0 run has no
+# key to check, and what stands in for it — where the run may WRITE — was already
+# enforced by the target guard above. Every other pin below runs unchanged under
+# both providers.
+if [[ "$PROVIDER" == "featherless" ]]; then
+  if [[ -z "${FEATHERLESS_API_KEY:-}" ]]; then
+    echo "Error: FEATHERLESS_API_KEY must be set to record the ML-calibration corpus." >&2
+    exit 1
+  fi
   echo "Using Featherless API key prefix: ${FEATHERLESS_API_KEY:0:8}"
 fi
 
@@ -1119,17 +1166,6 @@ echo "Locked prompt versions OK: $REQUIRED_PROMPT_SET resolves to the baseline-6
 # fake output at $0 with the wrong model. An unset variable resolved to
 # featherless above, so that silent-fake path stays closed.
 export AILIBI_LLM_PROVIDER="$PROVIDER"
-
-# The model this run actually records with, and therefore the model its MANIFEST
-# rows are attributed to. The fake client answers with its own tier id whatever
-# the env says, so a hermetic run must never stamp the Featherless id onto rows
-# it did not record — that is the one way a scratch row could later read as a
-# corpus row.
-if [[ "$PROVIDER" == "fake" ]]; then
-  ACTIVE_MODEL="$DEFAULT_FAKE_MODEL"
-else
-  ACTIVE_MODEL="$DEFAULT_FEATHERLESS_MODEL"
-fi
 
 # Provenance shared by every seed in this run.
 git_sha="$(git -C "$REPO_ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
@@ -1477,6 +1513,19 @@ record_set() {
     return 1
   fi
 
+  # A --seeds run finalizes NOTHING, even when every locked seed happens to be on
+  # disk. The count check above cannot express this: repairing one seed of an
+  # otherwise-complete set leaves all 50 present, so it passes, and the finalize
+  # would rebuild the eval report, rewrite splits.json and re-stamp the FROZEN
+  # line under the REPAIR run's sha — set-level provenance a one-seed operation
+  # must not restamp as a side effect. Finalizing is a deliberate act: re-run
+  # without --seeds, which records nothing (every seed is present) and freezes.
+  if [[ -n "$requested_fence" ]]; then
+    echo "Set $set_name: --seeds recorded a subset, so the finalize is skipped; NOT freezing."
+    echo "  Re-run without --seeds to rebuild the eval report + splits.json and freeze."
+    return 0
+  fi
+
   # Backfill MANIFEST rows for seeds that have a replay on disk but NO row (the
   # crash window: a replay was moved into place but its per-seed MANIFEST update
   # never ran); $0, no provider call. ONLY row-less seeds are stamped — seeds
@@ -1552,7 +1601,13 @@ for set_name in "${sets[@]}"; do
 done
 
 corpus_wall=$(($(date +%s) - corpus_start))
-if [[ "$overall_status" -eq 0 ]]; then
+if [[ "$overall_status" -eq 0 && -n "$requested_seeds" ]]; then
+  # A subset run recorded seeds and finalized nothing, so it must not print the
+  # acceptance block: those commands gate a FROZEN set, and nothing was frozen.
+  echo "===================================================================="
+  echo "Seed subset recorded in $((corpus_wall / 60))m$((corpus_wall % 60))s; no set was finalized or frozen."
+  echo "Re-run without --seeds to rebuild the eval report + splits.json, freeze, and print the acceptance commands."
+elif [[ "$overall_status" -eq 0 ]]; then
   echo "===================================================================="
   echo "Corpus recording complete in $((corpus_wall / 60))m$((corpus_wall % 60))s."
   echo "Acceptance (run per set before committing the PR):"
