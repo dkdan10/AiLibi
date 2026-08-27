@@ -1602,9 +1602,7 @@ def _sole_changed_line(before: str, after: str) -> tuple[str, str]:
 def _belief_row(view: str, player_id: str) -> str:
     """The one rendered belief row for ``player_id`` (fails loud if absent)."""
 
-    rows = [
-        line for line in view.splitlines() if line.startswith(f"- {player_id}: ")
-    ]
+    rows = [line for line in view.splitlines() if line.startswith(f"- {player_id}: ")]
     assert len(rows) == 1, f"expected one belief row for {player_id}, got {rows!r}"
     return rows[0]
 
@@ -1706,9 +1704,7 @@ class TestLastSeenFromEverySighting:
         memory = AgentMemory()
         memory.episodic.append(_self_state_event(tick=0, agent_id="p-6"))
         memory.beliefs.adjust_suspicion("p-3", delta=0.4)
-        memory.episodic.append(
-            _saw_player_event(tick=6, player_id="p-3", room="LABS")
-        )
+        memory.episodic.append(_saw_player_event(tick=6, player_id="p-3", room="LABS"))
         memory.episodic.append(
             _saw_player_move_event(
                 tick=8, player_id="p-3", from_room="LABS", to_room="MEDBAY"
@@ -1795,7 +1791,8 @@ class TestLastSeenFromEverySighting:
         # overwrites, so the move row -- which also states where the subject came
         # from -- is the one that lands. Driven through the real ingest so the
         # ordering comes from production code rather than from this test's hand.
-        from agents.perception import MovedPlayerView, PlayerView, ingest_packet
+        from agents.perception import ingest_packet
+        from observation.packet import MovedPlayerView, PlayerView
         from tests.agents.test_perception import _packet
 
         def build() -> AgentMemory:
@@ -1805,9 +1802,7 @@ class TestLastSeenFromEverySighting:
                 packet=_packet(
                     tick=6,
                     agent_id="p-1",
-                    visible_players=(
-                        PlayerView(id="p-3", room="MEDBAY", action=None),
-                    ),
+                    visible_players=(PlayerView(id="p-3", room="MEDBAY", action=None),),
                     moved_players=(
                         MovedPlayerView(id="p-3", from_room="LABS", to_room="MEDBAY"),
                     ),
@@ -1856,9 +1851,7 @@ class TestLastSeenFromEverySighting:
                 _saw_player_event(tick=6, player_id="p-2", room="ADMIN")
             )
             memory.episodic.append(
-                _saw_body_event(
-                    tick=7, body_id="b", victim_id="p-4", room="ADMIN"
-                )
+                _saw_body_event(tick=7, body_id="b", victim_id="p-4", room="ADMIN")
             )
             return memory
 
@@ -1910,7 +1903,7 @@ class TestLastSeenFromEverySighting:
         # ``_episodic_last_seen`` holds the newer one. Everywhere else the two
         # agree, which is what makes the render's convergence on the encoder a
         # statement rather than a coincidence.
-        from agents.tactical.features import _episodic_last_seen
+        from agents.tactical.features import _combined_last_seen, _episodic_last_seen
 
         def build() -> AgentMemory:
             memory = AgentMemory()
@@ -1935,6 +1928,26 @@ class TestLastSeenFromEverySighting:
 
         assert _episodic_last_seen(build().episodic)["p-1"] == (8, "LABS")
         assert _belief_row(view, "p-1").endswith("(last seen in STORAGE at tick 3)")
+
+        # And the feature vector is arithmetically unchanged by the repair:
+        # ``_combined_last_seen`` takes the max by tick of the episodic derivation
+        # and the render cache, and the cache is a firewall-filtered SUBSET of the
+        # same rows, so the episodic value wins on both arms.
+        combined = []
+        for enabled in (False, True):
+            memory = build()
+            with pytest.MonkeyPatch.context() as patch:
+                if enabled:
+                    patch.setenv(ENV_LAST_SEEN_FROM_SIGHTINGS, "1")
+                else:
+                    patch.delenv(ENV_LAST_SEEN_FROM_SIGHTINGS, raising=False)
+                render_for_prompt(memory)
+            combined.append(
+                _combined_last_seen(
+                    "p-1", _episodic_last_seen(memory.episodic), memory.working
+                )
+            )
+        assert combined == [(8, "LABS"), (8, "LABS")]
 
     def test_the_budget_pressure_is_bounded_to_the_added_suffix(self) -> None:
         # The stated cost: the belief block is non-elastic, so a newly-suffixed row
@@ -1969,9 +1982,7 @@ class TestBreadcrumbKeepsVentPlacements:
         # later, stronger placement in the same room.
         memory = AgentMemory()
         memory.episodic.append(_self_state_event(tick=0, agent_id="p-6"))
-        memory.episodic.append(
-            _saw_player_event(tick=7, player_id="p-3", room="LABS")
-        )
+        memory.episodic.append(_saw_player_event(tick=7, player_id="p-3", room="LABS"))
         memory.episodic.append(
             _saw_player_event(tick=12, player_id="p-3", room="LABS", action="vent")
         )
