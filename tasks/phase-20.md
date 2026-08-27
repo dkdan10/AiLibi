@@ -2,7 +2,7 @@
 
 STATUS: CLOSED 2026-08-26 (Task 20.42; `audits/audit-phase-20-close.md`) — 42 of the 43 dispatched
 contracts merged as PRs #351–#394 (2026-08-19 → 2026-08-26) and were re-verified at close HEAD
-`937bd805` with two deviations recorded and none silent; the 43rd is the close itself, whose own
+`937bd805` with three deviations recorded and none silent; the 43rd is the close itself, whose own
 merge commit completes the phase. The evidence-honesty substrate shipped and one pre-registered
 record was spent: the ratified decision rule returned **FINDING** (bar 1 non-direct accuracy
 61/103 = 0.5922 against ≥ 0.60, bar 2 innocent ejections 42 against < 35 — both missed, neither

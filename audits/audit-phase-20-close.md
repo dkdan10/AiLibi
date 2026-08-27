@@ -24,7 +24,7 @@ measurement tables (§3.2).
 
 **Verdict in one line:** Phase 20 **CLOSES COMPLETE** — the other 42 of its 43 dispatched contracts merged
 (2026-08-19 → 2026-08-26, PRs #351–#394, 87 commits after the planning commit) and re-verified at
-close HEAD, with two deviations recorded and none silent (§2); the default gate is **green at close
+close HEAD, with three deviations recorded and none silent (§2); the default gate is **green at close
 HEAD in both the clean and the restored-evidence states**, which is the pair the prior close
 recorded as mutually exclusive — Task 20.17's repair holds, and the phase-19 F1 is **CLOSED by
 measurement, not by assertion** (§1); the **opt-in campaign tier is RED** at close HEAD and is
@@ -118,7 +118,7 @@ Neither moves a byte; both are the exact class Craft rule 5 exists for (*a numbe
 committed bytes*), and both are inside files this contract may not touch.
 
 * **`orchestrator/game.py:388-391`** still reads *"The committed sample sets still stamp `*.qwen3_6_27b.v3` and re-render through the archived v3 bodies (`tests/fixtures/prompt_archive/qwen3_6_27b_v3/`) until the adopting record retires that entry."* The adopting record retired it: every committed replay stamps `qwen3_6_27b.v4`, `ARCHIVED_PROMPT_VERSION_SETS` is `{}` and `tests/fixtures/prompt_archive/` does not exist (§3.3). The neighbouring block at `:373-375` carries the same defect one generation older (the v1 archive, "until 16.17 re-records").
-* **`frontend/src/lib/bodies.test.ts:9`** still describes the negative control as *"0 phantom frames vs 1,182 of 1,769 on `9p2i`"* — the baseline-6 census — while the assertion twenty lines below it pins **668 phantom frames of 1,217** on the baseline-7 bytes it now walks. The gate is correct and bites; only its own header sentence is stale.
+* **`frontend/src/lib/bodies.test.ts:9`** still describes the negative control as *"0 phantom frames vs 1,182 of 1,769 on `9p2i`"* — the baseline-6 census — while the two cases it is describing pin the baseline-7 bytes it now walks: `it("9p2i: reads engine truth on every frame")` at `:447` asserts `frames: 1217, phantomFrames: 0`, and `it("9p2i: the retired accumulate rule fails the same walk")` at `:465` asserts `frames: 1217, phantomFrames: 668, phantomBodies: 1371`. The gate is correct and bites; only its own header sentence is stale.
 
 Routed to the next phase's inputs as a prose-sweep item.
 
@@ -146,8 +146,8 @@ already breached, taking README from 2,034 to 3,368.
 The close-HEAD column is the pre-close snapshot. **This close is itself the phase's 43rd contract and
 adds to it**: on the tree this PR leaves behind, `wc -w README.md` reads **3,425** — the status
 paragraph and the phase-table row. So the honest end-of-phase figure, which is why this is recorded
-rather than absorbed: the front door ended the phase **10.7% shorter than at charter (3,833 →
-3,425)**, not the 53% the target implied. The reading guide, ML page and lessons page are untouched
+rather than absorbed: the front door ended the phase **10.6% shorter than at charter** —
+408 words off 3,833, `(3833 − 3425) / 3833 = 0.10644` — not the 53% the target implied. The reading guide, ML page and lessons page are untouched
 by this PR and keep their close-HEAD counts. Routed as a next-phase item with the note that a budget
 nothing can fail is prose — Craft rule 2 applied to a documentation target.
 
@@ -196,14 +196,14 @@ quotes its output. The boilerplate tail (ruff / format / lint-imports / generate
 docs / mypy / pytest / `check.sh`) is verified **once for the whole tree** by §1 rather than
 re-quoted 42 times.
 
-**Tally: 40 VERIFIED, 2 DEVIATION-RECORDED (20.12 and 20.13 — the word budgets of F3; neither
-silent).**
+**Tally: 39 VERIFIED, 3 DEVIATION-RECORDED — 20.11 (its Measurement names the campaign tier, which
+is red: F1), 20.12 and 20.13 (the word budgets: F3). None silent, none softened into a pass.**
 
 | task (PR) | the fresh command at close HEAD | quoted output | verdict |
 |---|---|---|---|
 | 20.1 (#354) | `cd frontend && npx vitest run` (incl. `src/lib/bodies.test.ts`) | *"Test Files 8 passed (8) / Tests 435 passed (435)"* — the shipped rule reads **0 phantom frames of 1,217** on 9p2i and **0 of 601** on 4p1i; the retired accumulate rule, the negative control, reads **668/1,217** phantom frames and 1,371 phantom bodies, so the gate can fail | VERIFIED |
 | 20.2 (#360) | same vitest run (`src/lib/copy.test.ts`) + `grep -rnE 'DESIGN\.md §\|Task [0-9]+\.[0-9]+\|audits/\|sentinel\|KPI' frontend/src`, classified line by line | 435 frontend tests pass. The grep's **293** hits split **274** comment-opening lines + **6** continuation lines inside multi-line or JSX comment blocks + **12** string literals in `*.test.ts(x)` used as planted inputs to the dialect matcher + **1** the matcher's own banned-word pattern (`frontend/src/lib/copy.ts:45`) = 293. **Zero are rendered product strings**, which is the invariant; the classifier is in §7 | VERIFIED |
-| 20.3 (#367) | `cd frontend && npm run e2e` — the contract's own Measurement, which `check.sh` deliberately excludes | **"9 passed (56.3s)", 3 skipped, exit 0** against auto-started dev servers, and the contract's two new steps are two of the nine by name: *"the guided tour owns Tab when it stacks over another overlay"* (`journey.spec.ts:495`) and *"the transport dock leaves the map on screen at laptop heights"* (`:526`). The 3 skipped are `media.spec.ts`'s capture cases, skipped without `AILIBI_CAPTURE_MEDIA=1` exactly as 20.39 specifies | VERIFIED |
+| 20.3 (#367) | `cd frontend && npm run e2e` — the contract's own Measurement, which `check.sh` deliberately excludes | **"9 passed (56.3s)", 3 skipped, exit 0** against auto-started dev servers, and the contract's two new steps are two of the nine by name: `test("the guided tour owns Tab when it stacks over another overlay")` declared at `journey.spec.ts:479` and `test("the transport dock leaves the map on screen at laptop heights")` at `:505`. The 3 skipped are `media.spec.ts`'s capture cases, skipped without `AILIBI_CAPTURE_MEDIA=1` exactly as 20.39 specifies | VERIFIED |
 | 20.4 (#357) | `uv run pytest tests/api/test_replay_loader.py -q` | *"83 passed in 8.63s"* — the corrupt/empty/mistyped fixtures still return 200 through the listing and the cost endpoint | VERIFIED |
 | 20.5 (#351) | `uv run pytest tests/agents/test_prompt_loader.py -q` | *"56 passed in 0.28s"* — the one-notice-per-process pin holds; §1's bare-env `verify_samples.sh` emitted no notice line | VERIFIED |
 | 20.6 (#353) | `uv run pytest tests/eval/test_vote_correctness.py -q` + `check_doc_facts.py` | *"89 passed in 1.08s"*; the front-door check names *"eval/vote_correctness.py agrees with 4 recorded eval reports"* | VERIFIED |
@@ -211,7 +211,7 @@ silent).**
 | 20.8 (#363) | `uv run pytest eval/leak_test.py tests/observation tests/test_firewall.py tests/training/test_leak_gate.py -q` | *"154 passed in 16.30s"*. The entitlement gate can fail: `tests/test_firewall.py:908` plants **M6** (`_visible_body_ids` without its room filter) and `:1017` asserts the scan catches it, with M1, M10 and a widened `visible_rooms_for_player` beside it. Before the change the same suite ran **125 passed with M6 planted** (PR #363's own recorded run) | VERIFIED |
 | 20.9 (#352) | `uv run lint-imports` (§1) | *"Analyzed 152 files, 794 dependencies."* / *"Contracts: 4 kept, 0 broken."* against the review's `Analyzed 89 files, 379 dependencies`; the firewall suite's planted-route legs are inside the 154 above and `git status --porcelain` is empty after them | VERIFIED |
 | 20.10 (#356) | `uv run python scripts/validity_gate.py <set>` × 4 | *"Validity gate PASSED (all checks green)."* on all four recorded sets, each with *"byte_identical_reconstruction: 0 samples drifted"* and *"cost_and_provenance_exact: model='Qwen/Qwen3.6-27B', 4 prompt versions, substrate stamped exact"* over 50 / 150 / 50 / 50 games | VERIFIED |
-| 20.11 (#355) | `uv run pytest tests/engine/test_rules.py -q` + §1's byte-identity leg | *"10 passed in 0.95s"* (the in-vent action table and the mask-versus-engine property test); `verify_samples.sh` 100/100 in a bare env | VERIFIED |
+| 20.11 (#355) | `uv run pytest tests/engine/test_rules.py -q` + §1's byte-identity leg + **`uv run pytest -m campaign -q`**, which its Measurement names | *"10 passed in 0.95s"* (the in-vent action table and the mask-versus-engine property test) and `verify_samples.sh` 100/100 in a bare env — but the campaign leg its own contract requires **exits 1** (§1's F1). None of the nine failures is 20.11's or touches an engine rule, and no pinned ML value moved because of it; the contract's Measurement is still not satisfiable at close HEAD, and this row says so rather than substituting the two legs that are | **DEVIATION-RECORDED (F1)** |
 | 20.12 (#371) | `wc -w README.md docs/reading-guide.md` + `check_doc_facts.py` | The front-door checks are green (§1), but the budgets read **3,368** and **1,303** against ≤ ~1,800 and ≤ ~900 — F3 | **DEVIATION-RECORDED (F3)** |
 | 20.13 (#372) | `uv run python scripts/paired_stats.py training/reports/results-finalist-eval.jsonl` + `wc -w docs/ml-program.md` | The McNemar cells reproduce — *"clears alpha: p18-imp-ea4bc955, p18-imp-bfd145cb"*, *"fails alpha: p18-imp-6d327dcb, p18-imp-7f73929d"*, *"not significant even UNCORRECTED: p18-imp-6d327dcb"*, with `7f73929d 12/3 p=0.0352` against `alpha = 0.05 / 4 = 0.0125` — but the page reads **1,838 words** against ≤ ~1,400 — F3 | **DEVIATION-RECORDED (F3)** |
 | 20.14 (#358, #364) | `uv run pytest tests/eval/test_solvability.py -q` | *"26 passed in 3.73s"* — the containment / singleton / singleton-correct / cleared-ejection cells re-derive from the committed bytes | VERIFIED |
@@ -244,12 +244,18 @@ silent).**
 | 20.41 (#394) | `uv run python scripts/verify_ml_evidence.py --complete` + `grep -n 'audit C-C-' docs/deployment.md` | *"verify-ml-evidence: every check passed."* with the slate row reading *"RECOVERED → EVIDENCE-BRANCH-RESTORED (1569/1569)"*; all **4** `C-C-` hits name their source audit file | VERIFIED |
 | 20.43 (#387) | `uv run pytest tests/eval/test_evidence_honesty.py -q` + the counterfactual pins | *"95 passed in 39.31s"* and *"5 passed"* — the movement-sided sighting resolves and a duplicated flag counts once. The production-side duplicate mint was routed POST-record and **rides inside the recorded bytes**, which the record states rather than hides (`…baseline-7.md` §10.2) | VERIFIED |
 
-**On the two deviations.** Both are F3 and both are the same shape: a word budget written into a
+**On the three deviations.** 20.12 and 20.13 are F3 and share a shape: a word budget written into a
 contract's Measurement field, **already exceeded at that contract's own merge** (README 2,034
 against ≤ ~1,800, the reading guide 940 against ≤ ~900, the ML page 1,439 against ≤ ~1,400), and
 exceeded further at close HEAD because four later contracts each added prose to the same pages.
-Neither is silent, neither is softened into a pass, and neither is fixed here — the close verifies;
-it does not edit the front door's content.
+20.11 is a different shape and is recorded rather than argued around: its Measurement names
+`uv run pytest -m campaign -q` green, that command exits 1 at close HEAD, and a contract whose own
+stated measurement cannot be run green is not VERIFIED however unrelated the cause. The cause **is**
+unrelated — every one of F1's nine failures is in `tests/training/`, three against a substrate
+composite the graduation moved, five against the re-recorded corpus, one pre-dating the record — so
+the row states both facts and lets the reader hold them together. None of the three is silent, none
+is softened into a pass, and none is fixed here: the close verifies; it does not edit the front
+door's content or the test tier.
 
 **Deviations already recorded at their own merges** are not re-litigated here; they live in
 `tasks/phase-20.md` beside their contracts as orchestrator-ratified prose records (20.24, 20.25,
@@ -487,7 +493,7 @@ deploy is green (§1).
 - **The window:** 2026-08-19 → 2026-08-26, eight days, with the 23 h 25 m recording session inside it on 2026-08-25.
 - **The frontier computes complete on this close's merge.** With the merged `task 20*` titles from a log pinned to close HEAD (44 titles), `compute_frontier` reads **AT HEAD: dispatchable `['20.42']`, blocked `[]`, merged 42**; **WITH 20.42 MERGED: dispatchable `[]`, blocked `[]`, merged 43.** `parse_all_tasks` returned zero errors.
 - **The evidence pin:** `476a1f85492439277350af9708f1d120eb1c0a71` (the one orphan commit on `evidence/phase-18-coevo`), fetched by sha and verified at this close (2953/2953, §1). The 19.21 raw-slate ruling stands **RECOVERED**, and `--complete` reads its row as *"RECOVERED → EVIDENCE-BRANCH-RESTORED (1569/1569)"*.
-- **Remote refs observed** (read-only queries): tags `attempt-1-phase-10-wave1-rerecord`, `phase-16-baseline-4` → `a43b178`, `phase-16-baseline-5` → `2428044`, `phase-18-corpus-8f5f434` → `8f5f434` — no `phase-19-*` or `phase-20-*` tag exists and none is required; branches `evidence/phase-18-coevo` → `476a1f85` and `evidence/raw-slate-staging` → `c27ab7b5`, the latter being F4.
+- **Remote refs observed** (read-only queries): tags `attempt-1-phase-10-wave1-rerecord`, `phase-16-baseline-4` → `a43b178`, `phase-16-baseline-5` → `2428044`, `phase-18-corpus-8f5f434` → `8f5f434` — no `phase-19-*` or `phase-20-*` tag exists and none is required; branches `evidence/phase-18-coevo` → `476a1f85` and `evidence/raw-slate-staging` → `c27ab7b5`, the latter being F5.
 - **The banner and the front door record the close in this PR:** `tasks/phase-20.md`'s STATUS line → CLOSED, and README's `## Project status` sentences and phase row → the close, its date, its outcome and this audit's path. The PR also carries the one-token `docs/artifacts.md` registry bump (§5).
 
 ---
