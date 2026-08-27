@@ -90,6 +90,7 @@ schema-validation failure.
 from __future__ import annotations
 
 import asyncio
+import json
 import re
 from collections.abc import Callable, Coroutine, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
@@ -1888,18 +1889,8 @@ class MeetingManager:
                 ),
                 timeout=self._config.deadlines.vote_seconds,
             )
-            parsed = VoteBallot.model_validate_json(response.text)
-            # The two provenance fields are the meeting layer's testimony
-            # about its OWN rewrite, so a model-supplied value is discarded
-            # before any guard reads one. ``VoteBallot`` is the schema handed
-            # to ``complete`` above, so an adapter that constrains decoding on
-            # it shows the model these field names; ``extra="forbid"`` stops
-            # unknown keys, never a filled real one.
-            parsed = parsed.model_copy(
-                update={
-                    "guard_redirected_from": None,
-                    "guard_rewrite_reason": None,
-                }
+            parsed = VoteBallot.model_validate_json(
+                _without_model_authored_provenance(response.text)
             )
         except asyncio.TimeoutError:
             # Deadline miss: surface the fired default so the orchestrator
@@ -2586,6 +2577,44 @@ def _default_vote(*, voter: PlayerId) -> VoteBallot:
         considered_alternatives=(),
         rationale_text=DEFAULT_VOTE_RATIONALE,
     )
+
+
+# The ballot fields the meeting layer owns outright: they are its testimony
+# about its OWN target rewrite, never anything a voter says.
+_GUARD_PROVENANCE_FIELDS: Final[tuple[str, ...]] = (
+    "guard_redirected_from",
+    "guard_rewrite_reason",
+)
+
+
+def _without_model_authored_provenance(raw_response: str) -> str:
+    """Drop the meeting-owned provenance keys from a model's ballot payload.
+
+    :class:`VoteBallot` is the schema handed to
+    :meth:`llm.client.LLMClient.complete`, so an adapter that constrains
+    decoding on it shows the model these field names, and ``extra="forbid"``
+    stops an unknown key but never a real one the model filled. Stripping
+    BEFORE validation rather than nulling after is what keeps a fabricated
+    value from mattering at all: the pair validates jointly, so a model that
+    sent half of it would otherwise fail the schema and degrade the whole vote
+    to :func:`_vote_parse_default` instead of simply losing the field.
+
+    Byte-conservative: a payload that is not a JSON object, or carries neither
+    key -- every real completion -- is returned verbatim, so the common path's
+    parse and its error messages are unchanged.
+    """
+
+    try:
+        payload = json.loads(raw_response)
+    except ValueError:
+        return raw_response
+    if not isinstance(payload, dict):
+        return raw_response
+    if not any(key in payload for key in _GUARD_PROVENANCE_FIELDS):
+        return raw_response
+    for key in _GUARD_PROVENANCE_FIELDS:
+        payload.pop(key, None)
+    return json.dumps(payload)
 
 
 def _vote_parse_default(*, voter: PlayerId, raw_response: str) -> VoteBallot:

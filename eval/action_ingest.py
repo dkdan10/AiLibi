@@ -82,11 +82,9 @@ def ingest_actions_by_role(
         for entry in read_replay_entries(replay_path):
             dispositions = entry.action_dispositions
             for index, action in enumerate(entry.actions):
-                if dispositions is not None and (
-                    dispositions[index] == "discarded_by_meeting"
-                ):
-                    discarded_excluded += 1
-                    continue
+                # The roster check runs on EVERY recorded action, discarded
+                # included: excluding a row must never become a way for a
+                # corrupt actor id to enter the corpus unchallenged.
                 actor = action["actor"]
                 if actor not in game.roles:
                     raise ValueError(
@@ -95,6 +93,11 @@ def ingest_actions_by_role(
                         "tally cannot classify it, so this fails loud rather than "
                         "silently dropping or mis-attributing it."
                     )
+                if dispositions is not None and (
+                    dispositions[index] == "discarded_by_meeting"
+                ):
+                    discarded_excluded += 1
+                    continue
                 action_type = action["type"]
                 counts = (
                     impostor_counts

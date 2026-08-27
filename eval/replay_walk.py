@@ -116,7 +116,8 @@ this repo ships and turning it on would be a gate that cannot fail. The
 consumer that adopts it is the one that first walks a recording carrying the
 field. ``tests/eval/test_replay_walk.py`` pins the option's two behaviours on
 a rewritten fixture — it raises on a doctored tuple, and skips a row without
-one.
+one. ``api.replay_loader`` does not go through this walker but runs the same
+comparison inline and unconditionally, because it SERVES the tuple.
 
 What each profile deliberately relaxes, and why:
 

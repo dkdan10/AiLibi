@@ -94,6 +94,7 @@ from meetings.manager import (
     _suspicion_graph_with_contradictions,  # noqa: PLC2701
     _trigger_is_emergency,  # noqa: PLC2701
     _vote_parse_default,  # noqa: PLC2701
+    _without_model_authored_provenance,  # noqa: PLC2701
     coerce_teammate_ballot_to_skip,
     derive_belief_evidence,
     drop_teammate_statement_target,
@@ -7940,9 +7941,24 @@ class TestBallotRewriteProvenanceSites:
         # so a ballot recorded today is byte-identical to a pre-field one.
         assert "guard_rewrite_reason" not in guarded.model_dump_json()
 
-    def test_an_authored_target_without_a_reason_is_refused(self) -> None:
-        # The pair is one guard's testimony; half of it is a half-written record.
-        with pytest.raises(ValidationError, match="without guard_rewrite_reason"):
+    @pytest.mark.parametrize(
+        ("authored", "reason"),
+        [
+            # An authored target nobody gave a reason for.
+            ("p-4", None),
+            # A rewrite that will not say what it rewrote.
+            (None, "under_gate_redirect"),
+            (None, "invalid_target"),
+            # Nothing parsed, so nothing could have been authored.
+            ("p-4", "parse_default"),
+        ],
+    )
+    def test_a_half_written_provenance_pair_is_refused(
+        self, authored: str | None, reason: str | None
+    ) -> None:
+        # The pair is one guard's testimony, and every combination a consumer
+        # cannot read fails loud rather than parsing into the record.
+        with pytest.raises(ValidationError, match="guard_rewrite_reason"):
             VoteBallot(
                 voter="p-1",
                 target="SKIP",
@@ -7950,18 +7966,69 @@ class TestBallotRewriteProvenanceSites:
                 primary_reason_id=None,
                 considered_alternatives=(),
                 rationale_text="body",
-                guard_redirected_from="p-4",
+                guard_redirected_from=authored,
+                guard_rewrite_reason=reason,  # type: ignore[arg-type]
             )
+
+    @pytest.mark.parametrize(
+        ("authored", "reason"),
+        [
+            (None, None),
+            ("p-4", "under_gate_redirect"),
+            (None, "parse_default"),
+        ],
+    )
+    def test_a_whole_provenance_pair_is_accepted(
+        self, authored: str | None, reason: str | None
+    ) -> None:
+        # The other half of the gate: the three combinations the guards
+        # actually produce all parse.
+        ballot = VoteBallot(
+            voter="p-1",
+            target="SKIP",
+            confidence=0.5,
+            primary_reason_id=None,
+            considered_alternatives=(),
+            rationale_text="body",
+            guard_redirected_from=authored,
+            guard_rewrite_reason=reason,  # type: ignore[arg-type]
+        )
+
+        assert ballot.guard_redirected_from == authored
+        assert ballot.guard_rewrite_reason == reason
+
+    def test_both_json_schema_modes_publish_every_ballot_field(self) -> None:
+        # The serializer above would otherwise collapse SERIALIZATION-mode to a
+        # bare object — the schema FastAPI publishes and a generated client
+        # reads. Reverting ``__get_pydantic_json_schema__`` fails this.
+        expected = set(VoteBallot.model_fields)
+        for mode in ("validation", "serialization"):
+            schema = VoteBallot.model_json_schema(mode=mode)
+            assert set(schema["properties"]) == expected, mode
+            assert "guard_rewrite_reason" in schema["properties"], mode
+
+    def test_the_turn_schema_survives_the_shared_stripper(self) -> None:
+        # ``MeetingTurn`` carries the same serializer + hook pair and shares the
+        # stripper; its published field list must not move either.
+        expected = set(MeetingTurn.model_fields)
+        for mode in ("validation", "serialization"):
+            schema = MeetingTurn.model_json_schema(mode=mode)
+            assert set(schema["properties"]) == expected, mode
 
 
 @dataclass
 class _ProvenanceForgingVoteClient:
     """Returns a ballot that fills the guard-provenance fields itself.
 
-    The laundering attempt the parse-time neutralization exists to stop:
+    The laundering attempt the pre-validation strip exists to stop:
     ``VoteBallot`` is the schema handed to ``LLMClient.complete``, so a
     constrained-decoding adapter shows the model these field names.
+    ``forged`` is the pair the model sends; the half-pair case is the one that
+    would otherwise fail the joint validator and degrade the WHOLE vote to the
+    parse default rather than merely losing the field.
     """
+
+    forged: Mapping[str, object]
 
     async def complete(
         self,
@@ -7985,8 +8052,7 @@ class _ProvenanceForgingVoteClient:
                     "primary_reason_observation_id": None,
                     "considered_alternatives": [],
                     "rationale_text": f"stub-vote-{voter}",
-                    "guard_redirected_from": "p-4",
-                    "guard_rewrite_reason": "under_gate_redirect",
+                    **self.forged,
                 }
             )
         else:
@@ -7999,16 +8065,30 @@ class _ProvenanceForgingVoteClient:
         )
 
 
-def test_a_model_authored_provenance_value_never_reaches_the_record() -> None:
+@pytest.mark.parametrize(
+    "forged",
+    [
+        # A whole fabricated pair.
+        {"guard_redirected_from": "p-4", "guard_rewrite_reason": "under_gate_redirect"},
+        # Half a pair — invalid on the model, so stripping AFTER validation
+        # would raise and replace the entire vote with the parse default.
+        {"guard_redirected_from": "p-4"},
+        {"guard_rewrite_reason": "under_gate_redirect"},
+    ],
+)
+def test_a_model_authored_provenance_value_never_reaches_the_record(
+    forged: Mapping[str, object],
+) -> None:
     """The laundering guard: the fields are the meeting layer's, never the model's.
 
-    A ballot that arrives already claiming ``under_gate_redirect`` is neutralized
-    before any guard runs, so nothing in the recorded meeting reports a rewrite
-    that did not happen.
+    The keys are stripped from the raw payload BEFORE validation, so a ballot
+    that arrives claiming a rewrite loses only that claim: nothing in the
+    recorded meeting reports a rewrite that did not happen, and no ballot
+    degrades to the parse default over it.
     """
 
     manager = _make_manager(
-        llm_client=_ProvenanceForgingVoteClient(),
+        llm_client=_ProvenanceForgingVoteClient(forged=forged),
         deadlines=MeetingDeadlines(turn_seconds=None, vote_seconds=None),
     )
     result = _run(
@@ -8023,6 +8103,20 @@ def test_a_model_authored_provenance_value_never_reaches_the_record() -> None:
     for ballot in result.ballots:
         assert ballot.guard_redirected_from is None
         assert ballot.guard_rewrite_reason is None
+        # And the vote itself survived: the model's OWN body is on the record,
+        # so the strip cost it the forged field and nothing else.
+        assert ballot.rationale_text.endswith(f"stub-vote-{ballot.voter}")
+    assert manager.defaulted_calls == ()
+
+
+def test_the_strip_leaves_a_clean_ballot_payload_byte_identical() -> None:
+    # The common path pays nothing: a payload with neither key is returned
+    # verbatim, so its parse and any error it raises are unchanged.
+    clean = _vote_json(voter="p-1", target="SKIP")
+
+    assert _without_model_authored_provenance(clean) == clean
+    assert _without_model_authored_provenance("{not json") == "{not json"
+    assert _without_model_authored_provenance("[]") == "[]"
 
 
 def _guarded_one_of_each_kind() -> tuple[VoteBallot, ...]:

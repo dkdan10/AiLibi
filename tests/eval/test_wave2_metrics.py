@@ -567,6 +567,35 @@ class TestIndistinguishability:
         assert ingest.tally.crewmate_action_counts == {"wait": 1}
         assert ingest.tally.per_game_player_wait_counts == ((1,),)
 
+    def test_an_unseeded_actor_in_a_discarded_slot_still_fails_loud(
+        self, tmp_path: Path
+    ) -> None:
+        # Excluding a row must never become a way for a corrupt actor id to
+        # enter the corpus unchallenged: the roster check runs on every recorded
+        # action, discarded included.
+        replay_path = tmp_path / "replay-seed-98.jsonl"
+        replay_path.write_text(
+            json.dumps(
+                {
+                    "kind": "tick",
+                    "game_id": "g-1",
+                    "tick": 0,
+                    "actions": [
+                        {"type": "wait", "actor": "p-1", "payload": {}},
+                        {"type": "wait", "actor": "ghost", "payload": {}},
+                    ],
+                    "action_dispositions": ["applied", "discarded_by_meeting"],
+                    "state_hash": "0" * 64,
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        game = _game(meetings=(), roles={"p-1": "CREWMATE"}, seed=98)
+
+        with pytest.raises(ValueError, match="absent from game"):
+            ingest_actions_by_role(tmp_path, (game,))
+
 
 # ---------------------------------------------------------------------------
 # The single-witness inform channel

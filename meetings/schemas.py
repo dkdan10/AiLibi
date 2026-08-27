@@ -59,6 +59,29 @@ class _FrozenModel(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
 
+def _core_schema_without_serializer(core_schema: CoreSchema) -> CoreSchema:
+    """The same core schema with the model's custom serializer removed.
+
+    A ``model_serializer`` whose return type is a bare mapping collapses the
+    SERIALIZATION-mode JSON schema to ``{"type": "object"}``, which is what
+    FastAPI publishes and what a generated client would read -- so every model
+    that installs one hands the generator this stripped copy instead
+    (``__get_pydantic_json_schema__``). The ``serialization`` key is not always
+    at the top: a ``model_validator(mode="after")`` wraps the model schema in a
+    ``function-after`` node, so the walk follows ``schema`` until it finds the
+    node that carries it. Structure-preserving and non-mutating; a schema with
+    no serializer comes back unchanged.
+    """
+
+    node = dict(core_schema)
+    if node.pop("serialization", None) is not None:
+        return cast(CoreSchema, node)
+    inner = node.get("schema")
+    if isinstance(inner, dict):
+        node["schema"] = _core_schema_without_serializer(cast(CoreSchema, inner))
+    return cast(CoreSchema, node)
+
+
 # ---------------------------------------------------------------------------
 # Observation claims carried by a MeetingTurn (DESIGN.md §5.3)
 # ---------------------------------------------------------------------------
@@ -540,10 +563,7 @@ class MeetingTurn(_FrozenModel):
         present.
         """
 
-        without_serializer = {
-            key: value for key, value in core_schema.items() if key != "serialization"
-        }
-        return handler(cast(CoreSchema, without_serializer))
+        return handler(_core_schema_without_serializer(core_schema))
 
 
 # ---------------------------------------------------------------------------
@@ -674,14 +694,26 @@ class VoteBallot(_FrozenModel):
     guard_rewrite_reason: BallotTargetRewriteReason | None = None
 
     @model_validator(mode="after")
-    def _redirected_from_needs_a_reason(self) -> VoteBallot:
-        if self.guard_redirected_from is not None and self.guard_rewrite_reason is None:
-            raise ValueError(
-                "guard_redirected_from without guard_rewrite_reason: the pair is "
-                "one guard's testimony, so an authored target with no stated "
-                "reason is a half-written record and fails loud"
-            )
-        return self
+    def _guard_provenance_is_whole(self) -> VoteBallot:
+        """The pair is one guard's testimony; a half-written one fails loud.
+
+        Three combinations are records nobody can act on, so none of them
+        parses: an authored target with no reason (which rewrite?), a rewrite
+        reason with no authored target (rewritten from WHAT?), and
+        ``parse_default`` naming one (nothing parsed, so nothing was authored).
+        """
+
+        reason = self.guard_rewrite_reason
+        authored = self.guard_redirected_from
+        expects_authored = reason is not None and reason != "parse_default"
+        if expects_authored == (authored is not None):
+            return self
+        raise ValueError(
+            f"guard_rewrite_reason={reason!r} with "
+            f"guard_redirected_from={authored!r}: every reason but "
+            "'parse_default' names the target the voter authored, and no other "
+            "combination is a record a consumer can read"
+        )
 
     @model_serializer(mode="wrap")
     def _serialize(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
@@ -718,10 +750,7 @@ class VoteBallot(_FrozenModel):
         with defaults are present.
         """
 
-        without_serializer = {
-            key: value for key, value in core_schema.items() if key != "serialization"
-        }
-        return handler(cast(CoreSchema, without_serializer))
+        return handler(_core_schema_without_serializer(core_schema))
 
 
 # ---------------------------------------------------------------------------

@@ -176,6 +176,7 @@ from orchestrator.replay import (
     TacticalPolicyStamp,
     WinnerSide,
     _state_hash,
+    classify_action_dispositions,
     env_var_for_lever,
     fold_meeting_outcome_into_memories,
     fsm_default_tactical_policy_stamp,
@@ -331,12 +332,17 @@ class RosterConfig:
 
 
 class ReplayStateMismatchError(RuntimeError):
-    """Reconstructed ``state_hash`` diverged from the recorded one.
+    """A reconstructed tick diverged from the row that recorded it.
 
-    Indicates a replay-determinism break (DESIGN.md §0, §11.4): either
-    non-determinism in :func:`engine.tick.advance_tick`, wrong action
-    deserialization, or wrong meeting-result application. Surfaced as HTTP 500
-    with the offending tick + game id in the response body.
+    Raised for the recorded ``state_hash``, and by
+    :class:`ReplayDispositionMismatchError` for the recorded
+    ``action_dispositions`` — the two facts a tick row asserts about its own
+    reconstruction. Indicates a replay-determinism break or a doctored
+    recording (DESIGN.md §0, §11.4): non-determinism in
+    :func:`engine.tick.advance_tick`, wrong action deserialization, wrong
+    meeting-result application, or a row whose claim about its own actions the
+    engine does not bear out. Surfaced as HTTP 500 with the offending tick +
+    game id in the response body (:mod:`api.main`), for either kind.
     """
 
     def __init__(self, *, game_id: str, tick: int, expected: str, actual: str) -> None:
@@ -345,9 +351,35 @@ class ReplayStateMismatchError(RuntimeError):
         self.expected = expected
         self.actual = actual
         super().__init__(
-            f"replay state-hash mismatch for {game_id!r} at tick {tick}: "
+            f"{self._headline(game_id=game_id, tick=tick)}: "
             f"recorded {expected!r}, reconstructed {actual!r}"
         )
+
+    @staticmethod
+    def _headline(*, game_id: str, tick: int) -> str:
+        """The kind of divergence, which each subclass names for itself."""
+
+        return f"replay state-hash mismatch for {game_id!r} at tick {tick}"
+
+
+class ReplayDispositionMismatchError(ReplayStateMismatchError):
+    """A recorded ``action_dispositions`` tuple contradicts the re-walked tick.
+
+    The tick hash cannot catch this class by construction: a discarded action
+    was never applied, so a row that calls one ``applied`` still reconstructs
+    byte-identically while moving a served ``current_action`` off ``BLOCKED``.
+    The loader re-derives the tuple from the events it already has
+    (:func:`orchestrator.replay.classify_action_dispositions`) and refuses the
+    recording rather than serving the row's claim. A recording that carries no
+    dispositions can never raise it -- an absent field is not a claim.
+
+    A subclass so the app-level handler that already turns a divergent
+    reconstruction into a 500-with-tick covers this one too.
+    """
+
+    @staticmethod
+    def _headline(*, game_id: str, tick: int) -> str:
+        return f"replay action-disposition mismatch for {game_id!r} at tick {tick}"
 
 
 class ReplaySubstrateMismatchError(RuntimeError):
@@ -1225,6 +1257,19 @@ class ReplayLoader:
                         expected=entry.state_hash,
                         actual=actual,
                     )
+                # The disposition tuple is served (it decides who reads BLOCKED)
+                # and the hash above cannot vouch for it, so it is verified
+                # against the events this walk just produced before any frame
+                # is built from it. Skipped when the row carries none.
+                if entry.action_dispositions is not None:
+                    reconstructed = classify_action_dispositions(actions, events)
+                    if reconstructed != entry.action_dispositions:
+                        raise ReplayDispositionMismatchError(
+                            game_id=game_id,
+                            tick=entry.tick,
+                            expected=",".join(entry.action_dispositions),
+                            actual=",".join(reconstructed),
+                        )
 
                 meeting_entry: MeetingReplayEntry | None = None
                 meeting_id: str | None = None
