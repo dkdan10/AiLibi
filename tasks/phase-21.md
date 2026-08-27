@@ -15,7 +15,7 @@ injustice — the reporter railroad and the herding cascade — as pre-registere
 own adopting record (baseline 9 on ADOPTED). The standing context every contract inherits:
 baseline 7 is canon by explicit owner override of a FINDING verdict (bars 1 and 2 missed — bar 1
 by 0.0078; nothing re-priced), and no surface may state or imply otherwise. 26 contracts across
-four waves; the close (21.26) routes the next decision.
+five waves; the close (21.26) routes the next decision.
 
 ## Locked decisions (owner-ratified by the merge of this document)
 
@@ -169,9 +169,9 @@ nothing was re-priced — and no surface this phase ships may state or imply oth
 **Collision discipline** (dep-ordered; the validator enforces that every shared scope item has an
 edge, and assembly verified zero unordered pairs across all 26 contracts):
 `orchestrator/replay.py` 21.3 → 21.10 → 21.15 → 21.18 → 21.19 → 21.24 → 21.25;
-`api/replay_loader.py` 21.3 → 21.6 → 21.10 → 21.15;
-`orchestrator/game.py` 21.1 → 21.3 → 21.11 → 21.18 → 21.19 → 21.20;
-`meetings/manager.py` 21.2 → 21.3 → 21.18 → 21.19 → 21.20 → 21.24 → 21.25;
+`api/replay_loader.py` 21.3 → 21.10 → 21.6 → 21.15;
+`orchestrator/game.py` 21.3 → 21.1 → 21.11 → 21.18 → 21.19 → 21.20;
+`meetings/manager.py` 21.3 → 21.2 → 21.18 → 21.19 → 21.20 → 21.24 → 21.25;
 `meetings/transcript.py` 21.9 → 21.19 → 21.24 → 21.25; `meetings/schemas.py` 21.3 → 21.20;
 `meetings/render_contract.py` 21.18 → 21.19; `meetings/constants.py` 21.20 → 21.25;
 `engine/tick.py` 21.6 → 21.15; `agents/memory/store.py` 21.4 → 21.20 → 21.24 → 21.25;
@@ -180,11 +180,11 @@ edge, and assembly verified zero unordered pairs across all 26 contracts):
 `eval/replay_walk.py` 21.3 → 21.6 → 21.11 → 21.15;
 `eval/watchability.py` 21.7 → 21.9 → 21.11 → 21.15 → 21.17 → 21.24;
 `eval/evidence_honesty.py` 21.8 → 21.9; `eval/deduction_metrics.py` 21.9 → 21.20;
-`training/surrogate/dataset.py` 21.6 → 21.8 → 21.15; `training/bakeoff/harness.py` 21.16 → 21.17;
+`training/surrogate/dataset.py` 21.8 → 21.6 → 21.15; `training/bakeoff/harness.py` 21.16 → 21.17;
 `training/conviction/dataset.py` 21.7 → 21.9;
 `training/reports/report-ballot-surrogate.md` 21.8 → 21.17;
-`scripts/record_ml_corpus.sh` 21.1 → 21.10 → 21.11 → 21.24;
-`scripts/verify_ml_evidence.py` 21.8 → 21.10 → 21.15 → 21.17;
+`scripts/record_ml_corpus.sh` 21.10 → 21.1 → 21.11 → 21.24;
+`scripts/verify_ml_evidence.py` 21.10 → 21.8 → 21.15 → 21.17;
 `scripts/check_doc_facts.py` 21.11 → 21.15 → 21.24 → 21.25;
 `README.md` 21.15 → 21.24 → 21.25 → 21.26; `docs/artifacts.md` 21.1 → 21.17 → 21.26;
 `docs/history.md` 21.11 → 21.15 → 21.25; `docs/ml-program.md` 21.16 → 21.17 → 21.25;
@@ -198,11 +198,11 @@ edge, and assembly verified zero unordered pairs across all 26 contracts):
 `tests/eval/test_deduction_metrics.py` 21.9 → 21.11 → 21.20;
 `tests/agents/test_bespoke_prompt_sets.py` 21.1 → 21.20;
 `tests/meetings/test_prompt_byte_golden.py` 21.1 → 21.18;
-`tests/scripts/test_record_ml_corpus.py` 21.1 → 21.10 → 21.11;
-`tests/scripts/test_verify_ml_evidence.py` 21.8 → 21.10 → 21.17;
+`tests/scripts/test_record_ml_corpus.py` 21.10 → 21.1 → 21.11;
+`tests/scripts/test_verify_ml_evidence.py` 21.10 → 21.8 → 21.17;
 `tests/scripts/test_check_doc_facts.py` 21.11 → 21.24 → 21.25;
-`tests/training/test_conviction_model.py` 21.7 → 21.8 → 21.9 → 21.17;
-`tests/training/test_surrogate_runner.py` 21.8 → 21.16 → 21.17;
+`tests/training/test_conviction_model.py` 21.7 → 21.9 → 21.8 → 21.17;
+`tests/training/test_surrogate_runner.py` 21.16 → 21.8 → 21.17;
 `tests/training/test_surrogate_fidelity.py` 21.16 → 21.17;
 `tests/training/test_bakeoff_harness.py` 21.16 → 21.17;
 `tests/training/test_composed_runner.py` 21.8 → 21.17;
