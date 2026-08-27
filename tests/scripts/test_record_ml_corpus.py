@@ -1213,12 +1213,29 @@ def test_the_dry_run_refuses_an_out_of_range_seed_too() -> None:
     )
 
 
-def test_a_seed_valid_for_one_set_is_still_refused_by_the_other() -> None:
-    # 9p2i locks 1000..1149 and 4p1i 1000..1049, so `--set both --seeds 1100`
-    # is half-valid. Half-valid is refused, loudly, naming the set it fails.
-    proc = _run("--dry-run", "--seeds", "1100")
+def test_a_seed_valid_for_one_set_is_still_refused_before_the_first_set_records(
+    tmp_path: Path,
+) -> None:
+    # 9p2i locks 1000..1149 and 4p1i 1000..1049, so `--set both --seeds 1100` is
+    # half-valid — and `both` is the DEFAULT. Validating per set inside the
+    # record loop would be too late: the 9p2i leg would record (on the hosted
+    # provider, for hours) and could even freeze before the run failed on a seed
+    # the SECOND set never had. The refusal must land before either set is
+    # touched, which is what "nothing recorded" has to mean here.
+    corpus_root = tmp_path / "ml_corpus"
+    proc = _run("--seeds", "1100", env=_fake_env(corpus_root), timeout=300)
+    out = proc.stdout + proc.stderr
+
     assert proc.returncode != 0
-    assert "outside 4p1i's locked range" in proc.stdout + proc.stderr
+    assert "--seeds names seed 1100, outside 4p1i's locked range 1000..1049" in out
+    assert not corpus_root.exists()  # NEITHER set was created
+    assert "Recording corpus set 9p2i" not in out
+
+    # The dry-run refuses identically, so the preview and the real run can never
+    # describe different commands.
+    preview = _run("--dry-run", "--seeds", "1100")
+    assert preview.returncode != 0
+    assert "outside 4p1i's locked range" in preview.stdout + preview.stderr
 
 
 # -- the hermetic recording path ----------------------------------------------

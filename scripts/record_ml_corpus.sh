@@ -344,19 +344,27 @@ if [[ -n "$seeds_arg" ]]; then
   fi
 fi
 
-# Refuse a --seeds entry outside a set's LOCKED range. Run by the DRY RUN as well
-# as the real path: an operator previewing a repair command must learn there that
-# the seed does not exist, not after the preview said the plan was fine.
-assert_seeds_in_range() {
-  local set_name="$1" start="$2" last="$3" seed
+# Refuse a --seeds entry outside a set's LOCKED range, for EVERY selected set,
+# before anything runs. Checking per set inside the record loop would be too
+# late: `--set both --seeds 1100` is in 9p2i's range (1000..1149) and not in
+# 4p1i's (1000..1049), so the 9p2i leg would spend ~19 hosted hours and freeze
+# before the run failed on a seed the second set never had. The DRY RUN runs the
+# same check, so the preview and the real run can never describe different
+# commands.
+assert_seeds_in_selected_sets() {
+  local set_name start count last seed
   [[ -z "$requested_seeds" ]] && return 0
   local -a wanted=()
   IFS=',' read -ra wanted <<<"$requested_seeds"
-  for seed in "${wanted[@]}"; do
-    if [[ "$seed" -lt "$start" || "$seed" -gt "$last" ]]; then
-      echo "ERROR: --seeds names seed $seed, outside $set_name's locked range $start..$last; nothing recorded." >&2
-      return 1
-    fi
+  for set_name in "${sets[@]}"; do
+    read -r start count _ _ _ <<<"$(set_config "$set_name")"
+    last=$((start + count - 1))
+    for seed in "${wanted[@]}"; do
+      if [[ "$seed" -lt "$start" || "$seed" -gt "$last" ]]; then
+        echo "ERROR: --seeds names seed $seed, outside $set_name's locked range $start..$last; nothing recorded." >&2
+        return 1
+      fi
+    done
   done
   return 0
 }
@@ -415,6 +423,12 @@ case "$set_arg" in
     exit 1
     ;;
 esac
+
+# The seed subset is judged against every selected set here, once, before any
+# path (dry-run, splits-only, record) can act on it.
+if ! assert_seeds_in_selected_sets; then
+  exit 1
+fi
 
 # --- worker/queue/crash-retry knobs (mirrors refresh_samples.sh, Task 14.12) --
 
@@ -917,9 +931,6 @@ if [[ "$dry_run" -eq 1 ]]; then
     read -r start count np ni tpc <<<"$(set_config "$set_name")"
     last=$((start + count - 1))
     set_dir="$CORPUS_ROOT/$set_name"
-    if ! assert_seeds_in_range "$set_name" "$start" "$last"; then
-      exit 1
-    fi
     echo "[dry-run] --- set $set_name ---"
     echo "[dry-run]   seed range: $start..$last ($count games)"
     echo "[dry-run]   roster: num_players=$np num_impostors=$ni tasks_per_crewmate=$tpc"
@@ -1137,17 +1148,14 @@ record_set() {
   manifest="$set_dir/MANIFEST.md"
   local last=$((start + count - 1))
 
-  # --seeds: every requested seed must lie in THIS set's locked range, checked
-  # before the set dir is created so a typo costs nothing. The subset is
-  # intersected with the resume scan below rather than replacing it, so the
-  # "already recorded" skip keeps working and the finalize's exact-set check is
-  # still what refuses to freeze a subset. Fenced with commas so a membership
-  # test cannot match a prefix (seed 100 inside "1000").
+  # --seeds: the subset is INTERSECTED with the resume scan below rather than
+  # replacing it, so the "already recorded" skip keeps working and the
+  # finalize's exact-set check is still what refuses to freeze a subset. Every
+  # requested seed was already proved in range for every selected set, before
+  # any path could act on it (assert_seeds_in_selected_sets). Fenced with commas
+  # so a membership test cannot match a prefix (seed 100 inside "1000").
   local requested_fence=""
   if [[ -n "$requested_seeds" ]]; then
-    if ! assert_seeds_in_range "$set_name" "$start" "$last"; then
-      return 1
-    fi
     requested_fence=",$requested_seeds,"
   fi
 

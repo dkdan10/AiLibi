@@ -73,7 +73,7 @@ so the two can never be positionally conflated.
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass, fields, is_dataclass
+from dataclasses import fields, is_dataclass
 import hashlib
 import json
 import os
@@ -807,8 +807,7 @@ def retired_levers_stamped_off(
     ]
 
 
-@dataclass(frozen=True)
-class SubstrateStampMismatch:
+class SubstrateStampMismatch(BaseModel):
     """How a recording's substrate stamp diverges from an ambient snapshot.
 
     Two classes, reported separately because they mean different things and
@@ -822,6 +821,8 @@ class SubstrateStampMismatch:
     Empty on both axes is a match, which is what ``bool()`` reports, so a caller
     reads the verdict rather than re-deriving it.
     """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     differing: tuple[str, ...]
     unknown: tuple[str, ...]
