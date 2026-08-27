@@ -1071,11 +1071,29 @@ if [[ "$dry_run" -eq 1 ]]; then
     echo "[dry-run]   per seed, would run via a temp stage (then move the replay in and update that seed's manifest row):"
     echo "[dry-run]     AILIBI_LLM_PROVIDER=$PROVIDER AILIBI_PROMPT_SET=$REQUIRED_PROMPT_SET uv run python scripts/run_tournament.py --start-seed <seed> --num-games 1 --output-dir <stage> --num-players $np --num-impostors $ni --tasks-per-crewmate $tpc --tactical-policy-stamp $POLICY_STAMP --force"
     echo "[dry-run]   manifest: $set_dir/MANIFEST.md (rows carry the $POLICY_STAMP policy column)"
-    echo "[dry-run]   eval report: would rebuild $set_dir/tournament-eval-report.json (scripts/build_sample_report.py; \$0, no provider)"
-    echo "[dry-run]   splits: would write $set_dir/splits.json ($SPLIT_RULE_DESC)"
-    echo "[dry-run]   freeze: would append a FROZEN line naming the git_sha to $set_dir/MANIFEST.md"
+    if [[ "$PROVIDER" == "fake" ]]; then
+      # The fake arm exists to exercise the RECORDING engine, and it can never
+      # reach the finalize: check_replay_provenance requires the locked model on
+      # every recorded call, and fake rows carry $DEFAULT_FAKE_MODEL. Previewing
+      # a report/splits/FROZEN this run cannot produce would advertise the one
+      # thing the guard is there to refuse.
+      echo "[dry-run]   finalize: would STOP at check_replay_provenance — fake rows are stamped $DEFAULT_FAKE_MODEL, not the locked $DEFAULT_FEATHERLESS_MODEL, so the set fails baseline provenance"
+      echo "[dry-run]   eval report / splits / freeze: NONE — a fake run records replays + MANIFEST rows and is refused before any set-level artifact is written"
+    else
+      echo "[dry-run]   eval report: would rebuild $set_dir/tournament-eval-report.json (scripts/build_sample_report.py; \$0, no provider)"
+      echo "[dry-run]   splits: would write $set_dir/splits.json ($SPLIT_RULE_DESC)"
+      echo "[dry-run]   freeze: would append a FROZEN line naming the git_sha to $set_dir/MANIFEST.md"
+    fi
   done
-  echo "[dry-run] acceptance (per set, before merge): scripts/validity_gate.py <set> --expected-model $DEFAULT_FEATHERLESS_MODEL --require-zero-cost --expected-prompt-versions $REQUIRED_PROMPT_VERSIONS_CLI; scripts/verify_samples.sh <set>"
+  if [[ "$PROVIDER" == "fake" ]]; then
+    # No acceptance command: acceptance gates a FROZEN corpus against the locked
+    # model, and a fake run freezes nothing and is stamped with a model the gate
+    # is built to reject. Printing one would hand an operator a command that
+    # cannot pass on the bytes this plan describes.
+    echo "[dry-run] acceptance: N/A — the fake arm never freezes a set, so there is nothing to accept"
+  else
+    echo "[dry-run] acceptance (per set, before merge): scripts/validity_gate.py <set> --expected-model $DEFAULT_FEATHERLESS_MODEL --require-zero-cost --expected-prompt-versions $REQUIRED_PROMPT_VERSIONS_CLI; scripts/verify_samples.sh <set>"
+  fi
   echo "[dry-run] no API calls made; no files written."
   if ! substrate_lever_preflight; then
     exit 1

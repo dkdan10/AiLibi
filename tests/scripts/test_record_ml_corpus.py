@@ -1572,6 +1572,65 @@ def test_the_dry_run_plan_describes_the_provider_the_real_run_would_use(
     assert not corpus_root.exists()
 
 
+def test_the_fake_dry_run_previews_the_refusal_it_will_actually_hit(
+    tmp_path: Path,
+) -> None:
+    # A full fake run (no --seeds) records every locked seed and is then refused
+    # by check_replay_provenance, because fake rows carry the fake model and the
+    # guard demands the locked one. The preview must say so rather than promise
+    # a report, a splits.json, a FROZEN line and an acceptance command pinned to
+    # a model these bytes will never carry — a plan that advertises exactly what
+    # the run is guaranteed to refuse is worse than no plan.
+    corpus_root = tmp_path / "ml_corpus"
+    proc = _run("--set", "4p1i", "--dry-run", env=_fake_env(corpus_root), timeout=180)
+    out = proc.stdout
+
+    assert proc.returncode == 0, out + proc.stderr
+    assert "would STOP at check_replay_provenance" in out
+    assert f"fake rows are stamped {_FAKE_MODEL}" in out
+    assert "eval report / splits / freeze: NONE" in out
+    assert "acceptance: N/A" in out
+    # None of the featherless finalize promises survive on this path.
+    assert "would append a FROZEN line" not in out
+    assert "would write $" not in out.replace(str(corpus_root), "$")
+    assert "validity_gate.py" not in out
+
+
+def test_fake_model_bytes_are_refused_by_the_provenance_guard(
+    tmp_path: Path,
+) -> None:
+    # The other half of the pin above: the preview's claim is only honest if the
+    # guard really refuses fake-model bytes. Driven over a whole set of them —
+    # the committed 4p1i replays copied to scratch and re-stamped with the fake
+    # model, which is what a full fake run leaves on disk — so the refusal is
+    # reached without recording 50 games. check_replay_provenance is invoked
+    # twice per set (pre-spend over what is already present, and again before
+    # the freeze); this fixture trips the first, which is the same function and
+    # the same verdict: the run stops there and nothing is ever frozen.
+    corpus_root = tmp_path / "ml_corpus"
+    set_dir = corpus_root / "4p1i"
+    shutil.copytree(_REPO_ROOT / "replays" / "ml_corpus" / "4p1i", set_dir)
+    rewritten = 0
+    for replay in set_dir.glob("replay-seed-*.jsonl"):
+        text = replay.read_text(encoding="utf-8")
+        if f'"model":"{_BASELINE_MODEL}"' in text:
+            rewritten += 1
+        replay.write_text(
+            text.replace(f'"model":"{_BASELINE_MODEL}"', f'"model":"{_FAKE_MODEL}"'),
+            encoding="utf-8",
+        )
+    assert rewritten, "the fixture must actually carry fake-model rows"
+
+    proc = _run("--set", "4p1i", env=_fake_env(corpus_root), timeout=900)
+    out = proc.stdout + proc.stderr
+
+    assert proc.returncode != 0
+    assert "check_replay_provenance" in out
+    assert _FAKE_MODEL in out
+    assert "complete and FROZEN" not in out
+    assert "do not commit" in out
+
+
 def test_the_dry_run_refuses_a_fake_target_inside_the_committed_tree() -> None:
     # A preview that cannot refuse would let an operator confirm a plan the real
     # run rejects — the reason the lever preflight already runs in the dry-run.
