@@ -14,10 +14,10 @@
     "third_party_deflections": 15
   },
   "genuine_class_conversion": {
-    "conversion_rate": 0.0,
+    "conversion_rate": null,
     "converted": 0,
     "note": "genuine_class_conversion is the PRIMARY Phase-10 progress gate. Raw ejection_accuracy comparisons against pre-repair eras are INVALID: the artifact-era 0.63 (and the mixed-era 0.476) were built on detector artifacts -- 14/22 of the old impostor convictions carried zero genuine-shaped flags -- so parity with those numbers would be railroading regained, not detection recovered. Gate on this supplied/converted pair and the accumulator/testimony channels; the win split is likewise excluded as a gate signal (constant ~90/10, zero ejection-driven wins).",
-    "supplied": 1
+    "supplied": 0
   },
   "impostor_ejection_channels": {
     "seed-0:m0": [
@@ -170,6 +170,7 @@
       "vent_witness"
     ],
     "seed-33:m1": [
+      "contradiction_flag",
       "vent_witness"
     ],
     "seed-34:m0": [
@@ -311,30 +312,30 @@
   },
   "multi_signal_conversion": {
     "conversions_with_body_proximity": 22,
-    "conversions_with_contradiction_flag": 1,
+    "conversions_with_contradiction_flag": 2,
     "conversions_with_prior_meeting_carry": 20,
     "conversions_with_single_witness_inform": 3,
     "conversions_with_vent_witness": 61,
     "impostor_ejections": 85,
-    "multi_signal_conversions": 22,
-    "multi_signal_rate": 0.25882352941176473,
-    "single_signal_conversions": 63,
+    "multi_signal_conversions": 23,
+    "multi_signal_rate": 0.27058823529411763,
+    "single_signal_conversions": 62,
     "unattributed_conversions": 0
   },
   "sample_dir": "9p2i",
   "supply_gauges": {
     "accused_impostor_meetings": 122,
-    "flag_subjects_crew": 36,
-    "flag_subjects_impostor": 6,
-    "genuine_subject_meetings": 10,
-    "genuine_subject_share": 0.06578947368421052,
+    "flag_subjects_crew": 41,
+    "flag_subjects_impostor": 11,
+    "genuine_subject_meetings": 1,
+    "genuine_subject_share": 0.006578947368421052,
     "meetings_total": 152,
     "over_gate_listener_rows": 450,
     "over_gate_listeners_per_accused_impostor_meeting": 3.6885245901639343,
-    "strong_flags": 3,
-    "total_flags": 42,
-    "weak_flags": 39,
-    "zero_contradiction_meetings": 127,
-    "zero_contradiction_share": 0.8355263157894737
+    "strong_flags": 2,
+    "total_flags": 52,
+    "weak_flags": 50,
+    "zero_contradiction_meetings": 129,
+    "zero_contradiction_share": 0.8486842105263158
   }
 }

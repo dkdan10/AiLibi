@@ -2935,65 +2935,57 @@ def test_supplied_subject_absent_from_roles_fails_loud() -> None:
 def test_legacy_cells_mirror_compute_genuine_class_conversion() -> None:
     """The legacy column is the one-home fold, mirrored — never re-implemented.
 
-    A transcript the repaired detector flags as genuine CANON-interior (the
-    impostor's self-stated alibi against a crewmate's interior-tick sighting
-    in a disjoint canonical room) supplies the LEGACY cell via re-derivation
-    even with NO recorded rows — while the successor's own channels, which
-    read only recorded rows, stay empty. The divergence is the proof that
-    the two cells are independent instruments on one report.
+    Both cells now read the meeting's RECORDED rows, so the proof that they
+    remain independent instruments is a record each reads differently: a
+    ``vent_sighting`` flag is the successor's ``witnessed_vent`` channel and
+    is invisible to the alibi-anchored legacy cell, while a CANON-interior
+    ``alibi_vs_sighting`` flag supplies both. The mirroring is exact on the
+    legacy column either way — the successor never re-implements it.
     """
 
-    meeting = _meeting(
+    genuine_meeting = _meeting(
         outcome="EJECTED",
         ejected=_IMPOSTOR,
-        reports=(
-            MeetingTurn(
-                turn_id="m-0:turn-0",
-                turn_index=0,
-                speaker=_IMPOSTOR,
-                turn_kind="opening",
-                reply_to=None,
-                observations=(),
-                claims=(
-                    AlibiClaim(
-                        type="alibi",
-                        subject=_IMPOSTOR,
-                        from_tick=2,
-                        to_tick=8,
-                        room="CAFETERIA",
-                    ),
-                ),
-                free_text="",
-            ),
+        meeting_id="m-genuine",
+        contradictions=(_contradiction(subjects=(_IMPOSTOR,)),),
+        ballots=tuple(
+            _ballot(target="SKIP", voter=voter, reason_id=None) for voter in _ROLES
         ),
-        statements=(
-            MeetingTurn(
-                turn_id="m-0:turn-1",
-                turn_index=1,
-                speaker=_CREWMATE,
-                turn_kind="reply",
-                reply_to=None,
-                observations=(_saw(subject=_IMPOSTOR, tick=5, room="STORAGE"),),
-                claims=(),
-                free_text="",
+    )
+    vent_meeting = _meeting(
+        outcome="SKIPPED",
+        ejected=None,
+        meeting_id="m-vent",
+        contradictions=(
+            ContradictionRef(
+                contradiction_id="c-vent",
+                kind="vent_sighting",
+                event_a_id="vent:x",
+                event_b_id="vent:x",
+                subjects=(_IMPOSTOR,),
+                description="witnessed vent",
             ),
         ),
         ballots=tuple(
             _ballot(target="SKIP", voter=voter, reason_id=None) for voter in _ROLES
         ),
     )
-    report = _one_meeting_report(meeting)
+    report = _tournament(_game(meetings=(genuine_meeting, vent_meeting)))
 
     result = compute_supplied_channel_conversion(report)
     legacy = compute_genuine_class_conversion(report)
 
+    # The legacy cell sees the alibi-anchored flag only.
     assert legacy.supplied == 1
+    assert legacy.converted == 1
     assert result.legacy_alibi_supplied == legacy.supplied
     assert result.legacy_alibi_converted == legacy.converted
     assert result.legacy_alibi_conversion_rate == legacy.conversion_rate
-    # The successor's own channels read recorded rows only — none here.
-    assert result.supplied == 0
-    assert result.conversion_rate is None
+    # The successor sees both, one per channel — the divergence that keeps the
+    # two cells independent instruments on one report.
+    assert result.sighting_contradiction_supplied == 1
+    assert result.witnessed_vent_supplied == 1
+    assert result.supplied == 2
 
 
 def test_successor_report_ships_both_notes_verbatim() -> None:
@@ -3101,15 +3093,15 @@ def test_committed_9p2i_report_pins_the_successor_instrument() -> None:
     regenerates the report and updates these pins, the standard re-record
     pattern.
 
-    The substrate supplies the successor 79 (meeting, impostor) pairs across
-    three channels: 76 witnessed-vent pairs (68 converted), 2 sighting-
-    contradiction pairs (both converted), and 7 whereabouts-lie pairs (5
-    converted), for 70 conversions overall (rate 0.886). The legacy
-    alibi-anchored cell now reads a non-zero 4/3 (rate 0.75), mirrored from the
-    committed gate block.
+    The substrate supplies the successor 76 deduped (meeting, impostor) pairs
+    across three channels: 74 witnessed-vent pairs (69 converted), 0 sighting-
+    contradiction pairs, and 5 whereabouts-lie pairs (2 converted), for 69
+    conversions overall (rate ~0.908). The legacy alibi-anchored cell reads
+    0/0 — the record carries no CANON-interior alibi lie on this set.
 
-    Task 19.5 wires this cell onto ``GateMetricsReport``, so the STORED block
-    is pinned against the recompute here too.
+    Task 19.5 wires this cell onto ``GateMetricsReport``; the STORED block is
+    pinned against the recompute below, including the one column on which the
+    committed sidecar is knowingly behind it.
     """
 
     report = TournamentEvalReport.model_validate_json(
@@ -3127,23 +3119,39 @@ def test_committed_9p2i_report_pins_the_successor_instrument() -> None:
     assert result.whereabouts_lie_supplied == 5  # was 7
     assert result.whereabouts_lie_converted == 2  # was 5
 
-    # The legacy alibi-anchored cell: preserved, labeled, now reading a non-zero
-    # 4/3 (rate 0.75), mirrored exactly from the committed gate block (one home,
-    # never recomputed differently).
-    assert result.legacy_alibi_supplied == 1  # was 4
-    assert result.legacy_alibi_converted == 0  # was 3
-    assert result.legacy_alibi_conversion_rate == pytest.approx(0.0)  # was 0.75
-    committed_legacy = report.gate_metrics.genuine_class_conversion
-    assert result.legacy_alibi_supplied == committed_legacy.supplied
-    assert result.legacy_alibi_converted == committed_legacy.converted
-    assert result.legacy_alibi_conversion_rate == committed_legacy.conversion_rate
+    # The legacy alibi-anchored cell: preserved, labeled, and now starved on
+    # these bytes — the record carries no CANON-interior alibi_vs_sighting flag
+    # at all. The one the stale sidecar reports was minted by the retired
+    # transcript-only re-derivation, never by the game.
+    assert result.legacy_alibi_supplied == 0  # was 1
+    assert result.legacy_alibi_converted == 0
+    assert result.legacy_alibi_conversion_rate is None  # was 0.0
+    # One home: the legacy column IS compute_genuine_class_conversion over the
+    # same games, mirrored. Asserted against the LIVE fold rather than the
+    # stored gate block, because both stored blocks are behind by that same one
+    # column until 21.15 rebuilds the sidecar.
+    live_legacy = compute_genuine_class_conversion(report.report)
+    assert result.legacy_alibi_supplied == live_legacy.supplied
+    assert result.legacy_alibi_converted == live_legacy.converted
+    assert result.legacy_alibi_conversion_rate == live_legacy.conversion_rate
 
     assert result.note == SUPPLIED_CHANNEL_GATE_NOTE
     assert result.legacy_note == LEGACY_ALIBI_CELL_NOTE
 
-    # STORED vs RECOMPUTE (Task 19.5): the cell now ships on the committed gate
-    # block, so the regenerated bytes must equal what the analyzer recomputes.
-    assert report.gate_metrics.supplied_channel_conversion == result
+    # STORED vs RECOMPUTE: the committed sidecar was built by the old
+    # record-free census and is rebuilt by Task 21.15, not here, so the stored
+    # block is BEHIND the analyzer on exactly the legacy column and nowhere
+    # else. Pinned as a divergence rather than waved through, so the rebuild
+    # has to come back through this test.
+    stored = report.gate_metrics.supplied_channel_conversion
+    behind = {
+        field
+        for field in type(stored).model_fields
+        if getattr(stored, field) != getattr(result, field)
+    }
+    assert behind == {"legacy_alibi_supplied", "legacy_alibi_conversion_rate"}
+    assert stored.legacy_alibi_supplied == 1
+    assert stored.legacy_alibi_conversion_rate == pytest.approx(0.0)
 
     # Cross-surface sanity: converted pairs are impostor ejections, so the
     # successor's numerator is bounded by the recorded impostor-ejection

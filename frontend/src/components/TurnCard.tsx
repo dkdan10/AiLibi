@@ -17,8 +17,8 @@
 import {
   dedupeContradictions,
   findContradictions,
+  observationEventId,
   turnClaimEventId,
-  turnObsEventId,
 } from "../lib/contradictions";
 import { TURN_COPY } from "../lib/copy";
 import { useReplayStore } from "../store/replayStore";
@@ -290,7 +290,7 @@ export function TurnCard({
 }: TurnCardProps) {
   const observations = turn.observations.map((obs, index) => ({
     obs,
-    contras: findContradictions(turnObsEventId(turn, index), contradictions),
+    contras: findContradictions(observationEventId(turn, obs, index), contradictions),
   }));
   const claims = turn.claims.map((claim, index) => ({
     claim,

@@ -75,14 +75,15 @@ MIRRORS the ``eval/watchability.py`` assembly from the recorded bytes and never
 imports ``eval.*`` (the AST firewall the task contract names; the committed
 firewall test enforces it):
 
-* ``flags_minted`` — the transcript-re-derived census PLUS the persisted
-  ``vent_sighting`` subset: ``len(detect_contradictions(transcript,
-  roster=frozenset(ballot voters)))`` + the recorded ``vent_sighting`` flags
-  (the re-derivation can never mint one — the vent grounding channel is
-  private). Mirrors ``eval/meeting_quality.py::compute_supply_gauges`` +
-  ``eval/watchability.py::_persisted_vent_flag_count``; the detector itself IS
-  the production :func:`meetings.transcript.detect_contradictions`, imported —
-  only the eval-layer assembly is mirrored.
+* ``flags_minted`` — the meeting's RECORDED contradictions, exactly
+  ``len(entry.contradictions)``, split into the non-vent census and the
+  ``vent_sighting`` subset by the ``rederived_flags`` / ``persisted_vent_flags``
+  columns. The recording-time detector held the meeting's trigger kind and its
+  three private grounding channels; a transcript-only re-derivation holds none
+  of them and labels a different game. Mirrors
+  ``eval/meeting_quality.py::recorded_contradiction_flags`` +
+  ``eval/watchability.py::_persisted_vent_flag_count`` — mirrored, not
+  imported, because the firewall test forbids an ``eval.*`` import here.
 * ``conversion_attempted`` / ``conversion_converted`` — the observation-BACKED
   conversion (``eval/watchability.py::_observation_backed_impostors`` + the
   subject-aware Task-15.19 backing bit): a true impostor named by a non-self
@@ -130,7 +131,6 @@ from meetings.schemas import (
     SawPlayerObservation,
     SawVentObservation,
 )
-from meetings.transcript import detect_contradictions
 from orchestrator.replay import MeetingReplayEntry, read_all_entries
 from orchestrator.seeder import seed_initial_state
 from training.surrogate.dataset import (
@@ -264,7 +264,10 @@ class ConvictionMeetingRow(BaseModel):
     for byte-stable dumps) — the run_meeting-reconstructable evidence supply.
     ``flags_minted`` / ``conversion_*`` are the mirrored referee labels (module
     docstring); ``rederived_flags`` + ``persisted_vent_flags`` decompose the
-    flag label's two disjoint sources. ``ceiling_reachable`` is the label-side
+    flag label's two disjoint sources — the recorded non-vent flags and the
+    recorded ``vent_sighting`` ones. ``rederived_flags`` keeps its name because
+    the column layout is the frozen 18.15 artifact contract, not because it
+    still re-derives anything. ``ceiling_reachable`` is the label-side
     ceiling channel: whether the ejected target is the strict argmax of the
     best-case reconstructed physical+belief suspicion (always ``False`` on a
     SKIP meeting), so ``voice_driven_share`` re-measures on any row population.
@@ -477,18 +480,21 @@ def _meeting_labels(
 ) -> tuple[int, int, int, int]:
     """One meeting's ``(rederived_flags, persisted_vent_flags, attempted, converted)``.
 
-    The flag census re-derives under the ballot-voter roster exactly as the
-    referee's supply gauge does (``eval/meeting_quality.py::compute_supply_gauges``
-    — mirrored, with the production :func:`detect_contradictions` imported), then
-    the persisted ``vent_sighting`` flags merge in from the recorded
-    contradictions (the ONLY read of them — the re-derivation cannot mint a vent
-    flag; the two sets are disjoint, so no double count). Conversion follows
+    Both flag terms come off the RECORDED contradictions, split on the
+    ``vent_sighting`` kind: the first term is the non-vent census, the second
+    the vent one, and they sum to ``len(entry.contradictions)`` exactly. This
+    MIRRORS ``eval/meeting_quality.py::recorded_contradiction_flags`` +
+    ``eval/watchability.py::_persisted_vent_flag_count`` — mirrored rather than
+    imported because the committed firewall test forbids an ``eval.*`` import
+    from this package, the convention this module already follows for the
+    labels. The split is what keeps the two sources disjoint, so the row's
+    ``flags_minted == rederived + persisted_vent`` validator holds by
+    construction. Conversion follows
     :func:`_observation_backed_impostor_subjects`; a meeting ejects at most one
     player, so ``converted`` is 0 or 1.
     """
 
-    roster = frozenset(ballot.voter for ballot in entry.ballots)
-    rederived = len(detect_contradictions(entry.transcript, roster=roster))
+    rederived = sum(1 for flag in entry.contradictions if flag.kind != "vent_sighting")
     persisted_vent = sum(
         1 for flag in entry.contradictions if flag.kind == "vent_sighting"
     )
