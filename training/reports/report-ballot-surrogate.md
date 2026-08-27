@@ -221,6 +221,28 @@ the exact `suspicion_graph_for_meeting()` accessor a live meeting consumes):
    exclusion — under-gate redirects, and parse-defaults; only the J2 coercion marker
    records a vote the voter never chose as a skip.)
 
+   > **2026-08-27 — the exclusion widened; the next fit applies it.** The
+   > per-kind list above reasons about the SKIP DECISION label, which the
+   > under-gate redirects never touch: they keep the voter's authored EJECT and
+   > rewrite only the TARGET. `BallotExample` carries ONE `target` field feeding
+   > both the ranking softmax and the SKIP alternative, so a rewritten target is
+   > a poisoned label for the whole example. Both fit paths now drop every row
+   > whose recorded target is not the voter's authored choice — the five-member
+   > class `meetings.schemas.BallotTargetRewriteReason` names, read from that
+   > union rather than re-spelled — while the two citation-only rewrites stay in
+   > the fit, labelled and counted, because they null a reference and leave the
+   > target intact. On the corpus now on disk the whole-table census moves from
+   > 7 rows to 102 (9p2i) and from 0 to 2 (4p1i); what a fit actually drops is
+   > the `train ∪ val` share of that — **7 → 82** on 9p2i and 0 → 2 on 4p1i, the
+   > other 20 being held-out rows no fit path ever consumed. Over the same
+   > window the `is_reporter`
+   > slot is masked to a constant on the fit and the serve side alike: the
+   > reporter is a crewmate on all 3,602 recorded ballots across the four
+   > committed sets, so a fit that reads it learns roles ground truth rather than
+   > a ballot. **Every number in this report is the baseline-6 fit's, taken
+   > before both changes** — they are the record of that evaluation, and the ML
+   > re-ground re-states them.
+
 ---
 
 ## 3. Held-out fidelity vs the ceiling (the four channels together)

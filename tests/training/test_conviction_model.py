@@ -61,6 +61,7 @@ from training.conviction.fidelity import (
     CONVICTION_CONVERSION_CEILING_RATIO,
     CONVICTION_SPEARMAN_BAR,
     ConvictionFidelityReport,
+    conversion_trivial_baseline,
     decide_conviction_go,
     load_conviction_verdict,
     run_conviction_fidelity,
@@ -84,6 +85,7 @@ from training.surrogate.dataset import (
     SurrogateSplits,
     build_meeting_table,
 )
+from training.surrogate.runner import SurrogateFitCorpus, fit_corpus_fingerprint
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _NINE = _REPO_ROOT / "replays" / "samples" / "9p2i"
@@ -949,3 +951,184 @@ def test_the_committed_verdict_is_baseline6_and_the_weights_still_clear_the_bar(
         **rederived.model_dump(),
         "replay_set_dir": committed.replay_set_dir,
     }
+
+
+# --------------------------------------------------------------------------- #
+# Axis 3 — the trivial-constant comparator the recall bar cannot supply       #
+# --------------------------------------------------------------------------- #
+
+
+def _degenerate_report(base: ConvictionFidelityReport) -> ConvictionFidelityReport:
+    """An always-convert head on ``base``'s population: recall 1.0, no skill.
+
+    Every actual conversion is called (no false negatives) and so is every
+    non-conversion, so accuracy lands exactly on the base rate — the number a
+    constant answer earns for free.
+    """
+
+    conversions = base.conversions_test
+    meetings = base.test_meetings
+    return base.model_copy(
+        update={
+            "predicted_conversions": meetings,
+            "true_positives": conversions,
+            "false_positives": meetings - conversions,
+            "false_negatives": 0,
+            "true_negatives": 0,
+            "conversion_recall": 1.0,
+            "conversion_precision": conversions / meetings,
+            "conversion_accuracy": conversions / meetings,
+        }
+    )
+
+
+def test_axis_three_refuses_a_degenerate_head_the_recall_bar_waves_through(
+    corpus_conviction: ConvictionTable,
+) -> None:
+    """The planted degenerate head: recall 1.0, a passing Spearman, NO-GO anyway.
+
+    An always-convert head has no false negatives, so its recall is 1.0 on any
+    corpus and axis 2 passes by construction; its accuracy is the base rate, so
+    it has learned nothing. Axis 1 is left untouched and passing, which is what
+    makes the verdict attributable to axis 3 alone.
+    """
+
+    model, digest = load_conviction_model_artifact(_ARTIFACT_DIR)
+    report, _ = run_conviction_fidelity(corpus_conviction, model=model)
+    degenerate = decide_conviction_go(_degenerate_report(report), weights_sha256=digest)
+    assert degenerate.conversion_recall == 1.0
+    assert degenerate.meets_conversion_bar is True
+    assert degenerate.meets_spearman_bar is True
+    assert degenerate.beats_trivial_conversion is False
+    assert degenerate.verdict == "NO-GO"
+    assert degenerate.model_role == "diagnostic-only"
+
+
+def test_axis_three_is_a_floor_the_live_model_clears_on_all_three(
+    corpus_conviction: ConvictionTable,
+) -> None:
+    """The frozen re-derivation still passes every axis, axis 3 by a wide margin.
+
+    Recomputed from the committed weights against the corpus now on disk, never
+    copied from the contract: held-out confusion (TP, FP, FN, TN) = (45, 2, 6,
+    34) over 87 test meetings with 51 conversions, so recall is 45/51, accuracy
+    79/87, and the population's own best constant answer is 51/87. The axis is a
+    floor the real model clears, not a re-verdict on it.
+    """
+
+    model, digest = load_conviction_model_artifact(_ARTIFACT_DIR)
+    report, _ = run_conviction_fidelity(corpus_conviction, model=model)
+    verdict = decide_conviction_go(report, weights_sha256=digest)
+
+    assert (report.test_meetings, report.conversions_test) == (87, 51)
+    assert (
+        report.true_positives,
+        report.false_positives,
+        report.false_negatives,
+        report.true_negatives,
+    ) == (45, 2, 6, 34)
+    assert report.conversion_recall == pytest.approx(45 / 51)
+    assert report.conversion_precision == pytest.approx(45 / 47)
+    assert report.conversion_accuracy == pytest.approx(79 / 87)
+    assert verdict.conversion_trivial_baseline == pytest.approx(51 / 87)
+    assert verdict.conversion_accuracy == pytest.approx(79 / 87)
+    assert verdict.beats_trivial_conversion is True
+    assert 79 / 87 - 51 / 87 > 0.3  # the margin the axis clears by
+    assert (
+        verdict.meets_spearman_bar,
+        verdict.meets_conversion_bar,
+        verdict.verdict,
+    ) == (True, True, "GO")
+
+
+def test_the_trivial_baseline_is_the_better_of_the_two_constant_answers() -> None:
+    """``max(base_rate, 1 - base_rate)``, and undefined on an empty population."""
+
+    assert conversion_trivial_baseline(conversions=51, meetings=87) == pytest.approx(
+        51 / 87
+    )
+    assert conversion_trivial_baseline(conversions=10, meetings=87) == pytest.approx(
+        77 / 87
+    )
+    with pytest.raises(ValueError, match="empty held-out population"):
+        conversion_trivial_baseline(conversions=0, meetings=0)
+
+
+def test_decide_conviction_go_always_populates_the_axis_three_fields(
+    corpus_conviction: ConvictionTable,
+) -> None:
+    """``None`` means "predates axis 3" and nothing else.
+
+    The three fields are optional only so the committed baseline-6 artifact —
+    written before the axis existed — still loads and keeps the composed
+    runner's GO gate green. Nothing this function returns may carry a ``None``
+    there, or the sentinel would stop meaning one thing.
+    """
+
+    model, digest = load_conviction_model_artifact(_ARTIFACT_DIR)
+    report, _ = run_conviction_fidelity(corpus_conviction, model=model)
+    for candidate in (report, _degenerate_report(report)):
+        verdict = decide_conviction_go(candidate, weights_sha256=digest)
+        assert verdict.conversion_accuracy is not None
+        assert verdict.conversion_trivial_baseline is not None
+        assert verdict.beats_trivial_conversion is not None
+
+    committed = load_conviction_verdict(_ARTIFACT_DIR)
+    assert committed.conversion_accuracy is None
+    assert committed.conversion_trivial_baseline is None
+    assert committed.beats_trivial_conversion is None
+    assert committed.verdict == "GO"
+
+
+# --------------------------------------------------------------------------- #
+# The conviction fit-corpus fence (built here, wired by the ML re-ground)      #
+# --------------------------------------------------------------------------- #
+
+
+def test_the_conviction_corpus_fence_is_opt_in_and_bites_on_its_own_leg(
+    tmp_path: Path,
+) -> None:
+    """The fence is attributable to the conviction leg, not to the surrogate's.
+
+    Built in a temp artifact dir holding a MATCHING surrogate-shaped fit-corpus
+    record for the live corpus, so a refusal cannot be the surrogate fence
+    raising first: the mismatched record refuses, the ABSENT record refuses and
+    names the writer, the matching record loads, and no ``corpus_dir`` at all
+    leaves the load exactly as it is at HEAD.
+    """
+
+    for name in (
+        "conviction-model.json",
+        "conviction-model.json.sha256",
+        "max-uses.json",
+    ):
+        (tmp_path / name).write_text((_ARTIFACT_DIR / name).read_text())
+    _, digest = load_conviction_model_artifact(tmp_path)
+
+    # Opt-out: unchanged behaviour, no record needed.
+    assert load_conviction_model_artifact(tmp_path)[1] == digest
+
+    # Absent: refuses, and names who writes it.
+    with pytest.raises(FileNotFoundError, match="ML re-ground"):
+        load_conviction_model_artifact(tmp_path, corpus_dir=_CORPUS)
+
+    matching = SurrogateFitCorpus(
+        corpus_set="9p2i",
+        corpus_sha256=fit_corpus_fingerprint(_CORPUS),
+        fit_side_meetings=345,
+        weights_sha256=digest,
+    )
+    (tmp_path / "fit-corpus.json").write_text(matching.model_dump_json(indent=2) + "\n")
+    assert load_conviction_model_artifact(tmp_path, corpus_dir=_CORPUS)[1] == digest
+
+    # Substrate drift: the record names a corpus this one is not.
+    drifted = matching.model_copy(update={"corpus_sha256": "b" * 64})
+    (tmp_path / "fit-corpus.json").write_text(drifted.model_dump_json(indent=2) + "\n")
+    with pytest.raises(ValueError, match="the substrate drifted"):
+        load_conviction_model_artifact(tmp_path, corpus_dir=_CORPUS)
+
+    # Weights drift: the record is keyed to a different artifact.
+    foreign = matching.model_copy(update={"weights_sha256": "a" * 64})
+    (tmp_path / "fit-corpus.json").write_text(foreign.model_dump_json(indent=2) + "\n")
+    with pytest.raises(ValueError, match="fit-corpus record and the artifact"):
+        load_conviction_model_artifact(tmp_path, corpus_dir=_CORPUS)

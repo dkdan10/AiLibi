@@ -197,8 +197,6 @@ Run these before editing. If any fail, stop and report — your dependencies are
 - `uv run python -c "import training.surrogate.fidelity"`
 - `uv run python -c "import orchestrator.replay"`
 - `uv run python -c "import eval.meeting_quality"`
-- `uv run python -c "import eval.watchability.SupplyFloors"`
-- `uv run python -c "import eval.replay_walk.ReplayWalkConfig"`
 - `uv run python -c "import engine.tick"`
 - `uv run python -c "import training.surrogate.dataset"`
 - `uv run python -c "import training.surrogate.runner"`

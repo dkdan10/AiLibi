@@ -409,10 +409,25 @@ def test_recompute_reads_every_committed_verdict_against_the_declared_gap() -> N
         "composed decision accuracy",
         "composed exact-outcome match",
     }
+    # All three verdicts are re-derived, not two: the surrogate row joins its
+    # conviction and composed siblings, and it reproduces field-for-field on
+    # this checkout (its committed artifact was taken on the corpus now on disk,
+    # which is exactly what the other two verdicts cannot say).
+    surrogate_verdict = _row(result.rows, "surrogate verdict.json reproduces")
+    assert surrogate_verdict.status == "OK"
+    assert "fields identical" in surrogate_verdict.measured
+    assert not surrogate_verdict.measured.startswith("0/")
+    assert {
+        "surrogate verdict.json reproduces",
+        "conviction verdict.json reproduces",
+        "composed verdict.json reproduces",
+    } <= vme._CORPUS_DEPENDENT_RECOMPUTE_ROWS
     # Left: measured on the baseline-7 corpus. Right: the committed baseline-6
     # figure the row is read against. Pinned in pairs so neither can drift alone.
     for name, measured, committed in (
-        ("surrogate top-1 (ranking channel)", "0.8181818", "0.7666666"),
+        # was 0.8181818 — the reporter exclusion oracle left the served feature
+        # vector, and the frozen weights were fitted while it was still there
+        ("surrogate top-1 (ranking channel)", "0.7636363", "0.7666666"),
         ("surrogate SKIP-vs-eject decision accuracy", "0.3908045", "0.3750000"),
         # was 0.6991081 — the corrected recorded flag label fits BETTER
         ("conviction flag-count Spearman", "0.7145778975", "0.5781584"),
@@ -420,7 +435,8 @@ def test_recompute_reads_every_committed_verdict_against_the_declared_gap() -> N
         # its destination, so it carries conversions the frozen fit never saw
         ("conviction conversion-label accuracy", "0.9080459", "0.9375000"),
         ("composed decision accuracy", "0.8620689", "0.8645833"),
-        ("composed exact-outcome match", "0.8160919", "0.7916666"),
+        # was 0.8160919 — the same masked column, through the composition
+        ("composed exact-outcome match", "0.7816091", "0.7916666"),
     ):
         row = _row(result.rows, name)
         assert row.measured.startswith(measured), row.measured
@@ -458,6 +474,37 @@ def test_the_stale_amnesty_stops_at_the_corpus_dependent_rows() -> None:
     for row in result.rows:
         if row.status == "STALE" and row.name != "ML grounding":
             assert row.name in vme._CORPUS_DEPENDENT_RECOMPUTE_ROWS, row.name
+
+
+def test_the_extrapolated_grounding_list_shrinks_the_day_a_record_is_written() -> None:
+    """The one-question assumption is named, and it stops being an assumption.
+
+    Only the surrogate's grounding is MEASURED; the conviction and composed rows
+    are read against that one answer. Naming the extrapolation is half the fix —
+    the other half is that it cannot outlive itself: an instrument that gains its
+    own ``fit-corpus.json`` must be fingerprinted rather than assumed, so this
+    fails the day the ML re-ground writes the conviction record and leaves it on
+    the list. Perturbed by asserting the surrogate, which DOES commit one, would
+    fail the same gate.
+    """
+
+    assert vme._GROUNDING_EXTRAPOLATED_DIRS == {vme.CONVICTION_DIR, vme.COMPOSED_DIR}
+    assert vme.SURROGATE_DIR not in vme._GROUNDING_EXTRAPOLATED_DIRS
+    for artifact_dir in vme._GROUNDING_EXTRAPOLATED_DIRS:
+        record = _REPO_ROOT / artifact_dir / "fit-corpus.json"
+        assert not record.exists(), (
+            f"{artifact_dir} now commits its own fit-corpus record, so its "
+            "grounding must be MEASURED rather than extrapolated from the "
+            "surrogate's — drop it from _GROUNDING_EXTRAPOLATED_DIRS and "
+            "fingerprint it"
+        )
+    # The perturbation: the surrogate does ship one, so listing it would bite.
+    assert (_REPO_ROOT / vme.SURROGATE_DIR / "fit-corpus.json").exists()
+
+    # And the row says which instruments it is answering for.
+    grounding = _row(vme.run_recompute(_context(_REPO_ROOT)).rows, "ML grounding")
+    for artifact_dir in vme._GROUNDING_EXTRAPOLATED_DIRS:
+        assert artifact_dir in grounding.source
 
 
 def test_a_perturbed_weight_hash_fails_even_while_the_fits_are_stale(

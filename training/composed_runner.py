@@ -118,6 +118,7 @@ from training.conviction.model import (
 )
 from training.conviction.serving import assemble_live_conviction_features
 from training.surrogate.ballots import (
+    MASKED_IS_REPORTER,
     BallotPredictor,
     BallotSurrogateModel,
     PredictedBallot,
@@ -254,7 +255,9 @@ def load_composed_components(
     composed runner needs the per-voter ``target_probs`` for the ranking channel.
 
     **Conviction side.** The sha-verified model
-    (:func:`~training.conviction.model.load_conviction_model_artifact`), its
+    (:func:`~training.conviction.model.load_conviction_model_artifact`, handed
+    the same ``corpus_dir`` so BOTH components answer for the corpus about to
+    score them rather than one answering for the other), its
     committed cap (cross-checked keyed on those weights), and its committed
     verdict (cross-checked keyed on those weights AND asserted **GO** — a NO-GO
     conviction verdict means the composed runner is structurally unbuildable, the
@@ -286,7 +289,7 @@ def load_composed_components(
 
     # -- Conviction side: sha-verified model + cap + GO verdict. ----------------
     conviction_model, conviction_sha = load_conviction_model_artifact(
-        conviction_artifact_dir
+        conviction_artifact_dir, corpus_dir=corpus_dir
     )
     conviction_cap = load_conviction_staleness_cap(conviction_artifact_dir)
     if conviction_cap.weights_sha256 != conviction_sha:
@@ -689,7 +692,9 @@ class ComposedMeetingRunner:
                     "belief_trust": (
                         float(entry.trust) if entry is not None else _NEUTRAL_PRIOR
                     ),
-                    "is_reporter": float(cand == trigger.triggered_by),
+                    # Masked identically to the fit side, so the frozen weights
+                    # multiply the same column here as they were fitted on.
+                    "is_reporter": MASKED_IS_REPORTER,
                     "witnessed_vent": float(cand in vent_subjects),
                     "meeting_index": meeting_index,
                     "alive_count": alive_count,
@@ -842,6 +847,10 @@ def run_composed_fidelity(
     ballot_predictor, surrogate_sha = load_ballot_predictor_artifact(
         surrogate_artifact_dir
     )
+    # No ``corpus_dir`` here on purpose: this is the verdict-taking path, and
+    # the conviction fit-corpus record it would demand is written by the ML
+    # re-ground, not by this checkout. Same hand-off as the bake-off bundle
+    # loader — the fence is built, and wired once the record exists.
     conviction_model, conviction_sha = load_conviction_model_artifact(
         conviction_artifact_dir
     )

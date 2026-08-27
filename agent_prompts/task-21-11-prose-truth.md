@@ -240,7 +240,6 @@ Finally, re-read the whole file for the lever count and derive the word "twenty-
 ## Public types this task introduces
 - `check_doc_facts.check_front_door_budgets`
 - `check_doc_facts.check_corpus_disclosures`
-- `eval.replay_walk.ReplayWalkConfig.reject_retired_levers_stamped_off`
 
 These are the symbols downstream tasks will import. Keep their signatures stable.
 
@@ -249,9 +248,7 @@ Run these before editing. If any fail, stop and report — your dependencies are
 
 - `uv run python -c "import orchestrator.replay"`
 - `uv run python -c "import eval.meeting_quality"`
-- `uv run python -c "import eval.watchability.SupplyFloors"`
 - `uv run python -c "import meetings.schemas"`
-- `uv run python -c "import eval.replay_walk.ReplayWalkConfig"`
 - `uv run python -c "import engine.tick"`
 - `uv run python -c "import training.surrogate.dataset"`
 - `uv run python -c "import training.surrogate.runner"`

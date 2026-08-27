@@ -216,8 +216,6 @@ outside the walk by construction rather than by an allowlist entry that will rot
 
 ## Public types this task introduces
 - `eval.meeting_quality.recorded_contradiction_flags`
-- `eval.watchability.SupplyFloors.transcript_flags_per_meeting`
-- `eval.watchability.SupplyFloors.persisted_vent_flags_per_meeting`
 
 These are the symbols downstream tasks will import. Keep their signatures stable.
 

@@ -99,7 +99,7 @@ than its output preserved.
 | `tests/fixtures/` — golden fixtures (rendered memory views and their inputs; the bump-in-flight prompt archive currently holds the six `qwen3_6_27b` v4 bodies the committed replays render through, and is emptied again at the adopting re-record) | (a) | in git | 2,139,890 tracked bytes / 29 files |
 | `data/personas.json` — the canonical persona set | (a) | in git | 12 KB |
 | `training/artifacts/impostor/`, `crew/`, `anchor_study/` — the **canonical learned genomes** (`weights.json` + `config.json` + `stamp.json` + `weights.json.sha256`) | (a) + (b) | in git | 1.5 MB / 105 files |
-| `training/artifacts/surrogate/`, `conviction/`, `composed/` — the ballot surrogate, the conviction model and the composed-runner verdict, with their sidecars | (a) + (b) | in git | 52 KB / 10 files |
+| `training/artifacts/surrogate/`, `conviction/`, `composed/` — the ballot surrogate, the conviction model and the composed runner, each with its sidecars and its own committed GO/NO-GO verdict | (a) + (b) | in git | 7.8 KB / 11 files |
 | `training/artifacts/coevo/` — the 90 retained bytes (rankings, `measurement-stability.json`, the 8 pinned genome dirs, `provenance/`, `PATHS.md`) | (a) + (b) | in git | 495 KiB / 90 files |
 | `training/artifacts/coevo/EVIDENCE-MANIFEST.md` — the pin + the digests + the consumer enumeration | (b) | in git | 283 KiB |
 | `training/reports/` — the reports and their flattened `results-*.jsonl` rows | (b) | in git | 2.5 MB / 21 files |

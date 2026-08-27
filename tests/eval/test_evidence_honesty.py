@@ -24,6 +24,7 @@ import re
 import tempfile
 from collections import Counter
 from collections.abc import Mapping
+from dataclasses import replace
 from pathlib import Path
 from types import MappingProxyType
 from typing import Final, NamedTuple
@@ -796,16 +797,36 @@ def _flag_meeting(
         living=frozenset({"p-3", "p-6", "p-9"}),
         venting=frozenset(),
         body_triggered=True,
+        # Filled by :func:`_fold` from the memories the case hands it.
+        memory_prefix={},
     )
 
 
 def _fold(
-    facts: _MeetingFacts, *, memories: Mapping[PlayerId, MemoryStore]
+    facts: _MeetingFacts,
+    *,
+    memories: Mapping[PlayerId, MemoryStore],
+    memory_prefix: Mapping[PlayerId, int] | None = None,
 ) -> _Tallies:
+    """Fold one hand-built meeting; ``memory_prefix`` defaults to the whole log.
+
+    A hand-built store already holds exactly what its case means the speaker to
+    have perceived by meeting time, so the default prefix is its full length —
+    which is what keeps every case below reading as it did before the bound
+    existed. The planted post-meeting case passes a shorter one.
+    """
+
     tallies = _Tallies()
     _fold_flags(
         game_id="g",
-        facts=facts,
+        facts=replace(
+            facts,
+            memory_prefix=(
+                {pid: len(store) for pid, store in memories.items()}
+                if memory_prefix is None
+                else memory_prefix
+            ),
+        ),
         roles=_FLAG_ROLES,
         memories=memories,
         room_at=_FLAG_ROOM_AT,
@@ -910,6 +931,89 @@ def test_a_movement_sided_side_is_grounded_by_whichever_channel_holds_it() -> No
         memories={"p-9": _witness_memory(moved_to="MEDBAY")},
     )
     assert (static.resolvable_sides, static.grounded_at_tick) == (1, 0)
+
+
+def test_a_perception_taken_after_the_meeting_grounds_nothing_said_at_it() -> None:
+    """The planted case for the memory bound: look-ahead is not grounding.
+
+    I-4 asks whether the speaker COULD have seen what they said, and I-7 reads
+    the same log for the move row behind a spoken placement. Both folds run
+    after the walk has closed, so both would otherwise scan an end-of-game log.
+    Here p-9's only supporting rows — the static MEDBAY sighting and the
+    LABS→MEDBAY move — land AFTER the meeting opened, at the spoken tick itself
+    and therefore well inside the ±2 tolerance, which is exactly the shape a
+    tolerance window cannot exclude on its own. Under the meeting-time prefix
+    the side is ungrounded and the flag is not move-backed; over the whole log
+    both light up. Both directions are asserted, so the bound cannot pass by
+    being inert.
+    """
+
+    turns = (
+        _turn(index=0, speaker="p-9", observations=(_saw_move(to_room="MEDBAY"),)),
+        _turn(index=1, speaker="p-3", claims=(_FLAG_ALIBI,)),
+    )
+    flags = (_sighting_flag(sighting_id="turn:m:turn-0:obs:0"),)
+    # Row 0 is what p-9 held when the meeting opened: a sighting in the WRONG
+    # room, which supports nothing. Rows 1 and 2 are perceived afterwards.
+    late_memory = _memory_with(
+        EpisodicEvent(
+            tick=8,
+            type=EVENT_SAW_PLAYER,
+            payload={"player_id": "p-3", "room": "ADMIN"},
+            provenance=PROVENANCE_OBSERVED,
+            observation_id="p-9:8:0",
+        ),
+        EpisodicEvent(
+            tick=8,
+            type=EVENT_SAW_PLAYER,
+            payload={"player_id": "p-3", "room": "MEDBAY"},
+            provenance=PROVENANCE_OBSERVED,
+            observation_id="p-9:8:1",
+        ),
+        EpisodicEvent(
+            tick=8,
+            type=EVENT_SAW_PLAYER_MOVE,
+            payload={"player_id": "p-3", "from_room": "LABS", "to_room": "MEDBAY"},
+            provenance=PROVENANCE_OBSERVED,
+            observation_id="p-9:8:2",
+        ),
+    )
+
+    bounded = _fold(
+        _flag_meeting(turns=turns, flags=flags),
+        memories={"p-9": late_memory},
+        memory_prefix={"p-9": 1},
+    )
+    assert (bounded.resolvable_sides, bounded.grounded_within_2) == (1, 0)
+    assert (bounded.resolved_sighting_flags, bounded.move_backed_flags) == (1, 0)
+
+    unbounded = _fold(
+        _flag_meeting(turns=turns, flags=flags),
+        memories={"p-9": late_memory},
+    )
+    assert (unbounded.resolvable_sides, unbounded.grounded_within_2) == (1, 1)
+    assert (unbounded.resolved_sighting_flags, unbounded.move_backed_flags) == (1, 1)
+
+
+def test_a_missing_memory_prefix_raises_rather_than_reading_the_whole_log() -> None:
+    """A speaker the walk perceived for but did not record is a wiring bug.
+
+    Falling back to the whole log would silently restore the look-ahead the
+    prefix exists to remove, so the fold raises instead.
+    """
+
+    turns = (
+        _turn(index=0, speaker="p-9", observations=(_saw_move(to_room="MEDBAY"),)),
+        _turn(index=1, speaker="p-3", claims=(_FLAG_ALIBI,)),
+    )
+    with pytest.raises(EvidenceHonestyReconstructionError, match="prefix"):
+        _fold(
+            _flag_meeting(
+                turns=turns, flags=(_sighting_flag(sighting_id="turn:m:turn-0:obs:0"),)
+            ),
+            memories={"p-9": _witness_memory(moved_to="MEDBAY")},
+            memory_prefix={},
+        )
 
 
 def test_one_witnesss_placement_said_twice_folds_once_into_every_cell() -> None:

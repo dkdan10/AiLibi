@@ -37,7 +37,8 @@ string the code computes.
   was true.
 * **I-4 grounded sighting side** — numerator: STRONG alibi_vs_sighting
   sighting sides the speaker's own recorded perception supports within the
-  stated tick tolerance; denominator: the RESOLVABLE sides only, never the
+  stated tick tolerance, reading only the perceptions that speaker already held
+  when the meeting opened; denominator: the RESOLVABLE sides only, never the
   full flag count; the spoken tick is resolved to the engine frame as tick -
   1; it does NOT measure whether the sighting was factually true, only whether
   the speaker could have seen it.
@@ -53,11 +54,11 @@ string the code computes.
   are read from the recorded flag's own two events, no clock conversion
   applies; it does NOT measure reachability across more than one doorway.
 * **I-7 movement-origin flags** — numerator: alibi_vs_sighting flags whose
-  sighting names the ORIGIN half of a saw_player move from A to B row in the
-  speaker's own memory; denominator: all alibi_vs_sighting flags resolvable to
-  a spoken sighting; the memory row's tick is the spoken tick, so no
-  conversion applies; it does NOT measure destination-half re-speaks, which
-  are truthful.
+  sighting names the ORIGIN half of a saw_player move from A to B row the
+  speaker already held when the meeting opened; denominator: all
+  alibi_vs_sighting flags resolvable to a spoken sighting; the memory row's
+  tick is the spoken tick, so no conversion applies; it does NOT measure
+  destination-half re-speaks, which are truthful.
 * **I-8 dev-marker contamination** — numerator: transcript turns whose
   free_text begins with a meetings.manager audit marker, and separately the
   recorded prompts containing one; denominators: all turns and all recorded
@@ -318,7 +319,8 @@ CELL_DEFINITIONS: Final[Mapping[str, str]] = {
     ),
     "I-4": (
         "numerator: STRONG alibi_vs_sighting sighting sides the speaker's own "
-        "recorded perception supports within the stated tick tolerance; "
+        "recorded perception supports within the stated tick tolerance, reading "
+        "only the perceptions that speaker already held when the meeting opened; "
         "denominator: the RESOLVABLE sides only, never the full flag count; the "
         "spoken tick is resolved to the engine frame as tick - 1; it does NOT "
         "measure whether the sighting was factually true, only whether the speaker "
@@ -341,7 +343,8 @@ CELL_DEFINITIONS: Final[Mapping[str, str]] = {
     ),
     "I-7": (
         "numerator: alibi_vs_sighting flags whose sighting names the ORIGIN half "
-        "of a saw_player move from A to B row in the speaker's own memory; "
+        "of a saw_player move from A to B row the speaker already held when the "
+        "meeting opened; "
         "denominator: all alibi_vs_sighting flags resolvable to a spoken sighting; "
         "the memory row's tick is the spoken tick, so no conversion applies; it "
         "does NOT measure destination-half re-speaks, which are truthful."
@@ -475,10 +478,11 @@ class GroundedSightingCells(_FrozenModel):
     """I-4 grounded sighting side.
 
     numerator: STRONG alibi_vs_sighting sighting sides the speaker's own recorded
-    perception supports within the stated tick tolerance; denominator: the
-    RESOLVABLE sides only, never the full flag count; the spoken tick is resolved
-    to the engine frame as tick - 1; it does NOT measure whether the sighting was
-    factually true, only whether the speaker could have seen it.
+    perception supports within the stated tick tolerance, reading only the
+    perceptions that speaker already held when the meeting opened; denominator:
+    the RESOLVABLE sides only, never the full flag count; the spoken tick is
+    resolved to the engine frame as tick - 1; it does NOT measure whether the
+    sighting was factually true, only whether the speaker could have seen it.
 
     ``meetings.transcript.SIGHTING_GROUNDING_TICK_TOLERANCE`` (2) is production's
     tolerance for the exculpatory vouch channel and is a DIFFERENT thing from this
@@ -549,10 +553,10 @@ class MovementOriginFlagCells(_FrozenModel):
     """I-7 movement-origin flags.
 
     numerator: alibi_vs_sighting flags whose sighting names the ORIGIN half of a
-    saw_player move from A to B row in the speaker's own memory; denominator: all
-    alibi_vs_sighting flags resolvable to a spoken sighting; the memory row's tick
-    is the spoken tick, so no conversion applies; it does NOT measure
-    destination-half re-speaks, which are truthful.
+    saw_player move from A to B row the speaker already held when the meeting
+    opened; denominator: all alibi_vs_sighting flags resolvable to a spoken
+    sighting; the memory row's tick is the spoken tick, so no conversion
+    applies; it does NOT measure destination-half re-speaks, which are truthful.
 
     ``memory_truthful_spoken_false`` is the sub-count of origin flags whose memory
     row was TRUE (the subject really moved A→B across that tick pair) while the
@@ -1195,12 +1199,20 @@ _MARKER_PREFIXES: Final[tuple[str, ...]] = _marker_prefixes()
 
 @dataclass
 class _MeetingFacts:
-    """One recorded meeting, with the reconstruction facts its cells need."""
+    """One recorded meeting, with the reconstruction facts its cells need.
+
+    ``memory_prefix`` is each player's episodic-log LENGTH when this meeting
+    opened. The walk finishes before any meeting cell folds, so every store has
+    grown to the end of the game by then; a cell that asks what a speaker could
+    have perceived reads the first ``memory_prefix[speaker]`` rows and nothing
+    after them.
+    """
 
     entry: MeetingReplayEntry
     living: frozenset[PlayerId]
     venting: frozenset[PlayerId]
     body_triggered: bool
+    memory_prefix: Mapping[PlayerId, int]
 
 
 @dataclass(frozen=True)
@@ -1458,6 +1470,9 @@ def _fold_game(
                             if p.alive and p.in_vent
                         ),
                         body_triggered=walk_event.body_id is not None,
+                        memory_prefix={
+                            pid: len(store) for pid, store in memories.items()
+                        },
                     )
                 )
             elif isinstance(walk_event, MeetingApplied):
@@ -2208,11 +2223,16 @@ def _fold_flags(
             _fold_grounding(
                 resolved,
                 memories=memories,
+                memory_prefix=facts.memory_prefix,
                 room_at=room_at,
                 tallies=tallies,
             )
         _fold_movement_origin(
-            resolved, memories=memories, room_at=room_at, tallies=tallies
+            resolved,
+            memories=memories,
+            memory_prefix=facts.memory_prefix,
+            room_at=room_at,
+            tallies=tallies,
         )
 
 
@@ -2383,10 +2403,35 @@ def _supports_placement(
     return False
 
 
+def _memory_at_meeting(
+    memory: MemoryStore,
+    speaker: PlayerId,
+    memory_prefix: Mapping[PlayerId, int],
+) -> tuple[EpisodicEvent, ...]:
+    """The speaker's episodic log as it stood when the meeting opened.
+
+    The cells below ask what the speaker COULD have perceived, so they read the
+    prefix captured at ``MeetingOpened`` rather than the whole log the walk has
+    since grown. A speaker with no captured prefix is a wiring bug — every
+    player the walk perceives for is in the mapping — so it raises instead of
+    falling back to the whole log.
+    """
+
+    prefix = memory_prefix.get(speaker)
+    if prefix is None:
+        raise EvidenceHonestyReconstructionError(
+            f"no episodic-log prefix captured for {speaker!r} at the meeting "
+            "whose flags are being folded — the cell would silently read "
+            "perceptions the speaker did not yet hold"
+        )
+    return memory.recent(since_tick=0)[:prefix]
+
+
 def _fold_grounding(
     resolved: _ResolvedFlag,
     *,
     memories: Mapping[PlayerId, MemoryStore],
+    memory_prefix: Mapping[PlayerId, int],
     room_at: Mapping[int, Mapping[PlayerId, RoomId]],
     tallies: _Tallies,
 ) -> None:
@@ -2401,7 +2446,7 @@ def _fold_grounding(
     spoken = canonical_rooms(resolved.sighting.room)
     gaps = [
         abs(event.tick - resolved.sighting.tick)
-        for event in memory.recent(since_tick=0)
+        for event in _memory_at_meeting(memory, resolved.speaker, memory_prefix)
         if _supports_placement(event, resolved, spoken=spoken)
     ]
     if not gaps:
@@ -2416,6 +2461,7 @@ def _fold_movement_origin(
     resolved: _ResolvedFlag,
     *,
     memories: Mapping[PlayerId, MemoryStore],
+    memory_prefix: Mapping[PlayerId, int],
     room_at: Mapping[int, Mapping[PlayerId, RoomId]],
     tallies: _Tallies,
 ) -> None:
@@ -2427,7 +2473,7 @@ def _fold_movement_origin(
         return
     moves = [
         event
-        for event in memory.recent(since_tick=0)
+        for event in _memory_at_meeting(memory, resolved.speaker, memory_prefix)
         if event.type == EVENT_SAW_PLAYER_MOVE
         and event.tick == resolved.sighting.tick
         and event.payload.get("player_id") == resolved.sighting.subject
