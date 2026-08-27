@@ -60,8 +60,10 @@ read as a terminal outcome — silent truncation is never a fitness path (Task
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Final, TypeAlias, get_args
 
 import numpy as np
@@ -168,10 +170,13 @@ class PotentialShaper:
 
     def __init__(self, *, side: Role, scale: float, gamma: float = 1.0) -> None:
         _validate_side(side)
-        if scale <= 0.0:
+        # NaN passes ``<= 0.0`` and would turn every Φ into NaN; +inf passes it too
+        # and would collapse all progress to zero. The scale is a finite episode
+        # count, so both fail loud (AGENTS.md "no silent fallbacks").
+        if not math.isfinite(scale) or scale <= 0.0:
             raise ValueError(
-                f"PotentialShaper scale must be positive, got {scale!r}; use "
-                "training.rewards.potential_scale(rollout, side)"
+                f"PotentialShaper scale must be a finite positive number, got "
+                f"{scale!r}; use training.rewards.potential_scale(rollout, side)"
             )
         self._side = side
         self._scale = scale
@@ -335,11 +340,16 @@ def _crew_terms(rollout: EpisodeRollout) -> dict[str, float]:
 # The dense terms each side scores, in the order the term functions emit them.
 # EVERY name here is a bounded share in [0, 1] — that boundedness is what makes
 # :func:`derive_terminal_weight` a derivation rather than a guess, so a new term
-# belongs in this map only once it is bounded too.
-DENSE_TERM_NAMES: Final[Mapping[Role, tuple[str, ...]]] = {
-    "IMPOSTOR": ("unwitnessed_kills", "survival", "meetings_survived"),
-    "CREWMATE": ("task_progress", "survival", "correct_reports", "patrol_coverage"),
-}
+# belongs in this map only once it is bounded too. Read-only: the derived weights
+# and ``training.bakeoff.harness``'s truncation floor are computed from it at
+# import time, so a mutation here would silently desynchronise them (AGENTS.md
+# "no global state, no module-level mutable state").
+DENSE_TERM_NAMES: Final[Mapping[Role, tuple[str, ...]]] = MappingProxyType(
+    {
+        "IMPOSTOR": ("unwitnessed_kills", "survival", "meetings_survived"),
+        "CREWMATE": ("task_progress", "survival", "correct_reports", "patrol_coverage"),
+    }
+)
 
 
 def bounded_term_count(side: Role) -> int:
@@ -379,10 +389,16 @@ class ObjectiveWeights:
     terminal_weight: float = 1.0
 
 
-DEFAULT_OBJECTIVE_WEIGHTS: Final[Mapping[Role, ObjectiveWeights]] = {
-    side: ObjectiveWeights(terminal_weight=derive_terminal_weight(side))
-    for side in DENSE_TERM_NAMES
-}
+# Read-only for the same reason as :data:`DENSE_TERM_NAMES`:
+# ``training.bakeoff.harness.MIN_FULL_GAME_FITNESS`` and the truncation sentinel
+# derive from these profiles at import time and would not follow a mutation,
+# re-opening the very inversion they close.
+DEFAULT_OBJECTIVE_WEIGHTS: Final[Mapping[Role, ObjectiveWeights]] = MappingProxyType(
+    {
+        side: ObjectiveWeights(terminal_weight=derive_terminal_weight(side))
+        for side in DENSE_TERM_NAMES
+    }
+)
 
 # Names the objective the code below computes. A fitness number is only comparable
 # to another produced under the SAME id, so a re-ground stamps its own rows with

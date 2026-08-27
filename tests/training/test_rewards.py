@@ -16,12 +16,14 @@ side-specific tactically-reachable terms are read from the typed event log.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping, Sequence
 
 import pytest
 
 from engine.entities import Role
 from engine.events import EngineEvent, KilledEvent
+from training import rewards as rewards_module
 from training.env import TacticalRolloutEnv
 from training.rewards import (
     DEFAULT_OBJECTIVE_WEIGHTS,
@@ -259,7 +261,7 @@ def test_potential_shaper_requires_a_positive_scale() -> None:
     ``experiments/lab/torch_probe`` asserts (which mypy does not read)."""
 
     for bad in (0.0, -1.0):
-        with pytest.raises(ValueError, match="scale must be positive"):
+        with pytest.raises(ValueError, match="finite positive"):
             PotentialShaper(side="IMPOSTOR", scale=bad)
 
 
@@ -580,19 +582,25 @@ def _composed(rollout: EpisodeRollout, side: Role) -> float:
 # --------------------------------------------------------------------------- #
 
 
-def _reachable_extremes(
-    terms: Sequence[str], profile: ObjectiveWeights
-) -> tuple[float, float]:
-    """(worst reachable WIN, best reachable LOSS) from the declared [0, 1] bounds.
+def _declared_term_ceilings(side: Role) -> dict[str, float]:
+    """Each dense term's DECLARED ceiling — 1.0, because every term is a share."""
 
-    Derived from the term census and the profile, never hand-typed: a worst WIN
-    scores every bounded channel at its floor, a best LOSS every one at its ceiling.
+    return {name: 1.0 for name in DENSE_TERM_NAMES[side]}
+
+
+def _reachable_extremes(
+    term_ceilings: Mapping[str, float], profile: ObjectiveWeights
+) -> tuple[float, float]:
+    """(worst reachable WIN, best reachable LOSS) from the declared term ceilings.
+
+    Derived from the ceilings and the profile, never hand-typed: a worst WIN scores
+    every bounded channel at its floor of 0, a best LOSS every one at its ceiling.
     """
 
     worst_win = profile.terminal_weight * 1.0
     best_loss = (
         profile.terminal_weight * -1.0
-        + profile.dense_weight * len(terms) * 1.0
+        + profile.dense_weight * math.fsum(term_ceilings.values())
         + profile.shaping_weight * 1.0
     )
     return worst_win, best_loss
@@ -602,14 +610,14 @@ def _reachable_extremes(
 def test_worst_win_outranks_best_loss(side: str) -> None:
     """The derived terminal weight makes winning dominate, by the derived margin.
 
-    Both ends come from the DECLARED per-term bounds and the derivation the constant
-    itself came from — a hand-typed 5 and 6 would make this tautological.
+    Both ends come from the DECLARED per-term ceilings and the derivation the
+    constant itself came from — a hand-typed 5 and 6 would make this tautological.
     """
 
     profile = DEFAULT_OBJECTIVE_WEIGHTS[side]  # type: ignore[index]
     assert profile.terminal_weight == derive_terminal_weight(side)  # type: ignore[arg-type]
     worst_win, best_loss = _reachable_extremes(
-        DENSE_TERM_NAMES[side],  # type: ignore[index]
+        _declared_term_ceilings(side),  # type: ignore[arg-type]
         profile,
     )
     assert worst_win > best_loss
@@ -618,28 +626,48 @@ def test_worst_win_outranks_best_loss(side: str) -> None:
 
 
 @pytest.mark.parametrize("side", ["IMPOSTOR", "CREWMATE"])
-def test_ordering_gate_bites_on_an_unbounded_term(side: str) -> None:
-    """The planted case: one unbounded term and the ordering gate FAILS.
+def test_ordering_gate_bites_on_an_unbounded_declared_ceiling(side: str) -> None:
+    """The planted case, arithmetic half: one term whose ceiling is not 1.
 
-    ``_reachable_extremes`` reads the term census, so adding a term whose ceiling is
-    not 1 — here a raw count that can reach the roster size, exactly the shape the
-    deleted ``kills`` term had — pushes the best LOSS above the worst WIN and this
-    assertion bites. A gate nobody can fail is prose.
+    Re-adds the DELETED raw ``kills`` term at its true ceiling — the roster size, the
+    exact shape it had — and the best LOSS overtakes the worst WIN. The derivation is
+    only sound while every ceiling is 1.
     """
 
     profile = DEFAULT_OBJECTIVE_WEIGHTS[side]  # type: ignore[index]
-    perturbed = ObjectiveWeights(
-        # An unbounded raw-count term reaching 9 is modelled exactly as its weight:
-        # nine times the dense contribution the bounded terms are priced at.
-        dense_weight=profile.dense_weight * _NUM_PLAYERS,
-        shaping_weight=profile.shaping_weight,
-        terminal_weight=profile.terminal_weight,
-    )
-    worst_win, best_loss = _reachable_extremes(
-        DENSE_TERM_NAMES[side],  # type: ignore[index]
-        perturbed,
-    )
+    planted = _declared_term_ceilings(side) | {"kills": float(_NUM_PLAYERS)}  # type: ignore[arg-type]
+    worst_win, best_loss = _reachable_extremes(planted, profile)
     assert best_loss > worst_win
+
+
+def test_ordering_gate_bites_when_a_production_term_regresses_to_a_raw_count(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The planted case, PRODUCTION half: perturb the real term function.
+
+    The arithmetic gate above guards the declared ceilings; this one guards the code
+    that has to honour them. It scores a real recorded crew LOSS through
+    ``compute_shaped_reward`` (holds today), then regresses ONE crew term to the raw
+    count it used to be — and the same recorded LOSS now outranks the worst reachable
+    crew WIN. A gate nobody can fail is prose.
+    """
+
+    rollout = _env().rollout(0)
+    assert rollout.winner != "CREWMATES"  # the recorded seed-0 crew LOSS
+    profile = DEFAULT_OBJECTIVE_WEIGHTS["CREWMATE"]
+    worst_win, _ = _reachable_extremes(_declared_term_ceilings("CREWMATE"), profile)
+    assert _composed(rollout, "CREWMATE") < worst_win
+
+    bounded_terms = rewards_module._crew_terms
+
+    def unbounded(perturbed_rollout: EpisodeRollout) -> dict[str, float]:
+        terms = dict(bounded_terms(perturbed_rollout))
+        last = perturbed_rollout.frames[-1]
+        terms["correct_reports"] = float(last.tasks_completed)  # the raw count again
+        return terms
+
+    monkeypatch.setattr(rewards_module, "_crew_terms", unbounded)
+    assert _composed(rollout, "CREWMATE") > worst_win
 
 
 @pytest.mark.parametrize("seed", range(6))
@@ -653,9 +681,27 @@ def test_a_real_crew_loss_never_outranks_a_reachable_crew_win(seed: int) -> None
 
     rollout = _env().rollout(seed)
     profile = DEFAULT_OBJECTIVE_WEIGHTS["CREWMATE"]
-    worst_win, _ = _reachable_extremes(DENSE_TERM_NAMES["CREWMATE"], profile)
+    worst_win, _ = _reachable_extremes(_declared_term_ceilings("CREWMATE"), profile)
     composed = _composed(rollout, "CREWMATE")
     if rollout.winner == "CREWMATES":
         assert composed >= worst_win
     else:
         assert composed < worst_win
+
+
+def test_the_default_objective_registries_are_read_only() -> None:
+    """The derived weights and the truncation floor read these at import time, so a
+    process-wide mutation would silently desynchronise them."""
+
+    with pytest.raises(TypeError):
+        DENSE_TERM_NAMES["IMPOSTOR"] = ()  # type: ignore[index]
+    with pytest.raises(TypeError):
+        DEFAULT_OBJECTIVE_WEIGHTS["IMPOSTOR"] = ObjectiveWeights()  # type: ignore[index]
+
+
+def test_potential_shaper_rejects_a_non_finite_scale() -> None:
+    """NaN passes ``<= 0`` and poisons every Φ; +inf collapses progress to zero."""
+
+    for bad in (float("nan"), float("inf"), float("-inf")):
+        with pytest.raises(ValueError, match="finite positive"):
+            PotentialShaper(side="IMPOSTOR", scale=bad)
