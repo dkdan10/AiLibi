@@ -1048,6 +1048,16 @@ def evaluate_supply_floors(
     """
 
     meetings = gauges.meetings_total
+    # The vent flags are a SUBSET of the merged census by construction (the two
+    # readers split one recorded array on kind), so a larger vent count than
+    # total means the caller assembled the gauges from two different walks.
+    # Fail loud rather than report a negative component rate.
+    if gauges.persisted_vent_flags > gauges.total_flags:
+        raise ValueError(
+            f"persisted_vent_flags {gauges.persisted_vent_flags} > total_flags "
+            f"{gauges.total_flags}: the vent census is a subset of the merged "
+            "one, so these gauges did not come from a single recorded array"
+        )
     transcript_flags = gauges.total_flags - gauges.persisted_vent_flags
     gauge_specs: list[tuple[str, float | None, FloorPin | None]] = [
         (

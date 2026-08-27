@@ -868,6 +868,22 @@ def test_the_same_merged_supply_with_a_healthy_component_passes() -> None:
     assert by_name["transcript_flags_per_meeting"].measured == 100 / 152
 
 
+def test_a_vent_count_above_the_merged_census_fails_loud() -> None:
+    """PLANTED: the split's own arithmetic cannot go negative in silence.
+
+    The vent census is a subset of the merged one by construction, so a larger
+    vent count means the two terms came from different walks. Reporting the
+    resulting negative component rate would look like a starved candidate
+    rather than a broken instrument.
+    """
+
+    floors = _BASELINE_SUPPLY_FLOORS["baseline-7"]["9p2i"]
+    impossible = _vent_fed_candidate(total_flags=50, persisted_vent_flags=90)
+
+    with pytest.raises(ValueError, match="subset of the merged"):
+        evaluate_supply_floors(impossible, floors)
+
+
 def test_a_block_without_component_pins_emits_no_component_rows() -> None:
     """The earlier blocks stay evaluable: an unpinned component emits no row.
 
