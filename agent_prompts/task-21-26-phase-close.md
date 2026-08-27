@@ -42,9 +42,15 @@ other direction.
 The gate this close re-runs is the same shape as the last one and a different result in two legs, and
 those two legs are the phase's whole point. The phase-20 close recorded its F1 as
 `uv run pytest -m campaign` exiting 1 — **"9 failed, 308 passed, 5327 deselected in 185.78s"** — with
-the nine diagnosed by class (three substrate-sha self-consistency pins reading `f5865c53…` against a
-live `9bc00af0…`, five corpus-derived fit pins including `87 ≠ 96` held-out meetings, and one scenario
-pin that pre-dated the record) and routed, not fixed, to the ML re-ground. It recorded the same debt on
+the nine diagnosed by class (three substrate-sha self-consistency pins, five corpus-derived fit pins
+including `87 ≠ 96` held-out meetings, and one scenario pin that pre-dated the record) and routed, not
+fixed, to the ML re-ground. **Write the sha pair in the corrected direction and record the correction
+as a dated erratum to that close**: `compute_substrate_sha()` returns **`f5865c53…` LIVE**, while
+`training/artifacts/anchor_study/study.json` and all 60 `compute_substrate_sha`-kind campaign rows
+**RECORD `9bc00af0…`**. F1 states the pair the other way round; Task 21.17 re-derived it at HEAD and
+its contract carries the correction, and this ledger is where the erratum lands. Repeating F1's
+direction here would publish an already-identified false provenance claim in the authoritative close
+audit — the exact defect class this phase opened against. It recorded the same debt on
 the evidence leg: `--complete` green at **"checks: 55 | OK 39 | FAIL 0 | STALE 11 | ABSENT 0 | INFO 5"**,
 where the eleven STALE rows were the declared grounding gap of `audits/audit-phase-20-baseline-7.md`
 §10.2. This phase executed that routing. So for the first time since the record, the opt-in tier and the

@@ -84,19 +84,29 @@ every front-door cell that reads those bytes — precisely A-15's defect class. 
 on ADOPTED; on FINDING the tip stays at 8 and the bytes and the read publish anyway. Two baseline
 ids in one phase is the priced consequence of two records in it, and it is put to the owner in §6.
 
-**One divergence from the handoff's dependency table, recorded.** The planning inputs proposed
-seven day-one roots including 21.10. Assembly added one edge — **21.10 now depends on 21.3** —
-because the two contracts both name `orchestrator/replay.py`, `api/replay_loader.py`,
-`tests/orchestrator/test_replay.py` and `tests/api/test_replay_loader.py` in scope, and the
-validator rejects two tasks in one phase sharing a scope item with no ordering between them
-(`scripts/validate_task_docs.py::validate_parallel_file_scope`). Both are named files, so the
-narrow-a-directory remedy did not apply; the edge was the minimal fix. The direction is 21.3 first
-because 21.3 changes the recorded row shape (`ReplayEntry.action_dispositions`, `record_tick`'s
-keyword-only `events`) and 21.10 hardens the recorder and the loader guard around it — the
-hardening should harden the shape the record will carry, not race it. The edge is acyclic, keeps
-Wave 1a ahead of Wave 1b for this pair, and leaves the day-one frontier at **six roots**: 21.3,
-21.4, 21.7, 21.12, 21.13, 21.16. With it, assembly verified **zero** unordered scope collisions
-across all 26 contracts.
+**Two divergences from the handoff's dependency table, recorded.** The planning inputs proposed
+seven day-one roots. Assembly added two edges, and neither was a preference — in both cases the
+contract could not otherwise satisfy its own stated Measurement.
+
+**21.10 now depends on 21.3.** The two contracts both name `orchestrator/replay.py`,
+`api/replay_loader.py`, `tests/orchestrator/test_replay.py` and `tests/api/test_replay_loader.py`
+in scope, and the validator rejects two tasks in one phase sharing a scope item with no ordering
+between them (`scripts/validate_task_docs.py::validate_parallel_file_scope`). Both are named files,
+so the narrow-a-directory remedy did not apply; the edge was the minimal fix. The direction is 21.3
+first because 21.3 changes the recorded row shape (`ReplayEntry.action_dispositions`, `record_tick`'s
+keyword-only `events`) and 21.10 hardens the recorder and the loader guard around it — the hardening
+should harden the shape the record will carry, not race it.
+
+**21.16 now depends on 21.13.** 21.16's campaign-tier Measurement expects exactly the eight residual
+§10.2 failures the ML re-ground owns. The ninth is the `tests/test_scenarios.py` mover pin, which
+21.13 removes and which belongs to 20.32's repair rather than to the corpus. As parallel roots the
+tier reads NINE at 21.16's branch point, so the contract was unsatisfiable without an out-of-scope
+scenario edit or an undeclared merge order. The edge is acyclic — 21.13 is a root and 21.8 depends
+on 21.16, so the chain is 21.13 → 21.16 → 21.8 — and it costs nothing on the critical path, which
+runs through 21.7 → 21.9 → 21.8 rather than through 21.16.
+
+Together the two edges leave the day-one frontier at **five roots**: 21.3, 21.4, 21.7, 21.12, 21.13.
+With them, assembly verified **zero** unordered scope collisions across all 26 contracts.
 
 Two smaller assembly rulings are recorded here rather than left implicit. **B-47's bake-off-lag
 comment block moved from 21.11 to 21.17**: the block at `eval/watchability.py:908-914` describes a
@@ -193,6 +203,46 @@ counted fixture bodies, so the amendment now names the `tests/fixtures/` row too
 phase row was written in this project's private dialect ("ML re-ground", "the last injustice"),
 neither term defined in the glossary, on the one surface craft rule 4 governs; it is now plain
 language.
+
+A third and final round found seven more. Two are worth recording beyond the fix itself.
+
+**The adopting record's ADOPTED scope could not execute its own deletion.** Rounds 1 and 2 established
+that 21.24 deletes each graduated resolver and collapses its guard in the same commit. The scope did
+not cover where those resolvers live or who reads them: `testimony_shapes_enabled` homes in
+`meetings/constants.py` (forced there by the `agents ↛ meetings.manager` import contract), and all
+three levers are read in `agents/strategic/prompts/loader.py`'s `build_prompt_renderers` and
+`orchestrator/game.py`'s `prompt_versions_for_set` arms. Deleting only the scoped pieces would leave
+imports of a deleted symbol, or leave the graduated behaviour default-OFF under a bare shell — which
+means the record it just committed would not reconstruct. All three modules are now in scope on the
+ADOPTED path, the DoD requires the homes and read sites to be enumerated from a fresh grep before
+editing, and a new item proves the graduated behaviour ON under a bare environment rather than
+assuming it.
+
+**The sabotage-alarm ingest path was nearly collateral damage.** Round 1 scoped the dead
+`vent_use_heard` read path for deletion, naming `_AUDIBLE_EVENT_TYPES` "and its loop arm". That
+mapping has two members and `sabotage_alarm` is a LIVE producer — Task 21.5 deletes the vent
+derivation and explicitly preserves the global alarm emitted while sabotage is active — so deleting
+the mapping or the shared `packet.audible_events` loop would have stripped sabotage alarms from
+episodic memory on every active-sabotage tick, changing prompt behaviour AFTER the record meant to
+freeze it. 21.25 now deletes exactly the `"vent_use_heard"` member and the vent-specific render, and
+pins an end-to-end test that an active-sabotage tick still reaches memory and renders.
+
+Five smaller ones. **21.16 gained a dependency on 21.13**: its campaign Measurement expects the eight
+residual §10.2 failures, and the ninth is the scenario pin 21.13 removes — as parallel roots the tier
+reads nine at 21.16's branch point (§2). **The FINDING evidence path is registered, not just
+described**: `scripts/verify_ml_evidence.py` cross-checks `_IN_TREE_PROBES` and `_IN_TREE_INVENTORY`
+against every in-tree registry row, so the new `docs/artifacts.md` row needs its entry in both
+mappings or the task fails its own gate — the verifier and its tests are now both-branch scope.
+**`_LADDER_TIP_AUDIT` stays on the re-record audit on FINDING**: `check_conviction_partition` and
+`check_verdict_figures` parse the named audit's bars and compare them with README's live figures, so
+pointing them at a lever-ON audit whose bytes are not canonical would either fail the checker or force
+the front door to be re-pinned to evidence the record did not adopt. **21.17's risk section stopped
+asking for a ruling the DAG already made** — 21.24 depends on 21.17, so the alternative ordering does
+not exist; the risk is rewritten around what is actually live, which is that the ADOPTED
+re-declaration is new code and must keep mismatch-FAILS. And **the close ledger's sha pair is written
+in the corrected direction** (`compute_substrate_sha()` returns `f5865c53…` LIVE against `9bc00af0…`
+RECORDED), since publishing F1's reversed version in the authoritative close audit would reproduce the
+exact defect class this phase opened against.
 
 The first review round also caught the charter head's "four waves" against five wave headings, and five
 collision-discipline chains whose membership or arrow direction disagreed with the contracts' actual
@@ -380,9 +430,10 @@ seeing an offline prediction are bars fitted to a prediction. Two mitigations ar
    requires each to state whether an offline prediction for its cell exists — which makes the
    dependency visible in the memo rather than hidden in its authorship.
 
-**The day-one frontier is six roots, not seven.** The handoff's dependency table listed 21.10 as a
-root. Assembly added the single edge 21.3 → 21.10 to resolve a real scope collision the table did
-not cover. Rationale and the collision inventory: §2.
+**The day-one frontier is five roots, not seven.** The handoff's dependency table listed 21.10 and
+21.16 as roots. Assembly added two edges — 21.3 → 21.10 for a scope collision the table did not
+cover, and 21.13 → 21.16 because 21.16's campaign Measurement counts on the ninth failure already
+being gone. Rationale, the collision inventory and the acyclicity argument: §2.
 
 ## 8. Reproduce
 

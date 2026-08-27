@@ -130,7 +130,7 @@ Wave 1c — the smoke and the maintenance record:
       baseline 8, operator ~23 h, $0)
 
 Wave 1d — the ML re-ground:
-  21.16 (harness reshape)
+  21.13 -> 21.16 (harness reshape)
   (21.8, 21.15, 21.16) -> 21.17 (THE RE-GROUND: audit-phase-20-baseline-7.md §10.2 discharged
       in full on the baseline-8 corpus)
 
@@ -150,11 +150,14 @@ it, not the loudest repair: 21.8's fit hygiene waits on the corrected gauges, 21
 corrected surrogate labels, and the whole Wave-2 chain is serial by construction — counterfactual
 before pre-registration before smoke before record, each one a gate the next may not pre-empt.
 
-**The day-one frontier is six roots**: 21.3, 21.4, 21.7, 21.12, 21.13, 21.16. The planning inputs
-proposed seven, with 21.10 among them; assembly moved 21.10 behind 21.3 because the two contracts
-both edit `orchestrator/replay.py`, `api/replay_loader.py` and the two test modules that pin them,
-and the recorder hardening should harden the recorded row shape 21.3 establishes rather than race
-it. That single edge is the only divergence from the planning inputs' dependency table, and it is
+**The day-one frontier is five roots**: 21.3, 21.4, 21.7, 21.12, 21.13. The planning inputs proposed
+seven; assembly added two edges, both because a contract could not otherwise satisfy its own
+Measurement. **21.10 moved behind 21.3** — the two both edit `orchestrator/replay.py`,
+`api/replay_loader.py` and the two test modules that pin them, and the recorder hardening should
+harden the recorded row shape 21.3 establishes rather than race it. **21.16 moved behind 21.13** —
+21.16's campaign-tier Measurement expects exactly the eight residual §10.2 failures, and the ninth
+is the scenario pin 21.13 removes; as parallel roots the tier reads nine at 21.16's branch point and
+the contract is unsatisfiable without an out-of-scope edit. Both edges are acyclic and both are
 recorded in `audits/audit-phase-21-planning.md` §2. Nothing waits on the owner until 21.14 (the
 smoke); the two strike decisions (21.6, 21.20) are taken at THIS PR, before any of it dispatches.
 
@@ -170,12 +173,12 @@ nothing was re-priced — and no surface this phase ships may state or imply oth
 edge, and assembly verified zero unordered pairs across all 26 contracts):
 `orchestrator/replay.py` 21.3 → 21.10 → 21.18 → 21.19 → 21.20 → 21.24 → 21.25;
 `api/replay_loader.py` 21.3 → 21.10 → 21.6 → 21.15;
-`orchestrator/game.py` 21.3 → 21.1 → 21.11 → 21.18 → 21.19 → 21.20;
+`orchestrator/game.py` 21.3 → 21.1 → 21.11 → 21.18 → 21.19 → 21.20 → 21.24;
 `meetings/manager.py` 21.3 → 21.2 → 21.18 → 21.19 → 21.20 → 21.24 → 21.25;
 `meetings/transcript.py` 21.9 → 21.19 → 21.24 → 21.25; `meetings/schemas.py` 21.3 → 21.20;
-`meetings/render_contract.py` 21.18 → 21.19; `meetings/constants.py` 21.20 → 21.25;
+`meetings/render_contract.py` 21.18 → 21.19; `meetings/constants.py` 21.20 → 21.24 → 21.25;
 `engine/tick.py` 21.6 → 21.15; `agents/memory/store.py` 21.4 → 21.20 → 21.24 → 21.25;
-`agents/strategic/prompts/loader.py` 21.1 → 21.18 → 21.19 → 21.20 → 21.25;
+`agents/strategic/prompts/loader.py` 21.1 → 21.18 → 21.19 → 21.20 → 21.24 → 21.25;
 `agents/strategic/prompts/qwen3_6_27b/vote_ballot.j2` 21.2 → 21.19;
 `eval/replay_walk.py` 21.3 → 21.6 → 21.11 → 21.15;
 `eval/watchability.py` 21.7 → 21.9 → 21.15 → 21.17 → 21.24;
@@ -201,7 +204,7 @@ edge, and assembly verified zero unordered pairs across all 26 contracts):
 `tests/agents/test_bespoke_prompt_sets.py` 21.1 → 21.20;
 `tests/meetings/test_prompt_byte_golden.py` 21.1 → 21.18;
 `tests/scripts/test_record_ml_corpus.py` 21.10 → 21.1 → 21.11;
-`tests/scripts/test_verify_ml_evidence.py` 21.10 → 21.8 → 21.17;
+`tests/scripts/test_verify_ml_evidence.py` 21.10 → 21.8 → 21.17 → 21.24;
 `tests/scripts/test_check_doc_facts.py` 21.11 → 21.24 → 21.25;
 `tests/training/test_conviction_model.py` 21.7 → 21.9 → 21.8 → 21.17;
 `tests/training/test_surrogate_runner.py` 21.16 → 21.8 → 21.17;
@@ -3701,7 +3704,7 @@ record.
 
 ### Task 21.16 — The harness can say something new: bars that discriminate, a comparator told what it measures, objectives that rank a win above a loss
 **Branch:** `phase-21-harness-reshape`
-**Depends on:** none (root)
+**Depends on:** 21.13
 **Section refs:** audits/review-2026-08-26/B/collated-findings.md §B-11 [ADJUSTED, P2] (the live re-fit on `replays/ml_corpus/9p2i` reproduces NO-GO before the re-ground begins; the verifier's two corrections BIND this contract — the "frozen weights" label is inoperative because `run_surrogate_fidelity` re-fits per fold, and axis 1 is saturated in HEADROOM, not in discriminative power), §B-12 [ADJUSTED, P3] (the FO-6 tau plateau IS the fit-side SKIP count; the verifier REFUTED the impact half — FO-6's top-1 is threshold-independent and its tuned head enters no axis of the bar, so this task must not "repair" a gate that does not exist), §B-13 [ADJUSTED, P2] (crew LOSS 12.829131652661065 outranks every crew WIN with ≤7 tasks; the verifier's tighter bound replaces the filing's illustrative one, and the "undisclosed" sub-claim is REFUTED — docs/ml-program.md:32-39 already discloses non-invariance), §B-14 [ADJUSTED, P2] (kill-derived terms 15/22 = 68%, win term 1/22 = 4.5%; the verifier corrected the filing's FSM-agreement prose, which this contract does not repeat), §B-43 [CONFIRMED, P2] (`TRUNCATED_EPISODE_FITNESS` is not below every reachable full-game fitness; no test pins the ordering the comment asserts), §B-26 [CONFIRMED, P2] (the per-tick discarded `random.Random()` seeding; the verifier's state-hash walk over 20 committed replays proves the substitution is chain-identical, and names the `gauss_next` gotcha the fix sketch omits); audits/audit-phase-20-baseline-7.md §10.2 (the routed ML re-ground this task prepares and does not execute; the "FO-6 has flipped three records running … should not be read as a physical baseline" ruling this task implements). Anchors re-verified at HEAD: training/surrogate/fidelity.py:390-402 `_tune_threshold` (ascending scan, strict `correct > best_acc`), :405-414 `_decide`, :416-422 `predict` (ranking sorted by `(-prob, cand)`; tau touches only `ejected`), :726 `model.fit(train_views)` per fold, :748-749 `top1_hits` off `ranking[0]`, :857-877 `fo6_rebaseline`, :890 `GO_TOP1_CEILING_RATIO = 0.75`, :895-940 `GoNoGoVerdict`, :942-1021 `decide_go_no_go` (:992-998 the three axes and the conjunction); training/surrogate/ballots.py:833-835 (`fit` REPLACES a pre-installed predictor), :862-866 ("The DECISION is the real tally on the predicted ballots … Never re-implemented, never a tuned threshold"); training/rewards.py:26-45 (the documented falsification), :99-118 `_side_potential`, :120-179 `PotentialShaper`, :182-211 `ShapedReward` (:199-201 the three weights, :203-210 `total`), :214-233 `_impostor_terms`, :236-277 `_crew_terms`, :294-299 `_terminal_reward`, :301-341 `compute_shaped_reward`; training/bakeoff/harness.py:186-194 `ANCHOR_CE_CEILING = 2.0` (FLAGGED, never dropped), :195-199 `ANCHOR_CE_EPSILON = 1e-6`, :201-205 `DEFAULT_ANCHOR_PENALTY_WEIGHT = 1.0`, :207-212 `TRUNCATED_EPISODE_FITNESS = -10.0` with the false invariant in its comment, :486-491 the CE clamp, :911-948 `inner_episode_fitness` (:943-945 the truncation branch and the un-weighted `.total()`); training/crew/scorer.py:961-1000 `crew_inner_episode_fitness` (:997-999 the same shape); engine/rng.py:100 and :114 (`inner = random.Random()` immediately overwritten by `setstate`), engine/tick.py:648 and orchestrator/game.py:1351 (the two call sites); tests/training/test_rewards.py:465-488 (the exact `==` literals both objective findings rest on); tests/training/test_surrogate_runner.py:792-819 (`test_go_no_go_reproduces_the_re_measured_no_go_verdict`, which pins `top1_bar == 0.6000000000000001`); training/artifacts/coevo/provenance/harnesses/harness_run_c1.py.txt:47 and harness_run_c2.py.txt:40 (`anchor_weight=4.0` — the largest weight any committed harness uses).
 **Complexity:** Integration
 **Record impact:** none
@@ -5898,9 +5901,13 @@ half-set as canonical.
 **Files in scope:**
 - orchestrator/replay.py; (the Wave-2 lever keys reclassified from `_TOGGLEABLE_LEVER_RESOLVERS` into `_RETIRED_ALWAYS_ON_LEVERS` IF the ratified rule adopts, and each graduated key's resolver entry DELETED with it; otherwise they stay toggles and the record commits as a FINDING record — the rule decides, the task executes)
 - agents/memory/store.py; (the graduation flip where a lever homes here: on ADOPTED the `*_enabled` RESOLVER FUNCTION is deleted and its one branch point takes the ON path unconditionally. A resolver left hard-returning `True` is exactly the shape `tests/meetings/test_lever_registry.py:154-163` refuses, so flip-then-sweep-later lands the record red; mechanism bodies still froze at the pre-registration and are not otherwise edited)
-- meetings/manager.py; (same)
+- meetings/manager.py; (same — and it is a READ SITE for all three Wave-2 resolvers, so on ADOPTED its guards collapse to the ON path here)
 - meetings/transcript.py; (same)
-- scripts/verify_ml_evidence.py; (ADOPTED path ONLY: the re-declared grounding gap — one new digest pair named and dated, in §10.2's exact shape. B-46's invariant is untouched: any OTHER mismatch still FAILS, and the assertion proving it is not edited)
+- meetings/constants.py; (ADOPTED ONLY — the HOME of `testimony_shapes_enabled` and its `ENV_TESTIMONY_SHAPES` constant per Task 21.20; the resolver and the constant are deleted here, while every threshold constant in the module STAYS, because a graduated lever's threshold is live policy)
+- agents/strategic/prompts/loader.py; (ADOPTED ONLY — the graduated levers' read sites in `build_prompt_renderers`: each collapses to the ON branch and the import of a deleted resolver goes with it. The live 18.10 resolver at `:329` is UNTOUCHED)
+- orchestrator/game.py; (ADOPTED ONLY — the Wave-2 arms of `prompt_versions_for_set`: a graduated overlay's arm collapses so its version strings are served unconditionally, and the composite-stamp fold loses the branch that asked whether the lever was on. The default `PROMPT_VERSION_SETS` entry does not move here either)
+- scripts/verify_ml_evidence.py; (BOTH branches, different edits. ADOPTED: the re-declared grounding gap — one new digest pair named and dated, in §10.2's exact shape, with its own planted counter-case, and B-46's invariant intact so any OTHER mismatch still FAILS. FINDING: the evidence path registered in `_IN_TREE_PROBES` and `_IN_TREE_INVENTORY`, which is what makes the new `docs/artifacts.md` row legal)
+- tests/scripts/test_verify_ml_evidence.py; (the planted case for whichever branch's edit landed — the re-declaration's counter-case on ADOPTED, the inventory registration's on FINDING)
 - replays/samples/9p2i/; (ADOPTED ONLY — the new record replaces the canonical set: bytes, MANIFEST, eval report, rubric, README. On FINDING this directory is UNTOUCHED and keeps its baseline-8 bytes)
 - replays/samples/4p1i/; (same)
 - replays/ml_corpus/9p2i/; (same, plus `splits.json`)
@@ -5910,7 +5917,7 @@ half-set as canonical.
 - scripts/record_ml_corpus.sh; (the pin block and the leg durations move to the adopted substrate; `REQUIRED_PROMPT_VERSIONS` follows the recorded stamp and is never hand-edited ahead of it)
 - eval/watchability.py; (the successor floor block pinned from the recorded bytes, and `_DEFAULT_BASELINE_ID` on ADOPTED)
 - audits/audit-phase-21-adopting-record.md; (new: the record audit — the pre-registered read bar by bar, the verdict, the provenance tuple, the co-interventions, what it does not discharge)
-- scripts/check_doc_facts.py; (`_LADDER_TIP_AUDIT` repointed at the new record audit and `_WIN_SPLIT_HEADER`'s baseline literal moved to the previous tip; no new check is authored here)
+- scripts/check_doc_facts.py; (ADOPTED ONLY — `_LADDER_TIP_AUDIT` repointed at this record's audit and `_WIN_SPLIT_HEADER`'s baseline literal moved to the previous tip. On FINDING neither constant moves: `_LADDER_TIP_AUDIT` stays on `audits/audit-phase-21-rerecord.md`, because the front door still shows baseline-8 cells and that is the audit whose bars the checker must parse. No new check is authored on either branch)
 - tests/scripts/test_check_doc_facts.py
 - tests/eval/; (the byte-coupled re-pins this record moves — deduction cells, honesty cell families, solvability, funnel, V&J, watchability)
 - tests/agents/; (same)
@@ -5945,13 +5952,16 @@ half-set as canonical.
 - [ ] The audit's structure satisfies the doc-fact parser without a checker change beyond the two named: Bar 1 is the accuracy bar and Bar 2 the wrongful-ejection bar, each under a `### Bar N —` heading with a `set | before | after` table carrying a `pooled` row; the accuracy bar's prose states the direct-proof pooled cell in the `**k/n = r** pooled` shape; there is exactly one `the ladder tip stands at baseline N` sentence; and the win-split table's header names the previous baseline with a before/after `wins/games` pair per samples set.
 - [ ] The decision rule is applied verbatim and its output executed in this PR: on ADOPTED each Wave-2 lever's `*_enabled` RESOLVER FUNCTION is DELETED and its single branch point takes the ON path unconditionally, the key moves into `_RETIRED_ALWAYS_ON_LEVERS` and its `_TOGGLEABLE_LEVER_RESOLVERS` entry goes with it, `substrate_flag_snapshot({})` stamps the key True unconditionally so a BARE shell reproduces the committed stamp, and every pinned `SUBSTRATE_FLAG_KEYS` ordering assertion is re-checked because the retired half is ordered first and `impostor_roll_call`'s index moves again; on FINDING the registry is unchanged, the ladder tip does not move, and the audit's verdict line says FINDING. No subset graduates under any verdict. Any owner override is recorded as an override of the rule's verdict, never as a bar that passed.
 - [ ] The flip DELETES rather than hard-returns, and the reason is a gate, not a preference: `tests/meetings/test_lever_registry.py::test_no_accept_and_ignore_resolver_survives` (`:154-163`) walks the swept packages by AST and fails on any resolver that ignores its `env` and returns a constant — so a graduated lever left as `return True` for 21.25 to sweep later lands THIS record red. `uv run pytest tests/meetings/test_lever_registry.py -q` is green in the recording PR, and the PR states which resolvers were deleted. What 21.25 sweeps afterwards is the rest: the lever parameters threaded through call sites, the dead OFF-path branches, the tests that exercised the OFF arm, the `.env.example` entries and the prose.
+- [ ] The deletion reaches every HOME and every READ SITE, because a resolver deleted in one module and imported in another does not compile. Before editing, the PR enumerates them from a fresh grep per graduated key — at HEAD the three Wave-2 levers home in `meetings/manager.py` (`reporter_reasoning_enabled`), `meetings/corroboration.py` (`corroboration_discipline_enabled`) and `meetings/constants.py` (`testimony_shapes_enabled`, homed there because `agents ↛ meetings.manager` forbids the obvious module), and are READ in `meetings/manager.py`, `agents/strategic/prompts/loader.py`'s `build_prompt_renderers`, and `orchestrator/game.py`'s `prompt_versions_for_set` arms. Each home loses its resolver, its `ENV_*` constant and its `__all__` entry; each read site collapses to the ON branch and drops the import. `uv run lint-imports` and `uv run mypy .` are the gates that catch a half-done sweep, and `grep -rn '<lever>_enabled' .` outside `audits/` and `tasks/` returns nothing afterwards. The live 18.10 resolver at `loader.py:329` is UNTOUCHED and asserted so.
+- [ ] The graduated behaviour is proved ON under a BARE environment rather than assumed: with zero `AILIBI_*` exports, `substrate_flag_snapshot({})` stamps every graduated key `True`, a rendered ballot and accusation prompt carry the graduated blocks, and `prompt_versions_for_set` serves the composite stamp the record committed. That is the whole point of graduating — if a bare shell still renders the OFF bytes, a read site was missed and the committed record no longer reconstructs.
 - [ ] On ADOPTED — and only then — the grounding gap is RE-INTRODUCED, and the word is deliberate: Task 21.17 DELETED the amnesty outright, `"STALE"` and all, so there is no dormant mechanism to re-enable here. This task adds a fresh declaration, exactly one digest pair wide, naming the NEW corpus fingerprint against the fit-side digest 21.17 committed, dated, in `audits/audit-phase-20-baseline-7.md` §10.2's shape — and it ships with its own planted counter-case rather than inheriting 21.17's, because a re-added mechanism is new code. B-46's invariant is what the counter-case proves: a fingerprint mismatch that is NOT the declared pair still FAILS. `uv run python scripts/verify_ml_evidence.py --complete` is quoted showing the one declared gap and nothing else, and the audit states in its own words that the fits are stale against these bytes and that the second re-fit is ROUTED to the phase-close ledger as an owner decision with its cost, not taken here. On FINDING this DoD item is discharged by stating that no re-declaration was needed, the file is not touched, and `grep -c STALE scripts/verify_ml_evidence.py` still reads 0 exactly as 21.17 left it.
 - [ ] A successor block is added to `eval/watchability.py::_BASELINE_SUPPLY_FLOORS` pinned from the recorded bytes with all three gauges, their raw numerators in the comment, the 16.11 population-relative derivation worked through to the equality point, and self-consistency demonstrated (the referee scores the record's own bytes PASS at exact floor equality); a numerator of 0 or 1 is marked ADVISORY under the standing rare-event rule rather than pinned as a floor that cannot fail. `_DEFAULT_BASELINE_ID` moves on ADOPTED and stays put on FINDING.
 - [ ] ON ADOPTED: every byte-coupled pin is re-pinned in the same PR with the old value quoted in a comment beside the new one, from a census that starts repo-wide rather than under `tests/`: the 50 test files (41 by direct path plus the `tests/_helpers/committed.py` importers) and the three frontend files, including `bodies.test.ts`'s `corpusSha256`. ON FINDING none of those pins moves, because the bytes they read did not — the PR states that as a checked no-op with the diff to prove it. Either way `uv run pytest` is green with no `xfail` added to absorb a moved number.
 - [ ] `scripts/record_ml_corpus.sh`'s pin block carries the adopted substrate and the measured leg durations, and on ADOPTED `replays/ml_corpus/README.md` is refreshed end to end with `splits.json` regenerated non-degenerate under the unchanged `seed % 5` rule for both corpus sets. On FINDING the canonical corpus README and splits are untouched and the finding record's own leg durations and splits live under its evidence path, with `scripts/record_ml_corpus.sh`'s pin block stating the slate the canonical sets carry — which is still baseline 8's.
 - [ ] ON ADOPTED: each set's `tournament-eval-report.json` and `results-rubric-score.json` are regenerated from the new bytes by the committed recipes, the served rubric reads FRESH, and `FEATURED_GAMES` is re-curated by watching the new games — a seed is kept only where its blurb is still true, every replacement carries a hand-written spoiler-free line under the binding rule at `ReplayPicker.tsx:97-102`, and the `tests/api/test_sets.py` pin is updated. ON FINDING the served set is still baseline 8's, so the reports, the rubric and the curated strip are UNCHANGED and the PR says so rather than re-running a recipe over bytes that did not move; the finding record's own reports are generated into its evidence path instead.
 - [ ] The record audit carries the provenance tuple, every co-intervention by name with its attribution consequence, the DURATION ACTUALLY TAKEN per leg against the pre-committed projection, every re-recorded seed with why, the `(deadline_default)` watch-item status, and one section stating what this record does NOT discharge — naming the ML grounding state it leaves behind per the Integration-risk ruling, the graduation sweep (21.25), and the narrative reading of the results table.
-- [ ] `check_doc_facts` is green with `_LADDER_TIP_AUDIT` pointing at the new record audit. ON ADOPTED: README's provenance paragraph, win-rate row, citation-compliance row and proof row are re-derived from the new MANIFESTs and instrument pins, `docs/reading-guide.md`'s mirrored rows move with them, and `.env.example`'s always-ON note names every graduated key. ON FINDING: those cells still describe the canonical baseline-8 bytes and are UNCHANGED, `.env.example` keeps all three Wave-2 toggles documented as live, and the ladder-tip sentence still reads baseline 8 — the record audit is indexed and read, but no front-door number moves, because no front-door byte did. Either way `audits/README.md` indexes the new audit and `docs/artifacts.md`'s counts are re-derived rather than assumed — including, on FINDING, one new registry row for `replays/records/phase-21-wave2-finding/` so a preserved 300-game recording is inventoried rather than untracked prose. Both `docs/artifacts.md` edits ride the standing index amendment named in Files NOT in scope.
+- [ ] `check_doc_facts` is green, and WHICH audit `_LADDER_TIP_AUDIT` names is branch-dependent. **ON ADOPTED** it repoints at this record's audit, and README's provenance paragraph, win-rate row, citation-compliance row and proof row are re-derived from the new MANIFESTs and instrument pins, `docs/reading-guide.md`'s mirrored rows move with them, and `.env.example`'s always-ON note names every graduated key. **ON FINDING it stays on `audits/audit-phase-21-rerecord.md`** — the baseline-8 record — and this is load-bearing rather than tidy: `check_conviction_partition` and `check_verdict_figures` parse the named audit's Bar 1 / Bar 2 cells through `record_partition` (`:2587-2606`) and compare them against README's live proof and wrongful-ejection figures. Pointing them at a lever-ON finding audit whose bytes are NOT the canonical ones would either fail the checker or force the front door to be re-pinned to evidence this task explicitly did not adopt. So on FINDING those cells still describe the canonical baseline-8 bytes and are UNCHANGED, `.env.example` keeps all three Wave-2 toggles documented as live, and the ladder-tip sentence still reads baseline 8 — the finding audit is indexed and read, but it is not the front door's source, because no front-door byte moved. Either way `audits/README.md` indexes the new audit and `docs/artifacts.md`'s counts are re-derived rather than assumed. Both `docs/artifacts.md` edits ride the standing index amendment named in Files NOT in scope.
+- [ ] ON FINDING the evidence path is REGISTERED in the checker, not merely described in the registry. `docs/artifacts.md` gains one row for `replays/records/phase-21-wave2-finding/` so a preserved 300-game recording is inventoried rather than untracked prose — and because `scripts/verify_ml_evidence.py` cross-checks its `_IN_TREE_PROBES` and `_IN_TREE_INVENTORY` key sets against EVERY in-tree registry row, the same PR adds the path to both mappings. Without that, `test_every_counted_registry_row_matches_the_index` and this task's own `bash scripts/check.sh` line go red on the row the task just added. The registration ships with its planted case in `tests/scripts/test_verify_ml_evidence.py` (a stated count that disagrees with `git ls-files` fails), and the row's count and size are re-derived from the git index. ON ADOPTED no row is added, neither mapping changes, and the PR says so.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
 - [ ] `uv run lint-imports` passes.
@@ -6038,17 +6048,24 @@ at $0. Cite the audit for the record's truth, never the PR body.
 
 **Integration risk:**
 
-Risk 1 — **the ML grounding collision, and it needs an orchestrator ruling BEFORE dispatch.** 21.17
-re-fits the surrogate and the conviction model on the 21.15 corpus, re-stamps the fit-corpus
-fingerprint, and DELETES the STALE amnesty (B-46 enumerates the six code sites and the five tests),
-with `scripts/verify_ml_evidence.py --complete` reading 0 STALE as its exit condition. This record
-re-records `replays/ml_corpus/` a second time. If 21.17 merges first, its fingerprint check FAILS on
-these bytes — not STALE, because the amnesty it was granted under is gone — and `verify_ml_evidence.py`
-is a DoD gate here and a close gate at 21.26. Two shapes resolve it and the choice is not this
-contract's to make: sequence 21.17 AFTER this record so the corpus it fits is the final one, or record
-the corpus legs and re-declare a dated single-pair grounding gap with the re-fit routed forward. B-46's
-verifier fixes the one invariant either shape must preserve: **a fingerprint MISMATCH must still fail.**
-Get the ruling in writing and quote it in the audit.
+Risk 1 — **the ML grounding collision, already ruled and executed on the ADOPTED path.** 21.17 re-fits
+the surrogate and the conviction model on the 21.15 corpus, re-stamps the fit-corpus fingerprint, and
+DELETES the STALE amnesty (B-46 enumerates the six code sites and the five tests). This record
+re-records `replays/ml_corpus/` a second time on ADOPTED, so those fits are stale against the bytes it
+commits. The ordering is FIXED — 21.24 depends on 21.17 — so the alternative shape (sequence the
+re-ground after the record) is not available and no ruling is outstanding: the ratified path is the one
+this contract's scope and DoD already execute, a fresh dated single-pair declaration with the second
+re-fit routed to the close ledger as an owner decision.
+
+What remains a live risk is the declaration's own correctness, and it is not a bookkeeping detail.
+21.17 deleted the amnesty outright, so this is NEW code rather than a dormant switch being flipped, and
+new code is where B-46's one invariant gets lost: **a fingerprint MISMATCH must still FAIL.** The
+declaration must name exactly one digest pair and widen nothing — no prefix match, no "any corpus newer
+than" rule, no second pair added later "while we are here". Ship it with its own planted counter-case
+proving an undeclared corpus still FAILS, run that case, and quote the red output; a declaration whose
+counter-case is inherited from a mechanism that no longer exists proves nothing. On FINDING none of
+this applies: nothing re-records the corpus, no declaration is written, and `grep -c STALE
+scripts/verify_ml_evidence.py` still reads 0 exactly as 21.17 left it.
 
 Risk 2 — the widest byte-coupled sweep in the repository, and the last record's own audit says the
 contract's census was too narrow. 50 test files plus three frontend files at HEAD. Budget the sweep as
@@ -6058,9 +6075,16 @@ file §10.1 records the previous sweep missing.
 Risk 3 — the record-audit shape is parsed, not merely read. `scripts/check_doc_facts.py` reads the
 audit `_LADDER_TIP_AUDIT` names by bar NUMBER, by table header, and by two exact sentence forms, and
 `tests/scripts/test_check_doc_facts.py:236` and `:2289` assert the checker against the REAL
-repository inside `uv run pytest`. Repoint `_LADDER_TIP_AUDIT` and move `_WIN_SPLIT_HEADER`'s baseline
-literal in the same commit as the audit, and run the checker before the sweep rather than after: a
-shape error found late looks like a hundred failing pins.
+repository inside `uv run pytest`. **On ADOPTED** repoint `_LADDER_TIP_AUDIT` and move
+`_WIN_SPLIT_HEADER`'s baseline literal in the same commit as the audit, and run the checker before the
+sweep rather than after: a shape error found late looks like a hundred failing pins. **On FINDING
+repoint nothing.** `check_conviction_partition` and `check_verdict_figures` (`:3006-3074`) parse the
+named audit's bars through `record_partition` and compare them against README's live figures, so
+naming a lever-ON audit whose bytes are not the canonical ones either fails the checker or forces the
+front door to be re-pinned to evidence this record did not adopt. The finding audit still has to satisfy
+the parser's SHAPE — it carries `### Bar N —` headings, the `set | before | after` tables and the
+ladder-tip sentence — because it is a record audit and readers parse it by eye; it simply is not the
+constant's target.
 
 Risk 4 — the doc-fact couplings fire the moment the bytes land. `check_lever_registry` requires a
 graduated key to be named in `.env.example`'s always-ON note and to appear nowhere as an `AILIBI_*=`
@@ -6203,7 +6227,7 @@ split the constants half out. Whichever the orchestrator picks, the section-leve
 - tests/scripts/test_check_doc_facts.py; (a perturbation case per moved or added check, in the copy-the-tree-substitute-one-string shape the file already uses)
 - agents/memory/store.py; (the graduated wave-2 resolvers homed here, their `ENV_*` constants and `__all__` entries deleted; each read site replaced by its always-taken side; one trailing history line per mechanism)
 - agents/memory/beliefs.py; (the same, where a graduated lever gates a belief-line or render branch)
-- agents/perception.py; (the dead `vent_use_heard` INGEST branch — Task 21.5 removed the only producer and Task 21.15 replaced the bytes that still carried the rows, so this branch is now unreachable by construction)
+- agents/perception.py; (ONE MAPPING ENTRY — the `"vent_use_heard"` member of `_AUDIBLE_EVENT_TYPES` at `:85`, whose producer Task 21.5 removed and whose last bytes Task 21.15 replaced. The mapping itself, its `"sabotage_alarm"` member and the `packet.audible_events` ingest loop at `:231-241` all STAY: sabotage alarms are a live producer and share that path, so deleting the loop would strip them from episodic memory on every active-sabotage tick)
 - agents/tactical/features.py; (DOCUMENTATION AND ONE PIN ONLY — the `heard_vent_use` slot KEEPS its index and its place in the layout; its docstring records that it has been structurally zero since baseline 8, and a test pins that it reads `0.0` on the new bytes. The slot is deliberately NOT deleted: `TacticalFeatureEncoderV3` subclasses `TacticalFeatureEncoder` and its `feature_layout()` / `encode()` call `super()` before appending (`:608-668`), so removing a v2 scalar re-shapes the v3 vector too while `ENCODER_VERSION_V3` stays `"v3"` — silently invalidating the artifacts 21.17 has just re-ground)
 - agents/strategic/prompts/loader.py; (the live 18.10 resolver STAYS; only a graduated wave-2 template arm's gate and any dangling cross-reference to a deleted sibling change)
 - meetings/manager.py; (the same sweep, plus the `env` plumbing that only fed graduated resolvers)
@@ -6234,7 +6258,8 @@ split the constants half out. Whichever the orchestrator picks, the section-leve
 - [ ] The history column means the recording the current one replaced: `_BEFORE_COLUMN_HEADER` and `_PROOF_PARTITION_AUDIT` (with its parser) name that recording, both front-door tables carry the renamed column on every row, `check_before_columns` and `check_unowned_history` are green, and each row claiming a moved figure is either re-derived by the module or named in the compared-only registry — the PR states which set each row landed in and why the unchecked set did not grow.
 - [ ] Every results surface states the record's outcome the way the record states it, in that order: the verdict under the pre-registered rule, naming each bar that missed and by how much, THEN any owner action with its date and grounds and a link to the record audit. No sentence in the diff states or implies that a pre-registered bar passed, that a verdict was ADOPTED under the rule where it was not, or that any substrate was adopted on the arithmetic — the standing constraint that already binds the phase-20 override passage at README.md:150 and the warning paragraph at docs/history.md:187-191.
 - [ ] The reading guide's §2 exhibit paragraph names only games `FEATURED_GAMES` still carries and tells the story the new bytes actually tell; `check_featured_exhibits` is green and still meets its two-seed floor, and the §3 cross-tab and the prose that narrates it agree with the deduction pins under `check_guide_narrative`.
-- [ ] The dead `vent_use_heard` PRODUCER read path is deleted, and the deletion is dated rather than opportunistic: Task 21.5 removed the only producer, Task 21.15 replaced the four sets that still carried heard-vent rows, so the compatibility argument that kept these branches alive has expired and craft rule 3 applies. TWO sites go — the ingest branch in `agents/perception.py` (`_AUDIBLE_EVENT_TYPES` and its loop arm) and the heard-vent render in `agents/memory/store.py` — each with a one-line provenance note naming 21.5 as the mint-side repair. The PR proves the path is dead before deleting it: a census over the NEW committed sets reads zero `vent_use_heard` audible events, quoted with its command. If the census is non-zero the deletion does not happen and the surviving producer is reported.
+- [ ] The dead `vent_use_heard` PRODUCER read path is deleted, and the deletion is dated rather than opportunistic: Task 21.5 removed the only producer, Task 21.15 replaced the four sets that still carried heard-vent rows, so the compatibility argument that kept these branches alive has expired and craft rule 3 applies. TWO narrow sites go — the `"vent_use_heard"` MEMBER of `_AUDIBLE_EVENT_TYPES` (`agents/perception.py:85`) and the heard-vent-specific render in `agents/memory/store.py` — each with a one-line provenance note naming 21.5 as the mint-side repair. The PR proves the path is dead before deleting it: a census over the NEW committed sets reads zero `vent_use_heard` audible events, quoted with its command. If the census is non-zero the deletion does not happen and the surviving producer is reported.
+- [ ] The sabotage-alarm path SURVIVES the sweep intact and is pinned so, because it shares every structure the vent path used: `_AUDIBLE_EVENT_TYPES` keeps its `"sabotage_alarm"` member, the `packet.audible_events` ingest loop at `agents/perception.py:231-241` is UNCHANGED, and its render stays. `sabotage_alarm` is a LIVE producer — Task 21.5 deleted the vent derivation and explicitly preserved the global alarm emitted while `world_state.sabotage.active` — so deleting the shared mapping or its loop would strip sabotage alarms from episodic memory on every active-sabotage tick and change prompt behaviour AFTER the record that was supposed to freeze it. A test drives an active-sabotage tick end to end and asserts the alarm reaches episodic memory and renders, and the PR quotes it; a sweep that cannot show this leg green has cut too wide.
 - [ ] The encoder's `heard_vent_use` SLOT is RETAINED, and the reason is blast radius rather than caution. `TacticalFeatureEncoderV3` subclasses `TacticalFeatureEncoder`, and its `feature_layout()` and `encode()` call `super()` before appending the v3 blocks (`agents/tactical/features.py:608-668`), so the v2 vector is a strict prefix of the v3 vector. Deleting a v2 scalar therefore re-shapes BOTH layouts, while `ENCODER_VERSION_V3` (`:587`) stays `"v3"` and every training consumer and committed artifact — including the ones Task 21.17 has just re-ground — keeps identifying a now-different vector with the old stamp. A vector shape may only move under a version bump that is pinned; doing that for v2 AND v3 plus re-pinning every downstream consumer is a change of a different size than a post-record sweep. So: the slot keeps its index, `ENCODER_VERSION` and `ENCODER_VERSION_V3` do NOT move, no golden is re-pinned, and the change here is documentation plus one gate — the slot's docstring records that it has been structurally zero since baseline 8 and names 21.5 as the reason, and a test asserts it encodes `0.0` on the new committed bytes so the claim is checkable rather than asserted. The slot's true removal is routed to the next encoder revision, which owns both version stamps and their consumers, and the phase close's ledger names it.
 - [ ] Two further items are named as routed opens rather than swept in passing: `observation.packet.AudibleEvent.kind`'s `Literal` member and the served `AudibleEventView` — narrowing those is a DTO change with a `viewModelVersion` question attached, and it belongs to a contract that owns the wire.
 - [ ] The F2 class is re-run on the committed bytes, not assumed closed: the PR quotes a repo-wide sweep of narration-versus-pin over the census-quoting sentences a record moves — the phantom-frame control's header, the prompt-set archive narration, the corpus README's derived counts — and each hit is either fixed inside this task's files or routed with file, line, the sentence and the pin that disagrees with it.
@@ -6336,9 +6361,15 @@ other direction.
 The gate this close re-runs is the same shape as the last one and a different result in two legs, and
 those two legs are the phase's whole point. The phase-20 close recorded its F1 as
 `uv run pytest -m campaign` exiting 1 — **"9 failed, 308 passed, 5327 deselected in 185.78s"** — with
-the nine diagnosed by class (three substrate-sha self-consistency pins reading `f5865c53…` against a
-live `9bc00af0…`, five corpus-derived fit pins including `87 ≠ 96` held-out meetings, and one scenario
-pin that pre-dated the record) and routed, not fixed, to the ML re-ground. It recorded the same debt on
+the nine diagnosed by class (three substrate-sha self-consistency pins, five corpus-derived fit pins
+including `87 ≠ 96` held-out meetings, and one scenario pin that pre-dated the record) and routed, not
+fixed, to the ML re-ground. **Write the sha pair in the corrected direction and record the correction
+as a dated erratum to that close**: `compute_substrate_sha()` returns **`f5865c53…` LIVE**, while
+`training/artifacts/anchor_study/study.json` and all 60 `compute_substrate_sha`-kind campaign rows
+**RECORD `9bc00af0…`**. F1 states the pair the other way round; Task 21.17 re-derived it at HEAD and
+its contract carries the correction, and this ledger is where the erratum lands. Repeating F1's
+direction here would publish an already-identified false provenance claim in the authoritative close
+audit — the exact defect class this phase opened against. It recorded the same debt on
 the evidence leg: `--complete` green at **"checks: 55 | OK 39 | FAIL 0 | STALE 11 | ABSENT 0 | INFO 5"**,
 where the eleven STALE rows were the declared grounding gap of `audits/audit-phase-20-baseline-7.md`
 §10.2. This phase executed that routing. So for the first time since the record, the opt-in tier and the
