@@ -50,6 +50,7 @@ _COPIED = (
     "docs/history.md",
     "docs/reading-guide.md",
     "audits/README.md",
+    "replays/ml_corpus/README.md",
     "tests/eval/test_vj_instruments.py",
     "tests/eval/test_deduction_metrics.py",
     "frontend/src/components/ReplayPicker.tsx",
@@ -96,6 +97,7 @@ _READING_GUIDE = "docs/reading-guide.md"
 _CITATION_INSTRUMENT = "tests/eval/test_vj_instruments.py"
 _AUDITS_INDEX = "audits/README.md"
 _LESSONS = "docs/lessons.md"
+_CORPUS_README = "replays/ml_corpus/README.md"
 _REVIEW_INDEX = "audits/review-2026-08-19/README.md"
 # One acted-on map row, cell by cell: the finding, the task credited with
 # closing it, and the pull request that carries the change.
@@ -861,14 +863,14 @@ def test_eval_report_without_vote_correctness_block_fails_loud(
 ) -> None:
     # Format drift must not read as "nothing to check": a report with no
     # vote_correctness block leaves both the stamps and the README's
-    # real-report example sourceless.
+    # real-report example sourceless, and one with no public_response_coverage
+    # block leaves the corpus disclosures the same way.
     _write(doc_tree, _EVAL_REPORT_9P2I, "{}\n")
     errors = check_doc_facts.check_facts(doc_tree)
-    assert len(errors) == 2
-    assert all(
-        _EVAL_REPORT_9P2I in error and '"vote_correctness":' in error
-        for error in errors
-    )
+    assert len(errors) == 3
+    assert all(_EVAL_REPORT_9P2I in error for error in errors)
+    assert len([error for error in errors if '"vote_correctness":' in error]) == 2
+    assert any('"public_response_coverage":' in error for error in errors)
 
 
 def test_unlinked_dialect_term_detected(doc_tree: Path) -> None:
@@ -1466,6 +1468,73 @@ def test_missing_ml_results_table_fails_loud(doc_tree: Path) -> None:
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert "no results table" in errors[0]
+
+
+# --------------------------------------------------------------------------- #
+# The audits index's ladder tip, the word budgets, the corpus disclosures.     #
+# --------------------------------------------------------------------------- #
+
+
+def test_audits_index_ladder_tip_drift_detected(doc_tree: Path) -> None:
+    # The index is where a reader is sent to find the record, and its one
+    # "ladder tip" sentence sat outside the scan until 21.11 put it in scope.
+    _substitute(
+        doc_tree,
+        _AUDITS_INDEX,
+        "the ladder tip stands at baseline 7",
+        "the ladder tip stands at baseline 6",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert errors[0].startswith(f"{_AUDITS_INDEX}:")
+    assert "names baseline 6" in errors[0]
+    assert "ladder tip at baseline 7" in errors[0]
+
+
+def test_front_door_page_over_its_ceiling_detected(doc_tree: Path) -> None:
+    # The budgets were Measurement-field targets nothing could fail; padding
+    # the front door past its ceiling has to be an error now.
+    _write(doc_tree, _README, _read(doc_tree, _README) + "\n" + "padding " * 200)
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert errors[0].startswith(f"{_README}: ")
+    assert "over its 3550-word ceiling" in errors[0]
+
+
+def test_lessons_under_its_floor_detected(doc_tree: Path) -> None:
+    # A range budget with only a ceiling is half a gate: the essay shrinking
+    # out of its band is the same drift read the other way.
+    _write(doc_tree, _LESSONS, "# Lessons\n\n" + "word " * 100)
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert errors[0].startswith(f"{_LESSONS}: ")
+    assert "under its 800-word floor" in errors[0]
+
+
+def test_corpus_disclosure_coverage_cell_drift_detected(doc_tree: Path) -> None:
+    # The exact drift A-15 found: a coverage cell left as recorded on the
+    # previous substrate while the section was relabelled onto this one.
+    _substitute(doc_tree, _CORPUS_README, "crew S9 **652/652", "crew S9 **723/726")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert errors[0].startswith(f"{_CORPUS_README}:")
+    assert "'crew S9' cell reads 723/726" in errors[0]
+    assert "the recorded reports give 652/652" in errors[0]
+
+
+def test_corpus_disclosure_meeting_total_drift_detected(doc_tree: Path) -> None:
+    # The meeting total is summed across all four reports, so it drifts
+    # independently of any one set's coverage pair.
+    _substitute(
+        doc_tree,
+        _CORPUS_README,
+        "meetings crew-triggered **668/668**",
+        "meetings crew-triggered **707/707**",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "'meetings crew-triggered' cell reads 707/707" in errors[0]
+    assert "give 668/668" in errors[0]
 
 
 # --------------------------------------------------------------------------- #

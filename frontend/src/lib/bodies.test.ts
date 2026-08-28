@@ -6,7 +6,7 @@
 // forward-accumulated `report_body` set. `retiredAccumulateRule` below is the
 // NEGATIVE CONTROL: a derivation that accumulates `kill` events instead of
 // reading the served rows. Both run the same census on both committed sample
-// sets, and the control has to fail it (0 phantom frames vs 1,182 of 1,769 on
+// sets, and the control has to fail it (0 phantom frames vs 668 of 1,217 on
 // `9p2i`) — a zero-phantom assertion nothing can fail would be prose, since the
 // shipped rule satisfies it by construction.
 //

@@ -491,11 +491,13 @@ def test_roll_call_coverage_split_under_both_estimators(
 ) -> None:
     """VERIFY-THEN-FIX for the §7 item-24 roll-call split (source-specific).
 
-    The triage carried impostor coverage as ~45.5-46.5%. The recount: that
-    figure is the unweighted per-meeting MACRO-AVERAGE (45.45% / 46.54%), while
-    the pooled turn-level share is 49.0% / 50.0%. Both ship as separately named
-    cells, matching Task 19.8's disclosure
-    (``replays/ml_corpus/README.md`` item 8) byte for byte.
+    The two estimators genuinely differ, so both ship as separately named cells:
+    on these bytes the pooled turn-level impostor share is 47.5% (samples) and
+    45.3% (corpus), while the unweighted per-meeting macro-average of the same
+    turns reads 43.8% and 41.1%. ``replays/ml_corpus/README.md`` item 8
+    publishes the pooled pair as its headline and names the macro-average
+    beside it; ``check_doc_facts.check_corpus_disclosures`` re-derives those
+    cells from the same reports these asserts read.
     """
 
     samples = samples_9p2i.deduction.public_response_coverage
@@ -532,7 +534,7 @@ def test_roll_call_coverage_split_under_both_estimators(
 def test_roll_call_coverage_4p_sets(
     samples_4p1i: TournamentEvalReport, corpus_4p1i: TournamentEvalReport
 ) -> None:
-    """The 4p disclosure twins (crew 78/78 and 79/80 vs impostor 8/39 and 5/40)."""
+    """The 4p disclosure twins (crew 80/80 and 88/88 vs impostor 5/40 and 1/44)."""
 
     samples = samples_4p1i.deduction.public_response_coverage
     assert (samples.crew_turns_with_whereabouts, samples.crew_turns) == (80, 80)

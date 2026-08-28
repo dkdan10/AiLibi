@@ -4,19 +4,19 @@
 # bytes; the Bash-recorder port is explicitly out of scope. Bug fixes and
 # evidence readers only; no new search.
 #
-# record_ml_corpus.sh — record the frozen ML-calibration corpus at baseline-6
-# config (Task 15.12 corpus, re-grounded onto baseline 6 by Task 18.13;
+# record_ml_corpus.sh — record the frozen ML-calibration corpus at baseline-7
+# config (the Task 15.12 corpus, re-grounded twice — Task 18.13, then Task 20.36;
 # audits/audit-phase-18-baseline-6.md; audits/audit-phase-16-model-lock.md;
 # audits/post-phase-14-ML-training-signal.md §5.6, §7.2; tasks/post-phase-14-plan.md §4).
 #
 # The surrogate (15.13) and the impostor bake-off (15.15+) consume a FROZEN
-# training/calibration corpus recorded at EXACT baseline-6 config — the locked
-# substrate: Qwen/Qwen3.6-27B on Featherless, the qwen3_6_27b prompt set (all four
-# templates at v3), the baseline-6 lever slate (the thirteen retired always-on
-# levers — including the four meeting-layer graduations of Task 18.12:
-# roll_call_round / whereabouts_interior_flags / vent_placement_contradictions /
-# absence_prior — with every live toggle default-OFF unless --expect-levers
-# declares otherwise), $0 flat-rate.
+# training/calibration corpus recorded at EXACT baseline-7 config — the locked
+# substrate: Qwen/Qwen3.6-27B on Featherless, the qwen3_6_27b prompt set at the
+# versions $REQUIRED_PROMPT_VERSIONS pins, the baseline-7 lever slate (the
+# twenty-one retired always-on levers, which since the baseline-7 record include
+# the eight Phase-20 evidence-honesty graduations, with every live toggle
+# default-OFF unless --expect-levers declares otherwise), $0 flat-rate. The PIN
+# BLOCK below is the authority on all of it.
 # Nothing trains against a meeting layer scheduled to change, so this corpus is a
 # SEPARATE release artifact from the canonical samples: it lands under
 # replays/ml_corpus/ (NOT replays/samples/), at fresh seed ranges so a corpus game
@@ -74,17 +74,17 @@
 #   -h, --help            show this help
 #
 # Operator gate: requires FEATHERLESS_API_KEY and AILIBI_PROMPT_SET=qwen3_6_27b; the
-# corpus is baseline-6, so the FULL substrate is LOCKED: the provider (a run under
+# corpus is baseline-7, so the FULL substrate is LOCKED: the provider (a run under
 # any provider other than featherless — or the explicitly-named hermetic `fake`
 # arm, which may only write OUTSIDE replays/ — is refused, so a corpus game can
 # never be silently recorded off-substrate, AGENTS.md "no silent
 # fallbacks"), the meeting/trigger models (a non-baseline AILIBI_LLM_MEETING_MODEL
 # / AILIBI_LLM_TRIGGER_MODEL override is refused), the endpoint (a non-default
 # AILIBI_FEATHERLESS_BASE_URL override is refused), the LEVER SLATE (the live
-# substrate snapshot must equal the ruled baseline-6 state — a stale AILIBI_*
+# substrate snapshot must equal the ruled baseline-7 state — a stale AILIBI_*
 # lever export, most dangerously AILIBI_IMPOSTOR_ROLL_CALL, is refused before any
 # seed stages), and the per-template prompt versions (the registry must still
-# resolve qwen3_6_27b to the locked v3 map, and rows recorded off that map are
+# resolve qwen3_6_27b to the locked version map, and rows recorded off it are
 # refused at freeze).
 # ~22-23h wall MEASURED at Task 18.13 (the baseline-6 roll-call round adds ~36%
 # meeting calls over the ~14-15h baseline-5 record, and a phantom-repair pass
@@ -94,7 +94,7 @@
 # freezes, so a mistimed drop fails loud with the missing seeds named rather than
 # freezing a short set). Commit is one atomic PR after the gate + byte-verify pass
 # per set, with checkpoint commits of completed seed ranges along the way. May
-# share the baseline-6 operator session.
+# share the baseline-7 operator session.
 
 set -euo pipefail
 
@@ -116,14 +116,14 @@ CORPUS_ROOT="${AILIBI_ML_CORPUS_ROOT:-$REPO_ROOT/replays/ml_corpus}"
 # records (and freezes) at, and the substrate the COMMITTED corpus under
 # replays/ml_corpus/ now carries: Qwen/Qwen3.6-27B (the Task 16.2 locked model,
 # audits/audit-phase-16-model-lock.md, locked 2026-07-12) + the qwen3_6_27b
-# prompt set at v4 (the Task-20.31 evidence-honesty bump; lineage v1 bespoke port
-# -> v2 elicitation batch -> v3 persona voice -> v4) + the baseline-7 lever slate:
-# the twenty-one retired always-on levers, which since the baseline-7 record
-# include the eight Phase-20 evidence-honesty levers
-# (audits/audit-phase-20-baseline-7.md §6.1), with the one surviving live toggle
-# (impostor_roll_call) recorded OFF unless --expect-levers declares it ON.
-# The preflight COUPLES model + prompt set + prompt versions + lever slate
-# as ONE substrate, so they re-pin together.
+# prompt set at the versions $REQUIRED_PROMPT_VERSIONS pins (lineage v1 bespoke
+# port -> v2 elicitation -> v3 persona voice -> v4 evidence honesty -> v5) + the
+# baseline-7 lever slate: the twenty-one retired always-on levers, which since
+# the baseline-7 record include the eight Phase-20 evidence-honesty levers
+# (audits/audit-phase-20-baseline-7.md §6.1), with the three live toggles
+# (impostor_roll_call, last_seen_from_sightings, vent_single_mint) recorded OFF
+# unless --expect-levers declares one ON. The preflight COUPLES model + prompt
+# set + prompt versions + lever slate as ONE substrate, so they re-pin together.
 #
 # Both canonical artifacts sit at baseline 7 — the samples and this corpus were
 # re-recorded together at the baseline-7 record — so the freeze-path provenance
@@ -213,7 +213,7 @@ Usage: $(basename "$0") [--set 9p2i|4p1i|both] [--dry-run | --splits-only]
                         and every recorded game_over stamp is judged against it.
   -h, --help            show this help
 
-Records the frozen ML-calibration corpus at baseline-6 config into
+Records the frozen ML-calibration corpus at its locked substrate into
 $CORPUS_ROOT/<set>/. Requires FEATHERLESS_API_KEY and
 AILIBI_PROMPT_SET=$REQUIRED_PROMPT_SET (the provider is LOCKED to featherless).
 EOF
@@ -626,7 +626,7 @@ PYINNER
 }
 
 # Assert the live registry still resolves $REQUIRED_PROMPT_SET to EXACTLY the
-# locked baseline-6 per-template versions. Run at preflight (fail before spend):
+# locked per-template versions. Run at preflight (fail before spend):
 # a later task bumping the set's registry entry must stop this recorder cold —
 # re-locking the corpus to a new prompt baseline is an owner decision, never a
 # silent drift. Pure Python, no network.
@@ -641,10 +641,10 @@ set_name, locked = sys.argv[2], sys.argv[3]
 resolved = ", ".join(sorted(PROMPT_VERSION_SETS[set_name].values()))
 if resolved != locked:
     sys.stderr.write(
-        f"Error: the prompt-set registry has moved off the locked baseline-6 versions.\n"
+        f"Error: the prompt-set registry has moved off the locked versions.\n"
         f"  PROMPT_VERSION_SETS[{set_name!r}] resolves to: {resolved}\n"
         f"  the Task-15.12 corpus is frozen at:            {locked}\n"
-        "Recording the baseline-6 corpus against a bumped prompt set would freeze a\n"
+        "Recording the corpus against a bumped prompt set would freeze a\n"
         "non-baseline corpus as Task 15.12. Re-locking to a new prompt baseline is an\n"
         "owner decision (re-record + re-freeze); nothing was recorded.\n"
     )
@@ -653,7 +653,7 @@ PYINNER
 }
 
 # Refuse to freeze a set whose meeting-bearing MANIFEST rows are not EXACTLY the
-# locked baseline-6 prompt-version map. The preflight pins the registry FORWARD
+# locked prompt-version map. The preflight pins the registry FORWARD
 # from this run; this catches the RESUME case looking BACKWARD — seeds recorded
 # by an earlier session under a different (older/newer) prompt baseline, OR rows
 # with stripped/partial provenance (a row carrying only allowed tokens is still a
@@ -687,7 +687,7 @@ if bad:
     listing = "; ".join(f"seed {seed}: {cell!r}" for seed, cell in bad.items())
     sys.stderr.write(
         f"check_recorded_prompt_versions: {len(bad)} meeting-bearing MANIFEST row(s) "
-        f"in {set_dir} do not carry EXACTLY the locked baseline-6 prompt versions "
+        f"in {set_dir} do not carry EXACTLY the locked prompt versions "
         f"[{locked}] — {listing}\n"
         "A resumed set must not mix prompt baselines or carry stripped prompt\n"
         "provenance; re-record the offending seeds.\n"
@@ -697,7 +697,7 @@ PYINNER
 }
 
 # Refuse to treat a present replay as a corpus game unless its BYTES prove the
-# baseline-6 provenance the corpus contract requires. File presence is not
+# baseline-7 provenance the corpus contract requires. File presence is not
 # provenance: the resume skip-scan trusts any non-empty in-range replay, but the
 # model/endpoint preflights only govern seeds recorded by THIS run, and the
 # MANIFEST cannot carry these checks (its policy column renders an absent stamp
@@ -986,7 +986,7 @@ resolve_physical_path() {
 # would let an operator confirm a plan the real run rejects.
 PROVIDER="$(printf '%s' "${AILIBI_LLM_PROVIDER:-featherless}" | tr '[:upper:]' '[:lower:]')"
 if [[ "$PROVIDER" != "featherless" && "$PROVIDER" != "fake" ]]; then
-  echo "Error: the ML-calibration corpus is baseline-6, so it records ONLY on featherless." >&2
+  echo "Error: the ML-calibration corpus is baseline-7, so it records ONLY on featherless." >&2
   echo "       Unset AILIBI_LLM_PROVIDER or set it to 'featherless' (got '$PROVIDER')." >&2
   exit 1
 fi
@@ -1038,7 +1038,7 @@ if [[ "$dry_run" -eq 1 ]]; then
     echo "[dry-run] provider: fake (hermetic \$0 — NOT a corpus recording; the corpus root must lie outside $REPO_ROOT/replays)"
     echo "[dry-run] preflight: would require no API key (the fake provider makes no call)"
   else
-    echo "[dry-run] provider: featherless (LOCKED — the corpus is baseline-6)"
+    echo "[dry-run] provider: featherless (LOCKED — the corpus substrate pins it)"
     echo "[dry-run] preflight: would require FEATHERLESS_API_KEY (hosted run; \$0 provider-keyed cost)"
   fi
   echo "[dry-run] prompt set: $REQUIRED_PROMPT_SET (must be exported as AILIBI_PROMPT_SET)"
@@ -1116,7 +1116,7 @@ if [[ "$PROVIDER" == "featherless" ]]; then
 fi
 
 if [[ "${AILIBI_PROMPT_SET:-}" != "$REQUIRED_PROMPT_SET" ]]; then
-  echo "Error: the corpus must record the locked baseline-6 substrate (Task 18.13)." >&2
+  echo "Error: the corpus must record the locked substrate." >&2
   echo "       Export the locked prompt set before re-running; nothing was recorded:" >&2
   echo "  - AILIBI_PROMPT_SET must be '$REQUIRED_PROMPT_SET' (got '${AILIBI_PROMPT_SET:-<unset>}')" >&2
   exit 1
@@ -1128,7 +1128,7 @@ if ! substrate_lever_preflight; then
 fi
 echo "Locked substrate OK: AILIBI_PROMPT_SET=$REQUIRED_PROMPT_SET."
 
-# Baseline-5 also locks the MODEL: build_default_client honors
+# The locked substrate also pins the MODEL: build_default_client honors
 # AILIBI_LLM_MEETING_MODEL / AILIBI_LLM_TRIGGER_MODEL for featherless, so a
 # leftover export from a model sweep would silently record the whole multi-hour
 # corpus on a non-baseline model while the MANIFEST/no-meeting rows keep stamping
@@ -1139,7 +1139,7 @@ echo "Locked substrate OK: AILIBI_PROMPT_SET=$REQUIRED_PROMPT_SET."
 for model_env in AILIBI_LLM_MEETING_MODEL AILIBI_LLM_TRIGGER_MODEL; do
   model_val="${!model_env:-}"
   if [[ -n "$model_val" && "$model_val" != "$DEFAULT_FEATHERLESS_MODEL" ]]; then
-    echo "Error: the corpus must record the locked baseline-6 model ($DEFAULT_FEATHERLESS_MODEL)." >&2
+    echo "Error: the corpus must record the locked model ($DEFAULT_FEATHERLESS_MODEL)." >&2
     echo "       $model_env='$model_val' would record off-baseline while the MANIFEST stamps the baseline model." >&2
     echo "       Unset $model_env (or set it to '$DEFAULT_FEATHERLESS_MODEL') and re-run; nothing was recorded." >&2
     exit 1
@@ -1151,7 +1151,7 @@ echo "Locked model OK: meeting/trigger models pinned to $DEFAULT_FEATHERLESS_MOD
 
 # ... and the ENDPOINT: build_default_client also honors AILIBI_FEATHERLESS_BASE_URL
 # (llm/provider.py ENV_FEATHERLESS_BASE_URL), so a leftover export for a mock or
-# staging endpoint would record the whole "baseline-6 Featherless" corpus against
+# staging endpoint would record the whole "baseline-7 Featherless" corpus against
 # an alternate server while the MANIFEST stamps the baseline model and $0 — and
 # the validity gate cannot catch it if that endpoint echoes the same model id.
 # Refuse any non-default override (never silently discard an operator's explicit
@@ -1167,7 +1167,7 @@ export AILIBI_FEATHERLESS_BASE_URL="$DEFAULT_FEATHERLESS_BASE_URL"
 echo "Locked endpoint OK: base URL pinned to $DEFAULT_FEATHERLESS_BASE_URL."
 
 # ... and the PROMPT VERSIONS, not just the set name: the corpus contract freezes
-# the baseline-6 versions (all four templates at v3), but AILIBI_PROMPT_SET
+# the versions $REQUIRED_PROMPT_VERSIONS pins, but AILIBI_PROMPT_SET
 # names a REGISTRY entry whose per-template versions can be bumped by a later
 # task. If that happens, re-running/resuming this recorder would silently record
 # (or mix) a non-baseline-prompt corpus and freeze it as Task 15.12. Assert the
@@ -1177,7 +1177,7 @@ echo "Locked endpoint OK: base URL pinned to $DEFAULT_FEATHERLESS_BASE_URL."
 if ! check_prompt_version_registry; then
   exit 1
 fi
-echo "Locked prompt versions OK: $REQUIRED_PROMPT_SET resolves to the baseline-6 map ($REQUIRED_PROMPT_VERSIONS)."
+echo "Locked prompt versions OK: $REQUIRED_PROMPT_SET resolves to the locked map ($REQUIRED_PROMPT_VERSIONS)."
 
 # Export the RESOLVED provider so run_tournament.py records on it — never fall
 # through to build_default_client()'s fake default, which would silently record
@@ -1234,7 +1234,7 @@ record_set() {
     return 1
   fi
   # File presence is not provenance: before the resume skip-scan treats a present
-  # replay as "already recorded", prove its bytes carry the full baseline-6
+  # replay as "already recorded", prove its bytes carry the full baseline-7
   # provenance — the canonical five-field 15.9 stamp, the locked model on every
   # recorded call, and $0 cost (see check_replay_provenance — a foreign replay
   # would otherwise freeze undetected).
@@ -1577,12 +1577,12 @@ record_set() {
     return 1
   fi
 
-  # Refuse to freeze a replay whose bytes fail the full baseline-6 provenance
+  # Refuse to freeze a replay whose bytes fail the full baseline-7 provenance
   # check (re-run of the pre-spend guard over the now-complete set, incl.
   # anything that appeared mid-run; MANIFEST rows cannot carry this check — see
   # check_replay_provenance).
   if ! check_replay_provenance "$set_dir"; then
-    echo "ERROR: $set_name holds replays that fail baseline-6 provenance; NOT freezing." >&2
+    echo "ERROR: $set_name holds replays that fail baseline-7 provenance; NOT freezing." >&2
     return 1
   fi
 

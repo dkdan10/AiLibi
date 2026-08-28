@@ -101,59 +101,65 @@ seed mod 5:  {0,1,2} -> train    {3} -> val    {4} -> test        (60/20/20)
 For 9p2i (150 games): 90 train / 30 val / 30 test.
 For 4p1i (50 games):  30 train / 10 val / 10 test.
 
-## Capability disclosures (Task 19.8 — measured, not tuned)
+## Capability disclosures (measured, not tuned)
 
 The corpus is honest about what it contains; this section is honest about what
-that implies. Every number below was recomputed from the committed bytes in the
-Task-19.8 session — stdlib scripts over the JSONL, with each command and its
-numerator/denominator recorded in that task's PR — per the verify-then-fix rule:
-where a recount differed from an audit figure, the recount won and the delta is
-stated. Four surfaces are measured: this corpus's two sets and the canonical
-`replays/samples/` twins recorded at the same baseline-7 substrate — **S9**
-(`replays/samples/9p2i`, 50 games), **S4** (`replays/samples/4p1i`, 50 games),
-**C9** (`replays/ml_corpus/9p2i`, 150 games), **C4** (`replays/ml_corpus/4p1i`,
-50 games). These are **capability disclosures, not defects fixed here**: Task
-19.8 changed zero gameplay and zero bytes outside this README and the two
-samples-MANIFEST mirror notes. And because the by-game split rule above is a
-function of the seed alone — never of content — the pervasive phenomena below
-(the structural prior, the husk rate, the response shape, the skip templating,
-both theater classes, the evidence economy) land in train, val, and test alike
-(e.g. C9 husk turns: 80 train / 32 val / 25 test), so a model fitted on the
-train split learns them as if they were the game; rare events, by the same
-seed-blindness, land wherever their seed falls — the corpus's single public
-fourth-wall leak (seed 1023) sits entirely in val, and the two corroboration
-husks in train and test only.
+that implies. Four surfaces are measured: this corpus's two sets and the
+canonical `replays/samples/` twins, all four recorded at the same baseline-7
+substrate — **S9** (`replays/samples/9p2i`, 50 games), **S4**
+(`replays/samples/4p1i`, 50 games), **C9** (`replays/ml_corpus/9p2i`, 150
+games), **C4** (`replays/ml_corpus/4p1i`, 50 games).
+
+**Which numbers below are current, and how you can tell.** Items 1, 2, 8 and 9
+are re-derived from the committed baseline-7 bytes. Their headline cells — the
+meeting total and the eight roll-call coverage pairs — are re-derived on *every*
+gate run by `check_doc_facts.check_corpus_disclosures`, which reads each set's
+own `tournament-eval-report.json` and fails on disagreement, so this section can
+never again be relabelled without its arithmetic. The rest of each item is folded
+from the replay bytes through `eval.replay_walk` (the resolved-kill and
+crew-witness cells are the same walk `tests/eval/test_kill_craft.py` pins).
+**Items 3 through 7 are not current**: they were measured on the baseline-6
+bytes and were never re-derived at the baseline-7 record, so their counts and
+denominators describe the previous recording. Each carries that flag on its own
+line. Their *mechanism* claims still hold; their numbers are history, and
+anything fitted on this corpus must re-derive them first.
+
+Because the by-game split rule above is a function of the seed alone — never of
+content — the pervasive phenomena below (the structural prior, the husk rate,
+the response shape, the skip templating, both theater classes, the evidence
+economy) land in train, val, and test alike, so a model fitted on the train split
+learns them as if they were the game; rare events, by the same seed-blindness,
+land wherever their seed falls.
 
 1. **The absolute reporter-innocence prior (structural).** The scripted FSM
    impostor never files a body report and never calls a meeting — the COVER
    branch is explicit: "after the kill the body is in the room and the impostor
    must not file a report" (`agents/tactical/impostor_policy.py:39-40`).
-   Measured across all four sets: **707/707** meetings are crew-triggered,
-   **707/707** opening turns are crew-spoken, and the tick streams carry
-   **716/716** `report` and **112/112** `emergency` submissions by crew — zero
+   Measured across all four sets: meetings crew-triggered **668/668**, opening
+   turns crew-spoken **668/668**, and the tick streams carry **717/717**
+   `report` and **67/67** `emergency` submissions by crew — zero
    impostor-originated, anywhere. 100% of training examples therefore embed
    "the reporter is innocent" as an absolute prior. A crew model fitted here
    has never seen a lying reporter, and any learned impostor that self-reports
    instantly invalidates the crew's learned prior. The prior is disclosed, not
-   changed: the policy file is out of scope for 19.8.
+   changed: the scripted policy is what it describes.
 
-2. **Non-resolving kill submissions.** Of **986** recorded `kill` actions
-   across the four sets, **798 resolved** and **188 (19.1%) produced no kill**
-   — in two distinct ways. **156 were engine-rejected**, every single one on
+2. **Non-resolving kill submissions.** Of **1,011** submitted `kill` actions
+   across the four sets, **825 resolved** and **186 (18.4%) produced no kill**
+   — in two distinct ways. **150 were engine-rejected**, every single one on
    the same-room check (the target was no longer co-located when the action
    applied mid-tick; zero cooldown and zero dead-target rejections anywhere),
-   and **32 were never evaluated at all** (an earlier `report`/`emergency` in
+   and **36 were never evaluated at all** (an earlier `report`/`emergency` in
    the same tick moved the phase to MEETING before the kill applied — those
    were not necessarily illegal when submitted). Per set,
-   non-resolving = rejected + pre-empted: S9 **48/225 = 21.3%** (42 + 6), C9
-   **135/640 = 21.1%** (111 + 24), S4 3/64 = 4.7% (2 + 1), C4 2/57 = 3.5%
-   (1 + 1). At 9p, roughly one scripted kill decision in five fails to land,
-   and most of those failures are outright illegal at application (42/225 =
-   18.7% S9, 111/640 = 17.3% C9) — a mover-quality limitation no eval report
-   surfaces. Resolved counts match the committed
-   kill-craft pins exactly (177/505/61, `tests/eval/
-   test_kill_craft.py:66-135`; C4's 55 is newly recounted here). Delta noted:
-   an audit input's 131/640 for C9 did not reproduce — 640 − 505 = 135.
+   non-resolving = rejected + pre-empted: S9 **43/220 = 19.5%** (36 + 7), C9
+   **137/663 = 20.7%** (110 + 27), S4 2/67 = 3.0% (1 + 1), C4 4/61 = 6.6%
+   (3 + 1). At 9p, roughly one scripted kill decision in five fails to land,
+   and most of those failures are outright illegal at application (36/220 =
+   16.4% S9, 110/663 = 16.6% C9) — a mover-quality limitation no eval report
+   surfaces. The resolved counts are the committed kill-craft pins exactly —
+   C9 526, S9 177, S4 65 (`tests/eval/test_kill_craft.py:69`, `:100`, `:127`) —
+   and C4's 57 is recounted here through the same fold.
 
 3. **Player-visible `[invalid accusation target …]` husks — a recorded
    deviation from this README's own no-husk doctrine.** The "Defaulted turns"
@@ -178,6 +184,7 @@ husks in train and test only.
    the impostor's ally in the record), and `[invalid primary_reason… nulled]`
    variants: 18/971 S9 and 55/2,726 C9 ballots. As a capability datum: at 9p
    the model names an illegal accusation target roughly one turn in twenty.
+   *Baseline-6 counts; not re-derived at the baseline-7 record.*
 
 4. **Zombie-vent re-litigation.** Dead impostors' vents keep getting re-argued:
    **56/165 S9 meetings (33.9%)** and **174/463 C9 meetings (37.6%)** contain a
@@ -191,6 +198,7 @@ husks in train and test only.
    games; the S9 maximum is four (seed 23 meeting-1, tied with seed 19
    meeting-1). Delta noted: an audit placed "five drops" in S9 seed 23; the
    recount says four, and the five belongs to C9 seed 1118.
+   *Baseline-6 counts; not re-derived at the baseline-7 record.*
 
 5. **Skip-template repetition.** Skips are encoded as `target == "SKIP"`
    (there are no null targets). Skip shares: S9 451/971 = 46.5%, C9 1,148/2,726
@@ -203,6 +211,7 @@ husks in train and test only.
    entirely a skip phenomenon (261 of 270 redundant ballot copies are skips).
    Transcript `free_text`, by contrast, is byte-unique: 3,934/3,934 distinct
    across all four sets, zero exact repeats anywhere.
+   *Baseline-6 counts; not re-derived at the baseline-7 record.*
 
 6. **Wait-streak and ping-pong mover theater.** Two scripted-mover artifacts
    with mirror-image role signatures — one absolute, one strong but not
@@ -219,6 +228,7 @@ husks in train and test only.
    REACTOR↔ENGINEERING); S9's longest is 14 (seed 10 `p-3`, ending in a kill).
    The two artifacts are mirror images: crew theater is standing still,
    impostor theater is pacing.
+   *Baseline-6 counts; not re-derived at the baseline-7 record.*
 
 7. **Model-originated fourth-wall statements and machinery quotation.** The
    fourth wall holds almost everywhere in *player-visible* text and fails
@@ -251,44 +261,59 @@ husks in train and test only.
    player-visible surfaces is the machinery-injected husk class of item 3,
    not model quotation — the earlier "~17% quote machinery" reading spanned
    both registers without separating them.
+   *Baseline-6 counts; not re-derived at the baseline-7 record.*
 
 8. **Role-correlated public response shape.** The share of a role's transcript
    turns carrying a structured `whereabouts` observation (the roll-call
-   answer), pooled over turns: crew **723/726 = 99.6% (S9)** and **2,035/2,042
-   = 99.7% (C9)** versus impostor **120/245 = 49.0% (S9)** and **342/684 =
-   50.0% (C9)** (4p sets: crew 78/78 and 79/80 vs impostor 8/39 and 5/40). The
-   estimator matters and is named per verify-then-fix: the previously
-   circulated impostor figures of ~45.5%/46.5% reproduce exactly as the
-   *unweighted per-meeting macro-average* of the same bytes (45.45%/46.54%);
-   the pooled turn-level figures above are the headline here. The mechanism is
-   the templates' role-differentiated output contract, not model choice: the
-   role-blind info-share/roll-call surface elicits whereabouts from both roles
-   (impostor `opt_in` turns answer 120/121 in S9), but the impostor REPLY
-   surface hard-codes `observations: []` (0/124) while the crew reply carries
-   the full vocabulary (79/80) — and impostors are disproportionately in reply
-   position (124/245 of their turns, vs 80/726 for crew). The whereabouts that
-   *are* recorded are genuinely model-authored, and impostors lie in them: at
-   the pre-advance decision frame (the reconstructed state each recorded
-   tick's actions were decided against — the same frame as item 9's census),
-   impostor self-placements match the reconstructed room in **58/120 = 48.3%
-   (S9)** and **155/342 = 45.3% (C9)** of whereabouts-carrying turns, versus
-   crew **575/723 = 79.5%** and **1,619/2,035 = 79.6%**. A behavioral tell in
-   the public record — not an observation-firewall leak — and a learnable
-   role classifier that no shipped metric currently prices.
+   answer), pooled over turns: crew S9 **652/652 = 100.0%**, crew C9
+   **1,854/1,854 = 100.0%**, crew S4 **80/80 = 100.0%** and crew C4 **88/88 =
+   100.0%**, versus impostor S9 **104/219 = 47.5%**, impostor C9 **283/625 =
+   45.3%**, impostor S4 **5/40 = 12.5%** and impostor C4 **1/44 = 2.3%**. The
+   estimator matters and is named: the *unweighted per-meeting macro-average*
+   of the same bytes reads 43.8% (S9) and 41.1% (C9) for the impostor side
+   (`deduction.public_response_coverage`); the pooled turn-level figures above
+   are the headline here. The mechanism is the templates' role-differentiated
+   output contract, not model choice: the role-blind info-share/roll-call
+   surface elicits whereabouts from both roles (impostor `opt_in` turns answer
+   104/104 in S9 and 283/283 in C9), but the impostor REPLY surface hard-codes
+   `observations: []` (0/115 S9, 0/342 C9) while the crew reply carries the
+   full vocabulary (78/78 S9, 207/207 C9) — and impostors are disproportionately
+   in reply position (115/219 of their turns vs 78/652 for crew in S9;
+   342/625 vs 207/1,854 in C9). So the tell is the *absent* observation, and it
+   is absolute: on these bytes no crew turn anywhere lacks a whereabouts answer
+   and no impostor reply carries one.
 
-9. **The too-clean evidence economy.** Across all **798** resolved kills in
+   The whereabouts that *are* recorded are almost never lies. Counting
+   whereabouts *observations* (a turn may carry more than one) against the
+   pre-advance decision frame — the reconstructed state each recorded tick's
+   actions were decided against, read from `eval.replay_walk`'s per-tick
+   pre-advance state, the same frame as item 9's census — self-placements match
+   the reconstructed room in **102/104 = 98.1% (S9)** and **283/285 = 99.3%
+   (C9)** for impostors, versus crew **656/659 = 99.5% (S9)** and **1,875/1,892
+   = 99.1% (C9)**; pooled over all four sets, crew **2,701/2,722 = 99.2%** and
+   impostor **391/395 = 99.0%**. This frame agrees cell for cell with the
+   engine's own rendered route line in each meeting prompt. The 48.3%/45.3%
+   impostor and 79.5%/79.6% crew match rates this item used to publish were
+   measured on the baseline-6 bytes and reproduce in neither frame here; they
+   are retired rather than carried forward. **Impostors essentially do not lie
+   in the one structured channel the alibi rules prosecute** — anything fitted
+   on "impostors lie in roll call" is fitted on nothing.
+
+9. **The too-clean evidence economy.** Across all **825** resolved kills in
    the four sets, the pre-advance decision frame shows **zero** kills with any
    non-victim living crew co-present in the kill room (co-present histogram
-   `{0: 798}` — reproduced by an independent stdlib room-census that also
-   matches every committed one-hop pin), and only **19/798 = 2.4%** were
-   crew-witnessed at all (12 C9 / 6 S9 / 1 S4 / 0 C4 — every witness a
-   same-tick one-hop arrival; the witnessed bit is the one figure recomputed
-   via the repo evaluator's engine walk rather than pure stdlib, since it is a
-   mid-tick engine fact). The scripted impostor kills only isolated targets
+   `{0: 825}`, the fold `tests/eval/test_kill_craft.py` pins per set), and only
+   **20/825 = 2.4%** were crew-witnessed at all (16 C9 / 3 S9 / 1 S4 / 0 C4 —
+   every witness a same-tick one-hop arrival, a mid-tick engine fact that only
+   the engine walk can read). The scripted impostor kills only isolated targets
    (`agents/tactical/impostor_policy.py` KILL guard), so the corpus supplies
    almost no direct kill testimony: convictions ride the post-kill vent tell
    instead, and a crew stack trained here has effectively never seen a
    contested kill scene.
+
+Measured at Task 19.8 on the baseline-6 bytes; items 1, 2, 8 and 9 re-derived at
+Task 21.11 on the committed baseline-7 bytes, and Task 21.15's re-record moves
+every cell here again.
 
 ## Recording (operator, `$0`, ~22–23h MEASURED)
 

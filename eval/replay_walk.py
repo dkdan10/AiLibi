@@ -81,33 +81,33 @@ semantics. The negative fixtures live in ``tests/eval/test_replay_walk.py``
 (one per profile, proving each still bites — or still tolerates — what it did
 before the migration).
 
-=========================  =====  ====  ============  ====  =====  ====  ==========================
-Profile                    tick   dup   missing-      pre   tally  post  post-walk checks
-(consumer)                 hash   rows  meeting row   hash         hash
-=========================  =====  ====  ============  ====  =====  ====  ==========================
-``validity-gate``          ON     off   truncate      off   off    ON    none
+=========================  =====  ====  ============  ====  =====  ====  =======  ==========================
+Profile                    tick   dup   missing-      pre   tally  post  retired  post-walk checks
+(consumer)                 hash   rows  meeting row   hash         hash  levers
+=========================  =====  ====  ============  ====  =====  ====  =======  ==========================
+``validity-gate``          ON     off   truncate      off   off    ON    off      none
 (eval/validity)
-``win-condition-           ON     off   truncate      off   off    ON    none
+``win-condition-           ON     off   truncate      off   off    ON    off      none
 selfcheck``
 (eval/win_condition_
 selfcheck)
-``kill-gift``              ON     off   truncate      off   off    ON    none
+``kill-gift``              ON     off   truncate      off   off    ON    off      none
 (eval/balance_eval)
-``watchability-referee``   ON     ON    violation     ON    ON     ON    terminal + reconstructed
-(eval/watchability)                                                      outcome + trailing rows +
-                                                                         game_over row + forged
-                                                                         winner/reason
-``kill-craft``             ON     ON    violation     ON    off    ON    terminal + trailing rows +
-(eval/kill_craft)                                                        game_over row
-``solvability``            ON     ON    violation     ON    off    ON    terminal + trailing rows +
-(eval/solvability)                                                       game_over row
-``evidence-honesty``       ON     ON    violation     ON    off    ON    terminal + trailing rows +
-(eval/evidence_honesty)                                                  game_over row
-``funnel-instrument``      ON     off   violation     ON    off    ON    none
+``watchability-referee``   ON     ON    violation     ON    ON     ON    off      terminal + reconstructed
+(eval/watchability)                                                               outcome + trailing rows +
+                                                                                  game_over row + forged
+                                                                                  winner/reason
+``kill-craft``             ON     ON    violation     ON    off    ON    off      terminal + trailing rows +
+(eval/kill_craft)                                                                 game_over row
+``solvability``            ON     ON    violation     ON    off    ON    off      terminal + trailing rows +
+(eval/solvability)                                                                game_over row
+``evidence-honesty``       ON     ON    violation     ON    off    ON    off      terminal + trailing rows +
+(eval/evidence_honesty)                                                           game_over row
+``funnel-instrument``      ON     off   violation     ON    off    ON    ON       none
 (eval/funnel, both walks)
-``leak-scan-factory``      off    off   violation     off   off    off   none
+``leak-scan-factory``      off    off   violation     off   off    off   off      none
 (eval/leak_scan)
-=========================  =====  ====  ============  ====  =====  ====  ==========================
+=========================  =====  ====  ============  ====  =====  ====  =======  ==========================
 
 ``verify_action_dispositions`` has no column above because it is off in every
 profile listed: the committed sets were recorded before ``ReplayEntry`` carried
@@ -137,7 +137,11 @@ What each profile deliberately relaxes, and why:
   action stream, so a truncated or drifted recording would both under-count the
   transcript denominators AND silently re-price the policy cells.
 * ``funnel-instrument`` — the same hash discipline PLUS ``state_hash_before``,
-  and a missing meeting row is a loud :class:`~eval.funnel.FunnelReconstructionError`:
+  and the only profile that refuses a recording whose ``game_over`` stamp names
+  a RETIRED lever OFF: the funnel folds and the VJ instruments re-derive
+  always-on rules, so earlier-substrate bytes would be scored under a substrate
+  they never ran. A missing meeting row is a loud
+  :class:`~eval.funnel.FunnelReconstructionError`:
   funnel's comment declares the divergence from the loader deliberate — a
   measurement instrument must never silently under-count. The vj walk layers
   two more checks in its OWN fold (a MEETING transition without a
@@ -199,6 +203,7 @@ from meetings.schemas import MeetingResult
 from meetings.voting import tally_ballots
 from orchestrator.game import apply_meeting_result
 from orchestrator.replay import (
+    TOGGLEABLE_SUBSTRATE_FLAG_KEYS,
     GameEndReplayEntry,
     MeetingReplayEntry,
     ReplayEntry,
@@ -206,6 +211,7 @@ from orchestrator.replay import (
     _state_hash,
     classify_action_dispositions,
     read_all_entries,
+    substrate_stamp_mismatches,
 )
 from orchestrator.seeder import seed_initial_state
 
@@ -213,6 +219,7 @@ _ACTION_ADAPTER: Final[TypeAdapter[Action]] = TypeAdapter(Action)
 
 WalkViolationKind: TypeAlias = Literal[
     "duplicate_meeting_rows",
+    "retired_levers_stamped_off",
     "tick_hash_mismatch",
     "action_disposition_mismatch",
     "missing_meeting_row",
@@ -240,8 +247,9 @@ class WalkViolation:
     the hash kinds, and the recorded vs reconstructed comma-joined disposition
     tuples on ``action_disposition_mismatch``; ``phase`` / ``state_tick`` are
     the walk-final engine phase and tick on ``missing_terminal_tick``;
-    ``terminal_tick`` is set on ``trailing_replay_rows``. Fields not meaningful
-    for a kind are ``None``.
+    ``terminal_tick`` is set on ``trailing_replay_rows``; ``levers`` carries the
+    registry keys on ``retired_levers_stamped_off``, so a consumer can name them.
+    Fields not meaningful for a kind are ``None`` (``levers``: empty).
     """
 
     kind: WalkViolationKind
@@ -252,6 +260,7 @@ class WalkViolation:
     phase: str | None = None
     state_tick: int | None = None
     terminal_tick: int | None = None
+    levers: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -272,6 +281,13 @@ class ReplayWalkConfig:
     not a claim (:class:`orchestrator.replay.ReplayEntry`). The state hash
     cannot catch this class on its own — a discarded action was never applied,
     so a row that mislabels one still reconstructs byte-identically.
+    ``reject_retired_levers_stamped_off`` refuses, once before the first
+    advance, a recording whose ``game_over`` stamp names a lever this build has
+    graduated: its OFF derivation was deleted at the adopting record, so a fold
+    that re-derives always-on rules would score the bytes under a substrate
+    they never ran. An UNSTAMPED recording is skipped, its substrate being
+    unknown rather than OFF
+    (:func:`orchestrator.replay.substrate_stamp_mismatches`).
     """
 
     profile: str
@@ -279,6 +295,7 @@ class ReplayWalkConfig:
     verify_tick_hashes: bool = False
     verify_action_dispositions: bool = False
     reject_duplicate_meeting_rows: bool = False
+    reject_retired_levers_stamped_off: bool = False
     missing_meeting_row: MissingMeetingRowPolicy = "truncate"
     verify_meeting_pre_hashes: bool = False
     ballot_tally_threshold: float | None = None
@@ -423,6 +440,28 @@ def walk_replay(
         or len({entry.meeting_id for entry in meeting_entries}) != len(meeting_entries)
     ):
         _violate(config, WalkViolation(kind="duplicate_meeting_rows", game_id=game_id))
+
+    if config.reject_retired_levers_stamped_off:
+        # The retired half of the shared substrate comparison — the same filter
+        # audits/workflows/extract_gameplay_facts.py applies: a live toggle
+        # recorded the other way is a substrate this build can still reach, a
+        # graduated lever recorded OFF is not.
+        stamped_off = tuple(
+            key
+            for key in substrate_stamp_mismatches(
+                game_end.substrate_flags if game_end is not None else None
+            ).differing
+            if key not in TOGGLEABLE_SUBSTRATE_FLAG_KEYS
+        )
+        if stamped_off:
+            _violate(
+                config,
+                WalkViolation(
+                    kind="retired_levers_stamped_off",
+                    game_id=game_id,
+                    levers=stamped_off,
+                ),
+            )
 
     state = seed_initial_state(
         seed=seed,
