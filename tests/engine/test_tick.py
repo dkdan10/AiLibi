@@ -9,7 +9,7 @@ from engine.actions import Action
 from engine.entities import BodyState, PlayerState, SabotageState, TaskState
 from engine.events import event_to_dict
 from engine.rng import EngineRng
-from engine.tick import advance_tick
+from engine.tick import advance_tick, superseded_meeting_tick
 from engine.world import Map, WorldState, load_canonical_map
 
 _ACTION_ADAPTER: TypeAdapter[Action] = TypeAdapter(Action)
@@ -1070,9 +1070,7 @@ def test_report_and_emergency_transition_to_meeting() -> None:
     assert any(event.type == "MeetingTriggered" for event in emergency_events)
 
 
-def test_meeting_trigger_interrupts_tick_before_passive_effects_and_win_checks() -> (
-    None
-):
+def test_meeting_trigger_interrupts_tick_before_passive_effects() -> None:
     game_map = load_canonical_map()
     body = BodyState(
         id="body-p-2-0",
@@ -1115,9 +1113,7 @@ def test_meeting_trigger_interrupts_tick_before_passive_effects_and_win_checks()
     assert [event.type for event in events] == ["MeetingTriggered"]
 
 
-def test_emergency_trigger_interrupts_tick_before_passive_effects_and_win_checks() -> (
-    None
-):
+def test_emergency_trigger_interrupts_tick_before_passive_effects() -> None:
     game_map = load_canonical_map()
     state = replace(
         _state(),
@@ -1141,6 +1137,238 @@ def test_emergency_trigger_interrupts_tick_before_passive_effects_and_win_checks
     assert next_state.sabotage is not None
     assert next_state.sabotage.remaining_ticks == 1
     assert [event.type for event in events] == ["MeetingTriggered"]
+
+
+def _decided_trigger_state() -> WorldState:
+    """A crew-task win already satisfied, with a body and the button in reach.
+
+    ``p-1`` stands on an undiscovered body in the emergency-button room, so the
+    same state reaches a meeting trigger by either report or emergency.
+    """
+
+    base = _state()
+    body = BodyState(
+        id="body-p-2-0",
+        player_id="p-2",
+        room="CAFETERIA",
+        position=(0.0, 0.0),
+        killed_by="p-3",
+        discovered_by=None,
+    )
+    players = {
+        "p-1": _player("p-1", "CREWMATE", "CAFETERIA", (0.0, 0.0)),
+        "p-4": _player("p-4", "CREWMATE", "MEDBAY", (0.0, 0.0)),
+        "p-3": _player("p-3", "IMPOSTOR", "ELECTRICAL", (1.0, 0.0)),
+    }
+    return replace(
+        base,
+        players=players,
+        bodies={body.id: body},
+        tasks={
+            "p-1:swipe_card": replace(
+                _task("swipe_card", "p-1", "ADMIN"), progress=1, completed=True
+            )
+        },
+    )
+
+
+_REPORT_ACTION = {
+    "type": "report",
+    "actor": "p-1",
+    "payload": {"body_id": "body-p-2-0"},
+}
+_EMERGENCY_ACTION = {"type": "emergency", "actor": "p-1", "payload": {}}
+
+
+def test_kill_reaching_parity_beside_a_report_concludes_the_tick() -> None:
+    """A trigger tick that is already decided declares the win, not a meeting.
+
+    The §3.5 order attributes a same-tick offensive action to the offense
+    (engine/win_conditions.py). Without the check on this branch the kill's
+    parity win is handed to a meeting that can eject the impostor and record
+    ``CREWMATES / CREWMATE_EJECT`` instead (Task 21.6).
+    """
+
+    game_map = load_canonical_map()
+    body = BodyState(
+        id="body-p-2-0",
+        player_id="p-2",
+        room="ADMIN",
+        position=(0.0, 0.0),
+        killed_by="p-3",
+        discovered_by=None,
+    )
+    state = replace(
+        _state(),
+        players={
+            "p-3": _player("p-3", "IMPOSTOR", "CAFETERIA", (0.0, 0.0)),
+            "p-1": _player("p-1", "CREWMATE", "ADMIN", (1.0, 0.0)),
+            "victim": _player("victim", "CREWMATE", "CAFETERIA", (2.0, 0.0)),
+        },
+        bodies={body.id: body},
+        cooldowns={"p-3": 0},
+        tasks={"p-1:swipe_card": _task("swipe_card", "p-1", "ADMIN")},
+    )
+
+    next_state, events = advance_tick(
+        state,
+        [
+            _action({"type": "kill", "actor": "p-3", "payload": {"target": "victim"}}),
+            _action(_REPORT_ACTION),
+        ],
+        game_map=game_map,
+    )
+
+    assert [event.type for event in events] == [
+        "Killed",
+        "MeetingTriggered",
+        "GameOver",
+    ]
+    assert next_state.phase == "GAME_OVER"
+    game_over = event_to_dict(events[-1])
+    assert game_over["winner"] == "IMPOSTORS"
+    assert game_over["reason"] == "IMPOSTOR_PARITY"
+    assert game_over["tick"] == state.tick
+    # Passive effects still skipped and the tick not incremented, exactly as the
+    # undecided trigger behaves.
+    assert next_state.tick == state.tick
+    assert next_state.rng_state == state.rng_state
+
+
+def test_final_task_completion_beside_a_report_concludes_the_tick() -> None:
+    """The corrected answer for ``samples/4p1i`` seed 3 tick 10.
+
+    A last task finishing beside a report is the realized shape of the census:
+    the crew win is declared on the trigger tick rather than after a meeting.
+    """
+
+    game_map = load_canonical_map()
+    body = BodyState(
+        id="body-p-2-0",
+        player_id="p-2",
+        room="MEDBAY",
+        position=(0.0, 0.0),
+        killed_by="p-3",
+        discovered_by=None,
+    )
+    state = replace(
+        _state(),
+        players={
+            "p-1": _player("p-1", "CREWMATE", "ADMIN", (0.0, 0.0)),
+            "p-4": _player("p-4", "CREWMATE", "MEDBAY", (0.0, 0.0)),
+            "p-3": _player("p-3", "IMPOSTOR", "ELECTRICAL", (1.0, 0.0)),
+        },
+        bodies={body.id: body},
+        tasks={"p-1:swipe_card": _task("swipe_card", "p-1", "ADMIN")},
+    )
+
+    next_state, events = advance_tick(
+        state,
+        [
+            _action(
+                {
+                    "type": "do_task",
+                    "actor": "p-1",
+                    "payload": {"task_id": "swipe_card"},
+                }
+            ),
+            _action(
+                {
+                    "type": "report",
+                    "actor": "p-4",
+                    "payload": {"body_id": "body-p-2-0"},
+                }
+            ),
+        ],
+        game_map=game_map,
+    )
+
+    assert [event.type for event in events] == [
+        "TaskCompleted",
+        "MeetingTriggered",
+        "GameOver",
+    ]
+    assert next_state.phase == "GAME_OVER"
+    game_over = event_to_dict(events[-1])
+    assert game_over["winner"] == "CREWMATES"
+    assert game_over["reason"] == "CREWMATE_TASKS"
+    assert next_state.sabotage == state.sabotage
+
+
+@pytest.mark.parametrize("trigger", [_REPORT_ACTION, _EMERGENCY_ACTION])
+def test_every_trigger_kind_concludes_a_decided_tick(trigger: object) -> None:
+    """The gate is the win condition, not the action type."""
+
+    game_map = load_canonical_map()
+    state = _decided_trigger_state()
+
+    next_state, events = advance_tick(state, [_action(trigger)], game_map=game_map)
+
+    assert [event.type for event in events] == ["MeetingTriggered", "GameOver"]
+    assert next_state.phase == "GAME_OVER"
+    assert event_to_dict(events[-1])["reason"] == "CREWMATE_TASKS"
+
+
+@pytest.mark.parametrize("trigger", [_REPORT_ACTION, _EMERGENCY_ACTION])
+def test_every_trigger_kind_still_opens_a_meeting_on_an_undecided_tick(
+    trigger: object,
+) -> None:
+    """The same two triggers over an undecided state: unchanged behaviour."""
+
+    game_map = load_canonical_map()
+    decided = _decided_trigger_state()
+    state = replace(
+        decided, tasks={"p-1:swipe_card": _task("swipe_card", "p-1", "ADMIN")}
+    )
+
+    next_state, events = advance_tick(state, [_action(trigger)], game_map=game_map)
+
+    assert [event.type for event in events] == ["MeetingTriggered"]
+    assert next_state.phase == "MEETING"
+    assert superseded_meeting_tick(next_state, events) is None
+
+
+def test_superseded_meeting_tick_restores_the_pre_ruling_pair() -> None:
+    """The inverse hands back exactly what a pre-21.6 engine returned."""
+
+    game_map = load_canonical_map()
+    state = _decided_trigger_state()
+
+    next_state, events = advance_tick(
+        state, [_action(_REPORT_ACTION)], game_map=game_map
+    )
+    restored = superseded_meeting_tick(next_state, events)
+
+    assert restored is not None
+    restored_state, restored_events = restored
+    assert restored_state == replace(next_state, phase="MEETING")
+    assert [event.type for event in restored_events] == ["MeetingTriggered"]
+
+
+def test_superseded_meeting_tick_declines_a_plain_game_over_tick() -> None:
+    """A step-3 GAME_OVER carries no meeting trigger, so nothing is restored."""
+
+    game_map = load_canonical_map()
+    state = replace(
+        _state(),
+        players={
+            "p-3": _player("p-3", "IMPOSTOR", "CAFETERIA", (0.0, 0.0)),
+            "p-1": _player("p-1", "CREWMATE", "ADMIN", (1.0, 0.0)),
+            "victim": _player("victim", "CREWMATE", "CAFETERIA", (2.0, 0.0)),
+        },
+        cooldowns={"p-3": 0},
+        tasks={"p-1:swipe_card": _task("swipe_card", "p-1", "ADMIN")},
+    )
+
+    next_state, events = advance_tick(
+        state,
+        [_action({"type": "kill", "actor": "p-3", "payload": {"target": "victim"}})],
+        game_map=game_map,
+    )
+
+    assert next_state.phase == "GAME_OVER"
+    assert events[-1].type == "GameOver"
+    assert superseded_meeting_tick(next_state, events) is None
 
 
 def test_emergency_requires_actor_in_button_room() -> None:

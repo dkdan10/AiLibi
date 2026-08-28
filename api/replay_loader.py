@@ -116,7 +116,7 @@ from engine.events import (
     VentEnteredEvent,
     VentExitedEvent,
 )
-from engine.tick import advance_tick
+from engine.tick import advance_tick, superseded_meeting_tick
 from engine.world import Map, WorldState, load_canonical_map
 from eval.meeting_quality import TournamentEvalReport
 from meetings.manager import (
@@ -1318,12 +1318,29 @@ class ReplayLoader:
                 state, events = advance_tick(state, actions, game_map=self._game_map)
                 actual = _state_hash(state)
                 if actual != entry.state_hash:
-                    raise ReplayStateMismatchError(
-                        game_id=game_id,
-                        tick=entry.tick,
-                        expected=entry.state_hash,
-                        actual=actual,
-                    )
+                    # Two committed recordings pinned a meeting-trigger tick the
+                    # engine now concludes. The pre-ruling pair is accepted only
+                    # when a meeting row exists for the tick AND it re-hashes to
+                    # the recorded hash exactly, so it cannot mask a determinism
+                    # break; the restored events are what every frame below is
+                    # built from. Retired by Task 21.15's re-record.
+                    restored = superseded_meeting_tick(state, events)
+                    if (
+                        restored is not None
+                        and meeting_by_tick.get(entry.tick) is not None
+                    ):
+                        candidate_state, candidate_events = restored
+                        if _state_hash(candidate_state) == entry.state_hash:
+                            state = candidate_state
+                            events = list(candidate_events)
+                            actual = entry.state_hash
+                    if actual != entry.state_hash:
+                        raise ReplayStateMismatchError(
+                            game_id=game_id,
+                            tick=entry.tick,
+                            expected=entry.state_hash,
+                            actual=actual,
+                        )
                 # The disposition tuple is served (it decides who reads BLOCKED)
                 # and the hash above cannot vouch for it, so it is verified
                 # against the events this walk just produced before any frame
@@ -1775,22 +1792,27 @@ class ReplayLoader:
                     )
                 )
             elif isinstance(event, MeetingTriggeredEvent):
-                if meeting_id is None:
+                # A trigger tick that decided the game convenes no meeting, so
+                # there is no id to link and the chip is not projected — the
+                # report below still is, because the body was still found.
+                # Anywhere else a trigger without an id is an invariant break.
+                if meeting_id is None and state.phase != "GAME_OVER":
                     raise RuntimeError(
                         "MeetingTriggered event without a resolved meeting id"
                     )
-                kind: _TriggerKind = (
-                    "body" if event.trigger == "report" else "emergency"
-                )
-                views.append(
-                    MeetingTriggeredEventView(
-                        type="meeting_triggered",
-                        tick=event.tick,
-                        meeting_id=meeting_id,
-                        triggered_by=event.actor,
-                        trigger_kind=kind,
+                if meeting_id is not None:
+                    kind: _TriggerKind = (
+                        "body" if event.trigger == "report" else "emergency"
                     )
-                )
+                    views.append(
+                        MeetingTriggeredEventView(
+                            type="meeting_triggered",
+                            tick=event.tick,
+                            meeting_id=meeting_id,
+                            triggered_by=event.actor,
+                            trigger_kind=kind,
+                        )
+                    )
                 if event.trigger == "report" and event.body_id is not None:
                     body = state.bodies.get(event.body_id)
                     if body is not None:
