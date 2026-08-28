@@ -691,9 +691,9 @@ def superseded_meeting_tick(
     Reconstruction homes call this on a tick-hash mismatch and accept the pair
     only when it re-hashes to the recorded hash exactly. Task 21.15's re-record
     retires it: when no committed recording needs it, delete this function and
-    the five call sites — eval/replay_walk.py, api/replay_loader.py,
-    training/surrogate/dataset.py, eval/off_menu.py and
-    tests/meetings/test_prompt_byte_golden.py.
+    the seven call sites — eval/replay_walk.py, api/replay_loader.py,
+    training/surrogate/dataset.py, eval/off_menu.py, training/rollout.py,
+    training/anchor_study.py and tests/meetings/test_prompt_byte_golden.py.
     """
 
     if state.phase != "GAME_OVER" or len(events) < 2:

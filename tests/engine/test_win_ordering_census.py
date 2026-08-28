@@ -6,9 +6,10 @@ already decided. Exactly two games in the whole record do: a third occurrence
 and a stale entry both turn this red.
 
 Task 21.15 is the expiry. When the re-record lands on the corrected engine this
-census reads zero, and ``engine.tick.superseded_meeting_tick`` plus its five call
+census reads zero, and ``engine.tick.superseded_meeting_tick`` plus its seven call
 sites (eval/replay_walk.py, api/replay_loader.py, training/surrogate/dataset.py,
-eval/off_menu.py and tests/meetings/test_prompt_byte_golden.py) are deleted.
+eval/off_menu.py, training/rollout.py, training/anchor_study.py and
+tests/meetings/test_prompt_byte_golden.py) are deleted.
 """
 
 from __future__ import annotations
@@ -19,10 +20,13 @@ from typing import NoReturn
 
 import pytest
 
+from api.replay_loader import ReplayLoader
 from engine.win_conditions import evaluate_win_conditions
 from engine.world import Map, load_canonical_map
 from eval import validity
 from eval.replay_walk import MeetingOpened, ReplayWalkConfig, WalkViolation, walk_replay
+from training.anchor_study import walk_corpus_game
+from training.rollout import reconstruct_episode
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SAMPLES_4P1I = _REPO_ROOT / "replays" / "samples" / "4p1i"
@@ -108,6 +112,44 @@ def test_exactly_two_committed_4p1i_games_need_the_allowance(game_map: Map) -> N
     ]
     assert (census.games, census.meetings) == (100, 84)
     assert dict(census.margins) == {1: 84}
+
+
+#: The two superseded games, as ``(set_dir, seed)``.
+_SUPERSEDED = ((_SAMPLES_4P1I, 3), (_CORPUS_4P1I, 1009))
+
+
+def test_every_reconstruction_home_still_reads_the_superseded_games(
+    game_map: Map,
+) -> None:
+    """Each home that re-derives a tick hash carries the allowance.
+
+    A home that compares a re-derived hash to the recorded one BEFORE its
+    GAME_OVER break raises on these two games without the restore, which is how
+    ``training.rollout`` and ``training.anchor_study`` were found missing.
+    """
+
+    for set_dir, seed in _SUPERSEDED:
+        path = set_dir / f"replay-seed-{seed}.jsonl"
+
+        episode = reconstruct_episode(
+            path,
+            game_map=game_map,
+            seed=seed,
+            num_players=4,
+            num_impostors=1,
+            tasks_per_crewmate=1,
+        )
+        assert (episode.winner, len(episode.meetings)) == ("CREWMATES", 1)
+
+        facts, _decisions = walk_corpus_game(
+            path, num_players=4, num_impostors=1, tasks_per_crewmate=1
+        )
+        assert (facts.winner, facts.meetings) == ("CREWMATES", 1)
+
+        replay = ReplayLoader(replay_dir=set_dir).load_replay(f"headless-seed-{seed}")
+        assert len(replay.meetings) == 1
+        assert replay.finale is not None
+        assert replay.finale.winner_reason == "CREWMATE_TASKS"
 
 
 @pytest.mark.campaign
