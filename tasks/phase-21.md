@@ -1769,6 +1769,23 @@ precisely the code whose win labels this ruling corrects.
 **Public types introduced:**
 - `engine.tick.superseded_meeting_tick`
 
+**Merge-reality record (2026-08-27, orchestrator-ratified at the #409 merge):** the contract's
+"three reconstruction homes" premise was empirically false — SEVEN homes compare a re-derived
+tick hash, and the two training readers this contract listed NOT-in-scope on the grounds that
+they "inherit the ruling … never edited" in fact hash-check BEFORE their GAME_OVER breaks and
+raised on both superseded games (reproduced; previously ungated — Codex found it, not the
+tier). The implementer stopped as a draft per craft rule 6; the orchestrator ruled the widened
+list RATIFIED: the seam ruling's own promise is reconstruction preserved EVERYWHERE, and the
+alternative knowingly shipped training readers unable to read two committed games. Added:
+training/rollout.py, training/anchor_study.py, tests/meetings/test_prompt_byte_golden.py's
+walk, eval/off_menu.py (FROZEN, bug-fix clause), and the test_replay_meetings fixture repair
+(it seeded the corpse on the impostor and satisfied CREWMATE_EJECT at tick 0 — wrong before
+this task; every assertion kept). New gate: every home reads the superseded games, perturbed
+red at each. Ledger items in the PR body: B-2's zero-census cell does not reproduce (A-1's
+census is binding), and `scripts/validity_gate.py` crashes on a `HeadlessGame` `.audit`
+sidecar beside replays — aimed at 21.14/21.15, whose smoke gates every leg with that script;
+the fix wants a deliberate ruling, not a silent skip.
+
 **Ready-to-paste prompt:** `agent_prompts/task-21-6-win-ordering.md`
 
 ---
