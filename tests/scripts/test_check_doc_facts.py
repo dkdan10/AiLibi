@@ -14,6 +14,7 @@ checked against the levers this build actually ships.
 
 from __future__ import annotations
 
+import json
 import re
 import subprocess
 import sys
@@ -863,14 +864,16 @@ def test_eval_report_without_vote_correctness_block_fails_loud(
 ) -> None:
     # Format drift must not read as "nothing to check": a report with no
     # vote_correctness block leaves both the stamps and the README's
-    # real-report example sourceless, and one with no public_response_coverage
-    # block leaves the corpus disclosures the same way.
+    # real-report example sourceless, one with no public_response_coverage
+    # block leaves the corpus coverage cells the same way, and one with no
+    # meeting rows leaves the crew-triggered cell derived from nothing.
     _write(doc_tree, _EVAL_REPORT_9P2I, "{}\n")
     errors = check_doc_facts.check_facts(doc_tree)
-    assert len(errors) == 3
+    assert len(errors) == 4
     assert all(_EVAL_REPORT_9P2I in error for error in errors)
     assert len([error for error in errors if '"vote_correctness":' in error]) == 2
     assert any('"public_response_coverage":' in error for error in errors)
+    assert any("0 meeting rows" in error for error in errors)
 
 
 def test_unlinked_dialect_term_detected(doc_tree: Path) -> None:
@@ -1520,6 +1523,121 @@ def test_corpus_disclosure_coverage_cell_drift_detected(doc_tree: Path) -> None:
     assert errors[0].startswith(f"{_CORPUS_README}:")
     assert "'crew S9' cell reads 723/726" in errors[0]
     assert "the recorded reports give 652/652" in errors[0]
+
+
+def test_corpus_disclosure_stale_duplicate_cell_detected(doc_tree: Path) -> None:
+    # A stale copy beside the correct value is drift too: every occurrence of a
+    # cell's label is held to the recorded value, not just the first.
+    _write(
+        doc_tree,
+        _CORPUS_README,
+        _read(doc_tree, _CORPUS_README)
+        + "\nAn earlier draft quoted impostor C9 **342/684 = 50.0%**.\n",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "'impostor C9' cell reads 342/684" in errors[0]
+    assert "give 283/625" in errors[0]
+
+
+def test_corpus_disclosure_substrate_relabel_detected(doc_tree: Path) -> None:
+    # The root cause of A-15, reproduced: the substrate name is advanced and
+    # every number is left as recorded on the previous one. Re-deriving the
+    # numbers alone would pass this the moment the reports were replaced too,
+    # so the label is bound to the ladder-tip audit.
+    _substitute(
+        doc_tree,
+        _CORPUS_README,
+        "the same baseline-7\nsubstrate",
+        "the same baseline-8\nsubstrate",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert errors[0].startswith(f"{_CORPUS_README}:")
+    assert "labelled baseline-8 substrate" in errors[0]
+    assert "ladder tip at baseline 7" in errors[0]
+
+
+def test_corpus_disclosure_without_a_substrate_label_detected(doc_tree: Path) -> None:
+    # Deleting the label must not be the way to silence the check: numbers with
+    # no stated substrate are not true of anything.
+    text = _read(doc_tree, _CORPUS_README).replace(
+        "baseline-7\nsubstrate", "recorded\nsubstrate"
+    )
+    _write(
+        doc_tree,
+        _CORPUS_README,
+        text.replace("baseline-7 substrate", "recorded substrate"),
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "names no 'baseline-N substrate' at all" in errors[0]
+
+
+def test_an_impostor_triggered_meeting_lowers_the_crew_numerator(
+    tmp_path: Path,
+) -> None:
+    # The claim is that NO meeting was impostor-triggered, so the numerator has
+    # to be counted from the meeting rows' own trigger roles. Synthesising it
+    # from the denominator would make the claim unfalsifiable — this report has
+    # two meetings and only one crew trigger.
+    report = tmp_path / "tournament-eval-report.json"
+    report.write_text(
+        json.dumps(
+            {
+                "report": {
+                    "games": [
+                        {
+                            "roles": {"p-1": "CREWMATE", "p-2": "IMPOSTOR"},
+                            "meetings": [
+                                {"triggered_by": "p-1", "trigger": "report"},
+                                {"triggered_by": "p-2", "trigger": "emergency"},
+                            ],
+                        }
+                    ]
+                }
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    errors: list[str] = []
+    assert check_doc_facts.crew_triggered_meetings(tmp_path, report.name, errors) == (
+        1,
+        2,
+    )
+    assert errors == []
+
+
+def test_a_report_with_no_meeting_rows_fails_loud(tmp_path: Path) -> None:
+    # Format drift must not read as "every meeting was crew-triggered".
+    report = tmp_path / "tournament-eval-report.json"
+    report.write_text(json.dumps({"report": {"games": []}}, indent=2), encoding="utf-8")
+    errors: list[str] = []
+    assert (
+        check_doc_facts.crew_triggered_meetings(tmp_path, report.name, errors) is None
+    )
+    assert len(errors) == 1
+    assert "0 meeting rows" in errors[0]
+
+
+def test_meeting_rows_without_a_role_map_fail_loud(tmp_path: Path) -> None:
+    # Triggers with no roles to resolve them against would silently count as
+    # impostor-triggered; that is drift in the report, not a finding about the
+    # game.
+    report = tmp_path / "tournament-eval-report.json"
+    report.write_text(
+        json.dumps(
+            {"report": {"games": [{"meetings": [{"triggered_by": "p-1"}]}]}}, indent=2
+        ),
+        encoding="utf-8",
+    )
+    errors: list[str] = []
+    assert (
+        check_doc_facts.crew_triggered_meetings(tmp_path, report.name, errors) is None
+    )
+    assert len(errors) == 1
+    assert "no role map" in errors[0]
 
 
 def test_corpus_disclosure_meeting_total_drift_detected(doc_tree: Path) -> None:

@@ -41,8 +41,7 @@ together, so one run names every drifted fact rather than the first.
    baseline the substrate ladder stands at. Every front-door sentence naming
    the "ladder tip" — the whole sentence, however long — must name that
    baseline, and no other. The audits index is scanned with the front door: it
-   is where a reader is sent to find the record, and it stated a tip no check
-   could reach until Task 21.11 put it in scope.
+   is where a reader is sent to find the record.
 3. **Lever registry vs .env.example.** ``orchestrator.replay`` owns the live
    substrate-lever registry. Every still-toggleable lever must be documented
    IN the belief-substrate section with a commented example line showing its
@@ -693,13 +692,23 @@ _DISCLOSURE_SETS: Final[tuple[tuple[str, str], ...]] = (
     ("C4", "replays/ml_corpus/4p1i"),
 )
 _COVERAGE_KEY: Final = '"public_response_coverage":'
-_COVERAGE_MEETINGS: Final = "crew_macro_meetings"
 # Each role's ``(numerator, denominator)`` field pair in that block.
 _COVERAGE_ROLES: Final[tuple[tuple[str, str, str], ...]] = (
     ("crew", "crew_turns_with_whereabouts", "crew_turns"),
     ("impostor", "impostor_turns_with_whereabouts", "impostor_turns"),
 )
 _DISCLOSURE_MEETINGS_LABEL: Final = "meetings crew-triggered"
+# The report's per-game trigger evidence, streamed rather than decoded: one
+# ``roles`` map per game, then one ``triggered_by`` per meeting row. Both keys
+# are unique to their nesting level, so the scan reads the trigger side without
+# pulling in the embedded transcripts that make these files tens of megabytes.
+_ROLES_LINE: Final = re.compile(r'^\s*"roles":\s*\{\s*$')
+_TRIGGERED_BY_LINE: Final = re.compile(r'^\s*"triggered_by":\s*"([^"]+)"\s*,?\s*$')
+_CREW_ROLE: Final = "CREWMATE"
+# The section's substrate label. It is held to the ladder-tip audit because a
+# one-word relabel — the substrate name advanced, every number left as recorded
+# on the previous one — is exactly how this section went wrong.
+_DISCLOSURE_SUBSTRATE: Final = re.compile(r"baseline-(\d+)\s+substrate")
 # A labelled bold ``**<k>/<n>``-shaped cell. The label's words are joined by
 # ``\s+`` so a cell still matches when markdown re-wraps the sentence across
 # lines; the counts are written with thousands separators, stripped before the
@@ -803,11 +812,9 @@ def check_facts(repo_root: Path) -> list[str]:
 def check_front_door_budgets(repo_root: Path, errors: list[str]) -> None:
     """Every front-door page against its committed word budget.
 
-    The budgets in :data:`_FRONT_DOOR_BUDGETS` were contract Measurement targets
-    nothing could fail, and all of them were already over at the merge that set
-    them. They are enforceable here instead: a ceiling may be lowered by any
-    contract that trims a page, and raised only by an owner-ratified one. The
-    floor matters as much as the ceiling on a page written to a range — a range
+    A ceiling may be lowered by any contract that trims a page, and raised only
+    by an owner-ratified one — the asymmetry is what makes it a budget. The
+    floor matters as much as the ceiling on a page written to a range: a range
     budget with only a ceiling is half a gate, and an essay that shrinks out of
     its band has stopped being the thing the band described.
 
@@ -836,32 +843,46 @@ def check_front_door_budgets(repo_root: Path, errors: list[str]) -> None:
 def check_corpus_disclosures(repo_root: Path, errors: list[str]) -> None:
     """The ML corpus's headline disclosure cells, re-derived from the reports.
 
-    The capability-disclosures section of ``replays/ml_corpus/README.md`` was
-    relabelled from one substrate to the next with every number left as recorded
-    on the previous one, so the cells that CAN be re-derived cheaply are
-    re-derived on every run: the meeting total (each set's own
-    ``crew_macro_meetings``, summed) and the eight roll-call coverage pairs
-    (each set's ``crew``/``impostor`` whereabouts turns over its turns). Both
-    come from the recorded sets' ``tournament-eval-report.json``, never from a
-    literal here, so a re-record only re-states the section.
+    ``replays/ml_corpus/README.md``'s capability-disclosures section may not
+    state a headline cell the recorded bytes do not give: the crew-triggered
+    meeting cell and the eight roll-call coverage pairs. Every side of every
+    cell is re-derived from the recorded sets' ``tournament-eval-report.json``,
+    never from a literal here, so a re-record only re-states the section. The
+    meeting cell's NUMERATOR is counted from the meeting rows' own
+    ``triggered_by`` against each game's role map — the claim is that no meeting
+    was impostor-triggered, and a numerator synthesised from the denominator
+    would make that claim unfalsifiable.
 
-    Each cell is found by the label the prose writes before it, and a
-    disagreement is reported per cell with the README line it sits on.
+    The section's substrate LABEL is bound to the ladder-tip audit as well.
+    Re-deriving the numbers is not enough on its own: this section went wrong by
+    being relabelled onto a new substrate with the previous substrate's
+    arithmetic left in place, and a check that reads only the numbers would pass
+    that relabel again the moment the reports were replaced with it.
+
+    Each cell is found by the label the prose writes before it, EVERY occurrence
+    of that label is held to the same value — a stale duplicate beside the
+    correct one is drift too — and a disagreement is reported with the README
+    line it sits on.
     """
 
     readme = read_document(repo_root, _CORPUS_README, errors)
     if readme is None:
         return
 
+    check_disclosure_substrate(repo_root, readme, errors)
+
+    crew_triggered = 0
     meetings = 0
     cells: list[tuple[str, int, int]] = []
     for tag, set_dir in _DISCLOSURE_SETS:
         report = _EVAL_REPORT_PATH.format(set_dir=set_dir)
+        triggers = crew_triggered_meetings(repo_root, report, errors)
         block = read_report_block(repo_root, report, _COVERAGE_KEY, errors)
-        if block is None:
+        if triggers is None or block is None:
             return
+        crew_triggered += triggers[0]
+        meetings += triggers[1]
         try:
-            meetings += int(str(block[_COVERAGE_MEETINGS]))
             for role, answered_field, turns_field in _COVERAGE_ROLES:
                 cells.append(
                     (
@@ -877,11 +898,11 @@ def check_corpus_disclosures(repo_root: Path, errors: list[str]) -> None:
             )
             return
 
-    cells.insert(0, (_DISCLOSURE_MEETINGS_LABEL, meetings, meetings))
+    cells.insert(0, (_DISCLOSURE_MEETINGS_LABEL, crew_triggered, meetings))
     for label, numerator, denominator in cells:
         pattern = r"\s+".join(re.escape(word) for word in label.split())
-        cell = re.search(pattern + _DISCLOSURE_CELL, readme)
-        if cell is None:
+        found = list(re.finditer(pattern + _DISCLOSURE_CELL, readme))
+        if not found:
             errors.append(
                 f"{_CORPUS_README}: no '{label}' cell — the capability "
                 "disclosures no longer state it in the labelled "
@@ -889,16 +910,107 @@ def check_corpus_disclosures(repo_root: Path, errors: list[str]) -> None:
                 "the one way the check stops being able to fail."
             )
             continue
-        stated = (
-            int(cell.group(1).replace(",", "")),
-            int(cell.group(2).replace(",", "")),
-        )
-        if stated != (numerator, denominator):
-            errors.append(
-                f"{_CORPUS_README}:{line_number(readme, cell.start())}: the "
-                f"'{label}' cell reads {stated[0]}/{stated[1]}, but the "
-                f"recorded reports give {numerator}/{denominator}."
+        for cell in found:
+            stated = (
+                int(cell.group(1).replace(",", "")),
+                int(cell.group(2).replace(",", "")),
             )
+            if stated != (numerator, denominator):
+                errors.append(
+                    f"{_CORPUS_README}:{line_number(readme, cell.start())}: the "
+                    f"'{label}' cell reads {stated[0]}/{stated[1]}, but the "
+                    f"recorded reports give {numerator}/{denominator}."
+                )
+
+
+def check_disclosure_substrate(repo_root: Path, readme: str, errors: list[str]) -> None:
+    """The disclosures' substrate label against the recorded ladder tip.
+
+    The label is the half that moved when this section drifted, so it is held to
+    the same committed source every other baseline claim is held to. A section
+    that names NO substrate fails too: the numbers below it are only meaningful
+    against a stated one.
+    """
+
+    tip = recorded_ladder_tip(repo_root, errors)
+    if tip is None:
+        return
+    labels = list(_DISCLOSURE_SUBSTRATE.finditer(readme))
+    if not labels:
+        errors.append(
+            f"{_CORPUS_README}: names no 'baseline-N substrate' at all — the "
+            "disclosed numbers have no substrate to be true of, and the label "
+            f"must name baseline {tip} ({_LADDER_TIP_AUDIT})."
+        )
+        return
+    for label in labels:
+        if label.group(1) == tip:
+            continue
+        errors.append(
+            f"{_CORPUS_README}:{line_number(readme, label.start())}: labelled "
+            f"baseline-{label.group(1)} substrate, but {_LADDER_TIP_AUDIT} "
+            f"records the ladder tip at baseline {tip} — relabelling this "
+            "section without re-deriving it is the drift these checks exist to "
+            "end."
+        )
+
+
+def crew_triggered_meetings(
+    repo_root: Path, relative_path: str, errors: list[str]
+) -> tuple[int, int] | None:
+    """``(crew-triggered, total)`` meeting counts from one eval report.
+
+    Streamed, not decoded: the reports reach tens of megabytes because they
+    embed every transcript, and this needs only each game's ``roles`` map and
+    each meeting row's ``triggered_by``. A report that yields no meeting row, or
+    meeting rows with no role map before them, is format drift reported as such
+    — never a vacuous pass.
+    """
+
+    path = repo_root / relative_path
+    roles: dict[str, str] = {}
+    seen_roles = False
+    crew = 0
+    meetings = 0
+    block: list[str] | None = None
+    depth = 0
+    try:
+        with path.open(encoding="utf-8") as handle:
+            for line in handle:
+                if block is not None:
+                    depth += line.count("{") - line.count("}")
+                    block.append(line)
+                    if depth <= 0:
+                        decoded, _ = json.JSONDecoder().raw_decode("".join(block))
+                        roles = {str(k): str(v) for k, v in decoded.items()}
+                        seen_roles = True
+                        block = None
+                    continue
+                if _ROLES_LINE.match(line):
+                    block = ["{"]
+                    depth = 1
+                    continue
+                trigger = _TRIGGERED_BY_LINE.match(line)
+                if trigger is not None:
+                    meetings += 1
+                    if roles.get(trigger.group(1)) == _CREW_ROLE:
+                        crew += 1
+    except (OSError, ValueError) as exc:
+        errors.append(
+            f"{relative_path}: the per-game trigger rows do not read "
+            f"({exc}) — the crew-triggered meeting cell has no source."
+        )
+        return None
+
+    if meetings == 0 or not seen_roles:
+        errors.append(
+            f"{relative_path}: {meetings} meeting rows and "
+            f"{'a' if seen_roles else 'no'} role map — the eval-report format "
+            "drifted, so the crew-triggered meeting cell would be derived from "
+            "nothing."
+        )
+        return None
+    return crew, meetings
 
 
 def check_sample_provenance(repo_root: Path, readme: str, errors: list[str]) -> None:

@@ -311,9 +311,9 @@ land wherever their seed falls.
    instead, and a crew stack trained here has effectively never seen a
    contested kill scene.
 
-Measured at Task 19.8 on the baseline-6 bytes; items 1, 2, 8 and 9 re-derived at
-Task 21.11 on the committed baseline-7 bytes, and Task 21.15's re-record moves
-every cell here again.
+The section was first measured on the baseline-6 bytes; items 1, 2, 8 and 9 were
+re-derived on the committed baseline-7 bytes. The next re-record of all four sets
+moves every cell here again.
 
 ## Recording (operator, `$0`, ~22–23h MEASURED)
 
