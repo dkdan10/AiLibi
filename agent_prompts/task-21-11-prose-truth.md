@@ -133,6 +133,7 @@ by explicit owner override of a FINDING verdict — bars 1 and 2 were missed and
 - scripts/check_doc_facts.py; (the audits index joins `_LADDER_TIP_DOCUMENTS`; the front-door budgets; the corpus-disclosure re-derivation)
 - tests/scripts/test_check_doc_facts.py; (one planted perturbation per new gate, in the existing `doc_tree` fixture)
 - frontend/src/lib/bodies.test.ts; (the header sentence at `:9`, re-derived from the two cases beneath it)
+- docs/glossary.md; (the graduated-lever and live-toggle counts at `:66`, re-derived from the registry — that one sentence only; RATIFIED at merge: the re-anchored Section refs instructed this edit but this list never gained the file, and the implementer correctly kept the edit and asked)
 - docs/history.md; (the "## In progress: phase 20" heading at `:160` and `:170` reads the closed phase — heading and its one sentence only, no narrative rewrite)
 - eval/replay_walk.py; (the retired-lever profile option and its violation kind)
 - eval/funnel.py; (`_WALK_CONFIG` at `:240` turns the option on for both funnel walks)
