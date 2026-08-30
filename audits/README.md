@@ -274,3 +274,7 @@ directory's `README.md`, which carries the tallies and the proposed routing.
   Wave-0 grounding and its method, the phase shape, the routing of the 2026-08-26
   review's proposed buckets to contracts, the strike procedures for the two owner
   decision points, the cut line, and the divergences from the handoff.
+- [audit-phase-21-smoke.md](audit-phase-21-smoke.md) — the smoke before the
+  maintenance re-record: five live 9p2i seeds at the corrected slate into a
+  scratch directory, the validity gate, the six merged repairs read off the
+  fresh bytes beside their committed reference values, and the GO/ABANDON call.
