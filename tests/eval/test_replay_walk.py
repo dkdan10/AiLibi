@@ -65,7 +65,11 @@ from orchestrator.game import (
     build_default_agent_factory,
     build_default_meeting_runner,
 )
-from orchestrator.replay import ReplayLog, classify_action_dispositions
+from orchestrator.replay import (
+    TOGGLEABLE_SUBSTRATE_FLAG_KEYS,
+    ReplayLog,
+    classify_action_dispositions,
+)
 from orchestrator.scheduler import TickScheduler
 from orchestrator.seeder import seed_initial_state
 
@@ -361,6 +365,91 @@ def test_duplicate_meeting_rows_check_is_an_option(
     off = ReplayWalkConfig(profile="test-off", on_violation=_raise_violation)
     events = _drain(path, seed=seed, knobs=knobs, game_map=game_map, config=off)
     assert isinstance(events[-1], WalkComplete)  # collapsed silently, as before
+
+
+def test_retired_lever_stamp_check_is_an_option(
+    tmp_path: Path, knobs: tuple[int, int, int], game_map: Map
+) -> None:
+    """A stamp naming a graduated lever OFF describes a substrate this build
+    cannot reproduce; only the profiles that ask for the check see it."""
+
+    seed = _seeds()[0]
+    lines = _game_lines(seed)
+    retired = next(
+        key
+        for key in json.loads(lines[-1])["substrate_flags"]
+        if key not in TOGGLEABLE_SUBSTRATE_FLAG_KEYS
+    )
+    stamped_off: list[str] = []
+    for line in lines:
+        row = json.loads(line)
+        if row["kind"] == "game_over":
+            row["substrate_flags"][retired] = False
+            stamped_off.append(json.dumps(row))
+        else:
+            stamped_off.append(line)
+    path = _write_game(tmp_path, seed, stamped_off)
+
+    on = ReplayWalkConfig(
+        profile="test-on",
+        on_violation=_raise_violation,
+        reject_retired_levers_stamped_off=True,
+    )
+    with pytest.raises(_Violation) as info:
+        _drain(path, seed=seed, knobs=knobs, game_map=game_map, config=on)
+    assert info.value.violation.kind == "retired_levers_stamped_off"
+    assert info.value.violation.levers == (retired,)
+
+    off = ReplayWalkConfig(profile="test-off", on_violation=_raise_violation)
+    events = _drain(path, seed=seed, knobs=knobs, game_map=game_map, config=off)
+    assert isinstance(events[-1], WalkComplete)  # walked clean, as before
+
+    # A live toggle recorded the other way is a substrate this build can still
+    # reach, so the retired-half filter must let it through.
+    toggled: list[str] = []
+    for line in lines:
+        row = json.loads(line)
+        if row["kind"] == "game_over":
+            key = TOGGLEABLE_SUBSTRATE_FLAG_KEYS[0]
+            row["substrate_flags"][key] = not row["substrate_flags"][key]
+            toggled.append(json.dumps(row))
+        else:
+            toggled.append(line)
+    toggled_path = _write_game(tmp_path / "toggled", seed, toggled)
+    events = _drain(toggled_path, seed=seed, knobs=knobs, game_map=game_map, config=on)
+    assert isinstance(events[-1], WalkComplete)
+
+
+def test_funnel_profile_bites_a_retired_lever_stamped_off(
+    tmp_path: Path, knobs: tuple[int, int, int], game_map: Map
+) -> None:
+    """The shared funnel/VJ profile refuses earlier-substrate bytes by name."""
+
+    seed = _seeds()[0]
+    lines = _game_lines(seed)
+    retired = next(
+        key
+        for key in json.loads(lines[-1])["substrate_flags"]
+        if key not in TOGGLEABLE_SUBSTRATE_FLAG_KEYS
+    )
+    rewritten: list[str] = []
+    for line in lines:
+        row = json.loads(line)
+        if row["kind"] == "game_over":
+            row["substrate_flags"][retired] = False
+            rewritten.append(json.dumps(row))
+        else:
+            rewritten.append(line)
+    path = _write_game(tmp_path, seed, rewritten)
+    num_players, num_impostors, tasks_per_crewmate = knobs
+    with pytest.raises(funnel.FunnelReconstructionError, match=retired):
+        _drain(
+            path,
+            seed=seed,
+            knobs=(num_players, num_impostors, tasks_per_crewmate),
+            game_map=game_map,
+            config=funnel._WALK_CONFIG,
+        )
 
 
 def test_meeting_pre_and_post_hash_checks_are_options(

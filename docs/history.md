@@ -157,7 +157,7 @@ phase and a presentation phase was routed to the owner.
 [Contract](../tasks/phase-19.md) ·
 [close audit](../audits/audit-phase-19-close.md).
 
-## In progress: phase 20
+## Evidence honesty: phase 20
 
 **Phase 20** takes the presentation-and-honesty route out of that decision: the
 front door made true, the inference channel repaired, and one pre-registered
@@ -167,7 +167,8 @@ accuracy without engine-certified proof at 61/103 = 0.5922 against 0.60, short
 by 0.0078, and 42 wrongful ejections against fewer than 35 — so the rule's
 verdict is a finding, not an adoption. Reference recording 7 is canon because
 the owner overrode that verdict in writing on 2026-08-26, on stated grounds, and
-the phase stays open behind it.
+the phase closed behind it that same day at `d8ec0a1c`
+([close audit](../audits/audit-phase-20-close.md)).
 [Contract](../tasks/phase-20.md) ·
 [record](../audits/audit-phase-20-baseline-7.md).
 

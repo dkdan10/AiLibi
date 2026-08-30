@@ -10,7 +10,7 @@ class the 19.1 sweep cleaned (a stale refresh date, a stale win rate, a stale
 ladder tip, a graduated lever still documented as a live knob) is exactly what
 regenerates silently otherwise.
 
-Eighteen checks. Each accumulates precise errors; all of them are reported
+Twenty checks. Each accumulates precise errors; all of them are reported
 together, so one run names every drifted fact rather than the first.
 
 1. **Sample provenance.** ``replays/samples/<set>/MANIFEST.md`` owns each sample
@@ -40,7 +40,8 @@ together, so one run names every drifted fact rather than the first.
 2. **Ladder tip.** The audit that adopted the current recording owns which
    baseline the substrate ladder stands at. Every front-door sentence naming
    the "ladder tip" — the whole sentence, however long — must name that
-   baseline, and no other.
+   baseline, and no other. The audits index is scanned with the front door: it
+   is where a reader is sent to find the record.
 3. **Lever registry vs .env.example.** ``orchestrator.replay`` owns the live
    substrate-lever registry. Every still-toggleable lever must be documented
    IN the belief-substrate section with a commented example line showing its
@@ -157,6 +158,17 @@ together, so one run names every drifted fact rather than the first.
     label matching it, and appear exactly once. Whether the number was merged,
     and whether it belongs to the row's own task, is resolved in the unit tests,
     which need full git history and skip rather than pass without it.
+19. **The front-door pages stay inside their word budgets.** Each of README.md,
+    docs/reading-guide.md, docs/ml-program.md and docs/lessons.md carries one
+    enforceable budget — a ceiling, plus a floor on the page written to a range.
+    A ceiling may be lowered by any contract that trims a page; raising one
+    takes an owner-ratified contract.
+20. **The ML corpus's headline disclosures are re-derived from the reports.**
+    ``replays/ml_corpus/README.md``'s capability-disclosures section states a
+    meeting total and eight roll-call coverage pairs; each is recomputed from
+    the recorded sets' own ``tournament-eval-report.json``, so the section
+    cannot be relabelled onto a new substrate with the previous substrate's
+    arithmetic still in it.
 
 ``--repo-root`` points the document and source reads at another tree (the unit
 tests perturb a copy); it defaults to this checkout. The lever registry ALWAYS
@@ -239,6 +251,7 @@ _LADDER_TIP_DOCUMENTS: Final[tuple[str, ...]] = (
     _GLOSSARY,
     _HISTORY,
     _READING_GUIDE,
+    _AUDITS_INDEX,
 )
 _SAMPLE_SETS: Final[tuple[str, ...]] = ("4p1i", "9p2i")
 _MANIFEST_PATH: Final = "replays/samples/{name}/MANIFEST.md"
@@ -261,9 +274,10 @@ _VOTE_CORRECTNESS_KEY: Final = '"vote_correctness":'
 # there, and printing a number for it would be the drift this check exists
 # to catch.
 _NO_RATE: Final = "0/0 = n/a"
-# The reports run to tens of megabytes; the block is eight scalar fields, so a
-# runaway scan means the report format drifted rather than a bigger block.
-_VOTE_CORRECTNESS_BLOCK_MAX_LINES: Final = 64
+# The reports run to tens of megabytes; the blocks read out of them are a dozen
+# scalar fields at most, so a runaway scan means the report format drifted
+# rather than a bigger block.
+_REPORT_BLOCK_MAX_LINES: Final = 64
 # Prose that would reassert the pin the committed rates refute.
 _STRUCTURAL_PIN_PHRASES: Final[tuple[str, ...]] = (
     "structurally pinned",
@@ -649,6 +663,59 @@ _VENT_ROW_LABELS: Final[tuple[str, str]] = ("yes", "no")
 _POPULATED_REPORT: Final = "replays/samples/9p2i/tournament-eval-report.json"
 _EXAMPLE_ANCHOR: Final = "fake provider's report is empty on purpose"
 
+# One word budget per front-door page, as ``(document, floor, ceiling)`` —
+# ``None`` where a page has no floor. Measured with ``wc -w`` semantics:
+# whitespace-separated runs over the raw markdown, so the number in the gate is
+# the number a reader gets from the shell.
+#
+# A ceiling may be LOWERED by any contract that trims the page — that direction
+# is the point of having one. RAISING one takes an owner-ratified contract,
+# because a budget that moves up to meet its page is not a budget. These four
+# were priced just above their counts at the ratifying contract, so the ruling
+# grants headroom rather than demanding a trim.
+_FRONT_DOOR_BUDGETS: Final[tuple[tuple[str, int | None, int], ...]] = (
+    (_README, None, 3_550),
+    (_READING_GUIDE, None, 1_350),
+    (_ML_PAGE, None, 2_150),
+    (_LESSONS, 800, 1_500),
+)
+
+# The ML corpus's capability-disclosures section and the four recorded sets its
+# headline cells are re-derived from. Each cell is located by the label the
+# prose writes immediately before it, so a cell is bound to its own claim rather
+# than to a position in a sentence that may be rewritten.
+_CORPUS_README: Final = "replays/ml_corpus/README.md"
+_DISCLOSURE_SETS: Final[tuple[tuple[str, str], ...]] = (
+    ("S9", "replays/samples/9p2i"),
+    ("C9", "replays/ml_corpus/9p2i"),
+    ("S4", "replays/samples/4p1i"),
+    ("C4", "replays/ml_corpus/4p1i"),
+)
+_COVERAGE_KEY: Final = '"public_response_coverage":'
+# Each role's ``(numerator, denominator)`` field pair in that block.
+_COVERAGE_ROLES: Final[tuple[tuple[str, str, str], ...]] = (
+    ("crew", "crew_turns_with_whereabouts", "crew_turns"),
+    ("impostor", "impostor_turns_with_whereabouts", "impostor_turns"),
+)
+_DISCLOSURE_MEETINGS_LABEL: Final = "meetings crew-triggered"
+# The report's per-game trigger evidence, streamed rather than decoded: one
+# ``roles`` map per game, then one ``triggered_by`` per meeting row. Both keys
+# are unique to their nesting level, so the scan reads the trigger side without
+# pulling in the embedded transcripts that make these files tens of megabytes.
+_GAME_ID_LINE: Final = re.compile(r'^\s*"game_id":\s*"')
+_ROLES_LINE: Final = re.compile(r'^\s*"roles":\s*\{\s*$')
+_TRIGGERED_BY_LINE: Final = re.compile(r'^\s*"triggered_by":\s*"([^"]+)"\s*,?\s*$')
+_CREW_ROLE: Final = "CREWMATE"
+# The section's substrate label. It is held to the ladder-tip audit because a
+# one-word relabel — the substrate name advanced, every number left as recorded
+# on the previous one — is exactly how this section went wrong.
+_DISCLOSURE_SUBSTRATE: Final = re.compile(r"baseline-(\d+)\s+substrate")
+# A labelled bold ``**<k>/<n>``-shaped cell. The label's words are joined by
+# ``\s+`` so a cell still matches when markdown re-wraps the sentence across
+# lines; the counts are written with thousands separators, stripped before the
+# comparison.
+_DISCLOSURE_CELL: Final = r"\s+\*\*([\d,]+)/([\d,]+)"
+
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
@@ -706,6 +773,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         f"paired exact-McNemar p and referee verdict recompute from "
         f"{_FINALIST_JSONL}."
     )
+    print(
+        f"Budgets verified: {len(_FRONT_DOOR_BUDGETS)} front-door pages sit "
+        f"inside their word budgets; {_CORPUS_README}'s headline disclosure "
+        f"cells recompute from {len(_DISCLOSURE_SETS)} recorded eval reports."
+    )
     return 0
 
 
@@ -733,7 +805,284 @@ def check_facts(repo_root: Path) -> list[str]:
     check_relative_links(repo_root, errors)
     check_review_map(repo_root, errors)
     check_ml_results_table(repo_root, errors)
+    check_front_door_budgets(repo_root, errors)
+    check_corpus_disclosures(repo_root, errors)
     return errors
+
+
+def check_front_door_budgets(repo_root: Path, errors: list[str]) -> None:
+    """Every front-door page against its committed word budget.
+
+    A ceiling may be lowered by any contract that trims a page, and raised only
+    by an owner-ratified one — the asymmetry is what makes it a budget. The
+    floor matters as much as the ceiling on a page written to a range: a range
+    budget with only a ceiling is half a gate, and an essay that shrinks out of
+    its band has stopped being the thing the band described.
+
+    ``wc -w`` semantics: whitespace-separated runs over the raw markdown.
+    """
+
+    for document, floor, ceiling in _FRONT_DOOR_BUDGETS:
+        text = read_document(repo_root, document, errors)
+        if text is None:
+            continue
+        words = len(text.split())
+        if words > ceiling:
+            errors.append(
+                f"{document}: {words} words, over its {ceiling}-word ceiling by "
+                f"{words - ceiling} — trim the page, or raise the ceiling in an "
+                "owner-ratified contract."
+            )
+        if floor is not None and words < floor:
+            errors.append(
+                f"{document}: {words} words, under its {floor}-word floor by "
+                f"{floor - words} — the page is written to a "
+                f"{floor}–{ceiling}-word band."
+            )
+
+
+def check_corpus_disclosures(repo_root: Path, errors: list[str]) -> None:
+    """The ML corpus's headline disclosure cells, re-derived from the reports.
+
+    ``replays/ml_corpus/README.md``'s capability-disclosures section may not
+    state a headline cell the recorded bytes do not give: the crew-triggered
+    meeting cell and the eight roll-call coverage pairs. Every side of every
+    cell is re-derived from the recorded sets' ``tournament-eval-report.json``,
+    never from a literal here, so a re-record only re-states the section. The
+    meeting cell's NUMERATOR is counted from the meeting rows' own
+    ``triggered_by`` against each game's role map — the claim is that no meeting
+    was impostor-triggered, and a numerator synthesised from the denominator
+    would make that claim unfalsifiable.
+
+    The section's substrate LABEL is bound to the ladder-tip audit as well.
+    Re-deriving the numbers is not enough on its own: this section went wrong by
+    being relabelled onto a new substrate with the previous substrate's
+    arithmetic left in place, and a check that reads only the numbers would pass
+    that relabel again the moment the reports were replaced with it.
+
+    Each cell is found by the label the prose writes before it, EVERY occurrence
+    of that label is held to the same value — a stale duplicate beside the
+    correct one is drift too — and a disagreement is reported with the README
+    line it sits on.
+    """
+
+    readme = read_document(repo_root, _CORPUS_README, errors)
+    if readme is None:
+        return
+
+    check_disclosure_substrate(repo_root, readme, errors)
+
+    crew_triggered = 0
+    meetings = 0
+    cells: list[tuple[str, int, int]] = []
+    for tag, set_dir in _DISCLOSURE_SETS:
+        report = _EVAL_REPORT_PATH.format(set_dir=set_dir)
+        facts = read_disclosure_facts(repo_root, report, errors)
+        if facts is None:
+            return
+        crew_triggered += facts[0]
+        meetings += facts[1]
+        block = facts[2]
+        try:
+            for role, answered_field, turns_field in _COVERAGE_ROLES:
+                cells.append(
+                    (
+                        f"{role} {tag}",
+                        int(str(block[answered_field])),
+                        int(str(block[turns_field])),
+                    )
+                )
+        except (KeyError, ValueError) as exc:
+            errors.append(
+                f"{report}: {_COVERAGE_KEY} is missing an integer field "
+                f"({exc}) — the disclosure cells have no source."
+            )
+            return
+
+    cells.insert(0, (_DISCLOSURE_MEETINGS_LABEL, crew_triggered, meetings))
+    for label, numerator, denominator in cells:
+        pattern = r"\s+".join(re.escape(word) for word in label.split())
+        found = list(re.finditer(pattern + _DISCLOSURE_CELL, readme))
+        if not found:
+            errors.append(
+                f"{_CORPUS_README}: no '{label}' cell — the capability "
+                "disclosures no longer state it in the labelled "
+                "'**<numerator>/<denominator>' shape this check reads, which is "
+                "the one way the check stops being able to fail."
+            )
+            continue
+        for cell in found:
+            stated = (
+                int(cell.group(1).replace(",", "")),
+                int(cell.group(2).replace(",", "")),
+            )
+            if stated != (numerator, denominator):
+                errors.append(
+                    f"{_CORPUS_README}:{line_number(readme, cell.start())}: the "
+                    f"'{label}' cell reads {stated[0]}/{stated[1]}, but the "
+                    f"recorded reports give {numerator}/{denominator}."
+                )
+
+
+def check_disclosure_substrate(repo_root: Path, readme: str, errors: list[str]) -> None:
+    """The disclosures' substrate label, against the tip AND the recorded sets.
+
+    Two bindings, because either alone leaves the drift reachable. The LABEL is
+    held to the ladder-tip audit, so the section cannot be advanced to a
+    substrate the tree has not adopted. The recorded SETS are then held to the
+    live lever registry, so the label cannot be advanced to a tip the disclosed
+    bytes predate: a substrate advances here by graduating a lever, and a set
+    recorded before that graduation does not carry the graduated key in its
+    stamp. Checking only the label would pass a relabel onto a newly adopted
+    tip while the disclosed numbers still came from the older recording.
+
+    A section that names NO substrate fails too: the numbers below it are only
+    meaningful against a stated one.
+    """
+
+    tip = recorded_ladder_tip(repo_root, errors)
+    if tip is None:
+        return
+    labels = list(_DISCLOSURE_SUBSTRATE.finditer(readme))
+    if not labels:
+        errors.append(
+            f"{_CORPUS_README}: names no 'baseline-N substrate' at all — the "
+            "disclosed numbers have no substrate to be true of, and the label "
+            f"must name baseline {tip} ({_LADDER_TIP_AUDIT})."
+        )
+    for label in labels:
+        if label.group(1) == tip:
+            continue
+        errors.append(
+            f"{_CORPUS_README}:{line_number(readme, label.start())}: labelled "
+            f"baseline-{label.group(1)} substrate, but {_LADDER_TIP_AUDIT} "
+            f"records the ladder tip at baseline {tip} — relabelling this "
+            "section without re-deriving it is the drift these checks exist to "
+            "end."
+        )
+
+    retired = set(SUBSTRATE_FLAG_KEYS) - set(TOGGLEABLE_SUBSTRATE_FLAG_KEYS)
+    for _, set_dir in _DISCLOSURE_SETS:
+        relative_path = _SET_MANIFEST_PATH.format(set_dir=set_dir)
+        text = read_document(repo_root, relative_path, errors)
+        if text is None:
+            continue
+        rows = list(parse_manifest(text).values())
+        if not rows:
+            errors.append(
+                f"{relative_path}: parsed zero table rows — the manifest format "
+                "drifted, so this set proves nothing about the substrate the "
+                "disclosures are attributed to."
+            )
+            continue
+        for row in rows:
+            stamped = {flag.strip() for flag in row.flags.split(",") if flag.strip()}
+            missing = sorted(retired - stamped)
+            if missing:
+                errors.append(
+                    f"{relative_path}: a recorded row stamps graduated "
+                    f"lever(s) {missing} OFF, so this set predates the "
+                    f"substrate baseline {tip} names — the disclosures derived "
+                    "from it cannot be labelled with the current tip."
+                )
+                break
+
+
+def read_disclosure_facts(
+    repo_root: Path, relative_path: str, errors: list[str]
+) -> tuple[int, int, dict[str, object]] | None:
+    """``(crew-triggered, total, coverage)`` from one eval report, in ONE pass.
+
+    Streamed, not decoded: the reports reach tens of megabytes because they
+    embed every transcript, and this needs only each game's ``roles`` map, each
+    meeting row's ``triggered_by``, and the ``public_response_coverage`` block.
+    All three are collected on a single walk of the file — the trigger side has
+    to reach the end of the ``report`` block anyway, so picking the coverage
+    block up on the way costs nothing, where a second opener would re-scan the
+    prefix on every one of this module's runs.
+
+    A trigger is resolved against ITS OWN game's map and no other. The map is
+    dropped at every ``game_id`` — a game boundary — so a game that omitted its
+    roles cannot borrow the previous game's, where the same ``p-1`` is a
+    different player with a possibly different role. A trigger with no map, a
+    trigger naming nobody in it, and a report with no meeting rows at all are
+    each format drift reported as such, never silently resolved to "not crew"
+    (AGENTS.md, no silent fallbacks): every one of them would understate the
+    numerator and could pass a false cell.
+    """
+
+    path = repo_root / relative_path
+    roles: dict[str, str] | None = None
+    coverage: dict[str, object] | None = None
+    crew = 0
+    meetings = 0
+    unresolved: list[str] = []
+    block: list[str] | None = None
+    reading_coverage = False
+    depth = 0
+    try:
+        with path.open(encoding="utf-8") as handle:
+            for line in handle:
+                if block is not None:
+                    depth += line.count("{") - line.count("}")
+                    block.append(line)
+                    if depth > 0 and len(block) <= _REPORT_BLOCK_MAX_LINES:
+                        continue
+                    decoded, _ = json.JSONDecoder().raw_decode("".join(block))
+                    if reading_coverage:
+                        coverage = decoded if isinstance(decoded, dict) else None
+                    else:
+                        roles = {str(k): str(v) for k, v in decoded.items()}
+                    block = None
+                    continue
+                if coverage is None and line.strip().startswith(_COVERAGE_KEY):
+                    block, reading_coverage, depth = ["{"], True, 1
+                    continue
+                if _GAME_ID_LINE.match(line):
+                    roles = None
+                    continue
+                if _ROLES_LINE.match(line):
+                    block, reading_coverage, depth = ["{"], False, 1
+                    continue
+                trigger = _TRIGGERED_BY_LINE.match(line)
+                if trigger is not None:
+                    meetings += 1
+                    actor = trigger.group(1)
+                    role = None if roles is None else roles.get(actor)
+                    if role is None:
+                        unresolved.append(actor)
+                    elif role == _CREW_ROLE:
+                        crew += 1
+    except (OSError, ValueError) as exc:
+        errors.append(
+            f"{relative_path}: the per-game trigger rows do not read "
+            f"({exc}) — the crew-triggered meeting cell has no source."
+        )
+        return None
+
+    # Every defect is reported before returning: one drifted report should name
+    # everything the disclosures lost with it, not the first thing noticed.
+    if coverage is None:
+        errors.append(
+            f"{relative_path}: no {_COVERAGE_KEY} key — the eval-report format "
+            "drifted, so the prose derived from that block has no source."
+        )
+    if meetings == 0:
+        errors.append(
+            f"{relative_path}: no meeting rows — 0 meeting rows means the "
+            "eval-report format drifted, so the crew-triggered meeting cell "
+            "would be derived from nothing."
+        )
+    elif unresolved:
+        errors.append(
+            f"{relative_path}: {len(unresolved)} meeting trigger(s) "
+            f"{sorted(set(unresolved))} resolve to no role in their own game's "
+            "map — a game with no roles, or a trigger naming nobody in it. "
+            "Counting them as non-crew would understate the numerator."
+        )
+    if coverage is None or meetings == 0 or unresolved:
+        return None
+    return crew, meetings, coverage
 
 
 def check_sample_provenance(repo_root: Path, readme: str, errors: list[str]) -> None:
@@ -1582,11 +1931,20 @@ def check_vote_correctness_provenance(
 def read_vote_correctness_block(
     repo_root: Path, relative_path: str, errors: list[str]
 ) -> dict[str, object] | None:
-    """The report's ``vote_correctness`` object, without parsing the document.
+    """The report's ``vote_correctness`` object, without parsing the document."""
+
+    return read_report_block(repo_root, relative_path, _VOTE_CORRECTNESS_KEY, errors)
+
+
+def read_report_block(
+    repo_root: Path, relative_path: str, key: str, errors: list[str]
+) -> dict[str, object] | None:
+    """One named object out of an eval report, without parsing the document.
 
     The committed reports reach tens of megabytes, so the block is decoded from
-    its own key rather than by loading the whole file. Format drift (no such
-    key, or a block that never closes) is reported, never papered over.
+    its own ``"<name>":`` key rather than by loading the whole file. Format
+    drift (no such key, or a block that never closes) is reported, never
+    papered over.
     """
 
     path = repo_root / relative_path
@@ -1596,14 +1954,14 @@ def read_vote_correctness_block(
             depth = 0
             for line in handle:
                 if not block:
-                    if not line.strip().startswith(_VOTE_CORRECTNESS_KEY):
+                    if not line.strip().startswith(key):
                         continue
                     block.append("{")
                     depth = 1
                     continue
                 depth += line.count("{") - line.count("}")
                 block.append(line)
-                if depth <= 0 or len(block) > _VOTE_CORRECTNESS_BLOCK_MAX_LINES:
+                if depth <= 0 or len(block) > _REPORT_BLOCK_MAX_LINES:
                     break
     except OSError as exc:
         errors.append(f"{relative_path}: unreadable ({exc}).")
@@ -1611,8 +1969,8 @@ def read_vote_correctness_block(
 
     if not block:
         errors.append(
-            f"{relative_path}: no {_VOTE_CORRECTNESS_KEY} key — the eval-report "
-            "format drifted, so the vote-correctness stamps have no source."
+            f"{relative_path}: no {key} key — the eval-report format drifted, so "
+            "the prose derived from that block has no source."
         )
         return None
     try:
@@ -1620,14 +1978,12 @@ def read_vote_correctness_block(
     except ValueError as exc:
         decoded = None
         errors.append(
-            f"{relative_path}: the {_VOTE_CORRECTNESS_KEY} block does not parse "
-            f"as one JSON object ({exc})."
+            f"{relative_path}: the {key} block does not parse as one JSON "
+            f"object ({exc})."
         )
     if not isinstance(decoded, dict):
         if decoded is not None:
-            errors.append(
-                f"{relative_path}: {_VOTE_CORRECTNESS_KEY} is not a JSON object."
-            )
+            errors.append(f"{relative_path}: {key} is not a JSON object.")
         return None
     return decoded
 

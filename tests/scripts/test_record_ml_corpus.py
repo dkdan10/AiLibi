@@ -322,7 +322,7 @@ def test_preflight_accepts_the_declared_slate_when_the_environment_matches(
     assert "Substrate slate OK: expected levers ON = impostor_roll_call" in out
     assert "does not match --expect-levers" not in out
     assert proc.returncode != 0  # stopped at the MODEL guard, not the lever guard
-    assert "locked baseline-6 model" in out
+    assert "locked model" in out
 
 
 def test_dry_run_stamps_fsm_default_policy() -> None:
@@ -495,7 +495,7 @@ def test_preflight_requires_locked_prompt_set_before_record(tmp_path: Path) -> N
     proc = _run("--set", "4p1i", env=env)
     assert proc.returncode != 0
     out = proc.stdout + proc.stderr
-    assert "locked baseline-6 substrate" in out
+    assert "locked substrate" in out
     assert "AILIBI_PROMPT_SET must be 'qwen3_6_27b'" in out
     assert not corpus_root.exists()
 
@@ -522,7 +522,7 @@ def test_preflight_refuses_non_baseline_model_override(
     proc = _run("--set", "4p1i", env=env)
     assert proc.returncode != 0
     out = proc.stdout + proc.stderr
-    assert "locked baseline-6 model" in out
+    assert "locked model" in out
     assert model_env in out
     assert not corpus_root.exists()  # refused before any record
 
@@ -583,7 +583,7 @@ def test_preflight_accepts_explicitly_off_impostor_roll_call(tmp_path: Path) -> 
     assert "Locked substrate OK" in out
     assert "does not match --expect-levers" not in out
     assert proc.returncode != 0  # stopped at the MODEL guard, not the lever guard
-    assert "locked baseline-6 model" in out
+    assert "locked model" in out
 
 
 def test_preflight_refuses_non_default_base_url(tmp_path: Path) -> None:
@@ -624,7 +624,7 @@ def test_prompt_version_registry_matches_locked_script_constant() -> None:
     locked = match.group(1)
     resolved = ", ".join(sorted(PROMPT_VERSION_SETS["qwen3_6_27b"].values()))
     assert resolved == locked, (
-        "PROMPT_VERSION_SETS['qwen3_6_27b'] has moved off the locked baseline-6 "
+        "PROMPT_VERSION_SETS['qwen3_6_27b'] has moved off the locked "
         "corpus versions; recording/resuming the 15.12 corpus would now drift. "
         "Re-locking is an owner decision (re-record + re-freeze)."
     )

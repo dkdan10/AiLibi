@@ -181,12 +181,14 @@ _VENT_MENTION_RE = re.compile(r"\bvent", re.IGNORECASE)
 
 
 class FunnelReconstructionError(RuntimeError):
-    """A recorded state hash did not reconstruct — the set is corrupt/drifted.
+    """The recording does not reconstruct here — corrupt, drifted, or off-substrate.
 
     Raised during the walk when a per-tick ``state_hash`` or a meeting's
-    ``state_hash_after`` disagrees with the engine reconstruction, so a drifted or
-    corrupted replay set fails loud rather than silently mis-measuring (AGENTS.md
-    "no silent fallbacks").
+    ``state_hash_after`` disagrees with the engine reconstruction, when a MEETING
+    tick carries no meeting row, or when the recording's ``game_over`` stamp
+    names a graduated lever OFF — so a drifted, corrupted or earlier-substrate
+    replay set fails loud rather than silently mis-measuring (AGENTS.md "no
+    silent fallbacks").
     """
 
 
@@ -228,6 +230,16 @@ def _raise_walk_violation(violation: WalkViolation) -> NoReturn:
             f"{violation.actual!r} "
             f"!= recorded {violation.expected!r}"
         )
+    if violation.kind == "retired_levers_stamped_off":
+        # The folds re-derive rules whose env gates were deleted at the records
+        # that adopted them, so bytes stamped at an earlier substrate would be
+        # scored under a substrate the game never ran.
+        raise FunnelReconstructionError(
+            f"{game_id}: the recording stamps retired lever(s) "
+            f"{list(violation.levers)} OFF — this build can only re-derive the "
+            "unconditional substrate, so the funnel cells would not describe "
+            "the recorded game"
+        )
     raise FunnelReconstructionError(  # pragma: no cover - profile never enables it
         f"{game_id}: unexpected walk violation {violation.kind!r}"
     )
@@ -235,8 +247,10 @@ def _raise_walk_violation(violation: WalkViolation) -> NoReturn:
 
 # The named Task 19.25 profile (see eval/replay_walk.py's drift record), shared
 # by BOTH funnel walks: every recorded hash verified (per-tick + meeting
-# before/after), missing meeting row fail-loud. The vj walk's trigger-event and
-# living-vs-voters checks are consumer semantics in its own fold.
+# before/after), missing meeting row fail-loud, and a recording stamping a
+# graduated lever OFF refused before the first advance. The vj walk's
+# trigger-event and living-vs-voters checks are consumer semantics in its own
+# fold.
 _WALK_CONFIG: ReplayWalkConfig = ReplayWalkConfig(
     profile="funnel-instrument",
     on_violation=_raise_walk_violation,
@@ -244,6 +258,7 @@ _WALK_CONFIG: ReplayWalkConfig = ReplayWalkConfig(
     missing_meeting_row="violation",
     verify_meeting_pre_hashes=True,
     verify_meeting_post_hashes=True,
+    reject_retired_levers_stamped_off=True,
 )
 
 
