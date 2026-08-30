@@ -99,6 +99,14 @@ _CITATION_INSTRUMENT = "tests/eval/test_vj_instruments.py"
 _AUDITS_INDEX = "audits/README.md"
 _LESSONS = "docs/lessons.md"
 _CORPUS_README = "replays/ml_corpus/README.md"
+# A well-formed ``public_response_coverage`` block for the hand-written eval
+# reports the trigger cases use, so each of them perturbs one thing only.
+_COVERAGE_BLOCK = {
+    "crew_turns": 2,
+    "crew_turns_with_whereabouts": 2,
+    "impostor_turns": 1,
+    "impostor_turns_with_whereabouts": 0,
+}
 _REVIEW_INDEX = "audits/review-2026-08-19/README.md"
 # One acted-on map row, cell by cell: the finding, the task credited with
 # closing it, and the pull request that carries the change.
@@ -1582,6 +1590,27 @@ def test_corpus_disclosure_without_a_substrate_label_detected(doc_tree: Path) ->
     assert "names no 'baseline-N substrate' at all" in errors[0]
 
 
+def _trigger_report(tmp_path: Path, games: list[dict[str, object]]) -> Path:
+    """A minimal eval report carrying a coverage block and the given games.
+
+    Every case below perturbs exactly one thing, so the coverage block is always
+    well-formed here; its own absence is a separate case.
+    """
+
+    report = tmp_path / "tournament-eval-report.json"
+    report.write_text(
+        json.dumps(
+            {
+                "deduction": {"public_response_coverage": _COVERAGE_BLOCK},
+                "report": {"games": games},
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    return report
+
+
 def test_an_impostor_triggered_meeting_lowers_the_crew_numerator(
     tmp_path: Path,
 ) -> None:
@@ -1589,31 +1618,24 @@ def test_an_impostor_triggered_meeting_lowers_the_crew_numerator(
     # to be counted from the meeting rows' own trigger roles. Synthesising it
     # from the denominator would make the claim unfalsifiable — this report has
     # two meetings and only one crew trigger.
-    report = tmp_path / "tournament-eval-report.json"
-    report.write_text(
-        json.dumps(
+    report = _trigger_report(
+        tmp_path,
+        [
             {
-                "report": {
-                    "games": [
-                        {
-                            "roles": {"p-1": "CREWMATE", "p-2": "IMPOSTOR"},
-                            "meetings": [
-                                {"triggered_by": "p-1", "trigger": "report"},
-                                {"triggered_by": "p-2", "trigger": "emergency"},
-                            ],
-                        }
-                    ]
-                }
-            },
-            indent=2,
-        ),
-        encoding="utf-8",
+                "game_id": "g-1",
+                "roles": {"p-1": "CREWMATE", "p-2": "IMPOSTOR"},
+                "meetings": [
+                    {"triggered_by": "p-1", "trigger": "report"},
+                    {"triggered_by": "p-2", "trigger": "emergency"},
+                ],
+            }
+        ],
     )
     errors: list[str] = []
-    assert check_doc_facts.crew_triggered_meetings(tmp_path, report.name, errors) == (
-        1,
-        2,
-    )
+    facts = check_doc_facts.read_disclosure_facts(tmp_path, report.name, errors)
+    assert facts is not None
+    assert (facts[0], facts[1]) == (1, 2)
+    assert facts[2] == _COVERAGE_BLOCK
     assert errors == []
 
 
@@ -1624,29 +1646,19 @@ def test_a_trigger_is_never_resolved_against_another_games_roles(
     # parser that carried the first game's map forward would count the second
     # game's meeting as crew-triggered. The map is dropped at each game_id, and
     # a trigger with no map of its own fails loud rather than resolving.
-    report = tmp_path / "tournament-eval-report.json"
-    report.write_text(
-        json.dumps(
+    report = _trigger_report(
+        tmp_path,
+        [
             {
-                "report": {
-                    "games": [
-                        {
-                            "game_id": "g-1",
-                            "roles": {"p-1": "CREWMATE", "p-2": "IMPOSTOR"},
-                            "meetings": [{"triggered_by": "p-1"}],
-                        },
-                        {"game_id": "g-2", "meetings": [{"triggered_by": "p-1"}]},
-                    ]
-                }
+                "game_id": "g-1",
+                "roles": {"p-1": "CREWMATE", "p-2": "IMPOSTOR"},
+                "meetings": [{"triggered_by": "p-1"}],
             },
-            indent=2,
-        ),
-        encoding="utf-8",
+            {"game_id": "g-2", "meetings": [{"triggered_by": "p-1"}]},
+        ],
     )
     errors: list[str] = []
-    assert (
-        check_doc_facts.crew_triggered_meetings(tmp_path, report.name, errors) is None
-    )
+    assert check_doc_facts.read_disclosure_facts(tmp_path, report.name, errors) is None
     assert len(errors) == 1
     assert "resolve to no role in their own game's map" in errors[0]
 
@@ -1654,28 +1666,18 @@ def test_a_trigger_is_never_resolved_against_another_games_roles(
 def test_a_trigger_naming_nobody_in_its_role_map_fails_loud(tmp_path: Path) -> None:
     # Counting an unknown id as non-crew would understate the numerator, which
     # is the direction that lets a false cell pass.
-    report = tmp_path / "tournament-eval-report.json"
-    report.write_text(
-        json.dumps(
+    report = _trigger_report(
+        tmp_path,
+        [
             {
-                "report": {
-                    "games": [
-                        {
-                            "game_id": "g-1",
-                            "roles": {"p-1": "CREWMATE"},
-                            "meetings": [{"triggered_by": "p-9"}],
-                        }
-                    ]
-                }
-            },
-            indent=2,
-        ),
-        encoding="utf-8",
+                "game_id": "g-1",
+                "roles": {"p-1": "CREWMATE"},
+                "meetings": [{"triggered_by": "p-9"}],
+            }
+        ],
     )
     errors: list[str] = []
-    assert (
-        check_doc_facts.crew_triggered_meetings(tmp_path, report.name, errors) is None
-    )
+    assert check_doc_facts.read_disclosure_facts(tmp_path, report.name, errors) is None
     assert "['p-9']" in errors[0]
 
 
@@ -1699,12 +1701,9 @@ def test_a_disclosed_set_predating_the_substrate_detected(doc_tree: Path) -> Non
 
 def test_a_report_with_no_meeting_rows_fails_loud(tmp_path: Path) -> None:
     # Format drift must not read as "every meeting was crew-triggered".
-    report = tmp_path / "tournament-eval-report.json"
-    report.write_text(json.dumps({"report": {"games": []}}, indent=2), encoding="utf-8")
+    report = _trigger_report(tmp_path, [])
     errors: list[str] = []
-    assert (
-        check_doc_facts.crew_triggered_meetings(tmp_path, report.name, errors) is None
-    )
+    assert check_doc_facts.read_disclosure_facts(tmp_path, report.name, errors) is None
     assert len(errors) == 1
     assert "0 meeting rows" in errors[0]
 
@@ -1713,19 +1712,30 @@ def test_meeting_rows_without_a_role_map_fail_loud(tmp_path: Path) -> None:
     # Triggers with no roles to resolve them against would silently count as
     # impostor-triggered; that is drift in the report, not a finding about the
     # game.
+    report = _trigger_report(tmp_path, [{"meetings": [{"triggered_by": "p-1"}]}])
+    errors: list[str] = []
+    assert check_doc_facts.read_disclosure_facts(tmp_path, report.name, errors) is None
+    assert len(errors) == 1
+    assert "resolve to no role in their own game's map" in errors[0]
+
+
+def test_a_report_without_a_coverage_block_fails_loud(tmp_path: Path) -> None:
+    # The single pass collects the coverage block too, so its absence is drift
+    # this reports rather than a silently missing set of cells.
     report = tmp_path / "tournament-eval-report.json"
     report.write_text(
         json.dumps(
-            {"report": {"games": [{"meetings": [{"triggered_by": "p-1"}]}]}}, indent=2
+            {"report": {"games": [{"game_id": "g-1", "roles": {}, "meetings": []}]}},
+            indent=2,
         ),
         encoding="utf-8",
     )
     errors: list[str] = []
-    assert (
-        check_doc_facts.crew_triggered_meetings(tmp_path, report.name, errors) is None
-    )
-    assert len(errors) == 1
-    assert "resolve to no role in their own game's map" in errors[0]
+    assert check_doc_facts.read_disclosure_facts(tmp_path, report.name, errors) is None
+    # Both losses are named, not just the first noticed.
+    assert len(errors) == 2
+    assert any('"public_response_coverage":' in error for error in errors)
+    assert any("0 meeting rows" in error for error in errors)
 
 
 def test_corpus_disclosure_meeting_total_drift_detected(doc_tree: Path) -> None:

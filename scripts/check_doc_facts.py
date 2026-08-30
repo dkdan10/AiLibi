@@ -877,12 +877,12 @@ def check_corpus_disclosures(repo_root: Path, errors: list[str]) -> None:
     cells: list[tuple[str, int, int]] = []
     for tag, set_dir in _DISCLOSURE_SETS:
         report = _EVAL_REPORT_PATH.format(set_dir=set_dir)
-        triggers = crew_triggered_meetings(repo_root, report, errors)
-        block = read_report_block(repo_root, report, _COVERAGE_KEY, errors)
-        if triggers is None or block is None:
+        facts = read_disclosure_facts(repo_root, report, errors)
+        if facts is None:
             return
-        crew_triggered += triggers[0]
-        meetings += triggers[1]
+        crew_triggered += facts[0]
+        meetings += facts[1]
+        block = facts[2]
         try:
             for role, answered_field, turns_field in _COVERAGE_ROLES:
                 cells.append(
@@ -988,14 +988,18 @@ def check_disclosure_substrate(repo_root: Path, readme: str, errors: list[str]) 
                 break
 
 
-def crew_triggered_meetings(
+def read_disclosure_facts(
     repo_root: Path, relative_path: str, errors: list[str]
-) -> tuple[int, int] | None:
-    """``(crew-triggered, total)`` meeting counts from one eval report.
+) -> tuple[int, int, dict[str, object]] | None:
+    """``(crew-triggered, total, coverage)`` from one eval report, in ONE pass.
 
     Streamed, not decoded: the reports reach tens of megabytes because they
-    embed every transcript, and this needs only each game's ``roles`` map and
-    each meeting row's ``triggered_by``.
+    embed every transcript, and this needs only each game's ``roles`` map, each
+    meeting row's ``triggered_by``, and the ``public_response_coverage`` block.
+    All three are collected on a single walk of the file — the trigger side has
+    to reach the end of the ``report`` block anyway, so picking the coverage
+    block up on the way costs nothing, where a second opener would re-scan the
+    prefix on every one of this module's runs.
 
     A trigger is resolved against ITS OWN game's map and no other. The map is
     dropped at every ``game_id`` — a game boundary — so a game that omitted its
@@ -1009,10 +1013,12 @@ def crew_triggered_meetings(
 
     path = repo_root / relative_path
     roles: dict[str, str] | None = None
+    coverage: dict[str, object] | None = None
     crew = 0
     meetings = 0
     unresolved: list[str] = []
     block: list[str] | None = None
+    reading_coverage = False
     depth = 0
     try:
         with path.open(encoding="utf-8") as handle:
@@ -1020,17 +1026,23 @@ def crew_triggered_meetings(
                 if block is not None:
                     depth += line.count("{") - line.count("}")
                     block.append(line)
-                    if depth <= 0:
-                        decoded, _ = json.JSONDecoder().raw_decode("".join(block))
+                    if depth > 0 and len(block) <= _REPORT_BLOCK_MAX_LINES:
+                        continue
+                    decoded, _ = json.JSONDecoder().raw_decode("".join(block))
+                    if reading_coverage:
+                        coverage = decoded if isinstance(decoded, dict) else None
+                    else:
                         roles = {str(k): str(v) for k, v in decoded.items()}
-                        block = None
+                    block = None
+                    continue
+                if coverage is None and line.strip().startswith(_COVERAGE_KEY):
+                    block, reading_coverage, depth = ["{"], True, 1
                     continue
                 if _GAME_ID_LINE.match(line):
                     roles = None
                     continue
                 if _ROLES_LINE.match(line):
-                    block = ["{"]
-                    depth = 1
+                    block, reading_coverage, depth = ["{"], False, 1
                     continue
                 trigger = _TRIGGERED_BY_LINE.match(line)
                 if trigger is not None:
@@ -1048,22 +1060,29 @@ def crew_triggered_meetings(
         )
         return None
 
+    # Every defect is reported before returning: one drifted report should name
+    # everything the disclosures lost with it, not the first thing noticed.
+    if coverage is None:
+        errors.append(
+            f"{relative_path}: no {_COVERAGE_KEY} key — the eval-report format "
+            "drifted, so the prose derived from that block has no source."
+        )
     if meetings == 0:
         errors.append(
             f"{relative_path}: no meeting rows — 0 meeting rows means the "
             "eval-report format drifted, so the crew-triggered meeting cell "
             "would be derived from nothing."
         )
-        return None
-    if unresolved:
+    elif unresolved:
         errors.append(
             f"{relative_path}: {len(unresolved)} meeting trigger(s) "
             f"{sorted(set(unresolved))} resolve to no role in their own game's "
             "map — a game with no roles, or a trigger naming nobody in it. "
             "Counting them as non-crew would understate the numerator."
         )
+    if coverage is None or meetings == 0 or unresolved:
         return None
-    return crew, meetings
+    return crew, meetings, coverage
 
 
 def check_sample_provenance(repo_root: Path, readme: str, errors: list[str]) -> None:

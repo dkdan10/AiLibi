@@ -124,12 +124,13 @@ denominators describe the previous recording. Each carries that flag on its own
 line. Their *mechanism* claims still hold; their numbers are history, and
 anything fitted on this corpus must re-derive them first.
 
-The by-game split rule above is a function of the seed alone, never of content,
-so nothing below is *stratified* by the split: no phenomenon is concentrated in
-train, val, or test by construction, and a rare event lands wherever its seed
-falls. That is all seed-blindness buys. It does **not** establish how often any
-phenomenon below actually occurs in each split — those are per-split
-measurements, and this section does not currently publish them.
+The by-game split rule above assigns each game by its seed alone, never by what
+the game contains, so no phenomenon below influenced which split it landed in.
+That is the whole of what the rule buys, and it is a statement about the
+*assignment*, not about the result: a phenomenon rare enough, or correlated with
+the seed, can still end up entirely inside one split. How often anything below
+actually occurs in train, val or test is a per-split measurement, and this
+section does not currently publish one.
 
 1. **The absolute reporter-innocence prior (structural).** The scripted FSM
    impostor never files a body report and never calls a meeting — the COVER
