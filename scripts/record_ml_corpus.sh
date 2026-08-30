@@ -5,7 +5,7 @@
 # evidence readers only; no new search.
 #
 # record_ml_corpus.sh — record the frozen ML-calibration corpus at baseline-7
-# config (the Task 15.12 corpus, re-grounded twice — Task 18.13, then Task 20.36;
+# config — the substrate the PIN BLOCK below pins, and nothing else (provenance:
 # audits/audit-phase-18-baseline-6.md; audits/audit-phase-16-model-lock.md;
 # audits/post-phase-14-ML-training-signal.md §5.6, §7.2; tasks/post-phase-14-plan.md §4).
 #
@@ -110,11 +110,10 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 CORPUS_ROOT="${AILIBI_ML_CORPUS_ROOT:-$REPO_ROOT/replays/ml_corpus}"
 
 # =============================================================================
-# PIN BLOCK — the baseline-7 substrate; the committed corpus IS current.
+# PIN BLOCK — the baseline-7 substrate this recorder requires.
 # =============================================================================
-# The pins below name the BASELINE-7 substrate — the substrate this recorder
-# records (and freezes) at, and the substrate the COMMITTED corpus under
-# replays/ml_corpus/ now carries: Qwen/Qwen3.6-27B (the Task 16.2 locked model,
+# The pins below name the BASELINE-7 substrate this recorder records (and
+# freezes) at: Qwen/Qwen3.6-27B (the Task 16.2 locked model,
 # audits/audit-phase-16-model-lock.md, locked 2026-07-12) + the qwen3_6_27b
 # prompt set at the versions $REQUIRED_PROMPT_VERSIONS pins (lineage v1 bespoke
 # port -> v2 elicitation -> v3 persona voice -> v4 evidence honesty -> v5) + the
@@ -125,11 +124,12 @@ CORPUS_ROOT="${AILIBI_ML_CORPUS_ROOT:-$REPO_ROOT/replays/ml_corpus}"
 # unless --expect-levers declares one ON. The preflight COUPLES model + prompt
 # set + prompt versions + lever slate as ONE substrate, so they re-pin together.
 #
-# Both canonical artifacts sit at baseline 7 — the samples and this corpus were
-# re-recorded together at the baseline-7 record — so the freeze-path provenance
-# guards (check_replay_provenance — the model, the $0 cost, and the lever slate on
-# every recorded stamp — and check_recorded_prompt_versions — the MANIFEST version
-# cells) PASS over the committed bytes by construction. They still REFUSE anything
+# The COMMITTED bytes are a different question. Both artifacts sit at baseline 7
+# — samples and corpus were re-recorded together at that record, and every stamp
+# carries that lever slate and model — but their MANIFEST version cells read v4:
+# the registry was bumped to v5 afterwards. $REQUIRED_PROMPT_VERSIONS is the NEXT
+# recording's requirement, not a reading of the rows on disk, so a resume over
+# them is refused at freeze. The freeze-path guards still REFUSE anything
 # off-substrate (a prior baseline-6 recording, whose stamp carries the eight
 # Phase-20 levers OFF; a phantom seed) from being resumed-over and frozen: that
 # refusal is correct and expected. Nothing here weakens to accommodate

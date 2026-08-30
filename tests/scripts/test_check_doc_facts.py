@@ -672,11 +672,12 @@ def test_manifest_outcome_flip_detected(doc_tree: Path) -> None:
 def test_unparseable_manifest_fails_loud(doc_tree: Path) -> None:
     # Format drift must not read as "no impostor wins recorded": a manifest
     # with no parseable rows is a hard failure, not a vacuous pass.
-    # Both the win-rate check and the vote-correctness provenance check read
-    # this manifest, so both lose their source and both must say so.
+    # The win-rate check, the vote-correctness provenance check and the corpus
+    # disclosures' substrate reconciliation all read this manifest, so all three
+    # lose their source and all three must say so.
     _write(doc_tree, _MANIFEST_4P1I, "# Sample Replay Manifest\n\nno table here.\n")
     errors = check_doc_facts.check_facts(doc_tree)
-    assert len(errors) == 2
+    assert len(errors) == 3
     assert all("parsed zero table rows" in error for error in errors)
     assert all(_MANIFEST_4P1I in error for error in errors)
 
@@ -760,12 +761,19 @@ def test_recorded_sets_disagreeing_on_substrate_flags_fails_loud(
 ) -> None:
     # The flag stamp is part of the substrate the rates are attributed to: a
     # set recorded without one baseline-6 lever is a different substrate, even
-    # when its model and prompt token still match.
+    # when its model and prompt token still match. Two checks notice it from
+    # their own angles: the sets no longer agree with each other, and the set no
+    # longer carries a lever this build has graduated.
     _substitute(doc_tree, _ML_CORPUS_MANIFEST_9P2I, "absence_prior, ", "")
     errors = check_doc_facts.check_facts(doc_tree)
-    assert len(errors) == 1
-    assert "disagree on the substrate flags" in errors[0]
-    assert "absence_prior" in errors[0]
+    assert len(errors) == 2
+    assert any(
+        "disagree on the substrate flags" in error and "absence_prior" in error
+        for error in errors
+    )
+    assert any(
+        "stamps graduated lever(s) ['absence_prior'] OFF" in error for error in errors
+    )
 
 
 def test_vote_correctness_baseline_attribution_drift_detected(doc_tree: Path) -> None:
@@ -1609,6 +1617,86 @@ def test_an_impostor_triggered_meeting_lowers_the_crew_numerator(
     assert errors == []
 
 
+def test_a_trigger_is_never_resolved_against_another_games_roles(
+    tmp_path: Path,
+) -> None:
+    # `p-1` is a crewmate in the first game and an impostor in the second, so a
+    # parser that carried the first game's map forward would count the second
+    # game's meeting as crew-triggered. The map is dropped at each game_id, and
+    # a trigger with no map of its own fails loud rather than resolving.
+    report = tmp_path / "tournament-eval-report.json"
+    report.write_text(
+        json.dumps(
+            {
+                "report": {
+                    "games": [
+                        {
+                            "game_id": "g-1",
+                            "roles": {"p-1": "CREWMATE", "p-2": "IMPOSTOR"},
+                            "meetings": [{"triggered_by": "p-1"}],
+                        },
+                        {"game_id": "g-2", "meetings": [{"triggered_by": "p-1"}]},
+                    ]
+                }
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    errors: list[str] = []
+    assert (
+        check_doc_facts.crew_triggered_meetings(tmp_path, report.name, errors) is None
+    )
+    assert len(errors) == 1
+    assert "resolve to no role in their own game's map" in errors[0]
+
+
+def test_a_trigger_naming_nobody_in_its_role_map_fails_loud(tmp_path: Path) -> None:
+    # Counting an unknown id as non-crew would understate the numerator, which
+    # is the direction that lets a false cell pass.
+    report = tmp_path / "tournament-eval-report.json"
+    report.write_text(
+        json.dumps(
+            {
+                "report": {
+                    "games": [
+                        {
+                            "game_id": "g-1",
+                            "roles": {"p-1": "CREWMATE"},
+                            "meetings": [{"triggered_by": "p-9"}],
+                        }
+                    ]
+                }
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    errors: list[str] = []
+    assert (
+        check_doc_facts.crew_triggered_meetings(tmp_path, report.name, errors) is None
+    )
+    assert "['p-9']" in errors[0]
+
+
+def test_a_disclosed_set_predating_the_substrate_detected(doc_tree: Path) -> None:
+    # The label alone is not enough: if the ladder advances by graduating a
+    # lever and these sets are not re-recorded, relabelling the section to the
+    # new tip would otherwise pass. A set whose stamp lacks a graduated key
+    # predates the substrate its numbers would be labelled with.
+    manifest = "replays/ml_corpus/9p2i/MANIFEST.md"
+    _substitute(doc_tree, manifest, "absence_prior, citation_gate", "citation_gate")
+    errors = check_doc_facts.check_facts(doc_tree)
+    # The vote-correctness sentinel notices the same perturbation as a cross-set
+    # disagreement; this check is the one that names it as a set predating the
+    # substrate its numbers would be labelled with.
+    assert len(errors) == 2
+    predating = [error for error in errors if error.startswith(f"{manifest}: ")]
+    assert len(predating) == 1
+    assert "stamps graduated lever(s) ['absence_prior'] OFF" in predating[0]
+    assert "predates the substrate baseline 7 names" in predating[0]
+
+
 def test_a_report_with_no_meeting_rows_fails_loud(tmp_path: Path) -> None:
     # Format drift must not read as "every meeting was crew-triggered".
     report = tmp_path / "tournament-eval-report.json"
@@ -1637,7 +1725,7 @@ def test_meeting_rows_without_a_role_map_fail_loud(tmp_path: Path) -> None:
         check_doc_facts.crew_triggered_meetings(tmp_path, report.name, errors) is None
     )
     assert len(errors) == 1
-    assert "no role map" in errors[0]
+    assert "resolve to no role in their own game's map" in errors[0]
 
 
 def test_corpus_disclosure_meeting_total_drift_detected(doc_tree: Path) -> None:

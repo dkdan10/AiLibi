@@ -702,6 +702,7 @@ _DISCLOSURE_MEETINGS_LABEL: Final = "meetings crew-triggered"
 # ``roles`` map per game, then one ``triggered_by`` per meeting row. Both keys
 # are unique to their nesting level, so the scan reads the trigger side without
 # pulling in the embedded transcripts that make these files tens of megabytes.
+_GAME_ID_LINE: Final = re.compile(r'^\s*"game_id":\s*"')
 _ROLES_LINE: Final = re.compile(r'^\s*"roles":\s*\{\s*$')
 _TRIGGERED_BY_LINE: Final = re.compile(r'^\s*"triggered_by":\s*"([^"]+)"\s*,?\s*$')
 _CREW_ROLE: Final = "CREWMATE"
@@ -924,12 +925,19 @@ def check_corpus_disclosures(repo_root: Path, errors: list[str]) -> None:
 
 
 def check_disclosure_substrate(repo_root: Path, readme: str, errors: list[str]) -> None:
-    """The disclosures' substrate label against the recorded ladder tip.
+    """The disclosures' substrate label, against the tip AND the recorded sets.
 
-    The label is the half that moved when this section drifted, so it is held to
-    the same committed source every other baseline claim is held to. A section
-    that names NO substrate fails too: the numbers below it are only meaningful
-    against a stated one.
+    Two bindings, because either alone leaves the drift reachable. The LABEL is
+    held to the ladder-tip audit, so the section cannot be advanced to a
+    substrate the tree has not adopted. The recorded SETS are then held to the
+    live lever registry, so the label cannot be advanced to a tip the disclosed
+    bytes predate: a substrate advances here by graduating a lever, and a set
+    recorded before that graduation does not carry the graduated key in its
+    stamp. Checking only the label would pass a relabel onto a newly adopted
+    tip while the disclosed numbers still came from the older recording.
+
+    A section that names NO substrate fails too: the numbers below it are only
+    meaningful against a stated one.
     """
 
     tip = recorded_ladder_tip(repo_root, errors)
@@ -942,7 +950,6 @@ def check_disclosure_substrate(repo_root: Path, readme: str, errors: list[str]) 
             "disclosed numbers have no substrate to be true of, and the label "
             f"must name baseline {tip} ({_LADDER_TIP_AUDIT})."
         )
-        return
     for label in labels:
         if label.group(1) == tip:
             continue
@@ -954,6 +961,32 @@ def check_disclosure_substrate(repo_root: Path, readme: str, errors: list[str]) 
             "end."
         )
 
+    retired = set(SUBSTRATE_FLAG_KEYS) - set(TOGGLEABLE_SUBSTRATE_FLAG_KEYS)
+    for _, set_dir in _DISCLOSURE_SETS:
+        relative_path = _SET_MANIFEST_PATH.format(set_dir=set_dir)
+        text = read_document(repo_root, relative_path, errors)
+        if text is None:
+            continue
+        rows = list(parse_manifest(text).values())
+        if not rows:
+            errors.append(
+                f"{relative_path}: parsed zero table rows — the manifest format "
+                "drifted, so this set proves nothing about the substrate the "
+                "disclosures are attributed to."
+            )
+            continue
+        for row in rows:
+            stamped = {flag.strip() for flag in row.flags.split(",") if flag.strip()}
+            missing = sorted(retired - stamped)
+            if missing:
+                errors.append(
+                    f"{relative_path}: a recorded row stamps graduated "
+                    f"lever(s) {missing} OFF, so this set predates the "
+                    f"substrate baseline {tip} names — the disclosures derived "
+                    "from it cannot be labelled with the current tip."
+                )
+                break
+
 
 def crew_triggered_meetings(
     repo_root: Path, relative_path: str, errors: list[str]
@@ -962,16 +995,23 @@ def crew_triggered_meetings(
 
     Streamed, not decoded: the reports reach tens of megabytes because they
     embed every transcript, and this needs only each game's ``roles`` map and
-    each meeting row's ``triggered_by``. A report that yields no meeting row, or
-    meeting rows with no role map before them, is format drift reported as such
-    — never a vacuous pass.
+    each meeting row's ``triggered_by``.
+
+    A trigger is resolved against ITS OWN game's map and no other. The map is
+    dropped at every ``game_id`` — a game boundary — so a game that omitted its
+    roles cannot borrow the previous game's, where the same ``p-1`` is a
+    different player with a possibly different role. A trigger with no map, a
+    trigger naming nobody in it, and a report with no meeting rows at all are
+    each format drift reported as such, never silently resolved to "not crew"
+    (AGENTS.md, no silent fallbacks): every one of them would understate the
+    numerator and could pass a false cell.
     """
 
     path = repo_root / relative_path
-    roles: dict[str, str] = {}
-    seen_roles = False
+    roles: dict[str, str] | None = None
     crew = 0
     meetings = 0
+    unresolved: list[str] = []
     block: list[str] | None = None
     depth = 0
     try:
@@ -983,8 +1023,10 @@ def crew_triggered_meetings(
                     if depth <= 0:
                         decoded, _ = json.JSONDecoder().raw_decode("".join(block))
                         roles = {str(k): str(v) for k, v in decoded.items()}
-                        seen_roles = True
                         block = None
+                    continue
+                if _GAME_ID_LINE.match(line):
+                    roles = None
                     continue
                 if _ROLES_LINE.match(line):
                     block = ["{"]
@@ -993,7 +1035,11 @@ def crew_triggered_meetings(
                 trigger = _TRIGGERED_BY_LINE.match(line)
                 if trigger is not None:
                     meetings += 1
-                    if roles.get(trigger.group(1)) == _CREW_ROLE:
+                    actor = trigger.group(1)
+                    role = None if roles is None else roles.get(actor)
+                    if role is None:
+                        unresolved.append(actor)
+                    elif role == _CREW_ROLE:
                         crew += 1
     except (OSError, ValueError) as exc:
         errors.append(
@@ -1002,12 +1048,19 @@ def crew_triggered_meetings(
         )
         return None
 
-    if meetings == 0 or not seen_roles:
+    if meetings == 0:
         errors.append(
-            f"{relative_path}: {meetings} meeting rows and "
-            f"{'a' if seen_roles else 'no'} role map — the eval-report format "
-            "drifted, so the crew-triggered meeting cell would be derived from "
-            "nothing."
+            f"{relative_path}: no meeting rows — 0 meeting rows means the "
+            "eval-report format drifted, so the crew-triggered meeting cell "
+            "would be derived from nothing."
+        )
+        return None
+    if unresolved:
+        errors.append(
+            f"{relative_path}: {len(unresolved)} meeting trigger(s) "
+            f"{sorted(set(unresolved))} resolve to no role in their own game's "
+            "map — a game with no roles, or a trigger naming nobody in it. "
+            "Counting them as non-crew would understate the numerator."
         )
         return None
     return crew, meetings

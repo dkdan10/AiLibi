@@ -124,12 +124,12 @@ denominators describe the previous recording. Each carries that flag on its own
 line. Their *mechanism* claims still hold; their numbers are history, and
 anything fitted on this corpus must re-derive them first.
 
-Because the by-game split rule above is a function of the seed alone — never of
-content — the pervasive phenomena below (the structural prior, the husk rate,
-the response shape, the skip templating, both theater classes, the evidence
-economy) land in train, val, and test alike, so a model fitted on the train split
-learns them as if they were the game; rare events, by the same seed-blindness,
-land wherever their seed falls.
+The by-game split rule above is a function of the seed alone, never of content,
+so nothing below is *stratified* by the split: no phenomenon is concentrated in
+train, val, or test by construction, and a rare event lands wherever its seed
+falls. That is all seed-blindness buys. It does **not** establish how often any
+phenomenon below actually occurs in each split — those are per-split
+measurements, and this section does not currently publish them.
 
 1. **The absolute reporter-innocence prior (structural).** The scripted FSM
    impostor never files a body report and never calls a meeting — the COVER
@@ -184,7 +184,10 @@ land wherever their seed falls.
    the impostor's ally in the record), and `[invalid primary_reason… nulled]`
    variants: 18/971 S9 and 55/2,726 C9 ballots. As a capability datum: at 9p
    the model names an illegal accusation target roughly one turn in twenty.
-   *Baseline-6 counts; not re-derived at the baseline-7 record.*
+   *Baseline-6 counts; not re-derived at the baseline-7 record — and the
+   `[invalid accusation target …]` class this item is named for occurs **zero**
+   times in the committed bytes now (0 across all 300 games), so the deviation
+   it records is historical rather than live.*
 
 4. **Zombie-vent re-litigation.** Dead impostors' vents keep getting re-argued:
    **56/165 S9 meetings (33.9%)** and **174/463 C9 meetings (37.6%)** contain a
