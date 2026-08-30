@@ -119,9 +119,11 @@ CORPUS_ROOT="${AILIBI_ML_CORPUS_ROOT:-$REPO_ROOT/replays/ml_corpus}"
 # port -> v2 elicitation -> v3 persona voice -> v4 evidence honesty -> v5) + the
 # baseline-7 lever slate: the twenty-one retired always-on levers, which since
 # the baseline-7 record include the eight Phase-20 evidence-honesty levers
-# (audits/audit-phase-20-baseline-7.md §6.1), with the three live toggles
-# (impostor_roll_call, last_seen_from_sightings, vent_single_mint) recorded OFF
-# unless --expect-levers declares one ON. The preflight COUPLES model + prompt
+# (audits/audit-phase-20-baseline-7.md §6.1), with the one live toggle
+# (impostor_roll_call) recorded OFF unless --expect-levers declares it ON. The
+# two Wave-1a repair gates graduated at Task 21.15 and are deleted, not
+# retired, so this slate is byte-identical across that flip.
+# The preflight COUPLES model + prompt
 # set + prompt versions + lever slate as ONE substrate, so they re-pin together.
 #
 # The COMMITTED bytes are a different question. Both artifacts sit at baseline 7

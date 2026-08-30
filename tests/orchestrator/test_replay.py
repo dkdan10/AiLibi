@@ -31,13 +31,9 @@ from agents.memory.store import AgentMemory
 from meetings.schemas import MeetingResult, MeetingTranscript, VoteBallot
 from orchestrator.replay import (
     ENV_IMPOSTOR_ROLL_CALL,
-    ENV_LAST_SEEN_FROM_SIGHTINGS,
-    ENV_VENT_SINGLE_MINT,
     SUBSTRATE_FLAG_KEYS,
     TOGGLEABLE_SUBSTRATE_FLAG_KEYS,
     _impostor_roll_call_enabled,
-    _last_seen_from_sightings_enabled,
-    _vent_single_mint_enabled,
     _TOGGLEABLE_LEVER_RESOLVERS,
     FailedCallReplayEntry,
     GameEndReplayEntry,
@@ -67,29 +63,13 @@ from tests._helpers.world_state import scripted_initial_world_state
 
 _ACTION_ADAPTER: Final[TypeAdapter[Action]] = TypeAdapter(Action)
 
-# The first LIVE toggle's snapshot key: Task 18.10's impostor-answer arm, the one
+# The ONE LIVE toggle's snapshot key: Task 18.10's impostor-answer arm, the one
 # lever the CREW-ONLY ruling did not ship. Its resolver is
 # ``orchestrator.replay._impostor_roll_call_enabled`` -- a byte-mirror of the
 # loader's, because the loader's import-time Jinja build is prompt-set-sensitive
 # and would break every replay-only consumer on a stray AILIBI_PROMPT_SET export;
 # the equivalence pin below stands in for identity.
 ENV_IMPOSTOR_ROLL_CALL_KEY = "impostor_roll_call"
-
-# The second: the Wave-1a last-seen REPAIR gate, registered AFTER the baseline-7
-# record and absent from every committed stamp. Its resolver is
-# ``orchestrator.replay._last_seen_from_sightings_enabled`` -- a byte-mirror of
-# ``agents.memory.store.last_seen_from_sightings_enabled``, with the same
-# equivalence pin standing in for identity. It is a seam, not a lever: no record
-# runs it ON, and Task 21.15 DELETES it rather than graduating it.
-ENV_LAST_SEEN_FROM_SIGHTINGS_KEY = "last_seen_from_sightings"
-
-# The third: the Wave-1a one-vent-one-record REPAIR gate, likewise registered
-# after the baseline-7 record and absent from every committed stamp. Its resolver
-# is ``orchestrator.replay._vent_single_mint_enabled`` -- a byte-mirror of
-# ``observation.service.vent_single_mint_enabled``, with the same equivalence pin
-# standing in for identity. It is a seam, not a lever: no record runs it ON, and
-# Task 21.15 DELETES it rather than graduating it.
-ENV_VENT_SINGLE_MINT_KEY = "vent_single_mint"
 
 # Every RETIRED lever: snapshot key and the ``AILIBI_*`` variable its key
 # derives, in graduation order. Written out as literals rather than derived from
@@ -151,19 +131,17 @@ _BASELINE7_STAMP: dict[str, bool] = {
     "impostor_roll_call": False,
 }
 
-# What a BARE environment stamps TODAY: the committed baseline-7 stamp plus every
-# key registered after that record. All three live toggles are default-OFF and
+# What a BARE environment stamps TODAY: the committed stamp plus every key
+# registered after the baseline-7 record. The one live toggle is default-OFF and
 # every other lever is unconditional, so a shell with no ``AILIBI_*`` export
-# still reproduces the committed substrate -- the extra keys read False on both
-# sides, the missing-key rule the loader applies. The split between the two
-# literals is the point: ``_BASELINE7_STAMP`` is what the committed bytes carry
-# and must not grow a key those bytes never had, so a post-record registration
-# lands HERE and the two are compared by their difference below.
-_BARE_STAMP: dict[str, bool] = {
-    **_BASELINE7_STAMP,
-    "last_seen_from_sightings": False,
-    "vent_single_mint": False,
-}
+# still reproduces the committed substrate. The split between the two literals is
+# the point: ``_BASELINE7_STAMP`` is what the committed bytes carry and must not
+# grow a key those bytes never had, so a post-record registration lands HERE and
+# the two are compared by their difference below. The difference is EMPTY at this
+# HEAD: the two Wave-1a repair gates that lived here were deleted outright at the
+# baseline-8 record rather than graduated, which is what keeps the stamp keys
+# byte-identical across that flip.
+_BARE_STAMP: dict[str, bool] = {**_BASELINE7_STAMP}
 
 # The eight keys the baseline-7 record appended: the Phase-20 belief-substrate
 # levers. Named so the legacy baseline-6 shape below is derived by SUBTRACTING
@@ -312,17 +290,14 @@ class TestSubstrateFlagStamp:
     Task-18.12 baseline-6 record on the CREW-ONLY ruling: 16.8's ``absence_prior``,
     18.8's ``roll_call_round``, and 18.9's ``whereabouts_interior_flags`` and
     ``vent_placement_contradictions``; and the eight Phase-20 belief-substrate
-    levers at the baseline-7 record. THREE live env-gated toggles remain in
-    ``_TOGGLEABLE_LEVER_RESOLVERS``, all DEFAULT-OFF — Task 18.10's
-    ``impostor_roll_call`` (the arm the CREW-ONLY ruling did NOT ship) and the two
-    Wave-1a repair gates, ``last_seen_from_sightings`` and ``vent_single_mint``,
-    registered after the baseline-7 record and so absent from every committed
-    stamp. A bare-environment recording stamps the twenty-one retired levers True
-    and every toggle False,
-    which is the committed baseline-7 substrate: the recorded stamp names the
-    first toggle False and omits the second, and ``_assert_substrate_matches``
-    reads a missing key as ``False`` on both sides. Either ``AILIBI_*`` export
-    flips its own stamp ON; the twenty-one retired levers never read env again.
+    levers at the baseline-7 record. ONE live env-gated toggle remains in
+    ``_TOGGLEABLE_LEVER_RESOLVERS``, DEFAULT-OFF — Task 18.10's
+    ``impostor_roll_call``, the arm the CREW-ONLY ruling did NOT ship. A
+    bare-environment recording stamps the twenty-one retired levers True and that
+    toggle False, which is the committed substrate. ``_assert_substrate_matches``
+    reads a missing key as ``False`` on both sides, so a stamp written before a
+    key existed still lines up. The ``AILIBI_*`` export flips its own stamp ON;
+    the twenty-one retired levers never read env again.
     """
 
     @pytest.mark.parametrize(("key", "env_var"), _RETIRED_LEVERS)
@@ -356,11 +331,7 @@ class TestSubstrateFlagStamp:
         )
         for key, env_var in _RETIRED_LEVERS:
             assert env_var_for_lever(key) == env_var, key
-        assert TOGGLEABLE_SUBSTRATE_FLAG_KEYS == (
-            ENV_IMPOSTOR_ROLL_CALL_KEY,
-            ENV_LAST_SEEN_FROM_SIGHTINGS_KEY,
-            ENV_VENT_SINGLE_MINT_KEY,
-        )
+        assert TOGGLEABLE_SUBSTRATE_FLAG_KEYS == (ENV_IMPOSTOR_ROLL_CALL_KEY,)
 
     def test_the_retired_stamp_pin_bites(self) -> None:
         # The perturbation craft rule 2 asks for: a registry that stopped
@@ -373,26 +344,18 @@ class TestSubstrateFlagStamp:
         assert substrate_flag_snapshot({}) != broken
 
     def test_live_toggle_registrations(self) -> None:
-        # Registration pin: THREE live toggles, all DEFAULT-OFF -- the
-        # impostor-answer arm and the two Wave-1a repair gates (last-seen render,
-        # one-vent-one-record mint), in registration order. The graduated levers
-        # are not here: they moved into ``_RETIRED_ALWAYS_ON_LEVERS`` at the
-        # records that adopted them and their env gates are gone.
-        assert len(_TOGGLEABLE_LEVER_RESOLVERS) == 3
+        # Registration pin: ONE live toggle, DEFAULT-OFF -- the impostor-answer
+        # arm. The graduated levers are not here: they moved into
+        # ``_RETIRED_ALWAYS_ON_LEVERS`` at the records that adopted them and their
+        # env gates are gone. Neither are the two Wave-1a repair gates: a repair
+        # records no arm, so the baseline-8 record deleted them outright and
+        # promoted them nowhere.
+        assert len(_TOGGLEABLE_LEVER_RESOLVERS) == 1
         registry = dict(_TOGGLEABLE_LEVER_RESOLVERS)
         assert registry[ENV_IMPOSTOR_ROLL_CALL_KEY] is _impostor_roll_call_enabled
-        assert (
-            registry[ENV_LAST_SEEN_FROM_SIGHTINGS_KEY]
-            is _last_seen_from_sightings_enabled
-        )
-        assert registry[ENV_VENT_SINGLE_MINT_KEY] is _vent_single_mint_enabled
         for key, _env_var in _RETIRED_LEVERS:
             assert key not in registry, key
-        assert TOGGLEABLE_SUBSTRATE_FLAG_KEYS == (
-            ENV_IMPOSTOR_ROLL_CALL_KEY,
-            ENV_LAST_SEEN_FROM_SIGHTINGS_KEY,
-            ENV_VENT_SINGLE_MINT_KEY,
-        )
+        assert TOGGLEABLE_SUBSTRATE_FLAG_KEYS == (ENV_IMPOSTOR_ROLL_CALL_KEY,)
         # The full stamp key order: twenty-one graduated levers in graduation
         # order, then the live toggles in registration order. Each half grows only
         # at its own end, so this registration is a pure APPEND -- every
@@ -423,8 +386,6 @@ class TestSubstrateFlagStamp:
             "meeting_outcome_memory",
             "coalesced_memory_render",
             "impostor_roll_call",
-            "last_seen_from_sightings",
-            "vent_single_mint",
         )
 
     def test_env_var_for_lever_derives_the_documented_variable(self) -> None:
@@ -433,11 +394,6 @@ class TestSubstrateFlagStamp:
         # its AILIBI_* variable. Pinned against the lever table's own literals, so
         # a key renamed without its variable fails here.
         assert env_var_for_lever(ENV_IMPOSTOR_ROLL_CALL_KEY) == ENV_IMPOSTOR_ROLL_CALL
-        assert (
-            env_var_for_lever(ENV_LAST_SEEN_FROM_SIGHTINGS_KEY)
-            == ENV_LAST_SEEN_FROM_SIGHTINGS
-        )
-        assert env_var_for_lever(ENV_VENT_SINGLE_MINT_KEY) == ENV_VENT_SINGLE_MINT
         for key, env_var in _RETIRED_LEVERS:
             assert env_var_for_lever(key) == env_var, key
 
@@ -451,26 +407,18 @@ class TestSubstrateFlagStamp:
         assert substrate_flag_snapshot({}) == _BARE_STAMP
         assert substrate_flag_snapshot() == _BARE_STAMP
         # The MISSING-KEY SEAM, stated rather than assumed equal. A bare stamp is
-        # no longer key-for-key identical to the committed one: it is the
-        # committed stamp PLUS every key registered after that record, each
+        # the committed stamp PLUS every key registered after that record, each
         # reading False. That is precisely the shape the loader's mismatch guard
         # tolerates -- an absent key and a False key are the same substrate -- and
         # it is what lets a repair merge behind a new gate without moving a
-        # committed byte. Repairing this pin by appending the key to
+        # committed byte. Repairing a difference by appending the key to
         # ``_BASELINE7_STAMP`` would make the committed record claim to carry a
         # key it has never carried, so the two literals are compared by their
-        # difference instead.
-        assert _BARE_STAMP == {
-            **_BASELINE7_STAMP,
-            ENV_LAST_SEEN_FROM_SIGHTINGS_KEY: False,
-            ENV_VENT_SINGLE_MINT_KEY: False,
-        }
-        assert set(_BARE_STAMP) - set(_BASELINE7_STAMP) == {
-            ENV_LAST_SEEN_FROM_SIGHTINGS_KEY,
-            ENV_VENT_SINGLE_MINT_KEY,
-        }
-        assert ENV_LAST_SEEN_FROM_SIGHTINGS_KEY not in _BASELINE7_STAMP
-        assert ENV_VENT_SINGLE_MINT_KEY not in _BASELINE7_STAMP
+        # difference instead. The difference is EMPTY at this HEAD -- the two
+        # Wave-1a repair gates that occupied it were deleted, not graduated -- so
+        # the surviving statement is that no key was smuggled into either literal.
+        assert _BARE_STAMP == {**_BASELINE7_STAMP}
+        assert set(_BARE_STAMP) - set(_BASELINE7_STAMP) == set()
         assert all(_BARE_STAMP[key] == value for key, value in _BASELINE7_STAMP.items())
 
     def test_every_recording_stamps_the_full_snapshot(
@@ -524,16 +472,6 @@ class TestSubstrateFlagStamp:
                 ENV_IMPOSTOR_ROLL_CALL_KEY,
                 _impostor_roll_call_enabled,
             ),
-            (
-                ENV_LAST_SEEN_FROM_SIGHTINGS,
-                ENV_LAST_SEEN_FROM_SIGHTINGS_KEY,
-                _last_seen_from_sightings_enabled,
-            ),
-            (
-                ENV_VENT_SINGLE_MINT,
-                ENV_VENT_SINGLE_MINT_KEY,
-                _vent_single_mint_enabled,
-            ),
         ],
     )
     def test_a_live_toggle_is_default_off_and_reads_its_env_var(
@@ -544,11 +482,9 @@ class TestSubstrateFlagStamp:
     ) -> None:
         # Every live toggle is DEFAULT-OFF over the same truthy-token grid: unset
         # / bare / unrecognised stamps False — which is what the committed sets
-        # carry, either as an explicit False (the impostor-answer arm) or as an
-        # absent key the missing-key rule reads False (the two Wave-1a repair
-        # gates, registered after the baseline-7 record) — and a truthy export
-        # flips exactly that key True. Each is bound to a LOCAL mirror rather than
-        # by identity, so each also carries an equivalence pin below.
+        # carry as an explicit False — and a truthy export flips exactly that key
+        # True. It is bound to a LOCAL mirror rather than by identity, so it also
+        # carries an equivalence pin below.
         assert dict(_TOGGLEABLE_LEVER_RESOLVERS)[flag_key] is resolver
         assert substrate_flag_snapshot({})[flag_key] is False
         assert substrate_flag_snapshot({env_var: "nope"})[flag_key] is False
@@ -588,73 +524,6 @@ class TestSubstrateFlagStamp:
                 env
             ), env
 
-    def test_last_seen_mirror_equivalent_to_the_store_resolver(self) -> None:
-        # The same CI substitute for the repair gate: the stamp-side mirror in
-        # ``orchestrator.replay`` and the read-site resolver in
-        # ``agents.memory.store`` must agree over the whole env grid, so the
-        # substrate a recording claims and the render it actually produced cannot
-        # drift apart. The grid includes the surrounding-whitespace and
-        # mixed-case cases, because the two token sets are compared through
-        # ``.strip().lower()`` and a mirror that dropped either would pass a
-        # bare-value-only check.
-        from agents.memory.store import (
-            ENV_LAST_SEEN_FROM_SIGHTINGS as STORE_ENV,
-        )
-        from agents.memory.store import last_seen_from_sightings_enabled
-
-        assert STORE_ENV == ENV_LAST_SEEN_FROM_SIGHTINGS
-        for env in (
-            {},
-            {ENV_LAST_SEEN_FROM_SIGHTINGS: "1"},
-            {ENV_LAST_SEEN_FROM_SIGHTINGS: "true"},
-            {ENV_LAST_SEEN_FROM_SIGHTINGS: "YES"},
-            {ENV_LAST_SEEN_FROM_SIGHTINGS: " on "},
-            {ENV_LAST_SEEN_FROM_SIGHTINGS: "0"},
-            {ENV_LAST_SEEN_FROM_SIGHTINGS: "nope"},
-            {ENV_LAST_SEEN_FROM_SIGHTINGS: ""},
-        ):
-            expected = env.get(ENV_LAST_SEEN_FROM_SIGHTINGS, "").strip().lower() in {
-                "1",
-                "true",
-                "yes",
-                "on",
-            }
-            assert _last_seen_from_sightings_enabled(env) is expected, env
-            assert last_seen_from_sightings_enabled(env) is expected, env
-
-    def test_vent_single_mint_mirror_equivalent_to_the_service_resolver(self) -> None:
-        # The same CI substitute for the mint-side repair gate: the stamp-side
-        # mirror in ``orchestrator.replay`` and the read-site resolver in
-        # ``observation.service`` must agree over the whole env grid, so the
-        # substrate a recording claims and the packet it actually minted cannot
-        # drift apart. The grid includes the surrounding-whitespace and mixed-case
-        # cases, because the two token sets are compared through
-        # ``.strip().lower()`` and a mirror that dropped either would pass a
-        # bare-value-only check. The import happens HERE: the replay module stays
-        # free of the observation stack, which a replay-only consumer never builds.
-        from observation.service import ENV_VENT_SINGLE_MINT as SERVICE_ENV
-        from observation.service import vent_single_mint_enabled
-
-        assert SERVICE_ENV == ENV_VENT_SINGLE_MINT
-        for env in (
-            {},
-            {ENV_VENT_SINGLE_MINT: "1"},
-            {ENV_VENT_SINGLE_MINT: "true"},
-            {ENV_VENT_SINGLE_MINT: "YES"},
-            {ENV_VENT_SINGLE_MINT: " on "},
-            {ENV_VENT_SINGLE_MINT: "0"},
-            {ENV_VENT_SINGLE_MINT: "nope"},
-            {ENV_VENT_SINGLE_MINT: ""},
-        ):
-            expected = env.get(ENV_VENT_SINGLE_MINT, "").strip().lower() in {
-                "1",
-                "true",
-                "yes",
-                "on",
-            }
-            assert _vent_single_mint_enabled(env) is expected, env
-            assert vent_single_mint_enabled(env) is expected, env
-
     def test_replay_module_imports_under_a_garbage_prompt_set(self) -> None:
         # The regression the local mirror exists to prevent: ``import
         # orchestrator.replay`` must succeed even when the shell carries an
@@ -688,13 +557,11 @@ class TestSubstrateFlagStamp:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         # The other end of the range: with EVERY live toggle exported, all
-        # twenty-four keys stamp ON. This is the shape an adopting record that
+        # twenty-two keys stamp ON. This is the shape an adopting record that
         # shipped the whole slate would carry, and it is emphatically NOT the
-        # baseline-7 substrate -- which is exactly why the loader refuses to serve
+        # committed substrate -- which is exactly why the loader refuses to serve
         # one recording's bytes under the other's environment.
         monkeypatch.setenv(ENV_IMPOSTOR_ROLL_CALL, "1")
-        monkeypatch.setenv(ENV_LAST_SEEN_FROM_SIGHTINGS, "1")
-        monkeypatch.setenv(ENV_VENT_SINGLE_MINT, "1")
         for _key, env_var in _RETIRED_LEVERS:
             monkeypatch.setenv(env_var, "1")
         path = tmp_path / "impostor-on.jsonl"
@@ -1446,58 +1313,74 @@ class TestSubstrateMismatchOnAPhase20Lever:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         # The other half of the gate (a guard that always raised would be prose):
-        # the stamp every committed baseline-7 replay carries passes in a shell
-        # with no lever export at all.
+        # the stamp every committed replay carries passes in a shell with no lever
+        # export at all.
         #
         # This is also the MISSING-KEY seam that lets a repair register a new gate
-        # without moving a committed byte: ``_BASELINE7_STAMP`` predates
-        # ``last_seen_from_sightings`` and names no such key, while the ambient
-        # snapshot here does -- and ``bool(recorded.get(key))`` reads the absent
-        # key False, matching the default-OFF ambient value. Asserted here, not
-        # assumed, because it is the property every committed replay's
-        # reconstruction rests on across this registration.
+        # without moving a committed byte. It is demonstrated on the ONE key that
+        # can still be absent: a stamp predating ``impostor_roll_call`` names no
+        # such key, while the ambient snapshot does -- and ``bool(recorded.get(key))``
+        # reads the absent key False, matching the default-OFF ambient value.
+        # Asserted here, not assumed, because it is the property every
+        # reconstruction across a future registration will rest on.
         from api.replay_loader import _assert_substrate_matches
 
         _clear_lever_env(monkeypatch)
-        assert ENV_LAST_SEEN_FROM_SIGHTINGS_KEY in substrate_flag_snapshot({})
-        assert ENV_LAST_SEEN_FROM_SIGHTINGS_KEY not in _BASELINE7_STAMP
         recorded = GameEndReplayEntry(
-            game_id="g-baseline-7",
+            game_id="g-committed",
             tick=21,
             winner="CREWMATES",
             reason="TASKS",
             substrate_flags=dict(_BASELINE7_STAMP),
         )
-        _assert_substrate_matches("g-baseline-7", [recorded])
+        _assert_substrate_matches("g-committed", [recorded])
 
-    def test_the_missing_key_seam_bites_when_the_repair_gate_is_exported(
+        pre_registration = dict(_BASELINE7_STAMP)
+        del pre_registration[ENV_IMPOSTOR_ROLL_CALL_KEY]
+        assert ENV_IMPOSTOR_ROLL_CALL_KEY in substrate_flag_snapshot({})
+        assert ENV_IMPOSTOR_ROLL_CALL_KEY not in pre_registration
+        _assert_substrate_matches(
+            "g-pre-registration",
+            [
+                GameEndReplayEntry(
+                    game_id="g-pre-registration",
+                    tick=21,
+                    winner="CREWMATES",
+                    reason="TASKS",
+                    substrate_flags=pre_registration,
+                )
+            ],
+        )
+
+    def test_the_missing_key_seam_bites_when_the_toggle_is_exported(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         # The perturbation craft rule 2 asks of the seam above: the absent key is
         # tolerated because it MATCHES the ambient default, not because it is
-        # ignored. Export the repair gate and the same committed stamp is refused,
-        # with the remediation hint routing it to the toggleable branch -- unset
-        # the variable -- rather than to the retired one. A registration that
-        # failed to reach the stamp at all would pass the bare-shell case and fail
-        # this one.
+        # ignored. Export the toggle and the same stamp is refused, with the
+        # remediation hint routing it to the toggleable branch -- unset the
+        # variable -- rather than to the retired one. A registration that failed to
+        # reach the stamp at all would pass the bare-shell case and fail this one.
         from api.replay_loader import (
             ReplaySubstrateMismatchError,
             _assert_substrate_matches,
         )
 
         _clear_lever_env(monkeypatch)
-        monkeypatch.setenv(ENV_LAST_SEEN_FROM_SIGHTINGS, "1")
+        monkeypatch.setenv(ENV_IMPOSTOR_ROLL_CALL, "1")
+        pre_registration = dict(_BASELINE7_STAMP)
+        del pre_registration[ENV_IMPOSTOR_ROLL_CALL_KEY]
         recorded = GameEndReplayEntry(
-            game_id="g-baseline-7",
+            game_id="g-pre-registration",
             tick=21,
             winner="CREWMATES",
             reason="TASKS",
-            substrate_flags=dict(_BASELINE7_STAMP),
+            substrate_flags=pre_registration,
         )
         with pytest.raises(ReplaySubstrateMismatchError) as excinfo:
-            _assert_substrate_matches("g-baseline-7", [recorded])
+            _assert_substrate_matches("g-pre-registration", [recorded])
         message = str(excinfo.value)
-        assert ENV_LAST_SEEN_FROM_SIGHTINGS in message
+        assert ENV_IMPOSTOR_ROLL_CALL in message
         assert "Toggleable lever(s)" in message
 
     def test_a_baseline6_stamp_no_longer_reconstructs(

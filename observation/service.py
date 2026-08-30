@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -189,41 +188,10 @@ def impostor_pretend_task_set(
     )
 
 
-# The one-vent-one-record repair gate. ON, a witnessed vent reaches the packet
-# once — as the visible action — and no ``vent_use_heard`` copy is minted; OFF is
-# the co-emitting derivation the committed prompt bytes were recorded under, where
-# the sound is a function of the sight and a witness perceives one vent twice.
-# Accepts ``1/true/yes/on`` case-insensitively; anything else, unset included, is
-# OFF.
-#
-# DEFAULT-OFF only to hold the byte-identity seam: every committed replay
-# reconstructs against the OFF path, which is the code this build ships. The gate
-# flips unconditional and is deleted at Task 21.15's combined re-record.
-ENV_VENT_SINGLE_MINT: Final[str] = "AILIBI_VENT_SINGLE_MINT"
-_VENT_SINGLE_MINT_FLAG_TRUE: Final[frozenset[str]] = frozenset(
-    {"1", "true", "yes", "on"}
-)
-
-
-def vent_single_mint_enabled(env: Mapping[str, str] | None = None) -> bool:
-    """Whether a witnessed vent is minted once, as the sight alone (see the gate above).
-
-    ``orchestrator.replay`` mirrors this resolver for the substrate stamp; the two
-    are pinned equivalent over the env grid in ``tests/orchestrator/test_replay.py``.
-    """
-
-    environment = env if env is not None else os.environ
-    return (
-        environment.get(ENV_VENT_SINGLE_MINT, "").strip().lower()
-        in _VENT_SINGLE_MINT_FLAG_TRUE
-    )
-
-
 @dataclass(frozen=True)
 class _ObservedAction:
     action: str
     room: str
-    audible_room: str | None = None
 
 
 class ObservationService:
@@ -344,10 +312,7 @@ class ObservationService:
             ),
             visible_players=visible_players,
             visible_bodies=visible_bodies,
-            audible_events=self._audible_events(
-                world_state=world_state,
-                observed_actions=observed_actions,
-            ),
+            audible_events=self._audible_events(world_state=world_state),
             global_state=self._global_view(world_state=world_state),
             cooldown=cooldown,
             moved_players=moved_players,
@@ -391,32 +356,15 @@ class ObservationService:
         self,
         *,
         world_state: WorldState,
-        observed_actions: Mapping[PlayerId, _ObservedAction],
     ) -> tuple[AudibleEvent, ...]:
-        """The tick's audio cues for this observer, ordered vents-then-alarm.
+        """The tick's audio cues for this observer: the sabotage alarm alone.
 
         Emits the global ``sabotage_alarm`` (``room=None``) while a sabotage is
-        active, and — unless :func:`vent_single_mint_enabled` — one
-        ``vent_use_heard`` per witnessed vent room. Under that gate a witnessed
-        vent is delivered ONCE, as the visible action, so one physical event
-        yields one perception.
+        active. A witnessed vent mints NO audible copy: it is delivered once, as
+        the visible action, so one physical event yields one perception.
         """
 
         events: list[AudibleEvent] = []
-        if not vent_single_mint_enabled():
-            vent_rooms = tuple(
-                sorted(
-                    {
-                        observed_action.audible_room
-                        for observed_action in observed_actions.values()
-                        if observed_action.action == "vent"
-                        and observed_action.audible_room is not None
-                    }
-                )
-            )
-            events.extend(
-                AudibleEvent(kind="vent_use_heard", room=room) for room in vent_rooms
-            )
         if world_state.sabotage is not None and world_state.sabotage.active:
             events.append(AudibleEvent(kind="sabotage_alarm", room=None))
         return tuple(events)
@@ -577,11 +525,7 @@ class ObservationService:
             witnessed_rooms.append(event.destination_room)
         if not witnessed_rooms:
             return None
-        return _ObservedAction(
-            action="vent",
-            room=witnessed_rooms[0],
-            audible_room=witnessed_rooms[0],
-        )
+        return _ObservedAction(action="vent", room=witnessed_rooms[0])
 
     def _global_view(self, *, world_state: WorldState) -> GlobalView:
         # Per-player re-key (DESIGN.md §3.2/§3.5): ``WorldState.tasks`` is keyed by

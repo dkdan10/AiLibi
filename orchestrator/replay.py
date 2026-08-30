@@ -128,58 +128,6 @@ def _impostor_roll_call_enabled(env: Mapping[str, str] | None = None) -> bool:
     )
 
 
-# The Wave-1a last-seen REPAIR gate, resolved locally in the shape above rather
-# than bound to ``agents.memory.store.last_seen_from_sightings_enabled``: the
-# stamp side of a lever stays readable from a replay-only consumer (sample
-# byte-verification, MANIFEST reads, the API replay loader) without depending on
-# what the render module happens to import. The env name and truthy-token set
-# mirror the store's ``ENV_LAST_SEEN_FROM_SIGHTINGS`` /
-# ``_LAST_SEEN_FROM_SIGHTINGS_FLAG_TRUE`` byte-for-byte, and
-# ``tests/orchestrator/test_replay.py`` pins the two resolvers EQUIVALENT over
-# the env grid — the CI substitute for an identity binding, so the read site and
-# the stamp cannot drift apart.
-ENV_LAST_SEEN_FROM_SIGHTINGS: Final[str] = "AILIBI_LAST_SEEN_FROM_SIGHTINGS"
-_LAST_SEEN_FROM_SIGHTINGS_FLAG_TRUE: Final[frozenset[str]] = frozenset(
-    {"1", "true", "yes", "on"}
-)
-
-
-def _last_seen_from_sightings_enabled(env: Mapping[str, str] | None = None) -> bool:
-    """The 21.4 repair gate's stamp-side resolver (mirrors the store's, see above)."""
-
-    environment = env if env is not None else os.environ
-    return (
-        environment.get(ENV_LAST_SEEN_FROM_SIGHTINGS, "").strip().lower()
-        in _LAST_SEEN_FROM_SIGHTINGS_FLAG_TRUE
-    )
-
-
-# The Wave-1a one-vent-one-record REPAIR gate, resolved locally for the same
-# reason as the two above: importing ``observation.service`` would drag the whole
-# observation stack — engine visibility, the map loader, the audit log — into
-# every replay-only consumer (sample byte-verification, MANIFEST reads, the API
-# replay loader), which read JSONL rows and never build a packet. The env name and
-# truthy-token set mirror the service's ``ENV_VENT_SINGLE_MINT`` /
-# ``_VENT_SINGLE_MINT_FLAG_TRUE`` byte-for-byte, and
-# ``tests/orchestrator/test_replay.py`` pins the two resolvers EQUIVALENT over the
-# env grid — the CI substitute for an identity binding, so the read site and the
-# stamp cannot drift apart.
-ENV_VENT_SINGLE_MINT: Final[str] = "AILIBI_VENT_SINGLE_MINT"
-_VENT_SINGLE_MINT_FLAG_TRUE: Final[frozenset[str]] = frozenset(
-    {"1", "true", "yes", "on"}
-)
-
-
-def _vent_single_mint_enabled(env: Mapping[str, str] | None = None) -> bool:
-    """The 21.5 repair gate's stamp-side resolver (mirrors the service's, see above)."""
-
-    environment = env if env is not None else os.environ
-    return (
-        environment.get(ENV_VENT_SINGLE_MINT, "").strip().lower()
-        in _VENT_SINGLE_MINT_FLAG_TRUE
-    )
-
-
 class LLMCallRecord(BaseModel):
     """One LLM call captured during a meeting (DESIGN.md §11.4).
 
@@ -689,38 +637,26 @@ _RETIRED_ALWAYS_ON_LEVERS: Final[tuple[str, ...]] = (
 # silently change a replay stamp or the loader's mismatch check mid-process. Each
 # resolver takes the optional ``env`` mapping and returns the lever's live state.
 #
-# THREE live toggles, all DEFAULT-OFF and each bound to a LOCAL mirror with a CI
-# equivalence pin standing in for the identity (each mirror's own comment block
-# states why it is local):
+# ONE live toggle, DEFAULT-OFF and bound to a LOCAL mirror with a CI equivalence
+# pin standing in for the identity (the mirror's own comment block states why it
+# is local):
 #
 # * ``impostor_roll_call`` — 18.10's impostor-answer template arm, a LEVER: an
 #   arm a future gate may decide to ship, which would graduate it into
 #   ``_RETIRED_ALWAYS_ON_LEVERS`` at its adopting record.
-# * ``last_seen_from_sightings`` — the Wave-1a last-seen REPAIR gate, not a
-#   lever: nothing is decided on it and no record runs it ON. It holds the
-#   byte-identity seam between its merge and Task 21.15's combined re-record,
-#   which flips the render unconditional and DELETES this key outright rather
-#   than retiring it — so the retired half's twenty-one-key string, and the
-#   MANIFEST ``flags`` cell derived from it, stay byte-identical across the flip.
-# * ``vent_single_mint`` — the Wave-1a one-vent-one-record REPAIR gate, a seam on
-#   the same terms: nothing is decided on it and no record runs it ON. ON, a
-#   witnessed vent is minted once as the visible action instead of also as an
-#   audible copy. Task 21.15's re-record flips it unconditional and DELETES this
-#   key outright rather than retiring it, for the same byte-identity reason.
 #
-# A bare environment stamps every one ``False``, which IS the committed baseline-7
-# substrate: the missing-key-reads-False rule makes a stamp recorded before a key
-# existed agree with a build that has it. A lever graduates by moving into
+# A bare environment stamps it ``False``, which IS the committed substrate: the
+# missing-key-reads-False rule makes a stamp recorded before a key existed agree
+# with a build that has it. A lever graduates by moving into
 # ``_RETIRED_ALWAYS_ON_LEVERS`` at the record that adopts it — which appends it
 # to the retired half and so shifts every remaining toggle's index in
-# ``SUBSTRATE_FLAG_KEYS``. Registration order, newest last.
+# ``SUBSTRATE_FLAG_KEYS``. A REPAIR gate is not a lever and graduates differently:
+# it is deleted outright and promoted nowhere, which is what keeps the retired
+# half's twenty-one-key string — and the MANIFEST ``flags`` cell derived from it —
+# byte-identical across the flip. Registration order, newest last.
 _TOGGLEABLE_LEVER_RESOLVERS: Final[
     tuple[tuple[str, Callable[[Mapping[str, str] | None], bool]], ...]
-] = (
-    ("impostor_roll_call", _impostor_roll_call_enabled),
-    ("last_seen_from_sightings", _last_seen_from_sightings_enabled),
-    ("vent_single_mint", _vent_single_mint_enabled),
-)
+] = (("impostor_roll_call", _impostor_roll_call_enabled),)
 
 # The still-toggleable subset of ``SUBSTRATE_FLAG_KEYS`` (Task 14.10):
 # levers whose active state is an ``AILIBI_*`` env read, so a stamp/ambient
@@ -755,12 +691,10 @@ def substrate_flag_snapshot(
     The live toggles resolve from the immutable ``_TOGGLEABLE_LEVER_RESOLVERS``
     table with ``env`` threaded through (defaulting to the live process
     environment). Each is DEFAULT-OFF, so a bare environment agrees with the
-    committed baseline-7 stamp — which names ``impostor_roll_call`` OFF and
-    predates both ``last_seen_from_sightings`` and ``vent_single_mint`` entirely,
-    keys the missing-key rule reads OFF on both sides — and each ``AILIBI_*``
-    export flips exactly its own key: the deterministic seam the recorders, the
-    MANIFEST ``flags`` column and the sweep configs rely on to prove which arms a
-    recording ran under.
+    committed stamp — which names ``impostor_roll_call`` OFF — and each
+    ``AILIBI_*`` export flips exactly its own key: the deterministic seam the
+    recorders, the MANIFEST ``flags`` column and the sweep configs rely on to
+    prove which arms a recording ran under.
     """
 
     snapshot = dict.fromkeys(_RETIRED_ALWAYS_ON_LEVERS, True)
