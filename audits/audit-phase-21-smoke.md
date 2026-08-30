@@ -28,6 +28,12 @@ green, exactly as the contract predicted.
 Five seeds, 16 meetings, **$0.0000**, 33m03s of operator wall. One residual observation and one
 operator note are routed in §15; neither is a criterion and neither is stretched into one.
 
+**Three review findings were taken after this reading was first written, and §16 records what each
+moved.** Two cells and the projection bracket changed; **none of them is a cell the GO rests on**, and
+the corrections make the reading stronger rather than weaker — the B-8 marker now reads 0 over a
+denominator 2.3× larger, and the oracle net now runs wider than A-6's published one with an
+over-broad floor bounding the false negative. The GO stands unchanged on re-derivation.
+
 ## 1. What this is, and what it is not
 
 The standing cadence rule is smoke before record. The next record is **maintenance-of-record**: it
@@ -341,30 +347,56 @@ Built directly from the recorded prompts, the recorded action rows, the recorded
 recorded observation packets — **not from any instrument's fold**, so a marker cannot be silently
 satisfied by an instrument looking elsewhere.
 
-**The marker code is calibrated against the register.** Applied unchanged to the four committed sets
-it reproduces the published cells exactly: A-6's leak partition **45/326 flag-present and 0/342
-flag-absent**; A-17's **3,350** vote prompts with **0** current-meeting claim lines; A-14's **35,350**
-recorded actions over **5,960** tick rows; A-3's **3,602** ballots with **120** carrying the redirect
-marker; A-31's **1,505** double-minted rows, **27** distinct heard-only rows and **0** witnessed-only.
-The same code then produced the smoke column.
+**The marker pass is a command, not an assertion.** It supplies the evidence for STOP criterion 6 and
+therefore for the GO, so it ships here in full rather than being described. It is stdlib-only and
+imports nothing from the repo, so an owner or a later re-measure reproduces both columns from the
+preserved smoke bytes and the committed record alone. §7.3 carries the script; the two invocations
+that produced the table are:
+
+```bash
+# the committed reference column — a BARE shell (the committed stamps predate both repair keys)
+uv run python /tmp/marker_pass.py replays/samples/9p2i
+
+# the smoke column — the SAME shell discipline as the recording
+AILIBI_LAST_SEEN_FROM_SIGHTINGS=1 AILIBI_VENT_SINGLE_MINT=1 \
+  uv run python /tmp/marker_pass.py /Users/danielkeinan/ailibi-smoke-21-14/9p2i
+```
+
+**And it is calibrated against the register before it is trusted.** Applied unchanged to the four
+committed sets it reproduces the published cells exactly: A-6's leak partition **45/326 flag-present
+and 0/342 flag-absent** and its **11,727**-utterance denominator; A-17's **3,350** vote prompts with
+**0** current-meeting claim lines; A-14's **35,350** recorded actions over **5,960** tick rows; A-3's
+**3,602** ballots with **120** carrying the redirect marker; A-31's **1,505** double-minted rows,
+**27** distinct heard-only rows and **0** witnessed-only. The same code then produced the smoke column.
 
 | # | repair | marker | committed reference | **smoke (5 seeds / 16 meetings)** | reading |
 |---|---|---|---|---|---|
 | 1 | A-6 (21.1) | the taught oracle line inside a rendered proof block | 3,186 of 7,211 prompts across the four sets carry `The engine certified` — one in every prompt that renders the block; leak **45/326 = 13.8%** where the block renders, **0/342** where it does not | **0 of 184** prompts carry it, while **51 prompts DO render a `Proof.` block**; banned render vocabulary (`the engine`, `the system`, `the detector`, `certif`, `flag`) **absent from every rendered line** | **OBSERVED** |
-| 1b | A-6, spoken | the oracle net over `free_text`, ballot rationales and claim reasons | 18 hits / 3,083 utterances on `samples/9p2i`; 72 across the four sets. At the committed 13.8% flag-present leak rate, 6 flag-bearing meetings would be expected to yield **~0.8** leaking meetings — so a zero here is consistent with the repair AND weak on its own | **0 hits over 329 utterances**; leak **0/6** flag-present, **0/10** flag-absent | **OBSERVED**, directional at this n — the render-side row above carries the weight |
+| 1b | A-6, spoken | the oracle net over `free_text`, ballot rationales and claim reasons (§7.4 states the net and why it is wider than A-6's prose) | **20 hits / 2,813 utterances** on `samples/9p2i` — exactly A-6's published per-set 20; **80 across the four sets** against A-6's 78, exact on three of the four; leak **45/326** flag-present, **0/342** flag-absent | **0 hits over 306 utterances**; leak **0/6** flag-present, **0/10** flag-absent. The over-broad FLOOR net fires **106 times on these same bytes**, so the scan demonstrably reaches these surfaces — the zero is absence of the register, not a blind detector | **OBSERVED**, directional at this n — the render-side row above carries the weight |
 | 2 | A-17 (21.2) | structured testimony rows in the vote-ballot prompts | **0 of 3,350** 9p2i vote prompts carry a `saw:` / `claims:` / `said:` block — the flat render dropped ≥1 field on 3,593 of 3,602 turns | **92 of 92** vote prompts carry ALL THREE, over 546 rendered turn heads | **OBSERVED** |
 | 3 | A-14 (21.3) | every recorded action row carries an explicit disposition; queued-behind-trigger actions marked discarded | **0 of 5,960** committed tick rows carry `action_dispositions`; the register re-derived 2,166 of 35,350 = **6.13%** as submitted-with-no-consequence | **101 of 101** tick rows carry it; **56 of 684 = 8.19%** `discarded_by_meeting` across **15** meeting-trigger ticks — `do_task` 23, `move` 23, `wait` 4, `report` 2, **`kill` 2**, `vent` 1, **`emergency` 1** | **OBSERVED** |
 | 4 | A-3 (21.3) | guard-redirected ballots carry a machine-readable provenance field | **0 of 3,602** ballots carry `guard_rewrite_reason`; 120 are detectable only by regex over the bracketed display marker | **8 of 92** ballots carry `guard_rewrite_reason` (`under_gate_redirect` 6, `invalid_target` 1, `teammate_coerced` 1); **0** non-`parse_default` rows are missing `guard_redirected_from` | **OBSERVED** |
-| 5 | B-8 (21.4) | the belief line's last-seen agrees with the agent's own sightings | `samples/9p2i` **401/1,051 = 38.2%** carry a strictly later sighting, **225/1,051 = 21.4%** stale AND wrong room (B-8 published 34.4% / 19.6% over the corpus sets) | **0 of 263 stale (0.0%)**, **0 of 263 stale-and-wrong-room (0.0%)**; and at the packet layer **520 of 520** belief rows match the observer's OWN packet at that tick, exactly, room and all | **OBSERVED** |
+| 5 | B-8 (21.4) | the belief line's last-seen agrees with the agent's own sightings | `samples/9p2i` **907/2,809 = 32.3%** carry a strictly later sighting, **518/2,809 = 18.4%** stale AND wrong room — against B-8's published 34.4% / 19.6% over the corpus sets | **0 of 602 stale (0.0%)**, **0 of 602 stale-and-wrong-room (0.0%)**; and at the packet layer **520 of 520** belief rows match the observer's OWN packet at that tick, exactly, room and all | **OBSERVED** |
 | 6 | A-31 (21.5) | exactly one memory row per witnessed vent; no audible copy past the teammate firewall | **1,505** double-minted rows across the four sets; every distinct witnessed vent double-minted (90/90, 297/297, 20/20, 28/28 = **100%**); 27 distinct heard-only rows, 27/27 impostors | **40 witnessed-vent rows, 0 heard-vent rows, 0 double-minted**; at the PACKET layer **0 `vent_use_heard` events over 517 packet rows**, with 9 witnessed vents each delivered ONCE as the visible action | **OBSERVED** |
 
-Two of the six are verified at a second, stronger layer than the render. `observation/service.py::_audible_events`
-is where the A-31 repair lives, so the preserved observation packets settle it at the source: **zero
-`vent_use_heard` events were emitted at all**, which makes the 27-row teammate-firewall residue class
-*unreachable* rather than merely filtered — the outcome 21.5 specified. And for B-8 the packets are
-the ground truth for "the agent's own sightings": **520/520 rendered last-seen rows are something that
-observer actually perceived at that tick**, reading BOTH perception channels (`visible_players` and
-`moved_players`, whose destination is the placement the render uses).
+Two of the six were additionally cross-checked at a layer below the render.
+`observation/service.py::_audible_events` is where the A-31 repair lives, so the observation packets
+settle it at the source: **zero `vent_use_heard` events emitted at all**, which makes the 27-row
+teammate-firewall residue class *unreachable* rather than merely filtered — the outcome 21.5
+specified. And for B-8 the packets are the ground truth for "the agent's own sightings":
+**520/520 rendered last-seen rows are something that observer actually perceived at that tick**,
+reading BOTH perception channels (`visible_players` and `moved_players`, whose destination is the
+placement the render uses).
+
+**The scope and the reproducibility of that cross-check, stated plainly.** It ran over **four of the
+five seeds** — 13, 30, 39 and 43, the ones whose packet logs were captured; seed 4's stage had already
+been cleaned when the copying began. And those logs are **not preserved**: the wrapper writes each
+seed's `<stem>.audit.jsonl` into its DISCARDED stage tree (which is why no set dir carries one), and
+that tree is removed when the run finalizes. **So the packet cross-check is recorded here as run, with
+its numbers, and it is NOT re-runnable from the preserved bytes.** The primary evidence for every row
+of the table above is the byte-level marker pass in §7.3, which IS re-runnable at $0 against the
+preserved smoke bytes and the committed record — and it agrees with the packet cross-check on both
+rows.
 
 ### 7.1 The one repair the five seeds could not exercise
 
@@ -377,12 +409,12 @@ is `tests/`, not these bytes.
 
 ### 7.2 One residual observation, named rather than absorbed
 
-Six of 263 rendered belief rows (2.3%) carry a last-seen tick LATER than any sighting row **surviving
-in the same rendered memory block** — e.g. `replay-seed-4` p-3: `p-2: suspicion 0.45 (last seen in
-ENGINEERING at tick 17)` while that prompt's own observation rows stop at a tick-13 move.
+Sixteen of 602 rendered belief rows (2.7%) carry a last-seen tick LATER than any sighting row
+**surviving in the same rendered memory block** — e.g. `replay-seed-4` p-3: `p-2: suspicion 0.45 (last
+seen in ENGINEERING at tick 17)` while that prompt's own observation rows stop at a tick-13 move.
 
 This is **the opposite direction from B-8** and is not the defect 21.4 repaired. The packet check
-settles what it is: all six rows are own-eyes and correct — p-2's own recorded trajectory puts it in
+settles what it is: the rows are own-eyes and correct — p-2's own recorded trajectory puts it in
 ENGINEERING at tick 17, and 520/520 belief rows match their observer's packet. What is missing is the
 supporting observation ROW in the render, shed by the elastic memory budget: the belief block is the
 NON-elastic carve-out (`agents/memory/store.py`:2296-2302 puts `beliefs_block` in
@@ -394,6 +426,193 @@ statement; here it leaves a TRUE statement without its visible support.
 criterion's subject is a merged repair contradicted by the bytes — this repair is confirmed by them.
 It is a **legibility** item: a model reading that prompt cannot see why the belief line says what it
 says. §15 routes it.
+
+### 7.3 The marker pass, in full
+
+Stdlib only; imports nothing from the repo. Save as `/tmp/marker_pass.py` and run the two invocations
+at the head of §7. Every count in the table above, in both columns, comes out of this one script.
+
+```python
+"""The six-behaviour marker pass — stdlib only, no repo import."""
+from __future__ import annotations
+import collections, json, pathlib, re, sys
+
+TAUGHT = "The engine certified"
+BANNED = ("the engine", "the system", "the detector", "certif", "flag")
+# A-6's net with the determiner made optional — see §7.4 for why.
+NET = (
+    re.compile(r"\bengine(?!\s+(?:room|output))\b.{0,200}?(?:certif|flag|proof|say|confirm|seal)", re.I),
+    re.compile(r"engine[- ]certif", re.I),
+    re.compile(r"\bsystem\b.{0,200}?(?:flag|certif|say)", re.I),
+    re.compile(r"\bdetector", re.I),
+)
+# A deliberately over-broad floor: it cannot false-negative, only over-count.
+FLOOR = (re.compile(r"\bengine|\bsystem|\bdetector|certif|\bflag", re.I),)
+
+MEM = re.compile(r"<memory>(.*?)</memory>", re.S)
+BELIEF = re.compile(
+    r"^- (?P<pid>p-\d+): (?:suspicion [\d.]+ \()?last seen in (?P<room>[A-Z_]+) at tick (?P<tick>\d+)", re.M)
+S_IN = re.compile(r"\[tick (\d+)\] You saw (p-\d+) (?:task )?in ([A-Z_]+)")
+S_SPAN = re.compile(r"You saw (p-\d+) (?:task )?in ([A-Z_]+)[^\n]*? ticks \d+-(\d+)")
+S_MOVE = re.compile(r"\[tick (\d+)\] You saw (p-\d+) move from ([A-Z_]+) to ([A-Z_]+)")
+S_VENT = re.compile(r"\[tick (\d+)\] You witnessed (p-\d+) vent in ([A-Z_]+)")
+S_KILL = re.compile(r"\[tick (\d+)\] You witnessed (p-\d+) kill in ([A-Z_]+)")
+S_SPAWN = re.compile(r"\[tick (\d+)\] You saw every other player in ([A-Z_]+): ([^\n.]+)")
+HEARD = re.compile(r"\[tick (\d+)\] You heard a vent use(?: in ([A-Z_]+))?")
+TURN_HEAD = re.compile(r"^- \[[^\]]+\] turn \d+ \(", re.M)
+
+def latest_sightings(block):
+    out = {}
+    def offer(p, t, r):
+        if p not in out or t >= out[p][0]: out[p] = (t, r)
+    for t, p, r in S_IN.findall(block): offer(p, int(t), r)
+    for p, r, e in S_SPAN.findall(block): offer(p, int(e), r)
+    for t, p, _s, d in S_MOVE.findall(block): offer(p, int(t), d)
+    for t, p, r in S_VENT.findall(block): offer(p, int(t), r)
+    for t, p, r in S_KILL.findall(block): offer(p, int(t), r)
+    for t, r, mem in S_SPAWN.findall(block):
+        for p in re.findall(r"p-\d+", mem): offer(p, int(t), r)
+    return out
+
+def between(text, a, b):
+    i = text.find(a)
+    if i < 0: return ""
+    j = text.find(b, i)
+    return text[i + len(a): j if j > 0 else len(text)]
+
+def analyse(root):
+    seeds = sorted(root.glob("replay-seed-*.jsonl"), key=lambda p: int(p.stem.rsplit("-", 1)[1]))
+    prompts = proof = taught = utt = net_hits = floor_hits = 0
+    banned = collections.Counter(); net_surf = collections.Counter()
+    mf = mu = lf = lu = 0
+    votes = v_saw = v_claims = v_said = v_heads = 0
+    ticks = ticks_disp = actions = trigger_ticks = 0
+    disp = collections.Counter(); disc_kind = collections.Counter()
+    ballots = b_marker = b_machine = b_missing = 0; reasons = collections.Counter()
+    b_rows = b_check = b_stale = b_stale_room = 0
+    w_rows = h_rows = double = 0
+    d_w, d_h, d_d = set(), set(), set()
+    meetings = ejections = 0; endings = collections.Counter()
+    for path in seeds:
+        for line in path.open():
+            row = json.loads(line); kind = row["kind"]
+            if kind == "tick":
+                ticks += 1; actions += len(row["actions"])
+                d = row.get("action_dispositions")
+                if d is not None:
+                    ticks_disp += 1
+                    for x in d: disp[x] += 1
+                    if "discarded_by_meeting" in d: trigger_ticks += 1
+                    for a, x in zip(row["actions"], d):
+                        if x == "discarded_by_meeting": disc_kind[a.get("type", "?")] += 1
+                continue
+            if kind == "game_over":
+                endings[row.get("reason") or "?"] += 1; continue
+            if kind != "meeting": continue
+            meetings += 1
+            if row.get("ejected_player_id"): ejections += 1
+            has_vent = any((f.get("kind") if isinstance(f, dict) else str(f)) == "vent_sighting"
+                           for f in row.get("contradictions") or [])
+            leaked = False; items = []
+            for turn in (row.get("transcript") or {}).get("turns") or []:
+                items.append((turn.get("free_text") or "", "free_text"))
+                for c in turn.get("claims") or []:
+                    r = c.get("reason")
+                    if isinstance(r, str): items.append((r, "claim_reason"))  # alibi claims have none
+            for b in row.get("ballots") or []:
+                ballots += 1; rt = b.get("rationale_text") or ""
+                items.append((rt, "ballot_rationale"))
+                if "redirected]" in rt or "coerced]" in rt or "normalized]" in rt: b_marker += 1
+                reason = b.get("guard_rewrite_reason")
+                if reason is not None:
+                    b_machine += 1; reasons[reason] += 1
+                    if reason != "parse_default" and not b.get("guard_redirected_from"): b_missing += 1
+            for text, surface in items:
+                utt += 1
+                if any(p.search(text) for p in NET):
+                    net_hits += 1; net_surf[surface] += 1; leaked = True
+                if any(p.search(text) for p in FLOOR): floor_hits += 1
+            if has_vent: mf += 1; lf += 1 if leaked else 0
+            else: mu += 1; lu += 1 if leaked else 0
+            for call in row.get("llm_calls") or []:
+                pr = call["prompt"]; prompts += 1
+                if "\nProof." in pr or pr.startswith("Proof."): proof += 1
+                if TAUGHT in pr: taught += 1
+                for w in BANNED:
+                    if w in pr: banned[w] += 1
+                if "rationale_text" in pr:
+                    votes += 1; tx = between(pr, "<transcript>", "</transcript>")
+                    if tx:
+                        v_heads += len(TURN_HEAD.findall(tx))
+                        v_saw += "\n  saw:" in tx; v_claims += "\n  claims:" in tx
+                        v_said += '\n  said: "' in tx
+                m = MEM.search(pr)
+                if not m: continue
+                block = m.group(1); seen = latest_sightings(block)
+                for bm in BELIEF.finditer(block):
+                    b_rows += 1
+                    pid, room, tick = bm.group("pid"), bm.group("room"), int(bm.group("tick"))
+                    if pid not in seen: continue
+                    b_check += 1; ot, orm = seen[pid]
+                    if ot > tick:
+                        b_stale += 1
+                        if orm != room: b_stale_room += 1
+                obs = call.get("agent_id") or "?"
+                w = {(int(t), p, r) for t, p, r in S_VENT.findall(block)}
+                h = set(HEARD.findall(block))
+                w_rows += len(w); h_rows += len(h)
+                for wt, _wp, wr in w: d_w.add((path.stem, obs, wt, wr))
+                for t, r in h:
+                    tick = int(t); key = (path.stem, obs, tick, r or ""); d_h.add(key)
+                    if any(wt == tick and (not r or wr == r) for wt, _wp, wr in w):
+                        double += 1; d_d.add(key)
+    pc = lambda a, b: f"{100.0 * a / b:.1f}%" if b else "n/a"
+    print(f"\n{root}: seeds {len(seeds)} | meetings {meetings} | ejections {ejections} | {dict(endings)}")
+    print(f"  stray *.audit.jsonl: {len(sorted(root.glob('*.audit.jsonl')))}")
+    print(f"M1 prompts {prompts}; 'Proof.' blocks {proof}; taught line {taught}; banned {dict(banned)}")
+    print(f"   utterances {utt}; net {net_hits} {dict(net_surf)}; FLOOR {floor_hits}")
+    print(f"   leak flagged {lf}/{mf}; unflagged {lu}/{mu}")
+    print(f"M2 vote prompts {votes} (heads {v_heads}); saw {v_saw}; claims {v_claims}; said {v_said}")
+    print(f"M3 tick rows {ticks}; with dispositions {ticks_disp}; actions {actions}; {dict(disp)}")
+    print(f"   discarded {disp.get('discarded_by_meeting', 0)}/{actions}"
+          f" = {pc(disp.get('discarded_by_meeting', 0), actions)} over {trigger_ticks} trigger ticks {dict(disc_kind)}")
+    print(f"M4 ballots {ballots}; display {b_marker}; machine {b_machine} {dict(reasons)}; missing {b_missing}")
+    print(f"M5 belief rows {b_rows}; checkable {b_check}; stale {b_stale} = {pc(b_stale, b_check)};"
+          f" stale+wrong-room {b_stale_room} = {pc(b_stale_room, b_check)}")
+    print(f"M6 witnessed {w_rows}; heard {h_rows}; double {double}; distinct w{len(d_w)} h{len(d_h)}"
+          f" d{len(d_d)} heard-only {len(d_h) - len(d_d)}")
+
+for arg in sys.argv[1:]:
+    analyse(pathlib.Path(arg))
+```
+
+### 7.4 The spoken-oracle net, and why it is wider than A-6's prose
+
+A-6 states its net as `the engine …`, `the system … flag|certif|say`, `the detector`. Transcribed
+that literally it finds **72** utterances across the four committed sets against A-6's published
+**78** — and the shortfall is entirely in `claim_reason` (39 ballot and 28 free_text hits match A-6
+exactly, as does its count of 44 distinct games). Inspecting the misses shows why: A-6's own published
+hits include `Engine flags confirm p-2 vented`, `confirmed by system flag` and `corroborated by
+engine flags` — determiner-less. **Its prose says "the engine"; its detector plainly did not require
+the article.** Dropping the article gives **80** across the four sets against A-6's 78, and per set
+**20 / 52 / 3 / 5** against A-6's published **20 / 50 / 3 / 5** — exact on three of the four. That is
+the net §7 carries, and it is the wider of the two, so it cannot under-report relative to A-6.
+
+Two further points close Codex's false-negative concern properly, because "my net matches theirs" is
+not by itself an argument that a zero is real:
+
+1. **The denominator now matches A-6 exactly.** Counting only claims that CARRY a `reason` (alibi
+   claims have no such key) gives 3,602 + 4,523 + 3,602 = **11,727** utterances — A-6's figure to the
+   digit. The earlier 12,728 counted 1,001 absent alibi reasons as empty utterances.
+2. **The FLOOR net bounds the false negative directly.** A deliberately over-broad pattern — any of
+   `engine|system|detector|certif|flag` anywhere, with no context requirement — fires **106 times on
+   the smoke bytes** and 827 on committed `samples/9p2i`. So the scan demonstrably reads these
+   surfaces and matches on them; the oracle net's zero is the absence of the *register*, not a blind
+   detector. Those 106 are the in-fiction and evidence-jargon uses A-6 classes as false positives and
+   TIER2 (`the engine room`, `a red flag`, `the task flag`) and which the repair never claimed to
+   remove.
+
+Both nets, and the floor, are in the §7.3 script, so all three columns re-run from one command.
 
 ## 8. The honesty and solvability cells
 
@@ -516,12 +735,22 @@ tokens/meeting 55,349.5
 per-seed serial wall: 594, 791, 640, 747, 392 s  (mean 632.8, min 392, max 791)
 ```
 
-Against the committed `samples/9p2i` (1,746 calls over 152 meetings, 7,406,792 tokens): **11.5 vs
-11.5 calls per meeting, and 55,350 vs 48,729 tokens per meeting — the corrected substrate costs
-+13.6% per meeting and +24.0% per game.** That is the A-17 repair paying its way: the vote-ballot
-prompt now renders each turn's full observation and claim body instead of one line, which is the
-whole point of the repair and the dominant new input-token term. **Worth carrying into the record's
-plan as a measured fact rather than a surprise.**
+The inflation is measured **like-for-like on the same five seeds the smoke re-recorded** — seeds
+4/13/30/39/43 of `replays/samples/9p2i` carry **740,424** committed tokens over 15 meetings against
+the smoke's **885,592** over 16:
+
+| denominator | committed tokens/game | inflation |
+|---|---|---|
+| **the SAME FIVE seeds** (the like-for-like, and the one this report carries) | 148,084.8 | **×1.1961 (+19.6%)** |
+| all 50 committed `samples/9p2i` games | 148,135.8 | ×1.1956 (+19.6%) |
+| both 9p2i legs, 200 games | 142,844.1 | ×1.2399 (+24.0%) |
+
+The first two agree to 0.1%, which is the check that the five drawn seeds are not a freak sample.
+Per meeting: **55,349.5 smoke vs 49,361.6 on the same five committed — ×1.1213 (+12.1%)**; calls per
+meeting are unchanged at 11.5. That is the A-17 repair paying its way: the vote-ballot prompt now
+renders each turn's full observation and claim body instead of one line, which is the whole point of
+the repair and the dominant new input-token term. **Worth carrying into the record's plan as a
+measured fact rather than a surprise.**
 
 **Retries, transport blips, worker diagnostics: none.** Both run logs were scanned for `WARN`,
 `ERROR`, `Traceback`, lock, dead-owner and claim diagnostics — **zero matches in either**. No seed
@@ -532,18 +761,18 @@ it rather than inherits it: the two 9p2i legs (`samples` 50 + `ml_corpus` 150 = 
 roster this smoke actually ran, so they are projected from its own measured SERIAL seconds-per-seed at
 two workers, with the bracket's ends the fastest and slowest measured seed rather than a guess; the
 two 4p1i legs (100 games, **not smoked**) are projected from the wall the phase-20 record MEASURED for
-those same legs (1h29m31s, §0.3) scaled by the corrected substrate's measured ×1.240 token inflation
-— an inference, labelled one, and one the projection is insensitive to because the 4p1i legs are 6.4%
-of the last record's wall; overhead is carried as the phase-20 record's own realized factor (its
-window wall over the sum of its four leg walls, ×1.0009).
+those same legs (1h29m31s, §0.3) scaled by the ×1.1961 like-for-like inflation above — an inference,
+labelled one, and one the projection is insensitive to because the 4p1i legs are 6.4% of the last
+record's wall; overhead is carried as the phase-20 record's own realized factor (its window wall over
+the sum of its four leg walls, ×1.0009).
 
 | | 9p2i legs (200 games) | 4p1i legs (100 games) | **four-leg total** |
 |---|---|---|---|
-| low (fastest measured seed, 392 s) | 10h53m20s | 1h51m00s | **12h45m01s** |
-| centre (measured mean, 633 s) | 17h34m40s | 1h51m00s | **19h26m43s** |
-| high (slowest measured seed, 791 s) | 21h58m20s | 1h51m00s | **23h50m37s** |
+| low (fastest measured seed, 392 s) | 10h53m20s | 1h47m04s | **12h41m05s** |
+| centre (measured mean, 633 s) | 17h34m40s | 1h47m04s | **19h22m47s** |
+| high (slowest measured seed, 791 s) | 21h58m20s | 1h47m04s | **23h46m41s** |
 
-**The bracket is 12h45m – 23h51m, centred at 19h27m**, against the phase-20 record's realized
+**The bracket is 12h41m – 23h47m, centred at 19h23m**, against the phase-20 record's realized
 **23h25m42s** for the same 300 games. The bracket is wide by construction: with $0 flat-rate billing
 the wall is dominated by hosted-provider latency, which a five-seed sample measures coarsely and
 which varies hour to hour. The phase-20 realized figure sits just inside the high end, which is the
@@ -725,3 +954,27 @@ sidecars in the set dir: none
 
 `git status --porcelain` shows no replay bytes and no staging directory; the only tracked changes on
 this branch are this report and the two standing index amendments.
+
+## 16. Review round 1 — what each finding moved
+
+Three findings on PR #411, all against this report rather than a code path. Every re-derivation ran
+at **$0** against the PRESERVED smoke bytes and the committed record, in the shell discipline §2
+records — recording-shell exports for smoke-byte reads, a bare shell for committed-set reads. **No
+seed was re-recorded and no preserved byte was touched.**
+
+| finding | disposition | what moved | does the GO rest on it? |
+|---|---|---|---|
+| **P1 — the marker command is not in the report** | **Taken in full.** §7 now opens with the two invocations and §7.3 ships the whole stdlib-only script. Shipping it also surfaced that the original belief-row pattern required a `suspicion N.NN (` prefix and so skipped rows that render a last-seen without a suspicion scalar. The shipped pattern makes the prefix optional and the row set grows accordingly. | M5's denominators, both columns: committed **401/1,051 → 907/2,809 (38.2% → 32.3%)** stale and **225/1,051 → 518/2,809 (21.4% → 18.4%)** stale-and-wrong-room — the latter now closer to B-8's published 19.6%; smoke **0/263 → 0/602**. §7.2's residual **6/263 → 16/602 (2.3% → 2.7%)**. | **No — and the marker got stronger.** The smoke numerator is still **0**, now over 2.3× the rows. |
+| **P1 — re-run the spoken-oracle cell with the registered net** | **Taken, and bounded further than asked.** §7.4 shows A-6's prose says `the engine` while its own published hits are determiner-less, so the net drops the article: **80** hits across the four sets against A-6's 78, exact on three of four sets, and the denominator now reproduces A-6's **11,727** to the digit. A FLOOR net was added to bound the false negative directly. | M1b's committed reference **18 → 20** on `samples/9p2i` (now exactly A-6's published 20) and **72 → 80** across four sets; the smoke utterance denominator **329 → 306**. | **No.** The smoke cell reads **0 under both nets**, and the FLOOR net fires **106 times on the same bytes**, so the zero is absence of the register rather than a blind scan. The leak partition is unchanged at 45/326 and 0/342 committed, 0/6 and 0/10 smoke. |
+| **P2 — recompute the projection with the measured inflation** | **Taken in full; the finding was correct.** §11 quoted `samples/9p2i`'s totals in its sentence but derived the multiplier from BOTH 9p2i legs. It is now measured like-for-like on the same five seeds, with all three denominators tabulated so the one in force is unambiguous. | Inflation **×1.240 → ×1.1961**; per-game **+24.0% → +19.6%**; per-meeting **+13.6% → +12.1%**; the 4p1i leg **1h51m00s → 1h47m04s**; the bracket **12h45m–23h51m → 12h41m–23h47m**, centre **19h27m → 19h23m**. | **No.** The projection is operating data for 21.15's plan; no STOP criterion reads it. |
+
+**The verdict is re-derived, not restated: GO, unchanged.** Criteria 1–5 and 7 are untouched by all
+three findings. Criterion 6 is the only one any of them reaches, and both cells it reaches — the
+oracle marker and the B-8 marker — still read the repaired shape, each now on a wider net or a larger
+denominator than before.
+
+One reproducibility limit is recorded rather than papered over: the packet-layer cross-check in §7
+(0 `vent_use_heard` over 517 packets; 520/520 belief rows matching their observer's own packet) read
+the wrapper's discarded-stage `*.audit.jsonl` logs, which the run removes when it finalizes. Those
+numbers stand as recorded but **cannot be re-run from the preserved bytes**. The byte-level marker
+pass in §7.3 can, it covers every row of the table, and it agrees with the cross-check on both.
