@@ -375,7 +375,7 @@ and 0/342 flag-absent** and its **11,727**-utterance denominator; A-17's **3,350
 | 1b | A-6, spoken | the oracle net over `free_text`, ballot rationales and claim reasons (§7.4 states the net and why it is wider than A-6's prose) | **20 hits / 2,813 utterances** on `samples/9p2i` — exactly A-6's published per-set 20; **80 across the four sets** against A-6's 78, exact on three of the four; leak **45/326** flag-present, **0/342** flag-absent | **0 hits over 306 utterances**; leak **0/6** flag-present, **0/10** flag-absent. The over-broad FLOOR net fires **106 times on these same bytes**, so the scan demonstrably reaches these surfaces — the zero is absence of the register, not a blind detector | **OBSERVED**, directional at this n — the render-side row above carries the weight |
 | 2 | A-17 (21.2) | structured testimony rows in the vote-ballot prompts | **0 of 3,350** 9p2i vote prompts carry a `saw:` / `claims:` / `said:` block — the flat render dropped ≥1 field on 3,593 of 3,602 turns | **92 of 92** vote prompts carry ALL THREE, over 546 rendered turn heads | **OBSERVED** |
 | 3 | A-14 (21.3) | every recorded action row carries an explicit disposition; queued-behind-trigger actions marked discarded | **0 of 5,960** committed tick rows carry `action_dispositions`; the register re-derived 2,166 of 35,350 = **6.13%** as submitted-with-no-consequence | **101 of 101** tick rows carry it; **56 of 684 = 8.19%** `discarded_by_meeting` across **15** meeting-trigger ticks — `do_task` 23, `move` 23, `wait` 4, `report` 2, **`kill` 2**, `vent` 1, **`emergency` 1** | **OBSERVED** |
-| 4 | A-3 (21.3) | guard-redirected ballots carry a machine-readable provenance field | **0 of 3,602** ballots carry `guard_rewrite_reason`; 120 are detectable only by regex over the bracketed display marker | **8 of 92** ballots carry `guard_rewrite_reason` (`under_gate_redirect` 6, `invalid_target` 1, `teammate_coerced` 1); **0** non-`parse_default` rows are missing `guard_redirected_from` | **OBSERVED** |
+| 4 | A-3 (21.3) | guard-redirected ballots carry a machine-readable provenance field — measured by JOINING the display and machine channels per ballot (§7.5) | **0 of 3,602** ballots carry `guard_rewrite_reason`, so all **120** the display marker shows as rewritten are **missing** machine provenance (36 / 81 / 1 / 2 by set) — detectable only by regex | **8 of 92** ballots carry `guard_rewrite_reason` (`under_gate_redirect` 6, `invalid_target` 1, `teammate_coerced` 1); the 6 display-marked ballots ALL carry it, and **0 of 92 are missing provenance** under the joined check | **OBSERVED** |
 | 5 | B-8 (21.4) | the belief line's last-seen agrees with the agent's own sightings | `samples/9p2i` **907/2,809 = 32.3%** carry a strictly later sighting, **518/2,809 = 18.4%** stale AND wrong room — against B-8's published 34.4% / 19.6% over the corpus sets | **0 of 602 stale (0.0%)**, **0 of 602 stale-and-wrong-room (0.0%)**; and at the packet layer **520 of 520** belief rows match the observer's OWN packet at that tick, exactly, room and all | **OBSERVED** |
 | 6 | A-31 (21.5) | exactly one memory row per witnessed vent; no audible copy past the teammate firewall | **1,505** double-minted rows across the four sets; every distinct witnessed vent double-minted (90/90, 297/297, 20/20, 28/28 = **100%**); 27 distinct heard-only rows, 27/27 impostors | **40 witnessed-vent rows, 0 heard-vent rows, 0 double-minted**; at the PACKET layer **0 `vent_use_heard` events over 517 packet rows**, with 9 witnessed vents each delivered ONCE as the visible action | **OBSERVED** |
 
@@ -522,11 +522,18 @@ def analyse(root):
             for b in row.get("ballots") or []:
                 ballots += 1; rt = b.get("rationale_text") or ""
                 items.append((rt, "ballot_rationale"))
-                if "redirected]" in rt or "coerced]" in rt or "normalized]" in rt: b_marker += 1
+                marked = "redirected]" in rt or "coerced]" in rt or "normalized]" in rt
+                if marked: b_marker += 1
                 reason = b.get("guard_rewrite_reason")
                 if reason is not None:
                     b_machine += 1; reasons[reason] += 1
-                    if reason != "parse_default" and not b.get("guard_redirected_from"): b_missing += 1
+                # THE JOIN — the two channels compared per ballot, so the check can FAIL.
+                # A rewrite the DISPLAY channel shows while the MACHINE channel is silent
+                # is the criterion-6 regression; testing only inside `reason is not None`
+                # made exactly that case invisible. See §7.5.
+                if marked and reason is None: b_missing += 1
+                elif reason is not None and reason != "parse_default" \
+                        and not b.get("guard_redirected_from"): b_missing += 1
             for text, surface in items:
                 utt += 1
                 if any(p.search(text) for p in NET):
@@ -613,6 +620,44 @@ not by itself an argument that a zero is real:
    remove.
 
 Both nets, and the floor, are in the §7.3 script, so all three columns re-run from one command.
+
+### 7.5 The M4 check, and the planted case proving it can fail
+
+The first version of §7.3's M4 test could not fail on the case it exists to catch. It read:
+
+```python
+reason = b.get("guard_rewrite_reason")
+if reason is not None:                                  # <- the whole test lived in here
+    if reason != "parse_default" and not b.get("guard_redirected_from"): b_missing += 1
+```
+
+If the guard rewrote a ballot and wrote **neither** provenance field — precisely the regression
+STOP criterion 6 exists to detect — `reason` is `None`, the branch is skipped, and the marker
+reports zero missing rows. The display marker was counted separately and **never compared** against
+the machine fields, so the two channels could disagree silently. That is a gate nobody can fail,
+which AGENTS.md craft rule 2 forbids.
+
+§7.3 now **joins the two channels per ballot**: a ballot the display marker shows as rewritten while
+the machine channel is silent is counted, as is a non-`parse_default` reason with no authored target
+beside it.
+
+**The planted case.** The smoke set was copied to `/tmp` — the preserved bytes are never written —
+and both provenance fields were deleted from one ballot whose rationale still carries the marker
+(`replay-seed-13`, `headless-seed-13:meeting-0`, voter `p-1`, dropping
+`guard_rewrite_reason='under_gate_redirect'` and `guard_redirected_from='p-2'`). Then both versions
+were run against it:
+
+```
+OLD script, perturbed copy : M4 ballots 92; display 6; machine 7; missing 0   <- the defect: MISSES it
+NEW joined, perturbed copy : M4 ballots 92; display 6; machine 7; missing 1   <- the gate BITES
+NEW joined, REAL smoke     : M4 ballots 92; display 6; machine 8; missing 0   <- the real reading
+```
+
+**On the real preserved bytes the joined check reads 0 missing rows**, so this is not a criterion-6
+event — 21.3's recorder writes both fields on every rewrite, and the check that says so can now
+actually fail. And the corrected check makes the before/after sharper rather than softer: over the
+committed record it flags **120 of 3,602** ballots as showing a rewrite with no machine provenance —
+exactly A-3's 120 guard-redirected ballots — against **0 of 92** on the smoke.
 
 ## 8. The honesty and solvability cells
 
@@ -746,11 +791,24 @@ the smoke's **885,592** over 16:
 | both 9p2i legs, 200 games | 142,844.1 | ×1.2399 (+24.0%) |
 
 The first two agree to 0.1%, which is the check that the five drawn seeds are not a freak sample.
-Per meeting: **55,349.5 smoke vs 49,361.6 on the same five committed — ×1.1213 (+12.1%)**; calls per
-meeting are unchanged at 11.5. That is the A-17 repair paying its way: the vote-ballot prompt now
-renders each turn's full observation and claim body instead of one line, which is the whole point of
-the repair and the dominant new input-token term. **Worth carrying into the record's plan as a
-measured fact rather than a surprise.**
+
+**The per-meeting increase splits cleanly between two causes, and both are measured rather than
+attributed by assumption.** Against the same five committed seeds (740,424 tokens / 168 calls / 15
+meetings) the smoke (885,592 / 184 / 16) reads:
+
+| | same-five committed | smoke | factor |
+|---|---|---|---|
+| calls per meeting | 11.20 | 11.50 | **×1.0268 (+2.7%)** |
+| tokens per call | 4,407.3 | 4,813.0 | **×1.0921 (+9.2%)** |
+| **tokens per meeting** | **49,361.6** | **55,349.5** | **×1.1213 (+12.1%)** |
+
+and the two factors multiply to the third exactly: `1.0268 × 1.0921 = 1.1213`. So **roughly
+three-quarters of the per-meeting increase is larger prompts and roughly a quarter is a higher call
+rate.** The prompt-size term is the A-17 repair paying its way — the vote-ballot prompt now renders
+each turn's full observation and claim body instead of one line, the dominant new input-token term.
+The call-rate term is a trajectory effect at n=16 meetings, not a repair: the corrected substrate
+moves who speaks and how often, and 11.2 → 11.5 is well inside what five seeds can wander.
+**Both belong in the record's plan as measured facts rather than one surprise.**
 
 **Retries, transport blips, worker diagnostics: none.** Both run logs were scanned for `WARN`,
 `ERROR`, `Traceback`, lock, dead-owner and claim diagnostics — **zero matches in either**. No seed
@@ -891,7 +949,7 @@ proof block; 0 of 92 vote prompts lack a structured testimony row; 0 of 101 tick
 dispositions and 56 queued-behind-trigger actions ARE marked discarded; 0 redirected ballots lack
 provenance; 0 witnessed vents minted twice, at the render AND at the packet. §7.
 
-The six last-seen rows in §7.2 are **not** one of the enumerated cases and are not stretched into
+The sixteen last-seen rows in §7.2 are **not** one of the enumerated cases and are not stretched into
 one: the criterion's subject is a merged repair CONTRADICTED by the bytes, and the packet check shows
 these bytes confirm it (520/520). Recorded as a legibility item and routed, not as a criterion.
 
@@ -931,7 +989,7 @@ inside a recording session is exactly what the contract forbids.
    included — was recorded through `bash scripts/refresh_samples.sh --seeds ...`, never through a bare
    `run_tournament.py`. The one-line guard (skip or reject a non-integer stem) is **a routing slot for
    21.15's contract**, where the record's gating needs it permanently rather than procedurally.
-2. **The belief line can outlive its supporting observation row in the render** (§7.2): 6 of 263 rows,
+2. **The belief line can outlive its supporting observation row in the render** (§7.2): 16 of 602 rows,
    all true, all own-eyes, none stale. Mechanism: the belief block is non-elastic and the observation
    rows are shed against the remaining budget. This is a **legibility** item — a reader of that prompt
    cannot see why the line says what it says — and a routing slot for the owner to place, not a
@@ -978,3 +1036,21 @@ One reproducibility limit is recorded rather than papered over: the packet-layer
 the wrapper's discarded-stage `*.audit.jsonl` logs, which the run removes when it finalizes. Those
 numbers stand as recorded but **cannot be re-run from the preserved bytes**. The byte-level marker
 pass in §7.3 can, it covers every row of the table, and it agrees with the cross-check on both.
+
+## 17. Review round 2 — what each finding moved
+
+Four findings, all against this report and the artifact registry; no code path. Same discipline as
+§16: every re-derivation at **$0**, recording-shell exports for smoke reads and a bare shell for
+committed reads, **no seed re-recorded and no preserved byte touched** — the round-2 perturbation ran
+on a `/tmp` COPY of the smoke set.
+
+| finding | disposition | what moved | does the GO rest on it? |
+|---|---|---|---|
+| **P1 — the M4 check cannot detect a rewrite with BOTH provenance fields absent** | **Taken; this one had teeth.** The test sat inside `if reason is not None`, so the exact criterion-6 regression left it silent, and the display marker was never compared against the machine fields. §7.3 now JOINS the two channels per ballot and §7.5 ships the planted case: deleting both fields from a marked ballot on a `/tmp` copy takes the old script from `missing 0` (misses it) to `missing 1` (bites). | The M4 row is re-measured under the joined check: committed **120 of 3,602** ballots show a rewrite with no machine provenance (exactly A-3's 120), smoke **0 of 92**. | **No — and this is the one that could have.** On the REAL preserved bytes the joined check reads **0 missing**, so no criterion-6 event: 21.3's recorder writes both fields on every rewrite, and the check that says so can now actually fail. The before/after is sharper than the version it replaces (120 → 0, not 0 → 0). |
+| **P2 — the routed residual still said 6/263** | **Taken.** Two stale references superseded by §16 were left behind: the criterion-6 discussion's "six" and the §15 routing entry. This audit IS the routing record, so an undercount there is a real defect. | §14 criterion 6 "six" → **"sixteen"**; §15 routing item **6 of 263 → 16 of 602**. Both now agree with §7.2 and §16. | **No.** The residual is a routed legibility item, not a criterion. |
+| **P2 — the calls-per-meeting comparison is not flat** | **Taken; the finding is right.** "Unchanged at 11.5" compared the smoke to the ALL-50 average (11.487), which rounds to look flat; against the same five seeds it is 11.20 → 11.50. The attribution assigned the whole per-meeting increase to prompt size. | §11 now splits it and the factors multiply exactly: **×1.0268 call rate × ×1.0921 call size = ×1.1213 per meeting** — about three-quarters prompt size (A-17), about one-quarter call rate (a trajectory effect at n=16, not a repair). | **No.** Operating data for 21.15's plan; no STOP criterion reads it. |
+| **P3 — the registry size moves with this report** | **Taken.** The amendment bumped the file count and left the size at the parent commit's. | `docs/artifacts.md`:107 **7.9 MB → 7,981,822 tracked bytes**, adopting the tracked-bytes convention the `tests/fixtures/` row on :99 already uses — it is exact and sidesteps the MB/MiB/`du`-block ambiguity (`du -sh` reports 7.9M here against Codex's 8.0M for the same tree). | **No.** |
+
+**GO, unchanged, and re-derived a second time.** Criteria 1–5 and 7 remain untouched. Criterion 6 is
+again the only one any finding reaches, and the P1 fix strengthens it: the check guarding it could
+not previously fail, now it can, and on the real bytes it still reads clean.
