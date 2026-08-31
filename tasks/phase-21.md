@@ -4071,6 +4071,30 @@ perturbation cases proving the parser still refuses a record that publishes neit
 (ONE remains after the sweep) and any count in `.env.example`'s graduated-levers note — both
 re-derived from the registry, never hand-typed.
 
+**Merge-reality record (2026-08-31, owner-ratified at the #412 merge — the merge that mints
+baseline 8):** one contract deviation, owner-ruled. The record falsified the lead featured card:
+9p2i seed 2 fell from three weak-signal contradictions and an ejection to zero contradictions and
+a skipped meeting, so the curated blurb described a game that no longer exists. Re-curation being
+contract-routed out of scope, the operator stopped and the owner ruled option 2 on the
+orchestration thread: the card rewritten to the truthful exhibit (a room reasoning with nothing
+in front of it and declining to eject), selection unchanged. Task 19.10's standing copy-change
+prohibition is explicitly superseded for this edit — a label that has become false is the failure
+that file documents, not the churn the rule prevents — and the supersession is recorded in the
+file itself; the binding spoiler rule held (a first draft stating the meeting's outcome was
+caught before shipping). The journey guard was reshaped, never weakened: it now holds the head
+card's own promise to the render bidirectionally, the perturbation was RUN (a false claim over
+the same bytes turns the journey red), and a sibling test pins both mismatch directions. Full
+account at audits/audit-phase-21-rerecord.md §5.1.1c. Also of record: leg 4 STOPPED at 299/300
+on a provider HTTP 402 — the financial repair was the owner's alone, the resume was one seed,
+and the pause is history at §1.1 with the freeze guard intact across it. Codex round 1's three
+findings were fixed and replied (one of them Codex correcting this side's arithmetic); rounds 2
+and 3 stalled bot-side without verdicts, the second against an already-superseded head, and the
+cap closed with nothing pending. The regressed justice cells (accuracy 0.5922 → 0.5208, innocent
+ejections 42 → 46, two wrongful-conviction classes re-opened, I-13 at 3/4 + 1 partial) are
+published ungated as Wave-2 pricing input, and three Questions ride with the owner rather than
+any contract: the recurring ballot-schema shape, the rubric-reconciliation/scorer-robustness
+defect, and the README headroom.
+
 **Ready-to-paste prompt:** `agent_prompts/task-21-15-rerecord.md`
 
 ---
