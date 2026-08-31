@@ -339,7 +339,7 @@ verdict — the composed artifact is this manifest, never weights.
 ## 8. Staleness + re-grounding (the standing recipes, both components)
 
 The composed runner adds no cap of its own — it meters BOTH committed caps per
-meeting (conviction 52 481, surrogate 52 481, each 143 × 367 fit-side
+meeting (conviction 49 764, surrogate 49 764, each 143 × 348 fit-side
 meetings). A run that spends either cap re-grounds per that component's own
 committed recipe (`training/reports/report-conviction-model.md` §8 /
 `report-ballot-surrogate.md` §8: re-record, re-validate the walk, re-fit,

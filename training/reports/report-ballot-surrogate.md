@@ -1,10 +1,11 @@
 # The ballot-predictor surrogate — the GO/NO-GO verdict, the fallback ladder, the staleness doctrine
 
 > Task 15.13 built this surrogate and this report; Task 17.10 re-grounded both on
-> the baseline-5 corpus and read a GO; **Task 18.14 (`tasks/phase-18.md`)
-> RE-GROUNDS them again on the adopted baseline-6 corpus** and re-states the
-> verdict on the same owner-ratified bar (locked decision 4 travels: re-fit +
-> re-verdict on the recorded bar, the 6-feature live-parity fence kept). Anchored
+> the baseline-5 corpus and read a GO; Task 18.14 re-ground them on baseline 6 and
+> read a NO-GO; **Task 21.17 RE-GROUNDS them again on the adopted baseline-8
+> corpus** and re-states the verdict on the same owner-ratified bar (locked
+> decision 4 travels: re-fit + re-verdict on the recorded bar, the 6-feature
+> live-parity fence kept). Anchored
 > to `audits/post-phase-14-ML-training-signal.md` §5.3 (predict ballots, feed the
 > real tally), §5.5 (the four-channel fidelity protocol + the honest ceiling),
 > §5.6 (the re-grounding / model-exploitation doctrine). Code:
@@ -17,19 +18,20 @@
 > report (`report-meeting-table.md`) — the table is the substrate every number
 > below is measured on.
 >
-> **Date:** 2026-07-21 (baseline-5: 2026-07-16; baseline-3 original: 2026-07-09).
-> **Corpus:** `replays/ml_corpus/9p2i` — 150 games, re-recorded at **baseline 6**
-> (Task 18.13: `Qwen/Qwen3.6-27B` on Featherless, `qwen3_6_27b` v3 prompt set, the
-> baseline-6 lever slate — the thirteen retired always-on levers including the four
-> meeting-layer graduations, `impostor_roll_call` stay-OFF (crew-only ruling),
-> `fsm-default` stamp, `$0`), committed `splits.json` **seed mod 5:
+> **Date:** 2026-08-31 (baseline-6: 2026-07-21; baseline-5: 2026-07-16;
+> baseline-3 original: 2026-07-09).
+> **Corpus:** `replays/ml_corpus/9p2i` — 150 games, re-recorded at **baseline 8**
+> (Task 21.15: `Qwen/Qwen3.6-27B` on Featherless, `qwen3_6_27b` prompt set, the
+> bare lever slate — the twenty-one retired always-on levers, every live toggle
+> OFF, `fsm-default` stamp, `$0`), committed `splits.json` **seed mod 5:
 > {0,1,2}=train, {3}=val, {4}=test** → **fit side 120 games / held-out test 30
-> games** = **367 fit-side meetings / 96 held-out test meetings**.
+> games** = **348 fit-side meetings / 91 held-out test meetings**.
 > **Committed artifact:** `training/artifacts/surrogate/ballot-predictor.json`,
-> sha256 `611771a4853d2c4fe0ff9ebcc5811788a5a5c235ba8fc7061f4f9fe06dbf40c5`,
-> staleness cap **52481 meetings** (`max-uses.json`, = 143 × the 367 fit-side
+> sha256 `06b2050889271c267af2e5d083ba46099bbb55120ca834f4d357733f0e2dcda8`,
+> staleness cap **49764 meetings** (`max-uses.json`, = 143 × the 348 fit-side
 > meetings — the ~143× rule re-derived, §7), fit-corpus provenance
-> `fit-corpus.json` binding the weights to the baseline-6 corpus identity (§7).
+> `fit-corpus.json` binding the weights to the baseline-8 corpus identity (§7),
+> and the machine-readable `verdict.json` + `verdict.json.sha256` beside them.
 >
 > Reproduce every figure with the one-liners in §9 — each is a pure function of the
 > committed bytes and writes nothing.
@@ -37,14 +39,14 @@
 The 15.11 harness measured the honest ceiling and re-baselined FO-6; 15.13 built the
 surrogate inside that ceiling, stated the bar **before** training, and reported a
 baseline-3 **NO-GO**; the baseline-5 re-ground flipped to **GO** because that
-substrate went skip-majority. Task 18.13 re-recorded the corpus at the adopted
-baseline-6 meeting layer, so every anchor below is **re-measured on the new bytes —
-never copied** (honest ceiling 0.8200 → 0.8500; FO-6 top-1 0.2200 → 0.6500; the
-always-eject constant 0.4808 → 0.6250). On the re-measured bar the verdict is
-**NO-GO** — axes 1 and 2 pass but axis 3 fails on the held-out test split (§5) — with
-the honest diagnosis stated beside it: the baseline-6 meeting economy REVERTED to
-eject-majority, so the surrogate's unchanged all-SKIP decision head now scores below
-the trivial always-eject constant (§5). Its consequence is pre-committed: the
+substrate went skip-majority, and baseline 6 flipped it back. Task 21.15 re-recorded
+the corpus again on the corrected substrate, so every anchor below is **re-measured
+on the new bytes — never copied** (honest ceiling 0.8500 → 0.8246; FO-6 top-1
+0.6500 → 0.2456; the always-eject constant 0.6250 → 0.6264). On the re-measured bar
+the verdict is **NO-GO** — axes 1 and 2 pass but axis 3 fails on the held-out test
+split (§5) — with the honest diagnosis stated beside it: the meeting economy stays
+eject-majority, so the surrogate's SKIP-heavy decision head scores below the trivial
+always-eject constant (§5). Its consequence is pre-committed: the
 surrogate ships **diagnostic-only**, the fake-provider MeetingManager stays the
 training-time runner, and the bake-off is never blocked (§6).
 
@@ -195,10 +197,10 @@ the exact `suspicion_graph_for_meeting()` accessor a live meeting consumes):
 
    **The runner-path fidelity replay (the measured consequence).** Re-scoring the
    FROZEN committed artifact over the held-out test split with every divergent cell
-   replaced by the live-served CLAMPED value (all 28 held-out cells — the same census
+   replaced by the live-served CLAMPED value (all 25 held-out cells — the same census
    as above, the two instruments cross-validating) reproduces the §5 verdict inputs
-   **exactly**: the same decision and the same top-1 target on **every one of the 96
-   meetings** (46/60 top-1, all-SKIP census, 36 correct skips); the only movement is
+   **exactly**: the same decision and the same top-1 target on **every one of the 91
+   meetings** (47/57 top-1, 89 predicted skips, 34 correct skips); the only movement is
    a decision-irrelevant sub-top-rank reorder on a handful of meetings
    (libm/ULP-sensitive across CPUs, the same platform variance the artifact
    round-trip tolerates). All three verdict axes — the two that PASS and the one that
@@ -213,10 +215,11 @@ the exact `suspicion_graph_for_meeting()` accessor a live meeting consumes):
    `ballot_coerced_skip` per row (the anchored repr-aware marker parse, the
    `api.replay_loader._marker_pattern` convention) and **both fit paths drop flagged
    rows**; the fidelity replay scores recorded bytes unfiltered. On this corpus the
-   count is **1 of 2726 rows (9p2i), 1 of them fit-side, and 0 of 120 (4p1i)** — the
-   single dropped row is seed 1027, `headless-seed-1027:meeting-4`, voter `p-8`:
-   unlike the baseline-5 zero-count fixture, the exclusion now removes a real
-   poisoned row from the fit. (The other rationale markers on the corpus are *not* in
+   count is **6 of 2516 rows (9p2i), 5 of them fit-side, and 0 of 129 (4p1i)** — the
+   first dropped rows are seed 1016 (`meeting-1`, voters `p-5` and `p-8`) and seed
+   1020 (`meeting-1`, voter `p-8`): unlike the baseline-5 zero-count fixture, the
+   exclusion removes real poisoned rows from the fit. (Baseline-6 record: 1 of 2726,
+   1 fit-side.) (The other rationale markers on the corpus are *not* in
    the exclusion:
    teammate-coerced SKIPs — the §7.12 by-design skip the runner mirrors by candidate
    exclusion — under-gate redirects, and parse-defaults; only the J2 coercion marker
@@ -429,8 +432,8 @@ consequence:
 Committed cap file `training/artifacts/surrogate/max-uses.json`:
 
 ```json
-{ "max_uses": 52481, "unit": "meetings",
-  "weights_sha256": "611771a4853d2c4fe0ff9ebcc5811788a5a5c235ba8fc7061f4f9fe06dbf40c5" }
+{ "max_uses": 49764, "unit": "meetings",
+  "weights_sha256": "06b2050889271c267af2e5d083ba46099bbb55120ca834f4d357733f0e2dcda8" }
 ```
 
 - **Unit:** surrogate-simulated **MEETINGS** — one `SurrogateMeetingRunner.run_meeting`
@@ -443,11 +446,11 @@ Committed cap file `training/artifacts/surrogate/max-uses.json`:
   `SurrogateStalenessExceededError` (deliberately not silently recoverable — a trainer
   at the cap must re-ground, §8).
 
-**Rationale for 52481 — the ~143× rule, mechanical.** The fit is grounded on **367
-fit-side meetings** (the 2726-row table, 120 fit games), and the committed cap is
-`training.surrogate.ballots.derive_max_uses(367)` = 143 × 367 = **52481** simulated
-meetings ≈ 143× the grounding data — the same ratio every prior cap encoded (62491 ≈
-143 × 437; 50 000 ≈ 143 × 349), RE-DERIVED from this corpus. The headroom arithmetic
+**Rationale for 49764 — the ~143× rule, mechanical.** The fit is grounded on **348
+fit-side meetings** (the 2516-row table, 120 fit games), and the committed cap is
+`training.surrogate.ballots.derive_max_uses(348)` = 143 × 348 = **49764** simulated
+meetings ≈ 143× the grounding data — the same ratio every prior cap encoded (52481 ≈
+143 × 367; 62491 ≈ 143 × 437), RE-DERIVED from this corpus. The headroom arithmetic
 is unchanged: a mid-size ES bake-off sweep (~24 pop × ~30 gens × ~5 seeds × ~2–3
 meetings/game ≈ 7–11k simulated meetings) fits several times over while **forcing
 re-grounding before unbounded optimization against a frozen model** (the
@@ -498,7 +501,7 @@ task ARE one full turn of this recipe — executed, not hypothetical.
    written; the use-counter and the fit-corpus fence **re-key automatically**.
 4. **Re-measure** — `run_surrogate_fidelity` + `fo6_rebaseline` + `decide_go_no_go`
    on the new table; the verdict **re-states itself** against the same
-   population-relative bar (baseline 6: it read NO-GO).
+   population-relative bar (baselines 6 and 8 both read NO-GO).
 5. **Commit together** — weights + sha256 sidecar + cap + fit-corpus provenance + the
    updated report in one change.
 
@@ -509,17 +512,17 @@ task ARE one full turn of this recipe — executed, not hypothetical.
 Every number above is a pure function of the committed bytes. Each one-liner writes
 nothing.
 
-- **Table** (463 meetings / 2726 rows; fit 367 meetings / 120 games, test 96
+- **Table** (439 meetings / 2516 rows; fit 348 meetings / 120 games, test 91
   meetings / 30 games):
   ```
   uv run python -c "from pathlib import Path; from training.surrogate import build_meeting_table; t=build_meeting_table(Path('replays/ml_corpus/9p2i')); print(t.meetings_total, len(t.rows), t.games_total)"
   ```
 - **The walk re-validation + J1 live-parity divergence** (§2.1 — fold fidelity 0
-  mismatches; 141 divergent cells / 130 rows, fit 113 / test 28, max 0.06):
+  mismatches; 102 divergent cells / 98 rows, fit 77 / test 25, max 0.11):
   ```
   uv run python -c "from pathlib import Path; from training.surrogate.dataset import measure_belief_render_parity; print(measure_belief_render_parity(Path('replays/ml_corpus/9p2i')).model_dump_json(indent=2))"
   ```
-- **The coerced-SKIP census** (§2.1 — 1 row, 1 fit-side):
+- **The coerced-SKIP census** (§2.1 — 6 rows, 5 fit-side):
   ```
   uv run python -c "from pathlib import Path; from training.surrogate import build_meeting_table; t=build_meeting_table(Path('replays/ml_corpus/9p2i')); fit=set(t.splits.train)|set(t.splits.val); print(sum(r.ballot_coerced_skip for r in t.rows), sum(r.ballot_coerced_skip for r in t.rows if r.seed in fit))"
   ```
@@ -598,15 +601,18 @@ correctly labelled where it is recorded. The erratum pins the channel so the fig
 cannot be conflated with two others that share the phrase "decision accuracy".
 
 1. **"Decision accuracy" in this report names the SURROGATE's own channel, and only
-   that.** §3 records the cell verbatim as:
+   that.** As of this erratum's date §3 recorded the cell verbatim as:
 
    > `| SKIP-vs-eject decision accuracy | **37.5%** (36/96) |`
 
-   (:242, in the `ballot-surrogate.v1` channel table over 30 test games / 96 meetings /
+   (in the `ballot-surrogate.v1` channel table over 30 test games / 96 meetings /
    60 ejections / 36 skips). Read in context that label is exact: it is the surrogate's
    **SKIP-vs-eject channel** — **0.375**, the degenerate all-SKIP constant (0 correct
    ejects, 36 correct skips, `degenerates_to_skip` **True**), and it is the measurement
-   that produces this report's honest **NO-GO**.
+   that produces this report's honest **NO-GO**. The Task-21.17 re-ground re-measured
+   that cell to **39.6% (36/91)** on the baseline-8 corpus; the figures quoted through
+   this item are the baseline-6 ones the erratum was written against, and the CHANNEL
+   distinction it draws is what carries forward.
 
    **What it is NOT.** It is **not** the program's meeting-decision figure. That figure
    is the composed runner's **0.8646 (83/96)** — `report-composed-runner.md` §3-4, the

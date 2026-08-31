@@ -231,10 +231,11 @@ def compute_substrate_sha(
       re-record or byte drift moves the sha even if the metadata files were
       wrongly left untouched), and
     * the ``flags_per_meeting`` floor value this study filters against — the
-      floor ACTUALLY USED (``high_flag_floor``, defaulting to the committed
-      baseline-6 pin): a re-fit at an adopted baseline passes the re-pinned
-      floor alongside its ``baseline_id`` and the sha moves with both (Codex
-      review on PR #292).
+      floor ACTUALLY USED (``high_flag_floor``, defaulting to
+      :data:`HIGH_FLAG_FLOOR`, which is the floor ``baseline_id``'s own block
+      commits): a re-fit at an adopted baseline passes the re-pinned floor
+      alongside its ``baseline_id`` and the sha moves with both (Codex review on
+      PR #292).
 
     A Wave-1 substrate adoption (the 18.13 corpus re-record) changes this sha,
     which is exactly the 18.24 stale-seed refusal firing: every artifact under
@@ -346,8 +347,9 @@ class CorpusGameFacts:
     identity is pinned instead by the substrate sha's replay-bytes digest —
     a drifted/forged row moves :func:`compute_substrate_sha` and the 18.24
     stale-seed refusal fires. ``high_flag`` compares against the
-    ``high_flag_floor`` the walk was given (default: the committed baseline-6
-    pin :data:`HIGH_FLAG_FLOOR`); ``crew_winning`` reads the recorded winner.
+    ``high_flag_floor`` the walk was given (default: :data:`HIGH_FLAG_FLOOR`, the
+    adopted baseline's own committed floor); ``crew_winning`` reads the recorded
+    winner.
     """
 
     seed: int
