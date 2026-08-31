@@ -58,7 +58,6 @@ from eval.deduction_metrics import (
     DeductionMetricsReport,
     UnclassifiableFlagError,
     WilsonRateCell,
-    _LEGACY_TEAMMATE_COERCED_VOTE_RATIONALE,
     _authored_target,
     _matches,
     _scan_marker_chain,
@@ -770,32 +769,19 @@ class TestTheRedactionRecognizerIsGenerationAware:
             rationale_text=TEAMMATE_VOTE_TARGET_MARKER.format(target="p-5") + body,
         )
 
-    def test_both_generations_verify_as_guard_authored(self) -> None:
-        for body in (
-            TEAMMATE_COERCED_VOTE_RATIONALE,
-            _LEGACY_TEAMMATE_COERCED_VOTE_RATIONALE,
-        ):
-            split = _split_rationale(self._coerced(body).rationale_text, None)
+    def test_the_live_body_verifies_as_guard_authored(self) -> None:
+        body = TEAMMATE_COERCED_VOTE_RATIONALE
+        split = _split_rationale(self._coerced(body).rationale_text, None)
 
-            assert split.verified is True, body
-            assert split.body_region == body
-            assert split.marker_region == TEAMMATE_VOTE_TARGET_MARKER.format(
-                target="p-5"
-            )
-
-    def test_the_two_generations_are_distinct_bodies(self) -> None:
-        # Otherwise the case above proves nothing about the legacy entry.
-        assert (
-            TEAMMATE_COERCED_VOTE_RATIONALE != _LEGACY_TEAMMATE_COERCED_VOTE_RATIONALE
-        )
-        assert "no confident read" in _LEGACY_TEAMMATE_COERCED_VOTE_RATIONALE
-        assert "no confident read" not in TEAMMATE_COERCED_VOTE_RATIONALE
+        assert split.verified is True
+        assert split.body_region == body
+        assert split.marker_region == TEAMMATE_VOTE_TARGET_MARKER.format(target="p-5")
 
     def test_a_mangled_body_still_lands_unverifiable(self) -> None:
         # The planted case: the recognizer must bite BOTH ways, or it is a
         # rubber stamp that would wave through a real unregistered body.
-        mangled = _LEGACY_TEAMMATE_COERCED_VOTE_RATIONALE.replace(
-            "no confident read", "no confident READING"
+        mangled = TEAMMATE_COERCED_VOTE_RATIONALE.replace(
+            "no longer describes", "no longer DESCRIBES"
         )
         split = _split_rationale(self._coerced(mangled).rationale_text, None)
 
@@ -803,9 +789,11 @@ class TestTheRedactionRecognizerIsGenerationAware:
         assert split.marker_region == ""
         assert split.body_region == self._coerced(mangled).rationale_text
 
-    def test_the_legacy_body_is_what_the_committed_bytes_carry(self) -> None:
+    def test_the_live_body_is_what_the_committed_bytes_carry(self) -> None:
         # Pins the literal against the record it exists for: if no committed
-        # ballot carried it, the entry would be dead on arrival.
+        # ballot carried it, the entry would be dead on arrival. The pre-reword
+        # body retired at the baseline-8 record — it appeared 36 times across the
+        # previous recording and zero times in these bytes.
         carried = sum(
             1
             for path in sorted(_SAMPLES_9P2I.glob("replay-seed-*.jsonl"))
@@ -813,12 +801,10 @@ class TestTheRedactionRecognizerIsGenerationAware:
             for record in (json.loads(line),)
             if record.get("kind") == "meeting"
             for ballot in record["ballots"]
-            if ballot["rationale_text"].endswith(
-                _LEGACY_TEAMMATE_COERCED_VOTE_RATIONALE
-            )
+            if ballot["rationale_text"].endswith(TEAMMATE_COERCED_VOTE_RATIONALE)
         )
 
-        assert carried == 5
+        assert carried == 2  # was 5, and under the pre-reword body
 
 
 @pytest.mark.parametrize(
