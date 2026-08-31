@@ -65,11 +65,20 @@
    ``<map>`` card names each room in prose before its id, so the anchored
    spelling comes from an authored surface instead of the transcript echo.
 
+   Reporter voice (the default-OFF reporter_reasoning lever): a guarded rules
+   line asks the reporter for the discovery account as plain fact — where they
+   were, when they came upon the body, what they saw on the way. Framed as
+   clarity rather than advocacy: disclosure does not change how often the
+   reporter is accused, but an account nobody gave is an account nobody can
+   weigh. Threaded only for the reporter of a body-report meeting, and it names
+   only what that reader's own record already holds.
+
    Inputs (loader kwargs only — observation firewall, DESIGN.md §1.3):
      agent_id, current_tick, meeting_trigger, rendered_memory,
      public_transcript, living_ids, dead_ids, persona (rendered since v3 —
-     Task 16.16), impostors + map_card (rendered since v4 — Task 20.31;
-     suspicion_provenance is accepted by the loader and unreferenced here).
+     Task 16.16), impostors + map_card (rendered since v4 — Task 20.31),
+     reporter_context (rendered under the reporter_reasoning lever; at_body and
+     suspicion_provenance are accepted by the loader and unreferenced here).
 -#}
 {% set emergency = "called an emergency meeting" in meeting_trigger %}
 <persona>
@@ -119,6 +128,9 @@ Two accounts that name rooms one door apart at nearby ticks can BOTH be honest �
 Decide who is most likely the impostor and commit to it. Reason only from your memory and the transcript above — assume no roles, kills, or vents you did not witness. Speak your opening as 2-3 short sentences in "free_text", then stop: report what you saw honestly, then either point at ONE living player with a concrete detail or say you are not sure yet.
 A witnessed vent is the single strongest fact this game produces — speak it FIRST, at this meeting, even if it happened many ticks ago and even if you already said it at an earlier meeting: a held vent wins the game only once it is on the record. One exception, and only one: if the player you saw vent is already dead or ejected, that case is closed — say nothing about it and spend your turn on someone still in the game. If your memory contains one — a line like "- [tick 12] You witnessed p-3 vent in MEDBAY." — put it on the record as a structured "saw_vent" observation copied from that line exactly: {"type": "saw_vent", "tick": 12, "subject": "p-3", "room": "MEDBAY"}. Only the impostor can vent, so that one row identifies the impostor outright and outweighs every path inference. Speak a "saw_vent" only for a vent your memory says you witnessed — never one you merely heard about or suspect.
 Answer the roll-call: state where YOU were with one structured "whereabouts" observation — the room you were in at the tick that matters (the tick it was reported to have happened, or the tick under discussion), copied from your own record. One room, one tick: that single checkable placement is what lets the crew clear you and corner whoever cannot be placed.
+{% if reporter_context is defined and reporter_context %}
+You reported the body that opened this meeting{% if reporter_context.victim_id and reporter_context.room %} — {{ reporter_context.victim_id }}'s, in {{ reporter_context.room }}{% endif %}. Give that account plainly in your opening: where you were, when you came upon it, and what you saw on the way. State it as fact, not as a defence — the table can only weigh an account it has been given.
+{% endif %}
 The crew catches the impostor by establishing who was WHERE and WHEN, so put the sightings that matter on the record as structured "saw_player" observations (player, room, tick, who else was there) — a player's path is what exposes an impossible alibi later, and placing OTHERS at the tick that matters is testimony only you can give.
 Curate, don't dump: pick the 3-5 MOST PROBATIVE observations — always the "found_body" report if you found it, always a witnessed vent, always your own "whereabouts" answer, always the sightings that name your suspect — and leave the rest of your movement log out. Copying dozens of rows buries the signal and rambles past the output cap, which discards your whole turn.
 Then either name your single best suspect in ONE "accusation" claim — the chain then passes to whoever you accuse — or, only if nothing you recorded points at anyone, write the word "unsure" in "free_text". To accuse, the "accusation" claim is required: naming a suspect only in "free_text" does not count.

@@ -112,6 +112,7 @@ from jinja2 import Environment, FileSystemLoader, StrictUndefined, TemplateNotFo
 from llm.provider import ENV_PROVIDER, PROVIDER_FAKE
 from meetings.render_contract import (
     PromptRenderInputs,
+    ReporterContext,
     ReportPromptRenderer,
     StatementPromptRenderer,
     SuspicionEntry,
@@ -612,6 +613,8 @@ def crewmate_report_prompt(
     persona: str = "",
     suspicion_provenance: tuple[SuspicionEntry, ...] = (),
     render_inputs: PromptRenderInputs | None = None,
+    reporter_context: ReporterContext | None = None,
+    at_body: bool = False,
     environment: Environment | None = None,
     map_card: str = "",
 ) -> str:
@@ -642,6 +645,14 @@ def crewmate_report_prompt(
     neither, so jinja ignores them and the prompt is byte-unchanged (the
     widen-the-contract-inert pattern; the 15.5 ``reporter_id`` precedent). The
     seam is landed once here so 16.15/16.16 edit ONLY the template.
+
+    ``reporter_context`` (the reporter-voice lever) names the body-report
+    meeting's reporter, threaded only when the opener IS that reporter, so the
+    served template can ask for the discovery account plainly. ``at_body`` is
+    accepted for Protocol symmetry with the statement renderer and is not
+    referenced by any report template -- the opener is the reporter, whose
+    discovery IS the report. Both are passed straight through; ``None`` /
+    ``False`` renders byte-identically, which the prompt-byte golden pins.
     """
 
     inputs = _render_inputs_for(render_inputs, map_card=map_card)
@@ -660,6 +671,8 @@ def crewmate_report_prompt(
             suspicion_provenance=suspicion_provenance,
             map_card=inputs.map_card,
             impostors=_impostor_wording(inputs.impostor_count),
+            reporter_context=reporter_context,
+            at_body=at_body,
         )
     )
 
@@ -677,6 +690,8 @@ def impostor_report_prompt(
     persona: str = "",
     suspicion_provenance: tuple[SuspicionEntry, ...] = (),
     render_inputs: PromptRenderInputs | None = None,
+    reporter_context: ReporterContext | None = None,
+    at_body: bool = False,
     environment: Environment | None = None,
     template_name: str | None = None,
     map_card: str = "",
@@ -719,6 +734,13 @@ def impostor_report_prompt(
     PR #203 binding discipline). Lever ON outside the ``qwen3_6_27b`` set
     fails loud with :class:`jinja2.TemplateNotFound` — the variant file
     exists only there, and there is no silent fallback.
+
+    ``reporter_context`` / ``at_body`` (the reporter-voice lever) are accepted so
+    this wrapper conforms to the widened
+    :class:`~meetings.render_contract.ReportPromptRenderer` Protocol and are
+    passed straight through. The impostor never reports a body (the FSM impostor
+    presses no button), so the impostor templates reference neither and the
+    prompt is byte-unchanged.
     """
 
     resolved_template = (
@@ -747,6 +769,8 @@ def impostor_report_prompt(
             suspicion_provenance=suspicion_provenance,
             map_card=inputs.map_card,
             impostors=_impostor_wording(inputs.impostor_count),
+            reporter_context=reporter_context,
+            at_body=at_body,
         )
     )
 
@@ -767,6 +791,8 @@ def accusation_round_prompt(
     persona: str = "",
     suspicion_provenance: tuple[SuspicionEntry, ...] = (),
     render_inputs: PromptRenderInputs | None = None,
+    reporter_context: ReporterContext | None = None,
+    at_body: bool = False,
     environment: Environment | None = None,
     template_name: str | None = None,
     map_card: str = "",
@@ -844,6 +870,14 @@ def accusation_round_prompt(
     per-FILE rather than per-role — one meeting's ``accusation_round``
     prompts all carry one provenance stamp. Lever ON outside the
     ``qwen3_6_27b`` set fails loud with :class:`jinja2.TemplateNotFound`.
+
+    ``reporter_context`` (the reporter-voice lever) names the body-report
+    meeting's reporter, threaded only for speakers who are NOT that reporter, so
+    the table reads the same base rate the ballot states before it forms a
+    target. ``at_body`` says THIS speaker's own record places them at the body
+    when the meeting opened and renders one neutral self-addressed line -- never
+    a roster of who else was there. ``None`` / ``False`` renders byte-identically,
+    which the prompt-byte golden pins.
     """
 
     resolved_template = (
@@ -876,6 +910,8 @@ def accusation_round_prompt(
             map_card=inputs.map_card,
             impostors=_impostor_wording(inputs.impostor_count),
             flag_groups=_group_flags(contradictions),
+            reporter_context=reporter_context,
+            at_body=at_body,
         )
     )
 

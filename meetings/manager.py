@@ -91,6 +91,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import re
 from collections.abc import Callable, Coroutine, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
@@ -110,7 +111,9 @@ from llm.client import LLMClient, LLMResponse
 from llm.provider import LLMCallFailure, extract_parse_failure
 from meetings.constants import DEFAULT_SKIP_CONFIDENCE_THRESHOLD
 from meetings.render_contract import (
+    BodyDiscoveryRecord,
     PromptRenderInputs,
+    ReporterContext,
     ReportPromptRenderer,
     StatementPromptRenderer,
     SuspicionEntry,
@@ -495,6 +498,57 @@ OPENING_UNSURE_DEGRADE_MARKER: Final[str] = (
 # manager detects an emergency the same way the renderer does.
 EMERGENCY_TRIGGER_PHRASE: Final[str] = "called an emergency meeting"
 
+# The reporter-voice lever, DEFAULT OFF. It carries the reporter's identity and
+# the self-report base rate -- the sentence the vote ballot already states -- into
+# the TURN prompts of a body-report meeting, lets the reporter's own opening be
+# asked for the discovery account plainly, and tells a speaker whose own record
+# places them at the body that it does. It changes only what a speaker READS: no
+# flag is minted or re-banded, no gate threshold moves, and the reporter stays
+# ejectable exactly as before.
+#
+# Homed here rather than in ``agents.strategic.prompts.loader``: the loader
+# builds its Jinja environment at import time and stays env-free for render
+# INPUTS, while this manager is where the threading decision is made. Registered
+# in ``orchestrator.replay._TOGGLEABLE_LEVER_RESOLVERS`` by identity, so the
+# recorded substrate stamp and this read-site are one function.
+ENV_REPORTER_REASONING: Final[str] = "AILIBI_REPORTER_REASONING"
+_REPORTER_REASONING_FLAG_TRUE: Final[frozenset[str]] = frozenset(
+    {"1", "true", "yes", "on"}
+)
+
+# The tick window a body discovery may carry and still count as "at the body when
+# the meeting opened": the trigger tick, or the tick before it. Perception stamps
+# a discovery on the tick the packet was built, which is one tick early for a
+# player who saw the corpse on the approach -- 18 of 625 reporter discovery lines
+# in the committed corpus sit at trigger tick - 1 -- so a strict equality test
+# would silently drop them.
+BODY_DISCOVERY_WINDOW_TICKS: Final[int] = 1
+
+
+def reporter_reasoning_enabled(env: Mapping[str, str] | None = None) -> bool:
+    """Whether the reporter-voice lever is ON. DEFAULT OFF.
+
+    Reads :data:`ENV_REPORTER_REASONING` from ``env`` (defaulting to the real
+    process environment). Default OFF: an unset / empty / unrecognised value is
+    ``False``, so no turn prompt gains a reporter block and every rendered byte
+    matches the committed registry. Accepts ``1/true/yes/on``
+    (case-insensitive). The ``env`` argument lets tests toggle the lever
+    deterministically without mutating ``os.environ``.
+
+    Recorded provenance moves WITH the lever through
+    :func:`orchestrator.game.prompt_versions_for_set`
+    (:data:`~orchestrator.game.REPORTER_REASONING_PROMPT_VERSION_SETS`), so
+    lever-shaped bytes and default bytes never share a version stamp
+    (audits/audit-phase-17-absence-gate.md Ruling 3(d)).
+    """
+
+    environment = env if env is not None else os.environ
+    return (
+        environment.get(ENV_REPORTER_REASONING, "").strip().lower()
+        in _REPORTER_REASONING_FLAG_TRUE
+    )
+
+
 # Retry feedback appended to an EMERGENCY opening that fabricated a found_body
 # (Task 10.11.1). The crewmate_report v7 emergency branch already asks for no
 # body, but the 9B can ignore it (flat seed 11 m0 re-narrated a stale corpse as
@@ -696,6 +750,16 @@ class MeetingParticipant:
     Protocols accept. The default ``""`` keeps every existing construction site
     valid and renders byte-identically until 16.16 edits the templates (the
     widen-the-contract-inert pattern).
+
+    ``body_discovery_records`` is the participant's OWN first-hand body-discovery
+    channel, the fifth self-channel beside the four above. The orchestrator
+    populates it from ``MeetingAwareAgent.body_discovery_records_for_meeting()``
+    (episodic memory, self-channel only, so it is firewall-clean). The manager
+    reads it in exactly one place -- deciding whether the reporter-voice lever
+    tells THIS speaker their own record places them at the body when the meeting
+    opened -- and it never names another player to anyone. The default ``()``
+    keeps every existing construction site valid and means "this speaker
+    discovered nothing".
     """
 
     agent_id: PlayerId
@@ -709,6 +773,7 @@ class MeetingParticipant:
     move_witness_records: tuple[MoveWitnessRecord, ...] = ()
     observation_ids: tuple[ObservationId, ...] = ()
     persona: str = ""
+    body_discovery_records: tuple[BodyDiscoveryRecord, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -1014,6 +1079,16 @@ class MeetingManager:
         # the way ``dead_ids`` is. The map card is not here: it is a constant of
         # the map, bound onto each renderer at construction by the loader.
         render_inputs = PromptRenderInputs(impostor_count=impostor_count)
+        # The reporter-voice lever, read ONCE per run and carried down as a
+        # boolean. A body report's reporter is the trigger's opener -- the SAME
+        # derivation the ballot annotation uses below, so the two surfaces can
+        # never disagree about who reported; an emergency call has no reporter
+        # and arms nothing.
+        render_reporter_id = (
+            trigger.triggered_by
+            if reporter_reasoning_enabled() and not _trigger_is_emergency(trigger)
+            else None
+        )
 
         # Canonicalise participant order at entry. Real callers may iterate
         # over a set/dict whose order is hash-seeded and not
@@ -1076,6 +1151,7 @@ class MeetingManager:
             living_ids=roster,
             dead_ids=dead_ids,
             render_inputs=render_inputs,
+            render_reporter_id=render_reporter_id,
             turn_index=0,
             turn_kind="opening",
             reply_to=None,
@@ -1127,6 +1203,7 @@ class MeetingManager:
                 living_ids=roster,
                 dead_ids=dead_ids,
                 render_inputs=render_inputs,
+                render_reporter_id=render_reporter_id,
                 turn_index=len(turns),
                 turn_kind="reply",
                 reply_to=prev.turn_id,
@@ -1162,6 +1239,7 @@ class MeetingManager:
                 living_ids=roster,
                 dead_ids=dead_ids,
                 render_inputs=render_inputs,
+                render_reporter_id=render_reporter_id,
                 turn_index=len(turns),
                 turn_kind="opt_in",
                 reply_to=None,
@@ -1199,6 +1277,7 @@ class MeetingManager:
                 living_ids=roster,
                 dead_ids=dead_ids,
                 render_inputs=render_inputs,
+                render_reporter_id=render_reporter_id,
                 turn_index=len(turns),
                 turn_kind="opt_in",
                 reply_to=None,
@@ -1315,6 +1394,7 @@ class MeetingManager:
         contradictions: tuple[ContradictionRef, ...],
         dead_ids: tuple[PlayerId, ...] = (),
         render_inputs: PromptRenderInputs | None = None,
+        render_reporter_id: PlayerId | None = None,
         retries: int = 0,
     ) -> MeetingTurn:
         """Collect one turn through the shared guard chokepoint.
@@ -1366,6 +1446,7 @@ class MeetingManager:
             living_ids=living_ids,
             dead_ids=dead_ids,
             render_inputs=render_inputs,
+            render_reporter_id=render_reporter_id,
         )
         prompt = base_prompt
         turn_id = _turn_id(meeting_id=meeting_id, turn_index=turn_index)
@@ -1641,6 +1722,7 @@ class MeetingManager:
         living_ids: frozenset[PlayerId],
         dead_ids: tuple[PlayerId, ...] = (),
         render_inputs: PromptRenderInputs | None = None,
+        render_reporter_id: PlayerId | None = None,
     ) -> str:
         # Living-roster accusation list (Task 9.9, audit gp-3): living
         # participants minus this turn's speaker -- an agent cannot accuse
@@ -1651,6 +1733,30 @@ class MeetingManager:
         # line names the dead for every speaker alike.
         accusation_targets = _candidate_targets(
             living_ids, exclude=participant.agent_id
+        )
+        # The reporter-voice inputs. ``render_reporter_id`` is already ``None``
+        # unless the lever is ON and this is a body report, so everything below
+        # is inert on the OFF path -- one ``if``, not a second code path. The
+        # reporter reads the block on their OWN opening (the discovery account);
+        # every other speaker reads it on their statement (the base rate), and
+        # never one addressed at themselves.
+        speaker_is_reporter = participant.agent_id == render_reporter_id
+        reporter_context = (
+            _reporter_context_for(
+                reporter_id=render_reporter_id,
+                trigger_tick=trigger.trigger_tick,
+                records=participant.body_discovery_records,
+            )
+            if render_reporter_id is not None
+            else None
+        )
+        # Rule (c): the speaker's OWN record places them at the body when the
+        # meeting opened. Self-channel: it says nothing about who else was there,
+        # and it never fires for the reporter, whose discovery IS the report.
+        at_body = (
+            reporter_context is not None
+            and not speaker_is_reporter
+            and reporter_context.room != ""
         )
         # Task 13.5.5: turn prompts always read the frozen open-tick render.
         # A turn carries NO ``suspicion_graph`` kwarg (the belief-line-vs-graph
@@ -1680,6 +1786,9 @@ class MeetingManager:
                 persona=participant.persona,
                 suspicion_provenance=participant.suspicion_graph,
                 render_inputs=render_inputs,
+                # The opener of a body report IS its reporter, so this is the
+                # one seam where the discovery account can be asked for.
+                reporter_context=reporter_context if speaker_is_reporter else None,
             )
         return self._statement_prompt(
             agent_id=participant.agent_id,
@@ -1710,6 +1819,10 @@ class MeetingManager:
             # on (mirrors impostor_report.j2's `body_report_opening` gate).
             is_body_report=(EMERGENCY_TRIGGER_PHRASE not in trigger.description),
             render_inputs=render_inputs,
+            # The listener half: everyone EXCEPT the reporter hears who reported
+            # and the base rate before they pick a target.
+            reporter_context=None if speaker_is_reporter else reporter_context,
+            at_body=at_body,
         )
 
     # -- Voting -----------------------------------------------------------
@@ -3936,6 +4049,37 @@ def derive_reported_testimony(result: MeetingResult) -> tuple[ReportedStatement,
     return tuple(sorted(statements, key=_reported_statement_sort_key))
 
 
+def _reporter_context_for(
+    *,
+    reporter_id: PlayerId,
+    trigger_tick: int,
+    records: tuple[BodyDiscoveryRecord, ...],
+) -> ReporterContext:
+    """The reporter-voice render input for ONE speaker.
+
+    ``reporter_id`` and ``trigger_tick`` are meeting-scope facts. The discovery
+    facts are the RECEIVING speaker's own: the latest of their own body-discovery
+    rows inside :data:`BODY_DISCOVERY_WINDOW_TICKS` of the trigger, so a fact only
+    ever reaches the reader who perceived it. A speaker holding no such row gets
+    ``None`` / ``""`` and their prompt carries no discovery clause.
+    """
+
+    in_window = [
+        record
+        for record in records
+        if 0 <= trigger_tick - record.tick <= BODY_DISCOVERY_WINDOW_TICKS
+    ]
+    if not in_window:
+        return ReporterContext(reporter_id=reporter_id, tick=trigger_tick)
+    latest = max(in_window, key=lambda record: record.tick)
+    return ReporterContext(
+        reporter_id=reporter_id,
+        victim_id=latest.victim_id,
+        room=latest.room,
+        tick=trigger_tick,
+    )
+
+
 def _candidate_targets(
     player_ids: Iterable[PlayerId],
     *,
@@ -4028,6 +4172,7 @@ def _drop_non_roster_claims(
 
 __all__ = [
     "BALLOT_TARGET_REDIRECT_MARKER",
+    "BODY_DISCOVERY_WINDOW_TICKS",
     "DEFAULT_SKIP_CONFIDENCE_THRESHOLD",
     "DEFAULT_TURN_DEADLINE_SECONDS",
     "DEFAULT_TURN_FREE_TEXT",
@@ -4040,6 +4185,7 @@ __all__ = [
     "EMERGENCY_BODY_STRIP_MARKER",
     "EMERGENCY_NO_BODY_RETRY_FEEDBACK",
     "EMERGENCY_TRIGGER_PHRASE",
+    "ENV_REPORTER_REASONING",
     "INVALID_ACCUSATION_TARGET_MARKER",
     "INVALID_ALIBI_SUBJECT_MARKER",
     "INVALID_CORROBORATION_SUPPORTS_MARKER",
@@ -4059,6 +4205,7 @@ __all__ = [
     "TEAMMATE_VOTE_TARGET_MARKER",
     "UNCITED_ZERO_FLAG_EJECT_MARKER",
     "VOTE_PARSE_DEFAULT_MARKER",
+    "BodyDiscoveryRecord",
     "DefaultTrigger",
     "DefaultedCall",
     "DefaultedPhase",
@@ -4072,6 +4219,7 @@ __all__ = [
     "MeetingTrigger",
     "PromptRenderInputs",
     "ReportPromptRenderer",
+    "ReporterContext",
     "Role",
     "StatementPromptRenderer",
     "SuspicionEntry",
@@ -4086,4 +4234,5 @@ __all__ = [
     "extract_belief_evidence",
     "guard_ballot_citation",
     "guard_ballot_target_graph",
+    "reporter_reasoning_enabled",
 ]

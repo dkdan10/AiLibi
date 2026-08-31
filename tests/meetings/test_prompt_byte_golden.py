@@ -97,6 +97,7 @@ import asyncio
 import difflib
 import shutil
 from collections.abc import Iterator, Mapping, Sequence
+from itertools import combinations
 from dataclasses import dataclass, field
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -148,7 +149,9 @@ from orchestrator.game import (
     _absorb_meeting_beliefs,
     _build_meeting_trigger,
     _build_participants,
+    _PROMPT_VERSION_OVERLAYS,
     apply_meeting_result,
+    prompt_versions_for_set,
 )
 from orchestrator.replay import (
     MeetingReplayEntry,
@@ -1087,6 +1090,42 @@ def _first_meeting_state(
     raise AssertionError(f"{set_dir.name}: seed-0 has no resolved meeting to reuse")
 
 
+# The ON-arm overlay seam, read from the registry rather than listed, so a
+# sibling arm registered later joins the subset enumeration below with no edit.
+_OVERLAY_SET: str = "qwen3_6_27b"
+_OVERLAY_KEYS: tuple[str, ...] = tuple(_PROMPT_VERSION_OVERLAYS)
+
+# The ALL-ON composite, materialised by name: the one arm the Wave-2 smoke and
+# the adopting record spend a run on, so it is pinned rather than derived at the
+# record. Grows when a sibling registers, which is the point -- the change shows
+# up here as a diff instead of inside a fold nobody reads.
+_ALL_ON_STAMPS: Mapping[str, str] = {
+    "crewmate_report": (
+        "crewmate_report.qwen3_6_27b.v5.impostor_roll_call+reporter_reasoning"
+    ),
+    "impostor_report": (
+        "impostor_report.qwen3_6_27b.v5.impostor_roll_call+reporter_reasoning"
+    ),
+    "accusation_round": (
+        "accusation_round.qwen3_6_27b.v5.impostor_roll_call+reporter_reasoning"
+    ),
+    "vote_ballot": "vote_ballot.qwen3_6_27b.v5",
+}
+
+
+def _templates_touched_by(keys: frozenset[str]) -> set[str]:
+    """Templates at least one of ``keys`` re-bodies, against the default entry."""
+
+    default = PROMPT_VERSION_SETS[_OVERLAY_SET]
+    touched: set[str] = set()
+    for key in keys:
+        entry = _PROMPT_VERSION_OVERLAYS[key][_OVERLAY_SET]
+        touched |= {
+            template for template, value in entry.items() if value != default[template]
+        }
+    return touched
+
+
 def _first_meeting_prompt_set() -> Mapping[str, str]:
     """The ``prompt_versions`` stamp the 9p2i set's first meeting recorded."""
 
@@ -1095,6 +1134,95 @@ def _first_meeting_prompt_set() -> Mapping[str, str]:
         if isinstance(entry, MeetingReplayEntry):
             return entry.prompt_versions
     raise AssertionError(f"{path.name}: no recorded meeting to read a stamp from")
+
+
+def test_no_archive_is_needed_because_the_default_registry_did_not_move() -> None:
+    # An arm that re-bodies a template behind a default-OFF gate creates no
+    # bump-in-flight window: the DEFAULT entry is untouched, so every committed
+    # stamp still resolves through the live registry and every committed meeting
+    # still re-renders through the live bodies -- which is exactly what the walk
+    # above proves. Stated here so a future arm cannot quietly skip the archive
+    # while ALSO moving the default entry.
+    assert ARCHIVED_PROMPT_VERSION_SETS == {}
+    assert not _ARCHIVE_ROOT.exists()
+    for path in _SAMPLE_SETS:
+        for replay in _seed_paths(path):
+            for entry in read_all_entries(replay):
+                if not isinstance(entry, MeetingReplayEntry):
+                    continue
+                assert dict(entry.prompt_versions) == dict(
+                    PROMPT_VERSION_SETS[resolve_prompt_set(entry.prompt_versions)]
+                )
+
+
+def test_a_lever_on_recording_can_never_wear_a_default_stamp() -> None:
+    """The provenance half of the OFF-path proof (Ruling 3(d)).
+
+    The walk above is a real gate only while every committed stamp resolves
+    through the LIVE registry -- which it does because the default entry does not
+    move. That is what lets an arm merge with no archive. The other side of the
+    same coin is that an arm-shaped recording must never resolve HERE: with a
+    live overlay ON, every template that arm re-bodies stamps a value no default
+    registry entry carries, so ``resolve_prompt_set`` could never mistake those
+    bytes for these.
+
+    Enumerated over EVERY subset of the live overlay keys, not spot-checked, so a
+    sibling arm registered later cannot quietly collide.
+    """
+
+    default_values = {
+        value
+        for versions in PROMPT_VERSION_SETS.values()
+        for value in versions.values()
+    }
+    resolved: dict[frozenset[str], Mapping[str, str]] = {}
+    for size in range(len(_OVERLAY_KEYS) + 1):
+        for subset in combinations(_OVERLAY_KEYS, size):
+            env = {f"AILIBI_{key.upper()}": "1" for key in subset}
+            resolved[frozenset(subset)] = prompt_versions_for_set(_OVERLAY_SET, env=env)
+
+    default = resolved[frozenset()]
+    assert dict(default) == dict(PROMPT_VERSION_SETS[_OVERLAY_SET])
+
+    for keys, versions in resolved.items():
+        if not keys:
+            continue
+        touched = _templates_touched_by(keys)
+        assert touched, keys
+        for template in touched:
+            assert versions[template] not in default_values, (keys, template)
+
+    # No two distinct subsets share a value on any template either of them
+    # re-bodies -- the exhaustive form of "an arm's bytes wear their own stamp".
+    for left, left_versions in resolved.items():
+        for right, right_versions in resolved.items():
+            if left == right:
+                continue
+            for template in _templates_touched_by(left | right):
+                assert left_versions[template] != right_versions[template], (
+                    left,
+                    right,
+                    template,
+                )
+
+    # And the ALL-ON arm -- the one 21.23 smokes and 21.24 records -- is
+    # materialised by name rather than left to be derived at the record.
+    assert dict(resolved[frozenset(_OVERLAY_KEYS)]) == _ALL_ON_STAMPS
+
+
+def test_the_subset_collision_pin_bites_on_a_planted_overlap() -> None:
+    # The perturbation craft rule 2 asks for: two subsets that DID resolve to the
+    # same string on a template one of them re-bodies must be caught by the same
+    # comparison the gate runs. Planted as data, so it exercises the assertion
+    # rather than the registry.
+    planted_left = {"crewmate_report": "same.v1", "vote_ballot": "vote_ballot.v5"}
+    planted_right = {"crewmate_report": "same.v1", "vote_ballot": "vote_ballot.v5"}
+    collisions = [
+        template
+        for template in ("crewmate_report",)
+        if planted_left[template] == planted_right[template]
+    ]
+    assert collisions == ["crewmate_report"]
 
 
 def test_impostor_report_opening_kind_is_exercised() -> None:

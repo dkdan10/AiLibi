@@ -18,9 +18,12 @@ argument nor returns anything but a bare ``True``.
 
 The gate ships with a planted counter-case: a fixture module written into
 ``tmp_path`` carrying exactly that shape, asserted to be REPORTED by the same
-predicate the sweep uses. A live resolver (one that reads ``env``) is asserted
-clean by the same predicate, so the gate discriminates rather than matching on
-the name alone.
+predicate the sweep uses. Every LIVE resolver (one that reads ``env``) is
+asserted clean by the same predicate, so the gate discriminates rather than
+matching on the name alone. The live set is read out of
+``orchestrator.replay._TOGGLEABLE_LEVER_RESOLVERS`` -- the registry AGENTS.md
+names as the source of truth for which levers still switch -- rather than
+listed here, so a lever registered later is covered without an edit.
 
 The second half of the same rule lives here too:
 :func:`orchestrator.replay.retired_levers_stamped_off`, the refusal a re-deriver
@@ -33,12 +36,15 @@ happened. Pinned here with a planted legacy stamp beside the clean cases.
 from __future__ import annotations
 
 import ast
+import inspect
 from pathlib import Path
 from typing import Final
 
 from orchestrator.replay import (  # noqa: PLC2701
     SUBSTRATE_FLAG_KEYS,
+    TOGGLEABLE_SUBSTRATE_FLAG_KEYS,
     _RETIRED_ALWAYS_ON_LEVERS,
+    _TOGGLEABLE_LEVER_RESOLVERS,
     retired_levers_stamped_off,
 )
 
@@ -233,7 +239,7 @@ def test_the_gate_leaves_a_branched_env_free_resolver_that_can_be_false(
 def test_the_gate_leaves_a_live_resolver_alone(tmp_path: Path) -> None:
     # The discrimination half: a resolver that READS its env argument is a live
     # toggle and must not be reported, so the gate cannot be satisfied by
-    # deleting the one lever the project still switches.
+    # deleting a lever the project still switches.
     live = tmp_path / "live_lever.py"
     live.write_text(
         "import os\n"
@@ -262,12 +268,14 @@ def test_a_legacy_stamp_naming_a_retired_lever_off_is_refused() -> None:
     legacy["absence_prior"] = False
     assert retired_levers_stamped_off(legacy) == ["citation_gate", "absence_prior"]
 
-    # A baseline-7 stamp passes; so does the live toggle at either polarity,
-    # because it is the one lever whose OFF derivation still exists.
+    # A baseline-7 stamp passes; so does EVERY live toggle at either polarity,
+    # because those are the levers whose OFF derivation still exists. Derived
+    # from the registry, so a lever registered later is covered without an edit.
     current = dict.fromkeys(SUBSTRATE_FLAG_KEYS, True)
     assert retired_levers_stamped_off(current) == []
-    current["impostor_roll_call"] = False
-    assert retired_levers_stamped_off(current) == []
+    for key in TOGGLEABLE_SUBSTRATE_FLAG_KEYS:
+        current[key] = False
+        assert retired_levers_stamped_off(current) == [], key
 
     # An UNSTAMPED recording is unknown, not OFF: never checked, exactly as the
     # API replay loader skips an unstamped replay.
@@ -287,13 +295,32 @@ def test_a_legacy_stamp_naming_a_retired_lever_off_is_refused() -> None:
     )
 
 
-def test_the_one_live_resolver_in_the_tree_is_not_reported() -> None:
-    # The real discrimination case, not a fixture: the 18.10 impostor-answer arm
-    # is the project's one surviving toggle and both its resolvers read env, so
-    # the sweep passing above is a statement about deletion, not about the tree
-    # having no ``*_enabled`` function left at all.
-    loader = _REPO_ROOT / "agents" / "strategic" / "prompts" / "loader.py"
-    mirror = _REPO_ROOT / "orchestrator" / "replay.py"
-    source = loader.read_text(encoding="utf-8") + mirror.read_text(encoding="utf-8")
-    assert "impostor_roll_call_enabled" in source
-    assert accept_and_ignore_resolvers(source) == []
+def test_every_live_resolver_in_the_tree_is_not_reported() -> None:
+    # The real discrimination case, not a fixture: every surviving toggle's
+    # resolver reads ``env``, so the sweep passing above is a statement about
+    # deletion, not about the tree having no ``*_enabled`` function left at all.
+    # Derived from the registry rather than listed, so a lever registered later
+    # is covered here without an edit -- and the source files are named from the
+    # resolvers themselves, so a resolver that MOVED cannot be swept by reading
+    # a stale path.
+    sources = {
+        Path(inspect.getsourcefile(resolver) or "")
+        for _key, resolver in _TOGGLEABLE_LEVER_RESOLVERS
+    }
+    sources.add(_REPO_ROOT / "agents" / "strategic" / "prompts" / "loader.py")
+    combined = "".join(sorted(path.read_text(encoding="utf-8") for path in sources))
+    for key, resolver in _TOGGLEABLE_LEVER_RESOLVERS:
+        assert resolver.__name__.lstrip("_") == f"{key}_enabled", key
+        assert f"{key}_enabled" in combined, key
+    assert accept_and_ignore_resolvers(combined) == []
+
+
+def test_the_live_toggle_registry_is_the_key_order() -> None:
+    # The registry is the source of truth for which levers are still live
+    # (AGENTS.md "Graduation sweeps"), so the two derived tuples must agree with
+    # it in order and content -- a lever added to one and not the other would
+    # give a recording a stamp key no resolver fills, or the reverse.
+    keys = tuple(key for key, _ in _TOGGLEABLE_LEVER_RESOLVERS)
+    assert TOGGLEABLE_SUBSTRATE_FLAG_KEYS == keys
+    assert SUBSTRATE_FLAG_KEYS[-len(keys) :] == keys
+    assert set(keys) & set(_RETIRED_ALWAYS_ON_LEVERS) == set()

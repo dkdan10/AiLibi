@@ -86,6 +86,7 @@ from meetings.manager import (
     MeetingParticipant,
     MeetingTrigger,
     PromptRenderInputs,
+    ReporterContext,
     SuspicionEntry,
     _drop_non_roster_claims,  # noqa: PLC2701
     _opening_takes_position,  # noqa: PLC2701
@@ -7185,6 +7186,8 @@ def _run_prosecution_meeting(
         persona: str = "",
         suspicion_provenance: tuple[SuspicionEntry, ...] = (),
         render_inputs: PromptRenderInputs | None = None,  # Task 20.31
+        reporter_context: ReporterContext | None = None,  # reporter-voice (inert)
+        at_body: bool = False,  # reporter-voice (inert)
     ) -> str:
         seen[agent_id] = contradictions
         return _statement_prompt(

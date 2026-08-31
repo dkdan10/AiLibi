@@ -96,6 +96,51 @@ class SuspicionEntry:
 
 
 @dataclass(frozen=True)
+class BodyDiscoveryRecord:
+    """One first-hand body discovery the speaker's own memory holds.
+
+    The self-channel row behind the reporter-voice lever's co-discovery line:
+    the victim whose body this speaker found, the room it was in, the tick they
+    found it, and the episodic observation id that row carries (``None`` for a
+    row written before ids were stamped). The orchestrator projects it from the
+    agent's OWN ``saw_body`` episodic rows, so it names nothing this speaker did
+    not perceive; the manager reads it to decide whether the speaker was at the
+    body when the meeting opened, and no template ever renders another player's
+    rows.
+    """
+
+    victim_id: PlayerId
+    room: str
+    tick: int
+    observation_id: str | None = None
+
+
+@dataclass(frozen=True)
+class ReporterContext:
+    """Who reported the body that opened THIS meeting, and when.
+
+    Threaded per meeting and per speaker by the reporter-voice lever. The
+    reporter is the body-report meeting's opener
+    (``MeetingTrigger.triggered_by``) and ``tick`` is the trigger tick; an
+    emergency call has no reporter, so nothing is threaded there and no template
+    renders the block. ``victim_id`` / ``room`` are the discovery facts, carried
+    only when the RECEIVING speaker's own record supplies them -- the reporter's
+    own opening reads back their own discovery -- so this DTO never puts a fact
+    in front of a reader who did not perceive it. ``None`` / ``""`` mean the
+    reader holds no such row and the concrete clause is omitted.
+
+    Deliberately NOT a field of :class:`PromptRenderInputs`: that DTO is
+    per-GAME and is composed once at loader-construction time, while this is
+    per-MEETING and per-SPEAKER.
+    """
+
+    reporter_id: PlayerId
+    victim_id: PlayerId | None = None
+    room: str = ""
+    tick: int = 0
+
+
+@dataclass(frozen=True)
 class PromptRenderInputs:
     """The two facts about THIS game and THIS map the v4 templates state.
 
@@ -164,6 +209,15 @@ class ReportPromptRenderer(Protocol):
     ``render_inputs`` (Task 20.31) carries the game's impostor count and the
     map card the v4 ``qwen3_6_27b`` templates state. ``None`` -- every caller
     that does not thread it -- renders exactly as before.
+
+    ``reporter_context`` names the body-report meeting's reporter. The manager
+    threads it on this seam only when the OPENER IS that reporter, which is the
+    every-body-report case, so the reporter's own opening can be asked to state
+    the discovery account plainly. ``at_body`` is its co-discovery sibling,
+    accepted here so both report and statement renderers carry one signature;
+    the opener IS the reporter, so no report template reads it. ``None`` /
+    ``False`` -- the lever OFF, an emergency call, or any ad-hoc render -- is
+    byte-identical to a render that omits them.
     """
 
     def __call__(
@@ -180,6 +234,8 @@ class ReportPromptRenderer(Protocol):
         persona: str = "",
         suspicion_provenance: tuple[SuspicionEntry, ...] = (),
         render_inputs: PromptRenderInputs | None = None,
+        reporter_context: ReporterContext | None = None,
+        at_body: bool = False,
     ) -> str: ...
 
 
@@ -234,6 +290,15 @@ class StatementPromptRenderer(Protocol):
     ``render_inputs`` (Task 20.31) carries the game's impostor count and the
     map card the v4 ``qwen3_6_27b`` templates state. ``None`` -- every caller
     that does not thread it -- renders exactly as before.
+
+    ``reporter_context`` names the body-report meeting's reporter, threaded on
+    this seam only for speakers who are NOT that reporter, so the table hears
+    the same base rate the ballot already states before it forms a target.
+    ``at_body`` says that THIS speaker's own record places them at the body when
+    the meeting opened; it renders one neutral self-addressed line and never a
+    roster of who else was there. ``None`` / ``False`` -- the lever OFF, an
+    emergency call, or any ad-hoc render -- is byte-identical to a render that
+    omits them.
     """
 
     def __call__(
@@ -253,6 +318,8 @@ class StatementPromptRenderer(Protocol):
         persona: str = "",
         suspicion_provenance: tuple[SuspicionEntry, ...] = (),
         render_inputs: PromptRenderInputs | None = None,
+        reporter_context: ReporterContext | None = None,
+        at_body: bool = False,
     ) -> str: ...
 
 
@@ -315,8 +382,10 @@ class VotePromptRenderer(Protocol):
 
 
 __all__ = [
+    "BodyDiscoveryRecord",
     "PromptRenderInputs",
     "ReportPromptRenderer",
+    "ReporterContext",
     "StatementPromptRenderer",
     "SuspicionEntry",
     "VotePromptRenderer",
