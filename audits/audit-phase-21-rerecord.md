@@ -333,3 +333,217 @@ green when the NEW bytes land, and it cannot return to green before then. The re
 §10 and re-run in §8 once the record is complete. The same nine failures and thirty-six errors all
 PASS at `3b156fee`, verified by running them there, so the class is the graduation and nothing else.
 
+---
+
+## 1. THE VERDICT: the record is INCOMPLETE at 299 of 300 games
+
+**The provider refused, and the recording stopped.** Legs 1, 2 and 3 are complete, gated and
+committed. Leg 4 (`replays/ml_corpus/4p1i`) reached 49 of its 50 seeds and then hit a hard `HTTP 402`
+from Featherless on seed 1049:
+
+```
+Featherless chat-completions POST failed: HTTP 402 (model='Qwen/Qwen3.6-27B'):
+  {"error":{"message":"Insufficient credits. Available balance is -0.001503532 USD.
+   Add credits to continue.","type":"invalid_request_error","code":"insufficient_credits"}}
+```
+
+The recorder spent its whole retry budget against it — **8 attempts with escalating backoff (60 s,
+75 s, 90 s, 105 s …), every one returning the same 402** — and then refused to freeze the set. That
+is not a transient: the message names its own remedy, and the remedy is an account action. **This
+operator does not add credits**; the restart is the owner's.
+
+**Nothing here mints baseline 8.** A partial record is not a baseline. The ladder tip stays at
+baseline 7, `_DEFAULT_BASELINE_ID` is untouched, no floor block was written, and no surface on this
+branch claims a succession. Every downstream item this record was to discharge is listed unstarted in
+§6.
+
+**What the `$0.0000` claim does and does not cover.** Every recorded game on all four sets carries
+`cost_usd 0.0`, and the MANIFEST rows read `0.0000` throughout — the flat-rate substrate held exactly
+as declared. The 402 is an **account-balance** refusal (a balance of **-0.0015 USD**), not a
+per-token charge against this record. Both facts are true and this audit states both rather than
+letting the zero-cost claim imply the account was in good standing.
+
+## 2. The legs, as recorded, against the projection committed in §0.1
+
+| leg | set | games | ACTUAL | low | centre | high | reading |
+|---|---|---|---|---|---|---|---|
+| 1 | `samples/9p2i` | 50/50 | **3h07m00s** | 2h43m20s | 4h23m40s | 5h29m35s | inside, near the LOW end |
+| 2 | `ml_corpus/9p2i` | 150/150 | **7h59m32s** | 8h10m00s | 13h11m00s | 16h28m45s | just BELOW the low end |
+| 3 | `samples/4p1i` | 50/50 | **23m15s** | 53m32s | 53m32s | 53m32s | well below (an INFERENCE, not a measurement) |
+| 4 | `ml_corpus/4p1i` | **49/50** | 24m41s (incomplete) | 53m32s | 53m32s | 53m32s | ABANDONED on the provider refusal |
+| | **total** | **299/300** | **11h54m28s** | 12h41m05s | 19h22m47s | 23h46m41s | **below the low end** |
+
+**The projection was too slow, and the reason is nameable.** The bracket was built from the smoke's
+five measured seeds (392 / 632.8 / 791 s serial). Over 200 real 9p2i games the per-seed serial wall
+ran faster and tighter than that five-seed sample suggested — observed seeds landed at 215–644 s with
+most between 230 and 450. Five seeds measure hosted-provider latency coarsely, which §0.1 said in
+advance; this is that coarseness resolving in the favourable direction, and it is recorded as
+operating data rather than as a finding.
+
+The two 4p1i rows carry one figure across all three columns because their projection was an
+**inference** (phase 20's measured 4p1i wall scaled by the smoke's like-for-like inflation), never a
+measurement — labelled as such in §0.1 before the first seed, and the total was insensitive to it
+exactly as predicted.
+
+## 3. The gates, per leg
+
+`scripts/refresh_samples.sh` invokes the validity gate nowhere and prints no acceptance block, so the
+samples legs were gated by the operator by hand; the corpus recorder prints its own.
+
+| check | leg 1 `samples/9p2i` | leg 2 `ml_corpus/9p2i` | leg 3 `samples/4p1i` | leg 4 |
+|---|---|---|---|---|
+| `all_games_reach_game_over` | PASS 50/50 | PASS 150/150 | PASS 50/50 | not gated |
+| `meeting_rate_and_resolution` | PASS 1.0; 151 resolved, 0 unresolved | PASS 1.0; 439 resolved, 0 unresolved | PASS 0.78; 39 resolved, 0 unresolved | not gated |
+| `no_duplicate_meeting_rows` | PASS 0 of 151 | PASS 0 of 439 | PASS 0 of 39 | not gated |
+| `no_tick_1_kills` | PASS 0 | PASS 0 | PASS 0 | not gated |
+| `no_friendly_fire_kills` | PASS 0 | PASS 0 | PASS 0 | not gated |
+| `no_betrayal_ballots_or_accusations` | PASS 0 over 869 | PASS 0 over 2,516 | PASS 0 over 0 | not gated |
+| `no_railroaded_crew_ejections` | PASS 0 over 2,771 | PASS 0 over 7,656 | PASS 0 over 67 | not gated |
+| `no_dangling_primary_reason_id` | PASS 0 over 869 | PASS 0 over 2,516 | PASS 0 over 117 | not gated |
+| `cost_and_provenance_exact` | PASS, 4 prompt versions, 50 games | PASS, 4 prompt versions, 150 games | PASS, 4 prompt versions, 50 games | not gated |
+| `byte_identical_reconstruction` | PASS 0 drifted | PASS 0 drifted | PASS 0 drifted | not gated |
+| **gate exit** | **0** | **0** | **0** | — |
+| BARE-shell `verify_samples.sh` | clean | `All 150 samples verified clean` | clean | not run |
+| `*.audit.jsonl` in the set dir | 0 | 0 | 0 | 0 |
+
+Every gate ran with `--expected-model Qwen/Qwen3.6-27B --require-zero-cost` and the 21.10 CLI pin
+`--expected-prompt-versions` naming all four templates at **v5**. Reconstruction was verified in a
+**BARE** shell with no `AILIBI_*` lever export, which is what the recorded stamps agree with.
+
+Leg 2's freeze wrote its FROZEN line at `git_sha fed22c25` with the split rule unchanged
+(`seed mod 5: {0,1,2}=train, {3}=val, {4}=test`) and `splits.json` at **90 train / 30 val / 30 test**.
+
+## 4. The recorded substrate stamp — read out of the `game_over` rows, not the launching shell
+
+| set | games | distinct stamps | keys | ON | OFF | `substrate_slate_mismatches` |
+|---|---|---|---|---|---|---|
+| `samples/9p2i` | 50 | 1 | 22 | the twenty-one retired levers | `impostor_roll_call` | `[]` |
+| `ml_corpus/9p2i` | 150 | 1 | 22 | the twenty-one retired levers | `impostor_roll_call` | `[]` |
+| `samples/4p1i` | 50 | 1 | 22 | the twenty-one retired levers | `impostor_roll_call` | `[]` |
+| `ml_corpus/4p1i` | 49 | 1 | 22 | the twenty-one retired levers | `impostor_roll_call` | `[]` |
+
+**The `flags` cell of every new MANIFEST row is BYTE-IDENTICAL to the committed twenty-one-key
+string**, verified against the preserved baseline-7 bytes, which stamp the same 22 keys with the same
+one False. That equality is the cheapest available proof that **the substrate did not move while the
+bytes did** — the graduation deleted its two repair keys outright rather than retiring them into
+`_RETIRED_ALWAYS_ON_LEVERS`, so the retired half never grew.
+
+## 5. The re-record log, with causes, as they happened
+
+| # | leg | seed | cause | repair |
+|---|---|---|---|---|
+| 1 | 1 | 8 | `deadline_default` at tick 8, meeting-0 — the vote ballot validated short (`primary_reason_observation_id` returned where `primary_reason_id` is required); p-1's ballot defaulted | re-recorded, 345 s |
+| 2 | 2 | 1072 | `deadline_default` failed-call row — the turn was DEFAULTED, so the transcript carried a fallback husk rather than model output | re-recorded, 347 s |
+| 3 | 2 | 1079 | same | re-recorded, 439 s |
+| 4 | 2 | 1144 | same, **plus** the `(deadline_default)` sentinel recorded as a non-baseline model | re-recorded, 422 s |
+| 5 | 3 | 32 | `deadline_default` at tick 8, meeting-0 — the same ballot shape as #1 | re-recorded, 50 s |
+
+**Five re-records over 250 completed games**, against the baseline-7 record's 2 of 150 and the
+baseline-6 record's 10 of 150. Every one was found by a guard rather than by inspection: legs 1 and 3
+by the operator's `deadline_default` watch (the validity gate has no check for it), leg 2 by
+`check_replay_provenance` refusing the freeze at the end of a multi-hour leg — *presence alone must
+never make it a corpus game*, in the guard's own words.
+
+**Three of the five are ONE model-output shape**, named here rather than left as five unrelated
+incidents: against the v5 `vote_ballot` schema this model recurrently emits
+`primary_reason_observation_id` where `primary_reason_id` is required, the ballot fails validation,
+and the vote defaults. It costs a re-record each time and never reaches committed bytes. **Routed,
+not fixed here** — the prompt set is frozen for the recording window.
+
+**Two `failed_call` rows SURVIVE in the committed bytes, published rather than swept.**
+`ml_corpus/9p2i` seeds 1012 and 1093 each carry one `error_type=ValidationError` row: a malformed
+`MeetingTurn` the model emitted, recorded at the baseline model with `$0` cost and retried inside the
+turn. These are **not** `deadline_default` — the recorder declares recorded parse failures non-fatal
+and `check_replay_provenance` accepts them. The standing re-record rule names the defaulted class,
+and this is not it, so re-recording them would be widening a rule rather than following it.
+
+## 6. What this record does NOT discharge
+
+Everything below was scoped to this task and is **UNSTARTED**, because every item is keyed to FINAL
+bytes and the bytes are one seed short. Re-pinning against a set that is about to change is how a
+stale pin gets laundered as a current one.
+
+1. **Leg 4 itself** — seed 1049, the freeze, `splits.json`, the 50-game eval report, the validity gate.
+2. **The byte-coupled re-pin sweep.** The census was re-derived and reproduces the contract exactly —
+   **46** files under `tests/`, **97** repo-wide over `*.py`/`*.ts`/`*.tsx`/`*.json`/`*.sh` excluding
+   `replays/`, `audits/` and `node_modules/` (the repo-wide grep emits paths with no leading `./`, so
+   the exclusions filter on the bare prefix; filtering on `^./audits/` silently misses and reports
+   101). Not one pin was moved.
+3. **Both frontend fixtures** and their census tests.
+4. **The `baseline-8` floor block**, `_DEFAULT_BASELINE_ID`, and the five `FloorPin` fields per set.
+5. **The ladder-tip move.** `_LADDER_TIP_AUDIT` still points at the baseline-7 audit; README, the
+   reading guide, the glossary and the history file still say baseline 7 — **correctly**, because
+   baseline 8 does not exist.
+6. **The record-read parser widening** and its perturbation case.
+7. **`scripts/verify_ml_evidence.py`'s declared grounding gap** — still naming the old corpus digest.
+8. **The corpus README's Capability-disclosures section and leg table** (A-15's finding).
+9. **The win-ordering expiry**, the `.audit`-stem guards, `verify_action_dispositions` adoption, and
+   the prompt-archive retirement — all sequenced AFTER the last seed, which has not landed.
+10. **The before/after instrument tables.** The before column IS measured and preserved (§7); the
+    after column is not published, because three of four sets are final and the fourth is not.
+11. Everything the contract already listed as out of scope: the ML re-ground and the campaign tier,
+    the Wave-2 lever record, the narrative half of the front door, the corpus recorder's header
+    duration note.
+
+## 7. What IS banked, and reproducible at `$0`
+
+* **299 recorded games** on the corrected substrate at prompt set v5, three sets complete and gated.
+* **The BEFORE column, measured on the preserved baseline-7 bytes** at
+  `/Users/danielkeinan/ailibi-baseline7-preserved/` — honesty, solvability, core R-gate, funnel, V&J
+  and watchability, all four sets, every instrument exit 0. It reproduces the smoke's committed
+  reference column exactly (e.g. `samples/9p2i` I-2 `0.0046 (3/659)`, I-10 `0.1711 (26/152)`,
+  solvability killer-in-candidate-set `0.875 (126/144)`, and the live 9p2i supply split **92 vent +
+  52 transcript = 144/152 = 0.9473684210526315** — NOT B-10's pre-correction 134/152).
+* **The leg-4 partial**, preserved out of tree at `/Users/danielkeinan/ailibi-baseline8-leg4-partial/`
+  (49 replays), so resuming costs ONE seed rather than a leg.
+* **The graduation sweep**, complete and green on its own gates (§0.6).
+
+## 8. The freeze, shown rather than asserted
+
+`git log` over the window — from the graduation commit to this PR — shows commits touching `engine/`,
+`agents/`, `meetings/`, `observation/`, `orchestrator/` or the prompt set: **exactly one**, this
+branch's opening graduation commit `4ea88689`, named in §0.6 with the gates it flipped. The window
+did not reopen and the record did not have to restart from the smoke.
+
+## 9. Decisions
+
+1. **The DoD's `check.sh`-green-on-the-sweep line cannot hold**, and §0.6 reports the reading rather
+   than papering it. The graduation makes the repaired render the only one this build can produce, so
+   every test that re-renders the COMMITTED pre-repair bytes goes red — 9 failures and 36 errors, one
+   class, all passing at `3b156fee`. The suite returns to green when the new bytes land.
+2. **`tests/observation/test_service.py` was swept** though the contract's file list does not name it.
+   Deleting `vent_single_mint_enabled` makes its OFF-arm two-arm tests unimportable; the edit is
+   mechanically forced by the DoD's own "delete the mechanism", not a silent scope widening.
+3. **Two now-dead pieces of plumbing went with the gate** — `_ObservedAction.audible_room` (write-only
+   once the audible copy was gone) and `_audible_events`' `observed_actions` parameter — under
+   AGENTS.md craft rule 3, "retire means delete".
+4. **No loader-mediated smoke-byte re-measure was needed**, so the §0 ordering rule is discharged
+   vacuously: §0's projection and named-not-to-move list are copied from the smoke REPORT's committed
+   prose, which requires no byte re-read at all. After the graduation the preserved smoke bytes stamp
+   two keys `SUBSTRATE_FLAG_KEYS` no longer holds and both the loader and the validity gate refuse
+   them — INTENDED, and never exercised here.
+5. **A straggler replay was dropped rather than canonicalized.** `ml_corpus/9p2i` seed 1001 appeared
+   on disk written 12 s BEFORE the probe seed: a worker from a leg-2 launch that was stopped had
+   completed its staging move after the post-stop check came back clean. The file looked complete; a
+   replay whose recording process was signalled mid-flight is not something to put in a baseline. It
+   was deleted and re-recorded by the leg.
+6. **Leg 3's first probe was VACUOUS and re-ran.** Seed 0 of 4p1i reached an impostor win with zero
+   meetings in 1 s, making no LLM call. The committed 4p1i census shows the vacuity is a property of
+   the small roster and not a defect — 40 meetings over 50 games with TEN zero-meeting games, seed 0
+   among them there too — so the probe re-ran on a meeting-bearing seed rather than counting as a pass.
+7. **The 49-seed leg-4 partial is committed as a CHECKPOINT, not as a set.** It carries no FROZEN
+   line (the recorder refused to write one), no regenerated `splits.json`, no 50-game eval report and
+   no validity-gate claim. Committing it preserves the spend for the resume; the PR states in its
+   title and body that it must not be read as a baseline.
+
+## 10. The resume, for whoever picks this up
+
+1. Add credits to the Featherless account (the owner's action; the balance was **-0.0015 USD**).
+2. `bash scripts/record_ml_corpus.sh --set 4p1i --expect-levers ""` from the repo root with the
+   recording environment exported. The recorder's resume skip-scan re-proves each of the 49 present
+   replays' provenance before trusting it, records **only** seed 1049, then finalizes: the 50-game
+   eval report, `splits.json`, and the FROZEN line.
+3. Gate it exactly as §3 gates the other three, then run the operator's `deadline_default` watch —
+   the validity gate still has no check for it.
+4. Then, and only then, the whole post-record half of the contract in §6 becomes runnable.
+
