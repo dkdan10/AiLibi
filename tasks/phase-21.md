@@ -4670,6 +4670,37 @@ item rather than left for the worker to discover red. (4) The bake-off-sha half 
 provenance pin has no independent witness; Step 5's dated-literal fallback is pre-authorized
 with the gap named.
 
+**Merge-reality record (2026-08-31, orchestrator-ratified at the #413 merge):** the task opened
+as a STOP-draft on a real premise falsity — `walk_corpus` refused 55 of the 150 committed corpus
+games, every drift strictly post-meeting — and an independent diagnostic exonerated the record
+and root-caused it to Task 20.32 (09dab356), NOT Wave 1a: `absorb_meeting_evidence` mints the
+`meeting_boundary` episodic row that `ImpostorPolicy._pre_meeting_subjects` reads before ranking,
+and the anchor walk was the repo's ONLY reconstruction path skipping the post-meeting fold
+(`eval/off_menu.py`, the folding twin, walks the same bytes clean at exactly the corrected
+walk's decision count). RULED reading 1+4: the fold mirrored from off_menu (meeting-history fold
+omitted for the v3-encoder-only reason), the :417-424 invariant retired, two forced comment
+sites corrected, regression + planted-corruption tests added. The walk now reads 150/150 and the
+fit grew 3203 → 5584 decisions. The fifteen-failure map discharged in full; `pytest -m campaign`
+331 passed / 0 failed. Fingerprints: fit = corpus at `cc54d3c0…`; `compute_substrate_sha` live ==
+recorded at `c845602d…`; `bakeoff_substrate_sha` live == recorded at `4a25ccdf…`; `grep -c STALE`
+reads 0 and `--complete` exits 0 at FAIL 0 / ABSENT 0. Orchestrator rulings recorded in-PR: D2
+(the adoption-constraint set re-derived 3 → 2 on the fresh leg — constraint 3 did not reproduce,
++1.7% vs the +29.5% recorded; a published-cell move, ruled rather than buried), D3 (three verdict
+sidecars, closing the same gap for 21.8's surrogate verdict), Q3 (both stale prose sites →
+21.25). Codex: three rounds at cap, eleven findings addressed — two serious (a false-green
+grounding row certifying a bundle the loader would refuse; hand-written sidecars beside writers
+that didn't maintain them), both fixed with planted cases; nothing moved a published number.
+Deviations: three `baseline_id` probe defaults moved as forced touches (pinned equal to
+`BAKEOFF_BASELINE_ID`; a circular import forces the literal); docs/ml-program.md's grounding half
+folded into the adjacent section to stay under the F3 ceiling. Routed onward: Q4 — the
+conviction corpus fence at `_load_conviction_bundle` stays unwired (wiring needs a per-call
+opt-out touching two read-only-fenced consumers; attempted, measured six fixtures red, reverted;
+the evidence command meanwhile checks digest + weight key + corpus-set every run) — with D7 (the
+`rederived_flags` rename, declined on scope) both to 21.25; Q2 — the runnerups `stamp.json`
+naming a filtered-BC anchor whose weights moved stays recorded provenance, never re-stamped; Q1
+— the λ-grid and arms re-search under 21.16's repaired objective is an OWNER decision at
+campaign scale, held for the close ledger.
+
 **Ready-to-paste prompt:** `agent_prompts/task-21-17-reground.md`
 
 ---
