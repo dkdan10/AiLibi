@@ -672,5 +672,3 @@ def advance_tick(
 
     # 7) Tick increment happens in next_state above.
     return next_state, events
-
-
