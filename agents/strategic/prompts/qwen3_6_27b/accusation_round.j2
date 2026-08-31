@@ -77,11 +77,23 @@
      arbitrates one-tick transit with;
    * the ``saw_move`` observation shape is listed in the schema block.
 
+   Reporter voice (the default-OFF reporter_reasoning lever): a guarded
+   <who_reported> block states who reported the body and repeats the vote
+   ballot's own base-rate sentence verbatim, so the table reads the prior
+   BEFORE it picks a target rather than only at ballot time. It sits after the
+   turn header and before the memory block; it carries no markdown header of its
+   own, so the first-header slot classifier still reads "## Your turn: ...".
+   A second guarded line, on at_body, tells a speaker whose own record places
+   them at the body that it does — self-addressed, factual, and naming no other
+   player: a third of the players holding that row are impostors, so exculpatory
+   framing there would defend one.
+
    Inputs (loader kwargs only — observation firewall, DESIGN.md §1.3):
      agent_id, rendered_memory, transcript, contradictions, prior_turn,
      turn_kind, fellow_impostor_ids, living_ids, dead_ids, is_impostor,
      is_body_report, persona (rendered since v3 — Task 16.16), flag_groups +
-     impostors + map_card (rendered since v4 — Task 20.31;
+     impostors + map_card (rendered since v4 — Task 20.31), reporter_context +
+     at_body (rendered under the reporter_reasoning lever;
      suspicion_provenance is accepted by the loader and unreferenced here).
 
    In-world register (v5, Task 21.1): the evidence section speaks only of what
@@ -117,6 +129,15 @@ Let that voice color HOW you speak — the wording of your "free_text" only; eve
 {% else %}
 ## Your turn: an info-share
 This terminal turn does not extend the chain — it is your chance to put evidence on the record before the vote. Read your memory and the meeting so far below; the rules for your turn follow them.
+{% endif %}
+{% if reporter_context is defined and reporter_context %}
+
+<who_reported>
+`{{ reporter_context.reporter_id }}` reported the body that opened this meeting. In this game self-report is weakly exculpatory: the impostor almost never reports its own kill, so being first to the scene is not by itself evidence of guilt. Do not accuse `{{ reporter_context.reporter_id }}` merely for having reported it — weigh them on the same testimony, contradictions, and memory as everyone else.
+{% if at_body is defined and at_body %}
+Your own record places you at the body when it was reported.
+{% endif %}
+</who_reported>
 {% endif %}
 
 <memory>

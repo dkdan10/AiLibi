@@ -73,8 +73,8 @@ _FLAGS_OFF = {
 # Task-16.17 baseline-5 record (16.4's hard_evidence_gate, 16.5's
 # observation_id_rendering, 16.6's citation_gate) -- each env gate retired once the
 # baseline adopted it, so the snapshot no longer reads an AILIBI_* var for any of
-# them -- plus the ONE live default-OFF toggle, stamped False under the bare env:
-# 18.10's impostor_roll_call.
+# them -- plus the TWO live default-OFF toggles, stamped False under the bare env:
+# 18.10's impostor_roll_call and the reporter-voice arm.
 _FLAGS_ON = {
     "testimony_as_content": True,
     "witnessed_kill_evidence": True,
@@ -103,9 +103,11 @@ _FLAGS_ON = {
     "structured_turn_markers": True,
     "meeting_outcome_memory": True,
     "coalesced_memory_render": True,
-    # The ONE live toggle, DEFAULT-OFF: the impostor-answer arm the CREW-ONLY
-    # ruling did not ship. A probe backend runs bare, so it stamps False.
+    # The TWO live toggles, both DEFAULT-OFF: the impostor-answer arm the
+    # CREW-ONLY ruling did not ship, and the reporter-voice arm awaiting its own
+    # adopting record. A probe backend runs bare, so it stamps both False.
     "impostor_roll_call": False,
+    "reporter_reasoning": False,
 }
 
 
@@ -545,11 +547,13 @@ def test_active_substrate_flags_every_graduated_lever_unconditional(
     # active_substrate_flags reads them all-True under ANY env — bare, a legacy
     # all-ON export, a legacy "0", or a stray lever export (either polarity) — and
     # no AILIBI_* var can flip any of them (the delegation to
-    # orchestrator.replay.substrate_flag_snapshot carries this for free). The live
-    # default-OFF toggle — 18.10's impostor_roll_call — keeps a bare env at
-    # _FLAGS_ON (False); its env-liveness is pinned separately below.
+    # orchestrator.replay.substrate_flag_snapshot carries this for free). The two
+    # live default-OFF toggles — 18.10's impostor_roll_call and the reporter-voice
+    # arm — keep a bare env at _FLAGS_ON (both False); their env-liveness is
+    # pinned separately below.
     monkeypatch.delenv("AILIBI_EVIDENCE_QUALITY_LIFT", raising=False)
     monkeypatch.delenv("AILIBI_IMPOSTOR_ROLL_CALL", raising=False)
+    monkeypatch.delenv("AILIBI_REPORTER_REASONING", raising=False)
     assert active_substrate_flags(env={}) == _FLAGS_ON
     assert active_substrate_flags() == _FLAGS_ON
     assert active_substrate_flags(env={"AILIBI_TESTIMONY_AS_CONTENT": "0"}) == _FLAGS_ON
@@ -595,20 +599,29 @@ def test_active_substrate_flags_every_graduated_lever_unconditional(
     )
 
 
-def test_active_substrate_flags_reads_env_for_the_live_toggle(
+def test_active_substrate_flags_reads_env_for_the_live_toggles(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # The one lever active_substrate_flags still reads from env: Task 18.10's
-    # impostor_roll_call, the arm the CREW-ONLY ruling did NOT ship. A bare /
-    # unset / "0" env stamps it False — the _FLAGS_ON default — while a truthy
-    # export flips exactly its own key, yielding a mapping that diverges from
-    # _FLAGS_ON in that one place (the twenty-one graduated levers stay ON).
+    # The levers active_substrate_flags still reads from env: Task 18.10's
+    # impostor_roll_call (the arm the CREW-ONLY ruling did NOT ship) and the
+    # reporter-voice arm. A bare / unset / "0" env stamps each False — the
+    # _FLAGS_ON default — while a truthy export flips exactly its own key. Run as
+    # a GRID over both, so an export of one can never be shown to move the other
+    # and the twenty-one graduated levers stay ON throughout.
     monkeypatch.delenv("AILIBI_IMPOSTOR_ROLL_CALL", raising=False)
+    monkeypatch.delenv("AILIBI_REPORTER_REASONING", raising=False)
     assert active_substrate_flags(env={}) == _FLAGS_ON
-    assert active_substrate_flags(env={"AILIBI_IMPOSTOR_ROLL_CALL": "0"}) == _FLAGS_ON
-    flipped = active_substrate_flags(env={"AILIBI_IMPOSTOR_ROLL_CALL": "1"})
-    assert flipped != _FLAGS_ON
-    assert flipped == {**_FLAGS_ON, "impostor_roll_call": True}
+    toggles = {
+        "impostor_roll_call": "AILIBI_IMPOSTOR_ROLL_CALL",
+        "reporter_reasoning": "AILIBI_REPORTER_REASONING",
+    }
+    for key, variable in toggles.items():
+        assert active_substrate_flags(env={variable: "0"}) == _FLAGS_ON, key
+        flipped = active_substrate_flags(env={variable: "1"})
+        assert flipped != _FLAGS_ON, key
+        assert flipped == {**_FLAGS_ON, key: True}, key
+    both = active_substrate_flags(env={variable: "1" for variable in toggles.values()})
+    assert both == {**_FLAGS_ON, **dict.fromkeys(toggles, True)}
     # A graduated repair gate's variable is INERT: it was deleted outright rather
     # than retired, so no key of that name exists to flip and a stray export from
     # a pre-record shell moves nothing.

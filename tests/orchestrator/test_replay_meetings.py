@@ -40,6 +40,7 @@ from meetings.manager import (
     MeetingConfig,
     MeetingDeadlines,
     PromptRenderInputs,
+    ReporterContext,
     SuspicionEntry,
 )
 from meetings.schemas import (
@@ -179,6 +180,8 @@ def _crewmate_prompt(
     persona: str = "",  # Task 16.3: widened contract kwarg (inert)
     suspicion_provenance: tuple[SuspicionEntry, ...] = (),  # Task 16.3
     render_inputs: PromptRenderInputs | None = None,  # Task 20.31
+    reporter_context: ReporterContext | None = None,  # reporter-voice (inert)
+    at_body: bool = False,  # reporter-voice (inert)
 ) -> str:
     return f"CR:{agent_id}:{current_tick}"
 
@@ -196,6 +199,8 @@ def _impostor_prompt(
     persona: str = "",  # Task 16.3: widened contract kwarg (inert)
     suspicion_provenance: tuple[SuspicionEntry, ...] = (),  # Task 16.3
     render_inputs: PromptRenderInputs | None = None,  # Task 20.31
+    reporter_context: ReporterContext | None = None,  # reporter-voice (inert)
+    at_body: bool = False,  # reporter-voice (inert)
 ) -> str:
     return f"IM:{agent_id}:{current_tick}"
 
@@ -216,6 +221,8 @@ def _statement_prompt(
     persona: str = "",  # Task 16.3: widened contract kwarg (inert)
     suspicion_provenance: tuple[SuspicionEntry, ...] = (),  # Task 16.3
     render_inputs: PromptRenderInputs | None = None,  # Task 20.31
+    reporter_context: ReporterContext | None = None,  # reporter-voice (inert)
+    at_body: bool = False,  # reporter-voice (inert)
 ) -> str:
     return f"ST:{agent_id}:{turn_kind}:{len(transcript.turns)}"
 

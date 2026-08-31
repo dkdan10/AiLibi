@@ -53,6 +53,7 @@ from agents.memory.store import (
     render_for_prompt,
 )
 from agents.perception import (
+    EVENT_OWN_KILL,
     EVENT_SAW_BODY,
     EVENT_SAW_PLAYER,
     EVENT_SAW_PLAYER_MOVE,
@@ -65,7 +66,6 @@ from agents.strategic.prompts import (
     build_prompt_renderers,
     resolve_prompt_set,
 )
-from agents.strategic.prompts.loader import impostor_roll_call_enabled
 from agents.tactical.crewmate_policy import CrewmatePolicy, EmergencyPacingTracker
 from agents.tactical.impostor_policy import ImpostorPolicy
 from engine.actions import Action
@@ -86,7 +86,9 @@ from llm.client import CallKind as _LLMCallKind
 from llm.provider import LLMCallFailure, build_default_client, extract_parse_failure
 from meetings.manager import (
     EMERGENCY_TRIGGER_PHRASE,
+    BodyDiscoveryRecord,
     DefaultedCall,
+    reporter_reasoning_enabled,
     MeetingConfig,
     MeetingDeadlines,
     MeetingManager,
@@ -126,6 +128,7 @@ from orchestrator.replay import (
     ReplayLog,
     TacticalPolicyStamp,
     _state_hash,
+    _TOGGLEABLE_LEVER_RESOLVERS,
 )
 from orchestrator.scheduler import TickScheduler
 from orchestrator.seeder import seed_initial_state
@@ -380,7 +383,7 @@ PROMPT_VERSION_SETS: Final[Mapping[str, Mapping[str, str]]] = {
 
 # Task 18.10 (the impostor-answer template arm): the VARIANT version registry,
 # served by :func:`prompt_versions_for_set` ONLY while the default-OFF
-# ``impostor_roll_call_enabled`` lever is ON. The variant swaps the two
+# ``impostor_roll_call`` lever is ON. The variant swaps the two
 # impostor-facing templates for their ``*_roll_call.j2`` siblings (authored
 # only in the ``qwen3_6_27b`` set), so exactly those two keys carry variant
 # stamps; ``crewmate_report`` / ``vote_ballot`` render the default bodies and
@@ -408,6 +411,103 @@ IMPOSTOR_ROLL_CALL_PROMPT_VERSION_SETS: Final[Mapping[str, Mapping[str, str]]] =
 }
 
 
+def _lever_arm_versions(set_name: str, lever_key: str) -> Mapping[str, str]:
+    """Per-template stamps for an arm that RE-BODIES a set's own templates.
+
+    The 18.10 arm swaps template FILES, so its stamps name the variant file. An
+    arm that renders the SAME files with a guarded block has no other file to
+    name, so its stamps are the set's own values with the arm key appended:
+    ``crewmate_report.qwen3_6_27b.v5.reporter_reasoning`` says which body
+    rendered AND which arm shaped it, so the stamp moves when EITHER moves.
+    No arm value contains ``+``; a composite of two arms does, which is what
+    keeps the two kinds of stamp disjoint.
+    """
+
+    return {
+        template: f"{value}.{lever_key}"
+        for template, value in PROMPT_VERSION_SETS[set_name].items()
+    }
+
+
+# The reporter-voice ON-arm version registry, served by
+# :func:`prompt_versions_for_set` only while the default-OFF
+# ``reporter_reasoning`` lever is ON. The lever swaps no template FILE: it
+# renders the SET's own ``crewmate_report.j2`` / ``accusation_round.j2`` with a
+# guarded block, so exactly those two keys carry arm stamps and the two the
+# lever leaves alone inherit the default registry's values. Provenance moves
+# with the BODIES that moved (audits/audit-phase-17-absence-gate.md Ruling
+# 3(d)): an arm-rendered opening or reply can never wear a default stamp.
+_REPORTER_REASONING_ARM: Final[Mapping[str, str]] = _lever_arm_versions(
+    "qwen3_6_27b", "reporter_reasoning"
+)
+REPORTER_REASONING_PROMPT_VERSION_SETS: Final[Mapping[str, Mapping[str, str]]] = {
+    "qwen3_6_27b": {
+        **_bespoke_versions("qwen3_6_27b", version="v5"),
+        "crewmate_report": _REPORTER_REASONING_ARM["crewmate_report"],
+        "accusation_round": _REPORTER_REASONING_ARM["accusation_round"],
+    },
+}
+
+
+# Every live lever that carries an ON-arm version overlay, keyed by the substrate
+# registry key the lever stamps. The fold below iterates
+# ``_TOGGLEABLE_LEVER_RESOLVERS`` rather than this mapping, so application order
+# is REGISTRATION order and never depends on how the environment was spelled or
+# on dict insertion here. A sibling lever registers one entry and costs no new
+# branch.
+_PROMPT_VERSION_OVERLAYS: Final[Mapping[str, Mapping[str, Mapping[str, str]]]] = {
+    "impostor_roll_call": IMPOSTOR_ROLL_CALL_PROMPT_VERSION_SETS,
+    "reporter_reasoning": REPORTER_REASONING_PROMPT_VERSION_SETS,
+}
+
+# The human label each overlay's fail-loud message names, so an operator reads
+# WHICH arm has no body for the set they selected rather than a registry key.
+_PROMPT_OVERLAY_LABELS: Final[Mapping[str, str]] = {
+    "impostor_roll_call": "impostor-answer",
+    "reporter_reasoning": "reporter-voice",
+}
+
+
+def enabled_prompt_version_overlays(
+    env: Mapping[str, str] | None = None,
+) -> tuple[str, ...]:
+    """The live overlay keys reading ON, in ``_TOGGLEABLE_LEVER_RESOLVERS`` order.
+
+    One read of the SAME resolvers the substrate stamp uses, so a recording's
+    rendered bytes, its recorded ``prompt_versions`` and its substrate stamp can
+    never describe three different slates.
+    """
+
+    return tuple(
+        key
+        for key, resolver in _TOGGLEABLE_LEVER_RESOLVERS
+        if key in _PROMPT_VERSION_OVERLAYS and resolver(env)
+    )
+
+
+def _overlay_entry(key: str, set_name: str) -> Mapping[str, str]:
+    """One overlay's registry entry for ``set_name``, or fail loud.
+
+    The refusal is about a MISSING variant body for the set, never about a
+    sibling overlay being on: an all-ON slate is exactly what the adopting record
+    runs, so composition must construct.
+    """
+
+    registry = _PROMPT_VERSION_OVERLAYS[key]
+    try:
+        return registry[set_name]
+    except KeyError as exc:
+        known = ", ".join(sorted(registry))
+        label = _PROMPT_OVERLAY_LABELS[key]
+        variable = f"AILIBI_{key.upper()}"
+        raise ValueError(
+            f"Prompt set {set_name!r} has no {label} variant registry "
+            f"entry; the {variable} lever is "
+            f"only registered for: {known} — unset the lever or select a "
+            "variant-capable set"
+        ) from exc
+
+
 def prompt_versions_for_set(
     prompt_set: str | None = None,
     *,
@@ -419,41 +519,71 @@ def prompt_versions_for_set(
     ``AILIBI_PROMPT_SET`` selector the loader uses) and looks it up in
     :data:`PROMPT_VERSION_SETS`. An unregistered set raises :class:`ValueError`
     -- no silent fallback (AGENTS.md §"No silent fallbacks"). With the default
-    (9B) set this returns :data:`DEFAULT_PROMPT_VERSIONS` byte-identically.
+    (9B) set and no lever ON this returns :data:`DEFAULT_PROMPT_VERSIONS`
+    byte-identically, by identity.
 
-    The Task 18.10 impostor-answer lever moves provenance WITH the rendered
-    bytes: while :func:`agents.strategic.prompts.loader.impostor_roll_call_enabled`
-    reads ON from the same ``env``, the lookup is served from
-    :data:`IMPOSTOR_ROLL_CALL_PROMPT_VERSION_SETS` instead, so recordings made
-    under the variant templates stamp the variant versions (recorded
-    ``prompt_versions`` come from THIS registry, never from the loader — a
-    lever read here and not in :func:`build_default_meeting_runner`'s renderer
-    binding, or vice versa, is exactly the render-one-stamp-another failure
-    this pairing exists to prevent). Lever ON with a set that has no variant
-    entry raises :class:`ValueError` — the loader has no variant templates for
-    it either, and there is no silent fallback.
+    A lever with an ON-arm overlay moves provenance WITH the rendered bytes:
+    while its resolver reads ON from the same ``env``, this serves that arm's
+    version strings instead (recorded ``prompt_versions`` come from THIS
+    registry, never from the loader — a lever read here and not in
+    :func:`build_default_meeting_runner`'s renderer binding, or vice versa, is
+    exactly the render-one-stamp-another failure this pairing exists to
+    prevent). Lever ON with a set that carries no arm entry raises
+    :class:`ValueError` — a MISSING body, and there is no silent fallback.
+
+    Overlays COMPOSE, because the slate the adopting record runs is all-ON.
+    Three rules, fixed here and shared by every sibling arm:
+
+    1. application order is registration order (``_TOGGLEABLE_LEVER_RESOLVERS``),
+       so the result never depends on environment spelling;
+    2. one arm ON serves that arm's own registry entry verbatim; two or more ON
+       resolve each template to a COMPOSITE of the values the arms that ACTUALLY
+       re-body it contribute, in that same order, so the stamp names exactly the
+       lineages that shaped those bytes and moves when any of them moves;
+    3. the composite is computed by a fold over the enabled set, not by a
+       pairwise table, so a third arm costs a registration and no new branch.
+
+    One constraint the fold cannot enforce and the next arm author must respect:
+    an arm that swaps in a variant FILE serves a body written independently of
+    every sibling, so a sibling whose block lives in the DEFAULT body does not
+    reach the render while that swap is on. Two such arms compose in the stamp
+    but not in the bytes. The ``impostor_roll_call`` + ``reporter_reasoning``
+    pair is exactly that case today and is pinned as a known gap in
+    ``tests/meetings/test_prompt_byte_golden.py``; an arm that swaps a file must
+    author its siblings' blocks into the variant.
     """
 
     name = resolve_prompt_set(prompt_set, env=env)
-    if impostor_roll_call_enabled(env):
-        try:
-            return IMPOSTOR_ROLL_CALL_PROMPT_VERSION_SETS[name]
-        except KeyError as exc:
-            known = ", ".join(sorted(IMPOSTOR_ROLL_CALL_PROMPT_VERSION_SETS))
-            raise ValueError(
-                f"Prompt set {name!r} has no impostor-answer variant registry "
-                "entry; the Task 18.10 lever (AILIBI_IMPOSTOR_ROLL_CALL) is "
-                f"only registered for: {known} — unset the lever or select a "
-                "variant-capable set"
-            ) from exc
+    enabled = enabled_prompt_version_overlays(env)
     try:
-        return PROMPT_VERSION_SETS[name]
+        default = PROMPT_VERSION_SETS[name]
     except KeyError as exc:
         known = ", ".join(sorted(PROMPT_VERSION_SETS))
         raise ValueError(
             f"Unknown prompt set {name!r}: no version registry entry "
             f"(known sets: {known})"
         ) from exc
+    if not enabled:
+        return default
+    entries = [_overlay_entry(key, name) for key in enabled]
+    if len(enabled) == 1:
+        return entries[0]
+    # PER-TEMPLATE, and from each contributing arm's OWN value rather than from
+    # the default: an arm that swaps in a variant FILE carries that file's own
+    # lineage (``impostor_report_roll_call…v1``), so a composite rebuilt from the
+    # default value would not move when that variant body was revised and two
+    # different bodies could share one stamp. Joining the contributing values
+    # keeps every participating lineage inside the stamp, so ANY of them moving
+    # moves it. A template no enabled arm re-bodies keeps its default value --
+    # those ARE the default bytes, and giving them a composite would claim a
+    # provenance the render does not have.
+    versions: dict[str, str] = {}
+    for template, value in default.items():
+        contributing = [
+            entry[template] for entry in entries if entry[template] != value
+        ]
+        versions[template] = "+".join(contributing) if contributing else value
+    return versions
 
 
 # Headless recording runs meetings deadline-free (DESIGN.md §1.4, §5.2, §8.3:
@@ -570,6 +700,13 @@ class MeetingAwareAgent(Protocol):
     manager validates a ballot's ``primary_reason_observation_id`` against.
     Also REQUIRED and firewall-clean -- the ids name the agent's own memory
     rows and leak nothing; a canned double may return ``()``.
+
+    ``body_discovery_records_for_meeting`` is the self-channel behind the
+    reporter-voice lever's co-discovery line: the agent's OWN first-hand body
+    discoveries. OPTIONAL, unlike the four above, because nothing is grounded or
+    validated against it -- an agent without the accessor simply discovered
+    nothing, which is the lever's own OFF behaviour -- so a canned test double
+    needs no body bookkeeping to run a meeting.
     """
 
     @property
@@ -668,6 +805,23 @@ class MoveWitnessAgent(Protocol):
     """
 
     def move_witness_records_for_meeting(self) -> tuple[MoveWitnessRecord, ...]: ...
+
+
+@runtime_checkable
+class BodyDiscoveryAgent(Protocol):
+    """Agent that exposes its OWN first-hand body discoveries.
+
+    The self-channel the reporter-voice lever reads to decide whether a speaker's
+    own record places them at the body when the meeting opened. Firewall-clean --
+    an agent reporting its own witnessed events leaks nothing, and the packet the
+    rows derive from is witness-gated by the engine (``eval/leak_test.py``).
+
+    OPTIONAL, like :class:`MoveWitnessAgent`: an agent without the channel simply
+    discovered nothing, and its prompts carry no discovery line -- the same no-op
+    the lever's OFF path produces.
+    """
+
+    def body_discovery_records_for_meeting(self) -> tuple[BodyDiscoveryRecord, ...]: ...
 
 
 @runtime_checkable
@@ -809,6 +963,7 @@ class DefaultMeetingRunner:
         config: MeetingConfig | None = None,
         prompt_versions: Mapping[str, str] = DEFAULT_PROMPT_VERSIONS,
         token_budget: int = DEFAULT_TOKEN_BUDGET,
+        reporter_reasoning: bool | None = None,
     ) -> None:
         self._recording_client = _RecordingLLMClient(llm_client)
         self._manager = MeetingManager(
@@ -818,6 +973,10 @@ class DefaultMeetingRunner:
             statement_prompt=statement_prompt,
             vote_prompt=vote_prompt,
             config=config,
+            # Bound here so the lever that shapes the rendered bytes and the
+            # ``prompt_versions`` recorded beside them are ONE decision, taken
+            # once. ``None`` leaves the manager on its own per-run env read.
+            reporter_reasoning=reporter_reasoning,
         )
         self._prompt_versions = dict(prompt_versions)
         self._token_budget = token_budget
@@ -959,6 +1118,13 @@ def build_default_meeting_runner(
         if prompt_versions is not None
         else prompt_versions_for_set(active_prompt_set)
     )
+    # The reporter-voice lever is resolved HERE, once, beside the versions it is
+    # stamped into -- the same pairing the prompt set gets. Reading it per-run
+    # inside the manager instead would let a mid-game export move the rendered
+    # bytes while ``resolved_versions`` stayed frozen at what construction saw,
+    # which is the render-one-stamp-another failure this whole block exists to
+    # prevent.
+    resolved_reporter_reasoning = reporter_reasoning_enabled()
     inner: LLMClient = llm_client if llm_client is not None else build_default_client()
     client: LLMClient = (
         BudgetedLLMClient(inner=inner, budget=budget) if budget is not None else inner
@@ -981,6 +1147,7 @@ def build_default_meeting_runner(
         vote_prompt=renderers.vote,
         config=resolved_config,
         prompt_versions=resolved_versions,
+        reporter_reasoning=resolved_reporter_reasoning,
         token_budget=token_budget,
     )
 
@@ -1140,6 +1307,14 @@ def _build_participants(
                 # Task 16.9's persona-text fill; the locked set's templates
                 # render it since 16.16 (the guarded <voice> preamble block).
                 persona=persona_by_id[player_id].text,
+                # The reporter-voice lever's self-channel, same snapshot
+                # discipline. An agent without the optional capability
+                # discovered nothing, which is the lever's own OFF behaviour.
+                body_discovery_records=(
+                    agent.body_discovery_records_for_meeting()
+                    if isinstance(agent, BodyDiscoveryAgent)
+                    else ()
+                ),
             )
         )
     return tuple(participants)
@@ -2516,8 +2691,17 @@ def _build_meeting_trigger(
             "MeetingTriggeredEvent; this is an engine invariant violation"
         )
     body_id: BodyId | None
+    victim_id: PlayerId | None = None
     if trigger_event.trigger == "report":
         body_id = trigger_event.body_id
+        # The corpse this meeting was opened on, read off engine state rather
+        # than parsed out of the body id. A speaker can hold discoveries of two
+        # corpses a tick apart, so a render that says "the body" needs to know
+        # which; a body already consumed leaves this ``None`` and the render
+        # names no victim rather than guessing one.
+        if body_id is not None:
+            corpse = state.bodies.get(body_id)
+            victim_id = corpse.player_id if corpse is not None else None
         description = (
             f"{trigger_event.actor} reported "
             + (f"body {body_id} " if body_id is not None else "a body ")
@@ -2533,6 +2717,7 @@ def _build_meeting_trigger(
         triggered_by=trigger_event.actor,
         trigger_tick=trigger_event.tick,
         description=description,
+        body_victim_id=victim_id,
     )
     return trigger, body_id, trigger_event.trigger
 
@@ -3056,6 +3241,70 @@ class TacticalAgent:
             )
         return tuple(records)
 
+    def body_discovery_records_for_meeting(self) -> tuple[BodyDiscoveryRecord, ...]:
+        """The agent's OWN first-hand body discoveries, typed.
+
+        Implements :class:`BodyDiscoveryAgent`. A straight episodic filter in the
+        shape of :meth:`vent_witness_records_for_meeting` -- first-hand
+        (``provenance == "observed"``) ``saw_body`` rows -- NOT the re-deriving
+        join :meth:`body_proximity_records_for_meeting` performs. These are the
+        SAME rows the §6.6 renderer turns into "You discovered {victim}'s body in
+        {room}." lines, and the two dedupe identically: a body reports on its
+        FIRST sighting only, so a second look at the same corpse adds nothing.
+
+        The killer's OWN victim is excluded, exactly as the render suppresses that
+        discovery line (DESIGN.md §6.2): the kill is already narrated as a kill,
+        and telling a killer their record places them at the body they made would
+        put its own kill back in front of it under a discovery framing. The victim
+        set is this agent's own ``own_kill`` rows, so the crew path drops nothing.
+
+        Firewall-clean: every row was witness-gated by the engine before it
+        reached this agent's packet (``eval/leak_test.py``), and the accessor
+        reports only this agent's own log. Payload reads are defensive per the
+        store convention -- a malformed row contributes nothing. Append order is
+        non-decreasing in tick (the episodic-store invariant), so the returned
+        tuple is deterministic and tick-sorted.
+        """
+
+        own_kill_victims: set[str] = set()
+        for event in self._memory.episodic.recent(since_tick=0):
+            if event.type != EVENT_OWN_KILL:
+                continue
+            victim = event.payload.get("victim_id")
+            if isinstance(victim, str):
+                own_kill_victims.add(victim)
+
+        seen_bodies: set[str] = set()
+        records: list[BodyDiscoveryRecord] = []
+        for event in self._memory.episodic.recent(since_tick=0):
+            if event.type != EVENT_SAW_BODY:
+                continue
+            if event.provenance != PROVENANCE_OBSERVED:
+                continue
+            body_id = event.payload.get("body_id")
+            victim_id = event.payload.get("victim_id")
+            room = event.payload.get("room")
+            if not (
+                isinstance(body_id, str)
+                and isinstance(victim_id, str)
+                and isinstance(room, str)
+            ):
+                continue
+            if body_id in seen_bodies:
+                continue
+            seen_bodies.add(body_id)
+            if victim_id in own_kill_victims:
+                continue
+            records.append(
+                BodyDiscoveryRecord(
+                    victim_id=victim_id,
+                    room=room,
+                    tick=event.tick,
+                    observation_id=event.observation_id,
+                )
+            )
+        return tuple(records)
+
     def body_proximity_records_for_meeting(self) -> tuple[BodyProximityRecord, ...]:
         """The agent's OWN §6.3 Rule-1 body-proximity pins, typed (Task 18.30).
 
@@ -3292,6 +3541,7 @@ def build_default_agent_factory() -> AgentFactory:
 __all__ = [
     "AgentFactory",
     "BeliefPersistingAgent",
+    "BodyDiscoveryAgent",
     "BodyProximityRecord",
     "DEFAULT_MAX_TICKS",
     "DEFAULT_NUM_IMPOSTORS",
@@ -3311,6 +3561,7 @@ __all__ = [
     "MeetingRunner",
     "Outcome",
     "PROMPT_VERSION_SETS",
+    "REPORTER_REASONING_PROMPT_VERSION_SETS",
     "ROSTER_PRESETS",
     "ReportedTestimonyAgent",
     "RosterPreset",
@@ -3321,5 +3572,6 @@ __all__ = [
     "apply_meeting_result",
     "build_default_agent_factory",
     "build_default_meeting_runner",
+    "enabled_prompt_version_overlays",
     "prompt_versions_for_set",
 ]

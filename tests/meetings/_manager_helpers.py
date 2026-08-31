@@ -36,6 +36,7 @@ from meetings.manager import (
     MeetingParticipant,
     MeetingTrigger,
     PromptRenderInputs,
+    ReporterContext,
     SuspicionEntry,
 )
 from meetings.schemas import (
@@ -93,6 +94,8 @@ def _crewmate_report_prompt(
     persona: str = "",  # Task 16.3: widened contract kwarg (inert)
     suspicion_provenance: tuple[SuspicionEntry, ...] = (),  # Task 16.3
     render_inputs: PromptRenderInputs | None = None,  # Task 20.31
+    reporter_context: ReporterContext | None = None,  # reporter-voice (inert)
+    at_body: bool = False,  # reporter-voice (inert)
 ) -> str:
     return (
         f"PHASE=OPENING ROLE=CREWMATE agent_id={agent_id} tick={current_tick}\n"
@@ -118,6 +121,8 @@ def _impostor_report_prompt(
     persona: str = "",  # Task 16.3: widened contract kwarg (inert)
     suspicion_provenance: tuple[SuspicionEntry, ...] = (),  # Task 16.3
     render_inputs: PromptRenderInputs | None = None,  # Task 20.31
+    reporter_context: ReporterContext | None = None,  # reporter-voice (inert)
+    at_body: bool = False,  # reporter-voice (inert)
 ) -> str:
     return (
         f"PHASE=OPENING ROLE=IMPOSTOR agent_id={agent_id} tick={current_tick}\n"
@@ -146,6 +151,8 @@ def _statement_prompt(
     persona: str = "",  # Task 16.3: widened contract kwarg (inert)
     suspicion_provenance: tuple[SuspicionEntry, ...] = (),  # Task 16.3
     render_inputs: PromptRenderInputs | None = None,  # Task 20.31
+    reporter_context: ReporterContext | None = None,  # reporter-voice (inert)
+    at_body: bool = False,  # reporter-voice (inert)
 ) -> str:
     prior = prior_turn.speaker if prior_turn is not None else "none"
     return (
