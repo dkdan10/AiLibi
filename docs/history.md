@@ -193,10 +193,10 @@ That recording is **reference recording 8**, and it decided nothing. It has no
 bars and no verdict by design: it re-records, publishes every cell before and
 after, and leaves every judgment to the record that comes after it. Some of what
 it published is unwelcome — conviction accuracy without engine-certified proof
-fell, wrongful ejections rose, and a class of wrongful conviction that the
-previous record had described as extinct reappeared at four cases. Those are
-published unchanged, which is the whole point of separating a maintenance record
-from an adopting one.
+fell, wrongful ejections rose from 42 to 46, and a class of wrongful conviction
+that the previous record had described as extinct reappeared at four cases. Those
+are published unchanged, which is the whole point of separating a maintenance
+record from an adopting one.
 [Record](../audits/audit-phase-21-rerecord.md).
 
 ---

@@ -1016,19 +1016,17 @@ def test_scaffold_leakage_reproduces_the_19_8_disclosure(
     """
 
     samples = samples_9p2i.deduction.scaffold_leakage
-    assert (samples.model_partner_naming_ballots, samples.impostor_ballots) == (
-        36,
-        218,
-    )  # was (27, 219)
+    # was (27, 219). Kept on ONE line with no trailing comma: this is the pin
+    # scripts/check_doc_facts.py reads to hold the reading guide's partner-ballot
+    # row, and its pattern needs the tuple literal contiguous.
+    assert (samples.model_partner_naming_ballots, samples.impostor_ballots) == (36, 218)
     assert samples.model_role_statement_ballots == 10  # was 7
     assert samples.crew_partner_naming_ballots == 0
     assert samples.player_visible_leak_turns == 0
 
     corpus = corpus_9p2i.deduction.scaffold_leakage
-    assert (corpus.model_partner_naming_ballots, corpus.impostor_ballots) == (
-        137,
-        636,
-    )  # was (105, 625)
+    # was (105, 625). One line for the same reason as the samples pin above.
+    assert (corpus.model_partner_naming_ballots, corpus.impostor_ballots) == (137, 636)
     assert corpus.model_role_statement_ballots == 39  # was 24
     assert corpus.crew_partner_naming_ballots == 0
     assert corpus.player_visible_leak_turns == 0

@@ -21,7 +21,7 @@ is the recording it replaced. Where the two agree, nothing moved.
 | Eject ballots carrying a valid citation, a turn or an observation id (9p2i) | 526 / 527, zero dangling | 538 / 538, zero dangling | reference recording 8, 2026-08-31 — [instrument](../tests/eval/test_vj_instruments.py) |
 | Ejection accuracy with engine-certified proof of the ejectee's role, against without | 333 / 333 = 1.0000 vs 50 / 96 = 0.5208 | 310 / 310 = 1.0000 vs 46 / 125 = 0.3680 | the 2026-08-31 record, pooled over four recorded sets — [the record](../audits/audit-phase-21-rerecord.md) §5.1, against [phase-19 close](../audits/audit-phase-19-close.md) §4.1 |
 | Correct 9p ejections riding an ejectee-specific vent sighting | 68 / 82 = 83% | 68 / 78 = 87% | reference recording 8, 2026-08-31 — the cross-tab in §3, [pinned](../tests/eval/test_deduction_metrics.py) |
-| Impostor ballots cast against a partner (9p2i) | 0 of 219 | 0 of 245 | enforced by the meeting layer, not shown by the model — §3 |
+| Impostor ballots cast against a partner (9p2i) | 0 of 218 | 0 of 219 | enforced by the meeting layer, not shown by the model — §3 |
 | Pre-registered emergence rulings demonstrated, phase 18 | 0 of 14 | 0 of 14 | [close audit](../audits/audit-phase-18-close.md), derived in [the emergence reading](../audits/audit-phase-18-flip-emergence.md) |
 | Learned tactical policies that became the default | none, ruled twice | none, ruled twice | [phase 17](../audits/audit-phase-17-close.md), [18](../audits/audit-phase-18-close.md) |
 
@@ -79,9 +79,9 @@ the difference.
 
 ## 3. What the corpus demonstrates — and what it does not
 
-**Evidence-processing: demonstrated.** Deliberation is typed, and 526 of the 527
-eject ballots in the 9p2i samples cite a line the voter could really see. The one
-that does not is the first uncited eject ballot any recording has carried.
+**Evidence-processing: demonstrated.** Deliberation is typed, and of
+all 527 eject ballots in the 9p2i samples, 526 cite a line the voter could
+really see — the first recording where one did not.
 
 **Deception: demonstrated, and the strongest capability on display.**
 Coordinated fabricated alibis built by reading the transcript, strategic
@@ -103,12 +103,12 @@ committed 9p2i meetings:
 With the certified evidence in front of it the table never convicted a crewmate.
 Without it, ejection accuracy is close to a coin flip — 14 of 27 — which is why
 the pre-registered bar for exactly this cell, 0.60 pooled across the four
-recorded sets, is one of the two the previous recording missed. What that
-recording did close is the worst of the evidence itself: the class of flag that
-convicted 70 innocents on a single alibi-versus-sighting is empty on these
-bytes, and so is the adjacent-room class that supplied it, both by extinction
-rather than by waiver
-([the phase-20 record](../audits/audit-phase-20-baseline-7.md) §3, bars 4 and 7).
+recorded sets, is one of the two the previous recording missed. The worst class
+of evidence has NOT stayed closed: the flag that convicted 70 innocents on a
+single alibi-versus-sighting was empty on the previous recording
+([the phase-20 record](../audits/audit-phase-20-baseline-7.md) §3, bars 4 and 7),
+and these bytes carry four such convictions again
+([the record](../audits/audit-phase-21-rerecord.md) §5.1.1).
 
 ## 4. Three audits, in this order
 
