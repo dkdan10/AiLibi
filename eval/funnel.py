@@ -255,6 +255,7 @@ _WALK_CONFIG: ReplayWalkConfig = ReplayWalkConfig(
     profile="funnel-instrument",
     on_violation=_raise_walk_violation,
     verify_tick_hashes=True,
+    verify_action_dispositions=True,
     missing_meeting_row="violation",
     verify_meeting_pre_hashes=True,
     verify_meeting_post_hashes=True,

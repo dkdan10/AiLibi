@@ -124,7 +124,7 @@ from api.replay_loader import (
     _load_roster_config,
 )
 from engine.entities import PlayerId, Role
-from engine.tick import advance_tick, superseded_meeting_tick
+from engine.tick import advance_tick
 from engine.world import Map, WorldState, load_canonical_map
 from llm.client import CallKind, LLMResponse, TokenUsage
 from meetings.manager import (
@@ -606,22 +606,10 @@ def walk_replay_meetings(
             state, events = advance_tick(state, actions, game_map=game_map)
             actual = _state_hash(state)
             if actual != entry.state_hash:
-                # Two committed recordings pinned a meeting-trigger tick the
-                # engine now concludes; the pre-ruling pair is accepted only
-                # with a meeting row for the tick and an exact re-hash
-                # (engine.tick.superseded_meeting_tick). Retired by Task 21.15.
-                restored = superseded_meeting_tick(state, events)
-                if restored is not None and meeting_by_tick.get(entry.tick) is not None:
-                    candidate_state, candidate_events = restored
-                    if _state_hash(candidate_state) == entry.state_hash:
-                        state = candidate_state
-                        events = list(candidate_events)
-                        actual = entry.state_hash
-                if actual != entry.state_hash:
-                    raise AssertionError(
-                        f"{game_id} tick {entry.tick}: reconstructed state_hash "
-                        f"{actual!r} != recorded {entry.state_hash!r}"
-                    )
+                raise AssertionError(
+                    f"{game_id} tick {entry.tick}: reconstructed state_hash "
+                    f"{actual!r} != recorded {entry.state_hash!r}"
+                )
             if state.phase != "MEETING":
                 if state.phase == "GAME_OVER":
                     break

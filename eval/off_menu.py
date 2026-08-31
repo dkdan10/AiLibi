@@ -128,7 +128,7 @@ from agents.tactical.learned.forward import ImpostorOption, enumerate_options
 from engine.actions import Action
 from engine.entities import PlayerId, Role
 from engine.events import EngineEvent, MeetingTriggeredEvent
-from engine.tick import advance_tick, superseded_meeting_tick
+from engine.tick import advance_tick
 from engine.world import Map, load_canonical_map
 from eval.validity import resolve_roster_knobs, roles_by_seed, seeds_on_disk
 from meetings.manager import derive_reported_testimony, extract_belief_evidence
@@ -434,24 +434,11 @@ def _walk_game(
             state, events = advance_tick(state, actions, game_map=game_map)
             actual = _state_hash(state)
             if actual != entry.state_hash:
-                # Two committed recordings pinned a meeting-trigger tick the
-                # engine now concludes. The pre-ruling pair is accepted only
-                # when a meeting row exists for the tick AND it re-hashes to
-                # the recorded hash exactly, so it cannot mask a determinism
-                # break or a roster mismatch. Retired by Task 21.15's re-record.
-                restored = superseded_meeting_tick(state, events)
-                if restored is not None and meeting_by_tick.get(entry.tick) is not None:
-                    candidate_state, candidate_events = restored
-                    if _state_hash(candidate_state) == entry.state_hash:
-                        state = candidate_state
-                        events = list(candidate_events)
-                        actual = entry.state_hash
-                if actual != entry.state_hash:
-                    raise OffMenuReconstructionError(
-                        f"{game_id}: tick {entry.tick} reconstructed {actual!r} != "
-                        f"recorded {entry.state_hash!r} (roster mismatch or engine "
-                        "non-determinism)"
-                    )
+                raise OffMenuReconstructionError(
+                    f"{game_id}: tick {entry.tick} reconstructed {actual!r} != "
+                    f"recorded {entry.state_hash!r} (roster mismatch or engine "
+                    "non-determinism)"
+                )
 
             if state.phase == "GAME_OVER":
                 break

@@ -79,7 +79,7 @@ from agents.tactical.impostor_policy import ImpostorPolicy
 from engine.actions import Action
 from engine.entities import PlayerId
 from engine.events import EngineEvent, GameOverEvent, MeetingTriggeredEvent
-from engine.tick import advance_tick, superseded_meeting_tick
+from engine.tick import advance_tick
 from engine.world import Map, load_canonical_map
 from observation.service import ObservationService
 from orchestrator.boundary import public_map_from_engine_map, translate_action_intent
@@ -566,23 +566,10 @@ def walk_corpus_game(
             )
             actual = _state_hash(state)
             if actual != entry.state_hash:
-                # Two committed recordings pinned a meeting-trigger tick the
-                # engine now concludes. The pre-ruling pair is accepted only
-                # when a meeting row exists for the tick AND it re-hashes to the
-                # recorded hash exactly, so it cannot mask a roster mismatch or
-                # engine drift. Retired by Task 21.15's re-record.
-                restored = superseded_meeting_tick(state, tick_events)
-                if restored is not None and meeting_by_tick.get(entry.tick) is not None:
-                    candidate_state, candidate_events = restored
-                    if _state_hash(candidate_state) == entry.state_hash:
-                        state = candidate_state
-                        tick_events = list(candidate_events)
-                        actual = entry.state_hash
-                if actual != entry.state_hash:
-                    raise CorpusWalkError(
-                        f"seed {seed}: tick {entry.tick} reconstructed {actual!r} != "
-                        f"recorded {entry.state_hash!r} (roster mismatch or drift)"
-                    )
+                raise CorpusWalkError(
+                    f"seed {seed}: tick {entry.tick} reconstructed {actual!r} != "
+                    f"recorded {entry.state_hash!r} (roster mismatch or drift)"
+                )
             last_events = tuple(tick_events)
             for event in tick_events:
                 if isinstance(event, GameOverEvent):

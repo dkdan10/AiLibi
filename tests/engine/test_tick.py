@@ -9,7 +9,7 @@ from engine.actions import Action
 from engine.entities import BodyState, PlayerState, SabotageState, TaskState
 from engine.events import event_to_dict
 from engine.rng import EngineRng
-from engine.tick import advance_tick, superseded_meeting_tick
+from engine.tick import advance_tick
 from engine.world import Map, WorldState, load_canonical_map
 
 _ACTION_ADAPTER: TypeAdapter[Action] = TypeAdapter(Action)
@@ -1325,50 +1325,6 @@ def test_every_trigger_kind_still_opens_a_meeting_on_an_undecided_tick(
 
     assert [event.type for event in events] == ["MeetingTriggered"]
     assert next_state.phase == "MEETING"
-    assert superseded_meeting_tick(next_state, events) is None
-
-
-def test_superseded_meeting_tick_restores_the_pre_ruling_pair() -> None:
-    """The inverse hands back exactly what a pre-21.6 engine returned."""
-
-    game_map = load_canonical_map()
-    state = _decided_trigger_state()
-
-    next_state, events = advance_tick(
-        state, [_action(_REPORT_ACTION)], game_map=game_map
-    )
-    restored = superseded_meeting_tick(next_state, events)
-
-    assert restored is not None
-    restored_state, restored_events = restored
-    assert restored_state == replace(next_state, phase="MEETING")
-    assert [event.type for event in restored_events] == ["MeetingTriggered"]
-
-
-def test_superseded_meeting_tick_declines_a_plain_game_over_tick() -> None:
-    """A step-3 GAME_OVER carries no meeting trigger, so nothing is restored."""
-
-    game_map = load_canonical_map()
-    state = replace(
-        _state(),
-        players={
-            "p-3": _player("p-3", "IMPOSTOR", "CAFETERIA", (0.0, 0.0)),
-            "p-1": _player("p-1", "CREWMATE", "ADMIN", (1.0, 0.0)),
-            "victim": _player("victim", "CREWMATE", "CAFETERIA", (2.0, 0.0)),
-        },
-        cooldowns={"p-3": 0},
-        tasks={"p-1:swipe_card": _task("swipe_card", "p-1", "ADMIN")},
-    )
-
-    next_state, events = advance_tick(
-        state,
-        [_action({"type": "kill", "actor": "p-3", "payload": {"target": "victim"}})],
-        game_map=game_map,
-    )
-
-    assert next_state.phase == "GAME_OVER"
-    assert events[-1].type == "GameOver"
-    assert superseded_meeting_tick(next_state, events) is None
 
 
 def test_emergency_requires_actor_in_button_room() -> None:

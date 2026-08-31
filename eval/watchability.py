@@ -1390,6 +1390,7 @@ _REFEREE_WALK_CONFIG: Final[ReplayWalkConfig] = ReplayWalkConfig(
     profile="watchability-referee",
     on_violation=_raise_integrity_breach,
     verify_tick_hashes=True,
+    verify_action_dispositions=True,
     reject_duplicate_meeting_rows=True,
     missing_meeting_row="violation",
     verify_meeting_pre_hashes=True,

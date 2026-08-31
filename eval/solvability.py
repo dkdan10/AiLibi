@@ -699,6 +699,7 @@ _WALK_CONFIG: Final[ReplayWalkConfig] = ReplayWalkConfig(
     profile="solvability",
     on_violation=_raise_walk_violation,
     verify_tick_hashes=True,
+    verify_action_dispositions=True,
     reject_duplicate_meeting_rows=True,
     missing_meeting_row="violation",
     verify_meeting_pre_hashes=True,

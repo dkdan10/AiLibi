@@ -116,7 +116,7 @@ from engine.events import (
     VentEnteredEvent,
     VentExitedEvent,
 )
-from engine.tick import advance_tick, superseded_meeting_tick
+from engine.tick import advance_tick
 from engine.world import Map, WorldState, load_canonical_map
 from eval.meeting_quality import TournamentEvalReport
 from meetings.manager import (
@@ -1318,29 +1318,12 @@ class ReplayLoader:
                 state, events = advance_tick(state, actions, game_map=self._game_map)
                 actual = _state_hash(state)
                 if actual != entry.state_hash:
-                    # Two committed recordings pinned a meeting-trigger tick the
-                    # engine now concludes. The pre-ruling pair is accepted only
-                    # when a meeting row exists for the tick AND it re-hashes to
-                    # the recorded hash exactly, so it cannot mask a determinism
-                    # break; the restored events are what every frame below is
-                    # built from. Retired by Task 21.15's re-record.
-                    restored = superseded_meeting_tick(state, events)
-                    if (
-                        restored is not None
-                        and meeting_by_tick.get(entry.tick) is not None
-                    ):
-                        candidate_state, candidate_events = restored
-                        if _state_hash(candidate_state) == entry.state_hash:
-                            state = candidate_state
-                            events = list(candidate_events)
-                            actual = entry.state_hash
-                    if actual != entry.state_hash:
-                        raise ReplayStateMismatchError(
-                            game_id=game_id,
-                            tick=entry.tick,
-                            expected=entry.state_hash,
-                            actual=actual,
-                        )
+                    raise ReplayStateMismatchError(
+                        game_id=game_id,
+                        tick=entry.tick,
+                        expected=entry.state_hash,
+                        actual=actual,
+                    )
                 # The disposition tuple is served (it decides who reads BLOCKED)
                 # and the hash above cannot vouch for it, so it is verified
                 # against the events this walk just produced before any frame

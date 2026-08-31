@@ -81,43 +81,47 @@ semantics. The negative fixtures live in ``tests/eval/test_replay_walk.py``
 (one per profile, proving each still bites — or still tolerates — what it did
 before the migration).
 
-=========================  =====  ====  ============  ====  =====  ====  =======  ==========================
-Profile                    tick   dup   missing-      pre   tally  post  retired  post-walk checks
+=========================  =====  ====  ============  ====  =====  ====  =======  =====  ==========================
+Profile                    tick   dup   missing-      pre   tally  post  retired  disp   post-walk checks
 (consumer)                 hash   rows  meeting row   hash         hash  levers
-=========================  =====  ====  ============  ====  =====  ====  =======  ==========================
-``validity-gate``          ON     off   truncate      off   off    ON    off      none
+=========================  =====  ====  ============  ====  =====  ====  =======  =====  ==========================
+``validity-gate``          ON     off   truncate      off   off    ON    off      ON     none
 (eval/validity)
-``win-condition-           ON     off   truncate      off   off    ON    off      none
+``win-condition-           ON     off   truncate      off   off    ON    off      ON     none
 selfcheck``
 (eval/win_condition_
 selfcheck)
-``kill-gift``              ON     off   truncate      off   off    ON    off      none
+``kill-gift``              ON     off   truncate      off   off    ON    off      ON     none
 (eval/balance_eval)
-``watchability-referee``   ON     ON    violation     ON    ON     ON    off      terminal + reconstructed
-(eval/watchability)                                                               outcome + trailing rows +
-                                                                                  game_over row + forged
-                                                                                  winner/reason
-``kill-craft``             ON     ON    violation     ON    off    ON    off      terminal + trailing rows +
-(eval/kill_craft)                                                                 game_over row
-``solvability``            ON     ON    violation     ON    off    ON    off      terminal + trailing rows +
-(eval/solvability)                                                                game_over row
-``evidence-honesty``       ON     ON    violation     ON    off    ON    off      terminal + trailing rows +
-(eval/evidence_honesty)                                                           game_over row
-``funnel-instrument``      ON     off   violation     ON    off    ON    ON       none
+``watchability-referee``   ON     ON    violation     ON    ON     ON    off      ON     terminal + reconstructed
+(eval/watchability)                                                                      outcome + trailing rows +
+                                                                                         game_over row + forged
+                                                                                         winner/reason
+``kill-craft``             ON     ON    violation     ON    off    ON    off      ON     terminal + trailing rows +
+(eval/kill_craft)                                                                        game_over row
+``solvability``            ON     ON    violation     ON    off    ON    off      ON     terminal + trailing rows +
+(eval/solvability)                                                                       game_over row
+``evidence-honesty``       ON     ON    violation     ON    off    ON    off      ON     terminal + trailing rows +
+(eval/evidence_honesty)                                                                  game_over row
+``funnel-instrument``      ON     off   violation     ON    off    ON    ON       ON     none
 (eval/funnel, both walks)
-``leak-scan-factory``      off    off   violation     off   off    off   off      none
+``leak-scan-factory``      off    off   violation     off   off    off   off      off    none
 (eval/leak_scan)
-=========================  =====  ====  ============  ====  =====  ====  =======  ==========================
+=========================  =====  ====  ============  ====  =====  ====  =======  =====  ==========================
 
-``verify_action_dispositions`` has no column above because it is off in every
-profile listed: the committed sets were recorded before ``ReplayEntry`` carried
-``action_dispositions``, so the check has nothing to compare on any recording
-this repo ships and turning it on would be a gate that cannot fail. The
-consumer that adopts it is the one that first walks a recording carrying the
-field. ``tests/eval/test_replay_walk.py`` pins the option's two behaviours on
-a rewritten fixture — it raises on a doctored tuple, and skips a row without
-one. ``api.replay_loader`` does not go through this walker but runs the same
-comparison inline and unconditionally, because it SERVES the tuple.
+The ``disp`` column is ``verify_action_dispositions``, ADOPTED at the baseline-8
+record. It was off everywhere before, and correctly so: every committed set
+predated ``ReplayEntry.action_dispositions``, so the check had nothing to compare
+and would have been a gate that could not fail. The baseline-8 bytes are the
+first recordings that carry the field, so the eight profiles that already verify
+tick hashes now verify the tuple too — the same family of check, on the same
+rows. ``leak-scan-factory`` stays off: it is the declared no-check walk, and
+adding an integrity check there is the behaviour change locked decision 1
+forbids. A row without the field is still skipped, so the option stays correct
+over any older recording. ``tests/eval/test_replay_walk.py`` pins the two
+behaviours on a rewritten fixture — it raises on a doctored tuple, and skips a
+row without one. ``api.replay_loader`` does not go through this walker but runs
+the same comparison inline and unconditionally, because it SERVES the tuple.
 
 What each profile deliberately relaxes, and why:
 
@@ -197,7 +201,7 @@ from pydantic import TypeAdapter
 from engine.actions import Action
 from engine.entities import BodyId
 from engine.events import EngineEvent, GameOverEvent, MeetingTriggeredEvent
-from engine.tick import advance_tick, superseded_meeting_tick
+from engine.tick import advance_tick
 from engine.world import Map, WorldState
 from meetings.schemas import MeetingResult
 from meetings.voting import tally_ballots
@@ -485,22 +489,6 @@ def walk_replay(
         state, raw_events = advance_tick(state, actions, game_map=game_map)
         events = tuple(raw_events)
         actual = _state_hash(state) if hash_needed else None
-        if actual != entry.state_hash:
-            # Two committed recordings (samples/4p1i seed 3, ml_corpus/4p1i seed
-            # 1009) pinned a meeting-trigger tick the engine now concludes. The
-            # pre-ruling pair is accepted only when a meeting row exists for the
-            # tick AND it re-hashes to the recorded hash exactly, so this cannot
-            # mask a determinism break or a roster mismatch. Deliberately not
-            # gated on ``verify_tick_hashes``: the one profile that walks with
-            # it off still fails a missing meeting row, and would truncate at
-            # GAME_OVER instead. Retired by Task 21.15's re-record.
-            restored = superseded_meeting_tick(state, events)
-            if restored is not None and meeting_by_tick.get(entry.tick) is not None:
-                candidate_state, candidate_events = restored
-                if _state_hash(candidate_state) == entry.state_hash:
-                    state = candidate_state
-                    events = candidate_events
-                    actual = entry.state_hash
         if config.verify_tick_hashes and actual != entry.state_hash:
             _violate(
                 config,
