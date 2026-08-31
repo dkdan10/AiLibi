@@ -31,6 +31,7 @@ than a re-typed literal, so the two surfaces cannot drift apart silently.
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 from functools import partial
 
 import pytest
@@ -64,6 +65,7 @@ from observation.packet import BodyView, GlobalView, ObservationPacket, SelfView
 from orchestrator.game import (
     TacticalAgent,
     _build_participants,  # noqa: PLC2701
+    build_default_meeting_runner,
 )
 from orchestrator.seeder import seed_initial_state
 
@@ -422,6 +424,125 @@ class TestReporterReasoningResolver:
         assert reporter_reasoning_enabled() is True
 
 
+class TestReporterReasoningBinding:
+    """The lever is bound where the stamp is, so the two cannot drift apart."""
+
+    @staticmethod
+    def _manager(reporter_reasoning: bool | None) -> MeetingManager:
+        renderers = build_prompt_renderers(_SERVED_SET)
+        return MeetingManager(
+            llm_client=FakeProvider(),
+            crewmate_report_prompt=renderers.crewmate_report,
+            impostor_report_prompt=renderers.impostor_report,
+            statement_prompt=renderers.statement,
+            vote_prompt=renderers.vote,
+            config=MeetingConfig(
+                deadlines=MeetingDeadlines(turn_seconds=None, vote_seconds=None)
+            ),
+            reporter_reasoning=reporter_reasoning,
+        )
+
+    def test_a_bound_manager_ignores_a_later_environment_flip(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The failure this binding exists to prevent: ``prompt_versions`` is
+        # resolved once at construction, so a lever read per-run would let a
+        # mid-game export move the rendered bytes while the recorded stamp stayed
+        # frozen at what construction saw. A bound manager reads its binding.
+        monkeypatch.setenv(ENV_REPORTER_REASONING, "1")
+        bound_off = self._manager(False)
+        assert bound_off._reporter_reasoning is False  # noqa: PLC2701
+        monkeypatch.delenv(ENV_REPORTER_REASONING, raising=False)
+        bound_on = self._manager(True)
+        assert bound_on._reporter_reasoning is True  # noqa: PLC2701
+        # The rendered proof: the same trigger and participants, opposite blocks,
+        # under the OPPOSITE ambient environments.
+        monkeypatch.setenv(ENV_REPORTER_REASONING, "1")
+        assert "<who_reported>" not in _statement_prompts_from_a_real_run(bound_off)
+        monkeypatch.delenv(ENV_REPORTER_REASONING, raising=False)
+        assert "<who_reported>" in _statement_prompts_from_a_real_run(bound_on)
+
+    def test_an_unbound_manager_still_reads_the_environment(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The ad-hoc path is unchanged: a direct-construction caller that threads
+        # no binding resolves from the process environment, so no existing call
+        # site needs a new argument.
+        unbound = self._manager(None)
+        assert unbound._reporter_reasoning is None  # noqa: PLC2701
+        monkeypatch.delenv(ENV_REPORTER_REASONING, raising=False)
+        assert "<who_reported>" not in _statement_prompts_from_a_real_run(unbound)
+        monkeypatch.setenv(ENV_REPORTER_REASONING, "1")
+        assert "<who_reported>" in _statement_prompts_from_a_real_run(unbound)
+
+    def test_the_production_runner_binds_the_lever_beside_the_versions(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # ``build_default_meeting_runner`` resolves BOTH from the same read, so a
+        # recording's rendered bytes and its recorded stamps come from one
+        # decision. Flipping the env after construction moves neither.
+        monkeypatch.setenv("AILIBI_PROMPT_SET", _SERVED_SET)
+        monkeypatch.setenv(ENV_REPORTER_REASONING, "1")
+        runner = build_default_meeting_runner()
+        versions = dict(runner._prompt_versions)  # noqa: PLC2701
+        bound = runner._manager._reporter_reasoning  # noqa: PLC2701
+        monkeypatch.delenv(ENV_REPORTER_REASONING, raising=False)
+        assert bound is True
+        assert runner._manager._reporter_reasoning is True  # noqa: PLC2701
+        assert dict(runner._prompt_versions) == versions  # noqa: PLC2701
+        # And the stamp it froze is the ARM's, not the default's -- one decision,
+        # both halves.
+        assert any("reporter_reasoning" in value for value in versions.values())
+
+    def test_the_lever_on_a_set_without_an_arm_entry_fails_loud(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The other end of the same binding: only the served set carries the
+        # reporter blocks, so flipping the lever with the frozen 9B reference set
+        # selected refuses at construction rather than recording arm-shaped
+        # provenance over bytes that never moved.
+        monkeypatch.delenv("AILIBI_PROMPT_SET", raising=False)
+        monkeypatch.setenv(ENV_REPORTER_REASONING, "1")
+        with pytest.raises(ValueError, match="no reporter-voice variant registry"):
+            build_default_meeting_runner()
+
+
+def _statement_prompts_from_a_real_run(manager: MeetingManager) -> str:
+    """Every statement prompt a REAL ``run()`` of ``manager`` rendered.
+
+    Drives the manager's own lever resolution rather than re-deriving it in the
+    test: whether the binding or the environment wins is decided inside ``run()``,
+    so a test that re-derived it would pass while ``run()`` was wrong.
+    """
+
+    captured: list[str] = []
+    real_statement = manager._statement_prompt  # noqa: PLC2701
+
+    def capture(**kwargs: object) -> str:
+        rendered = real_statement(**kwargs)  # type: ignore[arg-type]
+        captured.append(rendered)
+        return rendered
+
+    manager._statement_prompt = capture  # noqa: PLC2701
+    try:
+        asyncio.run(
+            manager.run(
+                meeting_id="m-1",
+                trigger=_BODY_REPORT,
+                participants=[
+                    MeetingParticipant(
+                        agent_id=pid, role="CREWMATE", rendered_memory="(mem)"
+                    )
+                    for pid in ("p-1", "p-3", "p-4")
+                ],
+            )
+        )
+    finally:
+        manager._statement_prompt = real_statement  # noqa: PLC2701
+    assert captured, "the run rendered no statement prompt to inspect"
+    return "".join(captured)
+
+
 class TestReporterReasoningOffPath:
     def test_lever_off_renders_the_pre_lever_bytes(self) -> None:
         off = _turn_prompts(trigger=_BODY_REPORT, env={})
@@ -662,6 +783,25 @@ class TestReporterReasoningCoDiscovery:
             trigger=_BODY_REPORT, env=_LEVER_ON, discoveries=ambiguous
         )
         assert _CO_DISCOVERY_LINE in _who_reported_block(prompts[("p-3", "reply")])
+
+    def test_a_discovery_of_a_different_corpse_is_not_a_co_discovery(self) -> None:
+        # The reason the trigger carries a structured victim: a speaker who found
+        # a DIFFERENT corpse a tick before the report was not at the body that
+        # opened this meeting, and telling them they were would put a false
+        # placement on the table under the project's own name.
+        reported = replace(_BODY_REPORT, body_victim_id="p-2")
+        rows: dict[PlayerId, tuple[BodyDiscoveryRecord, ...]] = {
+            "p-3": (BodyDiscoveryRecord(victim_id="p-2", room="MEDBAY", tick=5),),
+            "p-4": (BodyDiscoveryRecord(victim_id="p-9", room="REACTOR", tick=4),),
+        }
+        prompts = _turn_prompts(trigger=reported, env=_LEVER_ON, discoveries=rows)
+        assert _CO_DISCOVERY_LINE in _who_reported_block(prompts[("p-3", "reply")])
+        assert _CO_DISCOVERY_LINE not in _who_reported_block(prompts[("p-4", "reply")])
+        # Without a threaded victim the layer cannot tell the corpses apart and
+        # falls back to the tick window alone, which is the shape a caller that
+        # threads no victim gets: the SAME rows then count both speakers.
+        legacy = _turn_prompts(trigger=_BODY_REPORT, env=_LEVER_ON, discoveries=rows)
+        assert _CO_DISCOVERY_LINE in _who_reported_block(legacy[("p-4", "reply")])
 
     def test_a_row_outside_the_window_is_not_a_co_discovery(self) -> None:
         stale: dict[PlayerId, tuple[BodyDiscoveryRecord, ...]] = {

@@ -785,11 +785,21 @@ class MeetingTrigger:
     opener (turn 0); ``description`` is a short free-text summary (e.g.
     ``"p3 reported p2's body in MedBay at tick 410"``) that the opening
     prompt surfaces to the LLM.
+
+    ``body_victim_id`` is the player whose corpse a BODY REPORT was made on --
+    the one structured trigger fact the meeting layer carries, added because a
+    speaker can hold discoveries of two different corpses within a tick of each
+    other and a render that says "the body" must know which one it means.
+    ``None`` for an emergency call and for any caller that does not thread it;
+    a ``None`` here means the layer cannot tell the corpses apart and says so by
+    rendering no victim rather than by guessing one. Additive and defaulted, so
+    every existing construction site stays valid.
     """
 
     triggered_by: PlayerId
     trigger_tick: int
     description: str
+    body_victim_id: PlayerId | None = None
 
 
 def _trigger_is_emergency(trigger: MeetingTrigger) -> bool:
@@ -938,6 +948,7 @@ class MeetingManager:
         statement_prompt: StatementPromptRenderer,
         vote_prompt: VotePromptRenderer,
         config: MeetingConfig | None = None,
+        reporter_reasoning: bool | None = None,
     ) -> None:
         if config is None:
             config = MeetingConfig()
@@ -969,6 +980,16 @@ class MeetingManager:
         self._statement_prompt = statement_prompt
         self._vote_prompt = vote_prompt
         self._config = config
+        # The reporter-voice lever, BOUND AT CONSTRUCTION when the caller
+        # resolves it (``build_default_meeting_runner`` does, from the same
+        # ``env`` that picks the recorded ``prompt_versions``). Binding here is
+        # what stops a mid-run export from moving rendered bytes while the
+        # recorded stamp stays frozen at what construction resolved -- the
+        # render-one-stamp-another failure the PR #203 binding discipline exists
+        # to prevent. ``None`` keeps the ad-hoc path: resolve from the process
+        # environment once per ``run()``, so a direct-construction caller needs
+        # no new argument.
+        self._reporter_reasoning = reporter_reasoning
         # Per-run scratch: the defaults that fired during the most recent
         # :meth:`run`. Reset at the top of every ``run`` (the manager is reused
         # across a game's meetings) and read by the orchestrator immediately
@@ -1079,14 +1100,20 @@ class MeetingManager:
         # the way ``dead_ids`` is. The map card is not here: it is a constant of
         # the map, bound onto each renderer at construction by the loader.
         render_inputs = PromptRenderInputs(impostor_count=impostor_count)
-        # The reporter-voice lever, read ONCE per run and carried down as a
-        # boolean. A body report's reporter is the trigger's opener -- the SAME
-        # derivation the ballot annotation uses below, so the two surfaces can
-        # never disagree about who reported; an emergency call has no reporter
-        # and arms nothing.
+        # The reporter-voice lever, resolved ONCE per run and carried down as a
+        # boolean: the construction-time binding when the caller supplied one,
+        # else a single environment read here. A body report's reporter is the
+        # trigger's opener -- the SAME derivation the ballot annotation uses
+        # below, so the two surfaces can never disagree about who reported; an
+        # emergency call has no reporter and arms nothing.
+        reporter_reasoning = (
+            self._reporter_reasoning
+            if self._reporter_reasoning is not None
+            else reporter_reasoning_enabled()
+        )
         render_reporter_id = (
             trigger.triggered_by
-            if reporter_reasoning_enabled() and not _trigger_is_emergency(trigger)
+            if reporter_reasoning and not _trigger_is_emergency(trigger)
             else None
         )
 
@@ -1745,6 +1772,7 @@ class MeetingManager:
             _discoveries_in_window(
                 participant.body_discovery_records,
                 trigger_tick=trigger.trigger_tick,
+                victim_id=trigger.body_victim_id,
             )
             if render_reporter_id is not None
             else ()
@@ -4061,15 +4089,31 @@ def derive_reported_testimony(result: MeetingResult) -> tuple[ReportedStatement,
 
 
 def _discoveries_in_window(
-    records: tuple[BodyDiscoveryRecord, ...], *, trigger_tick: int
+    records: tuple[BodyDiscoveryRecord, ...],
+    *,
+    trigger_tick: int,
+    victim_id: PlayerId | None,
 ) -> tuple[BodyDiscoveryRecord, ...]:
-    """The speaker's own body discoveries within the meeting's trigger window."""
+    """The speaker's own discoveries OF THIS MEETING'S CORPSE, near the trigger.
 
-    return tuple(
+    Two filters, and the victim one is the load-bearing half: a speaker who found
+    a DIFFERENT corpse a tick before the report was not at the body that opened
+    this meeting, and telling them they were would put a false placement in front
+    of the table under the project's own name. When the trigger carries no victim
+    (an ad-hoc caller, or a corpse already consumed) the layer cannot tell the
+    corpses apart, so it falls back to the tick window alone -- which is why the
+    victim is threaded by the orchestrator off world state rather than inferred
+    here -- the meeting layer reads no engine type of its own.
+    """
+
+    in_window = tuple(
         record
         for record in records
         if 0 <= trigger_tick - record.tick <= BODY_DISCOVERY_WINDOW_TICKS
     )
+    if victim_id is None:
+        return in_window
+    return tuple(record for record in in_window if record.victim_id == victim_id)
 
 
 def _reporter_context_for(

@@ -82,6 +82,11 @@ _DISCOVERY_LINE: Final[re.Pattern[str]] = re.compile(
 #: so a strict equality test silently drops them.
 DISCOVERY_WINDOW_TICKS: Final[int] = 1
 
+#: The body id ``engine/rules.py`` mints for a corpse. Parsed to recover WHICH
+#: corpse a report was made on, checked against the roster at every call so a
+#: format change fails loud instead of emptying the co-discovery cell.
+_BODY_ID: Final[re.Pattern[str]] = re.compile(r"^body-(?P<victim>.+)-(?P<tick>\d+)$")
+
 #: A rationale or a spoken turn "mentions a report" when it contains this stem,
 #: which covers report / reported / reporting / reporter in one test.
 REPORT_MENTION_TERM: Final[str] = "report"
@@ -270,11 +275,14 @@ class _Meeting:
     kind: str
     reporter: PlayerId
     trigger_tick: int
+    victim_id: PlayerId | None
     entry: MeetingReplayEntry
 
 
-def _meeting_kind(entries: Sequence[ReplayEntry], *, entry: MeetingReplayEntry) -> str:
-    """Classify one meeting off the recorded action stream at its own tick.
+def _meeting_trigger(
+    entries: Sequence[ReplayEntry], *, entry: MeetingReplayEntry, roster: Iterable[str]
+) -> tuple[str, PlayerId | None]:
+    """``(kind, reported victim)`` off the recorded action stream at this tick.
 
     The meeting layer keeps no structured trigger kind (the description IS the
     trigger surface, and descriptions are not recorded), so the honest recorded
@@ -282,8 +290,15 @@ def _meeting_kind(entries: Sequence[ReplayEntry], *, entry: MeetingReplayEntry) 
     ``report`` or ``emergency``. Fails loud when the tick carries neither --
     a meeting the recorded actions cannot explain is a corrupt reading, not a
     meeting to bin as "other".
+
+    A report's ``body_id`` names the corpse (``engine/rules.py`` mints
+    ``body-{victim}-{tick}``), and the victim is what lets the co-discovery cell
+    say "found THIS body" rather than "found A body near this tick". The parse is
+    checked against the roster and raises on a miss, so a changed id format is a
+    loud failure rather than a quietly emptied cell.
     """
 
+    players = set(roster)
     for tick_entry in entries:
         if tick_entry.tick != entry.tick:
             continue
@@ -294,7 +309,20 @@ def _meeting_kind(entries: Sequence[ReplayEntry], *, entry: MeetingReplayEntry) 
                 continue
             if dispositions is not None and dispositions[index] != _APPLIED:
                 continue
-            return kind
+            if kind != "body_report":
+                return kind, None
+            payload = action.get("payload")
+            body_id = payload.get("body_id") if isinstance(payload, dict) else None
+            if not isinstance(body_id, str):
+                return kind, None
+            match = _BODY_ID.match(body_id)
+            if match is None or match.group("victim") not in players:
+                raise ReporterJusticeError(
+                    f"{entry.game_id}/{entry.meeting_id}: body id {body_id!r} does "
+                    "not name a roster player; the reported corpse cannot be read "
+                    "from the recorded bytes"
+                )
+            return kind, match.group("victim")
     raise ReporterJusticeError(
         f"{entry.game_id}/{entry.meeting_id}: tick {entry.tick} carries no applied "
         f"report or emergency action by {entry.triggered_by!r}; the meeting kind "
@@ -320,24 +348,27 @@ def _carries_hinge(text: str) -> bool:
     return any(term in lowered for term in EXCULPATORY_HINGE_TERMS)
 
 
-def _discovery_ticks_by_agent(
+def _discoveries_by_agent(
     entry: MeetingReplayEntry,
-) -> dict[PlayerId, set[int]]:
-    """Discovery ticks each speaker's OWN rendered memory showed them.
+) -> dict[PlayerId, set[tuple[int, str]]]:
+    """``(tick, victim)`` pairs each speaker's OWN rendered memory showed them.
 
     Read off the recorded prompt bytes, which is what the speaker was actually
     given; a participant whose every call defaulted logged no prompt and
-    contributes nothing rather than a guessed row.
+    contributes nothing rather than a guessed row. The victim rides along because
+    "found a body near this tick" and "found THIS body" are different claims.
     """
 
-    ticks: dict[PlayerId, set[int]] = {}
+    rows: dict[PlayerId, set[tuple[int, str]]] = {}
     for call in entry.llm_calls:
         agent_id = call.agent_id
         if agent_id is None:
             continue
         for match in _DISCOVERY_LINE.finditer(call.prompt):
-            ticks.setdefault(agent_id, set()).add(int(match.group("tick")))
-    return ticks
+            rows.setdefault(agent_id, set()).add(
+                (int(match.group("tick")), match.group("victim"))
+            )
+    return rows
 
 
 @dataclass
@@ -395,21 +426,26 @@ def _fold_meeting(
         tallies.reporter_crewmate_meetings += 1
 
     # Living participants: every one casts a ballot, so the ballot set IS the
-    # meeting's living roster as recorded.
+    # meeting's living roster as recorded. The classes are REPORTER-FIRST, so
+    # they partition that roster even if a reporter is ever an impostor -- which
+    # is exactly the laundering case the role census exists to catch, and which
+    # a role-first split would hide by counting that seat twice and then
+    # attributing its ejection to the impostor class instead of the reporter one.
     living = sorted({ballot.voter for ballot in entry.ballots})
-    tallies.reporter_slots += 1 if reporter in living else 0
     for player_id in living:
-        if roles[player_id] == "IMPOSTOR":
+        if player_id == reporter:
+            tallies.reporter_slots += 1
+        elif roles[player_id] == "IMPOSTOR":
             tallies.impostor_slots += 1
-        elif player_id != reporter:
+        else:
             tallies.innocent_non_reporter_slots += 1
 
     ejected = entry.ejected_player_id
     if ejected is not None:
-        if roles[ejected] == "IMPOSTOR":
-            tallies.impostor_slot_ejections += 1
-        elif ejected == reporter:
+        if ejected == reporter:
             tallies.reporter_ejections += 1
+        elif roles[ejected] == "IMPOSTOR":
+            tallies.impostor_slot_ejections += 1
         else:
             tallies.innocent_non_reporter_ejections += 1
 
@@ -447,13 +483,19 @@ def _fold_meeting(
         if turn.speaker == reporter:
             tallies.speech_turns_with_hinge_by_reporter += 1
 
-    discovery_ticks = _discovery_ticks_by_agent(entry)
+    discoveries = _discoveries_by_agent(entry)
     co_discoverers = [
         player_id
-        for player_id, ticks in sorted(discovery_ticks.items())
+        for player_id, rows in sorted(discoveries.items())
         if player_id != reporter
         and any(
-            0 <= meeting.trigger_tick - tick <= DISCOVERY_WINDOW_TICKS for tick in ticks
+            0 <= meeting.trigger_tick - tick <= DISCOVERY_WINDOW_TICKS
+            # THIS meeting's corpse, not any corpse near this tick: a speaker
+            # who found a different body a tick earlier was not at the body that
+            # opened the meeting. A recording whose body id could not be read
+            # leaves ``victim_id`` None and falls back to the tick window.
+            and (meeting.victim_id is None or victim == meeting.victim_id)
+            for tick, victim in rows
         )
     ]
     if co_discoverers:
@@ -509,7 +551,7 @@ def compute_reporter_justice(sample_dir: Path) -> ReporterJusticeCells:
                     tallies.impostor_ejections += 1
                 else:
                     tallies.innocent_ejections += 1
-            kind = _meeting_kind(ticks, entry=entry)
+            kind, victim_id = _meeting_trigger(ticks, entry=entry, roster=roles)
             if kind != "body_report":
                 tallies.emergency_meetings += 1
                 continue
@@ -519,6 +561,7 @@ def compute_reporter_justice(sample_dir: Path) -> ReporterJusticeCells:
                     kind=kind,
                     reporter=entry.triggered_by,
                     trigger_tick=entry.tick,
+                    victim_id=victim_id,
                     entry=entry,
                 ),
                 roles=roles,

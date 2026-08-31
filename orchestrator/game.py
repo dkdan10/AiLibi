@@ -88,6 +88,7 @@ from meetings.manager import (
     EMERGENCY_TRIGGER_PHRASE,
     BodyDiscoveryRecord,
     DefaultedCall,
+    reporter_reasoning_enabled,
     MeetingConfig,
     MeetingDeadlines,
     MeetingManager,
@@ -962,6 +963,7 @@ class DefaultMeetingRunner:
         config: MeetingConfig | None = None,
         prompt_versions: Mapping[str, str] = DEFAULT_PROMPT_VERSIONS,
         token_budget: int = DEFAULT_TOKEN_BUDGET,
+        reporter_reasoning: bool | None = None,
     ) -> None:
         self._recording_client = _RecordingLLMClient(llm_client)
         self._manager = MeetingManager(
@@ -971,6 +973,10 @@ class DefaultMeetingRunner:
             statement_prompt=statement_prompt,
             vote_prompt=vote_prompt,
             config=config,
+            # Bound here so the lever that shapes the rendered bytes and the
+            # ``prompt_versions`` recorded beside them are ONE decision, taken
+            # once. ``None`` leaves the manager on its own per-run env read.
+            reporter_reasoning=reporter_reasoning,
         )
         self._prompt_versions = dict(prompt_versions)
         self._token_budget = token_budget
@@ -1112,6 +1118,13 @@ def build_default_meeting_runner(
         if prompt_versions is not None
         else prompt_versions_for_set(active_prompt_set)
     )
+    # The reporter-voice lever is resolved HERE, once, beside the versions it is
+    # stamped into -- the same pairing the prompt set gets. Reading it per-run
+    # inside the manager instead would let a mid-game export move the rendered
+    # bytes while ``resolved_versions`` stayed frozen at what construction saw,
+    # which is the render-one-stamp-another failure this whole block exists to
+    # prevent.
+    resolved_reporter_reasoning = reporter_reasoning_enabled()
     inner: LLMClient = llm_client if llm_client is not None else build_default_client()
     client: LLMClient = (
         BudgetedLLMClient(inner=inner, budget=budget) if budget is not None else inner
@@ -1134,6 +1147,7 @@ def build_default_meeting_runner(
         vote_prompt=renderers.vote,
         config=resolved_config,
         prompt_versions=resolved_versions,
+        reporter_reasoning=resolved_reporter_reasoning,
         token_budget=token_budget,
     )
 
@@ -2677,8 +2691,17 @@ def _build_meeting_trigger(
             "MeetingTriggeredEvent; this is an engine invariant violation"
         )
     body_id: BodyId | None
+    victim_id: PlayerId | None = None
     if trigger_event.trigger == "report":
         body_id = trigger_event.body_id
+        # The corpse this meeting was opened on, read off engine state rather
+        # than parsed out of the body id. A speaker can hold discoveries of two
+        # corpses a tick apart, so a render that says "the body" needs to know
+        # which; a body already consumed leaves this ``None`` and the render
+        # names no victim rather than guessing one.
+        if body_id is not None:
+            corpse = state.bodies.get(body_id)
+            victim_id = corpse.player_id if corpse is not None else None
         description = (
             f"{trigger_event.actor} reported "
             + (f"body {body_id} " if body_id is not None else "a body ")
@@ -2694,6 +2717,7 @@ def _build_meeting_trigger(
         triggered_by=trigger_event.actor,
         trigger_tick=trigger_event.tick,
         description=description,
+        body_victim_id=victim_id,
     )
     return trigger, body_id, trigger_event.trigger
 

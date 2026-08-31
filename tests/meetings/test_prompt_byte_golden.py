@@ -1142,6 +1142,72 @@ def _templates_touched_by(keys: frozenset[str]) -> set[str]:
     }
 
 
+def _resolve_every_subset() -> dict[frozenset[str], Mapping[str, str]]:
+    """``prompt_versions_for_set`` over EVERY subset of the live overlay keys."""
+
+    resolved: dict[frozenset[str], Mapping[str, str]] = {}
+    for size in range(len(_OVERLAY_KEYS) + 1):
+        for subset in combinations(_OVERLAY_KEYS, size):
+            env = {f"AILIBI_{key.upper()}": "1" for key in subset}
+            resolved[frozenset(subset)] = prompt_versions_for_set(_OVERLAY_SET, env=env)
+    return resolved
+
+
+def overlay_stamp_violations(
+    resolved: Mapping[frozenset[str], Mapping[str, str]],
+) -> list[str]:
+    """Every way a resolution table breaks the overlay-stamp invariant.
+
+    Named, and returning data rather than asserting inline, so the planted cases
+    can run through THIS function: a gate whose perturbation only compares two
+    literals to each other stays green when the gate itself is deleted.
+
+    Three rules, all forms of one claim -- the stamp is a statement about BODIES:
+
+    * no template an arm re-bodies may wear a value any default registry entry
+      carries (arm-shaped bytes must never resolve as default ones);
+    * two slates share a template's stamp EXACTLY WHEN the same arms shaped it,
+      which forbids a collision between different bodies AND a spurious split
+      between identical ones;
+    * a composite carries the LINEAGE of every body that shaped it, so a bump to
+      any participating body moves it.
+    """
+
+    default_values = {
+        value
+        for versions in PROMPT_VERSION_SETS.values()
+        for value in versions.values()
+    }
+    violations: list[str] = []
+    for keys, versions in resolved.items():
+        for template in _templates_touched_by(keys):
+            if versions[template] in default_values:
+                violations.append(
+                    f"{sorted(keys)}/{template}: arm-shaped bytes wear the "
+                    f"default value {versions[template]!r}"
+                )
+            for key in _contributors(template, keys):
+                arm_value = _PROMPT_VERSION_OVERLAYS[key][_OVERLAY_SET][template]
+                if arm_value not in versions[template]:
+                    violations.append(
+                        f"{sorted(keys)}/{template}: lost the lineage of {key} "
+                        f"({arm_value!r} absent from {versions[template]!r})"
+                    )
+    for left, left_versions in resolved.items():
+        for right, right_versions in resolved.items():
+            for template in PROMPT_VERSION_SETS[_OVERLAY_SET]:
+                same_bodies = _contributors(template, left) == _contributors(
+                    template, right
+                )
+                same_stamp = left_versions[template] == right_versions[template]
+                if same_stamp != same_bodies:
+                    violations.append(
+                        f"{sorted(left)} vs {sorted(right)}/{template}: same "
+                        f"bodies={same_bodies} but same stamp={same_stamp}"
+                    )
+    return violations
+
+
 def _first_meeting_prompt_set() -> Mapping[str, str]:
     """The ``prompt_versions`` stamp the 9p2i set's first meeting recorded."""
 
@@ -1186,55 +1252,15 @@ def test_a_lever_on_recording_can_never_wear_a_default_stamp() -> None:
     sibling arm registered later cannot quietly collide.
     """
 
-    default_values = {
-        value
-        for versions in PROMPT_VERSION_SETS.values()
-        for value in versions.values()
-    }
-    resolved: dict[frozenset[str], Mapping[str, str]] = {}
-    for size in range(len(_OVERLAY_KEYS) + 1):
-        for subset in combinations(_OVERLAY_KEYS, size):
-            env = {f"AILIBI_{key.upper()}": "1" for key in subset}
-            resolved[frozenset(subset)] = prompt_versions_for_set(_OVERLAY_SET, env=env)
+    resolved = _resolve_every_subset()
+    assert dict(resolved[frozenset()]) == dict(PROMPT_VERSION_SETS[_OVERLAY_SET])
 
-    default = resolved[frozenset()]
-    assert dict(default) == dict(PROMPT_VERSION_SETS[_OVERLAY_SET])
-
-    for keys, versions in resolved.items():
-        if not keys:
-            continue
-        touched = _templates_touched_by(keys)
-        assert touched, keys
-        for template in touched:
-            assert versions[template] not in default_values, (keys, template)
-
-    # Two slates share a template's stamp EXACTLY WHEN the same arms shaped that
-    # template -- which is exactly when the rendered bytes are the same. Stronger
-    # than "different slates differ somewhere": it forbids a collision between
-    # different bodies AND forbids a spurious split between identical ones, which
-    # is what would put a recording in an archive it does not need.
-    for left, left_versions in resolved.items():
-        for right, right_versions in resolved.items():
-            for template in PROMPT_VERSION_SETS[_OVERLAY_SET]:
-                same_bodies = _contributors(template, left) == _contributors(
-                    template, right
-                )
-                assert (left_versions[template] == right_versions[template]) is (
-                    same_bodies
-                ), (left, right, template)
-
-    # A composite carries the LINEAGE of every body that shaped it, so a bump to
-    # any participating body moves the stamp. Rebuilding it from the default
-    # value instead would leave a variant body's revision invisible.
-    both = resolved[frozenset(_OVERLAY_KEYS)]
-    for template in _templates_touched_by(frozenset(_OVERLAY_KEYS)):
-        for key in _contributors(template, frozenset(_OVERLAY_KEYS)):
-            arm_value = _PROMPT_VERSION_OVERLAYS[key][_OVERLAY_SET][template]
-            assert arm_value in both[template], (template, key)
+    violations = overlay_stamp_violations(resolved)
+    assert violations == [], violations
 
     # And the ALL-ON arm -- the one 21.23 smokes and 21.24 records -- is
     # materialised by name rather than left to be derived at the record.
-    assert dict(both) == _ALL_ON_STAMPS
+    assert dict(resolved[frozenset(_OVERLAY_KEYS)]) == _ALL_ON_STAMPS
 
 
 def test_a_file_swapping_arm_serves_a_body_its_siblings_do_not_reach() -> None:
@@ -1285,19 +1311,51 @@ def test_a_file_swapping_arm_serves_a_body_its_siblings_do_not_reach() -> None:
     assert "<who_reported>" in default_render
 
 
-def test_the_subset_collision_pin_bites_on_a_planted_overlap() -> None:
-    # The perturbation craft rule 2 asks for: two subsets that DID resolve to the
-    # same string on a template one of them re-bodies must be caught by the same
-    # comparison the gate runs. Planted as data, so it exercises the assertion
-    # rather than the registry.
-    planted_left = {"crewmate_report": "same.v1", "vote_ballot": "vote_ballot.v5"}
-    planted_right = {"crewmate_report": "same.v1", "vote_ballot": "vote_ballot.v5"}
-    collisions = [
-        template
-        for template in ("crewmate_report",)
-        if planted_left[template] == planted_right[template]
-    ]
-    assert collisions == ["crewmate_report"]
+def test_the_subset_invariant_bites_on_planted_stamp_tables() -> None:
+    """The perturbation craft rule 2 asks for, run through the REAL checker.
+
+    Three doctored resolution tables are fed to :func:`overlay_stamp_violations`
+    -- the same function the gate above calls -- and each must be REPORTED. A
+    planted case that only compared two literal dicts to each other would stay
+    green if the checker were deleted, bypassed or inverted, which is what this
+    replaces.
+    """
+
+    resolved = _resolve_every_subset()
+    assert overlay_stamp_violations(resolved) == []
+
+    # (a) COLLISION: an arm-shaped template wears a default value, so a recording
+    #     made under the arm would resolve as a default one.
+    collided = dict(resolved)
+    arm = frozenset({"reporter_reasoning"})
+    collided[arm] = {
+        **resolved[arm],
+        "crewmate_report": PROMPT_VERSION_SETS[_OVERLAY_SET]["crewmate_report"],
+    }
+    assert any("default value" in line for line in overlay_stamp_violations(collided))
+
+    # (b) SPURIOUS SPLIT: two slates that shaped a template identically are given
+    #     different stamps, which would send a recording to an archive it does
+    #     not need.
+    split = dict(resolved)
+    split[frozenset()] = {
+        **resolved[frozenset()],
+        "vote_ballot": "vote_ballot.qwen3_6_27b.v5.invented",
+    }
+    assert any("same bodies" in line for line in overlay_stamp_violations(split))
+
+    # (c) LOST LINEAGE: a composite rebuilt off the default value, dropping the
+    #     variant body's own version -- the failure the per-template fold exists
+    #     to stop, and the one a stamp cannot recover from.
+    lossy = dict(resolved)
+    all_on = frozenset(_OVERLAY_KEYS)
+    lossy[all_on] = {
+        **resolved[all_on],
+        "accusation_round": (
+            "accusation_round.qwen3_6_27b.v5.impostor_roll_call+reporter_reasoning"
+        ),
+    }
+    assert any("lineage" in line for line in overlay_stamp_violations(lossy))
 
 
 def test_impostor_report_opening_kind_is_exercised() -> None:

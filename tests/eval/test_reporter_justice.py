@@ -30,6 +30,8 @@ from typing import Any
 
 import pytest
 
+from eval.validity import resolve_roster_knobs, roles_by_seed
+
 from eval.reporter_justice import (
     EXCULPATORY_HINGE_TERMS,
     ReporterJusticeCells,
@@ -228,16 +230,22 @@ class TestInvocation:
 class TestCoDiscovery:
     def test_the_split_by_role(self, pooled: ReporterJusticeCells) -> None:
         # The measurement that REJECTED the filed fix. baseline-7 REFERENCE:
-        # 121/618 meetings, 89 CREWMATE / 51 IMPOSTOR = 36.4% impostor. On these
-        # bytes the impostor share is HIGHER, so exculpatory framing over the
-        # discoverer set would defend an impostor in over half the meetings it
-        # fired in -- the rejection holds a fortiori.
-        assert pooled.meetings_with_co_discoverer == 173
-        assert pooled.co_discoverer_slots_crewmate == 109
-        assert pooled.co_discoverer_slots_impostor == 114
-        assert pooled.co_discoverer_slots == 223
-        assert pooled.co_discoverer_impostor_share == pytest.approx(114 / 223, abs=1e-9)
-        assert pooled.co_discoverer_impostor_share > 0.5
+        # 121/618 meetings, 89 CREWMATE / 51 IMPOSTOR = 36.4% impostor. The
+        # meeting count sits inside its interval; the impostor SHARE is well
+        # above it, so exculpatory framing over the discoverer set would defend
+        # an impostor in nearly half the meetings it fired in and the rejection
+        # holds a fortiori.
+        #
+        # A co-discoverer is matched on THIS meeting's corpse, not on any corpse
+        # near the trigger tick: the tick-only predicate counted a speaker who
+        # found a different body a tick earlier and inflated this class by
+        # roughly a third (173 meetings / 223 slots).
+        assert pooled.meetings_with_co_discoverer == 118
+        assert pooled.co_discoverer_slots_crewmate == 74
+        assert pooled.co_discoverer_slots_impostor == 71
+        assert pooled.co_discoverer_slots == 145
+        assert pooled.co_discoverer_impostor_share == pytest.approx(71 / 145, abs=1e-9)
+        assert pooled.co_discoverer_impostor_share > 0.45
 
 
 class TestPerSetShape:
@@ -258,7 +266,7 @@ class TestPerSetShape:
             "34 reporter (73.9% of innocent)",
             "34/620",
             "12/1859",
-            "114 IMPOSTOR",
+            "71 IMPOSTOR",
         ):
             assert fragment in text, fragment
 
@@ -410,6 +418,123 @@ def test_the_aim_at_reporter_cells_bite(tmp_path: Path) -> None:
     assert doctored.impostor_ballots_at_reporter >= base.impostor_ballots_at_reporter
 
 
+def test_the_speech_accusation_cells_bite(tmp_path: Path) -> None:
+    # The BALLOT perturbation above leaves the speech half untouched, so it gets
+    # its own: rewrite every accusation claim in the transcript to name the
+    # reporter and the at-reporter numerators must rise to their denominators;
+    # then DROP every accusation claim and both denominators must fall to zero.
+    # Without this the speech cells rest on corpus pins alone.
+    def aim(rows: _Rows) -> _Rows:
+        for row in rows:
+            if row.get("kind") != "meeting":
+                continue
+            transcript = row.get("transcript")
+            if not isinstance(transcript, dict):
+                continue
+            for turn in _items(transcript, "turns"):
+                for claim in _items(turn, "claims"):
+                    if isinstance(claim, dict) and claim.get("type") == "accusation":
+                        claim["against"] = row["triggered_by"]
+        return rows
+
+    def strip(rows: _Rows) -> _Rows:
+        for row in rows:
+            if row.get("kind") != "meeting":
+                continue
+            transcript = row.get("transcript")
+            if not isinstance(transcript, dict):
+                continue
+            for turn in _items(transcript, "turns"):
+                if isinstance(turn, dict):
+                    turn["claims"] = [
+                        claim
+                        for claim in _items(turn, "claims")
+                        if not (
+                            isinstance(claim, dict)
+                            and claim.get("type") == "accusation"
+                        )
+                    ]
+        return rows
+
+    base = _baseline(tmp_path / "base")
+    assert base.crew_accusations + base.impostor_accusations > 0
+    assert (
+        base.crew_accusations_at_reporter + base.impostor_accusations_at_reporter
+        < base.crew_accusations + base.impostor_accusations
+    )
+
+    aimed = compute_reporter_justice(_doctored_set(tmp_path / "aimed", mutate=aim))
+    # Denominators hold, numerators saturate: the split is by the SPEAKER's role
+    # and the target is what moved.
+    assert aimed.crew_accusations == base.crew_accusations
+    assert aimed.impostor_accusations == base.impostor_accusations
+    assert aimed.crew_accusations_at_reporter == aimed.crew_accusations
+    assert aimed.impostor_accusations_at_reporter == aimed.impostor_accusations
+
+    stripped = compute_reporter_justice(
+        _doctored_set(tmp_path / "stripped", mutate=strip)
+    )
+    assert stripped.crew_accusations == 0
+    assert stripped.impostor_accusations == 0
+    assert stripped.crew_accusations_at_reporter == 0
+    assert stripped.impostor_accusations_at_reporter == 0
+    # The BALLOT cells are untouched by a transcript mutation, so the two halves
+    # are shown to be independent rather than one counter read twice.
+    assert stripped.crew_ballots == base.crew_ballots
+    assert stripped.impostor_ballots == base.impostor_ballots
+
+
+def test_the_reporter_slot_class_survives_an_impostor_reporter(tmp_path: Path) -> None:
+    # The laundering case the role census exists to catch, planted because the
+    # corpus has none of it: make an IMPOSTOR the reporter and the slot classes
+    # must still partition the roster -- that seat belongs to the reporter class,
+    # not to both -- and its ejection must count as a reporter ejection without
+    # ever becoming an innocent one.
+    source = _SETS[1]
+    replay, rows = _first_replay_with_a_meeting(source)
+    seed = int(replay.stem.rsplit("-", 1)[1])
+    num_players, num_impostors, tasks_per_crewmate = resolve_roster_knobs(source)
+    roles = roles_by_seed(
+        source,
+        num_players=num_players,
+        num_impostors=num_impostors,
+        tasks_per_crewmate=tasks_per_crewmate,
+    )[seed]
+    impostor = next(pid for pid, role in sorted(roles.items()) if role == "IMPOSTOR")
+
+    def impostor_reports(mutated: _Rows) -> _Rows:
+        for row in mutated:
+            if row.get("kind") == "meeting":
+                # The ejection too, so the reporter-first ejection branch is
+                # exercised and not only the slot loop.
+                if row.get("ejected_player_id") is not None:
+                    row["ejected_player_id"] = impostor
+                row["triggered_by"] = impostor
+            for action in _items(row, "actions"):
+                if isinstance(action, dict) and action.get("type") in (
+                    "report",
+                    "emergency",
+                ):
+                    action["actor"] = impostor
+        return mutated
+
+    cells = compute_reporter_justice(_doctored_set(tmp_path, mutate=impostor_reports))
+    assert cells.reporter_impostor_meetings > 0
+    assert cells.reporter_crewmate_meetings == 0
+    # The partition holds: the impostor reporter occupies the reporter slot and
+    # NOT the impostor slot, so the three classes still sum to the ballot count.
+    assert (
+        cells.reporter_slots + cells.innocent_non_reporter_slots + cells.impostor_slots
+        == cells.crew_ballots + cells.impostor_ballots
+    )
+    assert cells.reporter_slots == cells.body_report_meetings
+    # And an ejected impostor reporter is a reporter ejection that is NOT an
+    # innocent one -- the whole-set ledger keeps it on the impostor side.
+    assert cells.reporter_ejections > 0
+    assert cells.innocent_ejections == 0
+    assert cells.impostor_ejections >= cells.reporter_ejections
+
+
 def test_the_invocation_cells_bite(tmp_path: Path) -> None:
     # Plant the base-rate reasoning into every rationale; the mention and hinge
     # counts must both rise to the whole ballot population.
@@ -457,19 +582,40 @@ def test_the_speech_cells_bite(tmp_path: Path) -> None:
     assert doctored.speech_turns_with_hinge == doctored.speech_turns
 
 
+def _reported_victims(rows: _Rows) -> dict[int, str]:
+    """``{meeting tick: reported victim}`` off the applied report actions."""
+
+    victims: dict[int, str] = {}
+    for row in rows:
+        for action in _items(row, "actions"):
+            if not isinstance(action, dict) or action.get("type") != "report":
+                continue
+            payload = action.get("payload")
+            body_id = payload.get("body_id") if isinstance(payload, dict) else None
+            if isinstance(body_id, str):
+                victims[int(str(row["tick"]))] = body_id.rsplit("-", 1)[0][
+                    len("body-") :
+                ]
+    return victims
+
+
 def test_the_co_discovery_cells_bite(tmp_path: Path) -> None:
-    # Plant a discovery line at the trigger tick into every recorded prompt: each
-    # non-reporter speaker then reads as a co-discoverer, so the meeting count
-    # and both role slots must move off zero.
+    # Plant a discovery of THIS MEETING'S corpse at the trigger tick into every
+    # recorded prompt: each non-reporter speaker then reads as a co-discoverer,
+    # so the meeting count and the role slots must move off zero.
     def mutate(rows: _Rows) -> _Rows:
+        victims = _reported_victims(rows)
         for row in rows:
             if row.get("kind") != "meeting":
                 continue
-            tick = row.get("tick")
+            tick = int(str(row["tick"]))
+            victim = victims.get(tick)
+            if victim is None:
+                continue
             for call in _items(row, "llm_calls"):
                 if isinstance(call, dict) and call.get("agent_id"):
                     call["prompt"] = (
-                        f"[tick {tick}] You discovered p-9's body in MEDBAY.\n"
+                        f"[tick {tick}] You discovered {victim}'s body in MEDBAY.\n"
                         + str(call.get("prompt", ""))
                     )
         return rows
@@ -481,6 +627,43 @@ def test_the_co_discovery_cells_bite(tmp_path: Path) -> None:
     assert base.meetings_with_co_discoverer == 0
     assert doctored.meetings_with_co_discoverer > 0
     assert doctored.co_discoverer_slots > 0
+
+
+def test_a_discovery_of_a_different_corpse_is_not_a_co_discovery(
+    tmp_path: Path,
+) -> None:
+    # The discrimination half, and the reason the reported victim is threaded at
+    # all: the SAME planted line naming a corpse this meeting was NOT opened on
+    # must count nobody. A tick-only predicate calls that speaker a co-discoverer
+    # and inflates the class -- it did, by about a third, before the victim match.
+    def mutate(rows: _Rows) -> _Rows:
+        victims = _reported_victims(rows)
+        for row in rows:
+            if row.get("kind") != "meeting":
+                continue
+            tick = int(str(row["tick"]))
+            reported = victims.get(tick)
+            if reported is None:
+                continue
+            other = next(
+                pid
+                for pid in ("p-1", "p-2", "p-3", "p-4")
+                if pid != reported and pid != row["triggered_by"]
+            )
+            for call in _items(row, "llm_calls"):
+                if isinstance(call, dict) and call.get("agent_id"):
+                    call["prompt"] = (
+                        f"[tick {tick}] You discovered {other}'s body in MEDBAY.\n"
+                        + str(call.get("prompt", ""))
+                    )
+        return rows
+
+    base = _baseline(tmp_path / "base")
+    doctored = compute_reporter_justice(
+        _doctored_set(tmp_path / "wrong-corpse", mutate=mutate)
+    )
+    assert doctored.meetings_with_co_discoverer == base.meetings_with_co_discoverer == 0
+    assert doctored.co_discoverer_slots == 0
 
 
 def test_the_discovery_window_excludes_an_older_row(tmp_path: Path) -> None:
