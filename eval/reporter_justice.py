@@ -41,6 +41,7 @@ hinge count as a ceiling on real use.
 
 from __future__ import annotations
 
+import math
 import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
@@ -192,15 +193,19 @@ class ReporterJusticeCells:
     def reporter_relative_risk(self) -> float:
         """Reporter ejection rate over the innocent non-reporter's.
 
-        ``0.0`` when the baseline rate is 0 -- an undefined ratio, reported as
-        undefined rather than as infinity, because a set with no innocent
-        non-reporter ejection at all says nothing about the multiple.
+        A zero baseline is NOT zero risk, and reporting it as ``0.0`` would
+        reverse the reading of the one shape the class cares about -- a set where
+        reporters are ejected and no other innocent seat ever is. So a zero
+        baseline with reporter ejections returns :data:`math.inf` (unbounded), and
+        a zero baseline with no reporter ejection returns :data:`math.nan` (no
+        evidence either way). :func:`render_reporter_justice` prints both in
+        words; a caller comparing numbers should test ``math.isfinite`` first.
         """
 
         baseline = self.innocent_non_reporter_ejection_rate
-        if baseline <= 0.0:
-            return 0.0
-        return self.reporter_ejection_rate / baseline
+        if baseline > 0.0:
+            return self.reporter_ejection_rate / baseline
+        return math.inf if self.reporter_ejections else math.nan
 
     @property
     def reporter_share_of_innocent_ejections(self) -> float:
@@ -245,6 +250,17 @@ class ReporterJusticeCells:
 
 def _rate(numerator: int, denominator: int) -> float:
     return numerator / denominator if denominator else 0.0
+
+
+def _relative_risk_text(cells: ReporterJusticeCells) -> str:
+    """The relative risk in words, so an undefined ratio never reads as zero."""
+
+    risk = cells.reporter_relative_risk
+    if math.isnan(risk):
+        return "undefined (no innocent ejection of either kind)"
+    if math.isinf(risk):
+        return "unbounded (no innocent non-reporter was ever ejected)"
+    return f"{risk:.2f}x"
 
 
 @dataclass(frozen=True)
@@ -557,7 +573,7 @@ def render_reporter_justice(cells: ReporterJusticeCells) -> str:
         f"{cells.innocent_non_reporter_ejection_rate:.2%}, "
         f"impostor {cells.impostor_slot_ejections}/{cells.impostor_slots} = "
         f"{cells.impostor_ejection_rate:.2%} "
-        f"(relative risk {cells.reporter_relative_risk:.2f}x)",
+        f"(relative risk {_relative_risk_text(cells)})",
         f"  speech at reporter: crew {cells.crew_accusations_at_reporter}/"
         f"{cells.crew_accusations} = {cells.crew_accusation_at_reporter_share:.1%}, "
         f"impostor {cells.impostor_accusations_at_reporter}/"

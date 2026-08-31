@@ -552,6 +552,30 @@ class TestReporterReasoningDiscoveryAccount:
         )
         assert _DISCOVERY_ACCOUNT_OPENER not in prompts[(_REPORTER, "opening")]
 
+    def test_two_corpses_in_the_window_name_neither(self) -> None:
+        # The meeting layer carries no structured trigger body, so with two of
+        # this speaker's own discoveries inside the window nothing here can say
+        # WHICH one opened the meeting. Naming the wrong victim is worse than
+        # naming none: the ask stays, the guess does not.
+        ambiguous: dict[PlayerId, tuple[BodyDiscoveryRecord, ...]] = {
+            _REPORTER: (
+                BodyDiscoveryRecord(victim_id="p-2", room="MEDBAY", tick=5),
+                BodyDiscoveryRecord(victim_id="p-9", room="REACTOR", tick=5),
+            )
+        }
+        opening = _turn_prompts(
+            trigger=_BODY_REPORT, env=_LEVER_ON, discoveries=ambiguous
+        )[(_REPORTER, "opening")]
+        line = next(
+            row
+            for row in opening.splitlines()
+            if row.startswith(_DISCOVERY_ACCOUNT_OPENER)
+        )
+        assert "p-2" not in line
+        assert "p-9" not in line
+        assert "MEDBAY" not in line
+        assert "REACTOR" not in line
+
 
 class TestReporterReasoningCoDiscovery:
     """Rule (c): neutral, self-addressed, and never a roster."""
@@ -621,6 +645,23 @@ class TestReporterReasoningCoDiscovery:
         )
         assert _CO_DISCOVERY_LINE in _who_reported_block(prompts[("p-3", "reply")])
         assert _CO_DISCOVERY_LINE not in _who_reported_block(prompts[("p-4", "reply")])
+
+    def test_two_corpses_in_the_window_still_place_the_speaker_at_the_body(
+        self,
+    ) -> None:
+        # The ambiguity above suppresses the concrete CLAUSE, not the plain fact:
+        # a speaker who found two corpses in the window was still there, and
+        # dropping the line would silently punish the very case it exists for.
+        ambiguous: dict[PlayerId, tuple[BodyDiscoveryRecord, ...]] = {
+            "p-3": (
+                BodyDiscoveryRecord(victim_id="p-2", room="MEDBAY", tick=5),
+                BodyDiscoveryRecord(victim_id="p-9", room="REACTOR", tick=5),
+            )
+        }
+        prompts = _turn_prompts(
+            trigger=_BODY_REPORT, env=_LEVER_ON, discoveries=ambiguous
+        )
+        assert _CO_DISCOVERY_LINE in _who_reported_block(prompts[("p-3", "reply")])
 
     def test_a_row_outside_the_window_is_not_a_co_discovery(self) -> None:
         stale: dict[PlayerId, tuple[BodyDiscoveryRecord, ...]] = {

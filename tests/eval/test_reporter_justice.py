@@ -22,6 +22,7 @@ MOVE, so a pin that agreed with any corpus would fail here.
 from __future__ import annotations
 
 import json
+import math
 import shutil
 from collections.abc import Callable
 from pathlib import Path
@@ -117,6 +118,26 @@ class TestReporterExposure:
             (34 / 620) / (12 / 1859), abs=1e-9
         )
         assert pooled.reporter_relative_risk == pytest.approx(8.495, abs=5e-3)
+
+    def test_an_undefined_relative_risk_is_never_reported_as_zero(self) -> None:
+        # replays/samples/4p1i ejects 4 reporters and 0 innocent non-reporters.
+        # A ratio over a zero baseline is UNBOUNDED, not zero, and printing 0.00x
+        # would reverse the reading of the one shape this class is about.
+        cells = compute_reporter_justice(_SETS[1])
+        assert cells.reporter_ejections == 4
+        assert cells.innocent_non_reporter_ejections == 0
+        assert math.isinf(cells.reporter_relative_risk)
+        assert "unbounded" in render_reporter_justice(cells)
+        assert "0.00x" not in render_reporter_justice(cells)
+
+    def test_no_innocent_ejection_of_either_kind_reads_as_undefined(self) -> None:
+        # replays/ml_corpus/4p1i ejects no innocent at all: there is no evidence
+        # either way, which is a third state and not a zero.
+        cells = compute_reporter_justice(_SETS[3])
+        assert cells.reporter_ejections == 0
+        assert cells.innocent_non_reporter_ejections == 0
+        assert math.isnan(cells.reporter_relative_risk)
+        assert "undefined" in render_reporter_justice(cells)
 
     def test_the_slot_classes_partition_the_living_roster(
         self, pooled: ReporterJusticeCells

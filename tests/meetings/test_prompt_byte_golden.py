@@ -138,7 +138,8 @@ from meetings.manager import (
     MeetingTrigger,
     SuspicionEntry,
 )
-from meetings.schemas import MeetingResult
+from meetings.render_contract import ReporterContext
+from meetings.schemas import MeetingResult, MeetingTranscript
 from meetings.transcript import MeetingTriggerKind
 from observation.service import ObservationService
 from orchestrator.game import (
@@ -1095,35 +1096,50 @@ def _first_meeting_state(
 _OVERLAY_SET: str = "qwen3_6_27b"
 _OVERLAY_KEYS: tuple[str, ...] = tuple(_PROMPT_VERSION_OVERLAYS)
 
-# The ALL-ON composite, materialised by name: the one arm the Wave-2 smoke and
-# the adopting record spend a run on, so it is pinned rather than derived at the
+# The ALL-ON composite, materialised by name: the arm the Wave-2 smoke and the
+# adopting record spend a run on, so it is pinned rather than derived at the
 # record. Grows when a sibling registers, which is the point -- the change shows
-# up here as a diff instead of inside a fold nobody reads.
+# up here as a diff instead of inside a fold nobody reads. Each cell carries the
+# LINEAGE of every body that shaped it: ``accusation_round`` joins the roll-call
+# variant's own v1 with the reporter arm's v5 line, so a bump to EITHER moves the
+# stamp; a template no enabled arm re-bodies keeps its default value, because
+# those are the default bytes.
 _ALL_ON_STAMPS: Mapping[str, str] = {
-    "crewmate_report": (
-        "crewmate_report.qwen3_6_27b.v5.impostor_roll_call+reporter_reasoning"
-    ),
-    "impostor_report": (
-        "impostor_report.qwen3_6_27b.v5.impostor_roll_call+reporter_reasoning"
-    ),
+    "crewmate_report": "crewmate_report.qwen3_6_27b.v5.reporter_reasoning",
+    "impostor_report": "impostor_report_roll_call.qwen3_6_27b.v1",
     "accusation_round": (
-        "accusation_round.qwen3_6_27b.v5.impostor_roll_call+reporter_reasoning"
+        "accusation_round_roll_call.qwen3_6_27b.v1"
+        "+accusation_round.qwen3_6_27b.v5.reporter_reasoning"
     ),
     "vote_ballot": "vote_ballot.qwen3_6_27b.v5",
 }
 
 
+def _contributors(template: str, keys: frozenset[str]) -> tuple[str, ...]:
+    """The arms in ``keys`` that re-body ``template``, in registration order.
+
+    The stamp is a statement about BODIES, so two slates share a template's stamp
+    exactly when the same arms shaped it -- which is when the rendered bytes are
+    the same. This is the predicate the invariant below is written against.
+    """
+
+    default = PROMPT_VERSION_SETS[_OVERLAY_SET]
+    return tuple(
+        key
+        for key in _OVERLAY_KEYS
+        if key in keys
+        and _PROMPT_VERSION_OVERLAYS[key][_OVERLAY_SET][template] != default[template]
+    )
+
+
 def _templates_touched_by(keys: frozenset[str]) -> set[str]:
     """Templates at least one of ``keys`` re-bodies, against the default entry."""
 
-    default = PROMPT_VERSION_SETS[_OVERLAY_SET]
-    touched: set[str] = set()
-    for key in keys:
-        entry = _PROMPT_VERSION_OVERLAYS[key][_OVERLAY_SET]
-        touched |= {
-            template for template, value in entry.items() if value != default[template]
-        }
-    return touched
+    return {
+        template
+        for template in PROMPT_VERSION_SETS[_OVERLAY_SET]
+        if _contributors(template, keys)
+    }
 
 
 def _first_meeting_prompt_set() -> Mapping[str, str]:
@@ -1192,22 +1208,81 @@ def test_a_lever_on_recording_can_never_wear_a_default_stamp() -> None:
         for template in touched:
             assert versions[template] not in default_values, (keys, template)
 
-    # No two distinct subsets share a value on any template either of them
-    # re-bodies -- the exhaustive form of "an arm's bytes wear their own stamp".
+    # Two slates share a template's stamp EXACTLY WHEN the same arms shaped that
+    # template -- which is exactly when the rendered bytes are the same. Stronger
+    # than "different slates differ somewhere": it forbids a collision between
+    # different bodies AND forbids a spurious split between identical ones, which
+    # is what would put a recording in an archive it does not need.
     for left, left_versions in resolved.items():
         for right, right_versions in resolved.items():
-            if left == right:
-                continue
-            for template in _templates_touched_by(left | right):
-                assert left_versions[template] != right_versions[template], (
-                    left,
-                    right,
-                    template,
+            for template in PROMPT_VERSION_SETS[_OVERLAY_SET]:
+                same_bodies = _contributors(template, left) == _contributors(
+                    template, right
                 )
+                assert (left_versions[template] == right_versions[template]) is (
+                    same_bodies
+                ), (left, right, template)
+
+    # A composite carries the LINEAGE of every body that shaped it, so a bump to
+    # any participating body moves the stamp. Rebuilding it from the default
+    # value instead would leave a variant body's revision invisible.
+    both = resolved[frozenset(_OVERLAY_KEYS)]
+    for template in _templates_touched_by(frozenset(_OVERLAY_KEYS)):
+        for key in _contributors(template, frozenset(_OVERLAY_KEYS)):
+            arm_value = _PROMPT_VERSION_OVERLAYS[key][_OVERLAY_SET][template]
+            assert arm_value in both[template], (template, key)
 
     # And the ALL-ON arm -- the one 21.23 smokes and 21.24 records -- is
     # materialised by name rather than left to be derived at the record.
-    assert dict(resolved[frozenset(_OVERLAY_KEYS)]) == _ALL_ON_STAMPS
+    assert dict(both) == _ALL_ON_STAMPS
+
+
+def test_a_file_swapping_arm_serves_a_body_its_siblings_do_not_reach() -> None:
+    """A KNOWN GAP, pinned so it cannot be rediscovered by a recording.
+
+    An arm that swaps in a variant FILE serves a body authored independently of
+    every sibling. A sibling whose block lives in the DEFAULT body therefore does
+    not reach the render while that swap is on: the two compose in the stamp and
+    not in the bytes. ``impostor_roll_call`` swaps ``accusation_round.j2`` for
+    ``accusation_round_roll_call.j2``, which carries no ``<who_reported>`` block,
+    so with both arms ON every statement turn silently loses the reporter-voice
+    effects.
+
+    Neither arm's slate is recorded (18.10's was not shipped by the CREW-ONLY
+    ruling, and the Wave-2 record runs its own three arms with this one OFF), and
+    the variant file belongs to the other arm's frozen v1 lineage, so this is
+    pinned rather than patched here. The rule for the next arm author is in
+    ``orchestrator.game.prompt_versions_for_set``: an arm that swaps a file must
+    author its siblings' blocks into the variant. When one does, THIS test fails
+    -- which is the point.
+    """
+
+    on_both = {"AILIBI_IMPOSTOR_ROLL_CALL": "1", "AILIBI_REPORTER_REASONING": "1"}
+    renderers = build_prompt_renderers(_OVERLAY_SET, env=on_both)
+    rendered = renderers.statement(
+        agent_id="p-3",
+        rendered_memory="(memory)",
+        transcript=MeetingTranscript(turns=()),
+        contradictions=(),
+        prior_turn=None,
+        turn_kind="reply",
+        reporter_context=ReporterContext(reporter_id="p-1", tick=5),
+        at_body=True,
+    )
+    assert "<who_reported>" not in rendered
+    # With the swap OFF the SAME threaded context does render, so the assertion
+    # above is about the variant body and not about a context that never landed.
+    default_render = build_prompt_renderers(_OVERLAY_SET, env={}).statement(
+        agent_id="p-3",
+        rendered_memory="(memory)",
+        transcript=MeetingTranscript(turns=()),
+        contradictions=(),
+        prior_turn=None,
+        turn_kind="reply",
+        reporter_context=ReporterContext(reporter_id="p-1", tick=5),
+        at_body=True,
+    )
+    assert "<who_reported>" in default_render
 
 
 def test_the_subset_collision_pin_bites_on_a_planted_overlap() -> None:

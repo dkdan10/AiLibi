@@ -1741,22 +1741,33 @@ class MeetingManager:
         # every other speaker reads it on their statement (the base rate), and
         # never one addressed at themselves.
         speaker_is_reporter = participant.agent_id == render_reporter_id
+        discoveries = (
+            _discoveries_in_window(
+                participant.body_discovery_records,
+                trigger_tick=trigger.trigger_tick,
+            )
+            if render_reporter_id is not None
+            else ()
+        )
         reporter_context = (
             _reporter_context_for(
                 reporter_id=render_reporter_id,
                 trigger_tick=trigger.trigger_tick,
-                records=participant.body_discovery_records,
+                discoveries=discoveries,
             )
             if render_reporter_id is not None
             else None
         )
         # Rule (c): the speaker's OWN record places them at the body when the
-        # meeting opened. Self-channel: it says nothing about who else was there,
-        # and it never fires for the reporter, whose discovery IS the report.
+        # meeting opened. Read off the WINDOW rather than off the context's
+        # room, so a speaker who found two corpses in the window -- for whom no
+        # single victim can be named -- is still told the plain fact that they
+        # were there. Self-channel: it says nothing about who else was, and it
+        # never fires for the reporter, whose discovery IS the report.
         at_body = (
             reporter_context is not None
             and not speaker_is_reporter
-            and reporter_context.room != ""
+            and bool(discoveries)
         )
         # Task 13.5.5: turn prompts always read the frozen open-tick render.
         # A turn carries NO ``suspicion_graph`` kwarg (the belief-line-vs-graph
@@ -4049,33 +4060,45 @@ def derive_reported_testimony(result: MeetingResult) -> tuple[ReportedStatement,
     return tuple(sorted(statements, key=_reported_statement_sort_key))
 
 
+def _discoveries_in_window(
+    records: tuple[BodyDiscoveryRecord, ...], *, trigger_tick: int
+) -> tuple[BodyDiscoveryRecord, ...]:
+    """The speaker's own body discoveries within the meeting's trigger window."""
+
+    return tuple(
+        record
+        for record in records
+        if 0 <= trigger_tick - record.tick <= BODY_DISCOVERY_WINDOW_TICKS
+    )
+
+
 def _reporter_context_for(
     *,
     reporter_id: PlayerId,
     trigger_tick: int,
-    records: tuple[BodyDiscoveryRecord, ...],
+    discoveries: tuple[BodyDiscoveryRecord, ...],
 ) -> ReporterContext:
     """The reporter-voice render input for ONE speaker.
 
     ``reporter_id`` and ``trigger_tick`` are meeting-scope facts. The discovery
-    facts are the RECEIVING speaker's own: the latest of their own body-discovery
-    rows inside :data:`BODY_DISCOVERY_WINDOW_TICKS` of the trigger, so a fact only
-    ever reaches the reader who perceived it. A speaker holding no such row gets
-    ``None`` / ``""`` and their prompt carries no discovery clause.
+    facts are the RECEIVING speaker's own, so one only ever reaches the reader
+    who perceived it.
+
+    The concrete victim / room clause is filled ONLY when the window holds
+    exactly ONE of that speaker's discoveries. The meeting layer carries no
+    structured trigger body -- the description IS the trigger surface -- so with
+    two corpses found in the window there is nothing here that can say WHICH one
+    opened the meeting, and naming the wrong victim is worse than naming none.
+    Ambiguity therefore renders the generic ask, not a guess.
     """
 
-    in_window = [
-        record
-        for record in records
-        if 0 <= trigger_tick - record.tick <= BODY_DISCOVERY_WINDOW_TICKS
-    ]
-    if not in_window:
+    if len(discoveries) != 1:
         return ReporterContext(reporter_id=reporter_id, tick=trigger_tick)
-    latest = max(in_window, key=lambda record: record.tick)
+    only = discoveries[0]
     return ReporterContext(
         reporter_id=reporter_id,
-        victim_id=latest.victim_id,
-        room=latest.room,
+        victim_id=only.victim_id,
+        room=only.room,
         tick=trigger_tick,
     )
 

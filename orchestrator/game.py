@@ -410,21 +410,20 @@ IMPOSTOR_ROLL_CALL_PROMPT_VERSION_SETS: Final[Mapping[str, Mapping[str, str]]] =
 }
 
 
-def _lever_arm_versions(set_name: str, lever_keys: Sequence[str]) -> Mapping[str, str]:
+def _lever_arm_versions(set_name: str, lever_key: str) -> Mapping[str, str]:
     """Per-template stamps for an arm that RE-BODIES a set's own templates.
 
-    The 18.10 arm swaps template FILES, so its stamps name the variant file. A
-    lever that renders the SAME files with a guarded block has no other file to
-    name, so its stamps are the set's own values with the participating lever
-    keys appended: ``crewmate_report.qwen3_6_27b.v5.reporter_reasoning`` says
-    which bodies rendered AND which arms shaped them. ``+``-joined for a
-    combination, and no single-lever value ever contains ``+``, so a composite
-    can never collide with an arm's own stamp or with a default one.
+    The 18.10 arm swaps template FILES, so its stamps name the variant file. An
+    arm that renders the SAME files with a guarded block has no other file to
+    name, so its stamps are the set's own values with the arm key appended:
+    ``crewmate_report.qwen3_6_27b.v5.reporter_reasoning`` says which body
+    rendered AND which arm shaped it, so the stamp moves when EITHER moves.
+    No arm value contains ``+``; a composite of two arms does, which is what
+    keeps the two kinds of stamp disjoint.
     """
 
-    suffix = "+".join(lever_keys)
     return {
-        template: f"{value}.{suffix}"
+        template: f"{value}.{lever_key}"
         for template, value in PROMPT_VERSION_SETS[set_name].items()
     }
 
@@ -438,7 +437,7 @@ def _lever_arm_versions(set_name: str, lever_keys: Sequence[str]) -> Mapping[str
 # with the BODIES that moved (audits/audit-phase-17-absence-gate.md Ruling
 # 3(d)): an arm-rendered opening or reply can never wear a default stamp.
 _REPORTER_REASONING_ARM: Final[Mapping[str, str]] = _lever_arm_versions(
-    "qwen3_6_27b", ("reporter_reasoning",)
+    "qwen3_6_27b", "reporter_reasoning"
 )
 REPORTER_REASONING_PROMPT_VERSION_SETS: Final[Mapping[str, Mapping[str, str]]] = {
     "qwen3_6_27b": {
@@ -537,11 +536,20 @@ def prompt_versions_for_set(
     1. application order is registration order (``_TOGGLEABLE_LEVER_RESOLVERS``),
        so the result never depends on environment spelling;
     2. one arm ON serves that arm's own registry entry verbatim; two or more ON
-       resolve every template ANY of them re-bodies to a COMPOSITE stamp derived
-       from the enabled arm names in that same order, so the stamp names exactly
-       which levers shaped the bytes;
+       resolve each template to a COMPOSITE of the values the arms that ACTUALLY
+       re-body it contribute, in that same order, so the stamp names exactly the
+       lineages that shaped those bytes and moves when any of them moves;
     3. the composite is computed by a fold over the enabled set, not by a
        pairwise table, so a third arm costs a registration and no new branch.
+
+    One constraint the fold cannot enforce and the next arm author must respect:
+    an arm that swaps in a variant FILE serves a body written independently of
+    every sibling, so a sibling whose block lives in the DEFAULT body does not
+    reach the render while that swap is on. Two such arms compose in the stamp
+    but not in the bytes. The ``impostor_roll_call`` + ``reporter_reasoning``
+    pair is exactly that case today and is pinned as a known gap in
+    ``tests/meetings/test_prompt_byte_golden.py``; an arm that swaps a file must
+    author its siblings' blocks into the variant.
     """
 
     name = resolve_prompt_set(prompt_set, env=env)
@@ -559,18 +567,22 @@ def prompt_versions_for_set(
     entries = [_overlay_entry(key, name) for key in enabled]
     if len(enabled) == 1:
         return entries[0]
-    composite = _lever_arm_versions(name, enabled)
-    # Only the templates an enabled arm actually re-bodies carry a composite
-    # stamp; a template every enabled arm leaves alone keeps its default value,
-    # exactly as it does under one arm.
-    return {
-        template: (
-            composite[template]
-            if any(entry[template] != value for entry in entries)
-            else value
-        )
-        for template, value in default.items()
-    }
+    # PER-TEMPLATE, and from each contributing arm's OWN value rather than from
+    # the default: an arm that swaps in a variant FILE carries that file's own
+    # lineage (``impostor_report_roll_call…v1``), so a composite rebuilt from the
+    # default value would not move when that variant body was revised and two
+    # different bodies could share one stamp. Joining the contributing values
+    # keeps every participating lineage inside the stamp, so ANY of them moving
+    # moves it. A template no enabled arm re-bodies keeps its default value --
+    # those ARE the default bytes, and giving them a composite would claim a
+    # provenance the render does not have.
+    versions: dict[str, str] = {}
+    for template, value in default.items():
+        contributing = [
+            entry[template] for entry in entries if entry[template] != value
+        ]
+        versions[template] = "+".join(contributing) if contributing else value
+    return versions
 
 
 # Headless recording runs meetings deadline-free (DESIGN.md §1.4, §5.2, §8.3:
