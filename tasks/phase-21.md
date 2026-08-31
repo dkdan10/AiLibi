@@ -5384,6 +5384,30 @@ structured observation rows; the gap this lever closes is SOURCE-counting. (8) T
 stay in `meetings/corroboration.py` (deliberate divergence from 21.18's placement, recorded in
 BLOCK 2).
 
+**Merge-reality record (2026-09-01, orchestrator-ratified at the #415 merge):** Codex ran three
+rounds, eight findings, eight fixed. The two that mattered: a P1 vent-laundering hole (a speaker
+repeating someone else's grounded vent was credited as an independent account — the round-1
+count-based fix was itself corrected in round 2, and the final fix resolves each `vent_sighting`
+flag back to the observation it was minted from) and a P1 render/stamp split (an explicit
+`prompt_versions` pin rendered the block under the OFF-arm stamp). The laundering hole was real
+in code but never fires on the committed bytes, consistent with A-22's 448 engine-backed flags
+with 0 unbacked. The published cells as merged, freshly walked over 672 meetings / 1,525 accused
+rows / 429 ejections: 475 accused subjects with no first-hand source; 11 of 425 row-carrying
+ejections with none; 33 ejections answering the ejectee's own charge; 48 ejected subjects with a
+map-satisfied placement pair. Only cell 4 genuinely moved under the loop (49 → 48 — a same-tick
+pair had been rendered as a legal walk); the round-1 intermediate 482/18 publication was an
+artifact of an over-strict count dropping seven genuine accounts, corrected back before merge and
+named in the PR. Deviations ratified: a FOURTH transcript promotion beyond the enumerated three
+(`_turn_observation_id` → `turn_observation_id`, forced by the round-2 P1 — the alternative was a
+second copy of the id format, the exact failure the promotions exist to prevent; three consumer
+files renamed with it); `tests/agents/test_beliefs.py` was a fifth Protocol stub the forced-touch
+block did not enumerate, and `tests/meetings/test_manager.py` needed no edit. Routed onward:
+`reporter_reasoning` carries the IDENTICAL version/environment disagreement this PR closed for
+its own arm — generalising the refusal from inside this PR would have changed a merged lever's
+contract, so it is bound to 21.24's re-anchor (21.23's smoke is the earlier catch if it bites
+sooner). The OFF-path guarantee held after every round: golden unedited, `verify_samples.sh`
+100/100.
+
 **Ready-to-paste prompt:** `agent_prompts/task-21-19-corroboration.md`
 
 ### Task 21.20 — What you saw is what you can say (lever `testimony_shapes`, default OFF)
