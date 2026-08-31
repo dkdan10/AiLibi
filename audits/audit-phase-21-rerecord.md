@@ -639,14 +639,22 @@ What this record deliberately does NOT discharge:
    would leave the checker reading one vintage against another.
 6. **`README.md:29`'s phases-0-19 / 20-open contradiction** — pre-existing, unrelated to these bytes,
    named here so the ledger carries it rather than absorbed into a record that did not cause it.
-7. **The surrogate verdict artifact.** `training/artifacts/surrogate/verdict.json` was fitted on the
-   corpus that was on disk when it was written; this record re-recorded that corpus underneath it, so
-   16 of its 31 fields no longer re-derive and its row joins the conviction and composed verdicts in
-   reporting STALE. **Re-fitting it is the re-ground's job, not this record's** — `training/` artifacts
-   are out of scope here by contract, and re-stamping one would be exactly the "launder a stale
-   artifact as a current one" move the phase opened against. The two tests that asserted the old
-   premise now assert the honest state instead, with the reason in the code. This does NOT widen the
-   amnesty: the gap is still the same single pair of digests.
+7. **Surrogate verdict staleness → 21.17**, beside the conviction and composed staleness it joins.
+   `training/artifacts/surrogate/verdict.json` was fitted on the corpus that was on disk when it was
+   written; this record re-recorded that corpus underneath it, so 16 of its 31 fields no longer
+   re-derive and its row now reports STALE like its two siblings.
+
+   **Re-stamping it inside this PR was refused, and the reason is structural rather than procedural.**
+   Doing so would take a verdict on the new corpus *inside the record that creates the new corpus* —
+   the same-PR coupling of an ML baseline to a substrate baseline that the phase-20 contract
+   structure exists to forbid. Task 21.17 depends on this record, has not yet run, and is the named
+   discharger of exactly this staleness.
+
+   What the two affected tests assert instead is the honest state: STALE where production already
+   said STALE, and the equality converted into the two properties that must survive a declared gap —
+   the consequence mapping is stable (a NO-GO stays a NO-GO, because the verdict is keyed to the
+   weights, not to the corpus population) and the disagreement is a strict SUBSET of fields, so the
+   artifact is stale rather than corrupt. The amnesty stays at exactly one pair of digests.
 8. **The prior-generation docstring drift** the re-pin sweep deliberately left standing: the `19_8`
    disclosure, the 850-quotations line, the `55/2,726` figure, the `10/31` Wilson cell, the
    12-ejections 4p prose, and the origin-spoken-flags comments. These are stale against a recording

@@ -1,10 +1,10 @@
 {
   "_generated_by": "scripts/regen_test_goldens.py \u2014 do not hand-edit. Measured transcriptions of the committed evidence bytes; regenerate (and REVIEW the diff \u2014 committing it is a re-baselining act) after any evidence re-record.",
-  "fsm_comparator_win_rate": 0.24,
+  "fsm_comparator_win_rate": 0.3,
   "finalists": {
     "utility-es": {
       "impostor_win_rate": 0.52,
-      "win_edge_vs_fsm": 0.28,
+      "win_edge_vs_fsm": 0.22000000000000003,
       "referee_passed": false,
       "mean_score": 41.47,
       "gauges": {
@@ -27,7 +27,7 @@
     },
     "policy-es": {
       "impostor_win_rate": 0.02,
-      "win_edge_vs_fsm": -0.22,
+      "win_edge_vs_fsm": -0.27999999999999997,
       "referee_passed": true,
       "mean_score": 48.2,
       "gauges": {

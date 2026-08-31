@@ -724,37 +724,44 @@ def test_baseline_6_sets_pass_the_hardened_referee_end_to_end() -> None:
         assert all(gauge.passed for gauge in report.supply_gauges)
 
 
-def test_baseline_7_floor_pins_equal_the_measured_bytes() -> None:
-    """EXACT ANCHOR: each baseline-7 floor equals the bytes it was pinned from.
+def test_baseline_8_floor_pins_equal_the_measured_bytes() -> None:
+    """EXACT ANCHOR: each baseline-8 floor equals the bytes it was pinned from.
 
-    Same both-sides discipline as the baseline-6 anchor above — the measured
-    gauge IS the recorded fraction and the pinned floor IS the measured gauge —
-    so an under-pinned floor cannot silently weaken the block while the comments
-    still claim self-consistency.
+    Same both-sides discipline as the retired baseline-6 and baseline-7 anchors —
+    the measured gauge IS the recorded fraction and the pinned floor IS the
+    measured gauge — so an under-pinned floor cannot silently weaken the block
+    while the comments still claim self-consistency.
 
-    Reconstruction is substrate-coupled, so this reads the Phase-20 slate the
+    Re-anchored from baseline 7 at the baseline-8 re-record, which replaced the
+    bytes those floors were pinned from: a baseline-7 floor scored against these
+    bytes fails ``persisted_vent_flags_per_meeting``, the one-vent-one-record
+    repair having stopped minting each witnessed vent twice. That is the referee
+    reading the supply it was pinned to, not a defect, so the baseline-7 block
+    stays FROZEN as history and the anchor moves forward with the bytes.
+
+    Reconstruction is substrate-coupled, so this reads the Phase-21 slate the
     bytes were recorded at; the planted case below carries the "can it fail" half
     and needs no bytes at all.
     """
 
     expected = {
         _NINE: {
-            "witnessed_event_rate": 3 / 177,  # crew-witnessed kills
-            "flags_per_meeting": 144 / 152,  # 92 vent + 52 transcript (was 134/152)
-            "testimony_backed_conversion": 84 / 132,  # SUBJECT-AWARE + saw_move
-            "transcript_flags_per_meeting": 52 / 152,  # the deduction component
-            "persisted_vent_flags_per_meeting": 92 / 152,  # the vent component
+            "witnessed_event_rate": 3 / 182,  # crew-witnessed kills (was 3/177)
+            "flags_per_meeting": 147 / 151,  # 90 vent + 57 transcript (was 144/152)
+            "testimony_backed_conversion": 81 / 128,  # SUBJECT-AWARE (was 84/132)
+            "transcript_flags_per_meeting": 57 / 151,  # deduction cmp (was 52/152)
+            "persisted_vent_flags_per_meeting": 90 / 151,  # vent cmp (was 92/152)
         },
         _FOUR: {
-            "witnessed_event_rate": 1 / 65,  # numerator 1 -> ADVISORY
-            "flags_per_meeting": 20 / 40,  # 20 vent + 0 transcript
-            "testimony_backed_conversion": 20 / 34,  # SUBJECT-AWARE + saw_move
-            "transcript_flags_per_meeting": 0 / 40,  # numerator 0 -> ADVISORY
-            "persisted_vent_flags_per_meeting": 20 / 40,
+            "witnessed_event_rate": 1 / 62,  # numerator 1 -> ADVISORY (was 1/65)
+            "flags_per_meeting": 20 / 39,  # 20 vent + 0 transcript (was 20/40)
+            "testimony_backed_conversion": 20 / 33,  # SUBJECT-AWARE (was 20/34)
+            "transcript_flags_per_meeting": 0 / 39,  # numerator 0 -> ADVISORY
+            "persisted_vent_flags_per_meeting": 20 / 39,  # was 20/40
         },
     }
     for sample_dir, fractions in expected.items():
-        report = compute_watchability(sample_dir, baseline_id="baseline-7")
+        report = compute_watchability(sample_dir, baseline_id="baseline-8")
         assert report.referee_passed is True
         assert all(gauge.passed for gauge in report.supply_gauges)
         by_name = {gauge.name: gauge for gauge in report.supply_gauges}
@@ -1228,20 +1235,20 @@ def test_malformed_bytes_fail_closed_not_crash(tmp_path: Path) -> None:
     assert report.per_game == ()
 
 
-def test_baseline_6_witnessed_event_rate_is_the_measured_anchor() -> None:
-    """The 9p2i witnessed-event rate is the 6/177 = 3.39% crew-witnessed anchor.
+def test_witnessed_event_rate_is_the_measured_anchor() -> None:
+    """The 9p2i witnessed-event rate is the 3/182 = 1.65% crew-witnessed anchor.
 
     Computed from the committed bytes (not the pinned constant), so it tracks the
-    default baseline: the vent-widening baseline 6 records 6 crew-witnessed of 177
-    kills in 9p2i (the pre-widening baseline 6 was 7/173 = 4.05%; baseline 5 was
-    7/203 = 3.45%).
+    default baseline: baseline 8 records 3 crew-witnessed of 182 kills in 9p2i
+    (baseline 7 was 3/177 = 1.69%; the vent-widening baseline 6 was 6/177 = 3.39%;
+    the pre-widening baseline 6 was 7/173 = 4.05%; baseline 5 was 7/203 = 3.45%).
     """
 
     report = compute_watchability(_NINE)
     witnessed = next(
         g for g in report.supply_gauges if g.name == "witnessed_event_rate"
     )
-    assert witnessed.measured == pytest.approx(1 / 59)  # was 6 / 177
+    assert witnessed.measured == pytest.approx(3 / 182)  # was 1 / 59 (== 3/177)
 
 
 def test_evidence_starved_set_fails_the_referee() -> None:
@@ -1521,9 +1528,9 @@ def test_cli_watchability_json_emits_per_game_and_aggregate() -> None:
     report = payload[0]
     assert report["referee_passed"] is True
     assert report["roster_key"] == "9p2i"
-    assert report["baseline_id"] == "baseline-7"
+    assert report["baseline_id"] == "baseline-8"  # was baseline-7
     assert len(report["per_game"]) == 50
-    # Three Layer-1 gauges plus the two flags-per-meeting components baseline-7
+    # Three Layer-1 gauges plus the two flags-per-meeting components baseline-8
     # pins; the components trail the merged row, in that order.
     assert [g["name"] for g in report["supply_gauges"]] == [
         "witnessed_event_rate",
@@ -1541,7 +1548,7 @@ def test_cli_watchability_json_emits_per_game_and_aggregate() -> None:
     # the suspicion-theater games). Re-derived on the same bytes when the backing
     # vocabulary gained the spoken saw_move placement: more attempts enter D2 than
     # convert, so the mean eases.
-    assert report["mean_score"] == pytest.approx(50.05)  # was 50.69
+    assert report["mean_score"] == pytest.approx(48.57)  # was 50.05
 
 
 def test_cli_watchability_human_output() -> None:

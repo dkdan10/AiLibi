@@ -289,20 +289,20 @@ def test_flag_labels_reproduce_the_referee_census(sample_dir: Path) -> None:
 def test_sample_conversion_census_pins(
     nine_conviction: ConvictionTable, four_conviction: ConvictionTable
 ) -> None:
-    """The mirrored conversion census on the committed baseline-6 samples.
+    """The mirrored conversion census on the committed baseline-8 samples.
 
     Regression pins (re-derived from bytes, re-pinned at any re-record):
-    the observation-backed conversion economy the 18.11 gate shipped is
-    DENSE on baseline 6 — conversion is no longer the scarce quantity the
+    the observation-backed conversion economy the 18.11 gate shipped stays
+    DENSE — conversion is no longer the scarce quantity the
     §3.1 census measured at baseline 5.
     """
 
-    assert nine_conviction.meetings_total == 152  # was 165
-    assert nine_conviction.conversion_attempts_total == 132  # was 115
-    assert nine_conviction.conversions_total == 84  # was 80
-    assert four_conviction.meetings_total == 40  # was 39
-    assert four_conviction.conversion_attempts_total == 34  # was 31
-    assert four_conviction.conversions_total == 20  # was 19
+    assert nine_conviction.meetings_total == 151  # was 152
+    assert nine_conviction.conversion_attempts_total == 128  # was 132
+    assert nine_conviction.conversions_total == 81  # was 84
+    assert four_conviction.meetings_total == 39  # was 40
+    assert four_conviction.conversion_attempts_total == 33  # was 34
+    assert four_conviction.conversions_total == 20  # was 20
 
 
 def _turn(
@@ -778,24 +778,24 @@ def test_verdict_consequence_mapping_is_pre_committed() -> None:
 
 
 def test_corpus_census_pins(corpus_conviction: ConvictionTable) -> None:
-    """The baseline-6 corpus economy, pinned (re-derived at any re-record)."""
+    """The baseline-8 corpus economy, pinned (re-derived at any re-record)."""
 
     assert corpus_conviction.games_total == 150
-    assert corpus_conviction.meetings_total == 432  # was 463
-    assert corpus_conviction.ejections_total == 280  # was 302
-    # Every recorded contradiction on the set, vents included: the label is now
-    # exactly len(entry.contradictions) per meeting (308 vent + 120 transcript).
-    # The retired transcript re-derivation reached 431 by losing 43 recorded
-    # flags and minting 46 the record never carried.
-    assert corpus_conviction.flags_minted_total == 428  # was 431
-    assert corpus_conviction.conversion_attempts_total == 373  # was 336
-    assert corpus_conviction.conversions_total == 249  # was 239
+    assert corpus_conviction.meetings_total == 439  # was 432
+    assert corpus_conviction.ejections_total == 281  # was 280
+    # Every recorded contradiction on the set, vents included: the label is
+    # exactly len(entry.contradictions) per meeting (315 persisted vent + 134
+    # re-derived). The retired transcript re-derivation reached 431 by losing 43
+    # recorded flags and minting 46 the record never carried.
+    assert corpus_conviction.flags_minted_total == 449  # was 428
+    assert corpus_conviction.conversion_attempts_total == 386  # was 373
+    assert corpus_conviction.conversions_total == 249  # was 249
     splits = corpus_conviction.splits
     assert splits is not None
     fit_seeds = frozenset(splits.train) | frozenset(splits.val)
     assert (
-        sum(1 for r in corpus_conviction.rows if r.seed in fit_seeds) == 345
-    )  # was 367
+        sum(1 for r in corpus_conviction.rows if r.seed in fit_seeds) == 348
+    )  # was 345
 
 
 def test_committed_artifact_round_trips_and_the_refit_no_longer_matches(
@@ -811,13 +811,14 @@ def test_committed_artifact_round_trips_and_the_refit_no_longer_matches(
     platform, ULP-equivalent elsewhere -- numpy's SIMD reduction grouping varies
     by CPU).
 
-    The baseline-7 record re-recorded ``replays/ml_corpus`` without re-fitting the
+    The baseline-7 and baseline-8 records re-recorded ``replays/ml_corpus``
+    without re-fitting the
     conviction model (a NAMED follow-up, audits/audit-phase-20-baseline-7.md
     §10.2), so a refit on the live corpus is a different model and the pin
     inverts: the fitted parameters must DISAGREE by more than float noise, while
     the schema stays identical. The committed staleness cap keys to the
     artifact's OWN fit-side count (367 under the ~143× rule), never to the live
-    corpus's 345 -- asserting it against the live count would launder a stale cap
+    corpus's 348 -- asserting it against the live count would launder a stale cap
     as a current one. When the re-ground lands this test fails, and the
     equivalence pin comes back.
     """
@@ -835,8 +836,8 @@ def test_committed_artifact_round_trips_and_the_refit_no_longer_matches(
     assert splits is not None
     fit_seeds = frozenset(splits.train) | frozenset(splits.val)
     live_fit_rows = [row for row in corpus_conviction.rows if row.seed in fit_seeds]
-    # The live fit side is 345 meetings; the cap above is keyed to 367.
-    assert len(live_fit_rows) == 345
+    # The live fit side is 348 meetings; the cap above is keyed to 367.
+    assert len(live_fit_rows) == 348  # was 345
     refit = ConvictionEconomyModel()
     refit.fit(live_fit_rows)
     import json
@@ -878,11 +879,11 @@ def test_the_committed_verdict_is_baseline6_and_the_weights_still_clear_the_bar(
     new corpus says would rewrite history rather than extend it.
 
     What CAN be re-derived is the evaluation itself, from the same FROZEN weights
-    against the baseline-7 corpus. That is a fully out-of-sample read: the model
+    against the baseline-8 corpus. That is a fully out-of-sample read: the model
     was fitted on bytes that no longer exist, and it has never seen a single
     meeting in the corpus scoring it here. It still returns GO, on both bars, with
-    a HIGHER flag Spearman (0.715 vs the recorded 0.578) on a smaller held-out
-    split (87 meetings vs 96). That is evidence about the model, and it is NOT a
+    a HIGHER flag Spearman (0.643 vs the recorded 0.578) on a smaller held-out
+    split (91 meetings vs 96). That is evidence about the model, and it is NOT a
     substitute for the re-ground (a NAMED follow-up,
     audits/audit-phase-20-baseline-7.md §10.2): a re-fit would change the weights,
     the cap and the verdict together, and only then does a re-derived verdict
@@ -918,20 +919,20 @@ def test_the_committed_verdict_is_baseline6_and_the_weights_still_clear_the_bar(
         committed.model_role,
     ) == ("ships", "gating", "training-signal")
 
-    # -- the RE-DERIVATION: same frozen weights, baseline-7 corpus -------------
+    # -- the RE-DERIVATION: same frozen weights, baseline-8 corpus -------------
     # The corpus identity field is normalized (the committed artifact stores a
     # repo-relative path; this run built its table from an absolute one).
     assert Path(rederived.replay_set_dir).resolve() == _CORPUS.resolve()
     assert rederived.weights_sha256 == digest
-    assert rederived.test_meetings == 87
-    assert rederived.test_ejections == 55
-    assert rederived.conversions_test == 51  # was 47
+    assert rederived.test_meetings == 91  # was 87
+    assert rederived.test_ejections == 57  # was 55
+    assert rederived.conversions_test == 51  # was 51
     assert rederived.flag_spearman == pytest.approx(
-        0.71457789753481
-    )  # was 0.6991081211401057 — the corrected label fits better
-    assert rederived.conversion_recall == pytest.approx(45 / 51)  # was 44 / 47
-    assert rederived.voice_driven_share == pytest.approx(0.2)
-    assert rederived.conversion_bar == pytest.approx(0.6)
+        0.642539183190714
+    )  # was 0.71457789753481
+    assert rederived.conversion_recall == pytest.approx(49 / 51)  # was 45 / 51
+    assert rederived.voice_driven_share == pytest.approx(0.17543859649122806)  # was 0.2
+    assert rederived.conversion_bar == pytest.approx(0.618421052631579)  # was 0.6
     # The verdict survives the substrate change on both bars.
     assert rederived.verdict == "GO"
     assert rederived.meets_spearman_bar
@@ -943,7 +944,7 @@ def test_the_committed_verdict_is_baseline6_and_the_weights_still_clear_the_bar(
         report.false_positives,
         report.false_negatives,
         report.true_negatives,
-    ) == (45, 2, 6, 34)  # was (44, 3, 3, 37)
+    ) == (49, 3, 2, 37)  # was (45, 2, 6, 34)
 
     # The tripwire: the two are NOT the same evaluation. When the re-ground
     # lands they converge again, and this assertion is what says so.
@@ -1010,9 +1011,9 @@ def test_axis_three_is_a_floor_the_live_model_clears_on_all_three(
     """The frozen re-derivation still passes every axis, axis 3 by a wide margin.
 
     Recomputed from the committed weights against the corpus now on disk, never
-    copied from the contract: held-out confusion (TP, FP, FN, TN) = (45, 2, 6,
-    34) over 87 test meetings with 51 conversions, so recall is 45/51, accuracy
-    79/87, and the population's own best constant answer is 51/87. The axis is a
+    copied from the contract: held-out confusion (TP, FP, FN, TN) = (49, 3, 2,
+    37) over 91 test meetings with 51 conversions, so recall is 49/51, accuracy
+    86/91, and the population's own best constant answer is 51/91. The axis is a
     floor the real model clears, not a re-verdict on it.
     """
 
@@ -1020,20 +1021,21 @@ def test_axis_three_is_a_floor_the_live_model_clears_on_all_three(
     report, _ = run_conviction_fidelity(corpus_conviction, model=model)
     verdict = decide_conviction_go(report, weights_sha256=digest)
 
-    assert (report.test_meetings, report.conversions_test) == (87, 51)
+    assert (report.test_meetings, report.conversions_test) == (91, 51)  # was (87, 51)
     assert (
         report.true_positives,
         report.false_positives,
         report.false_negatives,
         report.true_negatives,
-    ) == (45, 2, 6, 34)
-    assert report.conversion_recall == pytest.approx(45 / 51)
-    assert report.conversion_precision == pytest.approx(45 / 47)
-    assert report.conversion_accuracy == pytest.approx(79 / 87)
-    assert verdict.conversion_trivial_baseline == pytest.approx(51 / 87)
-    assert verdict.conversion_accuracy == pytest.approx(79 / 87)
+    ) == (49, 3, 2, 37)  # was (45, 2, 6, 34)
+    assert report.conversion_recall == pytest.approx(49 / 51)  # was 45 / 51
+    assert report.conversion_precision == pytest.approx(49 / 52)  # was 45 / 47
+    assert report.conversion_accuracy == pytest.approx(86 / 91)  # was 79 / 87
+    assert verdict.conversion_trivial_baseline == pytest.approx(51 / 91)  # was 51 / 87
+    assert verdict.conversion_accuracy == pytest.approx(86 / 91)  # was 79 / 87
     assert verdict.beats_trivial_conversion is True
-    assert 79 / 87 - 51 / 87 > 0.3  # the margin the axis clears by
+    # the margin the axis clears by  # was 79 / 87 - 51 / 87
+    assert 86 / 91 - 51 / 91 > 0.3
     assert (
         verdict.meets_spearman_bar,
         verdict.meets_conversion_bar,

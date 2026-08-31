@@ -1,10 +1,10 @@
 """Tests for scripts/measure_baseline.py (Task 15.1).
 
-Pins the R-gate baseline-6 numbers EXACTLY from the committed bytes (any mismatch
+Pins the R-gate baseline numbers EXACTLY from the committed bytes (any mismatch
 is a task failure, not a number to retrofit) and covers the CLI surface: default
 two-set run, explicit dir, ``--json``, and the usage-error path. Re-pinned for the
-Task 18.12 baseline-6 re-record (model Qwen/Qwen3.6-27B held, the CREW-ONLY
-meeting-layer graduation slate).
+Task 21.15 baseline-8 re-record (prompt set ``qwen3_6_27b`` v5, the twenty-one
+retired levers plus ``impostor_roll_call`` OFF).
 """
 
 from __future__ import annotations
@@ -210,32 +210,34 @@ def test_solvability_empty_dir_is_usage_error(tmp_path: Path) -> None:
 def test_honesty_human_rendering(capsys: pytest.CaptureFixture[str]) -> None:
     assert measure_baseline.main(["--honesty", str(_NINE)]) == 0
     out = capsys.readouterr().out
-    assert "50 games, 152 meetings" in out
-    assert "+1 agent clock proved on 2845 discriminating sightings" in out
-    assert "I-2 false crew self-placement: 0.0046  (3/659)" in out
-    assert "I-3 sole-flag precision (per victim): None  (0/0)" in out
-    assert "I-4 grounded sighting side (+-0): None  (0/0)" in out
-    assert "I-5 fabricated completion lines: 0.0  (0/308)" in out
-    assert "I-6 adjacent-room STRONG share: None  (0/0)" in out
-    assert "I-7 movement-origin flags: 0.0  (0/27)" in out
-    assert "I-8 marker contamination (turns): 0.0  (0/871)" in out
-    assert "I-9 singular-persona prompts: 0.0  (0/1746)" in out
-    assert "I-10 meetings with a venting participant: 0.1711  (26/152)" in out
+    assert "50 games, 151 meetings" in out  # was 152 meetings
+    # was 2845 discriminating sightings
+    assert "+1 agent clock proved on 2984 discriminating sightings" in out
+    assert "I-2 false crew self-placement: 0.0091  (6/660)" in out  # was 0.0046 (3/659)
+    assert "I-3 sole-flag precision (per victim): 0.0  (0/1)" in out  # was None  (0/0)
+    assert "I-4 grounded sighting side (+-0): 1.0  (2/2)" in out  # was None  (0/0)
+    assert "I-5 fabricated completion lines: 0.0  (0/311)" in out  # was (0/308)
+    assert "I-6 adjacent-room STRONG share: 0.0  (0/2)" in out  # was None  (0/0)
+    assert "I-7 movement-origin flags: 0.0  (0/30)" in out  # was (0/27)
+    assert "I-8 marker contamination (turns): 0.0  (0/869)" in out  # was (0/871)
+    assert "I-9 singular-persona prompts: 0.0  (0/1740)" in out  # was (0/1746)
+    # was 0.1711  (26/152)
+    assert "I-10 meetings with a venting participant: 0.1788  (27/151)" in out
     # I-11 is the one block the emitter no longer renders as a reproduction of
     # the recorded policy: since the 20.32 mover repair the fold re-invokes the
     # REPAIRED policy over the frozen bytes, so these are counterfactual cells and
     # the mismatch count is the size of the behaviour change. The ratified
     # "before" is quoted from eval.evidence_honesty.RATIFIED_I11_CELLS.
-    assert (
-        f"I-11 [{LIVE_POLICY_FOLD}] free zero-witness kills declined: 0.0351  (8/228)"
+    assert (  # was 0.0351  (8/228)
+        f"I-11 [{LIVE_POLICY_FOLD}] free zero-witness kills declined: 0.0338  (8/237)"
         in out
     )
     # The label is what separates the two modes on the human surface; the ratified
     # "before" is a different string and must never render as this one.
     assert f"I-11 [{RATIFIED_BASELINE}]" not in out
-    assert "ghost-top decisions: 0.0029  (5/1750)" in out
-    assert "0 mismatches over 1750 decisions" in out
-    assert "render budget: mean rendered lines/snapshot 37.03" in out
+    assert "ghost-top decisions: 0.0016  (3/1826)" in out  # was 0.0029  (5/1750)
+    assert "0 mismatches over 1826 decisions" in out  # was over 1750 decisions
+    assert "render budget: mean rendered lines/snapshot 36.57" in out  # was 37.03
 
 
 def test_honesty_one_impostor_set_reports_not_applicable(
@@ -246,7 +248,7 @@ def test_honesty_one_impostor_set_reports_not_applicable(
     # A zero here would read as "clean"; with one impostor the singular persona
     # is simply true, so the cell says so instead.
     assert "I-9 singular-persona prompts: NOT-APPLICABLE" in out
-    assert "(240/240)" in out
+    assert "(234/234)" in out  # was (240/240)
     assert "(rare count — read the interval)" in out
 
 
@@ -257,13 +259,14 @@ def test_honesty_json_emits_array(capsys: pytest.CaptureFixture[str]) -> None:
     nine, four = payload
     assert nine["replay_set_dir"].endswith("9p2i")
     assert nine["games_total"] == 50
-    assert nine["clock_alignment_checked"] == 2845  # was 4501
-    assert nine["false_whereabouts"]["crew_false"]["numerator"] == 3  # was 152
+    assert nine["clock_alignment_checked"] == 2984  # was 2845
+    assert nine["false_whereabouts"]["crew_false"]["numerator"] == 6  # was 3
     # Marker contamination went to ZERO on the recorded prompts: the structured
     # turn markers are typed annotations now, so nothing splices an audit marker
     # into a rendered prompt (baseline 6: 246/1,956).
     contaminated = nine["marker_contamination"]["prompts_with_marker"]
-    assert (contaminated["numerator"], contaminated["denominator"]) == (0, 1746)
+    # was (0, 1746)
+    assert (contaminated["numerator"], contaminated["denominator"]) == (0, 1740)
     assert contaminated["rate"] == pytest.approx(0.0)
     assert contaminated["advisory"] is True
     # The JSON block labels its own mode, so a reader can tell the live fold from
@@ -274,10 +277,10 @@ def test_honesty_json_emits_array(capsys: pytest.CaptureFixture[str]) -> None:
     # made with the 20.32-repaired mover, so the live fold IS the recorded policy
     # and the I-11 cells are a reproduction rather than a counterfactual.
     assert nine["impostor_targeting"]["reconstruction_mismatches"] == 0
-    assert nine["impostor_targeting"]["recorded_kill_decisions"] == 220
-    assert nine["impostor_targeting"]["recorded_kills_reproduced"] == 220
+    assert nine["impostor_targeting"]["recorded_kill_decisions"] == 229  # was 220
+    assert nine["impostor_targeting"]["recorded_kills_reproduced"] == 229  # was 220
     assert four["singular_persona"]["applicable"] is False
-    assert four["meeting_physicality"]["meetings"] == 40
+    assert four["meeting_physicality"]["meetings"] == 39  # was 40
 
 
 def test_honesty_missing_dir_is_usage_error(tmp_path: Path) -> None:

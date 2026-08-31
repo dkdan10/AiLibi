@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import importlib
 import re
+import shutil
 import sys
 from pathlib import Path
 from typing import Any
@@ -349,16 +350,46 @@ def test_unknown_set_is_404_on_replays(monkeypatch: pytest.MonkeyPatch) -> None:
 # (the same pair scripts/refresh_samples.sh runs after a re-record).
 
 
-def test_committed_9p2i_manifest_is_mixed_provenance() -> None:
-    # The premise the fingerprint exists for: this set was refreshed piecemeal, so
-    # there is no single recording sha to key on.
-    rows = _manifest_seed_shas(_PARENT / "9p2i")
-    assert len({sha for _, sha in rows}) > 1
-    nine = _manifest_git_sha(_PARENT / "9p2i")
-    assert nine is not None and nine.startswith("multi:")
-    # A uniformly-recorded set still keys on its one sha (unchanged behaviour).
-    four = _manifest_git_sha(_PARENT / "4p1i")
-    assert four is not None and not four.startswith("multi:")
+def test_committed_manifests_key_on_their_single_recording_sha() -> None:
+    # The premise this test shipped under is dead: 9p2i had been refreshed
+    # piecemeal, so it carried several recording shas and keyed on a `multi:`
+    # fingerprint. The baseline-8 record recorded each set in ONE pass, so every
+    # set now has exactly one sha and keys on it directly — the uniform branch.
+    # The `multi:` branch is therefore unexercised by committed bytes and is
+    # covered by the synthetic case below, which is where a mixed set must be
+    # pinned once no recording produces one.
+    for name in ("9p2i", "4p1i"):
+        rows = _manifest_seed_shas(_PARENT / name)
+        assert len({sha for _, sha in rows}) == 1, name
+        sha = _manifest_git_sha(_PARENT / name)
+        assert sha is not None and not sha.startswith("multi:"), name
+
+
+def test_a_mixed_provenance_manifest_still_keys_on_a_multi_fingerprint(
+    tmp_path: Path,
+) -> None:
+    # The `multi:` branch, kept alive by construction now that no committed set
+    # exercises it. Two seeds recorded at different shas must not collapse to
+    # either one — the fingerprint has to say "mixed" or a piecemeal refresh
+    # would serve a rubric keyed to a sha half its bytes never saw.
+    shutil.copytree(_PARENT / "4p1i", tmp_path / "mixed")
+    manifest = tmp_path / "mixed" / "MANIFEST.md"
+    text = manifest.read_text(encoding="utf-8")
+    rows = _manifest_seed_shas(tmp_path / "mixed")
+    original = rows[0][1]
+    doctored = ("0" if original[0] != "0" else "f") + original[1:]
+    # Move exactly one row's sha, leaving the rest at the recorded one.
+    first_row_marker = f"| {rows[0][0]} |"
+    lines = text.splitlines(keepends=True)
+    for index, line in enumerate(lines):
+        if line.startswith(first_row_marker):
+            lines[index] = line.replace(original, doctored, 1)
+            break
+    manifest.write_text("".join(lines), encoding="utf-8")
+
+    assert len({sha for _, sha in _manifest_seed_shas(tmp_path / "mixed")}) > 1
+    mixed = _manifest_git_sha(tmp_path / "mixed")
+    assert mixed is not None and mixed.startswith("multi:")
 
 
 def test_rubric_producer_and_loader_agree_on_the_committed_provenance_key() -> None:
@@ -410,16 +441,29 @@ def test_set_fingerprints_compare_by_exact_equality() -> None:
     real = _manifest_git_sha(_PARENT / "9p2i")
     assert real is not None
     assert _rubric_is_stale(real, real) is False
+
+    # The malformed variants are built from a SYNTHETIC well-formed fingerprint,
+    # not from whatever the committed set happens to carry. Deriving them from
+    # `real` silently lost its teeth the moment the baseline-8 record gave every
+    # set a single recording sha: `real` became a bare 8-character sha, so
+    # truncating it to 11 characters returned the string itself and the
+    # "truncated digest" case compared a value against itself.
+    fingerprint = "multi:0123456789ab"
+    assert _rubric_is_stale(fingerprint, fingerprint) is False
     for malformed in (
         "multi:",  # prefix only
-        real[: len("multi:") + 5],  # truncated digest
-        real.upper(),  # non-lowercase hex
-        real + "ab",  # over-long
+        fingerprint[: len("multi:") + 5],  # truncated digest
+        fingerprint.upper(),  # non-lowercase hex
+        fingerprint + "ab",  # over-long
         "multi:zzzzzzzzzzzz",  # non-hex
     ):
+        assert _rubric_is_stale(malformed, fingerprint) is True, malformed
+        assert _rubric_is_stale(fingerprint, malformed) is True, malformed
+        # ...and malformed against the real committed key, in both directions.
         assert _rubric_is_stale(malformed, real) is True, malformed
         assert _rubric_is_stale(real, malformed) is True, malformed
     # A different well-formed fingerprint is stale too (the point of the key).
+    assert _rubric_is_stale("multi:000000000000", fingerprint) is True
     assert _rubric_is_stale("multi:000000000000", real) is True
     # A bare git sha keeps the prefix comparison: the manifest stores a SHORT sha
     # and a rubric may carry the full HEAD.

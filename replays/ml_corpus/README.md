@@ -1,66 +1,65 @@
-# ML-calibration corpus (Task 15.12, re-grounded onto baseline 7 by the baseline-7 record)
+# ML-calibration corpus, re-recorded at baseline 8
 
-The frozen training/calibration corpus the ballot surrogate (15.13) and the
-impostor bake-off (15.15+) consume, recorded at **exact baseline-7 config** —
-`Qwen/Qwen3.6-27B` on Featherless (non-thinking, `fail_loud`, `json_object`), the
-`qwen3_6_27b` prompt set (all four templates — `accusation_round`,
-`crewmate_report`, `impostor_report`, `vote_ballot` — at **v4**), the
-**baseline-7 lever slate** (the twenty-one retired always-on levers, which since
-the baseline-7 record include the eight Phase-20 evidence-honesty levers, with
-`impostor_roll_call` the **sole live toggle** and its recorded state **OFF**),
-`$0` flat-rate — with the 15.9 FSM-default tactical-policy stamp on every game.
-The model was locked 2026-07-12 at Task 16.2
-(`audits/audit-phase-16-model-lock.md`). The eight Phase-20 graduations were
-adopted by owner override of a FINDING verdict at the baseline-7 record
-(`audits/audit-phase-20-baseline-7.md` §6.1) — the pre-registered bars were
-missed, and the owner adopted the substrate regardless. The v4 prompt map is
-Task 20.31's evidence-honesty bump.
+The frozen training/calibration corpus the ballot surrogate and the impostor
+bake-off consume, recorded at **exact baseline-8 config** — `Qwen/Qwen3.6-27B`
+on Featherless (non-thinking, `fail_loud`, `json_object`), the `qwen3_6_27b`
+prompt set (all four templates — `accusation_round`, `crewmate_report`,
+`impostor_report`, `vote_ballot` — at **v5**), the **baseline-8 lever slate**
+(the twenty-one retired levers, unconditional in code, with `impostor_roll_call`
+the **sole live toggle** and its recorded state **OFF**), `$0` flat-rate — with
+the FSM-default tactical-policy stamp on every game. The model has been locked
+since 2026-07-12.
 
-Nothing trains against a meeting layer scheduled to change
-(`tasks/post-phase-14-plan.md` §4;
-`audits/post-phase-14-ML-training-signal.md` §5.6, §7.2), so this corpus is a
+Two repair gates that guarded behavioural fixes were graduated before this
+recording opened and **deleted outright** rather than retired, so the stamp on
+every recorded game carries exactly twenty-two keys — the twenty-one retired
+levers plus the one live toggle — byte-identical to the previous recording's
+stamp. That equality is the cheapest available proof that the lever substrate
+did not move while the bytes did. The v5 prompt map is the bump that took the
+oracle voice out of the templates, and item 7 below is where that shows up in
+the recorded text.
+
+Nothing trains against a meeting layer scheduled to change, so this corpus is a
 **separate release artifact** from the canonical `replays/samples/` baseline. It
 uses **fresh seed ranges** so a corpus game can never be confused with a
 canonical 0–49 game.
 
 > **The corpus and the samples sit at ONE substrate rung, and the ML program
-> does not.** The baseline-7 record re-recorded all four committed sets in one
-> window, so nothing downstream trains across a substrate seam *inside*
-> `replays/`. Everything fitted, selected, or pinned on the **baseline-6** corpus
-> — the surrogate, the conviction model, the bake-off rankings and finalist rows
-> — is now prior-substrate-anchored: `uv run python scripts/verify_ml_evidence.py`
-> reconstructs 300/300 and **exits 0 with 11 rows reporting STALE**, each naming
-> the gap; `BAKEOFF_BASELINE_ID` reads `baseline-6`, which is correct — it names
-> the baseline the bake-off is GROUNDED on, not the substrate baseline. Read the
+> does not.** This record re-recorded all four committed sets in one window, so
+> nothing downstream trains across a substrate seam *inside* `replays/`.
+> Everything fitted, selected, or pinned on an earlier corpus — the surrogate,
+> the conviction model, the bake-off rankings and finalist rows — is
+> prior-substrate-anchored, and by two rungs now rather than one:
+> `uv run python scripts/verify_ml_evidence.py` reconstructs 300/300 and
+> **exits 0 with 12 rows reporting STALE**, each naming the gap;
+> `BAKEOFF_BASELINE_ID` reads `baseline-6`, which is correct — it names the
+> baseline the bake-off is GROUNDED on, not the substrate baseline. Read the
 > command's `ML grounding` row first: it carries the two corpus fingerprints and
-> decides whether a disagreement below it is a defect (FAIL) or this declared gap
-> (STALE). Re-grounding those artifacts on these bytes is a NAMED FOLLOW-UP, not
-> part of this record (`audits/audit-phase-20-baseline-7.md` §10.2). Until it
-> lands, treat every published fit metric as anchored to bytes that are no longer
-> committed.
+> decides whether a disagreement below it is a defect (FAIL) or this declared
+> gap (STALE). Re-grounding those artifacts on these bytes is a NAMED
+> FOLLOW-UP, not part of this record. Until it lands, treat every published fit
+> metric as anchored to bytes that are no longer committed.
 
-> **Canary denominator — the Q3 rule, unbroken this time.** The mid-Phase-15 Q3
-> ruling (the ML corpus is the canary denominator; the canonical
-> `replays/samples/` baseline is the continuity anchor) lapses whenever the two
-> artifacts sit at different substrate rungs — it was DEGRADED through Phase 16,
-> restored at Task 17.9, and re-lapsed for the interval between the Task-18.12
-> samples record and the 18.13 corpus record. The baseline-7 record closes that
-> gap by construction: all four sets were recorded in ONE window, so the rule
-> never lapses across it. The corpus is the canary denominator, the baseline-7
-> samples are the continuity anchor, and future phase closes re-adopt the pairing
-> (`audits/audit-phase-17-close.md` §3 is the worked example).
+> **Canary denominator — the pairing, unbroken again.** The standing rule (the
+> ML corpus is the canary denominator; the canonical `replays/samples/`
+> baseline is the continuity anchor) lapses whenever the two artifacts sit at
+> different substrate rungs, and it has lapsed before, whenever the two sets
+> were recorded in separate windows. This record closes that gap by
+> construction: all four sets were recorded in ONE window, so the rule never
+> lapses across it. The corpus is the canary denominator, these samples are the
+> continuity anchor, and future phase closes re-adopt the pairing.
 
-> **These bytes are the baseline-7 record.** Both sets under `9p2i/` and
-> `4p1i/` were re-recorded at baseline 7 by a local operator session and pass the
-> acceptance gate: `validity_gate.py --expected-model Qwen/Qwen3.6-27B
+> **These bytes are the baseline-8 record.** Both sets under `9p2i/` and
+> `4p1i/` were re-recorded at baseline 8 by a local operator session and pass
+> the acceptance gate: `validity_gate.py --expected-model Qwen/Qwen3.6-27B
 > --require-zero-cost` is green on each, reconstruction is byte-identical, every
-> recorded `game_over` stamp carries the baseline-7 lever slate + the locked
+> recorded `game_over` stamp carries the baseline-8 lever slate + the locked
 > model + `$0` cost, and the `FROZEN` line in each `MANIFEST.md` names the
 > recording commit. The recorder's freeze-path guards (`check_replay_provenance`
-> — the model, the `$0` cost, and the **baseline-7 lever slate** on every
+> — the model, the `$0` cost, and the **baseline-8 lever slate** on every
 > recorded stamp) PASS over the committed bytes by construction; they refuse
-> anything off-substrate (a prior baseline-6 recording, whose stamp carries the
-> eight Phase-20 levers OFF; a phantom seed) from being resumed-over and frozen.
+> anything off-substrate (an earlier recording whose stamp carries a retired
+> lever OFF; a phantom seed) from being resumed-over and frozen.
 
 ## Layout
 
@@ -70,20 +69,20 @@ replays/ml_corpus/
   4p1i/     50 games, seeds 1000..1049, roster 4p/1i @ 1 task/crewmate    [secondary]
 ```
 
-Each set carries: `replay-seed-*.jsonl`, `MANIFEST.md` (with the 15.9 `policy`
+Each set carries: `replay-seed-*.jsonl`, `MANIFEST.md` (with the `policy`
 column stamping `fsm-default`, plus the explicit `FROZEN` line naming the
 `git_sha`), `roster.json`, `tournament-eval-report.json` (the roles ground
 truth), and a committed by-game `splits.json` (train/val/test — **data only**;
-the loader is 15.11's). The corpus keeps its Task-15.12 shape across the
-re-record — same 150-game 9p2i + 50-game 4p1i scale, same seed ranges, same split
+the loader lives in the training package). The corpus keeps its original shape
+across the re-record — same 150-game 9p2i + 50-game 4p1i scale, same seed ranges, same split
 rule — so `CORPUS_SPLITS_PATH` stays structurally identical.
 
 ### The two-level nesting is load-bearing
 
 A set placed directly under `replays/` would make the API's directory resolution
 treat `./replays` as the active parent and **shadow** the canonical samples
-(`api/main.py::_resolve_replay_dir` + `api/replay_loader.py::_is_set_dir`, Task
-12.12). Nesting each set under `replays/ml_corpus/<set>/` keeps the corpus
+(`api/main.py::_resolve_replay_dir` + `api/replay_loader.py::_is_set_dir`).
+Nesting each set under `replays/ml_corpus/<set>/` keeps the corpus
 invisible to default spectator resolution while an operator can still opt-in
 serve it explicitly with `AILIBI_REPLAY_DIR=replays/ml_corpus`. The invariant is
 pinned by `tests/api/test_set_discovery_ml_corpus.py`.
@@ -105,24 +104,51 @@ For 4p1i (50 games):  30 train / 10 val / 10 test.
 
 The corpus is honest about what it contains; this section is honest about what
 that implies. Four surfaces are measured: this corpus's two sets and the
-canonical `replays/samples/` twins, all four recorded at the same baseline-7
+canonical `replays/samples/` twins, all four recorded at the same baseline-8
 substrate — **S9** (`replays/samples/9p2i`, 50 games), **S4**
 (`replays/samples/4p1i`, 50 games), **C9** (`replays/ml_corpus/9p2i`, 150
-games), **C4** (`replays/ml_corpus/4p1i`, 50 games).
+games), **C4** (`replays/ml_corpus/4p1i`, 50 games). Together: 300 games, 672
+meetings, 3,631 transcript turns and 3,631 ballots.
 
-**Which numbers below are current, and how you can tell.** Items 1, 2, 8 and 9
-are re-derived from the committed baseline-7 bytes. Their headline cells — the
-meeting total and the eight roll-call coverage pairs — are re-derived on *every*
-gate run by `check_doc_facts.check_corpus_disclosures`, which reads each set's
-own `tournament-eval-report.json` and fails on disagreement, so this section can
-never again be relabelled without its arithmetic. The rest of each item is folded
-from the replay bytes through `eval.replay_walk` (the resolved-kill and
-crew-witness cells are the same walk `tests/eval/test_kill_craft.py` pins).
-**Items 3 through 7 are not current**: they were measured on the baseline-6
-bytes and were never re-derived at the baseline-7 record, so their counts and
-denominators describe the previous recording. Each carries that flag on its own
-line. Their *mechanism* claims still hold; their numbers are history, and
-anything fitted on this corpus must re-derive them first.
+**Every figure below is current, and every one is re-derivable.** All nine items
+were recomputed from these committed bytes at this recording; nothing is carried
+forward from a previous one. Before trusting any of it, prove the bytes:
+`uv run python scripts/verify_ml_evidence.py` reconstructs all 300 games. Three
+folds then produce every figure, each of them offline and at `$0`:
+
+```bash
+# (a) the REPORT fold — each set's own tournament-eval-report.json
+uv run python scripts/check_doc_facts.py
+
+# (b) the REPLAY fold — re-seed the engine, walk every recorded tick, verify
+#     every state hash; the only frame that can see mid-tick facts
+uv run python -c "from pathlib import Path; from eval.kill_craft import compute_kill_craft_report as f
+r = f(Path('replays/ml_corpus/9p2i')); print(r.kills_total, r.crew_witnessed_kills, dict(r.co_present_histogram))"
+
+# (c) the TEXT fold — direct counts over the recorded replay-seed-*.jsonl rows
+uv run python -c "import glob, json, collections
+c = collections.Counter()
+for p in glob.glob('replays/*/*/replay-seed-*.jsonl'):
+    for line in open(p):
+        row = json.loads(line)
+        if row['kind'] == 'meeting':
+            c['ballots'] += len(row['ballots']); c['turns'] += len(row['transcript']['turns'])
+            c['skips'] += sum(b['target'] == 'SKIP' for b in row['ballots'])
+        elif row['kind'] == 'tick':
+            for a, d in zip(row['actions'], row['action_dispositions']):
+                c[a['type'] + ':' + d] += 1
+print(c['turns'], c['ballots'], c['skips'], c['kill:applied'], c['kill:rejected'])"
+```
+
+Which item comes from which. The headline cells of items 1, 8 and 9 are fold
+(a), and `scripts/check_doc_facts.py` re-derives them on *every* gate run —
+reading the four eval reports and failing on disagreement, so this section can
+never be relabelled onto a new recording without its arithmetic moving with it.
+Item 2's rejection causes, item 4, item 8's truthfulness cells and item 9's
+kill census are fold (b), which reads the engine's own per-tick output rather
+than inferring it from the transcript. Items 3, 5, 6, 7, item 1's action-stream
+counts and item 2's submission counts are fold (c), straight counts over the
+recorded rows.
 
 The by-game split rule above assigns each game by its seed alone, never by what
 the game contains, so no phenomenon below influenced which split it landed in.
@@ -136,178 +162,192 @@ section does not currently publish one.
    impostor never files a body report and never calls a meeting — the COVER
    branch is explicit: "after the kill the body is in the room and the impostor
    must not file a report" (`agents/tactical/impostor_policy.py:39-40`).
-   Measured across all four sets: meetings crew-triggered **668/668**, opening
-   turns crew-spoken **668/668**, and the tick streams carry **717/717**
-   `report` and **67/67** `emergency` submissions by crew — zero
+   Measured across all four sets: meetings crew-triggered **672/672**, opening
+   turns crew-spoken **672/672**, and the tick streams carry **718/718**
+   `report` and **69/69** `emergency` submissions by crew — zero
    impostor-originated, anywhere. 100% of training examples therefore embed
    "the reporter is innocent" as an absolute prior. A crew model fitted here
    has never seen a lying reporter, and any learned impostor that self-reports
    instantly invalidates the crew's learned prior. The prior is disclosed, not
    changed: the scripted policy is what it describes.
 
-2. **Non-resolving kill submissions.** Of **1,011** submitted `kill` actions
-   across the four sets, **825 resolved** and **186 (18.4%) produced no kill**
-   — in two distinct ways. **150 were engine-rejected**, every single one on
-   the same-room check (the target was no longer co-located when the action
-   applied mid-tick; zero cooldown and zero dead-target rejections anywhere),
-   and **36 were never evaluated at all** (an earlier `report`/`emergency` in
-   the same tick moved the phase to MEETING before the kill applied — those
-   were not necessarily illegal when submitted). Per set,
-   non-resolving = rejected + pre-empted: S9 **43/220 = 19.5%** (36 + 7), C9
-   **137/663 = 20.7%** (110 + 27), S4 2/67 = 3.0% (1 + 1), C4 4/61 = 6.6%
-   (3 + 1). At 9p, roughly one scripted kill decision in five fails to land,
-   and most of those failures are outright illegal at application (36/220 =
-   16.4% S9, 110/663 = 16.6% C9) — a mover-quality limitation no eval report
-   surfaces. The resolved counts are the committed kill-craft pins exactly —
-   C9 526, S9 177, S4 65 (`tests/eval/test_kill_craft.py:69`, `:100`, `:127`) —
-   and C4's 57 is recounted here through the same fold.
+2. **Non-resolving kill submissions.** Of **1,033** submitted `kill` actions
+   across the four sets, **834 resolved** and **199 (19.3%) produced no kill**
+   — in two distinct ways. **161 were engine-rejected**, every single one of
+   them on the same-room check (the engine's own recorded rejection reason
+   reads `kill requires same room` on 161 of 161: the target was no longer
+   co-located when the action applied mid-tick, and there are zero cooldown
+   and zero dead-target rejections anywhere), and **38 were never evaluated at
+   all** (an earlier `report`/`emergency` in the same tick moved the phase to
+   MEETING before the kill applied — those were not necessarily illegal when
+   submitted). Per set, non-resolving = rejected + pre-empted: S9
+   **47/229 = 20.5%** (39 + 8), C9 **146/678 = 21.5%** (118 + 28), S4
+   2/64 = 3.1% (1 + 1), C4 4/62 = 6.5% (3 + 1). At 9p, roughly one scripted
+   kill decision in five fails to land, and most of those failures are outright
+   illegal at application (39/229 = 17.0% S9, 118/678 = 17.4% C9) — a
+   mover-quality limitation no eval report surfaces. The submitted counts and
+   their verdicts are read off each tick row's recorded `action_dispositions`;
+   the resolved counts — C9 532, S9 182, S4 62, C4 58 — are the engine walk's
+   own kill census (`eval/kill_craft.py`), and the two agree set for set.
 
-3. **Player-visible `[invalid accusation target …]` husks — a recorded
-   deviation from this README's own no-husk doctrine.** The "Defaulted turns"
-   section below rules that a frozen training/eval corpus **must not contain**
-   fallback husks, and the freeze guard enforces that for `deadline_default`
-   rows — and indeed all four sets carry **zero** defaulted turns. But the
-   doctrine's guard keys on `error_type`, so a *different*, unguarded husk
-   class sits in the frozen bytes: the validator annotation
-   `[invalid accusation target 'p-N' dropped]` is welded into player-visible
-   `free_text` on **53/971 S9 turns (5.5%)** and **137/2,726 C9 turns (5.0%)**
-   (both 4p sets: zero). The doctrine and the bytes contradict each other; this
-   paragraph records the deviation rather than leaving it silent. Shape facts:
-   every husk is a line-leading prefix on otherwise-model text (190/190), ~80%
-   sit on `opt_in` turns, and the class never appears in ballot
-   `rationale_text` (0/3,934). C9 also carries a second, rarer free-text class
-   — `[invalid corroboration supports … dropped]` ×2 — which resolves an
-   audit's 139-vs-137 discrepancy as a class difference, not a substring
-   boundary. A separate husk surface the audits did not reach: **ballot**
-   `rationale_text` carries vote-guard husks — `[under-gate eject target …
-   redirected]` (13 S9 / 48 C9 / 1 C4), `[invalid target … normalized to
-   SKIP]`, `[teammate target … coerced to SKIP]` (4 C9 — machinery that names
-   the impostor's ally in the record), and `[invalid primary_reason… nulled]`
-   variants: 18/971 S9 and 55/2,726 C9 ballots. As a capability datum: at 9p
-   the model names an illegal accusation target roughly one turn in twenty.
-   *Baseline-6 counts; not re-derived at the baseline-7 record — and the
-   `[invalid accusation target …]` class this item is named for occurs **zero**
-   times in the committed bytes now (0 across all 300 games), so the deviation
-   it records is historical rather than live.*
+3. **Bracketed guard annotations, and where they no longer are.** The
+   "Defaulted turns" section below rules that a frozen training/eval corpus
+   **must not contain** fallback husks, and the freeze guard enforces that for
+   `deadline_default` rows — all four sets carry **zero** defaulted turns. That
+   guard keys on `error_type`, so it has never covered a second, unrelated
+   class: the bracketed annotations the validators weld into recorded text when
+   they drop or rewrite part of a model response. On the previous recording
+   that class reached **player-visible** transcript text, and this item existed
+   to record the resulting contradiction between the doctrine and the bytes.
+   **It no longer reaches it.** Across all **3,631** transcript turns in the
+   four sets, player-visible `free_text` carries **zero** bracketed annotations
+   of any class — the `[invalid accusation target …]` and
+   `[invalid corroboration supports …]` classes this item was named for occur
+   nowhere in these 300 games. The contradiction is closed on the surface a
+   player or a crew model reads.
 
-4. **Zombie-vent re-litigation.** Dead impostors' vents keep getting re-argued:
-   **56/165 S9 meetings (33.9%)** and **174/463 C9 meetings (37.6%)** contain a
-   `saw_vent` observation whose subject was already dead at meeting time —
-   **230/707 meetings (32.5%)** corpus-wide, touching 68% of 9p games, and all
-   300 such observations name an **ejected impostor** (never a killed crew).
-   The structured `claims[]` arrays are clean (0/3,181 accusation claims name a
-   dead player — the validator strips them); the free-text husk drops in item 3
-   are the visible symptom of exactly that stripping. Worst meetings: C9 seed
-   1118 meeting-1 carries five drops — the only five-drop meeting in all 300
-   games; the S9 maximum is four (seed 23 meeting-1, tied with seed 19
-   meeting-1). Delta noted: an audit placed "five drops" in S9 seed 23; the
-   recount says four, and the five belongs to C9 seed 1118.
-   *Baseline-6 counts; not re-derived at the baseline-7 record.*
+   The class survives on the surface it always sat on: **ballot**
+   `rationale_text`, which is never shown to players but is committed and
+   trainable. **113/3,631 ballots (3.1%)** carry at least one — S9 30/869
+   (3.5%), C9 80/2,516 (3.2%), S4 1/117, C4 2/129 — in six kinds:
+   `[under-gate eject target … redirected]` (83: 23 S9 / 57 C9 / 1 S4 / 2 C4),
+   `[invalid primary_reason… nulled]` variants (20: 4 S9 / 16 C9),
+   `[teammate target … coerced to SKIP]` (7: 2 S9 / 5 C9 — machinery that
+   names the impostor's ally in the record), `[rationale redacted by the vote
+   guard…]` (7: 2 S9 / 5 C9), `[uncited zero-flag eject target … coerced]`
+   (6, C9 only) and `[invalid target … normalized to SKIP]` (4: 2 S9 / 2 C9).
+   A few ballots carry two kinds, which is why the kinds sum to 127 over 113
+   ballots. Anything fitted on ballot text is fitting on machinery output at
+   this rate; anything fitted on transcript text now is not.
+
+4. **Zombie-vent re-litigation.** Dead impostors' vents still get re-argued,
+   but far less often than they used to: **8/151 S9 meetings (5.3%)** and
+   **42/439 C9 meetings (9.6%)** contain a `saw_vent` observation whose subject
+   was already dead when the meeting opened — **50/672 meetings (7.4%)** across
+   the four sets, touching 43 of the 200 9p games (21.5%), with both 4p sets at
+   zero. That is **52 of the 512** `saw_vent` observations recorded anywhere
+   (10.2%). Every one of the 52 names an impostor who had already been
+   **ejected** in an earlier meeting of the same game; not one names a killed
+   crewmate. The structured `claims[]` arrays are clean — **0 of 3,114**
+   accusation claims name a dead player, because the validator drops those —
+   and, unlike the previous recording, that dropping now leaves no visible
+   residue in player-facing text at all (item 3). Worst meetings: two drops,
+   in C9 seed 1019 meeting-1 and C9 seed 1149 meeting-1; the S9 maximum is one.
+   Deaths are resolved against the engine walk's own alive set at the moment
+   each meeting opened, not inferred from the transcript.
 
 5. **Skip-template repetition.** Skips are encoded as `target == "SKIP"`
-   (there are no null targets). Skip shares: S9 451/971 = 46.5%, C9 1,148/2,726
-   = 42.1%, S4 90/117 = 76.9%, C4 75/120 = 62.5% of ballots. Among skip
-   ballots, exact-duplicate `rationale_text` copies (beyond each string's first
-   use): S9 **30/451 = 6.7%**, C9 **149/1,148 = 13.0%**, S4 11/90 = 12.2%, C4
-   2/75 = 2.7% — and **261/1,764 = 14.8%** pooled, higher than any single set
-   because the same template strings recur *across* sets ("The evidence is too
-   thin to justify an ejection." ×30 corpus-wide). The repetition is almost
-   entirely a skip phenomenon (261 of 270 redundant ballot copies are skips).
-   Transcript `free_text`, by contrast, is byte-unique: 3,934/3,934 distinct
+   (there are no null targets: 0 of 3,631 ballots carry one). Skip shares: S9
+   342/869 = 39.4%, C9 1,017/2,516 = 40.4%, S4 66/117 = 56.4%, C4 60/129 =
+   46.5% of ballots. Among skip ballots, exact-duplicate `rationale_text`
+   copies (beyond each string's first use): S9 **6/342 = 1.8%**, C9
+   **70/1,017 = 6.9%**, S4 0/66, C4 0/60 — and **103/1,485 = 6.9%** pooled,
+   which is fractionally above the highest single set because the same template
+   strings recur *across* sets (the most-repeated one appears 16 times across
+   three of the four sets — 13 of them inside C9). The repetition is almost entirely
+   a skip phenomenon: 103 of the 107 redundant ballot copies are skips.
+   Transcript `free_text`, by contrast, is byte-unique — 3,631/3,631 distinct
    across all four sets, zero exact repeats anywhere.
-   *Baseline-6 counts; not re-derived at the baseline-7 record.*
 
 6. **Wait-streak and ping-pong mover theater.** Two scripted-mover artifacts
-   with mirror-image role signatures — one absolute, one strong but not
-   perfect. **Wait streaks** (longest run of consecutive-tick
-   `wait` actions per player-game; meetings do not break a run): **170/2,200
-   player-games (7.7%) idle ≥10 consecutive ticks — 170/170 of them crew, 0
-   impostor**. Per set: S9 53/450 (worst 36 ticks: seed 32 `p-9`, ticks 20–55,
-   sitting through three meetings), C9 109/1,350 (worst 33), S4 7/200 (worst
-   19: seed 16 `p-4`, ticks 8–26), C4 1/200. **Ping-pong pathing** (a minted
-   definition, disclosed as such: ≥4 consecutive-tick `move` actions strictly
-   alternating between exactly two rooms): **124/2,200 player-games (5.6%),
-   119/124 of them impostors** — 119/500 = 23.8% of impostor player-games vs
-   5/1,700 = 0.29% of crew. Longest: 24 alternating moves (C9 seed 1016 `p-4`,
-   REACTOR↔ENGINEERING); S9's longest is 14 (seed 10 `p-3`, ending in a kill).
-   The two artifacts are mirror images: crew theater is standing still,
-   impostor theater is pacing.
-   *Baseline-6 counts; not re-derived at the baseline-7 record.*
+   with mirror-image role signatures. Neither is absolute on these bytes, and
+   both are rarer than they were. **Wait streaks** (longest run of
+   consecutive-tick `wait` actions per player-game; meetings do not break a
+   run): **100/2,200 player-games (4.5%) idle ≥10 consecutive ticks — 99 crew,
+   1 impostor**. Per set: S9 20/450 (longest 23 ticks: seed 27 `p-8`, ticks
+   17–39), C9 75/1,350 (longest 29: seed 1085 `p-9`, ticks 19–47), S4 4/200
+   (longest 13: seed 36 `p-4`, ticks 4–16), C4 1/200 (12 ticks). The single
+   impostor streak is S9 seed 27 `p-7`, 14 ticks — so "only crew stand still"
+   is a strong tendency here, not the invariant it was. **Ping-pong pathing**
+   (a minted definition, disclosed as such: ≥4 consecutive-tick `move` actions
+   strictly alternating between exactly two rooms): **31/2,200 player-games
+   (1.4%), 30 of the 31 impostors** — 30/500 = 6.0% of impostor player-games
+   versus 1/1,700 = 0.06% of crew. Per set: S9 8/450, C9 23/1,350, and zero
+   in both 4p sets. Longest: 8 alternating
+   moves (C9 seed 1111 `p-1`, ADMIN↔EAST_HALL); S9's longest is 4. The lone
+   crew instance is C9 seed 1098 `p-1`, 4 moves MEDBAY↔WEST_HALL. The two
+   artifacts remain mirror images: crew theater is standing still, impostor
+   theater is pacing — but both are now weak enough that a detector trained on
+   either would be fitting a handful of games.
 
 7. **Model-originated fourth-wall statements and machinery quotation.** The
-   fourth wall holds almost everywhere in *player-visible* text and fails
-   routinely in *recorded private* text. Ballot `rationale_text` (never shown
-   to players, but committed and audit-visible): **29/245 = 11.8% of S9** and
-   **81/684 = 11.8% of C9** impostor-voter ballots name a partner ("my
-   partner" / "my teammate" / "my fellow impostor"; a looser phrase net
-   reaches 36 and 107; crew false-positive control 0/2,926), and **8/245 S9,
-   14/684 C9, 2/40 C4** ballots state the role outright — C4 seed 1011's "I am
-   the impostor. Voting is futile." is the bluntest. Player-visible
-   `free_text` carries exactly **one** genuine fourth-wall leak in 3,934 turns
-   (C9 seed 1023, an impostor saying "my teammate" aloud). Model-originated
-   *machinery quotation* splits by register. Literal implementation tokens in
-   model output: **zero**. Of the audit-suggested tokens (`vent_sighting`,
-   `alibi_vs_sighting`, `[weak signal`, `roll_call`, …) none appears in any
-   player-visible or rationale text, and the only `primary_reason` occurrences
-   in persisted text (5/3,934 ballots) are guard-injected `[invalid
-   primary_reason… nulled]` prefixes — item 3's vote-guard husk surface, not
-   quotation: the corresponding raw `llm_calls[].response_text` rationales
-   carry zero such tokens. But *natural-language* machinery talk is common in ballot
-   rationales: "threshold" in **90/971 = 9.3% (S9)** and **208/2,726 = 7.6%
-   (C9)**, "suspicion" in 85/971 and 244/2,726, and a quoted internal decimal
-   (`0.NN`) in **39/971 = 4.0%** and **94/2,726 = 3.4%** — S9 seed 38's "my
-   suspicion is 0.45 … the threshold is 0.60. I skip." reproduces the scoring
-   internals verbatim, and S9 seed 44 asks whether "the system" flagged
-   verified evidence. The vocabulary counts are an upper bound (a deduction
-   game says "suspicion" naturally); the quoted decimals are unambiguous.
-   In player-visible `free_text` the same vocabulary is rarer ("suspicion"
-   16/971 and 47/2,726). The bracketed machinery text that reaches
-   player-visible surfaces is the machinery-injected husk class of item 3,
-   not model quotation — the earlier "~17% quote machinery" reading spanned
-   both registers without separating them.
-   *Baseline-6 counts; not re-derived at the baseline-7 record.*
+   fourth wall now holds completely in *player-visible* text and fails
+   routinely in *recorded private* text — a sharper split than the previous
+   recording showed, in both directions. Ballot `rationale_text` (never shown
+   to players, but committed and trainable): **36/218 = 16.5% of S9** and
+   **137/636 = 21.5% of C9** impostor-voter ballots name a partner ("my
+   partner" / "my teammate" / "my fellow impostor"; a looser phrase net reaches
+   46 and 159; both 4p sets are zero, having one impostor and so no partner to
+   name; crew false-positive control **0/2,695**), and **62 of the 936**
+   impostor ballots state the role outright (10 S9, 39 C9, 5 S4, 8 C4) — C4
+   seed 1011's "I am the impostor. I skip to survive." is the bluntest.
+   Player-visible `free_text` carries **zero** fourth-wall leaks in all 3,631
+   turns: no partner phrase and no role statement reaches a surface another
+   player reads, on any of the four sets.
+
+   Machinery quotation has gone to zero in both registers. Literal
+   implementation tokens in model output: **none** — `vent_sighting`,
+   `alibi_vs_sighting`, `[weak signal`, `roll_call`, `absence_prior`,
+   `hard_evidence_gate`, `citation_gate` appear in no transcript turn and no
+   ballot rationale, and the only `primary_reason` occurrences in persisted
+   text (20 ballots: 4 S9, 16 C9) are the guard-injected `[invalid
+   primary_reason… nulled]` prefixes of item 3, not quotation — parse each
+   recorded `llm_calls[].response_text` and its own rationale and free-text
+   fields carry zero such tokens. *Natural-language* machinery talk has gone
+   with them: "threshold" appears in **0 of 3,631** ballot rationales and **0
+   of 3,631** transcript turns, and a quoted internal decimal (`0.NN`) in
+   **0 of 3,631** of either. Both ran at several per cent of ballots on the
+   previous recording; the templates that invited that voice were rewritten at
+   this one. What is left is ordinary deduction vocabulary at a low rate:
+   "suspicion" in 17/3,631 ballot rationales (0 S9, 11 C9, 2 S4, 4 C4) and
+   43/3,631 transcript turns (8 S9, 31 C9, 4 S4, 0 C4) — a word a deduction
+   game says naturally, and an upper bound on anything stronger. **Nothing in
+   these bytes reproduces the scoring internals**, so a model fitted here
+   cannot learn to read them back.
 
 8. **Role-correlated public response shape.** The share of a role's transcript
    turns carrying a structured `whereabouts` observation (the roll-call
-   answer), pooled over turns: crew S9 **652/652 = 100.0%**, crew C9
-   **1,854/1,854 = 100.0%**, crew S4 **80/80 = 100.0%** and crew C4 **88/88 =
-   100.0%**, versus impostor S9 **104/219 = 47.5%**, impostor C9 **283/625 =
-   45.3%**, impostor S4 **5/40 = 12.5%** and impostor C4 **1/44 = 2.3%**. The
+   answer), pooled over turns: crew S9 **651/651 = 100.0%**, crew C9
+   **1,880/1,880 = 100.0%**, crew S4 **78/78 = 100.0%** and crew C4 **86/86 =
+   100.0%**, versus impostor S9 **106/218 = 48.6%**, impostor C9 **292/636 =
+   45.9%**, impostor S4 **6/39 = 15.4%** and impostor C4 **3/43 = 7.0%**. The
    estimator matters and is named: the *unweighted per-meeting macro-average*
-   of the same bytes reads 43.8% (S9) and 41.1% (C9) for the impostor side
+   of the same bytes reads 45.4% (S9) and 42.0% (C9) for the impostor side
    (`deduction.public_response_coverage`); the pooled turn-level figures above
    are the headline here. The mechanism is the templates' role-differentiated
    output contract, not model choice: the role-blind info-share/roll-call
    surface elicits whereabouts from both roles (impostor `opt_in` turns answer
-   104/104 in S9 and 283/283 in C9), but the impostor REPLY surface hard-codes
-   `observations: []` (0/115 S9, 0/342 C9) while the crew reply carries the
-   full vocabulary (78/78 S9, 207/207 C9) — and impostors are disproportionately
-   in reply position (115/219 of their turns vs 78/652 for crew in S9;
-   342/625 vs 207/1,854 in C9). So the tell is the *absent* observation, and it
-   is absolute: on these bytes no crew turn anywhere lacks a whereabouts answer
-   and no impostor reply carries one.
+   106/106 in S9, 292/292 in C9, 6/6 in S4 and 3/3 in C4), but the impostor
+   REPLY surface hard-codes `observations: []` (0/112 S9, 0/344 C9, 0/33 S4,
+   0/40 C4) while the crew reply carries the full vocabulary (76/76 S9, 217/217
+   C9, 9/9 S4, 9/9 C4) — and impostors are disproportionately in reply position
+   (112/218 of their turns vs 76/651 for crew in S9; 344/636 vs 217/1,880 in
+   C9). So the tell is the *absent* observation, and it is absolute: on these
+   bytes no crew turn anywhere lacks a whereabouts answer and no impostor reply
+   carries one.
 
    The whereabouts that *are* recorded are almost never lies. Counting
    whereabouts *observations* (a turn may carry more than one) against the
    pre-advance decision frame — the reconstructed state each recorded tick's
-   actions were decided against, read from `eval.replay_walk`'s per-tick
-   pre-advance state, the same frame as item 9's census — self-placements match
-   the reconstructed room in **102/104 = 98.1% (S9)** and **283/285 = 99.3%
-   (C9)** for impostors, versus crew **656/659 = 99.5% (S9)** and **1,875/1,892
-   = 99.1% (C9)**; pooled over all four sets, crew **2,701/2,722 = 99.2%** and
-   impostor **391/395 = 99.0%**. This frame agrees cell for cell with the
-   engine's own rendered route line in each meeting prompt. The 48.3%/45.3%
-   impostor and 79.5%/79.6% crew match rates this item used to publish were
-   measured on the baseline-6 bytes and reproduce in neither frame here; they
-   are retired rather than carried forward. **Impostors essentially do not lie
-   in the one structured channel the alibi rules prosecute** — anything fitted
-   on "impostors lie in roll call" is fitted on nothing.
+   actions were decided against, read from `eval/replay_walk.py`'s per-tick
+   pre-advance state, the same frame as item 9's census — impostor
+   self-placements match the reconstructed room in **105/106 = 99.1%** (S9),
+   **290/294 = 98.6%** (C9), 6/6 (S4) and 3/3 (C4); the crew figures are
+   **654/660 = 99.1%** (S9), **1,901/1,920 = 99.0%** (C9), 79/79 (S4) and
+   88/89 (C4). Pooled over all four sets: crew **2,722/2,748 = 99.1%** and
+   impostors **404/409 = 98.8%**. Every observation resolved in this frame —
+   there is no observation whose claimed tick the walk could not reconstruct.
+   **Impostors essentially do not lie in the one structured channel the alibi
+   rules prosecute** — anything fitted on "impostors lie in roll call" is
+   fitted on nothing. Note that the two sides now match at the same rate, so
+   the truthfulness of a whereabouts answer carries no role signal at all; only
+   its *presence* does.
 
-9. **The too-clean evidence economy.** Across all **825** resolved kills in
+9. **The too-clean evidence economy.** Across all **834** resolved kills in
    the four sets, the pre-advance decision frame shows **zero** kills with any
    non-victim living crew co-present in the kill room (co-present histogram
-   `{0: 825}`, the fold `tests/eval/test_kill_craft.py` pins per set), and only
-   **20/825 = 2.4%** were crew-witnessed at all (16 C9 / 3 S9 / 1 S4 / 0 C4 —
+   `{0: 834}`, from `eval/kill_craft.py`'s per-set fold), and only
+   **22/834 = 2.6%** were crew-witnessed at all (18 C9 / 3 S9 / 1 S4 / 0 C4 —
    every witness a same-tick one-hop arrival, a mid-tick engine fact that only
    the engine walk can read). The scripted impostor kills only isolated targets
    (`agents/tactical/impostor_policy.py` KILL guard), so the corpus supplies
@@ -315,32 +355,37 @@ section does not currently publish one.
    instead, and a crew stack trained here has effectively never seen a
    contested kill scene.
 
-The section was first measured on the baseline-6 bytes; items 1, 2, 8 and 9 were
-re-derived on the committed baseline-7 bytes. The next re-record of all four sets
-moves every cell here again.
+Every cell in this section was re-derived on the committed bytes at this
+recording. The next re-record of all four sets moves every one of them again,
+and the same three commands re-derive them.
 
-## Recording (operator, `$0`, ~22–23h MEASURED)
+## Recording (operator, `$0`, ~12h MEASURED)
 
 This is an operator-run step gated on `FEATHERLESS_API_KEY`; it is **not** run in
 CI or by an agent session (the fake CI provider is refused — the corpus records
-only on Featherless). The Task-18.13 record is the measured figure, not an
-estimate:
+only on Featherless). These are the measured walls of the record that produced
+the committed bytes, not estimates — all four sets in one window:
 
-| leg | wall clock |
-|---|---|
-| 4p1i (50 games) | 0h 47m 01s |
-| 9p2i (150 games) | 16h 00m 16s |
-| phantom-repair pass (2 seeds, see below) | 0h 12m 33s |
-| **corpus total** | **~17h 00m** |
+| leg | games | wall clock |
+|---|---|---|
+| `replays/samples/9p2i` | 50 | 3h 07m 00s |
+| `replays/ml_corpus/9p2i` | 150 | 7h 59m 32s |
+| `replays/samples/4p1i` | 50 | 0h 23m 15s |
+| `replays/ml_corpus/4p1i` | 50 | 0h 27m 48s |
+| **four legs, one window** | **300** | **12h 21m 01s** at **`$0.0000`** |
 
-Those are the corpus legs alone. The baseline-7 record recorded all four
-committed sets in one window — **23h 25m 42s** for 300 games at **$0.0000**,
-including the two samples legs (`audits/audit-phase-20-baseline-7.md` §0.3). It
-came in inside a bracket committed in advance (22.2 h at the smoke's own game
-lengths, 26.3 h at baseline-6 lengths), nearer the lower figure. Treat the
-baseline-6 figures (0h45m / 19h26m / 2h43m, ~22h54m) as history: the v4 prompt
-set is shorter per meeting call than v3 was. Note the wall clock includes any time the machine spends asleep — a
-suspend pauses the run rather than corrupting it. Apply the 16.14/17.9/18.12
+The four leg walls sum to 11h 57m 35s; the window total is 23m 26s longer
+because the last leg did not run straight through — a hard provider
+account-balance refusal stopped it at 49 of its 50 seeds, and it was completed
+on a resume. That is the resumable path below working as designed, and it is
+recorded here rather than smoothed into the leg row.
+
+Treat the previous recording's figures as history — it took roughly twice as
+long for the same 300 games, and the corpus legs alone (0h 47m 01s at 4p1i,
+16h 00m 16s at 9p2i, plus a 12m 33s repair pass) took more than the whole
+window does now. The prompt set is shorter per meeting call than it was.
+Note the wall clock includes any time the machine spends asleep — a
+suspend pauses the run rather than corrupting it. Apply the accumulated
 operator notes (staggered worker starts, jittered backoff, per-seed atomic
 staging, `AILIBI_SEED_MAX_ATTEMPTS=8`) and **checkpoint-push discipline**: commit
 and push each completed seed range as it lands, so an interruption (machine
@@ -357,8 +402,8 @@ to validate the pipeline end to end, then the long 9p2i leg:
 
 ```bash
 export FEATHERLESS_API_KEY=...          # hosted flat-rate; recorded as $0
-export AILIBI_LLM_PROVIDER=featherless  # the locked baseline-7 provider
-export AILIBI_PROMPT_SET=qwen3_6_27b    # the locked baseline-7 prompt set
+export AILIBI_LLM_PROVIDER=featherless  # the locked baseline-8 provider
+export AILIBI_PROMPT_SET=qwen3_6_27b    # the locked baseline-8 prompt set
 export AILIBI_SEED_MAX_ATTEMPTS=8       # raised transport retry budget for the long run
 bash scripts/record_ml_corpus.sh --set 4p1i    # short leg first
 bash scripts/record_ml_corpus.sh --set 9p2i    # then the long leg
@@ -368,10 +413,10 @@ Those four exports are the **whole** recording environment. The twenty-one retir
 levers are unconditional in code and need no env at all; `AILIBI_IMPOSTOR_ROLL_CALL`
 must stay **UNSET** (see below).
 
-The preflight locks the full baseline-7 substrate, not just the provider:
+The preflight locks the full baseline-8 substrate, not just the provider:
 
 - **the lever slate.** The preflight POSITIVELY checks the live substrate
-  snapshot equals the ruled baseline-7 state — the twenty-one retired levers ON and
+  snapshot equals the ruled baseline-8 state — the twenty-one retired levers ON and
   `impostor_roll_call` OFF — and refuses before any seed stages. A leftover
   `AILIBI_IMPOSTOR_ROLL_CALL` export would ship the **unshipped** impostor-answer
   arm into the record while the echo claimed the ruled substrate, and an
@@ -379,7 +424,7 @@ The preflight locks the full baseline-7 substrate, not just the provider:
   (`substrate_flag_snapshot()` reads the same env) — the C6 recording-preflight
   hazard the graduations discharge. Because the check compares the *slate* rather
   than blacklisting a variable name, it also catches a partial graduation and any
-  future toggleable-set drift. This mirrors the Task-18.12 preflight in
+  future toggleable-set drift. This mirrors the preflight in
   `scripts/refresh_samples.sh`.
 - **the model.** A leftover `AILIBI_LLM_MEETING_MODEL` / `AILIBI_LLM_TRIGGER_MODEL`
   export from a model sweep is refused unless it names the baseline model
@@ -390,7 +435,7 @@ The preflight locks the full baseline-7 substrate, not just the provider:
 All three knobs are then exported pinned so the recorded substrate can never
 drift from the one the `MANIFEST` stamps. The prompt **versions** are locked too,
 not just the set name: the preflight asserts the registry still resolves
-`qwen3_6_27b` to the baseline-7 map (all four templates at v4), and the finalize
+`qwen3_6_27b` to the baseline-8 map (all four templates at v5), and the finalize
 refuses to freeze a set unless every meeting-bearing `MANIFEST` row carries
 **exactly** that map (a foreign version string AND a stripped/partial row both
 refuse — the manager stamps the full set map on every meeting, so anything short
@@ -426,25 +471,26 @@ written) — rows recorded by an earlier session keep that session's `git_sha`,
 so a resume never rewrites the provenance of bytes it did not record. File
 presence alone is not provenance: before a present replay is skipped as
 "already recorded" (and again before the freeze), the recorder proves its
-**bytes** carry the full baseline-7 provenance —
+**bytes** carry the full baseline-8 provenance —
 
-- the canonical **five-field** 15.9 `fsm-default` tactical-policy stamp (not just
+- the canonical **five-field** `fsm-default` tactical-policy stamp (not just
   its id: a hand-crafted stamp with non-canonical method/encoder/weights/anchor
   fields renders identically in the `MANIFEST`);
 - the locked model (`Qwen/Qwen3.6-27B`) on **every** recorded call (meeting calls
   and failed-call rows alike, so a wall-clock-miss phantom or a foreign-model
   recording is refused);
 - exactly `$0` recorded cost;
-- the **baseline-7 lever slate** stamped **positively** on the `game_over` record
+- the **baseline-8 lever slate** stamped **positively** on the `game_over` record
   (the same tolerant per-lever match the validity gate and the loader enforce:
-  every retired always-on lever present and True — including the four Task-18.12
+  every one of the twenty-one retired levers present and True — including the
   meeting-layer graduations `roll_call_round` / `whereabouts_interior_flags` /
   `vent_placement_contradictions` / `absence_prior` — and `impostor_roll_call`
   OFF). This asserts the slate in the recorded bytes, not just the env refusal,
-  so a **stale baseline-5 replay** (which carries those four levers OFF) is
-  refused **at the recorder**, not only at the external validity gate. That
-  refusal is what made this a re-record rather than a resume: pointed at the
-  committed baseline-5 corpus, the guard refused all 200 replays by name.
+  so a replay from an older substrate, whose stamp carries one of those levers
+  OFF, is refused **at the recorder**, not only at the external validity gate.
+  That refusal is what turns a substrate change into a re-record rather than a
+  resume: pointed at a corpus recorded before a graduation, the guard refuses
+  every replay in it by name.
 
 ### Defaulted turns, and why a refused freeze is cheap
 
@@ -471,23 +517,26 @@ no `deadline_default` check at all; it rejects the sentinel shape only
 incidentally, via the model column. The corpus recorder is deliberately stricter
 than the gate here, because the corpus is a training artifact.)
 
-**Expect to iterate.** The 18.13 baseline-6 record paid a 2h43m repair pass at
-**10/150**; the baseline-7 record paid **2/150**, repaired in 12m33s, and
-absorbed no transport retry anywhere in its 23-hour window. Budget a repair pass
-anyway — the rate is a property of meeting length, and a re-recorded seed can
-pick up a fresh default. The deadline cannot be widened to compensate without
-changing the locked substrate, so re-recording is the only honest fix (`audits/audit-phase-16-close.md` §5.2's
-runbook rule: the seed re-records clean and its MANIFEST row honestly stamps the
-re-record date):
+**Expect to iterate.** Two records ago the repair pass ran to 10 of 150 seeds
+and cost 2h43m; the one before these bytes paid 2 of 150 in 12m33s. The
+committed bytes carry **zero** `deadline_default` rows on all four sets, which
+is what a clean freeze means — but budget a repair pass anyway: the rate is a
+property of meeting length, and a re-recorded seed can pick up a fresh default.
+The deadline cannot be widened to compensate without changing the locked
+substrate, so re-recording is the only honest fix — the seed re-records clean
+and its `MANIFEST` row honestly stamps the re-record date:
 
 ```bash
 # after a refused freeze: drop the offending replays, then resume
 bash scripts/record_ml_corpus.sh --set 9p2i     # records ONLY the dropped seeds, then re-finalizes
 ```
 
-Both baseline-7 seeds came back clean on the first retry (all 10 did at 18.13). **A refused freeze costs only the bad
-seeds**, never the good ones: provenance is checked separately from presence, so
-19 hours of recorded work survived the refusal untouched.
+Re-recorded seeds have come back clean on the first retry at every record so
+far. **A refused freeze costs only the bad seeds**, never the good ones:
+provenance is checked separately from presence, so hours of recorded work
+survive the refusal untouched. The same separation is what let the interrupted
+4p1i leg of this record resume over its 49 completed seeds rather than re-run
+them.
 
 > **Dropping phantoms while the leg still runs is safe — the finalize refuses a
 > short set.** `check_seed_count` asserts the exact contiguous locked set
@@ -499,7 +548,8 @@ seeds**, never the good ones: provenance is checked separately from presence, so
 > is to drop after the drain: the guard turns a mistimed drop into a hard stop,
 > not a silent corruption.
 
-An unstamped replay (a pre-15.9 recording, a canonical sample copied in) is
+An unstamped replay (a recording that predates the stamp, a canonical sample
+copied in) is
 refused for the same reason: it would render in the `MANIFEST` policy column
 identically to a stamped one and the validity gate does not check the stamp. A
 fully-recorded set records nothing and just re-finalizes, so re-running is always
@@ -514,11 +564,11 @@ For a long, flaky hosted run, raise the per-seed transport retry budget:
 `AILIBI_SEED_MAX_ATTEMPTS=8 bash scripts/record_ml_corpus.sh --set 9p2i`. A set
 directory that carries `replay-seed-*.jsonl` but no `FROZEN` line in its
 `MANIFEST.md` is a **partial** (not-yet-finished) recording — re-run to complete
-and freeze it before running the acceptance gate. A multi-day session spanning
-several UTC midnights is expected at the measured **~22–23h** (see the section
-header for the per-leg breakdown); `MANIFEST` dates are honest per-seed (the
-16.14 mixed-date precedent — the gate checks coherence, not
-uniformity).
+and freeze it before running the acceptance gate. A session spanning a UTC
+midnight is expected at the measured **~12h** for all four sets (see the section
+header for the per-leg breakdown); `MANIFEST` dates are honest per-seed, so
+mixed dates across a set are correct rather than suspect — the gate checks
+coherence, not uniformity.
 
 ## Finding these bytes later: the annotated tag
 
@@ -529,13 +579,12 @@ The `FROZEN` line in each `MANIFEST.md` names the **recording-time code state** 
 so no recorder could name it. Checking that sha out gives you the generating code,
 not the corpus.
 
-The pointer to the bytes is an **annotated tag** cut after the record lands
-(`phase-18-corpus-<sha>` for this record). Dispatch environments refuse tag pushes
-(the 16.14 limitation), so this is an operator-session step:
+The pointer to the bytes is an **annotated tag** cut after the record lands.
+Dispatch environments refuse tag pushes, so this is an operator-session step:
 
 ```bash
-git tag -a "phase-18-corpus-$(git rev-parse --short HEAD)" -m "…substrate + acceptance…"
-git push origin "phase-18-corpus-$(git rev-parse --short HEAD)"
+git tag -a "baseline-8-corpus-$(git rev-parse --short HEAD)" -m "…substrate + acceptance…"
+git push origin "baseline-8-corpus-$(git rev-parse --short HEAD)"
 ```
 
 Both halves are provenance: the freeze line answers "what code made this?", the

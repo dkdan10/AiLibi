@@ -18,7 +18,7 @@ is the recording it replaced. Where the two agree, nothing moved.
 | Committed sample replays that reconstruct byte-identically | 100 of 100 | 100 of 100 | every commit — `bash scripts/verify_samples.sh` |
 | Observation-firewall violations, all phases | zero | zero | never breached in CI — the three mechanisms are named below |
 | Impostor win rate, committed samples | 36% (4p1i), 30% (9p2i) | 36% (4p1i), 24% (9p2i) | the 2026-08-31 record — [4p1i](../replays/samples/4p1i/MANIFEST.md), [9p2i](../replays/samples/9p2i/MANIFEST.md) |
-| Eject ballots carrying a valid citation, a turn or an observation id (9p2i) | 538 / 538, zero dangling | 520 / 520, zero dangling | reference recording 8, 2026-08-31 — [instrument](../tests/eval/test_vj_instruments.py) |
+| Eject ballots carrying a valid citation, a turn or an observation id (9p2i) | 526 / 527, zero dangling | 538 / 538, zero dangling | reference recording 8, 2026-08-31 — [instrument](../tests/eval/test_vj_instruments.py) |
 | Ejection accuracy with engine-certified proof of the ejectee's role, against without | 333 / 333 = 1.0000 vs 50 / 96 = 0.5208 | 310 / 310 = 1.0000 vs 46 / 125 = 0.3680 | the 2026-08-31 record, pooled over four recorded sets — [the record](../audits/audit-phase-21-rerecord.md) §5.1, against [phase-19 close](../audits/audit-phase-19-close.md) §4.1 |
 | Correct 9p ejections riding an ejectee-specific vent sighting | 68 / 82 = 83% | 68 / 78 = 87% | reference recording 8, 2026-08-31 — the cross-tab in §3, [pinned](../tests/eval/test_deduction_metrics.py) |
 | Impostor ballots cast against a partner (9p2i) | 0 of 219 | 0 of 245 | enforced by the meeting layer, not shown by the model — §3 |
@@ -79,8 +79,9 @@ the difference.
 
 ## 3. What the corpus demonstrates — and what it does not
 
-**Evidence-processing: demonstrated.** Deliberation is typed, and all 538 eject
-ballots in the 9p2i samples cite a line the voter could really see.
+**Evidence-processing: demonstrated.** Deliberation is typed, and 526 of the 527
+eject ballots in the 9p2i samples cite a line the voter could really see. The one
+that does not is the first uncited eject ballot any recording has carried.
 
 **Deception: demonstrated, and the strongest capability on display.**
 Coordinated fabricated alibis built by reading the transcript, strategic

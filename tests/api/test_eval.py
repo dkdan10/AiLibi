@@ -183,19 +183,18 @@ def test_committed_4p1i_report_validates_against_current_model() -> None:
     # ejection_accuracy is None iff the set has no ejections (the field's own
     # validator). Re-anchored to the Task-18.12 baseline-6 re-record with the vent
     # widening (Qwen/Qwen3.6-27B, the CREW-ONLY graduation slate). The vent widening
-    # cascaded into different trajectories: the flat 4p/1i set now ejects in 12 of
-    # its 39 meetings: 10 impostor calls + 2 crew (accuracy 10/12 ≈ 0.833, was 11/13
-    # ≈ 0.846 on the pre-widening baseline-6 record). With that supply the set is
-    # still not small-n (flag False). vote_correctness_rate 12/12 = 1.0 — every one
-    # of the 12 ejections is transcript-evidence-backed. flagged_but_ignored is now
-    # 1: one SKIPPED meeting carried a still-flagged transcript contradiction that
-    # did not convert to an ejection (was 0 pre-widening).
-    assert report.vote_correctness.total_ejections == 21  # was 12
+    # cascaded into different trajectories: the flat 4p/1i set now ejects in 24 of
+    # its 39 meetings: 20 impostor calls + 4 crew (accuracy 20/24 ≈ 0.833; the prior
+    # record read 20/21 ≈ 0.952). With that supply the set is still not small-n
+    # (flag False). vote_correctness_rate 19/20 = 0.95 — all but one impostor
+    # ejection is transcript-evidence-backed. flagged_but_ignored is 0: no SKIPPED
+    # meeting carried a still-flagged transcript contradiction.
+    assert report.vote_correctness.total_ejections == 24  # was 21
     assert report.vote_correctness.ejection_accuracy == pytest.approx(
-        20 / 21
-    )  # was 10 / 12
-    assert report.vote_correctness.impostor_ejections == 20  # was 10
-    assert report.vote_correctness.crewmate_ejections == 1  # was 2
+        20 / 24
+    )  # was 20 / 21
+    assert report.vote_correctness.impostor_ejections == 20
+    assert report.vote_correctness.crewmate_ejections == 4  # was 1
     assert report.vote_correctness.vote_correctness_rate == pytest.approx(
         0.95
     )  # was 1.0

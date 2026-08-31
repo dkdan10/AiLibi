@@ -715,16 +715,17 @@ def test_v3_encode_is_inert_to_the_announcement_fields() -> None:
 #: not a gap: a 4p/1i game ends at its first ejection, so no meeting ever follows
 #: one.
 #:
-#: Re-measured on the baseline-7 bytes (the baseline-6 rows were
-#: 117/0/0/0/0, 971/475/409/139/68, 120/0/0/0/0 and 2726/1324/1187/282/232). The
-#: ``saw_vent`` columns fall hardest — 68 -> 14 and 232 -> 45 — because the
-#: meeting-outcome channel now renders the ejection, so a witness has far less
-#: occasion to name an already-ejected player.
+#: Re-measured on the current bytes (the baseline-7 rows were
+#: 120/0/0/0/0, 871/415/410/31/14, 132/0/0/0/0 and 2479/1196/1148/106/45; the
+#: baseline-6 rows were 117/0/0/0/0, 971/475/409/139/68, 120/0/0/0/0 and
+#: 2726/1324/1187/282/232). The ``saw_vent`` columns keep falling — 14 -> 8 and
+#: 45 -> 44 — because the meeting-outcome channel renders the ejection, so a
+#: witness has far less occasion to name an already-ejected player.
 _COUNTERFACTUAL_CENSUS: Final[dict[str, tuple[int, int, int, int, int]]] = {
-    "samples/4p1i": (120, 0, 0, 0, 0),
-    "samples/9p2i": (871, 415, 410, 31, 14),
-    "ml_corpus/4p1i": (132, 0, 0, 0, 0),
-    "ml_corpus/9p2i": (2479, 1196, 1148, 106, 45),
+    "samples/4p1i": (117, 0, 0, 0, 0),  # was (120, 0, 0, 0, 0)
+    "samples/9p2i": (869, 411, 406, 24, 8),  # was (871, 415, 410, 31, 14)
+    "ml_corpus/4p1i": (129, 0, 0, 0, 0),  # was (132, 0, 0, 0, 0)
+    "ml_corpus/9p2i": (2516, 1186, 1160, 78, 44),  # was (2479, 1196, 1148, 106, 45)
 }
 
 
@@ -796,8 +797,8 @@ def test_the_census_totals_reproduce_the_review_counts() -> None:
     renders = sum(row[0] for row in _COUNTERFACTUAL_CENSUS.values())
     gained = sum(row[1] for row in _COUNTERFACTUAL_CENSUS.values())
     stale_vents = sum(row[4] for row in _COUNTERFACTUAL_CENSUS.values())
-    assert (renders, gained) == (3602, 1611)  # baseline 6: (3934, 1799)
+    assert (renders, gained) == (3631, 1597)  # was (3602, 1611)
     # The re-litigation denominator, re-measured on the baseline-7 bytes: the
     # meeting-outcome channel renders the ejection, so a witness has far less
     # occasion to name an already-ejected player (baseline 6: 300).
-    assert stale_vents == 59
+    assert stale_vents == 52  # was 59

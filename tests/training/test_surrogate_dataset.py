@@ -348,11 +348,11 @@ def test_build_meeting_table_consumes_the_frozen_corpus() -> None:
 
     table = build_meeting_table(Path("replays/ml_corpus/4p1i"))
     assert table.games_total == 50
-    assert table.meetings_total == 44  # was 40
+    assert table.meetings_total == 43  # was 44
     assert (
-        table.ballots_total == 132
-    )  # == validity-gate ballot count: 100% join  # was 120
-    assert len(table.rows) == 132  # was 120
+        table.ballots_total == 129
+    )  # == validity-gate ballot count: 100% join  # was 132
+    assert len(table.rows) == 129  # was 132
     assert table.splits is not None
     assert (len(table.splits.train), len(table.splits.val), len(table.splits.test)) == (
         30,
@@ -1118,6 +1118,17 @@ def test_the_ballot_audit_marker_census_over_the_four_committed_sets() -> None:
     kinds are the prefix markers this module's table parses; the seventh, the
     vote-guard rationale redaction, is a replacement BODY rather than a prefix,
     so the census counts it and the parser does not claim it.
+
+    On the baseline-8 record the two totals no longer agree: 127 bracketed
+    annotations against 120 claimed labels. The 7-annotation gap is real and
+    reproducible — every ballot in it carries a citation-nulling marker
+    (``invalid_reason_id`` / ``invalid_observation_id``) BEHIND the target-guard
+    marker named by the newly-recorded ``guard_rewrite_reason`` field, and
+    ``ballot_rewrite_labels`` returns as soon as it consumes the marker naming
+    that field, so the citation label is dropped. Both totals are pinned as
+    MEASURED here rather than reconciled, so the gap stays visible; neither
+    dropped label is in ``TARGET_REWRITE_LABELS``, so no fit-side exclusion moves
+    with it.
     """
 
     ballots: list[VoteBallot] = []
@@ -1149,26 +1160,28 @@ def test_the_ballot_audit_marker_census_over_the_four_committed_sets() -> None:
             marked_games += int(game_marked)
         per_set_rewritten.append(rewritten)
 
-    assert (games, len(ballots), annotations, marked_games) == (300, 3602, 204, 94)
+    # was (300, 3602, 204, 94)
+    assert (games, len(ballots), annotations, marked_games) == (300, 3631, 127, 70)
     assert dict(kinds) == {
-        "under_gate_redirect": 120,
-        "invalid_observation_id": 27,
-        "teammate_coerced": 18,
-        "rationale_redaction": 18,
-        "invalid_reason_id": 9,
-        "uncited_coerced": 8,
+        "under_gate_redirect": 83,  # was 120
+        "invalid_observation_id": 12,  # was 27
+        "teammate_coerced": 7,  # was 18
+        "rationale_redaction": 7,  # was 18
+        "invalid_reason_id": 1,  # was 9
+        "uncited_coerced": 6,  # was 8
         "invalid_target": 4,
     }
-    assert sum(kinds.values()) == 204
+    assert sum(kinds.values()) == 120  # was 204 (see the docstring's 7-label gap)
     # samples-9p2i, ml_corpus-9p2i, samples-4p1i, ml_corpus-4p1i.
-    assert per_set_rewritten == [45, 102, 1, 2]
-    assert sum(per_set_rewritten) == 150
-    # 8 of those 150 were already dropped by the J2-only rule; 142 rode into the
+    assert per_set_rewritten == [27, 70, 1, 2]  # was [45, 102, 1, 2]
+    assert sum(per_set_rewritten) == 100  # was 150
+    # 6 of those 100 were already dropped by the J2-only rule; 94 rode into the
     # fit as the voter's own choice before this rule widened.
-    assert kinds["uncited_coerced"] == 8
-    # No recorded ballot carries the structured field yet, which is why the
-    # marker table above is load-bearing rather than belt-and-braces.
-    assert sum(b.guard_rewrite_reason is not None for b in ballots) == 0
+    assert kinds["uncited_coerced"] == 6  # was 8
+    # Task 21.2 wired the structured field, so every target rewrite now records
+    # its own reason — the marker table above stays load-bearing because the
+    # field holds ONE reason per ballot while the chain can carry more.
+    assert sum(b.guard_rewrite_reason is not None for b in ballots) == 100  # was 0
 
 
 @pytest.mark.slow
@@ -1195,7 +1208,7 @@ def test_the_reporter_column_is_an_exclusion_oracle_the_fit_may_not_read() -> No
                     reporter_roles[feat.role] += 1
                 features.append(float(feat.is_reporter))
                 labels.append(float(feat.is_impostor))
-    assert reporter_roles == Counter({"CREWMATE": 3602})
+    assert reporter_roles == Counter({"CREWMATE": 3631})  # was 3602
     assert reporter_roles["IMPOSTOR"] == 0
 
     # The fit-side vector never sees it: every built view writes the constant.
@@ -1247,9 +1260,9 @@ def test_walk_reproduces_the_production_fold_on_the_4p1i_corpus() -> None:
 
     parity = measure_belief_render_parity(Path("replays/ml_corpus/4p1i"))
     assert parity.games_total == 50
-    assert parity.meetings_total == 44  # was 40
-    assert parity.rows_total == 132  # was 120
-    assert parity.cells_compared == 264  # was 240
+    assert parity.meetings_total == 43  # was 44
+    assert parity.rows_total == 129  # was 132
+    assert parity.cells_compared == 258  # was 264
     assert parity.raw_mismatches == 0
     assert parity.trust_mismatches == 0
     assert parity.max_raw_abs_delta == 0.0
@@ -1303,21 +1316,22 @@ def test_j1_live_parity_divergence_is_measured_on_the_9p2i_corpus(
     skew the report states beside the verdict. The fidelity INVARIANTS are asserted
     live in the test above, not here.
 
-    RE-PINNED (not xfailed) at Task 18.13's baseline-6 re-record. Every number here
+    RE-PINNED (not xfailed) at Task 18.13's baseline-6 re-record and at every
+    re-record since. Every number here
     derives from the corpus bytes ALONE — ``measure_belief_render_parity`` reads no
     fitted artifact — so it is honestly re-derivable now, and deferring it to 18.14
     behind an expected failure would let the train/serve skew drift unrecorded in
-    the meantime (PR #301 review). The skew SHRANK on the graduated meeting layer:
-    divergent cells 280 -> 141 of 14 326 compared, and the max divergence 0.11 ->
-    0.06.
+    the meantime (PR #301 review). The skew moved AGAIN on the baseline-8 record:
+    divergent cells 61 -> 102 of 12 772 compared, and the max divergence 0.06 ->
+    0.11.
     """
 
     parity = corpus_parity
-    assert parity.meetings_total == 432  # was 463
-    assert parity.rows_total == 2479  # was 2726
-    assert parity.cells_compared == 12600  # was 14326
-    assert parity.j1_divergent_cells == 61  # was 141
-    assert parity.j1_divergent_rows == 57  # was 130
-    assert parity.j1_divergent_fit_cells == 42  # was 113
-    assert parity.j1_divergent_test_cells == 19  # was 28
-    assert parity.j1_max_abs_divergence == pytest.approx(0.06, abs=1e-9)
+    assert parity.meetings_total == 439  # was 432
+    assert parity.rows_total == 2516  # was 2479
+    assert parity.cells_compared == 12772  # was 12600
+    assert parity.j1_divergent_cells == 102  # was 61
+    assert parity.j1_divergent_rows == 98  # was 57
+    assert parity.j1_divergent_fit_cells == 77  # was 42
+    assert parity.j1_divergent_test_cells == 25  # was 19
+    assert parity.j1_max_abs_divergence == pytest.approx(0.11, abs=1e-9)  # was 0.06

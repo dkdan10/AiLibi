@@ -255,9 +255,9 @@ class TestConversionPerMeeting:
         # the gate ejects 78 impostors across 165 resolved meetings — the
         # per-meeting conversion KPI over the new bytes.
         result = compute_conversion_per_meeting(committed_9p2i_report.report.games)
-        assert result.impostor_ejections == 85  # was 78
-        assert result.resolved_meetings == 152  # was 165
-        assert result.conversion_per_meeting == pytest.approx(85 / 152)  # was 78 / 165
+        assert result.impostor_ejections == 82  # was 85
+        assert result.resolved_meetings == 151  # was 152
+        assert result.conversion_per_meeting == pytest.approx(82 / 151)  # was 85 / 152
 
 
 # ---------------------------------------------------------------------------
@@ -400,13 +400,13 @@ class TestEffectiveDeflection:
         # transcript contradiction channel collapsed, fewer of the impostor's
         # survivals come from landing plurality on a named or third-party target.
         result = compute_effective_deflection(committed_9p2i_report.report.games)
-        assert result.accused_impostor_events == 137  # was 148
-        assert result.accused_impostor_survivals == 52  # was 70
-        assert result.active_survivals == 51  # was 67
-        assert result.named_target_deflections == 17  # was 8
-        assert result.third_party_deflections == 15
-        assert result.effective_deflections == 32  # was 23
-        assert result.skip_saved_active_survivals == 19  # was 44
+        assert result.accused_impostor_events == 132  # was 137
+        assert result.accused_impostor_survivals == 51  # was 52
+        assert result.active_survivals == 50  # was 51
+        assert result.named_target_deflections == 18  # was 17
+        assert result.third_party_deflections == 20  # was 15
+        assert result.effective_deflections == 38  # was 32
+        assert result.skip_saved_active_survivals == 12  # was 19
 
 
 # ---------------------------------------------------------------------------
@@ -474,16 +474,16 @@ class TestIndistinguishability:
             _COMMITTED_9P2I_DIR, committed_9p2i_report.report.games
         )
         result = compute_indistinguishability(tally)
-        assert result.impostor_do_task == 370  # was 415
-        assert result.crewmate_do_task == 3163  # was 3703
+        assert result.impostor_do_task == 365  # was 370
+        assert result.crewmate_do_task == 3021  # was 3163
         assert result.impostor_wait_share is not None
         assert result.crewmate_wait_share is not None
         assert result.impostor_wait_share == pytest.approx(
-            0.10171428571428572, abs=1e-3
-        )  # was 0.0683
+            0.09868421052631579, abs=1e-3
+        )  # was 0.10171428571428572
         assert result.crewmate_wait_share == pytest.approx(
-            0.06418039895923677, abs=1e-3
-        )  # was 0.1739
+            0.08120486172274088, abs=1e-3
+        )  # was 0.06418039895923677
         # The fingerprint is gone: impostor wait-share no longer dwarfs crew's —
         # impostors now idle LESS than the task-burdened crew.
         assert result.impostor_wait_share < 2 * result.crewmate_wait_share
@@ -505,16 +505,19 @@ class TestIndistinguishability:
         with pytest.raises(ValueError, match="absent from game"):
             tally_actions_by_role(_COMMITTED_9P2I_DIR, (broken,))
 
-    def test_committed_bytes_exclude_nothing_and_tally_identically(
+    def test_committed_bytes_exclude_the_discarded_and_tally_identically(
         self, committed_9p2i_report: TournamentEvalReport
     ) -> None:
-        # The committed corpus carries no dispositions, so the ingest has
-        # nothing to exclude and every published cell above is byte-identical
-        # to what the pre-migration fold produced.
+        # The baseline-8 re-record is the first committed 9p2i set to carry
+        # ``action_dispositions``, so the ingest now HAS something to exclude:
+        # 537 recorded actions are marked ``discarded_by_meeting`` and stay out
+        # of the tally. (Every earlier committed set carried no dispositions and
+        # this read 0.) ``tally_actions_by_role`` delegates to the same fold, so
+        # the two surfaces still agree exactly.
         games = committed_9p2i_report.report.games
         ingest = ingest_actions_by_role(_COMMITTED_9P2I_DIR, games)
 
-        assert ingest.discarded_excluded == 0
+        assert ingest.discarded_excluded == 537  # was 0
         assert ingest.tally == tally_actions_by_role(_COMMITTED_9P2I_DIR, games)
 
     def test_a_disposition_bearing_recording_drops_the_discarded_actions(
@@ -684,7 +687,7 @@ class TestSingleWitnessInformChannel:
         # baseline-4 substrate, with transcript contradiction flags collapsed, no
         # ejection re-derives into the single-witness inform band.)
         result = compute_multi_signal_conversion(committed_9p2i_report.report.games)
-        assert result.conversions_with_single_witness_inform == 3  # was 0
+        assert result.conversions_with_single_witness_inform == 2  # was 3
 
 
 def test_gate_spec_states_the_three_tiers_separately() -> None:

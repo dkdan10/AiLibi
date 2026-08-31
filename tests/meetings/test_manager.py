@@ -6378,40 +6378,42 @@ class TestSingleWitnessInformYieldOnCommittedBytes:
     over the §4.6 gate yet lost plurality -- prior re-record read 60 / 29, then
     75 / 37, 46 / 19, 46 / 10, 72 / 38), which validates the offline
     oracle, then counts how many the single-witness inform converts WITHOUT any
-    tally change (this re-record: 0; prior: 1, 4, 4, none, none).
+    tally change (this re-record: 1; prior: 0, 1, 4, 4, none, none).
     """
 
     def test_methodology_reproduces_the_audit_partition(self) -> None:
         result = _derive_inform_yield()
 
         # The §4(3) partition, re-derived from the committed bytes
-        # (Qwen/Qwen3.6-27B qwen3_6_27b.v3, Task 16.17). The prior re-record read 60
-        # accused-not-ejected / 29 over-gate-lost-plurality; this re-record moves
-        # accused-not-ejected to 70 and over-gate-lost-plurality to 34 -- a
+        # (Qwen/Qwen3.6-27B qwen3_6_27b.v3, Task 16.17). The prior re-record read 52
+        # accused-not-ejected / 18 over-gate-lost-plurality; this re-record moves
+        # accused-not-ejected to 51 and holds over-gate-lost-plurality at 18 -- a
         # legitimate era move (pure functions of the bytes, re-derived by the SAME
         # offline oracle). The accused-not-ejected count cross-checks the
         # effective-deflection survivals (accused_impostor_survivals in the eval-layer
         # metrics) exactly.
-        assert result.accused_not_ejected == 52  # was 70
+        assert result.accused_not_ejected == 51  # was 52
         assert result.over_gate_lost_plurality == 18  # was 34
 
     def test_single_witness_inform_converts_fourteen_of_the_ninety_seven(self) -> None:
         result = _derive_inform_yield()
 
-        # 12 of the 34 over-gate-lost-plurality subjects are single-witness-informed
+        # 9 of the 18 over-gate-lost-plurality subjects are single-witness-informed
         # (one observation-backed voice under echo-dedup) on this re-record
-        # (Qwen/Qwen3.6-27B qwen3_6_27b.v3, Task 16.17; prior re-record: 9 of 29).
-        # On THIS re-record the +0.05 inform lifts ZERO single-witness candidates
-        # to a strict plurality under the frozen equal-votes + tie->SKIP tally (as
-        # on baselines 2 & 3; prior re-records read 1, then 4, 4; the earliest
-        # redistribute era read 14 of 97). The flip set is still the
+        # (prior re-record: 6 of 18; before that 12 of 34, 9 of 29).
+        # On THIS re-record the +0.05 inform lifts ONE single-witness candidate
+        # to a strict plurality under the frozen equal-votes + tie->SKIP tally
+        # (prior re-records read 0, then 1, 4, 4; the earliest redistribute era
+        # read 14 of 97). The flip set is still the
         # conservative one (only recorded SKIP voters whose rendered value sits in
         # [gate - inform, gate) -- a baseline below that band still cannot cross on
-        # the inform alone, the owner principle); this zero-conversion census is the
+        # the inform alone, the owner principle); this census is the
         # honest census the committed bytes support, pinned exactly.
-        assert result.informed_candidates == 6  # was 12
-        assert len(result.conversions) == 0
-        assert result.conversions == ()
+        assert result.informed_candidates == 9  # was 6
+        assert len(result.conversions) == 1  # was 0
+        assert result.conversions == (  # was ()
+            (26, "headless-seed-26:meeting-0", "p-3"),
+        )
 
     def test_derivation_is_deterministic(self) -> None:
         assert _derive_inform_yield() == _derive_inform_yield()
@@ -8342,15 +8344,28 @@ class TestMarkerAndFieldAgree:
 
         assert self._disagreeing_voters(guarded) == ["p-6"]
 
-    def test_the_committed_corpus_is_skipped_rather_than_failed(self) -> None:
-        # 3,602 recorded ballots carry the marker and no field; the predicate
-        # must not fail them, which is what lets the invariant ship today.
+    def test_the_committed_corpus_is_judged_rather_than_skipped(self) -> None:
+        # The premise this test shipped under is dead, and its replacement is
+        # STRICTLY STRONGER. It used to assert that every recorded ballot carried
+        # the display marker and NO machine field, so the predicate could only
+        # skip them; the baseline-8 record is the first that writes the field, so
+        # the corpus is now actually JUDGED. The invariant itself is unchanged and
+        # is what matters: no ballot's marker and field disagree.
         seen = 0
+        judged = 0
+        judged_meetings = 0
         for set_dir in _COMMITTED_BALLOT_SET_DIRS:
             for replay_path in sorted(set_dir.glob("replay-seed-*.jsonl")):
                 for meeting in read_meeting_entries(replay_path):
                     assert self._disagreeing_voters(meeting.ballots) == []
+                    carried = False
                     for ballot in meeting.ballots:
                         seen += 1
-                        assert ballot.guard_rewrite_reason is None
-        assert seen == 3602
+                        if ballot.guard_rewrite_reason is not None:
+                            judged += 1
+                            carried = True
+                    judged_meetings += int(carried)
+        assert seen == 3631  # was 3602
+        # Non-vacuous: the predicate is exercised on real rows, not skipped past.
+        assert judged == 100
+        assert judged_meetings == 70

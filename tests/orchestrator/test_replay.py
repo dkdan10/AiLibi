@@ -1578,16 +1578,23 @@ class TestReplayEntryDispositionField:
                 '"action_dispositions":["maybe"],"state_hash":"deadbeef"}'
             )
 
-    def test_every_committed_tick_row_parses_to_none(self) -> None:
-        # The committed corpus predates the field; the additive default is what
-        # lets all four sets load unchanged. Asserted over the real files.
+    def test_every_committed_tick_row_carries_its_dispositions(self) -> None:
+        # The premise this test shipped under is dead, and its replacement is
+        # STRICTLY STRONGER. It used to assert the field parsed to None on every
+        # row, because the committed corpus predated it and the additive default
+        # was what let the sets load. The baseline-8 record is the first that
+        # WRITES the field, so every row now carries one — and a disposition per
+        # submitted action is exactly what A-14 was about.
         rows = 0
         for set_dir in _COMMITTED_SET_DIRS:
             for replay_path in sorted(set_dir.glob("replay-seed-*.jsonl")):
                 for entry in read_replay_entries(replay_path):
                     rows += 1
-                    assert entry.action_dispositions is None
-        assert rows == 5960
+                    assert entry.action_dispositions is not None
+                    assert all(
+                        isinstance(d, str) and d for d in entry.action_dispositions
+                    )
+        assert rows == 6064  # was 5960
 
 
 class TestRecordTickEventsKeyword:

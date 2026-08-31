@@ -171,9 +171,9 @@ paragraph attached to it.
 ## What the next recording changed under all of this
 
 The social layer these policies were searched against was rebuilt after the campaign closed,
-and the committed sample sets were re-recorded on it — regenerated 2026-08-25, impostor win
-rates 36% (4p1i) and 24% (9p2i). The bars that recording was read against were registered
-before the repairs existed, and the read is published bar by bar in
+and the committed sample sets were re-recorded on it — regenerated 2026-08-31, impostor win
+rates 36% (4p1i) and 30% (9p2i). The bars the first of those recordings was read against were
+registered before the repairs existed, and that read is published bar by bar in
 [`audit-phase-20-baseline-7.md`](../audits/audit-phase-20-baseline-7.md) §3. Every pair below
 reads baseline 6 → baseline 7:
 

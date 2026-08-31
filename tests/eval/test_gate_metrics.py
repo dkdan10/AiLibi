@@ -956,9 +956,9 @@ def test_committed_9p2i_report_pins_the_audited_gate_metrics() -> None:
     # and unevidenced. On the baseline-6 re-record the sheltered class is empty, so
     # survivors split rendered-met (34), sheltered (0), and unevidenced (36), the
     # largest share still unevidenced.
-    assert gate.survivals_rendered_met == 18  # was 34
+    assert gate.survivals_rendered_met == 18
     assert gate.survivals_sheltered_sub_gate == 0
-    assert gate.survivals_unevidenced == 34  # was 36
+    assert gate.survivals_unevidenced == 33  # was 34
 
     # Per-seed identities RE-DERIVED from the same committed games. Task 21.9
     # rebuilt the sidecar, so the stored block above and this fold now AGREE:
@@ -1004,7 +1004,8 @@ def test_committed_9p2i_report_pins_the_audited_gate_metrics() -> None:
     )
     assert "INVALID" in raw["gate_metrics"]["genuine_class_conversion"]["note"]
     # ... and the Task-19.5 successor beside it, carrying its canary label.
-    assert raw["gate_metrics"]["supplied_channel_conversion"]["supplied"] == 76
+    # was 76
+    assert raw["gate_metrics"]["supplied_channel_conversion"]["supplied"] == 75
     assert (
         "canary-eligible" in raw["gate_metrics"]["supplied_channel_conversion"]["note"]
     )
@@ -1057,11 +1058,11 @@ def test_committed_flat_4p1i_report_pins_the_gate_metrics() -> None:
     assert gate.lost_opening_accusations == 0
     assert gate.cap_defaulted_turns == 0
 
-    assert gate.accused_impostor_events == 35
-    assert gate.accused_impostor_survivals == 15
-    assert gate.survivals_rendered_met == 1
+    assert gate.accused_impostor_events == 33  # was 35
+    assert gate.accused_impostor_survivals == 13  # was 15
+    assert gate.survivals_rendered_met == 3  # was 1
     assert gate.survivals_sheltered_sub_gate == 0
-    assert gate.survivals_unevidenced == 14
+    assert gate.survivals_unevidenced == 10  # was 14
 
     # JSON-level guard, mirroring the 9p2i pin above: the committed file itself
     # serves the successor cell with its canary label.

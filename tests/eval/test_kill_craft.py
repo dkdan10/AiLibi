@@ -66,14 +66,14 @@ def samples_4p1i_report(committed_kill_craft_4p1i: KillCraftReport) -> KillCraft
 
 def test_corpus_kill_counts_and_histograms(corpus_report: KillCraftReport) -> None:
     assert corpus_report.games_total == 150
-    assert corpus_report.kills_total == 526  # was 505
-    assert corpus_report.crew_witnessed_kills == 16  # was 12
-    assert dict(corpus_report.co_present_histogram) == {0: 526}
+    assert corpus_report.kills_total == 532  # was 526
+    assert corpus_report.crew_witnessed_kills == 18  # was 16
+    assert dict(corpus_report.co_present_histogram) == {0: 532}  # was {0: 526}
     assert dict(corpus_report.one_hop_histogram) == {
-        0: 226,
-        1: 127,
-        2: 112,
-        3: 56,
+        0: 234,  # was 226
+        1: 126,  # was 127
+        2: 110,  # was 112
+        3: 57,  # was 56
         4: 3,
         5: 2,
     }
@@ -82,27 +82,29 @@ def test_corpus_kill_counts_and_histograms(corpus_report: KillCraftReport) -> No
 def test_corpus_means_and_correlations(corpus_report: KillCraftReport) -> None:
     assert corpus_report.mean_co_present_witnessed == pytest.approx(0.0)
     assert corpus_report.mean_co_present_unwitnessed == pytest.approx(0.0)
-    assert corpus_report.mean_one_hop_witnessed == pytest.approx(1.6875)  # was 2.75
+    assert corpus_report.mean_one_hop_witnessed == pytest.approx(
+        1.8333333333333333
+    )  # was 1.6875
     assert corpus_report.mean_one_hop_unwitnessed == pytest.approx(
-        1.007843137254902
-    )  # was 0.847870182555781
+        0.9844357976653697
+    )  # was 1.007843137254902
     # co_present is all-zero (zero variance) -> the point-biserial is undefined.
     # STILL all-zero at baseline 6: the kill-craft fold's structural finding — no
     # committed kill has ever had a co-present crewmate — survives the re-record.
     assert corpus_report.witnessed_point_biserial_co_present is None
     assert corpus_report.witnessed_point_biserial_within_one_hop == pytest.approx(
-        0.10745972885288838
-    )
+        0.14094000669458107
+    )  # was 0.10745972885288838
 
 
 def test_samples_9p2i_fold1(samples_9p2i_report: KillCraftReport) -> None:
     assert samples_9p2i_report.games_total == 50
-    assert samples_9p2i_report.kills_total == 177
-    assert samples_9p2i_report.crew_witnessed_kills == 3  # was 6
-    assert dict(samples_9p2i_report.co_present_histogram) == {0: 177}
+    assert samples_9p2i_report.kills_total == 182  # was 177
+    assert samples_9p2i_report.crew_witnessed_kills == 3
+    assert dict(samples_9p2i_report.co_present_histogram) == {0: 182}  # was {0: 177}
     assert dict(samples_9p2i_report.one_hop_histogram) == {
-        0: 73,
-        1: 44,
+        0: 79,  # was 73
+        1: 43,  # was 44
         2: 39,
         3: 15,
         4: 5,
@@ -114,30 +116,34 @@ def test_samples_9p2i_fold1(samples_9p2i_report: KillCraftReport) -> None:
         2.3333333333333335
     )
     assert samples_9p2i_report.mean_one_hop_unwitnessed == pytest.approx(
-        1.0632183908045978
-    )
+        1.0279329608938548
+    )  # was 1.0632183908045978
     assert samples_9p2i_report.witnessed_point_biserial_co_present is None
     assert samples_9p2i_report.witnessed_point_biserial_within_one_hop == pytest.approx(
-        0.1432852958330477
-    )
+        0.14517805353760363
+    )  # was 0.1432852958330477
 
 
 def test_samples_4p1i_fold1(samples_4p1i_report: KillCraftReport) -> None:
     assert samples_4p1i_report.games_total == 50
-    assert samples_4p1i_report.kills_total == 65  # was 61
+    assert samples_4p1i_report.kills_total == 62  # was 65
     assert samples_4p1i_report.crew_witnessed_kills == 1
-    assert dict(samples_4p1i_report.co_present_histogram) == {0: 65}
-    assert dict(samples_4p1i_report.one_hop_histogram) == {0: 48, 1: 16, 2: 1}
+    assert dict(samples_4p1i_report.co_present_histogram) == {0: 62}  # was {0: 65}
+    assert dict(samples_4p1i_report.one_hop_histogram) == {
+        0: 46,  # was 48
+        1: 15,  # was 16
+        2: 1,
+    }
     assert samples_4p1i_report.mean_co_present_witnessed == pytest.approx(0.0)
     assert samples_4p1i_report.mean_co_present_unwitnessed == pytest.approx(0.0)
     assert samples_4p1i_report.mean_one_hop_witnessed == pytest.approx(1.0)
     assert samples_4p1i_report.mean_one_hop_unwitnessed == pytest.approx(
-        0.265625
-    )  # was 0.2
+        0.26229508196721313
+    )  # was 0.265625
     assert samples_4p1i_report.witnessed_point_biserial_co_present is None
     assert samples_4p1i_report.witnessed_point_biserial_within_one_hop == pytest.approx(
-        0.18805416740144096
-    )
+        0.19323986071703356
+    )  # was 0.18805416740144096
 
 
 # --------------------------------------------------------------------------- #
@@ -148,38 +154,38 @@ def test_samples_4p1i_fold1(samples_4p1i_report: KillCraftReport) -> None:
 def test_corpus_entropy_crew_cells(corpus_report: KillCraftReport) -> None:
     crew = corpus_report.entropy_by_side["CREWMATE"]
     assert crew.agents == 1050
-    assert crew.decisions == 18464  # was 22095
+    assert crew.decisions == 18707  # was 18464
     assert crew.mean_conditional_entropy == pytest.approx(
-        0.7629334468846046
-    )  # was 0.869323712309377
+        0.7686095519158265
+    )  # was 0.7629334468846046
     assert crew.mean_unconditional_entropy == pytest.approx(
-        1.088330190321391
-    )  # was 1.1899868117224368
+        1.0966835330273288
+    )  # was 1.088330190321391
     assert sorted(crew.buckets) == ["none|crowd", "none|pair", "none|solo"]
     # One full bucket cell pinned (decisions + exact kinds + approx entropy).
     solo = crew.buckets["none|solo"]
-    assert solo.decisions == 6548  # was 7713
+    assert solo.decisions == 6700  # was 6548
     assert dict(solo.action_kinds) == {
-        "do_task": 4007,
+        "do_task": 4040,  # was 4007
         "emergency": 8,
-        "move": 1879,
+        "move": 1930,  # was 1879
         "repair_sabotage": 34,
-        "report": 296,
-        "wait": 324,
+        "report": 305,  # was 296
+        "wait": 383,  # was 324
     }
-    assert solo.entropy == pytest.approx(1.4181914332356391)  # was 1.5054529064563125
+    assert solo.entropy == pytest.approx(1.4464881093221544)  # was 1.4181914332356391
 
 
 def test_corpus_entropy_impostor_cells(corpus_report: KillCraftReport) -> None:
     impostor = corpus_report.entropy_by_side["IMPOSTOR"]
     assert impostor.agents == 300
-    assert impostor.decisions == 5528  # was 6663
+    assert impostor.decisions == 5584  # was 5528
     assert impostor.mean_conditional_entropy == pytest.approx(
-        0.6065071892821182
-    )  # was 0.6525758068858258
+        0.6107836784034325
+    )  # was 0.6065071892821182
     assert impostor.mean_unconditional_entropy == pytest.approx(
-        1.9203951445069416
-    )  # was 1.7618425557336113
+        1.9217155337385243
+    )  # was 1.9203951445069416
     assert sorted(impostor.buckets) == [
         "cooling|crowd",
         "cooling|pair",
@@ -191,39 +197,39 @@ def test_corpus_entropy_impostor_cells(corpus_report: KillCraftReport) -> None:
     # The kill bucket (impostor ready + a co-present victim): the fold's sharpest
     # cell — kills concentrate here.
     ready_pair = impostor.buckets["ready|pair"]
-    assert ready_pair.decisions == 743  # was 1205
+    assert ready_pair.decisions == 743
     assert dict(ready_pair.action_kinds) == {
         "do_task": 2,
-        "kill": 638,
-        "move": 85,
-        "vent": 18,
+        "kill": 652,  # was 638
+        "move": 72,  # was 85
+        "vent": 17,  # was 18
     }
     assert ready_pair.entropy == pytest.approx(
-        0.6995789292335453
-    )  # was 1.2749397234112307
+        0.6393822969534485
+    )  # was 0.6995789292335453
 
 
 def test_samples_9p2i_entropy(samples_9p2i_report: KillCraftReport) -> None:
     crew = samples_9p2i_report.entropy_by_side["CREWMATE"]
     assert crew.agents == 350
-    assert crew.decisions == 5765  # was 8136
+    assert crew.decisions == 6060  # was 5765
     assert crew.mean_conditional_entropy == pytest.approx(
-        0.757706547711433
-    )  # was 0.8789489039463282
+        0.7680841109079299
+    )  # was 0.757706547711433
     assert crew.mean_unconditional_entropy == pytest.approx(
-        1.0734922751612022
-    )  # was 1.1994131474293237
+        1.0858638804767753
+    )  # was 1.0734922751612022
     assert sorted(crew.buckets) == ["none|crowd", "none|pair", "none|solo"]
 
     impostor = samples_9p2i_report.entropy_by_side["IMPOSTOR"]
     assert impostor.agents == 100
-    assert impostor.decisions == 1750  # was 2461
+    assert impostor.decisions == 1826  # was 1750
     assert impostor.mean_conditional_entropy == pytest.approx(
-        0.6009214748000467
-    )  # was 0.7069138997083648
+        0.6146999448089693
+    )  # was 0.6009214748000467
     assert impostor.mean_unconditional_entropy == pytest.approx(
-        1.884506862995976
-    )  # was 1.7642325293949697
+        1.9132140380058222
+    )  # was 1.884506862995976
     assert sorted(impostor.buckets) == [
         "cooling|crowd",
         "cooling|pair",
@@ -237,24 +243,24 @@ def test_samples_9p2i_entropy(samples_9p2i_report: KillCraftReport) -> None:
 def test_samples_4p1i_entropy(samples_4p1i_report: KillCraftReport) -> None:
     crew = samples_4p1i_report.entropy_by_side["CREWMATE"]
     assert crew.agents == 150
-    assert crew.decisions == 1403  # was 1584
+    assert crew.decisions == 1373  # was 1403
     assert crew.mean_conditional_entropy == pytest.approx(
-        0.6478604310748124
-    )  # was 0.6529321621450677
+        0.64365860423632
+    )  # was 0.6478604310748124
     assert crew.mean_unconditional_entropy == pytest.approx(
-        1.0713129612472163
-    )  # was 1.0988807344951677
+        1.069556980172887
+    )  # was 1.0713129612472163
     assert sorted(crew.buckets) == ["none|crowd", "none|pair", "none|solo"]
 
     impostor = samples_4p1i_report.entropy_by_side["IMPOSTOR"]
     assert impostor.agents == 50
-    assert impostor.decisions == 551  # was 632
+    assert impostor.decisions == 536  # was 551
     assert impostor.mean_conditional_entropy == pytest.approx(
-        0.5289882873221415
-    )  # was 0.490861414163582
+        0.5300704207469
+    )  # was 0.5289882873221415
     assert impostor.mean_unconditional_entropy == pytest.approx(
-        1.6894510017431523
-    )  # was 1.5135518536786732
+        1.70000549238552
+    )  # was 1.6894510017431523
     assert sorted(impostor.buckets) == [
         "cooling|crowd",
         "cooling|pair",
@@ -461,6 +467,17 @@ def test_fail_loud_on_doubled_actor_action(tmp_path: Path) -> None:
         dict(first["actions"][0]),
         *first["actions"][1:],
     ]
+    # The baseline-8 bytes carry ``action_dispositions``, a POSITIONAL tuple the
+    # loader length-checks before the walk ever runs. Duplicating the matching
+    # entry keeps the row well-formed so the one-action-per-living-player guard
+    # under test is what fires, not the loader's length check.
+    if first.get("action_dispositions") is not None:
+        dispositions = list(first["action_dispositions"])
+        first["action_dispositions"] = [
+            dispositions[0],
+            dispositions[0],
+            *dispositions[1:],
+        ]
     source_lines[0] = json.dumps(first)
     (tmp_path / f"replay-seed-{seed}.jsonl").write_text(
         "\n".join(source_lines) + "\n", encoding="utf-8"
@@ -518,6 +535,11 @@ def test_fail_loud_on_dropped_actor_action(tmp_path: Path) -> None:
     first = json.loads(source_lines[0])
     assert first["kind"] == "tick"
     first["actions"] = first["actions"][1:]
+    # Drop the matching positional disposition too (see the doubled-action test):
+    # a length mismatch would trip the loader's own check first and never reach
+    # the one-action-per-living-player guard this test exists to pin.
+    if first.get("action_dispositions") is not None:
+        first["action_dispositions"] = list(first["action_dispositions"])[1:]
     source_lines[0] = json.dumps(first)
     (tmp_path / f"replay-seed-{seed}.jsonl").write_text(
         "\n".join(source_lines) + "\n", encoding="utf-8"
