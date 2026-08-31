@@ -629,6 +629,41 @@ Two of the four audit exhibits move with it, and they moved in opposite directio
   `PARTLY FLIPPED`, its test was renamed to pin the regression rather than the claim, and the
   status-set check now enumerates the allowed values so a status nobody defined still fails.
 
+### 5.1.1c THE CURATED FEATURED HEAD NO LONGER SHOWS WHAT ITS CARD PROMISES
+
+**The first card a visitor clicks is now falsified by these bytes, in both halves of its blurb.**
+`FEATURED_GAMES[0]` is `9p2i` seed 2, and its curated label reads:
+
+> "One meeting decides the whole game, and every contradiction on the table is stamped a weak
+> signal. Watch a room reason with nothing solid in front of it."
+
+| | baseline 7 | baseline 8 |
+|---|---|---|
+| meetings | 1 | 1 |
+| contradictions | **3, all `weak_signal`** | **0** |
+| outcome | EJECTED p-5 | **SKIPPED — nobody ejected** |
+
+"One meeting **decides** the whole game" is false: the meeting now skips and decides nothing. "every
+contradiction on the table is stamped a weak signal" is false: there are no contradictions on the
+table. Seed 2 is the ONLY zero-flag game in `samples/9p2i`, and it is the one the strip leads with.
+
+**This is caught by a real gate, not by reading.** `frontend/e2e/journey.spec.ts:449` walks the
+featured head as a spectator and asserts the evidence surface is non-vacuous, with the reason written
+into the test: *"the count is read rather than pinned, because a re-record can move it, but it may
+not fall to zero."* It fell to zero, so the CI journey fails.
+
+**Not fixed here, and deliberately not worked around.** The contract routes the curated strip
+explicitly — it is "re-watched, not re-curated: a blurb this record falsifies is named in the audit
+and routed to the post-record results task, because Wave 2 replaces these bytes again". Re-curating
+is out of scope; weakening the e2e non-vacuity check to reach green would delete a guard that is
+doing exactly its job. So the finding is escalated with the record rather than absorbed by it.
+
+> **Routed:** the curated featured head (`9p2i` seed 2) demonstrates neither claim on its card, and
+> the spectator journey's non-vacuity leg fails on it. Either the strip is re-curated to a head that
+> still shows a weak-signal table, or the card's copy is rewritten to what seed 2 now is — a meeting
+> that reasons with nothing in front of it and declines to eject. The second reading is arguably the
+> better exhibit, but it is a copy decision and this record does not make it.
+
 ### 5.1.1b THE I-13 INJUSTICE FIXTURES: 4/4 FLIPPED becomes 3/4 flipped + 1 partial
 
 **This is the fourth movement against the justice cells, and it lands on a stated ground of the
