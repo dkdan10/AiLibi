@@ -596,6 +596,29 @@ class TestWalkableTransits:
         assert _row(_ledger(transcript), "p-5").walkable_transits == ()
 
 
+class TestFlagged:
+    _CHARGE = _transcript(_turn(index=0, speaker="p-1", claims=(_accuses("p-5"),)))
+
+    def test_the_field_reads_the_flags_not_a_suspicion_value(self) -> None:
+        # The same zero-flag predicate ``guard_ballot_citation`` uses: a
+        # contradiction naming the subject in ``subjects``, nothing else.
+        assert _row(_ledger(self._CHARGE), "p-5").flagged is False
+        assert (
+            _row(
+                _ledger(self._CHARGE, contradictions=(_vent_flag("p-5"),)), "p-5"
+            ).flagged
+            is True
+        )
+
+    def test_a_flag_naming_someone_else_leaves_it_false(self) -> None:
+        assert (
+            _row(
+                _ledger(self._CHARGE, contradictions=(_vent_flag("p-3"),)), "p-5"
+            ).flagged
+            is False
+        )
+
+
 class TestPurity:
     def test_repeat_calls_return_an_identical_ledger(self) -> None:
         transcript = _transcript(
@@ -683,6 +706,23 @@ class TestRender:
         assert "it started at [m-1:turn-0]" in rendered
         assert "p-1 described seeing them" in rendered
         assert "p-3, p-8 named them without adding anything they saw" in rendered
+
+    def test_the_flag_clause_states_both_polarities(self) -> None:
+        # The zero-flag half of the case, read off the flags exactly as
+        # ``guard_ballot_citation`` reads them and stated symmetrically, so the
+        # row does not lean either way on its own.
+        unflagged = _render(
+            ledger=_ledger(_RENDER_TRANSCRIPT, sighting_records=_RENDER_RECORDS)
+        )
+        assert "No conflict above names them." in unflagged
+        flagged = _render(
+            ledger=_ledger(
+                _RENDER_TRANSCRIPT,
+                contradictions=(_vent_flag("p-5"),),
+                sighting_records=_RENDER_RECORDS,
+            )
+        )
+        assert "A conflict above names them." in flagged
 
     def test_the_band_sentence_restates_the_ladder_verbatim(self) -> None:
         # The ladder the accusation template already asks for, quoted from the

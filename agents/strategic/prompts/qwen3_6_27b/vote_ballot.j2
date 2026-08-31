@@ -192,7 +192,7 @@ Weak signals. The same kind of conflict, but an innocent reading already fits it
 <testimony_sources>
 Who actually saw something, name by name. A voice is anyone who named them tonight; an account is a voice who also described seeing them, with their own record bearing that description out. Both are evidence and agreement at this table is often right, so read the split and price it — do not discount either half.
 {% for row in _sources %}
-- {{ row.subject }}: {{ row.voices }} {% if row.voices == 1 %}voice{% else %}voices{% endif %}, {{ row.first_hand | length }} {% if row.first_hand | length == 1 %}account{% else %}accounts{% endif %} — it started at [{{ row.originating_turn_id }}]{% if row.first_hand %}; {{ row.first_hand | join(", ") }} described seeing them{% endif %}{% if row.adopted %}; {{ row.adopted | join(", ") }} named them without adding anything they saw{% endif %}.
+- {{ row.subject }}: {{ row.voices }} {% if row.voices == 1 %}voice{% else %}voices{% endif %}, {{ row.first_hand | length }} {% if row.first_hand | length == 1 %}account{% else %}accounts{% endif %} — it started at [{{ row.originating_turn_id }}]{% if row.first_hand %}; {{ row.first_hand | join(", ") }} described seeing them{% endif %}{% if row.adopted %}; {{ row.adopted | join(", ") }} named them without adding anything they saw{% endif %}. {% if row.flagged %}A conflict above names them.{% else %}No conflict above names them.{% endif +%}
 {% if row.opener_charge_turn_id %}
   That charge came from someone `{{ row.subject }}` had already accused at [{{ row.opener_charge_turn_id }}] — an answer to a charge, not a second witness.
 {% endif %}
