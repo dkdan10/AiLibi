@@ -195,6 +195,11 @@ Status = Literal["OK", "FAIL", "ABSENT", "INFO", "STALE"]
 #: the corpus on disk, and it moves with every re-record; the amnesty is not
 #: widened by that, because it still names exactly one pair.
 #:
+#: NOTE the fingerprint covers each set's ``MANIFEST.md`` as well as its replays,
+#: so it moves when the manifest text moves — not only when a seed is
+#: re-recorded. Correcting a stale provenance label in a FROZEN row is enough to
+#: re-fingerprint the corpus, and this constant has to be re-derived with it.
+#:
 #: Naming BOTH digests, rather than accepting any mismatch, is what keeps the
 #: fingerprint checks real gates: a corpus perturbed by so much as one added
 #: replay fingerprints to something that is not the right-hand digest, and FAILS.
@@ -202,7 +207,7 @@ Status = Literal["OK", "FAIL", "ABSENT", "INFO", "STALE"]
 #: and the constant can be deleted along with every branch that reads it.
 _DECLARED_GROUNDING_GAP: Final[tuple[str, str]] = (
     "164ef00c16fa5108aa2d2a691f2f9a65d5ea60faa10f7bbd1604e93f36bc3170",
-    "0704a462fde1d9258826464c23aeca29f3fd7b6e841710915d246892ffeed636",
+    "cc54d3c02a9804d32b43b20cf1814749be64052378c9a199e042453da2845a34",
 )
 
 
