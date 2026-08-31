@@ -61,6 +61,7 @@ from training.conviction.fidelity import (
     CONVICTION_CONVERSION_CEILING_RATIO,
     CONVICTION_SPEARMAN_BAR,
     ConvictionFidelityReport,
+    ConvictionGoVerdict,
     conversion_trivial_baseline,
     decide_conviction_go,
     load_conviction_verdict,
@@ -802,25 +803,20 @@ def test_committed_artifact_round_trips_and_the_refit_no_longer_matches(
     corpus_conviction: ConvictionTable,
 ) -> None:
     """Byte-stable round trip, one sha across three files -- and a refit that
-    now DIVERGES, because the corpus moved and the fit did not.
+    reproduces the committed weights to ULP.
 
     The round trip and the sha agreement are properties of the format and of the
     artifact's internal consistency; they hold on any corpus. The refit
-    equivalence was a property of the GROUNDING: the committed weights were that
-    refit, so it reproduced them to float ULP (byte-identical on the recording
+    equivalence is a property of the GROUNDING: the committed weights ARE that
+    refit, so it reproduces them to float ULP (byte-identical on the recording
     platform, ULP-equivalent elsewhere -- numpy's SIMD reduction grouping varies
-    by CPU).
+    by CPU), and the tolerance is what lets the pin travel between them.
 
-    The baseline-7 and baseline-8 records re-recorded ``replays/ml_corpus``
-    without re-fitting the
-    conviction model (a NAMED follow-up, audits/audit-phase-20-baseline-7.md
-    §10.2), so a refit on the live corpus is a different model and the pin
-    inverts: the fitted parameters must DISAGREE by more than float noise, while
-    the schema stays identical. The committed staleness cap keys to the
-    artifact's OWN fit-side count (367 under the ~143× rule), never to the live
-    corpus's 348 -- asserting it against the live count would launder a stale cap
-    as a current one. When the re-ground lands this test fails, and the
-    equivalence pin comes back.
+    Between the baseline-7 record and the Task-21.17 re-ground this assertion was
+    INVERTED, pinning that the refit disagreed because the corpus had moved under
+    a frozen fit. The re-ground restores the equivalence, and the staleness cap
+    now keys to a fit-side count the live corpus reproduces — the two agreeing is
+    the statement that the cap is current rather than carried.
     """
 
     committed_json = (_ARTIFACT_DIR / "conviction-model.json").read_text()
@@ -830,69 +826,52 @@ def test_committed_artifact_round_trips_and_the_refit_no_longer_matches(
     cap = load_conviction_staleness_cap(_ARTIFACT_DIR)
     assert cap.weights_sha256 == digest
     assert cap.unit == "meetings"
-    assert cap.max_uses == derive_conviction_max_uses(367) == 52_481
+    assert cap.max_uses == derive_conviction_max_uses(348) == 49_764
 
     splits = corpus_conviction.splits
     assert splits is not None
     fit_seeds = frozenset(splits.train) | frozenset(splits.val)
     live_fit_rows = [row for row in corpus_conviction.rows if row.seed in fit_seeds]
-    # The live fit side is 348 meetings; the cap above is keyed to 367.
-    assert len(live_fit_rows) == 348  # was 345
+    # The live fit side is the count the cap is keyed to.
+    assert len(live_fit_rows) == 348
     refit = ConvictionEconomyModel()
     refit.fit(live_fit_rows)
     import json
 
     committed = json.loads(committed_json)
     refitted = json.loads(refit.to_artifact_json())
-    # Same schema, different numbers -- which is what "a different fit" means.
+    # Same schema, same numbers to ULP -- the committed weights ARE this refit.
     assert set(committed) == set(refitted)
-    diverged = 0
     for key, value in committed.items():
         if isinstance(value, list) and value and value[0].startswith(("0x", "-0x")):
-            if [float.fromhex(v) for v in refitted[key]] != pytest.approx(
+            assert [float.fromhex(v) for v in refitted[key]] == pytest.approx(
                 [float.fromhex(v) for v in value], rel=1e-9, abs=1e-12
-            ):
-                diverged += 1
+            ), key
         elif isinstance(value, str) and value.startswith(("0x", "-0x")):
-            if float.fromhex(refitted[key]) != pytest.approx(
+            assert float.fromhex(refitted[key]) == pytest.approx(
                 float.fromhex(value), rel=1e-9, abs=1e-12
-            ):
-                diverged += 1
+            ), key
         else:
             assert refitted[key] == value, f"artifact field {key!r} drifted"
-    assert diverged > 0, (
-        "the refit reproduces the committed weights to ULP -- either the ML "
-        "re-ground landed (delete this tripwire and restore the equivalence "
-        "pin) or the corpus never moved"
-    )
 
 
-def test_the_committed_verdict_is_baseline6_and_the_weights_still_clear_the_bar(
+def test_the_committed_verdict_is_the_baseline8_first_evaluation(
     corpus_conviction: ConvictionTable,
 ) -> None:
-    """The recorded verdict, and what the SAME frozen weights say on the new corpus.
+    """The committed verdict IS the re-derivable held-out evaluation.
 
-    ``verdict.json`` is the first held-out evaluation's verdict, decided on the
-    baseline-6 corpus. It is a RECORD, so its fields are read from the artifact
-    and pinned as written -- re-deriving them is not possible now that the corpus
-    under them has been re-recorded, and quietly re-pinning them to whatever the
-    new corpus says would rewrite history rather than extend it.
+    ``verdict.json`` is the first held-out evaluation's verdict, decided at the
+    Task-21.17 re-ground on the corpus that is still on disk — so it is not a
+    record to be read and taken on trust, it is a computation this test performs
+    and compares field for field. During the interim between the baseline-7
+    record and the re-ground the two could not converge, and this test's previous
+    form pinned the committed baseline-6 fields as history beside a
+    fully-out-of-sample re-derivation; the strong equality is what the re-ground
+    restores.
 
-    What CAN be re-derived is the evaluation itself, from the same FROZEN weights
-    against the baseline-8 corpus. That is a fully out-of-sample read: the model
-    was fitted on bytes that no longer exist, and it has never seen a single
-    meeting in the corpus scoring it here. It still returns GO, on both bars, with
-    a HIGHER flag Spearman (0.643 vs the recorded 0.578) on a smaller held-out
-    split (91 meetings vs 96). That is evidence about the model, and it is NOT a
-    substitute for the re-ground (a NAMED follow-up,
-    audits/audit-phase-20-baseline-7.md §10.2): a re-fit would change the weights,
-    the cap and the verdict together, and only then does a re-derived verdict
-    become the committed one again.
-
-    The two halves are asserted together so neither can be read alone, and the
-    inequality between them is asserted explicitly -- if a future change made the
-    re-derivation reproduce the committed record, this test would be silently
-    measuring nothing.
+    Every axis is asserted individually as well as through the object equality,
+    so a failure names the channel that moved rather than only "the dump
+    differs".
     """
 
     model, digest = load_conviction_model_artifact(_ARTIFACT_DIR)
@@ -900,55 +879,48 @@ def test_the_committed_verdict_is_baseline6_and_the_weights_still_clear_the_bar(
     rederived = decide_conviction_go(report, weights_sha256=digest)
     committed = load_conviction_verdict(_ARTIFACT_DIR)
 
-    # -- the RECORD: the baseline-6 first-evaluation verdict, as written --------
     assert committed.replay_set_dir == "replays/ml_corpus/9p2i"
     assert committed.verdict == "GO"
     assert committed.weights_sha256 == digest
-    assert committed.test_meetings == 96
-    assert committed.test_ejections == 60
-    assert committed.conversions_test == 47
-    assert committed.flag_spearman == pytest.approx(0.5781584982719424)
+    assert committed.test_meetings == 91  # was 96 on the baseline-6 record
+    assert committed.test_ejections == 57  # was 60
+    assert committed.conversions_test == 51  # was 47
+    assert committed.flag_spearman == pytest.approx(
+        0.667006270925879
+    )  # was 0.5781584982719424
     assert committed.meets_spearman_bar
-    assert committed.conversion_recall == pytest.approx(45 / 47)
-    assert committed.voice_driven_share == pytest.approx(0.15)
-    assert committed.conversion_bar == pytest.approx(0.6375)
+    assert committed.conversion_recall == pytest.approx(49 / 51)  # was 45 / 47
+    assert committed.voice_driven_share == pytest.approx(
+        0.17543859649122806
+    )  # was 0.15
+    assert committed.conversion_bar == pytest.approx(0.618421052631579)  # was 0.6375
     assert committed.meets_conversion_bar
+    # Axis 3, and the ceiling the recall bar is a fraction of — B-20 (c) found
+    # `conversion_ceiling` with no value pin anywhere in the suite.
+    assert committed.conversion_ceiling == pytest.approx(0.8245614035087719)
+    assert committed.conversion_ceiling_ratio == pytest.approx(0.75)
+    assert committed.conversion_accuracy == pytest.approx(0.945054945054945)
+    assert committed.conversion_trivial_baseline == pytest.approx(0.5604395604395604)
+    assert committed.beats_trivial_conversion
     assert (
         committed.fitness_term,
         committed.prescreen_role,
         committed.model_role,
     ) == ("ships", "gating", "training-signal")
 
-    # -- the RE-DERIVATION: same frozen weights, baseline-8 corpus -------------
-    # The corpus identity field is normalized (the committed artifact stores a
-    # repo-relative path; this run built its table from an absolute one).
-    assert Path(rederived.replay_set_dir).resolve() == _CORPUS.resolve()
-    assert rederived.weights_sha256 == digest
-    assert rederived.test_meetings == 91  # was 87
-    assert rederived.test_ejections == 57  # was 55
-    assert rederived.conversions_test == 51  # was 51
-    assert rederived.flag_spearman == pytest.approx(
-        0.642539183190714
-    )  # was 0.71457789753481
-    assert rederived.conversion_recall == pytest.approx(49 / 51)  # was 45 / 51
-    assert rederived.voice_driven_share == pytest.approx(0.17543859649122806)  # was 0.2
-    assert rederived.conversion_bar == pytest.approx(0.618421052631579)  # was 0.6
-    # The verdict survives the substrate change on both bars.
-    assert rederived.verdict == "GO"
-    assert rederived.meets_spearman_bar
-    assert rederived.meets_conversion_bar
-    assert rederived.flag_spearman > committed.flag_spearman
     # The held-out confusion census behind it.
     assert (
         report.true_positives,
         report.false_positives,
         report.false_negatives,
         report.true_negatives,
-    ) == (49, 3, 2, 37)  # was (45, 2, 6, 34)
+    ) == (49, 3, 2, 37)
 
-    # The tripwire: the two are NOT the same evaluation. When the re-ground
-    # lands they converge again, and this assertion is what says so.
-    assert committed.model_dump() != {
+    # The whole object, field for field. The corpus identity field is normalized
+    # (the committed artifact stores a repo-relative path; this run built its
+    # table from an absolute one).
+    assert Path(rederived.replay_set_dir).resolve() == _CORPUS.resolve()
+    assert committed.model_dump() == {
         **rederived.model_dump(),
         "replay_set_dir": committed.replay_set_dir,
     }
@@ -1061,10 +1033,11 @@ def test_decide_conviction_go_always_populates_the_axis_three_fields(
 ) -> None:
     """``None`` means "predates axis 3" and nothing else.
 
-    The three fields are optional only so the committed baseline-6 artifact —
-    written before the axis existed — still loads and keeps the composed
-    runner's GO gate green. Nothing this function returns may carry a ``None``
-    there, or the sentinel would stop meaning one thing.
+    The three fields are optional only so a verdict written before the axis
+    existed still loads rather than taking the composed runner's GO gate down
+    with it. Nothing :func:`decide_conviction_go` returns may carry a ``None``
+    there, or the sentinel would stop meaning one thing — and the committed
+    artifact, re-taken at the Task-21.17 re-ground, populates all three.
     """
 
     model, digest = load_conviction_model_artifact(_ARTIFACT_DIR)
@@ -1076,10 +1049,28 @@ def test_decide_conviction_go_always_populates_the_axis_three_fields(
         assert verdict.beats_trivial_conversion is not None
 
     committed = load_conviction_verdict(_ARTIFACT_DIR)
-    assert committed.conversion_accuracy is None
-    assert committed.conversion_trivial_baseline is None
-    assert committed.beats_trivial_conversion is None
+    assert committed.conversion_accuracy is not None
+    assert committed.conversion_trivial_baseline is not None
+    assert committed.beats_trivial_conversion is not None
     assert committed.verdict == "GO"
+
+    # The planted pre-axis-3 payload: the sentinel is only meaningful if such a
+    # verdict still validates, and no committed artifact carries one any more.
+    legacy = {
+        key: value
+        for key, value in committed.model_dump().items()
+        if key
+        not in {
+            "conversion_accuracy",
+            "conversion_trivial_baseline",
+            "beats_trivial_conversion",
+        }
+    }
+    predates_axis_three = ConvictionGoVerdict.model_validate(legacy)
+    assert predates_axis_three.conversion_accuracy is None
+    assert predates_axis_three.conversion_trivial_baseline is None
+    assert predates_axis_three.beats_trivial_conversion is None
+    assert predates_axis_three.verdict == "GO"
 
 
 # --------------------------------------------------------------------------- #

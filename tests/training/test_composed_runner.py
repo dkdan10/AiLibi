@@ -116,7 +116,6 @@ from training.surrogate.ballots import (
     load_ballot_predictor_artifact,
 )
 from training.surrogate.runner import (
-    SurrogateFitCorpus,
     SurrogateMeetingRunner,
     SurrogateStalenessExceededError,
     SurrogateUseCounter,
@@ -951,53 +950,43 @@ def test_the_conviction_corpus_fence_is_attributable_to_its_own_leg(
 ) -> None:
     """``corpus_dir`` now fences BOTH components, and the conviction half bites.
 
-    The surrogate leg is fenced first, so a refusal on a stale checkout could
-    only ever be attributed to it. Here the copied surrogate record is
-    re-pointed at the LIVE corpus so its fence passes, which makes every refusal
-    below the conviction leg's own: a mismatched conviction record refuses, an
-    ABSENT one refuses and names the ML re-ground as its writer, and a matching
-    one loads. With no ``corpus_dir`` the load is exactly what it is at HEAD —
-    which is why the committed conviction artifact, which ships no record yet,
-    keeps working.
+    The surrogate leg is fenced first, so a refusal could only ever be attributed
+    to it unless the surrogate side is known-good. Both committed records are
+    current since the Task-21.17 re-ground, so every refusal below is the
+    conviction leg's own: an ABSENT record refuses and names the ML re-ground as
+    its writer, a drifted one refuses, and the committed pair loads. With no
+    ``corpus_dir`` the load is unfenced, which is what every current caller does.
     """
 
     conviction_dir, surrogate_dir = _copy_artifacts(tmp_path)
     live = fit_corpus_fingerprint(_CORPUS)
-    (surrogate_dir / "fit-corpus.json").write_text(
-        load_fit_corpus_record(surrogate_dir)
-        .model_copy(update={"corpus_sha256": live})
-        .model_dump_json(indent=2)
-        + "\n"
-    )
     _, conviction_sha = load_conviction_model_artifact(conviction_dir)
 
-    # Opt-out: unchanged, and the committed artifacts have no conviction record.
-    assert not (conviction_dir / "fit-corpus.json").exists()
+    # Opt-out: unfenced, exactly as every current caller loads.
     assert load_composed_components(
         conviction_artifact_dir=conviction_dir, surrogate_artifact_dir=surrogate_dir
     )
 
+    # Fenced, on the committed pair: both records name the live corpus.
+    assert load_fit_corpus_record(surrogate_dir).corpus_sha256 == live
+    record = load_fit_corpus_record(conviction_dir)
+    assert record.corpus_sha256 == live
+    assert record.weights_sha256 == conviction_sha
+    assert load_composed_components(
+        conviction_artifact_dir=conviction_dir,
+        surrogate_artifact_dir=surrogate_dir,
+        corpus_dir=_CORPUS,
+    )
+
+    # The planted ABSENT case: without the conviction record the fence cannot be
+    # satisfied, and the message names who writes it.
+    (conviction_dir / "fit-corpus.json").unlink()
     with pytest.raises(FileNotFoundError, match="ML re-ground"):
         load_composed_components(
             conviction_artifact_dir=conviction_dir,
             surrogate_artifact_dir=surrogate_dir,
             corpus_dir=_CORPUS,
         )
-
-    record = SurrogateFitCorpus(
-        corpus_set="9p2i",
-        corpus_sha256=live,
-        fit_side_meetings=345,
-        weights_sha256=conviction_sha,
-    )
-    (conviction_dir / "fit-corpus.json").write_text(
-        record.model_dump_json(indent=2) + "\n"
-    )
-    assert load_composed_components(
-        conviction_artifact_dir=conviction_dir,
-        surrogate_artifact_dir=surrogate_dir,
-        corpus_dir=_CORPUS,
-    )
 
     (conviction_dir / "fit-corpus.json").write_text(
         record.model_copy(update={"corpus_sha256": "c" * 64}).model_dump_json(indent=2)
@@ -1286,26 +1275,27 @@ def test_decide_composed_go_cross_checks_shas_and_round_trips(
 def test_composed_fidelity_scores_the_committed_test_split(
     composed_fidelity: ComposedFidelityReport,
 ) -> None:
-    """Exactly 96 test meetings / 60 ejections; the standing top-1 recipe holds."""
+    """Exactly 91 test meetings / 57 ejections; the standing top-1 recipe holds."""
 
     report = composed_fidelity
-    assert report.test_meetings == 96
-    assert report.test_ejections == 60
-    assert report.always_eject_baseline == pytest.approx(60 / 96, abs=1e-12)
-    # The convicting top-1 is the SAME recipe the surrogate reports: 46/60.
-    assert report.convicting_top1 == pytest.approx(46 / 60, abs=1e-12)
-    assert report.top1_ceiling == pytest.approx(0.85, abs=1e-12)
-    # The surrogate tally's all-SKIP degeneracy is the NO-GO fact composed around.
-    assert report.surrogate_tally_ejections == 0
-    assert report.surrogate_tally_skips == 96
-    # Gate confusion partitions the 96 test meetings.
+    assert report.test_meetings == 91  # was 96 on the baseline-6 fit
+    assert report.test_ejections == 57  # was 60
+    assert report.always_eject_baseline == pytest.approx(57 / 91, abs=1e-12)
+    # The convicting top-1 is the SAME recipe the surrogate reports: 47/57.
+    assert report.convicting_top1 == pytest.approx(47 / 57, abs=1e-12)
+    assert report.top1_ceiling == pytest.approx(47 / 57, abs=1e-12)
+    # The surrogate tally's near-total SKIP degeneracy is the NO-GO fact composed
+    # around: the tally reaches an ejection on two of the 91 test meetings.
+    assert report.surrogate_tally_ejections == 2
+    assert report.surrogate_tally_skips == 89
+    # Gate confusion partitions the 91 test meetings.
     total = (
         report.gate_true_positives
         + report.gate_false_positives
         + report.gate_false_negatives
         + report.gate_true_negatives
     )
-    assert total == 96
+    assert total == 91
     assert 0.0 <= report.decision_accuracy <= 1.0
 
 
@@ -1337,8 +1327,10 @@ def test_composed_fidelity_top1_matches_an_independent_recompute(
         ejections += 1
         if model.predict(view).ranking[0] == view.ejected:
             hits += 1
-    assert ejections == 60
-    assert composed_fidelity.convicting_top1 == pytest.approx(hits / 60, abs=1e-12)
+    assert ejections == 57  # was 60 on the baseline-6 fit
+    assert composed_fidelity.convicting_top1 == pytest.approx(
+        hits / ejections, abs=1e-12
+    )
 
 
 def test_go_verdict_holds_under_the_live_teammate_exclusion_ranking(
@@ -1353,9 +1345,9 @@ def test_go_verdict_holds_under_the_live_teammate_exclusion_ranking(
     firewall), which shifts the softmax denominator on multi-impostor meetings.
     Measured, never assumed away (Codex review on PR #310; the surrogate's own
     live-parity idiom): re-scoring the whole held-out split through the LIVE
-    views moves the top-1 to 45/60 = 0.75 while the decision channel is
-    unchanged — and every gating cell still clears its bar, so the composed
-    verdict reads GO under the live channel too.
+    views moves the top-1 to 45/57 and the decision channel to 82/91 — and every
+    gating cell still clears its bar, so the composed verdict reads GO under the
+    live channel too.
     """
 
     from training.conviction.dataset import (
@@ -1456,12 +1448,11 @@ def test_go_verdict_holds_under_the_live_teammate_exclusion_ranking(
             if ranking[0] == view.ejected:
                 top1_hits += 1
 
-    # The measured live-exclusion cells: decision channel identical, top-1 one
-    # hit lower, the surrogate tally still all-SKIP.
-    assert (decision_hits, ejections) == (83, 60)
+    # The measured live-exclusion cells, re-derived at the Task-21.17 re-ground.
+    assert (decision_hits, ejections) == (82, 57)  # was (83, 60)
     assert top1_hits == 45
-    assert exact_hits == 75
-    assert tally_ejections == 0
+    assert exact_hits == 74  # was 75
+    assert tally_ejections == 2  # was 0
     assert gate_convictions == composed_fidelity.predicted_convictions
 
     # The verdict is invariant: re-deciding on the live-channel cells reads GO.
@@ -1471,9 +1462,9 @@ def test_go_verdict_holds_under_the_live_teammate_exclusion_ranking(
     assert surrogate_sha == surrogate_weights_sha256
     variant = composed_fidelity.model_copy(
         update={
-            "decision_accuracy": decision_hits / 96,
-            "convicting_top1": top1_hits / 60,
-            "exact_outcome_match": exact_hits / 96,
+            "decision_accuracy": decision_hits / composed_fidelity.test_meetings,
+            "convicting_top1": top1_hits / ejections,
+            "exact_outcome_match": exact_hits / composed_fidelity.test_meetings,
             "top1_ceiling": ceiling.max_achievable_top1,
         }
     )
@@ -1484,7 +1475,7 @@ def test_go_verdict_holds_under_the_live_teammate_exclusion_ranking(
     )
     assert verdict.verdict == "GO"
     assert verdict.meets_decision_bar and verdict.meets_top1_bar
-    assert verdict.convicting_top1 == pytest.approx(0.75)
+    assert verdict.convicting_top1 == pytest.approx(45 / 57)
 
 
 # --------------------------------------------------------------------------- #
@@ -1676,7 +1667,7 @@ def test_committed_composed_verdict_is_rederivable(
     assert Path(rederived.replay_set_dir).resolve() == _CORPUS.resolve()
     # ``adoption_constraints`` is the Goodhart leg's carried metadata (not
     # derivable from the fidelity), so the identity splice covers it like the
-    # repo-relative path — and the three NAMED constraints are pinned below so a
+    # repo-relative path — and the NAMED constraints are pinned below so a
     # silently emptied list moves this committed test, not just report prose.
     assert committed.model_dump() == {
         **rederived.model_dump(),
@@ -1685,20 +1676,19 @@ def test_committed_composed_verdict_is_rederivable(
     }
     assert [c.split(":", 1)[0] for c in committed.adoption_constraints] == [
         "composed-provenance-validity[all-arms,9p2i]",
-        "prescreen-substrate-divergence-shape[fsm-baseline+emergency,9p2i]",
-        "emergency-predicted-supply-above-bar[emergency,9p2i]",
+        "composed-substrate-mints-no-recorded-flags[all-arms,9p2i]",
     ]
 
-    # The first-evaluation numbers (baseline-6 corpus, committed split).
+    # The first-evaluation numbers (baseline-8 corpus, committed split).
     assert committed.verdict == "GO"
     assert committed.composed_role == "optional-campaign-configuration"
-    assert committed.test_meetings == 96
-    assert committed.test_ejections == 60
-    assert committed.decision_accuracy == pytest.approx(83 / 96)
-    assert committed.decision_accuracy_bar == pytest.approx(0.625)
+    assert committed.test_meetings == 91  # was 96 on the baseline-6 fit
+    assert committed.test_ejections == 57  # was 60
+    assert committed.decision_accuracy == pytest.approx(82 / 91)  # was 83 / 96
+    assert committed.decision_accuracy_bar == pytest.approx(57 / 91)  # was 0.625
     assert committed.meets_decision_bar
-    assert committed.convicting_top1 == pytest.approx(46 / 60)
-    assert committed.top1_bar == pytest.approx(0.6375)
-    assert committed.top1_ceiling == pytest.approx(0.85)
+    assert committed.convicting_top1 == pytest.approx(47 / 57)  # was 46 / 60
+    assert committed.top1_bar == pytest.approx(0.75 * 47 / 57)  # was 0.6375
+    assert committed.top1_ceiling == pytest.approx(47 / 57)  # was 0.85
     assert committed.meets_top1_bar
-    assert committed.exact_outcome_match == pytest.approx(76 / 96)
+    assert committed.exact_outcome_match == pytest.approx(76 / 91)  # was 76 / 96

@@ -398,21 +398,23 @@ def test_recorded_ballot_confidence_calibration_is_reported() -> None:
 def test_fo6_rebaseline_collapses_to_always_skip_on_the_big_set() -> None:
     """The re-run FO-6 decision head degenerates to always-SKIP on 9p2i (§5.2).
 
-    Its binary decision head almost never predicts an ejection — on the Task-18.12
-    baseline-6 re-record it skips ALL 101 true ejection meetings (a STRONGER
-    degeneracy than the baseline-5 99-of-100). On the baseline-3/4 bytes that trivial
+    Its binary decision head almost never predicts an ejection — on the baseline-8
+    samples it skips ALL 95 true ejection meetings, as it skipped all 101 on the
+    Task-18.12 baseline-6 re-record (a STRONGER degeneracy than the baseline-5
+    99-of-100). On the baseline-3/4 bytes that trivial
     policy was also WORSE than the always-eject constant (eject-majority meeting mix),
     which is what ``degenerates_to_skip`` encodes; the baseline-5 close record flipped
     the mix to skip-majority so always-skip briefly BEAT always-eject and the flag
-    read False. The baseline-6 re-record REVERTS the mix to eject-majority (101 EJECT
-    of 165 resolved — the graduated meeting layer convicts more often), so always-skip
-    is once again WORSE than always-eject and the eject-era degeneracy flag reads True.
+    read False. Baselines 6 through 8 hold the mix at eject-majority (95 EJECT of the
+    151 resolved meetings here — the graduated meeting layer convicts more often), so
+    always-skip stays WORSE than always-eject and the eject-era flag reads True.
 
     Task-18.12 finding (the record documents it, audits/audit-phase-18-baseline-6.md
     §9): the physical rank's residual signal NO LONGER collapses to the per-candidate
     base rate. On the baseline-5 bytes top-1 fell to ~0.11 (at/below ~1/9); on the
-    vent-widening re-record it RISES to 20/101 = 0.198, ABOVE the 1/9 = 0.111 base rate
-    — the widened trajectories leave the six raw physical counts slightly more
+    vent-widening re-record it rose to 20/101 = 0.198, and on the baseline-8 samples
+    it holds at 19/95 = 0.200, ABOVE the 1/9 = 0.111 base rate — the widened
+    trajectories leave the six raw physical counts slightly more
     predictive of the ejected candidate. This is a rank observation only: it remains
     far under the honest reachability ceiling (0.861, guarded by
     ``test_honest_ceiling_bounds_the_fo6_top1``), and the BEHAVIORAL collapse — the
@@ -423,14 +425,15 @@ def test_fo6_rebaseline_collapses_to_always_skip_on_the_big_set() -> None:
 
     report = fo6_rebaseline(build_meeting_table(_NINE))
     assert report.model_name == "fo6-physical-logistic"
-    # The physical rank's residual signal rose ABOVE the per-candidate base rate on
-    # baseline 6 (the documented 18.12 flip): top-1 = 20/101, pinned exactly. It stays
-    # far below the honest reachability ceiling (test_honest_ceiling_bounds_the_fo6_top1).
-    assert report.top1 == pytest.approx(20 / 101)
-    assert report.top1 > 1.0 / 9.0  # baseline-6 flip: now beats the base rate
-    # Almost never ejects: SKIP on ALL 101 true ejection meetings.
-    assert report.ejection_meetings == 101
-    assert report.ejection_predicted_skips == 101
+    # The physical rank's residual signal stays ABOVE the per-candidate base rate
+    # (the 18.12 flip, re-derived on the baseline-8 samples): top-1 = 19/95,
+    # pinned exactly. It stays far below the honest reachability ceiling
+    # (test_honest_ceiling_bounds_the_fo6_top1).
+    assert report.top1 == pytest.approx(19 / 95)  # was 20/101 on baseline 6
+    assert report.top1 > 1.0 / 9.0  # still beats the base rate
+    # Almost never ejects: SKIP on ALL 95 true ejection meetings.
+    assert report.ejection_meetings == 95  # was 101
+    assert report.ejection_predicted_skips == 95  # was 101
     assert 2 * report.ejection_predicted_skips > report.ejection_meetings
     # The substrate-contingent halves, re-pinned at their baseline-6 truth: the
     # meeting mix is eject-majority again, so the all-skip head scores BELOW the
@@ -472,12 +475,13 @@ def test_report_publishes_both_trivial_decision_constants() -> None:
 def test_fo6_decision_head_is_published_as_a_meeting_mix_tracker() -> None:
     """The head carries its label and the full tau curve it was chosen from.
 
-    On the committed 9p2i corpus the curve is FLAT at 120 across tau in
-    [0.40, 0.95] — exactly the fit side's SKIP count (120 of 345 meetings, 225
-    ejections) — and the tuned tau beats that trivial always-SKIP constant by 7
-    meetings (127 of 345, 2.0%). A head whose whole margin is 7 of 345 tracks the
-    meeting mix, which is why it is labelled and published rather than read as a
-    physical baseline.
+    On the baseline-8 9p2i corpus the curve is FLAT at 124 across tau in
+    [0.35, 0.95] — exactly the fit side's SKIP count (124 of 348 meetings, 224
+    ejections) — and the tuned tau lands ON that plateau, so the head's whole
+    margin over the trivial always-SKIP constant is now ZERO. At baseline 6 the
+    margin was 7 meetings of 345 (2.0%); a head that has given even that up is
+    tracking the meeting mix, which is why it is labelled and published rather
+    than read as a physical baseline.
     """
 
     report = fo6_rebaseline(build_meeting_table(_CORPUS))
@@ -487,14 +491,14 @@ def test_fo6_decision_head_is_published_as_a_meeting_mix_tracker() -> None:
     # The committed corpus ships a split, so the harness fits exactly once.
     assert len(head.scans) == 1
     scan = head.scans[0]
-    assert scan.fit_meetings == 345
-    assert scan.fit_ejection_meetings == 225
-    assert scan.fit_skip_meetings == 120
+    assert scan.fit_meetings == 348  # was 345
+    assert scan.fit_ejection_meetings == 224  # was 225
+    assert scan.fit_skip_meetings == 124  # was 120
 
-    plateau = {correct for tau, correct in scan.curve if tau >= 0.40}
+    plateau = {correct for tau, correct in scan.curve if tau >= 0.35}
     assert plateau == {scan.fit_skip_meetings}  # the always-SKIP constant, exactly
-    assert scan.tuned_correct == 127
-    assert scan.tuned_correct - scan.fit_skip_meetings == 7
+    assert scan.tuned_correct == 124  # was 127
+    assert scan.tuned_correct - scan.fit_skip_meetings == 0  # was 7
     # ...and the curve is the whole grid, not a summary of it.
     assert [tau for tau, _ in scan.curve] == [step / 20.0 for step in range(1, 20)]
 
@@ -502,7 +506,7 @@ def test_fo6_decision_head_is_published_as_a_meeting_mix_tracker() -> None:
 def test_tuned_threshold_breaks_ties_toward_the_higher_tau() -> None:
     """Ties go to the conservative pole, and it is a REAL tie on this corpus.
 
-    tau 0.20 and 0.25 both score 127 on the fit side; raising tau only ever turns
+    Every tau from 0.35 up scores 124 on the fit side; raising tau only ever turns
     an eject into a SKIP, so the top of a tied plateau is the conservative end and
     the bottom is the all-EJECT one. The scan takes the top.
     """
@@ -514,7 +518,7 @@ def test_tuned_threshold_breaks_ties_toward_the_higher_tau() -> None:
     tied = [tau for tau, correct in scan.curve if correct == scan.tuned_correct]
     assert len(tied) > 1, "no tie on this corpus — the tie-break would be untested"
     assert scan.tuned_tau == max(tied)
-    assert scan.tuned_tau == 0.25  # was 0.20, the all-EJECT end of the same tie
+    assert scan.tuned_tau == 0.95  # was 0.25; the plateau widened to the top
 
 
 def test_the_ranking_channel_is_untouched_by_the_tie_break() -> None:
@@ -539,20 +543,26 @@ def test_the_ranking_channel_is_untouched_by_the_tie_break() -> None:
     assert old.brier == new.brier
     assert old.ece == new.ece
     # ...and the tie-break really did select a different tau, so the control is not
-    # vacuous. (The corpus TEST side happens to decide identically at 0.20 and 0.25;
+    # vacuous. (The corpus TEST side decides identically across the tied plateau;
     # the samples set below is where the census actually moves.)
     assert old.decision_head is None  # the plain factory publishes no head
     assert new.decision_head is not None
-    assert new.decision_head.scans[0].tuned_tau == 0.25
+    assert new.decision_head.scans[0].tuned_tau == 0.95  # was 0.25
 
 
 def test_the_tie_break_moves_the_decision_census_but_not_the_ranking() -> None:
     """The asymmetry, on the set where the census actually moves.
 
-    On ``replays/samples/9p2i`` the higher tie-break skips 3 more true ejections
-    (94 -> 97) and its binary accuracy falls, while every ranking and calibration
-    channel is bit-identical — the whole content of "the tuned head enters no axis
-    of the bar".
+    On ``replays/samples/9p2i`` the two poles decide 10 meetings differently — the
+    low tau ejects on 10 and is right on 5, the high tau ejects on none — while
+    every ranking and calibration channel is bit-identical. That is the whole
+    content of "the tuned head enters no axis of the bar".
+
+    Their binary accuracies come out EQUAL here (the 5 true ejections the low tau
+    catches cost it exactly 5 correct skips), which is what a tied plateau means
+    and is why the tie-break has to be decided by a stated rule rather than by
+    score. The load-bearing assertion is therefore that the tuned head never
+    scores BETTER, not that it scores worse.
     """
 
     table = build_meeting_table(_NINE)
@@ -566,9 +576,11 @@ def test_the_tie_break_moves_the_decision_census_but_not_the_ranking() -> None:
     assert old.brier == new.brier
     assert old.ece == new.ece
 
-    assert old.ejection_predicted_skips == 94
-    assert new.ejection_predicted_skips == 97
-    assert new.skip_vs_eject_accuracy < old.skip_vs_eject_accuracy
+    # The census moves: the low tau ejects on 10 meetings, the high tau on none.
+    assert (old.predicted_ejections, new.predicted_ejections) == (10, 0)
+    assert old.ejection_predicted_skips == 90  # was 94
+    assert new.ejection_predicted_skips == 95  # was 97
+    assert new.skip_vs_eject_accuracy <= old.skip_vs_eject_accuracy
 
 
 # --------------------------------------------------------------------------- #

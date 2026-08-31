@@ -502,48 +502,44 @@ def test_surrogate_game_is_byte_deterministic(tmp_path: Path) -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_the_committed_surrogate_is_a_baseline6_fit_on_a_baseline8_corpus(
+def test_the_committed_surrogate_is_a_baseline8_fit_on_the_baseline8_corpus(
     corpus_table: MeetingTable,
 ) -> None:
-    """The HYBRID tripwire: the committed weights and the live corpus disagree.
+    """The EQUIVALENCE pin: the committed weights and the live corpus AGREE.
 
-    This is the same shape as the PR #301 tripwire (Task 18.14) that preceded the
-    baseline-6 re-ground — a committed fit now TWO baselines behind the corpus
-    under it, held as an explicit, reviewable pin until the re-fit lands. The
-    baseline-7 record re-recorded ``replays/ml_corpus`` without re-grounding the
-    ML program and the baseline-8 record (Task 21.15) re-recorded it again on the
-    corrected substrate; that re-ground is a NAMED follow-up
-    (audits/audit-phase-20-baseline-7.md §10.2), and this test is what keeps the
-    interim state honest rather than silent.
+    The inverse of the hybrid tripwire it replaces. That tripwire asserted a fit
+    two baselines behind the corpus under it and was written to fail the day the
+    re-ground landed; this asserts what the re-ground produced. One assertion per
+    seam the re-fit had to move together, so a PARTIAL re-ground — new weights
+    with a stale cap, a record re-keyed against unmoved weights — fails here
+    rather than at some consumer's load.
 
-    Both halves are asserted, so the tripwire cannot pass by accident: the
-    artifact is INTERNALLY consistent (weights, cap and fit-corpus record all key
-    to each other and to the baseline-6 fit-side count of 367), and it is
-    EXTERNALLY stale (the live corpus fingerprints differently and carries 348
-    fit-side meetings, which would re-derive the cap to 49 764 rather than the
-    committed 52 481). When the re-ground lands, both halves move together and
-    this test fails — which is the point.
+    Both halves are asserted, so the pin cannot pass by accident: the artifact is
+    INTERNALLY consistent (weights, cap and fit-corpus record all key to each
+    other and to the fit-side count), and it is EXTERNALLY current (the live
+    corpus fingerprints to exactly the digest the record names, and re-deriving
+    the cap from the live fit side reproduces the committed one).
     """
 
     cap = load_staleness_cap(_ARTIFACT_DIR)
     _, weights_sha256 = load_ballot_predictor_artifact(_ARTIFACT_DIR)
     record = load_fit_corpus_record(_ARTIFACT_DIR)
 
-    # Internally consistent: the committed artifact is a coherent baseline-6 fit.
+    # Internally consistent: the artifact is a coherent fit.
     assert record.weights_sha256 == weights_sha256
     assert cap.weights_sha256 == weights_sha256
     assert record.corpus_set == "9p2i"
-    assert record.fit_side_meetings == 367
-    assert cap.max_uses == derive_max_uses(record.fit_side_meetings) == 52_481
+    assert record.fit_side_meetings == 348  # was 367 on the baseline-6 fit
+    assert cap.max_uses == derive_max_uses(record.fit_side_meetings) == 49_764
 
-    # Externally stale: the live corpus is the baseline-8 recording.
+    # Externally current: the live corpus IS the corpus the fit was made on.
     views = build_meeting_views(corpus_table)
     assert corpus_table.splits is not None
     test_seeds = set(corpus_table.splits.test)
     live_fit_meetings = sum(1 for v in views if v.seed not in test_seeds)
-    assert live_fit_meetings == 348  # was 345
-    assert derive_max_uses(live_fit_meetings) == 49_764 != cap.max_uses  # was 49_335
-    assert record.corpus_sha256 != fit_corpus_fingerprint(_CORPUS)
+    assert live_fit_meetings == record.fit_side_meetings
+    assert derive_max_uses(live_fit_meetings) == cap.max_uses
+    assert record.corpus_sha256 == fit_corpus_fingerprint(_CORPUS)
 
 
 def test_fit_corpus_fence_fails_loud_on_substrate_and_key_drift(
@@ -557,6 +553,11 @@ def test_fit_corpus_fence_fails_loud_on_substrate_and_key_drift(
     silently score against a stale surrogate. The committed fit-corpus record
     closes that gap: a ``corpus_dir`` whose fingerprint disagrees raises, a
     record keyed to different weights raises, and an absent record raises.
+
+    The re-ground makes the committed artifact's own set the POSITIVE leg, so
+    the refusal is proved on a synthetic drifted record instead — a gate whose
+    only negative case was the repo's own staleness would stop biting the moment
+    that staleness was paid off.
     """
 
     # Loading against the WRONG corpus (the 4p1i set) fingerprints differently.
@@ -564,30 +565,29 @@ def test_fit_corpus_fence_fails_loud_on_substrate_and_key_drift(
         load_surrogate_runner_factory(
             _ARTIFACT_DIR, corpus_dir=_REPO_ROOT / "replays" / "ml_corpus" / "4p1i"
         )
-    # And against its OWN set, because the baseline-7 and baseline-8 records
-    # re-recorded the corpus without re-grounding the fit (the tripwire above).
-    # This is the fence
-    # doing its job on a real drift, not a synthetic one.
-    with pytest.raises(ValueError, match="substrate drifted"):
-        load_surrogate_runner_factory(_ARTIFACT_DIR, corpus_dir=_CORPUS)
+    # The gate is a gate, not a wall: the committed artifact against the corpus it
+    # was actually fitted on loads clean, fingerprint check and all.
+    assert callable(load_surrogate_runner_factory(_ARTIFACT_DIR, corpus_dir=_CORPUS))
 
-    # The gate is a gate, not a wall: an artifact whose record names the corpus it
-    # is actually handed loads. Re-fingerprinting the record is exactly what the
-    # deferred re-ground will do -- with re-fitted WEIGHTS beside it, which is why
-    # this local copy is a fence proof and not a shortcut around the re-ground.
+    # The planted refusal: a copied artifact whose record names a corpus digest
+    # nothing on disk produces. One flipped nibble is enough — the fence compares
+    # the whole digest, so this is the smallest drift it must still catch.
     for name in (
         "ballot-predictor.json",
         "ballot-predictor.json.sha256",
         "max-uses.json",
     ):
         (tmp_path / name).write_text((_ARTIFACT_DIR / name).read_text())
-    regrounded = load_fit_corpus_record(_ARTIFACT_DIR).model_copy(
-        update={"corpus_sha256": fit_corpus_fingerprint(_CORPUS)}
+    committed_record = load_fit_corpus_record(_ARTIFACT_DIR)
+    live_fingerprint = fit_corpus_fingerprint(_CORPUS)
+    assert committed_record.corpus_sha256 == live_fingerprint
+    perturbed = committed_record.model_copy(
+        update={"corpus_sha256": ("b" if live_fingerprint[0] != "b" else "c")
+        + live_fingerprint[1:]}
     )
-    (tmp_path / "fit-corpus.json").write_text(
-        regrounded.model_dump_json(indent=2) + "\n"
-    )
-    assert callable(load_surrogate_runner_factory(tmp_path, corpus_dir=_CORPUS))
+    (tmp_path / "fit-corpus.json").write_text(perturbed.model_dump_json(indent=2) + "\n")
+    with pytest.raises(ValueError, match="substrate drifted"):
+        load_surrogate_runner_factory(tmp_path, corpus_dir=_CORPUS)
 
     # A copied artifact whose fit-corpus record is keyed to DIFFERENT weights
     # (a botched re-fit that moved the weights but not the corpus record).
@@ -649,31 +649,21 @@ def test_the_committed_verdict_is_keyed_on_the_weights_and_reproduces(
     # table from an absolute one, so that one field is resolved.
     assert Path(rederived.replay_set_dir).resolve() == _CORPUS.resolve()
 
-    # The re-derivation NO LONGER equals the committed artifact, and that is the
-    # declared grounding gap rather than drift. The artifact was fitted on the
-    # corpus that was on disk when it was written; the baseline-8 record then
-    # re-recorded that corpus underneath it, and re-fitting is the re-ground's
-    # job, not this record's. So the artifact keeps saying what it measured and
-    # this test asserts the two halves that must survive the gap:
-    #   * the CONSEQUENCE mapping is stable — a NO-GO stays a NO-GO, because the
-    #     verdict is keyed to the weights, not to the corpus population; and
-    #   * the disagreement is confined to measured cells, so the artifact is
-    #     stale, not corrupt.
-    # Asserting equality here would assert a premise this checkout no longer has.
+    # The re-derivation EQUALS the committed artifact, field for field. During
+    # the interim between the baseline-7 record and the Task-21.17 re-ground this
+    # assertion was relaxed to "differs on the measured cells, agrees on the
+    # consequence mapping", because the corpus had moved under a frozen fit;
+    # the re-ground restores the strong form, which is the only one that proves
+    # the committed verdict is a recorded output rather than a hand-written one.
     committed_fields = verdict.model_dump()
     rederived_fields = rederived.model_dump()
     assert rederived.verdict == verdict.verdict == "NO-GO"
-    assert rederived.bar_id == verdict.bar_id
-    assert rederived.weights_sha256 == verdict.weights_sha256
-    assert rederived.surrogate_role == verdict.surrogate_role
     differing = {
         key
         for key in committed_fields
         if key != "replay_set_dir" and committed_fields[key] != rederived_fields[key]
     }
-    # Non-empty (the corpus moved) but a strict subset (the mapping held).
-    assert differing
-    assert differing < set(committed_fields)
+    assert not differing
 
 
 def test_writing_a_verdict_that_names_no_weights_is_refused(tmp_path: Path) -> None:
@@ -751,29 +741,26 @@ def test_the_install_gate_refuses_the_committed_no_go_as_a_training_runner(
 def test_committed_artifact_round_trips_and_the_refit_no_longer_matches(
     corpus_table: MeetingTable,
 ) -> None:
-    """The artifact still round-trips byte-stably; the refit is now a DIFFERENT fit.
+    """The artifact round-trips byte-stably, and the refit reproduces it to ULP.
 
-    Two claims, and only the first survives the re-records unchanged.
+    Two claims, both restored by the Task-21.17 re-ground.
 
     Serialization is byte-stable: loading the committed bytes and re-serializing
     is the identity, so the sha256 sidecar pins exactly what the bake-off
     reloads. That is a property of the format and holds on any corpus.
 
-    Refit provenance used to be parameter-level -- ``fit_corpus_ballot_predictor``
-    reproduced every committed parameter to float ULP, because the committed
-    weights WERE that refit. The baseline-7 and baseline-8 records re-recorded
-    the corpus without re-grounding the fit
-    (audits/audit-phase-20-baseline-7.md §10.2), so a refit
-    on the live corpus is a genuinely different model, and the pin inverts: the
-    parameters must DISAGREE by more than float noise. Same tripwire shape as
-    ``test_the_committed_surrogate_is_a_baseline6_fit_on_a_baseline8_corpus``, at
-    parameter granularity -- when the re-ground lands, this fails and the
-    ULP-equivalence pin comes back.
+    Refit provenance is parameter-level again: ``fit_corpus_ballot_predictor``
+    over the live corpus reproduces every committed parameter, because the
+    committed weights ARE that refit. Comparison is by ULP tolerance, not by
+    bytes — the fit is numpy full-batch gradient descent, byte-identical on the
+    recording platform and ULP-equivalent elsewhere — so this pin travels across
+    CPUs while still refusing a genuinely different model. During the interim
+    between the baseline-7 record and the re-ground this assertion was INVERTED,
+    pinning that the refit disagreed; restoring it is what the re-ground earns.
 
-    The committed staleness cap keys to the artifact's OWN fit-side count (367,
-    the ~143× rule of the Task 17.10 designer ruling), not to the live corpus's
-    348 -- asserting it against the live count is what would silently launder a
-    stale cap as a current one.
+    The committed staleness cap keys to the artifact's own fit-side count, and
+    the live corpus now produces that same count — the two agreeing is the
+    statement that the cap is current rather than carried.
     """
 
     predictor, sha = load_ballot_predictor_artifact(_ARTIFACT_DIR)
@@ -784,10 +771,10 @@ def test_committed_artifact_round_trips_and_the_refit_no_longer_matches(
     cap = load_staleness_cap(_ARTIFACT_DIR)
     record = load_fit_corpus_record(_ARTIFACT_DIR)
     assert cap.weights_sha256 == sha
-    assert cap.max_uses == derive_max_uses(record.fit_side_meetings) == 52_481
+    assert cap.max_uses == derive_max_uses(record.fit_side_meetings) == 49_764
     assert cap.unit == "meetings"
 
-    # The live corpus's fit side, which the cap is NOT keyed to.
+    # The live corpus's fit side, which the cap IS keyed to.
     assert corpus_table.splits is not None
     fit_seeds = frozenset(corpus_table.splits.train) | frozenset(
         corpus_table.splits.val
@@ -795,14 +782,12 @@ def test_committed_artifact_round_trips_and_the_refit_no_longer_matches(
     live_fit_meetings = len(
         {(r.seed, r.meeting_id) for r in corpus_table.rows if r.seed in fit_seeds}
     )
-    assert live_fit_meetings == 348 != record.fit_side_meetings  # was 345
+    assert live_fit_meetings == record.fit_side_meetings == 348
 
     refit = json.loads(fit_corpus_ballot_predictor(corpus_table).to_artifact_json())
     committed = json.loads(committed_json)
-    # The SHAPE is unchanged -- same keys, same feature names, same format marker.
-    # Only the fitted numbers moved, which is what "a different fit" means.
+    # Same keys, same feature names, same format marker, same numbers to ULP.
     assert refit.keys() == committed.keys()
-    diverged = 0
     for key, committed_value in committed.items():
         refit_value = refit[key]
         if (
@@ -811,24 +796,18 @@ def test_committed_artifact_round_trips_and_the_refit_no_longer_matches(
             and isinstance(committed_value[0], str)
             and "0x" in committed_value[0]
         ):
-            committed_floats = [float.fromhex(item) for item in committed_value]
-            refit_floats = [float.fromhex(item) for item in refit_value]
-            if refit_floats != pytest.approx(committed_floats, rel=1e-9, abs=1e-12):
-                diverged += 1
+            assert [float.fromhex(item) for item in refit_value] == pytest.approx(
+                [float.fromhex(item) for item in committed_value],
+                rel=1e-9,
+                abs=1e-12,
+            ), key
         elif isinstance(committed_value, str) and "0x" in committed_value:
-            if float.fromhex(refit_value) != pytest.approx(
+            assert float.fromhex(refit_value) == pytest.approx(
                 float.fromhex(committed_value), rel=1e-9, abs=1e-12
-            ):
-                diverged += 1
+            ), key
         else:
-            # Non-float metadata (format marker, feature names, epochs) is exact
-            # either way -- a re-fit changes the numbers, not the schema.
+            # Non-float metadata (format marker, feature names, epochs) is exact.
             assert refit_value == committed_value, key
-    assert diverged > 0, (
-        "the refit reproduces the committed weights to ULP -- either the ML "
-        "re-ground landed (delete this tripwire and restore the equivalence pin) "
-        "or the corpus never moved"
-    )
 
 
 def test_bakeoff_reloads_the_committed_artifact_and_reproduces_the_numbers(
@@ -841,7 +820,9 @@ def test_bakeoff_reloads_the_committed_artifact_and_reproduces_the_numbers(
     ``predictor`` injection on :class:`BallotSurrogateModel`) over the held-out
     test views reproduces the report's ranking/decision census and the
     predicted-ballot calibration channel (baseline-8: 91 test meetings, 57
-    ejections; the decision head still skips all but two meetings).
+    ejections; the decision head still skips all but two meetings). Since the
+    Task-21.17 re-ground these ARE the weights the report's numbers were
+    produced by, so the reproduction is exact rather than approximate.
     """
 
     predictor, _ = load_ballot_predictor_artifact(_ARTIFACT_DIR)
@@ -867,23 +848,20 @@ def test_bakeoff_reloads_the_committed_artifact_and_reproduces_the_numbers(
             predicted_ejections += 1
         if view.is_ejection and prediction.ranking[0] == view.ejected:
             top1_hits += 1
-    # The reporter column is masked at every fit and inference site, so the
-    # frozen weights no longer receive the exclusion oracle they were fitted
-    # with; the census below is what that masked, twice-stale artifact scores on
-    # the baseline-8 held-out split.
-    assert top1_hits == 46  # was 42
-    assert predicted_ejections == 2  # was 2
-    assert predicted_skips == 89  # was 85
-    assert correct_skips == 34  # was 32
+    # The census the re-ground's own weights score on their own held-out split.
+    assert top1_hits == 47  # was 46 on the baseline-6 fit
+    assert predicted_ejections == 2
+    assert predicted_skips == 89
+    assert correct_skips == 34
 
     calibration = frozen.predicted_ballot_calibration(test_views)
-    assert calibration.predicted_ballots == 114  # was 106
-    assert calibration.predicted_skips == 402  # was 392
+    assert calibration.predicted_ballots == 110  # was 114
+    assert calibration.predicted_skips == 406  # was 402
     # Inference from FIXED committed weights; tolerance covers libm exp variance
     # across platforms, nothing more.
     assert calibration.brier == pytest.approx(
-        0.3379753557131337, abs=1e-9
-    )  # was 0.33818288663917795
+        0.3277976536219233, abs=1e-9
+    )  # was 0.3379753557131337
 
 
 def test_surrogate_fidelity_reproduces_pinned_numbers(
@@ -1291,9 +1269,9 @@ def test_no_go_verdict_holds_on_live_served_clamped_features(
                 correct_skips += 1
         if view.is_ejection and live_pred.ranking[0] == view.ejected:
             top1_hits += 1
-    assert top1_hits == 46  # was 42
-    assert predicted_skips == 89  # was 85
-    assert correct_skips == 34  # was 32
+    assert top1_hits == 47  # was 46 on the baseline-6 fit
+    assert predicted_skips == 89
+    assert correct_skips == 34
     # Third-rank-and-below shuffles only, BOUNDED not pinned: the reorder count
     # sits on near-ties in the softmax shares, so it is libm/ULP-sensitive
     # across CPUs. The per-meeting decision/top-1 equality above is the
