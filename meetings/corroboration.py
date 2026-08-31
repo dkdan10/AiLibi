@@ -198,8 +198,10 @@ def _speaker_grounds_subject(
     The three grounded channels, each through the detector's own predicate: a
     ``saw_player`` matched by the speaker's own
     :class:`~meetings.schemas.SightingRecord` rows, a ``saw_move`` matched by
-    their own :class:`~meetings.schemas.MoveWitnessRecord` rows, or a spoken
-    vent whose subject the meeting's ``vent_sighting`` flags already carry. A
+    their own :class:`~meetings.schemas.MoveWitnessRecord` rows, or a spoken vent
+    whose subject reaches :func:`_vent_grounded_subjects` -- which credits the
+    vent channel only when every spoken vent against that subject is backed by
+    its own flag, so a second speaker cannot ride someone else's grounded vent. A
     fabricated observation matches nothing and grounds nothing, which is the
     whole point of testing the record rather than the turn.
 
@@ -231,6 +233,45 @@ def _speaker_grounds_subject(
     return False
 
 
+def _vent_grounded_subjects(
+    transcript: MeetingTranscript,
+    contradictions: Sequence[ContradictionRef],
+) -> frozenset[PlayerId]:
+    """Subjects whose spoken vents are ALL individually grounded.
+
+    A ``vent_sighting`` flag is minted from ONE speaker's own matched
+    :class:`~meetings.schemas.VentWitnessRecord`, so the flags naming a subject
+    count the grounded vent accounts against them. Reducing the flags to a bare
+    subject set would credit every speaker who mentioned that vent, including one
+    who invented theirs -- the laundering this ledger exists to prevent.
+
+    Counting closes that without a second copy of the flag's id format: when as
+    many speakers spoke a vent of the subject as there are flags naming them,
+    every one of those accounts is grounded. When speakers outnumber flags, at
+    least one is invented and nothing here can say which, so the channel credits
+    NOBODY for that subject -- the safe direction, and those speakers can still
+    ground through their own sighting or movement records.
+    """
+
+    spoken: dict[PlayerId, set[PlayerId]] = {}
+    for turn in transcript.turns:
+        for observation in turn.observations:
+            if isinstance(observation, SawVentObservation):
+                spoken.setdefault(observation.subject, set()).add(turn.speaker)
+    flags: dict[PlayerId, int] = {}
+    for subject in grounded_vent_subjects_from_flags(contradictions):
+        flags[subject] = sum(
+            1
+            for flag in contradictions
+            if flag.kind == "vent_sighting" and subject in flag.subjects
+        )
+    return frozenset(
+        subject
+        for subject, count in flags.items()
+        if len(spoken.get(subject, set())) == count
+    )
+
+
 def _room_label(rooms: frozenset[str]) -> str:
     """One spoken placement's canonical rooms as one readable label."""
 
@@ -242,28 +283,32 @@ def _walkable_transits(
 ) -> tuple[tuple[str, str], ...]:
     """The placement pairs about one subject that one tick of walking reconciles.
 
-    A pair qualifies when the two spoken ticks sit within
-    :data:`~meetings.constants.MAP_ARBITRATION_MAX_TICK_GAP` of each other and
-    the two canonical room sets sit within
-    :data:`~meetings.constants.MAP_ARBITRATION_MAX_HOPS` doorway hops -- the
-    arbitration bounds the detector itself uses, read from
-    :mod:`meetings.constants` rather than re-derived here. Zero hops is dropped:
-    two accounts naming the same room agree, and there is no walk to explain.
+    A pair qualifies when the elapsed ticks between the two spoken placements
+    COVER the doorway hops between the two rooms and stay inside
+    :data:`~meetings.constants.MAP_ARBITRATION_MAX_TICK_GAP` -- the arbitration
+    bounds the detector itself uses, read from :mod:`meetings.constants` rather
+    than re-derived here. One hop costs one tick on the canonical map, so the
+    walk must have had time to happen: two placements in adjacent rooms at the
+    SAME tick are a physical impossibility, not a legal walk, and saying
+    otherwise would clear the very charge the map refutes. Zero hops is dropped
+    too: two statements naming one room agree, and there is no walk to explain.
     ``placements`` arrives tick-sorted from
     :func:`~meetings.transcript.reconstruct_stated_paths`, so the pairs come out
-    earliest first and dedupe by room-label pair.
+    earliest first, dedupe by room-label pair, and the inner scan can stop at the
+    first placement past the tick bound rather than walk the rest.
     """
 
     seen: set[tuple[str, str]] = set()
     pairs: list[tuple[str, str]] = []
     for index, earlier in enumerate(placements):
         for later in placements[index + 1 :]:
-            if later.tick - earlier.tick > MAP_ARBITRATION_MAX_TICK_GAP:
-                continue
+            elapsed = later.tick - earlier.tick
+            if elapsed > MAP_ARBITRATION_MAX_TICK_GAP:
+                break
             hops = room_hops(
                 earlier.rooms, later.rooms, max_hops=MAP_ARBITRATION_MAX_HOPS
             )
-            if hops is None or hops == 0:
+            if hops is None or hops == 0 or hops > elapsed:
                 continue
             pair = (_room_label(earlier.rooms), _room_label(later.rooms))
             if pair in seen:
@@ -302,7 +347,7 @@ def build_testimony_ledger(
     if not accusations:
         return MeetingTestimonyLedger(rows=(), opener=opener)
 
-    vent_placed = grounded_vent_subjects_from_flags(contradictions)
+    vent_placed = _vent_grounded_subjects(transcript, contradictions)
     flagged_subjects = frozenset(
         subject
         for contradiction in contradictions

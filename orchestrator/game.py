@@ -84,7 +84,6 @@ from llm.budgeted_client import BudgetedLLMClient
 from llm.client import LLMClient, LLMResponse
 from llm.client import CallKind as _LLMCallKind
 from llm.provider import LLMCallFailure, build_default_client, extract_parse_failure
-from meetings.corroboration import corroboration_discipline_enabled
 from meetings.manager import (
     EMERGENCY_TRIGGER_PHRASE,
     BodyDiscoveryRecord,
@@ -487,6 +486,19 @@ _PROMPT_OVERLAY_LABELS: Final[Mapping[str, str]] = {
     "reporter_reasoning": "reporter-voice",
     "corroboration_discipline": "source-count",
 }
+
+
+def _arm_is_served(versions: Mapping[str, str], *, template: str, arm: str) -> bool:
+    """Whether the served stamp for ``template`` credits ``arm``'s lineage.
+
+    The composite fold joins each contributing arm's own value with ``+`` and no
+    arm value contains one (:func:`_lever_arm_versions`), so splitting recovers
+    the participating lineages exactly. A renderer that gates on THIS rather than
+    on a second environment read cannot render a block the recorded stamp does
+    not claim, whoever supplied the versions.
+    """
+
+    return arm in versions.get(template, "").split("+")
 
 
 def enabled_prompt_version_overlays(
@@ -1148,7 +1160,16 @@ def build_default_meeting_runner(
     # construction saw, which is the render-one-stamp-another failure this whole
     # block exists to prevent.
     resolved_reporter_reasoning = reporter_reasoning_enabled()
-    resolved_corroboration_discipline = corroboration_discipline_enabled()
+    # The source-count arm reads its decision off the versions ACTUALLY SERVED
+    # rather than off the environment a second time, so the two cannot disagree
+    # by construction -- including when a caller pins ``prompt_versions`` itself.
+    # An env-only read would render the block under a caller-pinned default
+    # stamp, which is the render-one-stamp-another failure in its exact form.
+    resolved_corroboration_discipline = _arm_is_served(
+        resolved_versions,
+        template="vote_ballot",
+        arm=_CORROBORATION_DISCIPLINE_ARM["vote_ballot"],
+    )
     inner: LLMClient = llm_client if llm_client is not None else build_default_client()
     client: LLMClient = (
         BudgetedLLMClient(inner=inner, budget=budget) if budget is not None else inner

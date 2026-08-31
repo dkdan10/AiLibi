@@ -63,9 +63,13 @@ from meetings.schemas import (
     SightingRecord,
 )
 from meetings.transcript import room_hops
+from llm.fake_provider import FakeProvider
 from orchestrator.game import (
     CORROBORATION_DISCIPLINE_PROMPT_VERSION_SETS,
     PROMPT_VERSION_SETS,
+    _arm_is_served,  # noqa: PLC2701
+    _CORROBORATION_DISCIPLINE_ARM,  # noqa: PLC2701
+    build_default_meeting_runner,
     prompt_versions_for_set,
 )
 from orchestrator.replay import (
@@ -158,15 +162,21 @@ def _transcript(*turns: MeetingTurn) -> MeetingTranscript:
     return MeetingTranscript(turns=turns)
 
 
-def _vent_flag(subject: str) -> ContradictionRef:
+def _vent_flag(subject: str, *, flag_id: str = "c-1") -> ContradictionRef:
     return ContradictionRef(
-        contradiction_id="c-1",
+        contradiction_id=flag_id,
         kind="vent_sighting",
         event_a_id="turn:m-1:turn-0:obs:0",
         event_b_id="turn:m-1:turn-0:obs:0",
         subjects=(subject,),
         description="witnessed vent",
     )
+
+
+def _saw_vent(
+    *, subject: str, room: str = "MEDBAY", tick: int = 11
+) -> SawVentObservation:
+    return SawVentObservation(type="saw_vent", tick=tick, subject=subject, room=room)
 
 
 _ROSTER: Final[frozenset[PlayerId]] = frozenset(
@@ -326,11 +336,7 @@ class TestFirstHandSources:
             _turn(
                 index=0,
                 speaker="p-2",
-                observations=(
-                    SawVentObservation(
-                        type="saw_vent", tick=11, subject="p-5", room="MEDBAY"
-                    ),
-                ),
+                observations=(_saw_vent(subject="p-5"),),
                 claims=(_accuses("p-5"),),
             ),
         )
@@ -338,6 +344,59 @@ class TestFirstHandSources:
             _ledger(transcript, contradictions=(_vent_flag("p-5"),)), "p-5"
         ).first_hand == ("p-2",)
         assert _row(_ledger(transcript), "p-5").first_hand == ()
+
+    def test_a_second_vent_speaker_cannot_ride_the_first_one_s_flag(self) -> None:
+        # Codex round 1: one grounded vent mints ONE flag naming the subject. A
+        # second speaker who repeats the vent with nothing behind it must not be
+        # credited by that flag -- reducing the flags to a bare subject set would
+        # launder exactly that claim into an independent account.
+        transcript = _transcript(
+            _turn(
+                index=0,
+                speaker="p-2",
+                observations=(_saw_vent(subject="p-5"),),
+                claims=(_accuses("p-5"),),
+            ),
+            _turn(
+                index=1,
+                speaker="p-8",
+                observations=(_saw_vent(subject="p-5"),),
+                claims=(_accuses("p-5"),),
+            ),
+        )
+        row = _row(_ledger(transcript, contradictions=(_vent_flag("p-5"),)), "p-5")
+        assert row.first_hand == ()
+        assert row.adopted == ("p-2", "p-8")
+
+    def test_two_grounded_vents_credit_both_speakers(self) -> None:
+        # The perturbation: when BOTH spoken vents are grounded the detector
+        # mints two flags, and the count credits both accounts.
+        transcript = _transcript(
+            _turn(
+                index=0,
+                speaker="p-2",
+                observations=(_saw_vent(subject="p-5"),),
+                claims=(_accuses("p-5"),),
+            ),
+            _turn(
+                index=1,
+                speaker="p-8",
+                observations=(_saw_vent(subject="p-5"),),
+                claims=(_accuses("p-5"),),
+            ),
+        )
+        row = _row(
+            _ledger(
+                transcript,
+                contradictions=(
+                    _vent_flag("p-5"),
+                    _vent_flag("p-5", flag_id="c-2"),
+                ),
+            ),
+            "p-5",
+        )
+        assert row.first_hand == ("p-2", "p-8")
+        assert row.adopted == ()
 
     def test_one_speaker_counts_once_however_much_they_hold(self) -> None:
         # The double-count guard: two matching records AND two matching
@@ -579,6 +638,26 @@ class TestWalkableTransits:
         )
         assert _row(_ledger(transcript), "p-5").walkable_transits == ()
 
+    def test_adjacent_rooms_at_the_SAME_tick_are_not_a_walk(self) -> None:
+        # Codex round 1: an upper-bound-only tick test accepts a zero-tick gap,
+        # and the ballot would then clear as "one tick of walking" a pair that is
+        # a physical impossibility -- the exact charge the map refutes. The walk
+        # must have had time to happen.
+        transcript = _transcript(
+            _turn(
+                index=0,
+                speaker="p-1",
+                observations=(_saw(subject="p-5", room="MEDBAY", tick=14),),
+                claims=(_accuses("p-5"),),
+            ),
+            _turn(
+                index=1,
+                speaker="p-3",
+                observations=(_saw(subject="p-5", room="WEST_HALL", tick=14),),
+            ),
+        )
+        assert _row(_ledger(transcript), "p-5").walkable_transits == ()
+
     def test_two_accounts_naming_one_room_are_not_a_walk(self) -> None:
         transcript = _transcript(
             _turn(
@@ -714,7 +793,7 @@ class TestRender:
         unflagged = _render(
             ledger=_ledger(_RENDER_TRANSCRIPT, sighting_records=_RENDER_RECORDS)
         )
-        assert "No conflict above names them." in unflagged
+        assert "Nothing in the evidence above names them." in unflagged
         flagged = _render(
             ledger=_ledger(
                 _RENDER_TRANSCRIPT,
@@ -722,7 +801,16 @@ class TestRender:
                 sighting_records=_RENDER_RECORDS,
             )
         )
-        assert "A conflict above names them." in flagged
+        # Codex round 1: the wording must cover EVERY flag category. A
+        # ``vent_sighting`` is role PROOF in the evidence section above, so a row
+        # calling it "a conflict" would contradict the ballot's own taxonomy and
+        # invite the voter to underweight the strongest evidence in the game.
+        assert "The evidence above names them — read it there, in its own class." in (
+            flagged
+        )
+        assert "conflict" not in flagged.split("<testimony_sources>")[1].split(
+            "</testimony_sources>"
+        )[0].replace("a conflict over that pair is thin", "")
 
     def test_the_band_sentence_restates_the_ladder_verbatim(self) -> None:
         # The ladder the accusation template already asks for, quoted from the
@@ -807,7 +895,39 @@ class TestRender:
         row = _row(_ledger(transcript), "p-5")
         assert len(row.walkable_transits) == MAX_WALKABLE_TRANSITS_PER_SUBJECT
         rendered = _render(ledger=_ledger(transcript))
-        assert rendered.count("one tick of walking fits both") == 2
+        assert rendered.count("so walking fits both") == 2
+
+    def test_the_transit_line_calls_the_placements_statements_not_accounts(
+        self,
+    ) -> None:
+        # Codex round 1: these placements come from ``reconstruct_stated_paths``
+        # over EVERY speaker's sightings -- not necessarily accusers, not
+        # necessarily record-grounded. Calling them "accounts" would contradict
+        # the block's own definition of the word and let a row read
+        # "1 voice, 0 accounts" while claiming two accounts placed the target.
+        transcript = _transcript(
+            _turn(
+                index=0,
+                speaker="p-1",
+                observations=(_saw(subject="p-5", room="MEDBAY", tick=14),),
+                claims=(_accuses("p-5"),),
+            ),
+            _turn(
+                index=1,
+                speaker="p-3",
+                observations=(_saw(subject="p-5", room="WEST_HALL", tick=15),),
+            ),
+        )
+        rendered = _render(ledger=_ledger(transcript))
+        block = rendered.split("<testimony_sources>")[1].split("</testimony_sources>")[
+            0
+        ]
+        assert "0 accounts" in block
+        assert "Two statements put" in block
+        # Scoped to THIS block: the ``<map>`` card below it has said "Two
+        # accounts …" since 20.31, in the looser everyday sense. Inside a block
+        # that DEFINES the word, the word has to mean what the block says.
+        assert "Two accounts" not in block
 
 
 class TestProvenance:
@@ -843,6 +963,42 @@ class TestProvenance:
 
     def test_the_default_registry_entry_is_not_re_bumped(self) -> None:
         assert PROMPT_VERSION_SETS[_SET]["vote_ballot"] == "vote_ballot.qwen3_6_27b.v5"
+
+    def test_the_render_decision_is_read_off_the_versions_actually_served(
+        self,
+    ) -> None:
+        # Codex round 1: a caller may pin ``prompt_versions`` itself, and an
+        # env-only read would then render the block under the OFF-arm stamp. The
+        # arm is credited only when the SERVED stamp carries its lineage, so the
+        # bytes and the provenance are one decision however the versions arrived.
+        arm = _CORROBORATION_DISCIPLINE_ARM["vote_ballot"]
+        assert _arm_is_served(
+            CORROBORATION_DISCIPLINE_PROMPT_VERSION_SETS[_SET],
+            template="vote_ballot",
+            arm=arm,
+        )
+        # A caller-pinned DEFAULT mapping does not credit the arm, even though
+        # the environment says ON -- so the block cannot render under it.
+        assert not _arm_is_served(
+            PROMPT_VERSION_SETS[_SET], template="vote_ballot", arm=arm
+        )
+        # And a composite the fold builds when a sibling arm re-bodies the same
+        # template still credits this lineage.
+        assert _arm_is_served(
+            {"vote_ballot": f"other.arm.v1+{arm}"}, template="vote_ballot", arm=arm
+        )
+        assert not _arm_is_served({}, template="vote_ballot", arm=arm)
+
+    def test_an_explicit_default_pin_leaves_the_ledger_off(self) -> None:
+        # The end-to-end shape of the same claim, through the production
+        # construction seam: lever exported ON, versions pinned to the default
+        # registry, so the runner must build no ledger and the stamp it records
+        # is the honest one.
+        runner = build_default_meeting_runner(
+            llm_client=FakeProvider(),
+            prompt_versions=PROMPT_VERSION_SETS[_SET],
+        )
+        assert runner._manager._corroboration_discipline is False  # noqa: SLF001
 
 
 # --------------------------------------------------------------------------- #
