@@ -156,10 +156,11 @@ the loader refuses a recording made under a different substrate. Graduating a
 lever also carries the prose-sweep obligation in `AGENTS.md`.
 
 **Baselines are adopting records**, not tags: a baseline is the recording that
-adopts a substrate. The ladder tip is baseline 7 — the evidence-honesty adopting
-record (`audits/audit-phase-20-baseline-7.md`), where the pre-registered rule
-returned **FINDING** and the owner adopted it anyway, by explicit override; §6.1
-holds the ruling. The three reproducibility
+adopts a substrate. The ladder tip is baseline 8 — the maintenance re-record on
+the corrected substrate (`audits/audit-phase-21-rerecord.md`), no bars by
+design. Beneath it, baseline 7 (`audits/audit-phase-20-baseline-7.md`): its
+pre-registered rule returned **FINDING** and the owner adopted it anyway, by
+explicit override; §6.1 holds the ruling. The three reproducibility
 scopes this project claims — replay integrity, same-runtime repeatability, and
 cross-platform optimizer portability (designed for, not yet confirmed) — are
 stated under the README's "Three reproducibility scopes"; never restate them
