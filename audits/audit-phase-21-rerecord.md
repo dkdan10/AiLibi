@@ -629,6 +629,35 @@ Two of the four audit exhibits move with it, and they moved in opposite directio
   `PARTLY FLIPPED`, its test was renamed to pin the regression rather than the claim, and the
   status-set check now enumerates the allowed values so a status nobody defined still fails.
 
+### 5.1.1b THE I-13 INJUSTICE FIXTURES: 4/4 FLIPPED becomes 3/4 flipped + 1 partial
+
+**This is the fourth movement against the justice cells, and it lands on a stated ground of the
+baseline-7 adoption.** That record's **Bar 8** read the four I-13 injustice fixtures as **4/4
+FLIPPED** and its §4 walked them one by one. On these bytes:
+
+| fixture | baseline 7 | baseline 8 |
+|---|---|---|
+| (a) provenance-impossible sighting — `9p2i` seed 23 M1 | FLIPPED | **FLIPPED** (flags demoted to weak; table still skips) |
+| (b) content-vs-own-memory miss — `9p2i` seed 12 M0 | FLIPPED | **PARTLY FLIPPED** — evidence half held, outcome half regressed: **ejects the crewmate p-5** |
+| (c) one-tick interval artifact — `4p1i` seeds 49 + 41 M0 | FLIPPED | **FLIPPED** |
+| (d) equal-weight conflict — `4p1i` seed 41 M0 | FLIPPED | **FLIPPED** |
+| | **4/4** | **3/4 flipped + 1 partial** |
+
+**Read together, the justice picture this record hands forward is one improvement and four
+regressions**, and they should be priced as a set rather than one at a time:
+
+1. non-direct conviction accuracy **fell** 0.5922 → 0.5208 (§5.1);
+2. innocent ejections **rose** 42 → 46 (§5.1);
+3. the sole-flag wrongful-conviction class **re-opened** 0 → 4 (§5.1.1);
+4. the STRONG statement-pair conviction class **re-opened** 0 → 1 meeting, ejecting a crewmate
+   (§5.1.1a);
+5. and against those, the oracle-register leak class went to **ZERO** on all four sets (§5.1.2c) —
+   the one unambiguously good movement.
+
+Nothing here is a bar and nothing is decided. But the four regressions are on the cells the Wave-2
+pre-registration will be written against, and a pre-registration priced on "these classes are
+closed" would be priced on a reading these bytes no longer support.
+
 The seventh-adjacent failure is the same meeting seen from the classifier's side:
 `test_rederivation_diverges_only_at_the_repaired_sites` finds one unnamed divergence class, at seed
 41 M2, where a recorded `alibi_vs_sighting` flag re-derives identically **except** that it gains
