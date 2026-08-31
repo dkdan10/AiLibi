@@ -760,6 +760,12 @@ What this record deliberately does NOT discharge:
    would leave the checker reading one vintage against another.
 6. **`README.md:29`'s phases-0-19 / 20-open contradiction** — pre-existing, unrelated to these bytes,
    named here so the ledger carries it rather than absorbed into a record that did not cause it.
+6a. **README word headroom is down to 13** (3,537 against a 3,550 ceiling). Two perturbation tests in
+   `tests/scripts/test_check_doc_facts.py` already had to be written word-frugally to stay inside it,
+   because a perturbation that appends prose now trips the budget check instead of the drift under
+   test. The next few words added to README will start breaking that suite in places unrelated to
+   what is being tested. Either the page gets trimmed or the ceiling gets raised in an owner-ratified
+   contract; this record did neither, having only moved cells the gates forced.
 7. **Surrogate verdict staleness → 21.17**, beside the conviction and composed staleness it joins.
    `training/artifacts/surrogate/verdict.json` was fitted on the corpus that was on disk when it was
    written; this record re-recorded that corpus underneath it, so 16 of its 31 fields no longer
