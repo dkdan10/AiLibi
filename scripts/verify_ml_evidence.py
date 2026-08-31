@@ -186,10 +186,14 @@ Status = Literal["OK", "FAIL", "ABSENT", "INFO", "STALE"]
 #: committed ML fits were made on, the corpus fingerprint now on disk).
 #:
 #: The baseline-7 record re-recorded ``replays/ml_corpus`` without re-fitting the
-#: ML artifacts; re-grounding them is a named follow-up
-#: (``audits/audit-phase-20-baseline-7.md`` §10.2). Until it lands, this exact
-#: pair of digests is expected, and the rows it explains report STALE instead of
-#: FAIL.
+#: ML artifacts, and the baseline-8 record re-recorded it again on the same frozen
+#: fit; re-grounding them is a named follow-up (Task 21.17,
+#: ``audits/audit-phase-21-rerecord.md``). Until it lands, this exact pair of
+#: digests is expected, and the rows it explains report STALE instead of FAIL.
+#: The LEFT digest is the FIT side and never moves — re-stamping it would erase
+#: which corpus the committed weights were actually made on. The RIGHT digest is
+#: the corpus on disk, and it moves with every re-record; the amnesty is not
+#: widened by that, because it still names exactly one pair.
 #:
 #: Naming BOTH digests, rather than accepting any mismatch, is what keeps the
 #: fingerprint checks real gates: a corpus perturbed by so much as one added
@@ -198,7 +202,7 @@ Status = Literal["OK", "FAIL", "ABSENT", "INFO", "STALE"]
 #: and the constant can be deleted along with every branch that reads it.
 _DECLARED_GROUNDING_GAP: Final[tuple[str, str]] = (
     "164ef00c16fa5108aa2d2a691f2f9a65d5ea60faa10f7bbd1604e93f36bc3170",
-    "45b11993d7badcc9c413ff6db0ee0b5e693006173185d0295bb3a16f221e59a8",
+    "0704a462fde1d9258826464c23aeca29f3fd7b6e841710915d246892ffeed636",
 )
 
 

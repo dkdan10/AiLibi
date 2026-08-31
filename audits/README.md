@@ -278,3 +278,9 @@ directory's `README.md`, which carries the tallies and the proposed routing.
   maintenance re-record: five live 9p2i seeds at the corrected slate into a
   scratch directory, the validity gate, the six merged repairs read off the
   fresh bytes beside their committed reference values, and the GO/ABANDON call.
+- [audit-phase-21-rerecord.md](audit-phase-21-rerecord.md) — the baseline-8
+  maintenance record: the projection and STOP rule committed before the first
+  seed, the four legs with their actuals against that bracket, the validity
+  gates, the recorded substrate stamp, the re-record log, the published
+  instrument cells before and after, and what the record does not discharge.
+  It decides nothing — no bars, no verdict — and it mints baseline 8.
