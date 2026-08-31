@@ -224,9 +224,7 @@ CONTENT_VS_OWN_MEMORY_MISS: Final[EvidenceMechanism] = EvidenceMechanism(
                     speaker_b="p-5",
                     self_linked=False,
                     weak=True,
-                    description_contains=(
-                        "[weak signal: endpoint-tick si"
-                    ),
+                    description_contains=("[weak signal: endpoint-tick si"),
                 ),
             ),
             baseline6=(
