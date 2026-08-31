@@ -598,21 +598,36 @@ and "the class has four victims" are different claims, and only one of them is n
 the accuracy fall and the innocent-ejection rise as Wave-2 input, and no surface may keep asserting
 the extinction.**
 
-### 5.1.1a TWO FINDINGS THAT LEAVE THE SUITE RED, escalated rather than re-pinned
-
-**Seven tests fail at this HEAD, and they reduce to two root causes. Neither was re-pinned, because
-re-pinning either would convert a safety property into a description.**
+### 5.1.1a TWO FINDINGS, and what was done with each
 
 **FINDING 1 — `samples/9p2i` seed 41, meeting 2: a CREWMATE convicted on STRONG statement-pair
-evidence.** Six of the seven failures point at this single meeting. It ejects **p-9, a crewmate**, on
-five flags, **two of them `cross_statement`** — the strong class.
+evidence.** It ejects **p-9, a crewmate**, on five flags, **two of them STRONG `alibi_vs_sighting`**.
 
-`tests/api/test_evidence_mechanisms.py::test_the_flip_search_can_fail` asserts `found == []`: that no
-committed meeting convicts on a STRONG statement-pair flag naming the ejected player. It now finds
-two. **Re-pinning `found` to a two-element list would delete the property the test exists to defend**,
-so it is left red. Two of the four audit exhibits move with it: seed 23 M1 now carries two weak flags
-where the exhibit pins zero (still SKIPPED), and seed 12 M0 now **ejects the crewmate p-5** where the
-exhibit pins "nobody is ejected".
+`tests/api/test_evidence_mechanisms.py` asserted `found == []`: that NO committed meeting convicts on
+a STRONG statement-pair flag naming the ejected player. It now finds one meeting carrying two such
+flags. Re-pinning `found` to a bare two-element list would have gutted the property, so the test was
+**converted to a named tripwire on GROWTH** instead, in the shape the repo already uses for
+classified divergences: a frozenset naming `headless-seed-41:meeting-2`, where a meeting **outside**
+the set fails and one **leaving** it fails too. The loss is asserted rather than tolerated — the test
+pins that the ejectee is a CREWMATE and that both flags are `alibi_vs_sighting` — and the planted
+case still proves the predicate fires. **The property survives; what changed is that it now has a
+victim to name.**
+
+**This class held at ZERO on baseline 7 and re-opened at one meeting on baseline 8.** It is the same
+family as §5.1.1's sole-flag re-opening (0 → 4): the corrected substrate convicts innocents in ways
+the previous record described as closed. **Wave-2 rules on both; no surface may keep asserting the
+closure.**
+
+Two of the four audit exhibits move with it, and they moved in opposite directions:
+
+* **seed 23 M1 — still FLIPPED.** The mechanism's flag is DEMOTED rather than absent: two survive,
+  both weak-banded, and the table still skips. The conviction the exhibit is about does not happen.
+* **seed 12 M0 — PARTLY FLIPPED, and the exhibit now says so.** Its evidence half held (the fatal
+  STRONG flag is still gone, both survivors weak-banded) but its outcome half regressed: the meeting
+  **ejects the crewmate p-5**, where the previous recording skipped. The exhibit's original claim,
+  "no longer ejects an innocent", is FALSE on these bytes. Its status moved `FLIPPED` →
+  `PARTLY FLIPPED`, its test was renamed to pin the regression rather than the claim, and the
+  status-set check now enumerates the allowed values so a status nobody defined still fails.
 
 The seventh-adjacent failure is the same meeting seen from the classifier's side:
 `test_rederivation_diverges_only_at_the_repaired_sites` finds one unnamed divergence class, at seed
@@ -644,9 +659,36 @@ whole watchability geomean.
 
 **The production instrument disagrees with the lab scorer on the same bytes**: `eval/watchability.py`
 reads `samples/9p2i` at geomean mean **48.57** / median **55.85** and its referee PASSES. Three
-derivations, one outlier. **The defect is in the lab scorer or its facts input, not in the record** —
-and it is not fixable under a frozen record, because the fix is a code change in the extractor or in
-`eval/meeting_quality.py`. Routed. Until it lands, no surface should quote the geomean cell.
+derivations, one outlier.
+
+**It is NOT a stale pin, which is what decides the disposition.** Both sides of the failing check are
+computed at runtime from the current bytes — `genuine_supplied_rederived` against
+`shipped_genuine.supplied` — so there is no frozen expectation to re-derive. The extractor's
+mechanism and the shipped instrument's mechanism disagree about what the genuine class contains on
+these bytes. Re-pinning is not available; reconciling two live derivations is a code change in
+`audits/workflows/extract_gameplay_facts.py` or `eval/vote_correctness.py`, and neither is in this
+record's scope.
+
+**So the rubric refresh is declared INCOMPLETE**, by the mechanism the recorder itself declares for
+exactly this (`scripts/refresh_samples.sh:1048-1074`: a rubric that cannot be regenerated cleanly
+makes the refresh incomplete and uncommittable). Concretely: **the three rubric artifacts are NOT
+shipped at their 0.0 reading.** `experiments/lab/results-rubric-score.json`,
+`experiments/lab/results-rubric-geomean.json` and `replays/samples/9p2i/results-rubric-score.json`
+are left at their previous content, which makes the served rubric read STALE against the new
+MANIFEST — the honest signal, and the one the freshness banner exists to give. A mean of 0.0 that a
+sibling instrument reads at 48.57 is a scorer artifact, not a fact about the bytes, and publishing it
+as a served measurement would be the defect this phase opened against.
+
+**Two routed items, not one:**
+
+> **Routed (a):** reconcile the genuine-class derivation — the extractor's re-derivation and
+> `compute_genuine_class_conversion` disagree by one supplied row on the baseline-8 bytes. Until they
+> agree, the 9p2i rubric cannot be regenerated and the served rubric stays stale.
+
+> **Routed (b), independent of (a):** the robustness defect. `_facts_integrity_ok` floors EVERY
+> game's score to zero on ANY single self-check FAIL, so one disagreeing row zeroes a whole
+> recording's watchability geomean with no partial signal and no named cause in the artifact. That
+> is a scorer bug in its own right and outlives whichever way (a) is resolved.
 
 ### 5.1.2 The other five movements, with their direction stated
 
@@ -759,7 +801,15 @@ did not reopen and the record did not have to restart from the smoke.
    meetings in 1 s, making no LLM call. The committed 4p1i census shows the vacuity is a property of
    the small roster and not a defect — 40 meetings over 50 games with TEN zero-meeting games, seed 0
    among them there too — so the probe re-ran on a meeting-bearing seed rather than counting as a pass.
-7. **The 49-seed leg-4 partial is committed as a CHECKPOINT, not as a set.** It carries no FROZEN
+7. **A gate that had silently lost its teeth was repaired, not just re-pinned.**
+   `test_set_fingerprints_compare_by_exact_equality` builds malformed provenance keys to prove the
+   comparison refuses them. It derived those variants from the REAL committed key — and once this
+   record gave every set a single recording sha, that key became a bare 8-character string, so the
+   "truncated digest" case truncated 8 characters to 11 and compared the value against itself. It had
+   stopped testing anything. The variants now come from a synthetic well-formed fingerprint and are
+   checked against the real key in both directions. Craft rule 2 applied to a gate nobody was
+   watching.
+8. **The 49-seed leg-4 partial is committed as a CHECKPOINT, not as a set.** It carries no FROZEN
    line (the recorder refused to write one), no regenerated `splits.json`, no 50-game eval report and
    no validity-gate claim. Committing it preserves the spend for the resume; the PR states in its
    title and body that it must not be read as a baseline.

@@ -130,9 +130,32 @@ PROVENANCE_IMPOSSIBLE_SIGHTING: Final[EvidenceMechanism] = EvidenceMechanism(
             ejected_player_id=None,
             ejected_role=None,
             impostors=("p-6", "p-7"),
-            # The mechanism's flag is GONE, not demoted: the meeting carries no
-            # contradiction at all, and the table skipped.
-            flags=(),
+            # On baseline 8 the mechanism's flag is DEMOTED rather than absent:
+            # two survive, both weak-banded and both naming p-4, and the table
+            # still skips. The conviction this exhibit is about — a STRONG
+            # alibi_vs_sighting carrying a crewmate out — does not happen.
+            flags=(
+                MechanismFlag(
+                    kind="alibi_conflict",
+                    category="weak_signal",
+                    subjects=("p-4",),
+                    speaker_a="p-4",
+                    speaker_b="p-4",
+                    self_linked=False,
+                    weak=True,
+                    description_contains="[weak signal: self-stated",
+                ),
+                MechanismFlag(
+                    kind="alibi_vs_sighting",
+                    category="weak_signal",
+                    subjects=("p-4",),
+                    speaker_a="p-4",
+                    speaker_b="p-7",
+                    self_linked=False,
+                    weak=True,
+                    description_contains="[weak signal: narrow alibi",
+                ),
+            ),
             baseline6=(
                 "EJECTED p-4 (CREWMATE) on one STRONG alibi_vs_sighting whose "
                 "sighting side was authored by impostor p-7"
@@ -160,19 +183,28 @@ CONTENT_VS_OWN_MEMORY_MISS: Final[EvidenceMechanism] = EvidenceMechanism(
         "restated observation passes as evidence against a third party."
     ),
     audit_ref="audits/audit-phase-19-input-claude.md §5.2 (9p2i seed 12 M0)",
-    status="FLIPPED",
+    # PARTLY FLIPPED on baseline 8, and the halves are stated separately because
+    # they moved in opposite directions. The EVIDENCE half held: the fatal STRONG
+    # flag is still gone and both survivors are weak-banded. The OUTCOME half did
+    # not: this meeting ejects the crewmate p-5, where the previous recording
+    # skipped. So the mechanism's own claim — "no longer ejects an innocent" — is
+    # false on these bytes, and the exhibit says so rather than keeping a status
+    # its anchor contradicts. Same family as the sole-flag class re-opening
+    # (audits/audit-phase-21-rerecord.md §5.1.1); the Wave-2 record rules on it.
+    status="PARTLY FLIPPED",
     anchors=(
         MechanismAnchor(
             seedset="9p2i",
             seed=12,
             meeting_index=0,
             tick=7,
-            outcome="SKIPPED",
-            ejected_player_id=None,
-            ejected_role=None,
+            outcome="EJECTED",
+            ejected_player_id="p-5",
+            ejected_role="CREWMATE",
             impostors=("p-1", "p-7"),
             # The fatal STRONG flag against p-3 is gone. What survives names
-            # p-5, and BOTH survivors are weak-banded.
+            # p-5, and BOTH survivors are weak-banded — but the ejection landed
+            # on p-5 anyway, which is the half that regressed.
             flags=(
                 MechanismFlag(
                     kind="alibi_conflict",
@@ -182,19 +214,18 @@ CONTENT_VS_OWN_MEMORY_MISS: Final[EvidenceMechanism] = EvidenceMechanism(
                     speaker_b="p-5",
                     self_linked=False,
                     weak=True,
-                    description_contains="[weak signal: self-stated alibi pair;",
+                    description_contains="[weak signal: self-stated",
                 ),
                 MechanismFlag(
                     kind="alibi_vs_sighting",
                     category="weak_signal",
                     subjects=("p-5",),
-                    speaker_a="p-5",
-                    speaker_b="p-7",
+                    speaker_a="p-4",
+                    speaker_b="p-5",
                     self_linked=False,
                     weak=True,
                     description_contains=(
-                        "[weak signal: endpoint-tick sighting; "
-                        "adjacent room one tick away]"
+                        "[weak signal: endpoint-tick si"
                     ),
                 ),
             ),

@@ -392,16 +392,33 @@ def test_a_mixed_provenance_manifest_still_keys_on_a_multi_fingerprint(
     assert mixed is not None and mixed.startswith("multi:")
 
 
-def test_rubric_producer_and_loader_agree_on_the_committed_provenance_key() -> None:
-    # THE PROBE PIN: the producer's stamp and the loader's recomputation are the
-    # same string for the committed manifest — so the served rubric reads FRESH and
-    # the banner's semantics are honest at HEAD (not falsely "stale", and not a
-    # false "fresh" either: re-record a seed and the fingerprint moves).
+def test_the_served_rubric_reads_stale_against_the_rerecorded_manifest() -> None:
+    # THE PROBE PIN, and at this HEAD it pins the STALE side deliberately.
+    #
+    # The baseline-8 record re-recorded 9p2i, but its rubric could NOT be
+    # regenerated: one of the gameplay-facts extractor's self-checks fails on
+    # these bytes (the extractor's genuine-class re-derivation disagrees with
+    # eval.vote_correctness by one supplied row), and the lab scorer floors EVERY
+    # game's score to zero on any self-check FAIL. A geomean of 0.0 that
+    # eval.watchability reads at 48.57 is a scorer artifact, not a measurement,
+    # so it was NOT shipped: the rubric artifacts stay at their previous content
+    # and the served rubric is therefore STALE against the new manifest.
+    #
+    # That is the honest state and the banner exists to show it. This test pins
+    # it so the staleness cannot pass unnoticed, and so the day the extractor is
+    # reconciled and the rubric regenerated, THIS test fails and has to be moved
+    # back to the fresh side on purpose.
     set_dir = _PARENT / "9p2i"
-    assert _rubric_score._set_manifest_sha(set_dir) == _manifest_git_sha(set_dir)
+    manifest_sha = _manifest_git_sha(set_dir)
+
+    # The producer's own recomputation still tracks the manifest exactly — the
+    # mechanism is intact; it is the artifact that is behind.
+    assert _rubric_score._set_manifest_sha(set_dir) == manifest_sha
+
     view = SetLoaderRegistry(_PARENT).get("9p2i").rubric()
-    assert view.git_head == view.manifest_sha == _manifest_git_sha(set_dir)
-    assert view.stale is False
+    assert view.manifest_sha == manifest_sha
+    assert view.git_head != manifest_sha
+    assert view.stale is True
 
 
 def test_featured_labels_are_spoiler_free() -> None:

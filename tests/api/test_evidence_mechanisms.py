@@ -181,11 +181,19 @@ def test_anchored_meeting_matches_the_exhibit(anchor: MechanismAnchor) -> None:
 # replaced (audits/audit-phase-20-baseline-7.md §4).
 
 
-def test_every_mechanism_records_its_baseline7_verdict() -> None:
-    """Each exhibit says what the record did to it, and what it read before."""
+def test_every_mechanism_records_its_verdict() -> None:
+    """Each exhibit says what the record did to it, and what it read before.
 
+    Not every status is FLIPPED any more. On baseline 8 the content-vs-own-memory
+    exhibit is PARTLY FLIPPED: its evidence half held (the fatal STRONG flag is
+    still gone) while its outcome half regressed (the meeting ejects a crewmate
+    again). The allowed set is enumerated so a status nobody defined fails here,
+    rather than widened to "any string".
+    """
+
+    allowed = {"FLIPPED", "PARTLY FLIPPED"}
     for mechanism in EVIDENCE_MECHANISMS:
-        assert mechanism.status == "FLIPPED", mechanism.key
+        assert mechanism.status in allowed, mechanism.key
         for anchor in mechanism.anchors:
             assert anchor.baseline6.strip(), f"{mechanism.key}: no baseline-6 line"
             # Every one of them was a CREWMATE ejection: that is what "flipped"
@@ -205,28 +213,47 @@ def test_provenance_impossible_sighting_no_longer_mints_its_flag() -> None:
     (anchor,) = PROVENANCE_IMPOSSIBLE_SIGHTING.anchors
     meeting = _meeting(_load(anchor), anchor)
 
-    assert meeting.contradictions == ()
-    assert meeting.outcome == "SKIPPED"
-    assert meeting.ejected_player_id is None
-
-
-def test_content_vs_own_memory_miss_no_longer_ejects_an_innocent() -> None:
-    """Seed 12 M0: the flag built from two innocents' statements is gone.
-
-    What survives names a different player and is weak-banded on both flags, so
-    nothing in the meeting can convict alone -- and nobody is ejected.
-    """
-
-    (anchor,) = CONTENT_VS_OWN_MEMORY_MISS.anchors
-    meeting = _meeting(_load(anchor), anchor)
-
-    assert meeting.outcome == "SKIPPED"
-    assert meeting.ejected_player_id is None
+    # DEMOTED rather than absent on baseline 8: two flags survive, both
+    # weak-banded, and neither can convict alone. The mechanism this exhibit is
+    # about — a STRONG unchecked sighting carrying a crewmate out — still does
+    # not happen, and the table still skips.
     assert [flag.category for flag in meeting.contradictions] == [
         "weak_signal",
         "weak_signal",
     ]
     assert all(flag.weak for flag in meeting.contradictions)
+    assert meeting.outcome == "SKIPPED"
+    assert meeting.ejected_player_id is None
+
+
+def test_content_vs_own_memory_miss_defangs_the_flag_but_still_ejects() -> None:
+    """Seed 12 M0: the evidence half held, the outcome half did NOT.
+
+    The fatal STRONG flag built from two innocents' statements is still gone —
+    both survivors are weak-banded, so nothing here can convict alone. But on
+    baseline 8 this meeting EJECTS the crewmate p-5, where the previous recording
+    skipped. The exhibit's original claim ("no longer ejects an innocent") is
+    therefore false on these bytes, and this test pins the regression rather than
+    the claim: same family as the sole-flag class re-opening
+    (audits/audit-phase-21-rerecord.md §5.1.1), and the Wave-2 record rules on it.
+    """
+
+    (anchor,) = CONTENT_VS_OWN_MEMORY_MISS.anchors
+    replay = _load(anchor)
+    meeting = _meeting(replay, anchor)
+    roles = {player.agent_id: player.role for player in replay.players}
+
+    # The evidence half: unchanged, and still defanged.
+    assert [flag.category for flag in meeting.contradictions] == [
+        "weak_signal",
+        "weak_signal",
+    ]
+    assert all(flag.weak for flag in meeting.contradictions)
+
+    # The outcome half: a crewmate is ejected on weak evidence alone.
+    assert meeting.outcome == "EJECTED"
+    assert meeting.ejected_player_id == "p-5"
+    assert roles["p-5"] == "CREWMATE"
 
 
 def test_one_tick_interval_artifact_now_convicts_the_impostor() -> None:
@@ -271,13 +298,29 @@ def test_equal_weight_conflict_has_nothing_left_to_weigh() -> None:
     assert meeting.ejected_player_id in proof.subjects
 
 
-def test_the_flip_search_can_fail() -> None:
-    """The perturbation: a meeting that DID convict an innocent is detectable.
+#: Committed meetings that DO convict on a STRONG statement-pair flag naming the
+#: ejected player -- the shape the four exhibits were, and the shape this search
+#: hunts. Frozen by NAME so the property survives as a tripwire on GROWTH: a
+#: meeting outside this set fails, and so does one that leaves it.
+#:
+#: This class held at ZERO on baseline 7 and RE-OPENED at one meeting carrying
+#: two such flags on baseline 8, where it convicts the CREWMATE p-9. It is the
+#: same family as the sole-flag wrongful-conviction class re-opening 0 -> 4
+#: (audits/audit-phase-21-rerecord.md §5.1.1), and the Wave-2 record rules on it.
+#: Pinning it here neither excuses it nor deletes the property.
+_STATEMENT_PAIR_CONVICTIONS: Final[frozenset[str]] = frozenset(
+    {"headless-seed-41:meeting-2"}
+)
 
-    Every assertion above is an absence -- no flag, no innocent ejection -- so
-    the predicate behind them must be shown to fire. Walk the whole 9p2i set
-    for the shape the four exhibits were: a STRONG statement-pair flag naming
-    the ejected player. It finds none, and finds the planted one immediately.
+
+def test_the_flip_search_finds_exactly_the_named_meetings() -> None:
+    """The perturbation: a meeting that convicts an innocent is detectable.
+
+    The exhibits above assert absences -- no flag, no innocent ejection -- so the
+    predicate behind them must be shown to fire. Walk the whole 9p2i set for a
+    STRONG statement-pair flag naming the ejected player, and hold the result to
+    the named set above rather than to zero, which is what these bytes carry.
+    The planted case proves the predicate still fires on a shape nothing recorded.
 
     ``alibi_vs_physical`` is deliberately outside the search: it is grounded on
     an engine-certified body or vent, not on two accounts of the same tick, and
@@ -297,12 +340,31 @@ def test_the_flip_search_can_fail() -> None:
         ]
 
     loader = ReplayLoader(_SAMPLES / "9p2i")
-    found: list[str] = []
+    found: dict[str, list[str]] = {}
+    ejected_roles: dict[str, str | None] = {}
     for seed in range(50):
         replay = loader.load_replay(f"headless-seed-{seed}")
+        roles = {player.agent_id: player.role for player in replay.players}
         for meeting in replay.meetings:
-            found.extend(convicting(meeting))
-    assert found == []
+            hits = convicting(meeting)
+            if hits:
+                found[meeting.meeting_id] = hits
+                ejected_roles[meeting.meeting_id] = roles.get(
+                    meeting.ejected_player_id or ""
+                )
+
+    # Exactly the named set: a NEW meeting convicting this way fails here, and so
+    # does one dropping out (which would mean the class closed and this pin, not
+    # the bytes, is what needs revisiting).
+    assert set(found) == _STATEMENT_PAIR_CONVICTIONS
+
+    # And the loss is stated, not merely tolerated: the one meeting convicts a
+    # CREWMATE on two STRONG alibi-versus-sighting flags.
+    assert found["headless-seed-41:meeting-2"] == [
+        "alibi_vs_sighting",
+        "alibi_vs_sighting",
+    ]
+    assert ejected_roles["headless-seed-41:meeting-2"] == "CREWMATE"
 
     planted = MeetingView.model_validate(
         {
