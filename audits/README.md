@@ -262,7 +262,9 @@ directory's `README.md`, which carries the tallies and the proposed routing.
   itself: 300 games at the frozen slate, the pre-registered read bar by bar, and
   the decision the arithmetic selected. FINDING: two bars missed, neither
   re-priced — and the owner then adopted the substrate over that verdict by
-  explicit override (§6.1), which is why the ladder tip stands at baseline 7.
+  explicit override (§6.1), which is how baseline 7 became canon. Baseline 8
+  later re-recorded the same sets on repaired code and succeeded it as the tip;
+  baseline 7 keeps that history and loses only its claim to be current.
 - [audit-phase-20-close.md](audit-phase-20-close.md) — the phase close: the
   whole gate re-run at close HEAD in both evidence states, every dispatched
   contract re-verified, the before/after read back bar by bar, the defects it
@@ -278,3 +280,9 @@ directory's `README.md`, which carries the tallies and the proposed routing.
   maintenance re-record: five live 9p2i seeds at the corrected slate into a
   scratch directory, the validity gate, the six merged repairs read off the
   fresh bytes beside their committed reference values, and the GO/ABANDON call.
+- [audit-phase-21-rerecord.md](audit-phase-21-rerecord.md) — the baseline-8
+  maintenance record: the projection and STOP rule committed before the first
+  seed, the four legs with their actuals against that bracket, the validity
+  gates, the recorded substrate stamp, the re-record log, the published
+  instrument cells before and after, and what the record does not discharge.
+  It decides nothing — no bars, no verdict — and it mints baseline 8.

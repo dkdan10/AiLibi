@@ -248,7 +248,7 @@ def test_meeting_rate_passes_on_committed(nine_report: TournamentReport) -> None
     check = check_meeting_rate_and_resolution(nine_report)
     assert check.passed
     assert check.facts["meeting_rate"] == 1.0
-    assert check.facts["resolved_meetings"] == 152  # was 165
+    assert check.facts["resolved_meetings"] == 151  # was 152
 
 
 def test_meeting_rate_fails_below_floor(nine_report: TournamentReport) -> None:
@@ -292,7 +292,7 @@ def test_meeting_resolution_fails_on_unresolved_meeting(
 def test_no_duplicate_meeting_rows_passes(nine_report: TournamentReport) -> None:
     check = check_no_duplicate_meeting_rows(nine_report)
     assert check.passed
-    assert int(check.facts["meetings_total"]) == 152  # type: ignore[arg-type]  # was 165
+    assert int(check.facts["meetings_total"]) == 151  # type: ignore[arg-type]  # was 152
 
 
 def test_no_duplicate_meeting_rows_fails(nine_report: TournamentReport) -> None:
@@ -831,6 +831,48 @@ def test_seeds_on_disk() -> None:
     assert len(seeds_on_disk(_FOUR)) == 50
 
 
+def test_seeds_on_disk_skips_an_audit_sidecar(tmp_path: Path) -> None:
+    """The planted case: a ``<n>.audit`` stem is skipped, not parsed.
+
+    A wrapper writes ``replay-seed-<n>.audit.jsonl`` beside the replay, and the
+    glob matches it. Parsing that stem raised an uncaught ``ValueError`` and
+    aborted the gate with a traceback instead of a report, so the guard is the
+    difference between a report and a crash — not a tidier list.
+    """
+
+    (tmp_path / "replay-seed-7.jsonl").write_text("")
+    (tmp_path / "replay-seed-11.jsonl").write_text("")
+
+    assert seeds_on_disk(tmp_path) == [7, 11]
+
+    (tmp_path / "replay-seed-7.audit.jsonl").write_text("")
+
+    assert seeds_on_disk(tmp_path) == [7, 11]
+
+
+def test_seeds_on_disk_still_raises_on_a_mistyped_replay(tmp_path: Path) -> None:
+    """The OTHER half: the skip is one recognised shape, not any odd name.
+
+    A mistyped ``replay-seed-7x.jsonl`` must not be quietly excluded — dropping
+    it would let the gate report on the remaining games and call the set clean,
+    which is worse than the crash the sidecar guard removed. Only the exact
+    ``replay-seed-<n>.audit`` stem is skipped.
+    """
+
+    (tmp_path / "replay-seed-7.jsonl").write_text("")
+    (tmp_path / "replay-seed-7x.jsonl").write_text("")
+
+    with pytest.raises(ValueError, match="replay-seed-7x.jsonl"):
+        seeds_on_disk(tmp_path)
+
+    # And a near-miss on the sidecar shape is refused too.
+    (tmp_path / "replay-seed-7x.jsonl").unlink()
+    (tmp_path / "replay-seed-x.audit.jsonl").write_text("")
+
+    with pytest.raises(ValueError, match="replay-seed-x.audit.jsonl"):
+        seeds_on_disk(tmp_path)
+
+
 def test_run_validity_gate_reproduces_9p2i_close() -> None:
     report = run_validity_gate(_NINE)
     assert report.passed
@@ -838,15 +880,15 @@ def test_run_validity_gate_reproduces_9p2i_close() -> None:
     assert report.failing_checks() == ()
     facts = {c.name: c.facts for c in report.checks}
     assert facts["meeting_rate_and_resolution"]["meeting_rate"] == 1.0
-    assert facts["meeting_rate_and_resolution"]["resolved_meetings"] == 152  # was 165
+    assert facts["meeting_rate_and_resolution"]["resolved_meetings"] == 151  # was 152
 
 
 def test_run_validity_gate_reproduces_4p1i_close() -> None:
     report = run_validity_gate(_FOUR)
     assert report.passed
     facts = {c.name: c.facts for c in report.checks}
-    assert facts["meeting_rate_and_resolution"]["meeting_rate"] == 0.8  # was 0.78
-    assert facts["meeting_rate_and_resolution"]["resolved_meetings"] == 40  # was 39
+    assert facts["meeting_rate_and_resolution"]["meeting_rate"] == 0.78  # was 0.8
+    assert facts["meeting_rate_and_resolution"]["resolved_meetings"] == 39  # was 40
 
 
 def test_run_validity_gate_rejects_a_truncated_replay(tmp_path: Path) -> None:

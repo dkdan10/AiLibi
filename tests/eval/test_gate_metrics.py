@@ -931,15 +931,15 @@ def test_committed_9p2i_report_pins_the_audited_gate_metrics() -> None:
 
     # The Task-19.5 canary cell: the successor instrument the canary bands read.
     supplied_channel = gate.supplied_channel_conversion
-    assert supplied_channel.supplied == 76  # was 79
+    assert supplied_channel.supplied == 75  # was 76
     assert supplied_channel.converted == 69  # was 70
-    assert supplied_channel.conversion_rate == pytest.approx(69 / 76)  # was 70 / 79
-    assert supplied_channel.witnessed_vent_supplied == 74  # was 76
-    assert supplied_channel.witnessed_vent_converted == 69  # was 68
+    assert supplied_channel.conversion_rate == pytest.approx(69 / 75)  # was 69 / 76
+    assert supplied_channel.witnessed_vent_supplied == 73  # was 74
+    assert supplied_channel.witnessed_vent_converted == 68  # was 69
     assert supplied_channel.sighting_contradiction_supplied == 0  # was 2
     assert supplied_channel.sighting_contradiction_converted == 0  # was 2
-    assert supplied_channel.whereabouts_lie_supplied == 5  # was 7
-    assert supplied_channel.whereabouts_lie_converted == 2  # was 5
+    assert supplied_channel.whereabouts_lie_supplied == 2  # was 5
+    assert supplied_channel.whereabouts_lie_converted == 1  # was 2
     # The preserved legacy column mirrors the genuine-class cell above.
     assert supplied_channel.legacy_alibi_supplied == 0  # was 1
     assert supplied_channel.legacy_alibi_converted == 0
@@ -949,16 +949,16 @@ def test_committed_9p2i_report_pins_the_audited_gate_metrics() -> None:
     assert gate.lost_opening_accusations == 0
     assert gate.cap_defaulted_turns == 0
 
-    assert gate.accused_impostor_events == 137  # was 148
-    assert gate.accused_impostor_survivals == 52  # was 70
+    assert gate.accused_impostor_events == 132  # was 137
+    assert gate.accused_impostor_survivals == 51  # was 52
     # The 70 accused-impostor survivals partition into rendered-met (voters saw a
     # §4.6-gate-meeting suspicion yet the impostor survived), sheltered sub-gate,
     # and unevidenced. On the baseline-6 re-record the sheltered class is empty, so
     # survivors split rendered-met (34), sheltered (0), and unevidenced (36), the
     # largest share still unevidenced.
-    assert gate.survivals_rendered_met == 18  # was 34
+    assert gate.survivals_rendered_met == 18
     assert gate.survivals_sheltered_sub_gate == 0
-    assert gate.survivals_unevidenced == 34  # was 36
+    assert gate.survivals_unevidenced == 33  # was 34
 
     # Per-seed identities RE-DERIVED from the same committed games. Task 21.9
     # rebuilt the sidecar, so the stored block above and this fold now AGREE:
@@ -1004,7 +1004,8 @@ def test_committed_9p2i_report_pins_the_audited_gate_metrics() -> None:
     )
     assert "INVALID" in raw["gate_metrics"]["genuine_class_conversion"]["note"]
     # ... and the Task-19.5 successor beside it, carrying its canary label.
-    assert raw["gate_metrics"]["supplied_channel_conversion"]["supplied"] == 76
+    # was 76
+    assert raw["gate_metrics"]["supplied_channel_conversion"]["supplied"] == 75
     assert (
         "canary-eligible" in raw["gate_metrics"]["supplied_channel_conversion"]["note"]
     )
@@ -1057,11 +1058,11 @@ def test_committed_flat_4p1i_report_pins_the_gate_metrics() -> None:
     assert gate.lost_opening_accusations == 0
     assert gate.cap_defaulted_turns == 0
 
-    assert gate.accused_impostor_events == 35
-    assert gate.accused_impostor_survivals == 15
-    assert gate.survivals_rendered_met == 1
+    assert gate.accused_impostor_events == 33  # was 35
+    assert gate.accused_impostor_survivals == 13  # was 15
+    assert gate.survivals_rendered_met == 3  # was 1
     assert gate.survivals_sheltered_sub_gate == 0
-    assert gate.survivals_unevidenced == 14
+    assert gate.survivals_unevidenced == 10  # was 14
 
     # JSON-level guard, mirroring the 9p2i pin above: the committed file itself
     # serves the successor cell with its canary label.

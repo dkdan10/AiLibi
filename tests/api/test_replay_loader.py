@@ -1851,20 +1851,21 @@ def test_committed_9p2i_fake_tasks_emergencies_and_repairs_are_named() -> None:
     census = _committed_9p2i_action_census()
 
     fake_tasks = census.by_intent["impostor_do_task"]
-    assert sum(fake_tasks.values()) == 370  # was 415
+    assert sum(fake_tasks.values()) == 373  # was 370
     # Not one of them still renders as a stale label.
     assert fake_tasks.get("IDLE", 0) == 0
     assert fake_tasks.get("MOVING", 0) == 0
     assert fake_tasks.get("TASK", 0) == 0
-    # The 5 that read BLOCKED share a tick with an earlier meeting trigger, so
+    # The 8 that read BLOCKED share a tick with an earlier meeting trigger, so
     # the engine never attempted them at all.
-    assert fake_tasks["PRETEND_TASK"] == 360  # was 410
-    assert fake_tasks["BLOCKED"] == 10  # was 5
+    assert fake_tasks["PRETEND_TASK"] == 365  # was 360
+    assert fake_tasks["BLOCKED"] == 8  # was 10
 
-    # 19 emergency intents: 14 pressed the button, 5 were foreclosed or refused.
-    assert census.by_intent["emergency"] == {"EMERGENCY": 8, "BLOCKED": 2}
-    # 114 repair intents: 83 landed.
-    assert census.by_intent["repair_sabotage"] == {"REPAIR": 16, "BLOCKED": 8}
+    # 12 emergency intents: 10 pressed the button, 2 were foreclosed or refused.
+    assert census.by_intent["emergency"] == {"EMERGENCY": 10, "BLOCKED": 2}  # was 8/2
+    # 38 repair intents: 26 landed.
+    # was {"REPAIR": 16, "BLOCKED": 8}
+    assert census.by_intent["repair_sabotage"] == {"REPAIR": 26, "BLOCKED": 12}
 
 
 def test_committed_9p2i_labels_never_outlive_their_tick() -> None:
@@ -2085,12 +2086,13 @@ def test_committed_turn_marker_census_and_zero_served_leak() -> None:
     """
 
     # Baseline 6 read (971, 53, {invalid_accusation_target: 53}) and (117, 0, {}).
-    # The marked count collapsed to ONE: the structured-turn-marker channel is
+    # The marked count collapsed to TWO: the structured-turn-marker channel is
     # unconditional now, so the guards record annotations instead of splicing
     # prose, and the accusation guard itself fires far less on the v4 openings.
+    # was (871, 1, {invalid_accusation_target: 1}) and (120, 0, {}).
     expected = {
-        _COMMITTED_9P2I_DIR: (871, 1, {"invalid_accusation_target": 1}),
-        _COMMITTED_4P1I_DIR: (120, 0, {}),
+        _COMMITTED_9P2I_DIR: (869, 2, {"invalid_accusation_target": 2}),
+        _COMMITTED_4P1I_DIR: (117, 0, {}),
     }
     for directory, (
         expected_turns,

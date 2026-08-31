@@ -860,6 +860,7 @@ _KILL_GIFT_WALK_CONFIG: Final[ReplayWalkConfig] = ReplayWalkConfig(
     profile="kill-gift",
     on_violation=_raise_kill_gift_walk_violation,
     verify_tick_hashes=True,
+    verify_action_dispositions=True,
     missing_meeting_row="truncate",
     verify_meeting_post_hashes=True,
 )

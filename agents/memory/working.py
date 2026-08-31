@@ -12,10 +12,10 @@ CURRENT STATUS — ``last_seen`` is WIRED; ``set_goal`` / ``set_path`` remain
 without a production writer. ``record_sighting`` has exactly one production
 caller, ``agents/memory/store.py``'s ``_record_last_seen_sightings`` at render
 time, which records each subject's LATEST first-hand sighting so ``_last_seen``
-fills and the §6.6 belief-line suffix renders. Which rows count is gated: a
-witnessed room→room transition always, and an ordinary look as well behind the
-last-seen repair gate (``store.last_seen_from_sightings_enabled``, default OFF
-until its re-record). The writer is idempotent (it skips a row not after the
+fills and the §6.6 belief-line suffix renders. Every first-hand row counts — a
+witnessed room→room transition and an ordinary look alike — so the rendered
+suffix is the argmax over the agent's own log and cannot contradict an
+observation printed above it. The writer is idempotent (it skips a row not after the
 recorded last-seen) so the repeated renders a meeting drives never trip
 ``record_sighting``'s non-decreasing-tick guard, and it is
 §4.7-firewall-suppressed. ``set_goal`` / ``set_path`` are still scaffolding (zero

@@ -4,15 +4,15 @@
 # bytes; the Bash-recorder port is explicitly out of scope. Bug fixes and
 # evidence readers only; no new search.
 #
-# record_ml_corpus.sh — record the frozen ML-calibration corpus at baseline-7
+# record_ml_corpus.sh — record the frozen ML-calibration corpus at baseline-8
 # config — the substrate the PIN BLOCK below pins, and nothing else (provenance:
 # audits/audit-phase-18-baseline-6.md; audits/audit-phase-16-model-lock.md;
 # audits/post-phase-14-ML-training-signal.md §5.6, §7.2; tasks/post-phase-14-plan.md §4).
 #
 # The surrogate (15.13) and the impostor bake-off (15.15+) consume a FROZEN
-# training/calibration corpus recorded at EXACT baseline-7 config — the locked
+# training/calibration corpus recorded at EXACT baseline-8 config — the locked
 # substrate: Qwen/Qwen3.6-27B on Featherless, the qwen3_6_27b prompt set at the
-# versions $REQUIRED_PROMPT_VERSIONS pins, the baseline-7 lever slate (the
+# versions $REQUIRED_PROMPT_VERSIONS pins, the baseline-8 lever slate (the
 # twenty-one retired always-on levers, which since the baseline-7 record include
 # the eight Phase-20 evidence-honesty graduations, with every live toggle
 # default-OFF unless --expect-levers declares otherwise), $0 flat-rate. The PIN
@@ -74,14 +74,14 @@
 #   -h, --help            show this help
 #
 # Operator gate: requires FEATHERLESS_API_KEY and AILIBI_PROMPT_SET=qwen3_6_27b; the
-# corpus is baseline-7, so the FULL substrate is LOCKED: the provider (a run under
+# corpus is baseline-8, so the FULL substrate is LOCKED: the provider (a run under
 # any provider other than featherless — or the explicitly-named hermetic `fake`
 # arm, which may only write OUTSIDE replays/ — is refused, so a corpus game can
 # never be silently recorded off-substrate, AGENTS.md "no silent
 # fallbacks"), the meeting/trigger models (a non-baseline AILIBI_LLM_MEETING_MODEL
 # / AILIBI_LLM_TRIGGER_MODEL override is refused), the endpoint (a non-default
 # AILIBI_FEATHERLESS_BASE_URL override is refused), the LEVER SLATE (the live
-# substrate snapshot must equal the ruled baseline-7 state — a stale AILIBI_*
+# substrate snapshot must equal the ruled baseline-8 state — a stale AILIBI_*
 # lever export, most dangerously AILIBI_IMPOSTOR_ROLL_CALL, is refused before any
 # seed stages), and the per-template prompt versions (the registry must still
 # resolve qwen3_6_27b to the locked version map, and rows recorded off it are
@@ -94,7 +94,7 @@
 # freezes, so a mistimed drop fails loud with the missing seeds named rather than
 # freezing a short set). Commit is one atomic PR after the gate + byte-verify pass
 # per set, with checkpoint commits of completed seed ranges along the way. May
-# share the baseline-7 operator session.
+# share the baseline-8 operator session.
 
 set -euo pipefail
 
@@ -110,26 +110,28 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 CORPUS_ROOT="${AILIBI_ML_CORPUS_ROOT:-$REPO_ROOT/replays/ml_corpus}"
 
 # =============================================================================
-# PIN BLOCK — the baseline-7 substrate this recorder requires.
+# PIN BLOCK — the baseline-8 substrate this recorder requires.
 # =============================================================================
-# The pins below name the BASELINE-7 substrate this recorder records (and
+# The pins below name the BASELINE-8 substrate this recorder records (and
 # freezes) at: Qwen/Qwen3.6-27B (the Task 16.2 locked model,
 # audits/audit-phase-16-model-lock.md, locked 2026-07-12) + the qwen3_6_27b
 # prompt set at the versions $REQUIRED_PROMPT_VERSIONS pins (lineage v1 bespoke
 # port -> v2 elicitation -> v3 persona voice -> v4 evidence honesty -> v5) + the
-# baseline-7 lever slate: the twenty-one retired always-on levers, which since
+# baseline-8 lever slate: the twenty-one retired always-on levers, which since
 # the baseline-7 record include the eight Phase-20 evidence-honesty levers
-# (audits/audit-phase-20-baseline-7.md §6.1), with the three live toggles
-# (impostor_roll_call, last_seen_from_sightings, vent_single_mint) recorded OFF
-# unless --expect-levers declares one ON. The preflight COUPLES model + prompt
+# (audits/audit-phase-20-baseline-7.md §6.1), with the one live toggle
+# (impostor_roll_call) recorded OFF unless --expect-levers declares it ON. The
+# two Wave-1a repair gates graduated at Task 21.15 and are deleted, not
+# retired, so this slate is byte-identical across that flip.
+# The preflight COUPLES model + prompt
 # set + prompt versions + lever slate as ONE substrate, so they re-pin together.
 #
-# The COMMITTED bytes are a different question. Both artifacts sit at baseline 7
-# — samples and corpus were re-recorded together at that record, and every stamp
-# carries that lever slate and model — but their MANIFEST version cells read v4:
-# the registry was bumped to v5 afterwards. $REQUIRED_PROMPT_VERSIONS is the NEXT
-# recording's requirement, not a reading of the rows on disk, so a resume over
-# them is refused at freeze. The freeze-path guards still REFUSE anything
+# The COMMITTED bytes now AGREE with these pins. Both artifacts sit at baseline
+# 8 — samples and corpus were re-recorded together at that record, every stamp
+# carries this lever slate and model, and their MANIFEST version cells read v5,
+# which is what $REQUIRED_PROMPT_VERSIONS names. The bump-in-flight window that
+# made the rows disagree with the pins is closed, so a resume over them is no
+# longer refused for that reason. The freeze-path guards still REFUSE anything
 # off-substrate (a prior baseline-6 recording, whose stamp carries the eight
 # Phase-20 levers OFF; a phantom seed) from being resumed-over and frozen: that
 # refusal is correct and expected. Nothing here weakens to accommodate
@@ -160,7 +162,7 @@ REQUIRED_PROMPT_SET="qwen3_6_27b"
 # task — so the preflight asserts orchestrator.game.PROMPT_VERSION_SETS still
 # resolves $REQUIRED_PROMPT_SET to exactly this map, and the finalize refuses to
 # freeze a set whose MANIFEST rows carry any other version string. Sorted,
-# comma+space-joined (the MANIFEST cell rendering). The committed baseline-7
+# comma+space-joined (the MANIFEST cell rendering). The committed baseline-8
 # corpus carries v4 in its own MANIFEST, so this constant no longer re-freezes
 # it — that re-lock is the owner decision Phase 21 already took: Task 21.15
 # re-records all four sets from scratch on the corrected substrate.
@@ -697,7 +699,7 @@ PYINNER
 }
 
 # Refuse to treat a present replay as a corpus game unless its BYTES prove the
-# baseline-7 provenance the corpus contract requires. File presence is not
+# baseline-8 provenance the corpus contract requires. File presence is not
 # provenance: the resume skip-scan trusts any non-empty in-range replay, but the
 # model/endpoint preflights only govern seeds recorded by THIS run, and the
 # MANIFEST cannot carry these checks (its policy column renders an absent stamp
@@ -774,6 +776,11 @@ slate = {
 canonical_keys = set(SUBSTRATE_FLAG_KEYS)
 bad: list[str] = []
 for path in sorted(set_dir.glob("replay-seed-*.jsonl")):
+    # A wrapper's ``replay-seed-<n>.audit.jsonl`` observation sidecar matches this
+    # glob and is NOT a replay: judged as one it reports as a stampless replay and
+    # refuses the freeze at the end of a multi-hour leg. Skip a non-integer stem.
+    if not path.stem.rsplit("-", 1)[1].isdigit():
+        continue
     stamp = read_tactical_policy_stamp(path)
     if stamp is None:
         bad.append(f"{path.name}: no tactical_policy stamp")
@@ -889,7 +896,7 @@ PYINNER
   fi
   {
     printf '\n'
-    printf '**FROZEN** — recording-time code state git_sha `%s` (the commit the recorder RAN at, NOT the commit containing these bytes, which cannot exist yet at freeze time; recorded %s; Task 15.12, baseline-7 re-record per Task 20.36): the %s ML-calibration corpus is frozen at Qwen/Qwen3.6-27B Featherless, prompt set %s, lever slate — expected ON = %s, every other live toggle OFF, the graduated levers unconditional ON — tactical policy %s. By-game split rule: %s. Do not re-record without re-freezing.\n' \
+    printf '**FROZEN** — recording-time code state git_sha `%s` (the commit the recorder RAN at, NOT the commit containing these bytes, which cannot exist yet at freeze time; recorded %s; Task 15.12, baseline-8 re-record per Task 21.15): the %s ML-calibration corpus is frozen at Qwen/Qwen3.6-27B Featherless, prompt set %s, lever slate — expected ON = %s, every other live toggle OFF, the graduated levers unconditional ON — tactical policy %s. By-game split rule: %s. Do not re-record without re-freezing.\n' \
       "$git_sha" "$refreshed_at" "$set_name" "$REQUIRED_PROMPT_SET" "$expect_levers_desc" "$POLICY_STAMP" "$SPLIT_RULE_DESC"
   } >>"$manifest"
   echo "  FROZEN: $manifest at git_sha $git_sha"
@@ -971,7 +978,7 @@ resolve_physical_path() {
   printf '%s' "$target"
 }
 
-# The corpus is baseline 7 == Featherless. Refuse every provider but featherless
+# The corpus is baseline 8 == Featherless. Refuse every provider but featherless
 # and the explicitly-named hermetic `fake`, so a corpus game can never be
 # silently recorded off-substrate (an anthropic/ollama misconfiguration). An
 # UNSET or empty variable still resolves to featherless, so the silent-fake path
@@ -986,7 +993,7 @@ resolve_physical_path() {
 # would let an operator confirm a plan the real run rejects.
 PROVIDER="$(printf '%s' "${AILIBI_LLM_PROVIDER:-featherless}" | tr '[:upper:]' '[:lower:]')"
 if [[ "$PROVIDER" != "featherless" && "$PROVIDER" != "fake" ]]; then
-  echo "Error: the ML-calibration corpus is baseline-7, so it records ONLY on featherless." >&2
+  echo "Error: the ML-calibration corpus is baseline-8, so it records ONLY on featherless." >&2
   echo "       Unset AILIBI_LLM_PROVIDER or set it to 'featherless' (got '$PROVIDER')." >&2
   exit 1
 fi
@@ -1151,7 +1158,7 @@ echo "Locked model OK: meeting/trigger models pinned to $DEFAULT_FEATHERLESS_MOD
 
 # ... and the ENDPOINT: build_default_client also honors AILIBI_FEATHERLESS_BASE_URL
 # (llm/provider.py ENV_FEATHERLESS_BASE_URL), so a leftover export for a mock or
-# staging endpoint would record the whole "baseline-7 Featherless" corpus against
+# staging endpoint would record the whole "baseline-8 Featherless" corpus against
 # an alternate server while the MANIFEST stamps the baseline model and $0 — and
 # the validity gate cannot catch it if that endpoint echoes the same model id.
 # Refuse any non-default override (never silently discard an operator's explicit
@@ -1234,7 +1241,7 @@ record_set() {
     return 1
   fi
   # File presence is not provenance: before the resume skip-scan treats a present
-  # replay as "already recorded", prove its bytes carry the full baseline-7
+  # replay as "already recorded", prove its bytes carry the full baseline-8
   # provenance — the canonical five-field 15.9 stamp, the locked model on every
   # recorded call, and $0 cost (see check_replay_provenance — a foreign replay
   # would otherwise freeze undetected).
@@ -1577,12 +1584,12 @@ record_set() {
     return 1
   fi
 
-  # Refuse to freeze a replay whose bytes fail the full baseline-7 provenance
+  # Refuse to freeze a replay whose bytes fail the full baseline-8 provenance
   # check (re-run of the pre-spend guard over the now-complete set, incl.
   # anything that appeared mid-run; MANIFEST rows cannot carry this check — see
   # check_replay_provenance).
   if ! check_replay_provenance "$set_dir"; then
-    echo "ERROR: $set_name holds replays that fail baseline-7 provenance; NOT freezing." >&2
+    echo "ERROR: $set_name holds replays that fail baseline-8 provenance; NOT freezing." >&2
     return 1
   fi
 

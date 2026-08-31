@@ -932,6 +932,10 @@ def _byte_fixture_memory() -> AgentMemory:
 # The bytes :func:`_byte_fixture_memory` renders to. Committed, not recomputed:
 # an expected value derived at assert time from the code under test would agree
 # with any change it made.
+#
+# The belief line was `- p-2: suspicion 0.55` until the Wave-1a graduation
+# (4ea88689) flipped `last_seen_from_sightings` unconditional; the last-seen
+# clause is that repair's render, on a hand-built store (no replay bytes).
 _EXPECTED_FIXTURE_RENDER = """\
 ## Your role: CREWMATE
 
@@ -944,7 +948,7 @@ _EXPECTED_FIXTURE_RENDER = """\
 - [tick 0] You saw every other player in CAFETERIA: p-2, p-3, p-4, p-5.
 
 ## Your current beliefs:
-- p-2: suspicion 0.55
+- p-2: suspicion 0.55 (last seen in ELECTRICAL at tick 3)
 """
 
 

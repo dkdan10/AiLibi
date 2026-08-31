@@ -2194,7 +2194,7 @@ class TestCommittedCorpusTargetingPins:
         assert (
             after.free_kills_declined.numerator,
             after.free_kills_declined.denominator,
-        ) == (8, 228)
+        ) == (8, 237)  # was (8, 228)
         assert after.free_kills_declined.rate is not None
         assert after.free_kills_declined.rate < 0.10
         assert after.decline_reason_ranking == 0
@@ -2205,19 +2205,20 @@ class TestCommittedCorpusTargetingPins:
         # frozen ``before`` describes the BASELINE-6 bytes (2,461 decisions, 130
         # in-vent), which the record replaced, so the two are no longer
         # comparable and only the measured side is pinned.
-        assert after.decisions_reconstructed == 1750
-        assert after.in_vent_decisions == 111
+        assert after.decisions_reconstructed == 1826  # was 1750
+        assert after.in_vent_decisions == 119  # was 111
 
     @pytest.mark.slow
     def test_no_recorded_kill_is_lost(self) -> None:
         # The loss guard: a repair that gains free kills must not silently drop one
         # the recording made. Every recorded kill state re-emits the same intent.
         # Baseline 6 recorded 225 / 640 / 64 / 57.
+        # was 220 / 663 / 67 / 61.
         for name, recorded_kills in (
-            ("samples/9p2i", 220),
-            ("ml_corpus/9p2i", 663),
-            ("samples/4p1i", 67),
-            ("ml_corpus/4p1i", 61),
+            ("samples/9p2i", 229),
+            ("ml_corpus/9p2i", 678),
+            ("samples/4p1i", 64),
+            ("ml_corpus/4p1i", 62),
         ):
             cells = self._targeting(name)
             assert cells.recorded_kill_decisions == recorded_kills
@@ -2243,9 +2244,14 @@ class TestCommittedCorpusTargetingPins:
         assert [
             (after[name].ghost_top.numerator, after[name].ghost_top.denominator)
             for name in names
-        ] == [(5, 1750), (4, 5528), (0, 551), (0, 529)]
+        ] == [
+            (3, 1826),
+            (4, 5584),
+            (0, 536),
+            (0, 526),
+        ]  # was [(5, 1750), (4, 5528), (0, 551), (0, 529)]
         assert after["samples/9p2i"].ghost_top_ejected == 0
-        assert after["samples/9p2i"].ghost_top_unseen_death == 5
+        assert after["samples/9p2i"].ghost_top_unseen_death == 3  # was 5
         assert after["ml_corpus/9p2i"].ghost_top_ejected == 0
         # 4p1i was clean on both sets before and stays clean: the defect was a
         # 9p2i-roster phenomenon, which is to say it biased the eval baseline.

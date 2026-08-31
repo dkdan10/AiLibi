@@ -915,9 +915,9 @@ class TestCommittedW2GateSpecPins:
     """The gp-7 pins over the committed Wave-2 bytes (baseline-6 canonical re-record).
 
     These re-derive from the committed 9p2i bytes. W2 first landed in Task 10.17
-    (W1 -> W2); the current bytes are the baseline-7 record. Off the RECORDED
-    flag census the set reads 85 impostor ejections and 52 non-vent flags split
-    50w/2s across 152 meetings, beside 92 recorded vent flags the referee prices
+    (W1 -> W2); the current bytes are the baseline-8 record. Off the RECORDED
+    flag census the set reads 82 impostor ejections and 57 non-vent flags split
+    50w/7s across 151 meetings, beside the recorded vent flags the referee prices
     on its own term. The frozen prior-era A/B anchors (corrected_w0_baseline.json and
     corrected_w1_baseline.json) are pinned separately by the two
     ``test_w*_baseline_fixture_carries_the_anchor_rows`` tests below.
@@ -943,46 +943,42 @@ class TestCommittedW2GateSpecPins:
         assert channels_by_site == expected
 
     def test_multi_signal_conversion_reads_18_of_64(self) -> None:
-        # The gate ejects 85 impostors on the committed 9p2i bytes. Reading the
-        # RECORDED flag channel rather than a transcript re-derivation, 23 of the
-        # 85 rows carry MULTIPLE signal channels, 62 carry a single channel and 0
-        # are unattributed — one more multi-signal row than the re-derivation
-        # found (seed-33:m1 gains contradiction_flag beside its vent witness).
-        # The channel decomposition per site is pinned above against the
-        # committed W2 baseline fixture.
+        # The gate ejects 82 impostors on the committed 9p2i bytes. Reading the
+        # RECORDED flag channel rather than a transcript re-derivation, 27 of the
+        # 82 rows carry MULTIPLE signal channels, 55 carry a single channel and 0
+        # are unattributed. The channel decomposition per site is pinned above
+        # against the committed W2 baseline fixture.
         report = _load_committed_9p2i()
         result = compute_multi_signal_conversion(report.report.games)
 
-        assert result.impostor_ejections == 85  # was 78
-        assert result.multi_signal_conversions == 23  # was 22
-        assert result.single_signal_conversions == 62  # was 63
+        assert result.impostor_ejections == 82  # was 85
+        assert result.multi_signal_conversions == 27  # was 23
+        assert result.single_signal_conversions == 55  # was 62
         assert result.unattributed_conversions == 0
-        assert result.multi_signal_rate == pytest.approx(23 / 85)  # was 22 / 85
+        assert result.multi_signal_rate == pytest.approx(27 / 82)  # was 23 / 85
 
     def test_supply_gauges_read_the_corrected_instrument(self) -> None:
         # The supply row off the RECORDED non-vent census on the committed 9p2i
-        # bytes: 52 flags split 50w/2s across 152 meetings, role split 41 CREW /
-        # 11 IMP, 129 zero-contradiction meetings, genuine-subject supply 1,
-        # accused-impostor 122, and 450 over-gate §6.6 listener rows. The vent
+        # bytes: 57 flags split 50w/7s across 151 meetings, role split 50 CREW /
+        # 7 IMP, 126 zero-contradiction meetings, genuine-subject supply 7,
+        # accused-impostor 118, and 432 over-gate §6.6 listener rows. The vent
         # class is excluded here and rides the referee's own vent term, so this
-        # is the deduction-flag half of a 144-flag record (92 of them vents).
-        # Against the retired transcript re-derivation the census gains 10 flags
-        # net — it loses ones the transcript minted without the private channels
-        # and gains ones the record carries that no transcript can reconstruct —
-        # and the genuine-class supply collapses from 10 meetings to 1.
+        # is the deduction-flag half of the record. The baseline-8 re-record
+        # re-opens the strong band (2 -> 7) and the genuine-subject supply
+        # (1 -> 7) that the baseline-7 bytes had nearly starved.
         report = _load_committed_9p2i()
         gauges = compute_supply_gauges(report.report.games)
 
-        assert gauges.meetings_total == 152
-        assert gauges.total_flags == 52  # was 42
-        assert gauges.weak_flags == 50  # was 39
-        assert gauges.strong_flags == 2  # was 3
-        assert gauges.zero_contradiction_meetings == 129  # was 127
-        assert gauges.genuine_subject_meetings == 1  # was 10
-        assert gauges.flag_subjects_crew == 41  # was 36
-        assert gauges.flag_subjects_impostor == 11  # was 6
-        assert gauges.accused_impostor_meetings == 122
-        assert gauges.over_gate_listener_rows == 450
+        assert gauges.meetings_total == 151  # was 152
+        assert gauges.total_flags == 57  # was 52
+        assert gauges.weak_flags == 50
+        assert gauges.strong_flags == 7  # was 2
+        assert gauges.zero_contradiction_meetings == 126  # was 129
+        assert gauges.genuine_subject_meetings == 7  # was 1
+        assert gauges.flag_subjects_crew == 50  # was 41
+        assert gauges.flag_subjects_impostor == 7  # was 11
+        assert gauges.accused_impostor_meetings == 118  # was 122
+        assert gauges.over_gate_listener_rows == 432  # was 450
 
     def test_corrected_w2_baseline_matches_a_rederivation(
         self, committed_9p2i_report: TournamentEvalReport

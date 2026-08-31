@@ -17,4 +17,4 @@
 - [tick 4] p-3 left ADMIN.
 
 ## Your current beliefs:
-- p-4: suspicion 0.60
+- p-4: suspicion 0.60 (last seen in ADMIN at tick 10)

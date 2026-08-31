@@ -279,15 +279,38 @@ def resolve_roster_knobs(sample_dir: Path) -> tuple[int, int, int]:
     return (roster.num_players, roster.num_impostors, roster.tasks_per_crewmate)
 
 
-def seeds_on_disk(sample_dir: Path) -> list[int]:
-    """Seeds with a committed ``replay-seed-{n}.jsonl``, sorted and de-duplicated."""
+#: The ONE non-replay name ``replay-seed-*.jsonl`` legitimately matches: a
+#: wrapper's per-seed observation log, ``replay-seed-<n>.audit.jsonl``, whose stem
+#: ends ``<n>.audit``. Recognised EXACTLY so the skip cannot widen into a silent
+#: drop of a mistyped replay.
+_AUDIT_SIDECAR_STEM: Final = re.compile(r"^replay-seed-\d+\.audit$")
 
-    return sorted(
-        {
-            int(path.stem.rsplit("-", 1)[1])
-            for path in sample_dir.glob("replay-seed-*.jsonl")
-        }
-    )
+
+def seeds_on_disk(sample_dir: Path) -> list[int]:
+    """Seeds with a committed ``replay-seed-{n}.jsonl``, sorted and de-duplicated.
+
+    The glob also matches a wrapper's ``replay-seed-<n>.audit.jsonl`` observation
+    sidecar, and parsing that stem raised an uncaught ``ValueError`` that aborted
+    the gate with a traceback instead of a report. That ONE shape is skipped.
+
+    Any OTHER non-numeric stem still raises. A mistyped ``replay-seed-7x.jsonl``
+    must not be silently excluded: dropping it would let the gate report on the
+    remaining games and call the set clean, which is the silent-fallback failure
+    the loud parse was protecting against.
+    """
+
+    seeds: set[int] = set()
+    for path in sample_dir.glob("replay-seed-*.jsonl"):
+        core = path.stem.rsplit("-", 1)[1]
+        if core.isdigit():
+            seeds.add(int(core))
+        elif not _AUDIT_SIDECAR_STEM.match(path.stem):
+            raise ValueError(
+                f"{path.name}: not a replay and not the recognised "
+                f"replay-seed-<n>.audit.jsonl sidecar — refusing to report on a "
+                "set holding an unrecognised replay-shaped file"
+            )
+    return sorted(seeds)
 
 
 def roles_by_seed(
@@ -479,6 +502,7 @@ _WALK_CONFIG: Final[ReplayWalkConfig] = ReplayWalkConfig(
     profile="validity-gate",
     on_violation=_raise_walk_violation,
     verify_tick_hashes=True,
+    verify_action_dispositions=True,
     missing_meeting_row="truncate",
     verify_meeting_post_hashes=True,
     reject_trailing_rows=True,

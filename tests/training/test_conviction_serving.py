@@ -94,10 +94,11 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 _CORPUS = _REPO_ROOT / "replays" / "ml_corpus" / "9p2i"
 
 # The committed corpus test split's meeting count. A measurement of the corpus,
-# so it moves with every re-record: 96 on baseline 6, 87 on the baseline-7 record
+# so it moves with every re-record: 96 on baseline 6, 87 on the baseline-7 record,
+# 91 on the baseline-8 record
 # (``report-conviction-model.md`` §5 describes the baseline-6 shape, 150 games /
 # 463 meetings). Pinned so a silent under-coverage of the parity walk fails loud.
-_EXPECTED_TEST_MEETINGS = 87
+_EXPECTED_TEST_MEETINGS = 91  # was 87
 
 _ACTION_ADAPTER: TypeAdapter[Action] = TypeAdapter(Action)
 

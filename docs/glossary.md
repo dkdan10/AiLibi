@@ -39,8 +39,8 @@ in play, the game's are **crewmate** and **impostor**.
 
 A numbered reference recording: one recording of the sample sets under a stated
 set of behavioural settings, which everything afterwards is measured against.
-Seven exist; the newest — the ladder tip — is baseline 7, recorded 2026-08-25
-([`audits/audit-phase-20-baseline-7.md`](../audits/audit-phase-20-baseline-7.md)).
+Eight exist; the newest — the ladder tip — is baseline 8, recorded 2026-08-31
+([`audits/audit-phase-21-rerecord.md`](../audits/audit-phase-21-rerecord.md)).
 
 ### adopting record (the recording that adopts a change)
 
@@ -52,8 +52,8 @@ makes it canonical are the same event
 
 ### the ladder tip (the newest reference recording)
 
-Where the substrate currently stands. "The ladder tip stands at baseline 7"
-([`audits/audit-phase-20-baseline-7.md`](../audits/audit-phase-20-baseline-7.md)); the
+Where the substrate currently stands. "The ladder tip stands at baseline 8"
+([`audits/audit-phase-21-rerecord.md`](../audits/audit-phase-21-rerecord.md)); the
 phrase is checked against that audit by
 [`scripts/check_doc_facts.py`](../scripts/check_doc_facts.py), so no document
 can quietly name a different one.
@@ -63,10 +63,14 @@ can quietly name a different one.
 A behavioural change ships behind an `AILIBI_*` environment gate, then
 *graduates* at a reference recording: the gate is deleted, the behaviour becomes
 unconditional, and the key survives only in the recording stamp for provenance.
-Twenty-one have graduated; three live toggles remain — `impostor_roll_call`,
-`last_seen_from_sightings` and `vent_single_mint`
+Twenty-one have graduated; one live toggle remains — `impostor_roll_call`
 ([`orchestrator/replay.py`](../orchestrator/replay.py)); graduating obliges a
 prose sweep ([AGENTS.md](../AGENTS.md), "Graduation sweeps").
+
+A *repair* gate is not a lever and graduates differently: it records no arm and
+nothing is decided on it, so at its record it is deleted outright and promoted
+nowhere, which leaves the graduated-lever stamp keys — and the MANIFEST `flags`
+cell derived from them — byte-identical across the flip.
 
 ### the flip bar (formerly "the §1.3 bar")
 

@@ -164,8 +164,9 @@ front door made true, the inference channel repaired, and one pre-registered
 record. That record was spent on 2026-08-25, and the phase read it against bars
 it had written down before the repairs existed. Two of them missed — conviction
 accuracy without engine-certified proof at 61/103 = 0.5922 against 0.60, short
-by 0.0078, and 42 wrongful ejections against fewer than 35 — so the rule's
-verdict is a finding, not an adoption. Reference recording 7 is canon because
+by 0.0078, and wrongful ejections at 42 against fewer than 35, down from 79 at
+the recording before it but not far enough — so the rule's verdict is a finding,
+not an adoption. Reference recording 7 became canon because
 the owner overrode that verdict in writing on 2026-08-26, on stated grounds, and
 the phase closed behind it that same day at `d8ec0a1c`
 ([close audit](../audits/audit-phase-20-close.md)).
@@ -174,24 +175,54 @@ the phase closed behind it that same day at `d8ec0a1c`
 
 ---
 
+## Phase 21 — the substrate told the truth, and the record caught up
+
+Phase 20's repairs had landed in the code but not in the bytes: every instrument,
+the training corpus, the front door and the spectator were still reading
+recordings made by code that no longer existed. A review of the whole record
+found the shape of the problem — a re-recording had once moved the bytes and
+relabelled one word while every number stayed behind, leaving a green check
+certifying a document it contradicted. Phase 21 repaired what the engine records
+and what a model is shown (discarded actions stop being written down as though
+they happened, the belief line stops contradicting the agent's own sightings,
+each witnessed vent is remembered once instead of twice, the oracle voice leaves
+the templates, and structured testimony survives to the ballot), then spent a
+twelve-hour recording on 2026-08-31 to put those repairs into the record.
+
+That recording is **reference recording 8**, and it decided nothing. It has no
+bars and no verdict by design: it re-records, publishes every cell before and
+after, and leaves every judgment to the record that comes after it. Some of what
+it published is unwelcome — conviction accuracy without engine-certified proof
+fell, wrongful ejections rose from 42 to 46, and a class of wrongful conviction
+that the previous record had described as extinct reappeared at four cases. Those
+are published unchanged, which is the whole point of separating a maintenance
+record from an adopting one.
+[Record](../audits/audit-phase-21-rerecord.md).
+
+---
+
 ## Where the sample sets came from
 
-The 100 committed replays under `replays/samples/` are the adopting record for
-reference recording 7, made 2026-08-25. Eight evidence-honesty settings graduated
-at that recording — task completion read from events, the self-location trail,
-the movement-claim shape, grounded prosecution, map-aware arbitration, structured
-turn markers, meeting-outcome memory and the coalesced memory render — beside the
-thirteen already retired, twenty-one graduated in total. The impostor-answer arm
-still has not shipped, so this record too was made in a bare environment with
-that toggle off.
+The 100 committed replays under `replays/samples/` are reference recording 8,
+made 2026-08-31. It is a **maintenance** record: it re-recorded the same four
+sets on repaired code at a bumped prompt set, published every instrument cell
+before and after, and **decided nothing** — no bars, no verdict, nothing adopted.
+It inherits reference recording 7's settings exactly: the same twenty-one
+graduated settings, the impostor-answer arm still unshipped and recorded off, and
+two repair gates that were flipped on for good and deleted rather than graduated,
+which is why the recorded settings list is unchanged between the two.
 
-**Read the record's own §6.1 before citing it.** The pre-registered decision rule
-returned **FINDING**, not adoption: two of its bars missed. Reference recording 7
-is canon because the owner adopted it by an explicit override of that verdict, on
-stated grounds — not because the bars passed
+**Read reference recording 7's own §6.1 before citing either.** Recording 8
+succeeded recording 7 as the newest, but it adopted nothing of its own and
+inherited that substrate exactly as it was adopted: the pre-registered decision
+rule returned **FINDING**, not adoption — two of its bars missed — and the owner
+adopted it by an explicit override of that verdict, on stated grounds, **not
+because the bars passed**
 ([`audits/audit-phase-20-baseline-7.md`](../audits/audit-phase-20-baseline-7.md)).
-Reference recording 6 remains the meeting-layer adopting record that preceded it
-([`audits/audit-phase-18-baseline-6.md`](../audits/audit-phase-18-baseline-6.md)).
+Recording 7 keeps that whole history and loses only its claim to be the current
+one ([`audits/audit-phase-21-rerecord.md`](../audits/audit-phase-21-rerecord.md)).
+Reference recording 6 remains the meeting-layer adopting record that preceded
+them ([`audits/audit-phase-18-baseline-6.md`](../audits/audit-phase-18-baseline-6.md)).
 
 Each set's `MANIFEST.md` is the canonical provenance record, row by row: model,
 prompt-template versions, the twenty-one graduated settings stamped on every row,

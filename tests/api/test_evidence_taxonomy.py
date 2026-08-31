@@ -67,12 +67,14 @@ _CORPUS_SETS: Final[tuple[str, ...]] = (
 # eval-side twin must reproduce on the same bytes; a diff here is either a
 # corpus change (re-record the numbers, in the PR that changes the corpus) or a
 # classification change (which is the thing this pin exists to surface).
-# Baseline 6 read 96/64/26, 11/2/3, 313/204/90 and 20/1/0. The cross-statement
-# column is the one the record closed: 64 -> 2 and 204 -> 10.
+# Baseline 6 read 96/64/26, 11/2/3, 313/204/90 and 20/1/0; the record that
+# followed closed the cross-statement column (64 -> 2, 204 -> 10) and it stays
+# closed here (7 and 8).
 _EXPECTED_COUNTS: Final[dict[str, dict[EvidenceCategory, int]]] = {
-    "samples/9p2i": {"role_proof": 92, "cross_statement": 2, "weak_signal": 50},
+    # was 92/2/50, 20/0/0, 308/10/110 and 28/0/1.
+    "samples/9p2i": {"role_proof": 90, "cross_statement": 7, "weak_signal": 50},
     "samples/4p1i": {"role_proof": 20, "cross_statement": 0, "weak_signal": 0},
-    "ml_corpus/9p2i": {"role_proof": 308, "cross_statement": 10, "weak_signal": 110},
+    "ml_corpus/9p2i": {"role_proof": 315, "cross_statement": 8, "weak_signal": 126},
     "ml_corpus/4p1i": {"role_proof": 28, "cross_statement": 0, "weak_signal": 1},
 }
 
@@ -280,12 +282,12 @@ def test_corpus_wide_totals() -> None:
         for flag in flags:
             totals[_served(flag).category] += 1
 
-    assert dict(totals) == {
-        "role_proof": 448,
-        "weak_signal": 161,
-        "cross_statement": 12,
+    assert dict(totals) == {  # was 448 / 161 / 12
+        "role_proof": 453,
+        "weak_signal": 177,
+        "cross_statement": 15,
     }
-    assert sum(totals.values()) == flag_count == 621  # was 830
+    assert sum(totals.values()) == flag_count == 645  # was 621
 
 
 @pytest.mark.parametrize("set_name", _CORPUS_SETS)
@@ -430,8 +432,9 @@ def test_endpoint_render_classes() -> None:
         for flag in flags:
             counts[_endpoint_class(flag)] += 1
 
-    assert dict(counts) == {"self_linked": 448, "two_turns": 113, "same_turn": 60}
-    assert sum(counts.values()) == 621
+    # was {"self_linked": 448, "two_turns": 113, "same_turn": 60}
+    assert dict(counts) == {"self_linked": 453, "two_turns": 126, "same_turn": 66}
+    assert sum(counts.values()) == 645  # was 621
     # Every self-linked flag is role proof; the same-turn class is the
     # self-stated pair the "within …" reading exists for.
     assert counts["unresolvable"] == 0

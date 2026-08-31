@@ -534,49 +534,50 @@ def test_conversion_model_rejects_negative_coerced() -> None:
 
 
 def test_committed_9p2i_recompute_pins_the_coerced_bucket() -> None:
-    """The coerced-bucket pin: the baseline-6 re-record carries one coerced SKIP.
+    """The coerced-bucket pin: the baseline-8 re-record carries NO coerced SKIP.
 
-    The meeting-layer graduation re-record (four levers unconditional,
-    impostor_roll_call OFF) produced a single uncited zero-flag EJECT->SKIP
-    coercion prefix, so ``citation_coerced_skip_ballots`` reads 1 and exactly one
-    ballot carries the marker head. The STORED conversion block was regenerated at
-    baseline 6 with the divert already applied, so recompute agrees with it
-    exactly.
+    The baseline-6 and baseline-7 records each produced a single uncited
+    zero-flag EJECT->SKIP coercion prefix; the baseline-8 re-record produces
+    none, so ``citation_coerced_skip_ballots`` reads 0 and no ballot carries the
+    marker head. The class going empty is a measurement, not a widening — the
+    scan below still counts the marker exactly and fails loud if one reappears
+    unpinned. The STORED conversion block was regenerated with the divert
+    already applied, so recompute agrees with it exactly.
     """
 
     report = TournamentEvalReport.model_validate_json(
         _COMMITTED_9P2I_REPORT.read_text(encoding="utf-8")
     )
 
-    # STORED block: the regenerated baseline-6 partition (divert already applied).
-    assert report.conversion.citation_coerced_skip_ballots == 1
-    assert report.conversion.missed_skip_ballots == 96  # was 129
-    assert report.conversion.threshold_inversions == 46  # was 87
-    assert report.conversion.missed_skip_impostor_voters == 48  # was 41
+    # STORED block: the regenerated baseline-8 partition (divert already applied).
+    assert report.conversion.citation_coerced_skip_ballots == 0  # was 1
+    assert report.conversion.missed_skip_ballots == 80  # was 96
+    assert report.conversion.threshold_inversions == 37  # was 46
+    assert report.conversion.missed_skip_impostor_voters == 42  # was 48
 
     # RECOMPUTE: the divert populates the coerced bucket, matching the STORED block.
     result = compute_conversion_report(report.report.games)
 
-    assert result.total_ejections == 99  # was 101
-    assert result.impostor_ejections == 85  # was 78
-    assert result.ejection_accuracy == pytest.approx(85 / 99)  # was 78 / 101
-    assert result.impostor_accused_meetings == 122  # was 134
-    assert result.impostor_accused_conversions == 85  # was 78
+    assert result.total_ejections == 95  # was 99
+    assert result.impostor_ejections == 82  # was 85
+    assert result.ejection_accuracy == pytest.approx(82 / 95)  # was 85 / 99
+    assert result.impostor_accused_meetings == 118  # was 122
+    assert result.impostor_accused_conversions == 82  # was 85
     assert result.impostor_accused_conversion_rate == pytest.approx(
-        85 / 122
-    )  # was 78 / 134
-    assert result.skip_ballots == 333  # was 451
-    assert result.correct_skip_ballots == 236  # was 321
-    assert result.missed_skip_ballots == 96  # was 129
+        82 / 118
+    )  # was 85 / 122
+    assert result.skip_ballots == 342  # was 333
+    assert result.correct_skip_ballots == 262  # was 236
+    assert result.missed_skip_ballots == 80  # was 96
     assert result.unclassified_skip_ballots == 0
-    assert result.citation_coerced_skip_ballots == 1
-    assert result.missed_skip_impostor_voters == 48  # was 41
-    assert result.missed_skip_teammate_coerced == 2  # was 0
-    assert result.missed_skip_invalid_target == 2  # was 1
-    assert result.threshold_inversions == 46  # was 87
+    assert result.citation_coerced_skip_ballots == 0  # was 1
+    assert result.missed_skip_impostor_voters == 42  # was 48
+    assert result.missed_skip_teammate_coerced == 1  # was 2
+    assert result.missed_skip_invalid_target == 1  # was 2
+    assert result.threshold_inversions == 37  # was 46
 
-    # Exactly one ballot carries the marker head: the baseline-6 bytes have a
-    # single coerced SKIP, so the divert scan yields one entry.
+    # No ballot carries the marker head: the baseline-8 bytes have no coerced
+    # SKIP, so the divert scan yields nothing.
     head = UNCITED_ZERO_FLAG_EJECT_MARKER.partition("{")[0]
     diverted = [
         (game.game_id, ballot.voter, game.roles[ballot.voter])
@@ -585,7 +586,7 @@ def test_committed_9p2i_recompute_pins_the_coerced_bucket() -> None:
         for ballot in meeting.ballots
         if ballot.target == "SKIP" and ballot.rationale_text.startswith(head)
     ]
-    assert len(diverted) == 1
+    assert len(diverted) == 0  # was 1
 
 
 def test_committed_4p1i_recompute_has_no_coerced_and_is_unchanged() -> None:
@@ -597,20 +598,20 @@ def test_committed_4p1i_recompute_has_no_coerced_and_is_unchanged() -> None:
     result = compute_conversion_report(report.report.games)
 
     assert result.citation_coerced_skip_ballots == 0
-    assert result.skip_ballots == 61  # was 90
-    assert result.correct_skip_ballots == 54  # was 88
-    assert result.missed_skip_ballots == 7  # was 2
+    assert result.skip_ballots == 66  # was 61
+    assert result.correct_skip_ballots == 53  # was 54
+    assert result.missed_skip_ballots == 13  # was 7
     assert result.unclassified_skip_ballots == 0
-    assert result.missed_skip_impostor_voters == 7  # was 1
+    assert result.missed_skip_impostor_voters == 10  # was 7
     assert result.missed_skip_invalid_target == 0
-    assert result.threshold_inversions == 0  # was 1
-    assert result.total_ejections == 21  # was 12
-    assert result.impostor_ejections == 20  # was 10
+    assert result.threshold_inversions == 3  # was 0
+    assert result.total_ejections == 24  # was 21
+    assert result.impostor_ejections == 20
 
 
 @pytest.mark.parametrize(
     ("path", "expected_coerced"),
-    [(_COMMITTED_9P2I_REPORT, 1), (_COMMITTED_4P1I_REPORT, 0)],
+    [(_COMMITTED_9P2I_REPORT, 0), (_COMMITTED_4P1I_REPORT, 0)],  # 9p2i was 1
 )
 def test_extended_invariant_holds_over_every_committed_meeting(
     path: Path, expected_coerced: int
@@ -642,27 +643,29 @@ def test_extended_invariant_holds_over_every_committed_meeting(
 # committed bytes. The ml_corpus tables are recorded in the PR rather than
 # pinned here (this file's committed-bytes pins are the samples sets).
 _EXPECTED_RECOUNTS: Mapping[str, ThresholdInversionRecount] = {
-    # Baseline 6 read 87 / 87 / 36 / 81 / 5 / 1 / 78 / 8 / 1 on 9p2i and a single
-    # inversion on 4p1i; the 4p1i class is now empty.
+    # Baseline 7 read 46 / 46 / 7 / 40 / 6 / 0 / 39 / 1 / 6 on 9p2i and an empty
+    # table on 4p1i (baseline 6 read 87 / 87 / 36 / 81 / 5 / 1 / 78 / 8 / 1 and a
+    # single 4p1i inversion). At baseline 8 the 9p2i remainder shrinks again and
+    # the 4p1i class is non-empty once more.
     "9p2i": ThresholdInversionRecount(
-        threshold_inversions=46,
-        marker_free=46,
-        rendered_at_threshold=7,
-        rendered_below_0_70=40,
-        rendered_0_70_to_0_80=6,
+        threshold_inversions=37,  # was 46
+        marker_free=37,  # was 46
+        rendered_at_threshold=5,  # was 7
+        rendered_below_0_70=30,  # was 40
+        rendered_0_70_to_0_80=7,  # was 6
         rendered_at_or_above_0_80=0,
-        in_skipped_meetings=39,
+        in_skipped_meetings=28,  # was 39
         in_crew_ejected_meetings=1,
-        in_impostor_ejected_meetings=6,
+        in_impostor_ejected_meetings=8,  # was 6
     ),
     "4p1i": ThresholdInversionRecount(
-        threshold_inversions=0,
-        marker_free=0,
+        threshold_inversions=3,  # was 0
+        marker_free=3,  # was 0
         rendered_at_threshold=0,
-        rendered_below_0_70=0,
+        rendered_below_0_70=3,  # was 0
         rendered_0_70_to_0_80=0,
         rendered_at_or_above_0_80=0,
-        in_skipped_meetings=0,
+        in_skipped_meetings=3,  # was 0
         in_crew_ejected_meetings=0,
         in_impostor_ejected_meetings=0,
     ),
@@ -690,7 +693,7 @@ def test_committed_recount_pins_the_by_cause_table(
     parse default, ballot redirect, citation gate) leaks into the remainder, so
     what is left is genuinely the voter's own decision. The rendered bands then
     say what kind of decision it was — on samples/9p2i the mass still sits below
-    the advisory line (40 of 46 below 0.70, 7 of those exactly at the 0.60
+    the advisory line (30 of 37 below 0.70, 5 of those exactly at the 0.60
     reference), which is a conservatism reading, not a disobedience reading.
     The two ml_corpus tables are recorded in the PR.
 

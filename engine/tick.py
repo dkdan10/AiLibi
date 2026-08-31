@@ -672,37 +672,3 @@ def advance_tick(
 
     # 7) Tick increment happens in next_state above.
     return next_state, events
-
-
-def superseded_meeting_tick(
-    state: WorldState,
-    events: Sequence[EngineEvent],
-) -> tuple[WorldState, tuple[EngineEvent, ...]] | None:
-    """The pair an engine without the decided-trigger win check returned here.
-
-    ``None`` unless this tick is one that check newly concludes — a meeting
-    trigger whose state already satisfied a win condition, recognised from the
-    trailing ``GameOverEvent`` behind a ``MeetingTriggeredEvent`` on a
-    GAME_OVER state. For such a tick it returns the MEETING state and the
-    events without the ``GameOverEvent``, which is what a recording made before
-    the check pinned. It reads only its arguments: no seed list, no game id,
-    no environment.
-
-    Reconstruction homes call this on a tick-hash mismatch and accept the pair
-    only when it re-hashes to the recorded hash exactly. Task 21.15's re-record
-    retires it: when no committed recording needs it, delete this function and
-    the seven call sites — eval/replay_walk.py, api/replay_loader.py,
-    training/surrogate/dataset.py, eval/off_menu.py, training/rollout.py,
-    training/anchor_study.py and tests/meetings/test_prompt_byte_golden.py.
-    """
-
-    if state.phase != "GAME_OVER" or len(events) < 2:
-        return None
-    if not isinstance(events[-1], GameOverEvent):
-        return None
-    if not isinstance(events[-2], MeetingTriggeredEvent):
-        return None
-    return (
-        replace(state, phase="MEETING"),
-        tuple(event for event in events if not isinstance(event, GameOverEvent)),
-    )

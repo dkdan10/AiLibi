@@ -414,10 +414,16 @@ class TestObservationIdRender:
         # line keeps its ORIGINAL id even when lower-salience lines are dropped. The
         # highest-salience body line (salience 100) survives with its id under a
         # tight budget; some lower-salience observations are shed.
+        #
+        # The budget was 70 until the Wave-1a graduation (4ea88689) flipped
+        # ``last_seen_from_sightings`` unconditional: the belief line grew a
+        # last-seen clause, so 70 now sheds every observation and proves nothing.
+        # 77 is the tightest budget at which the body line still survives -- the
+        # same shape the 70 pinned on the pre-repair render.
         memory = _lever_memory()
         full = render_for_prompt(memory)
         assert full.count("[obs ") == 4
-        tight = render_for_prompt(memory, token_budget=70)
+        tight = render_for_prompt(memory, token_budget=77)  # was 70
         assert 0 < tight.count("[obs ") < 4
         assert "[obs p1:5:3] [tick 5] You discovered p3's body in ELECTRICAL." in tight
 

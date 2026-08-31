@@ -94,10 +94,10 @@ def test_meetings_dry_run_uses_real_manifest() -> None:
     proc = _run("--meetings", "--dry-run")
     assert proc.returncode == 0
     # Meeting-bearing seeds derived from the committed flat MANIFEST.md: the
-    # baseline-7 record carries a meeting on 40/50 flat 4p/1i seeds
-    # (baseline 6 carried 39).
-    assert (
-        "[dry-run] seeds: 1,2,3,4,5,6,7,9,10,11,13,14,16,17,18,19,"
+    # baseline-8 record carries a meeting on 39/50 flat 4p/1i seeds
+    # (baseline 7 carried 40 — seed 3 goes meeting-free on the new bytes).
+    assert (  # was 1,2,3,4,5,6,7,9,10,11,13,14,16,…  (40 seeds, seed 3 included)
+        "[dry-run] seeds: 1,2,4,5,6,7,9,10,11,13,14,16,17,18,19,"
         "20,21,22,23,24,26,27,28,29,32,33,35,36,38,39,40,41,42,44,45,46,47,48,49"
         in proc.stdout
     )

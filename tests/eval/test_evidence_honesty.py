@@ -1377,7 +1377,7 @@ def test_the_same_mismatch_is_counted_when_fidelity_is_not_asserted(
 
     assert report.impostor_targeting.reconstruction_mismatches > 0
     assert report.impostor_targeting.policy_mode == LIVE_POLICY_FOLD
-    assert _counts(report.false_whereabouts.crew_false) == (1, 80)
+    assert _counts(report.false_whereabouts.crew_false) == (0, 79)  # was (1, 80)
 
 
 def test_a_caller_supplied_policy_is_never_reported_as_the_live_fold() -> None:
@@ -1463,25 +1463,41 @@ def test_i2_false_crew_self_placement_pins(
     # speaker's own engine room at tick N or N-1, while the review's unpublished
     # script evidently admitted a third neighbouring tick — the residual is
     # 0.6 points on the 9p2i sets and is carried, not smoothed.
-    assert _counts(reports[_SAMPLES_9P2I].false_whereabouts.crew_false) == (3, 659)
-    assert _counts(reports[_CORPUS_9P2I].false_whereabouts.crew_false) == (17, 1892)
-    assert _counts(reports[_SAMPLES_4P1I].false_whereabouts.crew_false) == (1, 80)
-    assert _counts(reports[_CORPUS_4P1I].false_whereabouts.crew_false) == (0, 91)
+    assert _counts(reports[_SAMPLES_9P2I].false_whereabouts.crew_false) == (
+        6,
+        660,
+    )  # was (3, 659)
+    assert _counts(reports[_CORPUS_9P2I].false_whereabouts.crew_false) == (
+        20,
+        1920,
+    )  # was (17, 1892)
+    assert _counts(reports[_SAMPLES_4P1I].false_whereabouts.crew_false) == (
+        0,
+        79,
+    )  # was (1, 80)
+    assert _counts(reports[_CORPUS_4P1I].false_whereabouts.crew_false) == (
+        1,
+        89,
+    )  # was (0, 91)
     # The strict agent-frame reading of the same rule (engine ticks N-1 and N-2).
     assert _counts(reports[_SAMPLES_9P2I].false_whereabouts.crew_false_agent_frame) == (
-        2,
-        659,
-    )
-    # Impostors lie about their own whereabouts at roughly twice the crew rate
-    # (the review: 46-48%), which is what makes the crew cell a defect and not a
-    # measure of deception.
-    assert _counts(reports[_SAMPLES_9P2I].false_whereabouts.impostor_false) == (1, 104)
+        3,
+        660,
+    )  # was (2, 659)
+    # The impostor cell no longer runs ABOVE the crew one: on these bytes not one
+    # of the 106 impostor self-placements is false, against 6 of 660 crew claims.
+    # That is what keeps the crew cell readable as a defect rather than as a
+    # measure of deception -- the deception arm reads zero.
+    assert _counts(reports[_SAMPLES_9P2I].false_whereabouts.impostor_false) == (
+        0,
+        106,
+    )  # was (1, 104)
     # Self-placement coverage: how often a rendered self-location row carried the
     # exact (tick, room) pair the claim used.
     assert _counts(reports[_SAMPLES_9P2I].false_whereabouts.copyable_self_location) == (
-        42,
-        659,
-    )
+        39,
+        660,
+    )  # was (42, 659)
 
 
 @pytest.mark.slow
@@ -1496,8 +1512,11 @@ def test_i3_sole_flag_precision_pins(
         _counts(reports[d].sole_flag_precision.per_victim_precision)
         for d in (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I)
     ]
-    assert per_victim == [(0, 0), (0, 0), (0, 0), (0, 0)]
-    assert (sum(n for n, _ in per_victim), sum(d for _, d in per_victim)) == (0, 0)
+    assert per_victim == [(0, 1), (0, 0), (0, 0), (0, 0)]  # was all (0, 0)
+    assert (sum(n for n, _ in per_victim), sum(d for _, d in per_victim)) == (
+        0,
+        1,
+    )  # was (0, 0)
 
     meetings = sum(
         reports[d].sole_flag_precision.per_meeting_sole_flag_meetings
@@ -1511,15 +1530,15 @@ def test_i3_sole_flag_precision_pins(
         reports[d].sole_flag_precision.per_meeting_crewmate_ejections.numerator
         for d in (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I)
     )
-    assert (meetings, ejections, crewmates) == (0, 0, 0)
+    assert (meetings, ejections, crewmates) == (1, 1, 1)  # was (0, 0, 0)
 
     # The class impostor share, deduped by subject, against the same meetings'
     # living-voter base rate (the review: 4/47 on samples/9p2i, 28/142 on the
     # corpus, 33/192 pooled vs a 25.3% base rate).
     assert _counts(reports[_SAMPLES_9P2I].sole_flag_precision.class_impostor_share) == (
         0,
-        0,
-    )
+        1,
+    )  # was (0, 0)
     assert _counts(reports[_CORPUS_9P2I].sole_flag_precision.class_impostor_share) == (
         0,
         0,
@@ -1528,7 +1547,10 @@ def test_i3_sole_flag_precision_pins(
         _counts(reports[d].sole_flag_precision.class_impostor_share)
         for d in (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I)
     ]
-    assert (sum(n for n, _ in pooled_class), sum(d for _, d in pooled_class)) == (0, 0)
+    assert (sum(n for n, _ in pooled_class), sum(d for _, d in pooled_class)) == (
+        0,
+        1,
+    )  # was (0, 0)
     # The stricter exactly-one-flag reading of the same population, emitted so
     # the choice of "only" stays a measured difference: it returns 8/58 pooled,
     # which is NOT the review's 12/70 wrong split — the kind-sole reading above is.
@@ -1540,10 +1562,11 @@ def test_i3_sole_flag_precision_pins(
     assert (sum(n for n, _ in single), sum(d for _, d in single)) == (0, 0)
 
     base = reports[_SAMPLES_9P2I].sole_flag_precision.living_voter_base_rate
-    # The class emptied, so the base rate has no denominator: the None sentinel,
-    # never 0.0 (baseline 6 read 0.25 over a populated class).
-    assert _counts(base) == (0, 0)
-    assert base.rate is None
+    # The class is populated again on these bytes -- one sole-flag meeting on
+    # samples/9p2i -- so the base rate carries a real denominator rather than the
+    # None sentinel the emptied class produced (baseline 6 read 0.25).
+    assert _counts(base) == (1, 5)  # was (0, 0)
+    assert base.rate == pytest.approx(0.2)  # was None
 
 
 @pytest.mark.slow
@@ -1561,12 +1584,21 @@ def test_i4_grounded_sighting_side_pins(
         reports[d].grounded_sighting.strong_sides
         for d in (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I)
     ]
-    assert sides == [0, 0, 0, 0]
-    assert sum(sides) == 0  # the review's own STRONG alibi_vs_sighting count
+    assert sides == [2, 0, 0, 0]  # was [0, 0, 0, 0]
+    assert sum(sides) == 2  # the review's own STRONG alibi_vs_sighting count; was 0
     assert reports[_SAMPLES_9P2I].grounded_sighting.unresolvable_sides == 0
-    assert _counts(reports[_SAMPLES_9P2I].grounded_sighting.grounded_at_tick) == (0, 0)
-    assert _counts(reports[_SAMPLES_9P2I].grounded_sighting.grounded_within_1) == (0, 0)
-    assert _counts(reports[_SAMPLES_9P2I].grounded_sighting.grounded_within_2) == (0, 0)
+    assert _counts(reports[_SAMPLES_9P2I].grounded_sighting.grounded_at_tick) == (
+        2,
+        2,
+    )  # was (0, 0)
+    assert _counts(reports[_SAMPLES_9P2I].grounded_sighting.grounded_within_1) == (
+        2,
+        2,
+    )  # was (0, 0)
+    assert _counts(reports[_SAMPLES_9P2I].grounded_sighting.grounded_within_2) == (
+        2,
+        2,
+    )  # was (0, 0)
     assert _counts(reports[_CORPUS_9P2I].grounded_sighting.grounded_at_tick) == (0, 0)
     assert _counts(reports[_CORPUS_9P2I].grounded_sighting.grounded_within_2) == (0, 0)
 
@@ -1583,10 +1615,22 @@ def test_i5_fabricated_completion_pins(
     # 14); on the 9p2i sets the budget drops the oldest rows from every prompt, so
     # both halves run lower. The prompt population is the honesty-relevant one: a
     # fabricated row no prompt carried poisoned nobody.
-    assert _counts(reports[_SAMPLES_9P2I].fabricated_completions.fabricated) == (0, 308)
-    assert _counts(reports[_CORPUS_9P2I].fabricated_completions.fabricated) == (0, 979)
-    assert _counts(reports[_SAMPLES_4P1I].fabricated_completions.fabricated) == (0, 38)
-    assert _counts(reports[_CORPUS_4P1I].fabricated_completions.fabricated) == (0, 40)
+    assert _counts(reports[_SAMPLES_9P2I].fabricated_completions.fabricated) == (
+        0,
+        311,
+    )  # was (0, 308)
+    assert _counts(reports[_CORPUS_9P2I].fabricated_completions.fabricated) == (
+        0,
+        986,
+    )  # was (0, 979)
+    assert _counts(reports[_SAMPLES_4P1I].fabricated_completions.fabricated) == (
+        0,
+        37,
+    )  # was (0, 38)
+    assert _counts(reports[_CORPUS_4P1I].fabricated_completions.fabricated) == (
+        0,
+        39,
+    )  # was (0, 40)
     # The review disagrees with itself on the samples-pooled count: A/verdicts.md
     # G-3's per-set table sums to 53 + 15 = 68 while D/FINAL-synthesis.md §4 item
     # 2.1 quotes 65. The 68 is the arithmetic of G-3's own published rows and 65
@@ -1600,14 +1644,17 @@ def test_i5_fabricated_completion_pins(
     # The +1 render calibration, measured rather than assumed.
     calibration = reports[_SAMPLES_4P1I].fabricated_completions
     assert (calibration.render_offset_matches, calibration.render_offset_checked) == (
-        38,
-        38,
-    )
+        37,
+        37,
+    )  # was (38, 38)
     # The completed-task rule cannot move a cell here: I-5 is scored off the
     # RECORDED prompt bytes (audits/audit-phase-20-preregistration.md §8) -- the
     # census over the committed sets belongs to the offline counterfactual.
     rederived = compute_evidence_honesty(_SAMPLES_4P1I)
-    assert _counts(rederived.fabricated_completions.fabricated) == (0, 38)
+    assert _counts(rederived.fabricated_completions.fabricated) == (
+        0,
+        37,
+    )  # was (0, 38)
 
 
 @pytest.mark.slow
@@ -1621,8 +1668,11 @@ def test_i6_adjacent_room_strong_share_pins(
         _counts(reports[d].adjacent_room_flags.adjacent)
         for d in (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I)
     ]
-    assert per_set == [(0, 0), (0, 0), (0, 0), (0, 0)]
-    assert (sum(n for n, _ in per_set), sum(d for _, d in per_set)) == (0, 0)
+    assert per_set == [(0, 2), (0, 0), (0, 0), (0, 0)]  # was all (0, 0)
+    assert (sum(n for n, _ in per_set), sum(d for _, d in per_set)) == (
+        0,
+        2,
+    )  # was (0, 0)
     # The registered cell's gap term measures ticks OUTSIDE the alibi window,
     # which is 0 on every minted flag — so the un-gated cell reads the same 148.
     # The two separate only under a lever that measures ticks differently.
@@ -1636,7 +1686,7 @@ def test_i6_adjacent_room_strong_share_pins(
             reports[d].adjacent_room_flags.distance_two
             for d in (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I)
         )
-        == 0
+        == 2  # was 0
     )
     assert (
         sum(
@@ -1665,15 +1715,19 @@ def test_i7_movement_origin_flag_pins(
         _counts(reports[d].movement_origin_flags.spoke_origin)
         for d in (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I)
     ]
-    assert per_set == [(0, 27), (1, 64), (0, 0), (0, 0)]
-    assert (sum(n for n, _ in per_set), sum(d for _, d in per_set)) == (1, 91)
+    assert per_set == [(0, 30), (5, 80), (0, 0), (0, 0)]  # was [(0, 27), (1, 64), ...]
+    assert (sum(n for n, _ in per_set), sum(d for _, d in per_set)) == (
+        5,
+        110,
+    )  # was (1, 91)
     truthful = sum(
         reports[d].movement_origin_flags.memory_truthful_spoken_false
         for d in (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I)
     )
-    assert truthful == 1
-    assert reports[_SAMPLES_9P2I].movement_origin_flags.backed_by_move_line == 16
-    assert reports[_SAMPLES_9P2I].movement_origin_flags.spoke_destination == 16
+    assert truthful == 5  # was 1
+    # was 16 and 16
+    assert reports[_SAMPLES_9P2I].movement_origin_flags.backed_by_move_line == 13
+    assert reports[_SAMPLES_9P2I].movement_origin_flags.spoke_destination == 13
 
 
 @pytest.mark.slow
@@ -1685,28 +1739,28 @@ def test_i8_marker_contamination_pins(
     # sets, 33 / 91 meetings, 25 / 68 games. Every cell reproduces EXACTLY.
     assert _counts(reports[_SAMPLES_9P2I].marker_contamination.turns_with_marker) == (
         0,
-        871,
-    )
+        869,
+    )  # was (0, 871)
     assert _counts(reports[_SAMPLES_9P2I].marker_contamination.prompts_with_marker) == (
         0,
-        1746,
-    )
+        1740,
+    )  # was (0, 1746)
     assert _counts(reports[_CORPUS_9P2I].marker_contamination.turns_with_marker) == (
         0,
-        2479,
-    )
+        2516,
+    )  # was (0, 2479)
     assert _counts(reports[_CORPUS_9P2I].marker_contamination.prompts_with_marker) == (
         0,
-        4961,
-    )
+        5039,
+    )  # was (0, 4961)
     assert _counts(reports[_SAMPLES_4P1I].marker_contamination.turns_with_marker) == (
         0,
-        120,
-    )
+        117,
+    )  # was (0, 120)
     assert _counts(reports[_CORPUS_4P1I].marker_contamination.turns_with_marker) == (
         0,
-        132,
-    )
+        129,
+    )  # was (0, 132)
     assert reports[_SAMPLES_9P2I].marker_contamination.meetings_with_marker == 0
     assert reports[_SAMPLES_9P2I].marker_contamination.games_with_marker == 0
     assert reports[_CORPUS_9P2I].marker_contamination.meetings_with_marker == 0
@@ -1723,17 +1777,17 @@ def test_i9_singular_persona_pins(
     # a defect there.
     assert _counts(
         reports[_SAMPLES_9P2I].singular_persona.prompts_with_singular_persona
-    ) == (0, 1746)
+    ) == (0, 1740)  # was (0, 1746)
     assert _counts(
         reports[_CORPUS_9P2I].singular_persona.prompts_with_singular_persona
-    ) == (0, 4961)
+    ) == (0, 5039)  # was (0, 4961)
     assert reports[_SAMPLES_9P2I].singular_persona.applicable is True
     assert reports[_CORPUS_9P2I].singular_persona.applicable is True
     assert reports[_SAMPLES_4P1I].singular_persona.applicable is False
     assert reports[_CORPUS_4P1I].singular_persona.applicable is False
     assert _counts(
         reports[_SAMPLES_4P1I].singular_persona.prompts_with_singular_persona
-    ) == (240, 240)
+    ) == (234, 234)  # was (240, 240)
 
 
 @pytest.mark.slow
@@ -1747,35 +1801,46 @@ def test_i10_meeting_physicality_pins(
         _counts(reports[d].meeting_physicality.venting_participants)
         for d in (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I)
     ]
-    assert venting == [(26, 152), (56, 432), (5, 40), (4, 44)]
-    assert (sum(n for n, _ in venting), sum(d for _, d in venting)) == (91, 668)
+    # was [(26, 152), (56, 432), (5, 40), (4, 44)]
+    assert venting == [(27, 151), (60, 439), (5, 39), (4, 43)]
+    assert (sum(n for n, _ in venting), sum(d for _, d in venting)) == (
+        96,
+        672,
+    )  # was (91, 668)
     killed = [
         _counts(reports[d].meeting_physicality.reporter_killed_within_three)
         for d in (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I)
     ]
-    assert killed == [(17, 152), (60, 432), (1, 40), (2, 44)]
-    assert (sum(n for n, _ in killed), sum(d for _, d in killed)) == (80, 668)
-    assert reports[_SAMPLES_9P2I].meeting_physicality.body_triggered_meetings == 144
+    # was [(17, 152), (60, 432), (1, 40), (2, 44)]
+    assert killed == [(19, 151), (56, 439), (1, 39), (2, 43)]
+    assert (sum(n for n, _ in killed), sum(d for _, d in killed)) == (
+        78,
+        672,
+    )  # was (80, 668)
+    # was 144
+    assert reports[_SAMPLES_9P2I].meeting_physicality.body_triggered_meetings == 141
 
     # The coherent reporter rate beside it: only a body-triggered meeting HAS a
     # reporter to kill, so the numerator is identical and only the denominator
     # narrows. The all-meetings cell understates itself by the emergency share —
-    # 60/432 published against 60/400 on the corpus, 7.4 % relative.
+    # 56/439 published against 56/407 on the corpus, 7.9 % relative.
     body_killed = [
         _counts(reports[d].meeting_physicality.reporter_killed_body_triggered)
         for d in (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I)
     ]
-    assert body_killed == [(17, 144), (60, 400), (1, 37), (2, 37)]
+    # was [(17, 144), (60, 400), (1, 37), (2, 37)]
+    assert body_killed == [(19, 141), (56, 407), (1, 36), (2, 36)]
     assert [n for n, _ in body_killed] == [n for n, _ in killed]
-    assert (
-        reports[_CORPUS_9P2I].meeting_physicality.reporter_killed_body_triggered.rate
-        == 0.15
-    )
+    assert reports[
+        _CORPUS_9P2I
+    ].meeting_physicality.reporter_killed_body_triggered.rate == pytest.approx(
+        56 / 407
+    )  # was 0.15
     assert reports[
         _SAMPLES_9P2I
     ].meeting_physicality.reporter_killed_body_triggered.rate == pytest.approx(
-        0.1181, abs=5e-5
-    )
+        0.13475, abs=5e-5
+    )  # was 0.1181
     # The restricted denominator is never the looser one, and each set's
     # body-triggered count is the denominator it uses.
     for sample_dir in (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I):
@@ -1797,33 +1862,33 @@ def test_the_agent_clock_is_proved_on_every_committed_set(
         reports[d].clock_alignment_checked
         for d in (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I)
     ]
-    assert checked == [2845, 9412, 380, 416]
-    assert sum(checked) == 13053
+    assert checked == [2984, 9407, 375, 415]  # was [2845, 9412, 380, 416]
+    assert sum(checked) == 13181  # was 13053
     # The action-bearing subset, checked under the two-frame rule rather than
     # dropped: it is where the +1 offset and the action's own room can differ.
     stamped = [
         reports[d].clock_alignment_action_stamped
         for d in (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I)
     ]
-    assert stamped == [78, 291, 17, 27]
+    assert stamped == [77, 300, 16, 27]  # was [78, 291, 17, 27]
     assert all(count > 0 for count in stamped)
 
 
 @pytest.mark.slow
 def test_render_budget_pins(reports: Mapping[Path, EvidenceHonestyReport]) -> None:
     budget = reports[_SAMPLES_9P2I].render_budget
-    assert budget.snapshots == 1746  # was 1956
+    assert budget.snapshots == 1740  # was 1746
     # Every rendered memory row, not only the citable ``[obs …]`` half: heard
     # testimony is rendered budget too and a compression lever spends against it.
-    assert budget.rendered_lines_total == 64_654  # was 99_959
+    assert budget.rendered_lines_total == 63_624  # was 64_654
     assert budget.rendered_lines_mean == pytest.approx(
-        37.02978235967927, abs=1e-4
-    )  # was 51.1038
-    assert budget.testimony_rows_total == 26735  # was 18319
-    assert dict(budget.testimony_rows_by_living_bucket) == {
-        "5-6": 17245,
-        "<=4": 8108,
-        ">=7": 1382,
+        36.56551724137931, abs=1e-4
+    )  # was 37.02978235967927
+    assert budget.testimony_rows_total == 25628  # was 26735
+    assert dict(budget.testimony_rows_by_living_bucket) == {  # was 17245 / 8108 / 1382
+        "5-6": 17340,
+        "<=4": 6882,
+        ">=7": 1406,
     }
     # Measured, not assumed: no recorded 4p1i prompt carries a reported-testimony
     # row at all, which is why the census is reported per candidate-count bucket
@@ -2125,10 +2190,10 @@ def test_self_placement_coverage_pins(
         census = placement[sample_dir]
         assert census.crew_claims > 0
         assert census.in_record == census.crew_claims
-    assert placement[_SAMPLES_9P2I].crew_claims == 659  # was 723
-    assert placement[_CORPUS_9P2I].crew_claims == 1892  # was 2038
-    assert placement[_SAMPLES_4P1I].crew_claims == 80  # was 78
-    assert placement[_CORPUS_4P1I].crew_claims == 91  # was 79
+    assert placement[_SAMPLES_9P2I].crew_claims == 660  # was 659
+    assert placement[_CORPUS_9P2I].crew_claims == 1920  # was 1892
+    assert placement[_SAMPLES_4P1I].crew_claims == 79  # was 80
+    assert placement[_CORPUS_4P1I].crew_claims == 89  # was 91
     # And it reaches the PROMPT: the block is charged before the elastic
     # observations and capped at 12 spans, so every claim tick is rendered at
     # DEFAULT_TOKEN_BUDGET. The trail is UNCONDITIONAL since the baseline-7
@@ -2163,10 +2228,10 @@ def test_the_trail_s_budget_cost_is_measured_not_assumed(
     samples = placement[_SAMPLES_9P2I]
     corpus = placement[_CORPUS_9P2I]
     assert (samples.renders, samples.trail_steps, samples.added_tokens) == (
-        871,
-        5343,
+        869,
+        5342,
         0,
-    )
+    )  # was (871, 5343, 0)
     assert (
         samples.observations_lost,
         samples.observations_lost_testimony,
@@ -2201,10 +2266,10 @@ def test_the_completed_task_row_names_the_engine_truth_room(
     # RETAINED composite the speaker held, whose non-elastic belief block leaves
     # less room than a fresh one (the per-span route this one replaced renders 817
     # here and 2394 on the corpus). The residual is carried, not smoothed.
-    assert placement[_SAMPLES_9P2I].completion_rows == 551  # was 829
-    assert placement[_CORPUS_9P2I].completion_rows == 1711  # was 2412
-    assert placement[_SAMPLES_4P1I].completion_rows == 38  # was 61
-    assert placement[_CORPUS_4P1I].completion_rows == 40  # was 58
+    assert placement[_SAMPLES_9P2I].completion_rows == 559  # was 551
+    assert placement[_CORPUS_9P2I].completion_rows == 1731  # was 1711
+    assert placement[_SAMPLES_4P1I].completion_rows == 37  # was 38
+    assert placement[_CORPUS_4P1I].completion_rows == 39  # was 40
 
 
 # --------------------------------------------------------------------------- #
@@ -2666,12 +2731,12 @@ def test_the_origin_reading_bites_on_a_destination_spoken_flag() -> None:
 # vent record's tick is (audits/audit-phase-20-baseline-7.md §10.3). Everything
 # else re-derives exactly, and the shortfall is pinned by set so it cannot drift.
 _REDERIVED_MEETINGS: Final[dict[Path, int]] = {
-    _SAMPLES_9P2I: 132,
-    _CORPUS_9P2I: 371,
-    _SAMPLES_4P1I: 40,
-    _CORPUS_4P1I: 44,
+    _SAMPLES_9P2I: 126,  # was 132
+    _CORPUS_9P2I: 369,  # was 371
+    _SAMPLES_4P1I: 39,  # was 40
+    _CORPUS_4P1I: 43,  # was 44
 }
-_COMMITTED_MEETING_TOTAL: Final[int] = 668  # baseline 6: 707
+_COMMITTED_MEETING_TOTAL: Final[int] = 672  # was 668; baseline 6: 707
 
 
 @pytest.mark.slow
@@ -2691,14 +2756,14 @@ def test_the_off_leg_re_derives_every_recoverable_meeting(
         == _COMMITTED_MEETING_TOTAL
     )
     # Baseline 6 carried NO spoken transition at all -- no v3 template offered
-    # the shape. The v4 set does, and the recorded bytes hold 1,657 of them, so
+    # the shape. The v4 set does, and the recorded bytes hold 1,606 of them, so
     # the movement channel has a real population to read for the first time.
     assert (
         sum(
             movement[d].spoken_transitions
             for d in (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I)
         )
-        == 1_657
+        == 1_606  # was 1_657
     )
 
 
@@ -2714,9 +2779,10 @@ def test_the_origin_spoken_flags_stop_minting(
     ]
     # The OFF leg reproduces I-7's own pin (7/76, 30/233, 0/3, 1/1) — the same
     # class, counted here off a live re-derivation rather than the recorded flags.
-    assert per_set == [(9, 21), (47, 84), (0, 0), (0, 0)]
+    # was [(9, 21), (47, 84), (0, 0), (0, 0)]
+    assert per_set == [(20, 37), (40, 83), (0, 0), (0, 0)]
     origin = sum(n for n, _ in per_set)
-    assert (origin, sum(d for _, d in per_set)) == (56, 105)
+    assert (origin, sum(d for _, d in per_set)) == (60, 120)  # was (56, 105)
     assert (
         sum(
             movement[d].origin_strong
@@ -2735,7 +2801,7 @@ def test_the_origin_spoken_flags_stop_minting(
         movement[d].origin_survives_naming_destination
         for d in (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I)
     )
-    assert (dissolved, survives_destination) == (55, 1)
+    assert (dissolved, survives_destination) == (59, 1)  # was (55, 1)
     assert dissolved + survives_destination == origin
     # The bar itself: ZERO flags in the ON output rest on an origin placement.
     assert (
@@ -2755,7 +2821,7 @@ def test_the_origin_spoken_flags_stop_minting(
     )
     # Every ON flag the speaker's own record could re-read — 88 of them, the 10
     # survivors plus the 78 newly minted — quotes the destination, not the origin.
-    assert (move_backed, naming_origin) == (9, 0)
+    assert (move_backed, naming_origin) == (11, 0)  # was (9, 0)
 
 
 @pytest.mark.slow
@@ -2766,20 +2832,20 @@ def test_the_price_of_the_lever_in_the_other_direction(
 
     sets = (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I)
     per_set = [movement[d].new_flags for d in sets]
-    assert per_set == [17, 33, 0, 0]
+    assert per_set == [14, 43, 0, 0]  # was [17, 33, 0, 0]
     new_flags = sum(per_set)
-    assert new_flags == 50
-    assert sum(movement[d].new_flags_strong for d in sets) == 1
+    assert new_flags == 57  # was 50
+    assert sum(movement[d].new_flags_strong for d in sets) == 6  # was 1
     # By SUBJECT role — the honest half of the price: most of the recovered
     # contradictions name crewmates, because crewmates misplace themselves too.
-    assert sum(movement[d].new_subject_crewmate for d in sets) == 42
-    assert sum(movement[d].new_subject_impostor for d in sets) == 8
+    assert sum(movement[d].new_subject_crewmate for d in sets) == 48  # was 42
+    assert sum(movement[d].new_subject_impostor for d in sets) == 9  # was 8
     # None of them is manufactured: every newly minted flag rests on a placement
     # the ENGINE agrees with — the subject really was in that room at that tick.
-    assert sum(movement[d].new_destination_engine_true for d in sets) == 8
+    assert sum(movement[d].new_destination_engine_true for d in sets) == 10  # was 8
     # The STRONG alibi_vs_sighting band the 13.14 lone-strong ruling can eject on.
-    assert sum(movement[d].strong_alibi_vs_sighting_off for d in sets) == 11
-    assert sum(movement[d].strong_alibi_vs_sighting_on for d in sets) == 12
+    assert sum(movement[d].strong_alibi_vs_sighting_off for d in sets) == 21  # was 11
+    assert sum(movement[d].strong_alibi_vs_sighting_on for d in sets) == 27  # was 12
     # "No new flag class in their place": the ON kinds are a subset of the OFF
     # kinds on every set — the lever re-reads placements, it invents no rule.
     for sample_dir in sets:
@@ -3238,9 +3304,9 @@ def test_the_grounded_off_leg_is_the_recorded_substrate(
         assert cell.off_matches_recorded == _REDERIVED_MEETINGS[sample_dir]
     assert sum(grounded[d].meetings for d in sets) == _COMMITTED_MEETING_TOTAL
     # Baseline 6's two baselines were 234 with neither rule and 268 with the
-    # merged movement rule. The record closed the class: 11 and 12.
-    assert sum(grounded[d].strong_off for d in sets) == 11
-    assert sum(grounded[d].strong_move for d in sets) == 12
+    # merged movement rule. The record narrowed the class to 21 and 27.
+    assert sum(grounded[d].strong_off for d in sets) == 21  # was 11
+    assert sum(grounded[d].strong_move for d in sets) == 27  # was 12
 
 
 @pytest.mark.slow
@@ -3265,7 +3331,7 @@ def test_the_grounded_lever_prices_the_prosecution_class(
     assert (
         sum(grounded[d].off_subjects for d in sets),
         sum(grounded[d].off_subject_impostors for d in sets),
-    ) == (11, 1)
+    ) == (20, 1)  # was (11, 1)
     assert (
         sum(grounded[d].grounded_subjects for d in sets),
         sum(grounded[d].grounded_subject_impostors for d in sets),
@@ -3278,11 +3344,12 @@ def test_the_grounded_lever_prices_the_prosecution_class(
         # A demotion rewrites the description and nothing else.
         assert (cell.new_flags, cell.structural_drift, cell.count_drift) == (0, 0, 0)
     assert (
-        sum(grounded[d].bands_off.get("vent_sighting:strong", 0) for d in sets) == 448
+        sum(grounded[d].bands_off.get("vent_sighting:strong", 0) for d in sets)
+        == 453  # was 448
     )
     assert (
         sum(grounded[d].bands_grounded.get("vent_sighting:strong", 0) for d in sets)
-        == 448
+        == 453  # was 448
     )
 
 
@@ -3293,22 +3360,22 @@ def test_the_grounded_lever_composed_with_the_movement_lever(
     """The slate the record runs: both Phase-20 detector levers together."""
 
     sets = (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I)
-    # 268 STRONG with the movement lever alone; 16 with both. The three extra
-    # survivors over the grounded-alone 13 rest on placements the movement lever
+    # 27 STRONG with the movement lever alone; 2 with both, against 0 for the
+    # grounded lever alone. Both survivors rest on placements the movement lever
     # re-read to their destination — the grounded-by-construction exemption is
     # what keeps them rather than demoting the lever's own dependency.
-    assert sum(grounded[d].strong_both for d in sets) == 0  # was 16
-    assert sum(grounded[d].strong_grounded for d in sets) == 0  # was 13
+    assert sum(grounded[d].strong_both for d in sets) == 2  # was 0
+    assert sum(grounded[d].strong_grounded for d in sets) == 0  # was 0
     both_sides = sum(grounded[d].both_surviving_sides for d in sets)
     both_grounded = sum(grounded[d].both_surviving_sides_grounded for d in sets)
-    # Every one of the 16 spoken sighting sides is supported by the speaker's own
-    # perception record; the three the grounded-alone leg does not carry are
-    # flags the movement lever mints on placements it re-read to the destination.
-    assert (both_sides, both_grounded) == (0, 0)
+    # Of the 2 surviving spoken sighting sides, ONE is supported by the speaker's
+    # own perception record; the other rides the movement lever's re-read
+    # destination placement, which the grounded-alone leg does not carry.
+    assert (both_sides, both_grounded) == (2, 1)  # was (0, 0)
     assert (
         sum(grounded[d].both_subjects for d in sets),
         sum(grounded[d].both_subject_impostors for d in sets),
-    ) == (0, 0)
+    ) == (1, 0)  # was (0, 0)
     for sample_dir in sets:
         cell = grounded[sample_dir]
         for band in _UNTOUCHED_BANDS:
@@ -3326,12 +3393,12 @@ def test_the_sole_flag_wrongful_ejections_lose_their_strong_flag(
     impostors = sum(grounded[d].sole_victim_impostors for d in sets)
     # I-3's own population, recounted here. Baseline 6 read 82 ejections
     # convicted on this class alone, 12 of them impostors -- 70 crewmates. The
-    # record CLOSED the class: nothing is convicted on it at all, which is the
-    # cell bar 4's waiver reads at 0/0.
-    assert (victims, impostors) == (0, 0)
-    assert victims - impostors == 0
+    # re-recorded bytes hold 4, every one of them a crewmate: the grounded lever
+    # strips the STRONG flag off all four, and one keeps it under the full slate.
+    assert (victims, impostors) == (4, 0)  # was (0, 0)
+    assert victims - impostors == 4  # was 0
     assert sum(grounded[d].sole_crewmate_still_strong_grounded for d in sets) == 0
-    assert sum(grounded[d].sole_crewmate_still_strong_both for d in sets) == 0
+    assert sum(grounded[d].sole_crewmate_still_strong_both for d in sets) == 1  # was 0
 
 
 # --- The map-aware arbitration counterfactual (Task 20.27) ------------------
@@ -3590,7 +3657,7 @@ def test_the_corridor_off_leg_is_the_recorded_substrate(
         cell = corridors[sample_dir]
         assert cell.sighting_flags_match_recorded == _REDERIVED_MEETINGS[sample_dir]
     assert sum(corridors[d].meetings for d in sets) == _COMMITTED_MEETING_TOTAL
-    assert sum(corridors[d].strong_off for d in sets) == 11  # baseline 6: 234
+    assert sum(corridors[d].strong_off for d in sets) == 21  # was 11; baseline 6: 234
 
 
 @pytest.mark.slow
@@ -3604,14 +3671,14 @@ def test_i6_adjacent_room_strong_share_off_and_on(
     on = [(corridors[d].adjacent_on, corridors[d].strong_on) for d in sets]
     # OFF: the review's pooled 148/234 = 63.2%, re-derived here rather than
     # restated, and matching the report-fixture pin per set.
-    assert off == [(0, 3), (1, 8), (0, 0), (0, 0)]
-    assert (sum(n for n, _ in off), sum(d for _, d in off)) == (1, 11)
+    assert off == [(0, 7), (2, 14), (0, 0), (0, 0)]  # was [(0, 3), (1, 8), ...]
+    assert (sum(n for n, _ in off), sum(d for _, d in off)) == (2, 21)  # was (1, 11)
     # ON: 140 of the 148 are demoted, so the class drops to 94 STRONG flags of
     # which 8 are still adjacent — 8/94 = 8.5%. Bar 7 asks for <= 5% and this
     # lever ALONE does not reach it; the bar is evaluated at the full-slate
     # record, and the rule is not widened here to chase it.
-    assert on == [(0, 3), (1, 8), (0, 0), (0, 0)]
-    assert (sum(n for n, _ in on), sum(d for _, d in on)) == (1, 11)
+    assert on == [(0, 7), (2, 14), (0, 0), (0, 0)]  # was [(0, 3), (1, 8), ...]
+    assert (sum(n for n, _ in on), sum(d for _, d in on)) == (2, 21)  # was (1, 11)
     assert sum(corridors[d].demoted for d in sets) == 0
 
 
@@ -3630,7 +3697,7 @@ def test_the_instrument_and_the_detector_read_one_adjacency_rule(
     # detector's predicate keeps them STRONG while the instrument still counts
     # them adjacent. 148 - 140 = 8, and every one of them clears the tick bar.
     kept = sum(corridors[d].adjacent_kept_strong for d in sets)
-    assert kept == 1  # was 8
+    assert kept == 2  # was 1
     assert sum(corridors[d].adjacent_off for d in sets) - kept == sum(
         corridors[d].demoted for d in sets
     )
@@ -3701,11 +3768,11 @@ def _sighting_ticks_covered(view: str) -> int:
 # audits/audit-phase-20-preregistration.md:351-356). The re-render recounts it
 # from the memories rather than from the recorded prompts, so the two agree only
 # if the reconstruction is faithful.
-_COMMITTED_OFF_MEAN: Final[float] = 37.0517  # baseline 6: 51.1038
+_COMMITTED_OFF_MEAN: Final[float] = 36.5655  # was 37.0517; baseline 6: 51.1038
 # The ON-path row count the review PROJECTED (53.2 x 0.68), falsified by the
 # measurement below, and the cell that replaces it as the ratified pin.
 _COALESCED_PROJECTED_ROW_TARGET: Final[float] = 36.0
-_COALESCED_ROW_PIN: Final[float] = 37.0517  # baseline 6: 42.1493
+_COALESCED_ROW_PIN: Final[float] = 36.5903  # was 37.0517; baseline 6: 42.1493
 
 
 class _RenderBudgetCensus(NamedTuple):
@@ -3899,7 +3966,7 @@ def _testimony_rows(pattern: re.Pattern[str], text: str) -> int:
 def test_no_committed_prompt_carries_a_tagged_meeting_frame() -> None:
     """The widening cannot move a committed cell: the bytes hold no tagged frame.
 
-    ``test_render_budget_pins`` pins 18,319 testimony rows for samples/9p2i. The
+    ``test_render_budget_pins`` pins 25,628 testimony rows for samples/9p2i. The
     same count falls straight out of the recorded bytes for the BARE frame, and
     the tagged frame appears zero times — the recordings predate the lever — so
     the two committed OFF cells are arithmetically untouched by Task 20.34's
@@ -3914,7 +3981,7 @@ def test_no_committed_prompt_carries_a_tagged_meeting_frame() -> None:
         bare_rows += len(bare.findall(text))
         tagged_rows += len(tagged.findall(text))
     assert bare_rows == 0  # was 18_319
-    assert tagged_rows == 26735  # was 0
+    assert tagged_rows == 25628  # was 26735
 
 
 @pytest.mark.slow
@@ -3922,7 +3989,7 @@ def test_the_coalesced_render_budget_cells(
     render_budget: _RenderBudgetCensus,
 ) -> None:
     census = render_budget
-    assert census.snapshots == 871  # was 971
+    assert census.snapshots == 869  # was 871
     mean_off = census.rows_off / census.snapshots
     mean_on = census.rows_on / census.snapshots
     # The coalesced render is UNCONDITIONAL since the baseline-7 record, so this
@@ -3934,12 +4001,14 @@ def test_the_coalesced_render_budget_cells(
     # 42.1493 mean, with 37,608 -> 19,558 sighting rows and 37,608 -> 30,927
     # covered ticks; the differential those pairs measured is what graduating the
     # lever spent.
-    assert census.rows_off == census.rows_on == 32_272
-    assert mean_off == mean_on == pytest.approx(37.05166475315729, abs=1e-4)
+    assert census.rows_off == census.rows_on == 31_797  # was 32_272
+    assert (
+        mean_off == mean_on == pytest.approx(36.59033371691599, abs=1e-4)
+    )  # was 37.05166475315729
     assert mean_on == pytest.approx(_COMMITTED_OFF_MEAN, abs=0.05)
-    assert census.sightings_off == census.sightings_on == 16_413
-    assert census.covered_off == census.covered_on == 25_966
-    assert census.chars_off == census.chars_on == 3_055_058
+    assert census.sightings_off == census.sightings_on == 16_574  # was 16_413
+    assert census.covered_off == census.covered_on == 26_275  # was 25_966
+    assert census.chars_off == census.chars_on == 3_044_260  # was 3_055_058
 
 
 @pytest.mark.slow
@@ -4005,9 +4074,9 @@ def test_the_band_change_not_the_fold_is_what_costs_first_hand_coverage(
     # document and accounts for MORE first-hand subject-ticks: compression, not
     # loss. Raising the band is the half that spends coverage, and the recorded
     # render (which has it raised) covers less than this leg does.
-    assert fold_only.rows_on == 32_135
+    assert fold_only.rows_on == 31_702  # was 32_135
     assert fold_only.rows_on < render_budget.rows_off
-    assert fold_only.covered_on == 29_394
+    assert fold_only.covered_on == 29_894  # was 29_394
     assert fold_only.covered_on > render_budget.covered_on
 
 

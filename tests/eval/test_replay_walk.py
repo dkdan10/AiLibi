@@ -1045,12 +1045,10 @@ def test_action_disposition_check_is_an_option(
 
 
 # --------------------------------------------------------------------------- #
-# The decided-trigger allowance (Task 21.6) — its three refusals, the profile   #
-# that walks with hashes off, and the shape Task 21.15 will record.             #
+# The decided trigger (Task 21.6): the shape the baseline-8 record captured,    #
+# and the hash refusals around it.                                              #
 # --------------------------------------------------------------------------- #
 
-_SUPERSEDED_SEED = 3
-_SUPERSEDED_TICK = 10
 _NEW_SHAPE_KNOBS = (4, 1, 1)
 
 _PRODUCTION_PROFILES: tuple[ReplayWalkConfig, ...] = (
@@ -1134,83 +1132,12 @@ def _write_decided_trigger_game(directory: Path, *, seed: int = 0) -> Path:
     pytest.fail("the decided-trigger fixture never reached GAME_OVER")
 
 
-def _superseded_lines() -> list[str]:
-    """The committed seed-3 bytes: a meeting row on a tick the engine decides."""
-
-    return _game_lines(_SUPERSEDED_SEED)
-
-
 def _tick_row_index(lines: list[str], tick: int) -> int:
     for index, line in enumerate(lines):
         row = json.loads(line)
         if row["kind"] == "tick" and row["tick"] == tick:
             return index
     pytest.fail(f"no tick row at {tick}")
-
-
-def test_the_allowance_restores_the_superseded_committed_game(
-    tmp_path: Path, knobs: tuple[int, int, int], game_map: Map
-) -> None:
-    """Seed 3's meeting still opens at tick 10 and the game still resolves."""
-
-    path = _write_game(tmp_path, _SUPERSEDED_SEED, _superseded_lines())
-    config = ReplayWalkConfig(
-        profile="test-strict",
-        on_violation=_raise_violation,
-        verify_tick_hashes=True,
-        missing_meeting_row="violation",
-        verify_meeting_pre_hashes=True,
-        verify_meeting_post_hashes=True,
-        require_terminal_tick=True,
-        verify_recorded_outcome=True,
-        require_game_end_row=True,
-    )
-    events = _drain(
-        path, seed=_SUPERSEDED_SEED, knobs=knobs, game_map=game_map, config=config
-    )
-
-    opened = [event for event in events if isinstance(event, MeetingOpened)]
-    assert [event.entry.tick for event in opened] == [_SUPERSEDED_TICK]
-    # The restored pair is what downstream sees: no premature GameOverEvent.
-    assert not [
-        event
-        for meeting in opened
-        for event in meeting.events
-        if event.type == "GameOver"
-    ]
-    assert isinstance(events[-1], WalkComplete)
-
-
-def test_the_allowance_holds_with_tick_hashes_off(
-    tmp_path: Path, knobs: tuple[int, int, int], game_map: Map
-) -> None:
-    """``leak-scan-factory``'s own shape: hashes off, missing meeting row fatal.
-
-    Gating the restore on ``verify_tick_hashes`` would break this walk at
-    GAME_OVER on tick 10 and truncate it silently — moving a committed cell with
-    no violation raised.
-    """
-
-    path = _write_game(tmp_path, _SUPERSEDED_SEED, _superseded_lines())
-    config = ReplayWalkConfig(
-        profile="test-hashes-off",
-        on_violation=_raise_violation,
-        missing_meeting_row="violation",
-        require_terminal_tick=True,
-    )
-    events = _drain(
-        path, seed=_SUPERSEDED_SEED, knobs=knobs, game_map=game_map, config=config
-    )
-
-    # Without the restore the walk would break at GAME_OVER and yield neither of
-    # these — with the same terminal tick, and no violation raised.
-    opened = [event for event in events if isinstance(event, MeetingOpened)]
-    applied = [event for event in events if isinstance(event, MeetingApplied)]
-    assert [event.entry.tick for event in opened] == [_SUPERSEDED_TICK]
-    assert [event.entry.tick for event in applied] == [_SUPERSEDED_TICK]
-    complete = events[-1]
-    assert isinstance(complete, WalkComplete)
-    assert complete.state.phase == "GAME_OVER"
 
 
 def test_a_hash_that_diverges_for_another_reason_still_violates(
@@ -1237,73 +1164,31 @@ def test_a_hash_that_diverges_for_another_reason_still_violates(
     assert info.value.violation.tick == trigger_tick
 
 
-def test_a_decided_trigger_without_a_meeting_row_is_never_restored(
-    tmp_path: Path, knobs: tuple[int, int, int], game_map: Map
+def test_a_decided_trigger_ends_the_walk_at_game_over(
+    tmp_path: Path, game_map: Map
 ) -> None:
-    """Plant (b), both halves.
+    """The shape the corrected engine records: GAME_OVER, and no meeting row.
 
-    Strip seed 3's meeting row and the pre-ruling hash is refused, because the
-    row is what says a meeting really opened. A recording of the NEW shape —
-    the GAME_OVER hash, no meeting row — needs no restore at all: the walk ends
-    at GAME_OVER on the trigger tick.
+    A tick whose state already satisfies a win condition concludes there, so the
+    walk ends at GAME_OVER on the trigger tick and opens no meeting. This needs
+    no allowance and no restore — the inverse that used to reconstruct the
+    pre-ruling pair retired at the baseline-8 record, once the census over all
+    four re-recorded sets read zero decided meeting-trigger ticks.
     """
 
-    lines = _superseded_lines()
-    index = next(
-        i for i, line in enumerate(lines) if json.loads(line)["kind"] == "meeting"
-    )
-    stripped = _write_game(
-        tmp_path / "stripped", _SUPERSEDED_SEED, _drop_meeting_row(lines, index)
-    )
     config = ReplayWalkConfig(
         profile="test-on", on_violation=_raise_violation, verify_tick_hashes=True
     )
-    with pytest.raises(_Violation) as info:
-        _drain(
-            stripped,
-            seed=_SUPERSEDED_SEED,
-            knobs=knobs,
-            game_map=game_map,
-            config=config,
-        )
-    assert info.value.violation.kind == "tick_hash_mismatch"
-    assert info.value.violation.tick == _SUPERSEDED_TICK
-
     new_shape = _write_decided_trigger_game(tmp_path / "new-shape")
+
     events = _drain(
         new_shape, seed=0, knobs=_NEW_SHAPE_KNOBS, game_map=game_map, config=config
     )
+
     complete = events[-1]
     assert isinstance(complete, WalkComplete)
     assert complete.state.phase == "GAME_OVER"
     assert not [event for event in events if isinstance(event, MeetingOpened)]
-
-
-def test_a_meeting_row_whose_hash_matches_neither_state_still_violates(
-    tmp_path: Path, knobs: tuple[int, int, int], game_map: Map
-) -> None:
-    """Plant (c): the restore is accepted only on an exact hash match."""
-
-    lines = _superseded_lines()
-    index = _tick_row_index(lines, _SUPERSEDED_TICK)
-    row = json.loads(lines[index])
-    recorded = row["state_hash"]
-    row["state_hash"] = ("0" if recorded[0] != "0" else "f") + recorded[1:]
-    path = _write_game(
-        tmp_path,
-        _SUPERSEDED_SEED,
-        [*lines[:index], json.dumps(row), *lines[index + 1 :]],
-    )
-    config = ReplayWalkConfig(
-        profile="test-on", on_violation=_raise_violation, verify_tick_hashes=True
-    )
-
-    with pytest.raises(_Violation) as info:
-        _drain(
-            path, seed=_SUPERSEDED_SEED, knobs=knobs, game_map=game_map, config=config
-        )
-    assert info.value.violation.kind == "tick_hash_mismatch"
-    assert info.value.violation.tick == _SUPERSEDED_TICK
 
 
 @pytest.mark.parametrize(

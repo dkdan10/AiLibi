@@ -823,14 +823,6 @@ class _RationaleSplit(BaseModel):
     verified: bool
 
 
-# The redaction body the committed recordings carry. Kept so this module can
-# decode a recording made before the teammate note was reworded; the live
-# constant is what every recording since carries.
-_LEGACY_TEAMMATE_COERCED_VOTE_RATIONALE: Final[str] = (
-    "[rationale redacted by the vote guard; recorded reason: "
-    "no confident read this round]"
-)
-
 # Every redaction body the teammate firewall has written, newest first. A
 # recorded rationale is guard-authored when it ends with ANY of them, because
 # this module reads FROZEN bytes: recognising only the live value would read a
@@ -840,12 +832,11 @@ _LEGACY_TEAMMATE_COERCED_VOTE_RATIONALE: Final[str] = (
 # unverifiable, so a genuinely new writer-side body surfaces rather than
 # passing.
 #
-# Entries retire when no committed recording carries them: 21.15's re-record
-# leaves only the live constant, so its sweep may drop the legacy entry.
-_TEAMMATE_COERCED_BODIES: Final[tuple[str, ...]] = (
-    TEAMMATE_COERCED_VOTE_RATIONALE,
-    _LEGACY_TEAMMATE_COERCED_VOTE_RATIONALE,
-)
+# Entries retire when no committed recording carries them. The pre-reword body
+# retired at the baseline-8 record: it appeared 36 times across 18 replays of the
+# previous recording and appears ZERO times in these bytes, while the live
+# constant went 0 -> 14. One entry is the whole history the committed sets need.
+_TEAMMATE_COERCED_BODIES: Final[tuple[str, ...]] = (TEAMMATE_COERCED_VOTE_RATIONALE,)
 
 
 def _split_rationale(rationale: str, model_body: str | None) -> _RationaleSplit:

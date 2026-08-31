@@ -9,4 +9,4 @@
 - [tick 9] You completed start_reactor (you were in ADMIN).
 
 ## Your current beliefs:
-- p-4: suspicion 0.60
+- p-4: suspicion 0.60 (last seen in ADMIN at tick 9)

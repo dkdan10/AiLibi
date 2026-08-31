@@ -923,7 +923,7 @@ def test_reported_rows_survive_in_every_candidate_bucket(
     # those figures -- the register sampled 60 games and 1,656 renders, this walks
     # every committed game -- so the shape, not the absolute count, is what carries.
     assert set(survival.offered) == set(_CANDIDATE_BUCKETS)
-    assert survival.renders == 2479  # was 2726
+    assert survival.renders == 2516  # was 2479
     # Both columns re-bucketed at the graduation sweep (Task 20.37) and NEITHER
     # moved in total. The candidate scan calls the private builder directly, and
     # until the sweep that builder's lever parameters DEFAULTED OFF -- so this
@@ -932,17 +932,18 @@ def test_reported_rows_survive_in_every_candidate_bucket(
     # the bucket, it filed each render under an OFF-path bucket too. Deleting the
     # parameters made the scan read the path ``render_for_prompt`` always took.
     assert survival.offered == {
-        "<=60": 11308,  # was 11135 under the builder's OFF defaults
-        "61-100": 13808,  # was 13165
-        "101-150": 7069,  # was 6835
-        ">150": 3689,  # was 3361
+        "<=60": 11484,  # was 11308
+        "61-100": 14982,  # was 13808
+        "101-150": 7316,  # was 7069
+        ">150": 3341,  # was 3689
     }
     # The raised reported band is unconditional since the baseline-7 record, so
     # there is ONE leg to count -- the differential the C-73 register measured is
     # what graduating the lever spent. Kept can exceed offered in a bucket: the
     # candidate scan counts rows the selector was HANDED, and a render can carry
     # a testimony line composed from several candidates.
-    kept = {"<=60": 11308, "61-100": 13803, "101-150": 7059, ">150": 3564}
+    # was {"<=60": 11308, "61-100": 13803, "101-150": 7059, ">150": 3564}
+    kept = {"<=60": 11484, "61-100": 14965, "101-150": 7295, ">150": 3214}
     assert survival.kept == kept
     # THE no-behaviour-moved statement, recomputed rather than asserted: the
     # sweep re-bucketed the kept rows and minted none. Every kept row comes off
@@ -950,8 +951,8 @@ def test_reported_rows_survive_in_every_candidate_bucket(
     # the number the pre-sweep buckets summed to (11,707 + 13,622 + 7,074 +
     # 3,331). The offered total legitimately GREW by the saw_vent rows the OFF
     # default used to swallow.
-    assert sum(kept.values()) == 35734
-    assert sum(survival.offered.values()) == 35874
+    assert sum(kept.values()) == 36958  # was 35734
+    assert sum(survival.offered.values()) == 37123  # was 35874
     # Every bucket clears the survival floor now, including the largest render --
     # the bucket the register measured keeping NO reported row at all.
     for bucket in _CANDIDATE_BUCKETS:

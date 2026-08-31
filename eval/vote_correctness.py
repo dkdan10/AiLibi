@@ -25,17 +25,18 @@ PRECISION lead, defined below) and the impostor-accused -> impostor-ejected
 conversion rate (the RECALL lead).
 
 What the recorded sets read (evidence-backed / impostor ejections). All four were
-recorded at the Phase-20 evidence-honesty slate -- model ``Qwen/Qwen3.6-27B``,
-every template at ``qwen3_6_27b.v4``, the eight levers ON -- as each set's
-``MANIFEST.md`` records. That slate is now the ``baseline-7`` substrate: the
-record missed two of its own pre-registered bars -- the rule's verdict is FINDING
--- and the owner adopted it as canon regardless, by explicit override
-(``audits/audit-phase-20-baseline-7.md`` §6.1).
+recorded at the ``baseline-8`` substrate -- model ``Qwen/Qwen3.6-27B``, every
+template at ``qwen3_6_27b.v5``, the twenty-one retired levers unconditional and
+``impostor_roll_call`` OFF -- as each set's ``MANIFEST.md`` records. Baseline 8
+is a maintenance record: it re-recorded the same sets on repaired code and
+decided nothing. It inherits baseline 7's substrate, and baseline 7 was adopted
+by explicit owner override of a FINDING verdict, its record having missed two of
+its own pre-registered bars (``audits/audit-phase-20-baseline-7.md`` §6.1).
 
-* ``replays/samples/9p2i``: 78/85 = 0.9176
+* ``replays/samples/9p2i``: 75/82 = 0.9146
 * ``replays/samples/4p1i``: 19/20 = 0.9500
-* ``replays/ml_corpus/9p2i``: 229/254 = 0.9016
-* ``replays/ml_corpus/4p1i``: 26/28 = 0.9286
+* ``replays/ml_corpus/9p2i``: 227/252 = 0.9008
+* ``replays/ml_corpus/4p1i``: 27/29 = 0.9310
 
 ``scripts/check_doc_facts.py`` re-derives all four rates from the committed
 reports and the model and prompt-set tokens from the four manifests, and fails

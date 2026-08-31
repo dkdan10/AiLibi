@@ -17,6 +17,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 import build_sample_report as bsr
 from eval.meeting_quality import TournamentEvalReport
 
@@ -77,3 +79,36 @@ def test_write_report_emits_a_loadable_consistent_file(tmp_path: Path) -> None:
     assert json.loads(written) == json.loads(
         _COMMITTED_REPORT.read_text(encoding="utf-8")
     )
+
+
+def test_seeds_on_disk_skips_an_audit_sidecar(tmp_path: Path) -> None:
+    """The planted case: a ``<n>.audit`` stem is skipped, not parsed.
+
+    A wrapper writes ``replay-seed-<n>.audit.jsonl`` beside the replay and the
+    glob matches it; parsing that stem raised an uncaught ``ValueError``, so this
+    guard is the difference between a report and a crash.
+    """
+
+    (tmp_path / "replay-seed-4.jsonl").write_text("")
+    (tmp_path / "replay-seed-9.jsonl").write_text("")
+
+    assert bsr._seeds_on_disk(tmp_path) == [4, 9]
+
+    (tmp_path / "replay-seed-4.audit.jsonl").write_text("")
+
+    assert bsr._seeds_on_disk(tmp_path) == [4, 9]
+
+
+def test_seeds_on_disk_still_raises_on_a_mistyped_replay(tmp_path: Path) -> None:
+    """The other half: only the recognised sidecar is skipped.
+
+    A mistyped ``replay-seed-4x.jsonl`` must not be silently excluded — building
+    a report over the remaining games and calling it the set's is worse than the
+    crash the sidecar guard removed.
+    """
+
+    (tmp_path / "replay-seed-4.jsonl").write_text("")
+    (tmp_path / "replay-seed-4x.jsonl").write_text("")
+
+    with pytest.raises(ValueError, match="replay-seed-4x.jsonl"):
+        bsr._seeds_on_disk(tmp_path)

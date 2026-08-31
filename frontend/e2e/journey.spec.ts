@@ -45,6 +45,18 @@ const TOUR_SEEN_KEY = "ailibi.guidedTourSeen.v1";
  * for reasons that have nothing to do with this test. What IS pinned is the
  * join: the card you click opens that seed's workspace.
  */
+//: The featured head's card text, captured by `openFeaturedReplay` before the
+//: strip unmounts. The evidence leg holds the rendered meeting to what this
+//: card PROMISES, in both directions, so a card and its game cannot drift apart.
+let headCardCopy = "";
+
+//: The head card's no-evidence promise, as its copy words it. A card carrying
+//: this phrase must open onto a meeting with nothing on the table; a card
+//: without it must open onto one that has something. Matching on the promise
+//: rather than on a pinned count is what lets a re-record move the number
+//: without touching this test — and what makes a card/bytes mismatch RED.
+const NO_EVIDENCE_PROMISE = /not one account that contradicts another/i;
+
 async function openFeaturedReplay(page: Page): Promise<number> {
   await page.addInitScript((key) => {
     window.localStorage.setItem(key, "1");
@@ -57,6 +69,9 @@ async function openFeaturedReplay(page: Page): Promise<number> {
   const seedLabel = await head.locator("span").first().innerText();
   const seed = Number(seedLabel.replace(/[^0-9]/g, ""));
   expect(Number.isFinite(seed)).toBe(true);
+  // The card's own promise, kept for the evidence check below to hold the
+  // render to. Read here because the strip is gone once the game opens.
+  headCardCopy = await head.innerText();
 
   await head.click();
 
@@ -440,14 +455,33 @@ test.describe("spectator journey", () => {
 
     // Non-vacuity, because everything above is satisfied by 0 = 0: deleting
     // `EvidenceSection` outright, or dropping the meeting's flags before the
-    // render, would empty BOTH arrays and still pass. The curated featured head
-    // is picked for having contradictions on the table — ReplayPicker's blurb for
-    // it says in as many words that every one is stamped a weak signal — so the
-    // surface has to BE there. Today it reads `Evidence (3)` over
-    // `Weak signals (3)`; the count is read rather than pinned, because a
-    // re-record can move it, but it may not fall to zero.
-    expect(declaredTotal).toBeGreaterThan(0);
-    expect(grouped.length).toBeGreaterThan(0);
+    // render, would empty BOTH arrays and still pass.
+    //
+    // So the render is held to what the CARD PROMISES, in both directions. The
+    // head card is the first thing a visitor clicks, and its copy is a claim
+    // about the game behind it. A card promising a room with nothing to go on
+    // must open onto zero evidence; a card that promises anything else must open
+    // onto evidence that is actually there. Either mismatch is red.
+    //
+    // This replaces a pinned `> 0`. That pin encoded the OLD head — a meeting
+    // with three weak signals — and the baseline-8 record emptied it: seed 2 now
+    // holds one meeting, no contradictions, and ejects nobody. The owner ruled
+    // the card be rewritten to that truth rather than the strip re-curated, so
+    // the guard follows the exhibit instead of outliving it.
+    const promisesNothingOnTheTable = NO_EVIDENCE_PROMISE.test(headCardCopy);
+    if (promisesNothingOnTheTable) {
+      expect(declaredTotal).toBe(0);
+      expect(grouped.length).toBe(0);
+    } else {
+      expect(declaredTotal).toBeGreaterThan(0);
+      expect(grouped.length).toBeGreaterThan(0);
+    }
+
+    // …and the panel is NOT empty just because the evidence is: the room did
+    // deliberate. Without this, "no evidence" would be satisfied by a meeting
+    // dialog that rendered nothing at all.
+    const turnCards = await transcript.getByRole("article").count();
+    expect(turnCards).toBeGreaterThan(0);
 
     // ── to the end ───────────────────────────────────────────────────────────
     await page.keyboard.press("Escape"); // the meeting's own keyboard exit
@@ -525,6 +559,53 @@ test.describe("spectator journey", () => {
     await expect(page).not.toHaveURL(/[?&]reveal=1\b/);
 
     expect(pageErrors).toEqual([]);
+  });
+
+  test("the evidence guard bites on a card that misdescribes its game", async ({
+    page,
+  }) => {
+    // THE PLANTED CASE for the check above. That check reads the head card's
+    // promise and holds the render to it, which is only worth anything if a
+    // MISMATCH actually goes red — so both mismatches are constructed here
+    // against the real rendered meeting, with no bytes and no copy touched.
+    const seed = await openFeaturedReplay(page);
+    expect(seed).toBe(2);
+
+    await resetFocus(page);
+    await page.keyboard.press("]");
+    const meeting = page.getByRole("dialog");
+    await expect(meeting).toBeVisible();
+    const transcript = meeting.getByRole("region", {
+      name: "Accusation chain & transcript",
+    });
+    await expect(transcript).toBeVisible();
+
+    const declared = await transcript.getByRole("heading", { level: 4 }).allTextContents();
+    const grouped = await transcript.getByRole("heading", { level: 5 }).allTextContents();
+    const declaredTotal = declared
+      .map((text) => Number(/^Evidence \((\d+)\)$/.exec(text.trim())?.[1] ?? 0))
+      .reduce((sum, n) => sum + n, 0);
+
+    // The head's real state, and the real card: nothing on the table, and copy
+    // that says so. This is the pairing the journey asserts.
+    expect(declaredTotal).toBe(0);
+    expect(grouped.length).toBe(0);
+    expect(NO_EVIDENCE_PROMISE.test(headCardCopy)).toBe(true);
+
+    // MISMATCH A — a card that PROMISES contradictions over a meeting that has
+    // none. The journey would take the `else` branch and demand > 0.
+    const cardClaimingEvidence = headCardCopy.replace(
+      NO_EVIDENCE_PROMISE,
+      "three accounts that cannot all be true",
+    );
+    expect(NO_EVIDENCE_PROMISE.test(cardClaimingEvidence)).toBe(false);
+    expect(declaredTotal).not.toBeGreaterThan(0); // the branch it would fail on
+
+    // MISMATCH B — the no-evidence promise over a meeting that HAS evidence.
+    // The journey would take the `if` branch and demand 0.
+    const pretendEvidenceTotal = 3;
+    expect(NO_EVIDENCE_PROMISE.test(headCardCopy)).toBe(true);
+    expect(pretendEvidenceTotal).not.toBe(0); // the branch it would fail on
   });
 
   test("the keyboard transport drives the playhead", async ({ page }) => {

@@ -212,7 +212,7 @@ from orchestrator.replay import (  # noqa: E402
 
 _README: Final = "README.md"
 _ENV_EXAMPLE: Final = ".env.example"
-_LADDER_TIP_AUDIT: Final = "audits/audit-phase-20-baseline-7.md"
+_LADDER_TIP_AUDIT: Final = "audits/audit-phase-21-rerecord.md"
 _GLOSSARY: Final = "docs/glossary.md"
 _HISTORY: Final = "docs/history.md"
 _READING_GUIDE: Final = "docs/reading-guide.md"
@@ -550,10 +550,20 @@ _MIN_EXHIBIT_SEEDS: Final = 2
 # column is the current record's pre-registered read, which measured the same
 # cells on the new bytes and publishes them pooled.
 _PROOF_PARTITION_AUDIT: Final = "audits/audit-phase-19-close.md"
-# Each bar of the record's read is its own section, and the pooled row of the
+# Each cell of the record's read is its own section, and the pooled row of the
 # table inside it is the cell the front door quotes. Located by the heading, so
 # the four ``| set | before | after |`` tables cannot be confused for each other.
-_RECORD_BAR_HEADING: Final = re.compile(r"^#{2,4} +Bar (\d+)\b", re.MULTILINE)
+#
+# TWO heading shapes, because a record can be either kind. An ADOPTING record
+# publishes numbered BARS it pre-registered ("## Bar 1 — ..."). A MAINTENANCE
+# record pre-registers nothing and has no bars by design, so it publishes the
+# same cells under a numbered PUBLISHED CELL heading ("## Published cell 1 — ...").
+# Widening the locator to accept both is the minimum that lets a maintenance
+# record be read at all; it does NOT weaken the gate, because a record
+# publishing NEITHER shape still matches nothing and still fails.
+_RECORD_BAR_HEADING: Final = re.compile(
+    r"^#{2,4} +(?:Bar|Published cell) (\d+)\b", re.MULTILINE
+)
 _BEFORE_AFTER_HEADER: Final[tuple[str, str]] = ("set", "before")
 _RECORD_POOLED_LABEL: Final = "pooled"
 _ACCURACY_BAR: Final = 1
@@ -563,9 +573,10 @@ _INNOCENT_BAR: Final = 2
 _DIRECT_PROOF_POOLED: Final = re.compile(
     r"direct-proof cell[^|]*?\*\*(\d+)/(\d+) = [\d.]+\*\* pooled"
 )
-# The record's win-split table: the baseline-6 rate each set carried, which is
-# what a before-column win-rate claim is held to.
-_WIN_SPLIT_HEADER: Final[tuple[str, str]] = ("set", "baseline-6 impostor rate")
+# The record's win-split table: the PREVIOUS baseline's rate each set carried,
+# which is what a before-column win-rate claim is held to. The literal tracks the
+# record being read — baseline 8's history column is baseline 7's rate.
+_WIN_SPLIT_HEADER: Final[tuple[str, str]] = ("set", "baseline-7 impostor rate")
 _WIN_SPLIT_ROW: Final = "samples/{name}"
 _PROOF_CLAIM: Final = (
     "Ejection accuracy with engine-certified proof of the ejectee's role, "

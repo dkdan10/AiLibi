@@ -58,7 +58,7 @@ from engine.events import (
     VentEnteredEvent,
     VentExitedEvent,
 )
-from engine.tick import advance_tick, superseded_meeting_tick
+from engine.tick import advance_tick
 from engine.world import Map, WorldState
 from meetings.schemas import MeetingOutcome, MeetingResult
 from orchestrator.game import apply_meeting_result
@@ -550,23 +550,10 @@ def reconstruct_episode(
         state, tick_events = advance_tick(state, actions, game_map=game_map)
         actual = _state_hash(state)
         if actual != entry.state_hash:
-            # Two committed recordings pinned a meeting-trigger tick the engine
-            # now concludes. The pre-ruling pair is accepted only when a meeting
-            # row exists for the tick AND it re-hashes to the recorded hash
-            # exactly, so it cannot mask a roster mismatch or engine drift.
-            # Retired by Task 21.15's re-record.
-            restored = superseded_meeting_tick(state, tick_events)
-            if restored is not None and meeting_by_tick.get(entry.tick) is not None:
-                candidate_state, candidate_events = restored
-                if _state_hash(candidate_state) == entry.state_hash:
-                    state = candidate_state
-                    tick_events = list(candidate_events)
-                    actual = entry.state_hash
-            if actual != entry.state_hash:
-                raise RolloutReconstructionError(
-                    f"seed {seed}: tick {entry.tick} reconstructed {actual!r} != "
-                    f"recorded {entry.state_hash!r} (roster mismatch or drift)"
-                )
+            raise RolloutReconstructionError(
+                f"seed {seed}: tick {entry.tick} reconstructed {actual!r} != "
+                f"recorded {entry.state_hash!r} (roster mismatch or drift)"
+            )
         final_tick = state.tick
         for event in tick_events:
             events.append(event)
