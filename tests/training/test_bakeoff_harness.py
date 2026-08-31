@@ -97,6 +97,7 @@ from training.bakeoff.harness import (
     MIN_FULL_GAME_FITNESS,
     PRESCREEN_CONVERSION_PIN,
     PRESCREEN_FLAGS_PER_MEETING_FLOOR,
+    SURROGATE_ARTIFACT_DIR,
     TRUNCATED_EPISODE_FITNESS,
     TrainedCandidate,
     _impostor_shaped_total,
@@ -135,11 +136,8 @@ from training.rewards import (
     ObjectiveWeights,
     compute_shaped_reward,
 )
+from training.anchor_study import HIGH_FLAG_FLOOR
 from training.rollout import DESCRIPTOR_VECTOR_FIELDS, EpisodeRollout
-
-from tests.training._regrounding import (
-    artifact_copy_fingerprinted_to_the_live_corpus,
-)
 
 # The four entrant modules the firewall test AST-scans (the committed forbidden
 # import is any ``eval`` / ``eval.*`` module — the harness is the ONLY bake-off
@@ -171,18 +169,24 @@ def test_eval_seeds_are_the_frozen_corpus_test_split() -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_selection_bar_pins_the_baseline_6_floors() -> None:
-    """Pin Task 18.14: the bake-off selects on the baseline-6 (adopted Phase-18)
-    floors and the goodhart probe default tracks the same literal.
+def test_selection_bar_pins_the_baseline_8_floors() -> None:
+    """The bake-off selects on the baseline the ML fits are ground on, and the
+    goodhart probe default tracks the same literal.
 
-    The flip is coupled: moving ``BAKEOFF_BASELINE_ID`` to ``baseline-6`` requires
+    The flip is coupled: moving ``BAKEOFF_BASELINE_ID`` requires
     ``run_goodhart_probe``'s default ``baseline_id`` to move with it, so the probe
-    keeps measuring against the same floors the bake-off selects on."""
+    keeps measuring against the same floors the bake-off selects on. The id moved
+    to ``baseline-8`` at the Task-21.17 re-ground, alongside
+    ``training.anchor_study.HIGH_FLAG_FLOOR``, which is that baseline's own
+    committed ``flags_per_meeting`` floor — the two travel together so the study
+    never stamps one baseline while filtering on another's gauge."""
 
-    assert BAKEOFF_BASELINE_ID == "baseline-6"
+    assert BAKEOFF_BASELINE_ID == "baseline-8"
     signature = inspect.signature(run_goodhart_probe)
     probe_default = signature.parameters["baseline_id"].default
     assert probe_default == BAKEOFF_BASELINE_ID
+    # The floor the study filters against is the one this baseline commits.
+    assert HIGH_FLAG_FLOOR == 147 / 151
 
 
 # --------------------------------------------------------------------------- #
@@ -365,12 +369,7 @@ def test_evaluate_candidate_full_row(tmp_path: Path) -> None:
         determinism_seeds=(1004,),
         leak_seeds=(0, 1),
         repeat_n=2,
-        # The committed artifact's fit-corpus fence refuses the baseline-7 corpus
-        # until the ML re-ground lands (tests/training/_regrounding.py); this row
-        # is about the HARNESS, so it runs against the re-fingerprinted copy.
-        surrogate_artifact_dir=artifact_copy_fingerprinted_to_the_live_corpus(
-            tmp_path / "surrogate"
-        ),
+        surrogate_artifact_dir=SURROGATE_ARTIFACT_DIR,
     )
     result = evaluate_candidate(candidate, protocol, artifact_root=tmp_path)
 
@@ -384,9 +383,15 @@ def test_evaluate_candidate_full_row(tmp_path: Path) -> None:
     # The referee scored exactly the two eval seeds.
     assert len(result.referee_scores) == 2
     assert 0.0 <= result.floor_trip_rate <= 1.0
+    # Five gauges, not three: the baseline the selection bar now reads
+    # (BAKEOFF_BASELINE_ID, moved at the Task-21.17 re-ground) commits the two
+    # flags_per_meeting COMPONENT floors beside the composite, so the referee
+    # reports the split its floor block pins.
     assert {gauge.name for gauge in result.supply_gauges} == {
         "witnessed_event_rate",
         "flags_per_meeting",
+        "transcript_flags_per_meeting",
+        "persisted_vent_flags_per_meeting",
         "testimony_backed_conversion",
     }
 
@@ -562,14 +567,9 @@ def test_goodhart_surrogate_rerun_ci_budget(tmp_path: Path) -> None:
         seed=0,
         fitness_seeds=(1004,),
     )
-    # As above: the 15.14 obligation is about the PROBE, and the probe cannot run
-    # at all until a surrogate loads, so it runs against the re-fingerprinted copy
-    # while the ML re-ground is outstanding (tests/training/_regrounding.py).
     rerun = run_goodhart_surrogate_rerun(
         config=config,
-        surrogate_artifact_dir=artifact_copy_fingerprinted_to_the_live_corpus(
-            tmp_path / "surrogate"
-        ),
+        surrogate_artifact_dir=SURROGATE_ARTIFACT_DIR,
     )
 
     assert rerun.probe.verdict in ("HELD", "EXPLOITS_FOUND")
@@ -832,7 +832,7 @@ def test_rerun_artifacts_carry_the_15_9_provenance_stamp() -> None:
 # as a literal so a re-ground that moves the weights trips the default-protocol
 # row-stamp pins HERE (the committed GO verdict is keyed to exactly this).
 _COMMITTED_CONVICTION_SHA256: str = (
-    "4841f8e02eb7b587237c5b88bc2d350c12c7a5b5ac5c7ae1481069235c7b2a47"
+    "7e764b89fb0bec445c3b19e2e0f07de89d9011c1e4fc1b0a6b32b1004cb151ed"
 )
 
 

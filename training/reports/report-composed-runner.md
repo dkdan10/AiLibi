@@ -5,29 +5,29 @@ rollouts, composed from the two committed instruments (the 18.15/18.16
 conviction model and the 15.13/18.14 ballot surrogate), no new weights.
 **Code:** `training/composed_runner.py`; tests in
 `tests/training/test_composed_runner.py`.
-**Date:** 2026-07-22.
-**Corpus:** `replays/ml_corpus/9p2i` — the baseline-6 re-record (Task 18.13):
-committed `splits.json`, held-out test side **96 meetings / 60 ejections** (the
+**Date:** 2026-07-22; re-ground on the baseline-8 corpus 2026-08-31 (Task 21.17).
+**Corpus:** `replays/ml_corpus/9p2i` — the baseline-8 re-record (Task 21.15):
+committed `splits.json`, held-out test side **91 meetings / 57 ejections** (the
 same population both component verdicts were taken on).
 **Committed artifact:** `training/artifacts/composed/` — `manifest.json` (the
 component-sha manifest: conviction
-`4841f8e02eb7b587237c5b88bc2d350c12c7a5b5ac5c7ae1481069235c7b2a47`, surrogate
-`611771a4853d2c4fe0ff9ebcc5811788a5a5c235ba8fc7061f4f9fe06dbf40c5`) +
-`verdict.json` (the bar verdict). The composed artifact carries **no weights** —
+`7e764b89fb0bec445c3b19e2e0f07de89d9011c1e4fc1b0a6b32b1004cb151ed`, surrogate
+`06b2050889271c267af2e5d083ba46099bbb55120ca834f4d357733f0e2dcda8`) +
+`verdict.json` (the bar verdict, with a `verdict.json.sha256` sidecar). The composed artifact carries **no weights** —
 it is the manifest pinning both component shas plus the verdict.
 
 **Verdict summary:** **GO**, taken on the FIRST held-out evaluation against the
-pre-registered bar. Meeting-level decision accuracy **83/96 = 0.8646 > 0.625**
+pre-registered bar. Meeting-level decision accuracy **82/91 = 0.9011 > 0.6264**
 (the strictest trivial constant on this split — always-eject), convicting-meeting
-ejected-target top-1 **46/60 = 0.7667 ≥ 0.6375** (= 0.75 × the 0.8500 honest
-ceiling, the standing axis-1 form), exact-outcome match **76/96 = 0.7917**
+ejected-target top-1 **47/57 = 0.8246 ≥ 0.6184** (= 0.75 × the 0.8246 honest
+ceiling, the standing axis-1 form), exact-outcome match **76/91 = 0.8352**
 reported informationally. Consequence (pre-committed, machine-readable in
 `verdict.json`): `composed_role: "optional-campaign-configuration"` — the runner
 MAY be adopted through 18.21's runner-factory seam, only at a swap boundary (the
 18.24 note), with the standing rules untouched: **final champion numbers are
 never composed-runner-scored, and both component staleness counters meter every
 composed meeting.** The composed-path Goodhart leg ran before any adoption
-(§6): machinery verdict **HELD, zero machinery blockers** — with three named
+(§6): machinery verdict **HELD, zero machinery blockers** — with two named
 adoption constraints stated in §6.3 (never silent caveats).
 
 ---
@@ -35,16 +35,16 @@ adoption constraints stated in §6.3 (never silent caveats).
 ## 1. The pre-registered GO bar
 
 Committed in the task contract (tasks/phase-18.md, Task 18.29) BEFORE any
-measurement, on the held-out corpus test split (96 meetings / 60 ejections):
+measurement, on the held-out corpus test split (91 meetings / 57 ejections):
 
-1. **Meeting-level decision accuracy > 0.625** — strictly greater than the
-   always-eject constant (60/96), the strictest trivial constant on this split.
+1. **Meeting-level decision accuracy > 0.6264** — strictly greater than the
+   always-eject constant (57/91), the strictest trivial constant on this split.
    Computed population-relative (`always_eject_baseline = test_ejections /
    test_meetings`), never a hard-coded absolute.
-2. **Among convicting meetings, ejected-target top-1 ≥ 0.6375** — the standing
+2. **Among convicting meetings, ejected-target top-1 ≥ 0.6184** — the standing
    axis-1 form: `GO_TOP1_CEILING_RATIO` (0.75, imported from
    `training/surrogate/fidelity.py`) × the honest ceiling measured on the same
-   scored population (0.8500, `compute_honest_ceiling` over the test views).
+   scored population (0.8246, `compute_honest_ceiling` over the test views).
 3. **Exact-outcome match (ejected id or skip) REPORTED beside the verdict** —
    informational, never gating.
 
@@ -86,7 +86,7 @@ protocol and composes, never re-fits:
   untouched (candidate-set exclusion), and re-anchoring can only place the
   target on voters allowed to name it — an impostor's ballot never names a
   fellow impostor, before or after re-anchoring. In-loop measurement (§6):
-  0 betrayal ballots over 162 multi-impostor ballots on the composed substrate.
+  0 betrayal ballots over 136 multi-impostor ballots on the composed substrate.
 * **Both fences load committed.** The surrogate side loads through
   `load_surrogate_runner_factory`'s fence semantics (weights-sha sidecar, cap
   cross-check, fit-corpus cross-check, counter validation); the predictor is
@@ -186,11 +186,11 @@ doctrine), and any substrate change re-runs §8.
 
 ## 5. What the composed path changes inside training rollouts
 
-On the composed substrate (8 scripted-FSM games, seeds 0–7, 9p2i), **28
-meetings resolved 13 ejections (46.4%)** — against 0% on the fake path (the
-verdict pair's opening: fake meetings convict nobody) and 65.2% on the real
-baseline-6 path. Games reach game-over with a consistent win condition (7
-crew / 1 impostor on those seeds), rosters actually shrink, and replays remain
+On the composed substrate (8 scripted-FSM games, seeds 0–7, 9p2i), **23
+meetings resolved 11 ejections (47.8%)** — against 0% on the fake path (the
+verdict pair's opening: fake meetings convict nobody) and 64.0% on the real
+baseline-8 corpus. Games reach game-over with a consistent win condition (5
+crew / 3 impostor on those seeds), rosters actually shrink, and replays remain
 byte-identical across re-runs (the validity gate's reconstruction check, §6.3).
 
 ## 6. The composed-path Goodhart leg (the standing rule — run before any adoption)
@@ -203,7 +203,7 @@ baseline-relative gate split, the `_signed_relative_gain` laundering
 convention, and the one-shared-counter discipline are reused import-only,
 `goodhart.py` untouched. Budget: the committed 18.18 shape (`generations=6`,
 `population=6`, σ=0.5, seed=0, K=8 fitness seeds, `init_scale=0.5`), roster
-9p2i, baseline-6, materiality bar 0.25.
+9p2i, baseline-8, materiality bar 0.25.
 
 ### 6.1 Machine verdict
 
@@ -381,7 +381,7 @@ uv run pytest tests/training/test_composed_runner.py -q
   runner's training-signal role grows further (the standing rule this leg
   instantiated); NO-GO or a fired probe would have left the campaigns on the
   standing plan with nothing re-planned — the fallback is always live.
-* Any substrate change re-runs §8 — every number here is a baseline-6
+* Any substrate change re-runs §8 — every number here is a baseline-8
   measurement, not a transferable constant.
 
 ## 11. Errata (coordination, 2026-08-04 — the Task 19.20 report-honesty pass; additive, no in-place rewrites)

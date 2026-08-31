@@ -35,6 +35,7 @@ from training.anchor_study import (
     walk_corpus_game,
 )
 from training.bakeoff.harness import (
+    BAKEOFF_BASELINE_ID,
     BakeoffProtocolConfig,
     load_candidate_weights,
 )
@@ -724,28 +725,31 @@ def test_committed_lambda_1_artifact_reproduces_the_champion_byte_for_byte() -> 
     assert sweep == committed
 
 
-def test_committed_study_artifacts_are_the_baseline6_fit() -> None:
-    """The committed anchor-study artifacts ARE the baseline-6 re-run (Task 18.14).
+def test_committed_study_artifacts_are_the_baseline8_fit() -> None:
+    """The committed anchor-study artifacts ARE the baseline-8 re-run (Task 21.17).
 
-    The inverse of the PR #301 tripwire this replaces. Where that asserted the
-    baseline-5-artifact / baseline-6-corpus HYBRID (a re-run deferred to this task),
-    the re-ground makes the committed artifact current. The utility-es λ sweep is
-    SUBSTRATE-INDEPENDENT (deterministic fake-provider rollouts off ``seed`` + the
-    canonical map, no corpus read), so the λ cell genomes — and the
-    λ=1.0-vs-committed-champion byte identity pinned above — reproduce unchanged;
-    only the corpus-derived filtered-BC anchor is re-fit on the baseline-6 replay
-    bytes, and every cell's ``config.json`` substrate sha plus the study index's
-    ``substrate_sha`` are re-stamped to the live substrate. So the committed
-    artifact's recorded substrate now MATCHES ``compute_substrate_sha()`` and reads
-    ``baseline-6`` — the hybrid the tripwire tracked has resolved.
+    The utility-es λ sweep is SUBSTRATE-INDEPENDENT (deterministic fake-provider
+    rollouts off ``seed`` + the canonical map, no corpus read), so the λ cell
+    genomes — and the λ=1.0-vs-committed-champion byte identity pinned above —
+    reproduce unchanged; only the corpus-derived filtered-BC anchor is re-fit on
+    the live replay bytes, and every cell's ``config.json`` substrate sha plus the
+    study index's ``substrate_sha`` are re-stamped to the live substrate. So the
+    committed artifact's recorded substrate MATCHES ``compute_substrate_sha()``
+    and reads the adopted baseline id.
+
+    The λ grid itself is deliberately NOT re-searched: those rows are a recording
+    of a search made under the pre-Task-21.16 fitness objective, and
+    ``compute_substrate_sha``'s payload covers the corpus and the flag floor but
+    not the objective — so the fence below cannot see that difference, and the
+    report says so in §1.1 rather than leaving it to be inferred.
     """
 
     index = json.loads((ANCHOR_STUDY_ARTIFACT_ROOT / "study.json").read_text())
     report = AnchorStudyReport.model_validate(index)
-    # Re-grounded: the recorded substrate now MATCHES the live substrate and reads
-    # the adopted baseline id (the tripwire's two hybrid assertions, inverted).
+    # Re-grounded: the recorded substrate MATCHES the live substrate and reads
+    # the adopted baseline id.
     assert report.substrate_sha == compute_substrate_sha()
-    assert report.baseline_id == "baseline-6"
+    assert report.baseline_id == BAKEOFF_BASELINE_ID == "baseline-8"
     # The substrate-independent structure holds (not what the re-ground moved): the
     # full λ grid and the λ=1.0 champion byte-identity cross-check.
     assert report.lambda_grid == LAMBDA_GRID

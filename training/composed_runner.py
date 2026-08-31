@@ -1222,7 +1222,7 @@ def run_composed_goodhart_leg(
     num_players: int = 9,
     num_impostors: int = 2,
     tasks_per_crewmate: int = 2,
-    baseline_id: str = "baseline-6",
+    baseline_id: str = "baseline-8",
     materiality_bar: float = 0.25,
     conviction_artifact_dir: Path = _CONVICTION_ARTIFACT_DIR,
     surrogate_artifact_dir: Path = _SURROGATE_ARTIFACT_DIR,

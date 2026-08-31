@@ -59,6 +59,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import re
 import sys
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -1430,6 +1431,50 @@ _BLOCK_IMPOSTOR_ENCODERS: tuple[str, ...] = (
 # MAP-Elites corpus MANIFEST substrate.
 _COMPUTE_SUBSTRATE_BLOCKS: frozenset[int] = frozenset({0, 1, 2})
 _BAKEOFF_SUBSTRATE_BLOCKS: frozenset[int] = frozenset({3, 4})
+
+# The campaign's own committed provenance: the harness scripts it RAN, each
+# asserting the composite substrate its seeds were trained at. Read from the
+# provenance tree rather than from the result rows, so the pin below is a
+# cross-file agreement and not the rows checking themselves.
+_COEVO_PROVENANCE_DIR: Path = (
+    Path(__file__).resolve().parents[2]
+    / "training"
+    / "artifacts"
+    / "coevo"
+    / "provenance"
+    / "harnesses"
+)
+_HARNESS_SUBSTRATE_ASSERT = re.compile(
+    r'composite\.startswith\("([0-9a-f]+)"\)',
+)
+# The bake-off-sha half has NO independent witness: nothing under
+# `training/artifacts/coevo/provenance/` records it, and its only other
+# statements live in the recorded impostor-campaign report — a recording, not
+# provenance. It is pinned as a dated literal with the gap named, per the
+# Task-21.17 contract's Step 5 fallback.
+_RECORDED_BAKEOFF_SUBSTRATE_SHA: str = (
+    "e4547789167039aea0cecb7c48522eed6e09e0d7b8d27a970ccbc76b251dedf2"
+)
+
+
+def _provenance_substrate_prefix() -> str:
+    """The composite substrate prefix the campaign's OWN harness scripts assert.
+
+    Every committed ``harness_run_*.py.txt`` carries
+    ``assert composite.startswith("<prefix>")`` — the substrate the campaign
+    refused to run away from. All of them must agree, or the provenance itself
+    is inconsistent and there is nothing to pin against.
+    """
+
+    prefixes = set()
+    scripts = sorted(_COEVO_PROVENANCE_DIR.glob("harness_run_*.py.txt"))
+    assert scripts, f"no committed campaign harnesses under {_COEVO_PROVENANCE_DIR}"
+    for script in scripts:
+        found = _HARNESS_SUBSTRATE_ASSERT.findall(script.read_text(encoding="utf-8"))
+        assert found, f"{script.name} records no substrate assertion"
+        prefixes.update(found)
+    assert len(prefixes) == 1, f"the committed harnesses disagree: {sorted(prefixes)}"
+    return prefixes.pop()
 # The projected per-run game ceiling every run stayed under.
 _CAMPAIGN_GAME_CEILING: int = 25000
 
@@ -1523,20 +1568,39 @@ class TestCommittedImpostorCampaignRows:
             assert cumulative[-1] <= _CAMPAIGN_GAME_CEILING
 
     def test_substrate_sha_kind_and_value_dispatch_per_block(self) -> None:
-        # A DYNAMIC self-consistency pin: the recorded shas must equal the live
-        # definitions, guarding the two-definition dispatch (never hardcoded).
-        compute_sha = compute_substrate_sha()
-        bakeoff_sha = bakeoff_substrate_sha()
+        """A PROVENANCE pin: the recorded shas against the campaign's own record.
+
+        These rows are a recording of a co-evolution campaign that ran for hours
+        on a substrate this checkout no longer holds; comparing them to a LIVE
+        digest would demand that a recording change whenever the repo does, and
+        re-stamping them to satisfy it would forge provenance. So each block's
+        recorded sha is checked against what the campaign itself committed, and
+        the per-block KIND dispatch is kept — a row that names the wrong sha kind
+        still fails.
+
+        The compute-sha half has an independent witness: the harness scripts the
+        campaign ran assert the composite they were seeded at. The bake-off half
+        has none anywhere under `training/artifacts/coevo/provenance/`, so it
+        takes a dated literal with that gap named
+        (:data:`_RECORDED_BAKEOFF_SUBSTRATE_SHA`).
+
+        The invariant a live comparison was standing in for — a seed whose
+        substrate sha does not match the adopted one is REFUSED at ingest — has
+        its own gate at
+        ``tests/training/test_hall_of_fame.py::test_founder_ingestion_substrate_mismatch_refused``.
+        """
+
+        provenance_prefix = _provenance_substrate_prefix()
         for index, block in enumerate(_campaign_blocks()):
             if index in _COMPUTE_SUBSTRATE_BLOCKS:
                 for row in block:
                     assert row.substrate_sha_kind == "compute_substrate_sha"
-                    assert row.substrate_sha256 == compute_sha
+                    assert row.substrate_sha256.startswith(provenance_prefix)
             else:
                 assert index in _BAKEOFF_SUBSTRATE_BLOCKS
                 for row in block:
                     assert row.substrate_sha_kind == "bakeoff_substrate_sha"
-                    assert row.substrate_sha256 == bakeoff_sha
+                    assert row.substrate_sha256 == _RECORDED_BAKEOFF_SUBSTRATE_SHA
 
     def test_moving_encoder_version_per_block_and_side(self) -> None:
         for index, block in enumerate(_campaign_blocks()):
@@ -1666,13 +1730,20 @@ class TestCommittedCrewCampaignRows:
             assert cumulative[-1] <= _CAMPAIGN_GAME_CEILING
 
     def test_substrate_is_the_compute_sha_for_both_blocks(self) -> None:
-        # Both runs bind to the anchor-study composite (dynamic
-        # self-consistency, never hardcoded hex).
-        compute_sha = compute_substrate_sha()
+        """Both runs bind to the anchor-study composite the campaign recorded.
+
+        A PROVENANCE pin, not a live one: these rows record a campaign that ran
+        on a substrate this checkout no longer holds, and the campaign's own
+        committed harness scripts are what they are checked against. The stale
+        seed the live comparison used to guard is refused at ingest instead —
+        ``tests/training/test_hall_of_fame.py::test_founder_ingestion_substrate_mismatch_refused``.
+        """
+
+        provenance_prefix = _provenance_substrate_prefix()
         for block in _crew_campaign_blocks():
             for row in block:
                 assert row.substrate_sha_kind == "compute_substrate_sha"
-                assert row.substrate_sha256 == compute_sha
+                assert row.substrate_sha256.startswith(provenance_prefix)
 
     def test_moving_encoder_version_per_block_and_side(self) -> None:
         for index, block in enumerate(_crew_campaign_blocks()):
