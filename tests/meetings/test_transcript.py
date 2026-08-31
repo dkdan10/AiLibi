@@ -13,6 +13,8 @@ classification (DESIGN.md §5.4; audit gp-1 precision) is pinned here.
 
 from __future__ import annotations
 
+from typing import Final
+
 import pytest
 
 from meetings.schemas import (
