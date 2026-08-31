@@ -45,6 +45,7 @@ from engine.world import Map, WorldState, load_canonical_map
 from eval.leak_scan import assert_memory_render_role_disclosure_is_entitled
 from llm.budget import GameBudget
 from llm.client import CallKind, LLMResponse, TokenUsage
+from meetings.corroboration import MeetingTestimonyLedger
 from meetings.manager import (
     MeetingConfig,
     MeetingDeadlines,
@@ -1019,6 +1020,7 @@ def _stub_vote_prompt(
     persona: str = "",  # Task 16.3: widened contract kwarg (inert)
     suspicion_provenance: tuple[SuspicionEntry, ...] = (),  # Task 16.3
     render_inputs: PromptRenderInputs | None = None,  # Task 20.31
+    testimony_ledger: MeetingTestimonyLedger | None = None,  # Task 21.19
 ) -> str:
     return f"VOTE voter={voter_id}"
 

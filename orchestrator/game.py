@@ -84,6 +84,7 @@ from llm.budgeted_client import BudgetedLLMClient
 from llm.client import LLMClient, LLMResponse
 from llm.client import CallKind as _LLMCallKind
 from llm.provider import LLMCallFailure, build_default_client, extract_parse_failure
+from meetings.corroboration import corroboration_discipline_enabled
 from meetings.manager import (
     EMERGENCY_TRIGGER_PHRASE,
     BodyDiscoveryRecord,
@@ -449,6 +450,24 @@ REPORTER_REASONING_PROMPT_VERSION_SETS: Final[Mapping[str, Mapping[str, str]]] =
 }
 
 
+# The corroboration ON-arm version registry, served while the default-OFF
+# ``corroboration_discipline`` lever is ON. Same shape as the reporter arm and
+# for the same reason -- the lever swaps no template FILE, it renders the set's
+# own ``vote_ballot.j2`` with a guarded source-count block -- so exactly that one
+# key carries an arm stamp and the other three inherit the default registry's
+# values. A ballot rendered with the block can therefore never share a
+# ``vote_ballot`` stamp with one rendered without it.
+_CORROBORATION_DISCIPLINE_ARM: Final[Mapping[str, str]] = _lever_arm_versions(
+    "qwen3_6_27b", "corroboration_discipline"
+)
+CORROBORATION_DISCIPLINE_PROMPT_VERSION_SETS: Final[Mapping[str, Mapping[str, str]]] = {
+    "qwen3_6_27b": {
+        **_bespoke_versions("qwen3_6_27b", version="v5"),
+        "vote_ballot": _CORROBORATION_DISCIPLINE_ARM["vote_ballot"],
+    },
+}
+
+
 # Every live lever that carries an ON-arm version overlay, keyed by the substrate
 # registry key the lever stamps. The fold below iterates
 # ``_TOGGLEABLE_LEVER_RESOLVERS`` rather than this mapping, so application order
@@ -458,6 +477,7 @@ REPORTER_REASONING_PROMPT_VERSION_SETS: Final[Mapping[str, Mapping[str, str]]] =
 _PROMPT_VERSION_OVERLAYS: Final[Mapping[str, Mapping[str, Mapping[str, str]]]] = {
     "impostor_roll_call": IMPOSTOR_ROLL_CALL_PROMPT_VERSION_SETS,
     "reporter_reasoning": REPORTER_REASONING_PROMPT_VERSION_SETS,
+    "corroboration_discipline": CORROBORATION_DISCIPLINE_PROMPT_VERSION_SETS,
 }
 
 # The human label each overlay's fail-loud message names, so an operator reads
@@ -465,6 +485,7 @@ _PROMPT_VERSION_OVERLAYS: Final[Mapping[str, Mapping[str, Mapping[str, str]]]] =
 _PROMPT_OVERLAY_LABELS: Final[Mapping[str, str]] = {
     "impostor_roll_call": "impostor-answer",
     "reporter_reasoning": "reporter-voice",
+    "corroboration_discipline": "source-count",
 }
 
 
@@ -964,6 +985,7 @@ class DefaultMeetingRunner:
         prompt_versions: Mapping[str, str] = DEFAULT_PROMPT_VERSIONS,
         token_budget: int = DEFAULT_TOKEN_BUDGET,
         reporter_reasoning: bool | None = None,
+        corroboration_discipline: bool | None = None,
     ) -> None:
         self._recording_client = _RecordingLLMClient(llm_client)
         self._manager = MeetingManager(
@@ -977,6 +999,7 @@ class DefaultMeetingRunner:
             # ``prompt_versions`` recorded beside them are ONE decision, taken
             # once. ``None`` leaves the manager on its own per-run env read.
             reporter_reasoning=reporter_reasoning,
+            corroboration_discipline=corroboration_discipline,
         )
         self._prompt_versions = dict(prompt_versions)
         self._token_budget = token_budget
@@ -1125,6 +1148,7 @@ def build_default_meeting_runner(
     # which is the render-one-stamp-another failure this whole block exists to
     # prevent.
     resolved_reporter_reasoning = reporter_reasoning_enabled()
+    resolved_corroboration_discipline = corroboration_discipline_enabled()
     inner: LLMClient = llm_client if llm_client is not None else build_default_client()
     client: LLMClient = (
         BudgetedLLMClient(inner=inner, budget=budget) if budget is not None else inner
@@ -1148,6 +1172,7 @@ def build_default_meeting_runner(
         config=resolved_config,
         prompt_versions=resolved_versions,
         reporter_reasoning=resolved_reporter_reasoning,
+        corroboration_discipline=resolved_corroboration_discipline,
         token_budget=token_budget,
     )
 

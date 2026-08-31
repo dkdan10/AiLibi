@@ -36,6 +36,7 @@ from agents.base import AgentInterface
 from engine.entities import BodyState, PlayerId, Role
 from engine.world import Map, WorldState, load_canonical_map
 from llm.client import CallKind, LLMResponse, TokenUsage
+from meetings.corroboration import MeetingTestimonyLedger
 from meetings.manager import (
     MeetingConfig,
     MeetingDeadlines,
@@ -241,6 +242,7 @@ def _vote_prompt(
     persona: str = "",  # Task 16.3: widened contract kwarg (inert)
     suspicion_provenance: tuple[SuspicionEntry, ...] = (),  # Task 16.3
     render_inputs: PromptRenderInputs | None = None,  # Task 20.31
+    testimony_ledger: MeetingTestimonyLedger | None = None,  # Task 21.19
 ) -> str:
     return f"VO:{voter_id}:{','.join(candidate_targets)}"
 

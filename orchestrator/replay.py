@@ -89,6 +89,7 @@ from agents.memory.store import (
 from engine.actions import Action
 from engine.events import ActionRejectedEvent, EngineEvent, MeetingTriggeredEvent
 from engine.world import WorldState
+from meetings.corroboration import corroboration_discipline_enabled
 from meetings.manager import (
     derive_meeting_outcome_summary,
     reporter_reasoning_enabled,
@@ -638,7 +639,7 @@ _RETIRED_ALWAYS_ON_LEVERS: Final[tuple[str, ...]] = (
 # silently change a replay stamp or the loader's mismatch check mid-process. Each
 # resolver takes the optional ``env`` mapping and returns the lever's live state.
 #
-# TWO live toggles, both DEFAULT-OFF:
+# THREE live toggles, all DEFAULT-OFF:
 #
 # * ``impostor_roll_call`` — 18.10's impostor-answer template arm, bound to a
 #   LOCAL mirror with a CI equivalence pin standing in for the identity (the
@@ -647,12 +648,16 @@ _RETIRED_ALWAYS_ON_LEVERS: Final[tuple[str, ...]] = (
 #   resolver BY IDENTITY. This module already imports ``meetings.manager``, and
 #   that module's own imports never reach ``agents.strategic.prompts.loader``, so
 #   the import-time Jinja build that forced the other arm's mirror does not apply
-#   and one source of truth beats two that agree.
+#   and one source of truth beats two that agree;
+# * ``corroboration_discipline`` — the ballot's source-count block, bound BY
+#   IDENTITY to ``meetings.corroboration``, whose own imports reach only
+#   ``meetings.schemas`` / ``constants`` / ``transcript`` and so trigger no Jinja
+#   build either.
 #
-# Both are LEVERS: an arm a future gate may decide to ship, which would graduate
-# it into ``_RETIRED_ALWAYS_ON_LEVERS`` at its adopting record.
+# All three are LEVERS: an arm a future gate may decide to ship, which would
+# graduate it into ``_RETIRED_ALWAYS_ON_LEVERS`` at its adopting record.
 #
-# A bare environment stamps both ``False``, which IS the committed substrate: the
+# A bare environment stamps all three ``False``, which IS the committed substrate: the
 # missing-key-reads-False rule makes a stamp recorded before a key existed agree
 # with a build that has it. A lever graduates by moving into
 # ``_RETIRED_ALWAYS_ON_LEVERS`` at the record that adopts it — which appends it
@@ -666,6 +671,7 @@ _TOGGLEABLE_LEVER_RESOLVERS: Final[
 ] = (
     ("impostor_roll_call", _impostor_roll_call_enabled),
     ("reporter_reasoning", reporter_reasoning_enabled),
+    ("corroboration_discipline", corroboration_discipline_enabled),
 )
 
 # The still-toggleable subset of ``SUBSTRATE_FLAG_KEYS`` (Task 14.10):
@@ -702,7 +708,8 @@ def substrate_flag_snapshot(
     table with ``env`` threaded through (defaulting to the live process
     environment). Each is DEFAULT-OFF, so a bare environment agrees with the
     committed stamp — which names ``impostor_roll_call`` OFF and predates
-    ``reporter_reasoning`` entirely (a missing key reads OFF) — and each
+    ``reporter_reasoning`` and ``corroboration_discipline`` entirely (a missing
+    key reads OFF) — and each
     ``AILIBI_*`` export flips exactly its own key: the deterministic seam the
     recorders, the MANIFEST ``flags`` column and the sweep configs rely on to
     prove which arms a recording ran under.

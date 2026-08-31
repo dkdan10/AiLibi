@@ -1111,7 +1111,7 @@ _ALL_ON_STAMPS: Mapping[str, str] = {
         "accusation_round_roll_call.qwen3_6_27b.v1"
         "+accusation_round.qwen3_6_27b.v5.reporter_reasoning"
     ),
-    "vote_ballot": "vote_ballot.qwen3_6_27b.v5",
+    "vote_ballot": "vote_ballot.qwen3_6_27b.v5.corroboration_discipline",
 }
 
 

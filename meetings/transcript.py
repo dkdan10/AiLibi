@@ -258,7 +258,7 @@ that ONE kind, gated on ONE predicate -- the caller supplied a
 
 * **grounding** -- a spoken sighting is GROUNDED iff the speaker holds a
   matching own :class:`~meetings.schemas.SightingRecord`
-  (:func:`_sighting_observation_matches_record`, the vouch channel's predicate
+  (:func:`sighting_observation_matches_record`, the vouch channel's predicate
   verbatim). An ungrounded sighting still mints its flag -- flags are
   information (DESIGN.md §5.4) -- but never a STRONG one. A placement the
   movement chokepoint produced is grounded by construction (it required the
@@ -2451,7 +2451,7 @@ def _destinations_conflict(records: tuple[MoveWitnessRecord, ...]) -> bool:
     return len({canonical_rooms(record.to_room) for record in records}) > 1
 
 
-def _move_observation_matches_record(
+def move_observation_matches_record(
     observation: SawMoveObservation,
     record: MoveWitnessRecord,
 ) -> bool:
@@ -2549,7 +2549,7 @@ def _iter_move_placements(
             if _destinations_conflict(at_tick):
                 continue
             if not any(
-                _move_observation_matches_record(observation, record)
+                move_observation_matches_record(observation, record)
                 for record in at_tick
             ):
                 continue
@@ -2892,7 +2892,7 @@ def _detect_alibi_vs_sightings(
             )
 
 
-def _room_hops(
+def room_hops(
     origin: frozenset[str], destination: frozenset[str], *, max_hops: int
 ) -> int | None:
     """Fewest doorway hops from ``origin`` to ``destination``, or ``None``.
@@ -2939,7 +2939,7 @@ def _adjacent_within_one_tick(
     tick of a claim of continuous presence, which no single hop reconciles.
     """
 
-    hops = _room_hops(alibi.rooms, sighting.rooms, max_hops=MAP_ARBITRATION_MAX_HOPS)
+    hops = room_hops(alibi.rooms, sighting.rooms, max_hops=MAP_ARBITRATION_MAX_HOPS)
     if hops is None or hops == 0:
         return False
     gap = min(
@@ -3173,7 +3173,7 @@ def _vent_observation_matches_record(
     return bool(observation_rooms and record_rooms & observation_rooms)
 
 
-def _sighting_observation_matches_record(
+def sighting_observation_matches_record(
     observation: SawPlayerObservation,
     record: SightingRecord,
 ) -> bool:
@@ -3214,7 +3214,7 @@ def grounded_vouch_subjects(
     (:func:`_detect_grounded_vent_flags`): for every spoken
     :class:`~meetings.schemas.SawPlayerObservation` naming ANOTHER player,
     the SPEAKER'S OWN typed records are searched for a match
-    (:func:`_sighting_observation_matches_record`). A match proves the
+    (:func:`sighting_observation_matches_record`). A match proves the
     speaker honestly reported what they saw -- it does NOT prove the
     subject innocent -- so the subject earns exactly the weak exculpation
     the existing corroboration channel already prices: the returned set
@@ -3297,7 +3297,7 @@ def grounded_vouch_subjects(
             # canonical rooms are non-empty by construction on a match (it
             # required them to intersect the spoken rooms).
             if any(
-                _sighting_observation_matches_record(observation, record)
+                sighting_observation_matches_record(observation, record)
                 and is_relevant_sighting(
                     tick=record.tick,
                     rooms=canonical_rooms(record.room),
@@ -4051,7 +4051,7 @@ def _sighting_is_grounded(
     if sighting.movement_grounded:
         return True
     return any(
-        _sighting_observation_matches_record(sighting.observation, record)
+        sighting_observation_matches_record(sighting.observation, record)
         for record in records
     )
 
@@ -4160,9 +4160,12 @@ __all__ = [
     "is_canonically_ordered",
     "is_relevant_sighting",
     "is_weak_contradiction",
+    "move_observation_matches_record",
     "next_chain_step",
     "reconstruct_stated_paths",
+    "room_hops",
     "self_refuted_alibi_claim_ids",
+    "sighting_observation_matches_record",
     "sighting_placement",
     "sort_turns_canonically",
     "triggering_body_rooms",

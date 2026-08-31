@@ -110,6 +110,7 @@ from typing import Final, Literal
 from jinja2 import Environment, FileSystemLoader, StrictUndefined, TemplateNotFound
 
 from llm.provider import ENV_PROVIDER, PROVIDER_FAKE
+from meetings.corroboration import MeetingTestimonyLedger
 from meetings.render_contract import (
     PromptRenderInputs,
     ReporterContext,
@@ -930,6 +931,7 @@ def vote_ballot_prompt(
     persona: str = "",
     suspicion_provenance: tuple[SuspicionEntry, ...] = (),
     render_inputs: PromptRenderInputs | None = None,
+    testimony_ledger: MeetingTestimonyLedger | None = None,
     environment: Environment | None = None,
     map_card: str = "",
 ) -> str:
@@ -958,6 +960,11 @@ def vote_ballot_prompt(
     ``suspicion_graph`` (the render-after-fold consistency pin), so 16.15's
     surface will decompose exactly the scalars already shown -- landed once here
     so 16.15 edits only the template.
+
+    ``testimony_ledger`` is the meeting's per-subject source count, threaded by
+    the manager only while the corroboration lever is ON. The template renders
+    one row per accused candidate; ``None`` omits the block entirely, so an OFF
+    meeting renders byte-identically to the pre-lever prompt.
     """
 
     inputs = _render_inputs_for(render_inputs, map_card=map_card)
@@ -979,6 +986,7 @@ def vote_ballot_prompt(
             map_card=inputs.map_card,
             impostors=_impostor_wording(inputs.impostor_count),
             flag_groups=_group_flags(contradiction_flags),
+            testimony_ledger=testimony_ledger,
         )
     )
 
