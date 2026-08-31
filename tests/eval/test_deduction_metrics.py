@@ -153,16 +153,16 @@ def test_samples_9p2i_meeting_flag_partition(
     """
 
     cross_tab = samples_9p2i.deduction.meeting_flag_cross_tab
-    assert cross_tab.meetings_total == 152  # was 165
-    assert cross_tab.flagged_meetings == 69  # was 70
+    assert cross_tab.meetings_total == 151  # was 152
+    assert cross_tab.flagged_meetings == 68  # was 69
     assert cross_tab.unflagged_meetings == 83  # was 95
-    assert cross_tab.flagged_ejections_impostor == 69  # was 68
+    assert cross_tab.flagged_ejections_impostor == 68  # was 69
     assert cross_tab.flagged_ejections_innocent == 0  # was 2
-    assert cross_tab.unflagged_ejections_impostor == 16  # was 10
-    assert cross_tab.unflagged_ejections_innocent == 14  # was 21
+    assert cross_tab.unflagged_ejections_impostor == 14  # was 16
+    assert cross_tab.unflagged_ejections_innocent == 13  # was 14
     accuracy = cross_tab.unflagged_meeting_accuracy
-    assert (accuracy.numerator, accuracy.denominator) == (16, 30)
-    assert accuracy.rate == pytest.approx(0.5333333333333333)  # was 0.3225806451612903
+    assert (accuracy.numerator, accuracy.denominator) == (14, 27)  # was (16, 30)
+    assert accuracy.rate == pytest.approx(0.5185185185185185)  # was 0.5333333333333333
 
 
 def test_samples_9p2i_ejectee_proof_partition(
@@ -176,17 +176,17 @@ def test_samples_9p2i_ejectee_proof_partition(
     """
 
     cross_tab = samples_9p2i.deduction.ejectee_proof_cross_tab
-    assert cross_tab.ejections_total == 99  # was 101
-    assert cross_tab.proof_present_ejections == 69  # was 68
-    assert cross_tab.proof_present_impostor == 69  # was 68
+    assert cross_tab.ejections_total == 95  # was 99
+    assert cross_tab.proof_present_ejections == 68  # was 69
+    assert cross_tab.proof_present_impostor == 68  # was 69
     assert cross_tab.proof_present_innocent == 0
-    assert cross_tab.non_direct_ejections == 30  # was 33
+    assert cross_tab.non_direct_ejections == 27  # was 30
     accuracy = cross_tab.non_direct_accuracy
-    assert (accuracy.numerator, accuracy.denominator) == (16, 30)
-    assert accuracy.rate == pytest.approx(0.5333333333333333)  # was 0.30303030303030304
-    # The headline share on these bytes: 69 of the 85 correct ejections rode
+    assert (accuracy.numerator, accuracy.denominator) == (14, 27)  # was (16, 30)
+    assert accuracy.rate == pytest.approx(0.5185185185185185)  # was 0.5333333333333333
+    # The headline share on these bytes: 68 of the 82 correct ejections rode
     # ejectee-specific proof (baseline 6: 68 of 78).
-    assert cross_tab.proof_present_impostor + cross_tab.non_direct_impostor == 85
+    assert cross_tab.proof_present_impostor + cross_tab.non_direct_impostor == 82
 
 
 def test_the_two_partitions_are_not_interchangeable(
@@ -218,17 +218,17 @@ def test_the_two_partitions_are_not_interchangeable(
         flagged_meeting_ejections + unflagged_meeting_ejections
         == ejectee_proof.ejections_total
         == deduction.ejections_total
-        == 99  # was 101
+        == 95  # was 99
     )
     # The "evidence present" buckets are NOT the same set. On these bytes they
-    # happen to hold the SAME COUNT -- 69 each -- so the inequality that made the
+    # happen to hold the SAME COUNT -- 68 each -- so the inequality that made the
     # C5 point on baseline 6 (70 vs 68) is asserted over the ejection SETS
     # instead, which is what the lesson was always about.
-    assert flagged_meeting_ejections == 69
-    assert ejectee_proof.proof_present_ejections == 69
+    assert flagged_meeting_ejections == 68  # was 69
+    assert ejectee_proof.proof_present_ejections == 68  # was 69
     # The SETS still differ, which is the whole C5 point: the meeting-flag
-    # partition's unflagged half splits 16/14 by role and the ejectee-proof
-    # partition's non-direct half splits 16/14 too -- but over different
+    # partition's unflagged half splits 14/13 by role and the ejectee-proof
+    # partition's non-direct half splits 14/13 too -- but over different
     # ejections, so the two accuracy CELLS carry the same denominator and are
     # still not interchangeable. The model's no-mixing validator is what
     # enforces that (test_a_cross_tab_cell_cannot_carry_another_blocks_counts).
@@ -236,11 +236,11 @@ def test_the_two_partitions_are_not_interchangeable(
         ejectee_proof.non_direct_accuracy
     )
     # On baseline 6 the complements differed too (31 vs 33). On these bytes both
-    # halves hold 30 ejections, so the partitions agree on every COUNT and still
+    # halves hold 27 ejections, so the partitions agree on every COUNT and still
     # describe different sets -- which is why the model's no-mixing validator,
     # not an arithmetic inequality, is what keeps them apart.
-    assert unflagged_meeting_ejections == 30
-    assert ejectee_proof.non_direct_ejections == 30
+    assert unflagged_meeting_ejections == 27  # was 30
+    assert ejectee_proof.non_direct_ejections == 27  # was 30
     assert (
         meeting_flag.unflagged_meeting_accuracy.denominator
         == ejectee_proof.non_direct_accuracy.denominator
@@ -260,26 +260,26 @@ def test_corpus_9p2i_cross_tab_twins(corpus_9p2i: TournamentEvalReport) -> None:
     meeting_flag = deduction.meeting_flag_cross_tab
     ejectee_proof = deduction.ejectee_proof_cross_tab
 
-    assert meeting_flag.meetings_total == 432  # was 463
-    assert meeting_flag.flagged_meetings == 212  # was 219
-    assert meeting_flag.unflagged_meetings == 220  # was 244
-    assert meeting_flag.flagged_ejections_impostor == 212  # was 213
+    assert meeting_flag.meetings_total == 439  # was 432
+    assert meeting_flag.flagged_meetings == 220  # was 212
+    assert meeting_flag.unflagged_meetings == 219  # was 220
+    assert meeting_flag.flagged_ejections_impostor == 220  # was 212
     assert meeting_flag.flagged_ejections_innocent == 0  # was 3
-    assert meeting_flag.unflagged_ejections_impostor == 42  # was 35
-    assert meeting_flag.unflagged_ejections_innocent == 26  # was 51
+    assert meeting_flag.unflagged_ejections_impostor == 32  # was 42
+    assert meeting_flag.unflagged_ejections_innocent == 29  # was 26
 
-    assert ejectee_proof.ejections_total == 280  # was 302
-    assert ejectee_proof.proof_present_ejections == 212  # was 213
-    assert ejectee_proof.proof_present_impostor == 212  # was 213
+    assert ejectee_proof.ejections_total == 281  # was 280
+    assert ejectee_proof.proof_present_ejections == 220  # was 212
+    assert ejectee_proof.proof_present_impostor == 220  # was 212
     non_direct = ejectee_proof.non_direct_accuracy
-    assert (non_direct.numerator, non_direct.denominator) == (42, 68)
+    assert (non_direct.numerator, non_direct.denominator) == (32, 61)  # was (42, 68)
     assert non_direct.rate == pytest.approx(
-        0.6176470588235294
-    )  # was 0.39325842696629215
-    # 212 of the 254 correct corpus ejections rode ejectee-specific proof
+        0.5245901639344263
+    )  # was 0.6176470588235294
+    # 220 of the 252 correct corpus ejections rode ejectee-specific proof
     # (baseline 6: 213 of 248).
     assert (
-        ejectee_proof.proof_present_impostor + ejectee_proof.non_direct_impostor == 254
+        ejectee_proof.proof_present_impostor + ejectee_proof.non_direct_impostor == 252
     )
 
 
@@ -300,21 +300,21 @@ def test_4p_sets_cross_tab(
     """
 
     samples = samples_4p1i.deduction
-    assert samples.meetings_total == 40  # was 39
-    assert samples.ejections_total == 21  # was 12
+    assert samples.meetings_total == 39  # was 40
+    assert samples.ejections_total == 24  # was 21
     meeting_flag = samples.meeting_flag_cross_tab
     assert meeting_flag.flagged_meetings == 19  # was 10
-    assert meeting_flag.unflagged_meetings == 21  # was 29
+    assert meeting_flag.unflagged_meetings == 20  # was 21
     assert meeting_flag.flagged_ejections_impostor == 19  # was 9
     assert meeting_flag.flagged_ejections_innocent == 0  # was 1
     assert meeting_flag.unflagged_ejections_impostor == 1
-    assert meeting_flag.unflagged_ejections_innocent == 1
+    assert meeting_flag.unflagged_ejections_innocent == 4  # was 1
     # The ANY-flag reading the triage may have meant: 13 flagged meetings, all
     # 12 ejections inside them, 26 flagless meetings — still not 13 ejections.
     assert samples.evidence_taxonomy.meetings_with_any_flag == 19  # was 13
     ejectee_proof = samples.ejectee_proof_cross_tab
     assert ejectee_proof.proof_present_ejections == 19  # was 9
-    assert ejectee_proof.non_direct_ejections == 2  # was 3
+    assert ejectee_proof.non_direct_ejections == 5  # was 2
     assert ejectee_proof.non_direct_accuracy.numerator == 1
     # 19 of the 20 correct 4p ejections involved vent proof (baseline 6: 9 of 10).
     assert ejectee_proof.proof_present_impostor == 19  # was 9
@@ -323,7 +323,7 @@ def test_4p_sets_cross_tab(
     )
 
     corpus = corpus_4p1i.deduction
-    assert corpus.meetings_total == 44  # was 40
+    assert corpus.meetings_total == 43  # was 44
     assert corpus.ejections_total == 29  # was 20
     assert corpus.ejectee_proof_cross_tab.proof_present_ejections == 26
     # Baseline 6 read an EMPTY non-direct denominator on this set (the None
@@ -391,12 +391,12 @@ def test_accepts_a_bare_game_sequence(samples_4p1i: TournamentEvalReport) -> Non
 # cross-pin the contract asks for; a diff on either side is a loud failure in
 # both suites.
 # Baseline 6 read (96, 64, 26), (11, 2, 3), (313, 204, 90) and (20, 1, 0). The
-# cross-statement column is what the record closed: 64 -> 2 and 204 -> 10.
+# cross-statement column is what the record closed: 64 -> 7 and 204 -> 8.
 _EXPECTED_CATEGORY_COUNTS: Final[dict[str, tuple[int, int, int]]] = {
     # set -> (role_proof, cross_statement, weak_signal)
-    "samples/9p2i": (92, 2, 50),
+    "samples/9p2i": (90, 7, 50),  # was (92, 2, 50)
     "samples/4p1i": (20, 0, 0),
-    "ml_corpus/9p2i": (308, 10, 110),
+    "ml_corpus/9p2i": (315, 8, 126),  # was (308, 10, 110)
     "ml_corpus/4p1i": (28, 0, 1),
 }
 

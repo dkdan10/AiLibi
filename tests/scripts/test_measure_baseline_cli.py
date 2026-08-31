@@ -26,21 +26,22 @@ _NINE = _REPO_ROOT / "replays" / "samples" / "9p2i"
 _FOUR = _REPO_ROOT / "replays" / "samples" / "4p1i"
 
 
-def test_9p2i_reproduces_baseline_6_exactly() -> None:
+def test_9p2i_reproduces_baseline_8_exactly() -> None:
     report = measure_baseline.measure_baseline(_NINE)
     assert report.games_total == 50
-    # R1 eject-decided win share 31/50 (the vent-widening re-record shifts three
-    # eject-leg wins into the tasks leg vs the pre-widening baseline-6 34/50).
-    assert report.r1_eject_decided_wins == 38  # was 31
+    # R1 eject-decided win share 35/50: on the baseline-8 bytes every crew win is
+    # eject-decided (the tasks leg is empty on this set), so this equals crew_wins.
+    assert report.r1_eject_decided_wins == 35  # was 38
     # Reason histogram exact (ordered desc by count).
-    assert report.reason_histogram == {"CREWMATE_EJECT": 38, "IMPOSTOR_PARITY": 12}
-    # Ejection accuracy 0.7723 = 78 impostor / 23 crew of 101 ejections (was 80/20
-    # of 100 = 0.80 pre-widening: the widened vent trajectories surface three more
-    # crew ejections -- the precision cost of the corrected substrate).
-    assert report.total_ejections == 99
-    assert report.impostor_ejections == 85
-    assert report.crewmate_ejections == 14
-    assert report.ejection_accuracy == pytest.approx(85 / 99)  # was 78 / 101
+    assert report.reason_histogram == {  # was CREWMATE_EJECT 38 / IMPOSTOR_PARITY 12
+        "CREWMATE_EJECT": 35,
+        "IMPOSTOR_PARITY": 15,
+    }
+    # Ejection accuracy 0.8632 = 82 impostor / 13 crew of 95 ejections.
+    assert report.total_ejections == 95  # was 99
+    assert report.impostor_ejections == 82  # was 85
+    assert report.crewmate_ejections == 13  # was 14
+    assert report.ejection_accuracy == pytest.approx(82 / 95)  # was 85 / 99
     # The genuine impostor-subject flag class is EMPTY on the recorded census:
     # exactly one recorded alibi_vs_sighting flag survives the three frozen
     # weak-reason exclusions on this set, and it names a crewmate. So the rate
@@ -50,41 +51,39 @@ def test_9p2i_reproduces_baseline_6_exactly() -> None:
     assert report.genuine_class_conversion is None  # was 0.0
     # Task 19.5 wires the Task-17.6 successor here too: the CANARY cell, the
     # only canary-eligible genuine-class instrument from baseline 5 onward.
-    # 76 supplied (meeting, impostor) pairs across the three recorded channels,
-    # 69 converted -> 0.9079 (baseline 6: 70/79 -> 0.8861).
-    assert report.supplied_channel_supplied == 76
+    # 75 supplied (meeting, impostor) pairs across the three recorded channels,
+    # 69 converted -> 0.92.
+    assert report.supplied_channel_supplied == 75  # was 76
     assert report.supplied_channel_converted == 69
-    assert report.supplied_channel_conversion == pytest.approx(69 / 76)
-    # Impostor win 0.24; win split CREW 38 / IMP 12 (baseline 6: 35 / 15, 0.30).
-    assert report.crew_wins == 38
-    assert report.impostor_wins == 12
-    assert report.impostor_win_rate == pytest.approx(0.24)
-    # Meeting rate 1.00 / 152 resolved (baseline 6: 165).
+    assert report.supplied_channel_conversion == pytest.approx(69 / 75)  # was 69 / 76
+    # Impostor win 0.30; win split CREW 35 / IMP 15.
+    assert report.crew_wins == 35  # was 38
+    assert report.impostor_wins == 15  # was 12
+    assert report.impostor_win_rate == pytest.approx(0.30)  # was 0.24
+    # Meeting rate 1.00 / 151 resolved.
     assert report.meeting_rate == pytest.approx(1.0)
-    assert report.resolved_meetings == 152
+    assert report.resolved_meetings == 151  # was 152
 
 
-def test_4p1i_reproduces_baseline_6_exactly() -> None:
+def test_4p1i_reproduces_baseline_8_exactly() -> None:
     report = measure_baseline.measure_baseline(_FOUR)
-    # Ejection accuracy 0.8333 = 10 impostor / 2 crew of 12 (was 11/2 of 13 =
-    # 0.8462 pre-widening: the widening drops one impostor ejection).
-    assert report.total_ejections == 21  # was 12
-    assert report.impostor_ejections == 20  # was 10
-    assert report.crewmate_ejections == 1  # was 2
-    assert report.ejection_accuracy == pytest.approx(20 / 21)  # was 10 / 12
+    # Ejection accuracy 0.8333 = 20 impostor / 4 crew of 24 ejections.
+    assert report.total_ejections == 24  # was 21
+    assert report.impostor_ejections == 20
+    assert report.crewmate_ejections == 4  # was 1
+    assert report.ejection_accuracy == pytest.approx(20 / 24)  # was 20 / 21
     # The genuine impostor-subject flag class is EMPTY on this set (baseline 6
     # read 1 supplied / 1 converted), so its rate is the None sentinel.
     assert report.genuine_class_supplied == 0
     assert report.genuine_class_converted == 0
     assert report.genuine_class_conversion is None
-    # The Task-19.5 canary cell on this set: 19 supplied, 19 converted -> 1.0
-    # (baseline 6: 11 supplied / 10 converted -> 0.9091).
+    # The Task-19.5 canary cell on this set: 19 supplied, 19 converted -> 1.0.
     assert report.supplied_channel_supplied == 19
     assert report.supplied_channel_converted == 19
     assert report.supplied_channel_conversion == pytest.approx(1.0)
-    # Meeting rate 0.80 / 40 (baseline 6: 0.78 / 39).
-    assert report.meeting_rate == pytest.approx(0.8)
-    assert report.resolved_meetings == 40
+    # Meeting rate 0.78 / 39 resolved.
+    assert report.meeting_rate == pytest.approx(0.78)  # was 0.8
+    assert report.resolved_meetings == 39  # was 40
 
 
 def test_default_measures_both_canonical_sets(
@@ -95,10 +94,12 @@ def test_default_measures_both_canonical_sets(
     assert "9p2i" in out
     assert "4p1i" in out
     # The load-bearing numbers surface in the human output.
-    assert "38/50" in out
-    assert "85 impostor / 14 crew of 99 ejections" in out
+    assert "35/50" in out  # was 38/50
+    assert "82 impostor / 13 crew of 95 ejections" in out  # was 85 / 14 of 99
     # Task 19.5: the canary line renders for BOTH sets, rate then headline pair.
-    assert "supplied-channel conversion (canary): 0.9079  (69/76)" in out
+    assert (  # was 0.9079  (69/76)
+        "supplied-channel conversion (canary): 0.92  (69/75)" in out
+    )
     assert "supplied-channel conversion (canary): 1.0  (19/19)" in out
 
 
@@ -108,11 +109,11 @@ def test_json_emits_array_of_reports(capsys: pytest.CaptureFixture[str]) -> None
     assert isinstance(payload, list)
     assert len(payload) == 2
     nine = payload[0]
-    assert nine["ejection_accuracy"] == pytest.approx(85 / 99)  # was 78 / 101
-    assert nine["reason_histogram"]["CREWMATE_EJECT"] == 38  # was 31
-    assert nine["r1_eject_decided_wins"] == 38  # was 31
+    assert nine["ejection_accuracy"] == pytest.approx(82 / 95)  # was 85 / 99
+    assert nine["reason_histogram"]["CREWMATE_EJECT"] == 35  # was 38
+    assert nine["r1_eject_decided_wins"] == 35  # was 38
     # Task 19.5: the canary trio ships on the JSON surface too (payload[0] is 9p2i).
-    assert nine["supplied_channel_supplied"] == 76  # was 79
+    assert nine["supplied_channel_supplied"] == 75  # was 76
     assert "supplied_channel_conversion" in nine
 
 
@@ -121,7 +122,7 @@ def test_explicit_dir_measures_one_set(capsys: pytest.CaptureFixture[str]) -> No
     payload = json.loads(capsys.readouterr().out)
     assert len(payload) == 1
     assert payload[0]["replay_set_dir"].endswith("4p1i")
-    assert payload[0]["ejection_accuracy"] == pytest.approx(20 / 21)  # was 10 / 12
+    assert payload[0]["ejection_accuracy"] == pytest.approx(20 / 24)  # was 20 / 21
 
 
 def test_report_json_round_trips() -> None:
@@ -147,13 +148,17 @@ def test_empty_dir_is_usage_error(tmp_path: Path) -> None:
 def test_solvability_human_rendering(capsys: pytest.CaptureFixture[str]) -> None:
     assert measure_baseline.main(["--solvability", str(_NINE)]) == 0
     out = capsys.readouterr().out
-    assert "50 games, 144 body meetings, 91 ejections at them" in out
-    assert "killer in candidate set: 0.875  (126/144)  95% CI [0.8111, 0.9194]" in out
-    assert "one candidate: 0.1389  (20/144)" in out
-    assert "... and it is the killer: 0.7  (14/20)" in out
-    assert "at most two candidates: 0.3194  (46/144)" in out
-    assert "ejected a player the crew had already cleared: 0.2088  (19/91)" in out
-    assert "killer in candidate set, last-kill anchor: 0.9375  (135/144)" in out
+    # was: 144 body meetings, 91 ejections at them
+    assert "50 games, 141 body meetings, 85 ejections at them" in out
+    # was 0.875  (126/144)  95% CI [0.8111, 0.9194]
+    assert "killer in candidate set: 0.9007  (127/141)  95% CI [0.8402, 0.9399]" in out
+    assert "one candidate: 0.1844  (26/141)" in out  # was 0.1389  (20/144)
+    assert "... and it is the killer: 0.8077  (21/26)" in out  # was 0.7  (14/20)
+    assert "at most two candidates: 0.3688  (52/141)" in out  # was 0.3194  (46/144)
+    # was 0.2088  (19/91)
+    assert "ejected a player the crew had already cleared: 0.1882  (16/85)" in out
+    # was 0.9375  (135/144)
+    assert "killer in candidate set, last-kill anchor: 0.9362  (132/141)" in out
 
 
 def test_solvability_json_emits_array(capsys: pytest.CaptureFixture[str]) -> None:
@@ -162,19 +167,19 @@ def test_solvability_json_emits_array(capsys: pytest.CaptureFixture[str]) -> Non
     assert len(payload) == 2
     nine, four = payload
     assert nine["replay_set_dir"].endswith("9p2i")
-    assert nine["body_meetings"] == 144  # was 151
-    assert nine["ejections_at_body_meetings"] == 91  # was 87
-    assert nine["killer_in_set"]["numerator"] == 126  # was 132
-    assert nine["singleton_correct"] == {
-        "numerator": 14,
-        "denominator": 20,
-        "rate": pytest.approx(14 / 20),
-        "wilson_low": pytest.approx(0.4810232237710206),
-        "wilson_high": pytest.approx(0.854524726031006),
+    assert nine["body_meetings"] == 141  # was 144
+    assert nine["ejections_at_body_meetings"] == 85  # was 91
+    assert nine["killer_in_set"]["numerator"] == 127  # was 126
+    assert nine["singleton_correct"] == {  # was 14/20, wilson [0.4810…, 0.8545…]
+        "numerator": 21,
+        "denominator": 26,
+        "rate": pytest.approx(21 / 26),
+        "wilson_low": pytest.approx(0.6212336384535001),
+        "wilson_high": pytest.approx(0.9149306422821174),
         "advisory": False,
     }
-    # The rare-count flag rides on the small set's cells (numerator 5 of 37).
-    assert four["body_meetings"] == 37
+    # The rare-count flag rides on the small set's cells (numerator 5 of 36).
+    assert four["body_meetings"] == 36  # was 37
     assert four["singleton_sets"]["numerator"] == 5
     assert four["singleton_sets"]["advisory"] is True
 
@@ -184,7 +189,7 @@ def test_solvability_rare_cells_render_their_advisory(
 ) -> None:
     assert measure_baseline.main(["--solvability", str(_FOUR)]) == 0
     out = capsys.readouterr().out
-    assert "one candidate: 0.1351  (5/37)" in out
+    assert "one candidate: 0.1389  (5/36)" in out  # was 0.1351  (5/37)
     assert "(rare count — read the interval)" in out
 
 

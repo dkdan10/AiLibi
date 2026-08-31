@@ -124,27 +124,27 @@ _EXPECTED_REPLAY_FILES: Final[dict[str, int]] = {
 # Baseline 6 read 165 / 39 / 463 / 40 meetings and 971 / 117 / 2726 / 120
 # ballots, 707 and 3,934 pooled.
 _EXPECTED_MEETINGS: Final[dict[str, int]] = {
-    "samples/9p2i": 152,
-    "samples/4p1i": 40,
-    "ml_corpus/9p2i": 432,
-    "ml_corpus/4p1i": 44,
+    "samples/9p2i": 151,  # was 152
+    "samples/4p1i": 39,  # was 40
+    "ml_corpus/9p2i": 439,  # was 432
+    "ml_corpus/4p1i": 43,  # was 44
 }
 _EXPECTED_BALLOTS: Final[dict[str, int]] = {
-    "samples/9p2i": 871,
-    "samples/4p1i": 120,
-    "ml_corpus/9p2i": 2479,
-    "ml_corpus/4p1i": 132,
+    "samples/9p2i": 869,  # was 871
+    "samples/4p1i": 117,  # was 120
+    "ml_corpus/9p2i": 2516,  # was 2479
+    "ml_corpus/4p1i": 129,  # was 132
 }
-_TOTAL_MEETINGS: Final[int] = 668
-_TOTAL_BALLOTS: Final[int] = 3602
+_TOTAL_MEETINGS: Final[int] = 672  # was 668
+_TOTAL_BALLOTS: Final[int] = 3631  # was 3602
 
-# The recorded outcome split over those 668 meetings. Pinned so the sweep
+# The recorded outcome split over those 672 meetings. Pinned so the sweep
 # provably exercises BOTH branches of the rule (an all-SKIPPED corpus would
 # leave the eject path — the one that removes a player from the game — proven
 # by synthetic fixtures alone).
 _EXPECTED_RECORDED_OUTCOMES: Final[dict[MeetingOutcome, int]] = {
     "EJECTED": 429,  # baseline 6: 435
-    "SKIPPED": 239,  # baseline 6: 272
+    "SKIPPED": 243,  # was 239
 }
 
 # The ballot-guard marker families, keyed by the stable label
@@ -168,18 +168,18 @@ _MARKER_TEMPLATES: Final[dict[str, str]] = {
 # exercised". Zeros are written out rather than omitted so the sweep states
 # what it does NOT cover: ``vote_parse_default`` never fired on committed
 # bytes, so it is carried by a synthetic fixture instead (see ``_EDGE_CASES``).
-# Baseline 6 read 3/0/13/2/0/1/0, 0/0/0/0/0/0/0, 0/4/48/1/2/1/0 and
-# 0/0/1/0/0/0/0. Every family the record moved moved UP: the meetings are longer
-# and the guards fire more often, and ``invalid_observation_id`` leaves zero on
-# the 9p2i sets for the first time.
+# The 4p1i sets are unchanged from baseline 6 (0/0/0/0/0/0/0 and 0/0/1/0/0/0/0);
+# every 9p2i family the record moved came DOWN off baseline 7 — the guards fire
+# less often — while ``invalid_observation_id`` stays off zero on both 9p2i sets
+# and ``uncited_zero_flag`` returns to zero on samples/9p2i.
 _EXPECTED_MARKERS: Final[dict[str, dict[str, int]]] = {
     "samples/9p2i": {
-        "invalid_target": 3,
-        "teammate_coerced": 5,
-        "under_gate_redirect": 36,
-        "invalid_reason_id": 2,
-        "invalid_observation_id": 8,
-        "uncited_zero_flag": 1,
+        "invalid_target": 2,  # was 3
+        "teammate_coerced": 2,  # was 5
+        "under_gate_redirect": 23,  # was 36
+        "invalid_reason_id": 1,  # was 2
+        "invalid_observation_id": 3,  # was 8
+        "uncited_zero_flag": 0,  # was 1
         "vote_parse_default": 0,
     },
     "samples/4p1i": {
@@ -192,12 +192,12 @@ _EXPECTED_MARKERS: Final[dict[str, dict[str, int]]] = {
         "vote_parse_default": 0,
     },
     "ml_corpus/9p2i": {
-        "invalid_target": 1,
-        "teammate_coerced": 13,
-        "under_gate_redirect": 81,
-        "invalid_reason_id": 7,
-        "invalid_observation_id": 19,
-        "uncited_zero_flag": 7,
+        "invalid_target": 2,  # was 1
+        "teammate_coerced": 5,  # was 13
+        "under_gate_redirect": 57,  # was 81
+        "invalid_reason_id": 4,  # was 7
+        "invalid_observation_id": 12,  # was 19
+        "uncited_zero_flag": 6,  # was 7
         "vote_parse_default": 0,
     },
     "ml_corpus/4p1i": {
@@ -225,8 +225,8 @@ _SWEEP_THRESHOLDS: Final[tuple[float, ...]] = (
     1.0,
 )
 
-# How many of the 707 committed meetings eject at each swept threshold. The
-# first four rows are all 435 — the recorded count — which is the corpus fact
+# How many of the 672 committed meetings eject at each swept threshold. The
+# first four rows are all 429 — the recorded count — which is the corpus fact
 # :func:`test_the_threshold_sweep_actually_moves_outcomes` documents: no
 # committed meeting was decided by the confidence gate at its recorded cutoff.
 # Baseline 6 read 435 / 435 / 435 / 435 / 424 / 331 / 65.
@@ -235,9 +235,9 @@ _EXPECTED_EJECTIONS_BY_THRESHOLD: Final[dict[float, int]] = {
     0.25: 429,
     0.5: 429,
     DEFAULT_SKIP_CONFIDENCE_THRESHOLD: 429,
-    0.75: 422,
-    0.9: 342,
-    1.0: 150,
+    0.75: 421,  # was 422
+    0.9: 351,  # was 342
+    1.0: 181,  # was 150
 }
 
 
@@ -589,7 +589,7 @@ def test_the_threshold_sweep_actually_moves_outcomes() -> None:
     was recorded, so no committed meeting was ever decided by the confidence
     gate — the "strict plurality but no confident ballot -> SKIPPED" branch is
     not exercised by the corpus at its own threshold. Raising the cutoff turns
-    429 recorded ejections into 422 / 342 / 150, which is what makes the sweep
+    429 recorded ejections into 421 / 351 / 181, which is what makes the sweep
     real coverage of that branch over real ballots rather than a re-run; the
     ``plurality_strictly_under_threshold`` edge fixture covers it directly.
     """
