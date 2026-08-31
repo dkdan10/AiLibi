@@ -1169,11 +1169,19 @@ def build_default_meeting_runner(
     # arm -- ``substrate_flag_snapshot``'s ``game_over`` stamp, which reads the
     # environment -- so a pin that contradicts the environment is refused rather
     # than recorded: it would label ON-arm bytes OFF in the very column a
-    # stratified evaluation reads.
-    resolved_corroboration_discipline = _arm_is_served(
-        resolved_versions,
-        template="vote_ballot",
-        arm=_CORROBORATION_DISCIPLINE_ARM["vote_ballot"],
+    # stratified evaluation reads. The arm value is looked up for the set the
+    # RENDERERS were bound to, never for a fixed set: only ``qwen3_6_27b``'s
+    # ballot carries the block, so a pin naming that arm while another family is
+    # active would stamp this arm over bytes that cannot render it.
+    _corroboration_arm = CORROBORATION_DISCIPLINE_PROMPT_VERSION_SETS.get(
+        active_prompt_set
+    )
+    resolved_corroboration_discipline = _corroboration_arm is not None and (
+        _arm_is_served(
+            resolved_versions,
+            template="vote_ballot",
+            arm=_corroboration_arm["vote_ballot"],
+        )
     )
     if resolved_corroboration_discipline != corroboration_discipline_enabled():
         variable = f"AILIBI_{_CORROBORATION_DISCIPLINE_KEY.upper()}"
@@ -1186,7 +1194,8 @@ def build_default_meeting_runner(
             f"{variable} says it is "
             f"{'ON' if not resolved_corroboration_discipline else 'OFF'}. The "
             "recording would stamp one and render the other — pin the arm's own "
-            "registry entry or unset the variable"
+            f"registry entry for the active set ({active_prompt_set!r}) or unset "
+            "the variable"
         )
     inner: LLMClient = llm_client if llm_client is not None else build_default_client()
     client: LLMClient = (

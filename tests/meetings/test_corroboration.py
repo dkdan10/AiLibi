@@ -1096,7 +1096,9 @@ class TestProvenance:
         # the third can still disagree, and a recording that labels ON-arm bytes
         # OFF would corrupt any evaluation stratified by substrate flags. So the
         # disagreement is refused rather than recorded (AGENTS.md: no silent
-        # fallbacks), in BOTH directions.
+        # fallbacks), in BOTH directions. The arm is authored for this set only,
+        # so the set is selected explicitly (see the sibling test below).
+        monkeypatch.setenv("AILIBI_PROMPT_SET", _SET)
         monkeypatch.setenv(ENV_CORROBORATION_DISCIPLINE, "1")
         with pytest.raises(ValueError, match="disagree with the source-count arm"):
             build_default_meeting_runner(
@@ -1111,12 +1113,29 @@ class TestProvenance:
                 prompt_versions=CORROBORATION_DISCIPLINE_PROMPT_VERSION_SETS[_SET],
             )
 
+    def test_an_arm_pin_for_another_family_is_refused(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Codex round 3: only the ``qwen3_6_27b`` ballot renders the block, and
+        # ``build_prompt_renderers`` binds the ACTIVE set independently of the
+        # pin. Pinning this arm while another family is active would stamp the
+        # arm over bytes that cannot carry it, so the arm value is looked up for
+        # the active set and a set with no arm entry can never credit it.
+        monkeypatch.setenv("AILIBI_PROMPT_SET", "qwen3_32b")
+        monkeypatch.setenv(ENV_CORROBORATION_DISCIPLINE, "1")
+        with pytest.raises(ValueError, match="disagree with the source-count arm"):
+            build_default_meeting_runner(
+                llm_client=FakeProvider(),
+                prompt_versions=CORROBORATION_DISCIPLINE_PROMPT_VERSION_SETS[_SET],
+            )
+
     def test_an_agreeing_arm_pin_is_accepted(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         # The perturbation that proves the refusal above is about DISAGREEMENT,
-        # not about pinning: the same arm mapping with the variable exported
-        # constructs, and arms the ledger.
+        # not about pinning: the same arm mapping with the variable exported AND
+        # the arm's own set active constructs, and arms the ledger.
+        monkeypatch.setenv("AILIBI_PROMPT_SET", _SET)
         monkeypatch.setenv(ENV_CORROBORATION_DISCIPLINE, "1")
         runner = build_default_meeting_runner(
             llm_client=FakeProvider(),
