@@ -46,8 +46,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
+from typing import Final
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(_REPO_ROOT) not in sys.path:
@@ -103,6 +105,11 @@ def _roster_knobs(sample_dir: Path) -> tuple[int, int, int]:
     return (roster.num_players, roster.num_impostors, roster.tasks_per_crewmate)
 
 
+#: The ONE non-replay name the replay glob legitimately matches (see
+#: ``eval.validity._AUDIT_SIDECAR_STEM``, which this mirrors).
+_AUDIT_SIDECAR_STEM: Final = re.compile(r"^replay-seed-\d+\.audit$")
+
+
 def _seeds_on_disk(sample_dir: Path) -> list[int]:
     """Seeds with a committed ``replay-seed-{n}.jsonl`` in ``sample_dir``.
 
@@ -110,9 +117,11 @@ def _seeds_on_disk(sample_dir: Path) -> list[int]:
     parse the trailing integer of each glob match and return them sorted and
     de-duplicated, so a zero-padded alias cannot double-count a seed.
 
-    A stem whose trailing segment is not an integer is SKIPPED, not parsed: the
-    glob also matches a wrapper's ``replay-seed-<n>.audit.jsonl`` observation
-    sidecar, and parsing that stem raised an uncaught ``ValueError``.
+    The glob also matches a wrapper's ``replay-seed-<n>.audit.jsonl`` observation
+    sidecar, whose stem raised an uncaught ``ValueError``; that ONE shape is
+    skipped. Any other non-numeric stem still raises — silently dropping a
+    mistyped ``replay-seed-7x.jsonl`` would build a report over the remaining
+    games and call it the set's.
     """
 
     seeds: set[int] = set()
@@ -120,6 +129,12 @@ def _seeds_on_disk(sample_dir: Path) -> list[int]:
         core = path.stem.rsplit("-", 1)[1]
         if core.isdigit():
             seeds.add(int(core))
+        elif not _AUDIT_SIDECAR_STEM.match(path.stem):
+            raise ValueError(
+                f"{path.name}: not a replay and not the recognised "
+                f"replay-seed-<n>.audit.jsonl sidecar — refusing to build a "
+                "report over a set holding an unrecognised replay-shaped file"
+            )
     return sorted(seeds)
 
 

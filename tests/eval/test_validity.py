@@ -850,6 +850,29 @@ def test_seeds_on_disk_skips_an_audit_sidecar(tmp_path: Path) -> None:
     assert seeds_on_disk(tmp_path) == [7, 11]
 
 
+def test_seeds_on_disk_still_raises_on_a_mistyped_replay(tmp_path: Path) -> None:
+    """The OTHER half: the skip is one recognised shape, not any odd name.
+
+    A mistyped ``replay-seed-7x.jsonl`` must not be quietly excluded — dropping
+    it would let the gate report on the remaining games and call the set clean,
+    which is worse than the crash the sidecar guard removed. Only the exact
+    ``replay-seed-<n>.audit`` stem is skipped.
+    """
+
+    (tmp_path / "replay-seed-7.jsonl").write_text("")
+    (tmp_path / "replay-seed-7x.jsonl").write_text("")
+
+    with pytest.raises(ValueError, match="replay-seed-7x.jsonl"):
+        seeds_on_disk(tmp_path)
+
+    # And a near-miss on the sidecar shape is refused too.
+    (tmp_path / "replay-seed-7x.jsonl").unlink()
+    (tmp_path / "replay-seed-x.audit.jsonl").write_text("")
+
+    with pytest.raises(ValueError, match="replay-seed-x.audit.jsonl"):
+        seeds_on_disk(tmp_path)
+
+
 def test_run_validity_gate_reproduces_9p2i_close() -> None:
     report = run_validity_gate(_NINE)
     assert report.passed
