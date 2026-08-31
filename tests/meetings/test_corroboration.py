@@ -162,12 +162,26 @@ def _transcript(*turns: MeetingTurn) -> MeetingTranscript:
     return MeetingTranscript(turns=turns)
 
 
-def _vent_flag(subject: str, *, flag_id: str = "c-1") -> ContradictionRef:
+def _vent_flag(
+    subject: str,
+    *,
+    flag_id: str = "c-1",
+    turn_index: int = 0,
+    obs_index: int = 0,
+) -> ContradictionRef:
+    """A ``vent_sighting`` flag naming the observation it was minted from.
+
+    The detector stamps BOTH event ids with the spoken observation's own id, so
+    a fixture that wants to ground a particular speaker names that speaker's
+    turn -- exactly the provenance the ledger reads back.
+    """
+
+    event_id = f"turn:m-1:turn-{turn_index}:obs:{obs_index}"
     return ContradictionRef(
         contradiction_id=flag_id,
         kind="vent_sighting",
-        event_a_id="turn:m-1:turn-0:obs:0",
-        event_b_id="turn:m-1:turn-0:obs:0",
+        event_a_id=event_id,
+        event_b_id=event_id,
         subjects=(subject,),
         description="witnessed vent",
     )
@@ -364,13 +378,18 @@ class TestFirstHandSources:
                 claims=(_accuses("p-5"),),
             ),
         )
-        row = _row(_ledger(transcript, contradictions=(_vent_flag("p-5"),)), "p-5")
-        assert row.first_hand == ()
-        assert row.adopted == ("p-2", "p-8")
+        row = _row(
+            _ledger(transcript, contradictions=(_vent_flag("p-5", turn_index=0),)),
+            "p-5",
+        )
+        # The flag names p-2's own observation, so p-2 keeps their account and
+        # p-8 -- who added nothing of their own -- is a voice, not an account.
+        assert row.first_hand == ("p-2",)
+        assert row.adopted == ("p-8",)
 
     def test_two_grounded_vents_credit_both_speakers(self) -> None:
         # The perturbation: when BOTH spoken vents are grounded the detector
-        # mints two flags, and the count credits both accounts.
+        # mints a flag on EACH observation, and both speakers are credited.
         transcript = _transcript(
             _turn(
                 index=0,
@@ -389,14 +408,80 @@ class TestFirstHandSources:
             _ledger(
                 transcript,
                 contradictions=(
-                    _vent_flag("p-5"),
-                    _vent_flag("p-5", flag_id="c-2"),
+                    _vent_flag("p-5", turn_index=0),
+                    _vent_flag("p-5", flag_id="c-2", turn_index=1),
                 ),
             ),
             "p-5",
         )
         assert row.first_hand == ("p-2", "p-8")
         assert row.adopted == ()
+
+    def test_a_prolific_witness_beside_a_fabricator_credits_only_the_witness(
+        self,
+    ) -> None:
+        # Codex round 2: the cardinality case a flag COUNT cannot see. p-2 speaks
+        # TWO grounded vents (two flags, both on p-2's own observations) and p-8
+        # speaks one ungrounded vent. Counting flags against speakers reads 2 == 2
+        # and would credit the fabricator; resolving each flag to its own
+        # observation credits p-2 alone.
+        transcript = _transcript(
+            _turn(
+                index=0,
+                speaker="p-2",
+                observations=(
+                    _saw_vent(subject="p-5", tick=11),
+                    _saw_vent(subject="p-5", room="LABS", tick=13),
+                ),
+                claims=(_accuses("p-5"),),
+            ),
+            _turn(
+                index=1,
+                speaker="p-8",
+                observations=(_saw_vent(subject="p-5"),),
+                claims=(_accuses("p-5"),),
+            ),
+        )
+        row = _row(
+            _ledger(
+                transcript,
+                contradictions=(
+                    _vent_flag("p-5", turn_index=0, obs_index=0),
+                    _vent_flag("p-5", flag_id="c-2", turn_index=0, obs_index=1),
+                ),
+            ),
+            "p-5",
+        )
+        assert row.first_hand == ("p-2",)
+        assert row.adopted == ("p-8",)
+
+    def test_one_witness_with_two_grounded_vents_is_not_erased(self) -> None:
+        # The mirror of the same cardinality bug: two flags, ONE speaker. A count
+        # would read 2 != 1 and erase a genuine account; the id resolution keeps
+        # it, and still counts the speaker exactly once.
+        transcript = _transcript(
+            _turn(
+                index=0,
+                speaker="p-2",
+                observations=(
+                    _saw_vent(subject="p-5", tick=11),
+                    _saw_vent(subject="p-5", room="LABS", tick=13),
+                ),
+                claims=(_accuses("p-5"),),
+            ),
+        )
+        row = _row(
+            _ledger(
+                transcript,
+                contradictions=(
+                    _vent_flag("p-5", turn_index=0, obs_index=0),
+                    _vent_flag("p-5", flag_id="c-2", turn_index=0, obs_index=1),
+                ),
+            ),
+            "p-5",
+        )
+        assert row.first_hand == ("p-2",)
+        assert row.voices == 1
 
     def test_one_speaker_counts_once_however_much_they_hold(self) -> None:
         # The double-count guard: two matching records AND two matching
@@ -989,16 +1074,55 @@ class TestProvenance:
         )
         assert not _arm_is_served({}, template="vote_ballot", arm=arm)
 
-    def test_an_explicit_default_pin_leaves_the_ledger_off(self) -> None:
-        # The end-to-end shape of the same claim, through the production
-        # construction seam: lever exported ON, versions pinned to the default
-        # registry, so the runner must build no ledger and the stamp it records
-        # is the honest one.
+    def test_an_agreeing_default_pin_leaves_the_ledger_off(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The ordinary pin: versions and environment agree the arm is OFF, so the
+        # runner builds no ledger and every surface says the same thing.
+        monkeypatch.delenv(ENV_CORROBORATION_DISCIPLINE, raising=False)
         runner = build_default_meeting_runner(
             llm_client=FakeProvider(),
             prompt_versions=PROMPT_VERSION_SETS[_SET],
         )
         assert runner._manager._corroboration_discipline is False  # noqa: SLF001
+
+    def test_a_pin_that_contradicts_the_environment_is_refused(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Codex round 2: a recording describes this arm THREE times -- the
+        # rendered bytes, the recorded ``prompt_versions``, and
+        # ``substrate_flag_snapshot``'s ``game_over`` stamp, which reads the
+        # environment. Deriving the render from the versions aligns the first two;
+        # the third can still disagree, and a recording that labels ON-arm bytes
+        # OFF would corrupt any evaluation stratified by substrate flags. So the
+        # disagreement is refused rather than recorded (AGENTS.md: no silent
+        # fallbacks), in BOTH directions.
+        monkeypatch.setenv(ENV_CORROBORATION_DISCIPLINE, "1")
+        with pytest.raises(ValueError, match="disagree with the source-count arm"):
+            build_default_meeting_runner(
+                llm_client=FakeProvider(),
+                prompt_versions=PROMPT_VERSION_SETS[_SET],
+            )
+
+        monkeypatch.delenv(ENV_CORROBORATION_DISCIPLINE, raising=False)
+        with pytest.raises(ValueError, match="disagree with the source-count arm"):
+            build_default_meeting_runner(
+                llm_client=FakeProvider(),
+                prompt_versions=CORROBORATION_DISCIPLINE_PROMPT_VERSION_SETS[_SET],
+            )
+
+    def test_an_agreeing_arm_pin_is_accepted(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The perturbation that proves the refusal above is about DISAGREEMENT,
+        # not about pinning: the same arm mapping with the variable exported
+        # constructs, and arms the ledger.
+        monkeypatch.setenv(ENV_CORROBORATION_DISCIPLINE, "1")
+        runner = build_default_meeting_runner(
+            llm_client=FakeProvider(),
+            prompt_versions=CORROBORATION_DISCIPLINE_PROMPT_VERSION_SETS[_SET],
+        )
+        assert runner._manager._corroboration_discipline is True  # noqa: SLF001
 
 
 # --------------------------------------------------------------------------- #

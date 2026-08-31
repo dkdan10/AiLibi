@@ -84,6 +84,7 @@ from llm.budgeted_client import BudgetedLLMClient
 from llm.client import LLMClient, LLMResponse
 from llm.client import CallKind as _LLMCallKind
 from llm.provider import LLMCallFailure, build_default_client, extract_parse_failure
+from meetings.corroboration import corroboration_discipline_enabled
 from meetings.manager import (
     EMERGENCY_TRIGGER_PHRASE,
     BodyDiscoveryRecord,
@@ -456,8 +457,9 @@ REPORTER_REASONING_PROMPT_VERSION_SETS: Final[Mapping[str, Mapping[str, str]]] =
 # key carries an arm stamp and the other three inherit the default registry's
 # values. A ballot rendered with the block can therefore never share a
 # ``vote_ballot`` stamp with one rendered without it.
+_CORROBORATION_DISCIPLINE_KEY: Final[str] = "corroboration_discipline"
 _CORROBORATION_DISCIPLINE_ARM: Final[Mapping[str, str]] = _lever_arm_versions(
-    "qwen3_6_27b", "corroboration_discipline"
+    "qwen3_6_27b", _CORROBORATION_DISCIPLINE_KEY
 )
 CORROBORATION_DISCIPLINE_PROMPT_VERSION_SETS: Final[Mapping[str, Mapping[str, str]]] = {
     "qwen3_6_27b": {
@@ -1161,15 +1163,31 @@ def build_default_meeting_runner(
     # block exists to prevent.
     resolved_reporter_reasoning = reporter_reasoning_enabled()
     # The source-count arm reads its decision off the versions ACTUALLY SERVED
-    # rather than off the environment a second time, so the two cannot disagree
-    # by construction -- including when a caller pins ``prompt_versions`` itself.
-    # An env-only read would render the block under a caller-pinned default
-    # stamp, which is the render-one-stamp-another failure in its exact form.
+    # rather than off the environment a second time, so the rendered bytes and
+    # the recorded ``prompt_versions`` cannot disagree even when a caller pins
+    # the mapping itself. A recording carries a THIRD description of the same
+    # arm -- ``substrate_flag_snapshot``'s ``game_over`` stamp, which reads the
+    # environment -- so a pin that contradicts the environment is refused rather
+    # than recorded: it would label ON-arm bytes OFF in the very column a
+    # stratified evaluation reads.
     resolved_corroboration_discipline = _arm_is_served(
         resolved_versions,
         template="vote_ballot",
         arm=_CORROBORATION_DISCIPLINE_ARM["vote_ballot"],
     )
+    if resolved_corroboration_discipline != corroboration_discipline_enabled():
+        variable = f"AILIBI_{_CORROBORATION_DISCIPLINE_KEY.upper()}"
+        raise ValueError(
+            "Explicit prompt_versions disagree with the "
+            f"{_PROMPT_OVERLAY_LABELS[_CORROBORATION_DISCIPLINE_KEY]} arm: the "
+            f"supplied vote_ballot stamp "
+            f"{resolved_versions.get('vote_ballot')!r} says the arm is "
+            f"{'ON' if resolved_corroboration_discipline else 'OFF'} while "
+            f"{variable} says it is "
+            f"{'ON' if not resolved_corroboration_discipline else 'OFF'}. The "
+            "recording would stamp one and render the other — pin the arm's own "
+            "registry entry or unset the variable"
+        )
     inner: LLMClient = llm_client if llm_client is not None else build_default_client()
     client: LLMClient = (
         BudgetedLLMClient(inner=inner, budget=budget) if budget is not None else inner

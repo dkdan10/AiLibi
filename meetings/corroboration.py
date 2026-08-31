@@ -47,11 +47,11 @@ from meetings.schemas import (
 from meetings.transcript import (
     MeetingTriggerKind,
     StatedPlacement,
-    grounded_vent_subjects_from_flags,
     move_observation_matches_record,
     reconstruct_stated_paths,
     room_hops,
     sighting_observation_matches_record,
+    turn_observation_id,
 )
 
 # The corroboration lever, DEFAULT OFF. ON, the vote ballot gains one guarded
@@ -191,7 +191,7 @@ def _speaker_grounds_subject(
     subject: PlayerId,
     sighting_records: Mapping[PlayerId, tuple[SightingRecord, ...]],
     move_witness_records: Mapping[PlayerId, tuple[MoveWitnessRecord, ...]],
-    vent_placed: frozenset[PlayerId],
+    vent_grounded: Mapping[PlayerId, frozenset[PlayerId]],
 ) -> bool:
     """Whether ``speaker`` spoke a FIRST-HAND observation of ``subject`` here.
 
@@ -199,11 +199,11 @@ def _speaker_grounds_subject(
     ``saw_player`` matched by the speaker's own
     :class:`~meetings.schemas.SightingRecord` rows, a ``saw_move`` matched by
     their own :class:`~meetings.schemas.MoveWitnessRecord` rows, or a spoken vent
-    whose subject reaches :func:`_vent_grounded_subjects` -- which credits the
-    vent channel only when every spoken vent against that subject is backed by
-    its own flag, so a second speaker cannot ride someone else's grounded vent. A
-    fabricated observation matches nothing and grounds nothing, which is the
-    whole point of testing the record rather than the turn.
+    the detector grounded against THIS speaker
+    (:func:`_vent_grounded_speakers`, which resolves each flag back to the
+    observation it was minted from). A fabricated observation matches nothing and
+    grounds nothing, which is the whole point of testing the record rather than
+    the turn.
 
     The sighting mapping arrives §4.7-firewalled from the manager, so an
     impostor's row naming a teammate cannot ground a case against that teammate.
@@ -228,48 +228,46 @@ def _speaker_grounds_subject(
                 ):
                     return True
             elif isinstance(observation, SawVentObservation):
-                if observation.subject == subject and subject in vent_placed:
+                if observation.subject == subject and speaker in vent_grounded.get(
+                    subject, frozenset()
+                ):
                     return True
     return False
 
 
-def _vent_grounded_subjects(
+def _vent_grounded_speakers(
     transcript: MeetingTranscript,
     contradictions: Sequence[ContradictionRef],
-) -> frozenset[PlayerId]:
-    """Subjects whose spoken vents are ALL individually grounded.
+) -> Mapping[PlayerId, frozenset[PlayerId]]:
+    """Per subject, the speakers whose OWN spoken vent the detector grounded.
 
-    A ``vent_sighting`` flag is minted from ONE speaker's own matched
-    :class:`~meetings.schemas.VentWitnessRecord`, so the flags naming a subject
-    count the grounded vent accounts against them. Reducing the flags to a bare
-    subject set would credit every speaker who mentioned that vent, including one
-    who invented theirs -- the laundering this ledger exists to prevent.
+    A ``vent_sighting`` flag is minted from one speaker's own matched
+    :class:`~meetings.schemas.VentWitnessRecord` and carries that exact spoken
+    observation in both event ids, so the flag names WHICH account it grounds --
+    not merely whom it accuses. Resolving the id back to its turn is what stops a
+    second speaker riding someone else's grounded vent, and it is exact whatever
+    the cardinality: one witness with two grounded vents mints two flags on two
+    of their own observations, and a fabricator standing beside them matches
+    none.
 
-    Counting closes that without a second copy of the flag's id format: when as
-    many speakers spoke a vent of the subject as there are flags naming them,
-    every one of those accounts is grounded. When speakers outnumber flags, at
-    least one is invented and nothing here can say which, so the channel credits
-    NOBODY for that subject -- the safe direction, and those speakers can still
-    ground through their own sighting or movement records.
+    The id comes from :func:`~meetings.transcript.turn_observation_id`, the one
+    home for that format and the same writer the detector stamped the flag with,
+    so this never re-derives an id shape of its own.
     """
 
-    spoken: dict[PlayerId, set[PlayerId]] = {}
-    for turn in transcript.turns:
-        for observation in turn.observations:
-            if isinstance(observation, SawVentObservation):
-                spoken.setdefault(observation.subject, set()).add(turn.speaker)
-    flags: dict[PlayerId, int] = {}
-    for subject in grounded_vent_subjects_from_flags(contradictions):
-        flags[subject] = sum(
-            1
-            for flag in contradictions
-            if flag.kind == "vent_sighting" and subject in flag.subjects
-        )
-    return frozenset(
-        subject
-        for subject, count in flags.items()
-        if len(spoken.get(subject, set())) == count
+    flagged_events = frozenset(
+        flag.event_a_id for flag in contradictions if flag.kind == "vent_sighting"
     )
+    if not flagged_events:
+        return {}
+    grounded: dict[PlayerId, set[PlayerId]] = {}
+    for turn in transcript.turns:
+        for index, observation in enumerate(turn.observations):
+            if not isinstance(observation, SawVentObservation):
+                continue
+            if turn_observation_id(turn=turn, index=index) in flagged_events:
+                grounded.setdefault(observation.subject, set()).add(turn.speaker)
+    return {subject: frozenset(speakers) for subject, speakers in grounded.items()}
 
 
 def _room_label(rooms: frozenset[str]) -> str:
@@ -347,7 +345,7 @@ def build_testimony_ledger(
     if not accusations:
         return MeetingTestimonyLedger(rows=(), opener=opener)
 
-    vent_placed = _vent_grounded_subjects(transcript, contradictions)
+    vent_grounded = _vent_grounded_speakers(transcript, contradictions)
     flagged_subjects = frozenset(
         subject
         for contradiction in contradictions
@@ -384,7 +382,7 @@ def build_testimony_ledger(
                     subject=subject,
                     sighting_records=sighting_records,
                     move_witness_records=move_witness_records,
-                    vent_placed=vent_placed,
+                    vent_grounded=vent_grounded,
                 )
             )
         )

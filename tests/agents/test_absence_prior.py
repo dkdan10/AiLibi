@@ -91,7 +91,7 @@ from meetings.transcript import (
     WEAK_CONTRADICTION_MARKER_PREFIX,
     WEAK_REASON_SELF_STATED,
     MeetingTriggerKind,
-    _turn_observation_id,  # noqa: PLC2701
+    turn_observation_id,  # noqa: PLC2701
     absent_players,
 )
 
@@ -963,7 +963,7 @@ class TestAbsencePriorOnCommittedBytes:
             for index, observation in enumerate(turn.observations):
                 if not isinstance(observation, SawVentObservation):
                     continue
-                event_id = _turn_observation_id(turn=turn, index=index)
+                event_id = turn_observation_id(turn=turn, index=index)
                 if event_id not in flagged_event_ids:
                     continue
                 records.setdefault(turn.speaker, []).append(

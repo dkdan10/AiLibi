@@ -2256,7 +2256,7 @@ def _iter_alibis(
     already have, no new flag kind and no duplicated chronology discipline (a
     single tick satisfies the :class:`~meetings.schemas.AlibiClaim` range
     validator by construction). The synthesized claim's event id is the
-    OBSERVATION id (:func:`_turn_observation_id` -- a whereabouts lives on
+    OBSERVATION id (:func:`turn_observation_id` -- a whereabouts lives on
     ``turn.observations``), so a flag referencing it resolves through
     :func:`_event_speaker_index` and the spectator surface exactly like any
     other observation. Per turn, claims index before observations -- a fixed
@@ -2309,7 +2309,7 @@ def _iter_sightings(transcript: MeetingTranscript) -> Iterator[_IndexedSighting]
         for index, observation in enumerate(turn.observations):
             if isinstance(observation, SawPlayerObservation):
                 yield _IndexedSighting(
-                    event_id=_turn_observation_id(turn=turn, index=index),
+                    event_id=turn_observation_id(turn=turn, index=index),
                     speaker=turn.speaker,
                     observation=observation,
                     rooms=canonical_rooms(observation.room),
@@ -2554,7 +2554,7 @@ def _iter_move_placements(
             ):
                 continue
             yield _IndexedSighting(
-                event_id=_turn_observation_id(turn=turn, index=index),
+                event_id=turn_observation_id(turn=turn, index=index),
                 speaker=turn.speaker,
                 observation=SawPlayerObservation(
                     type="saw_player",
@@ -3358,7 +3358,7 @@ def _detect_grounded_vent_flags(
             )
             if matched is None:
                 continue
-            event_id = _turn_observation_id(turn=turn, index=index)
+            event_id = turn_observation_id(turn=turn, index=index)
             yield _build_contradiction(
                 kind="vent_sighting",
                 event_a_id=event_id,
@@ -3386,7 +3386,7 @@ def _detect_vent_placement_contradictions(
     driver from :func:`grounded_vent_subjects_from_flags`, reading the
     ``vent_sighting`` flag channel. For every spoken
     :class:`~meetings.schemas.SawVentObservation` on any turn (indexed with
-    :func:`_turn_observation_id`) whose subject is in the
+    :func:`turn_observation_id`) whose subject is in the
     roster, the SPEAKER'S OWN typed records must exist; for each of the
     SUBJECT'S OWN de-echoed self-alibis (``self_alibis``, the tuple
     :func:`detect_contradictions` already computes) with non-empty canonical
@@ -3435,7 +3435,7 @@ def _detect_vent_placement_contradictions(
                 continue
             if not _subject_in_roster(observation.subject, roster):
                 continue
-            observation_id = _turn_observation_id(turn=turn, index=index)
+            observation_id = turn_observation_id(turn=turn, index=index)
             for alibi in self_alibis:
                 if not alibi.rooms:
                     continue
@@ -3766,7 +3766,7 @@ def _describe_retargeted_proxy(
 def _event_speaker_index(transcript: MeetingTranscript) -> Mapping[str, PlayerId]:
     """Map every claim/observation event id to the player who STATED it.
 
-    Reuses the :func:`_turn_claim_id` / :func:`_turn_observation_id`
+    Reuses the :func:`_turn_claim_id` / :func:`turn_observation_id`
     writers (one home for the id format, exactly the parse
     :func:`contradiction_lift_key` relies on) so a flag's
     ``event_a_id``/``event_b_id`` resolve back to ``turn.speaker``. Built
@@ -3786,7 +3786,7 @@ def _event_speaker_index(transcript: MeetingTranscript) -> Mapping[str, PlayerId
             if isinstance(observation, WhereaboutsClaim):
                 index[_turn_whereabouts_id(turn=turn, index=obs_index)] = turn.speaker
             else:
-                index[_turn_observation_id(turn=turn, index=obs_index)] = turn.speaker
+                index[turn_observation_id(turn=turn, index=obs_index)] = turn.speaker
     return index
 
 
@@ -4102,7 +4102,7 @@ def _turn_claim_id(*, turn: MeetingTurn, index: int) -> str:
     return f"turn:{turn.turn_id}:claim:{index}"
 
 
-def _turn_observation_id(*, turn: MeetingTurn, index: int) -> str:
+def turn_observation_id(*, turn: MeetingTurn, index: int) -> str:
     return f"turn:{turn.turn_id}:obs:{index}"
 
 
@@ -4169,5 +4169,6 @@ __all__ = [
     "sighting_placement",
     "sort_turns_canonically",
     "triggering_body_rooms",
+    "turn_observation_id",
     "walk_chain",
 ]
