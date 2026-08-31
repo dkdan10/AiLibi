@@ -115,33 +115,41 @@ never scored) — and the same cells were independently re-derived from the
 component public APIs alone (no `training.composed_runner` import) as an
 adversarial cross-check; the two computations agree cell-for-cell.
 
-| channel | held-out (30 test games, 96 meetings) |
+| channel | held-out (30 test games, 91 meetings) |
 |---|---|
-| decision accuracy | **83/96 = 0.8646** (bar > 0.625) |
-| convicting-meeting top-1 | **46/60 = 0.7667** (bar ≥ 0.6375) |
-| exact-outcome match | 76/96 = 0.7917 (informational) |
-| gate convictions | 49 of 96 |
-| gate confusion vs the ejection label (tp/fp/fn/tn) | 48 / 1 / 12 / 35 |
-| top-1 among gate-convicted ejections | 41/48 = 0.8542 (informational) |
-| surrogate tally census (the composed skip branch) | 0 ejections / 96 skips |
-| honest ceiling on this population | 0.8500 (60 ejections, 51 reachable) |
+| decision accuracy | **82/91 = 0.9011** (bar > 0.6264) |
+| convicting-meeting top-1 | **47/57 = 0.8246** (bar ≥ 0.6184) |
+| exact-outcome match | 76/91 = 0.8352 (informational) |
+| gate convictions | 52 of 91 |
+| gate confusion vs the ejection label (tp/fp/fn/tn) | 50 / 2 / 7 / 32 |
+| top-1 among gate-convicted ejections | 44/50 = 0.8800 (informational) |
+| surrogate tally census (the composed skip branch) | 2 ejections / 89 skips |
+| honest ceiling on this population | 0.8246 (57 ejections, 47 reachable) |
 
 The surrogate-tally row restates the NO-GO fact this composes around: the
-surrogate's own decision channel skips every test meeting (its committed 0.375
-decision accuracy — the always-SKIP constant), so on the composed skip branch
-the pass-through tally is in practice always SKIPPED and the decision channel
-is carried entirely by the conviction gate.
+surrogate's own decision channel skips 89 of the 91 test meetings (its 0.396
+decision accuracy, barely off the always-SKIP constant), so on the composed skip
+branch the pass-through tally is in practice always SKIPPED and the decision
+channel is carried almost entirely by the conviction gate.
+
+> **Erratum (Task 21.17, the baseline-8 re-ground).** §3, §4 and §6 were
+> re-measured from components re-fit on `replays/ml_corpus/9p2i` at the
+> baseline-8 record. The baseline-6 record read 96 held-out meetings / 60
+> ejections, decision accuracy **83/96 = 0.8646** against a 0.625 bar,
+> convicting top-1 **46/60 = 0.7667** against 0.6375, exact-outcome 0.7917, gate
+> confusion 48/1/12/35, and an all-SKIP surrogate tally on a 0.8500 ceiling.
+> Those are a record of bytes this checkout no longer holds.
 
 **The live candidate-view variant (measured, never assumed away — Codex review
 on PR #310).** The top-1 cell above is the STANDING axis-1 recipe: the
 surrogate fidelity harness's self-only candidate views, the exact channel the
-committed 0.7667 was measured on. The live runner additionally drops an
+committed 0.8246 was measured on. The live runner additionally drops an
 impostor voter's fellow impostors from its candidate set (the §7.12 firewall),
 which shifts the softmax denominator on multi-impostor meetings. Re-scoring
-the whole held-out split through the LIVE views: decision accuracy **83/96 =
-0.8646 (identical)**, convicting top-1 **45/60 = 0.7500** (one hit lower),
-exact-outcome **75/96 = 0.7813**, surrogate tally still all-SKIP (0/96). Every
-gating cell still clears its bar (0.8646 > 0.625; 0.7500 ≥ 0.6375), so **the
+the whole held-out split through the LIVE views: decision accuracy **82/91 =
+0.9011 (identical)**, convicting top-1 **45/57 = 0.7895** (two hits lower),
+exact-outcome **74/91 = 0.8132**, surrogate tally 2 ejections of 91. Every
+gating cell still clears its bar (0.9011 > 0.6264; 0.7895 ≥ 0.6184), so **the
 GO verdict is invariant to the live channel** — pinned by the committed test
 `test_go_verdict_holds_under_the_live_teammate_exclusion_ranking` (the
 surrogate's own live-parity idiom, `test_no_go_verdict_holds_on_live_served_
@@ -154,25 +162,25 @@ forbids.
 
 | axis | measured | bar | pass |
 |---|---|---|---|
-| 1. decision accuracy | 0.8646 | > 0.625 (always-eject) | **yes** |
-| 2. convicting top-1 | 0.7667 | ≥ 0.6375 = 0.75 × 0.8500 | **yes** |
-| 3. exact-outcome match | 0.7917 | informational, never gates | reported |
+| 1. decision accuracy | 0.9011 | > 0.6264 (always-eject) | **yes** |
+| 2. convicting top-1 | 0.8246 | ≥ 0.6184 = 0.75 × 0.8246 | **yes** |
+| 3. exact-outcome match | 0.8352 | informational, never gates | reported |
 
 **GO.** Honest notes: (a) the decision channel is the conviction model's
 CONVERSION head consumed as an eject/skip gate — its label was
-testimony-backed conversion, not ejection, so the 12 false negatives are
-mostly ejections that carried no testimony-backed conversion (60 ejections vs
-47 conversions on this split); the 0.8646 is the honest measurement of that
-re-use, well clear of the 0.625 constant but below the model's 0.9375 accuracy
-on its own conversion label; (b) the top-1 cell is the surrogate's retained
-ranking channel measured in the standing axis-1 form — identical to the
-committed 0.7667, confirming the composition preserves the WHO channel
+testimony-backed conversion, not ejection, so the 7 false negatives are
+mostly ejections that carried no testimony-backed conversion (57 ejections vs
+51 conversions on this split); the 0.9011 is the honest measurement of that
+re-use, well clear of the 0.6264 constant and now just below the model's 0.9451
+accuracy on its own conversion label; (b) the top-1 cell is the surrogate's
+retained ranking channel measured in the standing axis-1 form — identical to the
+surrogate's own 0.8246, confirming the composition preserves the WHO channel
 unchanged; the verdict is also invariant to the gate-conditioned reading of
-"among convicting meetings" (top-1 among gate-convicted ejections = 41/48 =
-0.8542 ≥ 0.6375) AND to the live candidate-view variant (§3: 45/60 = 0.7500 ≥
-0.6375), so no interpretation of axis 2 flips it; (c) exact-outcome (0.7917)
+"among convicting meetings" (top-1 among gate-convicted ejections = 44/50 =
+0.8800 ≥ 0.6184) AND to the live candidate-view variant (§3: 45/57 = 0.7895 ≥
+0.6184), so no interpretation of axis 2 flips it; (c) exact-outcome (0.8352)
 compounds both channels and is quoted informationally per the
-pre-registration; (d) every number here is a baseline-6 population
+pre-registration; (d) every number here is a baseline-8 population
 measurement — nothing transfers as an absolute (population-relative
 doctrine), and any substrate change re-runs §8.
 
@@ -199,11 +207,11 @@ convention, and the one-shared-counter discipline are reused import-only,
 
 ### 6.1 Machine verdict
 
-**HELD; machinery blockers: none.** The embedded standing probe: baseline mean
-score 4.19, ES champion 3.24, relative gain **−0.2269** (the champion scores
-BELOW the honest baseline — no exploit); every lever's score gain is negative
-(emergency −0.1463, report −0.1164, wait −0.9761 with a zero-meeting set, kill
-−0.1045, sabotage −0.7493).
+**HELD; machinery blockers: none; findings: none.** The embedded standing probe:
+baseline mean score 3.42, ES champion 0.65, relative gain **−0.8102** (the
+champion scores well BELOW the honest baseline — no exploit); every lever's
+score gain is negative or small (emergency +0.1423 on the score axis, report
++0.0474, wait −0.9708 with a zero-meeting set, kill +0.1204, sabotage −0.1058).
 
 ### 6.2 The delta per forced lever against the standing bars
 
@@ -212,31 +220,34 @@ scripted-FSM baseline; recorded-flags gain beside it; materiality bar 0.25):
 
 | arm | meetings | predicted supply gain | recorded flags gain | predicted flags/meeting | recorded flags/meeting | predicted converting share | recorded converting share |
 |---|---|---|---|---|---|---|---|
-| scripted-FSM baseline | 28 | (anchor) 0.0 | 0.0 | 1.169 | 0.000 | 0.464 | 0.000 |
-| forced-emergency | 37 | **+0.2953** | 0.0 | 1.600 | 0.000 | 0.351 | 0.000 |
-| forced-report | 32 | −0.2040 | 0.0 | 0.994 | 0.000 | 0.000 | 0.000 |
-| forced-wait | 0 | −1.0000 | 0.0 | 0.000 | 0.000 | 0.000 | 0.000 |
-| forced-kill | 27 | −0.1686 | 0.0 | 1.050 | 0.000 | 0.185 | 0.000 |
-| forced-sabotage | 13 | −0.0490 | 0.0 | 1.326 | 0.000 | 0.154 | 0.000 |
-| ES champion | 31 | −0.1730 | 0.0 | 1.023 | 0.000 | 0.032 | 0.000 |
+| scripted-FSM baseline | 23 | (anchor) 0.0 | 0.0 | 0.8523 | 0.000 | 0.4783 | 0.000 |
+| forced-emergency | 39 | **+0.0171** | 0.0 | 0.8399 | 0.000 | 0.3333 | 0.000 |
+| forced-report | 32 | −0.5091 | 0.0 | 0.4212 | 0.000 | 0.0312 | 0.000 |
+| forced-wait | 0 | −1.0000 | 0.0 | 0.0000 | 0.000 | 0.0000 | 0.000 |
+| forced-kill | 24 | −0.3700 | 0.0 | 0.4812 | 0.000 | 0.3750 | 0.000 |
+| forced-sabotage | 23 | +0.0326 | 0.0 | 0.8386 | 0.000 | 0.4348 | 0.000 |
+| ES champion | 28 | −0.0268 | 0.0 | 0.8057 | 0.000 | 0.0714 | 0.000 |
 
-Every arm's `validity_passed` is **False** on the composed substrate, so the
-gate-check buckets (`laundered` / `substrate_divergent` / `false_blocked`) are
-empty **by construction** — diagnosed in §6.3, named, never silent.
+**No arm reaches the 0.25 materiality bar on the predicted-supply axis** — the
+largest positive delta is the sabotage arm's +3.3%, and the emergency arm, which
+carried +29.5% on the baseline-6 record, comes in at **+1.7%**. Every arm's
+`validity_passed` is **False** on the composed substrate, so the gate-check
+buckets (`laundered` / `substrate_divergent` / `false_blocked`) are empty
+**by construction** — diagnosed in §6.3, named, never silent.
 
 ### 6.3 The honest diagnosis + the named adoption constraints
 
 Re-running the validity gate on a probe-identical composed replay set (8 games,
 roster sidecar written exactly as the arm reader writes it) isolates the
-failure to **exactly one check**: `cost_and_provenance_exact` — "no model
-recorded on any game cost row". A composed meeting makes zero LLM calls
-(`llm_calls=()`), so no model row exists to stamp — structural for ANY
-zero-LLM meeting path, not behavioral. Every behavioral check passes on the
-same set: all games reach game-over, meeting rate 1.0 (28 resolved meetings),
-0 tick-≤1 kills, 0 friendly-fire kills, **0 teammate-betrayal ballots over 162
-multi-impostor ballots** (the §7.12 firewall held in-loop), 0 railroaded crew
-ejections, 0 dangling reason ids, byte-identical reconstruction (0 drifted
-samples).
+failure to **exactly one check**: `cost_and_provenance_exact` — "model=None, 0
+prompt versions, substrate stamped exact on 8 games". A composed meeting makes
+zero LLM calls (`llm_calls=()`), so no model row exists to stamp — structural
+for ANY zero-LLM meeting path, not behavioral. Every behavioral check passes on
+the same set: all 8 games reach game-over, meeting rate 1.0 (23 resolved
+meetings), 0 duplicate meeting rows, 0 tick-≤1 kills over 31 kills, 0
+friendly-fire kills, **0 teammate-betrayal ballots over 136 multi-impostor
+ballots** (the §7.12 firewall held in-loop), 0 railroaded crew ejections, 0
+dangling reason ids, byte-identical reconstruction (0 drifted samples).
 
 Because the validity fail-close empties the machinery's blocker tuple, the
 following are NAMED here as adoption constraints (the task's rule: any
@@ -251,50 +262,54 @@ caveat):
    diagnostic-grade until the provenance check has a stamped-substrate answer
    for LLM-free meeting paths (an eval-side question, out of 18.29's scope —
    `eval/` never moves here).
-2. **`prescreen-substrate-divergence-shape[fsm-baseline+emergency,9p2i]`** —
-   the honest baseline's and the emergency lever's PREDICTED floors PASS
-   (baseline predicted 1.169 flags/meeting vs the 180/165 floor) while the
-   RECORDED floors FAIL everywhere: composed meetings mint **0 flags in
-   bytes** (empty transcripts — the runner synthesizes ballots, not talk).
-   This is the same predicted-PASS/recorded-FAIL shape 18.18 named
-   `prescreen-substrate-divergence` on the fake path, and its recorded caveat
-   applies to the composed substrate equally, exactly as the probe's caveat
-   predicted for "any decision-degenerate meeting model": **a pre-screen PASS
-   is real-path spend advice ONLY on the composed substrate — never a
-   recorded-floor read — and every gating use must be paired with a
-   recorded-bytes floor read** (the pairing the arm reader performs
+2. **`composed-substrate-mints-no-recorded-flags[all-arms,9p2i]`** — every
+   composed-path arm records **0.0000 flags/meeting in bytes** (empty
+   transcripts — the runner synthesizes ballots, not talk), so **no
+   recorded-floor read exists on this substrate at all**. A composed pre-screen
+   read is therefore real-path spend advice ONLY, and every gating use must be
+   paired with a recorded-bytes floor read (the pairing the arm reader performs
    structurally: both sides are computed on the same replay bytes; this leg's
-   recorded side is the 0.000 column above). It escapes the machinery's
-   `substrate_divergent` bucket only through the validity fail-close of
-   constraint 1.
-3. **`emergency-predicted-supply-above-bar[emergency,9p2i]`** — the forced
-   emergency lever's predicted-supply delta is **+29.5% ≥ the 25% materiality
-   bar** with a recorded-flags delta of 0.0 — the laundering SHAPE, kept out
-   of the machinery's findings only by the validity gate. Named here so no
-   later reader mistakes the empty `laundered` bucket for a measured
-   all-clear: on the composed substrate, meeting-farming still inflates the
-   PREDICTED supply term above the bar while the recorded bytes move nothing.
+   recorded side is the 0.000 column above).
 
-None of the three overturns the GO — the pre-committed consequence stands
-(optional campaign configuration, swap-boundary adoption) — but all three ride
-with it: an adopting campaign consumes the composed pre-screen as spend advice
-only, pairs every gating use with a recorded-bytes read, treats
-composed-substrate probe reads as diagnostic-grade, and never lets a champion
-number be composed-runner-scored (the standing rule). All three are ALSO
-committed machine-readably as `adoption_constraints` in
+Both ride with the GO rather than overturning it — the pre-committed consequence
+stands (optional campaign configuration, swap-boundary adoption) — and an
+adopting campaign consumes the composed pre-screen as spend advice only, pairs
+every gating use with a recorded-bytes read, treats composed-substrate probe
+reads as diagnostic-grade, and never lets a champion number be
+composed-runner-scored (the standing rule). Both are ALSO committed
+machine-readably as `adoption_constraints` in
 `training/artifacts/composed/verdict.json` (Codex review on PR #310), so a
 driver that branches on the verdict alone still sees them — never only this
 report's prose.
 
+> **Erratum (Task 21.17, the baseline-8 re-ground — the constraint set moved
+> from three to two).** The baseline-6 record named a third constraint and
+> worded the second differently; the re-run leg measures neither shape, so both
+> are recorded here as history rather than carried as claims.
+>
+> * `prescreen-substrate-divergence-shape[fsm-baseline+emergency,9p2i]` asserted
+>   that the honest baseline's and the emergency lever's PREDICTED floors PASS
+>   (baseline predicted 1.169 flags/meeting against the 180/165 floor) while the
+>   recorded floors fail. On these bytes the predicted floors **fail too**
+>   (baseline predicted 0.8523 against the floor), so the divergence SHAPE is
+>   absent. What survives is the recorded half, which is why constraint 2 above
+>   is re-worded to the fact the leg actually measures.
+> * `emergency-predicted-supply-above-bar[emergency,9p2i]` asserted a
+>   forced-emergency predicted-supply delta of **+29.5% ≥ the 25% materiality
+>   bar** with recorded 0.0 — the laundering shape. It re-measures at **+1.7%**,
+>   far under the bar, so it is retired rather than restated. Its warning
+>   remains true as doctrine (an empty `laundered` bucket is not a measured
+>   all-clear), and constraint 1 is what carries that warning now.
+
 ### 6.4 Component consumption (metered and quoted)
 
-**1029 composed meetings ran** across the leg. The ONE shared sha-keyed
-conviction counter (`4841f8e0…`) charged **1365** predicted meetings of the
-committed cap **52 481** (**2.60%**): 1029 composed-runner gate reads (one per
-composed meeting) + 336 probe reads (168 recorded meetings × the 2 committed
+**1175 composed meetings ran** across the leg. The ONE shared sha-keyed
+conviction counter (`7e764b89…`) charged **1513** predicted meetings of the
+committed cap **49 764** (**3.04%**): 1175 composed-runner gate reads (one per
+composed meeting) + 338 probe reads (169 recorded meetings × the 2 committed
 consumption paths — the fitness-term read and the composed-gate pre-screen
-read). The shared surrogate counter (`611771a4…`) charged **1029** simulated
-meetings of its committed cap **52 481** (**1.96%**) — one per composed
+read). The shared surrogate counter (`06b20508…`) charged **1175** simulated
+meetings of its committed cap **49 764** (**2.36%**) — one per composed
 meeting. No prediction ran unmetered.
 
 ## 7. The consequence mapping (machine-readable)
