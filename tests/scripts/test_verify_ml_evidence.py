@@ -409,12 +409,18 @@ def test_recompute_reads_every_committed_verdict_against_the_declared_gap() -> N
         "composed decision accuracy",
         "composed exact-outcome match",
     }
-    # All three verdicts are re-derived, not two: the surrogate row joins its
-    # conviction and composed siblings, and it reproduces field-for-field on
-    # this checkout (its committed artifact was taken on the corpus now on disk,
-    # which is exactly what the other two verdicts cannot say).
+    # All three verdicts are re-derived, and all three now report STALE. The
+    # surrogate row used to be the exception — its artifact HAD been taken on the
+    # corpus then on disk — but the baseline-8 record re-recorded
+    # ``replays/ml_corpus/9p2i`` underneath that frozen fit, so it joins its
+    # conviction and composed siblings. STALE is the honest status: the row is
+    # measuring the ONE declared grounding gap, not a defect, and asserting OK
+    # here would assert a premise this checkout no longer has. Re-fitting the
+    # artifact is the re-ground's job, and the re-ground is what deletes the
+    # amnesty entirely — this does not widen it, because the gap is still the
+    # same single pair of digests.
     surrogate_verdict = _row(result.rows, "surrogate verdict.json reproduces")
-    assert surrogate_verdict.status == "OK"
+    assert surrogate_verdict.status == "STALE"
     assert "fields identical" in surrogate_verdict.measured
     assert not surrogate_verdict.measured.startswith("0/")
     assert {
@@ -422,21 +428,23 @@ def test_recompute_reads_every_committed_verdict_against_the_declared_gap() -> N
         "conviction verdict.json reproduces",
         "composed verdict.json reproduces",
     } <= vme._CORPUS_DEPENDENT_RECOMPUTE_ROWS
-    # Left: measured on the baseline-7 corpus. Right: the committed baseline-6
-    # figure the row is read against. Pinned in pairs so neither can drift alone.
+    # Left: measured on the baseline-8 corpus. Right: the committed baseline-6
+    # figure the row is read against — FROZEN, keyed to the committed artifacts
+    # and their reports, never re-pinned by a re-record. Pinned in pairs so
+    # neither can drift alone.
     for name, measured, committed in (
-        # was 0.8181818 — the reporter exclusion oracle left the served feature
-        # vector, and the frozen weights were fitted while it was still there
-        ("surrogate top-1 (ranking channel)", "0.7636363", "0.7666666"),
-        ("surrogate SKIP-vs-eject decision accuracy", "0.3908045", "0.3750000"),
-        # was 0.6991081 — the corrected recorded flag label fits BETTER
-        ("conviction flag-count Spearman", "0.7145778975", "0.5781584"),
-        # was 0.9310344 — the conversion label now admits a spoken saw_move at
-        # its destination, so it carries conversions the frozen fit never saw
-        ("conviction conversion-label accuracy", "0.9080459", "0.9375000"),
-        ("composed decision accuracy", "0.8620689", "0.8645833"),
-        # was 0.8160919 — the same masked column, through the composition
-        ("composed exact-outcome match", "0.7816091", "0.7916666"),
+        # was 0.7636363
+        ("surrogate top-1 (ranking channel)", "0.8070175", "0.7666666"),
+        # was 0.3908045
+        ("surrogate SKIP-vs-eject decision accuracy", "0.3956043", "0.3750000"),
+        # was 0.7145778975
+        ("conviction flag-count Spearman", "0.6425391", "0.5781584"),
+        # was 0.9080459
+        ("conviction conversion-label accuracy", "0.9450549", "0.9375000"),
+        # was 0.8620689
+        ("composed decision accuracy", "0.8791208", "0.8645833"),
+        # was 0.7816091
+        ("composed exact-outcome match", "0.8131868", "0.7916666"),
     ):
         row = _row(result.rows, name)
         assert row.measured.startswith(measured), row.measured

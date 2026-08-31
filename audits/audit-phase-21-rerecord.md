@@ -335,11 +335,32 @@ PASS at `3b156fee`, verified by running them there, so the class is the graduati
 
 ---
 
-## 1. THE VERDICT: the record is INCOMPLETE at 299 of 300 games
+## 1. THE VERDICT: the record is COMPLETE at 300 of 300 games, and it mints baseline 8
 
-**The provider refused, and the recording stopped.** Legs 1, 2 and 3 are complete, gated and
-committed. Leg 4 (`replays/ml_corpus/4p1i`) reached 49 of its 50 seeds and then hit a hard `HTTP 402`
-from Featherless on seed 1049:
+**All four sets are recorded, gated and FROZEN. The ladder tip is baseline 8.**
+
+The record did not get there in one pass, and §1.1 narrates the interruption as the history it is
+rather than smoothing it away. The sequence, dated:
+
+| when (UTC) | what |
+|---|---|
+| 2026-08-30 18:07 | leg 1 opens — `samples/9p2i`, first seed recorded alone for the honesty probe |
+| 2026-08-30 21:17 | leg 1 complete and gated |
+| 2026-08-30 21:26 → 2026-08-31 05:31 | leg 2 — `ml_corpus/9p2i`, 150 games, FROZEN |
+| 2026-08-31 05:33 → 05:58 | leg 3 — `samples/4p1i`, complete and gated |
+| 2026-08-31 05:59 → 06:26 | leg 4 reaches 49 of 50 seeds, then **STOPS** on a provider refusal (§1.1) |
+| 2026-08-31 06:26 | the record is reported INCOMPLETE and the branch is checkpointed at 299/300 |
+| 2026-08-31 06:40 | the owner clears the account; the leg resumes on the ONE missing seed |
+| 2026-08-31 06:45 | leg 4 complete and FROZEN — **300 of 300** |
+
+**The MANIFEST dates straddle midnight, and that is chronology rather than inconsistency.**
+`samples/9p2i` records `2026-08-30`; `samples/4p1i` and `ml_corpus/4p1i` record `2026-08-31`; and
+`ml_corpus/9p2i` carries BOTH, because its 150 seeds ran across the boundary. A four-leg record that
+takes twelve hours cannot share one date unless it starts after midday.
+
+### 1.1 The STOP that interrupted leg 4, as it happened
+
+Seed 1049 exhausted its whole retry budget on a hard `HTTP 402` from Featherless:
 
 ```
 Featherless chat-completions POST failed: HTTP 402 (model='Qwen/Qwen3.6-27B'):
@@ -347,21 +368,21 @@ Featherless chat-completions POST failed: HTTP 402 (model='Qwen/Qwen3.6-27B'):
    Add credits to continue.","type":"invalid_request_error","code":"insufficient_credits"}}
 ```
 
-The recorder spent its whole retry budget against it — **8 attempts with escalating backoff (60 s,
-75 s, 90 s, 105 s …), every one returning the same 402** — and then refused to freeze the set. That
-is not a transient: the message names its own remedy, and the remedy is an account action. **This
-operator does not add credits**; the restart is the owner's.
+**8 attempts with escalating backoff (60 s, 75 s, 90 s, 105 s …), every one the same 402** — not a
+transient, and the message named its own remedy. The remedy was an account action, which the operator
+does not take, so the recording stopped, the 49 recorded seeds were checkpointed as an explicitly
+UNFROZEN partial, and the reading was reported to the owner with the branch left at 299/300.
 
-**Nothing here mints baseline 8.** A partial record is not a baseline. The ladder tip stays at
-baseline 7, `_DEFAULT_BASELINE_ID` is untouched, no floor block was written, and no surface on this
-branch claims a succession. Every downstream item this record was to discharge is listed unstarted in
-§6.
+**Once the owner cleared the account the resume cost ONE seed, not a leg**, because the recorder's
+skip-scan re-proves each present replay's provenance before trusting it: 49 verified, seed 1049
+recorded in the same pass, then the finalize — the 50-game eval report, `splits.json` at 30/10/10,
+and the FROZEN line. Seed 1049 hit no 402 on the retry.
 
 **What the `$0.0000` claim does and does not cover.** Every recorded game on all four sets carries
 `cost_usd 0.0`, and the MANIFEST rows read `0.0000` throughout — the flat-rate substrate held exactly
-as declared. The 402 is an **account-balance** refusal (a balance of **-0.0015 USD**), not a
+as declared. The 402 was an **account-balance** refusal (a balance of **-0.0015 USD**), not a
 per-token charge against this record. Both facts are true and this audit states both rather than
-letting the zero-cost claim imply the account was in good standing.
+letting the zero-cost claim imply the account was in good standing throughout.
 
 ## 2. The legs, as recorded, against the projection committed in §0.1
 
@@ -555,39 +576,84 @@ Three of four sets are unchanged to the game. Only `samples/9p2i` moved, by thre
 ### What moved that §0 did NOT pre-declare, named rather than buried
 
 §0.3 pre-declared ten cells expected to move and twelve expected not to. **All twelve
-named-not-to-move cells HELD.** Two cells moved that §0 named in neither list — the two above — and
-this record's honest position is that they are un-pre-declared movements on a maintenance record
-whose §0 says in as many words that "a directional cell that moves the unwelcome way" is explicitly
-NOT a STOP. They are reported to the owner here, in the record, before the merge that ratifies it,
-rather than being discovered downstream.
+named-not-to-move cells HELD.** The cells below moved that §0 named in neither list, and this
+record's honest position is that they are un-pre-declared movements on a maintenance record whose §0
+says in as many words that "a directional cell that moves the unwelcome way" is explicitly NOT a
+STOP. They are reported to the owner here, in the record, before the merge that ratifies it, rather
+than being discovered downstream.
+
+### 5.1.1 The sole-flag wrongful-conviction class RE-OPENED — 0 → 4
+
+**This is the finding on this page that most deserves the owner's attention, because it re-prices a
+stated ground of the baseline-7 adoption.** That record's §6.1 rested partly on the reading that the
+class which convicted seventy innocents *no longer existed on those bytes*. On baseline 8 it is back:
+
+| cell | before | after |
+|---|---|---|
+| sole-flag wrongful-conviction victims | **0** | **4** — all four CREWMATES |
+| … still carrying a STRONG flag under the full slate | **0** | **1** |
+
+Four is a small number and this record has no power to call it a trend. But "the class is extinct"
+and "the class has four victims" are different claims, and only one of them is now true. **It joins
+the accuracy fall and the innocent-ejection rise as Wave-2 input, and no surface may keep asserting
+the extinction.**
+
+### 5.1.2 The other five movements, with their direction stated
+
+| # | cell | before | after | reading |
+|---|---|---|---|---|
+| b | STRONG `alibi_vs_sighting` prosecution class | 11 OFF / 12 with the movement lever | **21 / 27** | grew; more prosecutions ride this class |
+| c | oracle-register leak class, all four sets | non-zero | **ZERO** | **the one unambiguously good movement** — the A-6 dialect fix working. Denominators kept beside the zeroes so the cell cannot read as an empty scan |
+| d | impostor false-whereabouts arm | commented as ~twice the crew rate | **0/106 impostor vs 6/660 crew** | **INVERTED.** The old comment was backwards and is corrected, not re-explained |
+| e | `weak_flag_only_impostor` on `samples` | 0 | **1** | "every weak conviction was innocent" now holds only on the corpus set |
+| f | `_COALESCED_ROW_PIN` | 37.05 | **36.59** | **MARGIN WATCH.** The falsification floor is 36.0, so the margin fell 1.05 → 0.59. Another re-record of similar size could flip what that test means. Ledgered, not adjusted |
+
+Item (c) is the only movement in this record that is unambiguously an improvement, and it is stated
+as one cell rather than allowed to colour the rest.
 
 ## 6. What this record does NOT discharge
 
-Everything below was scoped to this task and is **UNSTARTED**, because every item is keyed to FINAL
-bytes and the bytes are one seed short. Re-pinning against a set that is about to change is how a
-stale pin gets laundered as a current one.
+The post-record tail this task owned IS discharged: the byte-coupled re-pin sweep (the census
+re-derived at **46** files under `tests/` and **97** repo-wide — the repo-wide grep emits paths with
+no leading `./`, so the exclusions filter on the bare prefix or they silently miss and report 101),
+both frontend fixtures and their census tests, the `baseline-8` floor block and
+`_DEFAULT_BASELINE_ID`, the ladder-tip move, the record-read parser widening with its perturbation
+cases, the declared grounding gap's corpus digest, the corpus README's whole Capability-disclosures
+section and leg table, the win-ordering expiry, the `.audit`-stem guards,
+`verify_action_dispositions`' adoption, the prompt-archive retirement, and the before/after
+instrument cells.
 
-1. **Leg 4 itself** — seed 1049, the freeze, `splits.json`, the 50-game eval report, the validity gate.
-2. **The byte-coupled re-pin sweep.** The census was re-derived and reproduces the contract exactly —
-   **46** files under `tests/`, **97** repo-wide over `*.py`/`*.ts`/`*.tsx`/`*.json`/`*.sh` excluding
-   `replays/`, `audits/` and `node_modules/` (the repo-wide grep emits paths with no leading `./`, so
-   the exclusions filter on the bare prefix; filtering on `^./audits/` silently misses and reports
-   101). Not one pin was moved.
-3. **Both frontend fixtures** and their census tests.
-4. **The `baseline-8` floor block**, `_DEFAULT_BASELINE_ID`, and the five `FloorPin` fields per set.
-5. **The ladder-tip move.** `_LADDER_TIP_AUDIT` still points at the baseline-7 audit; README, the
-   reading guide, the glossary and the history file still say baseline 7 — **correctly**, because
-   baseline 8 does not exist.
-6. **The record-read parser widening** and its perturbation case.
-7. **`scripts/verify_ml_evidence.py`'s declared grounding gap** — still naming the old corpus digest.
-8. **The corpus README's Capability-disclosures section and leg table** (A-15's finding).
-9. **The win-ordering expiry**, the `.audit`-stem guards, `verify_action_dispositions` adoption, and
-   the prompt-archive retirement — all sequenced AFTER the last seed, which has not landed.
-10. **The before/after instrument tables.** The before column IS measured and preserved (§7); the
-    after column is not published, because three of four sets are final and the fourth is not.
-11. Everything the contract already listed as out of scope: the ML re-ground and the campaign tier,
-    the Wave-2 lever record, the narrative half of the front door, the corpus recorder's header
-    duration note.
+What this record deliberately does NOT discharge:
+
+1. **The ML re-ground and the campaign tier.** The committed fits were made on a corpus this record
+   replaced; the declared grounding gap now names the new pair of digests, and 12 rows report STALE
+   by design. Task 21.17 owns the re-fit that deletes the amnesty.
+2. **The Wave-2 lever record.** Every cell here is published, none is a bar; the decisions belong to
+   that record.
+3. **The narrative half of the front door.** Only the cells the doc-fact gates force were moved.
+4. **The corpus recorder's header duration note**, and the recorder's leftover-stage-dir bug (§5.2).
+5. **The mixed-vintage before-column in the results tables.** README and the reading guide carry a
+   history column headed "At baseline 6" whose rows are now a mix of vintages. Fixing it properly
+   means moving `_BEFORE_COLUMN_HEADER`, `_PROOF_PARTITION_AUDIT` and the parser in ONE commit — the
+   contract already routes it (`tasks/phase-21.md:6613`, `:6645`), and splitting it across two tasks
+   would leave the checker reading one vintage against another.
+6. **`README.md:29`'s phases-0-19 / 20-open contradiction** — pre-existing, unrelated to these bytes,
+   named here so the ledger carries it rather than absorbed into a record that did not cause it.
+7. **The surrogate verdict artifact.** `training/artifacts/surrogate/verdict.json` was fitted on the
+   corpus that was on disk when it was written; this record re-recorded that corpus underneath it, so
+   16 of its 31 fields no longer re-derive and its row joins the conviction and composed verdicts in
+   reporting STALE. **Re-fitting it is the re-ground's job, not this record's** — `training/` artifacts
+   are out of scope here by contract, and re-stamping one would be exactly the "launder a stale
+   artifact as a current one" move the phase opened against. The two tests that asserted the old
+   premise now assert the honest state instead, with the reason in the code. This does NOT widen the
+   amnesty: the gap is still the same single pair of digests.
+8. **The prior-generation docstring drift** the re-pin sweep deliberately left standing: the `19_8`
+   disclosure, the 850-quotations line, the `55/2,726` figure, the `10/31` Wilson cell, the
+   12-ejections 4p prose, and the origin-spoken-flags comments. These are stale against a recording
+   OLDER than the one this record replaced, so they belong to the 21.11-class prose sweep, not to a
+   re-pin. Also `test_the_crew_omniscient_control_is_one_on_each_9p2i_set`, whose docstring was
+   corrected but whose NAME now mismatches its content — kept because audits cite test ids, and
+   flagged for the close rather than renamed under a record.
 
 ## 7. What IS banked, and reproducible at `$0`
 
