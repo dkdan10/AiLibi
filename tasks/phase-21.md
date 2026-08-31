@@ -5011,6 +5011,30 @@ forces `tests/experiments/test_probe_backends.py` (the `_FLAGS_ON` literal) and
 `docs/architecture.md`'s live-toggle sentence, both expected in the diff and flagged in the
 PR's Questions.
 
+**Merge-reality record (2026-08-31, orchestrator-ratified at the #414 merge):** three worker
+deviations stand — `ReporterContext.victim_id`/`room` fill from the receiving speaker's OWN
+record (the meeting-scope source the DoD implied does not exist); the overlay re-stamps only the
+two templates whose bodies move, BLOCK 6's explicit instruction winning over the DoD's
+conflicting "ON ballot" clause, which belongs to 21.19; the exhaustive subset invariant is
+scoped to re-bodied templates (the absolute reading is unsatisfiable without breaking 18.10's
+out-of-scope test). Forced touches beyond the two pre-authorized: `docs/glossary.md` and
+`scripts/record_ml_corpus.sh` (the same one-clause false-count class) and four test files whose
+renderer stubs the Protocol widening mechanically forced; the architecture page was 1,293 words
+at the worker's HEAD, not the contract's 1,282 (the tip-line truth fix landed between). Codex ran
+3 rounds, 13 findings, 11 fixed, 2 answered — one fix CORRECTED a published cell before it ever
+stood: co-discoverers were tick-matched and counted speakers who found a different corpse;
+`MeetingTrigger` gained an additive `body_victim_id` and the class fell 173 meetings / 223 slots
+(51.1% impostor) → 118 / 145 (49.0%), inside the register's interval. The instrument's pooled
+ledger independently reproduces §5.1's 429 / 46 / 383 without reading the audit. THE PRICING
+CELL: the reporter is 34 of the 46 innocent ejections (73.9%); per-slot 5.48% vs 0.65%, relative
+risk 8.50x. Escalations dispositioned: the file-swapping-arm rule (a variant template must
+author its siblings' blocks — pinned by a designed-to-fail test) BINDS 21.20's contract at its
+re-anchor; the recorder's hardcoded default-v5 `REQUIRED_PROMPT_VERSIONS` literal (it would
+refuse ANY lever-ON record at finalization, i.e. 21.24 after ~22 h) is routed to be fixed AND
+smoke-validated at 21.23, deriving through `prompt_versions_for_set` from `--expect-levers`;
+`BodyDiscoveryAgent` stays OPTIONAL on the `MoveWitnessAgent` precedent (Codex's REQUIRED
+argument declined — a Protocol-wide test-double churn for no behavioral gain).
+
 **Ready-to-paste prompt:** `agent_prompts/task-21-18-reporter-voice.md`
 
 ### Task 21.19 — Testimony needs a second source (lever `corroboration_discipline`, default OFF)
