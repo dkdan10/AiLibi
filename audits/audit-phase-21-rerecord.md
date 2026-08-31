@@ -457,6 +457,110 @@ turn. These are **not** `deadline_default` — the recorder declares recorded pa
 and `check_replay_provenance` accepts them. The standing re-record rule names the defaulted class,
 and this is not it, so re-recording them would be widening a rule rather than following it.
 
+## 5.2 An operating note: the abandoned staging directory, and the recorder bug behind it
+
+**What was found.** After the record completed, `replays/ml_corpus/9p2i/` still held
+`.ailibi-corpus-stage-DMASrP/` — the corpus recorder's own `mktemp` staging directory from this
+record's leg 2. It is **gitignored**, so `git status` is blind to it and it would have ridden the
+merge invisibly. It surfaced only because `tests/scripts/test_record_ml_corpus.py::
+test_preflight_refuses_fake_provider_at_the_committed_corpus_tree` globs the committed set dir and
+failed on it.
+
+**What it was, verified before anything was removed.** Deleting inside `replays/` is not something to
+do on inference, so the directory was audited first:
+
+```
+tracked files in the stage                    0   (gitignored: git status --porcelain --ignored -> !!)
+replay-seed-*.jsonl anywhere inside it        0
+contents                                      .next_idx, .state/completed, .state/meetings
+.state/completed                            150   (the full leg-2 slate)
+.state/meetings                             150
+.next_idx                                   150
+.failed                                   ABSENT   (the leg did not fail)
+total size                                  12K
+committed replays in the set                150   (all promoted; the set is whole and FROZEN)
+```
+
+Every replay had been promoted out; what remained was three counter files. Removing it lost nothing,
+and `find replays -type d -name '.ailibi-*stage*'` now returns none. The test is green.
+
+**The bug, ROUTED rather than fixed here.** `scripts/record_ml_corpus.sh` creates the stage at
+`:1296` and arms `trap "rm -rf '$stage_dir'" RETURN` at `:1301` — so a stage dir surviving a
+**successful** promotion means that trap does not fire on at least one exit path. The recorder is
+frozen for this record's window and is out of this task's scope, so the defect is recorded here for
+the close ledger rather than patched:
+
+> **Routed:** the corpus recorder can leave its `mktemp` staging directory behind after a successful
+> record (`scripts/record_ml_corpus.sh:1296` / the `RETURN` trap at `:1301`). Because the path is
+> gitignored, neither `git status` nor a review sees it; the only thing that catches it is a
+> committed-tree test globbing the set dir. Either the trap needs to cover every exit path, or the
+> finalize needs an explicit sweep.
+
+## 5.1 The published cells
+
+**These are PUBLISHED CELLS, not bars.** This record pre-registered nothing, so nothing below carries
+a verdict, a target, or a pass/fail. They are published in the shape the front door's fact checker
+reads precisely so the front door quotes a committed source rather than a remembered one.
+
+**And the ladder tip stands at baseline 8.**
+
+### Published cell 1 — non-direct conviction accuracy
+
+The ejections the crew reached WITHOUT engine-certified proof of the ejectee's role. Baseline 7's
+pre-registered bar 1 was measured on this cell and **MISSED** it; that read is immutable and this
+record does not re-price it.
+
+| set | before | after |
+|---|---|---|
+| `samples/9p2i` | 16/30 = 0.5333 | **14/27 = 0.5185** [0.3399, 0.6926] |
+| `ml_corpus/9p2i` | 42/68 = 0.6176 | **32/61 = 0.5246** [0.4016, 0.6447] |
+| `samples/4p1i` | 1/2 = 0.5000 | **1/5 = 0.2000** [0.0362, 0.6245] — ADVISORY |
+| `ml_corpus/4p1i` | 2/3 = 0.6667 | **3/3 = 1.0000** [0.4385, 1.0] — ADVISORY |
+| **pooled** | **61/103 = 0.5922** | **50/96 = 0.5208** [0.4224, 0.6178] |
+
+**The cell FELL, and it is published unchanged.** 0.5922 → 0.5208 pooled. That is the unflattering
+direction, on the very cell baseline 7's missed bar 1 was about. Three things are true at once and
+the record states all three: nothing was pre-registered here so nothing is missed; the fall is inside
+overlapping intervals and this record has no power to call it real; and a maintenance record does not
+get to route an unwelcome number away. **It is the Wave-2 record's to rule on, not this one's.**
+
+The direct-proof cell stays perfect and grew: **333/333 = 1.0000** pooled (68 + 220 + 19 + 26),
+against 326/326 before.
+
+### Published cell 2 — innocent ejections
+
+| set | before | after |
+|---|---|---|
+| `samples/9p2i` | 14 | **13** |
+| `ml_corpus/9p2i` | 26 | **29** |
+| `samples/4p1i` | 1 | **4** |
+| `ml_corpus/4p1i` | 1 | **0** |
+| **pooled** | **42** | **46** |
+
+**The count ROSE, 42 → 46, and it is published unchanged** — the same reading as cell 1, on the cell
+baseline 7's missed bar 2 was about. Every innocent ejection still sits inside the non-direct cell:
+the proof-present cell is innocent-free on both records, 0 of 333 here and 0 of 326 before.
+
+### The win split
+
+| set | baseline-7 impostor rate | baseline-8 impostor rate |
+|---|---|---|
+| `samples/9p2i` | 24% (12/50) | **30% (15/50)** |
+| `samples/4p1i` | 36% (18/50) | **36% (18/50)** |
+| `ml_corpus/9p2i` | 24% (36/150) | **24% (36/150)** |
+| `ml_corpus/4p1i` | 26% (13/50) | **26% (13/50)** |
+
+Three of four sets are unchanged to the game. Only `samples/9p2i` moved, by three games.
+
+### What moved that §0 did NOT pre-declare, named rather than buried
+
+§0.3 pre-declared ten cells expected to move and twelve expected not to. **All twelve
+named-not-to-move cells HELD.** Two cells moved that §0 named in neither list — the two above — and
+this record's honest position is that they are un-pre-declared movements on a maintenance record
+whose §0 says in as many words that "a directional cell that moves the unwelcome way" is explicitly
+NOT a STOP. They are reported to the owner here, in the record, before the merge that ratifies it,
+rather than being discovered downstream.
+
 ## 6. What this record does NOT discharge
 
 Everything below was scoped to this task and is **UNSTARTED**, because every item is keyed to FINAL

@@ -39,8 +39,8 @@ in play, the game's are **crewmate** and **impostor**.
 
 A numbered reference recording: one recording of the sample sets under a stated
 set of behavioural settings, which everything afterwards is measured against.
-Seven exist; the newest — the ladder tip — is baseline 7, recorded 2026-08-25
-([`audits/audit-phase-20-baseline-7.md`](../audits/audit-phase-20-baseline-7.md)).
+Eight exist; the newest — the ladder tip — is baseline 8, recorded 2026-08-31
+([`audits/audit-phase-21-rerecord.md`](../audits/audit-phase-21-rerecord.md)).
 
 ### adopting record (the recording that adopts a change)
 
@@ -52,8 +52,8 @@ makes it canonical are the same event
 
 ### the ladder tip (the newest reference recording)
 
-Where the substrate currently stands. "The ladder tip stands at baseline 7"
-([`audits/audit-phase-20-baseline-7.md`](../audits/audit-phase-20-baseline-7.md)); the
+Where the substrate currently stands. "The ladder tip stands at baseline 8"
+([`audits/audit-phase-21-rerecord.md`](../audits/audit-phase-21-rerecord.md)); the
 phrase is checked against that audit by
 [`scripts/check_doc_facts.py`](../scripts/check_doc_facts.py), so no document
 can quietly name a different one.

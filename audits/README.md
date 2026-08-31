@@ -262,7 +262,9 @@ directory's `README.md`, which carries the tallies and the proposed routing.
   itself: 300 games at the frozen slate, the pre-registered read bar by bar, and
   the decision the arithmetic selected. FINDING: two bars missed, neither
   re-priced — and the owner then adopted the substrate over that verdict by
-  explicit override (§6.1), which is why the ladder tip stands at baseline 7.
+  explicit override (§6.1), which is how baseline 7 became canon. Baseline 8
+  later re-recorded the same sets on repaired code and succeeded it as the tip;
+  baseline 7 keeps that history and loses only its claim to be current.
 - [audit-phase-20-close.md](audit-phase-20-close.md) — the phase close: the
   whole gate re-run at close HEAD in both evidence states, every dispatched
   contract re-verified, the before/after read back bar by bar, the defects it
