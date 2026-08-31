@@ -658,11 +658,37 @@ and routed to the post-record results task, because Wave 2 replaces these bytes 
 is out of scope; weakening the e2e non-vacuity check to reach green would delete a guard that is
 doing exactly its job. So the finding is escalated with the record rather than absorbed by it.
 
-> **Routed:** the curated featured head (`9p2i` seed 2) demonstrates neither claim on its card, and
-> the spectator journey's non-vacuity leg fails on it. Either the strip is re-curated to a head that
-> still shows a weak-signal table, or the card's copy is rewritten to what seed 2 now is — a meeting
-> that reasons with nothing in front of it and declines to eject. The second reading is arguably the
-> better exhibit, but it is a copy decision and this record does not make it.
+**OWNER RULING (2026-08-31, orchestration thread): OPTION 2 — rewrite the card, keep the selection.**
+The head stays `9p2i` seed 2; its copy is repaired to the truth. This is a description repair, not a
+re-curation: the game is still a good exhibit, and on the corrected substrate it is arguably a better
+one — a room with nothing in front of it, where the old substrate would have railroaded. As shipped:
+
+> "The only meeting of the game, and nothing on the table: not one account that contradicts another.
+> Watch a room work out what to do with no evidence at all."
+
+**Two constraints this edit had to clear, both recorded rather than assumed.**
+
+1. **`ReplayPicker.tsx` carries a standing prohibition** — 19.10's contract "explicitly forbids copy
+   changes in this file". The owner ruling is an explicit supersession of it, and the file's own
+   comment now says so. The distinction that makes the supersession coherent: a label that has become
+   FALSE is not the copy-churn that rule exists to stop — the same failure the file already records
+   against the blurbs before it.
+2. **The BINDING spoiler rule survives untouched.** Each label must name the setup and the question,
+   "never its answer: no winner, no ejection, no vote tally". A first draft ended "and send nobody out
+   the airlock", which states the meeting's outcome and would have breached it. The shipped line ends
+   on the question instead.
+
+**The guard moved with the exhibit rather than dying with it.** `journey.spec.ts` had pinned
+`declaredTotal > 0`, which encoded the OLD head. It now reads the head card's own promise and holds
+the render to it **in both directions**: a card promising nothing on the table must open onto zero
+evidence, and a card promising anything else must open onto evidence that is actually there. A
+mismatch either way is red. Two further assertions keep it non-vacuous — the transcript's turn cards
+must have rendered, so "no evidence" cannot be satisfied by a dialog that rendered nothing.
+
+**The perturbation was run, not merely written.** Rewriting the card to claim "three accounts that
+cannot all be true" over the same unchanged bytes turns the journey RED; restoring the truthful copy
+turns it green. A sibling test constructs both mismatch directions against the real rendered meeting
+so the property is pinned in the suite rather than only in this paragraph.
 
 ### 5.1.1b THE I-13 INJUSTICE FIXTURES: 4/4 FLIPPED becomes 3/4 flipped + 1 partial
 

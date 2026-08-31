@@ -94,6 +94,17 @@ export interface FeaturedGame {
 // rubric does NOT produce this order and cannot. Editing this list is an
 // editorial act — re-scoring the rubric does not update it.
 //
+// The SELECTION is unchanged at the baseline-8 record; ONE label was rewritten.
+// The head (9p2i seed 2) had promised "every contradiction on the table is
+// stamped a weak signal", and those bytes now hold no contradiction at all, so
+// the card described a game that no longer exists — the same failure this
+// comment records against the blurbs before it. The owner ruled the copy be
+// repaired to the truth rather than the strip re-curated (2026-08-31), which is
+// also an explicit supersession of 19.10's "no copy changes in this file": a
+// label that has become FALSE is not the copy-churn that rule exists to stop.
+// The spoiler rule below is unaffected and still binds — the rewritten label
+// names the setup and the question, never the meeting's outcome.
+//
 // SPOILER RULE (BINDING, PR #324 review): this strip renders BEFORE any game is
 // opened, and a static blurb is prose, not outcome-derived data — so 19.10's
 // unspoiled-mode reveal gate cannot cover it, and 19.10's contract explicitly
@@ -105,7 +116,7 @@ export const FEATURED_GAMES: readonly FeaturedGame[] = [
     set: "9p2i",
     seed: 2,
     label:
-      "One meeting decides the whole game, and every contradiction on the table is stamped a weak signal. Watch a room reason with nothing solid in front of it.",
+      "The only meeting of the game, and nothing on the table: not one account that contradicts another. Watch a room work out what to do with no evidence at all.",
   },
   {
     set: "9p2i",
