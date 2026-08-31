@@ -598,6 +598,56 @@ and "the class has four victims" are different claims, and only one of them is n
 the accuracy fall and the innocent-ejection rise as Wave-2 input, and no surface may keep asserting
 the extinction.**
 
+### 5.1.1a TWO FINDINGS THAT LEAVE THE SUITE RED, escalated rather than re-pinned
+
+**Seven tests fail at this HEAD, and they reduce to two root causes. Neither was re-pinned, because
+re-pinning either would convert a safety property into a description.**
+
+**FINDING 1 — `samples/9p2i` seed 41, meeting 2: a CREWMATE convicted on STRONG statement-pair
+evidence.** Six of the seven failures point at this single meeting. It ejects **p-9, a crewmate**, on
+five flags, **two of them `cross_statement`** — the strong class.
+
+`tests/api/test_evidence_mechanisms.py::test_the_flip_search_can_fail` asserts `found == []`: that no
+committed meeting convicts on a STRONG statement-pair flag naming the ejected player. It now finds
+two. **Re-pinning `found` to a two-element list would delete the property the test exists to defend**,
+so it is left red. Two of the four audit exhibits move with it: seed 23 M1 now carries two weak flags
+where the exhibit pins zero (still SKIPPED), and seed 12 M0 now **ejects the crewmate p-5** where the
+exhibit pins "nobody is ejected".
+
+The seventh-adjacent failure is the same meeting seen from the classifier's side:
+`test_rederivation_diverges_only_at_the_repaired_sites` finds one unnamed divergence class, at seed
+41 M2, where a recorded `alibi_vs_sighting` flag re-derives identically **except** that it gains
+`[weak signal: single grounded source]`. The cause is a knock-on of the movement channel — the
+sibling pairing cannot be re-derived, so the alibi falls from two grounded sources to one — and the
+classifier misses it because its helper scans only the flag's own turns while the `saw_move` lives in
+turn 0. Widening that helper is a test-logic change and was not made under a record.
+
+**This finding is the same family as §5.1.1's re-opened sole-flag class.** Both say the corrected
+substrate convicts innocents in ways the previous record had described as closed. **It is Wave-2's to
+rule on, and no surface may keep asserting the closure.**
+
+**FINDING 2 — the watchability geomean reads 0.0 because ONE extractor self-check fails.**
+`test_historical_15_2_geomean_parity_frozen_pin_on_9p2i` fails against a committed artifact reading
+mean 0.0, median 0.0, **all 50 games floored**. That artifact is NOT corrupt: re-running the
+documented rubric path reproduces it exactly, and the copy committed at leg 1 is byte-identical to a
+fresh regeneration. The floor is real and its cause is precise:
+
+```
+re-derived genuine-class == shipped compute_genuine_class_conversion
+  (supplied 1/0, converted 0/0): FAIL
+```
+
+`experiments/lab/rubric_score.py::_facts_integrity_ok` floors EVERY game on any self-check FAIL, and
+exactly one fails — a one-row disagreement between the extractor's re-derivation of the genuine-class
+conversion and the shipped instrument's (supplied 1 versus 0). So a single disagreeing row zeroes the
+whole watchability geomean.
+
+**The production instrument disagrees with the lab scorer on the same bytes**: `eval/watchability.py`
+reads `samples/9p2i` at geomean mean **48.57** / median **55.85** and its referee PASSES. Three
+derivations, one outlier. **The defect is in the lab scorer or its facts input, not in the record** —
+and it is not fixable under a frozen record, because the fix is a code change in the extractor or in
+`eval/meeting_quality.py`. Routed. Until it lands, no surface should quote the geomean cell.
+
 ### 5.1.2 The other five movements, with their direction stated
 
 | # | cell | before | after | reading |
