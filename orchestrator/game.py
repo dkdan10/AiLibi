@@ -1141,12 +1141,12 @@ def build_default_meeting_runner(
         if prompt_versions is not None
         else prompt_versions_for_set(active_prompt_set)
     )
-    # The reporter-voice lever is resolved HERE, once, beside the versions it is
-    # stamped into -- the same pairing the prompt set gets. Reading it per-run
-    # inside the manager instead would let a mid-game export move the rendered
-    # bytes while ``resolved_versions`` stayed frozen at what construction saw,
-    # which is the render-one-stamp-another failure this whole block exists to
-    # prevent.
+    # The meeting-layer levers are resolved HERE, once each, beside the versions
+    # they are stamped into -- the same pairing the prompt set gets. Reading one
+    # per-run inside the manager instead would let a mid-game export move the
+    # rendered bytes while ``resolved_versions`` stayed frozen at what
+    # construction saw, which is the render-one-stamp-another failure this whole
+    # block exists to prevent.
     resolved_reporter_reasoning = reporter_reasoning_enabled()
     resolved_corroboration_discipline = corroboration_discipline_enabled()
     inner: LLMClient = llm_client if llm_client is not None else build_default_client()
