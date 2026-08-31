@@ -97,6 +97,10 @@ class TestReporterExposure:
         # The cell the record did NOT re-derive, and the reason this module
         # exists. baseline-7 REFERENCE: 30 of 42 = 71.4%.
         assert pooled.reporter_ejections == 34
+        # Every reporter ejected on this corpus was a crewmate, so exposure and
+        # WRONGFUL ejection coincide here -- stated rather than assumed, because
+        # the share below divides only the innocent half.
+        assert pooled.reporter_innocent_ejections == 34
         assert pooled.reporter_share_of_innocent_ejections == pytest.approx(
             34 / 46, abs=1e-9
         )
@@ -263,7 +267,7 @@ class TestPerSetShape:
         text = render_reporter_justice(pooled)
         for fragment in (
             "body report 620",
-            "34 reporter (73.9% of innocent)",
+            "34 reporter (34 of them innocent, 73.9% of the innocent total)",
             "34/620",
             "12/1859",
             "71 IMPOSTOR",
@@ -373,6 +377,22 @@ def test_an_unexplained_meeting_fails_loud(tmp_path: Path) -> None:
         return rows
 
     with pytest.raises(ReporterJusticeError, match="no applied report or emergency"):
+        compute_reporter_justice(_doctored_set(tmp_path, mutate=mutate))
+
+
+def test_a_report_with_an_unreadable_corpse_fails_loud(tmp_path: Path) -> None:
+    # A body report whose corpse cannot be identified must be REFUSED, not read
+    # with an unknown victim: an unknown victim re-opens the match-any-corpse
+    # behaviour the victim filter closed, and would inflate the co-discovery
+    # cells from a malformed replay instead of reporting the malformation.
+    def mutate(rows: _Rows) -> _Rows:
+        for row in rows:
+            for action in _items(row, "actions"):
+                if isinstance(action, dict) and action.get("type") == "report":
+                    action["payload"] = {"body_id": None}
+        return rows
+
+    with pytest.raises(ReporterJusticeError, match="does not name a roster player"):
         compute_reporter_justice(_doctored_set(tmp_path, mutate=mutate))
 
 
@@ -533,6 +553,13 @@ def test_the_reporter_slot_class_survives_an_impostor_reporter(tmp_path: Path) -
     assert cells.reporter_ejections > 0
     assert cells.innocent_ejections == 0
     assert cells.impostor_ejections >= cells.reporter_ejections
+    # And the DERIVED innocence metric, not just the raw ledger: a guilty
+    # reporter convicted is a correct verdict, so it counts as exposure and
+    # NOT as a wrongful ejection. The share over an empty innocent total
+    # renders "n/a" rather than a percentage of nothing.
+    assert cells.reporter_innocent_ejections == 0
+    assert cells.reporter_share_of_innocent_ejections == 0.0
+    assert "n/a of the innocent total" in render_reporter_justice(cells)
 
 
 def test_the_invocation_cells_bite(tmp_path: Path) -> None:

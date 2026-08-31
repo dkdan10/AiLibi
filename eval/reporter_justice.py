@@ -12,7 +12,9 @@ an impression:
   the exculpation a laundering channel, so the census is the premise check);
 * how often the reporter was ejected, against the same rate for an innocent
   non-reporter and for an impostor, with the relative risk;
-* how much of the set's innocent-ejection total the reporter accounts for;
+* how much of the set's innocent-ejection total the reporter accounts for (a
+  guilty reporter's conviction is counted as exposure and NOT as a wrongful
+  ejection, so the two never blur);
 * how often crew and impostors aim at the reporter, in SPEECH and in BALLOTS
   (the two follow through at different rates, and the ballot half is the one
   that convicts);
@@ -149,6 +151,7 @@ class ReporterJusticeCells:
     # participant per meeting; the slot classes partition that roster.
     reporter_slots: int
     reporter_ejections: int
+    reporter_innocent_ejections: int
     innocent_non_reporter_slots: int
     innocent_non_reporter_ejections: int
     impostor_slots: int
@@ -214,7 +217,16 @@ class ReporterJusticeCells:
 
     @property
     def reporter_share_of_innocent_ejections(self) -> float:
-        return _rate(self.reporter_ejections, self.innocent_ejections)
+        """How much of the set's WRONGFUL-ejection total the reporter accounts for.
+
+        Numerator is :attr:`reporter_innocent_ejections`, not every reporter
+        ejection: a guilty reporter convicted is a correct verdict and belongs to
+        neither side of this ratio. ``0.0`` when the set ejected no innocent at
+        all -- a zero over zero, which :func:`render_reporter_justice` prints as
+        "n/a" rather than as a share.
+        """
+
+        return _rate(self.reporter_innocent_ejections, self.innocent_ejections)
 
     @property
     def crew_accusation_at_reporter_share(self) -> float:
@@ -255,6 +267,14 @@ class ReporterJusticeCells:
 
 def _rate(numerator: int, denominator: int) -> float:
     return numerator / denominator if denominator else 0.0
+
+
+def _innocent_share_text(cells: ReporterJusticeCells) -> str:
+    """The reporter's share of the innocent ejections, or "n/a" over an empty set."""
+
+    if cells.innocent_ejections == 0:
+        return "n/a"
+    return f"{cells.reporter_share_of_innocent_ejections:.1%}"
 
 
 def _relative_risk_text(cells: ReporterJusticeCells) -> str:
@@ -313,14 +333,16 @@ def _meeting_trigger(
                 return kind, None
             payload = action.get("payload")
             body_id = payload.get("body_id") if isinstance(payload, dict) else None
-            if not isinstance(body_id, str):
-                return kind, None
-            match = _BODY_ID.match(body_id)
+            match = _BODY_ID.match(body_id) if isinstance(body_id, str) else None
             if match is None or match.group("victim") not in players:
+                # A body report with no readable corpse is refused, not accepted
+                # with an unknown victim: an unknown victim would re-open the
+                # match-any-corpse behaviour the victim filter exists to close,
+                # and silently inflate the co-discovery cells again.
                 raise ReporterJusticeError(
-                    f"{entry.game_id}/{entry.meeting_id}: body id {body_id!r} does "
-                    "not name a roster player; the reported corpse cannot be read "
-                    "from the recorded bytes"
+                    f"{entry.game_id}/{entry.meeting_id}: report action carries "
+                    f"body id {body_id!r}, which does not name a roster player; "
+                    "the reported corpse cannot be read from the recorded bytes"
                 )
             return kind, match.group("victim")
     raise ReporterJusticeError(
@@ -386,6 +408,7 @@ class _Tallies:
     impostor_ejections: int = 0
     reporter_slots: int = 0
     reporter_ejections: int = 0
+    reporter_innocent_ejections: int = 0
     innocent_non_reporter_slots: int = 0
     innocent_non_reporter_ejections: int = 0
     impostor_slots: int = 0
@@ -443,7 +466,14 @@ def _fold_meeting(
     ejected = entry.ejected_player_id
     if ejected is not None:
         if ejected == reporter:
+            # Every reporter ejection, whatever the role: this is the numerator
+            # of a per-SLOT exposure rate, and exposure is role-blind. The
+            # innocent half is counted separately because a guilty reporter's
+            # conviction is not a wrongful one and must never inflate a share of
+            # the innocent total.
             tallies.reporter_ejections += 1
+            if roles[ejected] != "IMPOSTOR":
+                tallies.reporter_innocent_ejections += 1
         elif roles[ejected] == "IMPOSTOR":
             tallies.impostor_slot_ejections += 1
         else:
@@ -608,7 +638,8 @@ def render_reporter_justice(cells: ReporterJusticeCells) -> str:
         f"  ejections (all meetings): {cells.ejections} total, "
         f"{cells.innocent_ejections} innocent, {cells.impostor_ejections} impostor; "
         f"{cells.reporter_ejections} reporter "
-        f"({cells.reporter_share_of_innocent_ejections:.1%} of innocent)",
+        f"({cells.reporter_innocent_ejections} of them innocent, "
+        f"{_innocent_share_text(cells)} of the innocent total)",
         f"  per-slot ejection: reporter {cells.reporter_ejections}/"
         f"{cells.reporter_slots} = {cells.reporter_ejection_rate:.2%}, "
         f"innocent non-reporter {cells.innocent_non_reporter_ejections}/"
