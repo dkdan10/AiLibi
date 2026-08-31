@@ -953,8 +953,8 @@ def test_the_conviction_corpus_fence_is_attributable_to_its_own_leg(
     The surrogate leg is fenced first, so a refusal could only ever be attributed
     to it unless the surrogate side is known-good. Both committed records are
     current since the Task-21.17 re-ground, so every refusal below is the
-    conviction leg's own: an ABSENT record refuses and names the ML re-ground as
-    its writer, a drifted one refuses, and the committed pair loads. With no
+    conviction leg's own: an ABSENT record refuses and names the recipe that
+    writes it, a drifted one refuses, and the committed pair loads. With no
     ``corpus_dir`` the load is unfenced, which is what every current caller does.
     """
 
@@ -981,7 +981,7 @@ def test_the_conviction_corpus_fence_is_attributable_to_its_own_leg(
     # The planted ABSENT case: without the conviction record the fence cannot be
     # satisfied, and the message names who writes it.
     (conviction_dir / "fit-corpus.json").unlink()
-    with pytest.raises(FileNotFoundError, match="ML re-ground"):
+    with pytest.raises(FileNotFoundError, match="re-grounding recipe writes it"):
         load_composed_components(
             conviction_artifact_dir=conviction_dir,
             surrogate_artifact_dir=surrogate_dir,

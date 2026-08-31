@@ -173,8 +173,8 @@ paragraph attached to it.
 The social layer these policies were searched against was rebuilt after the campaign closed,
 and the committed sample sets were re-recorded on it — twice, most recently at impostor win
 rates 36% (4p1i) and 30% (9p2i). The first of those recordings was read bar by bar in
-[`audit-phase-20-baseline-7.md`](../audits/audit-phase-20-baseline-7.md) §3: two moved and
-met their bars, two moved and missed, the win split did not move.
+[`audit-phase-20-baseline-7.md`](../audits/audit-phase-20-baseline-7.md) §3: two met their
+bars, two missed, the win split did not move.
 **The rule's verdict on that read is a FINDING, not an adoption: two bars missed. The
 recording is canon in spite of it, by an explicit owner override recorded with its grounds
 on 2026-08-26 (§6.1).** None of it re-prices a referee verdict.
@@ -182,24 +182,25 @@ on 2026-08-26 (§6.1).** None of it re-prices a referee verdict.
 ## What the instruments now stand on
 
 The three committed ML instruments were re-fit on the corpus that second re-recording left
-behind, so each now reads the bytes its weights were made from —
-`replays/ml_corpus/9p2i`, fingerprint `cc54d3c0…`. Every row below re-derives under
-`uv run python scripts/verify_ml_evidence.py --complete`.
+behind, so each reads the bytes its weights were made from — `replays/ml_corpus/9p2i`,
+fingerprint `cc54d3c0…`. Every row below re-derives under
+`scripts/verify_ml_evidence.py --complete`.
 
 | instrument | verdict | the axes it was judged on |
 |---|---|---|
-| ballot surrogate | **NO-GO** (ranking GO, decision NO-GO) | top-1 0.8246 at its own 0.8246 ceiling; decision accuracy 0.3956 against a 0.6264 always-eject constant |
-| conviction model | **GO** | flag Spearman 0.6670 ≥ 0.5; conversion recall 0.9608 ≥ 0.6184; accuracy 0.9451 > its 0.5604 trivial constant |
-| composed runner | **GO** | decision accuracy 0.9011 > 0.6264; convicting top-1 0.8246 ≥ 0.6184 |
+| ballot surrogate | **NO-GO** (ranking passes, decision fails) | who it ranks first, against the ceiling; whether to eject, against always-eject |
+| conviction model | **GO** | its flag-count rank correlation; its recall, against a share of the ceiling; its accuracy, against the best constant answer |
+| composed runner | **GO** | its meeting decision, against always-eject; its ranking on convicting meetings, against the ceiling |
 
-Every bar is a fraction of a constant measured on the same split, so none of it transfers
-as an absolute; the surrogate's NO-GO keeps it diagnostic-only.
+Each bar is a fraction of a constant measured on the same split, so none of it transfers as
+an absolute; the numbers live in `training/reports/` and each `verdict.json`. The
+surrogate's NO-GO keeps it diagnostic-only.
 
 Two things the re-ground did not do. It did not re-search the λ grid under the repaired
 fitness objective — those cells record a search under the prior one, which the stale-seed
-fence's digest cannot see. And it did not re-price the arm table above: **those edges were
-measured against a comparator this repository no longer ships**, as its erratum says. Both
-are owner decisions.
+fence cannot see. And it did not re-price the arm table above: **those edges were measured
+against a comparator this repository no longer ships**, as its erratum says. Both are owner
+decisions.
 
 ## Limitations
 

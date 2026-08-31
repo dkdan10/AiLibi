@@ -1074,7 +1074,7 @@ def test_decide_conviction_go_always_populates_the_axis_three_fields(
 
 
 # --------------------------------------------------------------------------- #
-# The conviction fit-corpus fence (built here, wired by the ML re-ground)      #
+# The conviction fit-corpus fence (built here; the record ships since 21.17)  #
 # --------------------------------------------------------------------------- #
 
 
@@ -1102,7 +1102,7 @@ def test_the_conviction_corpus_fence_is_opt_in_and_bites_on_its_own_leg(
     assert load_conviction_model_artifact(tmp_path)[1] == digest
 
     # Absent: refuses, and names who writes it.
-    with pytest.raises(FileNotFoundError, match="ML re-ground"):
+    with pytest.raises(FileNotFoundError, match="re-grounding recipe writes it"):
         load_conviction_model_artifact(tmp_path, corpus_dir=_CORPUS)
 
     matching = SurrogateFitCorpus(

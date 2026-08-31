@@ -279,13 +279,24 @@ threaded through both fitness sides and the pre-screen.
    re-validation runs FIRST and refuses a drifted fold (0 raw mismatches or
    no fit); record the returned parity's numbers in §2.1's format.
 3. `write_conviction_model_artifact(model, Path("training/artifacts/conviction"),
-   max_uses=derive_conviction_max_uses(<fit-side meeting count>))`.
-4. `run_conviction_fidelity(table, model=model)` then
+   max_uses=derive_conviction_max_uses(<fit-side meeting count>))` — returns the
+   new weights sha256, which the next two steps key to.
+4. **Re-write `fit-corpus.json` in the same breath.** The record is part of the
+   bundle, not an extra: `SurrogateFitCorpus(corpus_set=..., corpus_sha256=
+   fit_corpus_fingerprint(<corpus dir>), fit_side_meetings=<fit-side count>,
+   weights_sha256=<the sha from step 3>)`, serialized sorted-keys with a
+   trailing newline. Skip it and the bundle is keyed to the PREVIOUS weights and
+   corpus: `scripts/verify_ml_evidence.py`'s `ML grounding` row fails on all
+   three fields, and `load_conviction_model_artifact(..., corpus_dir=...)`
+   refuses the artifact outright.
+5. `run_conviction_fidelity(table, model=model)` then
    `decide_conviction_go(report, weights_sha256=<sha>)` then
    `write_conviction_verdict_artifact(verdict, <artifact dir>)` — the verdict
-   is taken on that FIRST held-out evaluation, whichever way it reads.
-5. Commit weights + sidecar + cap + verdict + the refreshed report together;
-   re-pin the committed-artifact tests' numbers.
+   is taken on that FIRST held-out evaluation, whichever way it reads. The
+   writer emits `verdict.json.sha256` with it; no sidecar is hand-written.
+6. Commit weights + sidecar + cap + fit-corpus record + verdict + verdict
+   sidecar + the refreshed report together; re-pin the committed-artifact
+   tests' numbers.
 
 ## 9. Reproduce
 
