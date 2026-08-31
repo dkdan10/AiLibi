@@ -827,7 +827,7 @@ def test_evaluate_crew_candidate_full_row(tmp_path: Path) -> None:
     assert result.conviction_weight == DEFAULT_CONVICTION_WEIGHT
     assert (
         result.conviction_weights_sha256
-        == "4841f8e02eb7b587237c5b88bc2d350c12c7a5b5ac5c7ae1481069235c7b2a47"
+        == "7e764b89fb0bec445c3b19e2e0f07de89d9011c1e4fc1b0a6b32b1004cb151ed"
     )
 
     # The row serializes to one jsonl line and round-trips.

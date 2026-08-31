@@ -504,8 +504,9 @@ def _verify_conviction_fit_corpus(
         record = load_fit_corpus_record(artifact_dir)
     except FileNotFoundError as error:
         raise FileNotFoundError(
-            f"{error}; the conviction record is written by the ML re-ground "
-            "(Task 21.17), so a caller cannot ask for this fence before it lands"
+            f"{error}; the conviction re-grounding recipe writes it beside the "
+            "weights (training/reports/report-conviction-model.md §8 step 4), so "
+            "an artifact without one was not committed by that recipe"
         ) from error
     if record.weights_sha256 != weights_sha256:
         raise ValueError(

@@ -1,23 +1,22 @@
 {
   "adoption_constraints": [
     "composed-provenance-validity[all-arms,9p2i]: every composed-path probe arm fails the recorded validity gate on cost_and_provenance_exact (no model row on a zero-LLM meeting path) \u2014 composed-substrate probe reads are diagnostic-grade, never validity-passing evidence",
-    "prescreen-substrate-divergence-shape[fsm-baseline+emergency,9p2i]: predicted floors PASS while the composed substrate mints 0 flags in bytes \u2014 a pre-screen PASS is real-path spend advice ONLY; pair every gating use with a recorded-bytes floor read",
-    "emergency-predicted-supply-above-bar[emergency,9p2i]: forced-emergency predicted-supply delta +29.5% >= the 25% materiality bar with recorded 0.0 \u2014 the laundering shape, validity-gated out of the machinery's findings"
+    "composed-substrate-mints-no-recorded-flags[all-arms,9p2i]: every composed-path arm records 0.0000 flags/meeting in bytes (the runner synthesizes ballots, not talk), so no recorded-floor read exists on this substrate \u2014 a composed pre-screen read is real-path spend advice ONLY; pair every gating use with a recorded-bytes floor read"
   ],
   "composed_role": "optional-campaign-configuration",
-  "convicting_top1": 0.7666666666666667,
-  "conviction_weights_sha256": "4841f8e02eb7b587237c5b88bc2d350c12c7a5b5ac5c7ae1481069235c7b2a47",
-  "decision_accuracy": 0.8645833333333334,
-  "decision_accuracy_bar": 0.625,
-  "exact_outcome_match": 0.7916666666666666,
+  "convicting_top1": 0.8245614035087719,
+  "conviction_weights_sha256": "7e764b89fb0bec445c3b19e2e0f07de89d9011c1e4fc1b0a6b32b1004cb151ed",
+  "decision_accuracy": 0.9010989010989011,
+  "decision_accuracy_bar": 0.6263736263736264,
+  "exact_outcome_match": 0.8351648351648352,
   "meets_decision_bar": true,
   "meets_top1_bar": true,
   "replay_set_dir": "replays/ml_corpus/9p2i",
-  "surrogate_weights_sha256": "611771a4853d2c4fe0ff9ebcc5811788a5a5c235ba8fc7061f4f9fe06dbf40c5",
-  "test_ejections": 60,
-  "test_meetings": 96,
-  "top1_bar": 0.6375,
-  "top1_ceiling": 0.85,
+  "surrogate_weights_sha256": "06b2050889271c267af2e5d083ba46099bbb55120ca834f4d357733f0e2dcda8",
+  "test_ejections": 57,
+  "test_meetings": 91,
+  "top1_bar": 0.618421052631579,
+  "top1_ceiling": 0.8245614035087719,
   "top1_ceiling_ratio": 0.75,
   "verdict": "GO"
 }

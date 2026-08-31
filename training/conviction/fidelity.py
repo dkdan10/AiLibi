@@ -72,6 +72,7 @@ from training.conviction.model import (
     DEFAULT_LEARNING_RATE,
     ConvictionEconomyModel,
 )
+from training.surrogate.runner import write_verdict_sha256_sidecar
 
 # The pre-stated GO bar's two constants (task contract, committed before the
 # first held-out evaluation): the Spearman floor is absolute BY DESIGN (a rank
@@ -89,6 +90,10 @@ CONVICTION_CONVERSION_DECISION_THRESHOLD: Final[float] = 0.5
 
 # The committed verdict filename beside the weights artifact.
 VERDICT_FILENAME: Final[str] = "verdict.json"
+# The verdict's sha256 sidecar, written BY the verdict writer so it can never
+# be a hand-maintained file left stale beside new bytes (the evidence
+# command's sidecar leg re-hashes every `*.sha256` target in the tree).
+VERDICT_SHA256_FILENAME: Final[str] = "verdict.json.sha256"
 
 
 def conversion_trivial_baseline(*, conversions: int, meetings: int) -> float:
@@ -446,6 +451,9 @@ def write_conviction_verdict_artifact(
     artifact_dir.mkdir(parents=True, exist_ok=True)
     (artifact_dir / VERDICT_FILENAME).write_text(
         json.dumps(verdict.model_dump(), indent=2, sort_keys=True) + "\n"
+    )
+    write_verdict_sha256_sidecar(
+        artifact_dir, VERDICT_FILENAME, VERDICT_SHA256_FILENAME
     )
 
 

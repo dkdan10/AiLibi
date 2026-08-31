@@ -40,6 +40,6 @@
   ],
   "genome_length": 19,
   "study": "anchor-study",
-  "substrate_sha": "9bc00af0f9e76719cb78d66c5593ec178312716528715f4a580677fb519f04f4",
+  "substrate_sha": "c845602d7e58f84920699d3d56aa12142b1b6b0f1a1cbfc1c1f3a0c287bd1677",
   "train_budget": "full"
 }

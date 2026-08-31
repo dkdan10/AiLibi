@@ -1,10 +1,11 @@
 # The ballot-predictor surrogate — the GO/NO-GO verdict, the fallback ladder, the staleness doctrine
 
 > Task 15.13 built this surrogate and this report; Task 17.10 re-grounded both on
-> the baseline-5 corpus and read a GO; **Task 18.14 (`tasks/phase-18.md`)
-> RE-GROUNDS them again on the adopted baseline-6 corpus** and re-states the
-> verdict on the same owner-ratified bar (locked decision 4 travels: re-fit +
-> re-verdict on the recorded bar, the 6-feature live-parity fence kept). Anchored
+> the baseline-5 corpus and read a GO; Task 18.14 re-ground them on baseline 6 and
+> read a NO-GO; **Task 21.17 RE-GROUNDS them again on the adopted baseline-8
+> corpus** and re-states the verdict on the same owner-ratified bar (locked
+> decision 4 travels: re-fit + re-verdict on the recorded bar, the 6-feature
+> live-parity fence kept). Anchored
 > to `audits/post-phase-14-ML-training-signal.md` §5.3 (predict ballots, feed the
 > real tally), §5.5 (the four-channel fidelity protocol + the honest ceiling),
 > §5.6 (the re-grounding / model-exploitation doctrine). Code:
@@ -17,19 +18,20 @@
 > report (`report-meeting-table.md`) — the table is the substrate every number
 > below is measured on.
 >
-> **Date:** 2026-07-21 (baseline-5: 2026-07-16; baseline-3 original: 2026-07-09).
-> **Corpus:** `replays/ml_corpus/9p2i` — 150 games, re-recorded at **baseline 6**
-> (Task 18.13: `Qwen/Qwen3.6-27B` on Featherless, `qwen3_6_27b` v3 prompt set, the
-> baseline-6 lever slate — the thirteen retired always-on levers including the four
-> meeting-layer graduations, `impostor_roll_call` stay-OFF (crew-only ruling),
-> `fsm-default` stamp, `$0`), committed `splits.json` **seed mod 5:
+> **Date:** 2026-08-31 (baseline-6: 2026-07-21; baseline-5: 2026-07-16;
+> baseline-3 original: 2026-07-09).
+> **Corpus:** `replays/ml_corpus/9p2i` — 150 games, re-recorded at **baseline 8**
+> (Task 21.15: `Qwen/Qwen3.6-27B` on Featherless, `qwen3_6_27b` prompt set, the
+> bare lever slate — the twenty-one retired always-on levers, every live toggle
+> OFF, `fsm-default` stamp, `$0`), committed `splits.json` **seed mod 5:
 > {0,1,2}=train, {3}=val, {4}=test** → **fit side 120 games / held-out test 30
-> games** = **367 fit-side meetings / 96 held-out test meetings**.
+> games** = **348 fit-side meetings / 91 held-out test meetings**.
 > **Committed artifact:** `training/artifacts/surrogate/ballot-predictor.json`,
-> sha256 `611771a4853d2c4fe0ff9ebcc5811788a5a5c235ba8fc7061f4f9fe06dbf40c5`,
-> staleness cap **52481 meetings** (`max-uses.json`, = 143 × the 367 fit-side
+> sha256 `06b2050889271c267af2e5d083ba46099bbb55120ca834f4d357733f0e2dcda8`,
+> staleness cap **49764 meetings** (`max-uses.json`, = 143 × the 348 fit-side
 > meetings — the ~143× rule re-derived, §7), fit-corpus provenance
-> `fit-corpus.json` binding the weights to the baseline-6 corpus identity (§7).
+> `fit-corpus.json` binding the weights to the baseline-8 corpus identity (§7),
+> and the machine-readable `verdict.json` + `verdict.json.sha256` beside them.
 >
 > Reproduce every figure with the one-liners in §9 — each is a pure function of the
 > committed bytes and writes nothing.
@@ -37,14 +39,14 @@
 The 15.11 harness measured the honest ceiling and re-baselined FO-6; 15.13 built the
 surrogate inside that ceiling, stated the bar **before** training, and reported a
 baseline-3 **NO-GO**; the baseline-5 re-ground flipped to **GO** because that
-substrate went skip-majority. Task 18.13 re-recorded the corpus at the adopted
-baseline-6 meeting layer, so every anchor below is **re-measured on the new bytes —
-never copied** (honest ceiling 0.8200 → 0.8500; FO-6 top-1 0.2200 → 0.6500; the
-always-eject constant 0.4808 → 0.6250). On the re-measured bar the verdict is
-**NO-GO** — axes 1 and 2 pass but axis 3 fails on the held-out test split (§5) — with
-the honest diagnosis stated beside it: the baseline-6 meeting economy REVERTED to
-eject-majority, so the surrogate's unchanged all-SKIP decision head now scores below
-the trivial always-eject constant (§5). Its consequence is pre-committed: the
+substrate went skip-majority, and baseline 6 flipped it back. Task 21.15 re-recorded
+the corpus again on the corrected substrate, so every anchor below is **re-measured
+on the new bytes — never copied** (honest ceiling 0.8500 → 0.8246; FO-6 top-1
+0.6500 → 0.2456; the always-eject constant 0.6250 → 0.6264). On the re-measured bar
+the verdict is **NO-GO** — axes 1 and 2 pass but axis 3 fails on the held-out test
+split (§5) — with the honest diagnosis stated beside it: the meeting economy stays
+eject-majority, so the surrogate's SKIP-heavy decision head scores below the trivial
+always-eject constant (§5). Its consequence is pre-committed: the
 surrogate ships **diagnostic-only**, the fake-provider MeetingManager stays the
 training-time runner, and the bake-off is never blocked (§6).
 
@@ -154,20 +156,20 @@ the exact `suspicion_graph_for_meeting()` accessor a live meeting consumes):
 
 | Gauge | 9p2i | 4p1i |
 |---|---:|---:|
-| non-self (meeting, voter, candidate) cells compared | 14 326 | 240 |
+| non-self (meeting, voter, candidate) cells compared | 12 772 | 258 |
 | **fold fidelity** — raw `belief_suspicion` vs the production raw scalar | **0 mismatches** | **0 mismatches** |
 | **fold fidelity** — `belief_trust` vs production trust | 0 mismatches | 0 mismatches |
-| **J1 live-parity divergence** — cells where the CLAMPED live render ≠ the raw column | **141 (0.98%)** | 0 |
-| — rows carrying ≥ 1 divergent cell | 130 of 2726 (4.8%) | 0 |
-| — divergent cells on the fit side (train ∪ val) / the test side | 113 / 28 | 0 / 0 |
-| — max abs divergence | 0.06 | 0.0 |
+| **J1 live-parity divergence** — cells where the CLAMPED live render ≠ the raw column | **102 (0.80%)** | 0 |
+| — rows carrying ≥ 1 divergent cell | 98 of 2516 (3.9%) | 0 |
+| — divergent cells on the fit side (train ∪ val) / the test side | 77 / 25 | 0 / 0 |
+| — max abs divergence | 0.11 | 0.0 |
 
 1. **The dataset walk re-validates on the new bytes.** The baseline-6 corpus carries
    whereabouts turns, observation-cited ballots, and marker-prefixed rationales;
    both sets reconstruct with every per-tick `state_hash` and per-meeting
    `state_hash_before`/`state_hash_after` verified, 100% ballot join, and the
    hand-mirrored perception→belief pins (`_WindowStats`) **exactly reproduce the
-   production fold** — 0 raw mismatches over 14 566 cells across both sets. The
+   production fold** — 0 raw mismatches over 13 030 cells across both sets. The
    integration risk (silent `belief_suspicion` corruption) is discharged by
    measurement; the fidelity INVARIANTS are pinned LIVE in
    `test_j1_fold_fidelity_is_exact_on_the_9p2i_corpus`, not behind the census.
@@ -177,14 +179,15 @@ the exact `suspicion_graph_for_meeting()` accessor a live meeting consumes):
    an entirely-soft conviction-grade row to 0.59 at the two belief-render read-sites
    — including `suspicion_graph_for_meeting()`, the exact channel the live
    `SurrogateMeetingRunner` reads. The table's `belief_suspicion` column is the RAW
-   stored scalar, so raw-vs-served diverges on exactly the clamped cells: **141 of
-   14 326 cells (0.98%), 130 of 2726 rows, max 0.06** — the skew SHRANK again on the
-   baseline-6 meeting layer (280/1.73%/0.11 at baseline 5). **The fit reads the RAW
+   stored scalar, so raw-vs-served diverges on exactly the clamped cells: **102 of
+   12 772 cells (0.80%), 98 of 2516 rows, max 0.11** — the cell share SHRANK again on
+   the baseline-8 meeting layer (141/0.98%/0.06 at baseline 6, 280/1.73%/0.11 at
+   baseline 5), while the largest single divergence returned to 0.11. **The fit reads the RAW
    column**, for three stated reasons: (a) production doctrine — every non-render
    consumer reads the raw stored scalar, and the table's belief columns also feed the
    fidelity instruments (`public_suspicion`, `recon_suspicion`, the ceiling's
    belief-lead), which are defined on the true belief graph; (b) the divergence is
-   measured and bounded (0.98% of cells, ≤ 0.06); (c) the live runner IS served the
+   measured and bounded (0.80% of cells, ≤ 0.11); (c) the live runner IS served the
    clamped value, so the promoted-or-diagnostic runner carries a **known,
    conservative** train/serve skew on those cells — live suspicion never exceeds the
    fit-time value, which pushes marginal meetings toward SKIP, the direction the
@@ -194,10 +197,10 @@ the exact `suspicion_graph_for_meeting()` accessor a live meeting consumes):
 
    **The runner-path fidelity replay (the measured consequence).** Re-scoring the
    FROZEN committed artifact over the held-out test split with every divergent cell
-   replaced by the live-served CLAMPED value (all 28 held-out cells — the same census
+   replaced by the live-served CLAMPED value (all 25 held-out cells — the same census
    as above, the two instruments cross-validating) reproduces the §5 verdict inputs
-   **exactly**: the same decision and the same top-1 target on **every one of the 96
-   meetings** (46/60 top-1, all-SKIP census, 36 correct skips); the only movement is
+   **exactly**: the same decision and the same top-1 target on **every one of the 91
+   meetings** (47/57 top-1, 89 predicted skips, 34 correct skips); the only movement is
    a decision-irrelevant sub-top-rank reorder on a handful of meetings
    (libm/ULP-sensitive across CPUs, the same platform variance the artifact
    round-trip tolerates). All three verdict axes — the two that PASS and the one that
@@ -212,10 +215,11 @@ the exact `suspicion_graph_for_meeting()` accessor a live meeting consumes):
    `ballot_coerced_skip` per row (the anchored repr-aware marker parse, the
    `api.replay_loader._marker_pattern` convention) and **both fit paths drop flagged
    rows**; the fidelity replay scores recorded bytes unfiltered. On this corpus the
-   count is **1 of 2726 rows (9p2i), 1 of them fit-side, and 0 of 120 (4p1i)** — the
-   single dropped row is seed 1027, `headless-seed-1027:meeting-4`, voter `p-8`:
-   unlike the baseline-5 zero-count fixture, the exclusion now removes a real
-   poisoned row from the fit. (The other rationale markers on the corpus are *not* in
+   count is **6 of 2516 rows (9p2i), 5 of them fit-side, and 0 of 129 (4p1i)** — the
+   first dropped rows are seed 1016 (`meeting-1`, voters `p-5` and `p-8`) and seed
+   1020 (`meeting-1`, voter `p-8`): unlike the baseline-5 zero-count fixture, the
+   exclusion removes real poisoned rows from the fit. (Baseline-6 record: 1 of 2726,
+   1 fit-side.) (The other rationale markers on the corpus are *not* in
    the exclusion:
    teammate-coerced SKIPs — the §7.12 by-design skip the runner mirrors by candidate
    exclusion — under-gate redirects, and parse-defaults; only the J2 coercion marker
@@ -231,76 +235,86 @@ the exact `suspicion_graph_for_meeting()` accessor a live meeting consumes):
    > class `meetings.schemas.BallotTargetRewriteReason` names, read from that
    > union rather than re-spelled — while the two citation-only rewrites stay in
    > the fit, labelled and counted, because they null a reference and leave the
-   > target intact. On the corpus now on disk the whole-table census moves from
-   > 7 rows to 102 (9p2i) and from 0 to 2 (4p1i); what a fit actually drops is
-   > the `train ∪ val` share of that — **7 → 82** on 9p2i and 0 → 2 on 4p1i, the
-   > other 20 being held-out rows no fit path ever consumed. Over the same
+   > target intact. On the corpus now on disk the whole-table census is
+   > **80 rows (9p2i), 67 of them fit-side, and 2 of 2 (4p1i)**. Over the same
    > window the `is_reporter`
    > slot is masked to a constant on the fit and the serve side alike: the
-   > reporter is a crewmate on all 3,602 recorded ballots across the four
+   > reporter is a crewmate on every recorded ballot across the four
    > committed sets, so a fit that reads it learns roles ground truth rather than
-   > a ballot. **Every number in this report is the baseline-6 fit's, taken
-   > before both changes** — they are the record of that evaluation, and the ML
-   > re-ground re-states them.
+   > a ballot. **Both changes are IN the committed fit as of Task 21.17**: the
+   > weights this report ships (`06b20508…`) were fitted with the widened
+   > exclusion applied and the reporter slot masked, and §§3–5 are that fit's
+   > held-out evaluation. The baseline-6 figures this note was written beside —
+   > a 7-row census, and every cell in the report at the time — are history.
 
 ---
 
 ## 3. Held-out fidelity vs the ceiling (the four channels together)
 
-Scored population: the **9p2i corpus test split** — 30 games / **96 meetings** /
-**60 ejections** / **36 skips**. The baseline-6 meeting economy REVERTED to
-**eject-majority** (302 of 463 corpus meetings eject = 65.2%; recorded voters cast
-SKIP on 42.1% of all ballots, down from 58.4% on baseline 5) — the single biggest
-substrate shift under every number below. Every channel (ranking, decision,
-calibration, the ceiling) is measured on **this one distribution**, so they describe
-the same games.
+Scored population: the **9p2i corpus test split** — 30 games / **91 meetings** /
+**57 ejections** / **34 skips**. The baseline-8 meeting economy stays
+**eject-majority** (281 of 439 corpus meetings eject = 64.0%; recorded voters cast
+SKIP on 40.4% of all ballots) — the distribution under every number below. Every
+channel (ranking, decision, calibration, the ceiling) is measured on **this one
+distribution**, so they describe the same games.
 
 **Surrogate `ballot-surrogate.v1`:**
 
 | Channel | Value |
 |---|---|
-| top-1 (ejected target ranked first) | **76.7%** (46/60) |
-| top-2 | **91.7%** (55/60) |
-| SKIP-vs-eject decision accuracy | **37.5%** (36/96) |
-| — correct ejects / correct skips | **0** correct ejects · 36 correct skips |
-| always-eject baseline (population constant) | **62.5%** (60/96) |
-| decision census (predicted) | **0 ejections · 96 skips** |
-| `degenerates_to_skip` | **True** (accuracy 0.375 ≤ always-eject 0.625 — the eject-era flag fires) |
-| ejection-confidence Brier / ECE | 0.0679 / 0.0948 |
+| top-1 (ejected target ranked first) | **82.5%** (47/57) |
+| top-2 | **94.7%** (54/57) |
+| SKIP-vs-eject decision accuracy | **39.6%** (36/91) |
+| — correct ejects / correct skips | **2** correct ejects · 34 correct skips |
+| always-eject baseline (population constant) | **62.6%** (57/91) |
+| decision census (predicted) | **2 ejections · 89 skips** |
+| `degenerates_to_skip` | **True** (accuracy 0.396 ≤ always-eject 0.626 — the eject-era flag fires) |
+| ejection-confidence Brier / ECE | 0.0646 / 0.1078 |
 
 **The honest ceiling on the SAME population** (a measurement, not a target):
 
 | Ceiling channel | Value |
 |---|---|
-| max achievable top-1 (strict-argmax recipe) | **85.0%** (reachable 51/60) |
-| flag on target | 57/60 |
-| proximity/eyewitness on target | 49/60 |
-| strict belief-lead on target | 43/60 |
-| voice-driven share (the complement) | **15.0%** |
+| max achievable top-1 (strict-argmax recipe) | **82.5%** (reachable 47/57) |
+| flag on target | 49/57 |
+| proximity/eyewitness on target | 52/57 |
+| strict belief-lead on target | 46/57 |
+| voice-driven share (the complement) | **17.5%** |
 
-The surrogate's top-1 (76.7%) sits **comfortably below** the measured 85.0% ceiling —
-the eject-majority substrate no longer lets the learned ranker exceed the
-strict-argmax recipe the way baseline 5 did. The ceiling is the honest measure of the
-**voice-driven share** (15.0% of ejections formed from the current meeting's spoken
-narrative — down from 18.0% on baseline 5), not a hard information bound on the
-learned ranker; axis 1 of the bar reads it as its denominator exactly as ratified.
+The surrogate's top-1 (82.5%) now **reaches** the measured 82.5% ceiling exactly —
+the learned ranker converts every reachable ejection on this population and the
+committed verdict's `top1_ceiling_gap` reads 0.0. The ceiling is the honest measure
+of the **voice-driven share** (17.5% of ejections formed from the current meeting's
+spoken narrative), not a hard information bound on the learned ranker; axis 1 of the
+bar reads it as its denominator exactly as ratified. Reaching the ceiling is not a
+claim that the ranker cannot be beaten — it is the statement that everything the
+strict-argmax recipe can see, this model also sees.
 
 **FO-6 re-baseline on the SAME population** (`fo6_rebaseline`, the floor to beat):
 
 | FO-6 channel | Value |
 |---|---|
-| top-1 | **65.0%** (39/60) |
-| top-2 | 70.0% |
-| SKIP-vs-eject decision accuracy | 62.5% |
-| decision census (predicted) | 96 ejections · 0 skips (all 96 meetings called EJECT) |
-| `degenerates_to_skip` | **False** — the head degenerates the OTHER way (all-EJECT), which on an eject-majority mix ties the always-eject constant, so the skip-era flag reads False by its own formula |
+| top-1 | **24.6%** (14/57) |
+| top-2 | 45.6% |
+| SKIP-vs-eject decision accuracy | 37.4% |
+| decision census (predicted) | 0 ejections · 91 skips (all 91 meetings called SKIP) |
+| `degenerates_to_skip` | **True** — the comparator collapses to the always-SKIP constant on this population, its third such reading in four records |
 
 **Recorded-ballot reference calibration (the WOLF channel, model-INDEPENDENT).** Over
-the scored split's **323** recorded ballot rows, each real voter's stated confidence
-vs whether its named target was ejected: **ballot Brier 0.1242 / ballot ECE 0.0489**.
-This is a property of the committed ballots — it is *not* the surrogate's calibration
-(§4), and the harness reports it for every model as the ground-truth reference
-(arXiv:2512.09187 WOLF ~0.26–0.29).
+the scored split's **289** non-SKIP recorded ballot rows, each real voter's stated
+confidence vs whether its named target was ejected: **ballot Brier 0.1225 / ballot
+ECE 0.1196**. This is a property of the committed ballots — it is *not* the
+surrogate's calibration (§4), and the harness reports it for every model as the
+ground-truth reference (arXiv:2512.09187 WOLF ~0.26–0.29).
+
+> **Erratum (Task 21.17, the baseline-8 re-ground).** Every cell in §3–§5 was
+> re-measured on `replays/ml_corpus/9p2i` at the baseline-8 record. The
+> baseline-6 record read 96 meetings / 60 ejections / 36 skips, top-1 76.7%
+> (46/60), decision accuracy 37.5% (36/96), ceiling 85.0% with a 15.0%
+> voice-driven share, and an FO-6 comparator that degenerated the OTHER way
+> (all-EJECT, top-1 65.0%). Those are a record of bytes this checkout no longer
+> holds; they are history, not a target, and the verdict below re-states itself
+> against the population-relative bar rather than against them.
 
 ---
 
@@ -313,35 +327,37 @@ actually ejected:
 
 | Predicted-ballot calibration | Value |
 |---|---|
-| Brier | **0.2542** |
-| ECE | **0.2465** |
-| predicted ballots (non-SKIP) | 100 |
-| predicted SKIP ballots | 457 |
+| Brier | **0.3278** |
+| ECE | **0.3408** |
+| predicted ballots (non-SKIP) | 110 |
+| predicted SKIP ballots | 406 |
 
-**State it plainly:** the harness's committed `ballot_brier` (0.1242) / `ballot_ece`
-(0.0489) are the **model-independent RECORDED-ballot reference**; the numbers in
+**State it plainly:** the harness's committed `ballot_brier` (0.1225) / `ballot_ece`
+(0.1196) are the **model-independent RECORDED-ballot reference**; the numbers in
 this section are the **surrogate's own predicted-confidence calibration** and are
-**markedly worse**. The predictor casts SKIP on 82% of individual ballots (457 of
-557), and its 100 non-SKIP ballots are spread too thin for any plurality to clear the
-0.60 tally gate — which is why the meeting-level decision census in §3 is all-SKIP,
-even on an eject-majority corpus.
+**markedly worse**. The predictor casts SKIP on 79% of individual ballots (406 of
+516), and its 110 non-SKIP ballots are spread too thin for any plurality to clear the
+0.60 tally gate on all but two meetings — which is why the meeting-level decision
+census in §3 is 2 ejections against 89 skips, even on an eject-majority corpus.
+(Baseline-6 record, for history: Brier 0.2542 / ECE 0.2465 over 100 predicted
+ballots and 457 predicted SKIPs, with an all-SKIP meeting census.)
 
 ---
 
 ## 5. THE VERDICT: NO-GO
 
-`decide_go_no_go(surrogate, fo6)` on the shared 96-meeting / 60-ejection
+`decide_go_no_go(surrogate, fo6)` on the shared 91-meeting / 57-ejection
 population:
 
 | # | Axis | Surrogate | Bar | Result |
 |---|---|---:|---:|:---:|
-| 1 | top-1 ≥ 0.75 × ceiling | 0.7667 | 0.6375 (= 0.75 × 0.8500) | **PASS** |
-| 2 | top-1 > FO-6 re-baseline | 0.7667 | 0.6500 | **PASS** |
-| 3 | SKIP-vs-eject > always-eject | 0.3750 | 0.6250 | **FAIL** |
+| 1 | top-1 ≥ 0.75 × ceiling | 0.8246 | 0.6184 (= 0.75 × 0.8246) | **PASS** |
+| 2 | top-1 > FO-6 re-baseline | 0.8246 | 0.2456 | **PASS** |
+| 3 | SKIP-vs-eject > always-eject | 0.3956 | 0.6264 | **FAIL** |
 
-Axes 1 and 2 pass but axis 3 fails, so the conjunction is **NO-GO** — the substrate
-flipped the baseline-5 GO back (baseline 3 also read NO-GO, on a different failing
-axis). Per the pre-committed mapping, `decide_go_no_go` returns
+Axes 1 and 2 pass but axis 3 fails, so the conjunction is **NO-GO** — the same shape
+the baseline-6 record read, re-stated on the baseline-8 population. Per the
+pre-committed mapping, `decide_go_no_go` returns
 `training_time_runner="fake-provider-meeting-manager"`,
 `surrogate_role="diagnostic-only"`: the surrogate ships as a **DIAGNOSTIC** and the
 fake-provider MeetingManager stays the bake-off's training-time runner (locked
@@ -352,41 +368,40 @@ NO-GO keeps the default fake-provider runner, it re-plans nothing downstream, an
 Task 18.15's conviction-economy model carries its own independent GO bar.
 
 **Honest diagnosis (read beside the verdict, not instead of it).** The ranking
-channel is genuinely competent: 76.7% top-1 against FO-6's 65.0%, clearing both the
-ceiling ratio and the FO-6 floor — the pre-meeting belief fold plus the vent pin
-identify the ejected target well on the citation-era bytes. What fails is the
-**decision channel**: the predictor casts SKIP-heavy ballots whose tally skips
-**every** test meeting (0 correct ejects; all 60 true ejections called SKIP), and its
-37.5% decision accuracy is exactly the trivial **always-SKIP** constant — which now
-scores BELOW axis 3's always-EJECT constant (62.5%) because the baseline-6 economy is
-eject-majority (60/96). This is the honest inverse of the baseline-5 GO: there, the
-same all-SKIP head *beat* always-eject only because the substrate was skip-majority;
-the ratified bar named always-eject as axis 3's constant and warned it was the
-STRONGER trivial constant on every substrate it was ratified on. Baseline 6 restores
-it at full strength, and the surrogate's decision head — unchanged in behavior — falls
-under it. The J1 train/serve skew (§2.1) points the same way: live-served suspicion on
-clamped cells is ≤ the fit-time value, a conservative, SKIP-ward bias on 0.98% of
-cells.
+channel is genuinely competent, and on these bytes it is at its own ceiling: 82.5%
+top-1 against FO-6's 24.6%, clearing both the ceiling ratio and the FO-6 floor — the
+pre-meeting belief fold plus the vent pin identify the ejected target on every
+reachable ejection. What fails is the **decision channel**: the predictor casts
+SKIP-heavy ballots whose tally skips 89 of the 91 test meetings (2 correct ejects; 55
+of the 57 true ejections called SKIP), and its 39.6% decision accuracy sits barely
+above the trivial **always-SKIP** constant (37.4%) and well below axis 3's
+always-EJECT constant (62.6%), because the baseline-8 economy is eject-majority
+(57/91). The ratified bar named always-eject as axis 3's constant and warned it was
+the STRONGER trivial constant on every eject-majority substrate; the surrogate's
+decision head — unchanged in behavior — falls under it. The J1 train/serve skew
+(§2.1) points the same way: live-served suspicion on clamped cells is ≤ the fit-time
+value, a conservative, SKIP-ward bias on 0.80% of cells (102 of 12 772).
 
 **The verdict was taken on the FIRST held-out evaluation.** The model was **not**
 iterated against the test split — doing so would corrupt the held-out claim. The
 **val** split exists for any future model iteration, and any re-fit re-states its
 verdict against **this same population-relative bar** (§9 reproduces it end-to-end).
 
-**Secondary diagnostic — 4p1i corpus test split** (tiny, noise-dominated: 10
-meetings / 4 ejections / 6 skips):
+**Secondary diagnostic — 4p1i corpus test split** (tiny, noise-dominated: 8
+meetings / 6 ejections / 2 skips):
 
 | Channel | Surrogate | Reference |
 |---|---:|---:|
-| top-1 | 100% (4/4) | ceiling 100%; FO-6 50.0% |
-| SKIP-vs-eject | 60.0% | always-eject 40.0% → axis 3 passes (strict `>`) |
-| predicted-ballot calib Brier / ECE | 0.2421 / 0.3125 (n=6) | — |
+| top-1 | 83.3% (5/6) | ceiling 83.3%; FO-6 83.3% |
+| SKIP-vs-eject | 37.5% | always-eject 75.0% → axis 3 fails |
+| predicted-ballot calib Brier / ECE | 0.0005 / 0.0227 (n=6) | — |
 
-The 4p1i secondary reads **GO** (all three axes pass on a 50/50 skip-majority mix),
-but it is a **corroborating diagnostic only** and does NOT change the shipped verdict:
-the primary scored population is the 9p2i corpus, whose **NO-GO governs**. The split
-is itself the honest reading — a tiny skip-majority set flatters exactly the axis the
-large eject-majority set fails.
+The 4p1i secondary now reads **NO-GO** on every axis (the ranking axis ties the FO-6
+floor rather than beating it, and the set flipped eject-majority), but it remains a
+**corroborating diagnostic only** and does not decide anything: the primary scored
+population is the 9p2i corpus, whose **NO-GO governs** either way. At baseline 6 this
+set read GO on a 10-meeting, skip-majority mix; eight meetings later it reads the
+opposite, which is the honest measure of how little a set this size settles.
 
 ---
 
@@ -417,8 +432,8 @@ consequence:
 Committed cap file `training/artifacts/surrogate/max-uses.json`:
 
 ```json
-{ "max_uses": 52481, "unit": "meetings",
-  "weights_sha256": "611771a4853d2c4fe0ff9ebcc5811788a5a5c235ba8fc7061f4f9fe06dbf40c5" }
+{ "max_uses": 49764, "unit": "meetings",
+  "weights_sha256": "06b2050889271c267af2e5d083ba46099bbb55120ca834f4d357733f0e2dcda8" }
 ```
 
 - **Unit:** surrogate-simulated **MEETINGS** — one `SurrogateMeetingRunner.run_meeting`
@@ -431,11 +446,11 @@ Committed cap file `training/artifacts/surrogate/max-uses.json`:
   `SurrogateStalenessExceededError` (deliberately not silently recoverable — a trainer
   at the cap must re-ground, §8).
 
-**Rationale for 52481 — the ~143× rule, mechanical.** The fit is grounded on **367
-fit-side meetings** (the 2726-row table, 120 fit games), and the committed cap is
-`training.surrogate.ballots.derive_max_uses(367)` = 143 × 367 = **52481** simulated
-meetings ≈ 143× the grounding data — the same ratio every prior cap encoded (62491 ≈
-143 × 437; 50 000 ≈ 143 × 349), RE-DERIVED from this corpus. The headroom arithmetic
+**Rationale for 49764 — the ~143× rule, mechanical.** The fit is grounded on **348
+fit-side meetings** (the 2516-row table, 120 fit games), and the committed cap is
+`training.surrogate.ballots.derive_max_uses(348)` = 143 × 348 = **49764** simulated
+meetings ≈ 143× the grounding data — the same ratio every prior cap encoded (52481 ≈
+143 × 367; 62491 ≈ 143 × 437), RE-DERIVED from this corpus. The headroom arithmetic
 is unchanged: a mid-size ES bake-off sweep (~24 pop × ~30 gens × ~5 seeds × ~2–3
 meetings/game ≈ 7–11k simulated meetings) fits several times over while **forcing
 re-grounding before unbounded optimization against a frozen model** (the
@@ -486,7 +501,7 @@ task ARE one full turn of this recipe — executed, not hypothetical.
    written; the use-counter and the fit-corpus fence **re-key automatically**.
 4. **Re-measure** — `run_surrogate_fidelity` + `fo6_rebaseline` + `decide_go_no_go`
    on the new table; the verdict **re-states itself** against the same
-   population-relative bar (baseline 6: it read NO-GO).
+   population-relative bar (baselines 6 and 8 both read NO-GO).
 5. **Commit together** — weights + sha256 sidecar + cap + fit-corpus provenance + the
    updated report in one change.
 
@@ -497,17 +512,17 @@ task ARE one full turn of this recipe — executed, not hypothetical.
 Every number above is a pure function of the committed bytes. Each one-liner writes
 nothing.
 
-- **Table** (463 meetings / 2726 rows; fit 367 meetings / 120 games, test 96
+- **Table** (439 meetings / 2516 rows; fit 348 meetings / 120 games, test 91
   meetings / 30 games):
   ```
   uv run python -c "from pathlib import Path; from training.surrogate import build_meeting_table; t=build_meeting_table(Path('replays/ml_corpus/9p2i')); print(t.meetings_total, len(t.rows), t.games_total)"
   ```
 - **The walk re-validation + J1 live-parity divergence** (§2.1 — fold fidelity 0
-  mismatches; 141 divergent cells / 130 rows, fit 113 / test 28, max 0.06):
+  mismatches; 102 divergent cells / 98 rows, fit 77 / test 25, max 0.11):
   ```
   uv run python -c "from pathlib import Path; from training.surrogate.dataset import measure_belief_render_parity; print(measure_belief_render_parity(Path('replays/ml_corpus/9p2i')).model_dump_json(indent=2))"
   ```
-- **The coerced-SKIP census** (§2.1 — 1 row, 1 fit-side):
+- **The coerced-SKIP census** (§2.1 — 6 rows, 5 fit-side):
   ```
   uv run python -c "from pathlib import Path; from training.surrogate import build_meeting_table; t=build_meeting_table(Path('replays/ml_corpus/9p2i')); fit=set(t.splits.train)|set(t.splits.val); print(sum(r.ballot_coerced_skip for r in t.rows), sum(r.ballot_coerced_skip for r in t.rows if r.seed in fit))"
   ```
@@ -586,15 +601,18 @@ correctly labelled where it is recorded. The erratum pins the channel so the fig
 cannot be conflated with two others that share the phrase "decision accuracy".
 
 1. **"Decision accuracy" in this report names the SURROGATE's own channel, and only
-   that.** §3 records the cell verbatim as:
+   that.** As of this erratum's date §3 recorded the cell verbatim as:
 
    > `| SKIP-vs-eject decision accuracy | **37.5%** (36/96) |`
 
-   (:242, in the `ballot-surrogate.v1` channel table over 30 test games / 96 meetings /
+   (in the `ballot-surrogate.v1` channel table over 30 test games / 96 meetings /
    60 ejections / 36 skips). Read in context that label is exact: it is the surrogate's
    **SKIP-vs-eject channel** — **0.375**, the degenerate all-SKIP constant (0 correct
    ejects, 36 correct skips, `degenerates_to_skip` **True**), and it is the measurement
-   that produces this report's honest **NO-GO**.
+   that produces this report's honest **NO-GO**. The Task-21.17 re-ground re-measured
+   that cell to **39.6% (36/91)** on the baseline-8 corpus; the figures quoted through
+   this item are the baseline-6 ones the erratum was written against, and the CHANNEL
+   distinction it draws is what carries forward.
 
    **What it is NOT.** It is **not** the program's meeting-decision figure. That figure
    is the composed runner's **0.8646 (83/96)** — `report-composed-runner.md` §3-4, the

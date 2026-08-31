@@ -205,9 +205,12 @@ _STALENESS_THRESHOLD: Final[int] = 30
 
 # The post-meeting episodic marker the policy dates a sighting against. Produced
 # per living agent at the resume tick by ``agents.memory.store`` (its
-# ``_EVENT_MEETING_BOUNDARY``, agents/memory/store.py:110) on both the live and
-# the replay path; mirrored here rather than imported so no private name crosses
-# a module boundary, with the two strings pinned equal in the policy's tests.
+# ``_EVENT_MEETING_BOUNDARY``, agents/memory/store.py:110) on every path that
+# runs the post-meeting absorb fold — the live loop, the replay loader, and the
+# two reconstruction walks (``eval/off_menu.py``, ``training/anchor_study.py``).
+# A path that skips the fold sees an empty subject set and ranks stale leads.
+# Mirrored here rather than imported so no private name crosses a module
+# boundary, with the two strings pinned equal in the policy's tests.
 _MEETING_BOUNDARY_EVENT: Final[str] = "meeting_boundary"
 
 # The task-gating sabotage the impostor emits (Task 11.5/11.7, DESIGN.md §3.4).
@@ -918,8 +921,9 @@ class ImpostorPolicy:
         The ejection barrier (2026-08-19 review G-12). A player ejected at a
         meeting is never seen again, so its last sighting necessarily predates the
         ``meeting_boundary`` marker the post-meeting fold appends at the resume
-        tick — the only meeting signal that reaches episodic memory on both the
-        live and the replay path. Cross-meeting leads on living players are
+        tick — the only meeting signal that reaches episodic memory, on every
+        path that runs that fold (the live loop, the replay loader and both
+        reconstruction walks). Cross-meeting leads on living players are
         dropped with it: a sighting the whole table has since re-gathered around
         is not a lead either.
         """

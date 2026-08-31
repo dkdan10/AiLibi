@@ -171,28 +171,36 @@ paragraph attached to it.
 ## What the next recording changed under all of this
 
 The social layer these policies were searched against was rebuilt after the campaign closed,
-and the committed sample sets were re-recorded on it — regenerated 2026-08-31, impostor win
-rates 36% (4p1i) and 30% (9p2i). The bars the first of those recordings was read against were
-registered before the repairs existed, and that read is published bar by bar in
-[`audit-phase-20-baseline-7.md`](../audits/audit-phase-20-baseline-7.md) §3. Every pair below
-reads baseline 6 → baseline 7:
+and the committed sample sets were re-recorded on it — twice, most recently at impostor win
+rates 36% (4p1i) and 30% (9p2i). The first of those recordings was read bar by bar in
+[`audit-phase-20-baseline-7.md`](../audits/audit-phase-20-baseline-7.md) §3: two met their
+bars, two missed, the win split did not move.
+**The rule's verdict on that read is a FINDING, not an adoption: two bars missed. The
+recording is canon in spite of it, by an explicit owner override recorded with its grounds
+on 2026-08-26 (§6.1).** None of it re-prices a referee verdict.
 
-* **Moved, and met their bars.** False crewmate self-placement, 20.1% → 0.77% pooled;
-  fabricated task-completion lines, 88 of 1,888 rendered rows → zero on every set; all four
-  of the traced injustice fixtures flipped.
-* **Moved, and missed their bars.** Conviction accuracy without engine-certified proof,
-  46/125 = 0.3680 → 61/103 = 0.5922, against a registered 0.60 — short by 0.0078. Wrongful
-  ejections, 79 → 42, against a registered fewer-than-35.
-* **Did not move.** The impostor win split landed inside the pre-registered ±15-point band on
-  every leg, and it is the observed-not-gated secondary here for a structural reason: the
-  mover repair above rode the same recording as a declared co-intervention, so no win-split
-  move can be attributed to either change (§5.1, §7).
+## What the instruments now stand on
 
-The rule's verdict on that read is a **finding**, not an adoption: two bars missed. The
-recording is the reference in spite of it, by an explicit owner override of the verdict
-recorded with its grounds on 2026-08-26 (§6.1). None of this re-prices a referee verdict
-above — those were decided on the campaign's own recordings, and nothing in this section
-was measured against a retrained arm.
+The three committed ML instruments were re-fit on the corpus that second re-recording left
+behind, so each reads the bytes its weights were made from — `replays/ml_corpus/9p2i`,
+fingerprint `cc54d3c0…`. Every row below re-derives under
+`scripts/verify_ml_evidence.py --complete`.
+
+| instrument | verdict | the axes it was judged on |
+|---|---|---|
+| ballot surrogate | **NO-GO** (ranking passes, decision fails) | who it ranks first, against the ceiling; whether to eject, against always-eject |
+| conviction model | **GO** | its flag-count rank correlation; its recall, against a share of the ceiling; its accuracy, against the best constant answer |
+| composed runner | **GO** | its meeting decision, against always-eject; its ranking on convicting meetings, against the ceiling |
+
+Each bar is a fraction of a constant measured on the same split, so none of it transfers as
+an absolute; the numbers live in `training/reports/` and each `verdict.json`. The
+surrogate's NO-GO keeps it diagnostic-only.
+
+Two things the re-ground did not do. It did not re-search the λ grid under the repaired
+fitness objective — those cells record a search under the prior one, which the stale-seed
+fence cannot see. And it did not re-price the arm table above: **those edges were measured
+against a comparator this repository no longer ships**, as its erratum says. Both are owner
+decisions.
 
 ## Limitations
 

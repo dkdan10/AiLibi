@@ -54,6 +54,7 @@ from orchestrator.boundary import public_map_from_engine_map
 from training.bakeoff import es
 from training.bakeoff.bc import BcDaggerEntrant, bc_budget
 from training.bakeoff.harness import (
+    BAKEOFF_BASELINE_ID,
     BakeoffPolicy,
     TrainedCandidate,
     load_candidate_weights,
@@ -1107,10 +1108,8 @@ def test_map_elites_default_run_config_is_byte_stable(
         )
 
 
-def test_committed_map_elites_cells_are_a_baseline6_pool_on_a_baseline7_corpus() -> (
-    None
-):
-    """The pool's GENOMES are untouched by the re-record; its STAMP is stale.
+def test_the_committed_map_elites_pool_is_current_and_structurally_untouched() -> None:
+    """The pool's STAMP is current and its GENOMES are unchanged, asserted together.
 
     The MAP-Elites archive is SUBSTRATE-INDEPENDENT: the illumination runs fresh
     deterministic fake-provider rollouts off ``seed`` + the canonical map and never
@@ -1120,16 +1119,12 @@ def test_committed_map_elites_cells_are_a_baseline6_pool_on_a_baseline7_corpus()
     the corpus ``MANIFEST.md``, deliberately chosen (``bakeoff_substrate_sha``) as
     the thing that trips when a re-record lands.
 
-    It has tripped. The baseline-7 record re-recorded the corpus without
-    re-grounding the ML program (a NAMED follow-up,
-    audits/audit-phase-20-baseline-7.md §10.2), so the pool is a baseline-6 pool
-    sitting on a baseline-7 corpus and the stale-seed fence reads STALE. This test
-    is the tripwire that says so out loud: the two halves below are asserted
-    together, so neither the untouched structure nor the stale stamp can be read
-    without the other. Re-stamping the index -- a two-field edit -- is NOT the
-    re-ground and must not be done on its own: the stamp's whole job is to mark
-    the pool as un-re-grounded, and forging it green would erase the only signal
-    that the campaign's seeds predate the corpus under them.
+    Between the baseline-7 record and the Task-21.17 re-ground this test was the
+    INVERTED tripwire: it asserted the stamp was stale, precisely so a lone
+    two-field edit could not quietly forge it green while the fits underneath
+    stayed un-re-ground. The re-ground moved the stamp WITH the fits, so the
+    assertion inverts — and the two halves stay asserted together, so a current
+    stamp can never be read without the untouched structure beside it.
     """
 
     root = Path("training/artifacts/impostor/map-elites")
@@ -1138,10 +1133,10 @@ def test_committed_map_elites_cells_are_a_baseline6_pool_on_a_baseline7_corpus()
 
     index = json.loads((root / "cells" / "index.json").read_text())
     assert index["filled_cells"] == 30
-    # The pool still declares the baseline it was illuminated against ...
-    assert index["baseline_id"] == "baseline-6"
-    # ... and the live corpus is no longer that one.
-    assert index["substrate"]["substrate_sha256"] != bakeoff_substrate_sha()
+    # The pool declares the adopted baseline ...
+    assert index["baseline_id"] == BAKEOFF_BASELINE_ID == "baseline-8"
+    # ... and its stamp is the corpus now on disk.
+    assert index["substrate"]["substrate_sha256"] == bakeoff_substrate_sha()
     assert index["substrate"]["corpus_manifest"] == "replays/ml_corpus/9p2i/MANIFEST.md"
 
     # The substrate-independent structure, unchanged across the re-record.

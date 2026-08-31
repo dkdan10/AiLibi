@@ -176,13 +176,14 @@ EVAL_SPLIT_MODULUS: Final[int] = 5
 EVAL_SPLIT_REMAINDER: Final[int] = 4
 
 # The bake-off roster — the canonical 9p2i eval roster the corpus was recorded
-# on and the referee floors the bake-off selects on are pinned for: the
-# baseline-6 (adopted Phase-18) floors since the Task-18.13 corpus re-record
-# (Task 18.14 flips the id; the floors themselves are pinned at Task 18.12).
+# on — and the baseline whose ``eval/watchability.py`` supply floors the bake-off
+# SELECTS on. The id names the floors selection is measured against, which is the
+# baseline the ML fits are ground on: it moves only when those fits move onto a
+# new corpus (Task 21.17 re-ground them onto the baseline-8 record).
 BAKEOFF_NUM_PLAYERS: Final[int] = 9
 BAKEOFF_NUM_IMPOSTORS: Final[int] = 2
 BAKEOFF_TASKS_PER_CREWMATE: Final[int] = 2
-BAKEOFF_BASELINE_ID: Final[str] = "baseline-6"
+BAKEOFF_BASELINE_ID: Final[str] = "baseline-8"
 
 # The pre-stated BC bar (task contract): held-out top-1 intent agreement with
 # the FSM oracle. Stated here, before training, per the definition of done.
@@ -776,6 +777,14 @@ def _load_conviction_bundle(
     training/surrogate/runner.py:449-462). Otherwise a fresh counter is built
     from the committed cap, so the caller always gets a counter keyed to the
     exact artifact it will meter.
+
+    ``corpus_dir`` is NOT wired, unlike the surrogate side. The conviction
+    fit-corpus fence exists and the record it needs is now committed, but this
+    loader is also the seam every SYNTHETIC conviction fixture loads through —
+    fabricated weights that were never fitted on any corpus — so demanding a
+    record here would either break those fixtures or invite a fabricated one.
+    Wiring it needs a per-call opt-out, which changes this function's signature
+    and its two public callers'. Routed rather than half-done (PR #413).
     """
 
     model, sha = load_conviction_model_artifact(artifact_dir)

@@ -245,7 +245,7 @@ def test_probe_reruns_end_to_end_on_the_regrounded_surrogate() -> None:
         meeting_runner_factory=factory,
     )
     assert isinstance(report, GoodhartProbeReport)
-    assert report.baseline_id == "baseline-6"
+    assert report.baseline_id == "baseline-8"
     assert report.verdict in ("HELD", "EXPLOITS_FOUND")
     # The surrogate meeting path was actually exercised and metered.
     assert counter.uses > 0
@@ -1113,7 +1113,7 @@ def test_conviction_reader_determinism_at_unit_level() -> None:
             num_impostors=1,
             tasks_per_crewmate=1,
             fitness_seeds=(0, 1),
-            baseline_id="baseline-6",
+            baseline_id="baseline-8",
             term=term,
             conviction_artifact_dir=_CONVICTION_ARTIFACT_DIR,
         )

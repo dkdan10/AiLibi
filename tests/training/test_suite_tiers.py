@@ -86,13 +86,12 @@ _MIXED_TIER_CAMPAIGN_TESTS: Final[tuple[str, ...]] = (
 )
 _MIXED_TIER_ALWAYS_ON_TESTS: Final[tuple[str, ...]] = (
     "test_corpus_census_pins",
-    # Both renamed at the baseline-7 record: the corpus moved under a frozen fit,
-    # so each pin now states what the committed artifact IS (a baseline-6 fit) and
-    # how the live corpus reads against it, rather than asserting a reproduction
-    # that the pending ML re-ground owns (audits/audit-phase-20-baseline-7.md
-    # §10.2). Same KEEP-row duty, same default tier.
+    # Both renamed twice: at the baseline-7 record, when the corpus moved under a
+    # frozen fit and each pin stated the gap instead of a reproduction; and again
+    # at the Task-21.17 re-ground, which closed the gap and restored the strong
+    # equality. Same KEEP-row duty, same default tier throughout.
     "test_committed_artifact_round_trips_and_the_refit_no_longer_matches",
-    "test_the_committed_verdict_is_baseline6_and_the_weights_still_clear_the_bar",
+    "test_the_committed_verdict_is_the_baseline8_first_evaluation",
 )
 
 

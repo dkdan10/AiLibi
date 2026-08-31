@@ -6,16 +6,17 @@
 > **Anchors:** training/bakeoff/harness.py `inner_episode_fitness` (:569-590,
 > the anchor penalty seam); training/bakeoff/utility_es.py:708-718 (the full
 > budget); replays/ml_corpus/9p2i/ (the filtered-BC source).
-> **Substrate:** baseline-6; substrate sha `9bc00af0f9e76719cb78d66c5593ec178312716528715f4a580677fb519f04f4`
+> **Substrate:** baseline-8; substrate sha `c845602d7e58f84920699d3d56aa12142b1b6b0f1a1cbfc1c1f3a0c287bd1677`
 > (every frozen artifact under `training/artifacts/anchor_study/` carries it —
 > the 18.24 stale-seed refusal reads it).
 > **Committed artifacts:** `training/artifacts/anchor_study/<entrant>/`
 > (float-hex `weights.json` + `weights.json.sha256` + `config.json` with the
 > substrate sha) + `training/artifacts/anchor_study/study.json` (the
 > deterministic index, the serialized `AnchorStudyReport`).
-> **Command:** `uv run python -m training.anchor_study run --budget full`
-> (exit 0, 1693 s training + 97 s
-> scoring/walk = 1790 s wall-clock, CPU-only, $0).
+> **Command:** the λ sweep below is a RECORDING (§1.1); the corpus-derived
+> half was re-run at Task 21.17 as `walk_corpus` + `fit_filtered_bc_anchor` +
+> the substrate re-stamp, CPU-only, `$0`. The sweep's own budget, when it was
+> searched, cost 1693 s training + 97 s scoring/walk = 1790 s wall-clock.
 > **Report-only:** no champion ships from this study; the ES leg under the
 > refined anchor is deliberately NOT run here (the harness's anchor-CE is
 > computed against the FSM's own choice; the anchor-policy seam lands at
@@ -24,6 +25,43 @@
 **The determinism cross-check, stated first:** λ=1.0 reproduced the committed champion **byte-identically** (committed `6d327dcbde94` == sweep `6d327dcbde94`).
 
 ## 1. Protocol (fixed before any run)
+
+### 1.1 What was re-run at the baseline-8 re-ground, and what was not
+
+The substrate this study binds to moved twice — the corpus was re-recorded, and
+the selection floor it filters against was re-pinned to the adopted baseline. At
+Task 21.17 the study was re-ground on those bytes, and the re-ground is
+deliberately partial:
+
+- **Re-run.** The corpus walk, the filtered-BC anchor fit, the offline agreement
+  evaluation, and every artifact's substrate stamp. Every figure in §3 and §4
+  below, and the `filtered-bc-anchor` weights, come from that run. The walk now
+  replays the post-meeting absorb fold impostor-side, exactly as the live loop
+  and `eval/off_menu.py` do; without it the impostor's resume-tick decision is
+  taken against a memory the live agent never had, and 55 of the 150 committed
+  games refused to re-derive.
+- **NOT re-run: the λ grid.** The sweep rows, the champion genomes under each λ,
+  and the λ=1.0 byte-identity cross-check are a RECORDING of a search made under
+  the impostor fitness objective as it stood before Task 21.16 repaired it.
+  Re-searching under a changed objective produces a new study, not a re-ground,
+  and it would silently re-price a recorded result — so the cells are carried
+  forward unchanged and only their substrate stamp moves.
+
+That leaves one limitation worth meeting here rather than inferring: the
+substrate sha `compute_substrate_sha` writes covers the corpus, the baseline id
+and the flag floor, and **not the fitness objective**. Task 21.16's repair is
+therefore invisible to the stale-seed fence — a λ cell whose search ran under
+the prior objective ingests cleanly at the current sha. Re-searching the λ grid
+(and the campaign that consumed it) under the repaired objective is a
+campaign-scale decision, routed to the owner, not a documentation edit.
+
+**Where a number below is a record of the prior corpus rather than a current
+measurement, it is labelled as such.** The baseline-6 study read 6663 total
+corpus decisions (5396 fit-side, weight total 7781) against 129 qualifying
+games, with overall FSM agreement 0.7971 at anchor-CE 0.4568; those are history
+and are not re-derivable from the committed bytes.
+
+### 1.2 The fixed protocol
 
 - **Sweep grid:** λ ∈ {0.25, 0.5, 1.0, 2.0, 4.0} over
   the committed utility-es `full` budget
@@ -40,7 +78,7 @@
 - **Filtered-BC filter (stated):** a corpus game qualifies iff its recorded
   winner is CREWMATES (crew-winning: the games where the evidence economy
   actually convicted) OR its persisted contradiction rows per meeting reach
-  the `flags_per_meeting` supply floor 1.090909
+  the `flags_per_meeting` supply floor 0.973510
   (high-flag: the supply gauge the champion failed, read off the committed
   meeting rows — conservative vs the referee's set-level gauge, which
   additionally re-derives transcript flags). Games satisfying BOTH weigh
@@ -95,10 +133,10 @@
 - **The Pareto front (mean shaped reward ↑, anchor-CE ↓) is `lambda-4.0`:** every other cell is weakly dominated — at this budget on the fake path a HEAVIER anchor did not cost shaped reward (λ=0.25 shaped 19.30 / CE 1.055 → λ=4.0 shaped 19.80 / CE 0.611). The fake path mints no convictions, so fitness and legibility are not yet in tension here — the tension the champion failed on lives in the referee gauges, and NO cell passes the supply floors (the flip bar stays open; this study only positions seeds).
 - **The refined anchor vs the committed champion, on the corpus stream:** the
   filtered-BC anchor matches the FSM's choice on
-  0.7971 of decisions (CE
-  0.4568); the committed champion matches on
-  0.4003 (CE
-  1.0815) — the champion has
+  0.8660 of decisions (CE
+  0.4530); the committed champion matches on
+  0.4133 (CE
+  1.0121) — the champion has
   drifted far from the legible anchor, which is the under-anchoring symptom
   the §2.4 reading predicts.
 - **Structurally-zero anchor weights are expected:** a conditional logit over
@@ -109,11 +147,11 @@
 ## 3. The filtered-BC anchor
 
 **Filter census:** 150 games walked, every state hash and
-every re-derived FSM decision verified. Crew-winning 112,
-high-flag 83, both 66 →
-129 qualifying games, 5396 fit
-decisions (weight total 7781) of
-6663 total corpus decisions;
+every re-derived FSM decision verified. Crew-winning 114,
+high-flag 82, both 71 →
+125 qualifying games, 4375 fit
+decisions (weight total 6523) of
+5584 total corpus decisions;
 0 FSM decisions were off the option menu
 (excluded from the fit, tallied here — never silently dropped).
 
@@ -121,38 +159,35 @@ decisions (weight total 7781) of
 
 | Stream | decisions | agreement | mean anchor-CE (nats) | FSM off-menu | CE-clamped |
 |---|---:|---:|---:|---:|---:|
-| all corpus games | 6663 | 0.7971 | 0.4568 | 0 | 0 |
-| in-filter games | 5396 | 0.7952 | 0.4571 | 0 | 0 |
-| out-of-filter games | 1267 | 0.8051 | 0.4556 | 0 | 0 |
-| committed utility-es champion | 6663 | 0.4003 | 1.0815 | 0 | 0 |
+| all corpus games | 5584 | 0.8660 | 0.4530 | 0 | 0 |
+| in-filter games | 4375 | 0.8599 | 0.4706 | 0 | 0 |
+| out-of-filter games | 1209 | 0.8883 | 0.3895 | 0 | 0 |
+| committed utility-es champion | 5584 | 0.4133 | 1.0121 | 0 | 0 |
 
 ### 3.2 Where the anchor agrees, by FSM intent kind (all corpus games)
 
 | FSM intent kind | decisions | anchor hits | agreement |
 |---|---:|---:|---:|
-| do_task | 1101 | 1068 | 0.9700 |
-| kill | 640 | 634 | 0.9906 |
-| move | 3632 | 2725 | 0.7503 |
-| sabotage | 73 | 73 | 1.0000 |
-| vent | 818 | 630 | 0.7702 |
-| wait | 399 | 181 | 0.4536 |
+| do_task | 1097 | 1062 | 0.9681 |
+| kill | 678 | 674 | 0.9941 |
+| move | 2418 | 2119 | 0.8763 |
+| sabotage | 26 | 26 | 1.0000 |
+| vent | 809 | 716 | 0.8850 |
+| wait | 556 | 239 | 0.4299 |
 
 ### 3.3 Where it diverges and toward what (top cells, all corpus games)
 
 | FSM chose | anchor chose | count |
 |---|---|---:|
-| move | move | 487 |
-| move | kill | 309 |
-| vent | vent | 188 |
-| wait | move | 137 |
-| move | do_task | 107 |
-| wait | do_task | 73 |
-| do_task | move | 30 |
-| wait | kill | 8 |
-| kill | sabotage | 6 |
-| do_task | kill | 3 |
-| move | sabotage | 2 |
-| move | wait | 2 |
+| move | move | 245 |
+| wait | move | 180 |
+| wait | do_task | 117 |
+| vent | vent | 93 |
+| move | do_task | 49 |
+| do_task | move | 35 |
+| wait | kill | 20 |
+| move | wait | 5 |
+| kill | sabotage | 4 |
 
 ## 4. Which candidates 18.24 should seed with
 

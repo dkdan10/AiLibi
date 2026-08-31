@@ -35,6 +35,7 @@ from training.anchor_study import (
     walk_corpus_game,
 )
 from training.bakeoff.harness import (
+    BAKEOFF_BASELINE_ID,
     BakeoffProtocolConfig,
     load_candidate_weights,
 )
@@ -47,6 +48,9 @@ pytestmark = pytest.mark.campaign
 
 _COMMITTED_CHAMPION_DIR = Path("training/artifacts/impostor/utility-es")
 _SEED_1000_REPLAY = CORPUS_DIR / "replay-seed-1000.jsonl"
+# Seed 1002 holds a meeting at tick 10 and an impostor (p-4) whose tick-11 resume
+# decision reads the post-meeting fold. It is the walk's fold regression subject.
+_SEED_1002_REPLAY = CORPUS_DIR / "replay-seed-1002.jsonl"
 
 
 # --------------------------------------------------------------------------- #
@@ -170,6 +174,56 @@ def test_walk_corpus_game_fails_loud_on_drifted_bytes(tmp_path: Path) -> None:
         walk_corpus_game(drifted)
 
 
+def test_the_walk_replays_the_meeting_fold_on_the_resume_tick() -> None:
+    """A post-meeting resume decision re-derives only when the fold is replayed.
+
+    ``absorb_reported_testimony`` mints the ``meeting_boundary`` episodic marker
+    that ``ImpostorPolicy._pre_meeting_subjects`` reads to drop stale and ejected
+    leads before ranking. Without the fold the marker never lands, the subject
+    set is empty, and the impostor chases a lead the live agent had already
+    dropped — seed 1002's p-4 walks to ADMIN at tick 11 where the recording says
+    CAFETERIA. This walk is the regression: it raises without the fold and is
+    clean with it.
+    """
+
+    facts, decisions = walk_corpus_game(_SEED_1002_REPLAY)
+    assert facts.seed == 1002
+    assert facts.meetings == 3
+    assert facts.decisions == len(decisions) > 0
+    # Decisions are harvested past the tick-10 meeting, so the resume tick the
+    # fold repairs is inside the verified stream rather than beyond its end.
+    assert max(decision.tick for decision in decisions) > 10
+
+
+def test_the_fold_does_not_soften_the_walk_on_the_resume_tick(
+    tmp_path: Path,
+) -> None:
+    """The planted case: a corrupted resume-tick action still refuses.
+
+    The fold makes MORE decisions re-derivable, so the guard it repairs has to
+    keep biting — tamper p-4's tick-11 move, the one the fold fixed, and the
+    per-decision verification must still raise.
+    """
+
+    lines = _SEED_1002_REPLAY.read_text().splitlines()
+    tampered = 0
+    for index, line in enumerate(lines):
+        row = json.loads(line)
+        if row.get("kind") != "tick" or row.get("tick") != 11:
+            continue
+        for action in row["actions"]:
+            if action["actor"] == "p-4":
+                assert action["payload"]["to_room"] == "CAFETERIA"
+                action["payload"]["to_room"] = "STORAGE"
+                tampered += 1
+        lines[index] = json.dumps(row)
+    assert tampered == 1
+    corrupted = tmp_path / "replay-seed-1002.jsonl"
+    corrupted.write_text("\n".join(lines) + "\n")
+    with pytest.raises(CorpusWalkError, match="drifted from the recording"):
+        walk_corpus_game(corrupted)
+
+
 def test_walk_rejects_off_convention_filenames(tmp_path: Path) -> None:
     stray = tmp_path / "game-1000.jsonl"
     stray.write_text("")
@@ -187,9 +241,19 @@ def test_walk_fails_loud_when_an_alive_impostor_action_is_missing(
     lines = _SEED_1000_REPLAY.read_text().splitlines()
     first = json.loads(lines[0])
     impostor_actors = {"p-6", "p-8"}
-    kept = [raw for raw in first["actions"] if raw["actor"] not in impostor_actors]
-    assert len(kept) == len(first["actions"]) - 2
-    first["actions"] = kept
+    # ``action_dispositions`` is POSITIONAL (orchestrator/replay.py:245-252), so
+    # the perturbation drops each row's disposition with it — otherwise the row
+    # fails the length validator before the fence under test can speak.
+    keep = [raw["actor"] not in impostor_actors for raw in first["actions"]]
+    first["action_dispositions"] = [
+        disposition
+        for disposition, kept in zip(first["action_dispositions"], keep, strict=True)
+        if kept
+    ]
+    first["actions"] = [
+        raw for raw, kept in zip(first["actions"], keep, strict=True) if kept
+    ]
+    assert len(first["actions"]) == len(keep) - 2
     lines[0] = json.dumps(first)
     drifted = tmp_path / "replay-seed-1000.jsonl"
     drifted.write_text("\n".join(lines) + "\n")
@@ -273,6 +337,8 @@ def test_walk_fails_loud_on_a_ghost_actor_row(tmp_path: Path) -> None:
     lines = _SEED_1000_REPLAY.read_text().splitlines()
     first = json.loads(lines[0])
     first["actions"].append({"actor": "ghost", "payload": {}, "type": "wait"})
+    # The positional disposition tuple grows with the row it describes.
+    first["action_dispositions"].append("applied")
     lines[0] = json.dumps(first)
     corrupted = tmp_path / "replay-seed-1000.jsonl"
     corrupted.write_text("\n".join(lines) + "\n")
@@ -302,6 +368,8 @@ def test_walk_fails_loud_on_duplicate_action_rows(tmp_path: Path) -> None:
     lines = _SEED_1000_REPLAY.read_text().splitlines()
     first = json.loads(lines[0])
     first["actions"].append(first["actions"][0])
+    # The positional disposition tuple grows with the row it describes.
+    first["action_dispositions"].append(first["action_dispositions"][0])
     lines[0] = json.dumps(first)
     corrupted = tmp_path / "replay-seed-1000.jsonl"
     corrupted.write_text("\n".join(lines) + "\n")
@@ -659,28 +727,31 @@ def test_committed_lambda_1_artifact_reproduces_the_champion_byte_for_byte() -> 
     assert sweep == committed
 
 
-def test_committed_study_artifacts_are_the_baseline6_fit() -> None:
-    """The committed anchor-study artifacts ARE the baseline-6 re-run (Task 18.14).
+def test_committed_study_artifacts_are_the_baseline8_fit() -> None:
+    """The committed anchor-study artifacts ARE the baseline-8 re-run (Task 21.17).
 
-    The inverse of the PR #301 tripwire this replaces. Where that asserted the
-    baseline-5-artifact / baseline-6-corpus HYBRID (a re-run deferred to this task),
-    the re-ground makes the committed artifact current. The utility-es λ sweep is
-    SUBSTRATE-INDEPENDENT (deterministic fake-provider rollouts off ``seed`` + the
-    canonical map, no corpus read), so the λ cell genomes — and the
-    λ=1.0-vs-committed-champion byte identity pinned above — reproduce unchanged;
-    only the corpus-derived filtered-BC anchor is re-fit on the baseline-6 replay
-    bytes, and every cell's ``config.json`` substrate sha plus the study index's
-    ``substrate_sha`` are re-stamped to the live substrate. So the committed
-    artifact's recorded substrate now MATCHES ``compute_substrate_sha()`` and reads
-    ``baseline-6`` — the hybrid the tripwire tracked has resolved.
+    The utility-es λ sweep is SUBSTRATE-INDEPENDENT (deterministic fake-provider
+    rollouts off ``seed`` + the canonical map, no corpus read), so the λ cell
+    genomes — and the λ=1.0-vs-committed-champion byte identity pinned above —
+    reproduce unchanged; only the corpus-derived filtered-BC anchor is re-fit on
+    the live replay bytes, and every cell's ``config.json`` substrate sha plus the
+    study index's ``substrate_sha`` are re-stamped to the live substrate. So the
+    committed artifact's recorded substrate MATCHES ``compute_substrate_sha()``
+    and reads the adopted baseline id.
+
+    The λ grid itself is deliberately NOT re-searched: those rows are a recording
+    of a search made under the pre-Task-21.16 fitness objective, and
+    ``compute_substrate_sha``'s payload covers the corpus and the flag floor but
+    not the objective — so the fence below cannot see that difference, and the
+    report says so in §1.1 rather than leaving it to be inferred.
     """
 
     index = json.loads((ANCHOR_STUDY_ARTIFACT_ROOT / "study.json").read_text())
     report = AnchorStudyReport.model_validate(index)
-    # Re-grounded: the recorded substrate now MATCHES the live substrate and reads
-    # the adopted baseline id (the tripwire's two hybrid assertions, inverted).
+    # Re-grounded: the recorded substrate MATCHES the live substrate and reads
+    # the adopted baseline id.
     assert report.substrate_sha == compute_substrate_sha()
-    assert report.baseline_id == "baseline-6"
+    assert report.baseline_id == BAKEOFF_BASELINE_ID == "baseline-8"
     # The substrate-independent structure holds (not what the re-ground moved): the
     # full λ grid and the λ=1.0 champion byte-identity cross-check.
     assert report.lambda_grid == LAMBDA_GRID

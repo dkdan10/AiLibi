@@ -81,6 +81,7 @@ from engine.entities import PlayerId
 from engine.events import EngineEvent, GameOverEvent, MeetingTriggeredEvent
 from engine.tick import advance_tick
 from engine.world import Map, load_canonical_map
+from meetings.manager import derive_reported_testimony, extract_belief_evidence
 from observation.service import ObservationService
 from orchestrator.boundary import public_map_from_engine_map, translate_action_intent
 from orchestrator.game import TacticalAgent, apply_meeting_result
@@ -154,18 +155,17 @@ REPORT_PATH: Final[Path] = Path("training/reports/report-anchor-study.md")
 # The committed λ=1.0 champion the determinism cross-check reproduces.
 COMMITTED_CHAMPION_DIR: Final[Path] = Path("training/artifacts/impostor/utility-es")
 
-# The high-flag game filter threshold: the baseline-6 9p2i ``flags_per_meeting``
-# supply floor, 180/165 = 12/11 (eval/watchability.py, the Task-18.12 adopting
-# record; the §1.3 flip bar's supply gauge — the exact gauge the champion
-# failed). Re-pinned baseline-5 (90/179 = 0.5028) -> baseline-6 (180/165 =
-# 1.0909) at Task 18.14 alongside BAKEOFF_BASELINE_ID, so a default-substrate
-# re-run filters against the ADOPTED supply bar (the vent-widening re-record
-# raised it) rather than the prior substrate's — otherwise the artifact stamps
-# baseline-6 while filtering on the baseline-5 gauge (Codex review on PR #303).
-# Pinned as the committed ratio rather than importing ``eval.watchability`` into
-# a training module: the bake-off entrant firewall keeps training-side modules
-# eval-free, and this study consumes the floor as a NUMBER, not the gauge.
-HIGH_FLAG_FLOOR: Final[float] = 180 / 165
+# The high-flag game filter threshold: the ``flags_per_meeting`` supply floor of
+# the baseline ``BAKEOFF_BASELINE_ID`` names — 147/151 on baseline-8's 9p2i block
+# (57 re-derived transcript flags + 90 persisted vent sightings,
+# eval/watchability.py). It moves WITH that id, so a default-substrate re-run
+# always filters against the supply bar the artifact stamps; otherwise the
+# artifact stamps one baseline while filtering on another's gauge (Codex review
+# on PR #303). Pinned as the committed ratio rather than importing
+# ``eval.watchability`` into a training module: the bake-off entrant firewall
+# keeps training-side modules eval-free, and this study consumes the floor as a
+# NUMBER, not the gauge.
+HIGH_FLAG_FLOOR: Final[float] = 147 / 151
 
 # The filtered-BC fit hyperparameters — the Fo6Logistic / BallotPredictor
 # deterministic recipe verbatim (training/surrogate/fidelity.py:319,
@@ -231,10 +231,11 @@ def compute_substrate_sha(
       re-record or byte drift moves the sha even if the metadata files were
       wrongly left untouched), and
     * the ``flags_per_meeting`` floor value this study filters against — the
-      floor ACTUALLY USED (``high_flag_floor``, defaulting to the committed
-      baseline-6 pin): a re-fit at an adopted baseline passes the re-pinned
-      floor alongside its ``baseline_id`` and the sha moves with both (Codex
-      review on PR #292).
+      floor ACTUALLY USED (``high_flag_floor``, defaulting to
+      :data:`HIGH_FLAG_FLOOR`, which is the floor ``baseline_id``'s own block
+      commits): a re-fit at an adopted baseline passes the re-pinned floor
+      alongside its ``baseline_id`` and the sha moves with both (Codex review on
+      PR #292).
 
     A Wave-1 substrate adoption (the 18.13 corpus re-record) changes this sha,
     which is exactly the 18.24 stale-seed refusal firing: every artifact under
@@ -346,8 +347,9 @@ class CorpusGameFacts:
     identity is pinned instead by the substrate sha's replay-bytes digest —
     a drifted/forged row moves :func:`compute_substrate_sha` and the 18.24
     stale-seed refusal fires. ``high_flag`` compares against the
-    ``high_flag_floor`` the walk was given (default: the committed baseline-6
-    pin :data:`HIGH_FLAG_FLOOR`); ``crew_winning`` reads the recorded winner.
+    ``high_flag_floor`` the walk was given (default: :data:`HIGH_FLAG_FLOOR`, the
+    adopted baseline's own committed floor); ``crew_winning`` reads the recorded
+    winner.
     """
 
     seed: int
@@ -414,14 +416,17 @@ def walk_corpus_game(
     (:func:`~training.bakeoff.utility_es.enumerate_options`) is then harvested
     off the same live packet/memory.
 
-    Meeting-time memory folds (the belief absorb + the ``reported`` testimony
-    rows) are deliberately NOT replayed: the impostor FSM and the option menu
-    read only packet fields and perception-written episodic rows
-    (``saw_player`` / body / sabotage / self-state types —
-    ``ImpostorPolicy._scored_targets`` filters on ``EVENT_SAW_PLAYER``, which
-    testimony rows are structurally not), so the folds cannot move a tactical
-    decision — and the per-decision recorded-action verification PROVES it on
-    every walked game rather than assuming it.
+    Meeting-time memory folds ARE replayed impostor-side, exactly as the live
+    loop (``orchestrator.game._absorb_meeting_beliefs``) and the sibling walk
+    (``eval/off_menu.py``) run them. They DO reach tactical decisions:
+    ``absorb_reported_testimony`` mints the ``meeting_boundary`` episodic marker,
+    and ``ImpostorPolicy._pre_meeting_subjects`` reads it to drop stale and
+    ejected leads before ranking. Eliding the fold hands the walk a memory the
+    live impostor never had — a divergence the per-decision recorded-action
+    verification catches, on 55 of the 150 committed corpus games. The
+    meeting-HISTORY fold is the one omission: it writes
+    ``memory.meeting_history``, which only the v3 encoder reads and
+    :func:`~training.bakeoff.utility_es.enumerate_options` never touches.
     """
 
     seed = _seed_from_replay_path(replay_path)
@@ -613,6 +618,32 @@ def walk_corpus_game(
                     f"seed {seed}: meeting at tick {entry.tick} reconstructed "
                     f"{after!r} != recorded {meeting_entry.state_hash_after!r}"
                 )
+            # The post-meeting absorb fold, mirroring
+            # ``orchestrator.game._absorb_meeting_beliefs`` and the sibling walk
+            # ``eval/off_menu.py`` for the IMPOSTOR agents (crew agents are not
+            # instantiated here): one evidence reduction + one absorb per
+            # impostor still alive in the post-meeting state.
+            # ``absorb_reported_testimony`` writes episodic content — the
+            # ``provenance="reported"`` rows and the ``meeting_boundary`` marker
+            # at the first post-meeting tick — and ``ImpostorPolicy`` reads that
+            # marker to drop stale leads before it ranks, so eliding this fold
+            # hands the walk a memory the live impostor never had.
+            # ``fold_meeting_outcome_into_memories`` is deliberately NOT run:
+            # it writes ``memory.meeting_history``, which only the v3 encoder
+            # reads and ``enumerate_options`` never touches.
+            evidence = extract_belief_evidence(
+                result, trigger_kind=trigger_event.trigger
+            )
+            statements = derive_reported_testimony(result)
+            for pid in impostor_ids:
+                if not state.players[pid].alive:
+                    continue
+                agents[pid].absorb_meeting_evidence(
+                    accused=evidence.accused,
+                    corroborated=evidence.corroborated,
+                    contradicted=evidence.contradicted,
+                )
+                agents[pid].absorb_reported_testimony(statements=statements)
             # Preserve the trigger tick's events beside the meeting's own (the
             # production loop's post-meeting perception splice).
             last_events = last_events + tuple(post_events)

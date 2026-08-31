@@ -507,6 +507,41 @@ def test_founder_ingestion_substrate_mismatch_refused(tmp_path: Path) -> None:
     assert len(founders) == len(archive)
 
 
+def test_the_committed_pool_ingests_cleanly_at_the_adopted_substrate(
+    tmp_path: Path,
+) -> None:
+    """The COMMITTED MAP-Elites pool passes the fence it is stamped for.
+
+    The test above proves the fence on a synthetic archive. This proves it on
+    the artifact the campaign actually seeds from — the committed pool under
+    ``training/artifacts/impostor/map-elites`` — which is what the co-evolution
+    campaign-row pins stopped covering when they became provenance pins
+    (``tests/training/test_coevo_driver.py``): those rows are a recording, so a
+    live digest can no longer be asserted against them, and this is where the
+    live digest is asserted instead.
+
+    A pool whose stamp drifts from ``bakeoff_substrate_sha()`` fails here rather
+    than at the next campaign's ingest.
+    """
+
+    committed_pool = (
+        Path(__file__).resolve().parents[2]
+        / "training"
+        / "artifacts"
+        / "impostor"
+        / "map-elites"
+    )
+    index = json.loads((committed_pool / "cells" / "index.json").read_text())
+    assert index["substrate"]["substrate_sha256"] == bakeoff_substrate_sha()
+
+    hall = HallOfFame.create(
+        tmp_path / "adopted", "impostor", substrate_sha256=bakeoff_substrate_sha()
+    )
+    founders = hall.ingest_map_elites_founders(committed_pool)
+    assert len(founders) == index["filled_cells"] == 30
+    assert hall.member_shas == tuple(sorted(hall.member_shas))
+
+
 def test_founder_ingestion_is_all_or_nothing(tmp_path: Path) -> None:
     """A duplicate founder refuses the WHOLE ingest before any write (18.20).
 

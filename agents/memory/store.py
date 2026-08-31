@@ -558,8 +558,11 @@ def absorb_meeting_evidence(
     # ejected/removed at the meeting (gone, no body, no gameplay movement) renders a
     # bogus "left ROOM" on the resume tick. This is the universal per-living-agent
     # post-meeting hook (live orchestrator AND replay loader both call it), so the
-    # marker lands on every path that reconstructs memory; it carries no sighting
-    # data and is inert to every consumer except :func:`_collect_transitions`.
+    # marker lands on every path that reconstructs memory. It carries no sighting
+    # data, but it is NOT inert: :func:`_collect_transitions` reads it, and so does
+    # ``ImpostorPolicy._pre_meeting_subjects``, which uses it to drop stale and
+    # ejected leads before ranking. A reconstruction path that skips this hook
+    # therefore changes what the impostor decides, not only what it renders.
     last_perceived_tick = _latest_self_state_tick(memory.episodic)
     if last_perceived_tick is not None:
         memory.episodic.append(

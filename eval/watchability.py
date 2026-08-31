@@ -1043,11 +1043,10 @@ _BASELINE_SUPPLY_FLOORS: Final[Mapping[str, Mapping[str, SupplyFloors]]] = {
 # referee accepts the committed bytes at equality. (Baselines 3-7 moved here from
 # Tasks 15.7, 16.14, 16.17, 18.12 and the baseline-7 record the same way; their
 # blocks above stay scoreable via an explicit --baseline-id, and baseline 7's
-# stays as history.) NOTE the bake-off lag: the training-side selection floors
-# deliberately lag this default — ``BAKEOFF_BASELINE_ID``
-# (training/bakeoff/harness.py) still reads ``baseline-5`` — until the surrogate
-# is re-ground on the new corpus, which is Task 21.17 rather than part of this
-# record (audits/audit-phase-21-rerecord.md).
+# stays as history.) The training-side selection floors are keyed separately, by
+# ``training.bakeoff.harness.BAKEOFF_BASELINE_ID``: that id names the baseline
+# the ML fits are ground on, and it moves at a re-ground rather than with this
+# default.
 _DEFAULT_BASELINE_ID: Final[str] = "baseline-8"
 
 
