@@ -28,6 +28,10 @@ import pytest
 from pydantic import TypeAdapter, ValidationError
 
 from agents.memory.store import AgentMemory
+from meetings.corroboration import (
+    ENV_CORROBORATION_DISCIPLINE,
+    corroboration_discipline_enabled,
+)
 from meetings.manager import ENV_REPORTER_REASONING, reporter_reasoning_enabled
 from meetings.schemas import MeetingResult, MeetingTranscript, VoteBallot
 from orchestrator.replay import (
@@ -77,8 +81,12 @@ _ACTION_ADAPTER: Final[TypeAdapter[Action]] = TypeAdapter(Action)
 # ``meetings.manager.reporter_reasoning_enabled`` BY IDENTITY: this module
 # already imports that one and it reaches no Jinja build, so it needs neither a
 # mirror nor an equivalence pin.
+# ``corroboration_discipline`` -- the ballot's source-count block, bound to
+# ``meetings.corroboration.corroboration_discipline_enabled`` BY IDENTITY for the
+# same reason: that module's imports reach no Jinja build either.
 ENV_IMPOSTOR_ROLL_CALL_KEY = "impostor_roll_call"
 ENV_REPORTER_REASONING_KEY = "reporter_reasoning"
+ENV_CORROBORATION_DISCIPLINE_KEY = "corroboration_discipline"
 
 # Every RETIRED lever: snapshot key and the ``AILIBI_*`` variable its key
 # derives, in graduation order. Written out as literals rather than derived from
@@ -147,10 +155,15 @@ _BASELINE7_STAMP: dict[str, bool] = {
 # the point: ``_BASELINE7_STAMP`` is what the committed bytes carry and must not
 # grow a key those bytes never had, so a post-record registration lands HERE and
 # the two are compared by their difference below. The difference at this HEAD is
-# exactly ``reporter_reasoning``, registered after the baseline-8 record: every
-# committed stamp predates the key and reads it OFF through the missing-key rule,
-# which is what lets the arm merge without moving a committed byte.
-_BARE_STAMP: dict[str, bool] = {**_BASELINE7_STAMP, "reporter_reasoning": False}
+# ``reporter_reasoning`` and ``corroboration_discipline``, both registered after
+# the baseline-8 record: every committed stamp predates both keys and reads them
+# OFF through the missing-key rule, which is what lets each arm merge without
+# moving a committed byte.
+_BARE_STAMP: dict[str, bool] = {
+    **_BASELINE7_STAMP,
+    "reporter_reasoning": False,
+    "corroboration_discipline": False,
+}
 
 # The eight keys the baseline-7 record appended: the Phase-20 belief-substrate
 # levers. Named so the legacy baseline-6 shape below is derived by SUBTRACTING
@@ -343,6 +356,7 @@ class TestSubstrateFlagStamp:
         assert TOGGLEABLE_SUBSTRATE_FLAG_KEYS == (
             ENV_IMPOSTOR_ROLL_CALL_KEY,
             ENV_REPORTER_REASONING_KEY,
+            ENV_CORROBORATION_DISCIPLINE_KEY,
         )
 
     def test_the_retired_stamp_pin_bites(self) -> None:
@@ -356,24 +370,32 @@ class TestSubstrateFlagStamp:
         assert substrate_flag_snapshot({}) != broken
 
     def test_live_toggle_registrations(self) -> None:
-        # Registration pin: TWO live toggles, both DEFAULT-OFF -- the
-        # impostor-answer arm and the reporter-voice arm. The graduated levers
+        # Registration pin: THREE live toggles, all DEFAULT-OFF -- the
+        # impostor-answer arm, the reporter-voice arm and the ballot's
+        # source-count arm. The graduated levers
         # are not here: they moved into ``_RETIRED_ALWAYS_ON_LEVERS`` at the
         # records that adopted them and their env gates are gone. Neither are the
         # two Wave-1a repair gates: a repair records no arm, so the baseline-8
         # record deleted them outright and promoted them nowhere.
-        assert len(_TOGGLEABLE_LEVER_RESOLVERS) == 2
+        assert len(_TOGGLEABLE_LEVER_RESOLVERS) == 3
         registry = dict(_TOGGLEABLE_LEVER_RESOLVERS)
         assert registry[ENV_IMPOSTOR_ROLL_CALL_KEY] is _impostor_roll_call_enabled
         # Bound BY IDENTITY, not by a mirror: this module already imports
         # ``meetings.manager``, so the read-site and the stamp are one function
         # and there is nothing for an equivalence pin to compare.
         assert registry[ENV_REPORTER_REASONING_KEY] is reporter_reasoning_enabled
+        # Same binding for the source-count arm: ``meetings.corroboration`` is a
+        # near-leaf, so the stamp and the manager's read-site are one function.
+        assert (
+            registry[ENV_CORROBORATION_DISCIPLINE_KEY]
+            is corroboration_discipline_enabled
+        )
         for key, _env_var in _RETIRED_LEVERS:
             assert key not in registry, key
         assert TOGGLEABLE_SUBSTRATE_FLAG_KEYS == (
             ENV_IMPOSTOR_ROLL_CALL_KEY,
             ENV_REPORTER_REASONING_KEY,
+            ENV_CORROBORATION_DISCIPLINE_KEY,
         )
         # The full stamp key order: twenty-one graduated levers in graduation
         # order, then the live toggles in registration order. Each half grows only
@@ -406,6 +428,7 @@ class TestSubstrateFlagStamp:
             "coalesced_memory_render",
             "impostor_roll_call",
             "reporter_reasoning",
+            "corroboration_discipline",
         )
 
     def test_env_var_for_lever_derives_the_documented_variable(self) -> None:
@@ -434,16 +457,21 @@ class TestSubstrateFlagStamp:
         # committed byte. Repairing a difference by appending the key to
         # ``_BASELINE7_STAMP`` would make the committed record claim to carry a
         # key it has never carried, so the two literals are compared by their
-        # difference instead. The difference at this HEAD is exactly the
-        # reporter-voice arm, registered after the baseline-8 record and stamped
-        # False on a bare shell -- the shape the missing-key rule reads as
-        # identical to the committed stamp that predates the key entirely.
-        assert set(_BARE_STAMP) - set(_BASELINE7_STAMP) == {"reporter_reasoning"}
+        # difference instead. The difference at this HEAD is the reporter-voice
+        # arm and the source-count arm, both registered after the baseline-8
+        # record and stamped False on a bare shell -- the shape the missing-key
+        # rule reads as identical to the committed stamp that predates them.
+        assert set(_BARE_STAMP) - set(_BASELINE7_STAMP) == {
+            "reporter_reasoning",
+            "corroboration_discipline",
+        }
         assert _BARE_STAMP["reporter_reasoning"] is False
+        assert _BARE_STAMP["corroboration_discipline"] is False
         assert all(_BARE_STAMP[key] == value for key, value in _BASELINE7_STAMP.items())
-        # And the committed literal must not have grown it: the committed bytes
-        # carry twenty-two keys and never named this one.
+        # And the committed literal must not have grown them: the committed bytes
+        # carry twenty-two keys and never named either.
         assert "reporter_reasoning" not in _BASELINE7_STAMP
+        assert "corroboration_discipline" not in _BASELINE7_STAMP
 
     def test_every_recording_stamps_the_full_snapshot(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -500,6 +528,11 @@ class TestSubstrateFlagStamp:
                 ENV_REPORTER_REASONING,
                 ENV_REPORTER_REASONING_KEY,
                 reporter_reasoning_enabled,
+            ),
+            (
+                ENV_CORROBORATION_DISCIPLINE,
+                ENV_CORROBORATION_DISCIPLINE_KEY,
+                corroboration_discipline_enabled,
             ),
         ],
     )
@@ -1415,6 +1448,37 @@ class TestSubstrateMismatchOnAPhase20Lever:
         with pytest.raises(ReplaySubstrateMismatchError) as excinfo:
             _assert_substrate_matches("g-pre-reporter-voice", [recorded])
         assert ENV_REPORTER_REASONING_KEY in str(excinfo.value)
+
+    def test_a_committed_stamp_predating_corroboration_discipline_still_reads_false(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The same byte claim for the registration this PR lands: every committed
+        # recording carries ``_BASELINE7_STAMP``, which has no
+        # ``corroboration_discipline`` key at all, and the missing-key rule reads
+        # it False -- matching the bare-shell ambient snapshot, so the committed
+        # sets reconstruct with nothing moved. The perturbation is below: export
+        # the variable and the SAME stamp is refused.
+        from api.replay_loader import (
+            ReplaySubstrateMismatchError,
+            _assert_substrate_matches,
+        )
+
+        _clear_lever_env(monkeypatch)
+        assert ENV_CORROBORATION_DISCIPLINE_KEY not in _BASELINE7_STAMP
+        assert substrate_flag_snapshot({})[ENV_CORROBORATION_DISCIPLINE_KEY] is False
+        recorded = GameEndReplayEntry(
+            game_id="g-pre-source-count",
+            tick=21,
+            winner="CREWMATES",
+            reason="TASKS",
+            substrate_flags=dict(_BASELINE7_STAMP),
+        )
+        _assert_substrate_matches("g-pre-source-count", [recorded])
+
+        monkeypatch.setenv(ENV_CORROBORATION_DISCIPLINE, "1")
+        with pytest.raises(ReplaySubstrateMismatchError) as excinfo:
+            _assert_substrate_matches("g-pre-source-count", [recorded])
+        assert ENV_CORROBORATION_DISCIPLINE_KEY in str(excinfo.value)
 
     def test_the_missing_key_seam_bites_when_the_toggle_is_exported(
         self, monkeypatch: pytest.MonkeyPatch

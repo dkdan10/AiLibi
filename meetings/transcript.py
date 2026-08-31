@@ -258,7 +258,7 @@ that ONE kind, gated on ONE predicate -- the caller supplied a
 
 * **grounding** -- a spoken sighting is GROUNDED iff the speaker holds a
   matching own :class:`~meetings.schemas.SightingRecord`
-  (:func:`_sighting_observation_matches_record`, the vouch channel's predicate
+  (:func:`sighting_observation_matches_record`, the vouch channel's predicate
   verbatim). An ungrounded sighting still mints its flag -- flags are
   information (DESIGN.md §5.4) -- but never a STRONG one. A placement the
   movement chokepoint produced is grounded by construction (it required the
@@ -2256,7 +2256,7 @@ def _iter_alibis(
     already have, no new flag kind and no duplicated chronology discipline (a
     single tick satisfies the :class:`~meetings.schemas.AlibiClaim` range
     validator by construction). The synthesized claim's event id is the
-    OBSERVATION id (:func:`_turn_observation_id` -- a whereabouts lives on
+    OBSERVATION id (:func:`turn_observation_id` -- a whereabouts lives on
     ``turn.observations``), so a flag referencing it resolves through
     :func:`_event_speaker_index` and the spectator surface exactly like any
     other observation. Per turn, claims index before observations -- a fixed
@@ -2309,7 +2309,7 @@ def _iter_sightings(transcript: MeetingTranscript) -> Iterator[_IndexedSighting]
         for index, observation in enumerate(turn.observations):
             if isinstance(observation, SawPlayerObservation):
                 yield _IndexedSighting(
-                    event_id=_turn_observation_id(turn=turn, index=index),
+                    event_id=turn_observation_id(turn=turn, index=index),
                     speaker=turn.speaker,
                     observation=observation,
                     rooms=canonical_rooms(observation.room),
@@ -2451,7 +2451,7 @@ def _destinations_conflict(records: tuple[MoveWitnessRecord, ...]) -> bool:
     return len({canonical_rooms(record.to_room) for record in records}) > 1
 
 
-def _move_observation_matches_record(
+def move_observation_matches_record(
     observation: SawMoveObservation,
     record: MoveWitnessRecord,
 ) -> bool:
@@ -2549,12 +2549,12 @@ def _iter_move_placements(
             if _destinations_conflict(at_tick):
                 continue
             if not any(
-                _move_observation_matches_record(observation, record)
+                move_observation_matches_record(observation, record)
                 for record in at_tick
             ):
                 continue
             yield _IndexedSighting(
-                event_id=_turn_observation_id(turn=turn, index=index),
+                event_id=turn_observation_id(turn=turn, index=index),
                 speaker=turn.speaker,
                 observation=SawPlayerObservation(
                     type="saw_player",
@@ -2892,7 +2892,7 @@ def _detect_alibi_vs_sightings(
             )
 
 
-def _room_hops(
+def room_hops(
     origin: frozenset[str], destination: frozenset[str], *, max_hops: int
 ) -> int | None:
     """Fewest doorway hops from ``origin`` to ``destination``, or ``None``.
@@ -2939,7 +2939,7 @@ def _adjacent_within_one_tick(
     tick of a claim of continuous presence, which no single hop reconciles.
     """
 
-    hops = _room_hops(alibi.rooms, sighting.rooms, max_hops=MAP_ARBITRATION_MAX_HOPS)
+    hops = room_hops(alibi.rooms, sighting.rooms, max_hops=MAP_ARBITRATION_MAX_HOPS)
     if hops is None or hops == 0:
         return False
     gap = min(
@@ -3173,7 +3173,7 @@ def _vent_observation_matches_record(
     return bool(observation_rooms and record_rooms & observation_rooms)
 
 
-def _sighting_observation_matches_record(
+def sighting_observation_matches_record(
     observation: SawPlayerObservation,
     record: SightingRecord,
 ) -> bool:
@@ -3214,7 +3214,7 @@ def grounded_vouch_subjects(
     (:func:`_detect_grounded_vent_flags`): for every spoken
     :class:`~meetings.schemas.SawPlayerObservation` naming ANOTHER player,
     the SPEAKER'S OWN typed records are searched for a match
-    (:func:`_sighting_observation_matches_record`). A match proves the
+    (:func:`sighting_observation_matches_record`). A match proves the
     speaker honestly reported what they saw -- it does NOT prove the
     subject innocent -- so the subject earns exactly the weak exculpation
     the existing corroboration channel already prices: the returned set
@@ -3297,7 +3297,7 @@ def grounded_vouch_subjects(
             # canonical rooms are non-empty by construction on a match (it
             # required them to intersect the spoken rooms).
             if any(
-                _sighting_observation_matches_record(observation, record)
+                sighting_observation_matches_record(observation, record)
                 and is_relevant_sighting(
                     tick=record.tick,
                     rooms=canonical_rooms(record.room),
@@ -3358,7 +3358,7 @@ def _detect_grounded_vent_flags(
             )
             if matched is None:
                 continue
-            event_id = _turn_observation_id(turn=turn, index=index)
+            event_id = turn_observation_id(turn=turn, index=index)
             yield _build_contradiction(
                 kind="vent_sighting",
                 event_a_id=event_id,
@@ -3386,7 +3386,7 @@ def _detect_vent_placement_contradictions(
     driver from :func:`grounded_vent_subjects_from_flags`, reading the
     ``vent_sighting`` flag channel. For every spoken
     :class:`~meetings.schemas.SawVentObservation` on any turn (indexed with
-    :func:`_turn_observation_id`) whose subject is in the
+    :func:`turn_observation_id`) whose subject is in the
     roster, the SPEAKER'S OWN typed records must exist; for each of the
     SUBJECT'S OWN de-echoed self-alibis (``self_alibis``, the tuple
     :func:`detect_contradictions` already computes) with non-empty canonical
@@ -3435,7 +3435,7 @@ def _detect_vent_placement_contradictions(
                 continue
             if not _subject_in_roster(observation.subject, roster):
                 continue
-            observation_id = _turn_observation_id(turn=turn, index=index)
+            observation_id = turn_observation_id(turn=turn, index=index)
             for alibi in self_alibis:
                 if not alibi.rooms:
                     continue
@@ -3766,7 +3766,7 @@ def _describe_retargeted_proxy(
 def _event_speaker_index(transcript: MeetingTranscript) -> Mapping[str, PlayerId]:
     """Map every claim/observation event id to the player who STATED it.
 
-    Reuses the :func:`_turn_claim_id` / :func:`_turn_observation_id`
+    Reuses the :func:`_turn_claim_id` / :func:`turn_observation_id`
     writers (one home for the id format, exactly the parse
     :func:`contradiction_lift_key` relies on) so a flag's
     ``event_a_id``/``event_b_id`` resolve back to ``turn.speaker``. Built
@@ -3786,7 +3786,7 @@ def _event_speaker_index(transcript: MeetingTranscript) -> Mapping[str, PlayerId
             if isinstance(observation, WhereaboutsClaim):
                 index[_turn_whereabouts_id(turn=turn, index=obs_index)] = turn.speaker
             else:
-                index[_turn_observation_id(turn=turn, index=obs_index)] = turn.speaker
+                index[turn_observation_id(turn=turn, index=obs_index)] = turn.speaker
     return index
 
 
@@ -4051,7 +4051,7 @@ def _sighting_is_grounded(
     if sighting.movement_grounded:
         return True
     return any(
-        _sighting_observation_matches_record(sighting.observation, record)
+        sighting_observation_matches_record(sighting.observation, record)
         for record in records
     )
 
@@ -4102,7 +4102,7 @@ def _turn_claim_id(*, turn: MeetingTurn, index: int) -> str:
     return f"turn:{turn.turn_id}:claim:{index}"
 
 
-def _turn_observation_id(*, turn: MeetingTurn, index: int) -> str:
+def turn_observation_id(*, turn: MeetingTurn, index: int) -> str:
     return f"turn:{turn.turn_id}:obs:{index}"
 
 
@@ -4160,11 +4160,15 @@ __all__ = [
     "is_canonically_ordered",
     "is_relevant_sighting",
     "is_weak_contradiction",
+    "move_observation_matches_record",
     "next_chain_step",
     "reconstruct_stated_paths",
+    "room_hops",
     "self_refuted_alibi_claim_ids",
+    "sighting_observation_matches_record",
     "sighting_placement",
     "sort_turns_canonically",
     "triggering_body_rooms",
+    "turn_observation_id",
     "walk_chain",
 ]

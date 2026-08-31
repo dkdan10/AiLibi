@@ -45,7 +45,7 @@ the cycle the split exists to break).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from meetings.schemas import (
     ContradictionRef,
@@ -54,6 +54,12 @@ from meetings.schemas import (
     PlayerId,
     TurnKind,
 )
+
+if TYPE_CHECKING:
+    # Type-only: the ledger DTO lives with its builder in
+    # :mod:`meetings.corroboration`, and importing it at runtime would give this
+    # leaf a third dependency for an annotation nothing evaluates.
+    from meetings.corroboration import MeetingTestimonyLedger
 
 
 @dataclass(frozen=True)
@@ -361,6 +367,11 @@ class VotePromptRenderer(Protocol):
     ``render_inputs`` (Task 20.31) carries the game's impostor count and the
     map card the v4 ``qwen3_6_27b`` templates state. ``None`` -- every caller
     that does not thread it -- renders exactly as before.
+
+    ``testimony_ledger`` is the meeting's per-subject source count, threaded
+    only while the corroboration lever is ON; the template filters its rows to
+    this voter's ``candidate_targets``. ``None`` -- an OFF meeting, or any
+    ad-hoc render -- omits the block and renders the previous bytes.
     """
 
     def __call__(
@@ -378,6 +389,7 @@ class VotePromptRenderer(Protocol):
         persona: str = "",
         suspicion_provenance: tuple[SuspicionEntry, ...] = (),
         render_inputs: PromptRenderInputs | None = None,
+        testimony_ledger: MeetingTestimonyLedger | None = None,
     ) -> str: ...
 
 

@@ -91,6 +91,12 @@
    rendered line names a flag, a detector or a certification — the register the
    templates dictate is the register the ballots come back in.
 
+   Source counting (v5 arm, lever ``corroboration_discipline``, Task 21.19): the
+   ``<testimony_sources>`` block states each accused candidate's voices, accounts,
+   originating turn, answered-charge provenance and walkable placement pairs. It
+   counts and names; it discounts nothing, and the tally is untouched. Guarded on
+   ``testimony_ledger`` — an absent ledger renders the previous bytes exactly.
+
    Inputs (loader kwargs only): voter_id, rendered_memory, transcript,
    contradiction_flags, suspicion_graph, candidate_targets (optional),
    skip_confidence_threshold (optional, default 0.6; accepted for the render
@@ -98,7 +104,8 @@
    reporter_id (optional, Task 15.5 lever), suspicion_provenance (optional,
    Task 16.3 widening — rendered here since v2; default () keeps the surface
    off), persona (rendered since v3 — Task 16.16), flag_groups + impostors +
-   map_card (rendered since v4 — Task 20.31).
+   map_card (rendered since v4 — Task 20.31), testimony_ledger (optional, Task
+   21.19 lever — default None keeps the surface off).
 -#}
 <persona>
 You are {{ voter_id }}, voting at an AiLibi meeting: {{ impostors.phrase }} {{ impostors.verb_kill }} crewmates; the crew wins by voting {{ impostors.eject_all }}, {{ impostors.subject }} by surviving until they equal or outnumber the crew. The discussion is over — cast one ejection ballot: name the one player you believe is {{ impostors.one_of_them }}, or SKIP if the evidence is too thin. The outcome is a deterministic tally over every ballot, so vote the conclusion you actually reach.
@@ -177,6 +184,25 @@ Weak signals. The same kind of conflict, but an innocent reading already fits it
 {% endfor %}
 {% endif %}
 </contradictions>
+{% endif %}
+{% if testimony_ledger and candidate_targets is defined and candidate_targets %}
+{% set _sources = testimony_ledger.rows | selectattr('subject', 'in', candidate_targets) | list %}
+{% if _sources %}
+
+<testimony_sources>
+Who actually saw something, name by name. A voice is anyone who named them tonight; an account is a voice who also described seeing them, with their own record bearing that description out. Both are evidence and agreement at this table is often right, so read the split and price it — do not discount either half.
+{% for row in _sources %}
+- {{ row.subject }}: {{ row.voices }} {% if row.voices == 1 %}voice{% else %}voices{% endif %}, {{ row.first_hand | length }} {% if row.first_hand | length == 1 %}account{% else %}accounts{% endif %} — it started at [{{ row.originating_turn_id }}]{% if row.first_hand %}; {{ row.first_hand | join(", ") }} described seeing them{% endif %}{% if row.adopted %}; {{ row.adopted | join(", ") }} named them without adding anything they saw{% endif %}. {% if row.flagged %}The evidence above names them — read it there, in its own class.{% else %}Nothing in the evidence above names them.{% endif +%}
+{% if row.opener_charge_turn_id %}
+  That charge came from someone `{{ row.subject }}` had already accused at [{{ row.opener_charge_turn_id }}] — an answer to a charge, not a second witness.
+{% endif %}
+{% for pair in row.walkable_transits %}
+  Two statements put `{{ row.subject }}` in {{ pair[0] }} and then in {{ pair[1] }} a tick later — one door apart, so walking fits both and a conflict over that pair is thin.
+{% endfor %}
+{% endfor %}
+Price your confidence the way this table already calibrates a case: 1.0 only for a kill or a vent you watched happen first-hand; ~0.7 for a case a second account or a contradiction corroborates; ~0.5 for a hunch read off movement alone.
+</testimony_sources>
+{% endif %}
 {% endif %}
 {% if map_card %}
 

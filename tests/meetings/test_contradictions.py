@@ -64,7 +64,7 @@ from meetings.transcript import (
     WEAK_REASON_SELF_PAIR,
     WEAK_REASON_UNGROUNDED_SIGHTING,
     _event_speaker_index,
-    _turn_observation_id,
+    turn_observation_id,
     _turn_whereabouts_id,
     absent_players,
     canonical_rooms,
@@ -515,7 +515,7 @@ class TestAlibiVsSighting:
 def _saw_player_obs_ids(transcript: MeetingTranscript) -> set[str]:
     """Every ``saw_player`` observation id in the transcript (id-format mirror).
 
-    Mirrors ``meetings.transcript._turn_observation_id`` so the firewall
+    Mirrors ``meetings.transcript.turn_observation_id`` so the firewall
     assertion below checks an ``alibi_vs_physical`` flag's placement event id
     against the public ``saw_player`` observations it must trace to -- with no
     reach into the belief layer (a leak test does not scan beliefs, so this is
@@ -1821,7 +1821,7 @@ class TestVentPlacementVariant:
         assert "tick 15" not in physical.description
         assert "STORAGE" in physical.description
         # event_a_id is the self-alibi claim; event_b_id the spoken vent obs.
-        obs_id = _turn_observation_id(turn=tx.turns[1], index=0)
+        obs_id = turn_observation_id(turn=tx.turns[1], index=0)
         assert obs_id in (physical.event_a_id, physical.event_b_id)
 
     def test_lever_off_with_records_is_byte_identical(self) -> None:
@@ -3205,7 +3205,7 @@ def _vent_records_from_recorded_flags(
         for index, observation in enumerate(turn.observations):
             if not isinstance(observation, SawVentObservation):
                 continue
-            if _turn_observation_id(turn=turn, index=index) not in flagged:
+            if turn_observation_id(turn=turn, index=index) not in flagged:
                 continue
             records.setdefault(turn.speaker, []).append(
                 VentWitnessRecord(

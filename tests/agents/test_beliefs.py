@@ -37,6 +37,7 @@ from agents.memory.beliefs import (
     apply_observation_rules,
     graduated_spread_delta,
 )
+from meetings.corroboration import MeetingTestimonyLedger
 from meetings.schemas import AlibiClaim as SchemaAlibiClaim
 from meetings.schemas import ContradictionRef as MeetingContradictionRef
 from meetings.schemas import (
@@ -3344,6 +3345,7 @@ class TestSelfRefutedAlibiDowngrade:
             persona: str = "",  # Task 16.3: widened contract kwarg (inert)
             suspicion_provenance: tuple[SuspicionEntry, ...] = (),  # Task 16.3
             render_inputs: PromptRenderInputs | None = None,  # Task 20.31
+            testimony_ledger: MeetingTestimonyLedger | None = None,  # Task 21.19
         ) -> str:
             captured[voter_id] = suspicion_graph
             return "cast your ballot"

@@ -130,7 +130,7 @@ from meetings.transcript import (
     WEAK_REASON_PROXY_INTRA_TURN,
     WEAK_REASON_NARROW_WINDOW,
     WEAK_REASON_SELF_STATED,
-    _turn_observation_id,
+    turn_observation_id,
     detect_contradictions,
     independent_voices,
     is_canonically_ordered,
@@ -471,7 +471,7 @@ def _vent_records_from_recorded_flags(
     for turn in entry.transcript.turns:
         for index, observation in enumerate(turn.observations):
             if isinstance(observation, SawVentObservation):
-                vent_obs_speaker[_turn_observation_id(turn=turn, index=index)] = (
+                vent_obs_speaker[turn_observation_id(turn=turn, index=index)] = (
                     turn.speaker
                 )
     seen: dict[str, set[tuple[str, str, int]]] = {}

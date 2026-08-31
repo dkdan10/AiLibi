@@ -29,6 +29,7 @@ from typing import TypeVar
 from pydantic import BaseModel
 
 from llm.client import CallKind, LLMClient, LLMResponse, TokenUsage
+from meetings.corroboration import MeetingTestimonyLedger
 from meetings.manager import (
     MeetingConfig,
     MeetingDeadlines,
@@ -181,6 +182,7 @@ def _vote_prompt(
     persona: str = "",  # Task 16.3: widened contract kwarg (inert)
     suspicion_provenance: tuple[SuspicionEntry, ...] = (),  # Task 16.3
     render_inputs: PromptRenderInputs | None = None,  # Task 20.31
+    testimony_ledger: MeetingTestimonyLedger | None = None,  # Task 21.19
 ) -> str:
     # ``reporter_id`` (Task 15.5) conforms to the widened VotePromptRenderer
     # contract; surfaced only when supplied so a lever-OFF (``None``) render is

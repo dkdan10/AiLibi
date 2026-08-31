@@ -110,6 +110,11 @@ from agents.memory.beliefs import (
 from llm.client import LLMClient, LLMResponse
 from llm.provider import LLMCallFailure, extract_parse_failure
 from meetings.constants import DEFAULT_SKIP_CONFIDENCE_THRESHOLD
+from meetings.corroboration import (
+    MeetingTestimonyLedger,
+    build_testimony_ledger,
+    corroboration_discipline_enabled,
+)
 from meetings.render_contract import (
     BodyDiscoveryRecord,
     PromptRenderInputs,
@@ -949,6 +954,7 @@ class MeetingManager:
         vote_prompt: VotePromptRenderer,
         config: MeetingConfig | None = None,
         reporter_reasoning: bool | None = None,
+        corroboration_discipline: bool | None = None,
     ) -> None:
         if config is None:
             config = MeetingConfig()
@@ -990,6 +996,12 @@ class MeetingManager:
         # environment once per ``run()``, so a direct-construction caller needs
         # no new argument.
         self._reporter_reasoning = reporter_reasoning
+        # The corroboration lever, bound at construction on the same terms and
+        # for the same reason: the ledger changes rendered ballot bytes, so the
+        # decision to build one must be taken once, beside the versions it is
+        # stamped into. ``None`` keeps the ad-hoc path (one env read per
+        # ``run()``).
+        self._corroboration_discipline = corroboration_discipline
         # Per-run scratch: the defaults that fired during the most recent
         # :meth:`run`. Reset at the top of every ``run`` (the manager is reused
         # across a game's meetings) and read by the orchestrator immediately
@@ -1115,6 +1127,15 @@ class MeetingManager:
             trigger.triggered_by
             if reporter_reasoning and not _trigger_is_emergency(trigger)
             else None
+        )
+        # The corroboration lever, resolved ONCE per run on the same terms: the
+        # construction-time binding when the caller supplied one, else a single
+        # environment read here. The ledger itself is built after the chain
+        # closes, from the final transcript and flags.
+        corroboration_discipline = (
+            self._corroboration_discipline
+            if self._corroboration_discipline is not None
+            else corroboration_discipline_enabled()
         )
 
         # Canonicalise participant order at entry. Real callers may iterate
@@ -1382,6 +1403,24 @@ class MeetingManager:
                 if player not in _vent_placed
             ),
         )
+        # How many voices carry each charge, and how many of them are accounts
+        # the speaker's own record confirms. Built ONCE, from the final
+        # transcript and the final flags, over the SAME firewall-filtered
+        # sighting mapping the detector read. ``None`` while the lever is OFF,
+        # so an OFF meeting and a ledger-less caller take the identical path.
+        testimony_ledger = (
+            build_testimony_ledger(
+                transcript,
+                contradictions=contradictions,
+                sighting_records=sighting_records,
+                move_witness_records=move_witness_records,
+                opener=trigger.triggered_by,
+                roster=roster,
+                trigger_kind=meeting_trigger_kind,
+            )
+            if corroboration_discipline
+            else None
+        )
         ballots = await self._collect_ballots(
             trigger=trigger,
             participants=ordered_participants,
@@ -1389,6 +1428,7 @@ class MeetingManager:
             contradictions=contradictions,
             evidence=evidence,
             render_inputs=render_inputs,
+            testimony_ledger=testimony_ledger,
         )
 
         # Phase 5: resolution.
@@ -1875,6 +1915,7 @@ class MeetingManager:
         contradictions: tuple[ContradictionRef, ...],
         evidence: MeetingBeliefEvidence,
         render_inputs: PromptRenderInputs | None = None,
+        testimony_ledger: MeetingTestimonyLedger | None = None,
     ) -> tuple[VoteBallot, ...]:
         # Sequential collection: concurrent ballots on a single local GPU
         # inflate each call's wall-clock past vote_seconds (measured 0.71x
@@ -1895,6 +1936,7 @@ class MeetingManager:
                     contradictions=contradictions,
                     evidence=evidence,
                     render_inputs=render_inputs,
+                    testimony_ledger=testimony_ledger,
                 )
             )
         return tuple(ballots)
@@ -1909,6 +1951,7 @@ class MeetingManager:
         contradictions: tuple[ContradictionRef, ...],
         evidence: MeetingBeliefEvidence,
         render_inputs: PromptRenderInputs | None = None,
+        testimony_ledger: MeetingTestimonyLedger | None = None,
     ) -> VoteBallot:
         # Confirm the candidate set over the FINAL transcript: every living
         # participant except the voter is an eligible eject target (the same
@@ -1997,6 +2040,10 @@ class MeetingManager:
             persona=participant.persona,
             suspicion_provenance=suspicion_graph,
             render_inputs=render_inputs,
+            # The per-meeting testimony ledger, threaded only while the
+            # corroboration lever is ON. The template filters its rows to this
+            # voter's candidate targets; ``None`` renders the previous bytes.
+            testimony_ledger=testimony_ledger,
         )
         # The in-prompt §4.6 verdict max, recomputed bit-for-bit from the SAME
         # graph + candidate set the template rendered (max suspicion over the
