@@ -147,6 +147,12 @@ FIT_CORPUS_FILENAME: Final[str] = "fit-corpus.json"
 # runner, so the pre-committed fallback mapping is enforced by the load path
 # rather than by convention.
 SURROGATE_VERDICT_FILENAME: Final[str] = "verdict.json"
+# The verdict's sha256 sidecar, in the repo's shasum format. Written BY the
+# verdict writer, never by hand: `scripts/verify_ml_evidence.py`'s sidecar leg
+# walks every `*.sha256` in the tree and hashes its target, so a writer that
+# emitted the JSON alone would leave the previous verdict's digest beside new
+# bytes and turn that leg red at the next re-ground.
+SURROGATE_VERDICT_SHA256_FILENAME: Final[str] = "verdict.json.sha256"
 
 # The repo-relative root under which the canonical corpora live (``9p2i`` / ``4p1i``).
 # ``load_surrogate_runner_factory`` uses ``_DEFAULT_CORPUS_ROOT / corpus_set`` only as
@@ -403,6 +409,25 @@ class SurrogateFitCorpus(BaseModel):
     weights_sha256: str = Field(min_length=64, max_length=64)
 
 
+def write_verdict_sha256_sidecar(
+    artifact_dir: Path, verdict_filename: str, sidecar_filename: str
+) -> str:
+    """Write a verdict's sha256 sidecar in the repo's ``"<hex>  <name>\\n"`` format.
+
+    Shared by all three verdict writers (surrogate, conviction, composed) so a
+    sidecar is never a hand-maintained file: it is derived from the bytes just
+    written, in the same call. ``scripts/verify_ml_evidence.py``'s sidecar leg
+    walks every ``*.sha256`` in the tree and re-hashes its target, so a writer
+    that emitted the JSON alone would strand the PREVIOUS verdict's digest beside
+    new bytes — green today, red at the next re-ground, and confusing in between.
+    Returns the digest.
+    """
+
+    digest = hashlib.sha256((artifact_dir / verdict_filename).read_bytes()).hexdigest()
+    (artifact_dir / sidecar_filename).write_text(f"{digest}  {verdict_filename}\n")
+    return digest
+
+
 def fit_corpus_fingerprint(corpus_dir: Path) -> str:
     """One digest of a fit corpus's identity (replay bytes + split + provenance).
 
@@ -472,8 +497,10 @@ def write_surrogate_verdict_artifact(
             "pass weights_sha256= to decide_go_no_go"
         )
     artifact_dir.mkdir(parents=True, exist_ok=True)
-    (artifact_dir / SURROGATE_VERDICT_FILENAME).write_text(
-        json.dumps(verdict.model_dump(), indent=2, sort_keys=True) + "\n"
+    payload = json.dumps(verdict.model_dump(), indent=2, sort_keys=True) + "\n"
+    (artifact_dir / SURROGATE_VERDICT_FILENAME).write_text(payload)
+    write_verdict_sha256_sidecar(
+        artifact_dir, SURROGATE_VERDICT_FILENAME, SURROGATE_VERDICT_SHA256_FILENAME
     )
 
 
@@ -616,6 +643,7 @@ def load_surrogate_runner_factory(
 __all__ = [
     "FIT_CORPUS_FILENAME",
     "SURROGATE_VERDICT_FILENAME",
+    "SURROGATE_VERDICT_SHA256_FILENAME",
     "SurrogateFitCorpus",
     "SurrogateInstallRole",
     "SurrogateMeetingRunner",
@@ -626,4 +654,5 @@ __all__ = [
     "load_surrogate_runner_factory",
     "load_surrogate_verdict",
     "write_surrogate_verdict_artifact",
+    "write_verdict_sha256_sidecar",
 ]

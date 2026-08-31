@@ -325,9 +325,11 @@ report's prose:
   use-counters quoted in the campaign meters; under `"diagnostic-only"` the
   campaigns run the standing plan unchanged.
 * `meets_decision_bar: true`, `meets_top1_bar: true`, every cell beside its
-  bar (`decision_accuracy_bar: 0.625`, `top1_bar: 0.6375`,
-  `top1_ceiling: 0.85`, `top1_ceiling_ratio: 0.75`),
-  `exact_outcome_match: 0.7917` informational.
+  bar (`decision_accuracy_bar: 0.6263736263736264`,
+  `top1_bar: 0.618421052631579`, `top1_ceiling: 0.8245614035087719`,
+  `top1_ceiling_ratio: 0.75`),
+  `exact_outcome_match: 0.8351648351648352` informational. (Baseline-6 record,
+  for history: bars 0.625 / 0.6375, ceiling 0.85, exact match 0.7917.)
 * `adoption_constraints`: the §6.3 named constraints, machine-readable beside
   the consequence — they ride with adoption and never flip the pre-committed
   GO/NO-GO mapping.

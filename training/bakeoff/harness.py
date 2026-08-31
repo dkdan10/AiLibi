@@ -777,6 +777,14 @@ def _load_conviction_bundle(
     training/surrogate/runner.py:449-462). Otherwise a fresh counter is built
     from the committed cap, so the caller always gets a counter keyed to the
     exact artifact it will meter.
+
+    ``corpus_dir`` is NOT wired, unlike the surrogate side. The conviction
+    fit-corpus fence exists and the record it needs is now committed, but this
+    loader is also the seam every SYNTHETIC conviction fixture loads through —
+    fabricated weights that were never fitted on any corpus — so demanding a
+    record here would either break those fixtures or invite a fabricated one.
+    Wiring it needs a per-call opt-out, which changes this function's signature
+    and its two public callers'. Routed rather than half-done (PR #413).
     """
 
     model, sha = load_conviction_model_artifact(artifact_dir)

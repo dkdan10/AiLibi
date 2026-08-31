@@ -560,6 +560,8 @@ def test_an_undeclared_corpus_still_fails_the_grounding_row(tmp_path: Path) -> N
         f"{vme.SURROGATE_DIR}/ballot-predictor.json",
         f"{vme.SURROGATE_DIR}/ballot-predictor.json.sha256",
         f"{vme.CONVICTION_DIR}/fit-corpus.json",
+        f"{vme.CONVICTION_DIR}/conviction-model.json",
+        f"{vme.CONVICTION_DIR}/conviction-model.json.sha256",
     )
     corpus = root / vme.CORPUS_SET
     corpus.mkdir(parents=True)
@@ -580,6 +582,55 @@ def test_an_undeclared_corpus_still_fails_the_grounding_row(tmp_path: Path) -> N
     # The perturbation removed: the unmodified corpus reads OK.
     (corpus / "replay-seed-999999.jsonl").unlink()
     assert vme._grounding_row(root).status == "OK"
+
+
+def test_a_record_keyed_to_other_weights_fails_the_grounding_row(
+    tmp_path: Path,
+) -> None:
+    """A right-corpus, wrong-WEIGHTS record is an unusable bundle, and it FAILS.
+
+    The corpus fingerprint alone is not the whole record. A ``fit-corpus.json``
+    that names the live corpus but is keyed to weights it does not sit beside
+    describes a bundle ``load_conviction_model_artifact(..., corpus_dir=…)``
+    refuses to load — so certifying it would be a false green on exactly the
+    thing this row exists to answer (Codex review, PR #413). The same planted
+    case covers ``corpus_set``, the record's third field.
+    """
+
+    import json
+
+    root = tmp_path / "repo"
+    _manifests(root)
+    _link(
+        root,
+        f"{vme.SURROGATE_DIR}/fit-corpus.json",
+        f"{vme.SURROGATE_DIR}/ballot-predictor.json",
+        f"{vme.SURROGATE_DIR}/ballot-predictor.json.sha256",
+        f"{vme.CONVICTION_DIR}/conviction-model.json",
+        f"{vme.CONVICTION_DIR}/conviction-model.json.sha256",
+        vme.CORPUS_SET,
+    )
+    record_path = _copy(root, f"{vme.CONVICTION_DIR}/fit-corpus.json")
+
+    # The control: untouched, the row is green.
+    assert vme._grounding_row(root).status == "OK"
+
+    payload = json.loads(record_path.read_text())
+    assert payload["weights_sha256"] != "0" * 64
+    record_path.write_text(
+        json.dumps({**payload, "weights_sha256": "0" * 64}, indent=2) + "\n"
+    )
+    keyed_wrong = vme._grounding_row(root)
+    assert keyed_wrong.status == "FAIL"
+    assert "the load path would refuse it" in keyed_wrong.detail
+    assert vme.CONVICTION_DIR in keyed_wrong.detail
+
+    record_path.write_text(
+        json.dumps({**payload, "corpus_set": "4p1i"}, indent=2) + "\n"
+    )
+    wrong_set = vme._grounding_row(root)
+    assert wrong_set.status == "FAIL"
+    assert "corpus_set" in wrong_set.detail
 
 
 def test_main_runs_the_cheap_legs_green_at_head(

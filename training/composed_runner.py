@@ -135,6 +135,7 @@ from training.surrogate.fidelity import (
 from training.surrogate.runner import (
     SurrogateUseCounter,
     load_surrogate_runner_factory,
+    write_verdict_sha256_sidecar,
 )
 
 # The committed-artifact directories the composed runner reads through. Path
@@ -147,6 +148,9 @@ _COMPOSED_ARTIFACT_DIR: Final[Path] = Path("training/artifacts/composed")
 # The committed composed-artifact sidecars under ``training/artifacts/composed/``.
 COMPOSED_MANIFEST_FILENAME: Final[str] = "manifest.json"
 COMPOSED_VERDICT_FILENAME: Final[str] = "verdict.json"
+# The verdict's sha256 sidecar, written BY the verdict writer so it can never
+# be a hand-maintained file left stale beside new bytes.
+COMPOSED_VERDICT_SHA256_FILENAME: Final[str] = "verdict.json.sha256"
 
 # The orchestrator's meeting-id format (``orchestrator/game.py`` ``_game_id`` +
 # ``_run_and_apply_meeting``): ``"{game_id}:meeting-{meeting_index}"`` — parsed
@@ -1137,6 +1141,9 @@ def write_composed_verdict_artifact(
     artifact_dir.mkdir(parents=True, exist_ok=True)
     (artifact_dir / COMPOSED_VERDICT_FILENAME).write_text(
         json.dumps(verdict.model_dump(), indent=2, sort_keys=True) + "\n"
+    )
+    write_verdict_sha256_sidecar(
+        artifact_dir, COMPOSED_VERDICT_FILENAME, COMPOSED_VERDICT_SHA256_FILENAME
     )
 
 

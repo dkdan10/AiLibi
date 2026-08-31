@@ -1649,6 +1649,13 @@ def _grounding_row(repo_root: Path) -> CheckRow:
     the corpus now on disk. Disagreement FAILS: a number re-derived from weights
     fitted on other games is not a check of anything.
 
+    The record is checked as a WHOLE, not just its corpus digest: its
+    ``weights_sha256`` must name the weights it sits beside and its
+    ``corpus_set`` must name the set this leg fingerprinted. Those are exactly
+    the cross-checks ``load_surrogate_runner_factory`` and
+    ``load_conviction_model_artifact(..., corpus_dir=…)`` apply, so a record that
+    passes here is a record the product will actually load.
+
     The surrogate's grounding and the conviction model's are both MEASURED, each
     against its own record. The composed runner holds no weights of its own, so
     its rows are read against the same answer by extrapolation
@@ -1656,6 +1663,8 @@ def _grounding_row(repo_root: Path) -> CheckRow:
     it implicit, and a test refuses the day that directory ships a record.
     """
 
+    from training.conviction.model import load_conviction_model_artifact
+    from training.surrogate.ballots import load_ballot_predictor_artifact
     from training.surrogate.runner import (
         FIT_CORPUS_FILENAME,
         fit_corpus_fingerprint,
@@ -1663,15 +1672,36 @@ def _grounding_row(repo_root: Path) -> CheckRow:
     )
 
     live = fit_corpus_fingerprint(repo_root / CORPUS_SET)
-    measured = {
-        directory: load_fit_corpus_record(repo_root / directory).corpus_sha256
-        for directory in (SURROGATE_DIR, CONVICTION_DIR)
+    stated_set = CORPUS_SET.rsplit("/", 1)[-1]
+    weights_of = {
+        SURROGATE_DIR: lambda path: load_ballot_predictor_artifact(path)[1],
+        CONVICTION_DIR: lambda path: load_conviction_model_artifact(path)[1],
     }
-    drifted = sorted(
-        f"{directory}: the fit was made on {sha[:16]}…"
-        for directory, sha in measured.items()
-        if sha != live
-    )
+    measured: dict[str, str] = {}
+    drifted: list[str] = []
+    for directory in (SURROGATE_DIR, CONVICTION_DIR):
+        record = load_fit_corpus_record(repo_root / directory)
+        measured[directory] = record.corpus_sha256
+        # Three ways a record can fail to describe the fit beside it, and the
+        # product's own loaders refuse all three. Checking only the corpus
+        # fingerprint would certify a bundle `load_*_model_artifact(...,
+        # corpus_dir=...)` will not load (Codex review, PR #413).
+        if record.corpus_sha256 != live:
+            drifted.append(
+                f"{directory}: the fit was made on {record.corpus_sha256[:16]}…"
+            )
+        weights_sha = weights_of[directory](repo_root / directory)
+        if record.weights_sha256 != weights_sha:
+            drifted.append(
+                f"{directory}: the record is keyed on "
+                f"{record.weights_sha256[:16]}… but the committed weights hash "
+                f"to {weights_sha[:16]}… — the load path would refuse it"
+            )
+        if record.corpus_set != stated_set:
+            drifted.append(
+                f"{directory}: the record names corpus_set {record.corpus_set!r}, "
+                f"this leg fingerprinted {stated_set!r}"
+            )
     committed = ", ".join(
         f"{directory.rsplit('/', 1)[-1]} {sha[:16]}…"
         for directory, sha in sorted(measured.items())
@@ -1689,8 +1719,8 @@ def _grounding_row(repo_root: Path) -> CheckRow:
         detail=(
             "\n".join(
                 [
-                    "a committed fit was made on a corpus this checkout no "
-                    "longer holds — an undeclared substrate, which no "
+                    "a committed fit does not describe the weights beside it or "
+                    "the corpus under it — an undeclared substrate, which no "
                     "recomputation below can be read against",
                     *drifted,
                 ]

@@ -37,6 +37,7 @@ artifact and the committed 9p2i corpus:
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import re
 from collections.abc import Callable, Mapping
@@ -112,10 +113,20 @@ from training.surrogate.runner import (
     load_surrogate_verdict,
     write_surrogate_verdict_artifact,
 )
+from training.composed_runner import (
+    load_composed_verdict,
+    write_composed_verdict_artifact,
+)
+from training.conviction.fidelity import (
+    load_conviction_verdict,
+    write_conviction_verdict_artifact,
+)
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _CORPUS = _REPO_ROOT / "replays" / "ml_corpus" / "9p2i"
 _ARTIFACT_DIR = _REPO_ROOT / "training" / "artifacts" / "surrogate"
+_CONVICTION_ARTIFACT_DIR = _REPO_ROOT / "training" / "artifacts" / "conviction"
+_COMPOSED_ARTIFACT_DIR = _REPO_ROOT / "training" / "artifacts" / "composed"
 
 # Task 18.14 re-fit the committed artifact on the baseline-6 corpus and re-pinned
 # every corpus-derived number below. The seven ``_PENDING_SURROGATE_REGROUND_1814``
@@ -668,6 +679,47 @@ def test_the_committed_verdict_is_keyed_on_the_weights_and_reproduces(
         if key != "replay_set_dir" and committed_fields[key] != rederived_fields[key]
     }
     assert not differing
+
+
+def test_every_verdict_writer_emits_its_own_sha256_sidecar(tmp_path: Path) -> None:
+    """A verdict's sidecar is DERIVED by its writer, never maintained by hand.
+
+    ``scripts/verify_ml_evidence.py``'s sidecar leg walks every ``*.sha256`` in
+    the tree and re-hashes its target, so a writer that emitted only the JSON
+    would strand the PREVIOUS verdict's digest beside new bytes — green on the
+    commit that hand-wrote the sidecar, red at the next re-ground that followed
+    the documented recipe. All three writers are covered together, because the
+    failure is per-writer and one of them getting it right proves nothing about
+    the other two.
+
+    The planted case is the re-write: write once, tamper the sidecar, write
+    again, and the sidecar must be correct — a writer that only creates a
+    missing sidecar would pass a first-write-only assertion and still strand a
+    stale digest on every re-ground after it.
+    """
+
+    committed = load_surrogate_verdict(_ARTIFACT_DIR)
+    conviction = load_conviction_verdict(_CONVICTION_ARTIFACT_DIR)
+    composed = load_composed_verdict(_COMPOSED_ARTIFACT_DIR)
+
+    for index, (write, verdict, sidecar_name) in enumerate(
+        (
+            (write_surrogate_verdict_artifact, committed, "verdict.json.sha256"),
+            (write_conviction_verdict_artifact, conviction, "verdict.json.sha256"),
+            (write_composed_verdict_artifact, composed, "verdict.json.sha256"),
+        )
+    ):
+        artifact_dir = tmp_path / f"artifact-{index}"
+        write(verdict, artifact_dir)  # type: ignore[operator]
+        sidecar = artifact_dir / sidecar_name
+        payload = (artifact_dir / "verdict.json").read_bytes()
+        expected = f"{hashlib.sha256(payload).hexdigest()}  verdict.json\n"
+        assert sidecar.read_text() == expected
+
+        # The planted case: a stale sidecar is OVERWRITTEN by the next write.
+        sidecar.write_text(f"{'0' * 64}  verdict.json\n")
+        write(verdict, artifact_dir)  # type: ignore[operator]
+        assert sidecar.read_text() == expected
 
 
 def test_writing_a_verdict_that_names_no_weights_is_refused(tmp_path: Path) -> None:

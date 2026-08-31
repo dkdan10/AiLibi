@@ -235,17 +235,17 @@ the exact `suspicion_graph_for_meeting()` accessor a live meeting consumes):
    > class `meetings.schemas.BallotTargetRewriteReason` names, read from that
    > union rather than re-spelled — while the two citation-only rewrites stay in
    > the fit, labelled and counted, because they null a reference and leave the
-   > target intact. On the corpus now on disk the whole-table census moves from
-   > 7 rows to 102 (9p2i) and from 0 to 2 (4p1i); what a fit actually drops is
-   > the `train ∪ val` share of that — **7 → 82** on 9p2i and 0 → 2 on 4p1i, the
-   > other 20 being held-out rows no fit path ever consumed. Over the same
+   > target intact. On the corpus now on disk the whole-table census is
+   > **80 rows (9p2i), 67 of them fit-side, and 2 of 2 (4p1i)**. Over the same
    > window the `is_reporter`
    > slot is masked to a constant on the fit and the serve side alike: the
-   > reporter is a crewmate on all 3,602 recorded ballots across the four
+   > reporter is a crewmate on every recorded ballot across the four
    > committed sets, so a fit that reads it learns roles ground truth rather than
-   > a ballot. **Every number in this report is the baseline-6 fit's, taken
-   > before both changes** — they are the record of that evaluation, and the ML
-   > re-ground re-states them.
+   > a ballot. **Both changes are IN the committed fit as of Task 21.17**: the
+   > weights this report ships (`06b20508…`) were fitted with the widened
+   > exclusion applied and the reporter slot masked, and §§3–5 are that fit's
+   > held-out evaluation. The baseline-6 figures this note was written beside —
+   > a 7-row census, and every cell in the report at the time — are history.
 
 ---
 
