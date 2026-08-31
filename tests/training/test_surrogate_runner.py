@@ -582,10 +582,14 @@ def test_fit_corpus_fence_fails_loud_on_substrate_and_key_drift(
     live_fingerprint = fit_corpus_fingerprint(_CORPUS)
     assert committed_record.corpus_sha256 == live_fingerprint
     perturbed = committed_record.model_copy(
-        update={"corpus_sha256": ("b" if live_fingerprint[0] != "b" else "c")
-        + live_fingerprint[1:]}
+        update={
+            "corpus_sha256": ("b" if live_fingerprint[0] != "b" else "c")
+            + live_fingerprint[1:]
+        }
     )
-    (tmp_path / "fit-corpus.json").write_text(perturbed.model_dump_json(indent=2) + "\n")
+    (tmp_path / "fit-corpus.json").write_text(
+        perturbed.model_dump_json(indent=2) + "\n"
+    )
     with pytest.raises(ValueError, match="substrate drifted"):
         load_surrogate_runner_factory(tmp_path, corpus_dir=_CORPUS)
 

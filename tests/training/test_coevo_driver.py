@@ -69,7 +69,6 @@ import pytest
 
 from llm.provider import ENV_PROVIDER, PROVIDER_FAKE, build_default_client
 from orchestrator.game import MeetingRunner, build_default_meeting_runner
-from training.anchor_study import compute_substrate_sha
 from training.bakeoff.es import random_genome
 from training.bakeoff.harness import (
     BakeoffPolicy,
@@ -1466,15 +1465,17 @@ def _provenance_substrate_prefix() -> str:
     is inconsistent and there is nothing to pin against.
     """
 
-    prefixes = set()
+    prefixes: set[str] = set()
     scripts = sorted(_COEVO_PROVENANCE_DIR.glob("harness_run_*.py.txt"))
     assert scripts, f"no committed campaign harnesses under {_COEVO_PROVENANCE_DIR}"
     for script in scripts:
         found = _HARNESS_SUBSTRATE_ASSERT.findall(script.read_text(encoding="utf-8"))
         assert found, f"{script.name} records no substrate assertion"
-        prefixes.update(found)
+        prefixes.update(str(prefix) for prefix in found)
     assert len(prefixes) == 1, f"the committed harnesses disagree: {sorted(prefixes)}"
     return prefixes.pop()
+
+
 # The projected per-run game ceiling every run stayed under.
 _CAMPAIGN_GAME_CEILING: int = 25000
 

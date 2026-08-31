@@ -250,7 +250,9 @@ def test_walk_fails_loud_when_an_alive_impostor_action_is_missing(
         for disposition, kept in zip(first["action_dispositions"], keep, strict=True)
         if kept
     ]
-    first["actions"] = [raw for raw, kept in zip(first["actions"], keep, strict=True) if kept]
+    first["actions"] = [
+        raw for raw, kept in zip(first["actions"], keep, strict=True) if kept
+    ]
     assert len(first["actions"]) == len(keep) - 2
     lines[0] = json.dumps(first)
     drifted = tmp_path / "replay-seed-1000.jsonl"
