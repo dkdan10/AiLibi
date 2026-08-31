@@ -736,6 +736,49 @@ def test_record_path_accepts_stamped_present_replay(tmp_path: Path) -> None:
     assert "disagrees with the requested roster" in out
 
 
+def test_an_audit_sidecar_is_refused_by_range_not_misread_as_a_stampless_replay(
+    tmp_path: Path,
+) -> None:
+    # The planted case for the <n>.audit guard, and it pins WHICH guard speaks.
+    #
+    # A wrapper writes each seed's observation log as replay-seed-<n>.audit.jsonl,
+    # and BOTH scans over that glob match it. check_seed_range refuses it as a
+    # stray file — pre-spend, naming the real cause. check_replay_provenance must
+    # NOT also report it as a stampless replay: that message is wrong (the file is
+    # not a replay) and it is the one that arrives at the END of a multi-hour leg.
+    corpus_root = tmp_path / "ml_corpus"
+    set_dir = corpus_root / "4p1i"
+    set_dir.mkdir(parents=True)
+    (set_dir / "replay-seed-1000.jsonl").write_text(
+        _baseline6_corpus_replay_text(), encoding="utf-8"
+    )
+    # The sidecar: a real one holds observation packets, and carries no stamp.
+    (set_dir / "replay-seed-1000.audit.jsonl").write_text(
+        '{"kind": "observation_packet"}\n', encoding="utf-8"
+    )
+    (set_dir / "roster.json").write_text(
+        json.dumps({"num_players": 9, "num_impostors": 2, "tasks_per_crewmate": 2})
+    )
+    env = dict(
+        _clean_env(),
+        AILIBI_LLM_PROVIDER="featherless",
+        FEATHERLESS_API_KEY="test-key-unused",
+        AILIBI_PROMPT_SET="qwen3_6_27b",
+        AILIBI_ML_CORPUS_ROOT=str(corpus_root),
+    )
+
+    proc = _run("--set", "4p1i", env=env, timeout=120)
+
+    assert proc.returncode != 0
+    out = proc.stdout + proc.stderr
+    # The range guard speaks, names the file, and refuses BEFORE any spend.
+    assert "check_seed_range" in out
+    assert "replay-seed-1000.audit.jsonl" in out
+    # The provenance scan does NOT: it skipped the sidecar rather than judging it.
+    assert "check_replay_provenance" not in out
+    assert "no tactical_policy stamp" not in out
+
+
 def test_record_path_refuses_non_canonical_stamp_fields(tmp_path: Path) -> None:
     # Matching policy_id alone is not enough: a hand-crafted stamp with
     # policy_id="fsm-default" but non-canonical method/encoder/weights/anchor

@@ -77,3 +77,21 @@ def test_write_report_emits_a_loadable_consistent_file(tmp_path: Path) -> None:
     assert json.loads(written) == json.loads(
         _COMMITTED_REPORT.read_text(encoding="utf-8")
     )
+
+
+def test_seeds_on_disk_skips_an_audit_sidecar(tmp_path: Path) -> None:
+    """The planted case: a ``<n>.audit`` stem is skipped, not parsed.
+
+    A wrapper writes ``replay-seed-<n>.audit.jsonl`` beside the replay and the
+    glob matches it; parsing that stem raised an uncaught ``ValueError``, so this
+    guard is the difference between a report and a crash.
+    """
+
+    (tmp_path / "replay-seed-4.jsonl").write_text("")
+    (tmp_path / "replay-seed-9.jsonl").write_text("")
+
+    assert bsr._seeds_on_disk(tmp_path) == [4, 9]
+
+    (tmp_path / "replay-seed-4.audit.jsonl").write_text("")
+
+    assert bsr._seeds_on_disk(tmp_path) == [4, 9]

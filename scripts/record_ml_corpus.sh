@@ -776,6 +776,11 @@ slate = {
 canonical_keys = set(SUBSTRATE_FLAG_KEYS)
 bad: list[str] = []
 for path in sorted(set_dir.glob("replay-seed-*.jsonl")):
+    # A wrapper's ``replay-seed-<n>.audit.jsonl`` observation sidecar matches this
+    # glob and is NOT a replay: judged as one it reports as a stampless replay and
+    # refuses the freeze at the end of a multi-hour leg. Skip a non-integer stem.
+    if not path.stem.rsplit("-", 1)[1].isdigit():
+        continue
     stamp = read_tactical_policy_stamp(path)
     if stamp is None:
         bad.append(f"{path.name}: no tactical_policy stamp")

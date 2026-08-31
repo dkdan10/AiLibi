@@ -280,14 +280,21 @@ def resolve_roster_knobs(sample_dir: Path) -> tuple[int, int, int]:
 
 
 def seeds_on_disk(sample_dir: Path) -> list[int]:
-    """Seeds with a committed ``replay-seed-{n}.jsonl``, sorted and de-duplicated."""
+    """Seeds with a committed ``replay-seed-{n}.jsonl``, sorted and de-duplicated.
 
-    return sorted(
-        {
-            int(path.stem.rsplit("-", 1)[1])
-            for path in sample_dir.glob("replay-seed-*.jsonl")
-        }
-    )
+    A stem whose trailing segment is not an integer is SKIPPED, not parsed. The
+    glob matches a wrapper's ``replay-seed-<n>.audit.jsonl`` observation sidecar,
+    whose stem ends ``<n>.audit`` — parsing that raised an uncaught ``ValueError``
+    and aborted the gate with a traceback instead of a report. The guard mirrors
+    ``scripts/_manifest_writer.py``'s ``core.isdigit()`` precedent.
+    """
+
+    seeds: set[int] = set()
+    for path in sample_dir.glob("replay-seed-*.jsonl"):
+        core = path.stem.rsplit("-", 1)[1]
+        if core.isdigit():
+            seeds.add(int(core))
+    return sorted(seeds)
 
 
 def roles_by_seed(

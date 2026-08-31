@@ -831,6 +831,25 @@ def test_seeds_on_disk() -> None:
     assert len(seeds_on_disk(_FOUR)) == 50
 
 
+def test_seeds_on_disk_skips_an_audit_sidecar(tmp_path: Path) -> None:
+    """The planted case: a ``<n>.audit`` stem is skipped, not parsed.
+
+    A wrapper writes ``replay-seed-<n>.audit.jsonl`` beside the replay, and the
+    glob matches it. Parsing that stem raised an uncaught ``ValueError`` and
+    aborted the gate with a traceback instead of a report, so the guard is the
+    difference between a report and a crash — not a tidier list.
+    """
+
+    (tmp_path / "replay-seed-7.jsonl").write_text("")
+    (tmp_path / "replay-seed-11.jsonl").write_text("")
+
+    assert seeds_on_disk(tmp_path) == [7, 11]
+
+    (tmp_path / "replay-seed-7.audit.jsonl").write_text("")
+
+    assert seeds_on_disk(tmp_path) == [7, 11]
+
+
 def test_run_validity_gate_reproduces_9p2i_close() -> None:
     report = run_validity_gate(_NINE)
     assert report.passed

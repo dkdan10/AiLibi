@@ -109,14 +109,18 @@ def _seeds_on_disk(sample_dir: Path) -> list[int]:
     Mirrors the loader's dedup (and the ``_committed_9p2i_seeds`` test helper):
     parse the trailing integer of each glob match and return them sorted and
     de-duplicated, so a zero-padded alias cannot double-count a seed.
+
+    A stem whose trailing segment is not an integer is SKIPPED, not parsed: the
+    glob also matches a wrapper's ``replay-seed-<n>.audit.jsonl`` observation
+    sidecar, and parsing that stem raised an uncaught ``ValueError``.
     """
 
-    return sorted(
-        {
-            int(path.stem.rsplit("-", 1)[1])
-            for path in sample_dir.glob("replay-seed-*.jsonl")
-        }
-    )
+    seeds: set[int] = set()
+    for path in sample_dir.glob("replay-seed-*.jsonl"):
+        core = path.stem.rsplit("-", 1)[1]
+        if core.isdigit():
+            seeds.add(int(core))
+    return sorted(seeds)
 
 
 def _roles_by_seed(
