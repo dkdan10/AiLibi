@@ -52,6 +52,7 @@ from pydantic import ValidationError
 from api.schemas import classify_evidence
 from engine.entities import Role
 from eval.deduction_metrics import (
+    CONFESSION_QUOTATION_EXCLUSIONS,
     MACHINERY_DECIMAL_PATTERN,
     MACHINERY_VOCABULARY,
     SELF_KILL_PHRASES,
@@ -60,11 +61,13 @@ from eval.deduction_metrics import (
     WilsonRateCell,
     _authored_target,
     _matches,
+    _player_visible_text,
     _scan_marker_chain,
     _split_rationale,
     _wilson_interval,
     _is_omniscient,
     _is_oracle_register,
+    _is_self_disclosure,
     classify_flag,
     compute_deduction_metrics,
     witnessed_supply_from_kill_craft,
@@ -2551,3 +2554,227 @@ def test_the_crew_omniscient_control_is_one_on_each_9p2i_set(
     assert corpus_4p1i.deduction.scaffold_leakage.crew_omniscient_control_ballots == 0
     for report in (samples_9p2i, corpus_9p2i, samples_4p1i, corpus_4p1i):
         assert report.deduction.scaffold_leakage.crew_partner_naming_ballots == 0
+
+
+# --------------------------------------------------------------------------- #
+# 9. The player-visible self-disclosure pair (upper bound + its crew control). #
+# --------------------------------------------------------------------------- #
+
+
+def _spoken_turn(
+    *,
+    speaker: PlayerId,
+    free_text: str = "",
+    reason: str = "r",
+) -> MeetingTurn:
+    """One turn whose free text and accusation reason are both set by hand."""
+
+    return MeetingTurn(
+        turn_id="m:turn-0",
+        turn_index=0,
+        speaker=speaker,
+        turn_kind="opening",
+        reply_to=None,
+        observations=(),
+        claims=(
+            AccusationClaim(
+                type="accusation", against="p-2", confidence=0.8, reason=reason
+            ),
+        ),
+        free_text=free_text,
+    )
+
+
+def _visible_cells(
+    *, speaker_role: Role, free_text: str = "", reason: str = "r"
+) -> tuple[int, int]:
+    """``(impostor cell, crew control)`` for one hand-built turn."""
+
+    report = _synthetic_report(
+        turns=(_spoken_turn(speaker="p-1", free_text=free_text, reason=reason),),
+        ballots=(_ballot("p-1", "SKIP"), _ballot("p-2", "SKIP")),
+        roles={"p-1": speaker_role, "p-2": "CREWMATE"},
+    )
+    leakage = compute_deduction_metrics(report).scaffold_leakage
+    return (
+        leakage.model_self_disclosure_visible_turns,
+        leakage.crew_self_disclosure_control_turns,
+    )
+
+
+def test_the_visible_net_reads_the_claim_reason_not_only_free_text() -> None:
+    """The surface is what the TABLE reads, and the reason is on the table.
+
+    The one genuine confession on the committed bytes lives in an accusation's
+    ``reason`` while the same turn's ``free_text`` is a denial, so a net over
+    ``free_text`` alone reports that turn clean — which is the zero this pair
+    exists to stop meaning "we did not look".
+    """
+
+    assert _visible_cells(
+        speaker_role="IMPOSTOR",
+        free_text="I was in Storage at tick 17, so I could not have done it.",
+        reason="p-8 moved in right after I killed p-1.",
+    ) == (1, 0)
+    # The partner net over ``free_text`` alone sees nothing in that same turn.
+    report = _synthetic_report(
+        turns=(
+            _spoken_turn(
+                speaker="p-1",
+                free_text="I was in Storage at tick 17, so I could not have done it.",
+                reason="p-8 moved in right after I killed p-1.",
+            ),
+        ),
+        ballots=(_ballot("p-1", "SKIP"), _ballot("p-2", "SKIP")),
+        roles={"p-1": "IMPOSTOR", "p-2": "CREWMATE"},
+    )
+    assert (
+        compute_deduction_metrics(report).scaffold_leakage.player_visible_leak_turns
+        == 0
+    )
+
+
+def test_the_net_also_reads_an_alibi_claims_evidence() -> None:
+    """``AlibiClaim`` carries ``evidence`` rather than ``reason``, and it is spoken."""
+
+    report = _synthetic_report(
+        turns=(
+            MeetingTurn(
+                turn_id="m:turn-0",
+                turn_index=0,
+                speaker="p-1",
+                turn_kind="opening",
+                reply_to=None,
+                observations=(),
+                claims=(
+                    AlibiClaim(
+                        type="alibi",
+                        subject="p-1",
+                        from_tick=1,
+                        to_tick=2,
+                        room="CAFETERIA",
+                        evidence=("I am the impostor and I was alone",),
+                    ),
+                ),
+                free_text="",
+            ),
+        ),
+        ballots=(_ballot("p-1", "SKIP"), _ballot("p-2", "SKIP")),
+        roles={"p-1": "IMPOSTOR", "p-2": "CREWMATE"},
+    )
+    leakage = compute_deduction_metrics(report).scaffold_leakage
+    assert leakage.model_self_disclosure_visible_turns == 1
+
+
+def test_the_crew_cell_is_the_false_positive_control() -> None:
+    """A crewmate has no kill to confess, so every crew match is noise.
+
+    The pair must be read together: the same sentence scores in the control when
+    a crewmate says it, which is what stops the impostor cell being quoted as a
+    leak RATE.
+    """
+
+    assert _visible_cells(
+        speaker_role="CREWMATE", free_text="not because I killed anyone"
+    ) == (0, 1)
+    assert _visible_cells(
+        speaker_role="IMPOSTOR", free_text="not because I killed anyone"
+    ) == (1, 0)
+
+
+@pytest.mark.parametrize("excluded", CONFESSION_QUOTATION_EXCLUSIONS)
+def test_the_exclusion_list_drops_a_quotation_or_conditional(excluded: str) -> None:
+    """Direction one: a phrase carried inside a rebuttal is not an admission."""
+
+    assert _visible_cells(
+        speaker_role="IMPOSTOR", free_text=f"{excluded} p-3 when I was in Labs?"
+    ) == (0, 0)
+
+
+def test_a_bare_first_person_admission_still_counts() -> None:
+    """Direction two: the exclusion must not swallow the class it is filtering.
+
+    Both directions are the planted case craft rule 2 asks for — an exclusion
+    that dropped everything would pass the test above on its own.
+    """
+
+    assert _visible_cells(
+        speaker_role="IMPOSTOR", free_text="I killed p-3 in Reactor."
+    ) == (1, 0)
+    assert _visible_cells(speaker_role="IMPOSTOR", free_text="I am the impostor.") == (
+        1,
+        0,
+    )
+
+
+def test_the_exclusion_bites_only_on_the_excluded_form() -> None:
+    """The gate can fail: the SAME sentence minus its quotation frame counts.
+
+    Fed through the real net, not through a re-implementation of it.
+    """
+
+    quoted = "How do you know I killed p-3? I was in Labs the whole time."
+    bare = "I killed p-3. I was in Labs the whole time."
+    assert _visible_cells(speaker_role="IMPOSTOR", free_text=quoted) == (0, 0)
+    assert _visible_cells(speaker_role="IMPOSTOR", free_text=bare) == (1, 0)
+
+
+@pytest.mark.parametrize(
+    ("set_name", "sample_dir", "impostor_cell", "crew_control"),
+    [
+        ("samples/9p2i", _SAMPLES_9P2I, 0, 1),
+        ("samples/4p1i", _SAMPLES_4P1I, 0, 0),
+        ("ml_corpus/9p2i", _CORPUS_9P2I, 1, 2),
+        ("ml_corpus/4p1i", _CORPUS_4P1I, 0, 1),
+    ],
+)
+def test_the_committed_sets_pin_the_visible_disclosure_pair(
+    set_name: str, sample_dir: Path, impostor_cell: int, crew_control: int
+) -> None:
+    """The measured reading, role-split, with the control beside it.
+
+    Pooled over the four sets the raw net fires on 10 of 3,631 turns (7 crew, 3
+    impostor); the documented exclusions drop 5 of them, leaving 5 — 4 crew and
+    1 impostor. The single impostor row is the one genuine confession, so the
+    within-impostor reading is 1/1 AFTER the exclusions and 1/3 before them.
+    Neither cell is a rate: the crew column is pure false positive by
+    construction.
+    """
+
+    leakage = _committed(sample_dir).deduction.scaffold_leakage
+    assert leakage.model_self_disclosure_visible_turns == impostor_cell
+    assert leakage.crew_self_disclosure_control_turns == crew_control
+    # An UPPER BOUND cannot exceed the turns it scanned.
+    assert leakage.model_self_disclosure_visible_turns <= leakage.turns_total
+    assert leakage.crew_self_disclosure_control_turns <= leakage.turns_total
+
+
+def test_the_pooled_visible_disclosure_reading_is_one_impostor_and_four_crew() -> None:
+    """The pooled cells, stated once so a single set cannot be quoted alone."""
+
+    cells = [
+        _committed(path).deduction.scaffold_leakage
+        for path in (_SAMPLES_9P2I, _SAMPLES_4P1I, _CORPUS_9P2I, _CORPUS_4P1I)
+    ]
+    assert sum(cell.model_self_disclosure_visible_turns for cell in cells) == 1
+    assert sum(cell.crew_self_disclosure_control_turns for cell in cells) == 4
+    assert sum(cell.turns_total for cell in cells) == 3631
+
+
+def test_the_one_impostor_row_is_the_named_exhibit() -> None:
+    """Name the exhibit: ml_corpus 9p2i seed 1079, meeting 2, speaker p-7.
+
+    The confession is in an accusation's ``reason``; the same turn's ``free_text``
+    is a denial. That placement is the whole argument for the scan surface.
+    """
+
+    corpus = _committed(_CORPUS_9P2I)
+    hits = [
+        (game.seed, meeting.meeting_id, turn.speaker)
+        for game in corpus.report.games
+        for meeting in game.meetings
+        for turn in meeting.transcript.turns
+        if game.roles[turn.speaker] == "IMPOSTOR"
+        and _is_self_disclosure(_player_visible_text(turn))
+    ]
+    assert hits == [(1079, "headless-seed-1079:meeting-2", "p-7")]

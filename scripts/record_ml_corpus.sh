@@ -120,8 +120,8 @@ CORPUS_ROOT="${AILIBI_ML_CORPUS_ROOT:-$REPO_ROOT/replays/ml_corpus}"
 # baseline-8 lever slate: the twenty-one retired always-on levers, which since
 # the baseline-7 record include the eight Phase-20 evidence-honesty levers
 # (audits/audit-phase-20-baseline-7.md §6.1), with the live toggles
-# (impostor_roll_call, reporter_reasoning, corroboration_discipline) recorded OFF
-# unless --expect-levers declares one ON. The
+# (impostor_roll_call, reporter_reasoning, corroboration_discipline,
+# testimony_shapes) recorded OFF unless --expect-levers declares one ON. The
 # two Wave-1a repair gates graduated at Task 21.15 and are deleted, not
 # retired, so this slate is byte-identical across that flip.
 # The preflight COUPLES model + prompt

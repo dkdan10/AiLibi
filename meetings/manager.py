@@ -109,7 +109,10 @@ from agents.memory.beliefs import (
 )
 from llm.client import LLMClient, LLMResponse
 from llm.provider import LLMCallFailure, extract_parse_failure
-from meetings.constants import DEFAULT_SKIP_CONFIDENCE_THRESHOLD
+from meetings.constants import (
+    DEFAULT_SKIP_CONFIDENCE_THRESHOLD,
+    testimony_shapes_enabled,
+)
 from meetings.corroboration import (
     MeetingTestimonyLedger,
     build_testimony_ledger,
@@ -143,6 +146,8 @@ from meetings.schemas import (
     ObservationId,
     PlayerId,
     ReportedStatement,
+    SawKillObservation,
+    SawMoveObservation,
     SawPlayerObservation,
     SawVentObservation,
     SightingRecord,
@@ -151,6 +156,7 @@ from meetings.schemas import (
     TurnKind,
     VentWitnessRecord,
     VoteBallot,
+    WhereaboutsClaim,
     bounded_marker_original,
 )
 from meetings.transcript import (
@@ -4024,7 +4030,11 @@ def derive_meeting_outcome_summary(result: MeetingResult) -> MeetingOutcomeSumma
     )
 
 
-def derive_reported_testimony(result: MeetingResult) -> tuple[ReportedStatement, ...]:
+def derive_reported_testimony(
+    result: MeetingResult,
+    *,
+    env: Mapping[str, str] | None = None,
+) -> tuple[ReportedStatement, ...]:
     """Reduce a resolved meeting to its public reported testimony (Task 13.5.2).
 
     The content twin of :func:`extract_belief_evidence` -- where that reduction
@@ -4049,6 +4059,20 @@ def derive_reported_testimony(result: MeetingResult) -> tuple[ReportedStatement,
     mints no evidence -- the STRONG ``vent_sighting`` flag is a separate,
     grounded channel.
 
+    Under the ``testimony_shapes`` lever (default OFF,
+    :func:`meetings.constants.testimony_shapes_enabled`, resolved ONCE here from
+    ``env``) three more spoken shapes survive:
+    :class:`~meetings.schemas.WhereaboutsClaim` as a ``whereabouts``
+    self-placement, :class:`~meetings.schemas.SawMoveObservation` as a
+    ``saw_move`` carrying its DESTINATION placement alone, and
+    :class:`~meetings.schemas.SawKillObservation` as a ``saw_kill``. They mint no
+    evidence either. With the lever OFF the returned tuple is produced by
+    exactly the code that produced it before the lever existed, which is what
+    lets every committed recording re-derive byte-identically -- and why a
+    recording's substrate stamp carries the lever's state
+    (``orchestrator.replay.SUBSTRATE_FLAG_KEYS``), so a load-time re-derivation
+    can never run a slate the recording did not.
+
     Speaker-gated; subject gating deferred to ingest (Codex P2, Task 13.5.2):
     ``roster`` is the meeting's living-participant set read off the recorded
     ballots (identical to :func:`extract_belief_evidence`). Only the SPEAKER is
@@ -4072,6 +4096,7 @@ def derive_reported_testimony(result: MeetingResult) -> tuple[ReportedStatement,
     :func:`apply_meeting_evidence_rules`).
     """
 
+    shapes_on = testimony_shapes_enabled(env)
     roster = frozenset(ballot.voter for ballot in result.ballots)
     statements: list[ReportedStatement] = []
     for turn in result.transcript.turns:
@@ -4100,6 +4125,44 @@ def derive_reported_testimony(result: MeetingResult) -> tuple[ReportedStatement,
                         from_tick=observation.tick,
                         to_tick=observation.tick,
                         room=observation.room,
+                    )
+                )
+            elif shapes_on and isinstance(observation, SawKillObservation):
+                statements.append(
+                    ReportedStatement(
+                        speaker=speaker,
+                        kind="saw_kill",
+                        subject=observation.subject,
+                        from_tick=observation.tick,
+                        to_tick=observation.tick,
+                        room=observation.room,
+                    )
+                )
+            elif shapes_on and isinstance(observation, WhereaboutsClaim):
+                # A self-placement: the shape carries no subject because the
+                # subject IS the speaker.
+                statements.append(
+                    ReportedStatement(
+                        speaker=speaker,
+                        kind="whereabouts",
+                        subject=speaker,
+                        from_tick=observation.tick,
+                        to_tick=observation.tick,
+                        room=observation.room,
+                    )
+                )
+            elif shapes_on and isinstance(observation, SawMoveObservation):
+                # The DESTINATION placement only, copying the rule the detector
+                # applies to the same shape: an inferred ``tick - 1`` origin
+                # would re-open the off-by-one class the shape closes.
+                statements.append(
+                    ReportedStatement(
+                        speaker=speaker,
+                        kind="saw_move",
+                        subject=observation.subject,
+                        from_tick=observation.tick,
+                        to_tick=observation.tick,
+                        room=observation.to_room,
                     )
                 )
         for claim in turn.claims:

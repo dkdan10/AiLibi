@@ -10970,6 +10970,8 @@
       "crew_partner_naming_ballots": 0,
       "crew_omniscient_control_ballots": 0,
       "player_visible_leak_turns": 0,
+      "model_self_disclosure_visible_turns": 0,
+      "crew_self_disclosure_control_turns": 0,
       "model_partner_naming_rate": {
         "numerator": 0,
         "denominator": 39,

@@ -21,6 +21,7 @@ unchanged. These tests pin that contract OFFLINE (no LLM, no network):
 
 from __future__ import annotations
 
+import difflib
 import re
 import shutil
 from pathlib import Path
@@ -1041,3 +1042,143 @@ class TestVersionMarkersMatchTheRegistry:
         # ...and the unmodified file still passes, so the check is not vacuous.
         live_file = _PROMPTS_ROOT / "qwen3_6_27b" / "vote_ballot.j2"
         assert _marker_version(_template_header(live_file)) == stamp
+
+
+# --------------------------------------------------------------------------- #
+# The testimony-shapes arm: a guarded block inside the served body             #
+# --------------------------------------------------------------------------- #
+
+# The two lines the arm inserts, verbatim. Written out here rather than read
+# back off the template, so a body edited to say something else fails HERE
+# instead of agreeing with itself.
+_KILL_MENU_ROW: str = (
+    '  {"type": "saw_kill", "tick": <int>, "subject": "<player id>", '
+    '"room": "<room id>"} — only for a kill you watched happen, copied exactly '
+    "from your memory line; name the killer, not the victim."
+)
+_KILL_MANDATE_PREFIX: str = (
+    "If instead you watched a KILL happen, that outranks even a vent: file it "
+    'as a structured "saw_kill" observation copied from your memory line'
+)
+
+_SHAPES_ON: dict[str, str] = {"AILIBI_TESTIMONY_SHAPES": "1"}
+
+
+def _inserted_lines(off: str, on: str) -> list[str]:
+    """The lines ON adds to OFF, as a DIFF — never as containment.
+
+    Containment would stay green if the guard leaked its block into the OFF path
+    or if an insertion swallowed the line beside it. A diff cannot: it reports
+    every removal and every replacement too.
+    """
+
+    diff = list(
+        difflib.unified_diff(off.splitlines(), on.splitlines(), lineterm="", n=0)
+    )
+    body = [line for line in diff if not line.startswith(("---", "+++", "@@"))]
+    assert all(line.startswith("+") for line in body), body
+    return [line[1:] for line in body]
+
+
+class TestTestimonyShapesIsExactlyTwoLines:
+    """ON equals OFF plus the shape-menu row and its one paired instruction."""
+
+    def _crewmate(self, env: dict[str, str]) -> str:
+        return build_prompt_renderers("qwen3_6_27b", env=env).crewmate_report(
+            agent_id="p-3",
+            current_tick=7,
+            meeting_trigger="a body was reported",
+            rendered_memory="(memory)",
+            public_transcript="",
+            living_ids=("p-1", "p-2"),
+        )
+
+    def _statement(self, env: dict[str, str], **overrides: object) -> str:
+        kwargs: dict[str, object] = {
+            "agent_id": "p-3",
+            "rendered_memory": "(memory)",
+            "transcript": MeetingTranscript(turns=()),
+            "contradictions": (),
+            "prior_turn": None,
+            "turn_kind": "reply",
+            "living_ids": ("p-1", "p-2"),
+        }
+        kwargs.update(overrides)
+        return build_prompt_renderers("qwen3_6_27b", env=env).statement(**kwargs)  # type: ignore[arg-type]
+
+    def test_the_opening_gains_exactly_the_two_lines(self) -> None:
+        inserted = _inserted_lines(self._crewmate({}), self._crewmate(_SHAPES_ON))
+        assert len(inserted) == 2
+        assert inserted[0].startswith(_KILL_MANDATE_PREFIX)
+        assert inserted[1] == _KILL_MENU_ROW
+
+    def test_the_crew_reply_gains_exactly_the_two_lines(self) -> None:
+        inserted = _inserted_lines(self._statement({}), self._statement(_SHAPES_ON))
+        assert len(inserted) == 2
+        assert inserted[0].startswith(_KILL_MANDATE_PREFIX)
+        assert inserted[1] == _KILL_MENU_ROW
+
+    def test_the_info_share_turn_gains_exactly_the_two_lines(self) -> None:
+        inserted = _inserted_lines(
+            self._statement({}, turn_kind="opt_in"),
+            self._statement(_SHAPES_ON, turn_kind="opt_in"),
+        )
+        assert len(inserted) == 2
+        assert inserted[0].startswith(_KILL_MANDATE_PREFIX)
+        assert inserted[1] == _KILL_MENU_ROW
+
+    @pytest.mark.parametrize("turn_kind", ["reply", "opt_in"])
+    def test_the_impostor_facing_render_is_byte_identical(self, turn_kind: str) -> None:
+        # The shape is offered to the CREW alone. An impostor holds no
+        # witnessed-kill row it could honestly speak — its own kill is its own
+        # first-person memory and a teammate's is suppressed before render — so
+        # offering it there would only be a confession prompt.
+        off = self._statement({}, is_impostor=True, turn_kind=turn_kind)
+        on = self._statement(_SHAPES_ON, is_impostor=True, turn_kind=turn_kind)
+        assert on == off
+        assert "saw_kill" not in on
+
+    def test_the_off_path_carries_no_byte_of_the_block(self) -> None:
+        # The half a containment assertion cannot make: with the lever OFF the
+        # guard must leak NOTHING — not the row, not the mandate, not a stray
+        # blank line the block's own ``{% if %}`` markers could have left behind.
+        for rendered in (self._crewmate({}), self._statement({})):
+            assert "saw_kill" not in rendered
+            assert _KILL_MANDATE_PREFIX not in rendered
+
+    def test_the_diff_gate_bites_on_a_leaking_guard(self, tmp_path: Path) -> None:
+        # The perturbation craft rule 2 asks for, run through the SAME checker,
+        # and it is the plausible authoring slip rather than a contrived one: a
+        # guard that tests only ``is defined`` is ALWAYS true, because the loader
+        # binds the kwarg on both paths — so the block renders with the lever OFF
+        # and the arm's bytes reach every committed recording. A containment
+        # assertion would stay green here; the diff must not.
+        scratch = tmp_path / "qwen3_6_27b"
+        shutil.copytree(_PROMPTS_ROOT / "qwen3_6_27b", scratch)
+        body = (scratch / "crewmate_report.j2").read_text(encoding="utf-8")
+        leaked = body.replace(
+            "{% if testimony_shapes is defined and testimony_shapes %}",
+            "{% if testimony_shapes is defined %}",
+        )
+        assert leaked != body
+        (scratch / "crewmate_report.j2").write_text(leaked, encoding="utf-8")
+
+        def render(env: dict[str, str]) -> str:
+            return build_prompt_renderers(
+                "qwen3_6_27b", root=tmp_path, env=env
+            ).crewmate_report(
+                agent_id="p-3",
+                current_tick=7,
+                meeting_trigger="a body was reported",
+                rendered_memory="(memory)",
+                public_transcript="",
+                living_ids=("p-1", "p-2"),
+            )
+
+        # The OFF render now carries the block, so ON adds nothing and the
+        # two-line assertion the real gate makes fails.
+        assert "saw_kill" in render({})
+        assert _inserted_lines(render({}), render(_SHAPES_ON)) != [
+            _KILL_MANDATE_PREFIX,
+            _KILL_MENU_ROW,
+        ]

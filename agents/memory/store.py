@@ -587,8 +587,12 @@ def absorb_reported_testimony(
     speech (the 2026-06-25 memory diagnosis, workflow ``wg54kfoxy``: "social info
     is a scalar, not content"): it appends one ``provenance="reported"`` episodic
     row per :class:`~meetings.schemas.ReportedStatement` and, for each
-    ``alibi`` statement, populates the previously-dead ``alibi_map`` via
-    :meth:`BeliefState.record_alibi`. The orchestrator and the replay loader call
+    ``alibi`` or ``whereabouts`` statement, populates the previously-dead
+    ``alibi_map`` via :meth:`BeliefState.record_alibi` -- a roll-call
+    self-placement is a location account like any other, so the map an agent
+    consults for "where did they say they were" holds both (a ``whereabouts``
+    statement exists only while the ``testimony_shapes`` lever is ON; the
+    reduction emits none with it OFF). The orchestrator and the replay loader call
     it per LIVING agent in the SAME loop as :func:`absorb_meeting_evidence`,
     unconditionally since Task 14.9 (the adopted 13.5.2 lever is the default
     substrate; the ``AILIBI_TESTIMONY_AS_CONTENT`` gate is retired).
@@ -615,7 +619,9 @@ def absorb_reported_testimony(
       firewall stays (unchanged, in :func:`absorb_meeting_evidence`).
     A ``saw_vent`` statement is kept as CONTENT: the game's one role-proving
     public observation survives the trip into memory with its room and tick
-    intact, instead of arriving as a bare accusation.
+    intact, instead of arriving as a bare accusation. The three
+    ``testimony_shapes`` kinds (``saw_kill``, ``whereabouts``, ``saw_move``)
+    ride the same path and the same guards; none of them mints evidence.
 
     Each row also carries the 1-based ``meeting_index`` it was spoken at, counted
     from the ``meeting_boundary`` markers :func:`absorb_meeting_evidence` has
@@ -689,7 +695,7 @@ def absorb_reported_testimony(
         # suspicion graph (Codex P2). The episodic CONTENT row above is still kept
         # -- the agent may want to know it was publicly placed somewhere.
         if (
-            statement.kind == "alibi"
+            statement.kind in ("alibi", "whereabouts")
             and statement.from_tick is not None
             and statement.subject != own_agent_id
         ):
@@ -1972,6 +1978,14 @@ def _render_reported_testimony(event: EpisodicEvent) -> _Observation | None:
     prefix = f"[tick {event.tick}] {meeting_tag} CLAIM by {speaker} (unverified):"
     if kind == "saw_vent" and isinstance(room, str) and isinstance(from_tick, int):
         body = f"saw {subject} VENT in {room} @ tick {from_tick}"
+    elif kind == "saw_kill" and isinstance(room, str) and isinstance(from_tick, int):
+        # Capitalised like the vent body: the same class of assertion, and
+        # unverified in exactly the same way -- the frame above says so.
+        body = f"saw {subject} KILL in {room} @ tick {from_tick}"
+    elif kind == "whereabouts" and isinstance(room, str) and isinstance(from_tick, int):
+        body = f"{subject} placed themselves in {room} @ tick {from_tick}"
+    elif kind == "saw_move" and isinstance(room, str) and isinstance(from_tick, int):
+        body = f"saw {subject} arrive in {room} @ tick {from_tick}"
     elif kind == "saw_player" and isinstance(room, str) and isinstance(from_tick, int):
         companions = event.payload.get("co_present")
         with_suffix = ""

@@ -408,6 +408,10 @@ function baseReport(): TournamentEvalReport {
         crew_partner_naming_ballots: 0,
         crew_omniscient_control_ballots: 0,
         player_visible_leak_turns: 0,
+        // The player-visible self-disclosure pair: an upper bound beside the
+        // crew control it must always be read with.
+        model_self_disclosure_visible_turns: 1,
+        crew_self_disclosure_control_turns: 2,
         model_partner_naming_rate: wilsonCell(20, 171),
         model_omniscient_rate: wilsonCell(28, 171),
         model_machinery_quotation_ballots: 27,

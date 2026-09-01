@@ -24,8 +24,11 @@ from meetings.schemas import (
     MeetingTurn,
     ObservationClaim,
     ReportedStatement,
+    SawKillObservation,
+    SawMoveObservation,
     SawPlayerObservation,
     VoteBallot,
+    WhereaboutsClaim,
 )
 
 _ROSTER = ("p-1", "p-2", "p-3", "p-4", "p-5")
@@ -284,3 +287,203 @@ class TestDeriveReportedTestimony:
 
     def test_empty_meeting_derives_nothing(self) -> None:
         assert derive_reported_testimony(_result_with()) == ()
+
+
+# --------------------------------------------------------------------------- #
+# The testimony-shapes lever: three more spoken shapes reach a listener        #
+# --------------------------------------------------------------------------- #
+
+_SHAPES_ON: dict[str, str] = {"AILIBI_TESTIMONY_SHAPES": "1"}
+
+_THREE_SHAPE_TURNS: tuple[MeetingTurn, ...] = (
+    _turn(
+        turn_index=0,
+        speaker="p-1",
+        observations=(
+            WhereaboutsClaim(type="whereabouts", tick=11, room="MEDBAY"),
+            SawMoveObservation(
+                type="saw_move",
+                tick=12,
+                subject="p-4",
+                from_room="ADMIN",
+                to_room="LABS",
+            ),
+            SawKillObservation(type="saw_kill", tick=13, subject="p-2", room="REACTOR"),
+        ),
+    ),
+)
+
+
+class TestTestimonyShapesLever:
+    """OFF is the pre-lever tuple; ON adds one statement per new shape."""
+
+    def test_off_drops_all_three_new_shapes(self) -> None:
+        result = _result_with(turns=_THREE_SHAPE_TURNS)
+
+        # The OFF tuple is produced by exactly the code that produced it before
+        # the lever existed: the three shapes fall through both loops, and the
+        # meeting reduces to nothing at all.
+        assert derive_reported_testimony(result, env={}) == ()
+        # Unset reads the same as an explicitly empty mapping (default OFF).
+        assert derive_reported_testimony(result) == ()
+
+    def test_on_emits_one_statement_per_new_shape(self) -> None:
+        statements = derive_reported_testimony(
+            _result_with(turns=_THREE_SHAPE_TURNS), env=_SHAPES_ON
+        )
+
+        by_kind = {statement.kind: statement for statement in statements}
+        assert set(by_kind) == {"whereabouts", "saw_move", "saw_kill"}
+        # A whereabouts is a SELF-placement: the shape carries no subject, so the
+        # subject is the speaker and the window is the single spoken tick.
+        assert by_kind["whereabouts"] == ReportedStatement(
+            speaker="p-1",
+            kind="whereabouts",
+            subject="p-1",
+            from_tick=11,
+            to_tick=11,
+            room="MEDBAY",
+        )
+        # A witnessed kill names the KILLER and carries no victim.
+        assert by_kind["saw_kill"] == ReportedStatement(
+            speaker="p-1",
+            kind="saw_kill",
+            subject="p-2",
+            from_tick=13,
+            to_tick=13,
+            room="REACTOR",
+        )
+
+    def test_a_transition_contributes_the_destination_only(self) -> None:
+        # The rule the detector applies to the same shape, copied: ONE placement,
+        # the arrival. Carrying the origin at ``tick - 1`` would re-open the
+        # off-by-one class the shape closes.
+        statements = derive_reported_testimony(
+            _result_with(turns=_THREE_SHAPE_TURNS), env=_SHAPES_ON
+        )
+
+        moves = [s for s in statements if s.kind == "saw_move"]
+        assert moves == [
+            ReportedStatement(
+                speaker="p-1",
+                kind="saw_move",
+                subject="p-4",
+                from_tick=12,
+                to_tick=12,
+                room="LABS",
+            )
+        ]
+        assert all(statement.room != "ADMIN" for statement in statements)
+
+    def test_the_lever_only_adds(self) -> None:
+        # Every OFF statement survives ON unchanged, so the lever is additive and
+        # a listener never LOSES content by turning it on.
+        result = _result_with(
+            turns=(
+                *_THREE_SHAPE_TURNS,
+                _turn(
+                    turn_index=1,
+                    speaker="p-3",
+                    observations=(
+                        SawPlayerObservation(
+                            type="saw_player", tick=9, subject="p-2", room="ADMIN"
+                        ),
+                    ),
+                    claims=(
+                        AccusationClaim(
+                            type="accusation",
+                            against="p-2",
+                            confidence=0.6,
+                            reason="near the body",
+                        ),
+                    ),
+                ),
+            )
+        )
+
+        off = derive_reported_testimony(result, env={})
+        on = derive_reported_testimony(result, env=_SHAPES_ON)
+        assert set(off) < set(on)
+        assert len(on) - len(off) == 3
+
+    def test_the_reduction_stays_deterministic_under_both_states(self) -> None:
+        # The module's own promise: the same recorded meeting reduces to the same
+        # tuple every time, with the lever as its only other input.
+        result = _result_with(turns=_THREE_SHAPE_TURNS)
+        for env in ({}, _SHAPES_ON):
+            first = derive_reported_testimony(result, env=env)
+            assert first == derive_reported_testimony(result, env=env)
+
+    def test_the_sort_key_totally_orders_a_mixed_statement_set(self) -> None:
+        # A mixed set of every kind, spoken out of order, still reduces to one
+        # deterministic sequence -- and the ORDER is the sort key's, not the
+        # transcript's, which is what makes the reduction replay-deterministic
+        # whatever order the turns arrived in.
+        turns = (
+            _turn(
+                turn_index=0,
+                speaker="p-3",
+                observations=(
+                    SawKillObservation(
+                        type="saw_kill", tick=13, subject="p-2", room="REACTOR"
+                    ),
+                    WhereaboutsClaim(type="whereabouts", tick=11, room="MEDBAY"),
+                ),
+            ),
+            _turn(
+                turn_index=1,
+                speaker="p-1",
+                observations=(
+                    SawMoveObservation(
+                        type="saw_move",
+                        tick=12,
+                        subject="p-4",
+                        from_room="ADMIN",
+                        to_room="LABS",
+                    ),
+                    SawPlayerObservation(
+                        type="saw_player", tick=9, subject="p-2", room="ADMIN"
+                    ),
+                ),
+                claims=(
+                    CorroborationClaim(
+                        type="corroboration", supports="p-2", on_tick=8, reason="ok"
+                    ),
+                ),
+            ),
+        )
+        statements = derive_reported_testimony(
+            _result_with(turns=turns), env=_SHAPES_ON
+        )
+
+        assert [(s.speaker, s.kind) for s in statements] == [
+            ("p-1", "corroboration"),
+            ("p-1", "saw_move"),
+            ("p-1", "saw_player"),
+            ("p-3", "saw_kill"),
+            ("p-3", "whereabouts"),
+        ]
+        # Total order: no two statements tie on the whole key.
+        keys = [
+            (s.speaker, s.kind, s.subject, s.from_tick, s.to_tick, s.room)
+            for s in statements
+        ]
+        assert len(set(keys)) == len(keys)
+
+    def test_a_non_roster_speaker_is_still_dropped_under_the_lever(self) -> None:
+        # The lever widens WHAT is carried, never WHO may speak: the roster gate
+        # is unchanged.
+        result = _result_with(
+            turns=(
+                _turn(
+                    turn_index=0,
+                    speaker="p-9",
+                    observations=(
+                        WhereaboutsClaim(type="whereabouts", tick=11, room="MEDBAY"),
+                    ),
+                ),
+            ),
+            voters=("p-1", "p-2", "p-3"),
+        )
+
+        assert derive_reported_testimony(result, env=_SHAPES_ON) == ()

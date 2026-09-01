@@ -63,8 +63,8 @@ can quietly name a different one.
 A behavioural change ships behind an `AILIBI_*` environment gate, then
 *graduates* at a reference recording: the gate is deleted, the behaviour becomes
 unconditional, and the key survives only in the recording stamp for provenance.
-Twenty-one have graduated; three live toggles remain — `impostor_roll_call`,
-`reporter_reasoning` and `corroboration_discipline`
+Twenty-one have graduated; four live toggles remain — `impostor_roll_call`,
+`reporter_reasoning`, `corroboration_discipline`, `testimony_shapes`
 ([`orchestrator/replay.py`](../orchestrator/replay.py));
 graduating obliges a prose sweep ([AGENTS.md](../AGENTS.md), "Graduation
 sweeps").

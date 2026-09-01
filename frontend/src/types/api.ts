@@ -730,6 +730,8 @@ export interface ScaffoldLeakageCells {
   crew_partner_naming_ballots: number;
   crew_omniscient_control_ballots: number;
   player_visible_leak_turns: number;
+  model_self_disclosure_visible_turns: number;
+  crew_self_disclosure_control_turns: number;
   model_partner_naming_rate: WilsonRateCell;
   model_omniscient_rate: WilsonRateCell;
   model_machinery_quotation_ballots: number;

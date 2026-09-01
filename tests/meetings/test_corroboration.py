@@ -252,9 +252,12 @@ class TestResolver:
 
 
 class TestRegistration:
-    def test_the_key_is_registered_last_and_stamps_false(self) -> None:
-        assert TOGGLEABLE_SUBSTRATE_FLAG_KEYS[-1] == _LEVER_KEY
-        assert SUBSTRATE_FLAG_KEYS[-1] == _LEVER_KEY
+    def test_the_key_keeps_its_index_and_stamps_false(self) -> None:
+        # A registration is a pure APPEND at the live end, so a sibling
+        # registering behind this key must not move it: the INDEX is the
+        # invariant a recorded stamp depends on, not being newest.
+        assert TOGGLEABLE_SUBSTRATE_FLAG_KEYS[2] == _LEVER_KEY
+        assert SUBSTRATE_FLAG_KEYS[23] == _LEVER_KEY
         assert substrate_flag_snapshot({})[_LEVER_KEY] is False
 
     def test_exporting_the_variable_flips_exactly_this_key(self) -> None:

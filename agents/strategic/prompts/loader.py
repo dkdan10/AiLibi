@@ -94,6 +94,20 @@ byte-identical to the committed registry. The matching provenance side
 lives in :data:`orchestrator.game.IMPOSTOR_ROLL_CALL_PROMPT_VERSION_SETS`
 (recorded ``prompt_versions`` come from that registry, never from this
 loader).
+
+The testimony-shapes arm
+========================
+
+The default-OFF :func:`meetings.constants.testimony_shapes_enabled` lever
+offers the crew turn bodies one witnessed-KILL shape — the strongest testimony
+the game produces, which no template offers at all with the lever OFF. It
+RE-BODIES rather than swaps: the block is guarded inside the served
+``crewmate_report.j2`` / ``accusation_round.j2``, so it cannot drift from the
+body it lives in and it composes with a sibling arm's block in the same file.
+Routing is therefore a render KWARG, resolved once in
+:func:`build_prompt_renderers` and bound into the partials at construction, and
+its provenance side is
+:data:`orchestrator.game.TESTIMONY_SHAPES_PROMPT_VERSION_SETS`.
 """
 
 from __future__ import annotations
@@ -110,6 +124,7 @@ from typing import Final, Literal
 from jinja2 import Environment, FileSystemLoader, StrictUndefined, TemplateNotFound
 
 from llm.provider import ENV_PROVIDER, PROVIDER_FAKE
+from meetings.constants import ENV_TESTIMONY_SHAPES, testimony_shapes_enabled
 from meetings.corroboration import MeetingTestimonyLedger
 from meetings.render_contract import (
     PromptRenderInputs,
@@ -616,6 +631,7 @@ def crewmate_report_prompt(
     render_inputs: PromptRenderInputs | None = None,
     reporter_context: ReporterContext | None = None,
     at_body: bool = False,
+    testimony_shapes: bool = False,
     environment: Environment | None = None,
     map_card: str = "",
 ) -> str:
@@ -654,6 +670,14 @@ def crewmate_report_prompt(
     referenced by any report template -- the opener is the reporter, whose
     discovery IS the report. Both are passed straight through; ``None`` /
     ``False`` renders byte-identically, which the prompt-byte golden pins.
+
+    ``testimony_shapes`` opens the served body's guarded witnessed-kill block --
+    one shape-menu row and the instruction line beside the vent mandate. It is
+    a render input rather than a lever read: :func:`build_prompt_renderers`
+    binds the resolved boolean at construction, so the routing decision is
+    frozen where ``prompt_versions_for_set`` reads the same lever and a mid-run
+    export cannot move bytes while the stamp stays put. The default ``False``
+    renders the committed bytes exactly.
     """
 
     inputs = _render_inputs_for(render_inputs, map_card=map_card)
@@ -674,6 +698,7 @@ def crewmate_report_prompt(
             impostors=_impostor_wording(inputs.impostor_count),
             reporter_context=reporter_context,
             at_body=at_body,
+            testimony_shapes=testimony_shapes,
         )
     )
 
@@ -794,6 +819,7 @@ def accusation_round_prompt(
     render_inputs: PromptRenderInputs | None = None,
     reporter_context: ReporterContext | None = None,
     at_body: bool = False,
+    testimony_shapes: bool = False,
     environment: Environment | None = None,
     template_name: str | None = None,
     map_card: str = "",
@@ -879,6 +905,16 @@ def accusation_round_prompt(
     when the meeting opened and renders one neutral self-addressed line -- never
     a roster of who else was there. ``None`` / ``False`` renders byte-identically,
     which the prompt-byte golden pins.
+
+    ``testimony_shapes`` opens the served body's guarded witnessed-kill block on
+    the CREW branch -- one shape-menu row and the instruction line beside the
+    vent mandate. An impostor-facing render is byte-identical under both states:
+    an impostor holds no witnessed-kill row it could honestly speak (its own
+    kill is its own first-person memory, and a teammate's is suppressed before
+    render), so offering it there would only be a confession prompt. Bound at
+    construction by :func:`build_prompt_renderers`, alongside the same lever
+    read that serves the version stamp; the default ``False`` renders the
+    committed bytes exactly.
     """
 
     resolved_template = (
@@ -913,6 +949,7 @@ def accusation_round_prompt(
             flag_groups=_group_flags(contradictions),
             reporter_context=reporter_context,
             at_body=at_body,
+            testimony_shapes=testimony_shapes,
         )
     )
 
@@ -1009,6 +1046,42 @@ class PromptRenderers:
     vote: VotePromptRenderer
 
 
+_TESTIMONY_SHAPES_GUARD: Final[str] = "testimony_shapes"
+
+
+def _require_testimony_shapes_bodies(
+    environment: Environment,
+    *,
+    set_name: str,
+    templates: tuple[str, ...],
+) -> None:
+    """Refuse a lever-ON bundle whose bodies carry no guarded block.
+
+    The arm RE-BODIES the set's own templates, so "no arm here" is a MISSING
+    BODY -- a real defect that must surface at construction rather than as a
+    silently unguarded render. The message names the body, never a sibling
+    lever: an all-ON slate is exactly what the adopting record runs.
+
+    Checked against the templates THIS arm re-bodies, not against whatever
+    filename a sibling swapped in. An arm that swaps a variant FILE serves a
+    body written independently of every sibling, so this arm's block does not
+    reach it -- the known gap pinned in
+    ``tests/meetings/test_prompt_byte_golden.py``, which belongs to the swapping
+    arm and is not a defect in this set's bodies.
+    """
+
+    for name in templates:
+        source = environment.loader.get_source(environment, name)[0]  # type: ignore[union-attr]
+        if _TESTIMONY_SHAPES_GUARD not in source:
+            raise ValueError(
+                f"Prompt set {set_name!r} template {name!r} carries no "
+                f"{_TESTIMONY_SHAPES_GUARD!r} block; the "
+                f"{ENV_TESTIMONY_SHAPES} lever is only authored for the "
+                "'qwen3_6_27b' set — unset the lever or select a set whose "
+                "bodies carry the block"
+            )
+
+
 def build_prompt_renderers(
     prompt_set: str | None = None,
     *,
@@ -1037,6 +1110,14 @@ def build_prompt_renderers(
     which is what keeps a recording's rendered bytes and recorded stamps on
     one routing decision.
 
+    The ``testimony_shapes`` lever is resolved in the same place and for the
+    same reason, and binds a render KWARG rather than a filename: its block
+    lives inside the served body, so ON binds ``True`` into the crewmate-report
+    and statement partials and OFF binds ``False`` — the exact committed bytes.
+    ON with a set whose served bodies carry no such block raises
+    :class:`ValueError` at construction, naming the missing BODY and never a
+    sibling lever being on.
+
     ``map_card`` defaults to the live :data:`CANONICAL_MAP_CARD` and exists for
     one caller: the bump-in-flight archive, which pairs an older set's template
     bytes with the card THOSE bytes rendered. The card is a render input, not a
@@ -1046,6 +1127,7 @@ def build_prompt_renderers(
 
     environment = build_environment(prompt_set, root=root, env=env)
     variant = impostor_roll_call_enabled(env)
+    shapes = testimony_shapes_enabled(env)
     impostor_report_template = (
         IMPOSTOR_REPORT_ROLL_CALL_TEMPLATE if variant else IMPOSTOR_REPORT_TEMPLATE
     )
@@ -1064,11 +1146,18 @@ def build_prompt_renderers(
                     "for the 'qwen3_6_27b' set — unset the lever or select a "
                     "variant-capable set"
                 ) from exc
+    if shapes:
+        _require_testimony_shapes_bodies(
+            environment,
+            set_name=resolve_prompt_set(prompt_set, env=env),
+            templates=(CREWMATE_REPORT_TEMPLATE, ACCUSATION_ROUND_TEMPLATE),
+        )
     return PromptRenderers(
         crewmate_report=partial(
             crewmate_report_prompt,
             environment=environment,
             map_card=map_card,
+            testimony_shapes=shapes,
         ),
         impostor_report=partial(
             impostor_report_prompt,
@@ -1081,6 +1170,7 @@ def build_prompt_renderers(
             environment=environment,
             template_name=statement_template,
             map_card=map_card,
+            testimony_shapes=shapes,
         ),
         vote=partial(
             vote_ballot_prompt,

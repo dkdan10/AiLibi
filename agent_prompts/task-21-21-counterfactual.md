@@ -246,7 +246,6 @@ Run these before editing. If any fail, stop and report — your dependencies are
 
 - `uv run python -c "import meetings.constants"`
 - `uv run python -c "import meetings.schemas"`
-- `uv run python -c "import agents.strategic.prompts.loader"`
 - `uv run python -c "import orchestrator.game"`
 - `uv run python -c "import eval.deduction_metrics"`
 - `uv run python -c "import meetings.corroboration"`
@@ -268,6 +267,7 @@ Run these before editing. If any fail, stop and report — your dependencies are
 - `uv run python -c "import eval.vj_instruments"`
 - `uv run python -c "import eval.vj_instruments.VJInstrumentReport"`
 - `uv run python -c "import eval.vj_instruments.VJMeetingRow"`
+- `uv run python -c "import agents.strategic.prompts.loader"`
 - `uv run python -c "import frontend/src/lib/contradictions"`
 - `uv run python -c "import check_doc_facts"`
 

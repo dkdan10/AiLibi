@@ -28,6 +28,7 @@ from meetings.schemas import (
     MeetingTranscript,
     MeetingTurn,
     MoveWitnessRecord,
+    SawKillObservation,
     SawMoveObservation,
     SawPlayerObservation,
     VoteBallot,
@@ -567,3 +568,133 @@ class TestSawMoveObservation:
         # The gate bites: without the speaker's own move record the transition is
         # ungrounded and the placement never enters.
         assert detect_contradictions(transcript, roster=frozenset({"p-3", "p-5"})) == ()
+
+
+class TestSawKillObservation:
+    """The witnessed-murder shape: accepted unconditionally, evidence for nothing."""
+
+    def test_a_turn_carries_a_witnessed_kill_and_round_trips(self) -> None:
+        turn = _opening_turn(
+            observations=(
+                SawKillObservation(
+                    type="saw_kill", tick=380, subject="p-5", room="REACTOR"
+                ),
+            )
+        )
+        observation = turn.observations[0]
+        assert isinstance(observation, SawKillObservation)
+        assert (observation.subject, observation.room) == ("p-5", "REACTOR")
+        assert MeetingTurn.model_validate(turn.model_dump(mode="json")) == turn
+
+    def test_parsing_never_depends_on_which_templates_offer_it(self) -> None:
+        # The ``SawMoveObservation`` precedent: the turn schema accepts the shape
+        # unconditionally, so a model served a set that does not list it simply
+        # never emits one -- the parser is not the gate, and the default-OFF
+        # ``testimony_shapes`` lever gates only what a listener KEEPS of it.
+        turn = MeetingTurn.model_validate(
+            {
+                "turn_id": "m-7:turn-0",
+                "turn_index": 0,
+                "speaker": "p-3",
+                "turn_kind": "opening",
+                "reply_to": None,
+                "observations": [
+                    {
+                        "type": "saw_kill",
+                        "tick": 380,
+                        "subject": "p-5",
+                        "room": "REACTOR",
+                    }
+                ],
+                "claims": [],
+                "free_text": "I watched p-5 do it.",
+            }
+        )
+        assert isinstance(turn.observations[0], SawKillObservation)
+
+    def test_the_shape_carries_no_victim(self) -> None:
+        # ``extra='forbid'``: naming the victim would need the perception packet
+        # widened (it drops ``KilledEvent.target``), so a victim field would be
+        # unobservable fabrication and the schema refuses it outright.
+        with pytest.raises(ValidationError):
+            SawKillObservation.model_validate(
+                {
+                    "type": "saw_kill",
+                    "tick": 380,
+                    "subject": "p-5",
+                    "room": "REACTOR",
+                    "victim": "p-2",
+                }
+            )
+
+    def test_a_malformed_payload_is_rejected(self) -> None:
+        with pytest.raises(ValidationError):
+            SawKillObservation.model_validate(
+                {"type": "saw_kill", "tick": 380, "subject": "p-5"}
+            )
+
+    def test_a_spoken_kill_mints_no_contradiction_flag(self) -> None:
+        # The shape is testimony CONTENT and nothing else: the detector is
+        # untouched, so a spoken witnessed kill that flatly contradicts an alibi
+        # for the same subject raises no flag at all. The grounded role-proof
+        # channel stays the vent's alone.
+        transcript = MeetingTranscript(
+            turns=(
+                _opening_turn(
+                    speaker="p-3",
+                    observations=(
+                        SawKillObservation(
+                            type="saw_kill", tick=380, subject="p-5", room="REACTOR"
+                        ),
+                    ),
+                    claims=(
+                        AlibiClaim(
+                            type="alibi",
+                            subject="p-5",
+                            from_tick=380,
+                            to_tick=380,
+                            room="ADMIN",
+                        ),
+                    ),
+                ),
+            )
+        )
+        assert detect_contradictions(transcript, roster=frozenset({"p-3", "p-5"})) == ()
+        # The gate is not vacuous: the SAME transcript shape with a grounded
+        # transition instead of the kill DOES flag.
+        grounded = MeetingTranscript(
+            turns=(
+                _opening_turn(
+                    speaker="p-3",
+                    observations=(
+                        SawMoveObservation(
+                            type="saw_move",
+                            tick=380,
+                            subject="p-5",
+                            from_room="MEDBAY",
+                            to_room="LABS",
+                        ),
+                    ),
+                    claims=(
+                        AlibiClaim(
+                            type="alibi",
+                            subject="p-5",
+                            from_tick=380,
+                            to_tick=380,
+                            room="ADMIN",
+                        ),
+                    ),
+                ),
+            )
+        )
+        assert detect_contradictions(
+            grounded,
+            roster=frozenset({"p-3", "p-5"}),
+            move_witness_records={
+                "p-3": (
+                    MoveWitnessRecord(
+                        subject="p-5", from_room="MEDBAY", to_room="LABS", tick=380
+                    ),
+                )
+            },
+        )
