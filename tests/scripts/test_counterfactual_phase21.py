@@ -17,11 +17,12 @@ Five things are pinned, each with a case proving it bites:
    four corroboration cells FIRST become an assertion here.
 5. **The memo cannot drift from the instrument.** Every published table in
    ``audits/audit-phase-21-counterfactual.md`` -- the cell rows per set and
-   pooled, the injustice ledger and its class totals, the whole ballot census,
-   the eight-kind reduction census, every leg of the render census and the
-   advisory markers -- is parsed and compared against a live four-set run, size
-   of the join included, and the memo carries no bar, no target and no decision
-   rule. Perturbed copies prove each check bites.
+   pooled, the injustice ledger with its recorded tallies and its class totals,
+   the whole ballot census, all eight rows of the reduction census, every leg of
+   the render census and the advisory markers -- is parsed and compared against
+   a live four-set run, the size of each join included, and the memo carries no
+   bar, no target and no decision rule. Perturbed copies prove each check bites,
+   including a moved tally and a deleted zero-count row.
 """
 
 from __future__ import annotations
@@ -84,6 +85,19 @@ _DECISION_VERB: Final[re.Pattern[str]] = re.compile(
 _CELL_THRESHOLD: Final[re.Pattern[str]] = re.compile(
     r"\b[A-Z]-\d+[a-z]?\b[^|\n]{0,40}?"
     r"(?:>=|<=|>|<|≥|≤|\bat least\b|\bat most\b|\bno more than\b|\bno fewer than\b)"
+)
+
+# Every kind the reduction can carry. The memo advertises an eight-kind census,
+# so the drift gate holds it to eight rows whatever the counts are.
+_REPORTED_KINDS: Final[tuple[str, ...]] = (
+    "saw_player",
+    "saw_vent",
+    "saw_kill",
+    "whereabouts",
+    "saw_move",
+    "alibi",
+    "accusation",
+    "corroboration",
 )
 
 # The slate legs the memo publishes a render census for: the whole set the
@@ -459,6 +473,40 @@ def test_the_census_comparisons_bite_on_a_perturbed_memo(tmp_path: Path) -> None
     assert _memo_render_census(perturbed) != render
 
 
+def test_the_ledger_comparison_covers_the_recorded_tally(tmp_path: Path) -> None:
+    # A row whose tags survive an edit to its vote tally is still a drifted row.
+    text = _MEMO.read_text(encoding="utf-8")
+    original = _memo_ledger_rows(text)
+    assert original
+    bent = tmp_path / "memo.md"
+    bent.write_text(
+        text.replace(
+            "| samples/9p2i | 1 | m1 | p-5 | WEAKFLAG+REDIRECT | p-5 3, SKIP 2, p-1 1 |",
+            "| samples/9p2i | 1 | m1 | p-5 | WEAKFLAG+REDIRECT | p-5 999, SKIP 2, p-1 1 |",
+        ),
+        encoding="utf-8",
+    )
+    assert _memo_ledger_rows(bent.read_text(encoding="utf-8")) != original
+
+
+def test_a_deleted_testimony_kind_row_is_caught(tmp_path: Path) -> None:
+    # The zero-count kinds are the ones a memo could quietly stop publishing,
+    # so the gate holds the census to all eight rows rather than to its values.
+    text = _MEMO.read_text(encoding="utf-8")
+    assert set(_memo_kind_census(text)[0]) == set(_REPORTED_KINDS)
+    bent = tmp_path / "memo.md"
+    bent.write_text(
+        "\n".join(
+            line for line in text.splitlines() if not line.startswith("| `saw_kill` |")
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    assert set(_memo_kind_census(bent.read_text(encoding="utf-8"))[0]) != set(
+        _REPORTED_KINDS
+    )
+
+
 def test_the_advisory_label_keys_on_the_rows_own_denominator(
     fast_run: Mapping[str, object],
 ) -> None:
@@ -538,10 +586,12 @@ def test_the_memo_table_equals_a_live_four_set_run() -> None:
 
     testimony = payload["pooled_testimony_census"]
     assert isinstance(testimony, dict)
-    assert _memo_kind_census(text) == (
-        testimony["statements_off"],
-        testimony["statements_on"],
+    memo_kinds = _memo_kind_census(text)
+    assert set(memo_kinds[0]) == set(_REPORTED_KINDS), (
+        "the memo advertises an eight-kind census and must publish all eight, "
+        "including the ones nothing was ever spoken in"
     )
+    assert memo_kinds == _run_kind_census(testimony)
 
     render = payload["pooled_render_census"]
     assert isinstance(render, dict)
@@ -761,14 +811,28 @@ def _memo_kind_census(text: str) -> tuple[dict[str, int], dict[str, int]]:
         on_value = _first_int(fields[2])
         if off_value is None or on_value is None:
             continue
-        # A kind nobody ever spoke is absent from the census's counters, not
-        # present at zero, so the memo's zeros are dropped the same way.
+        # Zeros are KEPT: a kind nobody ever spoke is still one of the eight the
+        # census advertises, and dropping it here would let the memo silently
+        # stop publishing a row.
         kind = fields[0].strip("`")
-        if off_value:
-            off[kind] = off_value
-        if on_value:
-            on[kind] = on_value
+        off[kind] = off_value
+        on[kind] = on_value
     return off, on
+
+
+def _run_kind_census(
+    census: Mapping[str, Any],
+) -> tuple[dict[str, int], dict[str, int]]:
+    """The pooled reduction census over ALL eight kinds, zeros included.
+
+    The live counters hold only the kinds something was spoken in, so the
+    absent ones are filled at zero here rather than dropped from the memo.
+    """
+
+    return (
+        {kind: census["statements_off"].get(kind, 0) for kind in _REPORTED_KINDS},
+        {kind: census["statements_on"].get(kind, 0) for kind in _REPORTED_KINDS},
+    )
 
 
 def _first_int(field: str) -> int | None:
@@ -776,10 +840,18 @@ def _first_int(field: str) -> int | None:
     return int(match.group(1).replace(",", "")) if match else None
 
 
-def _memo_ledger_rows(text: str) -> dict[tuple[str, int, int, str], tuple[str, ...]]:
-    """The §2.3 per-case ledger, keyed by ``(set, seed, meeting, ejectee)``."""
+_LedgerRow = tuple[tuple[str, ...], dict[str, int]]
 
-    rows: dict[tuple[str, int, int, str], tuple[str, ...]] = {}
+
+def _memo_ledger_rows(text: str) -> dict[tuple[str, int, int, str], _LedgerRow]:
+    """The §2.3 per-case ledger, keyed by ``(set, seed, meeting, ejectee)``.
+
+    Every published column is carried, the recorded vote tally included: a tally
+    is a fact about the case, and a row whose tags survive an edit to its tally
+    is still a drifted row.
+    """
+
+    rows: dict[tuple[str, int, int, str], _LedgerRow] = {}
     for line in text.splitlines():
         fields = [field.strip() for field in line.strip().strip("|").split("|")]
         if len(fields) != 6 or fields[0] not in cf.CANONICAL_SETS:
@@ -787,17 +859,31 @@ def _memo_ledger_rows(text: str) -> dict[tuple[str, int, int, str], tuple[str, .
         if not fields[1].isdigit() or not re.fullmatch(r"m\d+", fields[2]):
             continue
         tags = () if fields[4] == "(none)" else tuple(fields[4].split("+"))
-        rows[(fields[0], int(fields[1]), int(fields[2][1:]), fields[3])] = tags
+        key = (fields[0], int(fields[1]), int(fields[2][1:]), fields[3])
+        rows[key] = (tags, _memo_tally(fields[5]))
     return rows
+
+
+def _memo_tally(field: str) -> dict[str, int]:
+    """``p-5 3, SKIP 2, p-1 1`` as the counter the payload publishes."""
+
+    tally: dict[str, int] = {}
+    for entry in field.split(","):
+        target, _, count = entry.strip().rpartition(" ")
+        tally[target] = int(count)
+    return tally
 
 
 def _run_ledger_rows(
     payload: Mapping[str, object],
-) -> dict[tuple[str, int, int, str], tuple[str, ...]]:
+) -> dict[tuple[str, int, int, str], _LedgerRow]:
     ledger = payload["pooled_injustice_ledger"]
     assert isinstance(ledger, list)
     return {
-        (row["set"], row["seed"], row["meeting"], row["victim"]): tuple(row["tags"])
+        (row["set"], row["seed"], row["meeting"], row["victim"]): (
+            tuple(row["tags"]),
+            dict(row["tally"]),
+        )
         for row in ledger
     }
 
