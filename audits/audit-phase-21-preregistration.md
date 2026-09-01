@@ -662,17 +662,35 @@ force the operator to reinterpret a ratified criterion at the terminal. The pred
 what any run is judged against, at any n; the baseline-8 population figure is printed beside it as
 a REFERENCE only, for both runs (see the note under the table).
 
-**One tripwire needs a reader that does not exist yet, and it is named rather than assumed.** T5's
-predicate has two halves — every observed CREW speech turn gains the block, and ZERO impostor
-turns do — and `scripts/counterfactual_phase21.py`'s `T-9` row emits only the AGGREGATE
-`changed[accusation_round] / rendered[accusation_round]` (:1756-1766) with **no speaker-role
-split**. Two offsetting errors — a crew turn missing the block while an impostor turn gains one —
-leave that aggregate unchanged, so T-9 alone cannot falsify the predicate it is registered
-against. Per §5.1's routing rule the fix is a reader, not a number: **21.23's smoke report must
-publish the accusation-round render census SPLIT BY SPEAKER ROLE**, joining each recorded
-`accusation_round` prompt to its speaker's role from the recording, and T5 is evaluated on that
-split. §9.1 carries it as a precondition. Until that split is published T5 is UNREAD, which is a
-STOP in its own right — an unevaluable never-worse bar may not be recorded as satisfied.
+**A tripwire whose registered reader cannot evaluate its predicate is UNREAD, and UNREAD is a
+STOP** [PROPOSED — ratified at merge]. This is §5.1's routing rule applied to the tripwires: a
+criterion is only as good as the cell that can falsify it, and a predicate nobody can evaluate may
+not be recorded as satisfied. **Two of the seven are in that state today, and they are named
+rather than assumed:**
+
+* **T5 — no speaker-role split.** The predicate has two halves (every observed CREW speech turn
+  gains the block, ZERO impostor turns do) and `scripts/counterfactual_phase21.py`'s `T-9` row
+  emits only the AGGREGATE `changed[accusation_round] / rendered[accusation_round]` (:1756-1766).
+  Two offsetting errors — a crew turn missing the block while an impostor turn gains one — leave
+  that aggregate unchanged, so T-9 cannot falsify the predicate it is registered against.
+* **T7 — no meeting-1 filter.** The predicate is a first-meeting identity, but `B-1` accumulates
+  `snapshots` and `rendered_lines` across every captured meeting (:695-703) and publishes only
+  those totals (:1804-1808). A meeting-1 difference can be masked by an opposite later-meeting
+  one, and a later-only difference can trip a criterion that concerns meeting 1 alone.
+
+**Both route to ONE instrument contract that must merge BEFORE 21.23** — not to 21.23 itself,
+whose contract puts **every code path** out of scope (`tasks/phase-21.md`, Task 21.23's "Files
+NOT in scope"), so the reader cannot be written there and a smoke that invented one would be
+executing a criterion it had just authored. That contract owes exactly two cells: **`T-9` split by
+the speaker's recorded role**, and **a meeting-1-scoped `B-1`**. Scheduling it is an owner
+decision and it is raised as such in this PR's `## Questions`; until it merges, **T5 and T7 read
+UNREAD and the record does not start.**
+
+The other five tripwires are readable as registered, checked against the script's own rows: T1's
+count over `T-7` (:1711), T2's two 100%-of-denominator cells `R-13` and `R-14` (:1483, :1496 —
+whose denominators are `walk.reporter_openings` and `walk.non_reporter_speech_turns`, the
+body-report populations exactly, not the all-meeting totals), T3's count over `R-15` (:1508), T4's
+full-population `T-6` (:1699) and T6's share over `C-9` (:1621).
 
 | id | cell | **the predicate any run must satisfy** | the baseline-8 population, for reference | disposition |
 |---|---|---|---|---|
@@ -681,8 +699,8 @@ STOP in its own right — an unevaluable never-worse bar may not be recorded as 
 | **T3** | `R-15` — ballots gaining a reporter block | **the count is 0**, whatever the ballot denominator | 0 of 3,631, in both columns | **RATIFIED as a pre-record STOP.** A non-zero reading means the reporter lever reached a seam it does not own. Declined as a bar |
 | **T4** | `T-6` — location accounts reaching the alibi map | **100% of observed location accounts reach the map under ON** (and the OFF reconstruction of the same run is strictly below it) | 1,016/4,173 = 24.35% OFF → 4,173/4,173 = 100% ON | **RATIFIED as a pre-record STOP.** A partial fill means the widened `("alibi","whereabouts")` gate did not land. Declined as a bar |
 | **T5** | `T-9` **split by speaker role** — see the note above; the aggregate `T-9` cannot read this predicate | **every observed CREW speech turn gains the block and the IMPOSTOR count is 0**, whatever the denominators | 2,023 of 2,959, with 0 impostor turns | **RATIFIED as a NEVER-WORSE BAR *and* a pre-record STOP.** An impostor turn gaining the block is a FIREWALL question, not a render one, and the record must not start (or must stop). **UNREAD until 21.23 publishes the role split (§9.1) — and UNREAD is itself a STOP** |
-| **T6** | `C-9` — ballots gaining the source-count block | **every observed ballot gains the block except those whose meeting ledger holds no row for any of that voter's candidate targets** — the residue is enumerated, never estimated | 3,614 of 3,631 = 99.5% ON | **RATIFIED as a pre-record STOP.** A shortfall the residue rule does not account for means the ledger is not being built where it should be. Declined as a bar |
-| **T7** | `B-1` — rendered memory rows per prompt snapshot at meeting 1 | **the meeting-1 row count is byte-identical between the run's own OFF and ON columns** | 255,918/7,271, unchanged across all three columns | **RATIFIED as a pre-record STOP.** A first-meeting memory-row diff means prose is displacing memory, which this slate must not do. Declined as a bar |
+| **T6** | `C-9` — ballots gaining the source-count block | **the observed share is ≥ 99% of ballots.** The residue — meetings whose ledger holds no row for any of that voter's candidate targets — is the stated explanation for the gap, and is context rather than a second criterion, because `C-9` publishes the share and not the residue's membership | 3,614 of 3,631 = 99.5% ON | **RATIFIED as a pre-record STOP.** A materially lower share means the ledger is not being built where it should be. Declined as a bar |
+| **T7** | a **meeting-1-scoped `B-1`** — see the note above; the published `B-1` aggregates every meeting and cannot read this | **the meeting-1 row count is identical between the run's own OFF and ON columns** | 255,918/7,271 across all meetings, unchanged in all three columns | **RATIFIED as a pre-record STOP.** A first-meeting memory-row diff means prose is displacing memory, which this slate must not do. **UNREAD until the meeting-1 cell exists — and UNREAD is itself a STOP.** Declined as a bar |
 
 **How the two runs read the same predicate — and why the population column binds NEITHER.**
 21.23's smoke evaluates each predicate over the seeds it recorded, and a shortfall STOPs the
@@ -745,12 +763,13 @@ stale).
   Routed at the #414 merge to be **fixed AND smoke-validated at 21.23**, deriving through
   `prompt_versions_for_set` from `--expect-levers`. **This is a written PRECONDITION the 21.24
   operator CONFIRMS before the first seed** — not a known risk carried into the run.
-* **21.23's accusation-round render census, SPLIT BY SPEAKER ROLE** — T5's predicate is "every
-  observed CREW speech turn gains the testimony-shape block and ZERO impostor turns do", and no
-  committed reader emits that split today: `scripts/counterfactual_phase21.py`'s `T-9` row is an
-  aggregate over `accusation_round` prompts (:1756-1766) in which a missing crew block and a
-  gained impostor block cancel. The smoke must publish the census joined to each speaker's
-  recorded role. **Until it does, T5 is UNREAD and the record does not start** (§8.1).
+* **The T5 / T7 tripwire-reader contract, merged BEFORE 21.23.** Two ratified tripwires name
+  predicates no committed reader can evaluate (§8.1): T5 needs `T-9` **split by the speaker's
+  recorded role** (`scripts/counterfactual_phase21.py`:1756-1766 emits only the aggregate, in
+  which a missing crew block and a gained impostor block cancel), and T7 needs a **meeting-1-scoped
+  `B-1`** (:695-703 accumulates across every captured meeting and :1804-1808 publishes only the
+  totals). It cannot be written at 21.23, whose contract puts every code path out of scope.
+  **Until that contract merges, T5 and T7 are UNREAD and the record does not start.**
 
 Named as **21.24's own re-anchor business rather than this memo's**: the version/environment
 generalisation (#415), the Q2 seam and the `testimony_shapes` stamp-vs-environment guard
@@ -877,7 +896,7 @@ does NOT produce, is excluded from that count and pinned by name instead, so it 
 smuggle an unchecked value past the gate. Every text check is scoped to the memo BEFORE §12, so
 this reader — quoted inside the memo — cannot satisfy its own checks.
 
-**Fifteen perturbations, every one verified to bite, the last under `-O`:**
+**Eighteen perturbations, every one verified to bite, the last under `-O`:**
 
 | perturbation | what the reader prints |
 |---|---|
@@ -886,8 +905,10 @@ this reader — quoted inside the memo — cannot satisfy its own checks.
 | an interval re-spelled out of the parsed shape (`[0.0037, 0.0112]` → `[0.0037,0.0112]`) | `16 intervals quoted but only 15 are in a shape this reader can re-run` **and** `only 15 intervals parsed` |
 | a deleted §3.1 row | `table inventory: 14 rows, expected 15` |
 | a target moved in §4.1's TABLE | `bar 3: the table's target is not '**≤ 12 pooled**'` **and** `bar 3: §4's prose states ≤ 12.0 but §4.1's table says ≤ 16.0` |
-| a target moved in §4's PROSE, table left alone | `bar 3: §4's prose states ≤ 13.0 but §4.1's table says ≤ 12.0` |
-| **bar 3's and bar 4's prose targets SWAPPED** (the SET of targets is unchanged) | `bar 3: §4's prose states < 0.4 but §4.1's table says ≤ 12.0` |
+| a target moved in §4's PROSE, table left alone | `bar 3: §4's HEADING states ≤ 13.0 but §4.1's table says ≤ 12.0` |
+| **bar 3's and bar 4's prose targets SWAPPED** (the SET of targets is unchanged) | `bar 3: §4's HEADING states < 0.4 but §4.1's table says ≤ 12.0` |
+| **bar 1's HEADING moved while its block still repeats `≥ 0.60`** | `bar 1: §4's HEADING states ≥ 0.61 but §4.1's table says ≥ 0.6` |
+| **bar 2's HEADING moved while its block still repeats `< 35`** | `bar 2: §4's HEADING states < 38.0 but §4.1's table says < 35.0` |
 | a target moved in §0's verdict line | `§0's verdict line states [… ('<', 38.0) …] but §4.1's table says [… ('<', 35.0) …] -- in bar order` |
 | §6's conjunctive subset narrowed | `§6 no longer reads 'ADOPTED iff bars 1, 2, 3 and 4 are met ... FINDING otherwise'` |
 | **§6's verdict branches INVERTED** (ADOPTED ↔ FINDING) | the same message — the regex binds each branch to its own condition |
@@ -898,12 +919,17 @@ this reader — quoted inside the memo — cannot satisfy its own checks.
 | §3.2's two divergent bounds collapsed into one | `interval: §3.2 no longer states '[0.4224, 0.6178]'` |
 | the same re-spelling under `uv run python -O` | both interval messages; still exits 1 |
 
-**The target diff is BOUND TO BAR IDS, not to a set of values.** §4.1's table, §0's verdict line
-and §4's prose bars are all ratified content the record reads verbatim, so the reader splits §4
-into per-bar blocks, compares each block's own arrow with ITS table row, and requires §0's four
-arrows to match the table **in bar order**. An unlabelled set would prove only that all four
-values occur somewhere — swapping bar 3's and bar 4's targets leaves such a set identical while
-the normative prose assigns both reporter targets to the wrong cells. **Likewise the decision
+**The target diff is BOUND TO BAR IDS AND TO THE NORMATIVE HEADING, not to a set of values
+anywhere in the text.** §4.1's table, §0's verdict line and §4's prose bars are all ratified
+content the record reads verbatim, so the reader splits §4 into per-bar blocks, compares **the
+bolded heading of each block** with ITS table row, and requires §0's four targets to match the
+table **in bar order**. Two weaker designs were tried and both let real drift through: an
+unlabelled SET of targets proves only that all four values occur somewhere, so swapping bar 3's
+and bar 4's targets leaves it identical while the prose assigns both reporter targets to the wrong
+cells; and "the target appears anywhere in the bar's block" is satisfied by the block's own
+history and arithmetic, so moving bar 1's heading to `≥ 0.61` passed while the block still said
+`≥ 0.60` four sentences later. **The heading is the statement the record executes, so the heading
+is what is diffed. Likewise the decision
 rule is checked for its DIRECTION, not its vocabulary**: the regex binds ADOPTED to the
 all-four conjunction and FINDING to the fallback, so inverting the branches or adding a waiver
 fails even though the phrase "bars 1, 2, 3 and 4" survives.
@@ -1096,19 +1122,20 @@ for bar_id, want in sorted(table_targets.items()):
     if block is None:
         mismatches.append(f"bar {bar_id}: §4 carries no prose bar with that id")
         continue
-    found = [_norm(*m) for m in ARROW.findall(re.sub(r"\s+", " ", block))]
-    stated = [_norm(*m) for m in TARGET.findall(re.sub(r"\s+", " ", block))]
-    if found and found[0] != want:
+    # The NORMATIVE statement is the bar's bolded HEADING, not its block. A block
+    # also carries history, arithmetic and the phase-20 miss, all of which repeat
+    # numbers -- so "the target appears somewhere in the block" would let a moved
+    # heading be satisfied by a later mention of the old value.
+    heading = re.sub(r"\s+", " ", block.split("**", 1)[0])
+    found = [_norm(*m) for m in TARGET.findall(heading)]
+    if not found:
+        mismatches.append(f"bar {bar_id}: §4's heading states no target at all")
+    elif found[0] != want:
         mismatches.append(
-            f"bar {bar_id}: §4's prose states {found[0][0]} {found[0][1]} but §4.1's "
-            f"table says {want[0]} {want[1]}"
+            f"bar {bar_id}: §4's HEADING states {found[0][0]} {found[0][1]} but "
+            f"§4.1's table says {want[0]} {want[1]}"
         )
-    elif not found and want not in stated:
-        mismatches.append(
-            f"bar {bar_id}: §4's prose block states no target matching §4.1's "
-            f"{want[0]} {want[1]}"
-        )
-    print(f"OK  bar {bar_id} prose block states {want[0]} {want[1]:g}, as its table row does")
+    print(f"OK  bar {bar_id} heading states {want[0]} {want[1]:g}, as its table row does")
 
 # §0's verdict line carries the same four, in bar order, and is checked the same way.
 verdict = re.sub(r"\s+", " ", TEXT.split("## 0. Verdict in one line")[1].split("## 1.")[0])
