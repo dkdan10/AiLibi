@@ -5864,6 +5864,32 @@ no edit; the naming gate binds the resolver to `testimony_shapes_enabled`. (8) T
 home stays `meetings/constants.py` — the loader must read this lever and `.importlinter`
 forbids `agents` → `meetings.manager`; the leaf's import rule survives the two stdlib adds.
 
+**Merge-reality record (2026-09-01, orchestrator-ratified at the #416 merge):** the lever landed
+in the ruled re-body shape, fourth toggle, OFF-path proved element-for-element over all 672
+meetings with the golden unedited and the 16-subset overlay proof matching the dictated
+`_ALL_ON_STAMPS` verbatim. Every instrument cell matched this re-anchor's re-derived figures
+exactly (raw net 10/3,631 → 5 after exclusions, within-impostor 1/1;
+`crew_omniscient_control_ballots` 1/0/2/0). Codex ran three rounds, ten findings — two P1s were
+real bugs the task's own work introduced and fixed: `saw_kill` fell through
+`_carries_relevant_observation` and backed accusations OUTSIDE the OFF gate (fixed by a
+three-token exclusion in not-in-scope `meetings/transcript.py`, flagged as a forced touch), and
+the spectator surface raised `TypeError` on an ON-arm replay (fixed with `SawKillObservationView`
++ regenerated types + three exhaustive TS consumers). Escalations dispositioned: **Q4 RULED —
+the ballot renders no `saw_kill`, so under ON a voter never sees the shape; a focused amendment
+PR lands BEFORE 21.21 measures anything: one guarded branch in `vote_ballot.j2`'s observation
+walk, `vote_ballot` as the arm's third key, the `_ALL_ON_STAMPS` vote_ballot row becoming the
+corroboration+testimony composite, and an explicit disposition of whether
+`meetings/corroboration.py` counts a spoken `saw_kill` as a first-hand source.** Q5 ratified
+(`AlibiClaim.evidence` excluded from the visible surface — no template renders it; proven
+number-neutral). Q2 (the analysis-time re-derivation seam — five unguarded consumers — and the
+live-game freeze) joins the version/environment generalisation at 21.24. Q1's forced touches
+ratified: the four derived report JSONs (+2 keys each, 0 changed), the leak tripwire, the
+generated frontend types, and six `agent_prompts/` regenerations — the last repairing a
+prompt-sync red the ORCHESTRATOR's own eb2c3dba re-anchor shipped (the header edits regenerate
+into every downstream prompt; the named-paths commit took one file of seven; the staging rule is
+now "tasks file + the entire agent_prompts/ dir", recorded for the close ledger as the fourth
+incident in the masked-verdict class).
+
 **Ready-to-paste prompt:** `agent_prompts/task-21-20-testimony-shapes.md`
 
 ### Task 21.21 — THE OFFLINE COUNTERFACTUAL: the Wave-2 levers over the re-recorded bytes, published before any bar is written
