@@ -18,6 +18,12 @@ The grounding predicates are the detector's own
 means everywhere else in the meeting layer -- an invented sighting matches no
 record and earns no account.
 
+A spoken :class:`~meetings.schemas.SawKillObservation` is therefore EXCLUDED and
+stays excluded: the ledger's three channels are GROUNDED ones, and the kill
+shape has no grounding channel here to be tested against. The reasoning, and
+what would have to land before it could join, is in
+:func:`_speaker_grounds_subject`.
+
 Keep this module import-light: :mod:`meetings.schemas`, :mod:`meetings.constants`
 and :mod:`meetings.transcript` only, never :mod:`meetings.manager` -- the prompt
 loader imports it for the ledger type and ``agents`` may not reach the manager
@@ -207,6 +213,22 @@ def _speaker_grounds_subject(
 
     The sighting mapping arrives §4.7-firewalled from the manager, so an
     impostor's row naming a teammate cannot ground a case against that teammate.
+
+    A spoken :class:`~meetings.schemas.SawKillObservation` is DELIBERATELY not a
+    fourth channel (the Q4 ruling on #416, dispositioned here): each of the three
+    above tests an account against a typed record or a minted flag, and the kill
+    shape has neither -- ``KillWitnessRecord`` is an ``orchestrator.game``
+    tactical-agent surface documented as never reaching the meeting layer, the
+    manager threads no such mapping into :func:`build_testimony_ledger`, and this
+    module may not import it (see the module docstring's import rule). Counting
+    it anyway would credit an UNGROUNDED claim as a first-hand source -- the one
+    thing "first-hand" is defined here to exclude -- and would re-open on the
+    ballot exactly the suspicion delta
+    :func:`meetings.transcript._carries_relevant_observation` closes on the
+    accusation side for the same reason. Admitting it is therefore a separate
+    change that must first land a grounding channel, not a seventh kind joining
+    this walk; until then the shape is testimony a voter READS and no ledger
+    row COUNTS.
     """
 
     sightings = sighting_records.get(speaker, ())

@@ -108,6 +108,14 @@ Routing is therefore a render KWARG, resolved once in
 :func:`build_prompt_renderers` and bound into the partials at construction, and
 its provenance side is
 :data:`orchestrator.game.TESTIMONY_SHAPES_PROMPT_VERSION_SETS`.
+
+``vote_ballot.j2`` is the arm's THIRD body (the Q4 ruling on #416). Eliciting a
+shape and rendering it are two different edits, and the arm originally made only
+the first: every later SPEAKER read a spoken kill and the VOTER never did, so
+the strongest testimony in the game reached everyone except the person casting
+the ballot. The ballot's block is the transcript row alone — a voter files no
+observation, so there is no menu to offer — and it takes the same guard, the
+same construction-time binding and the same arm stamp as the two turn bodies.
 """
 
 from __future__ import annotations
@@ -976,6 +984,7 @@ def vote_ballot_prompt(
     suspicion_provenance: tuple[SuspicionEntry, ...] = (),
     render_inputs: PromptRenderInputs | None = None,
     testimony_ledger: MeetingTestimonyLedger | None = None,
+    testimony_shapes: bool = False,
     environment: Environment | None = None,
     map_card: str = "",
 ) -> str:
@@ -1009,6 +1018,15 @@ def vote_ballot_prompt(
     the manager only while the corroboration lever is ON. The template renders
     one row per accused candidate; ``None`` omits the block entirely, so an OFF
     meeting renders byte-identically to the pre-lever prompt.
+
+    ``testimony_shapes`` opens the served body's guarded witnessed-kill row in
+    the transcript's observation walk, so a voter READS the shape the arm
+    offered the speakers. The ballot offers no shape of its own -- a voter files
+    no observation -- so this is the transcript half alone, and it is the same
+    render input the report and statement renderers take: bound at construction
+    by :func:`build_prompt_renderers` from the one lever read, never a second
+    environment read here. The default ``False`` renders the committed bytes
+    exactly.
     """
 
     inputs = _render_inputs_for(render_inputs, map_card=map_card)
@@ -1031,6 +1049,7 @@ def vote_ballot_prompt(
             impostors=_impostor_wording(inputs.impostor_count),
             flag_groups=_group_flags(contradiction_flags),
             testimony_ledger=testimony_ledger,
+            testimony_shapes=testimony_shapes,
         )
     )
 
@@ -1163,11 +1182,16 @@ def build_prompt_renderers(
 
     The ``testimony_shapes`` lever is resolved in the same place and for the
     same reason, and binds a render KWARG rather than a filename: its block
-    lives inside the served body, so ON binds ``True`` into the crewmate-report
-    and statement partials and OFF binds ``False`` — the exact committed bytes.
-    ON with a set whose served bodies carry no such block raises
+    lives inside the served body, so ON binds ``True`` into the crewmate-report,
+    statement and vote partials and OFF binds ``False`` — the exact committed
+    bytes. ON with a set whose served bodies carry no such block raises
     :class:`ValueError` at construction, naming the missing BODY and never a
     sibling lever being on.
+
+    All THREE bodies are checked, and the ballot is one of them (the Q4 ruling
+    on #416): the arm ELICITS the shape on the two turn prompts and the ballot
+    RENDERS it, so a set that offers the shape to speakers and then hides it
+    from the voter is a missing body in exactly the same sense.
 
     ``map_card`` defaults to the live :data:`CANONICAL_MAP_CARD` and exists for
     one caller: the bump-in-flight archive, which pairs an older set's template
@@ -1201,7 +1225,11 @@ def build_prompt_renderers(
         _require_testimony_shapes_bodies(
             environment,
             set_name=resolve_prompt_set(prompt_set, env=env),
-            templates=(CREWMATE_REPORT_TEMPLATE, ACCUSATION_ROUND_TEMPLATE),
+            templates=(
+                CREWMATE_REPORT_TEMPLATE,
+                ACCUSATION_ROUND_TEMPLATE,
+                VOTE_BALLOT_TEMPLATE,
+            ),
         )
     return PromptRenderers(
         crewmate_report=partial(
@@ -1227,6 +1255,7 @@ def build_prompt_renderers(
             vote_ballot_prompt,
             environment=environment,
             map_card=map_card,
+            testimony_shapes=shapes,
         ),
     )
 

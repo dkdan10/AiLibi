@@ -1096,7 +1096,12 @@ def _inserted_lines(off: str, on: str) -> list[str]:
 
 
 class TestTestimonyShapesIsExactlyTwoLines:
-    """ON equals OFF plus the shape-menu row and its one paired instruction."""
+    """ON equals OFF plus the shape-menu row and its one paired instruction.
+
+    On the BALLOT there is no menu row to add — a voter files no observation —
+    so ON equals OFF plus the transcript row alone, and only when a kill was
+    actually spoken.
+    """
 
     def _crewmate(self, env: dict[str, str]) -> str:
         return build_prompt_renderers("qwen3_6_27b", env=env).crewmate_report(
@@ -1120,6 +1125,17 @@ class TestTestimonyShapesIsExactlyTwoLines:
         }
         kwargs.update(overrides)
         return build_prompt_renderers("qwen3_6_27b", env=env).statement(**kwargs)  # type: ignore[arg-type]
+
+    def _ballot(self, env: dict[str, str], transcript: MeetingTranscript) -> str:
+        return build_prompt_renderers("qwen3_6_27b", env=env).vote(
+            voter_id="p-3",
+            rendered_memory="(memory)",
+            transcript=transcript,
+            contradiction_flags=(),
+            suspicion_graph=(),
+            candidate_targets=("p-8",),
+            skip_confidence_threshold=0.5,
+        )
 
     def test_the_opening_gains_exactly_the_two_lines(self) -> None:
         inserted = _inserted_lines(self._crewmate({}), self._crewmate(_SHAPES_ON))
@@ -1174,13 +1190,40 @@ class TestTestimonyShapesIsExactlyTwoLines:
         # Crew additionally gets the OFFER; the impostor gets the table alone.
         assert len(inserted) == (1 if is_impostor else 3)
 
+    def test_a_spoken_kill_reaches_the_voter(self) -> None:
+        # The Q4 ruling on #416, amended here: the shape reached every later
+        # SPEAKER and stopped at the ballot, so a lever whose whole purpose is
+        # to put the strongest testimony in front of a decision never reached
+        # the decision. Exactly ONE line joins — the transcript row — because a
+        # voter files no observation and is offered no shape.
+        spoken = MeetingTranscript(turns=(_KILL_TURN,))
+        off = self._ballot({}, spoken)
+        on = self._ballot(_SHAPES_ON, spoken)
+        assert "KILL" not in off
+        assert _inserted_lines(off, on) == [
+            "  - tick 11: witnessed p-8 KILL in ADMIN "
+            "(spoken account, nothing confirms it)."
+        ]
+
+    def test_a_ballot_with_nothing_spoken_is_byte_identical(self) -> None:
+        # The guard is on the OBSERVATION, not on the ballot: with no kill row
+        # at the table the arm moves not one byte of the voter's page.
+        empty = MeetingTranscript(turns=())
+        assert self._ballot(_SHAPES_ON, empty) == self._ballot({}, empty)
+
     def test_the_off_path_carries_no_byte_of_the_block(self) -> None:
         # The half a containment assertion cannot make: with the lever OFF the
         # guard must leak NOTHING — not the row, not the mandate, not a stray
         # blank line the block's own ``{% if %}`` markers could have left behind.
+        spoken = MeetingTranscript(turns=(_KILL_TURN,))
         for rendered in (self._crewmate({}), self._statement({})):
             assert "saw_kill" not in rendered
             assert _KILL_MANDATE_PREFIX not in rendered
+        # The ballot never OFFERS the shape on either path, and renders no row
+        # for a spoken one while the lever is OFF.
+        for env in ({}, _SHAPES_ON):
+            assert _KILL_MANDATE_PREFIX not in self._ballot(env, spoken)
+        assert "KILL" not in self._ballot({}, spoken)
 
     def test_the_diff_gate_bites_on_a_leaking_guard(self, tmp_path: Path) -> None:
         # The perturbation craft rule 2 asks for, run through the SAME checker,

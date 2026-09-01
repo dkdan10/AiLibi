@@ -472,10 +472,18 @@ CORROBORATION_DISCIPLINE_PROMPT_VERSION_SETS: Final[Mapping[str, Mapping[str, st
 # The testimony-shapes ON-arm version registry, served while the default-OFF
 # ``testimony_shapes`` lever is ON. Same shape as the two arms above: the lever
 # swaps no template FILE, it renders the set's own ``crewmate_report.j2`` /
-# ``accusation_round.j2`` with a guarded witnessed-kill block, so exactly those
-# two keys carry arm stamps and the other two inherit the default registry's
-# values. A turn prompt that OFFERED the kill shape can therefore never share a
-# stamp with one that did not.
+# ``accusation_round.j2`` / ``vote_ballot.j2`` with a guarded witnessed-kill
+# block, so exactly those THREE keys carry arm stamps and ``impostor_report``
+# inherits the default registry's value. A turn prompt that OFFERED the kill
+# shape can therefore never share a stamp with one that did not, and neither
+# can a ballot that RENDERED a spoken one.
+#
+# ``vote_ballot`` joined at the Q4 amendment to #416: the arm elicits the shape
+# on the two turn prompts, and a shape no voter ever reads is a lever that
+# cannot reach the decision it was built to inform. The ballot's block is the
+# transcript row alone -- a voter files no observation of their own -- but the
+# BYTES move, so the stamp must move with them (the same rule that put the two
+# turn prompts here).
 _TESTIMONY_SHAPES_KEY: Final[str] = "testimony_shapes"
 _TESTIMONY_SHAPES_ARM: Final[Mapping[str, str]] = _lever_arm_versions(
     "qwen3_6_27b", _TESTIMONY_SHAPES_KEY
@@ -485,6 +493,7 @@ TESTIMONY_SHAPES_PROMPT_VERSION_SETS: Final[Mapping[str, Mapping[str, str]]] = {
         **_bespoke_versions("qwen3_6_27b", version="v5"),
         "crewmate_report": _TESTIMONY_SHAPES_ARM["crewmate_report"],
         "accusation_round": _TESTIMONY_SHAPES_ARM["accusation_round"],
+        "vote_ballot": _TESTIMONY_SHAPES_ARM["vote_ballot"],
     },
 }
 

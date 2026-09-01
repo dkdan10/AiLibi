@@ -57,6 +57,7 @@ from meetings.schemas import (
     MoveWitnessRecord,
     ObservationClaim,
     PlayerId,
+    SawKillObservation,
     SawMoveObservation,
     SawPlayerObservation,
     SawVentObservation,
@@ -546,6 +547,53 @@ class TestFirstHandSources:
             _turn(index=0, speaker="p-2", claims=(_accuses("p-2"),)),
         )
         assert _ledger(transcript).rows == ()
+
+    def test_a_spoken_kill_grounds_nothing(self) -> None:
+        # The Q4 disposition on #416: the testimony-shapes arm's seventh
+        # observation kind does NOT join this walk. Every channel here tests an
+        # account against a typed record or a minted flag, and the kill shape
+        # has neither — no meeting-layer record type, nothing threaded into
+        # ``build_testimony_ledger``, no flag kind. Counting it would credit an
+        # ungrounded claim as first-hand, which is the one thing the word is
+        # defined here to exclude.
+        transcript = _transcript(
+            _turn(
+                index=0,
+                speaker="p-2",
+                observations=(
+                    SawKillObservation(
+                        type="saw_kill", tick=14, subject="p-5", room="MEDBAY"
+                    ),
+                ),
+                claims=(_accuses("p-5"),),
+            ),
+        )
+        # Not even with a record that COVERS the same subject/room/tick: there
+        # is no predicate that could match the two, so record presence is not a
+        # back door into the count.
+        records = {"p-2": (_record(subject="p-5", room="MEDBAY", tick=14),)}
+        row = _row(_ledger(transcript, sighting_records=records), "p-5")
+        assert row.first_hand == ()
+        assert row.adopted == ("p-2",)
+        assert row.voices == 1
+
+    def test_the_exclusion_is_not_a_dead_fixture(self) -> None:
+        # Non-vacuity for the leg above: the SAME speaker, the same accusation
+        # and the same records, with a ``saw_player`` row instead of the kill,
+        # IS a first-hand source. So the previous test measures the kind, not a
+        # transcript that could never have grounded anything.
+        transcript = _transcript(
+            _turn(
+                index=0,
+                speaker="p-2",
+                observations=(_saw(subject="p-5", room="MEDBAY", tick=14),),
+                claims=(_accuses("p-5"),),
+            ),
+        )
+        records = {"p-2": (_record(subject="p-5", room="MEDBAY", tick=14),)}
+        row = _row(_ledger(transcript, sighting_records=records), "p-5")
+        assert row.first_hand == ("p-2",)
+        assert row.adopted == ()
 
 
 class TestAdoptedSources:
