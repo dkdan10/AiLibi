@@ -5890,6 +5890,24 @@ into every downstream prompt; the named-paths commit took one file of seven; the
 now "tasks file + the entire agent_prompts/ dir", recorded for the close ledger as the fourth
 incident in the masked-verdict class).
 
+**Amendment record (2026-09-01, the Q4 ruling executed — #417, squash `64de009e`):** the ballot
+now renders a spoken `saw_kill` under the arm (ON = OFF plus exactly one line, asserted as a
+diff), `vote_ballot` is the arm's third key, and the all-ON `vote_ballot` stamp is the
+corroboration+testimony composite with the overlay order DERIVED from the registry. The
+corroboration ledger EXCLUDES a spoken `saw_kill` from first-hand credit, documented on three
+grounds (no typed record or minted flag to test against; `KillWitnessRecord` is an
+orchestrator-layer surface the import-light module may not reach; crediting it would re-open on
+the ballot the suspicion delta #416's ratified P1 closed on the accusation side) and pinned with
+a record-covering test plus its non-vacuity twin. The 21.19 cells re-derive identically
+(475/1,525, 11/425, 33, 48). Two deviations ratified: the forced `loader.py` kwarg (without it
+the ruled branch was dead on both paths — the ruling's item 1 was unachievable as scoped), and a
+SECOND guarded branch fixing an all-ON self-contradiction Codex raised to P1 (the source-count
+row called a rendered kill witness someone who "named them without adding anything they saw" —
+right count, false sentence, on the exact slate 21.24 records; per-slate digests prove only the
+composite moves). Routed onward: `testimony_shapes` lacks the stamp-vs-environment guard its
+21.19 sibling carries — joining the version/environment generalisation and the Q2 seam items at
+21.24. Codex: 3 rounds, 3 P1s fixed, round 3 closed with no findings.
+
 **Ready-to-paste prompt:** `agent_prompts/task-21-20-testimony-shapes.md`
 
 ### Task 21.21 — THE OFFLINE COUNTERFACTUAL: the Wave-2 levers over the re-recorded bytes, published before any bar is written
