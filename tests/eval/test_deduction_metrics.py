@@ -52,6 +52,7 @@ from pydantic import ValidationError
 from api.schemas import classify_evidence
 from engine.entities import Role
 from eval.deduction_metrics import (
+    CONFESSION_QUOTATION_EXCLUSIONS,
     MACHINERY_DECIMAL_PATTERN,
     MACHINERY_VOCABULARY,
     SELF_KILL_PHRASES,
@@ -2551,3 +2552,207 @@ def test_the_crew_omniscient_control_is_one_on_each_9p2i_set(
     assert corpus_4p1i.deduction.scaffold_leakage.crew_omniscient_control_ballots == 0
     for report in (samples_9p2i, corpus_9p2i, samples_4p1i, corpus_4p1i):
         assert report.deduction.scaffold_leakage.crew_partner_naming_ballots == 0
+
+
+# --------------------------------------------------------------------------- #
+# 9. The player-visible self-disclosure pair (upper bound + its crew control). #
+# --------------------------------------------------------------------------- #
+
+
+def _spoken_turn(
+    *,
+    speaker: PlayerId,
+    free_text: str = "",
+    reason: str = "r",
+) -> MeetingTurn:
+    """One turn whose free text and accusation reason are both set by hand."""
+
+    return MeetingTurn(
+        turn_id="m:turn-0",
+        turn_index=0,
+        speaker=speaker,
+        turn_kind="opening",
+        reply_to=None,
+        observations=(),
+        claims=(
+            AccusationClaim(
+                type="accusation", against="p-2", confidence=0.8, reason=reason
+            ),
+        ),
+        free_text=free_text,
+    )
+
+
+def _visible_cells(
+    *, speaker_role: Role, free_text: str = "", reason: str = "r"
+) -> tuple[int, int]:
+    """``(impostor cell, crew control)`` for one hand-built turn."""
+
+    report = _synthetic_report(
+        turns=(_spoken_turn(speaker="p-1", free_text=free_text, reason=reason),),
+        ballots=(_ballot("p-1", "SKIP"), _ballot("p-2", "SKIP")),
+        roles={"p-1": speaker_role, "p-2": "CREWMATE"},
+    )
+    leakage = compute_deduction_metrics(report).scaffold_leakage
+    return (
+        leakage.model_self_disclosure_visible_turns,
+        leakage.crew_self_disclosure_control_turns,
+    )
+
+
+def test_the_visible_net_reads_the_claim_reason_not_only_free_text() -> None:
+    """The surface is what the TABLE reads, and the reason is on the table.
+
+    The one genuine confession on the committed bytes lives in an accusation's
+    ``reason`` while the same turn's ``free_text`` is a denial, so a net over
+    ``free_text`` alone reports that turn clean — which is the zero this pair
+    exists to stop meaning "we did not look".
+    """
+
+    assert _visible_cells(
+        speaker_role="IMPOSTOR",
+        free_text="I was in Storage at tick 17, so I could not have done it.",
+        reason="p-8 moved in right after I killed p-1.",
+    ) == (1, 0)
+    # The partner net over ``free_text`` alone sees nothing in that same turn.
+    report = _synthetic_report(
+        turns=(
+            _spoken_turn(
+                speaker="p-1",
+                free_text="I was in Storage at tick 17, so I could not have done it.",
+                reason="p-8 moved in right after I killed p-1.",
+            ),
+        ),
+        ballots=(_ballot("p-1", "SKIP"), _ballot("p-2", "SKIP")),
+        roles={"p-1": "IMPOSTOR", "p-2": "CREWMATE"},
+    )
+    assert (
+        compute_deduction_metrics(report).scaffold_leakage.player_visible_leak_turns
+        == 0
+    )
+
+
+def test_the_net_does_not_read_an_alibi_claims_evidence() -> None:
+    """The surface is what the table READS, so a string nothing renders is out.
+
+    Every transcript block spells an alibi as subject / room / tick range and
+    never its ``evidence`` tuple, so those strings are model-authored text no
+    player ever sees. Counting them would file hidden output as table-visible
+    testimony — the same ruling the oracle-register net already carries — and
+    would make the cell's own name false.
+    """
+
+    hidden = MeetingTurn(
+        turn_id="m:turn-0",
+        turn_index=0,
+        speaker="p-1",
+        turn_kind="opening",
+        reply_to=None,
+        observations=(),
+        claims=(
+            AlibiClaim(
+                type="alibi",
+                subject="p-1",
+                from_tick=1,
+                to_tick=2,
+                room="CAFETERIA",
+                evidence=("I am the impostor and I was alone",),
+            ),
+        ),
+        free_text="",
+    )
+    report = _synthetic_report(
+        turns=(hidden,),
+        ballots=(_ballot("p-1", "SKIP"), _ballot("p-2", "SKIP")),
+        roles={"p-1": "IMPOSTOR", "p-2": "CREWMATE"},
+    )
+    leakage = compute_deduction_metrics(report).scaffold_leakage
+    assert leakage.model_self_disclosure_visible_turns == 0
+    # ...and the gate is not vacuous: the SAME sentence in a rendered surface
+    # scores, so the exclusion is about visibility and not about the phrase.
+    assert _visible_cells(
+        speaker_role="IMPOSTOR", reason="I am the impostor and I was alone"
+    ) == (1, 0)
+
+
+def test_the_crew_cell_is_the_false_positive_control() -> None:
+    """A crewmate has no kill to confess, so every crew match is noise.
+
+    The pair must be read together: the same sentence scores in the control when
+    a crewmate says it, which is what stops the impostor cell being quoted as a
+    leak RATE.
+    """
+
+    assert _visible_cells(
+        speaker_role="CREWMATE", free_text="not because I killed anyone"
+    ) == (0, 1)
+    assert _visible_cells(
+        speaker_role="IMPOSTOR", free_text="not because I killed anyone"
+    ) == (1, 0)
+
+
+@pytest.mark.parametrize("excluded", CONFESSION_QUOTATION_EXCLUSIONS)
+def test_the_exclusion_list_drops_a_quotation_or_conditional(excluded: str) -> None:
+    """Direction one: a phrase carried inside a rebuttal is not an admission."""
+
+    assert _visible_cells(
+        speaker_role="IMPOSTOR", free_text=f"{excluded} p-3 when I was in Labs?"
+    ) == (0, 0)
+
+
+def test_a_bare_first_person_admission_still_counts() -> None:
+    """Direction two: the exclusion must not swallow the class it is filtering.
+
+    Both directions are the planted case craft rule 2 asks for — an exclusion
+    that dropped everything would pass the test above on its own.
+    """
+
+    assert _visible_cells(
+        speaker_role="IMPOSTOR", free_text="I killed p-3 in Reactor."
+    ) == (1, 0)
+    assert _visible_cells(speaker_role="IMPOSTOR", free_text="I am the impostor.") == (
+        1,
+        0,
+    )
+
+
+def test_the_exclusion_bites_only_on_the_excluded_form() -> None:
+    """The gate can fail: the SAME sentence minus its quotation frame counts.
+
+    Fed through the real net, not through a re-implementation of it.
+    """
+
+    quoted = "How do you know I killed p-3? I was in Labs the whole time."
+    bare = "I killed p-3. I was in Labs the whole time."
+    assert _visible_cells(speaker_role="IMPOSTOR", free_text=quoted) == (0, 0)
+    assert _visible_cells(speaker_role="IMPOSTOR", free_text=bare) == (1, 0)
+
+
+def test_the_disjoint_visible_disclosure_invariant_bites(
+    samples_9p2i: TournamentEvalReport,
+) -> None:
+    """The pair splits ONE turn pool by role, so it cannot double-count it.
+
+    Bounding each cell against ``turns_total`` alone would accept a payload
+    claiming every turn on both sides — and the pair's whole reading is the
+    impostor cell AGAINST its crew control, so a block that inflates both is
+    exactly the corruption that makes the control unreadable. Fed through the
+    real model validator, with the legal boundary case beside it.
+    """
+
+    payload = samples_9p2i.deduction.model_dump()
+    block = payload["scaffold_leakage"]
+    turns = block["turns_total"]
+    block["model_self_disclosure_visible_turns"] = turns
+    block["crew_self_disclosure_control_turns"] = 1
+    with pytest.raises(ValidationError, match="role-disjoint"):
+        DeductionMetricsReport.model_validate(payload)
+    # ...and the boundary is legal: the two may exactly partition the pool, so
+    # the guard is a joint bound rather than a blanket refusal.
+    block["model_self_disclosure_visible_turns"] = turns - 1
+    assert (
+        DeductionMetricsReport.model_validate(
+            payload
+        ).scaffold_leakage.crew_self_disclosure_control_turns
+        == 1
+    )

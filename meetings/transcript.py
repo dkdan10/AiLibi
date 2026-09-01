@@ -331,6 +331,7 @@ from meetings.schemas import (
     MoveWitnessRecord,
     PlayerId,
     RoomId,
+    SawKillObservation,
     SawMoveObservation,
     SawPlayerObservation,
     SawVentObservation,
@@ -2102,14 +2103,27 @@ def _carries_relevant_observation(
     testimony-spread gate always-pass and silently retire the
     bare-accusation exclusion; excluded HERE keeps the voice count keyed
     on genuine evidence about the subject.
+
+    A :class:`~meetings.schemas.SawKillObservation` is excluded too, for a
+    different reason: the shape is testimony CONTENT with no grounding channel
+    behind it, so it mints no flag, no band and no suspicion delta anywhere.
+    Backing a voice IS a suspicion delta -- it promotes a bare accusation into
+    an independent one and lifts testimony spread -- and an ungrounded spoken
+    kill is precisely the claim a fabricator would reach for. A witnessed vent
+    is scored here because vents are impostor-only and the STRONG flag behind
+    them is typed-record grounded; kills have no equivalent channel, and adding
+    one is a separate change with its own entitlement question.
     """
 
     for observation in turn.observations:
-        # A roll-call self-placement locates only the speaker (above), and a
-        # movement claim carries no single room to gate on: it participates
-        # ONLY as the lever's grounded destination placement
-        # (:func:`_iter_move_placements`) and backs no accusation here.
-        if isinstance(observation, (WhereaboutsClaim, SawMoveObservation)):
+        # A roll-call self-placement locates only the speaker (above), a
+        # movement claim carries no single room to gate on (it participates
+        # ONLY as the lever's grounded destination placement,
+        # :func:`_iter_move_placements`), and a spoken kill is ungrounded
+        # content that must move no suspicion. None backs an accusation here.
+        if isinstance(
+            observation, (WhereaboutsClaim, SawMoveObservation, SawKillObservation)
+        ):
             continue
         rooms = canonical_rooms(observation.room)
         if not rooms:

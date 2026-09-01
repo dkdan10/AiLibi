@@ -53,6 +53,9 @@ from agents.strategic.prompts.loader import (
     _ENV,  # noqa: PLC2701
     _notify_bare_prompt_set_fallback,  # noqa: PLC2701
 )
+from meetings.constants import ENV_TESTIMONY_SHAPES
+from orchestrator.game import prompt_versions_for_set
+
 from llm.fake_provider import FakeProvider
 from llm.provider import (
     ENV_ANTHROPIC_API_KEY,
@@ -67,7 +70,6 @@ from llm.provider import (
 from orchestrator.game import (
     DEFAULT_PROMPT_VERSIONS,
     PROMPT_VERSION_SETS,
-    prompt_versions_for_set,
 )
 
 _TEMPLATE_NAMES = (
@@ -703,3 +705,167 @@ class TestResolutionStillRunsOnEveryBuild:
             _notify_bare_prompt_set_fallback.cache_clear()
             build_environment(env=_REAL_PROVIDER_ENV)
         assert len(capsys.readouterr().err.strip().splitlines()) == 5
+
+
+class TestTestimonyShapesRouting:
+    """The lever is bound at construction, and an unauthored set fails there.
+
+    The pairing that must not split: ``build_prompt_renderers`` and
+    ``prompt_versions_for_set`` read the SAME lever from the SAME mapping, so a
+    recording's rendered bytes and its recorded stamps can never come from two
+    different routing decisions.
+    """
+
+    def _crewmate(self, renderers: PromptRenderers) -> str:
+        return renderers.crewmate_report(
+            agent_id="p-3",
+            current_tick=7,
+            meeting_trigger="a body was reported",
+            rendered_memory="(memory)",
+            public_transcript="",
+            living_ids=("p-1", "p-2"),
+        )
+
+    def test_off_is_the_committed_body(self) -> None:
+        off = self._crewmate(
+            build_prompt_renderers(OPERATIONAL_BASELINE_PROMPT_SET, env={})
+        )
+        assert "saw_kill" not in off
+        # ...and the default filename constants are still what was served.
+        assert '"type": "saw_vent"' in off
+
+    def test_on_offers_the_shape_and_the_mandate(self) -> None:
+        on = self._crewmate(
+            build_prompt_renderers(
+                OPERATIONAL_BASELINE_PROMPT_SET, env={ENV_TESTIMONY_SHAPES: "1"}
+            )
+        )
+        assert '"type": "saw_kill"' in on
+        assert "name the killer, not the victim" in on
+
+    def test_the_binding_is_frozen_at_construction(self) -> None:
+        # PR #203's discipline, applied to this lever: a bundle built with the
+        # lever OFF keeps rendering the OFF body however the ambient process
+        # environment moves afterwards, because the boolean is bound into the
+        # partial rather than read per render.
+        off = build_prompt_renderers(OPERATIONAL_BASELINE_PROMPT_SET, env={})
+        on = build_prompt_renderers(
+            OPERATIONAL_BASELINE_PROMPT_SET, env={ENV_TESTIMONY_SHAPES: "1"}
+        )
+        assert "saw_kill" not in self._crewmate(off)
+        assert "saw_kill" in self._crewmate(on)
+
+    def test_the_stamp_and_the_render_read_one_lever(self) -> None:
+        env = {ENV_TESTIMONY_SHAPES: "1"}
+        versions = prompt_versions_for_set(OPERATIONAL_BASELINE_PROMPT_SET, env=env)
+        assert versions["crewmate_report"].endswith(".testimony_shapes")
+        assert versions["accusation_round"].endswith(".testimony_shapes")
+        # The two templates the arm does NOT re-body inherit the default values.
+        default = prompt_versions_for_set(OPERATIONAL_BASELINE_PROMPT_SET, env={})
+        assert versions["impostor_report"] == default["impostor_report"]
+        assert versions["vote_ballot"] == default["vote_ballot"]
+
+    def test_a_set_without_the_guarded_body_fails_loud_at_construction(
+        self, tmp_path: Path
+    ) -> None:
+        # A MISSING BODY is a real defect and must surface where the bundle is
+        # built, never as a silently unguarded render. The message names the
+        # body, and says nothing about a sibling lever being on.
+        set_dir = tmp_path / "guardless_set"
+        set_dir.mkdir()
+        for name in (
+            CREWMATE_REPORT_TEMPLATE,
+            IMPOSTOR_REPORT_TEMPLATE,
+            ACCUSATION_ROUND_TEMPLATE,
+            VOTE_BALLOT_TEMPLATE,
+        ):
+            (set_dir / name).write_text("body {{ agent_id }}", encoding="utf-8")
+
+        with pytest.raises(ValueError) as excinfo:
+            build_prompt_renderers(
+                "guardless_set", root=tmp_path, env={ENV_TESTIMONY_SHAPES: "1"}
+            )
+        message = str(excinfo.value)
+        assert "testimony_shapes" in message
+        assert CREWMATE_REPORT_TEMPLATE in message
+        assert "impostor_roll_call" not in message
+        # The gate bites only on the ON path: the same set builds fine OFF.
+        assert (
+            build_prompt_renderers("guardless_set", root=tmp_path, env={}) is not None
+        )
+
+    @pytest.mark.parametrize(
+        ("label", "body"),
+        [
+            # The name in a jinja comment and in literal prose: no condition at
+            # all, so ON and OFF render the same bytes.
+            (
+                "mentioned",
+                "{# testimony_shapes: authored later #}\n"
+                "body {{ agent_id }} - testimony_shapes\n",
+            ),
+            # A DEAD guard: jinja folds ``false and x`` to a constant without
+            # ever reading ``x``, so the block can never render and the arm's
+            # stamp would claim bytes that were never served.
+            (
+                "dead guard",
+                "body {{ agent_id }}\n"
+                "{% if false and testimony_shapes %}\nkill row\n{% endif %}\n",
+            ),
+        ],
+    )
+    def test_a_body_without_a_LIVE_guard_is_refused(
+        self, label: str, body: str, tmp_path: Path
+    ) -> None:
+        # The check reads the PARSED template, not its source text: the body
+        # must carry an ``{% if %}`` whose condition reads the variable AND does
+        # not fold to a constant. A substring check accepts both bodies below;
+        # a variables-only check still accepts the second.
+        set_dir = tmp_path / "unguarded_set"
+        set_dir.mkdir()
+        for name in (
+            CREWMATE_REPORT_TEMPLATE,
+            IMPOSTOR_REPORT_TEMPLATE,
+            ACCUSATION_ROUND_TEMPLATE,
+            VOTE_BALLOT_TEMPLATE,
+        ):
+            (set_dir / name).write_text(body, encoding="utf-8")
+
+        with pytest.raises(ValueError, match="no live"):
+            build_prompt_renderers(
+                "unguarded_set", root=tmp_path, env={ENV_TESTIMONY_SHAPES: "1"}
+            )
+        # ...and the check is not vacuous: the same set with a LIVE guard builds.
+        for name in (CREWMATE_REPORT_TEMPLATE, ACCUSATION_ROUND_TEMPLATE):
+            (set_dir / name).write_text(
+                "body {{ agent_id }}\n"
+                "{% if testimony_shapes is defined and testimony_shapes %}\n"
+                "kill row\n"
+                "{% endif %}\n",
+                encoding="utf-8",
+            )
+        assert (
+            build_prompt_renderers(
+                "unguarded_set", root=tmp_path, env={ENV_TESTIMONY_SHAPES: "1"}
+            )
+            is not None
+        )
+
+    def test_a_sibling_overlay_does_not_make_it_raise(self) -> None:
+        # Composition, not exclusion: the all-ON slate is exactly what the
+        # adopting record runs, so a bundle with every live arm ON must build --
+        # including the arm that SWAPS the statement template for a variant this
+        # arm's block does not reach (the gap
+        # ``tests/meetings/test_prompt_byte_golden.py`` pins for the swapping
+        # arm, unchanged here). The pre-check reads the bodies THIS arm
+        # re-bodies, so a sibling's swap can never be reported as a missing body.
+        every_arm = {
+            ENV_IMPOSTOR_ROLL_CALL: "1",
+            "AILIBI_REPORTER_REASONING": "1",
+            "AILIBI_CORROBORATION_DISCIPLINE": "1",
+            ENV_TESTIMONY_SHAPES: "1",
+        }
+        renderers = build_prompt_renderers(
+            OPERATIONAL_BASELINE_PROMPT_SET, env=every_arm
+        )
+        assert "saw_kill" in self._crewmate(renderers)

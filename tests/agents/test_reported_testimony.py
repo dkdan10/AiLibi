@@ -47,9 +47,12 @@ from meetings.schemas import (
     MeetingTranscript,
     MeetingTurn,
     ReportedStatement,
+    SawKillObservation,
+    SawMoveObservation,
     SawPlayerObservation,
     SawVentObservation,
     VoteBallot,
+    WhereaboutsClaim,
 )
 
 
@@ -960,3 +963,210 @@ def test_reported_rows_survive_in_every_candidate_bucket(
         assert survival.kept[bucket] / offered >= _SURVIVAL_FLOOR, (
             f"{bucket}: kept {survival.kept[bucket]} of {offered}"
         )
+
+
+# --------------------------------------------------------------------------- #
+# The testimony-shapes lever: what the three new kinds do on the INGEST side   #
+# --------------------------------------------------------------------------- #
+
+_SHAPES_ON: Final[Mapping[str, str]] = {"AILIBI_TESTIMONY_SHAPES": "1"}
+
+
+def _shapes_meeting() -> MeetingResult:
+    """One meeting whose only content is the three lever-gated shapes."""
+
+    return MeetingResult(
+        meeting_id="m-shapes",
+        triggered_by="p-2",
+        trigger_tick=30,
+        outcome="SKIPPED",
+        ejected_player_id=None,
+        ballots=tuple(
+            VoteBallot(
+                voter=voter,
+                target="SKIP",
+                confidence=0.0,
+                primary_reason_id=None,
+                considered_alternatives=(),
+                rationale_text="skip",
+            )
+            for voter in ("p-1", "p-2", "p-3", "p-4")
+        ),
+        transcript=MeetingTranscript(
+            turns=(
+                MeetingTurn(
+                    turn_id="m-shapes:turn-0",
+                    turn_index=0,
+                    speaker="p-2",
+                    turn_kind="opening",
+                    reply_to=None,
+                    observations=(
+                        WhereaboutsClaim(type="whereabouts", tick=11, room="MEDBAY"),
+                        SawMoveObservation(
+                            type="saw_move",
+                            tick=12,
+                            subject="p-4",
+                            from_room="ADMIN",
+                            to_room="LABS",
+                        ),
+                        SawKillObservation(
+                            type="saw_kill", tick=13, subject="p-3", room="REACTOR"
+                        ),
+                    ),
+                    claims=(),
+                    free_text="I saw it happen.",
+                ),
+            )
+        ),
+    )
+
+
+class TestTestimonyShapesIngest:
+    def test_off_leaves_the_alibi_map_and_the_rows_exactly_as_head_leaves_them(
+        self,
+    ) -> None:
+        # The perturbation the lever's OFF path is entitled to: the SAME fixture
+        # meeting, derived with the lever unset, folds nothing at all -- no
+        # episodic row, no belief row, no alibi.
+        memory = _memory_for(agent_id="p-1", self_tick=20)
+        absorb_reported_testimony(
+            memory, statements=derive_reported_testimony(_shapes_meeting(), env={})
+        )
+
+        assert _reported_rows(memory) == ()
+        assert memory.beliefs.view("p-2").alibis == ()
+
+    def test_a_whereabouts_feeds_the_alibi_map_exactly_as_an_alibi_does(self) -> None:
+        memory = _memory_for(agent_id="p-1", self_tick=20)
+        absorb_reported_testimony(
+            memory,
+            statements=derive_reported_testimony(_shapes_meeting(), env=_SHAPES_ON),
+        )
+
+        belief = memory.beliefs.view("p-2")
+        assert len(belief.alibis) == 1
+        alibi = belief.alibis[0]
+        assert (alibi.player_id, alibi.room, alibi.tick, alibi.source) == (
+            "p-2",
+            "MEDBAY",
+            11,
+            "p-2",
+        )
+        # Only the self-placement reaches the map: a witnessed transition and a
+        # witnessed kill are sightings of SOMEONE ELSE, not location accounts the
+        # subject gave, so neither is a stated alibi.
+        assert memory.beliefs.view("p-4").alibis == ()
+        assert memory.beliefs.view("p-3").alibis == ()
+
+    def test_the_three_kinds_land_as_reported_rows(self) -> None:
+        memory = _memory_for(agent_id="p-1", self_tick=20)
+        absorb_reported_testimony(
+            memory,
+            statements=derive_reported_testimony(_shapes_meeting(), env=_SHAPES_ON),
+        )
+
+        rows = _reported_rows(memory)
+        assert {row.payload["kind"] for row in rows} == {
+            "whereabouts",
+            "saw_move",
+            "saw_kill",
+        }
+        assert {row.provenance for row in rows} == {PROVENANCE_REPORTED}
+        assert {row.tick for row in rows} == {21}
+
+    def test_the_three_kinds_render_inside_the_unverified_frame(self) -> None:
+        memory = _memory_for(agent_id="p-1", self_tick=20)
+        absorb_reported_testimony(
+            memory,
+            statements=derive_reported_testimony(_shapes_meeting(), env=_SHAPES_ON),
+        )
+
+        view = render_for_prompt(memory)
+        assert "p-2 placed themselves in MEDBAY @ tick 11" in view
+        assert "saw p-4 arrive in LABS @ tick 12" in view
+        assert "saw p-3 KILL in REACTOR @ tick 13" in view
+        # The frame is load-bearing: every one of them reads as a third party's
+        # unverified assertion, never as something this agent witnessed.
+        for body in (
+            "p-2 placed themselves in MEDBAY @ tick 11",
+            "saw p-4 arrive in LABS @ tick 12",
+            "saw p-3 KILL in REACTOR @ tick 13",
+        ):
+            line = next(line for line in view.splitlines() if body in line)
+            assert "CLAIM by p-2 (unverified):" in line
+
+    def test_the_own_statement_guard_still_drops_a_speakers_own_roll_call(
+        self,
+    ) -> None:
+        # A whereabouts is a SELF-placement, so the own-statement guard is what
+        # stops an agent's own roll-call echoing back at it as a third-party
+        # claim -- and it fires before the alibi-map write, so no SELF belief row
+        # materialises either.
+        memory = _memory_for(agent_id="p-2", self_tick=20)
+        absorb_reported_testimony(
+            memory,
+            statements=derive_reported_testimony(_shapes_meeting(), env=_SHAPES_ON),
+        )
+
+        assert _reported_rows(memory) == ()
+        assert memory.beliefs.view("p-2").alibis == ()
+
+    def test_a_non_roster_speaker_is_still_dropped(self) -> None:
+        memory = _memory_for(
+            agent_id="p-1", roster_sightings=("p-3", "p-4"), self_tick=20
+        )
+        absorb_reported_testimony(
+            memory,
+            statements=derive_reported_testimony(_shapes_meeting(), env=_SHAPES_ON),
+        )
+
+        # p-2 was never engine-witnessed by this agent, so neither its
+        # self-placement nor its sightings materialise anything.
+        assert _reported_rows(memory) == ()
+        assert memory.beliefs.view("p-2").alibis == ()
+
+    def test_a_malformed_payload_of_each_new_kind_renders_nothing(self) -> None:
+        # The module's defensive ``.get`` convention: a row planted with its room
+        # missing renders no line rather than a half-formed one.
+        memory = _memory_for(agent_id="p-1", self_tick=20)
+        for kind in ("whereabouts", "saw_move", "saw_kill"):
+            memory.episodic.append(
+                EpisodicEvent(
+                    tick=21,
+                    type=EVENT_REPORTED_TESTIMONY,
+                    payload={
+                        "speaker": "p-2",
+                        "kind": kind,
+                        "subject": "p-3",
+                        "meeting_index": 1,
+                        "from_tick": 13,
+                        "to_tick": 13,
+                        "room": None,
+                        "co_present": [],
+                    },
+                    provenance=PROVENANCE_REPORTED,
+                )
+            )
+
+        view = render_for_prompt(memory)
+        assert "CLAIM by p-2" not in view
+        # And the gate is not vacuous: the same rows WITH a room do render.
+        memory_ok = _memory_for(agent_id="p-1", self_tick=20)
+        memory_ok.episodic.append(
+            EpisodicEvent(
+                tick=21,
+                type=EVENT_REPORTED_TESTIMONY,
+                payload={
+                    "speaker": "p-2",
+                    "kind": "saw_kill",
+                    "subject": "p-3",
+                    "meeting_index": 1,
+                    "from_tick": 13,
+                    "to_tick": 13,
+                    "room": "REACTOR",
+                    "co_present": [],
+                },
+                provenance=PROVENANCE_REPORTED,
+            )
+        )
+        assert "saw p-3 KILL in REACTOR @ tick 13" in render_for_prompt(memory_ok)

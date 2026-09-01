@@ -1105,11 +1105,15 @@ _OVERLAY_KEYS: tuple[str, ...] = tuple(_PROMPT_VERSION_OVERLAYS)
 # stamp; a template no enabled arm re-bodies keeps its default value, because
 # those are the default bytes.
 _ALL_ON_STAMPS: Mapping[str, str] = {
-    "crewmate_report": "crewmate_report.qwen3_6_27b.v5.reporter_reasoning",
+    "crewmate_report": (
+        "crewmate_report.qwen3_6_27b.v5.reporter_reasoning"
+        "+crewmate_report.qwen3_6_27b.v5.testimony_shapes"
+    ),
     "impostor_report": "impostor_report_roll_call.qwen3_6_27b.v1",
     "accusation_round": (
         "accusation_round_roll_call.qwen3_6_27b.v1"
         "+accusation_round.qwen3_6_27b.v5.reporter_reasoning"
+        "+accusation_round.qwen3_6_27b.v5.testimony_shapes"
     ),
     "vote_ballot": "vote_ballot.qwen3_6_27b.v5.corroboration_discipline",
 }

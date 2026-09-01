@@ -469,6 +469,26 @@ CORROBORATION_DISCIPLINE_PROMPT_VERSION_SETS: Final[Mapping[str, Mapping[str, st
 }
 
 
+# The testimony-shapes ON-arm version registry, served while the default-OFF
+# ``testimony_shapes`` lever is ON. Same shape as the two arms above: the lever
+# swaps no template FILE, it renders the set's own ``crewmate_report.j2`` /
+# ``accusation_round.j2`` with a guarded witnessed-kill block, so exactly those
+# two keys carry arm stamps and the other two inherit the default registry's
+# values. A turn prompt that OFFERED the kill shape can therefore never share a
+# stamp with one that did not.
+_TESTIMONY_SHAPES_KEY: Final[str] = "testimony_shapes"
+_TESTIMONY_SHAPES_ARM: Final[Mapping[str, str]] = _lever_arm_versions(
+    "qwen3_6_27b", _TESTIMONY_SHAPES_KEY
+)
+TESTIMONY_SHAPES_PROMPT_VERSION_SETS: Final[Mapping[str, Mapping[str, str]]] = {
+    "qwen3_6_27b": {
+        **_bespoke_versions("qwen3_6_27b", version="v5"),
+        "crewmate_report": _TESTIMONY_SHAPES_ARM["crewmate_report"],
+        "accusation_round": _TESTIMONY_SHAPES_ARM["accusation_round"],
+    },
+}
+
+
 # Every live lever that carries an ON-arm version overlay, keyed by the substrate
 # registry key the lever stamps. The fold below iterates
 # ``_TOGGLEABLE_LEVER_RESOLVERS`` rather than this mapping, so application order
@@ -479,6 +499,7 @@ _PROMPT_VERSION_OVERLAYS: Final[Mapping[str, Mapping[str, Mapping[str, str]]]] =
     "impostor_roll_call": IMPOSTOR_ROLL_CALL_PROMPT_VERSION_SETS,
     "reporter_reasoning": REPORTER_REASONING_PROMPT_VERSION_SETS,
     "corroboration_discipline": CORROBORATION_DISCIPLINE_PROMPT_VERSION_SETS,
+    "testimony_shapes": TESTIMONY_SHAPES_PROMPT_VERSION_SETS,
 }
 
 # The human label each overlay's fail-loud message names, so an operator reads
@@ -487,6 +508,7 @@ _PROMPT_OVERLAY_LABELS: Final[Mapping[str, str]] = {
     "impostor_roll_call": "impostor-answer",
     "reporter_reasoning": "reporter-voice",
     "corroboration_discipline": "source-count",
+    "testimony_shapes": "testimony-shapes",
 }
 
 
@@ -3638,6 +3660,7 @@ __all__ = [
     "ROSTER_PRESETS",
     "ReportedTestimonyAgent",
     "RosterPreset",
+    "TESTIMONY_SHAPES_PROMPT_VERSION_SETS",
     "TacticalAgent",
     "UnrecordedGameResult",
     "UnrecordedMeetingStep",

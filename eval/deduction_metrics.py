@@ -256,11 +256,23 @@ pins say so.
   UNION (a ballot can hit several nets, so the union is not their sum).
   ``crew_partner_naming_ballots`` and ``crew_omniscient_control_ballots`` are
   the false-positive CONTROLS. Re-derived over the committed reports the partner
-  control is 0 on all four sets and the omniscient control is **1** on each of
-  the two 9p2i sets and 0 on the two 4p1i ones — a small, non-zero base rate a
-  reader of the leak cells must know about.
-  ``player_visible_leak_turns`` is the partner net over player-visible
-  ``free_text``.
+  control is 0 on all four sets and the omniscient control is **1** on
+  ``samples/9p2i``, **0** on ``samples/4p1i``, **2** on ``ml_corpus/9p2i`` and
+  **0** on ``ml_corpus/4p1i`` — a small, non-zero base rate a reader of the leak
+  cells must know about. Recompute both with
+  ``uv run python scripts/build_sample_report.py --sample-dir replays/<set>
+  --check`` per set, which rebuilds the committed
+  ``tournament-eval-report.json`` these cells are read out of.
+
+  Three cells reach the PLAYER-VISIBLE surface rather than the ballot:
+  ``player_visible_leak_turns`` is the partner net over turn ``free_text``, and
+  ``model_self_disclosure_visible_turns`` /
+  ``crew_self_disclosure_control_turns`` are the self-kill and role nets over
+  ``free_text`` plus each accusation / corroboration ``reason`` — the whole of
+  what a transcript block renders. The impostor cell is an explicit UPPER BOUND and the
+  crew cell is its false-positive control; neither may be quoted alone as a leak
+  rate. :data:`CONFESSION_QUOTATION_EXCLUSIONS` drops the quotation and
+  conditional forms first.
 
   First-person VENT mentions are deliberately EXCLUDED from the self-kill net.
   On the committed bytes they are dominated by denials and quotations of an
@@ -390,6 +402,7 @@ from meetings.schemas import (
     AccusationClaim,
     ContradictionRef,
     CorroborationClaim,
+    MeetingTurn,
     PlayerId,
     VoteBallot,
     WhereaboutsClaim,
@@ -537,6 +550,25 @@ admission; counting a denial as a leak would invert the metric. A genuine vent
 admission that also states the role is caught by
 :data:`ROLE_STATEMENT_PHRASES`. Crew false-positive control: 0 across all four
 committed sets.
+"""
+
+CONFESSION_QUOTATION_EXCLUSIONS: Final[tuple[str, ...]] = (
+    "how do you know i killed",
+    "if i killed",
+    "you claim i killed",
+)
+"""Forms that carry a self-kill phrase without asserting it.
+
+The player-visible surface below runs the first-person nets over speech, where
+the dominant non-admission use of "I killed" is a QUOTATION of someone else's
+charge or a CONDITIONAL rebuttal of it — the same class already excluded from
+the self-kill ballot net for first-person vent mentions. Each entry CONTAINS a
+net phrase, so cutting it out of the text before the net runs is what makes the
+exclusion bite; a form that merely sat beside a phrase would not.
+
+Matched case-insensitively. Deliberately short and literal rather than a
+pattern: an exclusion list that guesses generalises the noise it has measured
+into recall it has not.
 """
 
 MACHINERY_DECIMAL_PATTERN: Final[re.Pattern[str]] = re.compile(r"0\.\d\d")
@@ -1659,10 +1691,28 @@ class ScaffoldLeakageCells(_FrozenModel):
       guard-side cell below is scoped against.
     * ``crew_partner_naming_ballots`` / ``crew_omniscient_control_ballots`` —
       the false-positive CONTROLS over ``crew_ballots``. Re-derived over the
-      committed reports: partner 0 on all four sets, omniscient 1 on each 9p2i
-      set and 0 on each 4p1i set.
+      committed reports: partner 0 on all four sets, omniscient 1 on
+      ``samples/9p2i``, 0 on ``samples/4p1i``, 2 on ``ml_corpus/9p2i`` and 0 on
+      ``ml_corpus/4p1i`` (``uv run python scripts/build_sample_report.py
+      --sample-dir replays/<set> --check``).
     * ``player_visible_leak_turns`` — the partner net over player-visible
       ``free_text``; denominator ``turns_total``.
+    * ``model_self_disclosure_visible_turns`` /
+      ``crew_self_disclosure_control_turns`` — :data:`SELF_KILL_PHRASES` and
+      :data:`ROLE_STATEMENT_PHRASES` over the player-visible surface
+      (``free_text`` plus every accusation / corroboration ``reason``; an
+      ``AlibiClaim``'s ``evidence`` is never rendered, so it is never read
+      here either), split by the speaker's role; denominator ``turns_total``.
+      :data:`CONFESSION_QUOTATION_EXCLUSIONS` is cut out first. The impostor
+      cell is an explicit UPPER BOUND — a substring net cannot tell an
+      admission from a taunt or a rebuttal that quotes one, the same limit
+      ``model_machinery_vocabulary_ballots`` carries — and the crew cell is its
+      false-positive control: a crewmate has no kill to confess, so every crew
+      match is noise, and the two must be read together. Scanning the reason as
+      well as the free text is the point of the pair: on the committed bytes the
+      one genuine confession sits in an accusation's ``reason`` while the same
+      turn's ``free_text`` is a denial, so a net over ``free_text`` alone
+      reports that turn clean.
 
     MODEL-originated MACHINERY (over ALL ballots — machinery talk is
     role-independent):
@@ -1725,6 +1775,8 @@ class ScaffoldLeakageCells(_FrozenModel):
     crew_partner_naming_ballots: int
     crew_omniscient_control_ballots: int
     player_visible_leak_turns: int
+    model_self_disclosure_visible_turns: int
+    crew_self_disclosure_control_turns: int
     model_partner_naming_rate: WilsonRateCell
     model_omniscient_rate: WilsonRateCell
     model_machinery_quotation_ballots: int
@@ -1760,6 +1812,8 @@ class ScaffoldLeakageCells(_FrozenModel):
                 self.crew_partner_naming_ballots,
                 self.crew_omniscient_control_ballots,
                 self.player_visible_leak_turns,
+                self.model_self_disclosure_visible_turns,
+                self.crew_self_disclosure_control_turns,
                 self.model_machinery_quotation_ballots,
                 self.model_machinery_vocabulary_ballots,
                 self.claim_reasons_total,
@@ -1852,6 +1906,23 @@ class ScaffoldLeakageCells(_FrozenModel):
                     f"{impostor_side} + {crew_side} > "
                     f"{self.model_source_pre_guard_ballots}"
                 )
+        # The visible self-disclosure pair splits ONE turn pool by speaker role,
+        # so the two cells are disjoint and cannot jointly exceed it. Bounding
+        # each against ``turns_total`` alone would accept a payload claiming
+        # every turn twice -- and the pair's whole reading is the impostor cell
+        # AGAINST its crew control, so a block that inflates both is exactly the
+        # corruption that makes the control unreadable.
+        visible_disclosures = (
+            self.model_self_disclosure_visible_turns
+            + self.crew_self_disclosure_control_turns
+        )
+        if visible_disclosures > self.turns_total:
+            raise ValueError(
+                "the visible self-disclosure cells are role-disjoint, so they "
+                "cannot jointly exceed the turns scanned: "
+                f"{self.model_self_disclosure_visible_turns} + "
+                f"{self.crew_self_disclosure_control_turns} > {self.turns_total}"
+            )
         if self.impostor_ballots + self.crew_ballots != self.ballots_total:
             raise ValueError(
                 "impostor + crew ballots must equal ballots_total: "
@@ -1899,6 +1970,16 @@ class ScaffoldLeakageCells(_FrozenModel):
             (
                 "player_visible_leak_turns",
                 self.player_visible_leak_turns,
+                self.turns_total,
+            ),
+            (
+                "model_self_disclosure_visible_turns",
+                self.model_self_disclosure_visible_turns,
+                self.turns_total,
+            ),
+            (
+                "crew_self_disclosure_control_turns",
+                self.crew_self_disclosure_control_turns,
                 self.turns_total,
             ),
             (
@@ -2258,6 +2339,50 @@ def _matches(text: str, phrases: Sequence[str]) -> bool:
     return any(phrase in lowered for phrase in phrases)
 
 
+def _player_visible_text(turn: MeetingTurn) -> str:
+    """Everything of a turn the table actually reads.
+
+    ``free_text`` plus the ``reason`` of each accusation and corroboration: the
+    transcript render puts the reason on the table beside the free text, so a
+    disclosure there reaches every later speaker and every ballot exactly as one
+    in ``free_text`` does.
+
+    ``AlibiClaim.evidence`` is deliberately NOT read, and the render is the
+    reason: every transcript block spells an alibi as subject / room / tick
+    range and never its ``evidence`` tuple, so those strings are model-authored
+    text no player ever sees. Scoring them would file hidden output as
+    table-visible testimony and make the cell's own name false. (Excluding
+    ``evidence`` costs nothing on the committed bytes: the visible nets return
+    the same 10 turns either way.) Built once per turn, shared by the nets below.
+    """
+
+    return "\n".join(
+        [turn.free_text]
+        + [
+            claim.reason
+            for claim in turn.claims
+            if isinstance(claim, (AccusationClaim, CorroborationClaim))
+        ]
+    )
+
+
+def _is_self_disclosure(text: str) -> bool:
+    """Whether spoken text narrates the speaker's OWN kill or role.
+
+    :data:`SELF_KILL_PHRASES` and :data:`ROLE_STATEMENT_PHRASES` over the
+    player-visible surface, after :data:`CONFESSION_QUOTATION_EXCLUSIONS` are cut
+    out — a quotation or conditional carrying the phrase is not an assertion of
+    it, and counting one would invert the metric the way a counted denial would.
+    """
+
+    lowered = text.lower()
+    for excluded in CONFESSION_QUOTATION_EXCLUSIONS:
+        lowered = lowered.replace(excluded, " ")
+    return _matches(lowered, SELF_KILL_PHRASES) or _matches(
+        lowered, ROLE_STATEMENT_PHRASES
+    )
+
+
 def _is_oracle_register(text: str) -> bool:
     """Whether one utterance credits the game engine with a verdict.
 
@@ -2391,6 +2516,8 @@ class _Accumulator:
         self.crew_partner = 0
         self.crew_omniscient = 0
         self.player_visible_leak = 0
+        self.visible_self_disclosure_impostor = 0
+        self.visible_self_disclosure_crew = 0
         self.machinery_quotation = 0
         self.machinery_vocabulary = 0
         self.claim_reasons_total = 0
@@ -2493,6 +2620,15 @@ def _fold_meeting(
             acc.player_visible_leak += 1
         if _is_oracle_register(turn.free_text):
             acc.oracle_turns += 1
+        # The self-kill / role nets over everything the table READS, not over
+        # ``free_text`` alone: a speaker can deny in free text and narrate the
+        # kill in the accusation reason of the same turn, and a net over half
+        # the surface would report that turn clean.
+        if _is_self_disclosure(_player_visible_text(turn)):
+            if role == "IMPOSTOR":
+                acc.visible_self_disclosure_impostor += 1
+            else:
+                acc.visible_self_disclosure_crew += 1
         # The claim REASON is spoken text like any other. ``AlibiClaim`` carries
         # ``evidence``, not ``reason``, and is not scanned — a ruling backed by a
         # census: the register is absent from every committed evidence string.
@@ -2752,6 +2888,8 @@ def compute_deduction_metrics(
             crew_partner_naming_ballots=acc.crew_partner,
             crew_omniscient_control_ballots=acc.crew_omniscient,
             player_visible_leak_turns=acc.player_visible_leak,
+            model_self_disclosure_visible_turns=acc.visible_self_disclosure_impostor,
+            crew_self_disclosure_control_turns=acc.visible_self_disclosure_crew,
             model_partner_naming_rate=_cell(acc.model_partner, acc.impostor_ballots),
             model_omniscient_rate=_cell(acc.model_omniscient, acc.impostor_ballots),
             model_machinery_quotation_ballots=acc.machinery_quotation,
@@ -2786,6 +2924,7 @@ def compute_deduction_metrics(
 
 
 __all__ = [
+    "CONFESSION_QUOTATION_EXCLUSIONS",
     "CROSS_STATEMENT_KINDS",
     "MACHINERY_DECIMAL_PATTERN",
     "MACHINERY_ORACLE_PATTERNS",

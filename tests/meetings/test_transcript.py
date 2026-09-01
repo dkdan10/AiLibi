@@ -25,6 +25,7 @@ from meetings.schemas import (
     MeetingTranscript,
     MeetingTurn,
     SawMoveObservation,
+    SawKillObservation,
     SawPlayerObservation,
     SawVentObservation,
     WhereaboutsClaim,
@@ -3161,10 +3162,12 @@ def _voice_turn(
     supports: tuple[str, ...] = (),
     sightings: tuple[tuple[str, str, int], ...] = (),
     body: tuple[str, str, int] | None = None,
+    extra_observations: tuple[ObservationClaim, ...] = (),
     free_text: str | None = None,
 ) -> MeetingTurn:
     """One turn for the voices tests: ``sightings`` are (subject, room, tick),
-    ``body`` is (body_of, room, tick)."""
+    ``body`` is (body_of, room, tick), ``extra_observations`` are appended
+    verbatim for shapes the tuple forms do not spell."""
 
     observations: list[ObservationClaim] = []
     if body is not None:
@@ -3180,6 +3183,7 @@ def _voice_turn(
                 type="saw_player", tick=tick, subject=subject, room=room
             )
         )
+    observations.extend(extra_observations)
     claims: list[Claim] = []
     for target in accuses:
         claims.append(
@@ -3276,6 +3280,47 @@ class TestIndependentVoices:
         )
 
         assert independent_voices(transcript) == {"p-2": ("p-3",)}
+
+    def test_a_spoken_witnessed_kill_backs_no_voice(self) -> None:
+        # The witnessed-kill shape is testimony CONTENT with no grounding
+        # channel behind it, so it moves NO suspicion anywhere -- and backing a
+        # voice IS a suspicion delta: it promotes a bare accusation into an
+        # independent one and lifts testimony spread. Since the turn schema
+        # accepts the shape unconditionally, this must hold whatever the
+        # ``testimony_shapes`` lever reads.
+        transcript = MeetingTranscript(
+            turns=(
+                _voice_turn(
+                    turn_index=0,
+                    speaker="p-1",
+                    turn_kind="opening",
+                    accuses=("p-2",),
+                    body=self._BODY,
+                    extra_observations=(
+                        SawKillObservation(
+                            type="saw_kill", tick=9, subject="p-2", room="ADMIN"
+                        ),
+                    ),
+                ),
+            )
+        )
+
+        assert independent_voices(transcript) == {}
+        # The gate is not vacuous: the SAME turn with an ordinary sighting at
+        # the same room and tick DOES back the accusation.
+        backed = MeetingTranscript(
+            turns=(
+                _voice_turn(
+                    turn_index=0,
+                    speaker="p-1",
+                    turn_kind="opening",
+                    accuses=("p-2",),
+                    body=self._BODY,
+                    sightings=(("p-2", "ADMIN", 9),),
+                ),
+            )
+        )
+        assert independent_voices(backed) == {"p-2": ("p-1",)}
 
     def test_kill_scene_only_backing_carries_no_voice(self) -> None:
         # The seed-30 deflection shape: every located observation on the

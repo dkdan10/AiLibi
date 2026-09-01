@@ -562,6 +562,22 @@ class SawVentObservationView(_FrozenView):
     room: str
 
 
+class SawKillObservationView(_FrozenView):
+    """Shadows ``meetings.schemas.SawKillObservation``.
+
+    The spectator mirror of a witnessed murder: the KILLER named by
+    ``subject``, with the ``room`` and ``tick`` the witness watched it in.
+    Deliberately no victim field — the perception packet drops the victim, so
+    the witness's own record does not hold one. Display-only: the shape mints
+    no contradiction flag and no band, so nothing about it is re-derived here.
+    """
+
+    type: Literal["saw_kill"]
+    tick: int
+    subject: str
+    room: str
+
+
 class WhereaboutsClaimView(_FrozenView):
     """Shadows ``meetings.schemas.WhereaboutsClaim`` (Task 16.7.1).
 
@@ -603,6 +619,7 @@ ObservationClaimView: TypeAlias = Annotated[
     | CompletedTaskObsView
     | FoundBodyObsView
     | SawVentObservationView
+    | SawKillObservationView
     | WhereaboutsClaimView
     | SawMoveObservationView,
     Field(discriminator="type"),
@@ -1423,6 +1440,7 @@ __all__ = [
     "RubricView",
     "SabotageDetailView",
     "SabotageEventView",
+    "SawKillObservationView",
     "SawMoveObservationView",
     "SawPlayerView",
     "SawVentObservationView",

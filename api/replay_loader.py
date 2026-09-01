@@ -92,6 +92,7 @@ from api.schemas import (
     SabotageEventView,
     SawMoveObservationView,
     SawPlayerView,
+    SawKillObservationView,
     SawVentObservationView,
     SizeView,
     TaskCompletedEventView,
@@ -149,6 +150,7 @@ from meetings.schemas import (
     ObservationClaim,
     SawMoveObservation,
     SawPlayerObservation,
+    SawKillObservation,
     SawVentObservation,
     TurnAnnotationKind,
     VoteBallot,
@@ -2609,6 +2611,7 @@ def _observation_claim_view(
     | CompletedTaskObsView
     | FoundBodyObsView
     | SawVentObservationView
+    | SawKillObservationView
     | WhereaboutsClaimView
     | SawMoveObservationView
 ):
@@ -2641,6 +2644,16 @@ def _observation_claim_view(
         # ``ContradictionView``.
         return SawVentObservationView(
             type="saw_vent",
+            tick=claim.tick,
+            subject=claim.subject,
+            room=claim.room,
+        )
+    if isinstance(claim, SawKillObservation):
+        # The spectator mirror of the witnessed murder: the KILLER, the room and
+        # the tick. No victim -- the perception packet does not carry one -- and
+        # no flag: the shape mints none, so nothing is re-derived here.
+        return SawKillObservationView(
+            type="saw_kill",
             tick=claim.tick,
             subject=claim.subject,
             room=claim.room,

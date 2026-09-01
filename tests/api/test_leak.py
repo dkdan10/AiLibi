@@ -93,6 +93,8 @@ EXPECTED_DTOS: Final[frozenset[str]] = frozenset(
         "FoundBodyObsView",
         # Task 15.4.1 — spectator mirror of the Task 15.4 vent sighting:
         "SawVentObservationView",
+        # Spectator mirror of the witnessed murder (meetings SawKillObservation):
+        "SawKillObservationView",
         # Task 16.7.1 — spectator mirror of the Task 16.7 roll-call self-placement:
         "WhereaboutsClaimView",
         # Spectator mirror of the witnessed transition (meetings SawMoveObservation):
@@ -438,7 +440,9 @@ FORBIDDEN_EVAL_ENGINE_FIELDS: Final[frozenset[str]] = frozenset(
 #
 # Every one is an aggregate count, a rate, or a bool. Two groups deserve an
 # explicit firewall note because their NAMES sound content-bearing and are not:
-# ``player_visible_leak_turns`` / ``model_*_ballots`` are COUNTS of turns and
+# ``player_visible_leak_turns`` / ``model_*_ballots`` /
+# ``model_self_disclosure_visible_turns`` /
+# ``crew_self_disclosure_control_turns`` are COUNTS of turns and
 # ballots matching a phrase or regex net — no text, no speaker, no player id
 # crosses the model boundary — and ``crew_turns`` / ``impostor_turns`` are
 # role-SPLIT totals over a finished game's transcript, which this privileged
@@ -517,6 +521,7 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "crew_omniscient_control_ballots",
         "crew_partner_naming_ballots",
         "crew_pooled_coverage",
+        "crew_self_disclosure_control_turns",
         "crew_turns",
         "crew_turns_with_whereabouts",
         "crew_witnessed_kill_rate",
@@ -633,6 +638,7 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "model_partner_naming_ballots",
         "model_partner_naming_rate",
         "model_role_statement_ballots",
+        "model_self_disclosure_visible_turns",
         "model_self_kill_disclosure_ballots",
         "model_source_pre_guard_ballots",
         "model_source_unavailable_ballots",

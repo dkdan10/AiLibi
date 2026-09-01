@@ -278,6 +278,13 @@ export interface SawVentObservationView {
   room: string;
 }
 
+export interface SawKillObservationView {
+  type: "saw_kill";
+  tick: number;
+  subject: string;
+  room: string;
+}
+
 export interface WhereaboutsClaimView {
   type: "whereabouts";
   tick: number;
@@ -730,6 +737,8 @@ export interface ScaffoldLeakageCells {
   crew_partner_naming_ballots: number;
   crew_omniscient_control_ballots: number;
   player_visible_leak_turns: number;
+  model_self_disclosure_visible_turns: number;
+  crew_self_disclosure_control_turns: number;
   model_partner_naming_rate: WilsonRateCell;
   model_omniscient_rate: WilsonRateCell;
   model_machinery_quotation_ballots: number;
@@ -759,7 +768,7 @@ export interface WitnessedSupplyCells {
 }
 
 export type TickEventView = KillEventView | ReportBodyEventView | SabotageEventView | TaskCompletedEventView | MeetingTriggeredEventView | VentEventView;
-export type ObservationClaimView = SawPlayerView | CompletedTaskObsView | FoundBodyObsView | SawVentObservationView | WhereaboutsClaimView | SawMoveObservationView;
+export type ObservationClaimView = SawPlayerView | CompletedTaskObsView | FoundBodyObsView | SawVentObservationView | SawKillObservationView | WhereaboutsClaimView | SawMoveObservationView;
 export type StatementClaimView = AlibiClaimView | AccusationClaimView | CorroborationClaimView;
 
 export interface GameReport {

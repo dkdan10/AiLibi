@@ -144,6 +144,35 @@ class SawVentObservation(_FrozenModel):
     room: RoomId
 
 
+class SawKillObservation(_FrozenModel):
+    """First-hand witnessed murder: "``subject`` killed someone in ``room``".
+
+    The sayable form of the memory line a witness already holds
+    (``[tick 11] You witnessed p-8 kill in ADMIN.``): killer, room and tick,
+    mirroring :class:`SawVentObservation` field for field. Deliberately NO
+    victim field -- the perception packet carries the killer's action and its
+    room and drops the victim, so a victim field would be unobservable
+    fabrication, the same reasoning that keeps a vent's enter/exit phase out.
+
+    It mints NO contradiction flag and NO band: a spoken witnessed kill is
+    testimony CONTENT and stands exactly where a spoken
+    :class:`SawVentObservation` stands before grounding. The grounded
+    role-proof channel is the vent's alone -- the STRONG ``vent_sighting`` flag
+    confirms a spoken vent against the speaker's own typed
+    :class:`VentWitnessRecord`, and no equivalent typed channel exists for
+    kills. It reduces to a ``saw_kill``
+    :class:`ReportedStatement` so a listener keeps the room and tick as content
+    (:func:`meetings.manager.derive_reported_testimony`, under the
+    ``testimony_shapes`` lever). The turn schema accepts the shape
+    unconditionally, so parsing never depends on which templates offer it.
+    """
+
+    type: Literal["saw_kill"]
+    tick: int
+    subject: PlayerId
+    room: RoomId
+
+
 class WhereaboutsClaim(_FrozenModel):
     """Self-placement on the public record: "I was in ``room`` at ``tick``" (Task 16.7).
 
@@ -167,6 +196,13 @@ class WhereaboutsClaim(_FrozenModel):
     validators' range discipline applied to this shape.
     :func:`meetings.transcript.reconstruct_stated_paths` places the
     speaker by it, so answering roll-call puts you on the public record.
+
+    Under the ``testimony_shapes`` lever it also reduces to a ``whereabouts``
+    :class:`ReportedStatement` (subject = the speaker, ``from_tick == to_tick``)
+    so a listener keeps the placement as CONTENT and folds it into the
+    ``alibi_map`` an :class:`AlibiClaim` already feeds. With the lever OFF the
+    reduction drops it and the claim reaches listeners only through the scalar
+    detector path above.
     """
 
     type: Literal["whereabouts"]
@@ -196,6 +232,12 @@ class SawMoveObservation(_FrozenModel):
     accepts the shape unconditionally, so parsing never depends on which
     templates offer it -- a set that stays silent about the shape simply has no
     speaker who can emit one.
+
+    Under the ``testimony_shapes`` lever it reduces to a ``saw_move``
+    :class:`ReportedStatement` carrying that SAME single destination placement
+    (``room == to_room``, ``from_tick == to_tick == tick``), for the same
+    reason: the reduction may not mint an origin placement the detector
+    refuses to make. With the lever OFF the reduction drops the shape whole.
     """
 
     type: Literal["saw_move"]
@@ -210,6 +252,7 @@ ObservationClaim: TypeAlias = Annotated[
     | CompletedTaskObservation
     | FoundBodyObservation
     | SawVentObservation
+    | SawKillObservation
     | WhereaboutsClaim
     | SawMoveObservation,
     Field(discriminator="type"),
@@ -572,15 +615,24 @@ class MeetingTurn(_FrozenModel):
 
 
 ReportedStatementKind: TypeAlias = Literal[
-    "saw_player", "saw_vent", "alibi", "accusation", "corroboration"
+    "saw_player",
+    "saw_vent",
+    "saw_kill",
+    "whereabouts",
+    "saw_move",
+    "alibi",
+    "accusation",
+    "corroboration",
 ]
 """Discriminator for the STRUCTURED testimony shapes carried as content.
 
 The structured claim/observation kinds that survive the reduction -- a
 :class:`SawPlayerObservation` sighting, a :class:`SawVentObservation` sighting,
 an :class:`AlibiClaim`, an :class:`AccusationClaim`, a
-:class:`CorroborationClaim`. Free-text is excluded by construction (it never
-produces a :class:`ReportedStatement`).
+:class:`CorroborationClaim`, and under the ``testimony_shapes`` lever a
+:class:`SawKillObservation`, a :class:`WhereaboutsClaim` self-placement and a
+:class:`SawMoveObservation` transition. Free-text is excluded by construction
+(it never produces a :class:`ReportedStatement`).
 """
 
 
@@ -603,6 +655,13 @@ class ReportedStatement(_FrozenModel):
       whom" evidence the structured schema carries; Task 13.5.2, Codex P2).
     * ``saw_vent`` -- ``from_tick == to_tick`` (the sighting tick) and ``room``;
       no companions (a vent sighting names only who vented, and where).
+    * ``saw_kill`` -- ``from_tick == to_tick`` (the tick the kill was watched)
+      and ``room``; no companions, and the subject is the KILLER (the victim is
+      not carried, because the witness's own record does not hold one).
+    * ``whereabouts`` -- ``from_tick == to_tick`` (the placed tick) and
+      ``room``; the subject IS the speaker, a self-placement.
+    * ``saw_move`` -- ``from_tick == to_tick`` (the arrival tick) and ``room``,
+      which is the DESTINATION; the origin half is not carried.
     * ``alibi`` -- the inclusive ``from_tick``/``to_tick`` window and ``room``.
     * ``accusation`` -- ``subject`` only (no tick, no room).
     * ``corroboration`` -- ``from_tick == to_tick`` (the corroborated tick); no room.
@@ -913,6 +972,7 @@ __all__ = [
     "ReportedStatement",
     "ReportedStatementKind",
     "RoomId",
+    "SawKillObservation",
     "SawMoveObservation",
     "SawPlayerObservation",
     "SawVentObservation",

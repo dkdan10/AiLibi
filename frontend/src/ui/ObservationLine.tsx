@@ -50,6 +50,17 @@ export function ObservationLine({ obs }: { obs: ObservationClaimView }): ReactEl
           tick {obs.tick}
         </span>
       );
+    case "saw_kill":
+      // The witnessed murder: the subject is the KILLER and there is no victim
+      // to name (the perception packet does not carry one). Role-neutral
+      // wording, and no badge — the shape mints no contradiction at all.
+      return (
+        <span className="min-w-0 break-words">
+          <span className="font-semibold text-ink-900">saw</span> {obs.subject}{" "}
+          <span className="font-semibold text-ink-900">kill</span> in {obs.room} at
+          tick {obs.tick}
+        </span>
+      );
     case "whereabouts":
       // Task 16.7.1: the roll-call self-placement. The speaker IS the subject
       // (`TurnView.speaker`), so no name is rendered — role-neutral wording.

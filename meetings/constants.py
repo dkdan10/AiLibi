@@ -10,12 +10,20 @@ meetings.manager`` import contract satisfiable (audit post-phase-14-pause
 §3, constant homing). ``meetings.manager`` re-exports it for its existing
 callers, so no downstream import path breaks.
 
+The same rule homes the ``testimony_shapes`` resolver here. Both sides of the
+firewall must read that ONE lever -- :mod:`meetings.manager` for the testimony
+reduction and ``agents.strategic.prompts.loader`` for the render routing -- and
+the ``agents ↛ meetings.manager`` import contract forbids the obvious home, so
+a leaf both may import is the only place a single source of truth can sit.
+
 Keep this module stdlib-only (no ``meetings.*`` / ``agents.*`` /
 ``engine.*`` imports) so it stays a true leaf every layer can depend on.
 """
 
 from __future__ import annotations
 
+import os
+from collections.abc import Mapping
 from typing import Final
 
 # DESIGN.md §4.6 default skip-confidence threshold: a voter whose maximum
@@ -55,9 +63,51 @@ MAP_ARBITRATION_MAX_HOPS: Final[int] = 1
 MAP_ARBITRATION_MAX_TICK_GAP: Final[int] = 1
 
 
+# The testimony-shapes lever, DEFAULT OFF: what a witness may SAY and what a
+# listener KEEPS of it.
+ENV_TESTIMONY_SHAPES: Final[str] = "AILIBI_TESTIMONY_SHAPES"
+_TESTIMONY_SHAPES_FLAG_TRUE: Final[frozenset[str]] = frozenset(
+    {"1", "true", "yes", "on"}
+)
+
+
+def testimony_shapes_enabled(env: Mapping[str, str] | None = None) -> bool:
+    """Whether the testimony-shapes lever is ON. DEFAULT OFF.
+
+    Reads :data:`ENV_TESTIMONY_SHAPES` from ``env`` (defaulting to the real
+    process environment) and accepts ``1/true/yes/on`` case-insensitively; an
+    unset / empty / unrecognised value is ``False``. The ``env`` argument lets
+    tests and offline re-derivations toggle the lever deterministically without
+    mutating ``os.environ``.
+
+    ON does two things. The meeting reduction
+    (:func:`meetings.manager.derive_reported_testimony`) carries three more
+    spoken shapes into listeners' episodic memory -- a roll-call
+    ``whereabouts``, a witnessed ``saw_move`` transition and a witnessed
+    ``saw_kill`` -- and the crew turn templates OFFER the witnessed-kill shape,
+    which no template offers at all while the lever is OFF. OFF returns exactly
+    the pre-lever tuple and exactly the committed template bytes, so every
+    committed recording reconstructs unmoved.
+
+    Read at ONE place per entry point and never cached in a module-level
+    boolean: the loader binds the resolved value into its renderer partials at
+    construction and ``orchestrator.game.prompt_versions_for_set`` reads the
+    same lever for the stamp, which is what keeps rendered bytes and recorded
+    provenance on one routing decision.
+    """
+
+    environment = env if env is not None else os.environ
+    return (
+        environment.get(ENV_TESTIMONY_SHAPES, "").strip().lower()
+        in _TESTIMONY_SHAPES_FLAG_TRUE
+    )
+
+
 __all__ = [
     "DEFAULT_SKIP_CONFIDENCE_THRESHOLD",
+    "ENV_TESTIMONY_SHAPES",
     "GROUNDED_PROSECUTION_MIN_SOURCES",
     "MAP_ARBITRATION_MAX_HOPS",
     "MAP_ARBITRATION_MAX_TICK_GAP",
+    "testimony_shapes_enabled",
 ]

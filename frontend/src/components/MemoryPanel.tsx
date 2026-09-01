@@ -51,7 +51,8 @@ function Empty({ children }: { children: ReactNode }) {
 // only ever emits saw_player / completed_task / found_body. The explicit
 // `ReactElement` return type + a case for every union member means a future
 // producer widening can never SILENTLY blank a memory line (the 15-midwave
-// dormant trap, closed): saw_vent was the 15.4.1 gap, and whereabouts is 16.7.1.
+// dormant trap, closed): saw_vent was the 15.4.1 gap, whereabouts is 16.7.1,
+// and saw_kill is the witnessed-murder shape.
 // The wording mirrors `ui/ObservationLine.tsx`; the styling keeps this file's
 // local convention (`text-ink-900` on the root span).
 function ObservationLine({ obs }: { obs: ObservationClaimView }): ReactElement {
@@ -85,6 +86,14 @@ function ObservationLine({ obs }: { obs: ObservationClaimView }): ReactElement {
         <span className="min-w-0 break-words text-ink-900">
           <span className="font-semibold">saw</span> {obs.subject}{" "}
           <span className="font-semibold">vent</span> in {obs.room} at tick{" "}
+          {obs.tick}
+        </span>
+      );
+    case "saw_kill":
+      return (
+        <span className="min-w-0 break-words text-ink-900">
+          <span className="font-semibold">saw</span> {obs.subject}{" "}
+          <span className="font-semibold">kill</span> in {obs.room} at tick{" "}
           {obs.tick}
         </span>
       );

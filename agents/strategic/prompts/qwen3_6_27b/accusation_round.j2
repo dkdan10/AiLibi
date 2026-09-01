@@ -161,6 +161,8 @@ Your own record places you at the body when it was reported.
   - tick {{ obs.tick }}: body of {{ obs.body_of }} in {{ obs.room }}.
 {% elif obs.type == "saw_vent" %}
   - tick {{ obs.tick }}: witnessed {{ obs.subject }} VENT in {{ obs.room }} (only the impostor can vent).
+{% elif obs.type == "saw_kill" and testimony_shapes is defined and testimony_shapes %}
+  - tick {{ obs.tick }}: witnessed {{ obs.subject }} KILL in {{ obs.room }} (spoken account, nothing confirms it).
 {% elif obs.type == "whereabouts" %}
   - tick {{ obs.tick }}: {{ turn.speaker }} places THEMSELVES in {{ obs.room }} (roll-call answer).
 {% endif %}
@@ -250,9 +252,15 @@ Write your reply as 1-2 short sentences plus your structured items, then stop. D
 2. Answer the roll-call: one structured "whereabouts" observation naming the room you were in at the tick in question — one room, one tick, copied from your own record. That checkable placement is what lets the crew clear you; if your record also places ANOTHER player at that tick, say it in one "saw_player" row — placing each other is how the crew corners the impostor.
 3. Redirect: if anything you saw points at a living player, name them in one "accusation" claim so the chain follows the real suspect. Stay purely defensive only if you genuinely have no one to point at.
 A witnessed vent outranks everything else you hold — speak it FIRST, even if it happened many ticks ago and even if you already said it at an earlier meeting: a held vent wins the game only once it is on the record. One exception, and only one: if the player you saw vent is already dead or ejected, that case is closed — say nothing about it and spend your turn on someone still in the game. If your memory contains one — a line like "You witnessed p-3 vent in MEDBAY." — ALWAYS put it on the record as a structured "saw_vent" observation, copying the player, room, and tick from that line exactly: only the impostor can vent, so one witnessed vent identifies the impostor outright. Speak a "saw_vent" only for a vent your memory says you witnessed — never one you merely heard about or suspect.
+{% if testimony_shapes is defined and testimony_shapes and not is_impostor %}
+If instead you watched a KILL happen, that outranks even a vent: file it as a structured "saw_kill" observation copied from your memory line — a line like "You witnessed p-8 kill in ADMIN." becomes {"type": "saw_kill", "tick": 11, "subject": "p-8", "room": "ADMIN"}. Name the killer, not the person killed, and never file a kill you watched as a "saw_vent" — say what you actually saw.
+{% endif %}
 {% endif %}
 {% else %}
 Write 1-2 short sentences plus your structured items, then stop. If your memory backs an accusation already on the table (especially against a suspected killer), SECOND it with a "corroboration" claim or state the observation that implicates them. A witnessed vent outranks everything else you hold — speak it FIRST, even if it happened many ticks ago and even if you already said it at an earlier meeting: a held vent wins the game only once it is on the record. One exception, and only one: if the player you saw vent is already dead or ejected, that case is closed — say nothing about it and spend your turn on someone still in the game. If your memory contains one — a line like "You witnessed p-3 vent in MEDBAY." — ALWAYS put it on the record as a structured "saw_vent" observation, copying the player, room, and tick from that line exactly: only the impostor can vent, so one witnessed vent identifies the impostor outright. Speak a "saw_vent" only for a vent your memory says you witnessed — never one you merely heard about or suspect. Answer the roll-call: one structured "whereabouts" observation naming the room you were in at the tick that matters — one room, one tick, copied from your own record; a placement of ANOTHER player at that tick goes in one "saw_player" row. Share only the few rows that matter — not your whole movement log. Pass only if you recorded nothing relevant.
+{% if testimony_shapes is defined and testimony_shapes and not is_impostor %}
+If instead you watched a KILL happen, that outranks even a vent: file it as a structured "saw_kill" observation copied from your memory line — a line like "You witnessed p-8 kill in ADMIN." becomes {"type": "saw_kill", "tick": 11, "subject": "p-8", "room": "ADMIN"}. Name the killer, not the person killed, and never file a kill you watched as a "saw_vent" — say what you actually saw.
+{% endif %}
 {% endif %}
 {% if persona %}
 Stay in the voice described above: it shapes the wording of your "free_text" this turn and nothing else — your facts, claims, and JSON structure follow the rules exactly as written.
@@ -273,6 +281,9 @@ Fill "observations" with the 3-5 MOST PROBATIVE first-hand rows — the sighting
   {"type": "completed_task", "tick": <int>, "task_id": "<task id>", "room": "<room id>"}
   {"type": "found_body", "tick": <int>, "body_of": "<player id>", "room": "<room id>"}
   {"type": "saw_vent", "tick": <int>, "subject": "<player id>", "room": "<room id>"} — only for a witnessed vent, copied exactly from your memory line.
+{% if testimony_shapes is defined and testimony_shapes and not is_impostor %}
+  {"type": "saw_kill", "tick": <int>, "subject": "<player id>", "room": "<room id>"} — only for a kill you watched happen, copied exactly from your memory line; name the killer, not the victim.
+{% endif %}
   {"type": "whereabouts", "tick": <int>, "room": "<room id>"} — your roll-call answer: the room YOU were in at the tick that matters, copied from your own record (one room, one tick; the speaker is always you, so it names no subject).
 Each "claims" item is one of:
   {"type": "alibi", "subject": "{{ agent_id }}", "from_tick": <int>, "to_tick": <int>, "room": "<room id>", "evidence": ["<short ref>", ...]} with from_tick <= to_tick — ONE room, and only the tick range you were ACTUALLY in it; a range that spans rooms you moved between contradicts your own record and gets you ejected.
