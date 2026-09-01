@@ -77,7 +77,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Final
+from typing import Any, Final, TextIO
 
 # Allow `uv run python scripts/counterfactual_phase21.py ...` to find top-level
 # packages (mirrors scripts/counterfactual_phase20.py).
@@ -98,15 +98,21 @@ from eval.evidence_honesty import (  # noqa: E402
     _living_bucket,
     compute_evidence_honesty,
 )
+from eval.deduction_metrics import ScaffoldLeakageCells  # noqa: E402
 from eval.meeting_quality import TournamentEvalReport  # noqa: E402
 from eval.reporter_justice import (  # noqa: E402
+    ReporterJusticeCells,
     _meeting_trigger,
     compute_reporter_justice,
     pool_reporter_justice,
 )
 from eval.solvability import SolvabilityReport, compute_solvability_report  # noqa: E402
 from eval.validity import resolve_roster_knobs, roles_by_seed, seeds_on_disk  # noqa: E402
-from meetings.corroboration import MeetingTestimonyLedger, build_testimony_ledger  # noqa: E402
+from meetings.corroboration import (  # noqa: E402
+    MeetingTestimonyLedger,
+    build_testimony_ledger,
+)
+from meetings.render_contract import ReporterContext  # noqa: E402
 from meetings.manager import (  # noqa: E402
     MeetingParticipant,
     _discoveries_in_window,
@@ -125,6 +131,7 @@ from meetings.schemas import (  # noqa: E402
 from meetings.transcript import is_weak_contradiction, turn_observation_id  # noqa: E402
 from orchestrator.game import PROMPT_VERSION_SETS  # noqa: E402
 from orchestrator.replay import (  # noqa: E402
+    TOGGLEABLE_SUBSTRATE_FLAG_KEYS,
     ReplayEntry,
     _TOGGLEABLE_LEVER_RESOLVERS,
     env_var_for_lever,
@@ -368,6 +375,13 @@ class _CapturingRenderer:
 class _RendererCache:
     """The OFF and testimony-shapes-ON renderer pairs for each prompt set.
 
+    Both bundles are built under an EXPLICIT environment, never the ambient one:
+    the loader's own lever reads (``impostor_roll_call``, ``testimony_shapes``)
+    decide which template BODIES serve, so an OFF bundle that consulted the
+    process environment would render an operator's stale export instead of the
+    recorded substrate. The ambient guard refuses such an export outright; this
+    is the belt to that brace.
+
     Only the set every committed recording used carries the three re-bodied
     ``testimony_shapes`` templates; the loader refuses to build the ON pair for
     any other set, and that refusal is left to fail loud rather than caught.
@@ -379,7 +393,7 @@ class _RendererCache:
 
     def off(self, set_name: str) -> PromptRenderers:
         if set_name not in self._off:
-            self._off[set_name] = build_prompt_renderers(set_name)
+            self._off[set_name] = build_prompt_renderers(set_name, env={})
         return self._off[set_name]
 
     def shapes_on(self, set_name: str) -> PromptRenderers:
@@ -471,7 +485,7 @@ class _ReporterInputs:
     """The reporter lever's ON render inputs for one meeting, per speaker."""
 
     reporter_id: PlayerId | None
-    contexts: Mapping[PlayerId, object]
+    contexts: Mapping[PlayerId, ReporterContext]
     at_body: Mapping[PlayerId, bool]
 
 
@@ -493,7 +507,7 @@ def _reporter_inputs(
         return _ReporterInputs(reporter_id=None, contexts={}, at_body={})
     reporter_id = meeting.entry.triggered_by
     trigger_tick = meeting.entry.tick
-    contexts: dict[PlayerId, object] = {}
+    contexts: dict[PlayerId, ReporterContext] = {}
     at_body: dict[PlayerId, bool] = {}
     for participant in meeting.participants:
         discoveries = _discoveries_in_window(
@@ -669,7 +683,12 @@ def _fold_render_diff(
                 leg.added_lines[capture.kind] += prompt.count(
                     "\n"
                 ) - capture.off_prompt.count("\n")
-                leg.added_bytes[capture.kind] += len(prompt) - len(capture.off_prompt)
+                # Encoded bytes, not code points: the lever blocks carry em
+                # dashes and arrows, so a character count would understate what
+                # the prompt actually costs.
+                leg.added_bytes[capture.kind] += len(prompt.encode("utf-8")) - len(
+                    capture.off_prompt.encode("utf-8")
+                )
         if touched or not levers:
             leg.meetings_touched += 1
         on_prompts[label] = rendered_for_leg
@@ -1213,6 +1232,20 @@ class Row:
             return True
         return self.recorded_off == self.reconstructed_off
 
+    @property
+    def advisory(self) -> bool:
+        """Whether one case moves this ROW by more than a reading can bear.
+
+        Keyed on the row's OWN denominator rather than on any set-level count: a
+        cell measured over three turns is fragile in a set of 439 meetings, and
+        labelling it by the set would hide exactly that.
+        """
+
+        return any(
+            pair is not None and pair[1] <= ADVISORY_DENOMINATOR
+            for pair in (self.recorded_off, self.reconstructed_off, self.on)
+        )
+
     def payload(self) -> dict[str, object]:
         return {
             "cell": self.cell_id,
@@ -1220,12 +1253,19 @@ class Row:
             "population": self.population,
             "note": self.note,
             "on_slate": self.on_slate,
+            "advisory": self.advisory,
             "recorded_off": list(self.recorded_off) if self.recorded_off else None,
             "reconstructed_off": (
                 list(self.reconstructed_off) if self.reconstructed_off else None
             ),
             "on": list(self.on) if self.on else None,
         }
+
+
+#: A published cell whose denominator is this small moves by more than five
+#: points when one case changes, so it carries an advisory label wherever it is
+#: printed and takes no part in a directional statement.
+ADVISORY_DENOMINATOR: Final[int] = 20
 
 
 def _pair(numerator: int, denominator: int) -> tuple[int, int]:
@@ -1235,7 +1275,7 @@ def _pair(numerator: int, denominator: int) -> tuple[int, int]:
 def build_rows(
     *,
     walk: _SetWalk,
-    reporter: Any,
+    reporter: ReporterJusticeCells,
     evidence_budget: RenderBudgetCells,
     solvability: SolvabilityReport,
     committed: TournamentEvalReport,
@@ -1321,7 +1361,9 @@ def build_rows(
     return rows
 
 
-def _reporter_rows(*, walk: _SetWalk, reporter: Any, all_on: _LegTallies) -> list[Row]:
+def _reporter_rows(
+    *, walk: _SetWalk, reporter: ReporterJusticeCells, all_on: _LegTallies
+) -> list[Row]:
     """The reporter lever's OFF instrument column and its render census."""
 
     rows = [
@@ -1590,7 +1632,9 @@ def _corroboration_rows(*, walk: _SetWalk, all_on: _LegTallies) -> list[Row]:
     ]
 
 
-def _testimony_rows(*, walk: _SetWalk, all_on: _LegTallies, leakage: Any) -> list[Row]:
+def _testimony_rows(
+    *, walk: _SetWalk, all_on: _LegTallies, leakage: ScaffoldLeakageCells
+) -> list[Row]:
     """The reduction, ingest, laundering and confession cells."""
 
     census = walk.testimony
@@ -1824,6 +1868,11 @@ def _assert_live_slate(when: str) -> None:
     all, so a stale ``AILIBI_*`` export in the operator's shell would make every
     IMPORTED instrument's "OFF" column an ON column while the first check sailed
     through green. The refusal names the variable and says to unset it.
+
+    That half checks EVERY live toggle, not only the priced three. The recorded
+    substrate stamps all of them OFF, and the one this memo holds OFF is the one
+    an export would damage most quietly: its arm swaps a template file, so a
+    stale export would serve a body neither priced lever's block reaches.
     """
 
     registered = {key for key, _ in _TOGGLEABLE_LEVER_RESOLVERS}
@@ -1851,14 +1900,17 @@ def _assert_live_slate(when: str) -> None:
             "audits/audit-phase-21-counterfactual.md"
         )
     ambient = substrate_flag_snapshot()
-    exported = sorted(key for key in WAVE_2_LEVERS if ambient.get(key, False))
+    exported = sorted(
+        key for key in TOGGLEABLE_SUBSTRATE_FLAG_KEYS if ambient.get(key, False)
+    )
     if exported:
         raise SystemExit(
             f"the ambient environment is not the record's substrate {when}: "
             + ", ".join(f"{key} ({env_var_for_lever(key)})" for key in exported)
-            + " is exported ON in this process. Seven consumers re-derive the "
-            "meeting reduction with no env argument, so every imported "
-            "instrument's OFF column would silently be an ON column. Unset "
+            + " is exported ON in this process, and the committed recordings "
+            "stamp every live toggle OFF. Seven consumers re-derive the meeting "
+            "reduction with no env argument, so every imported instrument's OFF "
+            "column would silently be an ON column. Unset "
             + ", ".join(env_var_for_lever(key) for key in exported)
             + " and run again"
         )
@@ -1908,10 +1960,15 @@ def run(
     }
     per_set: dict[str, object] = {}
     pooled_walks: list[_SetWalk] = []
-    pooled_reporter: list[Any] = []
+    pooled_reporter: list[ReporterJusticeCells] = []
     pooled: Counter[str] = Counter()
     pooled_labels: dict[str, tuple[str, str, str, str, str]] = {}
     ledger_rows: list[InjusticeLedgerRow] = []
+    # Cells whose two OFF readings disagreed on ANY set. The pooled ON column is
+    # withdrawn for every one of them: summing the sets that DID reproduce would
+    # publish a pooled row over a silently reduced denominator, which is the
+    # opposite of what the fidelity refusal exists to do.
+    withdrawn: set[str] = set()
     for set_name in set_names:
         sample_dir = _REPO_ROOT / "replays" / set_name
         walk = walk_set(sample_dir, set_name=set_name, withhold=withhold)
@@ -1943,6 +2000,7 @@ def run(
             withhold=withhold,
         )
         disagreeing = [row for row in rows if not row.agrees]
+        withdrawn.update(row.cell_id for row in disagreeing)
         rows = [row if row.agrees else _withdraw_on_column(row) for row in rows]
         per_set[set_name] = {
             "games": walk.games,
@@ -1983,37 +2041,186 @@ def run(
                 pooled[f"{key}|{column}|d"] += pair[1]
     payload["sets"] = per_set
     payload["pooled"] = [
-        {
-            "cell": cell_id,
-            "label": label,
-            "population": population,
-            "note": note,
-            "on_slate": on_slate,
-            **{
-                column: (
-                    [pooled[f"{key}|{column}|n"], pooled[f"{key}|{column}|d"]]
-                    if f"{key}|{column}|d" in pooled
-                    else None
-                )
-                for column in ("recorded_off", "reconstructed_off", "on")
-            },
-        }
+        _pooled_row(
+            key=key,
+            cell_id=cell_id,
+            label=label,
+            population=population,
+            note=note,
+            on_slate=on_slate,
+            totals=pooled,
+            withdrawn=withdrawn,
+        )
         for key, (cell_id, label, population, note, on_slate) in pooled_labels.items()
     ]
+    payload["withdrawn_on_cells"] = sorted(withdrawn)
     payload["pooled_ledger_class_totals"] = _class_totals(ledger_rows)
     payload["pooled_injustice_ledger"] = [row.payload() for row in ledger_rows]
     payload["pooled_reporter_justice"] = _reporter_payload(
         pool_reporter_justice(pooled_reporter)
+    )
+    payload["pooled_ballot_census"] = _pool_ballot_census(pooled_walks)
+    payload["pooled_testimony_census"] = _pool_testimony_census(pooled_walks)
+    payload["pooled_render_census"] = _pool_render_census(
+        pooled_walks, withhold=withhold
     )
     payload["corroboration_pins"] = _corroboration_pin_check(pooled_walks)
     _assert_live_slate("at exit")
     return payload
 
 
+def _pooled_row(
+    *,
+    key: str,
+    cell_id: str,
+    label: str,
+    population: str,
+    note: str,
+    on_slate: str,
+    totals: Mapping[str, int],
+    withdrawn: set[str],
+) -> dict[str, object]:
+    """One pooled row, with the ON column withdrawn if any set disagreed."""
+
+    columns: dict[str, list[int] | None] = {}
+    for column in ("recorded_off", "reconstructed_off", "on"):
+        if f"{key}|{column}|d" not in totals:
+            columns[column] = None
+            continue
+        columns[column] = [totals[f"{key}|{column}|n"], totals[f"{key}|{column}|d"]]
+    withheld = cell_id in withdrawn
+    if withheld:
+        columns["on"] = None
+        note = (
+            f"{note} — the pooled ON column is WITHDRAWN: at least one set's two "
+            "OFF readings disagreed, and pooling the sets that did reproduce "
+            "would publish a row over a silently reduced denominator"
+        )
+    denominators = [pair[1] for pair in columns.values() if pair is not None]
+    return {
+        "cell": cell_id,
+        "label": label,
+        "population": population,
+        "note": note,
+        "on_slate": on_slate,
+        "advisory": any(value <= ADVISORY_DENOMINATOR for value in denominators),
+        "on_withdrawn": withheld,
+        **columns,
+    }
+
+
+def _pool_ballot_census(walks: Sequence[_SetWalk]) -> dict[str, object]:
+    """The ejecting-ballot census summed over every walked set.
+
+    Counts over disjoint games, so pooling is addition; the confidence means are
+    re-derived from the pooled numerator and denominator rather than averaged,
+    which is what stops a four-ejection set dragging a rate.
+    """
+
+    citations: Counter[str] = Counter()
+    driver: Counter[str] = Counter()
+    followers = {"CREWMATE": Counter[int](), "IMPOSTOR": Counter[int]()}
+    confidence: dict[str, list[float]] = {"flagged": [], "unflagged": []}
+    ejecting = cast = joined = 0
+    for walk in walks:
+        census = walk.ballots
+        ejecting += census.ejecting_ballots
+        citations.update(census.citations)
+        driver.update(census.driver_role)
+        for role, counts in census.follower_counts.items():
+            followers[role].update(counts)
+        for status, values in census.confidence_by_flag.items():
+            confidence[status].extend(values)
+        cast += census.impostor_ballots_in_these_meetings
+        joined += census.impostor_ballots_joining_the_pile
+    return {
+        "ejecting_ballots": ejecting,
+        "citation_mix": {name: citations.get(name, 0) for name in _CITATION_CLASSES},
+        "mean_confidence": {
+            status: (round(sum(values) / len(values), 4) if values else None)
+            for status, values in confidence.items()
+        },
+        "ejections_by_flag_status": {
+            status: len(values) for status, values in confidence.items()
+        },
+        "pile_driver_role": dict(sorted(driver.items())),
+        "follower_counts": {
+            role: dict(sorted(counts.items())) for role, counts in followers.items()
+        },
+        "impostor_ballots_cast": cast,
+        "impostor_ballots_joining_the_pile": joined,
+    }
+
+
+def _pool_testimony_census(walks: Sequence[_SetWalk]) -> dict[str, object]:
+    """The reduction and ingest census summed over every walked set."""
+
+    pooled = _TestimonyCensus()
+    for walk in walks:
+        census = walk.testimony
+        pooled.off_kinds.update(census.off_kinds)
+        pooled.on_kinds.update(census.on_kinds)
+        pooled.off_rows += census.off_rows
+        pooled.on_rows += census.on_rows
+        pooled.listener_slots += census.listener_slots
+        pooled.spoken_vent_rows += census.spoken_vent_rows
+        pooled.fabricated_vent_rows += census.fabricated_vent_rows
+        pooled.ungrounded_vent_rows += census.ungrounded_vent_rows
+    return pooled.payload()
+
+
+def _pool_render_census(
+    walks: Sequence[_SetWalk], *, withhold: str
+) -> dict[str, object]:
+    """The per-lever render census summed over every walked set."""
+
+    labels = [label for label, _ in _slate_legs(withhold)]
+    pooled: dict[str, object] = {}
+    for label in labels:
+        totals = _LegTallies()
+        touched = 0
+        for walk in walks:
+            leg = walk.legs[label]
+            touched += leg.meetings_touched
+            totals.snapshots += leg.snapshots
+            totals.rendered_lines += leg.rendered_lines
+            totals.testimony_rows += leg.testimony_rows
+            totals.testimony_by_bucket.update(leg.testimony_by_bucket)
+            totals.rendered.update(leg.rendered)
+            totals.changed.update(leg.changed)
+            totals.added_lines.update(leg.added_lines)
+            totals.added_bytes.update(leg.added_bytes)
+        pooled[label] = {
+            "meetings_touched": touched,
+            "by_prompt_class": _census_by_class(label, totals),
+            "render_budget": totals.budget().model_dump(),
+        }
+    return pooled
+
+
+def _census_by_class(label: str, leg: _LegTallies) -> dict[str, dict[str, object]]:
+    """One :class:`LeverExposureCensus` per prompt class the leg rendered."""
+
+    return {
+        kind: vars(
+            LeverExposureCensus(
+                lever=label,
+                prompt_class=kind,
+                rendered=leg.rendered[kind],
+                changed=leg.changed[kind],
+                added_lines=leg.added_lines[kind],
+                added_bytes=leg.added_bytes[kind],
+            )
+        )
+        for kind in (*_TURN_KINDS, _KIND_VOTE_BALLOT)
+        if leg.rendered[kind]
+    }
+
+
 def _assert_ledger_matches_the_instruments(
     *,
     walk: _SetWalk,
-    reporter: Any,
+    reporter: ReporterJusticeCells,
     committed: TournamentEvalReport,
 ) -> None:
     """Two structural ledger tags cross-checked against committed instruments.
@@ -2084,20 +2291,7 @@ def _render_census_payload(walk: _SetWalk, *, withhold: str) -> dict[str, object
     return {
         label: {
             "meetings_touched": leg.meetings_touched,
-            "by_prompt_class": {
-                kind: vars(
-                    LeverExposureCensus(
-                        lever=label,
-                        prompt_class=kind,
-                        rendered=leg.rendered[kind],
-                        changed=leg.changed[kind],
-                        added_lines=leg.added_lines[kind],
-                        added_bytes=leg.added_bytes[kind],
-                    )
-                )
-                for kind in (*_TURN_KINDS, _KIND_VOTE_BALLOT)
-                if leg.rendered[kind]
-            },
+            "by_prompt_class": _census_by_class(label, leg),
             "render_budget": leg.budget().model_dump(),
         }
         for label, leg in walk.legs.items()
@@ -2105,7 +2299,7 @@ def _render_census_payload(walk: _SetWalk, *, withhold: str) -> dict[str, object
     }
 
 
-def _reporter_payload(cells: Any) -> dict[str, object]:
+def _reporter_payload(cells: ReporterJusticeCells) -> dict[str, object]:
     return {
         name: getattr(cells, name)
         for name in type(cells).__dataclass_fields__
@@ -2168,22 +2362,29 @@ def _rate(pair: object) -> str:
     return f"{numerator}/{denominator} = {numerator / denominator:.4f}"
 
 
-def _print_row(row: Mapping[str, object], *, out: Any) -> None:
+ADVISORY_MARK: Final[str] = "[ADV]"
+"""Printed beside any cell whose own denominator one case would dominate."""
+
+
+def _print_row(row: Mapping[str, object], *, out: TextIO) -> None:
+    mark = f" {ADVISORY_MARK}" if row.get("advisory") else ""
     print(
-        f"{str(row['cell']):<6} {str(row['label'])[:56]:<56} "
+        f"{str(row['cell']):<6} {str(row['label'])[:52]:<52} "
         f"{_rate(row.get('recorded_off')):>24} "
         f"{_rate(row.get('reconstructed_off')):>24} "
-        f"{_rate(row.get('on')):>24}",
+        f"{_rate(row.get('on')):>24}{mark}",
         file=out,
     )
 
 
-def _print_table(payload: Mapping[str, object], *, stream: Any = None) -> None:
+def _print_table(
+    payload: Mapping[str, object], *, stream: TextIO | None = None
+) -> None:
     """Print the OFF/ON table the memo reproduces row for row."""
 
     out = sys.stdout if stream is None else stream
     header = (
-        f"{'cell':<6} {'label':<56} {'RECORDED-OFF':>24} "
+        f"{'cell':<6} {'label':<52} {'RECORDED-OFF':>24} "
         f"{'RECONSTRUCTED-OFF':>24} {'ON':>24}"
     )
     sets = payload["sets"]
@@ -2225,11 +2426,28 @@ def _print_table(payload: Mapping[str, object], *, stream: Any = None) -> None:
         f"\npooled injustice-ledger classes: {payload['pooled_ledger_class_totals']}",
         file=out,
     )
+    print(f"pooled ballot census: {payload['pooled_ballot_census']}", file=out)
+    print(f"pooled testimony census: {payload['pooled_testimony_census']}", file=out)
+    pooled_render = payload["pooled_render_census"]
+    assert isinstance(pooled_render, dict)
+    for label, census in pooled_render.items():
+        print(
+            f"pooled render census [{label}]: {census['by_prompt_class']} "
+            f"budget={census['render_budget']}",
+            file=out,
+        )
+    withdrawn = payload["withdrawn_on_cells"]
+    assert isinstance(withdrawn, list)
+    if withdrawn:
+        print(
+            "pooled ON column WITHDRAWN for: " + ", ".join(str(c) for c in withdrawn),
+            file=out,
+        )
     print(f"corroboration pins: {payload['corroboration_pins']}", file=out)
     _print_reading_rules(payload, out=out)
 
 
-def _print_reading_rules(payload: Mapping[str, object], *, out: Any) -> None:
+def _print_reading_rules(payload: Mapping[str, object], *, out: TextIO) -> None:
     """The footnotes a reader needs before comparing two columns."""
 
     print("\nreading rules:", file=out)
@@ -2250,6 +2468,10 @@ def _print_reading_rules(payload: Mapping[str, object], *, out: Any) -> None:
         "T-7 is an exact-zero OFF cell offered as a ZERO TRIPWIRE, never as an "
         "injustice a lever removes. T-7b is the speaker-side grounding census "
         "beside it and is a different question, not a fabrication count.",
+        f"{ADVISORY_MARK} marks a row one case would dominate — any column whose "
+        f"denominator is {ADVISORY_DENOMINATOR} or fewer. Such a row takes no "
+        "part in a directional statement, whatever the size of the set it sits "
+        "in.",
         "P-1, P-2, R-8, R-9, the stated-confidence response to any anchoring "
         "rule, whether crew stop laundering witnessed kills into vent rows, and "
         "the win split carry NO ON column at all.",

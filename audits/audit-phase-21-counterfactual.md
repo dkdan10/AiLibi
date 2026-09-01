@@ -9,7 +9,7 @@ bytes by `scripts/counterfactual_phase21.py`; where a figure from the 2026-08-26
 is quoted, it is labelled prior-record CONTEXT and is never the published cell.
 
 **Date:** 2026-09-01. **Instrument:** `uv run python scripts/counterfactual_phase21.py --sets all`
-(27.4 s over 300 games, `$0`, no network, no model call, no replay written, no `os.environ`
+(28.7 s over 300 games, `$0`, no network, no model call, no replay written, no `os.environ`
 assignment). **Substrate:** baseline 8, the four committed sets under `replays/`, with all four
 live toggles OFF — the substrate every one of those recordings stamps.
 
@@ -52,9 +52,12 @@ record must not start. §9 offers the sharpest of those as tripwire candidates.
 | **ON** | a SECOND RENDER of the same rebuilt memory and the same recorded meeting inputs with the lever's own argument supplied. |
 
 A cell whose two OFF readings disagree prints no ON value at all: the counterfactual would be
-measuring the reconstruction, not the lever. **No cell in this memo disagrees.** Where a row shows
-only one OFF column, the other has no producer — an instrument cell has no reconstruction twin,
-and a render cell has no committed instrument. That is a property of the cell, not a gap.
+measuring the reconstruction, not the lever. The withdrawal is per CELL and reaches the pooled row
+too — pooling the sets that did reproduce would publish a row over a silently reduced denominator,
+which is the opposite of what the refusal is for. **No cell in this memo disagrees on any set, and
+no pooled ON column is withdrawn.** Where a row shows only one OFF column, the other has no
+producer — an instrument cell has no reconstruction twin, and a render cell has no committed
+instrument. That is a property of the cell, not a gap.
 
 ### 1.2 The ON column is a RENDER DIFF and is never re-driven
 
@@ -76,10 +79,12 @@ line for line. Nothing is fed back.
    on two rows that cancelled, and the net over-triggers on true statements about venting. The
    regex is committed in the script and every tagged row is listed in §2.3 so a reader can
    re-judge it.
-3. **The two 4p1i sets are ADVISORY throughout.** `samples/4p1i` carried 4 innocent ejections and
-   `ml_corpus/4p1i` carried 0, so one case moves a per-set cell there by more than any difference
-   this memo discusses. They are printed at the recorded denominator and take no part in any
-   directional statement.
+3. **`[ADV]` marks a cell one case would dominate, and it is keyed on the CELL's own denominator**
+   — any column measured over 20 or fewer cases — not on the size of the set it sits in. A cell
+   read over three turns is fragile inside a 439-meeting set, and labelling by the set would hide
+   exactly that. Every marked cell is printed at its recorded denominator and takes no part in any
+   directional statement. The two 4p1i sets carry the most of them by far (`samples/4p1i` had 4
+   innocent ejections and `ml_corpus/4p1i` had 0), but T-4 and T-8 are marked in every set.
 4. **Every testimony-shapes ingest and render cell is a ONE-STEP-AHEAD reading.** Meeting 1's ON
    render is derivable from meeting 1's recorded inputs; meeting 2's ON transcript is a model
    output that does not exist. T-1 through T-7b, T-9 and T-10 are therefore read at each RECORDED
@@ -137,7 +142,8 @@ provenance field, never a marker string.
 
 ### 2.2 What is left when the classes are stripped
 
-Six of the 46 carry nothing beyond the generic herd and/or the judgment tag:
+Six of the 46 carry nothing beyond the generic herd, and none of the six carries even the judgment
+tag:
 
 `samples/9p2i` 21:m2 p-1 · `samples/9p2i` 41:m2 p-9 · `ml_corpus/9p2i` 1036:m3 p-9 ·
 `ml_corpus/9p2i` 1066:m3 p-3 · `ml_corpus/9p2i` 1106:m3 p-1 — all IMP-RIDES only — and
@@ -240,8 +246,8 @@ three quarters genuine). One reporter invokes it in speech.
 
 | prompt class | rendered | gains the block | lines added | bytes added |
 |---|---|---|---|---|
-| reporter opening (`crewmate_report`) | 672 | **620** | +620 | +168,742 |
-| non-reporter speech turn (`accusation_round`) | 2,959 | **2,715** | +11,005 | +1,021,540 |
+| reporter opening (`crewmate_report`) | 672 | **620** | +620 | +171,222 |
+| non-reporter speech turn (`accusation_round`) | 2,959 | **2,715** | +11,005 | +1,026,970 |
 | ballot (`vote_ballot`) | 3,631 | **0** | 0 | 0 |
 
 Per body-report meeting, for the smoke to join on: **exactly 1 reporter opening and 4.38 mean
@@ -320,7 +326,7 @@ in §2.3.
 
 | prompt class | rendered | gains the block | lines added | bytes added |
 |---|---|---|---|---|
-| ballot (`vote_ballot`) | 3,631 | **3,614** | +28,432 | +3,939,043 |
+| ballot (`vote_ballot`) | 3,631 | **3,614** | +28,432 | +3,970,615 |
 | reporter opening | 672 | 0 | 0 | 0 |
 | speech turn | 2,959 | 0 | 0 | 0 |
 
@@ -404,8 +410,8 @@ pre-disambiguation net and is not the cell above.
 
 | prompt class | rendered | gains a block | lines added | bytes added |
 |---|---|---|---|---|
-| reporter opening (`crewmate_report`) | 672 | **672** | +1,344 | +397,824 |
-| speech turn (`accusation_round`) | 2,959 | **2,023** | +4,046 | +1,173,340 |
+| reporter opening (`crewmate_report`) | 672 | **672** | +1,344 | +401,856 |
+| speech turn (`accusation_round`) | 2,959 | **2,023** | +4,046 | +1,185,478 |
 | ballot (`vote_ballot`) | 3,631 | **0** | 0 | 0 |
 
 Per meeting, for the smoke to join on: **exactly 1 opening and 3.01 mean crew speech turns (2,023
@@ -441,22 +447,26 @@ than a predicted one.**
 | leg | prose lines added, per rendered prompt | ballot bytes added |
 |---|---|---|
 | `reporter_reasoning` alone | 11,625 / 7,262 = 1.60 | 0 |
-| `corroboration_discipline` alone | 28,432 / 7,262 = 3.92 | +3,939,043 |
+| `corroboration_discipline` alone | 28,432 / 7,262 = 3.92 | +3,970,615 |
 | `testimony_shapes` alone | 5,390 / 7,262 = 0.74 | 0 |
-| **all three** | **45,447 / 7,262 = 6.26** | **+4,000,793** |
-| two, less `testimony_shapes` | 40,057 / 7,262 = 5.52 | +3,939,043 |
+| **all three** | **45,447 / 7,262 = 6.26** | **+4,032,365** |
+| two, less `testimony_shapes` | 40,057 / 7,262 = 5.52 | +3,970,615 |
 
-Added LINES are exactly additive on every seam (620 + 1,344 = 1,964 on the opening; 11,005 + 4,046
-= 15,051 on the speech turn; 28,432 + 0 = 28,432 on the ballot). Added BYTES are not: the ballot
-carries **+61,750 bytes under the joint slate that neither lever produces alone**, because
-`testimony_shapes` re-words the corroboration block's adopted clause — "named them without an
-account their own record bears out" in place of "named them without adding anything they saw". It
-is the only cross-lever render interaction in the slate, it is confined to one clause, and it
-exists only when both levers are ON.
+Bytes are UTF-8 encoded bytes, not code points: the lever blocks carry em dashes and arrows, so a
+character count would understate what the prompt costs.
+
+Added lines and added bytes are exactly additive on the two TURN seams — 620 + 1,344 = 1,964 lines
+and 171,222 + 401,856 = 573,078 bytes on the opening; 11,005 + 4,046 = 15,051 lines and 1,026,970 +
+1,185,478 = 2,212,448 bytes on the speech turn. The BALLOT is the exception: its lines are additive
+(28,432 + 0) but it carries **+61,750 bytes under the joint slate that neither lever produces
+alone**, because `testimony_shapes` re-words the corroboration block's adopted clause — "named them
+without an account their own record bears out" in place of "named them without adding anything they
+saw". It is the only cross-lever render interaction in the slate, it is confined to one clause, and
+it exists only when both levers are ON.
 
 The leave-one-out attribution the `--withhold testimony_shapes` leg computes is the last row: 88%
-of the slate's added prose survives dropping the testimony lever, so the prose cost is
-overwhelmingly the corroboration block's.
+of the slate's added prose survives dropping the testimony lever, and the corroboration block is
+63% of the total on its own. The prose cost is the ballot's.
 
 ---
 
@@ -548,7 +558,14 @@ it at n=1. **None of these is a bar.**
 
 Every row here is re-derived by the instrument and compared against this document by
 `tests/scripts/test_counterfactual_phase21.py`, so the memo cannot drift from the script. `—`
-means the column has no producer for that cell.
+means the column has no producer for that cell, and `[ADV]` marks a column measured over 20 or
+fewer cases (reading rule 3).
+
+The three censuses that are not cell rows — the ejecting-ballot census of §4.3, the eight-kind
+reduction census of §5.2, and the per-lever render census of §3.3 / §4.4 / §5.6 — are emitted
+pooled by `--json` as `pooled_ballot_census`, `pooled_testimony_census` and
+`pooled_render_census`, and the §4.3 and §5.2 tables are compared against them by the same test.
+Nothing published here exists only as prose.
 
 ### 10.1 Pooled, over 300 games and 672 meetings
 
@@ -585,12 +602,12 @@ means the column has no producer for that cell.
 | T-1 | spoken statements surviving the reduction | — | 9934/14697 | 14697/14697 |
 | T-2 | whereabouts self-placements dropped whole | — | 0/3157 | 3157/3157 |
 | T-3 | saw_move transitions dropped whole | — | 0/1606 | 1606/1606 |
-| T-4 | saw_kill accounts carried as content | — | 0/0 | 0/0 |
+| T-4 | saw_kill accounts carried as content | — | 0/0 [ADV] | 0/0 [ADV] |
 | T-5 | episodic rows the ingest writes at recorded boundaries | — | 49667/73218 | 73218/73218 |
 | T-6 | location accounts that reach the alibi map | — | 1016/4173 | 4173/4173 |
 | T-7 | spoken vent accounts naming a player who never vented | — | 0/512 | 0/512 |
 | T-7b | spoken vent accounts the SPEAKER's own record does not bear out | — | 59/512 | 59/512 |
-| T-8 | player-visible self-disclosure turns by an IMPOSTOR speaker | 1/5 | — | — |
+| T-8 | player-visible self-disclosure turns by an IMPOSTOR speaker | 1/5 [ADV] | — | — |
 | T-9 | speech turns gaining a testimony-shape block | — | 0/2959 | 2023/2959 |
 | T-10 | opening prompts gaining a testimony-shape block | — | 0/672 | 672/672 |
 | B-1 | rendered memory rows per prompt snapshot | 255918/7271 | 255918/7271 | 255918/7271 |
@@ -610,7 +627,7 @@ means the column has no producer for that cell.
 | samples/9p2i | P-4 | 16/85 | — | — |
 | samples/9p2i | R-1 | 141/151 | 141/151 | — |
 | samples/9p2i | R-2 | 141/141 | — | — |
-| samples/9p2i | R-3 | 7/13 | — | — |
+| samples/9p2i | R-3 | 7/13 [ADV] | — | — |
 | samples/9p2i | R-4 | 7/141 | — | — |
 | samples/9p2i | R-5 | 6/464 | — | — |
 | samples/9p2i | R-6 | 127/511 | — | — |
@@ -630,17 +647,17 @@ means the column has no producer for that cell.
 | samples/9p2i | C-5 | — | 25/44 | — |
 | samples/9p2i | C-6 | — | 12/44 | — |
 | samples/9p2i | C-7 | — | 1/44 | — |
-| samples/9p2i | C-8 | — | 8/13 | — |
+| samples/9p2i | C-8 | — | 8/13 [ADV] | — |
 | samples/9p2i | C-9 | — | 0/869 | 868/869 |
 | samples/9p2i | T-1 | — | 2370/3577 | 3577/3577 |
 | samples/9p2i | T-2 | — | 0/766 | 766/766 |
 | samples/9p2i | T-3 | — | 0/441 | 441/441 |
-| samples/9p2i | T-4 | — | 0/0 | 0/0 |
+| samples/9p2i | T-4 | — | 0/0 [ADV] | 0/0 [ADV] |
 | samples/9p2i | T-5 | — | 12188/18371 | 18371/18371 |
 | samples/9p2i | T-6 | — | 263/1029 | 1029/1029 |
 | samples/9p2i | T-7 | — | 0/98 | 0/98 |
 | samples/9p2i | T-7b | — | 8/98 | 8/98 |
-| samples/9p2i | T-8 | 0/1 | — | — |
+| samples/9p2i | T-8 | 0/1 [ADV] | — | — |
 | samples/9p2i | T-9 | — | 0/718 | 500/718 |
 | samples/9p2i | T-10 | — | 0/151 | 151/151 |
 | samples/9p2i | B-1 | 63624/1740 | 63624/1740 | 63624/1740 |
@@ -685,12 +702,12 @@ means the column has no producer for that cell.
 | ml_corpus/9p2i | T-1 | — | 7067/10390 | 10390/10390 |
 | ml_corpus/9p2i | T-2 | — | 0/2214 | 2214/2214 |
 | ml_corpus/9p2i | T-3 | — | 0/1109 | 1109/1109 |
-| ml_corpus/9p2i | T-4 | — | 0/0 | 0/0 |
+| ml_corpus/9p2i | T-4 | — | 0/0 [ADV] | 0/0 [ADV] |
 | ml_corpus/9p2i | T-5 | — | 36485/53387 | 53387/53387 |
 | ml_corpus/9p2i | T-6 | — | 705/2919 | 2919/2919 |
 | ml_corpus/9p2i | T-7 | — | 0/366 | 0/366 |
 | ml_corpus/9p2i | T-7b | — | 51/366 | 51/366 |
-| ml_corpus/9p2i | T-8 | 1/3 | — | — |
+| ml_corpus/9p2i | T-8 | 1/3 [ADV] | — | — |
 | ml_corpus/9p2i | T-9 | — | 0/2077 | 1441/2077 |
 | ml_corpus/9p2i | T-10 | — | 0/439 | 439/439 |
 | ml_corpus/9p2i | B-1 | 186784/5039 | 186784/5039 | 186784/5039 |
@@ -700,17 +717,17 @@ means the column has no producer for that cell.
 
 ### 10.4 `samples/4p1i`
 
-50 games, 39 meetings, 36 body reports, 24 ejections, 4 of them innocent. **ADVISORY** — one case moves every cell in this block by more than any difference this memo discusses, so no row here takes part in a directional statement.
+50 games, 39 meetings, 36 body reports, 24 ejections, 4 of them innocent. Every cell in this block sits in a set that carried 4 innocent ejections, so no row here takes part in a directional statement.
 
 | set | cell | RECORDED-OFF | RECONSTRUCTED-OFF | ON |
 |---|---|---|---|---|
-| samples/4p1i | P-1 | 1/5 | — | — |
+| samples/4p1i | P-1 | 1/5 [ADV] | — | — |
 | samples/4p1i | P-2 | 4/24 | 4/24 | — |
-| samples/4p1i | P-3 | 19/19 | — | — |
+| samples/4p1i | P-3 | 19/19 [ADV] | — | — |
 | samples/4p1i | P-4 | 0/21 | — | — |
 | samples/4p1i | R-1 | 36/39 | 36/39 | — |
 | samples/4p1i | R-2 | 36/36 | — | — |
-| samples/4p1i | R-3 | 4/4 | — | — |
+| samples/4p1i | R-3 | 4/4 [ADV] | — | — |
 | samples/4p1i | R-4 | 4/36 | — | — |
 | samples/4p1i | R-5 | 0/36 | — | — |
 | samples/4p1i | R-6 | 12/59 | — | — |
@@ -719,7 +736,7 @@ means the column has no producer for that cell.
 | samples/4p1i | R-9 | 4/36 | — | — |
 | samples/4p1i | R-10 | 1/108 | — | — |
 | samples/4p1i | R-11 | 0/36 | — | — |
-| samples/4p1i | R-12 | 0/0 | — | — |
+| samples/4p1i | R-12 | 0/0 [ADV] | — | — |
 | samples/4p1i | R-13 | — | 0/36 | 36/36 |
 | samples/4p1i | R-14 | — | 0/72 | 72/72 |
 | samples/4p1i | R-15 | — | 0/117 | 0/117 |
@@ -727,20 +744,20 @@ means the column has no producer for that cell.
 | samples/4p1i | C-2 | — | 3/24 | 3/24 |
 | samples/4p1i | C-3 | — | 4/24 | 4/24 |
 | samples/4p1i | C-4 | — | 0/24 | 0/24 |
-| samples/4p1i | C-5 | — | 6/8 | — |
-| samples/4p1i | C-6 | — | 2/8 | — |
-| samples/4p1i | C-7 | — | 0/8 | — |
-| samples/4p1i | C-8 | — | 2/4 | — |
+| samples/4p1i | C-5 | — | 6/8 [ADV] | — |
+| samples/4p1i | C-6 | — | 2/8 [ADV] | — |
+| samples/4p1i | C-7 | — | 0/8 [ADV] | — |
+| samples/4p1i | C-8 | — | 2/4 [ADV] | — |
 | samples/4p1i | C-9 | — | 0/117 | 117/117 |
 | samples/4p1i | T-1 | — | 241/355 | 355/355 |
 | samples/4p1i | T-2 | — | 0/85 | 85/85 |
 | samples/4p1i | T-3 | — | 0/29 | 29/29 |
-| samples/4p1i | T-4 | — | 0/0 | 0/0 |
+| samples/4p1i | T-4 | — | 0/0 [ADV] | 0/0 [ADV] |
 | samples/4p1i | T-5 | — | 482/710 | 710/710 |
 | samples/4p1i | T-6 | — | 29/114 | 114/114 |
-| samples/4p1i | T-7 | — | 0/20 | 0/20 |
-| samples/4p1i | T-7b | — | 0/20 | 0/20 |
-| samples/4p1i | T-8 | 0/0 | — | — |
+| samples/4p1i | T-7 | — | 0/20 [ADV] | 0/20 [ADV] |
+| samples/4p1i | T-7b | — | 0/20 [ADV] | 0/20 [ADV] |
+| samples/4p1i | T-8 | 0/0 [ADV] | — | — |
 | samples/4p1i | T-9 | — | 0/78 | 39/78 |
 | samples/4p1i | T-10 | — | 0/39 | 39/39 |
 | samples/4p1i | B-1 | 2552/234 | 2552/234 | 2552/234 |
@@ -750,17 +767,17 @@ means the column has no producer for that cell.
 
 ### 10.5 `ml_corpus/4p1i`
 
-50 games, 43 meetings, 36 body reports, 29 ejections, 0 of them innocent. **ADVISORY** — one case moves every cell in this block by more than any difference this memo discusses, so no row here takes part in a directional statement.
+50 games, 43 meetings, 36 body reports, 29 ejections, 0 of them innocent. Every cell in this block sits in a set that carried 0 innocent ejections, so no row here takes part in a directional statement.
 
 | set | cell | RECORDED-OFF | RECONSTRUCTED-OFF | ON |
 |---|---|---|---|---|
-| ml_corpus/4p1i | P-1 | 3/3 | — | — |
+| ml_corpus/4p1i | P-1 | 3/3 [ADV] | — | — |
 | ml_corpus/4p1i | P-2 | 0/29 | 0/29 | — |
 | ml_corpus/4p1i | P-3 | 26/26 | — | — |
 | ml_corpus/4p1i | P-4 | 0/22 | — | — |
 | ml_corpus/4p1i | R-1 | 36/43 | 36/43 | — |
 | ml_corpus/4p1i | R-2 | 36/36 | — | — |
-| ml_corpus/4p1i | R-3 | 0/0 | — | — |
+| ml_corpus/4p1i | R-3 | 0/0 [ADV] | — | — |
 | ml_corpus/4p1i | R-4 | 0/36 | — | — |
 | ml_corpus/4p1i | R-5 | 0/36 | — | — |
 | ml_corpus/4p1i | R-6 | 11/65 | — | — |
@@ -769,7 +786,7 @@ means the column has no producer for that cell.
 | ml_corpus/4p1i | R-9 | 5/36 | — | — |
 | ml_corpus/4p1i | R-10 | 3/108 | — | — |
 | ml_corpus/4p1i | R-11 | 0/36 | — | — |
-| ml_corpus/4p1i | R-12 | 0/0 | — | — |
+| ml_corpus/4p1i | R-12 | 0/0 [ADV] | — | — |
 | ml_corpus/4p1i | R-13 | — | 0/36 | 36/36 |
 | ml_corpus/4p1i | R-14 | — | 0/72 | 72/72 |
 | ml_corpus/4p1i | R-15 | — | 0/129 | 0/129 |
@@ -777,20 +794,20 @@ means the column has no producer for that cell.
 | ml_corpus/4p1i | C-2 | — | 0/29 | 0/29 |
 | ml_corpus/4p1i | C-3 | — | 0/29 | 0/29 |
 | ml_corpus/4p1i | C-4 | — | 0/29 | 0/29 |
-| ml_corpus/4p1i | C-5 | — | 0/0 | — |
-| ml_corpus/4p1i | C-6 | — | 0/0 | — |
-| ml_corpus/4p1i | C-7 | — | 0/0 | — |
-| ml_corpus/4p1i | C-8 | — | 0/0 | — |
+| ml_corpus/4p1i | C-5 | — | 0/0 [ADV] | — |
+| ml_corpus/4p1i | C-6 | — | 0/0 [ADV] | — |
+| ml_corpus/4p1i | C-7 | — | 0/0 [ADV] | — |
+| ml_corpus/4p1i | C-8 | — | 0/0 [ADV] | — |
 | ml_corpus/4p1i | C-9 | — | 0/129 | 129/129 |
 | ml_corpus/4p1i | T-1 | — | 256/375 | 375/375 |
 | ml_corpus/4p1i | T-2 | — | 0/92 | 92/92 |
 | ml_corpus/4p1i | T-3 | — | 0/27 | 27/27 |
-| ml_corpus/4p1i | T-4 | — | 0/0 | 0/0 |
+| ml_corpus/4p1i | T-4 | — | 0/0 [ADV] | 0/0 [ADV] |
 | ml_corpus/4p1i | T-5 | — | 512/750 | 750/750 |
 | ml_corpus/4p1i | T-6 | — | 19/111 | 111/111 |
 | ml_corpus/4p1i | T-7 | — | 0/28 | 0/28 |
 | ml_corpus/4p1i | T-7b | — | 0/28 | 0/28 |
-| ml_corpus/4p1i | T-8 | 0/1 | — | — |
+| ml_corpus/4p1i | T-8 | 0/1 [ADV] | — | — |
 | ml_corpus/4p1i | T-9 | — | 0/86 | 43/86 |
 | ml_corpus/4p1i | T-10 | — | 0/43 | 43/43 |
 | ml_corpus/4p1i | B-1 | 2958/258 | 2958/258 | 2958/258 |
@@ -809,14 +826,16 @@ uv run python scripts/counterfactual_phase21.py --sets all --withhold corroborat
 uv run pytest tests/scripts/test_counterfactual_phase21.py -q
 ```
 
-27.4 s over the four committed sets from a fresh clone, `$0`, no network, no model call, no `AILIBI_*` export from the operator (the script refuses to run under one). The Phase-20 instrument took 28 s over the same 300 games. `--json` emits this table machine-readably for the pre-registration and the record audit to consume, and `--withhold` re-points the leave-one-out leg at any of the three levers.
+28.7 s over the four committed sets from a fresh clone, `$0`, no network, no model call, no `AILIBI_*` export from the operator (the script refuses to run under one). The Phase-20 instrument took 28 s over the same 300 games. `--json` emits this table machine-readably for the pre-registration and the record audit to consume, and `--withhold` re-points the leave-one-out leg at any of the three levers.
+
+The reconstruction is `tests.meetings.test_prompt_byte_golden.walk_replay_meetings`, the only committed walk that drives the real `MeetingManager` and yields per-meeting participants carrying `sighting_records`, `move_witness_records` and `body_discovery_records` — all three of which the ON legs need and which the replay-walk and the API loader do not supply. Importing it from a test module is a deliberate, precedented inversion (`eval/determinism_test.py`, `eval/leak_test.py`), so the command runs under `uv run`, which resolves the dev group; promoting the walk to a production home is Task 21.25's. That the OFF re-render IS the record is not assumed either: every recorded LLM call is attributed back to the render that produced its base, and a call no render explains is a refusal — which is also why RECORDED-OFF and RECONSTRUCTED-OFF agree on the render-budget cells to the digit.
 
 ### 11.1 What the instrument refuses to do
 
 Four refusals fire before any number is printed, and each ships with a case proving it bites (`tests/scripts/test_counterfactual_phase21.py`):
 
 1. **A graduated lever.** Every priced lever must still be registered in `orchestrator.replay._TOGGLEABLE_LEVER_RESOLVERS` and must read OFF under an EMPTY environment. A graduated resolver ignores the argument this script toggles it with, so its OFF column would silently be its ON column — the failure `scripts/counterfactual_phase20.py` turned into a refusal, inherited here on day one rather than after the fact.
-2. **A stale ambient export.** `substrate_flag_snapshot()` read from the AMBIENT process must report every Wave-2 key OFF, at start and at exit. Seven consumers re-derive the meeting reduction with no `env` argument, so an operator with a stale `AILIBI_TESTIMONY_SHAPES=1` export would make every imported instrument's OFF column an ON column while an empty-mapping check sailed through green. The refusal names the variable and says to unset it.
+2. **A stale ambient export.** `substrate_flag_snapshot()` read from the AMBIENT process must report every LIVE TOGGLE OFF — not only the priced three — at start and at exit, because the recorded substrate stamps all of them OFF. Seven consumers re-derive the meeting reduction with no `env` argument, so an operator with a stale `AILIBI_TESTIMONY_SHAPES=1` export would make every imported instrument's OFF column an ON column while an empty-mapping check sailed through green; and the one lever this memo holds OFF would do its damage most quietly of all, since its arm swaps a template file for a body neither priced lever's block reaches. The refusal names the variable and says to unset it. Both renderer bundles are additionally built under an explicit environment rather than the ambient one, so the template BODIES cannot follow an export either.
 3. **An OFF column that is not the record.** The innocent-ejection enumeration is checked against `audits/audit-phase-21-rerecord.md` §5.1 per set; the RC and WEAKFLAG ledger classes are checked against `eval.reporter_justice` and the committed weak-flag conviction cell; the four corroboration cells are checked against the records that published them. A disagreement is a DEFECT IN THIS SCRIPT, and the failure message says so and names both readings.
 4. **A fourth lever.** The slate is three keys with `impostor_roll_call` OFF. That arm swaps `accusation_round.j2` for a variant carrying neither sibling's block, so an all-four slate would silently drop the reporter and testimony-shapes effects from every statement turn while a composite stamp claimed them.
 

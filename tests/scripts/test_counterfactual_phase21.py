@@ -60,9 +60,27 @@ _BAR_WORDS: Final[tuple[str, ...]] = (
     "the target is",
     "must reach",
     "must exceed",
+    "must remain below",
+    "must remain above",
+    "must stay below",
+    "must stay above",
     "pass/fail",
     "we will accept if",
     "the decision rule is",
+)
+
+# A decision the memo is not the document to make.
+_DECISION_VERB: Final[re.Pattern[str]] = re.compile(
+    r"\b(?:adopt|reject|abandon|ship|accept|stop|gate)\b\s+"
+    r"(?:only\s+)?(?:if|when|unless|on)\b"
+)
+
+# A published cell id followed closely by a comparison — a threshold attached to
+# a Wave-2 cell, whatever words surround it. Deliberately NOT triggered by bare
+# "below"/"above", which the memo uses for cross-references.
+_CELL_THRESHOLD: Final[re.Pattern[str]] = re.compile(
+    r"\b[A-Z]-\d+[a-z]?\b[^|\n]{0,40}?"
+    r"(?:>=|<=|>|<|≥|≤|\bat least\b|\bat most\b|\bno more than\b|\bno fewer than\b)"
 )
 
 
@@ -285,21 +303,44 @@ def test_the_memo_attaches_no_threshold_to_a_wave_2_cell() -> None:
     assert _bar_language(_MEMO.read_text(encoding="utf-8")) == []
 
 
-def test_the_no_bar_pin_bites_on_a_perturbed_memo(tmp_path: Path) -> None:
-    # The perturbed copy craft rule 2 asks for: a memo that writes a bar fails
-    # the check that says memos here do not.
+@pytest.mark.parametrize(
+    "planted",
+    [
+        "The bar is 0.60 non-direct accuracy; the decision rule is ADOPT.",
+        "Adopt if R-3 >= 50%.",
+        "R-3 must remain below 35.",
+        "Reject when T-7 is nonzero.",
+        "We abandon if C-1 <= 400/1525.",
+        "R-4 at most 3%.",
+        "Ship only if T-6 ≥ 100%.",
+        "Gate on P-2 no more than 35.",
+    ],
+)
+def test_the_no_bar_pin_bites_on_a_perturbed_memo(planted: str, tmp_path: Path) -> None:
+    # The perturbed copies craft rule 2 asks for: eight spellings of a bar, each
+    # of which must fail the check that says memos here carry none. A gate that
+    # caught only the phrase this task happened to avoid would be prose.
     perturbed = tmp_path / "memo.md"
     perturbed.write_text(
-        _MEMO.read_text(encoding="utf-8")
-        + "\n\nThe bar is 0.60 non-direct accuracy; the decision rule is ADOPT.\n",
-        encoding="utf-8",
+        f"{_MEMO.read_text(encoding='utf-8')}\n\n{planted}\n", encoding="utf-8"
     )
     assert _bar_language(perturbed.read_text(encoding="utf-8")) != []
 
 
 def _bar_language(text: str) -> list[str]:
+    """Every bar, target or decision rule the memo's own DAG position forbids.
+
+    Three nets, because one is a spelling and the invariant is semantic: the
+    named phrases, a decision verb ("adopt if", "reject when", "abandon if"),
+    and a published cell id followed closely by a comparison — which is what a
+    threshold attached to a Wave-2 cell actually looks like.
+    """
+
     lowered = text.lower()
-    return [phrase for phrase in _BAR_WORDS if phrase in lowered]
+    hits = [phrase for phrase in _BAR_WORDS if phrase in lowered]
+    hits.extend(match.group(0) for match in _DECISION_VERB.finditer(lowered))
+    hits.extend(match.group(0) for match in _CELL_THRESHOLD.finditer(text))
+    return hits
 
 
 def test_the_memo_table_parses_into_rows() -> None:
@@ -345,14 +386,92 @@ def _perturb_first_published_value(text: str) -> str:
     raise AssertionError("the memo publishes no parseable table row to perturb")
 
 
+def test_the_pooled_on_column_is_withdrawn_when_any_set_disagrees() -> None:
+    """The aggregation half of the reconstruction-fidelity refusal.
+
+    Withdrawing one set's ON pair is not enough: summing the sets that DID
+    reproduce publishes a pooled row over a silently reduced denominator, which
+    is the opposite of what the refusal exists to do. Planted both ways.
+    """
+
+    totals = {
+        "X-1|l|recorded_off|n": 3,
+        "X-1|l|recorded_off|d": 100,
+        "X-1|l|on|n": 7,
+        "X-1|l|on|d": 100,
+    }
+    kwargs: dict[str, Any] = {
+        "key": "X-1|l",
+        "cell_id": "X-1",
+        "label": "l",
+        "population": "p",
+        "note": "n",
+        "on_slate": "s",
+        "totals": totals,
+    }
+    kept = cf._pooled_row(**kwargs, withdrawn=set())
+    assert kept["on"] == [7, 100]
+    assert kept["on_withdrawn"] is False
+
+    pulled = cf._pooled_row(**kwargs, withdrawn={"X-1"})
+    assert pulled["on"] is None
+    assert pulled["on_withdrawn"] is True
+    assert "WITHDRAWN" in str(pulled["note"])
+    # The OFF columns survive: the reader still gets the record's own reading.
+    assert pulled["recorded_off"] == [3, 100]
+
+
+def test_the_advisory_label_keys_on_the_rows_own_denominator(
+    fast_run: Mapping[str, object],
+) -> None:
+    block = _set_block(fast_run, _FAST_SET)
+    rows = {row["cell"]: row for row in block["rows"]}
+    # A cell read over a handful of turns is fragile however large the set is.
+    assert rows["T-8"]["advisory"] is True
+    # And a cell read over the whole ballot population is not.
+    assert rows["C-9"]["advisory"] is False
+
+
+def test_the_memo_marks_every_advisory_cell(fast_run: Mapping[str, object]) -> None:
+    marked = _memo_advisory_cells()
+    block = _set_block(fast_run, _FAST_SET)
+    expected = {row["cell"] for row in block["rows"] if row["advisory"]}
+    assert expected, "the fast slice flags no advisory row — the check is vacuous"
+    assert {(_FAST_SET, cell) for cell in expected} <= marked
+
+
+def test_the_advisory_marker_check_bites_on_a_stripped_memo(tmp_path: Path) -> None:
+    # Drop the marker from ONE per-set row and the comparison must notice; the
+    # gate is a per-cell join, not a "the memo mentions [ADV] somewhere" check.
+    original = _memo_advisory_cells()
+    assert original, "the memo marks no advisory cell — the check is vacuous"
+    stripped = tmp_path / "memo.md"
+    stripped.write_text(_strip_one_advisory_marker(), encoding="utf-8")
+    parsed = _advisory_cells(stripped.read_text(encoding="utf-8"))
+    assert parsed != original
+    assert len(parsed) == len(original) - 1
+
+
+def _strip_one_advisory_marker() -> str:
+    lines = _MEMO.read_text(encoding="utf-8").splitlines()
+    for index, line in enumerate(lines):
+        fields = [field.strip() for field in line.strip().strip("|").split("|")]
+        if len(fields) == 5 and fields[0] in cf.CANONICAL_SETS:
+            if cf.ADVISORY_MARK in line:
+                lines[index] = line.replace(cf.ADVISORY_MARK, "")
+                return "\n".join(lines) + "\n"
+    raise AssertionError("the memo marks no per-set advisory cell to strip")
+
+
 @pytest.mark.slow
 def test_the_memo_table_equals_a_live_four_set_run() -> None:
     """The document cannot drift from the instrument.
 
     Every published row -- per set and pooled -- is re-derived here and compared
-    against the memo's own table. This is also where the four corroboration
-    cells become an assertion: Task 21.19 shipped a walk that prints them and
-    deliberately asserts no figure.
+    against the memo's own table, as are the two censuses the memo publishes as
+    tables of their own rather than as cell rows. This is also where the four
+    corroboration cells become an assertion: Task 21.19 shipped a walk that
+    prints them and deliberately asserts no figure.
     """
 
     payload = cf.run(list(cf.CANONICAL_SETS))
@@ -365,6 +484,30 @@ def test_the_memo_table_equals_a_live_four_set_run() -> None:
     live_per_set, live_pooled = _run_tables(payload)
     assert memo_pooled == live_pooled
     assert memo_per_set == live_per_set
+
+    # The two prose tables that carry cells, against the pooled censuses the
+    # payload now emits: nothing published exists only as hand-written prose.
+    text = _MEMO.read_text(encoding="utf-8")
+    ballots = payload["pooled_ballot_census"]
+    assert isinstance(ballots, dict)
+    assert _memo_citation_mix(text) == ballots["citation_mix"]
+    testimony = payload["pooled_testimony_census"]
+    assert isinstance(testimony, dict)
+    assert _memo_kind_census(text) == (
+        testimony["statements_off"],
+        testimony["statements_on"],
+    )
+
+    # Every advisory cell the instrument flags carries its marker in the memo.
+    sets = payload["sets"]
+    assert isinstance(sets, dict)
+    flagged = {
+        (set_name, row["cell"])
+        for set_name, block in sets.items()
+        for row in block["rows"]
+        if row["advisory"]
+    }
+    assert flagged <= _advisory_cells(text)
 
 
 # --------------------------------------------------------------------------- #
@@ -409,6 +552,75 @@ def _parse_tables(
         elif _CELL_ID.match(fields[0]):
             pooled[fields[0]] = _values(fields[2:5])
     return per_set, pooled
+
+
+def _memo_advisory_cells() -> set[tuple[str, str]]:
+    return _advisory_cells(_MEMO.read_text(encoding="utf-8"))
+
+
+def _advisory_cells(text: str) -> set[tuple[str, str]]:
+    """Every ``(set, cell)`` the memo's per-set tables mark advisory."""
+
+    marked: set[tuple[str, str]] = set()
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("|") or cf.ADVISORY_MARK not in stripped:
+            continue
+        fields = [field.strip() for field in stripped.strip("|").split("|")]
+        if len(fields) == 5 and fields[0] in cf.CANONICAL_SETS:
+            marked.add((fields[0], fields[1]))
+    return marked
+
+
+def _memo_citation_mix(text: str) -> dict[str, int]:
+    """The §4.3 citation table, keyed by the census's own channel names."""
+
+    names = {
+        "hearsay": "hearsay",
+        "own observation": "own_obs",
+        "own turn": "own_turn",
+        "another player's observation": "other_obs",
+        "nothing": "none",
+    }
+    mix: dict[str, int] = {}
+    for line in text.splitlines():
+        fields = [field.strip() for field in line.strip().strip("|").split("|")]
+        if len(fields) != 3 or fields[0] not in names:
+            continue
+        count = re.search(r"\*\*(\d+)\*\*", fields[1])
+        assert count is not None, fields
+        mix[names[fields[0]]] = int(count.group(1))
+    return mix
+
+
+def _memo_kind_census(text: str) -> tuple[dict[str, int], dict[str, int]]:
+    """The §5.2 eight-kind reduction table, as ``(OFF, ON)`` counters."""
+
+    off: dict[str, int] = {}
+    on: dict[str, int] = {}
+    for line in text.splitlines():
+        fields = [field.strip() for field in line.strip().strip("|").split("|")]
+        if len(fields) != 4:
+            continue
+        if not (fields[0].startswith("`") and fields[0].endswith("`")):
+            continue
+        off_value = _first_int(fields[1])
+        on_value = _first_int(fields[2])
+        if off_value is None or on_value is None:
+            continue
+        # A kind nobody ever spoke is absent from the census's counters, not
+        # present at zero, so the memo's zeros are dropped the same way.
+        kind = fields[0].strip("`")
+        if off_value:
+            off[kind] = off_value
+        if on_value:
+            on[kind] = on_value
+    return off, on
+
+
+def _first_int(field: str) -> int | None:
+    match = re.search(r"(\d[\d,]*)", field)
+    return int(match.group(1).replace(",", "")) if match else None
 
 
 def _values(fields: list[str]) -> tuple[Any, ...]:
