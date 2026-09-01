@@ -1191,11 +1191,9 @@ class TestTestimonyShapesIsExactlyTwoLines:
         assert len(inserted) == (1 if is_impostor else 3)
 
     def test_a_spoken_kill_reaches_the_voter(self) -> None:
-        # The Q4 ruling on #416, amended here: the shape reached every later
-        # SPEAKER and stopped at the ballot, so a lever whose whole purpose is
-        # to put the strongest testimony in front of a decision never reached
-        # the decision. Exactly ONE line joins — the transcript row — because a
-        # voter files no observation and is offered no shape.
+        # A shape the arm elicits must reach the person DECIDING on it, not
+        # only the speakers who follow. Exactly ONE line joins — the transcript
+        # row — because a voter files no observation and is offered no shape.
         spoken = MeetingTranscript(turns=(_KILL_TURN,))
         off = self._ballot({}, spoken)
         on = self._ballot(_SHAPES_ON, spoken)

@@ -551,13 +551,12 @@ class TestFirstHandSources:
         assert _ledger(transcript).rows == ()
 
     def test_a_spoken_kill_grounds_nothing(self) -> None:
-        # The Q4 disposition on #416: the testimony-shapes arm's seventh
-        # observation kind does NOT join this walk. Every channel here tests an
-        # account against a typed record or a minted flag, and the kill shape
-        # has neither — no meeting-layer record type, nothing threaded into
+        # The shapes arm's kill observation is not a channel here. Every channel
+        # tests an account against a typed record or a minted flag, and the kill
+        # shape has neither — no meeting-layer record type, nothing threaded into
         # ``build_testimony_ledger``, no flag kind. Counting it would credit an
-        # ungrounded claim as first-hand, which is the one thing the word is
-        # defined here to exclude.
+        # ungrounded claim as first-hand, the one thing the word is defined here
+        # to exclude.
         transcript = _transcript(
             _turn(
                 index=0,
@@ -1180,11 +1179,10 @@ class TestProvenance:
         assert not _arm_is_served({}, template="vote_ballot", arm=arm)
 
     def test_the_live_sibling_composite_still_credits_this_arm(self) -> None:
-        # The composite above is no longer hypothetical: ``testimony_shapes``
-        # re-bodies this same template, so the all-ON slate -- the one the record
-        # is spent on -- serves a two-lineage ``vote_ballot`` stamp. Read through
-        # the LIVE registry rather than a synthetic string, so this fails if a
-        # future arm's value ever contains a '+' and breaks the split.
+        # ``testimony_shapes`` re-bodies this same template, so the all-ON slate
+        # -- the one a record is spent on -- serves a two-lineage ``vote_ballot``
+        # stamp. Read through the LIVE registry rather than a synthetic string,
+        # so this fails if an arm value ever contains a '+' and breaks the split.
         arm = _CORROBORATION_DISCIPLINE_ARM["vote_ballot"]
         all_on = {
             "AILIBI_IMPOSTOR_ROLL_CALL": "1",

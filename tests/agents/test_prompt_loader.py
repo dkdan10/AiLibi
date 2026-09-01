@@ -778,11 +778,10 @@ class TestTestimonyShapesRouting:
         assert "name the killer, not the victim" in on
 
     def test_the_ballot_renders_a_spoken_shape_only_on_the_arm(self) -> None:
-        # The Q4 ruling on #416: the arm elicits the shape on the two turn
-        # prompts, and until this amendment no VOTER ever saw it -- the ballot
-        # walked six observation kinds and the seventh fell through the walk in
-        # silence. The ballot offers no shape of its own (a voter files no
-        # observation); it renders what the table already said.
+        # The arm elicits the shape on the two turn prompts and the ballot
+        # renders it, so the voter reads what the table said. The ballot offers
+        # no shape of its own -- a voter files no observation -- so the row is
+        # all that joins, and only while the arm is on.
         off = self._ballot(
             build_prompt_renderers(OPERATIONAL_BASELINE_PROMPT_SET, env={})
         )
@@ -816,9 +815,8 @@ class TestTestimonyShapesRouting:
         versions = prompt_versions_for_set(OPERATIONAL_BASELINE_PROMPT_SET, env=env)
         assert versions["crewmate_report"].endswith(".testimony_shapes")
         assert versions["accusation_round"].endswith(".testimony_shapes")
-        # The ballot RENDERS the shape the two turn prompts offer (the Q4
-        # ruling on #416), so its bytes move with the arm and its stamp must
-        # move with them.
+        # The ballot RENDERS the shape the two turn prompts offer, so its bytes
+        # move with the arm and its stamp moves with them.
         assert versions["vote_ballot"].endswith(".testimony_shapes")
         # The one template the arm does NOT re-body inherits the default value.
         default = prompt_versions_for_set(OPERATIONAL_BASELINE_PROMPT_SET, env={})
