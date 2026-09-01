@@ -18,6 +18,11 @@ The grounding predicates are the detector's own
 means everywhere else in the meeting layer -- an invented sighting matches no
 record and earns no account.
 
+A spoken :class:`~meetings.schemas.SawKillObservation` is therefore excluded: the
+three channels are GROUNDED ones and the kill shape has none here to be tested
+against. What would have to land before it could join is in
+:func:`_speaker_grounds_subject`.
+
 Keep this module import-light: :mod:`meetings.schemas`, :mod:`meetings.constants`
 and :mod:`meetings.transcript` only, never :mod:`meetings.manager` -- the prompt
 loader imports it for the ledger type and ``agents`` may not reach the manager
@@ -207,6 +212,21 @@ def _speaker_grounds_subject(
 
     The sighting mapping arrives §4.7-firewalled from the manager, so an
     impostor's row naming a teammate cannot ground a case against that teammate.
+
+    A spoken :class:`~meetings.schemas.SawKillObservation` is NOT a fourth
+    channel. Each of the three above tests an account against a typed record or a
+    minted flag, and the kill shape has neither: ``KillWitnessRecord`` is an
+    ``orchestrator.game`` tactical-agent surface that never reaches the meeting
+    layer, no such mapping is threaded into :func:`build_testimony_ledger`, and
+    this module may not import one (the module docstring's import rule). Counting
+    it would credit an UNGROUNDED claim as a first-hand source -- the one thing
+    "first-hand" is defined here to exclude -- and would put on the ballot the
+    same suspicion delta
+    :func:`meetings.transcript._carries_relevant_observation` refuses on the
+    accusation side. Admitting it needs a grounding channel FIRST; until one
+    exists the shape is testimony a voter reads and no ledger row counts, and
+    the ballot's adopted clause is worded against the record to say so. Ruled at
+    #416 Q4.
     """
 
     sightings = sighting_records.get(speaker, ())

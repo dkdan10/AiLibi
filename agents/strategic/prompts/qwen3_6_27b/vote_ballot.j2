@@ -139,6 +139,8 @@ Let that voice color HOW you speak — the wording of your "rationale_text" only
   - tick {{ obs.tick }}: body of {{ obs.body_of }} in {{ obs.room }}.
 {% elif obs.type == "saw_vent" %}
   - tick {{ obs.tick }}: witnessed {{ obs.subject }} VENT in {{ obs.room }} (only the impostor can vent).
+{% elif obs.type == "saw_kill" and testimony_shapes is defined and testimony_shapes %}
+  - tick {{ obs.tick }}: witnessed {{ obs.subject }} KILL in {{ obs.room }} (spoken account, nothing confirms it).
 {% elif obs.type == "whereabouts" %}
   - tick {{ obs.tick }}: {{ turn.speaker }} places THEMSELVES in {{ obs.room }} (roll-call answer).
 {% endif %}
@@ -192,7 +194,7 @@ Weak signals. The same kind of conflict, but an innocent reading already fits it
 <testimony_sources>
 Who actually saw something, name by name. A voice is anyone who named them tonight; an account is a voice who also described seeing them, with their own record bearing that description out. Both are evidence and agreement at this table is often right, so read the split and price it — do not discount either half.
 {% for row in _sources %}
-- {{ row.subject }}: {{ row.voices }} {% if row.voices == 1 %}voice{% else %}voices{% endif %}, {{ row.first_hand | length }} {% if row.first_hand | length == 1 %}account{% else %}accounts{% endif %} — it started at [{{ row.originating_turn_id }}]{% if row.first_hand %}; {{ row.first_hand | join(", ") }} described seeing them{% endif %}{% if row.adopted %}; {{ row.adopted | join(", ") }} named them without adding anything they saw{% endif %}. {% if row.flagged %}The evidence above names them — read it there, in its own class.{% else %}Nothing in the evidence above names them.{% endif +%}
+- {{ row.subject }}: {{ row.voices }} {% if row.voices == 1 %}voice{% else %}voices{% endif %}, {{ row.first_hand | length }} {% if row.first_hand | length == 1 %}account{% else %}accounts{% endif %} — it started at [{{ row.originating_turn_id }}]{% if row.first_hand %}; {{ row.first_hand | join(", ") }} described seeing them{% endif %}{% if row.adopted %}; {{ row.adopted | join(", ") }}{% if testimony_shapes is defined and testimony_shapes %} named them without an account their own record bears out{% else %} named them without adding anything they saw{% endif %}{% endif %}. {% if row.flagged %}The evidence above names them — read it there, in its own class.{% else %}Nothing in the evidence above names them.{% endif +%}
 {% if row.opener_charge_turn_id %}
   That charge came from someone `{{ row.subject }}` had already accused at [{{ row.opener_charge_turn_id }}] — an answer to a charge, not a second witness.
 {% endif %}

@@ -1115,7 +1115,10 @@ _ALL_ON_STAMPS: Mapping[str, str] = {
         "+accusation_round.qwen3_6_27b.v5.reporter_reasoning"
         "+accusation_round.qwen3_6_27b.v5.testimony_shapes"
     ),
-    "vote_ballot": "vote_ballot.qwen3_6_27b.v5.corroboration_discipline",
+    "vote_ballot": (
+        "vote_ballot.qwen3_6_27b.v5.corroboration_discipline"
+        "+vote_ballot.qwen3_6_27b.v5.testimony_shapes"
+    ),
 }
 
 

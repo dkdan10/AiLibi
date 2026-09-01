@@ -54,6 +54,11 @@ from agents.strategic.prompts.loader import (
     _notify_bare_prompt_set_fallback,  # noqa: PLC2701
 )
 from meetings.constants import ENV_TESTIMONY_SHAPES
+from meetings.schemas import (
+    MeetingTranscript,
+    MeetingTurn,
+    SawKillObservation,
+)
 from orchestrator.game import prompt_versions_for_set
 
 from llm.fake_provider import FakeProvider
@@ -726,6 +731,35 @@ class TestTestimonyShapesRouting:
             living_ids=("p-1", "p-2"),
         )
 
+    def _ballot(self, renderers: PromptRenderers) -> str:
+        spoken = MeetingTranscript(
+            turns=(
+                MeetingTurn(
+                    turn_id="m-1:turn-0",
+                    turn_index=0,
+                    speaker="p-4",
+                    turn_kind="opening",
+                    reply_to=None,
+                    observations=(
+                        SawKillObservation(
+                            type="saw_kill", tick=11, subject="p-8", room="ADMIN"
+                        ),
+                    ),
+                    claims=(),
+                    free_text="I watched it happen.",
+                ),
+            )
+        )
+        return renderers.vote(
+            voter_id="p-3",
+            rendered_memory="(memory)",
+            transcript=spoken,
+            contradiction_flags=(),
+            suspicion_graph=(),
+            candidate_targets=("p-8",),
+            skip_confidence_threshold=0.5,
+        )
+
     def test_off_is_the_committed_body(self) -> None:
         off = self._crewmate(
             build_prompt_renderers(OPERATIONAL_BASELINE_PROMPT_SET, env={})
@@ -742,6 +776,27 @@ class TestTestimonyShapesRouting:
         )
         assert '"type": "saw_kill"' in on
         assert "name the killer, not the victim" in on
+
+    def test_the_ballot_renders_a_spoken_shape_only_on_the_arm(self) -> None:
+        # The arm elicits the shape on the two turn prompts and the ballot
+        # renders it, so the voter reads what the table said. The ballot offers
+        # no shape of its own -- a voter files no observation -- so the row is
+        # all that joins, and only while the arm is on.
+        off = self._ballot(
+            build_prompt_renderers(OPERATIONAL_BASELINE_PROMPT_SET, env={})
+        )
+        on = self._ballot(
+            build_prompt_renderers(
+                OPERATIONAL_BASELINE_PROMPT_SET, env={ENV_TESTIMONY_SHAPES: "1"}
+            )
+        )
+        assert "KILL" not in off
+        assert (
+            "  - tick 11: witnessed p-8 KILL in ADMIN "
+            "(spoken account, nothing confirms it)."
+        ) in on
+        # The OFFER stays on the turn prompts: a ballot never asks for a shape.
+        assert '"type": "saw_kill"' not in on
 
     def test_the_binding_is_frozen_at_construction(self) -> None:
         # PR #203's discipline, applied to this lever: a bundle built with the
@@ -760,10 +815,12 @@ class TestTestimonyShapesRouting:
         versions = prompt_versions_for_set(OPERATIONAL_BASELINE_PROMPT_SET, env=env)
         assert versions["crewmate_report"].endswith(".testimony_shapes")
         assert versions["accusation_round"].endswith(".testimony_shapes")
-        # The two templates the arm does NOT re-body inherit the default values.
+        # The ballot RENDERS the shape the two turn prompts offer, so its bytes
+        # move with the arm and its stamp moves with them.
+        assert versions["vote_ballot"].endswith(".testimony_shapes")
+        # The one template the arm does NOT re-body inherits the default value.
         default = prompt_versions_for_set(OPERATIONAL_BASELINE_PROMPT_SET, env={})
         assert versions["impostor_report"] == default["impostor_report"]
-        assert versions["vote_ballot"] == default["vote_ballot"]
 
     def test_a_set_without_the_guarded_body_fails_loud_at_construction(
         self, tmp_path: Path
@@ -836,7 +893,12 @@ class TestTestimonyShapesRouting:
                 "unguarded_set", root=tmp_path, env={ENV_TESTIMONY_SHAPES: "1"}
             )
         # ...and the check is not vacuous: the same set with a LIVE guard builds.
-        for name in (CREWMATE_REPORT_TEMPLATE, ACCUSATION_ROUND_TEMPLATE):
+        # All THREE re-bodied templates need one, the ballot included.
+        for name in (
+            CREWMATE_REPORT_TEMPLATE,
+            ACCUSATION_ROUND_TEMPLATE,
+            VOTE_BALLOT_TEMPLATE,
+        ):
             (set_dir / name).write_text(
                 "body {{ agent_id }}\n"
                 "{% if testimony_shapes is defined and testimony_shapes %}\n"

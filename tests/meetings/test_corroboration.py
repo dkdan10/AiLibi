@@ -26,6 +26,7 @@ import pytest
 
 from agents.strategic.prompts.loader import build_prompt_renderers
 from meetings.constants import (
+    ENV_TESTIMONY_SHAPES,
     MAP_ARBITRATION_MAX_HOPS,
     MAP_ARBITRATION_MAX_TICK_GAP,
 )
@@ -57,6 +58,7 @@ from meetings.schemas import (
     MoveWitnessRecord,
     ObservationClaim,
     PlayerId,
+    SawKillObservation,
     SawMoveObservation,
     SawPlayerObservation,
     SawVentObservation,
@@ -67,6 +69,7 @@ from llm.fake_provider import FakeProvider
 from orchestrator.game import (
     CORROBORATION_DISCIPLINE_PROMPT_VERSION_SETS,
     PROMPT_VERSION_SETS,
+    TESTIMONY_SHAPES_PROMPT_VERSION_SETS,
     _arm_is_served,  # noqa: PLC2701
     _CORROBORATION_DISCIPLINE_ARM,  # noqa: PLC2701
     build_default_meeting_runner,
@@ -547,6 +550,52 @@ class TestFirstHandSources:
         )
         assert _ledger(transcript).rows == ()
 
+    def test_a_spoken_kill_grounds_nothing(self) -> None:
+        # The shapes arm's kill observation is not a channel here. Every channel
+        # tests an account against a typed record or a minted flag, and the kill
+        # shape has neither — no meeting-layer record type, nothing threaded into
+        # ``build_testimony_ledger``, no flag kind. Counting it would credit an
+        # ungrounded claim as first-hand, the one thing the word is defined here
+        # to exclude.
+        transcript = _transcript(
+            _turn(
+                index=0,
+                speaker="p-2",
+                observations=(
+                    SawKillObservation(
+                        type="saw_kill", tick=14, subject="p-5", room="MEDBAY"
+                    ),
+                ),
+                claims=(_accuses("p-5"),),
+            ),
+        )
+        # Not even with a record that COVERS the same subject/room/tick: there
+        # is no predicate that could match the two, so record presence is not a
+        # back door into the count.
+        records = {"p-2": (_record(subject="p-5", room="MEDBAY", tick=14),)}
+        row = _row(_ledger(transcript, sighting_records=records), "p-5")
+        assert row.first_hand == ()
+        assert row.adopted == ("p-2",)
+        assert row.voices == 1
+
+    def test_the_exclusion_is_not_a_dead_fixture(self) -> None:
+        # Non-vacuity for the leg above: the SAME speaker, the same accusation
+        # and the same records, with a ``saw_player`` row instead of the kill,
+        # IS a first-hand source. So the previous test measures the kind, not a
+        # transcript that could never have grounded anything.
+        transcript = _transcript(
+            _turn(
+                index=0,
+                speaker="p-2",
+                observations=(_saw(subject="p-5", room="MEDBAY", tick=14),),
+                claims=(_accuses("p-5"),),
+            ),
+        )
+        records = {"p-2": (_record(subject="p-5", room="MEDBAY", tick=14),)}
+        row = _row(_ledger(transcript, sighting_records=records), "p-5")
+        assert row.first_hand == ("p-2",)
+        assert row.adopted == ()
+
 
 class TestAdoptedSources:
     # The A-19 pile: one originator plus three repeats naming the same target,
@@ -832,9 +881,12 @@ _RENDER_RECORDS: Final[Mapping[PlayerId, tuple[SightingRecord, ...]]] = {
 
 
 def _render(
-    *, ledger: MeetingTestimonyLedger | None, candidates: tuple[str, ...] = ("p-5",)
+    *,
+    ledger: MeetingTestimonyLedger | None,
+    candidates: tuple[str, ...] = ("p-5",),
+    env: Mapping[str, str] | None = None,
 ) -> str:
-    renderers = build_prompt_renderers(_SET, env={})
+    renderers = build_prompt_renderers(_SET, env=dict(env or {}))
     return renderers.vote(
         voter_id="p-2",
         rendered_memory="## Your role: CREWMATE\nnothing yet",
@@ -845,6 +897,55 @@ def _render(
         skip_confidence_threshold=0.6,
         testimony_ledger=ledger,
     )
+
+
+class TestAdoptedClauseWording:
+    """The adopted clause must stay TRUE under the testimony-shapes arm.
+
+    An adopted voice is one whose account no record bears out. With the shapes
+    arm OFF that is always "added nothing they saw", because every kind that
+    reaches this walk is a grounded one. With it ON an adopted voice may have
+    spoken an ungrounded KILL — visible to the voter three blocks up — so the
+    clause is worded against the RECORD instead. The count does not move; only
+    the sentence describing it does.
+    """
+
+    _LEDGER: Final[MeetingTestimonyLedger] = _ledger(
+        _transcript(
+            _turn(index=0, speaker="p-1", claims=(_accuses("p-5"),)),
+            _turn(index=1, speaker="p-2", claims=(_accuses("p-5"),)),
+        ),
+        opener="p-1",
+    )
+    _RECORD_WORDING: Final[str] = (
+        "named them without an account their own record bears out"
+    )
+    _SAID_WORDING: Final[str] = "named them without adding anything they saw"
+
+    def test_the_source_count_arm_alone_keeps_its_committed_sentence(self) -> None:
+        rendered = _render(ledger=self._LEDGER)
+        assert self._SAID_WORDING in rendered
+        assert self._RECORD_WORDING not in rendered
+
+    def test_the_shapes_arm_words_it_against_the_record(self) -> None:
+        rendered = _render(ledger=self._LEDGER, env={ENV_TESTIMONY_SHAPES: "1"})
+        assert self._RECORD_WORDING in rendered
+        assert self._SAID_WORDING not in rendered
+
+    def test_only_that_sentence_moves(self) -> None:
+        # The gate that makes the two above meaningful: the arm rewords ONE
+        # clause and touches nothing else on the page, so a source-count
+        # recording and a shapes recording differ exactly where the stamp says.
+        off = _render(ledger=self._LEDGER)
+        on = _render(ledger=self._LEDGER, env={ENV_TESTIMONY_SHAPES: "1"})
+        assert off.replace(self._SAID_WORDING, self._RECORD_WORDING) == on
+
+    def test_the_count_is_untouched_by_the_wording(self) -> None:
+        # Craft rule 2: the perturbation that would make this vacuous is a
+        # reworded clause that also moved the number. Both renders must state
+        # the SAME split — two voices, zero accounts.
+        for env in ({}, {ENV_TESTIMONY_SHAPES: "1"}):
+            assert "2 voices, 0 accounts" in _render(ledger=self._LEDGER, env=env)
 
 
 class TestRender:
@@ -1076,6 +1177,28 @@ class TestProvenance:
             {"vote_ballot": f"other.arm.v1+{arm}"}, template="vote_ballot", arm=arm
         )
         assert not _arm_is_served({}, template="vote_ballot", arm=arm)
+
+    def test_the_live_sibling_composite_still_credits_this_arm(self) -> None:
+        # ``testimony_shapes`` re-bodies this same template, so the all-ON slate
+        # -- the one a record is spent on -- serves a two-lineage ``vote_ballot``
+        # stamp. Read through the LIVE registry rather than a synthetic string,
+        # so this fails if an arm value ever contains a '+' and breaks the split.
+        arm = _CORROBORATION_DISCIPLINE_ARM["vote_ballot"]
+        all_on = {
+            "AILIBI_IMPOSTOR_ROLL_CALL": "1",
+            "AILIBI_REPORTER_REASONING": "1",
+            ENV_CORROBORATION_DISCIPLINE: "1",
+            ENV_TESTIMONY_SHAPES: "1",
+        }
+        served = prompt_versions_for_set(_SET, env=all_on)
+        assert "+" in served["vote_ballot"]
+        assert _arm_is_served(served, template="vote_ballot", arm=arm)
+        # ...and the sibling's own lineage is credited off the same stamp.
+        assert _arm_is_served(
+            served,
+            template="vote_ballot",
+            arm=TESTIMONY_SHAPES_PROMPT_VERSION_SETS[_SET]["vote_ballot"],
+        )
 
     def test_an_agreeing_default_pin_leaves_the_ledger_off(
         self, monkeypatch: pytest.MonkeyPatch
