@@ -313,7 +313,8 @@ the clause is applied at the record, to the record's own numbers.**
 *This bar was **MISSED** at the phase-20 record (42 against < 35), and baseline 7 is canon by
 explicit owner override of a FINDING verdict.*
 
-The ask is **−12 cases** (46 → ≤ 34). At the phase-20 record the same target asked for −8.
+The ask is **−12 cases**: 46 down to 34 or fewer, which is what `< 35` means on an integer
+count. At the phase-20 record the same target asked for −8.
 
 ---
 
@@ -447,10 +448,21 @@ bar:
 
 * `eval.funnel.InformationFunnelReport.killer_self_reported == 0`, and
 * `reporter_ejected == reporter_ejected_innocent` (`eval/funnel.py`:910-912), and
-* `eval.reporter_justice.ReporterJusticeCells.reporter_impostor_meetings == 0`.
+* `eval.reporter_justice.ReporterJusticeCells.reporter_impostor_meetings == 0`, and
+* **the TWIN AGREES** —
+  `eval.funnel.InformationFunnelReport.reporter_ejected_innocent ==
+  eval.reporter_justice.ReporterJusticeCells.reporter_innocent_ejections`, **per leg AND
+  pooled.**
 
-A leg that breaks any of the three voids both reporter bars for the whole record. A VOID is
+A leg that breaks any of the four voids both reporter bars for the whole record. A VOID is
 published as a VOID and never absorbed into either verdict branch.
+
+**The twin's agreement is a VOID condition, not a footnote.** I-3 is registered in §2 and §3.1
+precisely because two independently authored readers arriving at the same 34 is bar 3's strongest
+provenance. A record on which they DISAGREE has lost that provenance, and reading bars 3 and 4
+anyway would let a graduation ride a number whose only corroboration had just failed. So the
+disagreement voids the reporter bars rather than being reported beside them, and the record audit
+prints both readings, per leg and pooled, whether they agree or not.
 
 ## 5. Secondary cells (observed, reported, never gated)
 
@@ -510,11 +522,29 @@ The rule is CONJUNCTIVE and names its subset exactly: bars 1 AND 2 AND 3 AND 4 �
 **VOID**, which is not "met", so the conjunction fails and the verdict is FINDING with the VOID
 published as its own line.
 
-**Partial adoption is a per-lever VERDICT, never a partial graduation.** A lever is ELIGIBLE
-when, conjunctively: (i) the bar its own cell speaks to is met on the recorded bytes; (ii)
-`audits/audit-phase-21-counterfactual.md` §8 predicted that direction and magnitude for that
-lever's own cell before the record was spent; and (iii) it is independently stampable, which the
-one-resolver-per-lever registry guarantees. **An eligible lever keeps its default-OFF gate.** The
+**Partial adoption is a per-lever VERDICT, never a partial graduation — and the verdict is a
+RENDER verdict, because no bar maps to a single lever.** §7 declares that no bar may be attributed
+to a lever, and `audits/audit-phase-21-counterfactual.md` §7 puts all four bars' cells
+(R-3 / R-4, P-1, P-2) on its NOT-PREDICTABLE-OFFLINE list. An eligibility test that asked whether
+the counterfactual predicted a lever's own BAR cell would therefore be unsatisfiable by
+construction, and an eligibility test that assigned one bar to one lever would assert an
+attribution this memo forbids. The test is stated so it can actually be run:
+
+A lever is ELIGIBLE when, conjunctively:
+
+1. **its own §8 RENDER predictions held on the recorded bytes** — `reporter_reasoning` against
+   `audits/audit-phase-21-counterfactual.md` §8.1, `corroboration_discipline` against §8.2,
+   `testimony_shapes` against §8.3, each read as the per-lever prediction table states it and
+   each falsifiable from the recording alone;
+2. **none of the seven §8.1 tripwires fired against it** — for `testimony_shapes` that includes
+   T1 and T5, the two NEVER-WORSE BARS; and
+3. **it is independently stampable**, which the one-resolver-per-lever registry
+   (`orchestrator/replay.py`:675-682) guarantees.
+
+**Eligibility decides nothing about the bars and graduates nothing.** It is published as a
+per-lever line in the record audit — "this lever rendered what it was predicted to render, and
+nothing got worse where it touched" — so that a FINDING verdict still records which levers
+behaved. **An eligible lever keeps its default-OFF gate.** The
 reason is mechanical, not stylistic: `api/replay_loader.py::_assert_substrate_matches` (:655)
 compares a recording's stamped slate against `orchestrator.replay.substrate_flag_snapshot()`
 across every `SUBSTRATE_FLAG_KEYS` entry and fails loud on any difference. Graduate a SUBSET and
@@ -598,20 +628,36 @@ or a never-worse bar, and is NEVER a graduating bar** (§6). Every one of them i
 **21.23's first ON seed**, and the reader for all seven is `scripts/counterfactual_phase21.py`
 (the cell ids below are its own, at :1483, :1496, :1508, :1621, :1699, :1711, :1756, :1793).
 
-| id | cell | predicted value, with denominator | disposition |
-|---|---|---|---|
-| **T1** | `T-7` — spoken vent accounts naming a player who never vented | **0 of 512** OFF; ON must not raise it | **RATIFIED as a NEVER-WORSE BAR *and* a pre-record STOP.** A non-zero ON reading means an ON arm mints fabricated vent accounts — the record has made something worse, and it must not start (or must stop) |
-| **T2** | `R-13` / `R-14` — reporter openings and non-reporter speech turns gaining the reporter block | **620/620** openings and **2,715/2,715** speech turns | **RATIFIED as a pre-record STOP.** Zero on an ON seed means the lever did not thread and the record must not start. Declined as a bar |
-| **T3** | `R-15` — ballots gaining a reporter block | **0 of 3,631**, in both columns | **RATIFIED as a pre-record STOP.** A non-zero reading means the reporter lever reached a seam it does not own. Declined as a bar |
-| **T4** | `T-6` — location accounts reaching the alibi map | **1,016/4,173 (24.35%) OFF → 4,173/4,173 (100%) ON** | **RATIFIED as a pre-record STOP.** A partial fill means the widened `("alibi","whereabouts")` gate did not land. Declined as a bar |
-| **T5** | `T-9` — speech turns gaining a testimony-shape block | **2,023 of 2,959**, and **0 impostor turns** | **RATIFIED as a NEVER-WORSE BAR *and* a pre-record STOP.** An impostor turn gaining the block is a FIREWALL question, not a render one, and the record must not start (or must stop) |
-| **T6** | `C-9` — ballots gaining the source-count block | **3,614 of 3,631 ≈ 99.5%** ON | **RATIFIED as a pre-record STOP.** A materially lower share means the ledger is not being built where it should be. Declined as a bar |
-| **T7** | `B-1` — rendered memory rows per prompt snapshot at meeting 1 | **255,918/7,271, unchanged** between columns | **RATIFIED as a pre-record STOP.** A first-meeting memory-row diff means prose is displacing memory, which this slate must not do. Declined as a bar |
+**Each tripwire is registered as a SAMPLE-LOCAL PREDICATE, not as a frozen population count**
+[PROPOSED — ratified at merge]. This is the one place the counterfactual's §9 wording cannot be
+adopted verbatim, and the reason is arithmetic: 21.23 is a **five-seed** smoke, so it cannot
+literally read 620 of 620 openings or 2,715 of 2,715 speech turns, and a STOP condition phrased on
+the 300-game totals would make a CORRECT smoke read "off its predicted value" and ABANDON — or
+force the operator to reinterpret a ratified criterion at the terminal. The predicate below is
+what any run is judged against, at any n; the baseline-8 population figure is printed beside it as
+the reference the full record additionally reproduces.
+
+| id | cell | **the predicate any run must satisfy** | the baseline-8 population, for reference | disposition |
+|---|---|---|---|---|
+| **T1** | `T-7` — spoken vent accounts naming a player who never vented | **the count is 0**, whatever the denominator | 0 of 512 OFF | **RATIFIED as a NEVER-WORSE BAR *and* a pre-record STOP.** A non-zero ON reading means an ON arm mints fabricated vent accounts — the record has made something worse, and it must not start (or must stop) |
+| **T2** | `R-13` / `R-14` — reporter openings and non-reporter speech turns gaining the reporter block | **every observed body-report opening gains the block, and every observed non-reporter speech turn in a body-report meeting gains it — 100% of each observed denominator, and no emergency-meeting prompt gains either** | 620/620 openings and 2,715/2,715 speech turns | **RATIFIED as a pre-record STOP.** A share below 100% on an ON seed means the lever did not thread and the record must not start. Declined as a bar |
+| **T3** | `R-15` — ballots gaining a reporter block | **the count is 0**, whatever the ballot denominator | 0 of 3,631, in both columns | **RATIFIED as a pre-record STOP.** A non-zero reading means the reporter lever reached a seam it does not own. Declined as a bar |
+| **T4** | `T-6` — location accounts reaching the alibi map | **100% of observed location accounts reach the map under ON** (and the OFF reconstruction of the same run is strictly below it) | 1,016/4,173 = 24.35% OFF → 4,173/4,173 = 100% ON | **RATIFIED as a pre-record STOP.** A partial fill means the widened `("alibi","whereabouts")` gate did not land. Declined as a bar |
+| **T5** | `T-9` — speech turns gaining a testimony-shape block | **every observed CREW speech turn gains the block and the IMPOSTOR count is 0**, whatever the denominators | 2,023 of 2,959, with 0 impostor turns | **RATIFIED as a NEVER-WORSE BAR *and* a pre-record STOP.** An impostor turn gaining the block is a FIREWALL question, not a render one, and the record must not start (or must stop) |
+| **T6** | `C-9` — ballots gaining the source-count block | **every observed ballot gains the block except those whose meeting ledger holds no row for any of that voter's candidate targets** — the residue is enumerated, never estimated | 3,614 of 3,631 = 99.5% ON | **RATIFIED as a pre-record STOP.** A shortfall the residue rule does not account for means the ledger is not being built where it should be. Declined as a bar |
+| **T7** | `B-1` — rendered memory rows per prompt snapshot at meeting 1 | **the meeting-1 row count is byte-identical between the run's own OFF and ON columns** | 255,918/7,271, unchanged across all three columns | **RATIFIED as a pre-record STOP.** A first-meeting memory-row diff means prose is displacing memory, which this slate must not do. Declined as a bar |
+
+**How the two runs read the same predicate.** 21.23's smoke evaluates each predicate over the
+seeds it recorded, and a shortfall STOPs the record before it starts. 21.24 evaluates the same
+predicates over its own bytes AND additionally reproduces the population column, because at 300
+games its denominators are the baseline-8 denominators. **The predicate is the ratified criterion;
+the population figure is evidence.**
 
 **The two NEVER-WORSE BARS, stated as such.** T1 and T5 are the only guards this pre-registration
 carries against the record making something worse while the four primary bars improve. Each is a
-one-sided bar: T1's cell may not RISE above 0 of 512, and T5's impostor-turn count may not RISE
-above 0. Neither can contribute to ADOPTED; each can only stop the record or fail it.
+one-sided bar on a COUNT, which is why neither needs a denominator to be judged: T1's fabricated
+vent-account count may not rise above 0, and T5's impostor-turn count may not rise above 0.
+Neither can contribute to ADOPTED; each can only stop the record or fail it.
 
 ## 9. The record order, the freeze, the slate and the preconditions
 
@@ -667,7 +713,9 @@ asymmetry (#416/#417), and the roll_call sibling-block gap.
 * a guard trip;
 * a lever-stamp mismatch between the recorded snapshot and the declared slate, compared through
   `orchestrator.replay.substrate_slate_mismatches` and **never re-derived**;
-* any of the seven §8.1 tripwires reading off its predicted value.
+* any of the seven §8.1 tripwires failing **its predicate** — the sample-local criterion in
+  §8.1's third column, evaluated over whatever the run actually recorded. A denominator smaller
+  than baseline 8's is expected at the smoke and is NOT a trip.
 
 ## 10. THE RATIFIED DECISION (owner) — the pre-registration
 
@@ -687,9 +735,11 @@ asymmetry (#416/#417), and the roll_call sibling-block gap.
 * **The `n ≥ 30` powered clause is carried VERBATIM** (§4), ratified explicitly, with the
   granularity test's disagreement on `samples/9p2i` printed beside it and the clause re-applied
   to the RECORD's own denominators at the record.
-* **Decision rule = §6 exactly**: conjunctive over all four bars; a per-lever eligibility VERDICT
-  and never a partial graduation; no bar re-priced after this merge; a miss published as a miss;
-  and the phase-20 override explicitly not a precedent for re-pricing.
+* **Decision rule = §6 exactly**: ADOPTED iff **bars 1, 2, 3 and 4** are all met on the recorded
+  bytes, FINDING otherwise — conjunctive, with no waiver and no substitute; a per-lever
+  eligibility VERDICT on the levers' own §8 RENDER predictions and never a partial graduation; no
+  bar re-priced after this merge; a miss published as a miss; and the phase-20 override
+  explicitly not a precedent for re-pricing.
 * **Secondary = §5 exactly**: observed and reported, never gated; the win-split band is ±15
   points per set against the four re-derived MANIFEST rates.
 * **Measured but not registered = §5.1 exactly**, with its routing rule: an instrument contract
@@ -777,15 +827,28 @@ does NOT produce, is excluded from that count and pinned by name instead, so it 
 smuggle an unchecked value past the gate. Every text check is scoped to the memo BEFORE §12, so
 this reader — quoted inside the memo — cannot satisfy its own checks.
 
-**Seven perturbations, every one verified to bite, the last under `-O`:** a changed cell digit
-(`20/95` → `21/95`) prints `I-6 zero-flag convictions [samples/9p2i]: (21, 95) != (20, 95)`; a
-changed interval prints `interval 34/46: 0.7391 1.0000 1.0000 != (0.7391, 0.5974, 0.844)`; an
-interval re-spelled out of the parsed shape (`[0.0037, 0.0112]` → `[0.0037,0.0112]`) trips both
-`16 intervals quoted but only 15 are in a shape this reader can re-run` and `only 15 intervals
-parsed`; deleting a §3.1 row prints `table inventory: 14 rows, expected 15`; moving a target in
-§4.1's machine-readable table prints `bar 3: the table's target is not '**≤ 12 pooled**'`;
-collapsing §3.2's two divergent bounds into one prints `interval: §3.2 no longer states '[0.4224,
-0.6178]'`; and the re-spelling under `uv run python -O` still exits 1 with both messages.
+**Twelve perturbations, every one verified to bite, the last under `-O`:**
+
+| perturbation | what the reader prints |
+|---|---|
+| a changed cell digit (`20/95` → `21/95`) | `I-6 zero-flag convictions [samples/9p2i]: (21, 95) != (20, 95)` |
+| a changed interval | `interval 34/46: 0.7391 1.0000 1.0000 != (0.7391, 0.5974, 0.844)` |
+| an interval re-spelled out of the parsed shape (`[0.0037, 0.0112]` → `[0.0037,0.0112]`) | `16 intervals quoted but only 15 are in a shape this reader can re-run` **and** `only 15 intervals parsed` |
+| a deleted §3.1 row | `table inventory: 14 rows, expected 15` |
+| a target moved in §4.1's TABLE | `bar 3: the table's target is not '**≤ 12 pooled**'` **and** `prose states a target ≤ 12.0 that §4.1's table does not` **and** `bar 3: §4.1's table says ≤ 16.0 but no prose bar states it` |
+| a target moved in §4's PROSE, table left alone | `prose states a target ≤ 13.0 that §4.1's table does not` |
+| a target moved in §0's verdict line | `prose states a target < 38.0 that §4.1's table does not` **and** `bar 2: §4.1's table says < 35.0 but no prose bar states it` |
+| §6's conjunctive subset narrowed | `6 no longer states 'bars 1, 2, 3 and 4'` |
+| §10's ratified list narrowed | `10 no longer states 'bars 1, 2, 3 and 4'` |
+| §4.3's twin VOID condition dropped | `§4.3's VOID list no longer names 'the TWIN AGREES'` |
+| §4.3's `killer_self_reported` condition dropped | `§4.3's VOID list no longer names 'killer_self_reported == 0'` |
+| §3.2's two divergent bounds collapsed into one | `interval: §3.2 no longer states '[0.4224, 0.6178]'` |
+| the same re-spelling under `uv run python -O` | both interval messages; still exits 1 |
+
+The three-way target diff — §4.1's table against §0's verdict line against §4's prose bars, in
+BOTH directions — exists because §0, §4 and §4.1 are all ratified content the record reads
+verbatim. A target that moved in one of them and not the others is drift the record contract would
+read two ways, and it is caught rather than absorbed.
 
 ```bash
 uv run python - <<'EOF'
@@ -824,16 +887,19 @@ REPORTS = {  # every instrument walks each committed set exactly once
 POOLED = pool_reporter_justice(REPORTS[name]["r"] for name in SETS)
 
 
-def computed(label: str, name: str) -> tuple[int, ...]:
+def computed(label: str, name: str) -> tuple[int, ...] | None:
     d, r, f = REPORTS[name]["d"], REPORTS[name]["r"], REPORTS[name]["f"]
     s, v = REPORTS[name]["s"], REPORTS[name]["v"]
     ct, mf = d.ejectee_proof_cross_tab, d.meeting_flag_cross_tab
     return {
         "I-1 direct-proof accuracy": (
             ct.proof_present_impostor, ct.proof_present_ejections),
+        # The None sentinel is NOT zero: a set with no non-direct ejections has no
+        # accuracy cell at all, and the memo must say so rather than state 0/0.
         "I-1 non-direct accuracy": (
-            ct.non_direct_accuracy.numerator or 0,
-            ct.non_direct_accuracy.denominator or 0),
+            (ct.non_direct_accuracy.numerator, ct.non_direct_accuracy.denominator)
+            if ct.non_direct_accuracy.denominator is not None
+            else None),
         "I-1 innocent ejections": (
             mf.flagged_ejections_innocent + mf.unflagged_ejections_innocent,
             ct.ejections_total),
@@ -861,12 +927,15 @@ def computed(label: str, name: str) -> tuple[int, ...]:
 
 
 NUM = re.compile(r"(\d+)/(\d+)")
-stated: dict[str, list[tuple[int, ...]]] = {}
+# `n/a` in a cell means the instrument has NO cell there (the None sentinel), which
+# is a different statement from `0/0` and is parsed as such.
+stated: dict[str, list[tuple[int, ...] | None]] = {}
 for line in TEXT.split("### 3.1")[1].split("### 3.2")[0].splitlines():
     row = [part.strip() for part in line.strip().strip("|").split("|")]
     if line.startswith("| I-") and len(row) == 6:
         stated[row[0]] = [
-            tuple(int(v) for v in NUM.findall(part)[0]) for part in row[1:5]
+            None if part == "n/a" else tuple(int(v) for v in NUM.findall(part)[0])
+            for part in row[1:5]
         ]
 
 for label in stated:
@@ -883,7 +952,10 @@ if len(stated) != EXPECTED_ROWS:
     mismatches.append(f"table inventory: {len(stated)} rows, expected {EXPECTED_ROWS}")
 print(f"OK  table inventory, {len(stated)} rows")
 
-# The four BARS, from §4.1's machine-readable table, against the pooled instruments.
+# The four BARS. Each baseline is recomputed from the bar's OWN registered producer,
+# never from a second instrument that merely agrees today: bar 2 is registered on
+# `MeetingFlagCrossTab`, so it is pooled from the deduction reports even though
+# `eval.reporter_justice` also reads 46 on baseline 8.
 nd_n = sum(
     REPORTS[n]["d"].ejectee_proof_cross_tab.non_direct_accuracy.numerator or 0
     for n in SETS
@@ -892,9 +964,19 @@ nd_d = sum(
     REPORTS[n]["d"].ejectee_proof_cross_tab.non_direct_accuracy.denominator or 0
     for n in SETS
 )
+bar2 = sum(
+    REPORTS[n]["d"].meeting_flag_cross_tab.flagged_ejections_innocent
+    + REPORTS[n]["d"].meeting_flag_cross_tab.unflagged_ejections_innocent
+    for n in SETS
+)
+if bar2 != POOLED.innocent_ejections:
+    print(
+        f"NOTE  bar 2's producers disagree: MeetingFlagCrossTab {bar2} vs "
+        f"reporter_justice {POOLED.innocent_ejections} -- bar 2 reads its own"
+    )
 BARS = {
     1: (f"{nd_n}/{nd_d} = {nd_n / nd_d:.4f}", "**≥ 0.60 pooled**"),
-    2: (f"{POOLED.innocent_ejections}", "**< 35 pooled**"),
+    2: (f"{bar2}", "**< 35 pooled**"),
     3: (f"{POOLED.reporter_innocent_ejections}", "**≤ 12 pooled**"),
     4: (
         f"{POOLED.reporter_innocent_ejections}/{POOLED.innocent_ejections} = "
@@ -916,6 +998,65 @@ for bar_id, (baseline, target) in BARS.items():
         mismatches.append(f"bar {bar_id}: the table's target is not {target!r}")
     print(f"OK  bar {bar_id}: baseline {baseline}, target {target}")
 
+# §4.1's table is not the only normative statement of a target: §0's verdict line and
+# §4's prose bars are read verbatim by the record too. So the table's targets and the
+# prose's targets are diffed against each other, BOTH WAYS -- a target moved in one
+# place and not the other is drift the record contract would read two ways.
+TARGET = re.compile(r"(≥|≤|<|>)\s*(\d+(?:\.\d+)?)(%?)")
+ARROW = re.compile(r"→\s*(≥|≤|<|>)\s*(\d+(?:\.\d+)?)(%?)")
+
+
+def _norm(op: str, num: str, pct: str) -> tuple[str, float]:
+    """A target as (operator, value); percentages and fractions compare equal."""
+    return op, (float(num) / 100 if pct else float(num))
+
+
+table_targets = {}
+for line in bar_table.splitlines():
+    head = re.match(r"\|\s*(\d)\s*\|", line)
+    if head:
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        found = TARGET.search(cells[4])
+        if found is None:
+            mismatches.append(f"bar {head[1]}: the table row states no target")
+            continue
+        table_targets[int(head[1])] = _norm(*found.groups())
+
+# Every arrow-stated target in §0 and §4 must BE one of the table's, and every one of
+# the table's must appear as an arrow. Codex's own repro -- moving the prose bar-3
+# target to `≤ 13` while leaving the table at `≤ 12` -- fails both halves.
+normative = "\n".join(
+    (
+        TEXT.split("## 0. Verdict in one line")[1].split("## 1.")[0],
+        TEXT.split("## 4. Primary bars")[1].split("### 4.1")[0],
+    )
+)
+arrows = {_norm(*m) for m in ARROW.findall(re.sub(r"\s+", " ", normative))}
+for arrow in sorted(arrows - set(table_targets.values())):
+    mismatches.append(
+        f"prose states a target {arrow[0]} {arrow[1]} that §4.1's table does not"
+    )
+for bar_id, want in sorted(table_targets.items()):
+    if want not in arrows:
+        mismatches.append(
+            f"bar {bar_id}: §4.1's table says {want[0]} {want[1]} but no prose bar "
+            "states it -- the prose and the table have drifted apart"
+        )
+print(
+    f"OK  {len(table_targets)} table targets and {len(arrows)} prose targets agree: "
+    + "  ".join(f"bar {b}: {o} {v:g}" for b, (o, v) in sorted(table_targets.items()))
+)
+
+# §6's rule and §10's ratified list must name the same conjunctive subset.
+for section, end, phrase in (
+    ("## 6.", "## 7.", "bars 1, 2, 3 and 4"),
+    ("## 10.", "## 11.", "bars 1, 2, 3 and 4"),
+    ("## 10.", "## 11.", "inherited VERBATIM"),
+):
+    if phrase not in re.sub(r"\s+", " ", TEXT.split(section)[1].split(end)[0]):
+        mismatches.append(f"{section.strip('# .')} no longer states {phrase!r}")
+print("OK  §6's rule and §10's ratified list name the same conjunctive subset")
+
 # The twin agrees with the primary, per set and pooled -- the §3.1 I-3 claim.
 twin = sum(REPORTS[n]["f"].reporter_ejected_innocent for n in SETS)
 if twin != POOLED.reporter_innocent_ejections:
@@ -933,6 +1074,21 @@ for name in SETS:
     if f.reporter_ejected != f.reporter_ejected_innocent:
         mismatches.append(f"premise: reporter_ejected != innocent on {name}")
 print("OK  premise: killer_self_reported 0 and reporter_impostor_meetings 0 on all four sets")
+
+# §4.3's VOID list is what the record audit reads before either reporter bar, so a
+# condition dropped from it is a gate silently removed. All four must be named.
+void = re.sub(r"\s+", " ", TEXT.split("### 4.3")[1].split("## 5.")[0])
+for condition in (
+    "killer_self_reported == 0",
+    "reporter_ejected == reporter_ejected_innocent",
+    "reporter_impostor_meetings == 0",
+    "the TWIN AGREES",
+):
+    if condition not in void:
+        mismatches.append(f"§4.3's VOID list no longer names {condition!r}")
+if "four voids" not in void:
+    mismatches.append("§4.3 no longer says how many conditions void the reporter bars")
+print("OK  §4.3 names all four VOID conditions")
 
 # Every bracketed pair in the memo must belong to a claim this reader re-runs --
 # equality closes the CLASS, so no new spelling slips a value past the gate. The
