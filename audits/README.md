@@ -292,3 +292,11 @@ directory's `README.md`, which carries the tallies and the proposed routing.
   exposure printed as an upper bound, the cells no offline instrument can reach
   named with their reasons, and tripwire candidates offered to the
   pre-registration. It writes no bar, no target and no decision rule.
+- [audit-phase-21-preregistration.md](audit-phase-21-preregistration.md) — the
+  falsifiability contract for the injustice record: six instruments, the
+  before-cells read from committed pins, four primary bars (the two the previous
+  record missed, carried over with unchanged targets, plus two on the body
+  reporter's conviction class), the granularity advisory discipline, the
+  conjunctive decision rule, the declared co-interventions, the seven tripwire
+  dispositions, and the record order, freeze, slate and abandon criteria. It is
+  the normative memo the smoke and the record read verbatim.
