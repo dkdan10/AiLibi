@@ -244,11 +244,14 @@ three quarters genuine). One reporter invokes it in speech.
 
 ### 3.3 The render census, per prompt class
 
-| prompt class | rendered | gains the block | lines added | bytes added |
-|---|---|---|---|---|
-| reporter opening (`crewmate_report`) | 672 | **620** | +620 | +171,222 |
-| non-reporter speech turn (`accusation_round`) | 2,959 | **2,715** | +11,005 | +1,026,970 |
-| ballot (`vote_ballot`) | 3,631 | **0** | 0 | 0 |
+| lever | prompt class | rendered | gains the block | lines added | bytes added |
+|---|---|---|---|---|---|
+| `reporter_reasoning` | `crewmate_report` | 672 | **620** | 620 | 171,222 |
+| `reporter_reasoning` | `accusation_round` | 2,959 | **2,715** | 11,005 | 1,026,970 |
+| `reporter_reasoning` | `vote_ballot` | 3,631 | **0** | 0 | 0 |
+
+The classes are the record's own names: `crewmate_report` is the reporter's opening,
+`accusation_round` a non-reporter speech turn, `vote_ballot` a ballot.
 
 Per body-report meeting, for the smoke to join on: **exactly 1 reporter opening and 4.38 mean
 non-reporter speech turns (2,715 over 620 meetings) gain a block; 0 ballots do.**
@@ -298,37 +301,52 @@ amendment records published, and refuses to print an ON number if the walk disag
 
 ### 4.3 The ejecting-ballot census over the injustice ledger
 
-150 ballots ejected those 46 innocents. Their citation channel:
+150 ballots ejected those 46 innocents. Every cell below is emitted by `--json` as
+`pooled_ballot_census` and compared against this table by the drift test.
 
-| channel | count of 150 | definition |
-|---|---|---|
-| hearsay | **89** | `primary_reason_id` names another speaker's turn |
-| own observation | **37** | `primary_reason_observation_id` names a row from the voter's own memory |
-| own turn | **23** | `primary_reason_id` names the voter's own turn |
-| another player's observation | **0** | expected empty; the manager's normalizer nulls it |
-| nothing | **1** | expected near-empty; the citation gate coerces an uncited eject to SKIP |
+| ballot-census cell | reading |
+|---|---|
+| ejecting ballots | 150 |
+| citation: hearsay (`primary_reason_id` names another speaker's turn) | 89 |
+| citation: own observation (`primary_reason_observation_id`, the voter's own memory) | 37 |
+| citation: own turn (`primary_reason_id` names the voter's own turn) | 23 |
+| citation: another player's observation (the manager's normalizer nulls it) | 0 |
+| citation: nothing (the citation gate coerces an uncited eject to SKIP) | 1 |
+| pile driver a CREWMATE | 36 |
+| pile driver an IMPOSTOR | 10 |
+| follower counts on a CREWMATE source | 1x13, 2x14, 3x7, 4x1, 6x1 |
+| follower counts on an IMPOSTOR source | 1x6, 2x1, 3x2, 4x1 |
+| ejections with a contradiction naming the ejectee | 9 |
+| ejections with none | 37 |
+| mean stated confidence, flagged | 0.8009 |
+| mean stated confidence, unflagged | 0.8047 |
+| impostor ballots cast in these meetings | 53 |
+| impostor ballots that joined the pile | 40 |
 
-The sole-source chain: in every one of the 46 cases some other speaker's turn is the modal
-citation, and that speaker is a **CREWMATE in 36 and an IMPOSTOR in 10**. Follower counts on that
-one source — CREWMATE `{1: 13, 2: 14, 3: 7, 4: 1, 6: 1}`, IMPOSTOR `{1: 6, 2: 1, 3: 2, 4: 1}`. Of
-the 53 impostor ballots cast in these meetings, 40 named the ejected innocent: the impostors pile
-on, but they are not the originators in 36 of 46 cases.
+Three readings the table supports. **Hearsay is the majority channel** — 89 of the 150 ballots that
+convicted an innocent cited another speaker's turn rather than anything the voter saw, and only 1
+cited nothing at all, so the citation gate is holding and what it admits is the problem.
 
-Stated confidence, split by flag status, is the cell an anchoring rule would be aimed at and it is
-flat: mean 0.8009 across the 9 ejections where a contradiction named the ejectee, and 0.8047
-across the 37 where none did. **A flagless conviction is stated at the same confidence as a
-flagged one.** Whether the block moves that number is a fact about the model and is in §7.
+**The pile has a single source and it is usually a crewmate.** In every one of the 46 cases some
+other speaker's turn is the modal citation, and that speaker is a CREWMATE 36 times against an
+IMPOSTOR 10. Of the 53 impostor ballots cast in these meetings 40 named the ejected innocent: the
+impostors pile on, but they are not the originators in 36 of 46 cases.
+
+**Stated confidence is flat across flag status** — 0.8009 mean over the 9 ejections where a
+contradiction named the ejectee and 0.8047 over the 37 where none did. A flagless conviction is
+stated at the same confidence as a flagged one. That is the cell an anchoring rule would be aimed
+at; whether the block moves it is a fact about the model and is in §7.
 
 The impossibility-charge population is 20 of the 46 (C-8) — **a judgment net**, listed row by row
 in §2.3.
 
 ### 4.4 The render census
 
-| prompt class | rendered | gains the block | lines added | bytes added |
-|---|---|---|---|---|
-| ballot (`vote_ballot`) | 3,631 | **3,614** | +28,432 | +3,970,615 |
-| reporter opening | 672 | 0 | 0 | 0 |
-| speech turn | 2,959 | 0 | 0 | 0 |
+| lever | prompt class | rendered | gains the block | lines added | bytes added |
+|---|---|---|---|---|---|
+| `corroboration_discipline` | `vote_ballot` | 3,631 | **3,614** | 28,432 | 3,970,615 |
+| `corroboration_discipline` | `crewmate_report` | 672 | 0 | 0 | 0 |
+| `corroboration_discipline` | `accusation_round` | 2,959 | 0 | 0 | 0 |
 
 Per meeting, for the smoke to join on: **5.38 mean ballots per meeting gain the block (3,614 over
 672 meetings), 0 openings and 0 speech turns do**, and the block itself is 7.87 mean lines per
@@ -408,11 +426,11 @@ pre-disambiguation net and is not the cell above.
 
 ### 5.6 The render census
 
-| prompt class | rendered | gains a block | lines added | bytes added |
-|---|---|---|---|---|
-| reporter opening (`crewmate_report`) | 672 | **672** | +1,344 | +401,856 |
-| speech turn (`accusation_round`) | 2,959 | **2,023** | +4,046 | +1,185,478 |
-| ballot (`vote_ballot`) | 3,631 | **0** | 0 | 0 |
+| lever | prompt class | rendered | gains a block | lines added | bytes added |
+|---|---|---|---|---|---|
+| `testimony_shapes` | `crewmate_report` | 672 | **672** | 1,344 | 401,856 |
+| `testimony_shapes` | `accusation_round` | 2,959 | **2,023** | 4,046 | 1,185,478 |
+| `testimony_shapes` | `vote_ballot` | 3,631 | **0** | 0 | 0 |
 
 Per meeting, for the smoke to join on: **exactly 1 opening and 3.01 mean crew speech turns (2,023
 over 672 meetings) gain a block; 0 ballots do under this lever alone.**
@@ -454,6 +472,24 @@ than a predicted one.**
 
 Bytes are UTF-8 encoded bytes, not code points: the lever blocks carry em dashes and arrows, so a
 character count would understate what the prompt costs.
+
+The two composite legs, in the same shape as the per-lever tables of §3.3, §4.4 and §5.6 — with
+the OFF leg beside them, which is the row that proves the diff is a diff:
+
+| lever | prompt class | rendered | gains a block | lines added | bytes added |
+|---|---|---|---|---|---|
+| `OFF` | `crewmate_report` | 672 | 0 | 0 | 0 |
+| `OFF` | `accusation_round` | 2,959 | 0 | 0 | 0 |
+| `OFF` | `vote_ballot` | 3,631 | 0 | 0 | 0 |
+| `all-three-ON` | `crewmate_report` | 672 | 672 | 1,964 | 573,078 |
+| `all-three-ON` | `accusation_round` | 2,959 | 2,879 | 15,051 | 2,212,448 |
+| `all-three-ON` | `vote_ballot` | 3,631 | 3,614 | 28,432 | 4,032,365 |
+| `two-ON (less testimony_shapes)` | `crewmate_report` | 672 | 620 | 620 | 171,222 |
+| `two-ON (less testimony_shapes)` | `accusation_round` | 2,959 | 2,715 | 11,005 | 1,026,970 |
+| `two-ON (less testimony_shapes)` | `vote_ballot` | 3,631 | 3,614 | 28,432 | 3,970,615 |
+
+Together with §3.3, §4.4 and §5.6 that is every leg and every prompt class `pooled_render_census`
+carries, and the drift test asserts the whole join rather than a sample of it.
 
 Added lines and added bytes are exactly additive on the two TURN seams — 620 + 1,344 = 1,964 lines
 and 171,222 + 401,856 = 573,078 bytes on the opening; 11,005 + 4,046 = 15,051 lines and 1,026,970 +

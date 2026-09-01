@@ -15,10 +15,13 @@ Five things are pinned, each with a case proving it bites:
 4. **The OFF column IS the committed record.** The fast slice's OFF cells equal
    the record audit's published cells and the committed instrument pins, and the
    four corroboration cells FIRST become an assertion here.
-5. **The memo cannot drift from the instrument.** Every table row in
-   ``audits/audit-phase-21-counterfactual.md`` is parsed and compared against a
-   live four-set run, and the memo carries no bar, no target and no decision
-   rule. A perturbed copy of the memo proves both checks bite.
+5. **The memo cannot drift from the instrument.** Every published table in
+   ``audits/audit-phase-21-counterfactual.md`` -- the cell rows per set and
+   pooled, the injustice ledger and its class totals, the whole ballot census,
+   the eight-kind reduction census, every leg of the render census and the
+   advisory markers -- is parsed and compared against a live four-set run, size
+   of the join included, and the memo carries no bar, no target and no decision
+   rule. Perturbed copies prove each check bites.
 """
 
 from __future__ import annotations
@@ -81,6 +84,17 @@ _DECISION_VERB: Final[re.Pattern[str]] = re.compile(
 _CELL_THRESHOLD: Final[re.Pattern[str]] = re.compile(
     r"\b[A-Z]-\d+[a-z]?\b[^|\n]{0,40}?"
     r"(?:>=|<=|>|<|≥|≤|\bat least\b|\bat most\b|\bno more than\b|\bno fewer than\b)"
+)
+
+# The slate legs the memo publishes a render census for: the whole set the
+# payload carries, so the join below is total rather than a sample.
+_RENDER_LEGS: Final[frozenset[str]] = frozenset(
+    {
+        "OFF",
+        *cf.WAVE_2_LEVERS,
+        "all-three-ON",
+        cf.decomposition_label("testimony_shapes"),
+    }
 )
 
 
@@ -421,6 +435,30 @@ def test_the_pooled_on_column_is_withdrawn_when_any_set_disagrees() -> None:
     assert pulled["recorded_off"] == [3, 100]
 
 
+def test_the_census_comparisons_bite_on_a_perturbed_memo(tmp_path: Path) -> None:
+    # The census joins are gates, not decoration: move one ballot-census figure
+    # and one render-census figure and each parse must change.
+    text = _MEMO.read_text(encoding="utf-8")
+    ballots = _memo_ballot_census(text)
+    render = _memo_render_census(text)
+    assert ballots and render
+
+    bent = tmp_path / "memo.md"
+    bent.write_text(
+        text.replace(
+            "| impostor ballots that joined the pile | 40 |",
+            "| impostor ballots that joined the pile | 41 |",
+        ).replace(
+            "| `corroboration_discipline` | `vote_ballot` | 3,631 |",
+            "| `corroboration_discipline` | `vote_ballot` | 3,632 |",
+        ),
+        encoding="utf-8",
+    )
+    perturbed = bent.read_text(encoding="utf-8")
+    assert _memo_ballot_census(perturbed) != ballots
+    assert _memo_render_census(perturbed) != render
+
+
 def test_the_advisory_label_keys_on_the_rows_own_denominator(
     fast_run: Mapping[str, object],
 ) -> None:
@@ -485,18 +523,41 @@ def test_the_memo_table_equals_a_live_four_set_run() -> None:
     assert memo_pooled == live_pooled
     assert memo_per_set == live_per_set
 
-    # The two prose tables that carry cells, against the pooled censuses the
-    # payload now emits: nothing published exists only as hand-written prose.
+    # Every published census, whole: nothing exists only as unchecked prose.
+    # Each comparison asserts the SIZE of the join first, so a memo that simply
+    # stopped publishing a field could not pass by publishing fewer rows.
     text = _MEMO.read_text(encoding="utf-8")
     ballots = payload["pooled_ballot_census"]
     assert isinstance(ballots, dict)
-    assert _memo_citation_mix(text) == ballots["citation_mix"]
+    memo_ballots, live_ballots = (
+        _memo_ballot_census(text),
+        _flatten_ballot_census(ballots),
+    )
+    assert len(memo_ballots) == len(live_ballots) > 0
+    assert memo_ballots == live_ballots
+
     testimony = payload["pooled_testimony_census"]
     assert isinstance(testimony, dict)
     assert _memo_kind_census(text) == (
         testimony["statements_off"],
         testimony["statements_on"],
     )
+
+    render = payload["pooled_render_census"]
+    assert isinstance(render, dict)
+    memo_render, live_render = _memo_render_census(text), _flatten_render_census(render)
+    assert len(memo_render) == len(live_render) > 0
+    assert memo_render == live_render
+
+    # The injustice ledger the memo lists row by row, and its class totals.
+    memo_ledger = _memo_ledger_rows(text)
+    assert len(memo_ledger) == len(_run_ledger_rows(payload)) > 0
+    assert memo_ledger == _run_ledger_rows(payload)
+    memo_totals = _memo_class_totals(text)
+    assert len(memo_totals) == len(_totals(payload)) - 1 > 0
+    assert memo_totals == {
+        tag: count for tag, count in _totals(payload).items() if tag != "TOTAL"
+    }
 
     # Every advisory cell the instrument flags carries its marker in the memo.
     sets = payload["sets"]
@@ -508,6 +569,12 @@ def test_the_memo_table_equals_a_live_four_set_run() -> None:
         if row["advisory"]
     }
     assert flagged <= _advisory_cells(text)
+
+
+def _totals(payload: Mapping[str, object]) -> dict[str, int]:
+    totals = payload["pooled_ledger_class_totals"]
+    assert isinstance(totals, dict)
+    return totals
 
 
 # --------------------------------------------------------------------------- #
@@ -572,25 +639,111 @@ def _advisory_cells(text: str) -> set[tuple[str, str]]:
     return marked
 
 
-def _memo_citation_mix(text: str) -> dict[str, int]:
-    """The §4.3 citation table, keyed by the census's own channel names."""
+# The §4.3 ballot-census table's row labels, mapped to the flattened census key
+# each one publishes. A label the census has no key for -- or a key the memo
+# never prints -- makes the comparison fail, which is the point.
+_BALLOT_CENSUS_LABELS: Final[tuple[tuple[str, str], ...]] = (
+    ("ejecting ballots", "ejecting_ballots"),
+    ("citation: hearsay", "citation.hearsay"),
+    ("citation: own observation", "citation.own_obs"),
+    ("citation: own turn", "citation.own_turn"),
+    ("citation: another player's observation", "citation.other_obs"),
+    ("citation: nothing", "citation.none"),
+    ("pile driver a CREWMATE", "driver.CREWMATE"),
+    ("pile driver an IMPOSTOR", "driver.IMPOSTOR"),
+    ("follower counts on a CREWMATE source", "followers.CREWMATE"),
+    ("follower counts on an IMPOSTOR source", "followers.IMPOSTOR"),
+    ("ejections with a contradiction naming the ejectee", "ejections.flagged"),
+    ("ejections with none", "ejections.unflagged"),
+    ("mean stated confidence, flagged", "confidence.flagged"),
+    ("mean stated confidence, unflagged", "confidence.unflagged"),
+    ("impostor ballots cast in these meetings", "impostor_ballots_cast"),
+    ("impostor ballots that joined the pile", "impostor_ballots_joined"),
+)
 
-    names = {
-        "hearsay": "hearsay",
-        "own observation": "own_obs",
-        "own turn": "own_turn",
-        "another player's observation": "other_obs",
-        "nothing": "none",
-    }
-    mix: dict[str, int] = {}
+
+def _memo_ballot_census(text: str) -> dict[str, object]:
+    """The §4.3 ballot-census table, flattened to the census's own keys."""
+
+    published: dict[str, object] = {}
     for line in text.splitlines():
         fields = [field.strip() for field in line.strip().strip("|").split("|")]
-        if len(fields) != 3 or fields[0] not in names:
+        if len(fields) != 2:
             continue
-        count = re.search(r"\*\*(\d+)\*\*", fields[1])
-        assert count is not None, fields
-        mix[names[fields[0]]] = int(count.group(1))
-    return mix
+        for prefix, key in _BALLOT_CENSUS_LABELS:
+            if not fields[0].startswith(prefix):
+                continue
+            published[key] = _census_value(key, fields[1])
+            break
+    return published
+
+
+def _census_value(key: str, field: str) -> object:
+    if key.startswith("followers."):
+        return {
+            int(count.split("x")[0]): int(count.split("x")[1])
+            for count in field.split(", ")
+        }
+    if key.startswith("confidence."):
+        return float(field)
+    value = _first_int(field)
+    assert value is not None, (key, field)
+    return value
+
+
+def _flatten_ballot_census(census: Mapping[str, Any]) -> dict[str, object]:
+    flat: dict[str, object] = {
+        "ejecting_ballots": census["ejecting_ballots"],
+        "impostor_ballots_cast": census["impostor_ballots_cast"],
+        "impostor_ballots_joined": census["impostor_ballots_joining_the_pile"],
+    }
+    for channel, count in census["citation_mix"].items():
+        flat[f"citation.{channel}"] = count
+    for role, count in census["pile_driver_role"].items():
+        flat[f"driver.{role}"] = count
+    for role, counts in census["follower_counts"].items():
+        flat[f"followers.{role}"] = {int(key): value for key, value in counts.items()}
+    for status, count in census["ejections_by_flag_status"].items():
+        flat[f"ejections.{status}"] = count
+    for status, mean in census["mean_confidence"].items():
+        flat[f"confidence.{status}"] = mean
+    return flat
+
+
+def _memo_render_census(text: str) -> dict[tuple[str, str], tuple[int, ...]]:
+    """Every render-census row the memo publishes, keyed ``(leg, prompt class)``."""
+
+    rows: dict[tuple[str, str], tuple[int, ...]] = {}
+    for line in text.splitlines():
+        fields = [field.strip() for field in line.strip().strip("|").split("|")]
+        if len(fields) != 6:
+            continue
+        leg = fields[0].strip("`")
+        prompt_class = fields[1].strip("`")
+        if leg not in _RENDER_LEGS or not prompt_class.islower():
+            continue
+        values = tuple(_first_int(field) for field in fields[2:6])
+        if any(value is None for value in values):
+            continue
+        rows[(leg, prompt_class)] = tuple(
+            int(value) for value in values if value is not None
+        )
+    return rows
+
+
+def _flatten_render_census(
+    census: Mapping[str, Any],
+) -> dict[tuple[str, str], tuple[int, ...]]:
+    return {
+        (leg, prompt_class): (
+            cells["rendered"],
+            cells["changed"],
+            cells["added_lines"],
+            cells["added_bytes"],
+        )
+        for leg, block in census.items()
+        for prompt_class, cells in block["by_prompt_class"].items()
+    }
 
 
 def _memo_kind_census(text: str) -> tuple[dict[str, int], dict[str, int]]:
@@ -621,6 +774,47 @@ def _memo_kind_census(text: str) -> tuple[dict[str, int], dict[str, int]]:
 def _first_int(field: str) -> int | None:
     match = re.search(r"(\d[\d,]*)", field)
     return int(match.group(1).replace(",", "")) if match else None
+
+
+def _memo_ledger_rows(text: str) -> dict[tuple[str, int, int, str], tuple[str, ...]]:
+    """The §2.3 per-case ledger, keyed by ``(set, seed, meeting, ejectee)``."""
+
+    rows: dict[tuple[str, int, int, str], tuple[str, ...]] = {}
+    for line in text.splitlines():
+        fields = [field.strip() for field in line.strip().strip("|").split("|")]
+        if len(fields) != 6 or fields[0] not in cf.CANONICAL_SETS:
+            continue
+        if not fields[1].isdigit() or not re.fullmatch(r"m\d+", fields[2]):
+            continue
+        tags = () if fields[4] == "(none)" else tuple(fields[4].split("+"))
+        rows[(fields[0], int(fields[1]), int(fields[2][1:]), fields[3])] = tags
+    return rows
+
+
+def _run_ledger_rows(
+    payload: Mapping[str, object],
+) -> dict[tuple[str, int, int, str], tuple[str, ...]]:
+    ledger = payload["pooled_injustice_ledger"]
+    assert isinstance(ledger, list)
+    return {
+        (row["set"], row["seed"], row["meeting"], row["victim"]): tuple(row["tags"])
+        for row in ledger
+    }
+
+
+def _memo_class_totals(text: str) -> dict[str, int]:
+    """The §2.1 class-total table, keyed by the tag the ledger emits."""
+
+    totals: dict[str, int] = {}
+    for line in text.splitlines():
+        fields = [field.strip() for field in line.strip().strip("|").split("|")]
+        if len(fields) != 4:
+            continue
+        count = re.fullmatch(r"\*\*(\d+)\*\*", fields[2])
+        if count is None or not re.fullmatch(r"[A-Z-]+", fields[1]):
+            continue
+        totals[fields[1]] = int(count.group(1))
+    return totals
 
 
 def _values(fields: list[str]) -> tuple[Any, ...]:
