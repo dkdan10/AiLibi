@@ -69,6 +69,7 @@ from llm.fake_provider import FakeProvider
 from orchestrator.game import (
     CORROBORATION_DISCIPLINE_PROMPT_VERSION_SETS,
     PROMPT_VERSION_SETS,
+    TESTIMONY_SHAPES_PROMPT_VERSION_SETS,
     _arm_is_served,  # noqa: PLC2701
     _CORROBORATION_DISCIPLINE_ARM,  # noqa: PLC2701
     build_default_meeting_runner,
@@ -1177,6 +1178,29 @@ class TestProvenance:
             {"vote_ballot": f"other.arm.v1+{arm}"}, template="vote_ballot", arm=arm
         )
         assert not _arm_is_served({}, template="vote_ballot", arm=arm)
+
+    def test_the_live_sibling_composite_still_credits_this_arm(self) -> None:
+        # The composite above is no longer hypothetical: ``testimony_shapes``
+        # re-bodies this same template, so the all-ON slate -- the one the record
+        # is spent on -- serves a two-lineage ``vote_ballot`` stamp. Read through
+        # the LIVE registry rather than a synthetic string, so this fails if a
+        # future arm's value ever contains a '+' and breaks the split.
+        arm = _CORROBORATION_DISCIPLINE_ARM["vote_ballot"]
+        all_on = {
+            "AILIBI_IMPOSTOR_ROLL_CALL": "1",
+            "AILIBI_REPORTER_REASONING": "1",
+            ENV_CORROBORATION_DISCIPLINE: "1",
+            ENV_TESTIMONY_SHAPES: "1",
+        }
+        served = prompt_versions_for_set(_SET, env=all_on)
+        assert "+" in served["vote_ballot"]
+        assert _arm_is_served(served, template="vote_ballot", arm=arm)
+        # ...and the sibling's own lineage is credited off the same stamp.
+        assert _arm_is_served(
+            served,
+            template="vote_ballot",
+            arm=TESTIMONY_SHAPES_PROMPT_VERSION_SETS[_SET]["vote_ballot"],
+        )
 
     def test_an_agreeing_default_pin_leaves_the_ledger_off(
         self, monkeypatch: pytest.MonkeyPatch
