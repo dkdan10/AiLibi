@@ -268,8 +268,8 @@ pins say so.
   ``player_visible_leak_turns`` is the partner net over turn ``free_text``, and
   ``model_self_disclosure_visible_turns`` /
   ``crew_self_disclosure_control_turns`` are the self-kill and role nets over
-  ``free_text`` plus each claim's ``reason`` and ``evidence`` — the whole of
-  what the table reads. The impostor cell is an explicit UPPER BOUND and the
+  ``free_text`` plus each accusation / corroboration ``reason`` — the whole of
+  what a transcript block renders. The impostor cell is an explicit UPPER BOUND and the
   crew cell is its false-positive control; neither may be quoted alone as a leak
   rate. :data:`CONFESSION_QUOTATION_EXCLUSIONS` drops the quotation and
   conditional forms first.
@@ -400,7 +400,6 @@ from meetings.manager import (
 )
 from meetings.schemas import (
     AccusationClaim,
-    AlibiClaim,
     ContradictionRef,
     CorroborationClaim,
     MeetingTurn,
@@ -1700,9 +1699,10 @@ class ScaffoldLeakageCells(_FrozenModel):
       ``free_text``; denominator ``turns_total``.
     * ``model_self_disclosure_visible_turns`` /
       ``crew_self_disclosure_control_turns`` — :data:`SELF_KILL_PHRASES` and
-      :data:`ROLE_STATEMENT_PHRASES` over the WHOLE player-visible surface
-      (``free_text`` plus every claim ``reason`` and ``evidence``), split by the
-      speaker's role; denominator ``turns_total`` for both.
+      :data:`ROLE_STATEMENT_PHRASES` over the player-visible surface
+      (``free_text`` plus every accusation / corroboration ``reason``; an
+      ``AlibiClaim``'s ``evidence`` is never rendered, so it is never read
+      here either), split by the speaker's role; denominator ``turns_total``.
       :data:`CONFESSION_QUOTATION_EXCLUSIONS` is cut out first. The impostor
       cell is an explicit UPPER BOUND — a substring net cannot tell an
       admission from a taunt or a rebuttal that quotes one, the same limit
@@ -2342,19 +2342,28 @@ def _matches(text: str, phrases: Sequence[str]) -> bool:
 def _player_visible_text(turn: MeetingTurn) -> str:
     """Everything of a turn the table actually reads.
 
-    ``free_text`` plus each claim's ``reason`` / ``evidence``: the turn render
-    puts the reason on the table beside the free text, so a disclosure in a
-    claim reaches every later speaker and every ballot exactly as one in
-    ``free_text`` does. Built once per turn and shared by the nets below.
+    ``free_text`` plus the ``reason`` of each accusation and corroboration: the
+    transcript render puts the reason on the table beside the free text, so a
+    disclosure there reaches every later speaker and every ballot exactly as one
+    in ``free_text`` does.
+
+    ``AlibiClaim.evidence`` is deliberately NOT read, and the render is the
+    reason: every transcript block spells an alibi as subject / room / tick
+    range and never its ``evidence`` tuple, so those strings are model-authored
+    text no player ever sees. Scoring them would file hidden output as
+    table-visible testimony and make the cell's own name false. (Excluding
+    ``evidence`` costs nothing on the committed bytes: the visible nets return
+    the same 10 turns either way.) Built once per turn, shared by the nets below.
     """
 
-    parts = [turn.free_text]
-    for claim in turn.claims:
-        if isinstance(claim, (AccusationClaim, CorroborationClaim)):
-            parts.append(claim.reason)
-        elif isinstance(claim, AlibiClaim):
-            parts.extend(claim.evidence)
-    return "\n".join(parts)
+    return "\n".join(
+        [turn.free_text]
+        + [
+            claim.reason
+            for claim in turn.claims
+            if isinstance(claim, (AccusationClaim, CorroborationClaim))
+        ]
+    )
 
 
 def _is_self_disclosure(text: str) -> bool:

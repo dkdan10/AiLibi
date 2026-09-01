@@ -2632,36 +2632,47 @@ def test_the_visible_net_reads_the_claim_reason_not_only_free_text() -> None:
     )
 
 
-def test_the_net_also_reads_an_alibi_claims_evidence() -> None:
-    """``AlibiClaim`` carries ``evidence`` rather than ``reason``, and it is spoken."""
+def test_the_net_does_not_read_an_alibi_claims_evidence() -> None:
+    """The surface is what the table READS, so a string nothing renders is out.
 
-    report = _synthetic_report(
-        turns=(
-            MeetingTurn(
-                turn_id="m:turn-0",
-                turn_index=0,
-                speaker="p-1",
-                turn_kind="opening",
-                reply_to=None,
-                observations=(),
-                claims=(
-                    AlibiClaim(
-                        type="alibi",
-                        subject="p-1",
-                        from_tick=1,
-                        to_tick=2,
-                        room="CAFETERIA",
-                        evidence=("I am the impostor and I was alone",),
-                    ),
-                ),
-                free_text="",
+    Every transcript block spells an alibi as subject / room / tick range and
+    never its ``evidence`` tuple, so those strings are model-authored text no
+    player ever sees. Counting them would file hidden output as table-visible
+    testimony — the same ruling the oracle-register net already carries — and
+    would make the cell's own name false.
+    """
+
+    hidden = MeetingTurn(
+        turn_id="m:turn-0",
+        turn_index=0,
+        speaker="p-1",
+        turn_kind="opening",
+        reply_to=None,
+        observations=(),
+        claims=(
+            AlibiClaim(
+                type="alibi",
+                subject="p-1",
+                from_tick=1,
+                to_tick=2,
+                room="CAFETERIA",
+                evidence=("I am the impostor and I was alone",),
             ),
         ),
+        free_text="",
+    )
+    report = _synthetic_report(
+        turns=(hidden,),
         ballots=(_ballot("p-1", "SKIP"), _ballot("p-2", "SKIP")),
         roles={"p-1": "IMPOSTOR", "p-2": "CREWMATE"},
     )
     leakage = compute_deduction_metrics(report).scaffold_leakage
-    assert leakage.model_self_disclosure_visible_turns == 1
+    assert leakage.model_self_disclosure_visible_turns == 0
+    # ...and the gate is not vacuous: the SAME sentence in a rendered surface
+    # scores, so the exclusion is about visibility and not about the phrase.
+    assert _visible_cells(
+        speaker_role="IMPOSTOR", reason="I am the impostor and I was alone"
+    ) == (1, 0)
 
 
 def test_the_crew_cell_is_the_false_positive_control() -> None:
