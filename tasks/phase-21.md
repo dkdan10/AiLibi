@@ -6247,10 +6247,10 @@ owner's pre-registration — now prices from this memo's tables.
 ### Task 21.22 — THE PRE-REGISTRATION (owner): the successor bars, the reporter cells and the decision rule for the injustice record
 **Branch:** `phase-21-preregistration`
 **Depends on:** 21.21
-**Section refs:** audits/review-2026-08-26/A/collated-findings.md — A-4 (:431, P1, ADJUSTED: 30 of the 42 pooled innocent ejections eject the meeting's own body reporter; per slot 30/618 = 4.85% against 12/1844 = 0.65% for an innocent non-reporter, RR 7.46x, two-proportion z = 6.98; 28 of the 30 carry no contradiction naming the reporter; 0 of 618 report meetings had an impostor reporter; pooled ejection accuracy 387/429 = 90.2% and 387/399 = 97.0% with the reporter class removed — and the verifier's three binding corrections: the reporter's ejectability is a recorded design decision (agents/memory/beliefs.py:175-197, tasks/phase-15.md:553-580), the channel is DOWN ~2.6x from baseline 2's 22/106 = 20.8% to 7.9% of report-meeting ejections, and the finding's strongest new content is that it falsifies the 2026-08-19 D-track disposition of G-31 — the ballot-time guard let 10 reporter ejections through 152 samples/9p2i meetings), A-5 (:614, ADJUSTED to design-hole: the exculpation renders at ballot time only — `grep -c reporter agents/strategic/prompts/qwen3_6_27b/accusation_round.j2` returns 0 against 5 in vote_ballot.j2, both re-verified at HEAD), A-10 (:1138, the 42-row ledger: reporter 30, boomerang 29, impossible-transit 17, impostor-rides-the-herd 33, weak-flag 5, guard-redirect 4, forced endgame 5, the citation mix 79 hearsay / 40 own-observation / 26 own-turn of 145 ejecting ballots, 37 of 42 ejectees carrying no contradiction flag — with the verifier's corrections that SIX rows carry no tag beyond herd and/or transit (only three are pure herd) and that two supporting cells drift by one under a different tie-break and must be quoted as approximate), A-11 (:1346, the boomerang, with the verifier's instruction to DROP the 0/387 contrast as a tautology and to quote 29/492 = 5.9% overall and 29/271 = 10.7% within the no-vent-flag half against 1/71 = 1.4%), A-12 (:1449, the transit charge, with the verifier's replacement wording and the corrected within-stratum enrichment 15/19 = 78.9% against a 42/103 = 40.8% base = 1.9x, and the ≥half figure 15/42 = 35.7%), A-19 (:2252, the calibration cells, whose pooled headline the verifier REFUTES by decomposition), A-24 (:2901), A-37 (:3950), A-38 (:4006); audits/review-2026-08-26/B/collated-findings.md B-6 (:477) — the gauges the record reads are repaired upstream, which is why no bar here rides an un-repaired instrument; audits/audit-phase-20-preregistration.md §1 (the standing rule: definitions, conventions, bars and the rule are ratified content, cells re-anchor mechanically), §2 (the instrument-table shape and the definitions-by-reference convention), §3.1 and §3.2 (the cell table and the pin-over-review reconciliation), §4 and §4.1 (the bars and the `1/n > |target − baseline|` advisory test), §5, §6 (the conjunctive rule and the no-partial-graduation ruling), §7, §8, §9, §10, §11, §12 (the pin-diff reader); audits/audit-phase-20-baseline-7.md §6 (the verdict table: bars 1 and 2 MISSED, verdict FINDING), §6.1 (the owner's adoption ruling and its "what no surface may say" constraint), §6.2; audits/audit-phase-20-close.md §3.1 (the bars read back) and §4 (the routed balance wave); audits/audit-phase-18-emergence-preregistration.md (the label key, the claim discipline, THE RATIFIED DECISION and the amendment log this memo copies); the committed pins and readers, re-verified at HEAD — tests/eval/test_deduction_metrics.py:158, :179, :181, :265, :271, :307, :313, :329-330 (the per-set non-direct cells 16/30, 42/68, 1/2 and the corpus-4p1i denominator 3), tests/eval/test_funnel.py:632-633 (`reporter_ejected == 10`, `reporter_ejected_innocent == 10` on samples/9p2i), eval/funnel.py:798-799, :850-851, :894-895, :952 (`compute_information_funnel`), eval/deduction_metrics.py:852 (`_wilson_interval`, the only interval producer a cell may quote), eval/evidence_honesty.py:226 (`CELL_DEFINITIONS`), eval/vj_instruments.py:297-311 (the zero-flag conviction cells), scripts/measure_baseline.py:26-55 (`--funnel` / `--solvability` / `--honesty` / `--vj`, the committed readers), scripts/validity_gate.py, orchestrator/replay.py:524 (`_RETIRED_ALWAYS_ON_LEVERS`, 21 keys) and :568 (`_TOGGLEABLE_LEVER_RESOLVERS`, `impostor_roll_call` alone), api/replay_loader.py:603 (`_assert_substrate_matches`, the mechanical reason a subset slate cannot graduate), orchestrator/game.py:391 (the prompt set pinned at v4 today), agents/memory/beliefs.py:175-197 and agents/strategic/prompts/qwen3_6_27b/vote_ballot.j2:171-174 and meetings/manager.py:1776, :1831 (the exculpation as built), AGENTS.md craft rules 5 and 7. Anchors re-verified at HEAD.
+**Section refs:** audits/review-2026-08-26/A/collated-findings.md — A-4 (:431, P1, ADJUSTED: 30 of the 42 pooled innocent ejections eject the meeting's own body reporter; per slot 30/618 = 4.85% against 12/1844 = 0.65% for an innocent non-reporter, RR 7.46x, two-proportion z = 6.98; 28 of the 30 carry no contradiction naming the reporter; 0 of 618 report meetings had an impostor reporter; pooled ejection accuracy 387/429 = 90.2% and 387/399 = 97.0% with the reporter class removed — and the verifier's three binding corrections: the reporter's ejectability is a recorded design decision (agents/memory/beliefs.py:175-197, tasks/phase-15.md:553-580), the channel is DOWN ~2.6x from baseline 2's 22/106 = 20.8% to 7.9% of report-meeting ejections, and the finding's strongest new content is that it falsifies the 2026-08-19 D-track disposition of G-31 — the ballot-time guard let 10 reporter ejections through 152 samples/9p2i meetings), A-5 (:614, ADJUSTED to design-hole — and the hole is now REPAIRED IN THE TREE BUT NOT IN THE RECORD, which is precisely what the slate tests: at baseline 7 the exculpation rendered at ballot time only, and at HEAD `grep -c reporter agents/strategic/prompts/qwen3_6_27b/accusation_round.j2` returns **5**, not 0, against 5 in `vote_ballot.j2` and 7 in `crewmate_report.j2` — the 21.18 `reporter_reasoning` blocks at `accusation_round.j2`:133-136 and `vote_ballot.j2`:238-241, each gated on a `reporter_context` / `reporter_id` the manager threads ONLY when the lever is ON (`meetings/manager.py`:1828 speech-side, :2033-2039 ballot-side). The baseline-8 bytes are all-levers-OFF, so A-5's design-hole is still the RECORD's state and the memo must say both: the hole stands on the bytes the bars are priced from, and the repair exists as the lever the record turns ON), A-10 (:1138, the 42-row ledger: reporter 30, boomerang 29, impossible-transit 17, impostor-rides-the-herd 33, weak-flag 5, guard-redirect 4, forced endgame 5, the citation mix 79 hearsay / 40 own-observation / 26 own-turn of 145 ejecting ballots, 37 of 42 ejectees carrying no contradiction flag — with the verifier's corrections that SIX rows carry no tag beyond herd and/or transit (only three are pure herd) and that two supporting cells drift by one under a different tie-break and must be quoted as approximate), A-11 (:1346, the boomerang, with the verifier's instruction to DROP the 0/387 contrast as a tautology and to quote 29/492 = 5.9% overall and 29/271 = 10.7% within the no-vent-flag half against 1/71 = 1.4%), A-12 (:1449, the transit charge, with the verifier's replacement wording and the corrected within-stratum enrichment 15/19 = 78.9% against a 42/103 = 40.8% base = 1.9x, and the ≥half figure 15/42 = 35.7%), A-19 (:2252, the calibration cells, whose pooled headline the verifier REFUTES by decomposition), A-24 (:2901), A-37 (:3950), A-38 (:4006); audits/review-2026-08-26/B/collated-findings.md B-6 (:477) — the gauges the record reads are repaired upstream, which is why no bar here rides an un-repaired instrument; audits/audit-phase-20-preregistration.md §1 (the standing rule: definitions, conventions, bars and the rule are ratified content, cells re-anchor mechanically), §2 (the instrument-table shape and the definitions-by-reference convention), §3.1 and §3.2 (the cell table and the pin-over-review reconciliation), §4 and §4.1 (the bars and the `1/n > |target − baseline|` advisory test), §5, §6 (the conjunctive rule and the no-partial-graduation ruling), §7, §8, §9, §10, §11, §12 (the pin-diff reader); audits/audit-phase-20-baseline-7.md §6 (the verdict table: bars 1 and 2 MISSED, verdict FINDING), §6.1 (the owner's adoption ruling and its "what no surface may say" constraint), §6.2; audits/audit-phase-20-close.md §3.1 (the bars read back) and §4 (the routed balance wave); audits/audit-phase-18-emergence-preregistration.md (the label key, the claim discipline, THE RATIFIED DECISION and the amendment log this memo copies); the committed pins and readers, re-verified at HEAD — tests/eval/test_reporter_justice.py:66 (`body_report_meetings == 620`), :78-79 (`reporter_impostor_meetings == 0`, `reporter_crewmate_meetings == 620`), :87-88 (`ejections == 429`, `innocent_ejections == 46`), :99/:103 (`reporter_ejections == 34`, `reporter_innocent_ejections == 34`), :104-105 (the share), :113-126 (34/620 per slot against 12/1,859, RR 8.495) — POOLED LITERAL assertions over all four committed sets via the module-scope `pooled` fixture at :55-58, which is what makes bars 3 and 4 registrable on pins rather than on a reader; tests/eval/test_deduction_metrics.py:163 and :165/:186 (samples/9p2i innocent 13, non-direct 14/27), :184 (non-direct denominator 27), :270 and :276 (ml_corpus/9p2i innocent 29, non-direct 32/61), :312 and :318-319 (samples/4p1i innocent 4, non-direct 1/5), :334-335 (ml_corpus/4p1i non-direct denominator 3 with the not-None sentinel; innocent 0) — the per-set baseline-8 cells; tests/eval/test_funnel.py:631-633 (`reporter_ejected == 7`, `reporter_ejected_innocent == 7`, `report_ejections == 85` on samples/9p2i — the twin that must agree with `reporter_justice` per set) and :638 (`killer_self_reported == 0`), eval/reporter_justice.py:144-158 (the cell fields), :201 (`reporter_relative_risk`), :219-229 (`reporter_share_of_innocent_ejections`, whose docstring states the numerator is `reporter_innocent_ejections` and NOT every reporter ejection), :540 (`compute_reporter_justice`) and :604 (`pool_reporter_justice`) with the `python -m eval.reporter_justice <sets> --pooled` CLI at :677-692, eval/funnel.py:910-912 and :918 (`reporter_ejected` / `reporter_ejected_innocent` / `report_ejections` / `killer_self_reported`), :968 (`compute_information_funnel`) and :1045-1048 (the folds), eval/deduction_metrics.py:983 (`_wilson_interval`, the only interval producer a cell may quote), eval/evidence_honesty.py:303 (`CELL_DEFINITIONS`), eval/vj_instruments.py:312-327 (the zero-flag conviction cells), scripts/measure_baseline.py:26-34 and :675/:680/:706/:717/:727 (`--json` / `--funnel` / `--vj` / `--solvability` / `--honesty`, the committed readers), scripts/validity_gate.py, orchestrator/replay.py:613-635 (`_RETIRED_ALWAYS_ON_LEVERS`, 21 keys) and :675-682 (`_TOGGLEABLE_LEVER_RESOLVERS`, FOUR live toggles), api/replay_loader.py:655 (`_assert_substrate_matches`, the mechanical reason a subset slate cannot graduate), orchestrator/game.py:308 (`DEFAULT_PROMPT_VERSIONS`, the frozen 9B reference set) and :381 (`PROMPT_VERSION_SETS["qwen3_6_27b"]` = the **v5** bespoke map at HEAD — the committed sample sets STAMP v4 and resolve through `tests/fixtures/prompt_archive/qwen3_6_27b_v4/`, so the memo reads the version from the recorded MANIFESTs and never from the registry), agents/memory/beliefs.py:174-201 and tasks/phase-15.md:552-580 and agents/strategic/prompts/qwen3_6_27b/vote_ballot.j2:238-241 and accusation_round.j2:133-136 and meetings/manager.py:1828, :2033-2039 (the exculpation as built, ballot-side and — under the lever — speech-side), agents/tactical/impostor_policy.py:53 (the design rule "the impostor must not file a report") against agents/tactical/crewmate_policy.py:737-740 (`_report`, the ONLY emitter of a `{"type": "report"}` intent in the tree — the structural half of the reporter bars' premise), AGENTS.md craft rules 5 and 7; **`audits/audit-phase-21-counterfactual.md` (#418, the memo this task converts) — §0 (the "a sentence added to a prompt is not a vote that changes" governing sentence), §1.1 (the three columns RECORDED-OFF / RECONSTRUCTED-OFF / ON), §1.3 (the four reading rules: exposure is an upper bound; the PIT judgment net; the `[ADV]` ≤20-case rule keyed on the CELL's denominator; the ONE-STEP-AHEAD testimony reading), §1.4 (What moved since the register — the register-to-baseline-8 delta table this contract's own prose must be read against), §2.1 (the ledger class totals at baseline 8: RC 34, BOOM 33, IMP-RIDES 36, ENDGAME 12, WEAKFLAG 8, REDIRECT 3, PIT 20 of 46), §2.2 (the six rows carrying nothing beyond herd; the single untagged row), §2.4 (the overlap is a JOIN, not three censuses — BOOM ⊂ RC, union 44 of 46), §3.1-§3.4 (the reporter lever: 34/46 = 73.9%, 620/620 openings and 2,715/2,715 speech turns, the co-discoverer over-damping at 71/145 = 49.0% impostor), §4.1-§4.2 (the corroboration lever and the four ledger cells 475/1,525, 11/425, 33/429, 48/429 — FIRST asserted there), §5 (the testimony lever), §6.2 (the render budget and the ONE cross-lever interaction: +61,750 ballot bytes under the joint slate that neither lever produces alone), §7 (what no offline instrument can reach — the reporter-conviction count R-3/R-4, non-direct accuracy P-1 and the innocent-ejection count P-2 are all named there, which is why the memo's ON column can never pre-empt a bar), §8.1-§8.4 (the per-lever render predictions with what falsifies each and when), **§9 (the seven tripwire CANDIDATES T1-T7, offered to this pre-registration to ratify, decline or replace)**, §10.1 (the pooled table, 300 games / 672 meetings) and §10.2-§10.5 (the per-set blocks), §11 (reproduction: `uv run python scripts/counterfactual_phase21.py --sets all`, 28.7 s, $0); `audits/audit-phase-21-rerecord.md` — §5.1 Published cell 1 (non-direct accuracy 61/103 = 0.5922 → **50/96 = 0.5208**, per set 14/27, 32/61, 1/5, 3/3) and Published cell 2 (innocent ejections 42 → **46**, per set 13/29/4/0), the win split (30% / 24% / 36% / 26%), §5.1.1 (the sole-flag wrongful-conviction class RE-OPENED 0 → 4, with one still carrying a STRONG flag — "no surface may keep asserting the extinction"), §5.1.1b (the I-13 fixtures 4/4 FLIPPED → **3/4 flipped + 1 partial**), §5.1.2 (the other five movements), §6 (what the record does NOT discharge — item 2 routes the Wave-2 decisions to THIS memo's record).** Anchors re-verified at HEAD `c5d7cd8f`.
 **Complexity:** Small
 **Record impact:** none
-**Measurement:** `uv run pytest -q -k "deduction_metrics or funnel or evidence_honesty or solvability"` green — every pin the memo quotes resolves at this HEAD; plus the pin-diff reader pasted into the PR Summary as a `uv run python - <<'EOF'` heredoc, which recomputes every registered cell from `eval/deduction_metrics.py`, `eval/funnel.py` and `eval/evidence_honesty.py` over the four committed sets, re-runs every quoted interval through `eval.deduction_metrics._wilson_interval`, prints one line per cell, and exits 0 only on `0 mismatches`.
+**Measurement:** `uv run pytest -q -k "deduction_metrics or funnel or evidence_honesty or solvability or reporter_justice"` green (339 tests at this HEAD, ~47 s) — every pin the memo quotes resolves at this HEAD; plus the pin-diff reader pasted into the PR Summary as a `uv run python - <<'EOF'` heredoc, which recomputes every registered cell from `eval/deduction_metrics.py`, `eval/reporter_justice.py`, `eval/funnel.py` and `eval/evidence_honesty.py` over the four committed sets, re-runs every quoted interval through `eval.deduction_metrics._wilson_interval`, prints one line per cell, and exits 0 only on `0 mismatches`.
 
 Phase 20 spent one 23-hour record and got a verdict its own rule wrote in advance: **FINDING**. Bars 1
 and 2 — non-direct conviction accuracy ≥ 0.60 pooled, innocent ejections < 35 pooled — were MISSED,
@@ -6265,24 +6265,36 @@ The bars carry over with their **targets unchanged**. That is the 20.22 standing
 (`audits/audit-phase-20-preregistration.md` §1) applied to its own successor: the corrected-substrate
 re-record re-anchors every baseline CELL, and a re-anchored baseline never drags a target with it. A
 bar that follows its own baseline is not a bar — and a bar that softens because the phase before it
-missed by 0.0078 is worse than none.
+missed by 0.0078 is worse than none. That 0.0078 is the phase-20 record's gap. On baseline 8 the
+same bar's gap is **0.0792** (0.60 − 50/96 = 0.5208), which is eight convictions at a constant
+denominator rather than one, and bar 2's ask is **−12** cases (46 → ≤ 34) rather than −8. The
+targets still do not move; what moved is how far they are, and the memo states that distance in its
+first section rather than letting a reader carry the 0.0078 forward.
 
 **The new content is the reporter class, and it is registrable today because a committed instrument
-already emits it.** A-4's headline — 30 of the 42 pooled innocent ejections eject the meeting's own
-body reporter — is not a review-only walk. `eval/funnel.py`, the Task-15.3 information funnel, carries
-a reporter-ejection census (`reporter_ejected`, `reporter_ejected_innocent`, `report_meetings`,
-`report_ejections`, `killer_self_reported`; :850-851, :894-895), it is reachable per set through
-`scripts/measure_baseline.py --funnel --json`, and this contract re-ran it over all four committed
-sets at HEAD: **10 / 18 / 1 / 1 reporter ejections, every one of them innocent, over 144 / 400 / 37 /
-37 report meetings and 91 / 248 / 18 / 22 report ejections, with `killer_self_reported` 0 on every
-set**. Pooled: **30 reporter convictions, 618 report meetings, 379 report ejections** — the register's
-figures to the digit, from committed code. The 42 denominator is the per-set non-direct innocent
-counts summed — 30−16, 68−42, 2−1 and 3−2 — of which the first three are literal assertions
-(`tests/eval/test_deduction_metrics.py`:179/181, :271, :313-314) while the corpus-4p1i set pins only
-its denominator and the not-None sentinel (:329-330), so that one cell comes from the same committed
-report through the reader rather than from an assertion. Say which is which in the memo. Either way
-the reporter bars need no new instrument, which is what makes them registrable at a gate that adds no
-code.
+already emits it — and since 21.18 that instrument is dedicated.** A-4's headline — 30 of the 42
+pooled innocent ejections eject the meeting's own body reporter — is baseline-7 PRIOR-RECORD
+CONTEXT. `eval/reporter_justice.py`, the Task-21.18 instrument, computes the class directly, and
+`tests/eval/test_reporter_justice.py` pins it POOLED over all four committed sets as LITERAL
+assertions: `body_report_meetings == 620` (:66), `reporter_impostor_meetings == 0` (:78),
+`ejections == 429` and `innocent_ejections == 46` (:87-88), `reporter_ejections ==
+reporter_innocent_ejections == 34` (:99/:103), the share (:104-105) and 34/620 against 12/1,859 at
+RR 8.495 (:113-126). This contract re-ran it at HEAD and the pooled reading is **34 reporter
+convictions of 46 innocent ejections = 73.9%, over 620 body-report meetings, per slot 5.48% against
+an innocent non-reporter's 0.65%, relative risk 8.50x**. The Task-15.3 funnel is the independent
+TWIN, not the primary: `eval/funnel.py`'s census (`reporter_ejected`,
+`reporter_ejected_innocent`, `report_meetings`, `report_ejections`, `killer_self_reported`;
+:910-912, :918, folded at :1045-1048) reads **7 / 23 / 4 / 0 reporter ejections, every one of them
+innocent, over 141 / 407 / 36 / 36 report meetings and 85 / 249 / 21 / 22 report ejections, with
+`killer_self_reported` 0 on every set** — pooled 34 / 620 / 377, agreeing with `reporter_justice`
+per set as well as pooled. Two independently authored readers landing on the same 34 is the memo's
+strongest provenance claim for bar 3, and the memo states the agreement as a cell rather than
+asserting it. Because both numerator and denominator are pooled literal pins, the phase-20 memo's
+"some cells come through the reader rather than from an assertion" hedge does NOT apply to bars 3
+and 4 — but it still applies to bar 1's `ml_corpus/4p1i` cell (`tests/eval/test_deduction_metrics.py`
+:334-335 pins the denominator 3 and the not-None sentinel, not the numerator), so the memo says
+which is which for THAT row and only that row. Either way the reporter bars need no new instrument,
+which is what makes them registrable at a gate that adds no code.
 
 **Two reporter bars, not one, because a share alone can be gamed by its own denominator.** The count
 bar (pooled reporter convictions) and the share bar (reporter convictions as a fraction of bar 2's own
@@ -6292,47 +6304,78 @@ innocent total did not fall is labelled **SHARE-BY-DILUTION** in the record audi
 the phase-20 memo used for SUPPRESSED-NOT-FIXED, for the same reason: the verdict is allowed to stand
 while the mechanism behind it is never left implicit.
 
-**The proposed reporter targets come from bar 2's own arithmetic, and the memo shows the working.**
-Bar 2 asks the pooled innocent-ejection count to fall from 42 to below 35 — at least eight cases. On
-the phase-20 record the reporter class supplied 30 of those 42, leaving twelve non-reporter innocent
-ejections in total; a phase that closed bar 2 while leaving the reporter class intact would have to
-erase eight of those twelve. So the proposal is **bar 3: pooled reporter convictions 30 → ≤ 12**,
-which on its own puts the pooled count at 24 with no other class moving, and **bar 4: the reporter
-share 30/42 = 71.4% → < 40%**. The two are not redundant: bars 2 and 3 together already imply a share
-under 12/35 = 34.3%, so bar 4 bites in exactly one case — a record that meets bar 2 because other
-classes fell while the reporter class stood — the outcome this phase would most want to mistake for
-success.
+**The proposed reporter targets come from bar 2's own arithmetic, and the memo shows the working on
+the BASELINE-8 numbers.** Bar 2 asks the pooled innocent-ejection count to fall from 46 to below 35
+— at least twelve cases (at the phase-20 record the same bar asked for eight, from 42). On the
+baseline-8 bytes the reporter class supplies 34 of those 46, leaving **twelve** non-reporter
+innocent ejections in total; a phase that closed bar 2 while leaving the reporter class intact would
+have to erase twelve of those twelve. So the same-method proposal is **bar 3: pooled reporter
+convictions 34 → ≤ 12** — the residue rule, unchanged in NUMBER from the target the planning PR
+priced on 30 of 42, because the residue is 12 on both records — which on its own puts the pooled
+count at 24 with no other class moving, and **bar 4: the reporter share 34/46 = 73.9% → < 40%**,
+the round number just above the boundary case (bar-3 cap over bar-2 cap, 12/34 = 35.3%). Write the
+burden beside the target rather than only the target: bar 3 now asks for **22** cases erased, 64.7%
+of the class, against the 18 cases and 60.0% the same number asked at baseline 7.
+The two are not redundant, and the memo must state the reason correctly, because the planning-time
+wording had the extremum backwards. Bars 2 and 3 together do NOT imply a low share: bar 2 caps the
+denominator and places no floor under it, so a record with `I = 12` and `R = 12` meets both and
+reads 100%. Bar 4 therefore bites in the case bars 2 and 3 cannot see — a record that fixes the
+reporter class in ABSOLUTE terms and fixes the rest of the ledger too, leaving the reporter still
+dominant in what remains: `R = 10`, `I = 20` passes bars 2 and 3 and fails bar 4 at 50%. That is
+the outcome this phase would most want to mistake for success, and it is the only thing bar 4 is
+for.
 Both numbers are [PROPOSED — ratified at merge] and live in one table cell each, so the owner can
-re-price them before merging without touching a line of prose.
+re-price them before merging without touching a line of prose. The pre-dispatch ruling R1 below
+sets out the alternatives the owner may prefer, with the derivation of each.
 
 **The instrument list is short by design.** Two rows carry all four bars — the proof-vs-inference
-conviction cells (`eval/deduction_metrics.py`, bars 1 and 2) and the reporter-ejection census
-(`eval/funnel.py`, bars 3 and 4) — and three more carry secondaries only: the evidence-honesty cells
+conviction cells (`eval/deduction_metrics.py`, bars 1 and 2) and the reporter-justice cells
+(`eval/reporter_justice.py`, bars 3 and 4 — with `eval/funnel.py`'s reporter census registered
+BESIDE it as the independent twin whose per-set and pooled agreement the record audit checks, never
+as a second definition) — and three more carry secondaries only: the evidence-honesty cells
 (`eval/evidence_honesty.py`), the solvability y-axis (`eval/solvability.py`) and the zero-flag
-conviction cells (`eval/vj_instruments.py`:297-311, the committed reading of the register's "37 of 42
+conviction cells (`eval/vj_instruments.py`:312-327, the committed reading of the register's "37 of 42
 ejectees carried no contradiction flag"). Definitions are adopted by reference from the modules that
 compute them, in the 20.22 §2 shape, with any place where a definition string is narrower than the
 registered cell called out in the memo's own words — because the wording that governs a bar is the
 wording beside the bar, not a docstring that can drift.
 
-**Power, re-derived rather than assumed.** At the phase-20 record the non-direct cell was n=30 on
-samples/9p2i, n=68 on ml_corpus/9p2i and n=2 and n=3 on the two 4p1i sets: the corpus leg carries two
-thirds of the whole denominator, and the samples leg sat exactly on the n ≥ 30 clause that makes a
-per-set floor binding. That is why the record order puts corpus 9p2i before either 4p1i leg, and why
-the memo re-runs the `1/n > |target − baseline|` test against ITS OWN denominators rather than
-inheriting the phase-20 advisory list. If the corrected-substrate re-record moved a denominator across
-the threshold, the advisory list changes with it, and the memo says which cells crossed.
+**Power, re-derived rather than assumed — and a denominator HAS crossed.** At the phase-20 record
+the non-direct cell was n=30 on samples/9p2i, n=68 on ml_corpus/9p2i and n=2 and n=3 on the two
+4p1i sets; the samples leg sat exactly on the `n ≥ 30` clause that phase-20 §4.1 uses to decide
+whether a per-set floor binds. On baseline 8 those denominators are **27 / 61 / 5 / 3**: the corpus
+leg still carries two thirds of the whole (61/96 = 63.5%), which is why the record order puts corpus
+9p2i before either 4p1i leg — and **samples/9p2i has fallen BELOW the `n ≥ 30` clause.** That is the
+crossing this contract anticipated, and it is now real, so the memo executes rather than forecasts:
+it re-runs the `1/n > |target − baseline|` test against ITS OWN denominators at the pooled margin
+|0.60 − 0.5208| = 0.0792, publishes the result — `samples/9p2i` 1/27 = 0.0370 and `ml_corpus/9p2i`
+1/61 = 0.0164 both inside the margin, `samples/4p1i` 1/5 = 0.20 and `ml_corpus/4p1i` 1/3 = 0.333
+both ADVISORY — and states plainly that the granularity test and the inherited literal `n ≥ 30`
+now DISAGREE on samples/9p2i. The pre-dispatch ruling R2 puts that disagreement to the owner; the
+memo records whichever reading is ratified and names the consequence for bar 1's per-set clause
+either way. These are the memo's baseline denominators, not the record's: the clause is applied at
+the record, to the record's own numbers, and the memo says so.
 
-**The slate the memo registers is the slate that merged.** The Wave-2 levers arrive as separate
-contracts, one of which is an owner decision point that may be struck before dispatch. The memo
-therefore reads the lever registry in the tree — `orchestrator/replay.py`:568 for what is still
-toggleable, :524 for what has retired — and names the levers it finds, with `impostor_roll_call` OFF
-as it has been since the baseline-7 record. A memo that named a lever the tree does not have would put
-the record's slate and its own protocol section out of agreement on day one.
+**The slate the memo registers is the slate that merged, and it has.** All three Wave-2 levers
+landed before this task: `reporter_reasoning` (#414), `corroboration_discipline` (#415) and
+`testimony_shapes` (#416, amended at #417). The memo reads the lever registry in the tree —
+`orchestrator/replay.py`:675-682 for what is still toggleable, :613-635 for what has retired — and
+finds FOUR live toggles, all default-OFF. The registered slate is therefore the **THREE Wave-2 keys
+ON, `impostor_roll_call` OFF**, which is the slate 21.21's counterfactual measured (its R7 ruling
+refuses a fourth key) and the slate 21.24 records ("every game this record produces is stamped with
+the three Wave-2 keys `True`"). Three surfaces must agree on this and the memo is the one that
+governs; a memo that named a lever the tree does not have, or a fourth key the counterfactual never
+priced, would put the record's slate and its own protocol section out of agreement on day one.
 
 **The reporter bars also carry their own premise, and it can void them.** They read as injustice cells
-only because the reporter is innocent by construction: the impostor policy cannot file a report
-(`killer_self_reported` 0 on all four sets today, and 0/618 in A-4's independent walk). If any recorded
+only because the reporter is innocent by construction, and the construction is structural rather
+than lucky: `agents/tactical/crewmate_policy.py`:737-740 is the ONLY emitter of a `{"type":
+"report"}` intent in the tree and `agents/tactical/impostor_policy.py`:53 states the rule outright
+("the impostor must not file a report"), which is why `killer_self_reported` reads 0 on all four
+sets at HEAD and `reporter_impostor_meetings` reads 0 of 620 (`tests/eval/test_reporter_justice.py`
+:78-79). The memo says which half is which — the structural half is a property of the scripted FSM
+policies these bytes record, so the VOID condition guards the case a 15.9 learned mover would
+create, not a coincidence in the corpus. If any recorded
 leg shows an impostor reporter, the premise has moved and the bars are **VOID**, not passed — the memo
 says so, and the record audit checks `killer_self_reported == 0` and `reporter_ejected ==
 reporter_ejected_innocent` per leg before reading either bar.
@@ -6382,26 +6425,29 @@ was priced in. The owner's merge ratifies; anything after it is a dated erratum 
 
 **Definition of done:**
 - [ ] `audits/audit-phase-21-preregistration.md` exists with the 18.4 / 20.22 skeleton in this order: verdict in one line; why these cells and what re-anchors without re-ratification; the instrument table; the baseline cells; where a pin and the register disagree; the primary bars; the advisory discipline; the secondary observed-not-gated cells; the decision rule; the declared co-interventions; the offline-counterfactual protocol; the record order and the freeze; THE RATIFIED DECISION; the amendment log; method and reproduction. The label key is the 18.4 one — [VERIFIED] quoted from a committed pin or committed source, [INFERRED] arithmetic over verified cells with inputs shown, [PROPOSED — ratified at merge] for every definition, bar and rule.
-- [ ] Every registered cell names the committed file that computes it, beside the number. A grep for `[REVIEW-DERIVED]` in the memo returns zero hits, and no cell is hand-computed: every interval quoted comes from `eval.deduction_metrics._wilson_interval` (eval/deduction_metrics.py:852).
-- [ ] The baseline column is read from the pins AS THEY STAND AT THIS HEAD — the corrected-substrate re-record's cells, not this contract's figures and not the phase-20 record's. That record is **baseline 8** and the memo names it by id in the column header, because two baseline ids move in this phase and a before column labelled only "baseline" would be ambiguous the moment baseline 9 exists. The baseline-7 values (non-direct 61/103 = 0.5922; innocent ejections 42 = 14/26/1/1; reporter convictions 30) appear beside them, labelled as the phase-20 record's history, and no phase-20 cell is re-priced anywhere in the memo.
-- [ ] Bar 1 (non-direct conviction accuracy ≥ 0.60 pooled, no adequately powered set below 0.50) and bar 2 (innocent ejections < 35 pooled) are stated verbatim with unchanged targets, each with the per-set cells beside the pooled figure and its Wilson interval, and each carrying one sentence recording that this bar was **MISSED** at the phase-20 record and that baseline 7 is canon by explicit owner override of a FINDING verdict. No sentence anywhere in the memo states or implies that a phase-20 bar passed.
-- [ ] Bar 3 (pooled reporter-conviction count) and bar 4 (the reporter share of bar 2's own innocent-ejection cell) are registered on committed cells — `eval.funnel.InformationFunnelReport.reporter_ejected_innocent` summed over the four sets for the numerator, bar 2's denominator for the share — with the proposed targets stated as [PROPOSED — ratified at merge] and the arithmetic that produced each shown, so the owner can move a number in exactly one place. The memo prints the per-set reproduction command and the four-set sum.
+- [ ] Every registered cell names the committed file that computes it, beside the number. A grep for `[REVIEW-DERIVED]` in the memo returns zero hits, and no cell is hand-computed: every interval quoted comes from `eval.deduction_metrics._wilson_interval` (eval/deduction_metrics.py:983).
+- [ ] The baseline column is read from the pins AS THEY STAND AT THIS HEAD — the corrected-substrate re-record's cells, not this contract's figures and not the phase-20 record's. That record is **baseline 8** and the memo names it by id in the column header, because two baseline ids move in this phase and a before column labelled only "baseline" would be ambiguous the moment baseline 9 exists. Read at this HEAD those cells are: **non-direct 50/96 = 0.5208** [0.4220, 0.6180] per set 14/27, 32/61, 1/5, 3/3; **innocent ejections 46** = 13/29/4/0; **reporter convictions 34**, share 34/46 = 73.9%, per slot 34/620 = 5.48% against 12/1,859 = 0.65%, RR 8.50x; **direct-proof 333/333**. The baseline-7 values (non-direct 61/103 = 0.5922; innocent ejections 42 = 14/26/1/1; reporter convictions 30 of 42 = 71.4%, RR 7.46x) appear beside them, labelled as the phase-20 record's history, and no phase-20 cell is re-priced anywhere in the memo. Where `audits/audit-phase-21-rerecord.md` §5.1 quotes the pooled non-direct interval as [0.4224, 0.6178] and `eval.deduction_metrics._wilson_interval(50, 96)` returns [0.42203591721406514, 0.618027543307401], the HELPER governs and the divergence is recorded by name in the memo's "where a pin and the register disagree" section — the memo never silently copies an interval it did not run.
+- [ ] Bar 1 (non-direct conviction accuracy ≥ 0.60 pooled, no adequately powered set below 0.50) and bar 2 (innocent ejections < 35 pooled) are stated verbatim with unchanged targets, each with the per-set cells beside the pooled figure and its Wilson interval, and each carrying one sentence recording that this bar was **MISSED** at the phase-20 record and that baseline 7 is canon by explicit owner override of a FINDING verdict. No sentence anywhere in the memo states or implies that a phase-20 bar passed. The memo also states, in the bar's own row, what the inherited per-set clause reads at baseline-8 denominators: `samples/9p2i` fell to n=27 and no longer satisfies the `n ≥ 30` clause phase-20 §4.1 attached to "adequately powered", so on those denominators `ml_corpus/9p2i` (n=61) is the only set whose 0.50 floor binds — stated as a consequence of carrying the clause verbatim, never as a reason to re-price it, and re-applied to the RECORD's own denominators at the record.
+- [ ] Bar 3 (pooled reporter-conviction count) and bar 4 (the reporter share of bar 2's own innocent-ejection cell) are registered on committed cells — `eval.reporter_justice.ReporterJusticeCells.reporter_innocent_ejections` (pooled by `pool_reporter_justice`, pinned literally at `tests/eval/test_reporter_justice.py`:103) for the numerator and `.innocent_ejections` (:88) for the share denominator, with `eval.funnel.InformationFunnelReport.reporter_ejected_innocent` summed over the four sets registered beside them as the agreeing twin (34 both ways at this HEAD, and per set 7/23/4/0) — the memo states that the share property's own docstring (`eval/reporter_justice.py`:219-229) narrows the numerator to INNOCENT reporter ejections and that this is the registered reading — with the proposed targets stated as [PROPOSED — ratified at merge] and the arithmetic that produced each shown, so the owner can move a number in exactly one place. The memo prints the per-set reproduction command and the four-set sum.
 - [ ] The reporter bars state their premise and its void condition: `killer_self_reported == 0` and `reporter_ejected == reporter_ejected_innocent` on every recorded leg, checked before either bar is read; a leg that breaks the premise makes both bars VOID rather than met, and the memo says which cell the record audit reads to decide that.
 - [ ] Bars 3 and 4 are stated jointly with the **SHARE-BY-DILUTION** label: a bar-4 pass whose bar-2 count did not fall is labelled that way in the record audit, with both denominators printed beside the verdict.
 - [ ] The bars are also stated ONCE as a machine-readable table — one row per bar: bar id, the cell's fully qualified field, the committed reader that emits it, the baseline value, the target, and whether the per-set clause is powered — so the record contract reads the bars mechanically instead of re-deriving them from prose. The prose statement and the table agree, and the pin-diff reader checks both.
 - [ ] The instrument table registers exactly the rows the bars and the secondaries need, each with its owner module and its committed pin, and adopts each definition by reference from the module that computes it. Where a module's definition string is narrower or broader than the cell the memo registers, the memo states the registered semantics in its own words, says which reading governs, and records that correcting the string is a production edit that routes as its own contract.
-- [ ] The advisory discipline carries over verbatim in its granularity form — a cell is ADVISORY when `1/n > |target − baseline|`, published with its rate, its interval and the arithmetic, and taking no part in the verdict in either direction — and the memo names its members at the memo's own baseline denominators, with the 4p1i cells expected to qualify.
-- [ ] The secondary cells are listed as observed-and-reported-never-gated, each naming its committed reader: the win split inside a pre-registered ±15-point-per-set band re-derived from each set's `MANIFEST.md`; the solvability y-axis; the zero-flag conviction cells (eval/vj_instruments.py:297-311); the evidence-honesty cells; the render census; token cost per meeting call.
+- [ ] The advisory discipline carries over verbatim in its granularity form — a cell is ADVISORY when `1/n > |target − baseline|`, published with its rate, its interval and the arithmetic, and taking no part in the verdict in either direction — and the memo names its members at the memo's own baseline denominators WITH the arithmetic printed, at the margin |0.60 − 0.5208| = 0.0792: `samples/4p1i` (1/5 = 0.20 > 0.0792) and `ml_corpus/4p1i` (1/3 = 0.333 > 0.0792) qualify as ADVISORY; `samples/9p2i` (1/27 = 0.0370) and `ml_corpus/9p2i` (1/61 = 0.0164) do not. The memo uses the POOLED baseline in the margin term, as `audits/audit-phase-20-preregistration.md` §4.1 does when it computes |0.60 − 0.368| = 0.232 for a per-set cell, and says so explicitly so the test cannot be re-read per-set later.
+- [ ] The secondary cells are listed as observed-and-reported-never-gated, each naming its committed reader: the win split inside a pre-registered ±15-point-per-set band re-derived from each set's `MANIFEST.md`; the solvability y-axis; the zero-flag conviction cells (eval/vj_instruments.py:312-327); the evidence-honesty cells; the render census; token cost per meeting call.
 - [ ] A **measured but not registered** section lists every review class the memo declines to gate — the ledger classes, the boomerang, the impossible-transit charge, the citation mix, the per-turn calibration decomposition — each with the reason (no committed reader emits it), each quoted in the VERIFIER-CORRECTED form rather than as originally filed, and each with the routing rule stated: an instrument contract merged before the record, or the class stays observed.
-- [ ] The decision rule is written in ADOPTED / FINDING form, conjunctive, naming the exact subset of bars each verdict requires; it states that a partially eligible lever yields a published per-lever verdict and never a partial graduation, with the mechanical reason quoted from `api/replay_loader.py::_assert_substrate_matches` (:603) and the registry at orchestrator/replay.py:524 and :568; it states that no bar may be re-priced after this merge, that a miss publishes as a miss, and — in one sentence — that the phase-20 owner override is not a precedent for re-pricing, because an override is recorded as an override of a FINDING verdict and leaves the arithmetic where it stands.
+- [ ] The decision rule is written in ADOPTED / FINDING form, conjunctive, naming the exact subset of bars each verdict requires; it states that a partially eligible lever yields a published per-lever verdict and never a partial graduation, with the mechanical reason quoted from `api/replay_loader.py::_assert_substrate_matches` (:655) and the registry at orchestrator/replay.py:613 and :675; it states that no bar may be re-priced after this merge, that a miss publishes as a miss, and — in one sentence — that the phase-20 owner override is not a precedent for re-pricing, because an override is recorded as an override of a FINDING verdict and leaves the arithmetic where it stands.
 - [ ] The ordering paragraph states plainly that this memo lands after the lever contracts and after the offline counterfactual, names the two mitigations (targets inherited verbatim from `audits/audit-phase-20-preregistration.md` §4; the counterfactual's predictions committed before this merge and quoted by section), and names any target that was chosen with a phase-21 figure in view together with that figure.
 - [ ] The declared co-interventions section names, by name, everything landing inside the same record that is not a Wave-2 lever — the corrected-substrate repairs the re-record already carries — and states the attribution consequence: no bar is attributed to a lever on the strength of the win split, and attribution rests on the offline counterfactual plus the recorded per-cell before/after.
-- [ ] The protocol section fixes the record order (`replays/samples/9p2i` → `replays/ml_corpus/9p2i` → `replays/samples/4p1i` → `replays/ml_corpus/4p1i`) with the power argument for the corpus-9p2i leg preceding either 4p1i leg stated from the memo's own re-anchored denominators; the freeze list; the slate (the Wave-2 levers that actually merged, ON; `impostor_roll_call` OFF; the model and the prompt-set version read from the tree and from the recorded MANIFESTs rather than from any contract's prose); and the abandon criteria as written STOP conditions — a `scripts/validity_gate.py` FAIL on any leg, a seed whose opening defaults, a guard trip, or a lever-stamp mismatch between the recorded snapshot and the declared slate.
+- [ ] The declared co-interventions also name the baseline-8 record's own un-pre-declared movements, each cited to `audits/audit-phase-21-rerecord.md`: the sole-flag wrongful-conviction class RE-OPENED 0 → 4 with one still carrying a STRONG flag (§5.1.1 — "no surface may keep asserting the extinction", which binds every sentence of this memo the way §6.1's constraint does), the I-13 injustice fixtures moving from 4/4 FLIPPED to **3/4 flipped + 1 partial** (§5.1.1b), the STRONG `alibi_vs_sighting` prosecution class 11/12 → 21/27, the oracle-register leak class going to ZERO on all four sets, the impostor false-whereabouts arm INVERTING to 0/106 impostor against 6/660 crew, and the `_COALESCED_ROW_PIN` margin falling 1.05 → 0.59 against a 36.0 floor (§5.1.2); plus the 21.17 ML re-ground, which landed between that record and this memo.
+- [ ] The protocol section fixes the record order (`replays/samples/9p2i` → `replays/ml_corpus/9p2i` → `replays/samples/4p1i` → `replays/ml_corpus/4p1i`) with the power argument for the corpus-9p2i leg preceding either 4p1i leg stated from the memo's own re-anchored denominators; the freeze list; the slate (the Wave-2 levers that actually merged, ON; `impostor_roll_call` OFF; the model and the prompt-set version read from the tree and from the recorded MANIFESTs rather than from any contract's prose); named explicitly as the THREE Wave-2 keys `reporter_reasoning` / `corroboration_discipline` / `testimony_shapes` ON with `impostor_roll_call` OFF, matching 21.21's R7 and 21.24; the PRECONDITIONS the record cannot start or finalize without, each named with its owning task — **21.23's fix to `scripts/record_ml_corpus.sh`'s hardcoded `REQUIRED_PROMPT_VERSIONS` (`:170`, the four v5 literals), which would refuse ANY lever-ON record at finalization, i.e. after ~22 hours of 21.24's spend (routed at the #414 merge to be fixed AND smoke-validated at 21.23, deriving through `prompt_versions_for_set` from `--expect-levers`), stated as a PRECONDITION the 21.24 operator confirms before the first seed** — and, named as 21.24's own re-anchor business rather than this memo's, the version/environment generalisation (#415), the Q2 seam and the `testimony_shapes` stamp-vs-environment guard asymmetry (#416/#417) and the roll_call sibling-block gap; and the abandon criteria as written STOP conditions — a `scripts/validity_gate.py` FAIL on any leg, a seed whose opening defaults, a guard trip, or a lever-stamp mismatch between the recorded snapshot and the declared slate (compared through `orchestrator/replay.py::substrate_slate_mismatches`, never re-derived).
+- [ ] Every tripwire CANDIDATE in `audits/audit-phase-21-counterfactual.md` §9 is dispositioned BY NAME — ratified as a pre-record STOP, ratified as a never-worse bar, or declined with its reason — and none is left unmentioned: **T1** (spoken vent accounts naming a never-venter, 0 of 512 OFF — ratified per the pre-dispatch ruling R3 as a NEVER-WORSE BAR and a pre-record STOP), **T2** (the reporter thread, 620/620 openings and 2,715/2,715 speech turns — zero on an ON seed means the lever did not thread and the record must not start), **T3** (ballots gaining a reporter block, 0 of 3,631 — a non-zero reading means the reporter lever reached a seam it does not own; STOP, declined as a bar), **T4** (the alibi map filling to 4,173/4,173), **T5** (crew-only elicitation, 2,023 of 2,959 and 0 impostor turns — an impostor turn gaining the block is a firewall question, not a render one; ratified per R3 as a NEVER-WORSE BAR and a STOP), **T6** (~99.5% of ballots gaining the source-count block) and **T7** (the meeting-1 render budget unchanged). Each ratified tripwire states the exact cell, the predicted value with its denominator, the reader that emits it, and the earliest run that can falsify it — 21.23's first ON seed for every one of them. The memo also records that a tripwire is a STOP or a never-worse bar and is never a graduating bar, so no tripwire can carry an ADOPTED verdict on its own.
+- [ ] The PR STOPS OPEN. This is an owner-gated contract on the 15.18 convention: the worker opens the PR with the memo complete, the bars marked [PROPOSED — ratified at merge], the pin-diff reader's `0 mismatches` output and a `## Questions` section putting the reporter-target re-pricing to the owner with both derivations side by side (see the Implementation hint's Step 4) — and does not merge it. The owner's merge IS the ratification; nothing in this PR is normative before it, and anything after it is a dated erratum in the amendment log.
 - [ ] The memo states its own precedence and the split between ratified content and re-anchoring evidence: definitions, conventions, bars, advisory discipline, decision rule, co-intervention declaration, protocol and record order are ratified; the quoted cells are evidence that re-anchors at the record with provenance and without re-ratification; and any surface that disagrees with the memo is re-anchored at its pre-dispatch review rather than read as a second rule. Known divergences at ratification are listed by name so the coordination pass has a list rather than a search.
 - [ ] A sign-off section records that ratification is the owner's merge of this PR, and an amendment log section exists with its convention stated and no rows at merge; the memo's status line does not say PROVISIONAL.
 - [ ] `tasks/phase-21.md` gains one preamble paragraph naming the ratified memo as the document the record and the post-record sweep read verbatim; the STATUS line is untouched.
 - [ ] The PR Summary carries the pin-diff reader's `0 mismatches` output and the green `pytest -k` run from Measurement, and its Decisions section records every proposed target with the arithmetic behind it.
-- [ ] `uv run pytest -q -k "deduction_metrics or funnel or evidence_honesty or solvability"` passes.
+- [ ] `uv run pytest -q -k "deduction_metrics or funnel or evidence_honesty or solvability or reporter_justice"` passes.
 - [ ] `uv run python scripts/measure_baseline.py --funnel --json replays/samples/9p2i` and the same command for the other three sets reproduce the reporter cells the memo quotes.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
@@ -6422,25 +6468,49 @@ reader are the four pieces that did real work at the record, and all four transf
 Step 2 — pin, do not re-measure. Open each test that asserts a cell and quote its numerator and
 denominator with the file and test name beside the number; prefer the assertion over the module,
 because a pin is what fails when the value moves. Read the pins at YOUR head, not from this contract:
-the corrected-substrate re-record re-derived all of them, and the figures quoted here
-(non-direct 16/30, 42/68, 1/2 with the corpus-4p1i denominator 3; innocent 14/26/1/1; reporter
-10/18/1/1) are the phase-20 record's, carried here so you can see which cells moved and by how much.
+the corrected-substrate re-record re-derived all of them. The phase-20 record's figures were
+non-direct 16/30, 42/68, 1/2 with the corpus-4p1i denominator 3; innocent 14/26/1/1; reporter
+10/18/1/1 — and this contract re-read every one of them at HEAD, where they are **non-direct 14/27
+(`tests/eval/test_deduction_metrics.py`:165/:186), 32/61 (:276), 1/5 (:318-319), denominator 3
+(:334-335); innocent 13/29/4/0 (:163, :270, :312, and 0 on ml_corpus/4p1i); reporter 7/23/4/0
+(`tests/eval/test_funnel.py`:631-632 for samples/9p2i, `eval.reporter_justice` per set for the
+rest, pooled 34 pinned literally at `tests/eval/test_reporter_justice.py`:103)**. Both vintages are
+carried here so you can see which cells moved and by how much; quote only the ones you re-read
+yourself, and label the phase-20 pair as history everywhere.
 
-Step 3 — the reporter cells reproduce with four commands, one per set:
+Step 3 — the reporter cells reproduce with ONE command:
+`uv run python -m eval.reporter_justice replays/samples/9p2i replays/ml_corpus/9p2i replays/samples/4p1i replays/ml_corpus/4p1i --pooled`
+(`eval/reporter_justice.py`:677-692). Read `reporter_innocent_ejections` for bar 3's numerator,
+`innocent_ejections` for bar 4's share denominator, `body_report_meetings` and the per-slot rates
+for the context the memo prints beside them, and `reporter_impostor_meetings` for the premise check.
+Every one of those is a POOLED LITERAL pin at `tests/eval/test_reporter_justice.py`:66, :78-79,
+:87-88, :99, :103, :104-105 and :113-126, so prefer the assertion over the CLI output. Then run the
+independent twin, four commands, one per set:
 `uv run python scripts/measure_baseline.py --funnel --json replays/samples/9p2i` and the same for
 `replays/ml_corpus/9p2i`, `replays/samples/4p1i`, `replays/ml_corpus/4p1i`. Sum
-`reporter_ejected_innocent` for the numerator, `report_meetings` and `report_ejections` for the two
-denominators the memo reports beside it, and read `killer_self_reported` on every set for the premise
-check. `tests/eval/test_funnel.py`:632-633 is the literal pin for the samples/9p2i cell; the other
-three come from the same committed module through the same reader, which is exactly the arrangement
-`audits/audit-phase-20-preregistration.md` §3.1 uses for its per-set rows.
+`reporter_ejected_innocent` and check it equals `reporter_justice`'s figure PER SET as well as
+pooled (7 / 23 / 4 / 0 = 34 at this HEAD), read `report_meetings` and `report_ejections` for the two
+denominators the memo reports beside it, and read `killer_self_reported` on every set.
+`tests/eval/test_funnel.py`:631-633 and :638 are the literal pins for the samples/9p2i twin. Publish
+the agreement of the two readers as a cell — that is what `audits/audit-phase-20-preregistration.md`
+§3.2 is for, and it is stronger provenance than either reader alone.
 
 Step 4 — do NOT add instruments, and do not soften a target because a re-anchored baseline made it
 look harder. The two primary targets are inherited verbatim. For the two reporter targets, write the
-arithmetic that produced each into the memo — for example, that bar 2 needs a fall of at least eight
-innocent ejections and the reporter class supplies 30 of the 42, so a reporter target that leaves the
-class larger than the whole bar-2 allowance cannot carry the phase — and mark them
-[PROPOSED — ratified at merge] so the owner can move a number in one place without touching prose.
+arithmetic that produced each into the memo, on the BASELINE-8 numbers — bar 2 needs a fall of at
+least twelve innocent ejections (46 → ≤ 34) and the reporter class supplies 34 of the 46, leaving a
+non-reporter residue of twelve, so the residue rule proposes bar 3 at ≤ 12 (a fall of 22 cases,
+64.7% of the class) and bar 4 at < 40% (the boundary case 12/34 = 35.3%, rounded up). Print BOTH
+derivations side by side in the PR's `## Questions` section, because the owner ratifies the number
+and not the method: (i) the RESIDUE rule above, which leaves both planning-time numbers unchanged at
+≤ 12 and < 40% while raising the burden from 18 cases to 22; and (ii) the CONSTANT-BURDEN reading,
+which holds the ask at the 18 cases the plan priced and gives bar 3 ≤ 16 (46 − 18 = 28, still under
+bar 2). State which one the memo adopts, and — per the ordering paragraph's own rule — name the
+phase-21 figure each proposed target was chosen against. Do NOT soften a target because a
+re-anchored baseline made it look harder; the two PRIMARY targets are inherited verbatim, and any
+movement in the two reporter targets is the owner's at merge, not the worker's in draft. Mark all
+four [PROPOSED — ratified at merge] so the owner can move a number in one place without touching
+prose.
 
 Step 5 — write the two sections a record contract actually executes against, and test them by reading
 them as that contract would. The bar table must let an operator answer "met or missed" for every bar
@@ -6459,6 +6529,24 @@ instrument contract.
 
 **Public types introduced:** none — this task ships one audit memo and one contract paragraph and adds
 no symbol to the codebase.
+
+**Pre-dispatch rulings (orchestrator, 2026-09-01, at the post-counterfactual re-anchor):** (R1)
+The reporter-bar re-pricing goes TO THE OWNER, with the draft ADOPTING the residue rule — which
+leaves both planning-time numbers UNCHANGED at ≤ 12 and < 40% because the non-reporter residue is
+12 on both records — and the constant-burden alternative (≤ 16, < 45%, holding the 18-case ask)
+printed beside it in the PR's Questions; the owner ratifies the number at merge, and two facts
+ride beside the choice: bar 1 is now eight convictions away instead of one, and samples/9p2i's
+denominator crossed below the powered clause. (R2) The `n ≥ 30` clause is carried VERBATIM
+(option A), ratified explicitly with the granularity test's disagreement on samples/9p2i printed
+beside it and the clause re-applied to the record's own denominators at the record — re-deriving
+a power threshold from a moved baseline is a bar following its own baseline. (R3) Of the
+counterfactual's seven tripwires, T1 and T5 are ratified as NEVER-WORSE BARS as well as STOPs
+(the only guards against the record making something worse while the four primary bars improve);
+T2/T3/T4/T6/T7 are STOPs; none is a graduating bar. (R4) 21.23's recorder fix is a written
+PRECONDITION the 21.24 operator confirms before the first seed, not a known risk — the failure
+mode is terminal and lands after ~22 hours of spend. (R5) The §5.1-vs-helper Wilson interval
+divergence is recorded by name, the helper governing. (R6, FYI forward) 21.24's own prose is
+baseline-7 vintage (42/30/618, a stale beliefs.py anchor) — its re-anchor carries the fix list.
 
 **Ready-to-paste prompt:** `agent_prompts/task-21-22-preregistration.md`
 
