@@ -109,13 +109,17 @@ Routing is therefore a render KWARG, resolved once in
 its provenance side is
 :data:`orchestrator.game.TESTIMONY_SHAPES_PROMPT_VERSION_SETS`.
 
-``vote_ballot.j2`` is the arm's THIRD body (the Q4 ruling on #416). Eliciting a
-shape and rendering it are two different edits, and the arm originally made only
-the first: every later SPEAKER read a spoken kill and the VOTER never did, so
-the strongest testimony in the game reached everyone except the person casting
-the ballot. The ballot's block is the transcript row alone — a voter files no
-observation, so there is no menu to offer — and it takes the same guard, the
-same construction-time binding and the same arm stamp as the two turn bodies.
+``vote_ballot.j2`` is the arm's THIRD body. Eliciting a shape and rendering it
+are two different edits and the arm makes both, so a shape a speaker files is
+read by every later speaker AND by the voter deciding on it. The ballot's block
+is the transcript row alone — a voter files no observation, so there is no menu
+to offer — and it takes the same guard, the same construction-time binding and
+the same arm stamp as the two turn bodies. Its ``<testimony_sources>`` rows word
+the adopted clause against the RECORD ("without an account their own record
+bears out") rather than against what was said, because under this arm an adopted
+voice may have spoken an ungrounded kill; the count is unchanged either way, and
+the wording is guarded so the source-count arm alone renders its own bytes.
+Ruled at #416 Q4.
 """
 
 from __future__ import annotations
@@ -1021,12 +1025,14 @@ def vote_ballot_prompt(
 
     ``testimony_shapes`` opens the served body's guarded witnessed-kill row in
     the transcript's observation walk, so a voter READS the shape the arm
-    offered the speakers. The ballot offers no shape of its own -- a voter files
-    no observation -- so this is the transcript half alone, and it is the same
-    render input the report and statement renderers take: bound at construction
-    by :func:`build_prompt_renderers` from the one lever read, never a second
-    environment read here. The default ``False`` renders the committed bytes
-    exactly.
+    offered the speakers, and words the ``<testimony_sources>`` adopted clause
+    against the record rather than against what was said. The ballot offers no
+    shape of its own -- a voter files no observation -- so there is no menu row
+    here, and it is the same render input the report and statement renderers
+    take: bound at construction by :func:`build_prompt_renderers` from the one
+    lever read, never a second environment read here. The default ``False``
+    renders the committed bytes exactly, and so does an ON ballot whose table
+    spoke no kill.
     """
 
     inputs = _render_inputs_for(render_inputs, map_card=map_card)
@@ -1188,10 +1194,10 @@ def build_prompt_renderers(
     :class:`ValueError` at construction, naming the missing BODY and never a
     sibling lever being on.
 
-    All THREE bodies are checked, and the ballot is one of them (the Q4 ruling
-    on #416): the arm ELICITS the shape on the two turn prompts and the ballot
-    RENDERS it, so a set that offers the shape to speakers and then hides it
-    from the voter is a missing body in exactly the same sense.
+    All THREE bodies are checked, the ballot included: the arm ELICITS the shape
+    on the two turn prompts and the ballot RENDERS it, so a set that offers the
+    shape to speakers and hides it from the voter is a missing body in exactly
+    the same sense as one that offers it nowhere.
 
     ``map_card`` defaults to the live :data:`CANONICAL_MAP_CARD` and exists for
     one caller: the bump-in-flight archive, which pairs an older set's template

@@ -26,6 +26,7 @@ import pytest
 
 from agents.strategic.prompts.loader import build_prompt_renderers
 from meetings.constants import (
+    ENV_TESTIMONY_SHAPES,
     MAP_ARBITRATION_MAX_HOPS,
     MAP_ARBITRATION_MAX_TICK_GAP,
 )
@@ -880,9 +881,12 @@ _RENDER_RECORDS: Final[Mapping[PlayerId, tuple[SightingRecord, ...]]] = {
 
 
 def _render(
-    *, ledger: MeetingTestimonyLedger | None, candidates: tuple[str, ...] = ("p-5",)
+    *,
+    ledger: MeetingTestimonyLedger | None,
+    candidates: tuple[str, ...] = ("p-5",),
+    env: Mapping[str, str] | None = None,
 ) -> str:
-    renderers = build_prompt_renderers(_SET, env={})
+    renderers = build_prompt_renderers(_SET, env=dict(env or {}))
     return renderers.vote(
         voter_id="p-2",
         rendered_memory="## Your role: CREWMATE\nnothing yet",
@@ -893,6 +897,55 @@ def _render(
         skip_confidence_threshold=0.6,
         testimony_ledger=ledger,
     )
+
+
+class TestAdoptedClauseWording:
+    """The adopted clause must stay TRUE under the testimony-shapes arm.
+
+    An adopted voice is one whose account no record bears out. With the shapes
+    arm OFF that is always "added nothing they saw", because every kind that
+    reaches this walk is a grounded one. With it ON an adopted voice may have
+    spoken an ungrounded KILL — visible to the voter three blocks up — so the
+    clause is worded against the RECORD instead. The count does not move; only
+    the sentence describing it does.
+    """
+
+    _LEDGER: Final[MeetingTestimonyLedger] = _ledger(
+        _transcript(
+            _turn(index=0, speaker="p-1", claims=(_accuses("p-5"),)),
+            _turn(index=1, speaker="p-2", claims=(_accuses("p-5"),)),
+        ),
+        opener="p-1",
+    )
+    _RECORD_WORDING: Final[str] = (
+        "named them without an account their own record bears out"
+    )
+    _SAID_WORDING: Final[str] = "named them without adding anything they saw"
+
+    def test_the_source_count_arm_alone_keeps_its_committed_sentence(self) -> None:
+        rendered = _render(ledger=self._LEDGER)
+        assert self._SAID_WORDING in rendered
+        assert self._RECORD_WORDING not in rendered
+
+    def test_the_shapes_arm_words_it_against_the_record(self) -> None:
+        rendered = _render(ledger=self._LEDGER, env={ENV_TESTIMONY_SHAPES: "1"})
+        assert self._RECORD_WORDING in rendered
+        assert self._SAID_WORDING not in rendered
+
+    def test_only_that_sentence_moves(self) -> None:
+        # The gate that makes the two above meaningful: the arm rewords ONE
+        # clause and touches nothing else on the page, so a source-count
+        # recording and a shapes recording differ exactly where the stamp says.
+        off = _render(ledger=self._LEDGER)
+        on = _render(ledger=self._LEDGER, env={ENV_TESTIMONY_SHAPES: "1"})
+        assert off.replace(self._SAID_WORDING, self._RECORD_WORDING) == on
+
+    def test_the_count_is_untouched_by_the_wording(self) -> None:
+        # Craft rule 2: the perturbation that would make this vacuous is a
+        # reworded clause that also moved the number. Both renders must state
+        # the SAME split — two voices, zero accounts.
+        for env in ({}, {ENV_TESTIMONY_SHAPES: "1"}):
+            assert "2 voices, 0 accounts" in _render(ledger=self._LEDGER, env=env)
 
 
 class TestRender:

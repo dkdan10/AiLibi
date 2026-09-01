@@ -478,12 +478,11 @@ CORROBORATION_DISCIPLINE_PROMPT_VERSION_SETS: Final[Mapping[str, Mapping[str, st
 # shape can therefore never share a stamp with one that did not, and neither
 # can a ballot that RENDERED a spoken one.
 #
-# ``vote_ballot`` joined at the Q4 amendment to #416: the arm elicits the shape
-# on the two turn prompts, and a shape no voter ever reads is a lever that
-# cannot reach the decision it was built to inform. The ballot's block is the
-# transcript row alone -- a voter files no observation of their own -- but the
-# BYTES move, so the stamp must move with them (the same rule that put the two
-# turn prompts here).
+# The ballot carries a stamp for the same reason the turn prompts do -- its
+# BYTES move under the arm -- even though it offers no shape of its own: the
+# arm elicits on the two turn bodies and renders on all three, and a lever no
+# voter ever reads could not reach the decision it exists to inform. Ruled at
+# #416 Q4.
 _TESTIMONY_SHAPES_KEY: Final[str] = "testimony_shapes"
 _TESTIMONY_SHAPES_ARM: Final[Mapping[str, str]] = _lever_arm_versions(
     "qwen3_6_27b", _TESTIMONY_SHAPES_KEY
