@@ -3660,6 +3660,7 @@ __all__ = [
     "ROSTER_PRESETS",
     "ReportedTestimonyAgent",
     "RosterPreset",
+    "TESTIMONY_SHAPES_PROMPT_VERSION_SETS",
     "TacticalAgent",
     "UnrecordedGameResult",
     "UnrecordedMeetingStep",

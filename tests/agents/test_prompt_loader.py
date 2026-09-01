@@ -794,16 +794,34 @@ class TestTestimonyShapesRouting:
             build_prompt_renderers("guardless_set", root=tmp_path, env={}) is not None
         )
 
-    def test_a_body_that_only_MENTIONS_the_name_is_still_refused(
-        self, tmp_path: Path
+    @pytest.mark.parametrize(
+        ("label", "body"),
+        [
+            # The name in a jinja comment and in literal prose: no condition at
+            # all, so ON and OFF render the same bytes.
+            (
+                "mentioned",
+                "{# testimony_shapes: authored later #}\n"
+                "body {{ agent_id }} - testimony_shapes\n",
+            ),
+            # A DEAD guard: jinja folds ``false and x`` to a constant without
+            # ever reading ``x``, so the block can never render and the arm's
+            # stamp would claim bytes that were never served.
+            (
+                "dead guard",
+                "body {{ agent_id }}\n"
+                "{% if false and testimony_shapes %}\nkill row\n{% endif %}\n",
+            ),
+        ],
+    )
+    def test_a_body_without_a_LIVE_guard_is_refused(
+        self, label: str, body: str, tmp_path: Path
     ) -> None:
-        # The check reads the PARSED template, not its source text, so a body
-        # that names the variable in a jinja comment or in literal prose — and
-        # would therefore render identically under both lever states — is
-        # refused exactly like a body with no block at all. A substring check
-        # would accept it and let the arm's version stamp describe bytes that
-        # were never served.
-        set_dir = tmp_path / "mentioning_set"
+        # The check reads the PARSED template, not its source text: the body
+        # must carry an ``{% if %}`` whose condition reads the variable AND does
+        # not fold to a constant. A substring check accepts both bodies below;
+        # a variables-only check still accepts the second.
+        set_dir = tmp_path / "unguarded_set"
         set_dir.mkdir()
         for name in (
             CREWMATE_REPORT_TEMPLATE,
@@ -811,17 +829,13 @@ class TestTestimonyShapesRouting:
             ACCUSATION_ROUND_TEMPLATE,
             VOTE_BALLOT_TEMPLATE,
         ):
-            (set_dir / name).write_text(
-                "{# testimony_shapes: authored later #}\n"
-                "body {{ agent_id }} — testimony_shapes\n",
-                encoding="utf-8",
-            )
+            (set_dir / name).write_text(body, encoding="utf-8")
 
-        with pytest.raises(ValueError, match="never reads"):
+        with pytest.raises(ValueError, match="no live"):
             build_prompt_renderers(
-                "mentioning_set", root=tmp_path, env={ENV_TESTIMONY_SHAPES: "1"}
+                "unguarded_set", root=tmp_path, env={ENV_TESTIMONY_SHAPES: "1"}
             )
-        # ...and the check is not vacuous: the same set with a real guard builds.
+        # ...and the check is not vacuous: the same set with a LIVE guard builds.
         for name in (CREWMATE_REPORT_TEMPLATE, ACCUSATION_ROUND_TEMPLATE):
             (set_dir / name).write_text(
                 "body {{ agent_id }}\n"
@@ -832,7 +846,7 @@ class TestTestimonyShapesRouting:
             )
         assert (
             build_prompt_renderers(
-                "mentioning_set", root=tmp_path, env={ENV_TESTIMONY_SHAPES: "1"}
+                "unguarded_set", root=tmp_path, env={ENV_TESTIMONY_SHAPES: "1"}
             )
             is not None
         )

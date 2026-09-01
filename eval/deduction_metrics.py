@@ -2915,6 +2915,7 @@ def compute_deduction_metrics(
 
 
 __all__ = [
+    "CONFESSION_QUOTATION_EXCLUSIONS",
     "CROSS_STATEMENT_KINDS",
     "MACHINERY_DECIMAL_PATTERN",
     "MACHINERY_ORACLE_PATTERNS",

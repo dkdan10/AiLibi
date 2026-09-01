@@ -46,6 +46,7 @@ from meetings.schemas import (
     FoundBodyObservation,
     MeetingTranscript,
     MeetingTurn,
+    SawKillObservation,
     SawPlayerObservation,
     SawVentObservation,
     VoteBallot,
@@ -1063,6 +1064,20 @@ _KILL_MANDATE_PREFIX: str = (
 
 _SHAPES_ON: dict[str, str] = {"AILIBI_TESTIMONY_SHAPES": "1"}
 
+# One already-spoken turn carrying the shape, for the transcript-render half.
+_KILL_TURN: MeetingTurn = MeetingTurn(
+    turn_id="m-1:turn-0",
+    turn_index=0,
+    speaker="p-4",
+    turn_kind="opening",
+    reply_to=None,
+    observations=(
+        SawKillObservation(type="saw_kill", tick=11, subject="p-8", room="ADMIN"),
+    ),
+    claims=(),
+    free_text="I watched it happen.",
+)
+
 
 def _inserted_lines(off: str, on: str) -> list[str]:
     """The lines ON adds to OFF, as a DIFF — never as containment.
@@ -1128,15 +1143,36 @@ class TestTestimonyShapesIsExactlyTwoLines:
         assert inserted[1] == _KILL_MENU_ROW
 
     @pytest.mark.parametrize("turn_kind", ["reply", "opt_in"])
-    def test_the_impostor_facing_render_is_byte_identical(self, turn_kind: str) -> None:
+    def test_the_impostor_is_never_OFFERED_the_shape(self, turn_kind: str) -> None:
         # The shape is offered to the CREW alone. An impostor holds no
         # witnessed-kill row it could honestly speak — its own kill is its own
         # first-person memory and a teammate's is suppressed before render — so
-        # offering it there would only be a confession prompt.
+        # offering it there would only be a confession prompt. With nothing
+        # spoken yet the impostor render is byte-identical under both states.
         off = self._statement({}, is_impostor=True, turn_kind=turn_kind)
         on = self._statement(_SHAPES_ON, is_impostor=True, turn_kind=turn_kind)
         assert on == off
         assert "saw_kill" not in on
+
+    @pytest.mark.parametrize("is_impostor", [False, True])
+    def test_a_spoken_kill_reaches_every_later_speaker(self, is_impostor: bool) -> None:
+        # The public transcript is ONE table: a shape the arm elicits must be
+        # legible to whoever speaks next, whatever their role, or the arm would
+        # record a row nobody at the meeting ever saw. So the transcript branch
+        # is role-blind, while the OFFER above stays crew-only — and it is
+        # guarded, so with the lever OFF a stray spoken row renders nothing.
+        spoken = MeetingTranscript(turns=(_KILL_TURN,))
+        off = self._statement({}, transcript=spoken, is_impostor=is_impostor)
+        on = self._statement(_SHAPES_ON, transcript=spoken, is_impostor=is_impostor)
+        assert "KILL" not in off
+        inserted = _inserted_lines(off, on)
+        transcript_line = (
+            "  - tick 11: witnessed p-8 KILL in ADMIN "
+            "(spoken account, nothing confirms it)."
+        )
+        assert transcript_line in inserted
+        # Crew additionally gets the OFFER; the impostor gets the table alone.
+        assert len(inserted) == (1 if is_impostor else 3)
 
     def test_the_off_path_carries_no_byte_of_the_block(self) -> None:
         # The half a containment assertion cannot make: with the lever OFF the

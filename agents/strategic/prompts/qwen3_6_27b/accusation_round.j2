@@ -161,6 +161,8 @@ Your own record places you at the body when it was reported.
   - tick {{ obs.tick }}: body of {{ obs.body_of }} in {{ obs.room }}.
 {% elif obs.type == "saw_vent" %}
   - tick {{ obs.tick }}: witnessed {{ obs.subject }} VENT in {{ obs.room }} (only the impostor can vent).
+{% elif obs.type == "saw_kill" and testimony_shapes is defined and testimony_shapes %}
+  - tick {{ obs.tick }}: witnessed {{ obs.subject }} KILL in {{ obs.room }} (spoken account, nothing confirms it).
 {% elif obs.type == "whereabouts" %}
   - tick {{ obs.tick }}: {{ turn.speaker }} places THEMSELVES in {{ obs.room }} (roll-call answer).
 {% endif %}

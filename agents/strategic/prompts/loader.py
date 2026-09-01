@@ -128,7 +128,7 @@ from jinja2 import (
     TemplateNotFound,
     TemplateSyntaxError,
 )
-from jinja2.meta import find_undeclared_variables
+from jinja2 import nodes
 
 from llm.provider import ENV_PROVIDER, PROVIDER_FAKE
 from meetings.constants import ENV_TESTIMONY_SHAPES, testimony_shapes_enabled
@@ -1056,6 +1056,32 @@ class PromptRenderers:
 _TESTIMONY_SHAPES_GUARD: Final[str] = "testimony_shapes"
 
 
+def _carries_a_live_guard(template: nodes.Template) -> bool:
+    """Whether a parsed body branches on the arm's variable for real.
+
+    True when some ``{% if %}`` condition reads
+    :data:`_TESTIMONY_SHAPES_GUARD` AND does not fold to a constant. Jinja
+    folds ``false and x`` to ``False`` without evaluating ``x``, so a dead
+    guard is exactly the case ``as_const`` decides and a live one is exactly
+    the case it refuses.
+    """
+
+    for branch in template.find_all(nodes.If):
+        test = branch.test
+        if not isinstance(test, nodes.Expr):
+            continue
+        names = {node.name for node in test.find_all(nodes.Name)}
+        if isinstance(test, nodes.Name):
+            names.add(test.name)
+        if _TESTIMONY_SHAPES_GUARD not in names:
+            continue
+        try:
+            test.as_const()
+        except nodes.Impossible:
+            return True
+    return False
+
+
 def _require_testimony_shapes_bodies(
     environment: Environment,
     *,
@@ -1069,12 +1095,16 @@ def _require_testimony_shapes_bodies(
     silently unguarded render. The message names the body, never a sibling
     lever: an all-ON slate is exactly what the adopting record runs.
 
-    The test is the PARSED template, not a substring of its source: jinja
-    reports the variables a body actually reads, so a name that appears only in
-    a ``{# comment #}`` or in literal prose does not satisfy it. A body that
-    reads the variable is a body whose render can differ between the two lever
-    states; whether it differs by exactly the intended lines is the diff gate's
-    job (``tests/agents/test_bespoke_prompt_sets.py``), not this one's.
+    The test is the PARSED template, not a substring of its source: the body
+    must carry at least one ``{% if %}`` whose condition READS the variable and
+    is not a foldable constant. A name in a ``{# comment #}`` or in literal
+    prose fails (it is no condition), and so does a dead guard such as
+    ``{% if false and testimony_shapes %}`` (its condition folds to a constant,
+    so ON and OFF would render identical bytes under a stamp claiming the arm).
+    What the check does NOT decide is whether the live guard adds the RIGHT
+    lines; that is the diff gate's job
+    (``tests/agents/test_bespoke_prompt_sets.py``), and duplicating it here
+    would need a full render context this seam does not have.
 
     Checked against the templates THIS arm re-bodies, not against whatever
     filename a sibling swapped in. An arm that swaps a variant FILE serves a
@@ -1090,13 +1120,13 @@ def _require_testimony_shapes_bodies(
     for name in templates:
         try:
             source = environment.loader.get_source(environment, name)[0]  # type: ignore[union-attr]
-            reads = find_undeclared_variables(environment.parse(source))
+            guarded = _carries_a_live_guard(environment.parse(source))
         except (TemplateNotFound, TemplateSyntaxError, AttributeError):
-            reads = set()
-        if _TESTIMONY_SHAPES_GUARD not in reads:
+            guarded = False
+        if not guarded:
             raise ValueError(
-                f"Prompt set {set_name!r} template {name!r} never reads "
-                f"{_TESTIMONY_SHAPES_GUARD!r}; the "
+                f"Prompt set {set_name!r} template {name!r} carries no live "
+                f"{_TESTIMONY_SHAPES_GUARD!r} guard; the "
                 f"{ENV_TESTIMONY_SHAPES} lever is only authored for the "
                 "'qwen3_6_27b' set — unset the lever or select a set whose "
                 "bodies carry the block"
