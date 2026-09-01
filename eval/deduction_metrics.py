@@ -1906,6 +1906,23 @@ class ScaffoldLeakageCells(_FrozenModel):
                     f"{impostor_side} + {crew_side} > "
                     f"{self.model_source_pre_guard_ballots}"
                 )
+        # The visible self-disclosure pair splits ONE turn pool by speaker role,
+        # so the two cells are disjoint and cannot jointly exceed it. Bounding
+        # each against ``turns_total`` alone would accept a payload claiming
+        # every turn twice -- and the pair's whole reading is the impostor cell
+        # AGAINST its crew control, so a block that inflates both is exactly the
+        # corruption that makes the control unreadable.
+        visible_disclosures = (
+            self.model_self_disclosure_visible_turns
+            + self.crew_self_disclosure_control_turns
+        )
+        if visible_disclosures > self.turns_total:
+            raise ValueError(
+                "the visible self-disclosure cells are role-disjoint, so they "
+                "cannot jointly exceed the turns scanned: "
+                f"{self.model_self_disclosure_visible_turns} + "
+                f"{self.crew_self_disclosure_control_turns} > {self.turns_total}"
+            )
         if self.impostor_ballots + self.crew_ballots != self.ballots_total:
             raise ValueError(
                 "impostor + crew ballots must equal ballots_total: "

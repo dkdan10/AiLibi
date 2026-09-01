@@ -794,6 +794,49 @@ class TestTestimonyShapesRouting:
             build_prompt_renderers("guardless_set", root=tmp_path, env={}) is not None
         )
 
+    def test_a_body_that_only_MENTIONS_the_name_is_still_refused(
+        self, tmp_path: Path
+    ) -> None:
+        # The check reads the PARSED template, not its source text, so a body
+        # that names the variable in a jinja comment or in literal prose — and
+        # would therefore render identically under both lever states — is
+        # refused exactly like a body with no block at all. A substring check
+        # would accept it and let the arm's version stamp describe bytes that
+        # were never served.
+        set_dir = tmp_path / "mentioning_set"
+        set_dir.mkdir()
+        for name in (
+            CREWMATE_REPORT_TEMPLATE,
+            IMPOSTOR_REPORT_TEMPLATE,
+            ACCUSATION_ROUND_TEMPLATE,
+            VOTE_BALLOT_TEMPLATE,
+        ):
+            (set_dir / name).write_text(
+                "{# testimony_shapes: authored later #}\n"
+                "body {{ agent_id }} — testimony_shapes\n",
+                encoding="utf-8",
+            )
+
+        with pytest.raises(ValueError, match="never reads"):
+            build_prompt_renderers(
+                "mentioning_set", root=tmp_path, env={ENV_TESTIMONY_SHAPES: "1"}
+            )
+        # ...and the check is not vacuous: the same set with a real guard builds.
+        for name in (CREWMATE_REPORT_TEMPLATE, ACCUSATION_ROUND_TEMPLATE):
+            (set_dir / name).write_text(
+                "body {{ agent_id }}\n"
+                "{% if testimony_shapes is defined and testimony_shapes %}\n"
+                "kill row\n"
+                "{% endif %}\n",
+                encoding="utf-8",
+            )
+        assert (
+            build_prompt_renderers(
+                "mentioning_set", root=tmp_path, env={ENV_TESTIMONY_SHAPES: "1"}
+            )
+            is not None
+        )
+
     def test_a_sibling_overlay_does_not_make_it_raise(self) -> None:
         # Composition, not exclusion: the all-ON slate is exactly what the
         # adopting record runs, so a bundle with every live arm ON must build --

@@ -93,6 +93,8 @@ EXPECTED_DTOS: Final[frozenset[str]] = frozenset(
         "FoundBodyObsView",
         # Task 15.4.1 — spectator mirror of the Task 15.4 vent sighting:
         "SawVentObservationView",
+        # Spectator mirror of the witnessed murder (meetings SawKillObservation):
+        "SawKillObservationView",
         # Task 16.7.1 — spectator mirror of the Task 16.7 roll-call self-placement:
         "WhereaboutsClaimView",
         # Spectator mirror of the witnessed transition (meetings SawMoveObservation):

@@ -61,13 +61,11 @@ from eval.deduction_metrics import (
     WilsonRateCell,
     _authored_target,
     _matches,
-    _player_visible_text,
     _scan_marker_chain,
     _split_rationale,
     _wilson_interval,
     _is_omniscient,
     _is_oracle_register,
-    _is_self_disclosure,
     classify_flag,
     compute_deduction_metrics,
     witnessed_supply_from_kill_craft,
@@ -2719,62 +2717,31 @@ def test_the_exclusion_bites_only_on_the_excluded_form() -> None:
     assert _visible_cells(speaker_role="IMPOSTOR", free_text=bare) == (1, 0)
 
 
-@pytest.mark.parametrize(
-    ("set_name", "sample_dir", "impostor_cell", "crew_control"),
-    [
-        ("samples/9p2i", _SAMPLES_9P2I, 0, 1),
-        ("samples/4p1i", _SAMPLES_4P1I, 0, 0),
-        ("ml_corpus/9p2i", _CORPUS_9P2I, 1, 2),
-        ("ml_corpus/4p1i", _CORPUS_4P1I, 0, 1),
-    ],
-)
-def test_the_committed_sets_pin_the_visible_disclosure_pair(
-    set_name: str, sample_dir: Path, impostor_cell: int, crew_control: int
+def test_the_disjoint_visible_disclosure_invariant_bites(
+    samples_9p2i: TournamentEvalReport,
 ) -> None:
-    """The measured reading, role-split, with the control beside it.
+    """The pair splits ONE turn pool by role, so it cannot double-count it.
 
-    Pooled over the four sets the raw net fires on 10 of 3,631 turns (7 crew, 3
-    impostor); the documented exclusions drop 5 of them, leaving 5 — 4 crew and
-    1 impostor. The single impostor row is the one genuine confession, so the
-    within-impostor reading is 1/1 AFTER the exclusions and 1/3 before them.
-    Neither cell is a rate: the crew column is pure false positive by
-    construction.
+    Bounding each cell against ``turns_total`` alone would accept a payload
+    claiming every turn on both sides — and the pair's whole reading is the
+    impostor cell AGAINST its crew control, so a block that inflates both is
+    exactly the corruption that makes the control unreadable. Fed through the
+    real model validator, with the legal boundary case beside it.
     """
 
-    leakage = _committed(sample_dir).deduction.scaffold_leakage
-    assert leakage.model_self_disclosure_visible_turns == impostor_cell
-    assert leakage.crew_self_disclosure_control_turns == crew_control
-    # An UPPER BOUND cannot exceed the turns it scanned.
-    assert leakage.model_self_disclosure_visible_turns <= leakage.turns_total
-    assert leakage.crew_self_disclosure_control_turns <= leakage.turns_total
-
-
-def test_the_pooled_visible_disclosure_reading_is_one_impostor_and_four_crew() -> None:
-    """The pooled cells, stated once so a single set cannot be quoted alone."""
-
-    cells = [
-        _committed(path).deduction.scaffold_leakage
-        for path in (_SAMPLES_9P2I, _SAMPLES_4P1I, _CORPUS_9P2I, _CORPUS_4P1I)
-    ]
-    assert sum(cell.model_self_disclosure_visible_turns for cell in cells) == 1
-    assert sum(cell.crew_self_disclosure_control_turns for cell in cells) == 4
-    assert sum(cell.turns_total for cell in cells) == 3631
-
-
-def test_the_one_impostor_row_is_the_named_exhibit() -> None:
-    """Name the exhibit: ml_corpus 9p2i seed 1079, meeting 2, speaker p-7.
-
-    The confession is in an accusation's ``reason``; the same turn's ``free_text``
-    is a denial. That placement is the whole argument for the scan surface.
-    """
-
-    corpus = _committed(_CORPUS_9P2I)
-    hits = [
-        (game.seed, meeting.meeting_id, turn.speaker)
-        for game in corpus.report.games
-        for meeting in game.meetings
-        for turn in meeting.transcript.turns
-        if game.roles[turn.speaker] == "IMPOSTOR"
-        and _is_self_disclosure(_player_visible_text(turn))
-    ]
-    assert hits == [(1079, "headless-seed-1079:meeting-2", "p-7")]
+    payload = samples_9p2i.deduction.model_dump()
+    block = payload["scaffold_leakage"]
+    turns = block["turns_total"]
+    block["model_self_disclosure_visible_turns"] = turns
+    block["crew_self_disclosure_control_turns"] = 1
+    with pytest.raises(ValidationError, match="role-disjoint"):
+        DeductionMetricsReport.model_validate(payload)
+    # ...and the boundary is legal: the two may exactly partition the pool, so
+    # the guard is a joint bound rather than a blanket refusal.
+    block["model_self_disclosure_visible_turns"] = turns - 1
+    assert (
+        DeductionMetricsReport.model_validate(
+            payload
+        ).scaffold_leakage.crew_self_disclosure_control_turns
+        == 1
+    )

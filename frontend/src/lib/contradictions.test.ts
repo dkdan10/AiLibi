@@ -191,8 +191,8 @@ function asNumber(value: unknown, where: string): number {
  *
  * The census only needs the discriminant — it is the whole input to the segment
  * choice — but the shipped helper takes a real union member, so building real
- * ones keeps the walk free of casts. Typed as a `Record` over the union so a
- * seventh observation type is a compile error here rather than a fixture row the
+ * ones keeps the walk free of casts. Typed as a `Record` over the union so an
+ * eighth observation type is a compile error here rather than a fixture row the
  * reader quietly drops; the payload fields are filler and never read.
  */
 const OBSERVATION_BY_TYPE: Record<ObservationClaimView["type"], ObservationClaimView> = {
@@ -200,6 +200,7 @@ const OBSERVATION_BY_TYPE: Record<ObservationClaimView["type"], ObservationClaim
   completed_task: { type: "completed_task", tick: 0, task_id: "task", room: "room" },
   found_body: { type: "found_body", tick: 0, body_of: "p-0", room: "room" },
   saw_vent: { type: "saw_vent", tick: 0, subject: "p-0", room: "room" },
+  saw_kill: { type: "saw_kill", tick: 0, subject: "p-0", room: "room" },
   whereabouts: { type: "whereabouts", tick: 0, room: "room" },
   saw_move: { type: "saw_move", tick: 0, subject: "p-0", from_room: "a", to_room: "b" },
 };

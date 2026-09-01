@@ -278,6 +278,13 @@ export interface SawVentObservationView {
   room: string;
 }
 
+export interface SawKillObservationView {
+  type: "saw_kill";
+  tick: number;
+  subject: string;
+  room: string;
+}
+
 export interface WhereaboutsClaimView {
   type: "whereabouts";
   tick: number;
@@ -761,7 +768,7 @@ export interface WitnessedSupplyCells {
 }
 
 export type TickEventView = KillEventView | ReportBodyEventView | SabotageEventView | TaskCompletedEventView | MeetingTriggeredEventView | VentEventView;
-export type ObservationClaimView = SawPlayerView | CompletedTaskObsView | FoundBodyObsView | SawVentObservationView | WhereaboutsClaimView | SawMoveObservationView;
+export type ObservationClaimView = SawPlayerView | CompletedTaskObsView | FoundBodyObsView | SawVentObservationView | SawKillObservationView | WhereaboutsClaimView | SawMoveObservationView;
 export type StatementClaimView = AlibiClaimView | AccusationClaimView | CorroborationClaimView;
 
 export interface GameReport {

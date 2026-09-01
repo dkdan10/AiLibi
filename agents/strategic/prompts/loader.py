@@ -121,7 +121,14 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Final, Literal
 
-from jinja2 import Environment, FileSystemLoader, StrictUndefined, TemplateNotFound
+from jinja2 import (
+    Environment,
+    FileSystemLoader,
+    StrictUndefined,
+    TemplateNotFound,
+    TemplateSyntaxError,
+)
+from jinja2.meta import find_undeclared_variables
 
 from llm.provider import ENV_PROVIDER, PROVIDER_FAKE
 from meetings.constants import ENV_TESTIMONY_SHAPES, testimony_shapes_enabled
@@ -1055,12 +1062,19 @@ def _require_testimony_shapes_bodies(
     set_name: str,
     templates: tuple[str, ...],
 ) -> None:
-    """Refuse a lever-ON bundle whose bodies carry no guarded block.
+    """Refuse a lever-ON bundle whose bodies never READ the arm's variable.
 
     The arm RE-BODIES the set's own templates, so "no arm here" is a MISSING
     BODY -- a real defect that must surface at construction rather than as a
     silently unguarded render. The message names the body, never a sibling
     lever: an all-ON slate is exactly what the adopting record runs.
+
+    The test is the PARSED template, not a substring of its source: jinja
+    reports the variables a body actually reads, so a name that appears only in
+    a ``{# comment #}`` or in literal prose does not satisfy it. A body that
+    reads the variable is a body whose render can differ between the two lever
+    states; whether it differs by exactly the intended lines is the diff gate's
+    job (``tests/agents/test_bespoke_prompt_sets.py``), not this one's.
 
     Checked against the templates THIS arm re-bodies, not against whatever
     filename a sibling swapped in. An arm that swaps a variant FILE serves a
@@ -1068,14 +1082,21 @@ def _require_testimony_shapes_bodies(
     reach it -- the known gap pinned in
     ``tests/meetings/test_prompt_byte_golden.py``, which belongs to the swapping
     arm and is not a defect in this set's bodies.
+
+    An unparseable or absent body is the same refusal as an unguarded one:
+    either way the set cannot serve the arm, and the message says which file.
     """
 
     for name in templates:
-        source = environment.loader.get_source(environment, name)[0]  # type: ignore[union-attr]
-        if _TESTIMONY_SHAPES_GUARD not in source:
+        try:
+            source = environment.loader.get_source(environment, name)[0]  # type: ignore[union-attr]
+            reads = find_undeclared_variables(environment.parse(source))
+        except (TemplateNotFound, TemplateSyntaxError, AttributeError):
+            reads = set()
+        if _TESTIMONY_SHAPES_GUARD not in reads:
             raise ValueError(
-                f"Prompt set {set_name!r} template {name!r} carries no "
-                f"{_TESTIMONY_SHAPES_GUARD!r} block; the "
+                f"Prompt set {set_name!r} template {name!r} never reads "
+                f"{_TESTIMONY_SHAPES_GUARD!r}; the "
                 f"{ENV_TESTIMONY_SHAPES} lever is only authored for the "
                 "'qwen3_6_27b' set — unset the lever or select a set whose "
                 "bodies carry the block"
