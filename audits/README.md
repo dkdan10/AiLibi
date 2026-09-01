@@ -286,3 +286,9 @@ directory's `README.md`, which carries the tallies and the proposed routing.
   gates, the recorded substrate stamp, the re-record log, the published
   instrument cells before and after, and what the record does not discharge.
   It decides nothing — no bars, no verdict — and it mints baseline 8.
+- [audit-phase-21-counterfactual.md](audit-phase-21-counterfactual.md) — the
+  offline counterfactual: the three Wave-2 levers priced over the baseline-8
+  bytes at `$0`, with the injustice ledger recomputed as the shared population,
+  exposure printed as an upper bound, the cells no offline instrument can reach
+  named with their reasons, and tripwire candidates offered to the
+  pre-registration. It writes no bar, no target and no decision rule.
