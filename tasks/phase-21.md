@@ -6223,6 +6223,25 @@ Wave-2 keys with `impostor_roll_call` OFF, matching 21.22 and 21.24; the script 
 fourth key. (R8) No forced-touch block: this task registers nothing and widens no Protocol; the
 two index files ride the standing 20.34 index amendment.
 
+**Merge-reality record (2026-09-01, orchestrator-ratified at the #418 merge):** the memo landed
+in the ruled shape — render-diff ON legs, kwarg toggling for the two non-env levers, the
+byte-golden walk imported by ruling — at 28.7 s wall over the four sets, $0, no environment
+mutation. The OFF-column equality proof held on every cell (record §5.1 exactly; the reporter
+cells verbatim from the instrument; the four corroboration cells FIRST PINNED here per R4;
+RECORDED-OFF == RECONSTRUCTED-OFF with `disagreeing_cells: []` on all four sets). The zero
+tripwires reproduce with denominators (fabricated vents 0/512; ballots gaining a reporter block
+0/3,631; saw_kill 0/0 both columns); the 100%-fill cells land (alibi map 1,016/4,173 →
+4,173/4,173 pooled). The one cross-lever interaction is named: the ballot carries +61,750 bytes
+under the joint slate that neither lever produces alone. Four deviations ratified: the contract's
+schemas note named the wrong three lever-gated kinds (HEAD gates `saw_kill`/`whereabouts`/
+`saw_move`); the confession precision reads 1 of 5 on the SHIPPED pair, not the contract's 1/10
+raw framing; the ingest row cell ships as a labelled upper bound (the roster gate needs episodic
+stores the walk does not expose); and the render-budget cell is lever-invariant offline —
+published as a FINDING with two added-prose cells beside it rather than papered over. Codex:
+three rounds, ten findings, all fixed (among them the ambient guard widened to every live toggle
+and the whole-memo drift join); nothing moved a published cell, nothing escalated. 21.22 — the
+owner's pre-registration — now prices from this memo's tables.
+
 **Ready-to-paste prompt:** `agent_prompts/task-21-21-counterfactual.md`
 
 ### Task 21.22 — THE PRE-REGISTRATION (owner): the successor bars, the reporter cells and the decision rule for the injustice record
