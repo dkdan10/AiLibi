@@ -956,15 +956,40 @@ mandate no longer claims to outrank a vent and states the must-carry duty the un
 | `two-ON (less testimony_shapes)` | `accusation_round` | 2,959 | 2,715 | 11,005 | 1,026,970 |
 | `two-ON (less testimony_shapes)` | `vote_ballot` | 3,631 | 3,614 | 26,522 | 4,982,723 |
 
-**§6.2's one cross-lever interaction is now zero.** The +61,750 ballot bytes that neither
-lever produced alone were the adopted clause re-wording under the joint slate; the clause no
-longer forks on `testimony_shapes` at all, because the arm cannot tell a silent voice from
-one whose sighting the record refused from one who said they watched the kill, and the
-ledger can. The ballot's added bytes are now identical on the `corroboration_discipline`,
-`two-ON` and `all-three-ON` legs, so added prose is additive in BOTH lines and bytes on
-every seam. §9's candidate tripwire built on that interaction has lost its premise; it was
-never adopted as one (`audits/audit-phase-21-preregistration.md` ratifies T1-T7, none of
-them this), and the successor reading is the flat additivity just stated.
+**The slate's one cross-lever interaction is now zero.** The +61,750 ballot bytes that
+neither lever produced alone were the adopted clause re-wording under the joint slate; the
+clause no longer forks on `testimony_shapes` at all, because the arm cannot tell a silent
+voice from one whose sighting the record refused from one who said they watched the kill,
+and the ledger can. The ballot's added bytes are now identical on the
+`corroboration_discipline`, `two-ON` and `all-three-ON` legs, so added prose is additive in
+BOTH lines and bytes on every seam. Two recorded sentences say otherwise and stay as
+published; each is quoted here with its erratum.
+
+§6.2, as published:
+
+> …but it carries **+61,750 bytes under the joint slate that neither lever produces
+> alone**, because `testimony_shapes` re-words the corroboration block's adopted clause —
+> "named them without an account their own record bears out" in place of "named them
+> without adding anything they saw". It is the only cross-lever render interaction in the
+> slate, it is confined to one clause, and it exists only when both levers are ON.
+
+*Erratum 2026-09-02, after PR #420:* the adopted clause no longer forks on the slate, so
+the ballot's added bytes are identical on the `corroboration_discipline`, `two-ON` and
+`all-three-ON` legs and the cross-lever interaction is 0 bytes. The ballot's added lines
+were already additive and remain so.
+
+§8.4's first prediction row, as published:
+
+> | added prose is additive in LINES on every seam and the only cross-lever interaction is
+> the ballot's adopted-clause re-wording (+61,750 bytes) | a byte delta on any other seam
+> that neither lever produces alone | the smoke's first ON seed |
+
+*Erratum 2026-09-02, after PR #420:* the interaction is now zero by construction. The row's
+FALSIFIER — "a byte delta on any other seam that neither lever produces alone" — is
+unchanged and is still the criterion the smoke reads.
+
+No tripwire moves with either: `audits/audit-phase-21-preregistration.md` ratifies T1-T7
+and none of them is this row, and §9's seven candidates name no cross-lever cell.
 
 Recomputed, the §6.2 cost table reads 620 + 11,005 = 11,625 / 7,262 = 1.60 for the reporter
 leg, 26,522 / 7,262 = 3.65 for corroboration, 1,344 + 4,046 = 5,390 / 7,262 = 0.74 for

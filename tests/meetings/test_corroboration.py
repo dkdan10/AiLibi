@@ -1275,7 +1275,7 @@ class TestRender:
             "A contradiction above names them — read it there, in its own class."
             in (flagged)
         )
-        block = flagged.split("<testimony_sources>")[1].split("</testimony_sources>")[0]
+        block = _block(flagged)
         assert "conflict" not in block
 
     def test_the_band_sentence_restates_the_ladder_verbatim(self) -> None:
@@ -1333,9 +1333,7 @@ class TestRender:
         rendered = _render(
             ledger=_ledger(_RENDER_TRANSCRIPT, sighting_records=_RENDER_RECORDS)
         )
-        block = rendered.split("<testimony_sources>")[1].split("</testimony_sources>")[
-            0
-        ]
+        block = _block(rendered)
         for banned in (
             "Task ",
             "audits/",
@@ -1402,9 +1400,7 @@ class TestRender:
             ),
         )
         rendered = _render(ledger=_ledger(transcript))
-        block = rendered.split("<testimony_sources>")[1].split("</testimony_sources>")[
-            0
-        ]
+        block = _block(rendered)
         assert "0 accounts" in block
         assert "Two statements put" in block
         # Scoped to THIS block: the ``<map>`` card below it has said "Two
