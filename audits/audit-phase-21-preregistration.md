@@ -888,7 +888,7 @@ are recorded on the PR and in Task 21.22's merge-reality record.**
 
 | date | what changed | why | ratification vehicle |
 |---|---|---|---|
-| 2026-09-02 | §8.1's **T5** disposition cell: "UNREAD until 21.23 publishes the role split (§9.1)" now names the §9.1 tripwire-reader contract as the publisher, and records that the contract has merged and the tripwire is READ, naming `T-9a` / `T-9b` as its cells. No bar, no cell, no population and no predicate moves | the cell contradicted §8.1's own note and §9.1, both amended before the §10 merge to route the reader to a contract that lands BEFORE 21.23 — whose contract puts every code path out of scope, so 21.23 could not have published it. T7's cell named no task and needed no edit | this PR, self-merged on the owner's delegation of 2026-09-02 recorded on PR #419, under this section's convention (**the merge is the re-ratification**) |
+| 2026-09-02 | §8.1's **T5** disposition cell: "UNREAD until 21.23 publishes the role split (§9.1)" now names the §9.1 tripwire-reader contract as the publisher, and records that the contract has merged and the tripwire is READ, naming `T-9a` / `T-9b` as its cells. No bar, no cell, no population and no predicate moves | the cell contradicted §8.1's own note and §9.1, both amended before the §10 merge to route the reader to a contract that lands BEFORE 21.23 — whose contract puts every code path out of scope, so 21.23 could not have published it. T7's cell named no task and needed no edit | PR #421 (the §9.1 contract itself), self-merged on the owner's delegation of 2026-09-02 recorded on PR #419, under this section's convention (**the merge is the re-ratification**) |
 
 *(The log was empty at the §10 ratification; every row above landed after it.)*
 
