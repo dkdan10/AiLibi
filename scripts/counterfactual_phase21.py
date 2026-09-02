@@ -594,7 +594,7 @@ class _RendererCache:
         if set_name not in self._opening_block:
             off = self.off(set_name)
             plain = _probe_crew_opening(off)
-            markers = _block_markers(
+            held, runs = _block_markers(
                 _added_lines(
                     plain,
                     _probe_crew_opening(off, reporter_context=_REPORTER_BINDING_A),
@@ -604,18 +604,21 @@ class _RendererCache:
                     _probe_crew_opening(off, reporter_context=_REPORTER_BINDING_B),
                 ),
             )
-            if not markers:
+            # The block is a sentence and nothing else, so its RUNS are what
+            # says the sentence arrived. A wrapper it might one day grow would
+            # be welcome as extra evidence and is never enough on its own.
+            if not runs:
                 raise SystemExit(
-                    f"{set_name}: a crew OPENING gains no line this reader can "
-                    "identify when a reporter context is supplied, so R-13 has "
-                    "no discovery-account block to count. Either the block left "
+                    f"{set_name}: a crew OPENING gains no template-owned text "
+                    "when a reporter context is supplied, so R-13 has no "
+                    "discovery-account block to count. Either the block left "
                     "the template, or it now renders a different number of "
                     "lines under two bindings of its own fields — a reader that "
                     "returned 0 here would report every opening as missing the "
                     "block and STOP a correct record. This is a DEFECT IN THIS "
                     "SCRIPT's reader, not a finding about the bytes"
                 )
-            self._opening_block[set_name] = markers
+            self._opening_block[set_name] = held | runs
         return self._opening_block[set_name]
 
     def reporter_statement_markers(
@@ -623,26 +626,25 @@ class _RendererCache:
     ) -> frozenset[str]:
         """R-14's block: what a non-reporter SPEECH turn gains from a context.
 
-        The block's own opening and closing tags — the whole lines two bindings
-        of its one interpolated sentence leave standing. Those tags ARE the
-        block here: they and the sentence share one guard and render together,
-        so unlike the ballot's source-count block this one cannot arrive as an
-        empty frame. Its sentence contributes no marker on purpose: the id it
-        interpolates sits mid-word, so the longest run two bindings share runs
-        past the template's own text and into the value.
+        A tagged frame around one interpolated sentence, and BOTH halves are
+        required. The tags alone would be satisfied by a frame whose sentence
+        had been deleted or guarded away — the prompt would then be credited
+        with reasoning nobody was shown, and T2 would pass on it. The sentence's
+        own half is the template-owned text between its two interpolations,
+        which is why the probe ids agree on no character.
         """
 
         key = (set_name, turn_kind)
         if key not in self._statement_block:
             off = self.off(set_name)
             plain = _probe_crew_statement(off, turn_kind=turn_kind)
-            markers = _invariant_lines(
+            held, runs = _block_markers(
                 _added_lines(
                     plain,
                     _probe_crew_statement(
                         off,
                         turn_kind=turn_kind,
-                        reporter_context=_REPORTER_BINDING_A,
+                        reporter_context=_STATEMENT_BINDING_A,
                     ),
                 ),
                 _added_lines(
@@ -650,20 +652,23 @@ class _RendererCache:
                     _probe_crew_statement(
                         off,
                         turn_kind=turn_kind,
-                        reporter_context=_REPORTER_BINDING_C,
+                        reporter_context=_STATEMENT_BINDING_B,
                     ),
                 ),
             )
-            if not markers:
+            if not held or not runs:
                 raise SystemExit(
-                    f"{set_name}: a crew {turn_kind!r} turn gains no line this "
-                    "reader can identify when a reporter context is supplied, "
-                    "so R-14 has no base-rate block to count. A reader that "
-                    "returned 0 here would report every speech turn as missing "
-                    "the block and STOP a correct record. This is a DEFECT IN "
-                    "THIS SCRIPT's reader, not a finding about the bytes"
+                    f"{set_name}: a crew {turn_kind!r} turn gains no base-rate "
+                    "block this reader can identify by BOTH its frame and its "
+                    "sentence, so R-14 has nothing to count. A frame with no "
+                    "sentence inside it is not the block, and crediting one "
+                    "would let T2 pass over prompts that carry no reasoning at "
+                    "all; a reader that returned 0 instead would report every "
+                    "speech turn as missing the block and STOP a correct "
+                    "record. This is a DEFECT IN THIS SCRIPT's reader, not a "
+                    "finding about the bytes"
                 )
-            self._statement_block[key] = markers
+            self._statement_block[key] = held | runs
         return self._statement_block[key]
 
     def corroboration_markers(self, set_name: str) -> frozenset[str]:
@@ -744,8 +749,11 @@ class _RendererCache:
         """The lever block this prompt class carries, or ``None`` if it has none.
 
         ``impostor_report`` is the ``None``: Task 21.18's overlay left that body
-        untouched, so it has no reporter site to gain, and asking for one would
-        refuse a template that is correct as shipped.
+        untouched, so it has no reporter site, and asking this cache to derive
+        one would refuse a template that is correct as shipped. The prompt stays
+        in R-13's denominator and can never enter its numerator, which is how an
+        impostor-filed report reads — a body-report opening that did not gain
+        the block, and therefore a STOP.
         """
 
         if capture.kind == _KIND_CREWMATE_REPORT:
@@ -931,14 +939,22 @@ def _added_lines(off: str, on: str) -> tuple[str, ...]:
 #: marker that short would match anything.
 _MIN_TEMPLATE_RUN: Final[int] = 16
 
-#: Two bindings of the reporter block's own fields, and a third for the sibling
-#: surface. A marker set derived from ONE binding would carry that binding's
-#: player id and stop matching the moment a different seat reported.
+#: Two bindings of each reporter block's own fields, one pair per surface. A
+#: marker set derived from ONE binding would carry that binding's player id and
+#: stop matching the moment a different seat reported.
+#:
+#: The statement pair's two ids agree on no character, first or last. That is
+#: what keeps a shared run from growing out of the template and into the value:
+#: the block interpolates its id mid-sentence, so two ids sharing a prefix would
+#: leave that prefix inside a run this reader calls template-owned. The opening
+#: pair needs no such care — its two bindings diverge on whether the clause
+#: renders at all, so every run there ends at the template's own punctuation.
 _REPORTER_BINDING_A: Final[ReporterContext] = ReporterContext(reporter_id="p-2", tick=1)
 _REPORTER_BINDING_B: Final[ReporterContext] = ReporterContext(
     reporter_id="p-7", victim_id="p-4", room="ADMIN", tick=3
 )
-_REPORTER_BINDING_C: Final[ReporterContext] = ReporterContext(reporter_id="p-7")
+_STATEMENT_BINDING_A: Final[ReporterContext] = ReporterContext(reporter_id="p-2")
+_STATEMENT_BINDING_B: Final[ReporterContext] = ReporterContext(reporter_id="q-7")
 
 
 def _support(
@@ -1048,48 +1064,46 @@ def _shared_runs(left: str, right: str) -> tuple[str, ...]:
     )
 
 
-def _invariant_lines(first: Sequence[str], second: Sequence[str]) -> frozenset[str]:
-    """The whole lines two bindings of one block render identically.
+def _block_markers(
+    first: Sequence[str], second: Sequence[str]
+) -> tuple[frozenset[str], frozenset[str]]:
+    """One block, split into ``(the lines that hold still, the text inside them)``.
 
-    The identification for a block whose fixed lines are its own delimiters: a
-    tag is template text under any binding, while the sentence between them
-    interpolates an id mid-word and has no run that stops at the template's
-    edge. An EMPTY result is the caller's refusal to make.
-    """
+    A line both bindings render identically is template-owned and is kept whole:
+    a delimiter, or a sentence the block interpolates nothing into. A line they
+    disagree on is interpolated, so what is kept is its fixed runs. The two are
+    returned APART because what a block must be identified by depends on its
+    shape, and no caller may settle for its wrapper alone — a frame with its
+    sentence guarded away would otherwise still read as a complete gain, and the
+    prompt would be credited with reasoning nobody was shown.
 
-    return frozenset(_nonblank(first)) & frozenset(_nonblank(second))
+    Every marker must occur verbatim in the shipped template, which is what the
+    reader's own test asserts: a run that straddled an interpolation boundary
+    would carry a rendered value and stop matching the moment a different one
+    appeared. The probe bindings are chosen so it cannot — they agree on no
+    character next to an interpolation.
 
-
-def _block_markers(first: Sequence[str], second: Sequence[str]) -> frozenset[str]:
-    """One block's own text, as two bindings of its variable fields leave it.
-
-    A line both bindings render identically is template-owned and is kept whole.
-    A line they disagree on is interpolated, so what is kept is its fixed runs.
-    Every marker this returns must occur verbatim in the shipped template, which
-    is what the reader's own test asserts: a run that straddled an interpolation
-    boundary would carry a rendered value and stop matching the moment a
-    different one appeared.
-
-    An EMPTY result is the caller's refusal to make, and three things produce
-    it: a block that added nothing, a block whose two bindings render different
-    numbers of lines (this reader pairs them positionally, and a block it cannot
-    pair is one it cannot identify), and an interpolated line with no fixed run
-    long enough to belong to the template.
+    BOTH halves come back empty when the block cannot be identified at all: it
+    added nothing, its two bindings render different numbers of lines (this
+    reader pairs them positionally, and a block it cannot pair is one it cannot
+    identify), or an interpolated line holds no run long enough to be template
+    text.
     """
 
     left, right = _nonblank(first), _nonblank(second)
     if not left or len(left) != len(right):
-        return frozenset()
-    markers: set[str] = set()
+        return frozenset(), frozenset()
+    held: set[str] = set()
+    runs: set[str] = set()
     for one, other in zip(left, right):
         if one == other:
-            markers.add(one)
+            held.add(one)
             continue
-        runs = _shared_runs(one, other)
-        if not runs:
-            return frozenset()
-        markers.update(runs)
-    return frozenset(markers)
+        found = _shared_runs(one, other)
+        if not found:
+            return frozenset(), frozenset()
+        runs.update(found)
+    return frozenset(held), frozenset(runs)
 
 
 def _block_gain(
@@ -2201,16 +2215,17 @@ class _SetWalk:
     ballots: _BallotCensus = field(default_factory=_BallotCensus)
     testimony: _TestimonyCensus = field(default_factory=_TestimonyCensus)
     corroboration: Counter[str] = field(default_factory=Counter)
-    #: Openings a body report's own reporter spoke, through the CREWMATE body.
-    #: R-13's denominator, and crewmate-only on purpose: ``impostor_report.j2``
-    #: carries no reporter site at all — Task 21.18's overlay left that body
-    #: unchanged — so an impostor opening has no block to gain and a reader that
-    #: put one in this denominator would report a correct render as a shortfall.
-    #: The premise holds on the committed bytes and is not assumed here: the
-    #: impostor policy must not file a report (agents/tactical/impostor_policy.py:53)
-    #: and ``tests/eval/test_reporter_justice.py`` pins
-    #: ``reporter_impostor_meetings == 0``. The count below is what makes the
-    #: exclusion visible rather than silent if that ever stops being true.
+    #: Openings a body report's own reporter spoke, through EITHER report body.
+    #: T2's registered predicate is over every observed body-report opening, so
+    #: this denominator is every one of them and the reader narrows it nowhere.
+    #: The second count is diagnostic: ``impostor_report.j2`` carries no reporter
+    #: site at all (Task 21.18's overlay left that body unchanged), so an
+    #: impostor-filed report cannot gain the block and correctly takes R-13 off
+    #: 100% — the count is what names WHY, instead of leaving a bare 619/620.
+    #: The committed bytes hold none: the impostor policy must not file a report
+    #: (agents/tactical/impostor_policy.py:53) and
+    #: ``tests/eval/test_reporter_justice.py`` pins ``reporter_impostor_meetings
+    #: == 0``.
     reporter_openings: int = 0
     reporter_openings_by_an_impostor: int = 0
     non_reporter_speech_turns: int = 0
@@ -2536,7 +2551,7 @@ def _walk(
                 walk.reporter_openings += sum(
                     1
                     for capture in captures
-                    if capture.kind == _KIND_CREWMATE_REPORT
+                    if capture.kind in (_KIND_CREWMATE_REPORT, _KIND_IMPOSTOR_REPORT)
                     and capture.agent_id == reporter.reporter_id
                 )
                 walk.reporter_openings_by_an_impostor += sum(
@@ -2886,11 +2901,16 @@ def _reporter_rows(
             population="prompt",
             note=(
                 "a RENDER cell, read as a COMPLETE gain of the block's own "
-                "lines: the smoke's first ON seed can falsify it at n=1"
+                "lines: the smoke's first ON seed can falsify it at n=1. The "
+                "denominator is every observed body-report opening, an "
+                "impostor-filed one included — that body carries no reporter "
+                "site, so such an opening cannot gain the block and correctly "
+                "takes this cell off 100%"
             ),
             reconstructed_off=_pair(0, walk.reporter_openings),
             on=_pair(
-                walk.legs["reporter_reasoning"].block_gained[_KIND_CREWMATE_REPORT],
+                walk.legs["reporter_reasoning"].block_gained[_KIND_CREWMATE_REPORT]
+                + walk.legs["reporter_reasoning"].block_gained[_KIND_IMPOSTOR_REPORT],
                 walk.reporter_openings,
             ),
             byte_diff=_pair(
@@ -3616,16 +3636,25 @@ def build_on_recording_rows(walk: _SetWalk) -> list[OnRow]:
             note=(
                 "read backwards from the record: an opening GAINED the block "
                 "exactly when withdrawing the reporter argument takes EVERY one "
-                "of the block's own lines off the page. The byte-diff count the "
-                "cell used to publish is printed beside it, informationally"
+                "of the block's own lines off the page. The denominator is "
+                "every observed body-report opening, an impostor-filed one "
+                "included: that body carries no reporter site, so such an "
+                "opening cannot gain the block and is a STOP rather than an "
+                "exclusion. The byte-diff count the cell used to publish is "
+                "printed beside it, informationally"
             ),
             rule=_RULE_FULL,
             recorded_on=_pair(
-                _body_block_gained(less_reporter, _KIND_CREWMATE_REPORT), openings
+                _body_block_gained(
+                    less_reporter, _KIND_CREWMATE_REPORT, _KIND_IMPOSTOR_REPORT
+                ),
+                openings,
             ),
             reconstructed_on=_pair(
                 less_reporter.block_gained_vs_reconstruction[_KIND_CREWMATE_REPORT]
-                - less_reporter.block_gained_in_emergency[_KIND_CREWMATE_REPORT],
+                + less_reporter.block_gained_vs_reconstruction[_KIND_IMPOSTOR_REPORT]
+                - less_reporter.block_gained_in_emergency[_KIND_CREWMATE_REPORT]
+                - less_reporter.block_gained_in_emergency[_KIND_IMPOSTOR_REPORT],
                 openings,
             ),
             off=_pair(0, openings),

@@ -2668,20 +2668,82 @@ def test_a_block_that_renders_nothing_refuses_rather_than_reading_zero(
     assert cell in str(excinfo.value)
 
 
+def test_a_frame_with_its_sentence_gone_refuses_rather_than_crediting_the_tags(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """R-14's body half, perturbed independently of its tags.
+
+    The failure a tags-only identification would let through: delete the block's
+    one sentence and leave its wrapper standing, and every speech prompt still
+    renders an empty frame. A reader satisfied by the tags would credit all of
+    them as complete gains and let T2 PASS over prompts carrying none of the
+    reasoning the lever exists to put there. The derivation must refuse.
+    """
+
+    scratch = tmp_path / "prompts"
+    shutil.copytree(_PROMPTS_ROOT, scratch)
+    target = scratch / _PROMPT_SET / "accusation_round.j2"
+    body = target.read_text(encoding="utf-8")
+    (sentence,) = [
+        line
+        for line in body.splitlines()
+        if line.startswith("`{{ reporter_context.reporter_id }}`")
+    ]
+    hollow = body.replace(sentence + "\n", "", 1)
+    assert hollow != body
+    target.write_text(hollow, encoding="utf-8")
+    monkeypatch.setattr(
+        cf,
+        "build_prompt_renderers",
+        functools.partial(build_prompt_renderers, root=scratch),
+    )
+    # The wrapper still renders — this is a hollow frame, not an absent block.
+    rendered = build_prompt_renderers(_PROMPT_SET, env={}, root=scratch).statement(
+        agent_id="p-1",
+        rendered_memory="(memory)",
+        transcript=MeetingTranscript(turns=()),
+        contradictions=(),
+        prior_turn=None,
+        turn_kind="reply",
+        living_ids=("p-2", "p-3"),
+        reporter_context=_REPORTER_CONTEXT,
+    )
+    plain = build_prompt_renderers(_PROMPT_SET, env={}, root=scratch).statement(
+        agent_id="p-1",
+        rendered_memory="(memory)",
+        transcript=MeetingTranscript(turns=()),
+        contradictions=(),
+        prior_turn=None,
+        turn_kind="reply",
+        living_ids=("p-2", "p-3"),
+        reporter_context=None,
+    )
+    assert rendered != plain, "the hollow frame renders nothing at all"
+    with pytest.raises(SystemExit) as excinfo:
+        _markers_for("R-14")
+    assert "R-14" in str(excinfo.value)
+
+
 def test_the_marker_pairing_refuses_a_block_it_cannot_line_up() -> None:
     """The two ways a derivation returns nothing, at the function that decides."""
 
+    empty: tuple[frozenset[str], frozenset[str]] = (frozenset(), frozenset())
     # Different numbers of lines: the pairing is positional, so a block that
     # renders an extra line under one binding cannot be identified at all.
-    assert cf._block_markers(("one line", "two lines"), ("one line",)) == frozenset()
+    assert cf._block_markers(("one line", "two lines"), ("one line",)) == empty
     # An interpolated line with no template-length run: `p-2` and `p-7` share
     # `p-`, and a marker that short would match anything.
-    assert cf._block_markers(("p-2",), ("p-7",)) == frozenset()
-    assert cf._invariant_lines(("`p-2` spoke",), ("`p-7` spoke",)) == frozenset()
-    # ...and the unperturbed pairing still reads, so neither gate is vacuous.
+    assert cf._block_markers(("p-2",), ("p-7",)) == empty
+    # ...and the two halves come back APART, so a caller can require the one its
+    # block's shape needs. A frame with nothing inside it yields no runs.
     shared = "a sentence long enough to be template text"
-    assert cf._block_markers((shared,), (shared,)) == frozenset({shared})
-    assert cf._invariant_lines((shared,), (shared,)) == frozenset({shared})
+    assert cf._block_markers((shared,), (shared,)) == (frozenset({shared}), frozenset())
+    held, runs = cf._block_markers(
+        (shared, f"`p-2` {shared} and more of it here"),
+        (shared, f"`q-7` {shared} and more of it here"),
+    )
+    assert held == frozenset({shared})
+    assert runs and all(run in f"`x` {shared} and more of it here" for run in runs)
 
 
 def test_the_block_level_column_is_the_marker_scan_not_the_byte_count(
@@ -2732,9 +2794,11 @@ def test_the_block_level_cells_equal_the_byte_cells_on_the_committed_bytes(
     sets = full_run["sets"]
     assert isinstance(sets, dict)
     for block in sets.values():
-        # No committed set holds an impostor-filed report, so R-13's
-        # crewmate-only denominator excludes nothing.
+        # R-13's denominator is every observed body-report opening. No committed
+        # set holds an impostor-filed one — that body carries no reporter site,
+        # so one would take the cell off 100% rather than leave the population.
         assert block["reporter_openings_by_an_impostor"] == 0
+        assert block["reporter_openings"] > 0
         rows = {row["cell"]: row for row in block["rows"]}
         for cell, _template, _guard in _BLOCK_CELLS:
             assert rows[cell]["on"] == rows[cell]["byte_diff"], cell
