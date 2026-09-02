@@ -32,6 +32,15 @@ first two agree:
   meeting inputs with the lever's argument supplied. The process environment is
   never written and no replay is read twice.
 
+Most ON cells count a prompt whose bytes MOVE. The three that name a specific
+block -- ``R-13``, ``R-14`` and ``C-9`` -- count a COMPLETE gain of that block's
+own lines instead, derived from the shipped template at runtime the way T5's and
+T3's markers are: a whitespace-only guarded branch or an unrelated
+lever-conditioned line moves bytes without putting any of the block on the page,
+and a cell that credited one would report a prompt as having gained a block it
+never received. The byte-diff count travels beside each of them as an
+informational column; no verdict is taken from it.
+
 The ON column is a RENDER DIFF and is never fed back into the manager. The
 reconstruction's recorded-response stub keys on EXACT prompt bytes, so a
 lever-ON prompt would miss every recorded response and fail-soft the whole
@@ -91,6 +100,7 @@ refuses a disagreement. It never writes one.
 from __future__ import annotations
 
 import argparse
+import difflib
 import json
 import re
 import sys
@@ -138,6 +148,7 @@ from eval.solvability import SolvabilityReport, compute_solvability_report  # no
 from eval.validity import resolve_roster_knobs, roles_by_seed, seeds_on_disk  # noqa: E402
 from meetings.corroboration import (  # noqa: E402
     MeetingTestimonyLedger,
+    TestimonySupport,
     build_testimony_ledger,
 )
 from meetings.render_contract import ReporterContext  # noqa: E402
@@ -440,6 +451,9 @@ class _RendererCache:
         self._on: dict[str, PromptRenderers] = {}
         self._markers: dict[tuple[str, str], frozenset[str]] = {}
         self._reporter_markers: dict[tuple[str, str], frozenset[str]] = {}
+        self._opening_block: dict[str, frozenset[str]] = {}
+        self._statement_block: dict[tuple[str, str], frozenset[str]] = {}
+        self._ballot_block: dict[str, frozenset[str]] = {}
 
     def off(self, set_name: str) -> PromptRenderers:
         if set_name not in self._off:
@@ -529,8 +543,8 @@ class _RendererCache:
             ballot_lines = frozenset(_probe_ballot(self.off(set_name)).splitlines())
             context = ReporterContext(reporter_id="p-2", tick=1)
             # BOTH reporter-owned speech surfaces. The arm renders a
-            # discovery-account block on the opening and a `<who_reported>` block
-            # on every other speaker's statement; either reaching the ballot is
+            # discovery-account block on the opening and a base-rate block on
+            # every other speaker's statement; either reaching the ballot is
             # the seam T3 forbids, so a marker set drawn from one surface would
             # let the other leak through reading zero.
             markers = frozenset(
@@ -566,6 +580,241 @@ class _RendererCache:
                 )
             self._reporter_markers[key] = markers
         return self._reporter_markers[key]
+
+    def reporter_opening_markers(self, set_name: str) -> frozenset[str]:
+        """R-13's block: what a crew OPENING gains from a reporter context.
+
+        The block is ONE line whose middle clause is interpolated, so no whole
+        line survives two bindings and the identification is that line's
+        template-owned runs. Derived from the shipped template for the reason
+        :meth:`elicitation_markers` gives — a copied sentence stops matching in
+        silence and reads every opening as having lost the block.
+
+        The line has text on BOTH sides of what it interpolates — it says who
+        reported, optionally which body, and then what to do about it — and both
+        sides are required. Half of it is still a sixteen-character run, so a
+        reader that took any surviving run would credit an opening that names
+        the report and no longer asks for the account.
+        """
+
+        if set_name not in self._opening_block:
+            off = self.off(set_name)
+            plain = _probe_crew_opening(off)
+            first = _added_lines(
+                plain, _probe_crew_opening(off, reporter_context=_REPORTER_BINDING_A)
+            )
+            second = _added_lines(
+                plain, _probe_crew_opening(off, reporter_context=_REPORTER_BINDING_B)
+            )
+            held, runs = _block_markers(first, second)
+            # The block is a sentence and nothing else, so its RUNS are what
+            # says the sentence arrived. A wrapper it might one day grow would
+            # be welcome as extra evidence and is never enough on its own.
+            if not runs:
+                raise SystemExit(
+                    f"{set_name}: a crew OPENING gains no template-owned text "
+                    "when a reporter context is supplied, so R-13 has no "
+                    "discovery-account block to count. Either the block left "
+                    "the template, or it now renders a different number of "
+                    "lines under two bindings of its own fields — a reader that "
+                    "returned 0 here would report every opening as missing the "
+                    "block and STOP a correct record. This is a DEFECT IN THIS "
+                    "SCRIPT's reader, not a finding about the bytes"
+                )
+            if not _straddles_its_interpolation(first, second):
+                raise SystemExit(
+                    f"{set_name}: the discovery-account block's own text now "
+                    "sits on ONE side of the clause it interpolates, so half of "
+                    "it has gone: the line either names the report without "
+                    "asking for the account, or asks without naming it. R-13 "
+                    "would credit every opening for a block that no longer asks "
+                    "the reporter where they were, when they came upon the body "
+                    "and what they saw on the way, and T2 would pass on it. "
+                    "This is a DEFECT IN THIS SCRIPT's reader against a changed "
+                    "template, not a finding about the bytes"
+                )
+            self._opening_block[set_name] = held | runs
+        return self._opening_block[set_name]
+
+    def reporter_statement_markers(
+        self, set_name: str, turn_kind: str
+    ) -> frozenset[str]:
+        """R-14's block: what a non-reporter SPEECH turn gains from a context.
+
+        A tagged frame around one interpolated sentence, and BOTH halves are
+        required. The tags alone would be satisfied by a frame whose sentence
+        had been deleted or guarded away — the prompt would then be credited
+        with reasoning nobody was shown, and T2 would pass on it. The sentence's
+        own half is the template-owned text between its two interpolations,
+        which is why the probe ids agree on no character.
+        """
+
+        key = (set_name, turn_kind)
+        if key not in self._statement_block:
+            off = self.off(set_name)
+            plain = _probe_crew_statement(off, turn_kind=turn_kind)
+            held, runs = _block_markers(
+                _added_lines(
+                    plain,
+                    _probe_crew_statement(
+                        off,
+                        turn_kind=turn_kind,
+                        reporter_context=_STATEMENT_BINDING_A,
+                    ),
+                ),
+                _added_lines(
+                    plain,
+                    _probe_crew_statement(
+                        off,
+                        turn_kind=turn_kind,
+                        reporter_context=_STATEMENT_BINDING_B,
+                    ),
+                ),
+            )
+            if not held or not runs:
+                raise SystemExit(
+                    f"{set_name}: a crew {turn_kind!r} turn gains no base-rate "
+                    "block this reader can identify by BOTH its frame and its "
+                    "sentence, so R-14 has nothing to count. A frame with no "
+                    "sentence inside it is not the block, and crediting one "
+                    "would let T2 pass over prompts that carry no reasoning at "
+                    "all; a reader that returned 0 instead would report every "
+                    "speech turn as missing the block and STOP a correct "
+                    "record. This is a DEFECT IN THIS SCRIPT's reader, not a "
+                    "finding about the bytes"
+                )
+            self._statement_block[key] = held | runs
+        return self._statement_block[key]
+
+    def corroboration_markers(self, set_name: str) -> frozenset[str]:
+        """C-9's block: what a BALLOT gains from a testimony ledger.
+
+        Two halves, because neither reads the block on its own.
+
+        The FRAME is what three different ledgers leave unchanged AND what still
+        renders when a role-proof contradiction does. That second probe is
+        load-bearing: the block's closing calibration sentence is itself guarded
+        on ``not (contradiction_flags and flag_groups.proof)``, so a marker set
+        that kept it would measure the proof suppression rather than the block
+        and count only the ballots that carry no proof flag.
+
+        The ROW half is the template-owned runs of the per-subject row line,
+        taken across ledgers that differ in every field it interpolates. It is
+        what stops an empty frame being credited: the frame renders only around
+        a body, and a reader that asked for the frame alone could not say so.
+
+        The COUNTS the block is named for cannot themselves be a marker: the
+        row states them as ``N voice(s), M account(s)``, and the noun follows
+        the number, so no run of template text sits on every row — requiring the
+        plural form would drop every single-source row and move a published
+        cell. They are checked at derivation instead, and the check is exact: a
+        count is the first thing the row varies by, so two rows differing in
+        THAT count alone must diverge before any text this reader identifies
+        them by. Take the clause away and they first diverge at the originating
+        turn instead, which puts a marker inside their shared prefix.
+
+        Both counts are probed SEPARATELY, against partners sharing this row's
+        subject and originating turn. Either clause can be deleted while the
+        other still moves the divergence early, so one probe would accept a
+        block that had stopped reporting half of what it promises.
+        """
+
+        if set_name not in self._ballot_block:
+            off = self.off(set_name)
+            plain = _probe_ballot(off)
+            proofed = _probe_ballot(off, contradiction_flags=_ROLE_PROOF_FLAGS)
+            one = _nonblank(
+                _added_lines(
+                    plain, _probe_ballot(off, testimony_ledger=_LEDGER_ONE_ACCOUNT)
+                )
+            )
+            two = _nonblank(
+                _added_lines(
+                    plain, _probe_ballot(off, testimony_ledger=_LEDGER_TWO_ACCOUNTS)
+                )
+            )
+            under_proof = _nonblank(
+                _added_lines(
+                    proofed,
+                    _probe_ballot(
+                        off,
+                        testimony_ledger=_LEDGER_ONE_ACCOUNT,
+                        contradiction_flags=_ROLE_PROOF_FLAGS,
+                    ),
+                )
+            )
+            none = _nonblank(
+                _added_lines(
+                    plain, _probe_ballot(off, testimony_ledger=_LEDGER_NO_ACCOUNT)
+                )
+            )
+            ledger_invariant = frozenset(one) & frozenset(two)
+            frame = ledger_invariant & frozenset(under_proof)
+            bodies = [
+                [line for line in lines if line not in ledger_invariant]
+                for lines in (one, two, none)
+            ]
+            row_runs: frozenset[str] = frozenset()
+            if all(bodies):
+                row_runs = frozenset(
+                    run
+                    for run in _shared_runs(bodies[0][0], bodies[1][0])
+                    if run in bodies[2][0]
+                )
+            if not frame or not row_runs:
+                raise SystemExit(
+                    f"{set_name}: the ballot's source-count block cannot be "
+                    "identified — its unconditional frame or its row line's "
+                    "template-owned text is missing, so C-9 has no block to "
+                    "count. A frame-only reader would credit a block rendered "
+                    "around no body, and a reader that returned 0 here would "
+                    "report every ballot as missing the block and STOP a "
+                    "correct record. This is a DEFECT IN THIS SCRIPT's reader, "
+                    "not a finding about the bytes"
+                )
+            for count, partner in (
+                ("first-hand accounts", _LEDGER_SAME_VOICES_TWO_ACCOUNTS),
+                ("voices", _LEDGER_THREE_VOICES_ONE_ACCOUNT),
+            ):
+                against = _nonblank(
+                    _added_lines(plain, _probe_ballot(off, testimony_ledger=partner))
+                )
+                rows = [line for line in against if line not in ledger_invariant]
+                shared = _common_prefix(bodies[0][0], rows[0]) if rows else bodies[0][0]
+                if any(run in shared for run in row_runs):
+                    raise SystemExit(
+                        f"{set_name}: two ledger rows differing ONLY in their "
+                        f"{count} render the same text up to and past the "
+                        "block's own markers, so the row no longer states how "
+                        f"many {count} stand behind the name. C-9 would credit "
+                        "every ballot for a source-count block that reports one "
+                        "of its two counts or neither, and T6 would pass on it. "
+                        "This is a DEFECT IN THIS SCRIPT's reader against a "
+                        "changed template, not a finding about the bytes"
+                    )
+            self._ballot_block[set_name] = frame | row_runs
+        return self._ballot_block[set_name]
+
+    def block_markers(self, set_name: str, capture: _Capture) -> frozenset[str] | None:
+        """The lever block this prompt class carries, or ``None`` if it has none.
+
+        ``impostor_report`` is the ``None``: Task 21.18's overlay left that body
+        untouched, so it has no reporter site, and asking this cache to derive
+        one would refuse a template that is correct as shipped. The prompt stays
+        in R-13's denominator and can never enter its numerator, which is how an
+        impostor-filed report reads — a body-report opening that did not gain
+        the block, and therefore a STOP.
+        """
+
+        if capture.kind == _KIND_CREWMATE_REPORT:
+            return self.reporter_opening_markers(set_name)
+        if capture.kind == _KIND_ACCUSATION_ROUND:
+            return self.reporter_statement_markers(
+                set_name, str(capture.kwargs.get("turn_kind"))
+            )
+        if capture.kind == _KIND_VOTE_BALLOT:
+            return self.corroboration_markers(set_name)
+        return None
 
     def capturing(
         self,
@@ -650,23 +899,33 @@ def _probe_crew_opening(
     )
 
 
-def _probe_ballot(renderers: PromptRenderers) -> str:
+def _probe_ballot(
+    renderers: PromptRenderers,
+    *,
+    testimony_ledger: MeetingTestimonyLedger | None = None,
+    contradiction_flags: Sequence[ContradictionRef] = (),
+) -> str:
     """One minimal ballot render, WITH the unconditional reporter annotation.
 
     The annotation is threaded on every body-report ballot whatever the levers
     do, so a marker set that did not subtract these lines would read the Task-15.5
     exculpation as the reporter ARM's block.
+
+    ``testimony_ledger`` and ``contradiction_flags`` are what
+    :meth:`_RendererCache.corroboration_markers` varies; both default to the
+    values that make this the plain ballot every other caller wants.
     """
 
     return renderers.vote(
         voter_id="p-1",
         rendered_memory="",
         transcript=MeetingTranscript(turns=()),
-        contradiction_flags=(),
+        contradiction_flags=tuple(contradiction_flags),
         suspicion_graph=(),
         candidate_targets=("p-2",),
         skip_confidence_threshold=0.5,
         reporter_id="p-2",
+        testimony_ledger=testimony_ledger,
     )
 
 
@@ -719,6 +978,282 @@ def _added_lines(off: str, on: str) -> tuple[str, ...]:
         else:
             added.append(line)
     return tuple(added)
+
+
+# --------------------------------------------------------------------------- #
+# The lever blocks, identified from the shipped templates.                     #
+# --------------------------------------------------------------------------- #
+
+#: The shortest run of shared characters that can belong to a template rather
+#: than to a value interpolated into it. Two player ids share ``p-``, and a
+#: marker that short would match anything.
+_MIN_TEMPLATE_RUN: Final[int] = 16
+
+#: Two bindings of each reporter block's own fields, one pair per surface. A
+#: marker set derived from ONE binding would carry that binding's player id and
+#: stop matching the moment a different seat reported.
+#:
+#: The statement pair's two ids agree on no character, first or last. That is
+#: what keeps a shared run from growing out of the template and into the value:
+#: the block interpolates its id mid-sentence, so two ids sharing a prefix would
+#: leave that prefix inside a run this reader calls template-owned. The opening
+#: pair needs no such care — its two bindings diverge on whether the clause
+#: renders at all, so every run there ends at the template's own punctuation.
+_REPORTER_BINDING_A: Final[ReporterContext] = ReporterContext(reporter_id="p-2", tick=1)
+_REPORTER_BINDING_B: Final[ReporterContext] = ReporterContext(
+    reporter_id="p-7", victim_id="p-4", room="ADMIN", tick=3
+)
+_STATEMENT_BINDING_A: Final[ReporterContext] = ReporterContext(reporter_id="p-2")
+_STATEMENT_BINDING_B: Final[ReporterContext] = ReporterContext(reporter_id="q-7")
+
+
+def _support(
+    *,
+    subject: PlayerId,
+    turn: str,
+    places: tuple[tuple[PlayerId, tuple[tuple[str, str, int], ...]], ...] = (),
+    silent: tuple[PlayerId, ...] = (),
+    ungrounded: tuple[PlayerId, ...] = (),
+    kill: tuple[PlayerId, ...] = (),
+    flagged: bool = False,
+    opener_charge: str | None = None,
+    transits: tuple[tuple[str, str], ...] = (),
+) -> TestimonySupport:
+    return TestimonySupport(
+        subject=subject,
+        originating_turn_id=turn,
+        first_hand_places=places,
+        adopted_silent=silent,
+        adopted_spoke_ungrounded=ungrounded,
+        adopted_spoke_kill=kill,
+        flagged=flagged,
+        opener_charge_turn_id=opener_charge,
+        walkable_transits=transits,
+    )
+
+
+#: Three synthetic ledgers whose ROW LINES disagree in every field the template
+#: interpolates — the source counts, the originating turn, the described
+#: sightings, the adoption classes and the contradiction clause. What all three
+#: leave standing is the template's own text.
+_LEDGER_ONE_ACCOUNT: Final[MeetingTestimonyLedger] = MeetingTestimonyLedger(
+    rows=(
+        _support(
+            subject="p-2",
+            turn="t-1",
+            places=(("p-3", (("saw_move", "ADMIN", 4),)),),
+            silent=("p-4",),
+        ),
+    ),
+    opener="p-9",
+)
+_LEDGER_TWO_ACCOUNTS: Final[MeetingTestimonyLedger] = MeetingTestimonyLedger(
+    rows=(
+        _support(
+            subject="p-2",
+            turn="alpha:beta:9",
+            places=(
+                ("p-5", (("saw_vent", "CAFETERIA", 7),)),
+                ("p-6", (("saw_move", "MEDBAY", 2),)),
+            ),
+            ungrounded=("p-8",),
+            kill=("p-9",),
+            flagged=True,
+            opener_charge="t-3",
+            transits=(("ADMIN", "MEDBAY"),),
+        ),
+    ),
+    opener="p-2",
+)
+_LEDGER_NO_ACCOUNT: Final[MeetingTestimonyLedger] = MeetingTestimonyLedger(
+    rows=(_support(subject="p-2", turn="zz9", silent=("p-3", "p-4"), flagged=True),),
+    opener="p-9",
+)
+
+#: Two ledgers that move ONE source count each, against
+#: :data:`_LEDGER_ONE_ACCOUNT`'s two voices and one account. The row states both
+#: counts, and either can be deleted while the other still makes two rows
+#: diverge early — so each is probed on its own, against a partner that shares
+#: this row's subject and originating turn so the shared prefix really does run
+#: on when the clause goes.
+_LEDGER_SAME_VOICES_TWO_ACCOUNTS: Final[MeetingTestimonyLedger] = (
+    MeetingTestimonyLedger(
+        rows=(
+            _support(
+                subject="p-2",
+                turn="t-1",
+                places=(
+                    ("p-3", (("saw_move", "ADMIN", 4),)),
+                    ("p-4", (("saw_player", "MEDBAY", 6),)),
+                ),
+            ),
+        ),
+        opener="p-9",
+    )
+)
+_LEDGER_THREE_VOICES_ONE_ACCOUNT: Final[MeetingTestimonyLedger] = (
+    MeetingTestimonyLedger(
+        rows=(
+            _support(
+                subject="p-2",
+                turn="t-1",
+                places=(("p-3", (("saw_move", "ADMIN", 4),)),),
+                silent=("p-4", "p-5"),
+            ),
+        ),
+        opener="p-9",
+    )
+)
+
+#: One role-proof contradiction, for the probe that separates the block's
+#: unconditional frame from the closing sentence the proof branch suppresses.
+_ROLE_PROOF_FLAGS: Final[tuple[ContradictionRef, ...]] = (
+    ContradictionRef(
+        contradiction_id="c-1",
+        kind="vent_sighting",
+        event_a_id="o-1",
+        event_b_id="o-1",
+        subjects=("p-2",),
+        description="a watched vent",
+    ),
+)
+
+#: Which Wave-2 lever owns the block a prompt class carries. It is what decides,
+#: for any leg, which of two renders is the armed one — so one reader serves a
+#: lever-OFF record (the leg supplies the argument) and a lever-ON one (the leg
+#: strips it).
+_BLOCK_LEVER: Final[Mapping[str, str]] = MappingProxyType(
+    {
+        _KIND_CREWMATE_REPORT: "reporter_reasoning",
+        _KIND_ACCUSATION_ROUND: "reporter_reasoning",
+        _KIND_VOTE_BALLOT: "corroboration_discipline",
+    }
+)
+
+
+def _nonblank(lines: Sequence[str]) -> list[str]:
+    return [line for line in lines if line.strip()]
+
+
+def _common_prefix(left: str, right: str) -> str:
+    """How far two renderings of one line agree before they first differ."""
+
+    for index, (one, other) in enumerate(zip(left, right)):
+        if one != other:
+            return left[:index]
+    return left[: min(len(left), len(right))]
+
+
+def _straddles_its_interpolation(first: Sequence[str], second: Sequence[str]) -> bool:
+    """Whether a block's own text sits on BOTH sides of what it interpolates.
+
+    Half a sentence is still a sixteen-character run, so a block that kept only
+    its opening clause — or only its closing one — would still be identified by
+    a non-empty marker set and credited on every prompt. The two sides are told
+    apart without naming either: what two bindings share BEFORE they first
+    diverge is the text ahead of the interpolation, and a run that is not part
+    of that prefix is text behind it.
+    """
+
+    for one, other in zip(_nonblank(first), _nonblank(second)):
+        if one == other:
+            continue
+        shared = _common_prefix(one, other)
+        runs = _shared_runs(one, other)
+        if any(run in shared for run in runs) and any(
+            run not in shared for run in runs
+        ):
+            return True
+    return False
+
+
+def _shared_runs(left: str, right: str) -> tuple[str, ...]:
+    """The runs two renderings of ONE line share, template-length or longer.
+
+    The template-owned half of a line whose other half is interpolated.
+    """
+
+    matcher = difflib.SequenceMatcher(None, left, right, autojunk=False)
+    return tuple(
+        left[block.a : block.a + block.size]
+        for block in matcher.get_matching_blocks()
+        if block.size >= _MIN_TEMPLATE_RUN
+    )
+
+
+def _block_markers(
+    first: Sequence[str], second: Sequence[str]
+) -> tuple[frozenset[str], frozenset[str]]:
+    """One block, split into ``(the lines that hold still, the text inside them)``.
+
+    A line both bindings render identically is template-owned and is kept whole:
+    a delimiter, or a sentence the block interpolates nothing into. A line they
+    disagree on is interpolated, so what is kept is its fixed runs. The two are
+    returned APART because what a block must be identified by depends on its
+    shape, and no caller may settle for its wrapper alone — a frame with its
+    sentence guarded away would otherwise still read as a complete gain, and the
+    prompt would be credited with reasoning nobody was shown.
+
+    Every marker must occur verbatim in the shipped template, which is what the
+    reader's own test asserts: a run that straddled an interpolation boundary
+    would carry a rendered value and stop matching the moment a different one
+    appeared. The probe bindings are chosen so it cannot — they agree on no
+    character next to an interpolation.
+
+    BOTH halves come back empty when the block cannot be identified at all: it
+    added nothing, its two bindings render different numbers of lines (this
+    reader pairs them positionally, and a block it cannot pair is one it cannot
+    identify), or an interpolated line holds no run long enough to be template
+    text.
+    """
+
+    left, right = _nonblank(first), _nonblank(second)
+    if not left or len(left) != len(right):
+        return frozenset(), frozenset()
+    held: set[str] = set()
+    runs: set[str] = set()
+    for one, other in zip(left, right):
+        if one == other:
+            held.add(one)
+            continue
+        found = _shared_runs(one, other)
+        if not found:
+            return frozenset(), frozenset()
+        runs.update(found)
+    return frozenset(held), frozenset(runs)
+
+
+def _block_gain(
+    *,
+    capture: _Capture,
+    markers: frozenset[str] | None,
+    levers: frozenset[str],
+    reference_levers: frozenset[str],
+    rendered: str,
+    reference: str,
+) -> bool:
+    """Whether the armed side of this pair carries the WHOLE of the block.
+
+    A COMPLETE gain, and a gain rather than a presence: every one of the block's
+    markers must occur more often in the render that carries the lever than in
+    the render that does not. That is what tells the block apart from a
+    whitespace-only guarded branch or an unrelated lever-conditioned line, both
+    of which move bytes while putting none of the block on the page — and from a
+    sentence a speaker quoted into the transcript, which stands in both renders.
+
+    A leg and its reference on the SAME side of the block's own lever have no
+    gain to read and count nothing.
+    """
+
+    if not markers:
+        return False
+    lever = _BLOCK_LEVER[capture.kind]
+    if (lever in levers) == (lever in reference_levers):
+        return False
+    armed, withdrawn = (
+        (rendered, reference) if lever in levers else (reference, rendered)
+    )
+    return all(armed.count(marker) > withdrawn.count(marker) for marker in markers)
 
 
 def elicitation_lines_gained(
@@ -927,6 +1462,15 @@ class _LegTallies:
     #: counts cannot express it: an emergency prompt is outside their
     #: denominators, so a lever that reached one would move no cell at all.
     changed_in_emergency: Counter[str] = field(default_factory=Counter)
+    #: The same three counts read at BLOCK level: a prompt is counted only when
+    #: the render carrying the lever carries EVERY one of the block's own marker
+    #: lines and the render without it carries none of them. A byte difference is
+    #: exposure; a complete block gain is the block. The two are printed side by
+    #: side, and a divergence between them is a line in the output rather than a
+    #: verdict.
+    block_gained: Counter[str] = field(default_factory=Counter)
+    block_gained_vs_reconstruction: Counter[str] = field(default_factory=Counter)
+    block_gained_in_emergency: Counter[str] = field(default_factory=Counter)
     added_lines: Counter[str] = field(default_factory=Counter)
     added_bytes: Counter[str] = field(default_factory=Counter)
     meetings_touched: int = 0
@@ -1063,6 +1607,7 @@ def _fold_render_diff(
     roles: Mapping[PlayerId, Role],
     elicitation: _ElicitationCensus,
     recorded_label: str | None,
+    recorded_levers: frozenset[str],
     elicitation_legs: tuple[str, str],
     reporter_on_ballots: list[_Capture],
 ) -> None:
@@ -1072,6 +1617,9 @@ def _fold_render_diff(
     the walk already holds and never re-renders. On a lever-OFF recording that is
     the OFF leg; on a lever-ON one it is ``None``, because there the whole-slate
     leg is the fidelity check and a leg that returned the capture could not fail.
+
+    ``recorded_levers`` is the slate the RECORD carries, which is what tells the
+    block-level reader which side of each lever the recorded bytes sit on.
 
     ``elicitation_legs`` is the ``(without the arm, with the arm)`` pair T5's
     reader diffs — the arm is stripped on one side of the record or added on the
@@ -1112,6 +1660,17 @@ def _fold_render_diff(
                 leg.added_bytes[capture.kind] += len(prompt.encode("utf-8")) - len(
                     capture.recorded_prompt.encode("utf-8")
                 )
+            if _block_gain(
+                capture=capture,
+                markers=renderers.block_markers(meeting.set_name, capture),
+                levers=levers,
+                reference_levers=recorded_levers,
+                rendered=prompt,
+                reference=capture.recorded_prompt,
+            ):
+                leg.block_gained[capture.kind] += 1
+                if reporter.reporter_id is None:
+                    leg.block_gained_in_emergency[capture.kind] += 1
         if touched or label == recorded_label:
             leg.meetings_touched += 1
         on_prompts[label] = rendered_for_leg
@@ -1121,7 +1680,12 @@ def _fold_render_diff(
         # row prints both, so a mirror that has drifted from the manager shows up
         # as two disagreeing columns rather than as one confident number.
         _fold_against_reconstruction(
-            captures=captures, legs=legs, tallies=tallies, prompts=on_prompts
+            captures=captures,
+            legs=legs,
+            tallies=tallies,
+            prompts=on_prompts,
+            renderers=renderers,
+            set_name=meeting.set_name,
         )
     first_meeting = meeting.meeting_index == 0
     for label, _levers in legs:
@@ -1176,8 +1740,8 @@ def _template_owned_ballot_text(prompt: str, *, where: str) -> str:
 
     A ballot renders the meeting transcript, and a turn's ``free_text`` is
     whatever the model said. A crew agent who quoted the reporter instruction
-    back at the table -- or typed ``<who_reported>`` -- would otherwise put a
-    marker into every later ballot of that meeting without the arm having reached
+    back at the table -- or typed the block's own opening tag -- would otherwise
+    put a marker into every later ballot of that meeting without the arm reaching
     the ballot seam at all, and T3 would STOP a correct record on it. That is the
     same "a correct render read as a breach" failure §8.1 warns about for T5.
 
@@ -1219,17 +1783,35 @@ def _fold_against_reconstruction(
     legs: Sequence[tuple[str, frozenset[str]]],
     tallies: Mapping[str, _LegTallies],
     prompts: Mapping[str, Mapping[int, str]],
+    renderers: _RendererCache,
+    set_name: str,
 ) -> None:
-    """Count each leg's moved prompts against the whole-slate re-render."""
+    """Count each leg's moved prompts against the whole-slate re-render.
+
+    Both readings, so a lever-ON row's second column is the same measurement as
+    its first: the byte difference, and the complete gain of the block's own
+    lines. The baseline carries the whole slate, so it is the armed side of every
+    pair here.
+    """
 
     baseline = prompts[_SLATE_ALL_ON]
-    for label, _levers in legs:
+    whole = frozenset(WAVE_2_LEVERS)
+    for label, levers in legs:
         if label == _SLATE_ALL_ON:
             continue
         leg = tallies[label]
         for index, capture in enumerate(captures):
             if prompts[label][index] != baseline[index]:
                 leg.changed_vs_reconstruction[capture.kind] += 1
+            if _block_gain(
+                capture=capture,
+                markers=renderers.block_markers(set_name, capture),
+                levers=levers,
+                reference_levers=whole,
+                rendered=prompts[label][index],
+                reference=baseline[index],
+            ):
+                leg.block_gained_vs_reconstruction[capture.kind] += 1
 
 
 #: The leg pair T5's reader diffs on a lever-OFF recording: the record itself
@@ -1750,7 +2332,19 @@ class _SetWalk:
     ballots: _BallotCensus = field(default_factory=_BallotCensus)
     testimony: _TestimonyCensus = field(default_factory=_TestimonyCensus)
     corroboration: Counter[str] = field(default_factory=Counter)
+    #: Openings a body report's own reporter spoke, through EITHER report body.
+    #: T2's registered predicate is over every observed body-report opening, so
+    #: this denominator is every one of them and the reader narrows it nowhere.
+    #: The second count is diagnostic: ``impostor_report.j2`` carries no reporter
+    #: site at all (Task 21.18's overlay left that body unchanged), so an
+    #: impostor-filed report cannot gain the block and correctly takes R-13 off
+    #: 100% — the count is what names WHY, instead of leaving a bare 619/620.
+    #: The committed bytes hold none: the impostor policy must not file a report
+    #: (agents/tactical/impostor_policy.py:53) and
+    #: ``tests/eval/test_reporter_justice.py`` pins ``reporter_impostor_meetings
+    #: == 0``.
     reporter_openings: int = 0
+    reporter_openings_by_an_impostor: int = 0
     non_reporter_speech_turns: int = 0
     # T3, read INDEPENDENTLY of any render diff: recorded ballot prompts whose
     # bytes carry the reporter ARM's own block. The arm has no ballot argument to
@@ -2077,6 +2671,12 @@ def _walk(
                     if capture.kind in (_KIND_CREWMATE_REPORT, _KIND_IMPOSTOR_REPORT)
                     and capture.agent_id == reporter.reporter_id
                 )
+                walk.reporter_openings_by_an_impostor += sum(
+                    1
+                    for capture in captures
+                    if capture.kind == _KIND_IMPOSTOR_REPORT
+                    and capture.agent_id == reporter.reporter_id
+                )
                 walk.non_reporter_speech_turns += sum(
                     1
                     for capture in captures
@@ -2102,6 +2702,7 @@ def _walk(
                 roles=roles,
                 elicitation=walk.elicitation,
                 recorded_label=recorded_label,
+                recorded_levers=recorded_levers,
                 elicitation_legs=elicitation_legs,
                 reporter_on_ballots=reporter_on_ballots,
             )
@@ -2139,6 +2740,12 @@ class Row:
     ``recorded_off`` is a committed instrument's reading; ``reconstructed_off``
     the same cell folded from the reconstruction with the slate OFF; ``on`` the
     render diff. A row whose two OFF readings disagree prints no ON value.
+
+    ``byte_diff`` is an INFORMATIONAL fourth column, carried only by the rows
+    whose ON value is a complete BLOCK gain: the same cell counted by ANY byte
+    difference, which is what those rows used to publish. It is never a verdict
+    and nothing is judged against it — where the two disagree, the block-level
+    count is the reading and the divergence is a line in the output.
     """
 
     cell_id: str
@@ -2148,6 +2755,7 @@ class Row:
     recorded_off: tuple[int, int] | None = None
     reconstructed_off: tuple[int, int] | None = None
     on: tuple[int, int] | None = None
+    byte_diff: tuple[int, int] | None = None
     on_slate: str = _SLATE_ALL_ON
 
     @property
@@ -2183,6 +2791,7 @@ class Row:
                 list(self.reconstructed_off) if self.reconstructed_off else None
             ),
             "on": list(self.on) if self.on else None,
+            "byte_diff": list(self.byte_diff) if self.byte_diff else None,
         }
 
 
@@ -2407,9 +3016,21 @@ def _reporter_rows(
             cell_id="R-13",
             label="reporter openings gaining the discovery-account block",
             population="prompt",
-            note="a RENDER cell: the smoke's first ON seed can falsify it at n=1",
+            note=(
+                "a RENDER cell, read as a COMPLETE gain of the block's own "
+                "lines: the smoke's first ON seed can falsify it at n=1. The "
+                "denominator is every observed body-report opening, an "
+                "impostor-filed one included — that body carries no reporter "
+                "site, so such an opening cannot gain the block and correctly "
+                "takes this cell off 100%"
+            ),
             reconstructed_off=_pair(0, walk.reporter_openings),
             on=_pair(
+                walk.legs["reporter_reasoning"].block_gained[_KIND_CREWMATE_REPORT]
+                + walk.legs["reporter_reasoning"].block_gained[_KIND_IMPOSTOR_REPORT],
+                walk.reporter_openings,
+            ),
+            byte_diff=_pair(
                 walk.legs["reporter_reasoning"].changed[_KIND_CREWMATE_REPORT]
                 + walk.legs["reporter_reasoning"].changed[_KIND_IMPOSTOR_REPORT],
                 walk.reporter_openings,
@@ -2420,9 +3041,16 @@ def _reporter_rows(
             cell_id="R-14",
             label="non-reporter speech turns gaining the base-rate block",
             population="prompt",
-            note="a RENDER cell: per meeting and per prompt class, checkable on one seed",
+            note=(
+                "a RENDER cell, read as a COMPLETE gain of the block's own "
+                "lines: per meeting and per prompt class, checkable on one seed"
+            ),
             reconstructed_off=_pair(0, walk.non_reporter_speech_turns),
             on=_pair(
+                walk.legs["reporter_reasoning"].block_gained[_KIND_ACCUSATION_ROUND],
+                walk.non_reporter_speech_turns,
+            ),
+            byte_diff=_pair(
                 walk.legs["reporter_reasoning"].changed[_KIND_ACCUSATION_ROUND],
                 walk.non_reporter_speech_turns,
             ),
@@ -2545,9 +3173,16 @@ def _corroboration_rows(*, walk: _SetWalk, all_on: _LegTallies) -> list[Row]:
             cell_id="C-9",
             label="ballots gaining the source-count block",
             population="ballot",
-            note="a RENDER cell: falsifiable on the smoke's first ON seed",
+            note=(
+                "a RENDER cell, read as a COMPLETE gain of the block's own "
+                "frame and row text: falsifiable on the smoke's first ON seed"
+            ),
             reconstructed_off=_pair(0, all_on.rendered[_KIND_VOTE_BALLOT]),
             on=_pair(
+                walk.legs["corroboration_discipline"].block_gained[_KIND_VOTE_BALLOT],
+                all_on.rendered[_KIND_VOTE_BALLOT],
+            ),
+            byte_diff=_pair(
                 walk.legs["corroboration_discipline"].changed[_KIND_VOTE_BALLOT],
                 all_on.rendered[_KIND_VOTE_BALLOT],
             ),
@@ -2923,6 +3558,12 @@ class OnRow:
     ``caveat`` is what a reader must know before believing the verdict. It is set
     where the registered cell cannot fail by construction, so a PASS is not read
     as evidence the criterion was exercised.
+
+    ``byte_diff`` is an INFORMATIONAL column, carried only by the rows whose
+    reading is a complete BLOCK gain: the same cell counted by ANY byte
+    difference, which is what those rows used to publish. No verdict is taken
+    from it — where the two disagree, the block-level count is the reading and
+    the divergence is printed as its own line.
     """
 
     cell_id: str
@@ -2935,6 +3576,7 @@ class OnRow:
     recorded_on: tuple[int, int] | None = None
     reconstructed_on: tuple[int, int] | None = None
     off: tuple[int, int] | None = None
+    byte_diff: tuple[int, int] | None = None
     also_zero: tuple[str, int] | None = None
     #: A compound predicate's ORDERING clause, as ``(name, below, above)``.
     #: Printed whether it bites or not, so the operator sees the clause was read.
@@ -3037,6 +3679,7 @@ class OnRow:
                 list(self.reconstructed_on) if self.reconstructed_on else None
             ),
             "off": (list(self.off) if self.off else None) if self.agrees else None,
+            "byte_diff": list(self.byte_diff) if self.byte_diff else None,
         }
 
 
@@ -3049,6 +3692,14 @@ def _body_report_changed(leg: _LegTallies, *kinds: str) -> int:
     """
 
     return sum(leg.changed[kind] - leg.changed_in_emergency[kind] for kind in kinds)
+
+
+def _body_block_gained(leg: _LegTallies, *kinds: str) -> int:
+    """The same restriction over COMPLETE block gains rather than moved bytes."""
+
+    return sum(
+        leg.block_gained[kind] - leg.block_gained_in_emergency[kind] for kind in kinds
+    )
 
 
 def build_on_recording_rows(walk: _SetWalk) -> list[OnRow]:
@@ -3101,23 +3752,35 @@ def build_on_recording_rows(walk: _SetWalk) -> list[OnRow]:
             ),
             note=(
                 "read backwards from the record: an opening GAINED the block "
-                "exactly when withdrawing the reporter argument moves its bytes"
+                "exactly when withdrawing the reporter argument takes EVERY one "
+                "of the block's own lines off the page. The denominator is "
+                "every observed body-report opening, an impostor-filed one "
+                "included: that body carries no reporter site, so such an "
+                "opening cannot gain the block and is a STOP rather than an "
+                "exclusion. The byte-diff count the cell used to publish is "
+                "printed beside it, informationally"
             ),
             rule=_RULE_FULL,
             recorded_on=_pair(
-                _body_report_changed(
+                _body_block_gained(
                     less_reporter, _KIND_CREWMATE_REPORT, _KIND_IMPOSTOR_REPORT
                 ),
                 openings,
             ),
             reconstructed_on=_pair(
-                less_reporter.changed_vs_reconstruction[_KIND_CREWMATE_REPORT]
-                + less_reporter.changed_vs_reconstruction[_KIND_IMPOSTOR_REPORT]
-                - less_reporter.changed_in_emergency[_KIND_CREWMATE_REPORT]
-                - less_reporter.changed_in_emergency[_KIND_IMPOSTOR_REPORT],
+                less_reporter.block_gained_vs_reconstruction[_KIND_CREWMATE_REPORT]
+                + less_reporter.block_gained_vs_reconstruction[_KIND_IMPOSTOR_REPORT]
+                - less_reporter.block_gained_in_emergency[_KIND_CREWMATE_REPORT]
+                - less_reporter.block_gained_in_emergency[_KIND_IMPOSTOR_REPORT],
                 openings,
             ),
             off=_pair(0, openings),
+            byte_diff=_pair(
+                _body_report_changed(
+                    less_reporter, _KIND_CREWMATE_REPORT, _KIND_IMPOSTOR_REPORT
+                ),
+                openings,
+            ),
             also_zero=(
                 "emergency openings that gained one",
                 less_reporter.changed_in_emergency[_KIND_CREWMATE_REPORT]
@@ -3140,18 +3803,23 @@ def build_on_recording_rows(walk: _SetWalk) -> list[OnRow]:
                 "counted as failures. The predicate's THIRD clause is over that "
                 "excluded population and is read beside the share, because a "
                 "lever that reached an emergency meeting would otherwise move no "
-                "cell at all"
+                "cell at all — and it stays a BYTE reading, because a zero "
+                "clause about a population the lever must not touch is stricter "
+                "read that way: any moved byte trips it, block or not"
             ),
             rule=_RULE_FULL,
             recorded_on=_pair(
-                _body_report_changed(less_reporter, _KIND_ACCUSATION_ROUND), speech
+                _body_block_gained(less_reporter, _KIND_ACCUSATION_ROUND), speech
             ),
             reconstructed_on=_pair(
-                less_reporter.changed_vs_reconstruction[_KIND_ACCUSATION_ROUND]
-                - less_reporter.changed_in_emergency[_KIND_ACCUSATION_ROUND],
+                less_reporter.block_gained_vs_reconstruction[_KIND_ACCUSATION_ROUND]
+                - less_reporter.block_gained_in_emergency[_KIND_ACCUSATION_ROUND],
                 speech,
             ),
             off=_pair(0, speech),
+            byte_diff=_pair(
+                _body_report_changed(less_reporter, _KIND_ACCUSATION_ROUND), speech
+            ),
             also_zero=(
                 "emergency speech prompts that gained one",
                 less_reporter.changed_in_emergency[_KIND_ACCUSATION_ROUND],
@@ -3261,15 +3929,22 @@ def build_on_recording_rows(walk: _SetWalk) -> list[OnRow]:
             note=(
                 "the residue — meetings whose ledger holds no row for any of "
                 "that voter's candidate targets — is the stated explanation for "
-                "the gap and is context, not a second criterion"
+                "the gap and is context, not a second criterion. Read as a "
+                "COMPLETE gain of the block's unconditional frame AND its row "
+                "text, so a ballot that renders the frame around no body is not "
+                "counted; the block's closing sentence is separately guarded on "
+                "the proof branch and is deliberately not a marker"
             ),
             rule=_RULE_SHARE,
-            recorded_on=_pair(less_corroboration.changed[_KIND_VOTE_BALLOT], ballots),
+            recorded_on=_pair(
+                less_corroboration.block_gained[_KIND_VOTE_BALLOT], ballots
+            ),
             reconstructed_on=_pair(
-                less_corroboration.changed_vs_reconstruction[_KIND_VOTE_BALLOT],
+                less_corroboration.block_gained_vs_reconstruction[_KIND_VOTE_BALLOT],
                 ballots,
             ),
             off=_pair(0, ballots),
+            byte_diff=_pair(less_corroboration.changed[_KIND_VOTE_BALLOT], ballots),
         ),
         OnRow(
             cell_id="B-1m1",
@@ -3717,6 +4392,8 @@ def run(
             "body_report_meetings": walk.body_report_meetings,
             "ejections": walk.ejections,
             "innocent_ejections": walk.innocent_ejections,
+            "reporter_openings": walk.reporter_openings,
+            "reporter_openings_by_an_impostor": walk.reporter_openings_by_an_impostor,
             "elapsed_seconds": round(walk.elapsed, 2),
             "advisory": walk.innocent_ejections <= ADVISORY_INNOCENT_EJECTIONS,
             "rows": [row.payload() for row in rows],
@@ -3815,6 +4492,8 @@ def run_recording(
             "meetings": walk.meetings,
             "body_report_meetings": walk.body_report_meetings,
             "ejections": walk.ejections,
+            "reporter_openings": walk.reporter_openings,
+            "reporter_openings_by_an_impostor": walk.reporter_openings_by_an_impostor,
             "elapsed_seconds": round(walk.elapsed, 2),
             "rows": [row.payload() for row in rows],
             "stopped_cells": sorted(
@@ -3919,6 +4598,7 @@ class _PooledOnRows:
             recorded_on=_sum_pairs(seen.recorded_on, row.recorded_on),
             reconstructed_on=_sum_pairs(seen.reconstructed_on, row.reconstructed_on),
             off=_sum_pairs(seen.off, row.off),
+            byte_diff=_sum_pairs(seen.byte_diff, row.byte_diff),
             # The compound clause and the caveat travel with the cell. A pooled
             # row that dropped its second zero reading would print PASS over a
             # member that STOPped on exactly that clause, and one that dropped
@@ -3960,6 +4640,16 @@ def _sum_pairs(
     return (left[0] + right[0], left[1] + right[1])
 
 
+#: The columns a pooled row carries, in printing order. ``byte_diff`` is the
+#: informational one and is present only on the rows that publish it.
+_POOLED_COLUMNS: Final[tuple[str, ...]] = (
+    "recorded_off",
+    "reconstructed_off",
+    "on",
+    "byte_diff",
+)
+
+
 def _pooled_row(
     *,
     key: str,
@@ -3974,7 +4664,7 @@ def _pooled_row(
     """One pooled row, with the ON column withdrawn if any set disagreed."""
 
     columns: dict[str, list[int] | None] = {}
-    for column in ("recorded_off", "reconstructed_off", "on"):
+    for column in _POOLED_COLUMNS:
         if f"{key}|{column}|d" not in totals:
             columns[column] = None
             continue
@@ -3982,6 +4672,7 @@ def _pooled_row(
     withheld = cell_id in withdrawn
     if withheld:
         columns["on"] = None
+        columns["byte_diff"] = None
         note = (
             f"{note} — the pooled ON column is WITHDRAWN: at least one set's two "
             "OFF readings disagreed, and pooling the sets that did reproduce "
@@ -4025,6 +4716,7 @@ class _PooledRows:
             ("recorded_off", row.recorded_off),
             ("reconstructed_off", row.reconstructed_off),
             ("on", row.on),
+            ("byte_diff", row.byte_diff),
         ):
             if pair is None:
                 continue
@@ -4229,6 +4921,7 @@ def _withdraw_on_column(row: Row) -> Row:
         recorded_off=row.recorded_off,
         reconstructed_off=row.reconstructed_off,
         on=None,
+        byte_diff=None,
         on_slate=row.on_slate,
     )
 
@@ -4335,6 +5028,28 @@ _TRIPWIRE_HEADING: Final[str] = (
 )
 
 
+def _print_byte_diff(
+    row: Mapping[str, object], *, reading: object, indent: str, out: TextIO
+) -> None:
+    """The informational byte-diff column, printed beside a block-level reading.
+
+    Always printed where the row carries one, so the operator sees that both
+    readings were taken. A DIVERGENCE is worth a line and is not a verdict:
+    the block-level count is the reading, and a prompt the bytes credit without
+    the block is exposure the block-level cell deliberately does not count.
+    """
+
+    byte = row.get("byte_diff")
+    if byte is None:
+        return
+    verdict = "agrees with" if byte == reading else "DIVERGES from"
+    print(
+        f"{indent}byte-diff reading (informational): {_rate(byte)} — "
+        f"{verdict} the block-level count above",
+        file=out,
+    )
+
+
 def _print_row(row: Mapping[str, object], *, out: TextIO) -> None:
     mark = f" {ADVISORY_MARK}" if row.get("advisory") else ""
     print(
@@ -4344,6 +5059,7 @@ def _print_row(row: Mapping[str, object], *, out: TextIO) -> None:
         f"{_rate(row.get('on')):>24}{mark}",
         file=out,
     )
+    _print_byte_diff(row, reading=row.get("on"), indent="       ", out=out)
 
 
 def _print_table(
@@ -4454,6 +5170,7 @@ def _print_on_row(row: Mapping[str, object], *, out: TextIO) -> None:
         f"{_rate(reading)}{beside} → {row['verdict']}",
         file=out,
     )
+    _print_byte_diff(row, reading=reading, indent="       ", out=out)
     if row.get("caveat"):
         print(f"       ⚠ {row['caveat']}", file=out)
 
@@ -4535,6 +5252,14 @@ def _print_on_reading_rules(payload: Mapping[str, object], *, out: TextIO) -> No
         "withdrawn. It says what the slate put in front of a reader, never what "
         "the reader would then have done: a sentence removed from a prompt is "
         "not a vote that changes.",
+        "R-13, R-14 and C-9 count a COMPLETE gain of the block's own lines, "
+        "derived from the shipped template at runtime — not a byte difference, "
+        "which a whitespace-only guarded branch or an unrelated "
+        "lever-conditioned line also moves. The byte-diff count each cell used "
+        "to publish is printed beside it and is informational: no verdict is "
+        "taken from it. R-14's and R-13's emergency clause stays a BYTE "
+        "reading, because a zero clause over a population the lever must not "
+        "touch is stricter that way.",
         "A share predicate over an EMPTY population reads UNREAD rather than "
         "PASS. A one-sided count bar (T1, T3, T5's impostor half) needs no "
         "denominator and is judged at any n, which is why §8.1 states it as a "
@@ -4579,6 +5304,13 @@ def _print_reading_rules(payload: Mapping[str, object], *, out: TextIO) -> None:
         "P-1, P-2, R-8, R-9, the stated-confidence response to any anchoring "
         "rule, whether crew stop laundering witnessed kills into vent rows, and "
         "the win split carry NO ON column at all.",
+        "R-13, R-14 and C-9 count a COMPLETE gain of the block's own lines, "
+        "derived from the shipped template at runtime — not a byte difference, "
+        "which a whitespace-only guarded branch or an unrelated "
+        "lever-conditioned line also moves. The byte-diff count each cell used "
+        "to publish is printed beside it and is informational: no verdict is "
+        "taken from it, and a divergence between the two is a line rather than "
+        "a finding.",
         "The tripwire rows (T-9a, T-9b, B-1m1, P-1k, P-1ka) read predicates "
         "the pre-registration ratified and no cell of the table above can "
         "evaluate. T-9a/T-9b test for the ELICITATION BLOCK's own lines, not "
