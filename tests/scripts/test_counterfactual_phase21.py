@@ -47,6 +47,11 @@ _REPO_ROOT: Final[Path] = Path(__file__).resolve().parents[2]
 _MEMO: Final[Path] = _REPO_ROOT / "audits" / "audit-phase-21-counterfactual.md"
 _FAST_SET: Final[str] = "samples/4p1i"
 
+# A published table is never rewritten, so a figure that moves after publication
+# is re-derived in an appended errata block. Rows the errata republishes are the
+# authoritative pin; rows it does not are still pinned by the recorded table.
+_ERRATA_HEADING: Final[str] = "## Errata"
+
 # A lever the tree already graduated, used as the planted case for the
 # graduation half of the guard.
 _GRADUATED_LEVER: Final[str] = "reporter_exculpation"
@@ -473,6 +478,73 @@ def test_the_census_comparisons_bite_on_a_perturbed_memo(tmp_path: Path) -> None
     assert _memo_render_census(perturbed) != render
 
 
+def test_an_erratum_overrides_the_row_it_republishes() -> None:
+    # The fold, asserted on the memo as it stands rather than on a fixture: the
+    # recorded §4.4 ballot row and the errata's disagree, and the errata's is
+    # what the drift gate reads. A row no erratum republishes still comes from
+    # the recorded table, so an errata block pins what it names and nothing else.
+    text = _MEMO.read_text(encoding="utf-8")
+    record, errata = _split_errata(text)
+    assert errata, "the memo publishes an errata block; the fold below needs one"
+    recorded = _memo_render_census(record)
+    corrected = _memo_render_census(errata)
+    folded = _published_render_census(text)
+    ballot = ("corroboration_discipline", "vote_ballot")
+    assert recorded[ballot] != corrected[ballot]
+    assert folded[ballot] == corrected[ballot]
+    untouched = ("reporter_reasoning", "accusation_round")
+    assert folded[untouched] == recorded[untouched]
+
+
+def test_a_memo_with_no_errata_folds_to_the_recorded_tables() -> None:
+    # The "when present" half: strip the block and every parse is the record's,
+    # so the mechanism adds no behaviour to a memo that has never been amended.
+    record, _ = _split_errata(_MEMO.read_text(encoding="utf-8"))
+    assert _published_render_census(record) == _memo_render_census(record)
+    assert _published_tables(record) == _parse_tables(record)
+
+
+@pytest.mark.parametrize(
+    "planted",
+    [
+        (
+            "| `corroboration_discipline` | `vote_ballot` | 3,631 | 3,614 | 26,522 |"
+            " 5,676,313 |"
+        ),
+        "| B-3 | prose lines the slate ADDS, per rendered prompt | — | 0/7262 |"
+        " 43537/7262 |",
+        "| samples/9p2i | B-3 | — | 0/1738 | 10741/1738 |",
+    ],
+)
+def test_a_wrong_erratum_cannot_pass_the_drift_gate(planted: str) -> None:
+    # Craft rule 2 for the mechanism itself. The drift gate asserts the FOLDED
+    # parse equals a live run, so an erratum that misstates a figure has to move
+    # the fold — otherwise the errata block would be prose that pins nothing.
+    # One planted row per published shape: the six-column census, a pooled cell,
+    # a per-set cell.
+    text = _MEMO.read_text(encoding="utf-8")
+    assert text.count(planted) == 1, planted
+    bent = text.replace(planted, _bump_last_number(planted))
+    assert _published_parses(bent) != _published_parses(text)
+
+
+def _published_parses(text: str) -> tuple[Any, ...]:
+    """Everything the drift gate reads out of the memo, as one comparable value."""
+
+    per_set, pooled = _published_tables(text)
+    return (_published_render_census(text), per_set, pooled)
+
+
+def _bump_last_number(row: str) -> str:
+    """The row with its LAST integer moved by one — a one-digit drift."""
+
+    matches = list(re.finditer(r"\d[\d,]*", row))
+    assert matches, row
+    last = matches[-1]
+    moved = str(int(last.group(0).replace(",", "")) + 1)
+    return f"{row[: last.start()]}{moved}{row[last.end() :]}"
+
+
 def test_the_ledger_comparison_covers_the_recorded_tally(tmp_path: Path) -> None:
     # A row whose tags survive an edit to its vote tally is still a drifted row.
     text = _MEMO.read_text(encoding="utf-8")
@@ -566,7 +638,8 @@ def test_the_memo_table_equals_a_live_four_set_run() -> None:
     for cell, expected in cf.COMMITTED_CORROBORATION_CELLS.items():
         assert tuple(pins["measured"][cell]) == expected, cell
 
-    memo_per_set, memo_pooled = _memo_tables()
+    text = _MEMO.read_text(encoding="utf-8")
+    memo_per_set, memo_pooled = _published_tables(text)
     live_per_set, live_pooled = _run_tables(payload)
     assert memo_pooled == live_pooled
     assert memo_per_set == live_per_set
@@ -574,7 +647,6 @@ def test_the_memo_table_equals_a_live_four_set_run() -> None:
     # Every published census, whole: nothing exists only as unchecked prose.
     # Each comparison asserts the SIZE of the join first, so a memo that simply
     # stopped publishing a field could not pass by publishing fewer rows.
-    text = _MEMO.read_text(encoding="utf-8")
     ballots = payload["pooled_ballot_census"]
     assert isinstance(ballots, dict)
     memo_ballots, live_ballots = (
@@ -595,7 +667,10 @@ def test_the_memo_table_equals_a_live_four_set_run() -> None:
 
     render = payload["pooled_render_census"]
     assert isinstance(render, dict)
-    memo_render, live_render = _memo_render_census(text), _flatten_render_census(render)
+    memo_render, live_render = (
+        _published_render_census(text),
+        _flatten_render_census(render),
+    )
     assert len(memo_render) == len(live_render) > 0
     assert memo_render == live_render
 
@@ -642,6 +717,34 @@ def _memo_tables() -> tuple[
     dict[tuple[str, str], tuple[Any, ...]], dict[str, tuple[Any, ...]]
 ]:
     return _parse_tables(_MEMO.read_text(encoding="utf-8"))
+
+
+def _split_errata(text: str) -> tuple[str, str]:
+    """The memo as ``(record, errata)`` — the errata empty when there is none."""
+
+    head, marker, tail = text.partition(f"\n{_ERRATA_HEADING}")
+    return (head, f"{marker}{tail}" if marker else "")
+
+
+def _published_tables(
+    text: str,
+) -> tuple[dict[tuple[str, str], tuple[Any, ...]], dict[str, tuple[Any, ...]]]:
+    """Every cell as it now stands: the record, overridden row-by-row by errata."""
+
+    record, errata = _split_errata(text)
+    record_per_set, record_pooled = _parse_tables(record)
+    errata_per_set, errata_pooled = _parse_tables(errata)
+    return (
+        {**record_per_set, **errata_per_set},
+        {**record_pooled, **errata_pooled},
+    )
+
+
+def _published_render_census(text: str) -> dict[tuple[str, str], tuple[int, ...]]:
+    """The render census as it now stands, the same record-then-errata fold."""
+
+    record, errata = _split_errata(text)
+    return {**_memo_render_census(record), **_memo_render_census(errata)}
 
 
 def _parse_tables(

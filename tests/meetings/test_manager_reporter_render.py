@@ -21,7 +21,7 @@ rendered prompt.
 The SPEECH half -- the default-OFF ``reporter_reasoning`` lever -- lives here too,
 because it is the same finding on a second surface: the base rate the ballot has
 carried since 15.5 reaches the turn prompts, the reporter's own opening is asked
-for the discovery account, and a speaker whose own record places them at the body
+for the discovery account, and a speaker whose own record has them seeing the body
 is told so. Those cases drive the real ``_render_turn_prompt`` seam with the real
 ``qwen3_6_27b`` turn templates (the served set, the only one that renders the
 blocks), and the base-rate sentence is asserted against the BALLOT render rather
@@ -298,7 +298,7 @@ class TestReporterAnnotationTemplateBytes:
 
 _SERVED_SET = "qwen3_6_27b"
 _LEVER_ON = {ENV_REPORTER_REASONING: "1"}
-_CO_DISCOVERY_LINE = "Your own record places you at the body when it was reported."
+_CO_DISCOVERY_LINE = "Your own record shows you saw the body when it was reported."
 _DISCOVERY_ACCOUNT_OPENER = "You reported the body that opened this meeting"
 # The distinctive words of the BALLOT's exculpatory framing. Rule (c)'s line must
 # carry none of them: half the players holding a co-discovery row at the report
@@ -715,6 +715,20 @@ class TestReporterReasoningCoDiscovery:
         # packet's tick, one early for a player who saw it on the approach.
         assert _CO_DISCOVERY_LINE in _who_reported_block(prompts[("p-4", "reply")])
 
+    def test_the_line_claims_a_sighting_and_never_a_position(self) -> None:
+        # ``BodyDiscoveryRecord.room`` is the CORPSE's room, never the observer's,
+        # and an impostor perceives the adjacent room (engine/visibility.py) — so
+        # a speaker can hold this row from one room away. A line that read as a
+        # placement would put a false position on the table under the project's
+        # own name; this one states only what the record holds.
+        prompts = _turn_prompts(
+            trigger=_BODY_REPORT, env=_LEVER_ON, discoveries=self._ROWS
+        )
+        line = _who_reported_block(prompts[("p-3", "reply")]).splitlines()[-1]
+        assert line == _CO_DISCOVERY_LINE
+        for placement in ("places you", "at the body when", "you were at"):
+            assert placement not in line, placement
+
     def test_an_impostor_co_discoverer_gets_the_same_neutral_line(self) -> None:
         # The over-damping canary. Exculpatory framing on this surface would
         # print a defence of an impostor in over half the meetings it fires in,
@@ -741,7 +755,7 @@ class TestReporterReasoningCoDiscovery:
         # The perturbation for the assertion above: a line that DID carry the
         # ballot's framing must be caught by the same words.
         planted = (
-            "Your own record places you at the body; being first to the scene is "
+            "Your own record shows you saw the body; being first to the scene is "
             "not by itself evidence of guilt."
         )
         assert [word for word in _EXCULPATORY_WORDS if word in planted]
@@ -767,7 +781,7 @@ class TestReporterReasoningCoDiscovery:
         assert _CO_DISCOVERY_LINE in _who_reported_block(prompts[("p-3", "reply")])
         assert _CO_DISCOVERY_LINE not in _who_reported_block(prompts[("p-4", "reply")])
 
-    def test_two_corpses_in_the_window_still_place_the_speaker_at_the_body(
+    def test_two_corpses_in_the_window_still_credit_the_speaker_with_the_sighting(
         self,
     ) -> None:
         # The ambiguity above suppresses the concrete CLAUSE, not the plain fact:

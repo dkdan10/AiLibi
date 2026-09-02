@@ -95,7 +95,10 @@
    ``<testimony_sources>`` block states each accused candidate's voices, accounts,
    originating turn, answered-charge provenance and walkable placement pairs. It
    counts and names; it discounts nothing, and the tally is untouched. Guarded on
-   ``testimony_ledger`` — an absent ledger renders the previous bytes exactly.
+   ``testimony_ledger`` — an absent ledger renders the previous bytes exactly. Its
+   closing calibration line yields wherever the Proof paragraph renders, on the same
+   condition that paragraph itself renders on: two pricing instructions on one page
+   answer differently about a vent someone else watched, and Proof owns that class.
 
    Inputs (loader kwargs only): voter_id, rendered_memory, transcript,
    contradiction_flags, suspicion_graph, candidate_targets (optional),
@@ -192,17 +195,21 @@ Weak signals. The same kind of conflict, but an innocent reading already fits it
 {% if _sources %}
 
 <testimony_sources>
-Who actually saw something, name by name. A voice is anyone who named them tonight; an account is a voice who also described seeing them, with their own record bearing that description out. Both are evidence and agreement at this table is often right, so read the split and price it — do not discount either half.
+Who backed each name, and which of them saw it themselves. A voice is anyone who accused them tonight; an account is a voice who also described seeing them, with their own record bearing that description out. Someone who described seeing them but accused a different name, or who only backed another's charge, is not counted here — the evidence and transcript above carry what they said; a player nobody accused has no row. A sighting or a movement only places them somewhere, so a second such account corroborates a case only where what it describes bears on the death; a watched vent is the exception — it names an impostor outright, and the contradictions above are where it is read. Both are evidence and agreement at this table is often right, so read the split and price it — do not discount either half.
+{% set _kill_is_speakable = testimony_shapes is defined and testimony_shapes %}
 {% for row in _sources %}
-- {{ row.subject }}: {{ row.voices }} {% if row.voices == 1 %}voice{% else %}voices{% endif %}, {{ row.first_hand | length }} {% if row.first_hand | length == 1 %}account{% else %}accounts{% endif %} — it started at [{{ row.originating_turn_id }}]{% if row.first_hand %}; {{ row.first_hand | join(", ") }} described seeing them{% endif %}{% if row.adopted %}; {{ row.adopted | join(", ") }}{% if testimony_shapes is defined and testimony_shapes %} named them without an account their own record bears out{% else %} named them without adding anything they saw{% endif %}{% endif %}. {% if row.flagged %}The evidence above names them — read it there, in its own class.{% else %}Nothing in the evidence above names them.{% endif +%}
+{% set _ungrounded = row.adopted_spoke_ungrounded if _kill_is_speakable else ((row.adopted_spoke_ungrounded + row.adopted_spoke_kill) | sort) %}
+- {{ row.subject }}: {{ row.voices }} {% if row.voices == 1 %}voice{% else %}voices{% endif %}, {{ row.first_hand | length }} {% if row.first_hand | length == 1 %}account{% else %}accounts{% endif %} — it started at [{{ row.originating_turn_id }}]{% for speaker, places in row.first_hand_places %}; {{ speaker }} described seeing them ({% for kind, room, tick in places %}{% if kind == "saw_move" %}arriving in {% elif kind == "saw_vent" %}venting in {% endif %}{{ room }} at tick {{ tick }}{% if not loop.last %}, {% endif %}{% endfor %}){% endfor %}{% if row.adopted_silent %}; {{ row.adopted_silent | join(", ") }} named them without adding anything they saw{% endif %}{% if _ungrounded %}; {{ _ungrounded | join(", ") }} described seeing them, but their own record does not bear that out{% endif %}{% if _kill_is_speakable and row.adopted_spoke_kill %}; {{ row.adopted_spoke_kill | join(", ") }} described watching the kill — nothing at this table can confirm a kill{% endif %}. {% if row.flagged %}A contradiction above names them — read it there, in its own class.{% else %}No contradiction above names them.{% endif +%}
 {% if row.opener_charge_turn_id %}
   That charge came from someone `{{ row.subject }}` had already accused at [{{ row.opener_charge_turn_id }}] — an answer to a charge, not a second witness.
 {% endif %}
 {% for pair in row.walkable_transits %}
-  Two statements put `{{ row.subject }}` in {{ pair[0] }} and then in {{ pair[1] }} a tick later — one door apart, so walking fits both and a conflict over that pair is thin.
+  Two statements put `{{ row.subject }}` in {{ pair[0] }} and then in {{ pair[1] }} a tick later — one door apart, so walking fits both; that pair is no ground for an impossible-move charge.
 {% endfor %}
 {% endfor %}
+{% if not (contradiction_flags and flag_groups.proof) %}
 Price your confidence the way this table already calibrates a case: 1.0 only for a kill or a vent you watched happen first-hand; ~0.7 for a case a second account or a contradiction corroborates; ~0.5 for a hunch read off movement alone.
+{% endif %}
 </testimony_sources>
 {% endif %}
 {% endif %}
