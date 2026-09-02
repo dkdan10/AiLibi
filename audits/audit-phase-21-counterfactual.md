@@ -957,14 +957,19 @@ mandate no longer claims to outrank a vent and states the must-carry duty the un
 | `two-ON (less testimony_shapes)` | `accusation_round` | 2,959 | 2,715 | 11,005 | 1,026,970 |
 | `two-ON (less testimony_shapes)` | `vote_ballot` | 3,631 | 3,614 | 26,522 | 5,477,841 |
 
-**The slate's one cross-lever interaction is now zero.** The +61,750 ballot bytes that
-neither lever produced alone were the adopted clause re-wording under the joint slate; the
-clause no longer forks on `testimony_shapes` at all, because the arm cannot tell a silent
-voice from one whose sighting the record refused from one who said they watched the kill,
-and the ledger can. The ballot's added bytes are now identical on the
-`corroboration_discipline`, `two-ON` and `all-three-ON` legs, so added prose is additive in
-BOTH lines and bytes on every seam. Two recorded sentences say otherwise and stay as
-published; each is quoted here with its erratum.
+**The slate's one cross-lever interaction is now zero on the recorded bytes.** The +61,750
+ballot bytes that neither lever produced alone were the adopted clause re-wording under the
+joint slate. That re-wording is gone: the arm cannot tell a silent voice from one whose
+sighting the record refused from one who said they watched the kill, and the ledger can, so
+the clause forks on the SPEAKER instead. One arm-shaped fork remains and is narrower by
+construction — the clause may name a watched KILL only while the arm is up, because the
+transcript above renders that shape only then, and a row must not name evidence the page
+withholds. It cannot fire here: the corpus holds 0 spoken `saw_kill`
+(`grep -rn "saw_kill" replays/ | wc -l` → 0), which is the same zero §5.6 already records.
+So the ballot's added bytes are identical on the `corroboration_discipline`, `two-ON` and
+`all-three-ON` legs, and added prose is additive in BOTH lines and bytes on every seam. Two
+recorded sentences say otherwise and stay as published; each is quoted here with its
+erratum.
 
 §6.2, as published:
 
@@ -974,10 +979,12 @@ published; each is quoted here with its erratum.
 > without adding anything they saw". It is the only cross-lever render interaction in the
 > slate, it is confined to one clause, and it exists only when both levers are ON.
 
-*Erratum 2026-09-02, after PR #420:* the adopted clause no longer forks on the slate, so
-the ballot's added bytes are identical on the `corroboration_discipline`, `two-ON` and
-`all-three-ON` legs and the cross-lever interaction is 0 bytes. The ballot's added lines
-were already additive and remain so.
+*Erratum 2026-09-02, after PR #420:* the adopted clause no longer re-words under the joint
+slate, so the ballot's added bytes are identical on the `corroboration_discipline`,
+`two-ON` and `all-three-ON` legs and the cross-lever interaction is 0 bytes on these bytes.
+The residual arm-shaped fork — the clause may name a watched KILL only where the transcript
+above renders one — reaches 0 of 3,631 ballots on a corpus holding no spoken `saw_kill`.
+The ballot's added lines were already additive and remain so.
 
 §8.4's first prediction row, as published:
 
@@ -985,9 +992,11 @@ were already additive and remain so.
 > the ballot's adopted-clause re-wording (+61,750 bytes) | a byte delta on any other seam
 > that neither lever produces alone | the smoke's first ON seed |
 
-*Erratum 2026-09-02, after PR #420:* the interaction is now zero by construction. The row's
-FALSIFIER — "a byte delta on any other seam that neither lever produces alone" — is
-unchanged and is still the criterion the smoke reads.
+*Erratum 2026-09-02, after PR #420:* the interaction is zero on the recorded bytes, and the
+only way it could be non-zero is a spoken `saw_kill` the ballot names under the joint slate
+— which is a BALLOT-seam delta, the seam the row already covers. The row's FALSIFIER — "a
+byte delta on any other seam that neither lever produces alone" — is unchanged and is still
+the criterion the smoke reads.
 
 No tripwire moves with either: `audits/audit-phase-21-preregistration.md` ratifies T1-T7
 and none of them is this row, and §9's seven candidates name no cross-lever cell.
