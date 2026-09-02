@@ -2330,6 +2330,37 @@ class TestMovementResolutionArm:
         # leaves you absent, and the re-read does not change that either.
         assert absent_players(tx, roster=_ROSTER_3) == ("p-5", "p-9")
 
+    def test_the_reconstruction_shapes_placements_only_when_asked(self) -> None:
+        # The paired case for the test above. `reconstruct_stated_paths` takes
+        # the movement mapping as a DEFAULTED keyword, so the detector's own
+        # calls -- and `absent_players`, and every lab probe -- keep reading the
+        # room the witness spoke, while a consumer that asks for the shaped
+        # placements gets the destination the record left the subject in. The
+        # default is the assertion above; withholding the keyword is what makes
+        # this arm invisible to the detector, and supplying it is what lets the
+        # corroboration ledger's transit clause see a spoken transition at all.
+        tx = _origin_spoken_transcript(answer_room="ADMIN")
+        records = {
+            "p-9": (
+                _move_record(tick=3, subject="p-3", from_room="MEDBAY", to_room="LABS"),
+            )
+        }
+        default = reconstruct_stated_paths(tx, roster=_ROSTER_3)
+        shaped = reconstruct_stated_paths(
+            tx, roster=_ROSTER_3, movement_witness_records=records
+        )
+        assert [
+            (placement.tick, sorted(placement.rooms), placement.speaker)
+            for placement in shaped["p-3"]
+        ] == [(3, ["ADMIN"], "p-3"), (3, ["LABS"], "p-9")]
+        assert default != shaped
+        # An EMPTY mapping is still "supplied", and a speaker with no records
+        # grounds nothing, so the shaped walk agrees with the default there.
+        assert (
+            reconstruct_stated_paths(tx, roster=_ROSTER_3, movement_witness_records={})
+            == default
+        )
+
 
 class TestMovementShapeArm:
     """ON, a grounded spoken transition participates as ONE destination placement."""
