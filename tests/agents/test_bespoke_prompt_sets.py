@@ -1165,10 +1165,12 @@ class TestTestimonyShapesIsExactlyTwoLines:
         # mints no flag, no band and no suspicion delta, earns no first-hand
         # credit in the ledger, and renders on the ballot as an unconfirmed
         # account. So the line asks for the row without ranking it.
+        assert "outranks" not in _KILL_MANDATE_PREFIX
         for render in (self._crewmate(_SHAPES_ON), self._statement(_SHAPES_ON)):
-            assert "outranks" not in _KILL_MANDATE_PREFIX
             assert _KILL_MANDATE_PREFIX in render
             assert "it is testimony, not proof" in render
+        # The sentences it lands beside, quoted from the OFF bytes rather than
+        # assumed, so the pairing is checked and not merely described.
         off = self._crewmate({})
         assert "A witnessed vent is the single strongest fact this game produces" in off
         assert "A witnessed vent outranks everything else you hold" in self._statement(
