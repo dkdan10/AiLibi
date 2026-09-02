@@ -920,20 +920,27 @@ def accusation_round_prompt(
     ``reporter_context`` (the reporter-voice lever) names the body-report
     meeting's reporter, threaded only for speakers who are NOT that reporter, so
     the table reads the same base rate the ballot states before it forms a
-    target. ``at_body`` says THIS speaker's own record places them at the body
-    when the meeting opened and renders one neutral self-addressed line -- never
-    a roster of who else was there. ``None`` / ``False`` renders byte-identically,
-    which the prompt-byte golden pins.
+    target. ``at_body`` says THIS speaker's own record holds a SIGHTING of the
+    body the meeting opened on, and renders one neutral self-addressed line --
+    never a roster of who else was there, and never a position: the discovery
+    row carries the CORPSE's room, and an impostor perceives the adjacent one,
+    so a third of the seats holding this row logged the body from a room they
+    were not in. ``None`` / ``False`` renders byte-identically, which the
+    prompt-byte golden pins.
 
     ``testimony_shapes`` opens the served body's guarded witnessed-kill block on
     the CREW branch -- one shape-menu row and the instruction line beside the
-    vent mandate. An impostor-facing render is byte-identical under both states:
-    an impostor holds no witnessed-kill row it could honestly speak (its own
-    kill is its own first-person memory, and a teammate's is suppressed before
-    render), so offering it there would only be a confession prompt. Bound at
-    construction by :func:`build_prompt_renderers`, alongside the same lever
-    read that serves the version stamp; the default ``False`` renders the
-    committed bytes exactly.
+    vent mandate. Only that ELICITATION half is crew-only: an impostor holds no
+    witnessed-kill row it could honestly speak (its own kill is its own
+    first-person memory, and a teammate's is suppressed before render), so
+    offering it there would only be a confession prompt. The transcript's
+    ``saw_kill`` row is role-blind by design -- the public table is one table,
+    so a spoken kill reaches every later speaker whatever their seat -- and an
+    impostor-facing render is byte-identical under both states only while
+    nobody has spoken one. Bound at construction by
+    :func:`build_prompt_renderers`, alongside the same lever read that serves
+    the version stamp; the default ``False`` renders the committed bytes
+    exactly.
     """
 
     resolved_template = (
@@ -1025,9 +1032,14 @@ def vote_ballot_prompt(
 
     ``testimony_shapes`` opens the served body's guarded witnessed-kill row in
     the transcript's observation walk, so a voter READS the shape the arm
-    offered the speakers, and words the ``<testimony_sources>`` adopted clause
-    against the record rather than against what was said. The ballot offers no
-    shape of its own -- a voter files no observation -- so there is no menu row
+    offered the speakers. The ``<testimony_sources>`` adopted clause is worded
+    from each voice's OWN shapes rather than from the arm, with one exception
+    that follows the transcript: a voice may be named as having watched the kill
+    only while the arm renders the row behind it, and reads as an ungrounded
+    sighting otherwise. So a table where a kill was SPOKEN is the one place the
+    two Wave-2 arms interact on this page -- a joint-slate ballot there differs
+    from either arm alone by more than the two alone would give. The ballot
+    offers no shape of its own -- a voter files no observation -- so there is no menu row
     here, and it is the same render input the report and statement renderers
     take: bound at construction by :func:`build_prompt_renderers` from the one
     lever read, never a second environment read here. The default ``False``

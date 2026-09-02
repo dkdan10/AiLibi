@@ -196,6 +196,25 @@ def _saw_vent(
     return SawVentObservation(type="saw_vent", tick=tick, subject=subject, room=room)
 
 
+def _saw_kill(
+    *, subject: str, room: str = "ADMIN", tick: int = 11
+) -> SawKillObservation:
+    return SawKillObservation(type="saw_kill", tick=tick, subject=subject, room=room)
+
+
+def _conflict_flag(subject: str) -> ContradictionRef:
+    """A flag that groups as "Conflicting accounts" — two events, no weak marker."""
+
+    return ContradictionRef(
+        contradiction_id="c-2",
+        kind="alibi_vs_sighting",
+        event_a_id="turn:m-1:turn-0:claim:0",
+        event_b_id="turn:m-1:turn-1:obs:0",
+        subjects=(subject,),
+        description="alibi disagrees with a sighting",
+    )
+
+
 _ROSTER: Final[frozenset[PlayerId]] = frozenset(
     {"p-1", "p-2", "p-3", "p-5", "p-7", "p-8"}
 )
@@ -488,6 +507,99 @@ class TestFirstHandSources:
         )
         assert row.first_hand == ("p-2",)
         assert row.voices == 1
+        assert row.first_hand_places == (
+            ("p-2", (("saw_vent", "MEDBAY", 11), ("saw_vent", "LABS", 13))),
+        )
+
+    def test_one_grounded_vent_does_not_vouch_for_the_speaker_s_other_one(
+        self,
+    ) -> None:
+        # Codex round 1: the flag names the OBSERVATION it was minted from, so a
+        # witness who spoke two vents of one subject and had one grounded is one
+        # account whose row names one statement. Crediting the pair would print a
+        # fabricated vent detail as verified testimony beside a real one — the
+        # laundering hole the id resolution exists to close, in its
+        # same-speaker form.
+        transcript = _transcript(
+            _turn(
+                index=0,
+                speaker="p-2",
+                observations=(
+                    _saw_vent(subject="p-5", tick=11),
+                    _saw_vent(subject="p-5", room="LABS", tick=13),
+                ),
+                claims=(_accuses("p-5"),),
+            ),
+        )
+        row = _row(
+            _ledger(
+                transcript,
+                contradictions=(_vent_flag("p-5", turn_index=0, obs_index=0),),
+            ),
+            "p-5",
+        )
+        assert row.first_hand == ("p-2",)
+        assert row.voices == 1
+        assert row.first_hand_places == (("p-2", (("saw_vent", "MEDBAY", 11),)),)
+
+    def test_two_statements_at_one_tick_are_told_apart_by_room(self) -> None:
+        # Codex round 2: the tick alone could not separate a grounded MEDBAY
+        # vent from a fabricated LABS one spoken at the SAME tick — the row
+        # would have printed one coordinate covering both. The coordinate is
+        # room AND tick, which is exactly the pair the transcript above prints,
+        # so the credited statement is identifiable on the page.
+        transcript = _transcript(
+            _turn(
+                index=0,
+                speaker="p-2",
+                observations=(
+                    _saw_vent(subject="p-5", room="MEDBAY", tick=11),
+                    _saw_vent(subject="p-5", room="LABS", tick=11),
+                ),
+                claims=(_accuses("p-5"),),
+            ),
+        )
+        ledger = _ledger(
+            transcript, contradictions=(_vent_flag("p-5", turn_index=0, obs_index=0),)
+        )
+        assert _row(ledger, "p-5").first_hand_places == (
+            ("p-2", (("saw_vent", "MEDBAY", 11),)),
+        )
+        # Codex round 3: render the SAME grounded ledger. Rebuilding it without
+        # the flag left zero accounts and no coordinate at all, so the negative
+        # assertion would have passed even if coordinates stopped rendering —
+        # the positive half is what stops this going vacuous.
+        rendered = _render(ledger=ledger, transcript=transcript)
+        assert "venting in MEDBAY at tick 11" in rendered
+        assert "LABS at tick 11" not in rendered
+
+    def test_one_shape_grounded_beside_another_at_the_same_coordinate(self) -> None:
+        # Codex round 3: room and tick alone still collided when the two
+        # statements were different SHAPES — a grounded sighting beside an
+        # ungrounded vent in the same room at the same tick. The coordinate
+        # carries the kind too, which is the last thing the transcript row
+        # above distinguishes them by.
+        transcript = _transcript(
+            _turn(
+                index=0,
+                speaker="p-2",
+                observations=(
+                    _saw(subject="p-5", room="MEDBAY", tick=11),
+                    _saw_vent(subject="p-5", room="MEDBAY", tick=11),
+                ),
+                claims=(_accuses("p-5"),),
+            ),
+        )
+        ledger = _ledger(
+            transcript,
+            sighting_records={"p-2": (_record(subject="p-5", room="MEDBAY", tick=11),)},
+        )
+        assert _row(ledger, "p-5").first_hand_places == (
+            ("p-2", (("saw_player", "MEDBAY", 11),)),
+        )
+        rendered = _render(ledger=ledger, transcript=transcript)
+        assert "p-2 described seeing them (MEDBAY at tick 11)" in rendered
+        assert "venting in MEDBAY at tick 11" not in rendered
 
     def test_one_speaker_counts_once_however_much_they_hold(self) -> None:
         # The double-count guard: two matching records AND two matching
@@ -517,6 +629,38 @@ class TestFirstHandSources:
         )
         assert row.first_hand == ("p-2",)
         assert row.voices == 1
+        # One voice, both statements named: the ticks are coordinates, not a
+        # second count, and they are what tells the credited statement apart
+        # from the speaker's other sighting of the same subject.
+        assert row.first_hand_places == (
+            ("p-2", (("saw_player", "MEDBAY", 14), ("saw_player", "LABS", 16))),
+        )
+
+    def test_the_ticks_name_only_the_statements_the_record_bore_out(self) -> None:
+        # The perturbation of the pair above: drop the second record and the
+        # speaker keeps their single account, while the tick that no longer
+        # holds up disappears from the row. A bare name would have gone on
+        # covering both.
+        transcript = _transcript(
+            _turn(
+                index=0,
+                speaker="p-2",
+                observations=(
+                    _saw(subject="p-5", tick=14),
+                    _saw(subject="p-5", room="LABS", tick=16),
+                ),
+                claims=(_accuses("p-5"),),
+            ),
+        )
+        row = _row(
+            _ledger(
+                transcript,
+                sighting_records={"p-2": (_record(subject="p-5", tick=14),)},
+            ),
+            "p-5",
+        )
+        assert row.first_hand == ("p-2",)
+        assert row.first_hand_places == (("p-2", (("saw_player", "MEDBAY", 14),)),)
 
     def test_a_second_grounded_speaker_makes_it_a_two_account_row(self) -> None:
         # The perturbation of the guard above: an otherwise identical transcript
@@ -577,6 +721,10 @@ class TestFirstHandSources:
         assert row.first_hand == ()
         assert row.adopted == ("p-2",)
         assert row.voices == 1
+        # Excluded from the COUNT, named on the ROW: the ruling says the shape
+        # earns no account, not that the speaker said nothing.
+        assert row.adopted_spoke_kill == ("p-2",)
+        assert row.adopted_silent == ()
 
     def test_the_exclusion_is_not_a_dead_fixture(self) -> None:
         # Non-vacuity for the leg above: the SAME speaker, the same accusation
@@ -657,6 +805,85 @@ class TestAdoptedSources:
                 assert first == origin.turn_index
             else:
                 assert first > origin.turn_index
+
+    def test_the_three_adopted_classes_partition_the_set(self) -> None:
+        # One accuser per class on one pile: p-1 says nothing, p-3 speaks a
+        # sighting no record bears out, p-7 says they watched the kill. The
+        # split is a partition, so the honest voice count cannot drift with it.
+        pile = _transcript(
+            _turn(index=0, speaker="p-1", claims=(_accuses("p-5"),)),
+            _turn(
+                index=1,
+                speaker="p-3",
+                observations=(_saw(subject="p-5"),),
+                claims=(_accuses("p-5"),),
+            ),
+            _turn(
+                index=2,
+                speaker="p-7",
+                observations=(_saw_kill(subject="p-5"),),
+                claims=(_accuses("p-5"),),
+            ),
+        )
+        row = _row(_ledger(pile), "p-5")
+        assert row.adopted_silent == ("p-1",)
+        assert row.adopted_spoke_ungrounded == ("p-3",)
+        assert row.adopted_spoke_kill == ("p-7",)
+        assert row.adopted == ("p-1", "p-3", "p-7")
+        assert row.voices == 3
+
+    def test_a_borne_out_sighting_empties_the_ungrounded_class(self) -> None:
+        # The perturbation: give p-3 the record that bears their sighting out
+        # and they leave the adopted set entirely, so the ungrounded class
+        # reports a failed check and never mere silence.
+        pile = _transcript(
+            _turn(index=0, speaker="p-1", claims=(_accuses("p-5"),)),
+            _turn(
+                index=1,
+                speaker="p-3",
+                observations=(_saw(subject="p-5"),),
+                claims=(_accuses("p-5"),),
+            ),
+        )
+        row = _row(
+            _ledger(pile, sighting_records={"p-3": (_record(subject="p-5"),)}), "p-5"
+        )
+        assert row.first_hand == ("p-3",)
+        assert row.adopted_spoke_ungrounded == ()
+        assert row.adopted_silent == ("p-1",)
+
+    def test_a_sighting_of_someone_else_leaves_the_voice_silent(self) -> None:
+        # The classes are per SUBJECT: p-3 described seeing p-8, not p-5, so on
+        # p-5's row they added nothing they saw. Scoping this to the accused is
+        # what stops the row crediting an unrelated statement as a failed check.
+        pile = _transcript(
+            _turn(index=0, speaker="p-1", claims=(_accuses("p-5"),)),
+            _turn(
+                index=1,
+                speaker="p-3",
+                observations=(_saw(subject="p-8"),),
+                claims=(_accuses("p-5"),),
+            ),
+        )
+        row = _row(_ledger(pile), "p-5")
+        assert row.adopted_silent == ("p-1", "p-3")
+        assert row.adopted_spoke_ungrounded == ()
+
+    def test_a_watched_kill_outranks_a_failed_sighting_on_one_speaker(self) -> None:
+        # A voice who said both is named for the kill: it is the strongest thing
+        # they claimed, and the classes have to be disjoint for the counts to
+        # stay honest.
+        pile = _transcript(
+            _turn(
+                index=0,
+                speaker="p-3",
+                observations=(_saw(subject="p-5"), _saw_kill(subject="p-5")),
+                claims=(_accuses("p-5"),),
+            ),
+        )
+        row = _row(_ledger(pile), "p-5")
+        assert row.adopted_spoke_kill == ("p-3",)
+        assert row.adopted_spoke_ungrounded == ()
 
     def test_rows_are_ordered_by_the_turn_the_charge_started_in(self) -> None:
         transcript = _transcript(
@@ -885,13 +1112,20 @@ def _render(
     ledger: MeetingTestimonyLedger | None,
     candidates: tuple[str, ...] = ("p-5",),
     env: Mapping[str, str] | None = None,
+    contradiction_flags: tuple[ContradictionRef, ...] = (),
+    transcript: MeetingTranscript = _RENDER_TRANSCRIPT,
 ) -> str:
+    """One ballot render. ``transcript`` is the ledger's own wherever a case
+    turns on the two agreeing — the production seam renders both from one
+    meeting, so a fixture that split them could not see a block naming a shape
+    the transcript above it refuses to show."""
+
     renderers = build_prompt_renderers(_SET, env=dict(env or {}))
     return renderers.vote(
         voter_id="p-2",
         rendered_memory="## Your role: CREWMATE\nnothing yet",
-        transcript=_RENDER_TRANSCRIPT,
-        contradiction_flags=(),
+        transcript=transcript,
+        contradiction_flags=contradiction_flags,
         suspicion_graph=(SuspicionEntry(player_id="p-5", suspicion=0.5, trust=0.5),),
         candidate_targets=candidates,
         skip_confidence_threshold=0.6,
@@ -899,56 +1133,239 @@ def _render(
     )
 
 
-class TestAdoptedClauseWording:
-    """The adopted clause must stay TRUE under the testimony-shapes arm.
+def _block(rendered: str) -> str:
+    """Just the source-count block, so a claim about it cannot pass on the page."""
 
-    An adopted voice is one whose account no record bears out. With the shapes
-    arm OFF that is always "added nothing they saw", because every kind that
-    reaches this walk is a grounded one. With it ON an adopted voice may have
-    spoken an ungrounded KILL — visible to the voter three blocks up — so the
-    clause is worded against the RECORD instead. The count does not move; only
-    the sentence describing it does.
+    return rendered.split("<testimony_sources>")[1].split("</testimony_sources>")[0]
+
+
+class TestAdoptedClauseWording:
+    """The adopted clause says what each voice actually did, speaker by speaker.
+
+    One sentence for every adopted voice was false in both directions: a voice
+    who spoke nothing read as a failed check, and a voice whose own memory says
+    they watched the kill read as having added nothing they saw. So the clause
+    forks on the SPEAKER's own shapes — silent, an ungrounded sighting, or a
+    watched kill — rather than on the shapes ARM, which cannot know which of the
+    three a given voice is. The counts do not move; only which sentence each
+    name sits in. The one thing the arm still governs is whether the KILL may be
+    named at all, because the transcript three blocks up renders that shape only
+    under the arm and the row must never name evidence the page refuses to show.
     """
 
-    _LEDGER: Final[MeetingTestimonyLedger] = _ledger(
-        _transcript(
+    _SILENT: Final[str] = "named them without adding anything they saw"
+    _UNGROUNDED: Final[str] = (
+        "described seeing them, but their own record does not bear that out"
+    )
+    _KILL: Final[str] = (
+        "described watching the kill — nothing at this table can confirm a kill"
+    )
+    _ON: Final[Mapping[str, str]] = {ENV_TESTIMONY_SHAPES: "1"}
+
+    _KILL_WITNESSES: Final[tuple[PlayerId, ...]] = ("p-7", "p-8")
+
+    @classmethod
+    def _table(
+        cls,
+        *,
+        p3_observation: tuple[ObservationClaim, ...] = (),
+        with_kill: bool = True,
+        kills: int = 1,
+    ) -> tuple[MeetingTranscript, MeetingTestimonyLedger]:
+        """One table: p-1 and p-2 silent, p-3 as given, then ``kills`` witnesses.
+
+        The transcript is returned WITH its ledger so a render can pass both —
+        the production seam builds them from one meeting, and a case about the
+        row agreeing with the transcript above it cannot be made on two.
+        """
+
+        turns = [
             _turn(index=0, speaker="p-1", claims=(_accuses("p-5"),)),
             _turn(index=1, speaker="p-2", claims=(_accuses("p-5"),)),
-        ),
-        opener="p-1",
-    )
-    _RECORD_WORDING: Final[str] = (
-        "named them without an account their own record bears out"
-    )
-    _SAID_WORDING: Final[str] = "named them without adding anything they saw"
+            _turn(
+                index=2,
+                speaker="p-3",
+                observations=p3_observation,
+                claims=(_accuses("p-5"),),
+            ),
+        ]
+        if with_kill:
+            for offset, witness in enumerate(cls._KILL_WITNESSES[:kills]):
+                turns.append(
+                    _turn(
+                        index=3 + offset,
+                        speaker=witness,
+                        observations=(_saw_kill(subject="p-5"),),
+                        claims=(_accuses("p-5"),),
+                    )
+                )
+        transcript = _transcript(*turns)
+        return transcript, _ledger(transcript, opener="p-1")
 
-    def test_the_source_count_arm_alone_keeps_its_committed_sentence(self) -> None:
-        rendered = _render(ledger=self._LEDGER)
-        assert self._SAID_WORDING in rendered
-        assert self._RECORD_WORDING not in rendered
+    def _rendered(
+        self,
+        *,
+        env: Mapping[str, str] | None = None,
+        p3_observation: tuple[ObservationClaim, ...] = (),
+        with_kill: bool = True,
+        kills: int = 1,
+    ) -> str:
+        transcript, ledger = self._table(
+            p3_observation=p3_observation, with_kill=with_kill, kills=kills
+        )
+        return _render(ledger=ledger, transcript=transcript, env=env)
 
-    def test_the_shapes_arm_words_it_against_the_record(self) -> None:
-        rendered = _render(ledger=self._LEDGER, env={ENV_TESTIMONY_SHAPES: "1"})
-        assert self._RECORD_WORDING in rendered
-        assert self._SAID_WORDING not in rendered
+    @staticmethod
+    def _interaction(
+        transcript: MeetingTranscript, ledger: MeetingTestimonyLedger
+    ) -> int:
+        """Joint-slate bytes minus what the two arms add on their own."""
 
-    def test_only_that_sentence_moves(self) -> None:
-        # The gate that makes the two above meaningful: the arm rewords ONE
-        # clause and touches nothing else on the page, so a source-count
-        # recording and a shapes recording differ exactly where the stamp says.
-        off = _render(ledger=self._LEDGER)
-        on = _render(ledger=self._LEDGER, env={ENV_TESTIMONY_SHAPES: "1"})
-        assert off.replace(self._SAID_WORDING, self._RECORD_WORDING) == on
+        def size(**kwargs: object) -> int:
+            return len(_render(transcript=transcript, **kwargs).encode("utf-8"))  # type: ignore[arg-type]
 
-    def test_the_count_is_untouched_by_the_wording(self) -> None:
-        # Craft rule 2: the perturbation that would make this vacuous is a
-        # reworded clause that also moved the number. Both renders must state
-        # the SAME split — two voices, zero accounts.
-        for env in ({}, {ENV_TESTIMONY_SHAPES: "1"}):
-            assert "2 voices, 0 accounts" in _render(ledger=self._LEDGER, env=env)
+        off = size(ledger=None)
+        shapes = size(ledger=None, env={ENV_TESTIMONY_SHAPES: "1"})
+        source = size(ledger=ledger)
+        both = size(ledger=ledger, env={ENV_TESTIMONY_SHAPES: "1"})
+        return (both - off) - ((shapes - off) + (source - off))
+
+    def test_each_voice_gets_the_sentence_its_own_shapes_earn(self) -> None:
+        rendered = self._rendered(
+            env=self._ON, p3_observation=(_saw(subject="p-5", tick=14),)
+        )
+        assert f"p-1, p-2 {self._SILENT}" in rendered
+        assert f"p-3 {self._UNGROUNDED}" in rendered
+        assert f"p-7 {self._KILL}" in rendered
+
+    def test_a_silent_voice_is_never_told_its_record_failed(self) -> None:
+        # The larger half of the population: a voice who spoke nothing must not
+        # read as a check that was run and came back empty.
+        rendered = self._rendered(with_kill=False)
+        assert f"p-1, p-2, p-3 {self._SILENT}" in rendered
+        assert self._UNGROUNDED not in rendered
+
+    def test_only_that_clause_moves_when_a_voice_changes_class(self) -> None:
+        # Craft rule 2, and the gate that makes the others meaningful: give p-3
+        # one ungrounded sighting and the ONLY thing that moves in this block is
+        # which sentence p-3's name sits in. Scoped to the block because the
+        # transcript above it legitimately gains the sighting row too — the
+        # ledger's honesty is that the two agree, not that the page is frozen.
+        silent = _block(self._rendered(with_kill=False))
+        spoke = _block(
+            self._rendered(
+                with_kill=False, p3_observation=(_saw(subject="p-5", tick=14),)
+            )
+        )
+        assert silent != spoke
+        assert (
+            silent.replace(
+                f"p-1, p-2, p-3 {self._SILENT}",
+                f"p-1, p-2 {self._SILENT}; p-3 {self._UNGROUNDED}",
+            )
+            == spoke
+        )
+
+    def test_the_arm_does_not_word_voices_it_cannot_see(self) -> None:
+        # With no kill at the table the arm governs nothing on this block: a
+        # silent voice and an ungrounded sighting read the same under both
+        # states, because the arm cannot tell them apart and the ledger can.
+        for observation in ((), (_saw(subject="p-5", tick=14),)):
+            assert self._rendered(
+                env=self._ON, with_kill=False, p3_observation=observation
+            ) == self._rendered(with_kill=False, p3_observation=observation)
+
+    def test_the_row_never_names_a_shape_the_transcript_refuses_to_show(
+        self,
+    ) -> None:
+        # Codex round 1: the ballot's observation walk renders a spoken
+        # ``saw_kill`` only under the shapes arm, so with the arm DOWN a row
+        # saying "described watching the kill" would publish content the same
+        # page withholds — the corroboration-only leg leaking a sibling lever's
+        # surface. With the arm down the kill witness reads as what the ledger
+        # can defend about them instead: they described seeing the subject and
+        # no record bears it out.
+        off = self._rendered()
+        assert "KILL" not in off
+        assert self._KILL not in off
+        assert f"p-7 {self._UNGROUNDED}" in off
+        on = self._rendered(env=self._ON)
+        assert "witnessed p-5 KILL" in on
+        assert f"p-7 {self._KILL}" in on
+
+    def test_a_spoken_kill_is_the_one_cross_lever_interaction_on_this_page(
+        self,
+    ) -> None:
+        # Codex round 2, and the prediction 21.23's smoke has to be able to
+        # read: the gate above IS an interaction between the two arms, so a
+        # joint-slate ballot at a table where a kill was spoken carries bytes
+        # neither arm produces alone. Registered here on a SYNTHETIC kill rather
+        # than inferred from a corpus that happens to hold none — the committed
+        # bytes carry 0 spoken ``saw_kill``, which is why the published census
+        # shows the interaction at zero and not why it is absent.
+        transcript, ledger = self._table()
+        interaction = self._interaction(transcript, ledger)
+        assert interaction > 0
+        # The floor of the class: kill witnesses ONLY, so both arms render one
+        # clause and only its tail moves.
+        assert interaction == len(self._KILL.encode("utf-8")) - len(
+            self._UNGROUNDED.encode("utf-8")
+        )
+
+    def test_the_interaction_does_not_scale_with_the_witness_count(self) -> None:
+        # Codex round 3: "per adopted kill witness" was the wrong unit. The
+        # template joins every kill witness into ONE clause, so a second witness
+        # moves the names on both arms and leaves the interaction where it was.
+        one = self._table(kills=1)
+        two = self._table(kills=2)
+        assert "p-7, p-8" in self._rendered(env=self._ON, kills=2)
+        assert self._interaction(*two) == self._interaction(*one)
+
+    def test_a_mixed_row_pays_a_whole_clause_not_a_tail(self) -> None:
+        # Codex round 3, the other half of the composition: when the row also
+        # carries an ungrounded voice, the OFF arm merges both names into one
+        # clause while the joint arm emits two. The interaction is then the
+        # SPLIT — a second "; " lead-in, the kill names again, and the kill
+        # sentence in full, less the separator that leaves the merged list — an
+        # order of magnitude above the tail-only floor, which is why the
+        # prediction has to name the row composition and not a per-witness rate.
+        mixed = self._table(p3_observation=(_saw(subject="p-5", tick=14),))
+        floor = self._interaction(*self._table())
+        assert self._interaction(*mixed) > 10 * floor
+        # It is the split, exactly: one extra clause carrying p-7's name, minus
+        # the ", p-7" the merged OFF clause no longer needs.
+        assert self._interaction(*mixed) == len(f"; p-7 {self._KILL}".encode()) - len(
+            b", p-7"
+        )
+
+    def test_a_table_with_no_kill_has_no_interaction(self) -> None:
+        # The perturbation for all three above: strip the kill witnesses and the
+        # joint ballot is exactly the two arms added, whatever else the row
+        # carries. That is the shape the published census records over the
+        # committed bytes, and the reason it records zero.
+        for observation in ((), (_saw(subject="p-5", tick=14),)):
+            transcript, ledger = self._table(
+                with_kill=False, p3_observation=observation
+            )
+            assert self._interaction(transcript, ledger) == 0
+
+    def test_the_counts_are_untouched_by_the_wording(self) -> None:
+        # The perturbation that would make the class vacuous is a reworded
+        # clause that also moved a number. Every variant states the SAME split.
+        for observation in ((), (_saw(subject="p-5", tick=14),)):
+            for env in (None, self._ON):
+                assert "4 voices, 0 accounts" in self._rendered(
+                    env=env, p3_observation=observation
+                )
 
 
 class TestRender:
+    _LADDER: Final[str] = (
+        "1.0 only for a kill or a vent you watched happen first-hand; ~0.7 for a "
+        "case a second account or a contradiction corroborates; ~0.5 for a hunch "
+        "read off movement alone."
+    )
+
     def test_an_absent_ledger_renders_the_pre_lever_bytes(self) -> None:
         renderers = build_prompt_renderers(_SET, env={})
         without_kwarg = renderers.vote(
@@ -972,8 +1389,96 @@ class TestRender:
         assert "<testimony_sources>" in rendered
         assert "p-5: 3 voices, 1 account" in rendered
         assert "it started at [m-1:turn-0]" in rendered
-        assert "p-1 described seeing them" in rendered
+        assert "p-1 described seeing them (MEDBAY at tick 14)" in rendered
         assert "p-3, p-8 named them without adding anything they saw" in rendered
+
+    def test_the_account_names_the_statement_it_rests_on(self) -> None:
+        # The block's definition of "account" is singular, so a bare name lets a
+        # voter read the credit as covering EVERY sighting that speaker gave —
+        # including the one a contradiction above may be quoting. The ticks say
+        # which statements the record bore out and, by omission, which it did
+        # not. Here p-1's t14 sighting matches a record and their t19 one does
+        # not, and only the first is named.
+        transcript = _transcript(
+            _turn(
+                index=0,
+                speaker="p-1",
+                observations=(
+                    _saw(subject="p-5", room="MEDBAY", tick=14),
+                    _saw(subject="p-5", room="ADMIN", tick=19),
+                ),
+                claims=(_accuses("p-5"),),
+            ),
+        )
+        records = {"p-1": (_record(subject="p-5", room="MEDBAY", tick=14),)}
+        rendered = _render(ledger=_ledger(transcript, sighting_records=records))
+        assert "p-1 described seeing them (MEDBAY at tick 14)" in rendered
+        assert "ADMIN at tick 19" not in rendered
+
+    def test_two_borne_out_statements_are_both_named(self) -> None:
+        # The plural leg, and the non-vacuity twin of the test above: add the
+        # record that bears the second statement out and the parenthetical says
+        # so, while the COUNT stays at one account — a speaker is one voice
+        # however many of their statements hold up.
+        transcript = _transcript(
+            _turn(
+                index=0,
+                speaker="p-1",
+                observations=(
+                    _saw(subject="p-5", room="MEDBAY", tick=14),
+                    _saw(subject="p-5", room="ADMIN", tick=19),
+                ),
+                claims=(_accuses("p-5"),),
+            ),
+        )
+        records = {
+            "p-1": (
+                _record(subject="p-5", room="MEDBAY", tick=14),
+                _record(subject="p-5", room="ADMIN", tick=19),
+            )
+        }
+        rendered = _render(ledger=_ledger(transcript, sighting_records=records))
+        assert (
+            "p-1 described seeing them (MEDBAY at tick 14, ADMIN at tick 19)"
+            in rendered
+        )
+        assert "p-5: 1 voice, 1 account" in rendered
+
+    def test_the_header_glosses_a_voice_as_the_accusation_channel(self) -> None:
+        # The ledger counts accusers. A header that said "anyone who named them"
+        # promised the transcript's whole vocabulary — a corroboration claim, a
+        # sighting filed against a different name, a mention in free text — and
+        # the same page then falsifies it. The gloss states the channel and says
+        # where the rest of what was said still lives.
+        block = _block(
+            _render(
+                ledger=_ledger(_RENDER_TRANSCRIPT, sighting_records=_RENDER_RECORDS)
+            )
+        )
+        assert "A voice is anyone who accused them tonight" in block
+        assert "who only backed another's charge, is not counted here" in block
+        assert "a player nobody accused has no row" in block
+
+    def test_the_header_says_what_a_second_account_does_and_does_not_settle(
+        self,
+    ) -> None:
+        # A sighting or a movement is a PLACEMENT, while the closing ladder
+        # prices "a second account corroborates" in the everyday sense. Two
+        # people placing someone in a corridor corroborate each other and
+        # nothing about the death, so the header states the scope the ladder
+        # assumes — and names the one channel that is not a placement, because a
+        # grounded vent IS an account here and is role proof, not geography
+        # (Codex round 1).
+        block = _block(
+            _render(
+                ledger=_ledger(_RENDER_TRANSCRIPT, sighting_records=_RENDER_RECORDS)
+            )
+        )
+        assert "A sighting or a movement only places them somewhere" in block
+        assert "only where what it describes bears on the death" in block
+        assert (
+            "a watched vent is the exception — it names an impostor outright" in block
+        )
 
     def test_the_flag_clause_states_both_polarities(self) -> None:
         # The zero-flag half of the case, read off the flags exactly as
@@ -982,7 +1487,7 @@ class TestRender:
         unflagged = _render(
             ledger=_ledger(_RENDER_TRANSCRIPT, sighting_records=_RENDER_RECORDS)
         )
-        assert "Nothing in the evidence above names them." in unflagged
+        assert "No contradiction above names them." in unflagged
         flagged = _render(
             ledger=_ledger(
                 _RENDER_TRANSCRIPT,
@@ -990,25 +1495,24 @@ class TestRender:
                 sighting_records=_RENDER_RECORDS,
             )
         )
-        # Codex round 1: the wording must cover EVERY flag category. A
-        # ``vent_sighting`` is role PROOF in the evidence section above, so a row
-        # calling it "a conflict" would contradict the ballot's own taxonomy and
-        # invite the voter to underweight the strongest evidence in the game.
-        assert "The evidence above names them — read it there, in its own class." in (
-            flagged
+        # The clause names the CONTRADICTION section, not "the evidence": this
+        # block calls testimony evidence two lines up, so the negative polarity
+        # would otherwise deny the account it has just credited. "Contradiction"
+        # is the section's own rendered noun and covers every flag category —
+        # a ``vent_sighting`` is role PROOF up there, and a row calling it "a
+        # conflict" would contradict the ballot's own taxonomy and invite the
+        # voter to underweight the strongest evidence in the game.
+        assert (
+            "A contradiction above names them — read it there, in its own class."
+            in (flagged)
         )
-        assert "conflict" not in flagged.split("<testimony_sources>")[1].split(
-            "</testimony_sources>"
-        )[0].replace("a conflict over that pair is thin", "")
+        block = _block(flagged)
+        assert "conflict" not in block
 
     def test_the_band_sentence_restates_the_ladder_verbatim(self) -> None:
         # The ladder the accusation template already asks for, quoted from the
         # served bytes rather than paraphrased, so the two surfaces agree.
-        ladder = (
-            "1.0 only for a kill or a vent you watched happen first-hand; ~0.7 for a "
-            "case a second account or a contradiction corroborates; ~0.5 for a hunch "
-            "read off movement alone."
-        )
+        ladder = self._LADDER
         accusation = (
             Path("agents/strategic/prompts") / _SET / "accusation_round.j2"
         ).read_text(encoding="utf-8")
@@ -1016,6 +1520,27 @@ class TestRender:
         assert ladder in _render(
             ledger=_ledger(_RENDER_TRANSCRIPT, sighting_records=_RENDER_RECORDS)
         )
+
+    def test_the_band_sentence_yields_to_a_proof_flag(self) -> None:
+        # The ladder prices a vent someone ELSE watched at ~0.7, while the Proof
+        # paragraph three lines up says nothing at this table outweighs it. Two
+        # instructions, one page, opposite answers on the same evidence — so
+        # where Proof renders, the ladder does not, and the paragraph that owns
+        # the strongest evidence class is the one the voter reads.
+        ledger = _ledger(_RENDER_TRANSCRIPT, sighting_records=_RENDER_RECORDS)
+        rendered = _render(ledger=ledger, contradiction_flags=(_vent_flag("p-5"),))
+        assert "Proof. Only an impostor can vent" in rendered
+        assert self._LADDER not in rendered
+
+    def test_a_non_proof_flag_leaves_the_band_sentence_standing(self) -> None:
+        # The perturbation: the gate is on the PROOF group, not on flags. A
+        # conflicting-accounts flag raises no unanswerable-evidence paragraph,
+        # so the ladder is still the page's only pricing instruction.
+        ledger = _ledger(_RENDER_TRANSCRIPT, sighting_records=_RENDER_RECORDS)
+        rendered = _render(ledger=ledger, contradiction_flags=(_conflict_flag("p-5"),))
+        assert "Conflicting accounts." in rendered
+        assert "Proof. Only an impostor can vent" not in rendered
+        assert self._LADDER in rendered
 
     def test_rows_are_emitted_only_for_this_voter_s_candidates(self) -> None:
         transcript = _transcript(
@@ -1039,9 +1564,7 @@ class TestRender:
         rendered = _render(
             ledger=_ledger(_RENDER_TRANSCRIPT, sighting_records=_RENDER_RECORDS)
         )
-        block = rendered.split("<testimony_sources>")[1].split("</testimony_sources>")[
-            0
-        ]
+        block = _block(rendered)
         for banned in (
             "Task ",
             "audits/",
@@ -1108,15 +1631,39 @@ class TestRender:
             ),
         )
         rendered = _render(ledger=_ledger(transcript))
-        block = rendered.split("<testimony_sources>")[1].split("</testimony_sources>")[
-            0
-        ]
+        block = _block(rendered)
         assert "0 accounts" in block
         assert "Two statements put" in block
         # Scoped to THIS block: the ``<map>`` card below it has said "Two
         # accounts …" since 20.31, in the looser everyday sense. Inside a block
         # that DEFINES the word, the word has to mean what the block says.
         assert "Two accounts" not in block
+
+    def test_the_transit_line_presupposes_no_dispute(self) -> None:
+        # The pair is almost never a flag's two endpoints, and the same row
+        # usually says no contradiction names the subject at all — so a tail
+        # calling a conflict "thin" defuses one the page has just denied. The
+        # line states what the map settles and names the charge it forecloses,
+        # without asserting that anyone made it.
+        transcript = _transcript(
+            _turn(
+                index=0,
+                speaker="p-1",
+                observations=(_saw(subject="p-5", room="MEDBAY", tick=14),),
+                claims=(_accuses("p-5"),),
+            ),
+            _turn(
+                index=1,
+                speaker="p-3",
+                observations=(_saw(subject="p-5", room="WEST_HALL", tick=15),),
+            ),
+        )
+        block = _block(_render(ledger=_ledger(transcript)))
+        assert "No contradiction above names them." in block
+        assert (
+            "so walking fits both; that pair is no ground for an impossible-move "
+            "charge." in block
+        )
 
 
 class TestProvenance:

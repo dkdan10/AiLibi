@@ -21,7 +21,8 @@ record and earns no account.
 A spoken :class:`~meetings.schemas.SawKillObservation` is therefore excluded: the
 three channels are GROUNDED ones and the kill shape has none here to be tested
 against. What would have to land before it could join is in
-:func:`_speaker_grounds_subject`.
+:func:`_speaker_grounding_places`. Excluded from the COUNT, it is still named on
+the row -- a voice who watched the kill is not a voice who said nothing.
 
 Keep this module import-light: :mod:`meetings.schemas`, :mod:`meetings.constants`
 and :mod:`meetings.transcript` only, never :mod:`meetings.manager` -- the prompt
@@ -43,6 +44,7 @@ from meetings.schemas import (
     MeetingTranscript,
     MoveWitnessRecord,
     PlayerId,
+    SawKillObservation,
     SawMoveObservation,
     SawPlayerObservation,
     SawVentObservation,
@@ -114,13 +116,27 @@ class TestimonySupport:
     * ``subject`` -- the accused.
     * ``originating_turn_id`` -- the turn the charge started in (the first turn
       of this meeting whose accusation names ``subject``).
-    * ``first_hand`` -- the distinct speakers who accused ``subject`` AND spoke
-      an observation of them their OWN typed record confirms, sorted. A speaker
-      counts ONCE however many records they hold or observations they spoke.
-    * ``adopted`` -- every other distinct accusing speaker, sorted: they named
-      ``subject`` and added nothing they saw. Disjoint from ``first_hand`` by
-      construction, so ``len(first_hand) + len(adopted)`` is the honest count of
-      voices carrying the charge.
+    * ``first_hand_places`` -- per first-hand speaker, sorted by speaker, the
+      ``(kind, room, tick)`` coordinates of the observations of ``subject`` their
+      OWN record bore out, earliest first. A speaker counts ONCE however many
+      records they hold or observations they spoke; the coordinates say WHICH of
+      their statements earned the credit, so a speaker whose other sighting of
+      the same subject is the one a contradiction above quotes is not thereby
+      credited for that one. All three, because one speaker can place a subject
+      in two rooms at one tick, or speak a sighting and a vent at one room and
+      tick, with only one of them borne out. The triple is exactly what the
+      transcript above distinguishes a row by, so a statement this cannot tell
+      apart is one the transcript did not distinguish either.
+    * ``adopted_silent`` -- accusing speakers who described nothing they saw of
+      ``subject`` at all.
+    * ``adopted_spoke_ungrounded`` -- accusing speakers who described seeing
+      ``subject`` in a shape this ledger grounds, whose own record did not bear
+      it out.
+    * ``adopted_spoke_kill`` -- accusing speakers who said they watched
+      ``subject`` kill. The shape has no grounding channel here, so it earns no
+      account; it is a different thing from having said nothing, and the row
+      says which. Precedence over the two above, because it is the strongest
+      claim the speaker made.
     * ``flagged`` -- whether any contradiction detected at this table names
       ``subject``. Read off the flags, exactly as
       :func:`meetings.manager.guard_ballot_citation` reads them, never off a
@@ -139,11 +155,37 @@ class TestimonySupport:
 
     subject: PlayerId
     originating_turn_id: TurnId
-    first_hand: tuple[PlayerId, ...]
-    adopted: tuple[PlayerId, ...]
+    first_hand_places: tuple[tuple[PlayerId, tuple[tuple[str, str, int], ...]], ...]
+    adopted_silent: tuple[PlayerId, ...]
+    adopted_spoke_ungrounded: tuple[PlayerId, ...]
+    adopted_spoke_kill: tuple[PlayerId, ...]
     flagged: bool
     opener_charge_turn_id: TurnId | None
     walkable_transits: tuple[tuple[str, str], ...]
+
+    @property
+    def first_hand(self) -> tuple[PlayerId, ...]:
+        """The distinct speakers whose account of ``subject`` was borne out."""
+
+        return tuple(speaker for speaker, _ in self.first_hand_places)
+
+    @property
+    def adopted(self) -> tuple[PlayerId, ...]:
+        """Every other accusing speaker, sorted.
+
+        The three adopted fields partition this set, so the split describes the
+        voices without changing how many there are.
+        """
+
+        return tuple(
+            sorted(
+                (
+                    *self.adopted_silent,
+                    *self.adopted_spoke_ungrounded,
+                    *self.adopted_spoke_kill,
+                )
+            )
+        )
 
     @property
     def voices(self) -> int:
@@ -189,26 +231,36 @@ def _accused_by_turn(
     )
 
 
-def _speaker_grounds_subject(
+def _speaker_grounding_places(
     transcript: MeetingTranscript,
     *,
     speaker: PlayerId,
     subject: PlayerId,
     sighting_records: Mapping[PlayerId, tuple[SightingRecord, ...]],
     move_witness_records: Mapping[PlayerId, tuple[MoveWitnessRecord, ...]],
-    vent_grounded: Mapping[PlayerId, frozenset[PlayerId]],
-) -> bool:
-    """Whether ``speaker`` spoke a FIRST-HAND observation of ``subject`` here.
+    grounded_vent_ids: frozenset[str],
+) -> tuple[tuple[str, str, int], ...]:
+    """``(kind, room, tick)`` per FIRST-HAND observation of ``subject`` here.
+
+    Empty means they grounded nothing, so this is the ledger's one definition of
+    "first-hand" and the row's coordinates in a single pass: the ballot names
+    the coordinates so a voter can tell the credited statement apart from the
+    speaker's OTHER sighting of the same subject, which a contradiction above
+    may be quoting. A ``saw_move`` is labelled by its destination, the room it
+    places the subject in.
 
     The three grounded channels, each through the detector's own predicate: a
     ``saw_player`` matched by the speaker's own
     :class:`~meetings.schemas.SightingRecord` rows, a ``saw_move`` matched by
     their own :class:`~meetings.schemas.MoveWitnessRecord` rows, or a spoken vent
-    the detector grounded against THIS speaker
-    (:func:`_vent_grounded_speakers`, which resolves each flag back to the
-    observation it was minted from). A fabricated observation matches nothing and
-    grounds nothing, which is the whole point of testing the record rather than
-    the turn.
+    whose OWN observation id the detector minted a flag from
+    (:func:`_grounded_vent_observation_ids`). A fabricated observation matches
+    nothing and grounds nothing, which is the whole point of testing the record
+    rather than the turn.
+
+    Every channel is tested per STATEMENT, not per speaker: a witness who spoke
+    two vents of one subject and had one of them grounded is one account, and
+    the row names only the tick that held up.
 
     The sighting mapping arrives §4.7-firewalled from the manager, so an
     impostor's row naming a teammate cannot ground a case against that teammate.
@@ -224,70 +276,100 @@ def _speaker_grounds_subject(
     same suspicion delta
     :func:`meetings.transcript._carries_relevant_observation` refuses on the
     accusation side. Admitting it needs a grounding channel FIRST; until one
-    exists the shape is testimony a voter reads and no ledger row counts, and
-    the ballot's adopted clause is worded against the record to say so. Ruled at
-    #416 Q4.
+    exists the shape is testimony a voter reads and no ledger row counts --
+    which is why :func:`_spoke_of_subject` sorts such a speaker into
+    ``adopted_spoke_kill`` and the ballot names what they said rather than
+    reporting them silent. Ruled at #416 Q4.
     """
 
     sightings = sighting_records.get(speaker, ())
     moves = move_witness_records.get(speaker, ())
+    places: set[tuple[str, str, int]] = set()
     for turn in transcript.turns:
         if turn.speaker != speaker:
             continue
-        for observation in turn.observations:
+        for index, observation in enumerate(turn.observations):
             if isinstance(observation, SawPlayerObservation):
                 if observation.subject == subject and any(
                     sighting_observation_matches_record(observation, record)
                     for record in sightings
                 ):
-                    return True
+                    places.add((observation.type, observation.room, observation.tick))
             elif isinstance(observation, SawMoveObservation):
                 if observation.subject == subject and any(
                     move_observation_matches_record(observation, record)
                     for record in moves
                 ):
-                    return True
+                    places.add(
+                        (observation.type, observation.to_room, observation.tick)
+                    )
             elif isinstance(observation, SawVentObservation):
-                if observation.subject == subject and speaker in vent_grounded.get(
-                    subject, frozenset()
+                if (
+                    observation.subject == subject
+                    and turn_observation_id(turn=turn, index=index) in grounded_vent_ids
                 ):
-                    return True
-    return False
+                    places.add((observation.type, observation.room, observation.tick))
+    return tuple(sorted(places, key=lambda place: (place[2], place[1], place[0])))
 
 
-def _vent_grounded_speakers(
-    transcript: MeetingTranscript,
+def _spoke_of_subject(
+    transcript: MeetingTranscript, *, speaker: PlayerId, subject: PlayerId
+) -> tuple[bool, bool]:
+    """What ``speaker`` said they saw of ``subject``, as ``(kill, anything)``.
+
+    The sibling of :func:`_speaker_grounding_places` for the voices it turned
+    away: a speaker the record did not bear out still said something or said
+    nothing, and a watched kill is neither of those -- it is the one shape this
+    ledger has no channel to test, so the row names it as testimony instead of
+    reporting silence. Only the four subject-naming shapes count; a roll-call
+    ``whereabouts``, a task or a body report names no one.
+    """
+
+    kill = False
+    anything = False
+    for turn in transcript.turns:
+        if turn.speaker != speaker:
+            continue
+        for observation in turn.observations:
+            if not isinstance(
+                observation,
+                SawPlayerObservation
+                | SawMoveObservation
+                | SawVentObservation
+                | SawKillObservation,
+            ):
+                continue
+            if observation.subject != subject:
+                continue
+            anything = True
+            if isinstance(observation, SawKillObservation):
+                kill = True
+    return kill, anything
+
+
+def _grounded_vent_observation_ids(
     contradictions: Sequence[ContradictionRef],
-) -> Mapping[PlayerId, frozenset[PlayerId]]:
-    """Per subject, the speakers whose OWN spoken vent the detector grounded.
+) -> frozenset[str]:
+    """The spoken vent observations the detector minted a flag from.
 
     A ``vent_sighting`` flag is minted from one speaker's own matched
     :class:`~meetings.schemas.VentWitnessRecord` and carries that exact spoken
     observation in both event ids, so the flag names WHICH account it grounds --
-    not merely whom it accuses. Resolving the id back to its turn is what stops a
-    second speaker riding someone else's grounded vent, and it is exact whatever
-    the cardinality: one witness with two grounded vents mints two flags on two
-    of their own observations, and a fabricator standing beside them matches
-    none.
+    not merely whom it accuses, and not merely that its speaker said something
+    true once. Matching the id is what stops a second speaker riding someone
+    else's grounded vent AND stops one witness's grounded vent vouching for
+    their own second, ungrounded one; it is exact whatever the cardinality, since
+    a witness with two grounded vents mints two flags on two of their own
+    observations and a fabricator standing beside them matches none.
 
-    The id comes from :func:`~meetings.transcript.turn_observation_id`, the one
-    home for that format and the same writer the detector stamped the flag with,
+    The id format comes from :func:`~meetings.transcript.turn_observation_id`,
+    the one home for it and the same writer the detector stamped the flag with,
     so this never re-derives an id shape of its own.
     """
 
-    flagged_events = frozenset(
+    return frozenset(
         flag.event_a_id for flag in contradictions if flag.kind == "vent_sighting"
     )
-    if not flagged_events:
-        return {}
-    grounded: dict[PlayerId, set[PlayerId]] = {}
-    for turn in transcript.turns:
-        for index, observation in enumerate(turn.observations):
-            if not isinstance(observation, SawVentObservation):
-                continue
-            if turn_observation_id(turn=turn, index=index) in flagged_events:
-                grounded.setdefault(observation.subject, set()).add(turn.speaker)
-    return {subject: frozenset(speakers) for subject, speakers in grounded.items()}
 
 
 def _room_label(rooms: frozenset[str]) -> str:
@@ -365,7 +447,7 @@ def build_testimony_ledger(
     if not accusations:
         return MeetingTestimonyLedger(rows=(), opener=opener)
 
-    vent_grounded = _vent_grounded_speakers(transcript, contradictions)
+    grounded_vent_ids = _grounded_vent_observation_ids(contradictions)
     flagged_subjects = frozenset(
         subject
         for contradiction in contradictions
@@ -392,25 +474,31 @@ def build_testimony_ledger(
 
     rows: list[TestimonySupport] = []
     for subject, (origin_index, origin_turn_id, origin_speaker) in origins.items():
-        first_hand = tuple(
-            sorted(
-                speaker
-                for speaker in accusers[subject]
-                if _speaker_grounds_subject(
-                    transcript,
-                    speaker=speaker,
-                    subject=subject,
-                    sighting_records=sighting_records,
-                    move_witness_records=move_witness_records,
-                    vent_grounded=vent_grounded,
-                )
+        first_hand_places: list[tuple[PlayerId, tuple[tuple[str, str, int], ...]]] = []
+        silent: list[PlayerId] = []
+        ungrounded: list[PlayerId] = []
+        spoke_kill: list[PlayerId] = []
+        for speaker in sorted(accusers[subject]):
+            places = _speaker_grounding_places(
+                transcript,
+                speaker=speaker,
+                subject=subject,
+                sighting_records=sighting_records,
+                move_witness_records=move_witness_records,
+                grounded_vent_ids=grounded_vent_ids,
             )
-        )
-        adopted = tuple(
-            sorted(
-                speaker for speaker in accusers[subject] if speaker not in first_hand
+            if places:
+                first_hand_places.append((speaker, places))
+                continue
+            kill, anything = _spoke_of_subject(
+                transcript, speaker=speaker, subject=subject
             )
-        )
+            if kill:
+                spoke_kill.append(speaker)
+            elif anything:
+                ungrounded.append(speaker)
+            else:
+                silent.append(speaker)
         opener_charge_turn_id: TurnId | None = None
         if subject == opener:
             charge = opener_charges.get(origin_speaker)
@@ -420,8 +508,10 @@ def build_testimony_ledger(
             TestimonySupport(
                 subject=subject,
                 originating_turn_id=origin_turn_id,
-                first_hand=first_hand,
-                adopted=adopted,
+                first_hand_places=tuple(first_hand_places),
+                adopted_silent=tuple(silent),
+                adopted_spoke_ungrounded=tuple(ungrounded),
+                adopted_spoke_kill=tuple(spoke_kill),
                 flagged=subject in flagged_subjects,
                 opener_charge_turn_id=opener_charge_turn_id,
                 walkable_transits=_walkable_transits(paths.get(subject, ())),
