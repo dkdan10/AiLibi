@@ -495,6 +495,12 @@ def _renderer_for(renderers: PromptRenderers, kind: str) -> Any:
 # --------------------------------------------------------------------------- #
 
 
+#: The turn kinds a speech prompt is rendered for. ``opening`` is the report
+#: templates' kind and never reaches the statement renderer, so a capture
+#: carrying anything else means the reader is probing a branch it has not seen.
+_SPEECH_TURN_KINDS: Final[tuple[TurnKind, ...]] = ("reply", "opt_in")
+
+
 def _probe_crew_statement(renderers: PromptRenderers, *, turn_kind: str) -> str:
     """One minimal CREW speech render, for deriving the arm's own block.
 
@@ -503,7 +509,15 @@ def _probe_crew_statement(renderers: PromptRenderers, *, turn_kind: str) -> str:
     no publicly spoken row can join it.
     """
 
-    kind: TurnKind = "opt_in" if turn_kind == "opt_in" else "reply"
+    kind = next((k for k in _SPEECH_TURN_KINDS if k == turn_kind), None)
+    if kind is None:
+        raise SystemExit(
+            f"a speech prompt was rendered for turn kind {turn_kind!r}, which "
+            f"is not one of {list(_SPEECH_TURN_KINDS)}. The elicitation block is "
+            "derived per turn kind, so this reader cannot probe a branch it does "
+            "not know exists — falling back to another kind's block would read "
+            "the wrong lines. This is a DEFECT IN THIS SCRIPT's reader"
+        )
     return renderers.statement(
         agent_id="p-1",
         rendered_memory="",
@@ -952,7 +966,7 @@ def _fold_elicitation(
             capture, roles, where=f"{meeting.set_name} {meeting.meeting_id}"
         )
         markers = renderers.elicitation_markers(
-            meeting.set_name, str(capture.kwargs.get("turn_kind", "reply"))
+            meeting.set_name, str(capture.kwargs.get("turn_kind"))
         )
         gained = elicitation_lines_gained(
             off_prompt=capture.off_prompt,

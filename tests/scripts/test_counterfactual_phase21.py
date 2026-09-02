@@ -857,6 +857,18 @@ def test_the_marker_derivation_refuses_when_the_arm_offers_nothing(
     assert "elicitation block" in str(excinfo.value)
 
 
+def test_an_unknown_speech_turn_kind_refuses_rather_than_probing_another() -> None:
+    # The block is derived PER TURN KIND, so a kind this reader has not seen has
+    # no block of its own. Coercing it to the reply branch would read the wrong
+    # lines and report a real gap as a clean 100%; the refusal names the kind.
+    with pytest.raises(SystemExit) as excinfo:
+        cf._RendererCache().elicitation_markers(_PROMPT_SET, "opening")
+    assert "turn kind 'opening'" in str(excinfo.value)
+    # ...and both kinds the statement renderer really serves still read.
+    for kind in cf._SPEECH_TURN_KINDS:
+        assert len(cf._RendererCache().elicitation_markers(_PROMPT_SET, kind)) == 2
+
+
 def test_the_impostor_half_bites_on_a_breached_firewall(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
