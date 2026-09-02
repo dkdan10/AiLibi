@@ -922,16 +922,17 @@ the sentence it replaces.
 
 | leg | prompt class | rendered | changed | lines added | bytes added |
 |---|---|---|---|---|---|
-| `corroboration_discipline` | `vote_ballot` | 3,631 | 3,614 | 26,522 | 4,982,723 |
+| `corroboration_discipline` | `vote_ballot` | 3,631 | 3,614 | 26,522 | 5,477,841 |
 | `corroboration_discipline` | `crewmate_report` | 672 | 0 | 0 | 0 |
 | `corroboration_discipline` | `accusation_round` | 2,959 | 0 | 0 | 0 |
 
-The ballot loses 1,910 lines and gains 1,012,108 bytes. The lines are the calibration
+The ballot loses 1,910 lines and gains 1,507,226 bytes. The lines are the calibration
 ladder, which now yields on the 1,910 ballots that also render the Proof paragraph — two
 pricing instructions on one page disagreed about a vent someone else watched, and the
 paragraph that owns the strongest evidence class is the one the voter keeps. The bytes are
-the header's two added sentences, the per-statement ticks beside each credited account, and
-the three-way split of the adopted clause.
+the header's added sentences — what a voice is, who falls outside the count, and what a
+second account does and does not settle — the per-statement ticks beside each credited
+account, and the three-way split of the adopted clause.
 
 | leg | prompt class | rendered | changed | lines added | bytes added |
 |---|---|---|---|---|---|
@@ -948,13 +949,13 @@ mandate no longer claims to outrank a vent and states the must-carry duty the un
 |---|---|---|---|---|---|
 | `all-three-ON` | `crewmate_report` | 672 | 672 | 1,964 | 604,662 |
 | `all-three-ON` | `accusation_round` | 2,959 | 2,879 | 15,051 | 2,307,529 |
-| `all-three-ON` | `vote_ballot` | 3,631 | 3,614 | 26,522 | 4,982,723 |
+| `all-three-ON` | `vote_ballot` | 3,631 | 3,614 | 26,522 | 5,477,841 |
 
 | leg | prompt class | rendered | changed | lines added | bytes added |
 |---|---|---|---|---|---|
 | `two-ON (less testimony_shapes)` | `crewmate_report` | 672 | 620 | 620 | 171,222 |
 | `two-ON (less testimony_shapes)` | `accusation_round` | 2,959 | 2,715 | 11,005 | 1,026,970 |
-| `two-ON (less testimony_shapes)` | `vote_ballot` | 3,631 | 3,614 | 26,522 | 4,982,723 |
+| `two-ON (less testimony_shapes)` | `vote_ballot` | 3,631 | 3,614 | 26,522 | 5,477,841 |
 
 **The slate's one cross-lever interaction is now zero.** The +61,750 ballot bytes that
 neither lever produced alone were the adopted clause re-wording under the joint slate; the
@@ -994,7 +995,7 @@ and none of them is this row, and §9's seven candidates name no cross-lever cel
 Recomputed, the §6.2 cost table reads 620 + 11,005 = 11,625 / 7,262 = 1.60 for the reporter
 leg, 26,522 / 7,262 = 3.65 for corroboration, 1,344 + 4,046 = 5,390 / 7,262 = 0.74 for
 testimony shapes, 43,537 / 7,262 = 5.99 for all three, and 38,147 / 7,262 = 5.25 for the
-leave-one-out leg; the ballot-bytes column is +4,982,723 on all three ballot-carrying legs.
+leave-one-out leg; the ballot-bytes column is +5,477,841 on all three ballot-carrying legs.
 §6.1's render budget — 255,918 rendered memory rows over 7,271 snapshots, 99,710 testimony
 rows, the three living buckets — is untouched, because none of it reads a lever.
 

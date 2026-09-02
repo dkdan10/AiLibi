@@ -233,7 +233,7 @@ def _speaker_grounding_ticks(
     subject: PlayerId,
     sighting_records: Mapping[PlayerId, tuple[SightingRecord, ...]],
     move_witness_records: Mapping[PlayerId, tuple[MoveWitnessRecord, ...]],
-    vent_grounded: Mapping[PlayerId, frozenset[PlayerId]],
+    grounded_vent_ids: frozenset[str],
 ) -> tuple[int, ...]:
     """The ticks of ``speaker``'s FIRST-HAND observations of ``subject`` here.
 
@@ -247,11 +247,14 @@ def _speaker_grounding_ticks(
     ``saw_player`` matched by the speaker's own
     :class:`~meetings.schemas.SightingRecord` rows, a ``saw_move`` matched by
     their own :class:`~meetings.schemas.MoveWitnessRecord` rows, or a spoken vent
-    the detector grounded against THIS speaker
-    (:func:`_vent_grounded_speakers`, which resolves each flag back to the
-    observation it was minted from). A fabricated observation matches nothing and
-    grounds nothing, which is the whole point of testing the record rather than
-    the turn.
+    whose OWN observation id the detector minted a flag from
+    (:func:`_grounded_vent_observation_ids`). A fabricated observation matches
+    nothing and grounds nothing, which is the whole point of testing the record
+    rather than the turn.
+
+    Every channel is tested per STATEMENT, not per speaker: a witness who spoke
+    two vents of one subject and had one of them grounded is one account, and
+    the row names only the tick that held up.
 
     The sighting mapping arrives §4.7-firewalled from the manager, so an
     impostor's row naming a teammate cannot ground a case against that teammate.
@@ -279,7 +282,7 @@ def _speaker_grounding_ticks(
     for turn in transcript.turns:
         if turn.speaker != speaker:
             continue
-        for observation in turn.observations:
+        for index, observation in enumerate(turn.observations):
             if isinstance(observation, SawPlayerObservation):
                 if observation.subject == subject and any(
                     sighting_observation_matches_record(observation, record)
@@ -293,8 +296,9 @@ def _speaker_grounding_ticks(
                 ):
                     ticks.add(observation.tick)
             elif isinstance(observation, SawVentObservation):
-                if observation.subject == subject and speaker in vent_grounded.get(
-                    subject, frozenset()
+                if (
+                    observation.subject == subject
+                    and turn_observation_id(turn=turn, index=index) in grounded_vent_ids
                 ):
                     ticks.add(observation.tick)
     return tuple(sorted(ticks))
@@ -335,39 +339,29 @@ def _spoke_of_subject(
     return kill, anything
 
 
-def _vent_grounded_speakers(
-    transcript: MeetingTranscript,
+def _grounded_vent_observation_ids(
     contradictions: Sequence[ContradictionRef],
-) -> Mapping[PlayerId, frozenset[PlayerId]]:
-    """Per subject, the speakers whose OWN spoken vent the detector grounded.
+) -> frozenset[str]:
+    """The spoken vent observations the detector minted a flag from.
 
     A ``vent_sighting`` flag is minted from one speaker's own matched
     :class:`~meetings.schemas.VentWitnessRecord` and carries that exact spoken
     observation in both event ids, so the flag names WHICH account it grounds --
-    not merely whom it accuses. Resolving the id back to its turn is what stops a
-    second speaker riding someone else's grounded vent, and it is exact whatever
-    the cardinality: one witness with two grounded vents mints two flags on two
-    of their own observations, and a fabricator standing beside them matches
-    none.
+    not merely whom it accuses, and not merely that its speaker said something
+    true once. Matching the id is what stops a second speaker riding someone
+    else's grounded vent AND stops one witness's grounded vent vouching for
+    their own second, ungrounded one; it is exact whatever the cardinality, since
+    a witness with two grounded vents mints two flags on two of their own
+    observations and a fabricator standing beside them matches none.
 
-    The id comes from :func:`~meetings.transcript.turn_observation_id`, the one
-    home for that format and the same writer the detector stamped the flag with,
+    The id format comes from :func:`~meetings.transcript.turn_observation_id`,
+    the one home for it and the same writer the detector stamped the flag with,
     so this never re-derives an id shape of its own.
     """
 
-    flagged_events = frozenset(
+    return frozenset(
         flag.event_a_id for flag in contradictions if flag.kind == "vent_sighting"
     )
-    if not flagged_events:
-        return {}
-    grounded: dict[PlayerId, set[PlayerId]] = {}
-    for turn in transcript.turns:
-        for index, observation in enumerate(turn.observations):
-            if not isinstance(observation, SawVentObservation):
-                continue
-            if turn_observation_id(turn=turn, index=index) in flagged_events:
-                grounded.setdefault(observation.subject, set()).add(turn.speaker)
-    return {subject: frozenset(speakers) for subject, speakers in grounded.items()}
 
 
 def _room_label(rooms: frozenset[str]) -> str:
@@ -445,7 +439,7 @@ def build_testimony_ledger(
     if not accusations:
         return MeetingTestimonyLedger(rows=(), opener=opener)
 
-    vent_grounded = _vent_grounded_speakers(transcript, contradictions)
+    grounded_vent_ids = _grounded_vent_observation_ids(contradictions)
     flagged_subjects = frozenset(
         subject
         for contradiction in contradictions
@@ -483,7 +477,7 @@ def build_testimony_ledger(
                 subject=subject,
                 sighting_records=sighting_records,
                 move_witness_records=move_witness_records,
-                vent_grounded=vent_grounded,
+                grounded_vent_ids=grounded_vent_ids,
             )
             if ticks:
                 first_hand_ticks.append((speaker, ticks))
