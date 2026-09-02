@@ -3336,7 +3336,7 @@ def run(
             "advisory": walk.innocent_ejections <= ADVISORY_INNOCENT_EJECTIONS,
             "rows": [row.payload() for row in rows],
             "tripwire_rows": [row.payload() for row in tripwires],
-            "render_census": _render_census_payload(walk, withhold=withhold),
+            "render_census": _render_census_payload(walk, legs=_slate_legs(withhold)),
             "ballot_census": walk.ballots.payload(),
             "testimony_census": walk.testimony.payload(),
             "injustice_ledger": [row.payload() for row in walk.ledger_rows],
@@ -3420,7 +3420,7 @@ def run_recording(
             "ejections": walk.ejections,
             "elapsed_seconds": round(walk.elapsed, 2),
             "rows": [row.payload() for row in rows],
-            "render_census": _render_census_payload(walk, withhold="testimony_shapes"),
+            "render_census": _render_census_payload(walk, legs=_on_recording_legs()),
             "testimony_census": walk.testimony.payload(),
             "ballot_census": walk.ballots.payload(),
             "corroboration_cells": dict(sorted(walk.corroboration.items())),
@@ -3790,8 +3790,16 @@ def _class_totals(rows: Sequence[InjusticeLedgerRow]) -> dict[str, int]:
     return dict(sorted(totals.items()))
 
 
-def _render_census_payload(walk: _SetWalk, *, withhold: str) -> dict[str, object]:
-    labels = {label for label, _ in _slate_legs(withhold)}
+def _render_census_payload(
+    walk: _SetWalk, *, legs: Sequence[tuple[str, frozenset[str]]]
+) -> dict[str, object]:
+    """The per-leg render census, over the legs the run actually walked.
+
+    Keyed on the run's OWN legs rather than on the committed mode's, so a mode
+    with different legs publishes all of them instead of the intersection.
+    """
+
+    labels = {label for label, _ in legs}
     return {
         label: {
             "meetings_touched": leg.meetings_touched,
