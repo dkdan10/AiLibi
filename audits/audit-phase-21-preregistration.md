@@ -669,10 +669,20 @@ not be recorded as satisfied. **Two of the seven are in that state today, and th
 rather than assumed:**
 
 * **T5 — no speaker-role split.** The predicate has two halves (every observed CREW speech turn
-  gains the block, ZERO impostor turns do) and `scripts/counterfactual_phase21.py`'s `T-9` row
-  emits only the AGGREGATE `changed[accusation_round] / rendered[accusation_round]` (:1756-1766).
-  Two offsetting errors — a crew turn missing the block while an impostor turn gains one — leave
-  that aggregate unchanged, so T-9 cannot falsify the predicate it is registered against.
+  gains the ELICITATION block, ZERO impostor speech prompts do) and
+  `scripts/counterfactual_phase21.py`'s `T-9` row emits only the AGGREGATE
+  `changed[accusation_round] / rendered[accusation_round]` (:1756-1766). Two offsetting errors —
+  a crew turn missing the block while an impostor turn gains one — leave that aggregate unchanged,
+  so T-9 cannot falsify the predicate it is registered against.
+  **The split the reader owes is a split of the ELICITATION BLOCK, not of the byte diff**: `T-9`
+  counts a prompt as changed whenever its ON render differs from its OFF render at all
+  (`scripts/counterfactual_phase21.py`:680-682), and on a lever-ON record the first crew-spoken
+  `saw_kill` inserts the PUBLIC-TRANSCRIPT row — `accusation_round.j2`:164-165 and
+  `vote_ballot.j2`:142-143, guarded on the lever alone because the transcript is the one table
+  every seat reads — into every later prompt of that meeting, impostor prompts included, so a role
+  split of the byte diff would read a CORRECT render as an impostor turn gaining the block and
+  STOP a good record. (At baseline 8 the two readings coincide: the corpus holds no spoken
+  `saw_kill` at all.)
 * **T7 — no meeting-1 filter.** The predicate is a first-meeting identity, but `B-1` accumulates
   `snapshots` and `rendered_lines` across every captured meeting (:695-703) and publishes only
   those totals (:1804-1808). A meeting-1 difference can be masked by an opposite later-meeting
@@ -682,9 +692,9 @@ rather than assumed:**
 whose contract puts **every code path** out of scope (`tasks/phase-21.md`, Task 21.23's "Files
 NOT in scope"), so the reader cannot be written there and a smoke that invented one would be
 executing a criterion it had just authored. That contract owes exactly two cells: **`T-9` split by
-the speaker's recorded role**, and **a meeting-1-scoped `B-1`**. Scheduling it is an owner
-decision and it is raised as such in this PR's `## Questions`; until it merges, **T5 and T7 read
-UNREAD and the record does not start.**
+the speaker's recorded role and restricted to the elicitation block**, and **a meeting-1-scoped
+`B-1`**. Scheduling it is an owner decision and it is raised as such in this PR's `## Questions`;
+until it merges, **T5 and T7 read UNREAD and the record does not start.**
 
 The other five tripwires are readable as registered, checked against the script's own rows: T1's
 count over `T-7` (:1711), T2's two 100%-of-denominator cells `R-13` and `R-14` (:1483, :1496 —
@@ -698,7 +708,7 @@ full-population `T-6` (:1699) and T6's share over `C-9` (:1621).
 | **T2** | `R-13` / `R-14` — reporter openings and non-reporter speech turns gaining the reporter block | **every observed body-report opening gains the block, and every observed non-reporter speech turn in a body-report meeting gains it — 100% of each observed denominator, and no emergency-meeting prompt gains either** | 620/620 openings and 2,715/2,715 speech turns | **RATIFIED as a pre-record STOP.** A share below 100% on an ON seed means the lever did not thread and the record must not start. Declined as a bar |
 | **T3** | `R-15` — ballots gaining a reporter block | **the count is 0**, whatever the ballot denominator | 0 of 3,631, in both columns | **RATIFIED as a pre-record STOP.** A non-zero reading means the reporter lever reached a seam it does not own. Declined as a bar |
 | **T4** | `T-6` — location accounts reaching the alibi map | **100% of observed location accounts reach the map under ON** (and the OFF reconstruction of the same run is strictly below it) | 1,016/4,173 = 24.35% OFF → 4,173/4,173 = 100% ON | **RATIFIED as a pre-record STOP.** A partial fill means the widened `("alibi","whereabouts")` gate did not land. Declined as a bar |
-| **T5** | `T-9` **split by speaker role** — see the note above; the aggregate `T-9` cannot read this predicate | **every observed CREW speech turn gains the block and the IMPOSTOR count is 0**, whatever the denominators | 2,023 of 2,959, with 0 impostor turns | **RATIFIED as a NEVER-WORSE BAR *and* a pre-record STOP.** An impostor turn gaining the block is a FIREWALL question, not a render one, and the record must not start (or must stop). **UNREAD until 21.23 publishes the role split (§9.1) — and UNREAD is itself a STOP** |
+| **T5** | `T-9` **split by speaker role AND restricted to the elicitation block** (the witnessed-kill mandate line and the `saw_kill` schema-menu row) — see the note above; neither the aggregate `T-9` nor a role split of its byte diff can read this predicate | **every observed CREW speech turn gains the ELICITATION block, and the count of IMPOSTOR speech prompts gaining an ELICITATION block is 0**, whatever the denominators. The role-blind public-transcript row that renders a spoken `saw_kill` to every later speaker (`accusation_round.j2`:164-165, `vote_ballot.j2`:142-143) is EXCLUDED from both halves by construction — it is the shared table every seat reads, it is specified and pinned by `tests/agents/test_bespoke_prompt_sets.py::test_a_spoken_kill_reaches_every_later_speaker`, and an impostor prompt carrying it is CORRECT | 2,023 of 2,959, with 0 impostor turns (at baseline 8 the byte-diff and elicitation-block readings coincide, because no `saw_kill` was ever spoken) | **RATIFIED as a NEVER-WORSE BAR *and* a pre-record STOP.** An impostor turn gaining an ELICITATION block is a firewall question, not a render one, and the record must not start (or must stop); an impostor prompt merely rendering a publicly spoken `saw_kill` row is not, and does not trip this bar. **UNREAD until 21.23 publishes the role split (§9.1) — and UNREAD is itself a STOP** |
 | **T6** | `C-9` — ballots gaining the source-count block | **the observed share is ≥ 99% of ballots.** The residue — meetings whose ledger holds no row for any of that voter's candidate targets — is the stated explanation for the gap, and is context rather than a second criterion, because `C-9` publishes the share and not the residue's membership | 3,614 of 3,631 = 99.5% ON | **RATIFIED as a pre-record STOP.** A materially lower share means the ledger is not being built where it should be. Declined as a bar |
 | **T7** | a **meeting-1-scoped `B-1`** — see the note above; the published `B-1` aggregates every meeting and cannot read this | **the meeting-1 row count is identical between the run's own OFF and ON columns** | 255,918/7,271 across all meetings, unchanged in all three columns | **RATIFIED as a pre-record STOP.** A first-meeting memory-row diff means prose is displacing memory, which this slate must not do. **UNREAD until the meeting-1 cell exists — and UNREAD is itself a STOP.** Declined as a bar |
 
@@ -718,8 +728,8 @@ published beside the reading and never compared against it.
 **The two NEVER-WORSE BARS, stated as such.** T1 and T5 are the only guards this pre-registration
 carries against the record making something worse while the four primary bars improve. Each is a
 one-sided bar on a COUNT, which is why neither needs a denominator to be judged: T1's fabricated
-vent-account count may not rise above 0, and T5's impostor-turn count may not rise above 0.
-Neither can contribute to ADOPTED; each can only stop the record or fail it.
+vent-account count may not rise above 0, and T5's impostor ELICITATION-block count may not rise
+above 0. Neither can contribute to ADOPTED; each can only stop the record or fail it.
 
 ## 9. The record order, the freeze, the slate and the preconditions
 
@@ -765,10 +775,13 @@ stale).
   operator CONFIRMS before the first seed** — not a known risk carried into the run.
 * **The T5 / T7 tripwire-reader contract, merged BEFORE 21.23.** Two ratified tripwires name
   predicates no committed reader can evaluate (§8.1): T5 needs `T-9` **split by the speaker's
-  recorded role** (`scripts/counterfactual_phase21.py`:1756-1766 emits only the aggregate, in
-  which a missing crew block and a gained impostor block cancel), and T7 needs a **meeting-1-scoped
-  `B-1`** (:695-703 accumulates across every captured meeting and :1804-1808 publishes only the
-  totals). It cannot be written at 21.23, whose contract puts every code path out of scope.
+  recorded role and restricted to the elicitation block** — a split of the byte diff is the bug,
+  not the reader (`scripts/counterfactual_phase21.py`:1756-1766 emits only the aggregate, in
+  which a missing crew block and a gained impostor block cancel; :680-682 counts any ON/OFF byte
+  difference at all, so a role split of THAT would count the public-transcript row an impostor
+  prompt correctly carries), and T7 needs a **meeting-1-scoped `B-1`** (:695-703 accumulates
+  across every captured meeting and :1804-1808 publishes only the totals). It cannot be written
+  at 21.23, whose contract puts every code path out of scope.
   **Until that contract merges, T5 and T7 are UNREAD and the record does not start.**
 
 Named as **21.24's own re-anchor business rather than this memo's**: the version/environment
