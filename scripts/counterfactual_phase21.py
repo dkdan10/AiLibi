@@ -109,7 +109,10 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from agents.memory.store import absorb_reported_testimony  # noqa: E402
+from agents.memory.store import (  # noqa: E402
+    AgentMemory,
+    absorb_reported_testimony,
+)
 from agents.strategic.prompts.loader import (  # noqa: E402
     PromptRenderers,
     build_prompt_renderers,
@@ -1100,7 +1103,11 @@ def _fold_render_diff(
     for capture in captures:
         if capture.kind != _KIND_VOTE_BALLOT:
             continue
-        if any(marker in capture.recorded_prompt for marker in reporter_markers):
+        if _ballot_carries_a_reporter_block(
+            capture,
+            markers=reporter_markers,
+            where=f"{meeting.set_name} {meeting.meeting_id}",
+        ):
             reporter_on_ballots.append(capture)
     without, with_arm = elicitation_legs
     by_label = {
@@ -1119,6 +1126,52 @@ def _fold_render_diff(
         roles=roles,
         census=elicitation,
     )
+
+
+#: The ballot template's own delimiters around the region a MODEL authors. What
+#: sits between them is spoken ``free_text`` and the observations a turn carried,
+#: none of it template-owned, so a marker found there says nothing about which
+#: blocks the template rendered.
+_BALLOT_TRANSCRIPT_OPEN: Final[str] = "<transcript>"
+_BALLOT_TRANSCRIPT_CLOSE: Final[str] = "</transcript>"
+
+
+def _template_owned_ballot_text(prompt: str, *, where: str) -> str:
+    """One recorded ballot prompt with the model-authored transcript cut out.
+
+    A ballot renders the meeting transcript, and a turn's ``free_text`` is
+    whatever the model said. A crew agent who quoted the reporter instruction
+    back at the table -- or typed ``<who_reported>`` -- would otherwise put a
+    marker into every later ballot of that meeting without the arm having reached
+    the ballot seam at all, and T3 would STOP a correct record on it. That is the
+    same "a correct render read as a breach" failure §8.1 warns about for T5.
+
+    Cut by the template's OWN delimiters rather than by counting occurrences: the
+    question is which region of the page a marker sits in, and only the delimiters
+    answer it exactly. A prompt missing them is refused, because a scan over a
+    region this reader cannot locate is not a reading.
+    """
+
+    opened = prompt.find(_BALLOT_TRANSCRIPT_OPEN)
+    closed = prompt.find(_BALLOT_TRANSCRIPT_CLOSE)
+    if opened == -1 or closed == -1 or closed < opened:
+        raise SystemExit(
+            f"{where}: a recorded ballot prompt carries no "
+            f"{_BALLOT_TRANSCRIPT_OPEN}/{_BALLOT_TRANSCRIPT_CLOSE} pair, so the "
+            "model-authored region cannot be cut out and a reporter-block scan "
+            "would read a speaker's own words as a template block. This is a "
+            "DEFECT IN THIS SCRIPT's reader, not a finding about the bytes"
+        )
+    return prompt[:opened] + prompt[closed + len(_BALLOT_TRANSCRIPT_CLOSE) :]
+
+
+def _ballot_carries_a_reporter_block(
+    capture: _Capture, *, markers: frozenset[str], where: str
+) -> bool:
+    """Whether the BALLOT TEMPLATE put the reporter arm's block on this prompt."""
+
+    outside = _template_owned_ballot_text(capture.recorded_prompt, where=where)
+    return any(marker in outside for marker in markers)
 
 
 def _fold_against_reconstruction(
@@ -1505,25 +1558,45 @@ def _fold_testimony(
 _LOCATION_KINDS: Final[tuple[str, ...]] = ("alibi", "whereabouts")
 
 
+def _alibi_multiset(memory: AgentMemory) -> Counter[tuple[object, ...]]:
+    """Every alibi claim a belief state holds, as a MULTISET.
+
+    A multiset and not a set: two identical accounts in one reduction, or an
+    account a later meeting repeats verbatim, are separate writes. Membership
+    alone would credit both when the ingest performed one.
+    """
+
+    return Counter(
+        (claim.source, claim.player_id, claim.tick, claim.room)
+        for player_id in memory.beliefs.known_players()
+        for claim in memory.beliefs.view(player_id).alibis
+    )
+
+
 def _accounts_reaching_the_map(
     meeting: ReconstructedMeeting,
     *,
     statements: Sequence[ReportedStatement],
     listeners: frozenset[PlayerId],
 ) -> int:
-    """Location accounts the REAL ingest wrote into at least one alibi map.
+    """Location accounts the REAL ingest WROTE into at least one alibi map.
 
     Runs :func:`agents.memory.store.absorb_reported_testimony` -- the function the
     orchestrator and the replay loader call per living agent -- over a DEEP COPY
-    of each listener's own memory, and reads back what landed. The copy is not an
-    optimisation: these are the stores the walk's NEXT meeting renders from, and
-    absorbing into them would change the bytes the reconstruction has to
+    of each listener's own memory, and reads back what it ADDED. The copy is not
+    an optimisation: these are the stores the walk's NEXT meeting renders from,
+    and absorbing into them would change the bytes the reconstruction has to
     reproduce.
 
     Counting what the ingest WROTE rather than what the reduction OFFERED is the
     whole point. The gate's own definition says every location account reaches
     the map; the own-statement guard, the roster gate and a tickless claim can
     each stop one, and a cell derived from the offer could not see any of them.
+
+    The reading is a BEFORE/AFTER delta, taken as a multiset and then consumed
+    once per account. Reading the map's final contents instead would credit an
+    account the map already held, and would credit two identical accounts to a
+    single write -- either of which lets a partial ingest still read 100%.
     """
 
     accounts = [
@@ -1531,35 +1604,37 @@ def _accounts_reaching_the_map(
     ]
     if not accounts:
         return 0
-    landed: set[tuple[str, PlayerId, PlayerId, int | None, str | None]] = set()
+    added: Counter[tuple[object, ...]] = Counter()
     for listener in sorted(listeners):
         memory = meeting.memories.get(listener)
         if memory is None:
             continue
         probe = deepcopy(memory)
+        before = _alibi_multiset(probe)
         try:
             absorb_reported_testimony(probe, statements=accounts)
         except ValueError:
             # No self_state row yet, so the ingest's own guard refuses. Nothing
             # this listener could have absorbed reached anything.
             continue
-        for player_id in probe.beliefs.known_players():
-            for claim in probe.beliefs.view(player_id).alibis:
-                landed.add(
-                    (claim.source, player_id, claim.player_id, claim.tick, claim.room)
-                )
-    return sum(
-        1
-        for statement in accounts
-        if (
+        # The per-listener delta, unioned by MAX across listeners: one account
+        # written into three maps is one account that reached the map, but two
+        # identical accounts must be written twice before both are credited.
+        delta = _alibi_multiset(probe) - before
+        for key, count in delta.items():
+            added[key] = max(added[key], count)
+    reached = 0
+    for statement in accounts:
+        key = (
             statement.speaker,
-            statement.subject,
             statement.subject,
             statement.from_tick,
             statement.room if statement.room is not None else "",
         )
-        in landed
-    )
+        if added[key] > 0:
+            added[key] -= 1
+            reached += 1
+    return reached
 
 
 def _ingest_rows(
@@ -2815,6 +2890,9 @@ class OnRow:
     reconstructed_on: tuple[int, int] | None = None
     off: tuple[int, int] | None = None
     also_zero: tuple[str, int] | None = None
+    #: A compound predicate's ORDERING clause, as ``(name, below, above)``.
+    #: Printed whether it bites or not, so the operator sees the clause was read.
+    also_below: tuple[str, int, int] | None = None
     caveat: str = ""
 
     @property
@@ -2849,6 +2927,15 @@ class OnRow:
             return _VERDICT_OBSERVED
         if self.also_zero is not None and self.also_zero[1] != 0:
             return _VERDICT_STOP
+        if self.also_below is not None:
+            below, above = self.also_below[1], self.also_below[2]
+            # The clause reads "the OFF reconstruction is strictly below ON". An
+            # OFF reading ABOVE the ON one is an inversion no slate can produce
+            # and a defect in either column. An OFF reading EQUAL to it means the
+            # widened gate found nothing to widen on these bytes -- a population
+            # fact, and §8.1 says a population is never a trip.
+            if below > above:
+                return _VERDICT_STOP
         pair = self.reading
         if pair is None:
             return _VERDICT_UNREAD
@@ -2894,6 +2981,9 @@ class OnRow:
             "advisory": self.advisory,
             "verdict": self.verdict(),
             "also_zero": list(self.also_zero) if self.also_zero is not None else None,
+            "also_below": (
+                list(self.also_below) if self.also_below is not None else None
+            ),
             "caveat": self.caveat,
             "on_withdrawn": not self.agrees,
             "recorded_on": list(self.recorded_on) if self.recorded_on else None,
@@ -3065,6 +3155,11 @@ def build_on_recording_rows(walk: _SetWalk) -> list[OnRow]:
             rule=_RULE_FULL,
             reconstructed_on=testimony.alibi_map_on,
             off=testimony.alibi_map_off,
+            also_below=(
+                "the OFF ingest, which the clause requires strictly below ON",
+                testimony.alibi_map_off[0],
+                testimony.alibi_map_on[0],
+            ),
         ),
         OnRow(
             cell_id="T-9a",
@@ -3783,6 +3878,15 @@ class _PooledOnRows:
             # member that STOPped on exactly that clause, and one that dropped
             # its caveat would state a construction-guaranteed value as a result.
             also_zero=_sum_also_zero(seen.also_zero, row.also_zero),
+            also_below=(
+                None
+                if seen.also_below is None or row.also_below is None
+                else (
+                    row.also_below[0],
+                    seen.also_below[1] + row.also_below[1],
+                    seen.also_below[2] + row.also_below[2],
+                )
+            ),
             caveat=row.caveat or seen.caveat,
         )
 
@@ -4296,6 +4400,9 @@ def _print_on_row(row: Mapping[str, object], *, out: TextIO) -> None:
     beside = ""
     if isinstance(also, list):
         beside = f", {also[0]} = {also[1]}"
+    ordering = row.get("also_below")
+    if isinstance(ordering, list):
+        beside += f", {ordering[0]} = {ordering[1]} against {ordering[2]}"
     print(
         f"       {row['tripwire']}: {row['predicate']} — READS "
         f"{_rate(reading)}{beside} → {row['verdict']}",

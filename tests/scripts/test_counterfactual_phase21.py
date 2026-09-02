@@ -57,7 +57,10 @@ from pydantic import BaseModel
 
 from agents.strategic.prompts.loader import ENV_PROMPT_SET, build_prompt_renderers
 from llm.client import CallKind, LLMResponse
+from agents.memory.store import absorb_reported_testimony
+from engine.world import load_canonical_map
 from llm.fake_provider import FakeProvider
+from meetings.manager import derive_reported_testimony
 from meetings.corroboration import MeetingTestimonyLedger
 from meetings.render_contract import ReporterContext
 from meetings.schemas import (
@@ -73,6 +76,7 @@ from orchestrator.replay import (
     substrate_flag_snapshot,
 )
 from tests._helpers.lever_on_recording import record_replay_set
+from tests.meetings.test_prompt_byte_golden import walk_replay_meetings
 
 import counterfactual_phase21 as cf
 
@@ -1787,6 +1791,167 @@ def test_the_ingest_reading_is_the_shipped_function_not_a_restatement(
     )
     assert walk.testimony.alibi_map_reached_on == 0
     assert walk.testimony.alibi_map_reached_off == 0
+
+
+def _one_meeting_with_a_location_account(directory: Path) -> tuple[Any, Any]:
+    """One reconstructed meeting of a recording, plus a location account it spoke.
+
+    Driven through the SAME walk the script uses, so the meeting carries the real
+    per-agent memories the ingest reads and the account is one the shipped
+    reduction actually produced.
+    """
+
+    renderers = cf._RendererCache()
+    sink: list[Any] = []
+    bundles = renderers.capturing(
+        sink,
+        levers=frozenset(cf.WAVE_2_LEVERS),
+        slate_set=cf._arm_serving_set(directory),
+    )
+    for path in cf._seed_paths(directory):
+        for meeting in walk_replay_meetings(
+            path, game_map=load_canonical_map(), renderers_for_set=bundles
+        ):
+            spoken = derive_reported_testimony(
+                meeting.result,
+                env={env_var_for_lever("testimony_shapes"): "1"},
+            )
+            for statement in spoken:
+                if (
+                    statement.kind in cf._LOCATION_KINDS
+                    and statement.from_tick is not None
+                ):
+                    return meeting, statement
+    raise AssertionError("the recording spoke no location account")
+
+
+def test_a_duplicate_account_the_ingest_drops_takes_t4_off_100_percent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """T4 is a BEFORE/AFTER MULTISET delta, so two accounts need two writes.
+
+    Reading the map's final contents would credit both copies of a repeated
+    account to a single write — the exact shape in which a partial ingest still
+    reads 100%. The planted case speaks the same account twice and lets the
+    ingest write it once.
+    """
+
+    _export_the_slate(monkeypatch)
+    _record_on(tmp_path, seeds=(1,), llm_client=_LocationAccountProvider())
+    meeting, account = _one_meeting_with_a_location_account(tmp_path)
+    listeners = frozenset(ballot.voter for ballot in meeting.result.ballots)
+    doubled = (account, account)
+
+    both = cf._accounts_reaching_the_map(
+        meeting, statements=doubled, listeners=listeners
+    )
+    assert both == 2, "both copies land when the ingest writes both"
+
+    # Now the ingest writes only the FIRST copy. A membership test would still
+    # credit both; the delta credits one, and T4 falls off 100%.
+    monkeypatch.setattr(
+        cf,
+        "absorb_reported_testimony",
+        lambda memory, *, statements: absorb_reported_testimony(
+            memory, statements=list(statements)[:1]
+        ),
+    )
+    partial = cf._accounts_reaching_the_map(
+        meeting, statements=doubled, listeners=listeners
+    )
+    assert partial == 1
+    dropped = cf.OnRow(
+        cell_id="T-6",
+        tripwire="T4",
+        label="planted",
+        population="statement",
+        predicate="planted",
+        note="planted",
+        rule="full",
+        reconstructed_on=(partial, 2),
+        off=(0, 2),
+    )
+    assert dropped.verdict() == "STOP"
+
+
+def test_a_marker_inside_a_spoken_turn_is_not_a_reporter_block(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """T3 must not STOP a correct record because a model quoted the instruction.
+
+    The scan cuts the ballot's model-authored `<transcript>` region out by the
+    TEMPLATE's own delimiters, so a marker a speaker typed sits outside the
+    scanned text. Both directions are planted: inside the region is no breach,
+    outside it is.
+    """
+
+    _export_the_slate(monkeypatch)
+    renderers = cf._RendererCache()
+    marker = sorted(renderers.reporter_markers("qwen3_6_27b", "reply"))[0]
+
+    echoed = cf._Capture(
+        kind=cf._KIND_VOTE_BALLOT,
+        agent_id="p-2",
+        kwargs={},
+        recorded_prompt=f"<ballot>\n<transcript>\n{marker}\n</transcript>\n",
+    )
+    assert not cf._ballot_carries_a_reporter_block(
+        echoed, markers=frozenset({marker}), where="planted"
+    )
+
+    rendered = cf._Capture(
+        kind=cf._KIND_VOTE_BALLOT,
+        agent_id="p-2",
+        kwargs={},
+        recorded_prompt=f"<ballot>\n{marker}\n<transcript>\n</transcript>\n",
+    )
+    assert cf._ballot_carries_a_reporter_block(
+        rendered, markers=frozenset({marker}), where="planted"
+    )
+
+    # A prompt whose transcript region cannot be located is refused, not scanned.
+    with pytest.raises(SystemExit, match="cannot be cut out"):
+        cf._ballot_carries_a_reporter_block(
+            cf._Capture(
+                kind=cf._KIND_VOTE_BALLOT,
+                agent_id="p-2",
+                kwargs={},
+                recorded_prompt="<ballot>no transcript here</ballot>",
+            ),
+            markers=frozenset({marker}),
+            where="planted",
+        )
+    del tmp_path
+
+
+def test_t4s_ordering_clause_is_read_and_only_an_inversion_stops_it() -> None:
+    """The parenthetical of a compound predicate, read rather than dropped.
+
+    §8.1's T4 cell asks for the OFF reconstruction to sit strictly below ON. An
+    OFF reading ABOVE the ON one is an inversion no slate can produce; an OFF
+    reading EQUAL to it means the run spoke no `whereabouts`, which is a
+    POPULATION fact — and §8.1 says a population is never a trip.
+    """
+
+    def row(off_reached: int, on_reached: int) -> cf.OnRow:
+        return cf.OnRow(
+            cell_id="T-6",
+            tripwire="T4",
+            label="planted",
+            population="statement",
+            predicate="planted",
+            note="planted",
+            rule="full",
+            reconstructed_on=(on_reached, on_reached),
+            off=(off_reached, on_reached),
+            also_below=("planted", off_reached, on_reached),
+        )
+
+    assert row(29, 114).verdict() == "PASS"
+    # Nothing to widen: equal, and not a trip.
+    assert row(114, 114).verdict() == "PASS"
+    # An inversion: OFF reached more than ON, which no slate can do.
+    assert row(115, 114).verdict() == "STOP"
 
 
 def test_a_reporter_block_on_a_recorded_ballot_stops_t3(
