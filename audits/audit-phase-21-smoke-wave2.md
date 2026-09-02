@@ -460,8 +460,40 @@ $ git status --porcelain replays/
 ```
 
 `scripts/counterfactual_phase21.py --sets all` also ran in that bare shell and exited 0, which is
-the committed-record mode's contract. **The two shells refuse each other's bytes by design**, and
-that refusal — not a wrong number — is what `api/replay_loader.py`:655 produces.
+the committed-record mode's contract.
+
+### 6.4 The two shells refuse each other's bytes — proven, not asserted
+
+Both crossings were run deliberately, and both refuse rather than mis-measure.
+
+**(i) the SMOKE bytes reconstructed in the BARE shell** — `api/replay_loader.py`:655 →
+`_assert_recorded_substrate`, exit 1:
+
+```
+api.replay_loader.ReplaySubstrateMismatchError: replay substrate mismatch for 'headless-seed-4':
+recorded with {... 'corroboration_discipline': True, ... 'reporter_reasoning': True, ...
+'testimony_shapes': True} but reconstructing under {... 'reporter_reasoning': False,
+'corroboration_discipline': False, 'testimony_shapes': False}
+(differing levers: ['corroboration_discipline', 'reporter_reasoning', 'testimony_shapes'];
+unknown levers: []). Toggleable lever(s) [...] differ: match the environment to the stamp
+(AILIBI_CORROBORATION_DISCIPLINE, AILIBI_REPORTER_REASONING, AILIBI_TESTIMONY_SHAPES) [...]
+(This is not a determinism break — the per-tick state hash is substrate-independent.)
+```
+
+**(ii) the COMMITTED-set reader in the LEVER-ON shell** — the counterfactual's own second refusal
+(§11.1 there), exit 1:
+
+```
+the ambient environment is not the record's substrate at start: the recording needs every live
+toggle OFF, but this process reads reporter_reasoning ON (AILIBI_REPORTER_REASONING),
+corroboration_discipline ON (AILIBI_CORROBORATION_DISCIPLINE), testimony_shapes ON
+(AILIBI_TESTIMONY_SHAPES). Seven consumers re-derive the meeting reduction with no env argument,
+so a shell that disagrees with the recording makes every imported instrument read a substrate the
+bytes were never made under.
+```
+
+**An operator who does not know which shell they are in reads either of these as a defect.** They
+are the discipline working.
 
 ## 7. The recorded substrate stamp, read off the five `game_over` rows
 
