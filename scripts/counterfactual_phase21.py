@@ -687,6 +687,16 @@ class _RendererCache:
         taken across ledgers that differ in every field it interpolates. It is
         what stops an empty frame being credited: the frame renders only around
         a body, and a reader that asked for the frame alone could not say so.
+
+        The COUNTS the block is named for cannot themselves be a marker: the
+        row states them as ``N voice(s), M account(s)``, and the noun follows
+        the number, so no run of template text sits on every row — requiring the
+        plural form would drop every single-source row and move a published
+        cell. They are checked at derivation instead, and the check is exact: the
+        counts are the first thing the row varies by, so two rows with DIFFERENT
+        counts must diverge before any text this reader identifies them by. Take
+        the clause away and they first diverge at the originating turn instead,
+        which puts a marker inside their shared prefix and refuses here.
         """
 
         if set_name not in self._ballot_block:
@@ -740,6 +750,18 @@ class _RendererCache:
                     "around no body, and a reader that returned 0 here would "
                     "report every ballot as missing the block and STOP a "
                     "correct record. This is a DEFECT IN THIS SCRIPT's reader, "
+                    "not a finding about the bytes"
+                )
+            shared = _common_prefix(bodies[0][0], bodies[1][0])
+            if any(run in shared for run in row_runs):
+                raise SystemExit(
+                    f"{set_name}: two ledger rows with DIFFERENT source counts "
+                    "render the same text up to and past the block's own "
+                    "markers, so the row no longer states how many voices and "
+                    "how many first-hand accounts stand behind the name. C-9 "
+                    "would then credit every ballot for a source-count block "
+                    "that counts no sources, and T6 would pass on it. This is a "
+                    "DEFECT IN THIS SCRIPT's reader against a changed template, "
                     "not a finding about the bytes"
                 )
             self._ballot_block[set_name] = frame | row_runs
@@ -1048,6 +1070,15 @@ _BLOCK_LEVER: Final[Mapping[str, str]] = MappingProxyType(
 
 def _nonblank(lines: Sequence[str]) -> list[str]:
     return [line for line in lines if line.strip()]
+
+
+def _common_prefix(left: str, right: str) -> str:
+    """How far two renderings of one line agree before they first differ."""
+
+    for index, (one, other) in enumerate(zip(left, right)):
+        if one != other:
+            return left[:index]
+    return left[: min(len(left), len(right))]
 
 
 def _shared_runs(left: str, right: str) -> tuple[str, ...]:

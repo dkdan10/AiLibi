@@ -2724,6 +2724,59 @@ def test_a_frame_with_its_sentence_gone_refuses_rather_than_crediting_the_tags(
     assert "R-14" in str(excinfo.value)
 
 
+#: The ballot row's source-count clause, perturbed on its own. Deleting it
+#: leaves the row, the frame and every run this reader identifies them by
+#: standing — the block simply stops counting sources.
+_COUNT_CLAUSE: Final[str] = (
+    ": {{ row.voices }} {% if row.voices == 1 %}voice{% else %}voices{% endif %}, "
+    "{{ row.first_hand | length }} "
+    "{% if row.first_hand | length == 1 %}account{% else %}accounts{% endif %}"
+)
+
+
+def test_a_row_that_stops_counting_its_sources_refuses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """C-9's counts, perturbed independently of the row that carries them.
+
+    Its markers cannot be the counts themselves — the noun follows the number,
+    so no run of template text sits on both a one-source row and a many-source
+    one, and requiring the plural would drop every single-source row and move a
+    published cell. The counts are checked at derivation instead: delete the
+    clause and two rows with different counts stop diverging until the
+    originating turn, which puts a marker inside their shared prefix.
+    """
+
+    scratch = tmp_path / "prompts"
+    shutil.copytree(_PROMPTS_ROOT, scratch)
+    target = scratch / _PROMPT_SET / "vote_ballot.j2"
+    body = target.read_text(encoding="utf-8")
+    countless = body.replace(_COUNT_CLAUSE, "", 1)
+    assert countless != body, "the count clause moved — re-derive this plant"
+    target.write_text(countless, encoding="utf-8")
+    monkeypatch.setattr(
+        cf,
+        "build_prompt_renderers",
+        functools.partial(build_prompt_renderers, root=scratch),
+    )
+    # The block still renders, row and frame and all — only the counts are gone.
+    rendered = build_prompt_renderers(_PROMPT_SET, env={}, root=scratch).vote(
+        voter_id="p-1",
+        rendered_memory="(memory)",
+        transcript=MeetingTranscript(turns=()),
+        contradiction_flags=(),
+        suspicion_graph=(),
+        candidate_targets=("p-2",),
+        skip_confidence_threshold=0.5,
+        reporter_id="p-9",
+        testimony_ledger=_LEDGER,
+    )
+    assert "it started at [" in rendered, "the row itself is gone, not just the counts"
+    with pytest.raises(SystemExit) as excinfo:
+        _markers_for("C-9")
+    assert "how many voices" in str(excinfo.value)
+
+
 def test_the_marker_pairing_refuses_a_block_it_cannot_line_up() -> None:
     """The two ways a derivation returns nothing, at the function that decides."""
 
