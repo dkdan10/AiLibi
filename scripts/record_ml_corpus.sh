@@ -12,7 +12,7 @@
 # The surrogate (15.13) and the impostor bake-off (15.15+) consume a FROZEN
 # training/calibration corpus recorded at EXACT baseline-8 config — the locked
 # substrate: Qwen/Qwen3.6-27B on Featherless, the qwen3_6_27b prompt set at the
-# versions $REQUIRED_PROMPT_VERSIONS pins, the baseline-8 lever slate (the
+# versions $REQUIRED_PROMPT_VERSIONS_BASE pins, the baseline-8 lever slate (the
 # twenty-one retired always-on levers, which since the baseline-7 record include
 # the eight Phase-20 evidence-honesty graduations, with every live toggle
 # default-OFF unless --expect-levers declares otherwise), $0 flat-rate. The PIN
@@ -115,7 +115,7 @@ CORPUS_ROOT="${AILIBI_ML_CORPUS_ROOT:-$REPO_ROOT/replays/ml_corpus}"
 # The pins below name the BASELINE-8 substrate this recorder records (and
 # freezes) at: Qwen/Qwen3.6-27B (the Task 16.2 locked model,
 # audits/audit-phase-16-model-lock.md, locked 2026-07-12) + the qwen3_6_27b
-# prompt set at the versions $REQUIRED_PROMPT_VERSIONS pins (lineage v1 bespoke
+# prompt set at the versions $REQUIRED_PROMPT_VERSIONS_BASE pins (lineage v1 bespoke
 # port -> v2 elicitation -> v3 persona voice -> v4 evidence honesty -> v5) + the
 # baseline-8 lever slate: the twenty-one retired always-on levers, which since
 # the baseline-7 record include the eight Phase-20 evidence-honesty levers
@@ -130,7 +130,7 @@ CORPUS_ROOT="${AILIBI_ML_CORPUS_ROOT:-$REPO_ROOT/replays/ml_corpus}"
 # The COMMITTED bytes now AGREE with these pins. Both artifacts sit at baseline
 # 8 — samples and corpus were re-recorded together at that record, every stamp
 # carries this lever slate and model, and their MANIFEST version cells read v5,
-# which is what $REQUIRED_PROMPT_VERSIONS names. The bump-in-flight window that
+# which is what $REQUIRED_PROMPT_VERSIONS_BASE names. The bump-in-flight window that
 # made the rows disagree with the pins is closed, so a resume over them is no
 # longer refused for that reason. The freeze-path guards still REFUSE anything
 # off-substrate (a prior baseline-6 recording, whose stamp carries the eight
@@ -156,29 +156,28 @@ DEFAULT_FEATHERLESS_BASE_URL="https://api.featherless.ai/v1"
 # The locked prompt set the corpus records under. A featherless run with any
 # other set would SILENTLY record the wrong substrate.
 REQUIRED_PROMPT_SET="qwen3_6_27b"
-# The per-template prompt versions the set must resolve to (all four at v5 since
-# Task 21.1's in-world register bump; the lineage is v1 bespoke port -> v2
-# elicitation batch -> v3 persona voice -> v4 evidence honesty -> v5). The set
-# NAME alone is not a version pin — the registry entry can be bumped by a later
-# task — so the preflight asserts orchestrator.game.PROMPT_VERSION_SETS still
-# resolves $REQUIRED_PROMPT_SET to exactly this map, and the finalize refuses to
-# freeze a set whose MANIFEST rows carry any other version string. Sorted,
-# comma+space-joined (the MANIFEST cell rendering). The committed baseline-8
-# corpus carries v4 in its own MANIFEST, so this constant no longer re-freezes
-# it — that re-lock is the owner decision Phase 21 already took: Task 21.15
-# re-records all four sets from scratch on the corrected substrate.
-REQUIRED_PROMPT_VERSIONS="accusation_round.qwen3_6_27b.v5, crewmate_report.qwen3_6_27b.v5, impostor_report.qwen3_6_27b.v5, vote_ballot.qwen3_6_27b.v5"
-# The same locked map rendered as the acceptance CLI's KEY=VER pairs
-# (scripts/validity_gate.py --expected-prompt-versions). Each locked version
-# string is "<template>.<set>.<version>", so its template key is the first
-# dot-segment — one literal above, two renderings, and no way for the acceptance
-# command this script prints to drift from the map it freezes against.
+# The BASE per-template prompt versions the set's registry entry must still
+# resolve to with no lever ON (all four at v5 since Task 21.1's in-world register
+# bump; the lineage is v1 bespoke port -> v2 elicitation batch -> v3 persona
+# voice -> v4 evidence honesty -> v5). The set NAME alone is not a version pin —
+# the registry entry can be bumped by a later task — so the preflight asserts
+# orchestrator.game.PROMPT_VERSION_SETS still resolves $REQUIRED_PROMPT_SET to
+# exactly this map. Sorted, comma+space-joined (the MANIFEST cell rendering).
+REQUIRED_PROMPT_VERSIONS_BASE="accusation_round.qwen3_6_27b.v5, crewmate_report.qwen3_6_27b.v5, impostor_report.qwen3_6_27b.v5, vote_ballot.qwen3_6_27b.v5"
+# What a recording under the DECLARED slate actually stamps: a lever with a
+# prompt-version overlay moves provenance with its rendered bytes, so an ON arm
+# stamps a composite ("<template>.<set>.v5.<lever>+…") rather than the base
+# literal. Derived below the argument parse — $expect_levers is not known here —
+# through orchestrator.game.prompt_versions_for_set, which is the same registry
+# the meeting manager stamps from. Empty until derive_required_prompt_versions
+# runs; every consumer reads it after that point.
+REQUIRED_PROMPT_VERSIONS=""
+# The same map rendered as the acceptance CLI's KEY=VER pairs
+# (scripts/validity_gate.py --expected-prompt-versions). Each version string is
+# "<template>.<set>.<version>…", so its template key is the first dot-segment —
+# one derivation, two renderings, and no way for the acceptance command this
+# script prints to drift from the map it freezes against.
 REQUIRED_PROMPT_VERSIONS_CLI=""
-IFS=', ' read -ra _locked_versions <<<"$REQUIRED_PROMPT_VERSIONS"
-for _locked_version in "${_locked_versions[@]}"; do
-  REQUIRED_PROMPT_VERSIONS_CLI="${REQUIRED_PROMPT_VERSIONS_CLI:+$REQUIRED_PROMPT_VERSIONS_CLI,}${_locked_version%%.*}=$_locked_version"
-done
-unset _locked_versions _locked_version
 # The 15.9 tactical-policy stamp for the canonical scripted FSMs. Every corpus
 # game is FSM-default (no learned mover exists yet); the stamp makes that explicit
 # provenance rather than the absent = FSM-default default, so the MANIFEST policy
@@ -308,6 +307,57 @@ if [[ -n "$seeds_arg" && "$splits_only" -eq 1 ]]; then
   usage
   exit 1
 fi
+
+# Resolve the prompt-version map this record will stamp, from the slate the
+# operator declared. A lever with a prompt-version overlay serves its own arm's
+# version strings, so a lever-ON record stamps composites that the base literals
+# do not name; deriving here (rather than hardcoding) is what lets the freeze
+# check judge an ON record by what it actually renders. The declared slate is the
+# input, not the ambient environment: the slate preflight refuses any run whose
+# live exports differ from it, so the two agree by the time a seed stages, and a
+# derivation from the declaration fails loud on a lever key nobody registered.
+# AILIBI_PROMPT_SET is pinned for this subprocess alone: the prompt package
+# builds its Jinja environment from that variable at IMPORT time, so an ambient
+# typo would raise here — before the preflight that exists to name it. The
+# ambient value is judged by that preflight, not by this derivation.
+derive_required_prompt_versions() {
+  AILIBI_PROMPT_SET="$REQUIRED_PROMPT_SET" \
+    uv run python - "$REPO_ROOT" "$REQUIRED_PROMPT_SET" "$expect_levers" <<'PYINNER'
+import sys
+
+sys.path.insert(0, sys.argv[1])
+from orchestrator.game import prompt_versions_for_set  # noqa: E402
+from orchestrator.replay import (  # noqa: E402
+    TOGGLEABLE_SUBSTRATE_FLAG_KEYS,
+    env_var_for_lever,
+)
+
+set_name, declared = sys.argv[2], sys.argv[3]
+keys = [token.strip() for token in declared.split(",") if token.strip()]
+unknown = [key for key in keys if key not in TOGGLEABLE_SUBSTRATE_FLAG_KEYS]
+if unknown:
+    known = ", ".join(TOGGLEABLE_SUBSTRATE_FLAG_KEYS)
+    sys.stderr.write(
+        f"Error: --expect-levers names {', '.join(repr(k) for k in unknown)}, "
+        f"which is not a live substrate toggle (live toggles: {known}).\n"
+        "The prompt-version map a record freezes against is derived from the\n"
+        "declared slate, so an unrecognized key would silently freeze against\n"
+        "the wrong map; nothing was recorded.\n"
+    )
+    raise SystemExit(1)
+env = {env_var_for_lever(key): "1" for key in keys}
+print(", ".join(sorted(prompt_versions_for_set(set_name, env=env).values())))
+PYINNER
+}
+
+if ! REQUIRED_PROMPT_VERSIONS="$(derive_required_prompt_versions)"; then
+  exit 1
+fi
+IFS=', ' read -ra _resolved_versions <<<"$REQUIRED_PROMPT_VERSIONS"
+for _resolved_version in "${_resolved_versions[@]}"; do
+  REQUIRED_PROMPT_VERSIONS_CLI="${REQUIRED_PROMPT_VERSIONS_CLI:+$REQUIRED_PROMPT_VERSIONS_CLI,}${_resolved_version%%.*}=$_resolved_version"
+done
+unset _resolved_versions _resolved_version
 
 # Validate a comma-separated seed list and echo the normalized, de-duplicated
 # form. Surrounding whitespace around a seed is tolerated; whitespace *inside* a
@@ -628,42 +678,67 @@ if missing or extra:
 PYINNER
 }
 
-# Assert the live registry still resolves $REQUIRED_PROMPT_SET to EXACTLY the
-# locked per-template versions. Run at preflight (fail before spend):
-# a later task bumping the set's registry entry must stop this recorder cold —
-# re-locking the corpus to a new prompt baseline is an owner decision, never a
-# silent drift. Pure Python, no network.
+# Assert both halves of the version pin at preflight (fail before spend): the
+# registry entry still resolves to the locked BASE map — a later task bumping it
+# must stop this recorder cold, because re-locking the corpus to a new prompt
+# baseline is an owner decision, never a silent drift — and the slate-resolved
+# map this run will freeze against still equals the one derived at startup, so a
+# lever export that moved in between cannot record one substrate and freeze
+# against another. Pure Python, no network.
 check_prompt_version_registry() {
-  uv run python - "$REPO_ROOT" "$REQUIRED_PROMPT_SET" "$REQUIRED_PROMPT_VERSIONS" <<'PYINNER'
+  AILIBI_PROMPT_SET="$REQUIRED_PROMPT_SET" \
+    uv run python - \
+    "$REPO_ROOT" "$REQUIRED_PROMPT_SET" "$REQUIRED_PROMPT_VERSIONS_BASE" \
+    "$REQUIRED_PROMPT_VERSIONS" "$expect_levers" <<'PYINNER'
 import sys
 
 sys.path.insert(0, sys.argv[1])
-from orchestrator.game import PROMPT_VERSION_SETS  # noqa: E402
+from orchestrator.game import (  # noqa: E402
+    PROMPT_VERSION_SETS,
+    prompt_versions_for_set,
+)
+from orchestrator.replay import env_var_for_lever  # noqa: E402
 
-set_name, locked = sys.argv[2], sys.argv[3]
-resolved = ", ".join(sorted(PROMPT_VERSION_SETS[set_name].values()))
-if resolved != locked:
+set_name, base, expected, declared = sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5]
+resolved_base = ", ".join(sorted(PROMPT_VERSION_SETS[set_name].values()))
+if resolved_base != base:
     sys.stderr.write(
         f"Error: the prompt-set registry has moved off the locked versions.\n"
-        f"  PROMPT_VERSION_SETS[{set_name!r}] resolves to: {resolved}\n"
-        f"  the Task-15.12 corpus is frozen at:            {locked}\n"
+        f"  PROMPT_VERSION_SETS[{set_name!r}] resolves to: {resolved_base}\n"
+        f"  the Task-15.12 corpus is frozen at:            {base}\n"
         "Recording the corpus against a bumped prompt set would freeze a\n"
         "non-baseline corpus as Task 15.12. Re-locking to a new prompt baseline is an\n"
         "owner decision (re-record + re-freeze); nothing was recorded.\n"
+    )
+    raise SystemExit(1)
+keys = [token.strip() for token in declared.split(",") if token.strip()]
+env = {env_var_for_lever(key): "1" for key in keys}
+resolved_slate = ", ".join(sorted(prompt_versions_for_set(set_name, env=env).values()))
+if resolved_slate != expected:
+    sys.stderr.write(
+        f"Error: the slate-resolved prompt versions moved after startup.\n"
+        f"  --expect-levers {declared!r} now resolves to: {resolved_slate}\n"
+        f"  this run derived:                             {expected}\n"
+        "The map a record freezes against must be the map its meetings stamp;\n"
+        "nothing was recorded.\n"
     )
     raise SystemExit(1)
 PYINNER
 }
 
 # Refuse to freeze a set whose meeting-bearing MANIFEST rows are not EXACTLY the
-# locked prompt-version map. The preflight pins the registry FORWARD
-# from this run; this catches the RESUME case looking BACKWARD — seeds recorded
-# by an earlier session under a different (older/newer) prompt baseline, OR rows
-# with stripped/partial provenance (a row carrying only allowed tokens is still a
-# violation: the manager stamps the FULL set map on every meeting, so anything
-# short of the exact four is missing provenance, not a lighter meeting — every
-# meeting-bearing row empirically carries all four). No-meeting rows carry
-# the "(none — no meetings)" sentinel and are exempt (they invoked no template).
+# prompt-version map the DECLARED slate resolves to. The preflight pins the
+# registry FORWARD from this run; this catches the RESUME case looking BACKWARD —
+# seeds recorded by an earlier session under a different prompt baseline or a
+# different lever slate, OR rows with stripped/partial provenance (a row carrying
+# only allowed tokens is still a violation: the manager stamps the FULL set map
+# on every meeting, so anything short of the exact four is missing provenance,
+# not a lighter meeting — every meeting-bearing row empirically carries all
+# four). A lever with a prompt-version overlay stamps a composite, which is why
+# the expected map is derived from --expect-levers rather than hardcoded: an
+# ON-slate record whose rows carried the bare literals would be a render that
+# stamped somebody else's provenance. No-meeting rows carry the
+# "(none — no meetings)" sentinel and are exempt (they invoked no template).
 check_recorded_prompt_versions() {
   local set_dir="$1" manifest="$2"
   uv run python - "$REPO_ROOT" "$set_dir" "$manifest" "$REQUIRED_PROMPT_VERSIONS" <<'PYINNER'
@@ -673,8 +748,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(sys.argv[1]) / "scripts"))
 from _manifest_writer import parse_manifest  # noqa: E402
 
-set_dir, manifest, locked_csv = sys.argv[2], Path(sys.argv[3]), sys.argv[4]
-locked = ", ".join(sorted(token.strip() for token in locked_csv.split(",")))
+set_dir, manifest, expected_csv = sys.argv[2], Path(sys.argv[3]), sys.argv[4]
+locked = ", ".join(sorted(token.strip() for token in expected_csv.split(",")))
 if not manifest.exists():
     sys.stderr.write(f"check_recorded_prompt_versions: no MANIFEST at {manifest}\n")
     raise SystemExit(1)
@@ -690,10 +765,10 @@ if bad:
     listing = "; ".join(f"seed {seed}: {cell!r}" for seed, cell in bad.items())
     sys.stderr.write(
         f"check_recorded_prompt_versions: {len(bad)} meeting-bearing MANIFEST row(s) "
-        f"in {set_dir} do not carry EXACTLY the locked prompt versions "
+        f"in {set_dir} do not carry EXACTLY the slate-resolved prompt versions "
         f"[{locked}] — {listing}\n"
-        "A resumed set must not mix prompt baselines or carry stripped prompt\n"
-        "provenance; re-record the offending seeds.\n"
+        "A resumed set must not mix prompt baselines or lever slates, or carry\n"
+        "stripped prompt provenance; re-record the offending seeds.\n"
     )
     raise SystemExit(1)
 PYINNER
@@ -1052,7 +1127,7 @@ if [[ "$dry_run" -eq 1 ]]; then
   echo "[dry-run] prompt set: $REQUIRED_PROMPT_SET (must be exported as AILIBI_PROMPT_SET)"
   echo "[dry-run] model: $ACTIVE_MODEL (meeting + trigger pinned; a non-baseline AILIBI_LLM_MEETING_MODEL/AILIBI_LLM_TRIGGER_MODEL override is refused)"
   echo "[dry-run] endpoint: $DEFAULT_FEATHERLESS_BASE_URL (pinned; a non-default AILIBI_FEATHERLESS_BASE_URL override is refused)"
-  echo "[dry-run] prompt versions: locked to [$REQUIRED_PROMPT_VERSIONS] (the registry is asserted at preflight; rows off this map are refused at freeze)"
+  echo "[dry-run] prompt versions: the declared slate resolves to [$REQUIRED_PROMPT_VERSIONS] (the registry's base map is asserted at preflight; rows off the resolved map are refused at freeze)"
   echo "[dry-run] substrate flags: expected levers ON = $expect_levers_desc; every other live toggle OFF; the graduated levers unconditional ON"
   echo "[dry-run] substrate-lever preflight: would require the live lever slate to equal that expectation exactly and refuse before any seed stages — an expected-ON lever left unexported and an unexpected AILIBI_* export are both named"
   echo "[dry-run] tactical policy stamp: $POLICY_STAMP (15.9 FSM-default on every game)"
@@ -1175,17 +1250,18 @@ export AILIBI_FEATHERLESS_BASE_URL="$DEFAULT_FEATHERLESS_BASE_URL"
 echo "Locked endpoint OK: base URL pinned to $DEFAULT_FEATHERLESS_BASE_URL."
 
 # ... and the PROMPT VERSIONS, not just the set name: the corpus contract freezes
-# the versions $REQUIRED_PROMPT_VERSIONS pins, but AILIBI_PROMPT_SET
+# the versions $REQUIRED_PROMPT_VERSIONS_BASE pins, but AILIBI_PROMPT_SET
 # names a REGISTRY entry whose per-template versions can be bumped by a later
 # task. If that happens, re-running/resuming this recorder would silently record
 # (or mix) a non-baseline-prompt corpus and freeze it as Task 15.12. Assert the
-# live registry still resolves the set to EXACTLY the locked map; a mismatch is a
-# fail-loud stop — re-locking the corpus to a new prompt baseline is an owner
-# decision (a re-record + re-freeze), never a silent drift.
+# live registry still resolves the set to EXACTLY the locked base map, and that
+# the declared slate still resolves to the map this run derived at startup; a
+# mismatch on either is a fail-loud stop — re-locking the corpus to a new prompt
+# baseline is an owner decision (a re-record + re-freeze), never a silent drift.
 if ! check_prompt_version_registry; then
   exit 1
 fi
-echo "Locked prompt versions OK: $REQUIRED_PROMPT_SET resolves to the locked map ($REQUIRED_PROMPT_VERSIONS)."
+echo "Locked prompt versions OK: $REQUIRED_PROMPT_SET resolves to the locked base map; the declared slate stamps ($REQUIRED_PROMPT_VERSIONS)."
 
 # Export the RESOLVED provider so run_tournament.py records on it — never fall
 # through to build_default_client()'s fake default, which would silently record

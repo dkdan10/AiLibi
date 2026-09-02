@@ -306,3 +306,12 @@ directory's `README.md`, which carries the tallies and the proposed routing.
   conjunctive decision rule, the declared co-interventions, the seven tripwire
   dispositions, and the record order, freeze, slate and abandon criteria. It is
   the normative memo the smoke and the record read verbatim.
+- [audit-phase-21-smoke-wave2.md](audit-phase-21-smoke-wave2.md) — the smoke
+  before the injustice record: five live 9p2i seeds at the ratified Wave-2 slate
+  into a scratch directory, the two shells and the refusal that separates them,
+  the seed slate drawn for the no-vent-flag stratum, the validity gate, the
+  recorded 25-key substrate stamp, the per-lever coverage read off the recorded
+  prompts, the seven tripwires against their sample-local predicates, the three
+  watch cells, the Wave-1 no-regression check, the re-priced projection, the
+  abandon criteria read one by one, and the GO/ABANDON call. It writes no bar
+  and reads none.

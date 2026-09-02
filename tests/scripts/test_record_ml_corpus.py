@@ -221,7 +221,8 @@ def test_dry_run_announces_endpoint_and_prompt_version_locks() -> None:
         "AILIBI_FEATHERLESS_BASE_URL override is refused)" in proc.stdout
     )
     assert (
-        "prompt versions: locked to [accusation_round.qwen3_6_27b.v5, "
+        "prompt versions: the declared slate resolves to "
+        "[accusation_round.qwen3_6_27b.v5, "
         "crewmate_report.qwen3_6_27b.v5, impostor_report.qwen3_6_27b.v5, "
         "vote_ballot.qwen3_6_27b.v5]" in proc.stdout
     )
@@ -612,15 +613,21 @@ def test_preflight_refuses_non_default_base_url(tmp_path: Path) -> None:
 def test_prompt_version_registry_matches_locked_script_constant() -> None:
     # The corpus contract freezes the prompt VERSIONS (all four templates at
     # v5), not just the set name — the recorder's preflight asserts the live
-    # registry still resolves qwen3_6_27b to its locked constant. Pin the two
-    # together here: if a later task bumps the registry entry, this test fails
-    # and forces the corpus re-lock conversation instead of letting the
-    # recorder's guard and the registry drift apart silently.
+    # registry still resolves qwen3_6_27b to its locked BASE constant. Pin the
+    # two together here: if a later task bumps the registry entry, this test
+    # fails and forces the corpus re-lock conversation instead of letting the
+    # recorder's guard and the registry drift apart silently. The slate-resolved
+    # map the recorder freezes against is derived from that base at runtime; the
+    # base is what an owner decision moves.
     from orchestrator.game import PROMPT_VERSION_SETS
 
     script = _RECORD_SH.read_text(encoding="utf-8")
-    match = re.search(r'^REQUIRED_PROMPT_VERSIONS="([^"]+)"$', script, re.MULTILINE)
-    assert match is not None, "REQUIRED_PROMPT_VERSIONS constant missing from script"
+    match = re.search(
+        r'^REQUIRED_PROMPT_VERSIONS_BASE="([^"]+)"$', script, re.MULTILINE
+    )
+    assert match is not None, (
+        "REQUIRED_PROMPT_VERSIONS_BASE constant missing from script"
+    )
     locked = match.group(1)
     resolved = ", ".join(sorted(PROMPT_VERSION_SETS["qwen3_6_27b"].values()))
     assert resolved == locked, (
@@ -628,6 +635,185 @@ def test_prompt_version_registry_matches_locked_script_constant() -> None:
         "corpus versions; recording/resuming the 15.12 corpus would now drift. "
         "Re-locking is an owner decision (re-record + re-freeze)."
     )
+
+
+def test_declared_slate_resolves_the_prompt_versions_the_dry_run_prints() -> None:
+    # The recorder must freeze against what its meetings STAMP, not against the
+    # bare literals: a lever with a prompt-version overlay serves its own arm's
+    # strings, so a lever-ON record carries composites. Drive both slates through
+    # the committed dry-run and compare each against the registry's own
+    # resolution, so the script's derivation cannot drift from the map the
+    # manager writes.
+    from orchestrator.game import prompt_versions_for_set
+    from orchestrator.replay import env_var_for_lever
+
+    wave2 = ("reporter_reasoning", "corroboration_discipline", "testimony_shapes")
+    for declared in ((), wave2):
+        env = _clean_env()
+        env["AILIBI_PROMPT_SET"] = "qwen3_6_27b"
+        for key in declared:
+            env[env_var_for_lever(key)] = "1"
+        proc = _run(
+            "--set",
+            "9p2i",
+            "--dry-run",
+            "--expect-levers",
+            ",".join(declared),
+            env=env,
+        )
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        expected = ", ".join(
+            sorted(
+                prompt_versions_for_set(
+                    "qwen3_6_27b",
+                    env={env_var_for_lever(key): "1" for key in declared},
+                ).values()
+            )
+        )
+        assert f"[{expected}]" in proc.stdout, proc.stdout
+    # The loop's expectation is computed from the same registry the script reads,
+    # so it would also pass if BOTH went on printing the bare literals. The last
+    # iteration is the Wave-2 slate: assert its output actually carries a
+    # composite, or the comparison above proves nothing about the lever arm.
+    assert "accusation_round.qwen3_6_27b.v5.reporter_reasoning" in proc.stdout
+
+
+def test_derivation_refuses_an_expect_levers_key_that_is_not_a_live_toggle() -> None:
+    # A typo in --expect-levers would otherwise resolve to the BARE map and
+    # freeze a lever-ON record against provenance it does not carry, hours after
+    # the spend. Refuse before anything stages.
+    env = _clean_env()
+    env["AILIBI_PROMPT_SET"] = "qwen3_6_27b"
+    proc = _run(
+        "--set", "9p2i", "--dry-run", "--expect-levers", "reporter_resoning", env=env
+    )
+    assert proc.returncode != 0
+    out = proc.stdout + proc.stderr
+    assert "not a live substrate toggle" in out
+    assert "reporter_resoning" in out
+
+
+_PROMPT_VERSION_FREEZE_DRIVER = """\
+set -euo pipefail
+REPO_ROOT="{repo_root}"
+REQUIRED_PROMPT_SET="qwen3_6_27b"
+expect_levers="{expect_levers}"
+{derivation}
+if ! REQUIRED_PROMPT_VERSIONS="$(derive_required_prompt_versions)"; then
+  exit 1
+fi
+{check}
+check_recorded_prompt_versions "$1" "$2"
+"""
+
+
+def _prompt_version_freeze_driver(tmp_path: Path, expect_levers: str) -> Path:
+    """A driver around the committed derivation + freeze-path version check."""
+
+    script = _RECORD_SH.read_text(encoding="utf-8")
+    derivation = re.search(
+        r"(?ms)^derive_required_prompt_versions\(\) \{\n.*?\n\}$", script
+    )
+    check = re.search(r"(?ms)^check_recorded_prompt_versions\(\) \{\n.*?\n\}$", script)
+    assert derivation is not None, "derive_required_prompt_versions not found"
+    assert check is not None, "check_recorded_prompt_versions not found"
+    driver = tmp_path / f"prompt_versions_{expect_levers or 'bare'}.sh"
+    driver.write_text(
+        _PROMPT_VERSION_FREEZE_DRIVER.format(
+            repo_root=_REPO_ROOT,
+            expect_levers=expect_levers,
+            derivation=derivation.group(0),
+            check=check.group(0),
+        ),
+        encoding="utf-8",
+    )
+    return driver
+
+
+def _manifest_with_prompt_versions(path: Path, cell: str) -> Path:
+    path.mkdir(parents=True, exist_ok=True)
+    manifest = path / "MANIFEST.md"
+    manifest.write_text(
+        "# Sample Replay Manifest\n\n"
+        "| seed | model | prompt_versions | flags | policy | refreshed_at | "
+        "git_sha | cost_usd | winner |\n"
+        "|------|-------|-----------------|-------|--------|--------------|"
+        "---------|----------|--------|\n"
+        f"| 1000 | Qwen/Qwen3.6-27B | {cell} | reporter_reasoning | fsm-default | "
+        "2026-09-02 | abc1234 | 0.0000 | CREWMATES |\n",
+        encoding="utf-8",
+    )
+    return manifest
+
+
+def _run_prompt_version_check(
+    tmp_path: Path, expect_levers: str, cell: str
+) -> subprocess.CompletedProcess[str]:
+    manifest = _manifest_with_prompt_versions(tmp_path, cell)
+    return subprocess.run(
+        [
+            "bash",
+            str(_prompt_version_freeze_driver(tmp_path, expect_levers)),
+            str(tmp_path),
+            str(manifest),
+        ],
+        cwd=_REPO_ROOT,
+        capture_output=True,
+        text=True,
+        env=_clean_env(),
+        timeout=300,
+    )
+
+
+_BARE_VERSION_CELL = (
+    "accusation_round.qwen3_6_27b.v5, crewmate_report.qwen3_6_27b.v5, "
+    "impostor_report.qwen3_6_27b.v5, vote_ballot.qwen3_6_27b.v5"
+)
+_WAVE2_VERSION_CELL = (
+    "accusation_round.qwen3_6_27b.v5.reporter_reasoning"
+    "+accusation_round.qwen3_6_27b.v5.testimony_shapes, "
+    "crewmate_report.qwen3_6_27b.v5.reporter_reasoning"
+    "+crewmate_report.qwen3_6_27b.v5.testimony_shapes, "
+    "impostor_report.qwen3_6_27b.v5, "
+    "vote_ballot.qwen3_6_27b.v5.corroboration_discipline"
+    "+vote_ballot.qwen3_6_27b.v5.testimony_shapes"
+)
+_WAVE2_SLATE = "reporter_reasoning,corroboration_discipline,testimony_shapes"
+
+
+def test_freeze_accepts_the_rows_the_declared_slate_stamps(tmp_path: Path) -> None:
+    # Both directions of the derivation, on the freeze path that actually breaks
+    # a record: a bare-slate run accepts the base literals, and a Wave-2 run
+    # accepts the composites its own meetings stamp.
+    bare = _run_prompt_version_check(tmp_path / "bare", "", _BARE_VERSION_CELL)
+    assert bare.returncode == 0, bare.stdout + bare.stderr
+    wave2 = _run_prompt_version_check(
+        tmp_path / "wave2", _WAVE2_SLATE, _WAVE2_VERSION_CELL
+    )
+    assert wave2.returncode == 0, wave2.stdout + wave2.stderr
+
+
+@pytest.mark.parametrize(
+    ("expect_levers", "planted_cell"),
+    [
+        # The defect this fix removes: a lever-ON record whose rows carry the
+        # bare literals. Before the derivation the guard compared against those
+        # literals and PASSED, so the failure landed only at the end of a
+        # multi-hour spend; now the row is refused for the provenance it lacks.
+        (_WAVE2_SLATE, _BARE_VERSION_CELL),
+        # The mirror: a bare-slate freeze must refuse rows stamped by an ON run.
+        ("", _WAVE2_VERSION_CELL),
+    ],
+)
+def test_freeze_refuses_rows_recorded_under_another_slate(
+    tmp_path: Path, expect_levers: str, planted_cell: str
+) -> None:
+    proc = _run_prompt_version_check(tmp_path, expect_levers, planted_cell)
+
+    assert proc.returncode != 0, proc.stdout + proc.stderr
+    out = proc.stdout + proc.stderr
+    assert "do not carry EXACTLY the slate-resolved prompt versions" in out
+    assert "seed 1000" in out
 
 
 def test_record_path_accepts_baseline_model_override_and_rejects_stray_replay(
