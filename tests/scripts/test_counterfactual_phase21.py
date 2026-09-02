@@ -58,6 +58,8 @@ from pydantic import BaseModel
 from agents.strategic.prompts.loader import ENV_PROMPT_SET, build_prompt_renderers
 from llm.client import CallKind, LLMResponse
 from llm.fake_provider import FakeProvider
+from meetings.corroboration import MeetingTestimonyLedger
+from meetings.render_contract import ReporterContext
 from meetings.schemas import (
     ContradictionRef,
     MeetingResult,
@@ -1215,6 +1217,55 @@ class _SpokenKillProvider:
         )
 
 
+class _LocationAccountProvider:
+    """The fake provider with one turn's observations replaced by a whereabouts.
+
+    The fake speaks no self-placement at all, so a corpus made with it has no
+    location account for T4 to read. A self-placement is the shape the widened
+    ``("alibi", "whereabouts")`` gate exists for, so planting one is what gives
+    that tripwire a population.
+    """
+
+    def __init__(self) -> None:
+        self._inner = FakeProvider()
+        self.planted = 0
+
+    async def complete(
+        self,
+        *,
+        prompt: str,
+        schema: type[BaseModel] | None,
+        max_tokens: int,
+        temperature: float,
+        call_kind: CallKind = "meeting",
+        model: str | None = None,
+        agent_id: str | None = None,
+    ) -> LLMResponse:
+        response = await self._inner.complete(
+            prompt=prompt,
+            schema=schema,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            call_kind=call_kind,
+            model=model,
+            agent_id=agent_id,
+        )
+        if schema is None or agent_id is None or self.planted:
+            return response
+        payload = json.loads(response.text)
+        if "observations" not in payload:
+            return response
+        payload["observations"] = [
+            {"type": "whereabouts", "tick": 1, "room": "CAFETERIA"}
+        ]
+        text = json.dumps(payload)
+        schema.model_validate_json(text)
+        self.planted += 1
+        return LLMResponse(
+            text=text, usage=response.usage, cost_usd=0.0, model=response.model
+        )
+
+
 def test_the_on_mode_walks_a_lever_on_recording_prompt_for_prompt(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -1270,9 +1321,11 @@ def test_the_on_mode_walks_a_lever_on_recording_prompt_for_prompt(
     # T2's third clause has its own reading beside the share, and it is zero.
     assert rows["R-13"]["also_zero"][1] == 0
     assert rows["R-14"]["also_zero"][1] == 0
-    # The two cells that cannot fail on this reader say so on their own row.
-    assert "BY CONSTRUCTION" in rows["R-15"]["caveat"]
-    assert "BY CONSTRUCTION" in rows["T-6"]["caveat"]
+    # Both tripwires that could not fail are now real readings: T3 by
+    # independent identification off the recorded ballot bytes, T4 by running
+    # the ingest. Neither carries a construction caveat any more.
+    assert rows["R-15"]["caveat"] == ""
+    assert rows["T-6"]["caveat"] == ""
     # The pooled block is informational; the verdict is the per-recording union.
     assert payload["pooled_is_informational"] is True
 
@@ -1297,7 +1350,6 @@ def test_the_on_mode_prints_every_predicate_beside_its_reading(
     assert "→ PASS" in printed
     assert "→ UNREAD (a STOP)" in printed
     assert "this command exits non-zero" in printed
-    assert "READS ZERO BY CONSTRUCTION" in printed
     assert "writes no bar, no target and no decision rule" in printed
 
 
@@ -1596,16 +1648,27 @@ def test_pooling_cannot_pass_a_predicate_a_recording_failed(
     assert summed.recorded_on == (198, 200)
     assert summed.verdict() == "PASS"
 
-    # And the shipped run reports per recording, so the union is available.
+    # And the same arithmetic through the SHIPPED run, over TWO recordings — the
+    # only shape in which pooled and sample-local verdicts can disagree. One
+    # recording proves nothing here: its pooled row IS its member row.
     _export_the_slate(monkeypatch)
-    _record_on(tmp_path, seeds=(1,))
-    payload = cf.run_recording([tmp_path], recorded_slate=cf.RECORDED_SLATE_ON)
+    first, second = tmp_path / "leg-a", tmp_path / "leg-b"
+    _record_on(first, seeds=(1,))
+    _record_on(second, seeds=(2,))
+    readings = iter((98, 100))
+    monkeypatch.setattr(
+        cf, "build_on_recording_rows", lambda walk: [leg(next(readings))]
+    )
+    payload = cf.run_recording([first, second], recorded_slate=cf.RECORDED_SLATE_ON)
+    assert payload["stopped_cells"] == ["C-9"]
+    # The pooled row this verdict is NOT taken from would have passed.
+    (pooled_row,) = _rows(payload, "pooled")
+    assert pooled_row["recorded_on"] == [198, 200]
+    assert pooled_row["verdict"] == "PASS"
+    assert payload["pooled_is_informational"] is True
     sets = payload["sets"]
     assert isinstance(sets, dict)
-    (block,) = sets.values()
-    assert isinstance(block, dict)
-    assert payload["stopped_cells"] == block["stopped_cells"]
-    assert payload["pooled_is_informational"] is True
+    assert [block["stopped_cells"] for block in sets.values()] == [["C-9"], []]
 
 
 def test_an_emergency_prompt_that_gains_a_reporter_block_stops_t2(
@@ -1629,9 +1692,35 @@ def test_an_emergency_prompt_that_gains_a_reporter_block_stops_t2(
     assert clean["R-14"].also_zero[1] == 0
     assert clean["R-14"].verdict() == "PASS"
 
-    # One more moved prompt, in an emergency meeting — counted in all three
-    # places exactly as the fold counts it, so the row's two ON columns still
-    # agree and the STOP comes from the clause rather than from a withdrawal.
+    # The seam itself, first. An emergency meeting has no reporter, and a capture
+    # that nonetheless carries a context must have it CLEARED on the withdrawn
+    # leg — leaving the capture's own keywords in place rendered the leak on BOTH
+    # legs and hid it in a zero diff, which is the bug this clause exists to
+    # catch. Restore that guard and this assertion fails.
+    emergency = cf._ReporterInputs(reporter_id=None, contexts={}, at_body={})
+    leaked = cf._Capture(
+        kind=cf._KIND_ACCUSATION_ROUND,
+        agent_id="p-3",
+        kwargs={
+            "turn_kind": "reply",
+            "reporter_context": ReporterContext(reporter_id="p-1", tick=4),
+            "at_body": True,
+        },
+        recorded_prompt="",
+    )
+    for levers in (frozenset(cf.WAVE_2_LEVERS), frozenset()):
+        stripped = cf._on_kwargs(
+            leaked,
+            levers=levers,
+            reporter=emergency,
+            ledger=MeetingTestimonyLedger(rows=(), opener="p-1"),
+        )
+        assert stripped["reporter_context"] is None, levers
+        assert stripped["at_body"] is False, levers
+
+    # Then the reading: one more moved prompt in an emergency meeting, counted in
+    # all three places exactly as the fold counts it, so the row's two ON columns
+    # still agree and the STOP comes from the clause rather than a withdrawal.
     withdrawn = walk.legs[cf.decomposition_label("reporter_reasoning")]
     withdrawn.changed[cf._KIND_ACCUSATION_ROUND] += 1
     withdrawn.changed_vs_reconstruction[cf._KIND_ACCUSATION_ROUND] += 1
@@ -1644,6 +1733,137 @@ def test_an_emergency_prompt_that_gains_a_reporter_block_stops_t2(
     # over different populations, so neither can hide the other — a naive
     # numerator would have counted the leak as a body-report gain.
     assert tripped["R-14"].recorded_on == clean["R-14"].recorded_on
+
+
+def test_a_dropped_location_account_stops_t4(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """T4 reads the INGEST, so an account the ingest drops takes it off 100%.
+
+    The planted case makes the shipped ingest write nothing for one listener
+    class — the gate T4 exists to watch — and the row goes from PASS to STOP.
+    A cell derived from the reduction census instead of from the ingest would
+    have read 100% either way, which is the finding this replaces.
+    """
+
+    _export_the_slate(monkeypatch)
+    provider = _LocationAccountProvider()
+    _record_on(tmp_path, seeds=_ON_SEEDS, llm_client=provider)
+    assert provider.planted == 1
+    walk = cf.walk_recording(
+        tmp_path, set_name="planted", slate_set=cf._arm_serving_set(tmp_path)
+    )
+    clean = {row.cell_id: row for row in cf.build_on_recording_rows(walk)}
+    accounts = clean["T-6"].reconstructed_on
+    assert accounts is not None and accounts[1] > 0, "no location account to drop"
+    assert clean["T-6"].verdict() == "PASS"
+
+    # One account no longer lands. Nothing else about the run moves.
+    walk.testimony.alibi_map_reached_on -= 1
+    tripped = {row.cell_id: row for row in cf.build_on_recording_rows(walk)}
+    assert tripped["T-6"].verdict() == "STOP"
+    assert tripped["T-6"].reconstructed_on == (accounts[0] - 1, accounts[1])
+
+
+def test_the_ingest_reading_is_the_shipped_function_not_a_restatement(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """And the number really comes from `absorb_reported_testimony`.
+
+    Silence the shipped ingest and the cell must fall to zero. A reader that had
+    re-implemented the guards would be unmoved, which is exactly the difference
+    between measuring the ingest and describing it.
+    """
+
+    _export_the_slate(monkeypatch)
+    _record_on(tmp_path, seeds=_ON_SEEDS, llm_client=_LocationAccountProvider())
+    before = cf.walk_recording(
+        tmp_path, set_name="planted", slate_set=cf._arm_serving_set(tmp_path)
+    )
+    assert before.testimony.alibi_map_reached_on > 0
+    monkeypatch.setattr(cf, "absorb_reported_testimony", lambda *a, **k: None)
+    walk = cf.walk_recording(
+        tmp_path, set_name="planted", slate_set=cf._arm_serving_set(tmp_path)
+    )
+    assert walk.testimony.alibi_map_reached_on == 0
+    assert walk.testimony.alibi_map_reached_off == 0
+
+
+def test_a_reporter_block_on_a_recorded_ballot_stops_t3(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """T3 by independent identification, and the case that makes it fire.
+
+    The reporter arm has no ballot argument to withdraw, so the render diff over
+    that seam is identically zero. The reader instead looks for the arm's OWN
+    block in the recorded ballot bytes — and the planted case puts one there.
+    """
+
+    _export_the_slate(monkeypatch)
+    _record_on(tmp_path, seeds=(1,))
+    walk = cf.walk_recording(
+        tmp_path, set_name="planted", slate_set=cf._arm_serving_set(tmp_path)
+    )
+    clean = {row.cell_id: row for row in cf.build_on_recording_rows(walk)}
+    assert clean["R-15"].recorded_on is not None
+    assert clean["R-15"].recorded_on[0] == 0
+    assert clean["R-15"].recorded_on[1] > 0, "no ballot to carry a block"
+    assert clean["R-15"].verdict() == "PASS"
+
+    walk.ballots_carrying_a_reporter_block += 1
+    tripped = {row.cell_id: row for row in cf.build_on_recording_rows(walk)}
+    assert tripped["R-15"].verdict() == "STOP"
+
+
+def test_the_reporter_marker_tells_the_arm_apart_from_the_ballots_own_block(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The subtraction that makes T3's identification safe, and its planted case.
+
+    The Task-15.5 ballot exculpation is worded almost identically to the arm's
+    block ("Do not vote" against "Do not accuse"), and it renders on EVERY
+    body-report ballot whatever the levers do. A marker taken from the statement
+    render alone would therefore read every one of them as a breach.
+    """
+
+    _export_the_slate(monkeypatch)
+    renderers = cf._RendererCache()
+    markers = renderers.reporter_markers("qwen3_6_27b", "reply")
+    assert markers
+
+    # Every marker is really in the arm's block ...
+    armed = cf._probe_crew_statement(
+        renderers.off("qwen3_6_27b"),
+        turn_kind="reply",
+        reporter_context=ReporterContext(reporter_id="p-2", tick=1),
+    )
+    assert all(marker in armed for marker in markers)
+    # ... and none of them is in a plain ballot, which is what the subtraction
+    # buys: without it the shared sentence would match and T3 would fire on a
+    # correct record.
+    plain = cf._probe_ballot(renderers.off("qwen3_6_27b"))
+    assert all(marker not in plain for marker in markers)
+    assert "reported the body that opened this meeting" in plain
+
+    # And the scan really reads the RECORDED ballot bytes against those markers:
+    # point it at a line every ballot carries and the count stops being zero.
+    # A recorded prompt cannot be edited to plant one for real — the stub keys on
+    # exact bytes, so the walk would refuse to reproduce it — which is why the
+    # marker set is what the plant moves.
+    _record_on(tmp_path, seeds=(1,))
+    walk = cf.walk_recording(
+        tmp_path, set_name="planted", slate_set=cf._arm_serving_set(tmp_path)
+    )
+    assert walk.ballots_carrying_a_reporter_block == 0
+    monkeypatch.setattr(
+        cf._RendererCache,
+        "reporter_markers",
+        lambda self, set_name, turn_kind: frozenset({_a_line_of(plain)}),
+    )
+    leaked = cf.walk_recording(
+        tmp_path, set_name="planted", slate_set=cf._arm_serving_set(tmp_path)
+    )
+    assert leaked.ballots_carrying_a_reporter_block > 0
 
 
 def test_a_row_whose_two_on_readings_disagree_reads_unread(
@@ -1740,6 +1960,65 @@ def test_a_row_with_no_reading_at_all_is_unread_not_passed() -> None:
     assert lonely.verdict() == "UNREAD (a STOP)"
 
 
+def test_a_rule_this_reader_does_not_implement_is_refused() -> None:
+    """No silent fallback: an unknown rule is not the nearest known one.
+
+    A mistyped or newly-registered rule that fell through to the share test could
+    exit 0 under a criterion nobody wrote, which is the whole failure the exit
+    status was just given teeth to prevent.
+    """
+
+    row = cf.OnRow(
+        cell_id="planted",
+        tripwire="planted",
+        label="planted",
+        population="planted",
+        predicate="planted",
+        note="planted",
+        rule="not_a_rule",
+        recorded_on=(100, 100),
+        off=(0, 100),
+    )
+    with pytest.raises(SystemExit) as excinfo:
+        row.verdict()
+    message = str(excinfo.value)
+    assert "'not_a_rule' is not a verdict rule" in message
+    assert "DEFECT IN THIS SCRIPT" in message
+
+
+def test_pooling_keeps_a_rows_second_clause_and_its_caveat() -> None:
+    """A pooled row may not contradict the predicate printed beside it.
+
+    Rebuilding the row from summed columns alone dropped both: an R-14 whose
+    member STOPped on the emergency clause would print PASS, and R-15/T-6 would
+    state a construction-guaranteed value with nothing saying so.
+    """
+
+    def leg(leaked: int) -> cf.OnRow:
+        return cf.OnRow(
+            cell_id="R-14",
+            tripwire="T2",
+            label="planted",
+            population="prompt",
+            predicate="planted",
+            note="planted",
+            rule="full",
+            recorded_on=(6, 6),
+            reconstructed_on=(6, 6),
+            off=(0, 6),
+            also_zero=("emergency speech prompts that gained one", leaked),
+            caveat="planted caveat",
+        )
+
+    pooled = cf._PooledOnRows()
+    pooled.add(leg(0))
+    pooled.add(leg(1))
+    (summed,) = pooled.rows()
+    assert summed.also_zero == ("emergency speech prompts that gained one", 1)
+    assert summed.caveat == "planted caveat"
+    assert summed.verdict() == "STOP"
+
+
 def test_a_verdict_over_zero_recordings_is_refused(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1759,6 +2038,15 @@ def test_the_cli_refuses_a_declared_slate_on_the_committed_sets() -> None:
     with pytest.raises(SystemExit) as excinfo:
         cf.main(["--sets", _FAST_SET, "--recorded-slate", cf.RECORDED_SLATE_ON])
     assert excinfo.value.code == 2
+
+
+def _a_line_of(prompt: str) -> str:
+    """One distinctive line every ballot render carries, for a marker plant."""
+
+    for line in prompt.splitlines():
+        if len(line.strip()) > 30:
+            return line
+    raise AssertionError("no line long enough to plant as a marker")
 
 
 def _strip_substrate_stamp(replay_path: Path) -> None:

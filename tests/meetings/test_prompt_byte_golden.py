@@ -111,7 +111,7 @@ from agents.memory.beliefs import (
     SuspicionProvenance,
     hard_evidence_gated_suspicion,
 )
-from agents.memory.store import DEFAULT_TOKEN_BUDGET
+from agents.memory.store import DEFAULT_TOKEN_BUDGET, AgentMemory
 from agents.perception import ingest_packet
 from agents.strategic.prompts.loader import (
     _PROMPTS_ROOT,
@@ -284,6 +284,12 @@ class ReconstructedMeeting:
     # Each carries the live suspicion_graph (with the game builder's provenance
     # fields) the live-population assertions decompose.
     participants: tuple[MeetingParticipant, ...] = ()
+    # The LIVE per-agent memory the walk maintains, at this meeting's boundary.
+    # A downstream reader that wants to know what an ingest would actually write
+    # needs the real roster and self_state guards, not a hand-built stand-in --
+    # and must copy before absorbing, because these are the stores the NEXT
+    # meeting renders from.
+    memories: Mapping[PlayerId, AgentMemory] = field(default_factory=dict)
     # Task 16.8: the reconstructed trigger's kind ("report" / "emergency"), from
     # the same ``_build_meeting_trigger`` rebuild the walk drives the manager
     # with. A downstream re-derivation needs it to mirror the manager's
@@ -776,6 +782,7 @@ def _run_recorded_meeting(
         complete_calls=tuple(stub.calls),
         hit_prompts=hit_prompts,
         participants=tuple(participants),
+        memories={pid: agent.memory for pid, agent in agents.items()},
         trigger_kind=trigger_kind,
     )
     return reconstructed, result, body_id, trigger_kind

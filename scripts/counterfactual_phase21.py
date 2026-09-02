@@ -96,6 +96,7 @@ import re
 import sys
 import time
 from collections import Counter
+from copy import deepcopy
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -108,6 +109,7 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
+from agents.memory.store import absorb_reported_testimony  # noqa: E402
 from agents.strategic.prompts.loader import (  # noqa: E402
     PromptRenderers,
     build_prompt_renderers,
@@ -434,6 +436,7 @@ class _RendererCache:
         self._off: dict[str, PromptRenderers] = {}
         self._on: dict[str, PromptRenderers] = {}
         self._markers: dict[tuple[str, str], frozenset[str]] = {}
+        self._reporter_markers: dict[tuple[str, str], frozenset[str]] = {}
 
     def off(self, set_name: str) -> PromptRenderers:
         if set_name not in self._off:
@@ -502,6 +505,50 @@ class _RendererCache:
             else self.off(set_name)
         )
 
+    def reporter_markers(self, set_name: str, turn_kind: str) -> frozenset[str]:
+        """The lines the REPORTER arm's own block puts on a speech prompt.
+
+        Derived from the shipped template the way the elicitation markers are —
+        one crew turn rendered with and without a ``reporter_context`` — and then
+        MINUS every line a baseline BALLOT render already carries. That
+        subtraction is the whole point: the Task-15.5 ballot exculpation is
+        worded almost identically to this block ("Do not vote" against "Do not
+        accuse"), so a marker taken from the statement render alone would report
+        every body-report ballot as carrying the arm's block.
+
+        What survives is what lets T3 be read INDEPENDENTLY of the render diff:
+        the reporter arm has no ballot argument to withdraw, so a diff over the
+        ballot seam is identically zero whatever the recorded bytes hold.
+        """
+
+        key = (set_name, turn_kind)
+        if key not in self._reporter_markers:
+            ballot_lines = frozenset(_probe_ballot(self.off(set_name)).splitlines())
+            markers = frozenset(
+                line
+                for line in _added_lines(
+                    _probe_crew_statement(self.off(set_name), turn_kind=turn_kind),
+                    _probe_crew_statement(
+                        self.off(set_name),
+                        turn_kind=turn_kind,
+                        reporter_context=ReporterContext(reporter_id="p-2", tick=1),
+                    ),
+                )
+                if line.strip() and line not in ballot_lines
+            )
+            if not markers:
+                raise SystemExit(
+                    f"{set_name}: every line the reporter block adds to a crew "
+                    f"{turn_kind!r} turn already appears on a plain ballot, so "
+                    "this reader cannot tell the arm's block apart from the "
+                    "Task-15.5 exculpation the ballot renders unconditionally. "
+                    "T3 would read every body-report ballot as a breach. This is "
+                    "a DEFECT IN THIS SCRIPT's reader, not a finding about the "
+                    "bytes"
+                )
+            self._reporter_markers[key] = markers
+        return self._reporter_markers[key]
+
     def capturing(
         self,
         sink: list[_Capture],
@@ -565,7 +612,32 @@ def _renderer_for(renderers: PromptRenderers, kind: str) -> Any:
 _SPEECH_TURN_KINDS: Final[tuple[TurnKind, ...]] = ("reply", "opt_in")
 
 
-def _probe_crew_statement(renderers: PromptRenderers, *, turn_kind: str) -> str:
+def _probe_ballot(renderers: PromptRenderers) -> str:
+    """One minimal ballot render, WITH the unconditional reporter annotation.
+
+    The annotation is threaded on every body-report ballot whatever the levers
+    do, so a marker set that did not subtract these lines would read the Task-15.5
+    exculpation as the reporter ARM's block.
+    """
+
+    return renderers.vote(
+        voter_id="p-1",
+        rendered_memory="",
+        transcript=MeetingTranscript(turns=()),
+        contradiction_flags=(),
+        suspicion_graph=(),
+        candidate_targets=("p-2",),
+        skip_confidence_threshold=0.5,
+        reporter_id="p-2",
+    )
+
+
+def _probe_crew_statement(
+    renderers: PromptRenderers,
+    *,
+    turn_kind: str,
+    reporter_context: ReporterContext | None = None,
+) -> str:
     """One minimal CREW speech render, for deriving the arm's own block.
 
     Everything optional is left at its default so the render carries as little
@@ -590,6 +662,7 @@ def _probe_crew_statement(renderers: PromptRenderers, *, turn_kind: str) -> str:
         prior_turn=None,
         turn_kind=kind,
         living_ids=("p-2",),
+        reporter_context=reporter_context,
     )
 
 
@@ -953,6 +1026,7 @@ def _fold_render_diff(
     elicitation: _ElicitationCensus,
     recorded_label: str | None,
     elicitation_legs: tuple[str, str],
+    reporter_on_ballots: list[_Capture],
 ) -> None:
     """Render every captured prompt once per slate and count what moved.
 
@@ -1020,6 +1094,14 @@ def _fold_render_diff(
                 bucket=bucket,
                 first_meeting=first_meeting,
             )
+    reporter_markers = renderers.reporter_markers(
+        meeting.set_name, str(_SPEECH_TURN_KINDS[0])
+    )
+    for capture in captures:
+        if capture.kind != _KIND_VOTE_BALLOT:
+            continue
+        if any(marker in capture.recorded_prompt for marker in reporter_markers):
+            reporter_on_ballots.append(capture)
     without, with_arm = elicitation_legs
     by_label = {
         **on_prompts,
@@ -1283,15 +1365,23 @@ class _TestimonyCensus:
     fabricated_vent_rows: int = 0
     ungrounded_vent_rows: int = 0
 
+    #: Location accounts the REAL ingest wrote into at least one listener's
+    #: alibi map, per slate. Measured by running
+    #: :func:`agents.memory.store.absorb_reported_testimony` over a COPY of the
+    #: walk's own memories, so the own-statement, roster and tickless guards are
+    #: the live ones rather than a restatement of them here.
+    alibi_map_reached_off: int = 0
+    alibi_map_reached_on: int = 0
+
     @property
     def alibi_map_off(self) -> tuple[int, int]:
         accounts = self.on_kinds["alibi"] + self.on_kinds["whereabouts"]
-        return (self.off_kinds["alibi"], accounts)
+        return (self.alibi_map_reached_off, accounts)
 
     @property
     def alibi_map_on(self) -> tuple[int, int]:
         accounts = self.on_kinds["alibi"] + self.on_kinds["whereabouts"]
-        return (accounts, accounts)
+        return (self.alibi_map_reached_on, accounts)
 
     def payload(self) -> dict[str, object]:
         return {
@@ -1395,12 +1485,81 @@ def _fold_testimony(
     census.on_kinds.update(statement.kind for statement in on)
     listeners = frozenset(ballot.voter for ballot in meeting.result.ballots)
     census.listener_slots += len(listeners)
+    census.alibi_map_reached_off += _accounts_reaching_the_map(
+        meeting, statements=off, listeners=listeners
+    )
+    census.alibi_map_reached_on += _accounts_reaching_the_map(
+        meeting, statements=on, listeners=listeners
+    )
     census.off_rows += _ingest_rows(off, listeners)
     census.on_rows += _ingest_rows(on, listeners)
     spoken, fabricated, ungrounded = _vent_row_census(meeting.result, venters=venters)
     census.spoken_vent_rows += spoken
     census.fabricated_vent_rows += fabricated
     census.ungrounded_vent_rows += ungrounded
+
+
+#: The statement kinds a location account can be spoken as. The widened gate the
+#: ``testimony_shapes`` arm installs is ``("alibi", "whereabouts")``; with the arm
+#: down the reduction emits no ``whereabouts`` at all.
+_LOCATION_KINDS: Final[tuple[str, ...]] = ("alibi", "whereabouts")
+
+
+def _accounts_reaching_the_map(
+    meeting: ReconstructedMeeting,
+    *,
+    statements: Sequence[ReportedStatement],
+    listeners: frozenset[PlayerId],
+) -> int:
+    """Location accounts the REAL ingest wrote into at least one alibi map.
+
+    Runs :func:`agents.memory.store.absorb_reported_testimony` -- the function the
+    orchestrator and the replay loader call per living agent -- over a DEEP COPY
+    of each listener's own memory, and reads back what landed. The copy is not an
+    optimisation: these are the stores the walk's NEXT meeting renders from, and
+    absorbing into them would change the bytes the reconstruction has to
+    reproduce.
+
+    Counting what the ingest WROTE rather than what the reduction OFFERED is the
+    whole point. The gate's own definition says every location account reaches
+    the map; the own-statement guard, the roster gate and a tickless claim can
+    each stop one, and a cell derived from the offer could not see any of them.
+    """
+
+    accounts = [
+        statement for statement in statements if statement.kind in _LOCATION_KINDS
+    ]
+    if not accounts:
+        return 0
+    landed: set[tuple[str, PlayerId, PlayerId, int | None, str | None]] = set()
+    for listener in sorted(listeners):
+        memory = meeting.memories.get(listener)
+        if memory is None:
+            continue
+        probe = deepcopy(memory)
+        try:
+            absorb_reported_testimony(probe, statements=accounts)
+        except ValueError:
+            # No self_state row yet, so the ingest's own guard refuses. Nothing
+            # this listener could have absorbed reached anything.
+            continue
+        for player_id in probe.beliefs.known_players():
+            for claim in probe.beliefs.view(player_id).alibis:
+                landed.add(
+                    (claim.source, player_id, claim.player_id, claim.tick, claim.room)
+                )
+    return sum(
+        1
+        for statement in accounts
+        if (
+            statement.speaker,
+            statement.subject,
+            statement.subject,
+            statement.from_tick,
+            statement.room if statement.room is not None else "",
+        )
+        in landed
+    )
 
 
 def _ingest_rows(
@@ -1472,6 +1631,11 @@ class _SetWalk:
     corroboration: Counter[str] = field(default_factory=Counter)
     reporter_openings: int = 0
     non_reporter_speech_turns: int = 0
+    # T3, read INDEPENDENTLY of any render diff: recorded ballot prompts whose
+    # bytes carry the reporter ARM's own block. The arm has no ballot argument to
+    # withdraw, so a diff over that seam is identically zero and could never
+    # report the breach T3 exists to catch.
+    ballots_carrying_a_reporter_block: int = 0
     elicitation: _ElicitationCensus = field(default_factory=_ElicitationCensus)
     kill_named: _KillNamedConvictions = field(default_factory=_KillNamedConvictions)
     # The render budget at the FIRST meeting, folded straight off the recorded
@@ -1805,6 +1969,7 @@ def _walk(
                         _RENDERED_ROW.findall(call.prompt)
                     )
             ledger = _ledger_for(meeting)
+            reporter_on_ballots: list[_Capture] = []
             _fold_render_diff(
                 meeting=meeting,
                 captures=captures,
@@ -1817,7 +1982,9 @@ def _walk(
                 elicitation=walk.elicitation,
                 recorded_label=recorded_label,
                 elicitation_legs=elicitation_legs,
+                reporter_on_ballots=reporter_on_ballots,
             )
+            walk.ballots_carrying_a_reporter_block += len(reporter_on_ballots)
             _fold_kill_named_conviction(
                 result=meeting.result, roles=roles, census=walk.kill_named
             )
@@ -2701,10 +2868,19 @@ class OnRow:
             return _VERDICT_UNREAD
         if self.rule == _RULE_FULL:
             return _VERDICT_PASS if numerator == denominator else _VERDICT_STOP
-        return (
-            _VERDICT_PASS
-            if numerator / denominator >= SOURCE_COUNT_SHARE_FLOOR
-            else _VERDICT_STOP
+        if self.rule == _RULE_SHARE:
+            return (
+                _VERDICT_PASS
+                if numerator / denominator >= SOURCE_COUNT_SHARE_FLOOR
+                else _VERDICT_STOP
+            )
+        # A rule this method does not implement is not a rule. Falling through to
+        # the nearest one would let a mistyped or newly-registered predicate exit
+        # 0 under a criterion nobody wrote.
+        raise SystemExit(
+            f"{self.cell_id}: {self.rule!r} is not a verdict rule this reader "
+            "implements, so its predicate cannot be judged at all. This is a "
+            "DEFECT IN THIS SCRIPT's row table, not a finding about the bytes"
         )
 
     def payload(self) -> dict[str, object]:
@@ -2852,23 +3028,18 @@ def build_on_recording_rows(walk: _SetWalk) -> list[OnRow]:
             population="ballot",
             predicate="the count is 0, whatever the ballot denominator",
             note=(
-                "the Task-15.5 exculpation already renders on every body-report "
-                "ballot unconditionally, so the reporter lever owns no ballot "
-                "seam at all"
-            ),
-            caveat=(
-                "READS ZERO BY CONSTRUCTION on this reader. The reporter lever "
-                "has no ballot argument to withdraw, so both columns are "
-                "identically 0 whatever the ballot bytes hold, and a PASS here "
-                "is not evidence that T3 was exercised. §8.1 registers R-15 as "
-                "T3's reader and this instrument does not redefine a published "
-                "cell; the gap is reported, not patched"
+                "read by INDEPENDENT IDENTIFICATION, not by a render diff: the "
+                "reporter arm has no ballot argument to withdraw, so a diff over "
+                "that seam is identically zero whatever the ballot bytes hold. "
+                "The numerator is recorded ballot prompts carrying the arm's own "
+                "block, whose marker lines are derived from the shipped template "
+                "and then subtracted against a plain ballot — the Task-15.5 "
+                "exculpation the ballot renders unconditionally is worded almost "
+                "identically and must not be read as a breach"
             ),
             rule=_RULE_ZERO,
-            recorded_on=_pair(less_reporter.changed[_KIND_VOTE_BALLOT], ballots),
-            reconstructed_on=_pair(
-                less_reporter.changed_vs_reconstruction[_KIND_VOTE_BALLOT], ballots
-            ),
+            recorded_on=_pair(walk.ballots_carrying_a_reporter_block, ballots),
+            reconstructed_on=_pair(walk.ballots_carrying_a_reporter_block, ballots),
             off=_pair(0, ballots),
         ),
         OnRow(
@@ -2881,19 +3052,15 @@ def build_on_recording_rows(walk: _SetWalk) -> list[OnRow]:
                 "the OFF reconstruction of the same run is strictly below it)"
             ),
             note=(
-                "the bolded clause is what this verdict reads; the parenthetical "
-                "is printed as the OFF column beside it, because a run in which "
-                "every account already reached the map under OFF had nothing for "
-                "the widened gate to widen and is not a failure of it"
-            ),
-            caveat=(
-                "READS 100% BY CONSTRUCTION on any non-empty population. The ON "
-                "column is a derivation over the reduction census — the widened "
-                "('alibi','whereabouts') gate's own definition — and not a "
-                "measurement of what the ingest path then writes, so a PASS here "
-                "is not evidence that no account was dropped. §8.1 registers T-6 "
-                "as T4's reader and this instrument does not redefine a "
-                "published cell; the gap is reported, not patched"
+                "an INGEST measurement, not a restatement of the offer: both "
+                "columns run agents.memory.store.absorb_reported_testimony over "
+                "a copy of each listener's own memory and count the accounts "
+                "that landed in an alibi map, so the own-statement, roster and "
+                "tickless guards are the live ones. The bolded clause is what "
+                "this verdict reads; the parenthetical is printed as the OFF "
+                "column beside it, because a run in which every account already "
+                "reached the map under OFF had nothing for the widened gate to "
+                "widen and is not a failure of it"
             ),
             rule=_RULE_FULL,
             reconstructed_on=testimony.alibi_map_on,
@@ -3611,10 +3778,26 @@ class _PooledOnRows:
             recorded_on=_sum_pairs(seen.recorded_on, row.recorded_on),
             reconstructed_on=_sum_pairs(seen.reconstructed_on, row.reconstructed_on),
             off=_sum_pairs(seen.off, row.off),
+            # The compound clause and the caveat travel with the cell. A pooled
+            # row that dropped its second zero reading would print PASS over a
+            # member that STOPped on exactly that clause, and one that dropped
+            # its caveat would state a construction-guaranteed value as a result.
+            also_zero=_sum_also_zero(seen.also_zero, row.also_zero),
+            caveat=row.caveat or seen.caveat,
         )
 
     def rows(self) -> list[OnRow]:
         return list(self._rows.values())
+
+
+def _sum_also_zero(
+    left: tuple[str, int] | None, right: tuple[str, int] | None
+) -> tuple[str, int] | None:
+    """Add two named second readings, keeping ABSENT absent."""
+
+    if left is None or right is None:
+        return None
+    return (right[0], left[1] + right[1])
 
 
 def _sum_pairs(
@@ -3777,6 +3960,8 @@ def _pool_testimony_census(walks: Sequence[_SetWalk]) -> dict[str, object]:
         pooled.spoken_vent_rows += census.spoken_vent_rows
         pooled.fabricated_vent_rows += census.fabricated_vent_rows
         pooled.ungrounded_vent_rows += census.ungrounded_vent_rows
+        pooled.alibi_map_reached_off += census.alibi_map_reached_off
+        pooled.alibi_map_reached_on += census.alibi_map_reached_on
     return pooled.payload()
 
 
