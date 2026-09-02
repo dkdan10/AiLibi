@@ -345,6 +345,28 @@ if unknown:
         "the wrong map; nothing was recorded.\n"
     )
     raise SystemExit(1)
+# A stamp that outpaces its bodies. An arm that swaps in a VARIANT FILE serves a
+# body written independently of every sibling, so a sibling whose block lives in
+# the DEFAULT body never reaches the render while that swap is on -- the two
+# compose in the STAMP and not in the BYTES (orchestrator/game.py:611-618, pinned
+# by tests/meetings/test_prompt_byte_golden.py:1364-1409). Deriving the expected
+# map from the slate would then freeze a record against a composite claiming
+# provenance its prompts do not carry. The hardcoded literal this derivation
+# replaced refused that combination by accident, because no composite ever
+# matched it; the refusal is restored deliberately here.
+if "impostor_roll_call" in keys and "reporter_reasoning" in keys:
+    sys.stderr.write(
+        "Error: --expect-levers names both 'impostor_roll_call' and "
+        "'reporter_reasoning', whose stamps would outpace their bodies.\n"
+        "impostor_roll_call swaps accusation_round.j2 for the roll-call variant, "
+        "which carries no reporter block, so every statement turn would silently "
+        "lose the reporter-voice effects while the composite stamp still named "
+        "reporter_reasoning as their lineage. Freezing a record against that map "
+        "would certify provenance the recorded prompts do not carry.\n"
+        "Record them separately, or author the reporter block into the roll-call "
+        "variant first; nothing was recorded.\n"
+    )
+    raise SystemExit(1)
 env = {env_var_for_lever(key): "1" for key in keys}
 resolved = prompt_versions_for_set(set_name, env=env)
 # TWO renderings of ONE map, both emitted here: the MANIFEST cell's sorted,

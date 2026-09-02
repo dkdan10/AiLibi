@@ -715,6 +715,66 @@ def test_acceptance_pairs_carry_the_maps_own_keys_not_the_version_prefix() -> No
     assert f"--expected-prompt-versions {expected};" in proc.stdout, proc.stdout
 
 
+def test_derivation_refuses_a_pair_whose_stamps_outpace_their_bodies() -> None:
+    # impostor_roll_call swaps accusation_round.j2 for a variant carrying no
+    # reporter block, so with reporter_reasoning also ON the two compose in the
+    # STAMP and not in the BYTES (orchestrator/game.py, pinned by
+    # tests/meetings/test_prompt_byte_golden.py::
+    # test_a_file_swapping_arm_serves_a_body_its_siblings_do_not_reach).
+    # Freezing against the derived composite would certify provenance the
+    # recorded prompts do not carry; the hardcoded literal this derivation
+    # replaced refused that by accident, so the refusal is restored here.
+    from orchestrator.replay import env_var_for_lever
+
+    env = _clean_env()
+    env["AILIBI_PROMPT_SET"] = "qwen3_6_27b"
+    for key in ("impostor_roll_call", "reporter_reasoning"):
+        env[env_var_for_lever(key)] = "1"
+    proc = _run(
+        "--set",
+        "9p2i",
+        "--dry-run",
+        "--expect-levers",
+        "impostor_roll_call,reporter_reasoning",
+        env=env,
+    )
+
+    assert proc.returncode != 0
+    out = proc.stdout + proc.stderr
+    assert "outpace their bodies" in out
+    assert "impostor_roll_call" in out and "reporter_reasoning" in out
+    assert "nothing was recorded" in out
+
+
+def test_the_outpacing_refusal_does_not_reach_the_ratified_slate_or_either_arm_alone() -> (
+    None
+):
+    # The refusal must bite on the PAIR and nothing else: the Wave-2 slate the
+    # record runs, and each of the two arms on its own, all still resolve. A
+    # guard that also refused these would block the record it exists to protect.
+    from orchestrator.replay import env_var_for_lever
+
+    for declared in (
+        ("reporter_reasoning", "corroboration_discipline", "testimony_shapes"),
+        ("impostor_roll_call",),
+        ("reporter_reasoning",),
+    ):
+        env = _clean_env()
+        env["AILIBI_PROMPT_SET"] = "qwen3_6_27b"
+        for key in declared:
+            env[env_var_for_lever(key)] = "1"
+        proc = _run(
+            "--set",
+            "9p2i",
+            "--dry-run",
+            "--expect-levers",
+            ",".join(declared),
+            env=env,
+        )
+        assert proc.returncode == 0, (declared, proc.stdout + proc.stderr)
+        assert "outpace their bodies" not in (proc.stdout + proc.stderr)
+
+
 def test_derivation_refuses_an_expect_levers_key_that_is_not_a_live_toggle() -> None:
     # A typo in --expect-levers would otherwise resolve to the BARE map and
     # freeze a lever-ON record against provenance it does not carry, hours after

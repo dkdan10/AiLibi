@@ -19,7 +19,11 @@ criterion names **a seed whose OPENING defaults**, and no opening defaulted (`lo
 defaulted turn is an `opt_in` speech turn, so the criterion as written is NOT met and this report
 does not stretch it. The remedy is the one the recorder itself prescribes — re-record the seed — and
 it has a precedent at the baseline-7 record. **The seed was NOT re-recorded to make this report
-green**: a smoke that re-rolls until it is clean measures nothing.
+green**: a smoke that re-rolls until it is clean measures nothing. **The contract's own DoD item at
+`tasks/phase-21.md`:6868 — "no recorded failed-call row carries `error_type == "deadline_default"`
+under either shape" — is therefore NOT SATISFIED** (§14.1), the disagreement between that item and
+the ratified §9.2 criterion is the owner's to settle at the gate, and both halves of it are ROUTED to
+21.24 in §16, the first as a precondition.
 
 **Three further things no previous bytes could show.** A crew speaker filed the project's **first
 spoken `saw_kill`** (baseline 8 holds zero anywhere), and with it the **cross-lever ballot
@@ -890,11 +894,18 @@ and the transcript carries the husk it left:
    defaulted turn is `turn_index 5`, an `opt_in` speech turn. §9.2's criterion names *"a seed whose
    opening defaults"*, so **the criterion as written is NOT met** (§14) and this report does not
    stretch it to fit.
-2. **No deadline was missed.** The cause is a SCHEMA VALIDATION failure — the model put a
-   `corroboration` item, which is a CLAIM type, into `observations`. Both the `error_type` and the
-   husk's `free_text` say "deadline" for a validation default, which makes the watch item read
-   wrongly on its face. That mislabel is itself worth the record's attention: an operator scanning
-   for wall-clock misses will find this row and mis-diagnose it.
+2. **No deadline was missed — the cause is a SCHEMA VALIDATION failure, and the label is wrong.**
+   The model put a `corroboration` item, which is a CLAIM type, into `observations`, and the turn
+   failed `MeetingTurn` validation. The labelling is `orchestrator/game.py`:2486-2560
+   (`_record_deadline_defaults`), which stamps `error_type="deadline_default"` on BOTH branches —
+   the burned-generation row at :2543 (the one that fired here, carrying the real model and its
+   tokens) and the zero-spend marker at :2557 — while its own docstring records that the trigger
+   kind, *"deadline vs validation"*, is named only inside `error_message`. The husk's
+   `free_text` compounds it: `meetings/manager.py`:209 mints the literal
+   `"(missed deadline; no turn submitted)"` for every default, whatever its cause.
+   **So `error_type` is a CHANNEL name, not a cause — and every consumer keys on it.**
+   `check_replay_provenance`'s own comment says it keys on `error_type` deliberately, so it cannot
+   tell a wall-clock miss from a schema slip. That is a recorder defect, routed in §16.
 3. **The corpus freeze guard WOULD refuse this seed, and it is demonstrated doing so** rather than
    asserted. `check_replay_provenance` keys on `error_type` (deliberately — *"the burned-generation
    branch stamps the REAL baseline model, so a model-only check misses it entirely"*), and its
@@ -926,7 +937,7 @@ missed_skip 15 | meeting_rate 1.00 (18 meetings) | ejection_accuracy 0.7143 (5/7
 **Zero lost openings and zero vote defaults; one non-opening default.** The observed rate is **1
 defaulted turn in 204 recorded calls**; the superseded first attempt carried 0 in 176 (§2.0). Two
 five-seed samples cannot price this, and the report gives no rate for the record to plan against —
-only the two observations and their denominators.
+only the two observations and their denominators. **The contract's own DoD item for this scan cannot be ticked on these bytes; §14.1 walks it.**
 
 ## 12. Operating data, and the re-priced projection
 
@@ -1062,6 +1073,49 @@ denominator disagreement (§12.1); and **the non-opening defaulted turn and its 
 label** (§11.2). **No §9.2 criterion names any of these classes verbatim, and this report invents
 none.** The precedent for saying so in those words is `audits/audit-phase-20-smoke.md` §12.
 
+### 14.1 The contract's own DoD item that CANNOT be ticked
+
+The ratified §9.2 criteria are one surface; the task contract's Definition of done is another, and
+they disagree here. `tasks/phase-21.md`:6868 requires:
+
+> no recorded failed-call row carries `error_type == "deadline_default"` under either shape, and the
+> recorder's own summary counters for lost openings and vote defaults are quoted
+
+**That item is NOT SATISFIED on these bytes**, and this report marks it so rather than reading it
+generously. The scan was performed and the counters are quoted; the stated result is not what was
+observed. The row, verbatim from the recorded bytes:
+
+```
+game_id     headless-seed-26          meeting_id  headless-seed-26:meeting-1    tick 11
+error_type  deadline_default          model       Qwen/Qwen3.6-27B              cost_usd 0.0
+turn_kind   opt_in                    turn_index  5                             speaker  p-5
+error_message
+  opt_in turn (turn 5) defaulted (validation); p-5 submitted no turn
+  [ValidationError: 1 validation error for MeetingTurn
+   observations.1
+     Input tag 'corroboration' found using 'type' does not match any of the expected tags:
+     'saw_player', 'completed_task', 'found_body', 'saw_vent', 'saw…]
+```
+
+**The cause is established, not inferred**: a schema-validation failure that
+`orchestrator/game.py`:2486-2560 (`_record_deadline_defaults`) labels `deadline_default` on both its
+branches (:2543 burned-generation, :2557 zero-spend marker), with the true trigger kind carried only
+in `error_message`; `meetings/manager.py`:209 mints the husk's `"(missed deadline; no turn
+submitted)"` regardless of cause.
+
+**What no criterion names.** §9.2's second criterion is *"a seed whose opening defaults (the
+`(deadline_default)` watch item)"*, and its subject is an OPENING; the recorder's counters read
+`lost_openings 0 (defaults 1)` and `vote_defaults 0 (must_vote 0)`. **This row is neither an opening
+nor a vote.** No §9.2 criterion names that class verbatim, and this report invents none — the
+precedent for saying exactly that is `audits/audit-phase-20-smoke.md` §12.
+
+**So the two surfaces give two answers, and this report gives both.** Under the ratified §9.2 text
+the criterion is NOT MET and the memo's own answer is GO. Under the parenthetical read as the
+operative clause — the DoD item's shape — the run carries a `deadline_default` row and the call
+would be ABANDON. **The memo governs where this report and it disagree, so the verdict is GO; the
+choice between the two readings is the OWNER's at the gate**, and §16 carries the routing either
+way.
+
 **And the standing canon, stated where the report needs it:** baseline 7 is canon by explicit owner
 override of a FINDING verdict, with bar 1 missed at 61/103 = 0.5922 against ≥ 0.60 and bar 2 missed
 at 42 against < 35. No surface in this report states or implies that those bars passed.
@@ -1110,11 +1164,14 @@ byte-identical (§6), the recorded substrate stamp is the declared slate on all 
 registered comparisons (§7), no Wave-1 repair regressed (§11.1), and the committed record is
 untouched (§6.3).
 
-**The GO is not a clean bill.** One seed carries a defaulted turn whose `failed_call` row the corpus
-freeze guard refuses (§11.2), and §9.2's criterion does not reach it because its subject is an
-opening and no opening defaulted. That is the ratified criteria producing GO on a run that also
-surfaced a defect — which is the smoke working, not the smoke being waved through. **The owner is
-the one who weighs the two**; this report's job was to put both on the page with their evidence.
+**The GO is not a clean bill, and one contract item cannot be ticked.** One seed carries a defaulted
+turn whose `failed_call` row the corpus freeze guard refuses (§11.2). §9.2's criterion does not reach
+it — its subject is an OPENING and no opening defaulted — so the memo's own answer is GO. But the
+task contract's DoD item at `tasks/phase-21.md`:6868 requires that **no** recorded failed-call row
+carry `error_type == "deadline_default"` under either shape, and **that item is NOT SATISFIED**
+(§14.1). The two surfaces disagree; the memo governs, so the verdict stands, and **the call under the
+parenthetical reading is the owner's at the gate.** Items 1 and 2 below are ROUTED to 21.24 with
+their homes, the first as a precondition the record cannot start without.
 
 **The adopting record's window opens on `14854a06`**, this report's certified source state, and the
 freeze governs from the pre-registration's own merge point. Any merge into `agents/`, `meetings/`,
@@ -1135,43 +1192,73 @@ like-for-like OFF reference this report reads against is preserved beside them a
 `/Users/danielkeinan/ailibi-smoke-21-23/committed-same-five` (five copies of committed replays,
 read-only; nothing under `replays/` moved).
 
-**Five items the record inherits**, none of them a STOP and none of them blocking:
+**Six items the record inherits** — the first two ROUTED with homes, the rest observed, none of them a STOP and none of them blocking:
 
-1. **The defaulted turn, and the guard that refuses it** (§11.2). The record will meet this and its
-   own freeze guard will catch it on the corpus legs — and NOT on the samples legs, where neither
-   the wrapper nor the validity gate looks. The remedy is the recorder's own (`re-record the seed`),
-   the precedent is baseline 7's two seeds in 12m33s, and the cost sits outside §12.2's bracket.
-   **Two sub-items ride it:** the label is wrong (a validation default reported as a deadline miss,
-   in both the `error_type` and the husk's `free_text`), and the wrapper/gate asymmetry is ledgered
-   but unassigned.
-2. **What the table did with the two spoken kills** (§8.5). Both accounts were true, neither
+1. **ROUTED TO 21.24, AS A PRECONDITION — the guard/criterion asymmetry must be reconciled before
+   the record starts.** `check_replay_provenance` (`scripts/record_ml_corpus.sh`, the freeze-guard
+   branch) refuses **ANY** `deadline_default` row and says `re-record the seed`; the ratified §9.2
+   criterion and the validity gate name only **an OPENING** (the gate names nothing at all). On
+   these bytes those two answers differ, and on a 300-game record they will differ repeatedly. **The
+   record cannot start until the owner reconciles them**, in one of two directions — narrow the
+   guard to the memo's shape (refuse only a defaulted opening, or only a wall-clock miss), or widen
+   the memo to the guard's (make any `deadline_default` row an abandon criterion, with the
+   re-record cost priced in). Either is an owner decision, not an operator one. **Priced as a 21.24
+   precondition** beside the two §9.1 preconditions this task discharged. Its blast radius is the
+   corpus legs only: `scripts/refresh_samples.sh` contains no `deadline_default` check
+   (`grep -c` → 0), so the two samples legs would carry such a husk into the committed record
+   unnoticed.
+2. **ROUTED TO 21.24, AS A RECORDER FIX BEFORE THE RECORD — the mislabelling.**
+   `orchestrator/game.py`:2486-2560 (`_record_deadline_defaults`) stamps
+   `error_type="deadline_default"` on both branches (:2543, :2557) for a wall-clock miss AND a
+   schema-validation default alike, carrying the true trigger only inside `error_message`; and
+   `meetings/manager.py`:209 mints `"(missed deadline; no turn submitted)"` as the husk's
+   `free_text` whatever the cause. Every consumer keys on `error_type` — `check_replay_provenance`'s
+   own comment says so deliberately — so no guard, gate or operator scan can currently tell the two
+   apart. **Fix before 21.24**, so the record's own watch item means what it says. The remedy for
+   the seed itself is unchanged and is the recorder's own (`re-record the seed`; the precedent is
+   baseline 7's two seeds in 12m33s), and that cost sits outside §12.2's bracket.
+3. **What the table did with the two spoken kills** (§8.5). Both accounts were true, neither
    convicted, and one ended with the truthful crew witness ejected. Two cases decide nothing; they
    are the first live evidence on a question the counterfactual declares unreachable offline, and
    21.24's audit should read this cell deliberately rather than incidentally.
-3. **The first spoken `saw_kill` and its ballot interaction** (§8.4). Both are registered — the
+4. **The first spoken `saw_kill` and its ballot interaction** (§8.4). Both are registered — the
    public-transcript row by `test_a_spoken_kill_reaches_every_later_speaker` and the ballot fork by
    Errata E.1 — and 21.24's audit should report the interaction's realized size rather than E.1's
    synthetic per-row arithmetic.
-4. **The seed slate is not a representative token sample** (§12.1). The projection's low end is the
+5. **The seed slate is not a representative token sample** (§12.1). The projection's low end is the
    all-games cross-check for that reason, and the record should re-derive its own ratio per leg.
-5. **The `at_body` line reached an impostor in 2 of 4 firings** (§9.2), reproducing the
+6. **The `at_body` line reached an impostor in 2 of 4 firings** (§9.2), reproducing the
    counterfactual's 49.0% co-discoverer hazard at n = 4. It is observed and gated by nothing.
 
-### 16.1 The project gate, and the two exceptions the contract asks be stated
+### 16.1 The project gate — run COMPLETE, nothing skipped
 
-`bash scripts/check.sh` passes in this clean worktree: **6,003 tests passed, 20 skipped, 3 xfailed**,
-with `mypy`, `ruff check`, `ruff format --check`, `lint-imports`, `generate_prompts.py --check`
-(390 tasks, 390 prompts in sync) and `validate_task_docs.py` all green.
+`bash scripts/check.sh` — the full command, **no `AILIBI_SKIP_FRONTEND`**, from the worktree root:
 
-Two exceptions the contract asks be recorded rather than discovered:
+```
+$ bash scripts/check.sh; echo EXIT=$?
+…
+Contracts: 4 kept, 0 broken.
+Task docs validation passed: 390 tasks and 390 prompts.
+All 390 prompts are in sync.
+Success: no issues found in 377 source files          (mypy)
+=========== 6005 passed, 20 skipped, 3 xfailed in 113.13s (0:01:53) ============
+Running frontend checks...
+  eslint .                                   — clean
+  tsc --noEmit (+ tsconfig.node.json, e2e/tsconfig.json)  — clean
+  vitest run   — Test Files 9 passed (9);  Tests 440 passed (440)
+  vite build   — ✓ built in 223ms
+EXIT=0
+```
 
-* **The ES hash-pin test did NOT fail here.**
-  `tests/training/test_es.py::test_evolve_is_deterministic_and_hash_pinned` is a Linux-CI hash pin
-  known to fail on this Mac on bare `main`; in this worktree it **passed**, so there is no known
-  local failure to report and none is claimed. Had it failed it would have been reported as the
-  known local failure it is and never as a smoke finding.
-* **The frontend leg was skipped** with `AILIBI_SKIP_FRONTEND=1` because `frontend/node_modules` is
-  absent in this worktree. Nothing in this PR touches `frontend/`.
+The frontend dependencies were installed in this worktree (`cd frontend && npm ci`) specifically so
+this gate could run unskipped; the earlier declaration of a skipped frontend leg is superseded.
+Nothing in this PR touches `frontend/`, and the four frontend legs pass anyway.
+
+**The one exception the contract asks be recorded, and it did not occur:**
+`tests/training/test_es.py::test_evolve_is_deterministic_and_hash_pinned` is a Linux-CI hash pin
+known to fail on this Mac on bare `main`; in this worktree it **passed**, so there is no known local
+failure to report and none is claimed. Had it failed it would have been reported as the known local
+failure it is and never as a smoke finding.
 
 ## 17. Appendix — the readers this report ran, in full
 
@@ -1438,12 +1525,120 @@ for arg in sys.argv[1:]:
     analyse(pathlib.Path(arg))
 ```
 
-### 17.4 The operating-data reader
+### 17.4 The operating-data reader — the §11.2 watch scan and the §12 token source
 
-`AILIBI_OPDATA_DIR=<set> [AILIBI_OPDATA_SEEDS=a,b,c] uv run python opdata.py` — sums recorded
-`llm_calls` tokens and cost per seed, and scans every recorded `failed_call` row for
-`error_type == "deadline_default"` and for the `(deadline_default)` model sentinel, under both
-shapes. It is the watch-item scan of §11 and the token source of §12.
+Stdlib only. Reproduces §5's per-seed table, §11.2's watch-item scan and §12's token figures:
+
+```bash
+AILIBI_OPDATA_DIR=/Users/danielkeinan/ailibi-smoke-21-23/9p2i uv run python opdata.py
+# the like-for-like OFF column of §12.1:
+AILIBI_OPDATA_DIR=replays/samples/9p2i AILIBI_OPDATA_SEEDS=4,17,19,26,46 uv run python opdata.py
+```
+
+```python
+"""Operating data over a recorded set: calls, tokens, cost, meetings, failed calls.
+
+Also the hand-scanned watch item: any failed_call row of any kind, and the
+`(deadline_default)` sentinel under either shape.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import sys
+from collections import Counter
+from pathlib import Path
+
+TARGET = Path(os.environ.get("AILIBI_OPDATA_DIR", os.environ.get("SMOKE_DIR", ".")))
+ONLY = {
+    int(token)
+    for token in os.environ.get("AILIBI_OPDATA_SEEDS", "").split(",")
+    if token.strip()
+}
+
+
+def main() -> int:
+    per_seed: dict[int, dict] = {}
+    failed_kinds: Counter[str] = Counter()
+    deadline_rows = 0
+    for path in sorted(TARGET.glob("replay-seed-*.jsonl")):
+        seed = int(path.stem.rsplit("-", 1)[1])
+        if ONLY and seed not in ONLY:
+            continue
+        info = {
+            "meetings": 0,
+            "ejections": 0,
+            "calls": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cost": 0.0,
+            "ending": None,
+            "winner": None,
+            "failed_calls": 0,
+        }
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            if row.get("kind") == "game_over":
+                info["ending"] = row.get("end_reason") or row.get("reason")
+                info["winner"] = row.get("winner")
+            if row.get("kind") == "failed_call":
+                info["failed_calls"] += 1
+                failed_kinds[str(row.get("error_type"))] += 1
+                if row.get("error_type") == "deadline_default":
+                    deadline_rows += 1
+                if row.get("model") == "(deadline_default)":
+                    deadline_rows += 1
+                continue
+            if row.get("kind") != "meeting":
+                continue
+            info["meetings"] += 1
+            if row.get("ejected_player_id"):
+                info["ejections"] += 1
+            for call in row.get("llm_calls") or []:
+                info["calls"] += 1
+                info["input_tokens"] += int(call.get("input_tokens") or 0)
+                info["output_tokens"] += int(call.get("output_tokens") or 0)
+                info["cost"] += float(call.get("cost_usd") or 0.0)
+                if call.get("model") == "(deadline_default)":
+                    deadline_rows += 1
+        per_seed[seed] = info
+
+    print(f"set={TARGET}")
+    print("seed meetings ejections calls in_tokens out_tokens tokens cost ending winner")
+    tot = Counter()
+    for seed, info in sorted(per_seed.items()):
+        tokens = info["input_tokens"] + info["output_tokens"]
+        print(
+            f"{seed} {info['meetings']} {info['ejections']} {info['calls']} "
+            f"{info['input_tokens']} {info['output_tokens']} {tokens} "
+            f"{info['cost']:.4f} {info['ending']} {info['winner']}"
+        )
+        for key in ("meetings", "ejections", "calls", "input_tokens", "output_tokens"):
+            tot[key] += info[key]
+        tot["failed_calls"] += info["failed_calls"]
+    tokens = tot["input_tokens"] + tot["output_tokens"]
+    print()
+    print(
+        f"TOTAL meetings={tot['meetings']} ejections={tot['ejections']} "
+        f"calls={tot['calls']} input={tot['input_tokens']} "
+        f"output={tot['output_tokens']} tokens={tokens}"
+    )
+    if tot["meetings"]:
+        print(f"tokens/meeting = {tokens / tot['meetings']:.1f}")
+        print(f"calls/meeting  = {tot['calls'] / tot['meetings']:.2f}")
+    if tot["calls"]:
+        print(f"tokens/call    = {tokens / tot['calls']:.1f}")
+    print(f"failed_call rows by error_type: {dict(failed_kinds) or '{} (none recorded)'}")
+    print(f"deadline_default rows (EITHER shape): {deadline_rows}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+```
 
 ### 17.5 The agreement-with-the-opener session walk (§9.1)
 
@@ -1564,16 +1759,137 @@ for path in sorted(TARGET.glob("replay-seed-*.jsonl")):
 
 ### 17.7 The spoken-kill outcome read (§8.5)
 
-Walks every recorded meeting for a spoken `saw_kill`, and prints the speaker's role, the named
-player's role, the ballot tally and the outcome. Roles come from the committed
-`eval.validity.roles_by_seed` re-seeding, never from the replay — roles are firewalled out of the
-JSONL — so "the account was true" is checked against ground truth rather than against the transcript
-that made the claim.
+Roles come from the committed `eval.validity.roles_by_seed` re-seeding, never from the replay —
+roles are firewalled out of the JSONL — so "the account was true" is checked against ground truth
+rather than against the transcript that made the claim. Run under Shell A:
+
+```bash
+SMOKE_DIR=/Users/danielkeinan/ailibi-smoke-21-23/9p2i uv run python kill_outcomes.py
+```
+
+```python
+"""What happened at the two meetings where a crew speaker filed a spoken saw_kill.
+
+Roles come from the committed re-seeding (eval.validity.roles_by_seed), never from
+the replay: roles are firewalled out of the JSONL.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import sys
+from pathlib import Path
+
+ROOT = Path(os.environ.get("AILIBI_REPO_ROOT", os.getcwd()))
+sys.path.insert(0, str(ROOT))
+
+from eval.validity import resolve_roster_knobs, roles_by_seed  # noqa: E402
+
+TARGET = Path(os.environ["SMOKE_DIR"])
+players, impostors, tasks = resolve_roster_knobs(TARGET)
+roles = roles_by_seed(
+    TARGET, num_players=players, num_impostors=impostors, tasks_per_crewmate=tasks
+)
+
+for path in sorted(TARGET.glob("replay-seed-*.jsonl")):
+    seed = int(path.stem.rsplit("-", 1)[1])
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        row = json.loads(line)
+        if row.get("kind") != "meeting":
+            continue
+        for turn in (row.get("transcript") or {}).get("turns") or []:
+            for obs in turn.get("observations") or []:
+                if obs.get("type") != "saw_kill":
+                    continue
+                speaker = str(turn["speaker"])
+                named = str(obs["subject"])
+                ejected = row.get("ejected_player_id")
+                print(f"seed {seed} {row['meeting_id']}")
+                print(f"  speaker {speaker} = {roles[seed].get(speaker)}  (reporter: {row.get('triggered_by')})")
+                print(f"  named   {named} = {roles[seed].get(named)}")
+                print(f"  outcome {row.get('outcome')}  ejected {ejected} = {roles[seed].get(str(ejected)) if ejected else '-'}")
+                tally = {}
+                for ballot in row.get("ballots") or []:
+                    tally[str(ballot.get("target"))] = tally.get(str(ballot.get("target")), 0) + 1
+                print(f"  ballot tally {tally}")
+```
 
 ### 17.8 The `at_body` recipient read (§9.2)
 
-The same roster/roles resolution, over every recorded prompt carrying
-`Your own record shows you saw the body when it was reported.`, printing each recipient's recorded
-role and the impostor share. It is the only cell in this report that reads a per-speaker line of the
-reporter block against ground truth, and it is what makes §9.2's watch reading a measurement rather
-than an inference.
+The same roster/roles resolution, over every recorded prompt carrying the `at_body` sentence. It is
+the only cell in this report that reads a per-speaker line of the reporter block against ground
+truth, and it is what makes §9.2's watch reading a measurement rather than an inference. Run under
+Shell A:
+
+```bash
+SMOKE_DIR=/Users/danielkeinan/ailibi-smoke-21-23/9p2i uv run python at_body.py
+```
+
+```python
+"""Who received the reporter block's `at_body` line, and what role were they.
+
+A-38's proposed widening (extend exculpatory framing to non-reporter
+co-discoverers) was REJECTED on measurement. The shipped block frames only the
+reporter; the one other per-speaker line it renders is the neutral self-addressed
+`at_body` sentence. This names every seat that received it and its recorded role,
+so the smoke's sharpest watch cell is measured rather than assumed.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import sys
+from pathlib import Path
+
+ROOT = Path(os.environ.get("AILIBI_REPO_ROOT", os.getcwd()))
+sys.path.insert(0, str(ROOT))
+
+from eval.validity import resolve_roster_knobs, roles_by_seed  # noqa: E402
+
+TARGET = Path(os.environ["SMOKE_DIR"])
+AT_BODY = "Your own record shows you saw the body when it was reported."
+REPORTER_LINE = "` reported the body that opened this meeting."
+
+
+def main() -> int:
+    players, impostors, tasks = resolve_roster_knobs(TARGET)
+    roles_all = roles_by_seed(
+        TARGET,
+        num_players=players,
+        num_impostors=impostors,
+        tasks_per_crewmate=tasks,
+    )
+    rows: list[tuple[int, str, str]] = []
+    for path in sorted(TARGET.glob("replay-seed-*.jsonl")):
+        seed = int(path.stem.rsplit("-", 1)[1])
+        roles = roles_all[seed]
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            if row.get("kind") != "meeting":
+                continue
+            for call in row.get("llm_calls") or []:
+                if AT_BODY not in call["prompt"]:
+                    continue
+                agent = str(call.get("agent_id"))
+                rows.append((seed, agent, roles.get(agent, "?")))
+    impostor = sum(1 for _s, _a, role in rows if role == "IMPOSTOR")
+    print(f"prompts carrying the at_body line: {len(rows)}")
+    for seed, agent, role in rows:
+        print(f"  seed {seed}: {agent} = {role}")
+    if rows:
+        print(f"IMPOSTOR share: {impostor}/{len(rows)} = {impostor / len(rows):.1%}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+```
+
+**Every reader in this appendix was re-run against the preserved bytes after the report was written,
+and each reproduces the numbers it is cited for to the digit.**
