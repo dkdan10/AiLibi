@@ -1,5 +1,17 @@
 """The Phase-21 offline counterfactual: the Wave-2 slate over the re-recorded bytes.
 
+Two modes over one machine, because the same three levers have to be read on
+bytes recorded BOTH ways.
+
+``--sets`` is the committed-record mode: the four committed replay sets, whose
+bytes were recorded with every lever OFF. ``--recording <dir> --recorded-slate
+on`` is the LEVER-ON mode: one directory of ``replay-seed-*.jsonl`` recorded with
+the Wave-2 slate up -- 21.23's smoke and 21.24's record write exactly that, into
+a scratch directory outside this repository -- and it reads the ratified
+pre-registration's seven tripwire predicates off those bytes. The two modes share
+the walk, the folds and the render diff; what changes is which slate the RECORD
+is and therefore which direction the second render runs in.
+
 One command, one shipping slate, one table. It prices the three Wave-2 levers --
 ``reporter_reasoning``, ``corroboration_discipline``, ``testimony_shapes`` -- over
 the four committed replay sets and prints, per set and pooled with a numerator and
@@ -69,7 +81,11 @@ model ``tests``; the inversion has precedent in ``eval/determinism_test.py`` and
 ``eval/leak_test.py``. Promoting the walk to a production home is Task 21.25's.
 
 Purity: offline, no network, no LLM call, no replay written, no ``os.environ``
-assignment.
+assignment. The lever-ON mode needs a shell carrying the recording's own
+``AILIBI_*`` exports -- ``api.replay_loader`` refuses a cross-substrate
+reconstruction, and the manager resolves its two kwarg-toggled levers from that
+same environment -- so it CHECKS the shell against the recording's stamp and
+refuses a disagreement. It never writes one.
 """
 
 from __future__ import annotations
@@ -80,6 +96,7 @@ import re
 import sys
 import time
 from collections import Counter
+from copy import deepcopy
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -92,6 +109,10 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
+from agents.memory.store import (  # noqa: E402
+    AgentMemory,
+    absorb_reported_testimony,
+)
 from agents.strategic.prompts.loader import (  # noqa: E402
     PromptRenderers,
     build_prompt_renderers,
@@ -142,15 +163,20 @@ from meetings.transcript import is_weak_contradiction, turn_observation_id  # no
 from orchestrator.game import PROMPT_VERSION_SETS  # noqa: E402
 from orchestrator.replay import (  # noqa: E402
     TOGGLEABLE_SUBSTRATE_FLAG_KEYS,
+    MeetingReplayEntry,
     ReplayEntry,
     _TOGGLEABLE_LEVER_RESOLVERS,
     env_var_for_lever,
     read_all_entries,
+    read_substrate_flags,
+    retired_levers_stamped_off,
     substrate_flag_snapshot,
+    substrate_slate_mismatches,
+    substrate_stamp_mismatches,
 )
 from tests.meetings.test_prompt_byte_golden import (  # noqa: E402
     ReconstructedMeeting,
-    _seed_paths,
+    resolve_prompt_set,
     walk_replay_meetings,
 )
 
@@ -182,6 +208,12 @@ NON_WAVE_2_LEVER: Final[str] = "impostor_roll_call"
 
 _SLATE_OFF: Final[str] = "OFF"
 _SLATE_ALL_ON: Final[str] = "all-three-ON"
+
+#: The slate a ``--recorded-slate on`` recording must stamp: the three Wave-2
+#: keys ON and every other live toggle OFF. Named as the pre-registration's §9
+#: slate, and the only value the lever-ON mode accepts -- a second slate is a
+#: second criterion, and this instrument authors none.
+RECORDED_SLATE_ON: Final[str] = "on"
 
 # The env mapping the ONE env-parameterised lever takes. The other two levers
 # have no env seam on the path this script uses and are toggled by render kwarg.
@@ -345,12 +377,18 @@ class InjusticeLedgerRow:
 
 @dataclass
 class _Capture:
-    """One renderer invocation, with the exact keyword inputs it was given."""
+    """One renderer invocation, with the exact keyword inputs it was given.
+
+    ``recorded_prompt`` is the bytes the manager produced during the walk, which
+    the recorded-response stub matched against the recording's own
+    ``llm_calls[].prompt``. It is the RECORD's render whichever slate the record
+    was made under, so every second render below is a diff against it.
+    """
 
     kind: str
     agent_id: PlayerId | None
     kwargs: dict[str, Any]
-    off_prompt: str
+    recorded_prompt: str
 
 
 class _CapturingRenderer:
@@ -358,7 +396,7 @@ class _CapturingRenderer:
 
     Returns the inner renderer's bytes unchanged, so the manager and the
     recorded-response stub see exactly the recorded prompt. The kept ``kwargs``
-    are what the ON legs re-render from.
+    are what the second render re-renders from.
     """
 
     def __init__(self, kind: str, inner: Any, sink: list[_Capture]) -> None:
@@ -376,7 +414,7 @@ class _CapturingRenderer:
                 kind=self._kind,
                 agent_id=agent_id,
                 kwargs=dict(kwargs),
-                off_prompt=prompt,
+                recorded_prompt=prompt,
             )
         )
         return prompt
@@ -401,6 +439,7 @@ class _RendererCache:
         self._off: dict[str, PromptRenderers] = {}
         self._on: dict[str, PromptRenderers] = {}
         self._markers: dict[tuple[str, str], frozenset[str]] = {}
+        self._reporter_markers: dict[tuple[str, str], frozenset[str]] = {}
 
     def off(self, set_name: str) -> PromptRenderers:
         if set_name not in self._off:
@@ -454,17 +493,107 @@ class _RendererCache:
             self._markers[key] = markers
         return self._markers[key]
 
-    def capturing(self, sink: list[_Capture]) -> dict[str, PromptRenderers]:
+    def for_slate(self, set_name: str, levers: frozenset[str]) -> PromptRenderers:
+        """The bundle a slate serves: only ``testimony_shapes`` re-bodies here.
+
+        The loader reads two levers, and the Wave-2 slate holds the other one
+        (``impostor_roll_call``) OFF in both modes, so the bundle is a function
+        of one bit. Routing through this one accessor is what keeps the walk's
+        capturing bundle and every second render on the same two objects.
+        """
+
+        return (
+            self.shapes_on(set_name)
+            if "testimony_shapes" in levers
+            else self.off(set_name)
+        )
+
+    def reporter_markers(self, set_name: str, turn_kind: str) -> frozenset[str]:
+        """The lines the REPORTER arm's own block puts on a speech prompt.
+
+        Derived from the shipped template the way the elicitation markers are —
+        one crew turn rendered with and without a ``reporter_context`` — and then
+        MINUS every line a baseline BALLOT render already carries. That
+        subtraction is the whole point: the Task-15.5 ballot exculpation is
+        worded almost identically to this block ("Do not vote" against "Do not
+        accuse"), so a marker taken from the statement render alone would report
+        every body-report ballot as carrying the arm's block.
+
+        What survives is what lets T3 be read INDEPENDENTLY of the render diff:
+        the reporter arm has no ballot argument to withdraw, so a diff over the
+        ballot seam is identically zero whatever the recorded bytes hold.
+        """
+
+        key = (set_name, turn_kind)
+        if key not in self._reporter_markers:
+            ballot_lines = frozenset(_probe_ballot(self.off(set_name)).splitlines())
+            context = ReporterContext(reporter_id="p-2", tick=1)
+            # BOTH reporter-owned speech surfaces. The arm renders a
+            # discovery-account block on the opening and a `<who_reported>` block
+            # on every other speaker's statement; either reaching the ballot is
+            # the seam T3 forbids, so a marker set drawn from one surface would
+            # let the other leak through reading zero.
+            markers = frozenset(
+                line
+                for pair in (
+                    (
+                        _probe_crew_statement(self.off(set_name), turn_kind=turn_kind),
+                        _probe_crew_statement(
+                            self.off(set_name),
+                            turn_kind=turn_kind,
+                            reporter_context=context,
+                        ),
+                    ),
+                    (
+                        _probe_crew_opening(self.off(set_name)),
+                        _probe_crew_opening(
+                            self.off(set_name), reporter_context=context
+                        ),
+                    ),
+                )
+                for line in _added_lines(*pair)
+                if line.strip() and line not in ballot_lines
+            )
+            if not markers:
+                raise SystemExit(
+                    f"{set_name}: every line the reporter block adds to a crew "
+                    f"{turn_kind!r} turn already appears on a plain ballot, so "
+                    "this reader cannot tell the arm's block apart from the "
+                    "Task-15.5 exculpation the ballot renders unconditionally. "
+                    "T3 would read every body-report ballot as a breach. This is "
+                    "a DEFECT IN THIS SCRIPT's reader, not a finding about the "
+                    "bytes"
+                )
+            self._reporter_markers[key] = markers
+        return self._reporter_markers[key]
+
+    def capturing(
+        self,
+        sink: list[_Capture],
+        *,
+        levers: frozenset[str] = frozenset(),
+        slate_set: str | None = None,
+    ) -> dict[str, PromptRenderers]:
         """A capturing renderer bundle for every registered prompt set.
 
         The walk resolves each recorded meeting's set from its own stamps, so
         the mapping must cover all of them; only the set a recording actually
         used is ever invoked.
+
+        ``slate_set`` names the ONE set whose bundle is built under ``levers`` --
+        the set a lever-ON recording stamped. Every other set keeps its OFF
+        bundle, because the arm's bodies exist for one set only and building the
+        ON pair for a set that has none raises at construction, refusing a
+        recording this walk was never asked to render. A recording that resolves
+        to any other set is refused by the walk itself, so no OFF bundle here is
+        ever a silent substitute for an arm's body.
         """
 
         bundles: dict[str, PromptRenderers] = {}
         for set_name in PROMPT_VERSION_SETS:
-            inner = self.off(set_name)
+            inner = self.for_slate(
+                set_name, levers if set_name == slate_set else frozenset()
+            )
             bundles[set_name] = PromptRenderers(
                 crewmate_report=_CapturingRenderer(
                     _KIND_CREWMATE_REPORT, inner.crewmate_report, sink
@@ -501,7 +630,52 @@ def _renderer_for(renderers: PromptRenderers, kind: str) -> Any:
 _SPEECH_TURN_KINDS: Final[tuple[TurnKind, ...]] = ("reply", "opt_in")
 
 
-def _probe_crew_statement(renderers: PromptRenderers, *, turn_kind: str) -> str:
+def _probe_crew_opening(
+    renderers: PromptRenderers, *, reporter_context: ReporterContext | None = None
+) -> str:
+    """One minimal CREW OPENING render, for the discovery-account block's lines.
+
+    The reporter arm's second surface. Everything optional is left at its default
+    so the render carries as little as possible beside the block being derived.
+    """
+
+    return renderers.crewmate_report(
+        agent_id="p-1",
+        current_tick=1,
+        meeting_trigger="",
+        rendered_memory="",
+        public_transcript="",
+        living_ids=("p-2",),
+        reporter_context=reporter_context,
+    )
+
+
+def _probe_ballot(renderers: PromptRenderers) -> str:
+    """One minimal ballot render, WITH the unconditional reporter annotation.
+
+    The annotation is threaded on every body-report ballot whatever the levers
+    do, so a marker set that did not subtract these lines would read the Task-15.5
+    exculpation as the reporter ARM's block.
+    """
+
+    return renderers.vote(
+        voter_id="p-1",
+        rendered_memory="",
+        transcript=MeetingTranscript(turns=()),
+        contradiction_flags=(),
+        suspicion_graph=(),
+        candidate_targets=("p-2",),
+        skip_confidence_threshold=0.5,
+        reporter_id="p-2",
+    )
+
+
+def _probe_crew_statement(
+    renderers: PromptRenderers,
+    *,
+    turn_kind: str,
+    reporter_context: ReporterContext | None = None,
+) -> str:
     """One minimal CREW speech render, for deriving the arm's own block.
 
     Everything optional is left at its default so the render carries as little
@@ -526,6 +700,7 @@ def _probe_crew_statement(renderers: PromptRenderers, *, turn_kind: str) -> str:
         prior_turn=None,
         turn_kind=kind,
         living_ids=("p-2",),
+        reporter_context=reporter_context,
     )
 
 
@@ -687,24 +862,47 @@ def _on_kwargs(
     reporter: _ReporterInputs,
     ledger: MeetingTestimonyLedger,
 ) -> dict[str, Any]:
-    """The capture's keywords with each ON lever's own argument supplied."""
+    """The capture's keywords with every lever's argument set for ``levers``.
+
+    Each of the two kwarg-toggled levers is written EXPLICITLY, ON value or OFF
+    value, rather than left at whatever the capture happened to carry. That is
+    what makes one function serve both directions: on a lever-OFF recording the
+    OFF values are the captured ones and writing them changes no byte, while on
+    a lever-ON recording they are what strips the arm back out. Every value is
+    derived here from :func:`_reporter_inputs` and :func:`_ledger_for` -- this
+    script's own mirror of the manager's derivation -- so a leg that carries the
+    whole slate must reproduce the recorded prompt, and a disagreement is a
+    mirror defect the row-level fidelity check reports rather than hides.
+    """
 
     kwargs = dict(capture.kwargs)
-    if "reporter_reasoning" in levers and reporter.reporter_id is not None:
-        speaker = capture.agent_id
-        context = reporter.contexts.get(speaker) if speaker is not None else None
-        is_reporter = speaker == reporter.reporter_id
-        if capture.kind in (_KIND_CREWMATE_REPORT, _KIND_IMPOSTOR_REPORT):
-            # The opener of a body report IS its reporter, so this is the one
-            # seam where the discovery account can be asked for.
-            kwargs["reporter_context"] = context if is_reporter else None
-        elif capture.kind == _KIND_ACCUSATION_ROUND:
-            kwargs["reporter_context"] = None if is_reporter else context
-            kwargs["at_body"] = bool(
-                speaker is not None and reporter.at_body.get(speaker, False)
-            )
-    if "corroboration_discipline" in levers and capture.kind == _KIND_VOTE_BALLOT:
-        kwargs["testimony_ledger"] = ledger
+    # The reporter seams are written on EVERY meeting, emergency ones included.
+    # An emergency call has no reporter and arms nothing, so its ON value is the
+    # same ``None`` its OFF value is -- but writing it is what makes a leak
+    # visible: leaving an emergency capture's own keywords in place would render
+    # a wrongly-threaded context on BOTH legs and hide it in a zero diff, and
+    # "no emergency-meeting prompt gains either block" is half of T2's predicate.
+    armed = "reporter_reasoning" in levers
+    speaker = capture.agent_id
+    context = (
+        reporter.contexts.get(speaker)
+        if speaker is not None and reporter.reporter_id is not None
+        else None
+    )
+    is_reporter = reporter.reporter_id is not None and speaker == reporter.reporter_id
+    if capture.kind in (_KIND_CREWMATE_REPORT, _KIND_IMPOSTOR_REPORT):
+        # The opener of a body report IS its reporter, so this is the one
+        # seam where the discovery account can be asked for.
+        kwargs["reporter_context"] = context if armed and is_reporter else None
+    elif capture.kind == _KIND_ACCUSATION_ROUND:
+        kwargs["reporter_context"] = None if is_reporter or not armed else context
+        kwargs["at_body"] = bool(
+            armed and speaker is not None and reporter.at_body.get(speaker, False)
+        )
+    if capture.kind == _KIND_VOTE_BALLOT:
+        kwargs["testimony_ledger"] = (
+            ledger if "corroboration_discipline" in levers else None
+        )
     return kwargs
 
 
@@ -719,6 +917,16 @@ class _LegTallies:
 
     rendered: Counter[str] = field(default_factory=Counter)
     changed: Counter[str] = field(default_factory=Counter)
+    #: The same count against the RECONSTRUCTION rather than the record, folded
+    #: only when a reconstruction leg exists (the lever-ON mode). It is what
+    #: gives a lever-ON row two independent readings of its own numerator: one
+    #: off the recorded bytes, one off the walk's re-render of them.
+    changed_vs_reconstruction: Counter[str] = field(default_factory=Counter)
+    #: The same count restricted to meetings with NO reporter seat. T2's third
+    #: clause is a zero over exactly this population, and the two body-report
+    #: counts cannot express it: an emergency prompt is outside their
+    #: denominators, so a lever that reached one would move no cell at all.
+    changed_in_emergency: Counter[str] = field(default_factory=Counter)
     added_lines: Counter[str] = field(default_factory=Counter)
     added_bytes: Counter[str] = field(default_factory=Counter)
     meetings_touched: int = 0
@@ -779,6 +987,30 @@ def _slate_legs(withhold: str) -> tuple[tuple[str, frozenset[str]], ...]:
     return tuple(legs)
 
 
+def _on_recording_legs() -> tuple[tuple[str, frozenset[str]], ...]:
+    """The slates a LEVER-ON recording renders: all three, OFF, and each dropped.
+
+    The mirror image of :func:`_slate_legs`. The record is the all-three-ON
+    render, so the second render runs BACKWARDS: the OFF leg strips the whole
+    slate and each leave-one-out leg strips exactly one lever, which is how a
+    row like ``R-13`` ("openings gaining the discovery-account block") is read
+    off bytes that already carry the block -- the openings that LOSE it when the
+    reporter argument is withdrawn are exactly the ones that gained it.
+
+    ``all-three-ON`` is a genuine re-render here rather than the captured bytes,
+    because on this side it is the FIDELITY leg: it must reproduce the recording
+    prompt for prompt, and a leg that simply returned the capture could not fail.
+    """
+
+    whole = frozenset(WAVE_2_LEVERS)
+    legs: list[tuple[str, frozenset[str]]] = [(_SLATE_ALL_ON, whole)]
+    legs.append((_SLATE_OFF, frozenset()))
+    legs.extend(
+        (decomposition_label(lever), whole - {lever}) for lever in WAVE_2_LEVERS
+    )
+    return tuple(legs)
+
+
 def decomposition_label(withhold: str) -> str:
     """The label the leave-one-out leg is printed and keyed under."""
 
@@ -802,9 +1034,11 @@ def _attribute_calls(
     for call in meeting.entry.llm_calls:
         best: int | None = None
         for index, capture in enumerate(captures):
-            if not call.prompt.startswith(capture.off_prompt):
+            if not call.prompt.startswith(capture.recorded_prompt):
                 continue
-            if best is None or len(capture.off_prompt) > len(captures[best].off_prompt):
+            if best is None or len(capture.recorded_prompt) > len(
+                captures[best].recorded_prompt
+            ):
                 best = index
         if best is None:
             raise SystemExit(
@@ -813,7 +1047,7 @@ def _attribute_calls(
                 "cannot be built. This is a DEFECT IN THIS SCRIPT's attribution, "
                 "not a finding about the committed bytes"
             )
-        paired.append((best, call.prompt[len(captures[best].off_prompt) :]))
+        paired.append((best, call.prompt[len(captures[best].recorded_prompt) :]))
     return paired
 
 
@@ -828,8 +1062,21 @@ def _fold_render_diff(
     tallies: Mapping[str, _LegTallies],
     roles: Mapping[PlayerId, Role],
     elicitation: _ElicitationCensus,
+    recorded_label: str | None,
+    elicitation_legs: tuple[str, str],
+    reporter_on_ballots: list[_Capture],
 ) -> None:
-    """Render every captured prompt once per slate and count what moved."""
+    """Render every captured prompt once per slate and count what moved.
+
+    ``recorded_label`` names the leg whose render IS the recorded bytes, which
+    the walk already holds and never re-renders. On a lever-OFF recording that is
+    the OFF leg; on a lever-ON one it is ``None``, because there the whole-slate
+    leg is the fidelity check and a leg that returned the capture could not fail.
+
+    ``elicitation_legs`` is the ``(without the arm, with the arm)`` pair T5's
+    reader diffs — the arm is stripped on one side of the record or added on the
+    other, and the block's own lines are the same either way.
+    """
 
     living = frozenset(p.agent_id for p in meeting.participants)
     bucket = _living_bucket(len(living))
@@ -840,14 +1087,10 @@ def _fold_render_diff(
         rendered_for_leg: dict[int, str] = {}
         touched = False
         for index, capture in enumerate(captures):
-            if not levers:
-                prompt = capture.off_prompt
+            if label == recorded_label:
+                prompt = capture.recorded_prompt
             else:
-                bundle = (
-                    renderers.shapes_on(meeting.set_name)
-                    if "testimony_shapes" in levers
-                    else renderers.off(meeting.set_name)
-                )
+                bundle = renderers.for_slate(meeting.set_name, levers)
                 prompt = _renderer_for(bundle, capture.kind)(
                     **_on_kwargs(
                         capture, levers=levers, reporter=reporter, ledger=ledger
@@ -855,21 +1098,31 @@ def _fold_render_diff(
                 )
             rendered_for_leg[index] = prompt
             leg.rendered[capture.kind] += 1
-            if prompt != capture.off_prompt:
+            if prompt != capture.recorded_prompt:
                 touched = True
                 leg.changed[capture.kind] += 1
+                if reporter.reporter_id is None:
+                    leg.changed_in_emergency[capture.kind] += 1
                 leg.added_lines[capture.kind] += prompt.count(
                     "\n"
-                ) - capture.off_prompt.count("\n")
+                ) - capture.recorded_prompt.count("\n")
                 # Encoded bytes, not code points: the lever blocks carry em
                 # dashes and arrows, so a character count would understate what
                 # the prompt actually costs.
                 leg.added_bytes[capture.kind] += len(prompt.encode("utf-8")) - len(
-                    capture.off_prompt.encode("utf-8")
+                    capture.recorded_prompt.encode("utf-8")
                 )
-        if touched or not levers:
+        if touched or label == recorded_label:
             leg.meetings_touched += 1
         on_prompts[label] = rendered_for_leg
+    if recorded_label is None:
+        # The lever-ON side's second reading: the same counts measured against
+        # the walk's own whole-slate re-render instead of the recorded bytes. A
+        # row prints both, so a mirror that has drifted from the manager shows up
+        # as two disagreeing columns rather than as one confident number.
+        _fold_against_reconstruction(
+            captures=captures, legs=legs, tallies=tallies, prompts=on_prompts
+        )
     first_meeting = meeting.meeting_index == 0
     for label, _levers in legs:
         leg = tallies[label]
@@ -879,21 +1132,125 @@ def _fold_render_diff(
                 bucket=bucket,
                 first_meeting=first_meeting,
             )
+    reporter_markers = renderers.reporter_markers(
+        meeting.set_name, str(_SPEECH_TURN_KINDS[0])
+    )
+    for capture in captures:
+        if capture.kind != _KIND_VOTE_BALLOT:
+            continue
+        if _ballot_carries_a_reporter_block(
+            capture,
+            markers=reporter_markers,
+            where=f"{meeting.set_name} {meeting.meeting_id}",
+        ):
+            reporter_on_ballots.append(capture)
+    without, with_arm = elicitation_legs
+    by_label = {
+        **on_prompts,
+        _RECORD_LABEL: {index: c.recorded_prompt for index, c in enumerate(captures)},
+    }
     _fold_elicitation(
         meeting=meeting,
         captures=captures,
         renderers=renderers,
-        on_prompts=on_prompts[_ELICITATION_LEG],
+        off_prompts=by_label[without],
+        on_prompts=by_label[with_arm],
+        reconstruction_prompts=(
+            on_prompts[_SLATE_ALL_ON] if recorded_label is None else None
+        ),
         roles=roles,
         census=elicitation,
     )
 
 
-#: The leg whose ON renders the T5 reader reads. The elicitation block is
-#: ``testimony_shapes``'s alone, so the single-lever leg is the one that isolates
-#: it — and it reads the same on every leg that carries the arm, because the
-#: marker is the block's own text rather than a byte diff.
+#: The ballot template's own delimiters around the region a MODEL authors. What
+#: sits between them is spoken ``free_text`` and the observations a turn carried,
+#: none of it template-owned, so a marker found there says nothing about which
+#: blocks the template rendered.
+_BALLOT_TRANSCRIPT_OPEN: Final[str] = "<transcript>"
+_BALLOT_TRANSCRIPT_CLOSE: Final[str] = "</transcript>"
+
+
+def _template_owned_ballot_text(prompt: str, *, where: str) -> str:
+    """One recorded ballot prompt with the model-authored transcript cut out.
+
+    A ballot renders the meeting transcript, and a turn's ``free_text`` is
+    whatever the model said. A crew agent who quoted the reporter instruction
+    back at the table -- or typed ``<who_reported>`` -- would otherwise put a
+    marker into every later ballot of that meeting without the arm having reached
+    the ballot seam at all, and T3 would STOP a correct record on it. That is the
+    same "a correct render read as a breach" failure §8.1 warns about for T5.
+
+    Cut by the template's OWN delimiters rather than by counting occurrences: the
+    question is which region of the page a marker sits in, and only the delimiters
+    answer it exactly. A prompt missing them is refused, because a scan over a
+    region this reader cannot locate is not a reading.
+
+    The OUTER pair, because ``free_text`` is interpolated unescaped: a speaker who
+    typed ``</transcript>`` would otherwise end the cut early and leave the rest
+    of their own words inside the scanned text.
+    """
+
+    opened = prompt.find(_BALLOT_TRANSCRIPT_OPEN)
+    closed = prompt.rfind(_BALLOT_TRANSCRIPT_CLOSE)
+    if opened == -1 or closed == -1 or closed < opened:
+        raise SystemExit(
+            f"{where}: a recorded ballot prompt carries no "
+            f"{_BALLOT_TRANSCRIPT_OPEN}/{_BALLOT_TRANSCRIPT_CLOSE} pair, so the "
+            "model-authored region cannot be cut out and a reporter-block scan "
+            "would read a speaker's own words as a template block. This is a "
+            "DEFECT IN THIS SCRIPT's reader, not a finding about the bytes"
+        )
+    return prompt[:opened] + prompt[closed + len(_BALLOT_TRANSCRIPT_CLOSE) :]
+
+
+def _ballot_carries_a_reporter_block(
+    capture: _Capture, *, markers: frozenset[str], where: str
+) -> bool:
+    """Whether the BALLOT TEMPLATE put the reporter arm's block on this prompt."""
+
+    outside = _template_owned_ballot_text(capture.recorded_prompt, where=where)
+    return any(marker in outside for marker in markers)
+
+
+def _fold_against_reconstruction(
+    *,
+    captures: Sequence[_Capture],
+    legs: Sequence[tuple[str, frozenset[str]]],
+    tallies: Mapping[str, _LegTallies],
+    prompts: Mapping[str, Mapping[int, str]],
+) -> None:
+    """Count each leg's moved prompts against the whole-slate re-render."""
+
+    baseline = prompts[_SLATE_ALL_ON]
+    for label, _levers in legs:
+        if label == _SLATE_ALL_ON:
+            continue
+        leg = tallies[label]
+        for index, capture in enumerate(captures):
+            if prompts[label][index] != baseline[index]:
+                leg.changed_vs_reconstruction[capture.kind] += 1
+
+
+#: The leg pair T5's reader diffs on a lever-OFF recording: the record itself
+#: against the single-lever ON leg. The elicitation block is
+#: ``testimony_shapes``'s alone, so that leg isolates it — and it reads the same
+#: on every leg that carries the arm, because the marker is the block's own text
+#: rather than a byte diff.
 _ELICITATION_LEG: Final[str] = "testimony_shapes"
+_ELICITATION_LEGS_OFF_RECORD: Final[tuple[str, str]] = (_SLATE_OFF, _ELICITATION_LEG)
+
+#: The RECORD's own bytes, addressed as if they were a leg. Not a slate: the one
+#: render this script never produces, only receives.
+_RECORD_LABEL: Final[str] = "the recording"
+
+#: The same pair on a lever-ON recording, where the arm is stripped rather than
+#: supplied: the leave-one-out leg is the render WITHOUT the block and the
+#: RECORDING itself is the render with it.
+_ELICITATION_LEGS_ON_RECORD: Final[tuple[str, str]] = (
+    decomposition_label("testimony_shapes"),
+    _RECORD_LABEL,
+)
 
 
 @dataclass
@@ -909,6 +1266,10 @@ class _ElicitationCensus:
 
     rendered: Counter[str] = field(default_factory=Counter)
     gained: Counter[str] = field(default_factory=Counter)
+    #: The same count taken against the walk's whole-slate RE-RENDER rather than
+    #: against the recorded bytes. Folded only on a lever-ON recording, where the
+    #: two are the row's two independent readings; empty otherwise.
+    gained_from_reconstruction: Counter[str] = field(default_factory=Counter)
     #: Prompts that gained SOME but not all of the block's lines. The block is
     #: one offer rendered by guards that share a condition, so a partial gain
     #: means this reader can no longer read it as one unit.
@@ -953,11 +1314,23 @@ def _fold_elicitation(
     meeting: ReconstructedMeeting,
     captures: Sequence[_Capture],
     renderers: _RendererCache,
+    off_prompts: Mapping[int, str],
     on_prompts: Mapping[int, str],
+    reconstruction_prompts: Mapping[int, str] | None,
     roles: Mapping[PlayerId, Role],
     census: _ElicitationCensus,
 ) -> None:
-    """Count, per speaker role, the speech prompts that gain the block."""
+    """Count, per speaker role, the speech prompts that gain the block.
+
+    The pair is always ``(the render without the arm, the render with it)``, and
+    which of the two the RECORDING supplied does not enter the count: the gain is
+    the block's own lines appearing on one side and not the other.
+
+    ``reconstruction_prompts`` is the second armed reading a lever-ON recording
+    has and a lever-OFF one does not — the walk's own re-render of the same
+    inputs, counted separately so the row can print both instead of asserting
+    that they agree.
+    """
 
     for index, capture in enumerate(captures):
         if capture.kind != _KIND_ACCUSATION_ROUND:
@@ -969,7 +1342,7 @@ def _fold_elicitation(
             meeting.set_name, str(capture.kwargs.get("turn_kind"))
         )
         gained = elicitation_lines_gained(
-            off_prompt=capture.off_prompt,
+            off_prompt=off_prompts[index],
             on_prompt=on_prompts[index],
             markers=markers,
         )
@@ -978,6 +1351,14 @@ def _fold_elicitation(
             census.gained[role] += 1
         elif gained:
             census.partial += 1
+        if reconstruction_prompts is None:
+            continue
+        if elicitation_lines_gained(
+            off_prompt=off_prompts[index],
+            on_prompt=reconstruction_prompts[index],
+            markers=markers,
+        ) == len(markers):
+            census.gained_from_reconstruction[role] += 1
 
 
 # --------------------------------------------------------------------------- #
@@ -1076,15 +1457,23 @@ class _TestimonyCensus:
     fabricated_vent_rows: int = 0
     ungrounded_vent_rows: int = 0
 
+    #: Location accounts the REAL ingest wrote into at least one listener's
+    #: alibi map, per slate. Measured by running
+    #: :func:`agents.memory.store.absorb_reported_testimony` over a COPY of the
+    #: walk's own memories, so the own-statement, roster and tickless guards are
+    #: the live ones rather than a restatement of them here.
+    alibi_map_reached_off: int = 0
+    alibi_map_reached_on: int = 0
+
     @property
     def alibi_map_off(self) -> tuple[int, int]:
         accounts = self.on_kinds["alibi"] + self.on_kinds["whereabouts"]
-        return (self.off_kinds["alibi"], accounts)
+        return (self.alibi_map_reached_off, accounts)
 
     @property
     def alibi_map_on(self) -> tuple[int, int]:
         accounts = self.on_kinds["alibi"] + self.on_kinds["whereabouts"]
-        return (accounts, accounts)
+        return (self.alibi_map_reached_on, accounts)
 
     def payload(self) -> dict[str, object]:
         return {
@@ -1177,18 +1566,121 @@ def _fold_testimony(
     bound and are printed as one.
     """
 
-    off = derive_reported_testimony(meeting.result)
+    # BOTH sides pass an explicit env. The reduction's default is the ambient
+    # process environment, and the lever-ON mode runs in a shell that exports the
+    # arm on purpose -- so an unqualified call would return the ON reduction and
+    # label it OFF, which is precisely the seam the committed mode's bare-shell
+    # guard protects and the ON mode necessarily gives up.
+    off = derive_reported_testimony(meeting.result, env={})
     on = derive_reported_testimony(meeting.result, env=_TESTIMONY_SHAPES_ENV)
     census.off_kinds.update(statement.kind for statement in off)
     census.on_kinds.update(statement.kind for statement in on)
     listeners = frozenset(ballot.voter for ballot in meeting.result.ballots)
     census.listener_slots += len(listeners)
+    # The alibi-map reading uses a NARROWER set. The production fan-out runs per
+    # player ALIVE AFTER the meeting (orchestrator/game.py), so the ejectee never
+    # receives one, and crediting an account to a copy of their memory would
+    # count a write production never performs. The published row above keeps the
+    # ballot population it was measured on: this narrowing belongs to the ingest
+    # cell alone.
+    recipients = listeners - {meeting.result.ejected_player_id}
+    census.alibi_map_reached_off += _accounts_reaching_the_map(
+        meeting, statements=off, listeners=recipients
+    )
+    census.alibi_map_reached_on += _accounts_reaching_the_map(
+        meeting, statements=on, listeners=recipients
+    )
     census.off_rows += _ingest_rows(off, listeners)
     census.on_rows += _ingest_rows(on, listeners)
     spoken, fabricated, ungrounded = _vent_row_census(meeting.result, venters=venters)
     census.spoken_vent_rows += spoken
     census.fabricated_vent_rows += fabricated
     census.ungrounded_vent_rows += ungrounded
+
+
+#: The statement kinds a location account can be spoken as. The widened gate the
+#: ``testimony_shapes`` arm installs is ``("alibi", "whereabouts")``; with the arm
+#: down the reduction emits no ``whereabouts`` at all.
+_LOCATION_KINDS: Final[tuple[str, ...]] = ("alibi", "whereabouts")
+
+
+def _alibi_multiset(memory: AgentMemory) -> Counter[tuple[object, ...]]:
+    """Every alibi claim a belief state holds, as a MULTISET.
+
+    A multiset and not a set: two identical accounts in one reduction, or an
+    account a later meeting repeats verbatim, are separate writes. Membership
+    alone would credit both when the ingest performed one.
+    """
+
+    return Counter(
+        (claim.source, claim.player_id, claim.tick, claim.room)
+        for player_id in memory.beliefs.known_players()
+        for claim in memory.beliefs.view(player_id).alibis
+    )
+
+
+def _accounts_reaching_the_map(
+    meeting: ReconstructedMeeting,
+    *,
+    statements: Sequence[ReportedStatement],
+    listeners: frozenset[PlayerId],
+) -> int:
+    """Location accounts the REAL ingest WROTE into at least one alibi map.
+
+    Runs :func:`agents.memory.store.absorb_reported_testimony` -- the function the
+    orchestrator and the replay loader call per living agent -- over a DEEP COPY
+    of each listener's own memory, and reads back what it ADDED. The copy is not
+    an optimisation: these are the stores the walk's NEXT meeting renders from,
+    and absorbing into them would change the bytes the reconstruction has to
+    reproduce.
+
+    Counting what the ingest WROTE rather than what the reduction OFFERED is the
+    whole point. The gate's own definition says every location account reaches
+    the map; the own-statement guard, the roster gate and a tickless claim can
+    each stop one, and a cell derived from the offer could not see any of them.
+
+    The reading is a BEFORE/AFTER delta, taken as a multiset and then consumed
+    once per account. Reading the map's final contents instead would credit an
+    account the map already held, and would credit two identical accounts to a
+    single write -- either of which lets a partial ingest still read 100%.
+    """
+
+    accounts = [
+        statement for statement in statements if statement.kind in _LOCATION_KINDS
+    ]
+    if not accounts:
+        return 0
+    added: Counter[tuple[object, ...]] = Counter()
+    for listener in sorted(listeners):
+        memory = meeting.memories.get(listener)
+        if memory is None:
+            continue
+        probe = deepcopy(memory)
+        before = _alibi_multiset(probe)
+        try:
+            absorb_reported_testimony(probe, statements=accounts)
+        except ValueError:
+            # No self_state row yet, so the ingest's own guard refuses. Nothing
+            # this listener could have absorbed reached anything.
+            continue
+        # The per-listener delta, unioned by MAX across listeners: one account
+        # written into three maps is one account that reached the map, but two
+        # identical accounts must be written twice before both are credited.
+        delta = _alibi_multiset(probe) - before
+        for key, count in delta.items():
+            added[key] = max(added[key], count)
+    reached = 0
+    for statement in accounts:
+        key = (
+            statement.speaker,
+            statement.subject,
+            statement.from_tick,
+            statement.room if statement.room is not None else "",
+        )
+        if added[key] > 0:
+            added[key] -= 1
+            reached += 1
+    return reached
 
 
 def _ingest_rows(
@@ -1260,6 +1752,11 @@ class _SetWalk:
     corroboration: Counter[str] = field(default_factory=Counter)
     reporter_openings: int = 0
     non_reporter_speech_turns: int = 0
+    # T3, read INDEPENDENTLY of any render diff: recorded ballot prompts whose
+    # bytes carry the reporter ARM's own block. The arm has no ballot argument to
+    # withdraw, so a diff over that seam is identically zero and could never
+    # report the breach T3 exists to catch.
+    ballots_carrying_a_reporter_block: int = 0
     elicitation: _ElicitationCensus = field(default_factory=_ElicitationCensus)
     kill_named: _KillNamedConvictions = field(default_factory=_KillNamedConvictions)
     # The render budget at the FIRST meeting, folded straight off the recorded
@@ -1429,11 +1926,96 @@ def _fold_corroboration(
         cells["ejected_with_a_walkable_pair"] += 1
 
 
+def _seed_paths(sample_dir: Path) -> list[Path]:
+    """The replay files of a set, in seed order.
+
+    Built from :func:`eval.validity.seeds_on_disk` rather than from a raw glob:
+    a wrapper writes a ``replay-seed-<n>.audit.jsonl`` observation sidecar beside
+    each replay, and that helper is the one place that recognises the sidecar
+    exactly while still refusing any other replay-shaped file. The committed sets
+    carry no sidecar; a scratch recording does.
+    """
+
+    return [
+        sample_dir / f"replay-seed-{seed}.jsonl" for seed in seeds_on_disk(sample_dir)
+    ]
+
+
 def walk_set(sample_dir: Path, *, set_name: str, withhold: str) -> _SetWalk:
     """One reconstruction pass over one committed set, every fold on the way."""
 
+    return _walk(
+        sample_dir,
+        set_name=set_name,
+        legs=_slate_legs(withhold),
+        recorded_levers=frozenset(),
+        recorded_label=_SLATE_OFF,
+        elicitation_legs=_ELICITATION_LEGS_OFF_RECORD,
+        slate_set=None,
+    )
+
+
+def walk_recording(recording_dir: Path, *, set_name: str, slate_set: str) -> _SetWalk:
+    """One reconstruction pass over one LEVER-ON recording.
+
+    The same walk, mirrored: the capturing bundle is built from the arm's own
+    bodies so the manager reproduces the recorded prompts byte for byte, and
+    every second render strips levers instead of supplying them.
+    """
+
+    return _walk(
+        recording_dir,
+        set_name=set_name,
+        legs=_on_recording_legs(),
+        recorded_levers=frozenset(WAVE_2_LEVERS),
+        recorded_label=None,
+        elicitation_legs=_ELICITATION_LEGS_ON_RECORD,
+        slate_set=slate_set,
+    )
+
+
+def _assert_the_walk_reproduced_the_record(meeting: ReconstructedMeeting) -> None:
+    """Every recorded prompt of this meeting was re-rendered byte for byte.
+
+    The recorded-response stub keys on EXACT prompt bytes, so a render that
+    misses defaults the turn and the meeting continues on invented content. On a
+    lever-OFF recording the prompt-byte golden already pins this; on a lever-ON
+    one nothing else does, and a bundle built for the wrong slate would miss
+    every lookup and quietly produce a whole table over a defaulted transcript.
+
+    It is also the one gate a recording whose stamps resolve to a SECOND prompt
+    set trips: only the set named at capture time is given the arm's bodies, so
+    a stray recording in the directory renders through bodies that carry no block
+    and every one of its prompts misses here.
+    """
+
+    recorded = {call.prompt for call in meeting.entry.llm_calls}
+    missed = sorted(recorded - meeting.hit_prompts)
+    if missed:
+        raise SystemExit(
+            f"{meeting.set_name} {meeting.meeting_id}: {len(missed)} of "
+            f"{len(recorded)} recorded prompts were NOT reproduced by the walk, "
+            "so the recorded-response stub missed and the manager defaulted "
+            f"those calls. The first one starts: {missed[0][:180]!r}. This is a "
+            "DEFECT IN THIS SCRIPT's reconstruction (the wrong renderer bundle, "
+            "or a shell whose levers are not the recording's), not a finding "
+            "about the recorded bytes"
+        )
+
+
+def _walk(
+    sample_dir: Path,
+    *,
+    set_name: str,
+    legs: Sequence[tuple[str, frozenset[str]]],
+    recorded_levers: frozenset[str],
+    recorded_label: str | None,
+    elicitation_legs: tuple[str, str],
+    slate_set: str | None,
+) -> _SetWalk:
+    """One reconstruction pass over one replay set, every fold on the way."""
+
     started = time.monotonic()
-    legs = _slate_legs(withhold)
     walk = _SetWalk(set_name=set_name, legs={label: _LegTallies() for label, _ in legs})
     num_players, num_impostors, tasks_per_crewmate = resolve_roster_knobs(sample_dir)
     if not seeds_on_disk(sample_dir):
@@ -1450,7 +2032,7 @@ def walk_set(sample_dir: Path, *, set_name: str, withhold: str) -> _SetWalk:
     game_map = load_canonical_map()
     renderers = _RendererCache()
     sink: list[_Capture] = []
-    capturing = renderers.capturing(sink)
+    capturing = renderers.capturing(sink, levers=recorded_levers, slate_set=slate_set)
     for seed_path in _seed_paths(sample_dir):
         walk.games += 1
         seed = int(seed_path.stem.rsplit("-", 1)[-1])
@@ -1468,6 +2050,7 @@ def walk_set(sample_dir: Path, *, set_name: str, withhold: str) -> _SetWalk:
             captures = list(sink)
             sink.clear()
             walk.meetings += 1
+            _assert_the_walk_reproduced_the_record(meeting)
             trigger_kind, victim_id = _meeting_trigger(
                 ticks, entry=meeting.entry, roster=roles
             )
@@ -1507,6 +2090,7 @@ def walk_set(sample_dir: Path, *, set_name: str, withhold: str) -> _SetWalk:
                         _RENDERED_ROW.findall(call.prompt)
                     )
             ledger = _ledger_for(meeting)
+            reporter_on_ballots: list[_Capture] = []
             _fold_render_diff(
                 meeting=meeting,
                 captures=captures,
@@ -1517,7 +2101,11 @@ def walk_set(sample_dir: Path, *, set_name: str, withhold: str) -> _SetWalk:
                 tallies=walk.legs,
                 roles=roles,
                 elicitation=walk.elicitation,
+                recorded_label=recorded_label,
+                elicitation_legs=elicitation_legs,
+                reporter_on_ballots=reporter_on_ballots,
             )
+            walk.ballots_carrying_a_reporter_block += len(reporter_on_ballots)
             _fold_kill_named_conviction(
                 result=meeting.result, roles=roles, census=walk.kill_named
             )
@@ -2288,12 +2876,526 @@ def build_tripwire_rows(
 
 
 # --------------------------------------------------------------------------- #
+# The same tripwires, read off a LEVER-ON recording.                           #
+# --------------------------------------------------------------------------- #
+
+#: T6's floor, quoted from the pre-registration's §8.1 predicate column. It is
+#: the memo's number, not this reader's: the reader executes a ratified criterion
+#: and authors none.
+SOURCE_COUNT_SHARE_FLOOR: Final[float] = 0.99
+
+_VERDICT_PASS: Final[str] = "PASS"
+_VERDICT_STOP: Final[str] = "STOP"
+_VERDICT_OBSERVED: Final[str] = "OBSERVED"
+_VERDICT_UNREAD: Final[str] = "UNREAD (a STOP)"
+
+#: How a row's own reading is judged against its predicate. ``zero`` and
+#: ``identity`` are judgeable at any n — a one-sided count bar needs no
+#: denominator, which is exactly why §8.1 says so of T1 and T5 — while ``full``
+#: and ``share`` are shares and have nothing to read when their population is
+#: empty.
+_RULE_ZERO: Final[str] = "zero"
+_RULE_FULL: Final[str] = "full"
+_RULE_SHARE: Final[str] = "share"
+_RULE_IDENTITY: Final[str] = "identity"
+_RULE_OBSERVED: Final[str] = "observed"
+
+
+@dataclass(frozen=True)
+class OnRow:
+    """One cell read off a LEVER-ON recording, in the mirrored three columns.
+
+    ``recorded_on`` is the record's own bytes; ``reconstructed_on`` the walk's
+    re-render of them; ``off`` the second render with the slate stripped. A row
+    whose two ON readings disagree withdraws its OFF column and reads UNREAD,
+    because a reconstruction that does not reproduce the record is measuring
+    itself — the same rule the committed table applies to its two OFF readings.
+
+    ``predicate`` is the pre-registration's own sample-local sentence, printed
+    beside the reading so the operator reads PASS or STOP off the page rather
+    than re-deriving a ratified criterion at the terminal.
+
+    ``also_zero`` is a second, NAMED reading a compound predicate carries — T2's
+    "and no emergency-meeting prompt gains either" is over a different population
+    from its share, so it cannot be folded into the same fraction. It must read
+    zero for the row to pass, and it is printed whether it does or not.
+
+    ``caveat`` is what a reader must know before believing the verdict. It is set
+    where the registered cell cannot fail by construction, so a PASS is not read
+    as evidence the criterion was exercised.
+    """
+
+    cell_id: str
+    tripwire: str
+    label: str
+    population: str
+    predicate: str
+    note: str
+    rule: str = _RULE_OBSERVED
+    recorded_on: tuple[int, int] | None = None
+    reconstructed_on: tuple[int, int] | None = None
+    off: tuple[int, int] | None = None
+    also_zero: tuple[str, int] | None = None
+    #: A compound predicate's ORDERING clause, as ``(name, below, above)``.
+    #: Printed whether it bites or not, so the operator sees the clause was read.
+    also_below: tuple[str, int, int] | None = None
+    caveat: str = ""
+
+    @property
+    def agrees(self) -> bool:
+        if self.recorded_on is None or self.reconstructed_on is None:
+            return True
+        return self.recorded_on == self.reconstructed_on
+
+    @property
+    def reading(self) -> tuple[int, int] | None:
+        """The column the predicate is judged on: the record's, if it has one."""
+
+        return (
+            self.recorded_on
+            if self.recorded_on is not None
+            else (self.reconstructed_on)
+        )
+
+    @property
+    def advisory(self) -> bool:
+        return any(
+            pair is not None and pair[1] <= ADVISORY_DENOMINATOR
+            for pair in (self.recorded_on, self.reconstructed_on, self.off)
+        )
+
+    def verdict(self) -> str:
+        """PASS, STOP, OBSERVED or UNREAD, against this row's own predicate."""
+
+        if not self.agrees:
+            return _VERDICT_UNREAD
+        if self.rule == _RULE_OBSERVED:
+            return _VERDICT_OBSERVED
+        if self.also_zero is not None and self.also_zero[1] != 0:
+            return _VERDICT_STOP
+        if self.also_below is not None:
+            below, above = self.also_below[1], self.also_below[2]
+            # The clause reads "the OFF reconstruction is strictly below ON". An
+            # OFF reading ABOVE the ON one is an inversion no slate can produce
+            # and a defect in either column. An OFF reading EQUAL to it means the
+            # widened gate found nothing to widen on these bytes -- a population
+            # fact, and §8.1 says a population is never a trip.
+            if below > above:
+                return _VERDICT_STOP
+        pair = self.reading
+        if pair is None:
+            return _VERDICT_UNREAD
+        numerator, denominator = pair
+        if self.rule == _RULE_ZERO:
+            return _VERDICT_PASS if numerator == 0 else _VERDICT_STOP
+        if self.rule == _RULE_IDENTITY:
+            # An identity between the run's own two columns, so a missing OFF
+            # column is not a passing one.
+            if self.off is None:
+                return _VERDICT_UNREAD
+            return _VERDICT_PASS if pair == self.off else _VERDICT_STOP
+        if denominator == 0:
+            # A share over an empty population is not satisfied, it is
+            # unevaluated -- and §8.1 reads a tripwire its reader cannot
+            # evaluate as UNREAD, which is itself a STOP.
+            return _VERDICT_UNREAD
+        if self.rule == _RULE_FULL:
+            return _VERDICT_PASS if numerator == denominator else _VERDICT_STOP
+        if self.rule == _RULE_SHARE:
+            return (
+                _VERDICT_PASS
+                if numerator / denominator >= SOURCE_COUNT_SHARE_FLOOR
+                else _VERDICT_STOP
+            )
+        # A rule this method does not implement is not a rule. Falling through to
+        # the nearest one would let a mistyped or newly-registered predicate exit
+        # 0 under a criterion nobody wrote.
+        raise SystemExit(
+            f"{self.cell_id}: {self.rule!r} is not a verdict rule this reader "
+            "implements, so its predicate cannot be judged at all. This is a "
+            "DEFECT IN THIS SCRIPT's row table, not a finding about the bytes"
+        )
+
+    def payload(self) -> dict[str, object]:
+        return {
+            "cell": self.cell_id,
+            "tripwire": self.tripwire,
+            "label": self.label,
+            "population": self.population,
+            "predicate": self.predicate,
+            "note": self.note,
+            "advisory": self.advisory,
+            "verdict": self.verdict(),
+            "also_zero": list(self.also_zero) if self.also_zero is not None else None,
+            "also_below": (
+                list(self.also_below) if self.also_below is not None else None
+            ),
+            "caveat": self.caveat,
+            "on_withdrawn": not self.agrees,
+            "recorded_on": list(self.recorded_on) if self.recorded_on else None,
+            "reconstructed_on": (
+                list(self.reconstructed_on) if self.reconstructed_on else None
+            ),
+            "off": (list(self.off) if self.off else None) if self.agrees else None,
+        }
+
+
+def _body_report_changed(leg: _LegTallies, *kinds: str) -> int:
+    """Prompts of ``kinds`` this leg moved, in a meeting that HAS a reporter.
+
+    T2's share is over the body-report population, so an emergency prompt that
+    moved is not a shortfall in it — it is the predicate's separate zero clause,
+    and blending the two would let one hide the other in either direction.
+    """
+
+    return sum(leg.changed[kind] - leg.changed_in_emergency[kind] for kind in kinds)
+
+
+def build_on_recording_rows(walk: _SetWalk) -> list[OnRow]:
+    """Every §8.1 tripwire the recorded bytes can answer, plus §5's split.
+
+    One row per registered predicate, in tripwire order, so the operator reads
+    the whole ratified set off one block instead of assembling it. Nothing here
+    is a bar and nothing here is new: each row is the cell the committed-record
+    table already publishes, read from the other side of the slate.
+    """
+
+    census = walk.elicitation
+    whole = walk.legs[_SLATE_ALL_ON]
+    less_reporter = walk.legs[decomposition_label("reporter_reasoning")]
+    less_corroboration = walk.legs[decomposition_label("corroboration_discipline")]
+    off_leg = walk.legs[_SLATE_OFF]
+    testimony = walk.testimony
+    kills = walk.kill_named
+    cells = walk.corroboration
+    ballots = whole.rendered[_KIND_VOTE_BALLOT]
+    openings = walk.reporter_openings
+    speech = walk.non_reporter_speech_turns
+    rows = [
+        OnRow(
+            cell_id="T-7",
+            tripwire="T1",
+            label="spoken vent accounts naming a player who never vented",
+            population="statement",
+            predicate="the count is 0, whatever the denominator",
+            note=(
+                "a NEVER-WORSE bar and a pre-record STOP. Read off the recorded "
+                "transcript against the recorded action stream, so no lever "
+                "enters it: an arm that mints a fabricated account shows up here "
+                "as a count above zero"
+            ),
+            rule=_RULE_ZERO,
+            reconstructed_on=_pair(
+                testimony.fabricated_vent_rows, testimony.spoken_vent_rows
+            ),
+            off=_pair(testimony.fabricated_vent_rows, testimony.spoken_vent_rows),
+        ),
+        OnRow(
+            cell_id="R-13",
+            tripwire="T2",
+            label="reporter openings gaining the discovery-account block",
+            population="prompt",
+            predicate=(
+                "every observed body-report opening gains the block — 100% of "
+                "the observed denominator"
+            ),
+            note=(
+                "read backwards from the record: an opening GAINED the block "
+                "exactly when withdrawing the reporter argument moves its bytes"
+            ),
+            rule=_RULE_FULL,
+            recorded_on=_pair(
+                _body_report_changed(
+                    less_reporter, _KIND_CREWMATE_REPORT, _KIND_IMPOSTOR_REPORT
+                ),
+                openings,
+            ),
+            reconstructed_on=_pair(
+                less_reporter.changed_vs_reconstruction[_KIND_CREWMATE_REPORT]
+                + less_reporter.changed_vs_reconstruction[_KIND_IMPOSTOR_REPORT]
+                - less_reporter.changed_in_emergency[_KIND_CREWMATE_REPORT]
+                - less_reporter.changed_in_emergency[_KIND_IMPOSTOR_REPORT],
+                openings,
+            ),
+            off=_pair(0, openings),
+            also_zero=(
+                "emergency openings that gained one",
+                less_reporter.changed_in_emergency[_KIND_CREWMATE_REPORT]
+                + less_reporter.changed_in_emergency[_KIND_IMPOSTOR_REPORT],
+            ),
+        ),
+        OnRow(
+            cell_id="R-14",
+            tripwire="T2",
+            label="non-reporter speech turns gaining the base-rate block",
+            population="prompt",
+            predicate=(
+                "every observed non-reporter speech turn in a body-report "
+                "meeting gains it — 100% of the observed denominator, and no "
+                "emergency-meeting prompt gains either"
+            ),
+            note=(
+                "the share's denominator is the body-report population exactly, "
+                "so an emergency meeting's turns are outside it rather than "
+                "counted as failures. The predicate's THIRD clause is over that "
+                "excluded population and is read beside the share, because a "
+                "lever that reached an emergency meeting would otherwise move no "
+                "cell at all"
+            ),
+            rule=_RULE_FULL,
+            recorded_on=_pair(
+                _body_report_changed(less_reporter, _KIND_ACCUSATION_ROUND), speech
+            ),
+            reconstructed_on=_pair(
+                less_reporter.changed_vs_reconstruction[_KIND_ACCUSATION_ROUND]
+                - less_reporter.changed_in_emergency[_KIND_ACCUSATION_ROUND],
+                speech,
+            ),
+            off=_pair(0, speech),
+            also_zero=(
+                "emergency speech prompts that gained one",
+                less_reporter.changed_in_emergency[_KIND_ACCUSATION_ROUND],
+            ),
+        ),
+        OnRow(
+            cell_id="R-15",
+            tripwire="T3",
+            label="ballots gaining a reporter block",
+            population="ballot",
+            predicate="the count is 0, whatever the ballot denominator",
+            note=(
+                "read by INDEPENDENT IDENTIFICATION, not by a render diff: the "
+                "reporter arm has no ballot argument to withdraw, so a diff over "
+                "that seam is identically zero whatever the ballot bytes hold. "
+                "The numerator is recorded ballot prompts carrying the arm's own "
+                "block, whose marker lines are derived from the shipped template "
+                "and then subtracted against a plain ballot — the Task-15.5 "
+                "exculpation the ballot renders unconditionally is worded almost "
+                "identically and must not be read as a breach"
+            ),
+            rule=_RULE_ZERO,
+            recorded_on=_pair(walk.ballots_carrying_a_reporter_block, ballots),
+            reconstructed_on=_pair(walk.ballots_carrying_a_reporter_block, ballots),
+            off=_pair(0, ballots),
+        ),
+        OnRow(
+            cell_id="T-6",
+            tripwire="T4",
+            label="location accounts that reach the alibi map",
+            population="statement",
+            predicate=(
+                "100% of observed location accounts reach the map under ON (and "
+                "the OFF reconstruction of the same run is strictly below it)"
+            ),
+            note=(
+                "an INGEST measurement, not a restatement of the offer: both "
+                "columns run agents.memory.store.absorb_reported_testimony over "
+                "a copy of each listener's own memory and count the accounts "
+                "that landed in an alibi map, so the own-statement, roster and "
+                "tickless guards are the live ones. The bolded clause is what "
+                "this verdict reads; the parenthetical is printed as the OFF "
+                "column beside it, because a run in which every account already "
+                "reached the map under OFF had nothing for the widened gate to "
+                "widen and is not a failure of it"
+            ),
+            rule=_RULE_FULL,
+            reconstructed_on=testimony.alibi_map_on,
+            off=testimony.alibi_map_off,
+            also_below=(
+                "the OFF ingest, which the clause requires strictly below ON",
+                testimony.alibi_map_off[0],
+                testimony.alibi_map_on[0],
+            ),
+        ),
+        OnRow(
+            cell_id="T-9a",
+            tripwire="T5",
+            label="CREW speech turns gaining the witnessed-kill elicitation block",
+            population="prompt",
+            predicate="every observed CREW speech turn gains the ELICITATION block",
+            note=(
+                "the BLOCK's own lines, derived from the shipped template — not "
+                "a byte diff, which also moves for the role-blind "
+                "public-transcript row a spoken kill puts in front of every "
+                "later speaker"
+            ),
+            rule=_RULE_FULL,
+            recorded_on=_pair(census.gained["CREWMATE"], census.rendered["CREWMATE"]),
+            reconstructed_on=_pair(
+                census.gained_from_reconstruction["CREWMATE"],
+                census.rendered["CREWMATE"],
+            ),
+            off=_pair(0, census.rendered["CREWMATE"]),
+        ),
+        OnRow(
+            cell_id="T-9b",
+            tripwire="T5",
+            label="IMPOSTOR speech turns gaining the witnessed-kill elicitation block",
+            population="prompt",
+            predicate=(
+                "the count of IMPOSTOR speech prompts gaining an ELICITATION "
+                "block is 0, whatever the denominators"
+            ),
+            note=(
+                "a NEVER-WORSE bar and a pre-record STOP: an impostor offered "
+                "the shape is a firewall question. An impostor prompt merely "
+                "rendering a publicly spoken kill row is CORRECT and is excluded "
+                "here by construction"
+            ),
+            rule=_RULE_ZERO,
+            recorded_on=_pair(census.gained["IMPOSTOR"], census.rendered["IMPOSTOR"]),
+            reconstructed_on=_pair(
+                census.gained_from_reconstruction["IMPOSTOR"],
+                census.rendered["IMPOSTOR"],
+            ),
+            off=_pair(0, census.rendered["IMPOSTOR"]),
+        ),
+        OnRow(
+            cell_id="C-9",
+            tripwire="T6",
+            label="ballots gaining the source-count block",
+            population="ballot",
+            predicate=(
+                f"the observed share is ≥ {SOURCE_COUNT_SHARE_FLOOR:.0%} of ballots"
+            ),
+            note=(
+                "the residue — meetings whose ledger holds no row for any of "
+                "that voter's candidate targets — is the stated explanation for "
+                "the gap and is context, not a second criterion"
+            ),
+            rule=_RULE_SHARE,
+            recorded_on=_pair(less_corroboration.changed[_KIND_VOTE_BALLOT], ballots),
+            reconstructed_on=_pair(
+                less_corroboration.changed_vs_reconstruction[_KIND_VOTE_BALLOT],
+                ballots,
+            ),
+            off=_pair(0, ballots),
+        ),
+        OnRow(
+            cell_id="B-1m1",
+            tripwire="T7",
+            label="rendered memory rows per prompt snapshot, FIRST meeting only",
+            population="row per snapshot",
+            predicate=(
+                "the meeting-1 row count is identical between the run's own OFF "
+                "and ON columns"
+            ),
+            note=(
+                "the published B-1 sums every captured meeting, where a "
+                "first-meeting difference and an opposite later one cancel. "
+                "RECORDED-ON is folded straight off the recorded call bytes, so "
+                "the identity is read on two independent ON readings"
+            ),
+            rule=_RULE_IDENTITY,
+            recorded_on=_pair(
+                walk.recorded_first_meeting_rendered_lines,
+                walk.recorded_first_meeting_snapshots,
+            ),
+            reconstructed_on=_pair(
+                whole.first_meeting_rendered_lines, whole.first_meeting_snapshots
+            ),
+            off=_pair(
+                off_leg.first_meeting_rendered_lines, off_leg.first_meeting_snapshots
+            ),
+        ),
+        OnRow(
+            cell_id="P-1k",
+            tripwire="Q-B",
+            label="non-direct convictions whose ejectee a spoken kill named",
+            population="ejection",
+            predicate="observed and never gated (§5)",
+            note=(
+                "bar 1's cell split by a spoken kill. The OFF column is BLANK by "
+                "construction: whether the shape is spoken at all is a model "
+                "output, so an OFF reading of it would be a prediction rather "
+                "than a second render"
+            ),
+            reconstructed_on=_pair(kills.kill_named, kills.non_direct),
+        ),
+        OnRow(
+            cell_id="P-1ka",
+            tripwire="Q-B",
+            label="of those, the ones that convicted an IMPOSTOR",
+            population="ejection",
+            predicate="observed and never gated (§5)",
+            note=(
+                "the accuracy side of the same split, so a movement in bar 1 can "
+                "be attributed to the eyewitness channel rather than credited to "
+                "it by assumption"
+            ),
+            reconstructed_on=_pair(kills.kill_named_impostor, kills.kill_named),
+        ),
+    ]
+    rows.extend(_on_corroboration_rows(cells))
+    return rows
+
+
+def _on_corroboration_rows(cells: Mapping[str, int]) -> list[OnRow]:
+    """The four corroboration cells, over a lever-ON run's own ledger.
+
+    A DERIVATION over the recorded transcript rather than a render, so both
+    columns read the same figure: the ledger is built the same way whatever the
+    ballot then does with it. What moves between a lever-OFF record and this one
+    is the transcript the ledger reads, which is a model output and is exactly
+    what no offline column can predict.
+    """
+
+    shared = (
+        "one of the four cells the #415/#417 records left pinned on the "
+        "committed bytes; here it is re-read on the run's own"
+    )
+    specs = (
+        (
+            "C-1",
+            "accused subjects with NO first-hand source",
+            "accused row",
+            "accused_without_a_first_hand_source",
+            "rows",
+        ),
+        (
+            "C-2",
+            "ejected subjects with NO first-hand source",
+            "ejection",
+            "ejected_without_a_first_hand_source",
+            "ejected_rows",
+        ),
+        (
+            "C-3",
+            "ejections whose charge ANSWERED the ejectee's own",
+            "ejection",
+            "ejected_on_an_answering_turn",
+            "ejections",
+        ),
+        (
+            "C-4",
+            "ejected subjects with a map-satisfied placement pair",
+            "ejection",
+            "ejected_with_a_walkable_pair",
+            "ejections",
+        ),
+    )
+    return [
+        OnRow(
+            cell_id=cell_id,
+            tripwire="§5",
+            label=label,
+            population=population,
+            predicate="observed and never gated (§5)",
+            note=shared,
+            reconstructed_on=_pair(cells[numerator], cells[denominator]),
+            off=_pair(cells[numerator], cells[denominator]),
+        )
+        for cell_id, label, population, numerator, denominator in specs
+    ]
+
+
+# --------------------------------------------------------------------------- #
 # The guard, written before the folds.                                         #
 # --------------------------------------------------------------------------- #
 
 
-def _assert_live_slate(when: str) -> None:
-    """Refuse to run once the OFF column this table prices cannot be produced.
+def _assert_live_slate(when: str, *, shell_slate: frozenset[str] = frozenset()) -> None:
+    """Refuse to run once the columns this table prices cannot be produced.
 
     TWO environments are checked, and the second is the load-bearing one.
 
@@ -2305,12 +3407,19 @@ def _assert_live_slate(when: str) -> None:
     Seven consumers re-derive the meeting reduction with no ``env`` argument at
     all, so a stale ``AILIBI_*`` export in the operator's shell would make every
     IMPORTED instrument's "OFF" column an ON column while the first check sailed
-    through green. The refusal names the variable and says to unset it.
+    through green. The refusal names the variable and says what to change.
 
-    That half checks EVERY live toggle, not only the priced three. The recorded
-    substrate stamps all of them OFF, and the one this memo holds OFF is the one
-    an export would damage most quietly: its arm swaps a template file, so a
-    stale export would serve a body neither priced lever's block reaches.
+    ``shell_slate`` is the slate the shell MUST carry, and it is the recording's
+    own: a lever-OFF record demands a bare shell, and a lever-ON record demands
+    exactly its stamped exports, because ``api.replay_loader`` refuses a
+    cross-substrate reconstruction and the manager resolves two of the three
+    levers from that same environment. Either way the rule is one rule — the
+    shell equals the record — and a disagreement in EITHER direction refuses.
+
+    That half checks EVERY live toggle, not only the priced three. The one this
+    memo holds OFF is the one a stray export would damage most quietly: its arm
+    swaps a template file, so it would serve a body neither priced lever's block
+    reaches.
     """
 
     registered = {key for key, _ in _TOGGLEABLE_LEVER_RESOLVERS}
@@ -2338,18 +3447,33 @@ def _assert_live_slate(when: str) -> None:
             "audits/audit-phase-21-counterfactual.md"
         )
     ambient = substrate_flag_snapshot()
-    exported = sorted(
-        key for key in TOGGLEABLE_SUBSTRATE_FLAG_KEYS if ambient.get(key, False)
-    )
-    if exported:
+    wrong = [
+        (key, bool(ambient.get(key, False)), key in shell_slate)
+        for key in TOGGLEABLE_SUBSTRATE_FLAG_KEYS
+        if bool(ambient.get(key, False)) is not (key in shell_slate)
+    ]
+    if wrong:
+        wanted = (
+            "every live toggle OFF"
+            if not shell_slate
+            else ", ".join(sorted(shell_slate)) + " ON and every other toggle OFF"
+        )
         raise SystemExit(
-            f"the ambient environment is not the record's substrate {when}: "
-            + ", ".join(f"{key} ({env_var_for_lever(key)})" for key in exported)
-            + " is exported ON in this process, and the committed recordings "
-            "stamp every live toggle OFF. Seven consumers re-derive the meeting "
-            "reduction with no env argument, so every imported instrument's OFF "
-            "column would silently be an ON column. Unset "
-            + ", ".join(env_var_for_lever(key) for key in exported)
+            f"the ambient environment is not the record's substrate {when}: the "
+            f"recording needs {wanted}, but this process reads "
+            + ", ".join(
+                f"{key} {'ON' if live else 'OFF'} ({env_var_for_lever(key)})"
+                for key, live, _ in wrong
+            )
+            + ". Seven consumers re-derive the meeting reduction with no env "
+            "argument, so a shell that disagrees with the recording makes every "
+            "imported instrument read a substrate the bytes were never made "
+            "under. "
+            + "; ".join(
+                f"{'export' if want else 'unset'} {env_var_for_lever(key)}"
+                + ("=1" if want else "")
+                for key, _, want in wrong
+            )
             + " and run again"
         )
 
@@ -2365,6 +3489,149 @@ def _assert_slate_is_the_three_wave_2_keys() -> None:
             "drop the reporter and testimony-shapes effects from every statement "
             "turn while a composite stamp claimed them"
         )
+
+
+def read_recorded_slate(recording_dir: Path) -> dict[str, bool]:
+    """The substrate a recording STAMPED, read off its own ``game_over`` rows.
+
+    Never off the shell: the shell is what this reading is later used to judge,
+    so taking the slate from it would make the check compare a value with itself.
+    Every seed must stamp the same slate — a directory holding two substrates is
+    two recordings, and pooling them would publish one table over bytes made
+    under different rules — and an unstamped seed is refused rather than read as
+    all-OFF, which is the ``read_substrate_flags`` contract.
+
+    A stamp naming a GRADUATED lever OFF describes a substrate this build cannot
+    reproduce at all, so it is refused here through the shared registry check
+    rather than discovered as a wrong number downstream.
+    """
+
+    seeds = seeds_on_disk(recording_dir)
+    if not seeds:
+        raise SystemExit(
+            f"{recording_dir}: no replay-seed-*.jsonl files found — not a "
+            "recording; refusing to report a zero-game measurement"
+        )
+    stamps: dict[int, dict[str, bool]] = {}
+    for seed in seeds:
+        flags = read_substrate_flags(recording_dir / f"replay-seed-{seed}.jsonl")
+        if flags is None:
+            raise SystemExit(
+                f"{recording_dir}: seed {seed} carries no substrate stamp, so "
+                "the slate it was recorded under is UNKNOWN. An unstamped "
+                "recording is not an all-OFF one, and this reader will not "
+                "guess which levers its bytes were made with"
+            )
+        retired_off = retired_levers_stamped_off(flags)
+        if retired_off:
+            raise SystemExit(
+                f"{recording_dir}: seed {seed} stamps the graduated lever(s) "
+                + ", ".join(retired_off)
+                + " OFF. Those levers have no env gate in this build, so no "
+                "shell can reproduce that substrate and no column below would "
+                "describe these bytes"
+            )
+        stamps[seed] = flags
+    first = stamps[seeds[0]]
+    for seed in seeds[1:]:
+        if stamps[seed] != first:
+            differing = sorted(
+                key
+                for key in set(first) | set(stamps[seed])
+                if first.get(key) != stamps[seed].get(key)
+            )
+            raise SystemExit(
+                f"{recording_dir}: seed {seeds[0]} and seed {seed} stamp "
+                f"different substrates ({', '.join(differing)}). One directory "
+                "is one recording; pooling two substrates would publish a table "
+                "over bytes made under different rules"
+            )
+    return dict(first)
+
+
+def _env_for_stamp(stamp: Mapping[str, bool]) -> dict[str, str]:
+    """The ``AILIBI_*`` environment a recorded stamp's LIVE toggles describe.
+
+    Feeding the stamp back through the resolvers is what lets the mandated
+    comparison — :func:`orchestrator.replay.substrate_slate_mismatches`, which
+    takes an environment — judge a RECORDING rather than a shell, without this
+    script re-deriving the comparison itself.
+    """
+
+    return {
+        env_var_for_lever(key): "1"
+        for key in TOGGLEABLE_SUBSTRATE_FLAG_KEYS
+        if stamp.get(key, False)
+    }
+
+
+def assert_recording_declares(stamp: Mapping[str, bool], *, expected_on: str) -> None:
+    """The recording's own stamp IS the declared slate, or refuse naming both.
+
+    §9.2's abandon criterion, executed rather than described: the comparison is
+    ``substrate_slate_mismatches`` and is never re-derived here. The only slate
+    this reader accepts is the pre-registration's — the three Wave-2 keys ON with
+    every other live toggle, ``impostor_roll_call`` included, OFF — because a
+    second slate would be a second criterion and this instrument authors none.
+    """
+
+    if expected_on != RECORDED_SLATE_ON:
+        raise SystemExit(
+            f"--recorded-slate {expected_on!r} is not a slate this reader knows. "
+            f"The one it reads is {RECORDED_SLATE_ON!r}: "
+            + ", ".join(WAVE_2_LEVERS)
+            + f" ON with {NON_WAVE_2_LEVER} OFF, which is the slate the ratified "
+            "pre-registration names and 21.24 records"
+        )
+    problems = substrate_slate_mismatches(WAVE_2_LEVERS, env=_env_for_stamp(stamp))
+    if problems:
+        raise SystemExit(
+            "the recording's own substrate stamp is not the declared "
+            f"{RECORDED_SLATE_ON!r} slate:\n  "
+            + "\n  ".join(problems)
+            + "\nEvery tripwire below is registered against the Wave-2 slate, so "
+            "reading these bytes as that slate would evaluate a ratified "
+            "criterion over a substrate it was never written for"
+        )
+
+
+def assert_shell_matches_recording(stamp: Mapping[str, bool]) -> None:
+    """The shell reconstructs this recording, said before the loader says it.
+
+    ``api.replay_loader._assert_substrate_matches`` already refuses a
+    cross-substrate reconstruction, and it is the mechanism that makes a
+    mismatched shell a refusal rather than a wrong number. It fires deep inside a
+    walk, though, and names the loader's concern; this says it first, in this
+    reader's own words, before a single seed is opened. The comparison is the
+    loader's own (:func:`orchestrator.replay.substrate_stamp_mismatches`) and is
+    not re-derived.
+    """
+
+    mismatch = substrate_stamp_mismatches(stamp, ambient=substrate_flag_snapshot())
+    if not mismatch:
+        return
+    lines = []
+    if mismatch.differing:
+        lines.append(
+            "recorded the other way: "
+            + ", ".join(
+                f"{key} stamped {'ON' if stamp.get(key) else 'OFF'} "
+                f"({env_var_for_lever(key)})"
+                for key in mismatch.differing
+            )
+        )
+    if mismatch.unknown:
+        lines.append(
+            "recorded by a build this one does not have: " + ", ".join(mismatch.unknown)
+        )
+    raise SystemExit(
+        "this shell cannot reconstruct that recording — its substrate is not "
+        "the recording's:\n  "
+        + "\n  ".join(lines)
+        + "\nRun this reader in the SAME shell the recording was made in "
+        "(api/replay_loader.py refuses the reconstruction otherwise, and the "
+        "manager resolves two of the three levers from that environment)"
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -2454,7 +3721,7 @@ def run(
             "advisory": walk.innocent_ejections <= ADVISORY_INNOCENT_EJECTIONS,
             "rows": [row.payload() for row in rows],
             "tripwire_rows": [row.payload() for row in tripwires],
-            "render_census": _render_census_payload(walk, withhold=withhold),
+            "render_census": _render_census_payload(walk, legs=_slate_legs(withhold)),
             "ballot_census": walk.ballots.payload(),
             "testimony_census": walk.testimony.payload(),
             "injustice_ledger": [row.payload() for row in walk.ledger_rows],
@@ -2485,6 +3752,212 @@ def run(
     payload["corroboration_pins"] = _corroboration_pin_check(pooled_walks)
     _assert_live_slate("at exit")
     return payload
+
+
+def run_recording(
+    recording_dirs: Sequence[Path], *, recorded_slate: str
+) -> dict[str, object]:
+    """Read the ratified tripwire predicates off one or more LEVER-ON recordings.
+
+    Every refusal that can be made before a byte is walked is made first: the
+    priced slate is still three keys, the build still has an OFF derivation for
+    each of them, each recording's own stamp IS the declared slate, and this
+    shell is the shell that recording was made in. Only then does the walk start,
+    because each of those failures would otherwise surface as a wrong number
+    somewhere in the middle of a table.
+    """
+
+    if not recording_dirs:
+        raise SystemExit(
+            "no --recording directory was given, and a verdict over zero "
+            "recordings would read as a pass over nothing"
+        )
+    _assert_slate_is_the_three_wave_2_keys()
+    stamps: dict[str, dict[str, bool]] = {}
+    names: dict[str, Path] = {}
+    for directory in recording_dirs:
+        resolved = directory.resolve()
+        name = resolved.name
+        if name in names and names[name] != resolved:
+            name = str(resolved)
+        names[name] = resolved
+        stamp = read_recorded_slate(resolved)
+        assert_recording_declares(stamp, expected_on=recorded_slate)
+        assert_shell_matches_recording(stamp)
+        stamps[name] = stamp
+    shell = frozenset(WAVE_2_LEVERS)
+    _assert_live_slate("at start", shell_slate=shell)
+    payload: dict[str, object] = {
+        "mode": "recording",
+        "levers": list(WAVE_2_LEVERS),
+        "held_off": NON_WAVE_2_LEVER,
+        "recorded_slate": recorded_slate,
+        "slate_legs": [label for label, _ in _on_recording_legs()],
+        "recordings": {name: str(path) for name, path in names.items()},
+        "recorded_substrate": {name: stamp for name, stamp in stamps.items()},
+    }
+    per_set: dict[str, object] = {}
+    pooled = _PooledOnRows()
+    stopped: set[str] = set()
+    for name, resolved in names.items():
+        walk = walk_recording(
+            resolved, set_name=name, slate_set=_arm_serving_set(resolved)
+        )
+        _assert_the_mirror_reproduced_the_record(walk)
+        rows = build_on_recording_rows(walk)
+        stopped.update(
+            row.cell_id
+            for row in rows
+            if row.verdict() in (_VERDICT_STOP, _VERDICT_UNREAD)
+        )
+        per_set[name] = {
+            "games": walk.games,
+            "meetings": walk.meetings,
+            "body_report_meetings": walk.body_report_meetings,
+            "ejections": walk.ejections,
+            "elapsed_seconds": round(walk.elapsed, 2),
+            "rows": [row.payload() for row in rows],
+            "stopped_cells": sorted(
+                row.cell_id
+                for row in rows
+                if row.verdict() in (_VERDICT_STOP, _VERDICT_UNREAD)
+            ),
+            "render_census": _render_census_payload(walk, legs=_on_recording_legs()),
+            "testimony_census": walk.testimony.payload(),
+            "ballot_census": walk.ballots.payload(),
+            "corroboration_cells": dict(sorted(walk.corroboration.items())),
+        }
+        for row in rows:
+            pooled.add(row)
+    payload["sets"] = per_set
+    # The pooled block is INFORMATIONAL. Every §8.1 predicate is SAMPLE-LOCAL,
+    # so a sum can pass where a member failed -- two 98/100 and 100/100 legs pool
+    # to exactly T6's floor, and two opposite meeting-1 row differences cancel.
+    # The verdict is therefore the union over the recordings, never the sum.
+    payload["pooled"] = [row.payload() for row in pooled.rows()]
+    payload["pooled_is_informational"] = True
+    # The GATED predicates that did not pass, in ANY recording. An observed cell
+    # can never appear here: §5's rows and the four corroboration cells are
+    # reported and never judged, so listing one would invent a criterion.
+    payload["stopped_cells"] = sorted(stopped)
+    _assert_live_slate("at exit", shell_slate=shell)
+    return payload
+
+
+def _assert_the_mirror_reproduced_the_record(walk: _SetWalk) -> None:
+    """This script's whole-slate re-render IS the recording, prompt for prompt.
+
+    The walk already proves the MANAGER reproduced the recorded bytes. This is
+    the other half: the script's own mirror of the manager's lever derivation
+    (:func:`_reporter_inputs`, :func:`_ledger_for`, :func:`_on_kwargs`) must
+    reproduce them too, because every withdrawn-lever column is a diff against
+    that mirror. A row-level column comparison is not enough to catch this — a
+    mirror that drifts on every reporter-affected prompt moves the two counts
+    TOGETHER, so both columns agree and the row passes while the reconstruction
+    reproduces nothing.
+    """
+
+    mismatches = {
+        kind: count for kind, count in walk.legs[_SLATE_ALL_ON].changed.items() if count
+    }
+    if not mismatches:
+        return
+    raise SystemExit(
+        f"{walk.set_name}: this script's whole-slate re-render does not "
+        f"reproduce the recording — {mismatches} prompts differ by class. Every "
+        "withdrawn-lever column below is a diff against that re-render, so all "
+        "of them would be measuring the mirror rather than the levers. This is a "
+        "DEFECT IN THIS SCRIPT's mirror of the manager's derivation, not a "
+        "finding about the recorded bytes"
+    )
+
+
+def _arm_serving_set(recording_dir: Path) -> str:
+    """The prompt set whose bodies a Wave-2 recording's stamps name.
+
+    Recovered from the recording's own ``prompt_versions`` stamp rather than from
+    the environment: the stamp is what says which bodies rendered, and the arm's
+    blocks exist for one set only. Reusing the golden's reverse lookup keeps the
+    walk and this pre-check on one resolution.
+    """
+
+    for seed in seeds_on_disk(recording_dir):
+        for entry in read_all_entries(recording_dir / f"replay-seed-{seed}.jsonl"):
+            if isinstance(entry, MeetingReplayEntry):
+                return resolve_prompt_set(entry.prompt_versions)
+    raise SystemExit(
+        f"{recording_dir}: no recorded meeting carries a prompt_versions stamp, "
+        "so which template bodies rendered these prompts is unknown. A recording "
+        "with no meeting has no tripwire to read"
+    )
+
+
+class _PooledOnRows:
+    """Lever-ON rows summed across recordings, in first-seen order.
+
+    The recordings are disjoint games, so pooling is addition; the predicate,
+    the rule and the note travel with the cell, so the pooled row is judged by
+    exactly the sentence its per-recording rows were.
+    """
+
+    def __init__(self) -> None:
+        self._rows: dict[str, OnRow] = {}
+
+    def add(self, row: OnRow) -> None:
+        seen = self._rows.get(row.cell_id)
+        if seen is None:
+            self._rows[row.cell_id] = row
+            return
+        self._rows[row.cell_id] = OnRow(
+            cell_id=row.cell_id,
+            tripwire=row.tripwire,
+            label=row.label,
+            population=row.population,
+            predicate=row.predicate,
+            note=row.note,
+            rule=row.rule,
+            recorded_on=_sum_pairs(seen.recorded_on, row.recorded_on),
+            reconstructed_on=_sum_pairs(seen.reconstructed_on, row.reconstructed_on),
+            off=_sum_pairs(seen.off, row.off),
+            # The compound clause and the caveat travel with the cell. A pooled
+            # row that dropped its second zero reading would print PASS over a
+            # member that STOPped on exactly that clause, and one that dropped
+            # its caveat would state a construction-guaranteed value as a result.
+            also_zero=_sum_also_zero(seen.also_zero, row.also_zero),
+            also_below=(
+                None
+                if seen.also_below is None or row.also_below is None
+                else (
+                    row.also_below[0],
+                    seen.also_below[1] + row.also_below[1],
+                    seen.also_below[2] + row.also_below[2],
+                )
+            ),
+            caveat=row.caveat or seen.caveat,
+        )
+
+    def rows(self) -> list[OnRow]:
+        return list(self._rows.values())
+
+
+def _sum_also_zero(
+    left: tuple[str, int] | None, right: tuple[str, int] | None
+) -> tuple[str, int] | None:
+    """Add two named second readings, keeping ABSENT absent."""
+
+    if left is None or right is None:
+        return None
+    return (right[0], left[1] + right[1])
+
+
+def _sum_pairs(
+    left: tuple[int, int] | None, right: tuple[int, int] | None
+) -> tuple[int, int] | None:
+    """Add two columns, keeping ABSENT absent rather than reading it as zero."""
+
+    if left is None or right is None:
+        return None
+    return (left[0] + right[0], left[1] + right[1])
 
 
 def _pooled_row(
@@ -2637,6 +4110,8 @@ def _pool_testimony_census(walks: Sequence[_SetWalk]) -> dict[str, object]:
         pooled.spoken_vent_rows += census.spoken_vent_rows
         pooled.fabricated_vent_rows += census.fabricated_vent_rows
         pooled.ungrounded_vent_rows += census.ungrounded_vent_rows
+        pooled.alibi_map_reached_off += census.alibi_map_reached_off
+        pooled.alibi_map_reached_on += census.alibi_map_reached_on
     return pooled.payload()
 
 
@@ -2767,8 +4242,16 @@ def _class_totals(rows: Sequence[InjusticeLedgerRow]) -> dict[str, int]:
     return dict(sorted(totals.items()))
 
 
-def _render_census_payload(walk: _SetWalk, *, withhold: str) -> dict[str, object]:
-    labels = {label for label, _ in _slate_legs(withhold)}
+def _render_census_payload(
+    walk: _SetWalk, *, legs: Sequence[tuple[str, frozenset[str]]]
+) -> dict[str, object]:
+    """The per-leg render census, over the legs the run actually walked.
+
+    Keyed on the run's OWN legs rather than on the committed mode's, so a mode
+    with different legs publishes all of them instead of the intersection.
+    """
+
+    labels = {label for label, _ in legs}
     return {
         label: {
             "meetings_touched": leg.meetings_touched,
@@ -2941,6 +4424,133 @@ def _print_table(
     _print_reading_rules(payload, out=out)
 
 
+_ON_TABLE_HEADING: Final[str] = (
+    "the seven ratified tripwires (pre-registration §8.1) and §5's spoken-kill "
+    "split, read off THIS recording's own bytes. No bar of the four primary "
+    "bars is read here and none is declared met or missed"
+)
+
+
+def _print_on_row(row: Mapping[str, object], *, out: TextIO) -> None:
+    mark = f" {ADVISORY_MARK}" if row.get("advisory") else ""
+    print(
+        f"{str(row['cell']):<6} {str(row['tripwire']):<4} "
+        f"{str(row['label'])[:52]:<52} "
+        f"{_rate(row.get('recorded_on')):>22} "
+        f"{_rate(row.get('reconstructed_on')):>22} "
+        f"{_rate(row.get('off')):>22}{mark}",
+        file=out,
+    )
+    reading = row.get("recorded_on") or row.get("reconstructed_on")
+    also = row.get("also_zero")
+    beside = ""
+    if isinstance(also, list):
+        beside = f", {also[0]} = {also[1]}"
+    ordering = row.get("also_below")
+    if isinstance(ordering, list):
+        beside += f", {ordering[0]} = {ordering[1]} against {ordering[2]}"
+    print(
+        f"       {row['tripwire']}: {row['predicate']} — READS "
+        f"{_rate(reading)}{beside} → {row['verdict']}",
+        file=out,
+    )
+    if row.get("caveat"):
+        print(f"       ⚠ {row['caveat']}", file=out)
+
+
+def _print_on_table(
+    payload: Mapping[str, object], *, stream: TextIO | None = None
+) -> None:
+    """Print the lever-ON tripwire table, verdict beside every predicate."""
+
+    out = sys.stdout if stream is None else stream
+    header = (
+        f"{'cell':<6} {'trip':<4} {'label':<52} {'RECORDED-ON':>22} "
+        f"{'RECONSTRUCTED-ON':>22} {'OFF':>22}"
+    )
+    sets = payload["sets"]
+    assert isinstance(sets, dict)
+    recordings = payload["recordings"]
+    assert isinstance(recordings, dict)
+    for name, block in sets.items():
+        assert isinstance(block, dict)
+        print(
+            f"\n== {name} ({block['games']} games, {block['meetings']} meetings, "
+            f"{block['body_report_meetings']} body reports, "
+            f"{block['ejections']} ejections, {block['elapsed_seconds']}s) "
+            f"— {recordings[name]}",
+            file=out,
+        )
+        print(f"   -- {_ON_TABLE_HEADING}", file=out)
+        print(header, file=out)
+        for row in block["rows"]:
+            _print_on_row(row, out=out)
+        print(f"   testimony census: {block['testimony_census']}", file=out)
+        print(f"   corroboration cells: {block['corroboration_cells']}", file=out)
+        print(
+            "   this recording's gated predicates that did not pass: "
+            f"{block['stopped_cells'] or 'none'}",
+            file=out,
+        )
+    print(
+        "\n== POOLED — INFORMATIONAL. Every predicate is SAMPLE-LOCAL, so the "
+        "verdict below is the union over the recordings and never this sum",
+        file=out,
+    )
+    print(header, file=out)
+    pooled = payload["pooled"]
+    assert isinstance(pooled, list)
+    for row in pooled:
+        _print_on_row(row, out=out)
+    stopped = payload["stopped_cells"]
+    assert isinstance(stopped, list)
+    print(
+        "\nverdict: every GATED predicate PASSES on these bytes"
+        if not stopped
+        else "\nverdict: a gated predicate did NOT pass — "
+        + ", ".join(str(cell) for cell in stopped)
+        + " (this command exits non-zero)",
+        file=out,
+    )
+    _print_on_reading_rules(payload, out=out)
+
+
+def _print_on_reading_rules(payload: Mapping[str, object], *, out: TextIO) -> None:
+    """What the operator must know before acting on the block above."""
+
+    print("\nreading rules:", file=out)
+    for line in (
+        "A row marked ⚠ CANNOT FAIL on this reader: its registered cell is a "
+        "derivation whose value follows from its own inputs, so its PASS is not "
+        "evidence the criterion was exercised. §8.1 registers those cells and "
+        "this instrument does not redefine a published one.",
+        "The PREDICATE is the ratified criterion and the population is not. A "
+        "denominator smaller than baseline 8's is expected at a smoke and is "
+        "never a trip; stopping a correct record because its own behaviour "
+        "changed a denominator is the opposite of what these tripwires are for.",
+        "RECORDED-ON is the recording's own bytes and RECONSTRUCTED-ON is this "
+        "walk's re-render of them. A row whose two ON readings disagree prints "
+        "no OFF column and reads UNREAD — and §8.1 reads UNREAD as a STOP.",
+        "OFF is a SECOND RENDER of the recorded inputs with the lever arguments "
+        "withdrawn. It says what the slate put in front of a reader, never what "
+        "the reader would then have done: a sentence removed from a prompt is "
+        "not a vote that changes.",
+        "A share predicate over an EMPTY population reads UNREAD rather than "
+        "PASS. A one-sided count bar (T1, T3, T5's impostor half) needs no "
+        "denominator and is judged at any n, which is why §8.1 states it as a "
+        "count.",
+        f"{ADVISORY_MARK} marks a row one case would dominate — any column whose "
+        f"denominator is {ADVISORY_DENOMINATOR} or fewer.",
+        f"The slate is the THREE Wave-2 levers with {payload['held_off']} OFF, "
+        "read off the recording's own game_over stamp and compared through "
+        "orchestrator.replay.substrate_slate_mismatches, never re-derived.",
+        "This block writes no bar, no target and no decision rule: the "
+        "pre-registration owns all four, and none of the seven tripwires is a "
+        "graduating bar.",
+    ):
+        print(f"  {line}", file=out)
+
+
 def _print_reading_rules(payload: Mapping[str, object], *, out: TextIO) -> None:
     """The footnotes a reader needs before comparing two columns."""
 
@@ -3003,6 +4613,31 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     parser.add_argument(
+        "--recording",
+        type=Path,
+        action="append",
+        default=None,
+        help=(
+            "a directory of replay-seed-*.jsonl recorded with the lever slate "
+            "UP, inside or outside replays/ — 21.23's smoke and 21.24's record "
+            "write one. Repeat the flag to pool several legs. Requires "
+            "--recorded-slate, and a shell carrying the recording's own "
+            "AILIBI_* exports"
+        ),
+    )
+    parser.add_argument(
+        "--recorded-slate",
+        default=None,
+        choices=[RECORDED_SLATE_ON],
+        help=(
+            "the slate the --recording directories were recorded under, "
+            "DECLARED by the operator and checked against each recording's own "
+            f"game_over stamp. {RECORDED_SLATE_ON!r} is the ratified Wave-2 "
+            "slate: " + ", ".join(WAVE_2_LEVERS) + f" ON with {NON_WAVE_2_LEVER} "
+            "OFF"
+        ),
+    )
+    parser.add_argument(
         "--json",
         action="store_true",
         help="emit the same table machine-readably for the pre-registration",
@@ -3018,18 +4653,43 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     args = parser.parse_args(argv)
-    set_names = (
-        list(CANONICAL_SETS) if args.sets == "all" else [str(args.sets).strip("/")]
-    )
     started = time.monotonic()
-    payload = run(set_names, withhold=str(args.withhold))
+    if args.recording:
+        if args.recorded_slate is None:
+            parser.error(
+                "--recording needs --recorded-slate: the slate a recording was "
+                "made under is DECLARED and then checked against its own stamp, "
+                "so an undeclared recording is refused rather than guessed at"
+            )
+        payload = run_recording(
+            [Path(directory) for directory in args.recording],
+            recorded_slate=str(args.recorded_slate),
+        )
+        printer = _print_on_table
+    else:
+        if args.recorded_slate is not None:
+            parser.error(
+                "--recorded-slate describes a --recording; the committed sets "
+                "were recorded with every lever OFF and --sets reads them as such"
+            )
+        set_names = (
+            list(CANONICAL_SETS) if args.sets == "all" else [str(args.sets).strip("/")]
+        )
+        payload = run(set_names, withhold=str(args.withhold))
+        printer = _print_table
     elapsed = time.monotonic() - started
     if args.json:
         print(json.dumps(payload, indent=2))
     else:
-        _print_table(payload)
+        printer(payload)
         print(f"\nwall time: {elapsed:.1f}s", file=sys.stdout)
-    return 0
+    # A tripwire that did not pass is a PRE-RECORD STOP, so the process status
+    # has to say so: the smoke drives this from a shell script, and a table that
+    # printed STOP while exiting 0 would let `set -e` carry straight on into a
+    # 22-hour record. The committed-record mode carries no verdicts and always
+    # exits 0.
+    stopped = payload.get("stopped_cells")
+    return 1 if isinstance(stopped, list) and stopped else 0
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point
