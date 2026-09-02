@@ -527,16 +527,31 @@ class _RendererCache:
         key = (set_name, turn_kind)
         if key not in self._reporter_markers:
             ballot_lines = frozenset(_probe_ballot(self.off(set_name)).splitlines())
+            context = ReporterContext(reporter_id="p-2", tick=1)
+            # BOTH reporter-owned speech surfaces. The arm renders a
+            # discovery-account block on the opening and a `<who_reported>` block
+            # on every other speaker's statement; either reaching the ballot is
+            # the seam T3 forbids, so a marker set drawn from one surface would
+            # let the other leak through reading zero.
             markers = frozenset(
                 line
-                for line in _added_lines(
-                    _probe_crew_statement(self.off(set_name), turn_kind=turn_kind),
-                    _probe_crew_statement(
-                        self.off(set_name),
-                        turn_kind=turn_kind,
-                        reporter_context=ReporterContext(reporter_id="p-2", tick=1),
+                for pair in (
+                    (
+                        _probe_crew_statement(self.off(set_name), turn_kind=turn_kind),
+                        _probe_crew_statement(
+                            self.off(set_name),
+                            turn_kind=turn_kind,
+                            reporter_context=context,
+                        ),
+                    ),
+                    (
+                        _probe_crew_opening(self.off(set_name)),
+                        _probe_crew_opening(
+                            self.off(set_name), reporter_context=context
+                        ),
                     ),
                 )
+                for line in _added_lines(*pair)
                 if line.strip() and line not in ballot_lines
             )
             if not markers:
@@ -613,6 +628,26 @@ def _renderer_for(renderers: PromptRenderers, kind: str) -> Any:
 #: templates' kind and never reaches the statement renderer, so a capture
 #: carrying anything else means the reader is probing a branch it has not seen.
 _SPEECH_TURN_KINDS: Final[tuple[TurnKind, ...]] = ("reply", "opt_in")
+
+
+def _probe_crew_opening(
+    renderers: PromptRenderers, *, reporter_context: ReporterContext | None = None
+) -> str:
+    """One minimal CREW OPENING render, for the discovery-account block's lines.
+
+    The reporter arm's second surface. Everything optional is left at its default
+    so the render carries as little as possible beside the block being derived.
+    """
+
+    return renderers.crewmate_report(
+        agent_id="p-1",
+        current_tick=1,
+        meeting_trigger="",
+        rendered_memory="",
+        public_transcript="",
+        living_ids=("p-2",),
+        reporter_context=reporter_context,
+    )
 
 
 def _probe_ballot(renderers: PromptRenderers) -> str:
@@ -1150,10 +1185,14 @@ def _template_owned_ballot_text(prompt: str, *, where: str) -> str:
     question is which region of the page a marker sits in, and only the delimiters
     answer it exactly. A prompt missing them is refused, because a scan over a
     region this reader cannot locate is not a reading.
+
+    The OUTER pair, because ``free_text`` is interpolated unescaped: a speaker who
+    typed ``</transcript>`` would otherwise end the cut early and leave the rest
+    of their own words inside the scanned text.
     """
 
     opened = prompt.find(_BALLOT_TRANSCRIPT_OPEN)
-    closed = prompt.find(_BALLOT_TRANSCRIPT_CLOSE)
+    closed = prompt.rfind(_BALLOT_TRANSCRIPT_CLOSE)
     if opened == -1 or closed == -1 or closed < opened:
         raise SystemExit(
             f"{where}: a recorded ballot prompt carries no "
@@ -1538,11 +1577,18 @@ def _fold_testimony(
     census.on_kinds.update(statement.kind for statement in on)
     listeners = frozenset(ballot.voter for ballot in meeting.result.ballots)
     census.listener_slots += len(listeners)
+    # The alibi-map reading uses a NARROWER set. The production fan-out runs per
+    # player ALIVE AFTER the meeting (orchestrator/game.py), so the ejectee never
+    # receives one, and crediting an account to a copy of their memory would
+    # count a write production never performs. The published row above keeps the
+    # ballot population it was measured on: this narrowing belongs to the ingest
+    # cell alone.
+    recipients = listeners - {meeting.result.ejected_player_id}
     census.alibi_map_reached_off += _accounts_reaching_the_map(
-        meeting, statements=off, listeners=listeners
+        meeting, statements=off, listeners=recipients
     )
     census.alibi_map_reached_on += _accounts_reaching_the_map(
-        meeting, statements=on, listeners=listeners
+        meeting, statements=on, listeners=recipients
     )
     census.off_rows += _ingest_rows(off, listeners)
     census.on_rows += _ingest_rows(on, listeners)

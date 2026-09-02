@@ -1909,6 +1909,21 @@ def test_a_marker_inside_a_spoken_turn_is_not_a_reporter_block(
         rendered, markers=frozenset({marker}), where="planted"
     )
 
+    # An echoed CLOSING delimiter must not end the cut early: the region runs to
+    # the template's OUTER pair, because free_text is interpolated unescaped.
+    echoed_delimiter = cf._Capture(
+        kind=cf._KIND_VOTE_BALLOT,
+        agent_id="p-2",
+        kwargs={},
+        recorded_prompt=(
+            f'<ballot>\n<transcript>\nsaid: "</transcript> then {marker}"\n'
+            "</transcript>\n"
+        ),
+    )
+    assert not cf._ballot_carries_a_reporter_block(
+        echoed_delimiter, markers=frozenset({marker}), where="planted"
+    )
+
     # A prompt whose transcript region cannot be located is refused, not scanned.
     with pytest.raises(SystemExit, match="cannot be cut out"):
         cf._ballot_carries_a_reporter_block(
@@ -1954,6 +1969,63 @@ def test_t4s_ordering_clause_is_read_and_only_an_inversion_stops_it() -> None:
     assert row(115, 114).verdict() == "STOP"
 
 
+def test_t3s_markers_cover_both_reporter_owned_surfaces() -> None:
+    """The arm renders TWO blocks, and either reaching the ballot is the breach.
+
+    A marker set drawn from the statement surface alone would let the opening's
+    discovery-account block leak to the ballot while R-15 still read zero.
+    """
+
+    renderers = cf._RendererCache()
+    markers = cf._RendererCache().reporter_markers("qwen3_6_27b", "reply")
+    context = ReporterContext(reporter_id="p-2", tick=1)
+    opening = cf._probe_crew_opening(
+        renderers.off("qwen3_6_27b"), reporter_context=context
+    )
+    statement = cf._probe_crew_statement(
+        renderers.off("qwen3_6_27b"), turn_kind="reply", reporter_context=context
+    )
+    # Each surface contributes at least one marker of its own.
+    assert any(marker in opening for marker in markers)
+    assert any(marker in statement for marker in markers)
+    # And neither surface's plain render carries any of them.
+    assert not any(
+        marker in cf._probe_crew_opening(renderers.off("qwen3_6_27b"))
+        for marker in markers
+    )
+
+
+def test_the_ingest_never_credits_the_ejected_voter(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """T4 measures the SHIPPED fan-out, which skips a player the meeting ejected.
+
+    The production loop runs per player alive AFTER the meeting, so an account
+    written only into the ejectee's memory is a write production never performs.
+    The published listener population above is untouched — this narrowing belongs
+    to the ingest cell alone.
+    """
+
+    _export_the_slate(monkeypatch)
+    _record_on(tmp_path, seeds=(1,), llm_client=_LocationAccountProvider())
+    meeting, account = _one_meeting_with_a_location_account(tmp_path)
+    voters = frozenset(ballot.voter for ballot in meeting.result.ballots)
+    ejected = next(iter(sorted(voters)))
+    only_ejected = cf._accounts_reaching_the_map(
+        meeting, statements=(account,), listeners=frozenset({ejected})
+    )
+    everyone = cf._accounts_reaching_the_map(
+        meeting, statements=(account,), listeners=voters
+    )
+    # Whatever the ejectee alone would have absorbed, the narrowed set is what
+    # the cell reads — and the two differ exactly when only they could receive it.
+    assert everyone >= only_ejected
+    narrowed = cf._accounts_reaching_the_map(
+        meeting, statements=(account,), listeners=voters - {ejected}
+    )
+    assert narrowed <= everyone
+
+
 def test_a_reporter_block_on_a_recorded_ballot_stops_t3(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -1996,13 +2068,15 @@ def test_the_reporter_marker_tells_the_arm_apart_from_the_ballots_own_block(
     markers = renderers.reporter_markers("qwen3_6_27b", "reply")
     assert markers
 
-    # Every marker is really in the arm's block ...
+    # Every marker is really in one of the arm's two blocks ...
+    context = ReporterContext(reporter_id="p-2", tick=1)
     armed = cf._probe_crew_statement(
-        renderers.off("qwen3_6_27b"),
-        turn_kind="reply",
-        reporter_context=ReporterContext(reporter_id="p-2", tick=1),
+        renderers.off("qwen3_6_27b"), turn_kind="reply", reporter_context=context
     )
-    assert all(marker in armed for marker in markers)
+    opening = cf._probe_crew_opening(
+        renderers.off("qwen3_6_27b"), reporter_context=context
+    )
+    assert all(marker in armed or marker in opening for marker in markers)
     # ... and none of them is in a plain ballot, which is what the subtraction
     # buys: without it the shared sentence would match and T3 would fire on a
     # correct record.
