@@ -6707,6 +6707,34 @@ markers — a block-level re-read could move the published `C-9` 3,614/3,631, so
 with a read-only derivation in hand, and 21.23 reads the three as byte diffs with the weakness recorded in
 its report. `docs/artifacts.md:107` recomputed to 164 files / 8,260,842 bytes.
 
+**Amendment record (2026-09-02, #422's Question 6 — #423, squash `88bc8be7`, an orchestrator-ruled
+instrument amendment merged by the orchestrator, self-merge withheld by the worker because 21.23's R9 still
+carried the owner routing):** the routing premise was FALSIFIED first — a read-only derivation on the
+committed bytes (harness kept beside the pass's scratch as `pr3-harness-reference.py`) read `R-13`, `R-14`
+and `C-9` at block level and found block-level == byte-diff on EVERY prompt of every set (620/620,
+2,715/2,715, 3,614/3,631; zero prompts credited by one method and not the other), so adopting the block-level
+reader moves no published cell and is not the owner's gate. T2's and T6's readers now count a COMPLETE
+block in BOTH modes: markers derived at runtime from the shipped template and subtracted against the plain
+render (R-14 the `<who_reported>` frame PLUS its sentence's fixed runs — tags alone would credit a hollow
+frame; R-13 the one-line block's fixed runs across two reporter bindings, required to STRADDLE the
+interpolated clause so half a sentence is never the block; C-9 the unconditional `<testimony_sources>` frame
+PLUS the row line's template-owned runs, the proof-guarded "price your confidence" line deliberately NOT a
+marker — with it the cell reads 1,704/3,631 and measures the proof suppression, not the block — and each
+source COUNT probed separately at derivation against a partner ledger moving that count alone). An empty or
+half-shaped marker set REFUSES naming the cell, never reads zero. The byte-diff count is kept as an
+informational column beside each verdict. Fourteen planted cases (a whitespace-only branch and an unrelated
+lever-conditioned line are NOT gains; a quoted block in the transcript is not a gain; the proof-suppressed
+ballot IS credited; an empty frame is not; each block's guard misdirected refuses; the lever-ON mode reads
+all three at block level on the fake-provider recording). Codex: 3 rounds (the round-3 fix — both C-9
+count clauses probed independently, R-13's straddle check — read and ruled by the orchestrator, not
+re-reviewed). Baseline 8 re-derives identically per set and pooled with nothing re-pinned; the memo's §12
+reader prints `0 mismatches`; §11 gained one dated row; `docs/artifacts.md:107` recomputed. ROUTED, not
+done: a template-CONTENT gate for the three blocks (what each block must SAY) belongs beside
+`tests/meetings/test_manager_reporter_render.py`, not in a reader whose markers adapt to the template by
+design. Noted for the record: `R-13`'s denominator would count an impostor-filed report opening, and
+`impostor_report.j2` carries no reporter site by Task 21.18's own overlay — structurally unreachable, since
+the impostor policy never files a report and `reporter_impostor_meetings == 0` is pinned.
+
 **Ready-to-paste prompt:** `agent_prompts/task-21-22-preregistration.md`
 
 ### Task 21.23 — The Wave-2 smoke (operator): the lever slate ON, live, ruled against the ratified memos
@@ -6979,10 +7007,13 @@ the committed bytes (R-7). (R7) Gates in a clean worktree; the ES hash-pin local
 smoke finding (R-8). (R8) The three-key slate is settled — the strike hedges are gone (edit 17).
 (R9) PR #422 merged as `96b61318`: its golden-file widening ratified as part of the instrument; T4's
 ordering clause PASSES on equality (a population fact under §8.1's own rule; the owner may rule the
-literal); `--recorded-slate` kept; `R-13`/`R-14`/`C-9` byte-diff readings stand for this smoke with
-the weakness recorded in the report, the block-level re-read routed to the owner as a published-cell
-mover; the reader EXITS 1 on a STOP, so the wrapper's `set -e` is load-bearing. Thirty-six verifier
-edits applied; anchors re-verified at HEAD `3339b9b8`; the ON-recording lines filled at `96b61318`.
+literal); `--recorded-slate` kept; `R-13`/`R-14`/`C-9` are read at BLOCK level in both modes since
+PR #423 (`88bc8be7`) — the "published-cell mover" routing was FALSIFIED by a read-only derivation
+(block-level == byte-diff on every prompt of every committed set), so it merged as an instrument
+amendment and the smoke's T2/T6 rows carry the byte-diff count as an informational column beside the
+verdict; the reader EXITS 1 on a STOP, so the wrapper's `set -e` is load-bearing. Thirty-six verifier
+edits applied; anchors re-verified at HEAD `3339b9b8`; the ON-recording lines filled at `96b61318`;
+R9 amended at `88bc8be7`.
 
 **Ready-to-paste prompt:** `agent_prompts/task-21-23-smoke-wave2.md`
 
