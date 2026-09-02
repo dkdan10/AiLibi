@@ -927,13 +927,17 @@ def accusation_round_prompt(
 
     ``testimony_shapes`` opens the served body's guarded witnessed-kill block on
     the CREW branch -- one shape-menu row and the instruction line beside the
-    vent mandate. An impostor-facing render is byte-identical under both states:
-    an impostor holds no witnessed-kill row it could honestly speak (its own
-    kill is its own first-person memory, and a teammate's is suppressed before
-    render), so offering it there would only be a confession prompt. Bound at
-    construction by :func:`build_prompt_renderers`, alongside the same lever
-    read that serves the version stamp; the default ``False`` renders the
-    committed bytes exactly.
+    vent mandate. Only that ELICITATION half is crew-only: an impostor holds no
+    witnessed-kill row it could honestly speak (its own kill is its own
+    first-person memory, and a teammate's is suppressed before render), so
+    offering it there would only be a confession prompt. The transcript's
+    ``saw_kill`` row is role-blind by design -- the public table is one table,
+    so a spoken kill reaches every later speaker whatever their seat -- and an
+    impostor-facing render is byte-identical under both states only while
+    nobody has spoken one. Bound at construction by
+    :func:`build_prompt_renderers`, alongside the same lever read that serves
+    the version stamp; the default ``False`` renders the committed bytes
+    exactly.
     """
 
     resolved_template = (
@@ -1025,8 +1029,9 @@ def vote_ballot_prompt(
 
     ``testimony_shapes`` opens the served body's guarded witnessed-kill row in
     the transcript's observation walk, so a voter READS the shape the arm
-    offered the speakers, and words the ``<testimony_sources>`` adopted clause
-    against the record rather than against what was said. The ballot offers no
+    offered the speakers. The ``<testimony_sources>`` adopted clause does not
+    fork on it: the ledger words each voice from that speaker's own shapes, so
+    the sentence is true whether or not the arm is up. The ballot offers no
     shape of its own -- a voter files no observation -- so there is no menu row
     here, and it is the same render input the report and statement renderers
     take: bound at construction by :func:`build_prompt_renderers` from the one

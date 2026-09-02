@@ -21,7 +21,8 @@ record and earns no account.
 A spoken :class:`~meetings.schemas.SawKillObservation` is therefore excluded: the
 three channels are GROUNDED ones and the kill shape has none here to be tested
 against. What would have to land before it could join is in
-:func:`_speaker_grounds_subject`.
+:func:`_speaker_grounding_ticks`. Excluded from the COUNT, it is still named on
+the row -- a voice who watched the kill is not a voice who said nothing.
 
 Keep this module import-light: :mod:`meetings.schemas`, :mod:`meetings.constants`
 and :mod:`meetings.transcript` only, never :mod:`meetings.manager` -- the prompt
@@ -43,6 +44,7 @@ from meetings.schemas import (
     MeetingTranscript,
     MoveWitnessRecord,
     PlayerId,
+    SawKillObservation,
     SawMoveObservation,
     SawPlayerObservation,
     SawVentObservation,
@@ -114,13 +116,22 @@ class TestimonySupport:
     * ``subject`` -- the accused.
     * ``originating_turn_id`` -- the turn the charge started in (the first turn
       of this meeting whose accusation names ``subject``).
-    * ``first_hand`` -- the distinct speakers who accused ``subject`` AND spoke
-      an observation of them their OWN typed record confirms, sorted. A speaker
-      counts ONCE however many records they hold or observations they spoke.
-    * ``adopted`` -- every other distinct accusing speaker, sorted: they named
-      ``subject`` and added nothing they saw. Disjoint from ``first_hand`` by
-      construction, so ``len(first_hand) + len(adopted)`` is the honest count of
-      voices carrying the charge.
+    * ``first_hand_ticks`` -- per first-hand speaker, sorted by speaker, the
+      ticks of the observations of ``subject`` their OWN record bore out. A
+      speaker counts ONCE however many records they hold or observations they
+      spoke, and the ticks say WHICH of their statements earned the credit: a
+      speaker whose other sighting of the same subject is the one a
+      contradiction above quotes is not thereby credited for that one.
+    * ``adopted_silent`` -- accusing speakers who described nothing they saw of
+      ``subject`` at all.
+    * ``adopted_spoke_ungrounded`` -- accusing speakers who described seeing
+      ``subject`` in a shape this ledger grounds, whose own record did not bear
+      it out.
+    * ``adopted_spoke_kill`` -- accusing speakers who said they watched
+      ``subject`` kill. The shape has no grounding channel here, so it earns no
+      account; it is a different thing from having said nothing, and the row
+      says which. Precedence over the two above, because it is the strongest
+      claim the speaker made.
     * ``flagged`` -- whether any contradiction detected at this table names
       ``subject``. Read off the flags, exactly as
       :func:`meetings.manager.guard_ballot_citation` reads them, never off a
@@ -139,11 +150,37 @@ class TestimonySupport:
 
     subject: PlayerId
     originating_turn_id: TurnId
-    first_hand: tuple[PlayerId, ...]
-    adopted: tuple[PlayerId, ...]
+    first_hand_ticks: tuple[tuple[PlayerId, tuple[int, ...]], ...]
+    adopted_silent: tuple[PlayerId, ...]
+    adopted_spoke_ungrounded: tuple[PlayerId, ...]
+    adopted_spoke_kill: tuple[PlayerId, ...]
     flagged: bool
     opener_charge_turn_id: TurnId | None
     walkable_transits: tuple[tuple[str, str], ...]
+
+    @property
+    def first_hand(self) -> tuple[PlayerId, ...]:
+        """The distinct speakers whose account of ``subject`` was borne out."""
+
+        return tuple(speaker for speaker, _ in self.first_hand_ticks)
+
+    @property
+    def adopted(self) -> tuple[PlayerId, ...]:
+        """Every other accusing speaker, sorted.
+
+        The three adopted fields partition this set, so the split describes the
+        voices without changing how many there are.
+        """
+
+        return tuple(
+            sorted(
+                (
+                    *self.adopted_silent,
+                    *self.adopted_spoke_ungrounded,
+                    *self.adopted_spoke_kill,
+                )
+            )
+        )
 
     @property
     def voices(self) -> int:
@@ -189,7 +226,7 @@ def _accused_by_turn(
     )
 
 
-def _speaker_grounds_subject(
+def _speaker_grounding_ticks(
     transcript: MeetingTranscript,
     *,
     speaker: PlayerId,
@@ -197,8 +234,14 @@ def _speaker_grounds_subject(
     sighting_records: Mapping[PlayerId, tuple[SightingRecord, ...]],
     move_witness_records: Mapping[PlayerId, tuple[MoveWitnessRecord, ...]],
     vent_grounded: Mapping[PlayerId, frozenset[PlayerId]],
-) -> bool:
-    """Whether ``speaker`` spoke a FIRST-HAND observation of ``subject`` here.
+) -> tuple[int, ...]:
+    """The ticks of ``speaker``'s FIRST-HAND observations of ``subject`` here.
+
+    Empty means they grounded nothing, so this is the ledger's one definition of
+    "first-hand" and the row's coordinates in a single pass: the ballot names
+    the ticks so a voter can tell the credited statement apart from the
+    speaker's OTHER sighting of the same subject, which a contradiction above
+    may be quoting.
 
     The three grounded channels, each through the detector's own predicate: a
     ``saw_player`` matched by the speaker's own
@@ -224,13 +267,15 @@ def _speaker_grounds_subject(
     same suspicion delta
     :func:`meetings.transcript._carries_relevant_observation` refuses on the
     accusation side. Admitting it needs a grounding channel FIRST; until one
-    exists the shape is testimony a voter reads and no ledger row counts, and
-    the ballot's adopted clause is worded against the record to say so. Ruled at
-    #416 Q4.
+    exists the shape is testimony a voter reads and no ledger row counts --
+    which is why :func:`_spoke_of_subject` sorts such a speaker into
+    ``adopted_spoke_kill`` and the ballot names what they said rather than
+    reporting them silent. Ruled at #416 Q4.
     """
 
     sightings = sighting_records.get(speaker, ())
     moves = move_witness_records.get(speaker, ())
+    ticks: set[int] = set()
     for turn in transcript.turns:
         if turn.speaker != speaker:
             continue
@@ -240,19 +285,54 @@ def _speaker_grounds_subject(
                     sighting_observation_matches_record(observation, record)
                     for record in sightings
                 ):
-                    return True
+                    ticks.add(observation.tick)
             elif isinstance(observation, SawMoveObservation):
                 if observation.subject == subject and any(
                     move_observation_matches_record(observation, record)
                     for record in moves
                 ):
-                    return True
+                    ticks.add(observation.tick)
             elif isinstance(observation, SawVentObservation):
                 if observation.subject == subject and speaker in vent_grounded.get(
                     subject, frozenset()
                 ):
-                    return True
-    return False
+                    ticks.add(observation.tick)
+    return tuple(sorted(ticks))
+
+
+def _spoke_of_subject(
+    transcript: MeetingTranscript, *, speaker: PlayerId, subject: PlayerId
+) -> tuple[bool, bool]:
+    """What ``speaker`` said they saw of ``subject``, as ``(kill, anything)``.
+
+    The sibling of :func:`_speaker_grounding_ticks` for the voices it turned
+    away: a speaker the record did not bear out still said something or said
+    nothing, and a watched kill is neither of those -- it is the one shape this
+    ledger has no channel to test, so the row names it as testimony instead of
+    reporting silence. Only the four subject-naming shapes count; a roll-call
+    ``whereabouts``, a task or a body report names no one.
+    """
+
+    kill = False
+    anything = False
+    for turn in transcript.turns:
+        if turn.speaker != speaker:
+            continue
+        for observation in turn.observations:
+            if not isinstance(
+                observation,
+                SawPlayerObservation
+                | SawMoveObservation
+                | SawVentObservation
+                | SawKillObservation,
+            ):
+                continue
+            if observation.subject != subject:
+                continue
+            anything = True
+            if isinstance(observation, SawKillObservation):
+                kill = True
+    return kill, anything
 
 
 def _vent_grounded_speakers(
@@ -392,25 +472,31 @@ def build_testimony_ledger(
 
     rows: list[TestimonySupport] = []
     for subject, (origin_index, origin_turn_id, origin_speaker) in origins.items():
-        first_hand = tuple(
-            sorted(
-                speaker
-                for speaker in accusers[subject]
-                if _speaker_grounds_subject(
-                    transcript,
-                    speaker=speaker,
-                    subject=subject,
-                    sighting_records=sighting_records,
-                    move_witness_records=move_witness_records,
-                    vent_grounded=vent_grounded,
-                )
+        first_hand_ticks: list[tuple[PlayerId, tuple[int, ...]]] = []
+        silent: list[PlayerId] = []
+        ungrounded: list[PlayerId] = []
+        spoke_kill: list[PlayerId] = []
+        for speaker in sorted(accusers[subject]):
+            ticks = _speaker_grounding_ticks(
+                transcript,
+                speaker=speaker,
+                subject=subject,
+                sighting_records=sighting_records,
+                move_witness_records=move_witness_records,
+                vent_grounded=vent_grounded,
             )
-        )
-        adopted = tuple(
-            sorted(
-                speaker for speaker in accusers[subject] if speaker not in first_hand
+            if ticks:
+                first_hand_ticks.append((speaker, ticks))
+                continue
+            kill, anything = _spoke_of_subject(
+                transcript, speaker=speaker, subject=subject
             )
-        )
+            if kill:
+                spoke_kill.append(speaker)
+            elif anything:
+                ungrounded.append(speaker)
+            else:
+                silent.append(speaker)
         opener_charge_turn_id: TurnId | None = None
         if subject == opener:
             charge = opener_charges.get(origin_speaker)
@@ -420,8 +506,10 @@ def build_testimony_ledger(
             TestimonySupport(
                 subject=subject,
                 originating_turn_id=origin_turn_id,
-                first_hand=first_hand,
-                adopted=adopted,
+                first_hand_ticks=tuple(first_hand_ticks),
+                adopted_silent=tuple(silent),
+                adopted_spoke_ungrounded=tuple(ungrounded),
+                adopted_spoke_kill=tuple(spoke_kill),
                 flagged=subject in flagged_subjects,
                 opener_charge_turn_id=opener_charge_turn_id,
                 walkable_transits=_walkable_transits(paths.get(subject, ())),

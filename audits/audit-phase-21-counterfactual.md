@@ -877,3 +877,122 @@ Four refusals fire before any number is printed, and each ships with a case prov
 
 The process environment is byte-identical before and after a whole run, and a test asserts it.
 
+---
+
+## Errata
+
+Nothing above is rewritten. A recorded table stays as it was published; where a later
+change moves a figure the memo carries the re-derived table HERE, dated, and
+`tests/scripts/test_counterfactual_phase21.py` reads the errata block as the authoritative
+pin for any row it republishes — a row this section does not carry is still pinned by §10
+and §3.3 / §4.4 / §5.6.
+
+### E.1 erratum 2026-09-02, after PR #420: prose-only lever amendment moved the ON byte/line deltas; every count is unchanged
+
+PR #420 amended the wording of the three levers' guarded blocks after a hardening pass read
+them as prose (a flag clause worded against "the evidence" inside a block that calls
+testimony evidence; a header that promised more than the counts mean; a witnessed-kill
+mandate that taught a rank every downstream weight inverts; an at-body line that read as a
+placement; an imported calibration ladder that priced a Proof-class vent below the Proof
+paragraph beside it; an adopted clause false in both directions). Every byte it moved sits
+inside a lever guard, so the OFF leg is untouched, `verify_samples.sh` still reports 100/100
+and the prompt-byte golden still passes unedited over every committed meeting.
+
+What moved: `added_lines` and `added_bytes` on four legs. What did not: `rendered` and
+`changed` on every leg and every prompt class, the four corroboration cells
+(475/1,525; 11/425; 33/429; 48/429), the injustice ledger, the ballot census, the
+eight-kind reduction census and every render-budget cell of §6.1.
+
+The full six-column census as it now re-derives, one block per leg:
+
+| leg | prompt class | rendered | changed | lines added | bytes added |
+|---|---|---|---|---|---|
+| `OFF` | `crewmate_report` | 672 | 0 | 0 | 0 |
+| `OFF` | `accusation_round` | 2,959 | 0 | 0 | 0 |
+| `OFF` | `vote_ballot` | 3,631 | 0 | 0 | 0 |
+
+| leg | prompt class | rendered | changed | lines added | bytes added |
+|---|---|---|---|---|---|
+| `reporter_reasoning` | `crewmate_report` | 672 | 620 | 620 | 171,222 |
+| `reporter_reasoning` | `accusation_round` | 2,959 | 2,715 | 11,005 | 1,026,970 |
+| `reporter_reasoning` | `vote_ballot` | 3,631 | 0 | 0 | 0 |
+
+The reporter leg is unchanged to the digit: the at-body line's reword is the same length as
+the sentence it replaces.
+
+| leg | prompt class | rendered | changed | lines added | bytes added |
+|---|---|---|---|---|---|
+| `corroboration_discipline` | `vote_ballot` | 3,631 | 3,614 | 26,522 | 4,982,723 |
+| `corroboration_discipline` | `crewmate_report` | 672 | 0 | 0 | 0 |
+| `corroboration_discipline` | `accusation_round` | 2,959 | 0 | 0 | 0 |
+
+The ballot loses 1,910 lines and gains 1,012,108 bytes. The lines are the calibration
+ladder, which now yields on the 1,910 ballots that also render the Proof paragraph — two
+pricing instructions on one page disagreed about a vent someone else watched, and the
+paragraph that owns the strongest evidence class is the one the voter keeps. The bytes are
+the header's two added sentences, the per-statement ticks beside each credited account, and
+the three-way split of the adopted clause.
+
+| leg | prompt class | rendered | changed | lines added | bytes added |
+|---|---|---|---|---|---|
+| `testimony_shapes` | `crewmate_report` | 672 | 672 | 1,344 | 433,440 |
+| `testimony_shapes` | `accusation_round` | 2,959 | 2,023 | 4,046 | 1,280,559 |
+| `testimony_shapes` | `vote_ballot` | 3,631 | 0 | 0 | 0 |
+
+47 bytes per elicitation block, on 672 openings and 2,023 crew speech turns: the kill
+mandate no longer claims to outrank a vent and states the must-carry duty the unguarded
+3-5-row budget line cannot name. Line counts are unmoved, so §5.6's "exactly 1 opening and
+3.01 mean crew speech turns gain a block" reads as published.
+
+| leg | prompt class | rendered | changed | lines added | bytes added |
+|---|---|---|---|---|---|
+| `all-three-ON` | `crewmate_report` | 672 | 672 | 1,964 | 604,662 |
+| `all-three-ON` | `accusation_round` | 2,959 | 2,879 | 15,051 | 2,307,529 |
+| `all-three-ON` | `vote_ballot` | 3,631 | 3,614 | 26,522 | 4,982,723 |
+
+| leg | prompt class | rendered | changed | lines added | bytes added |
+|---|---|---|---|---|---|
+| `two-ON (less testimony_shapes)` | `crewmate_report` | 672 | 620 | 620 | 171,222 |
+| `two-ON (less testimony_shapes)` | `accusation_round` | 2,959 | 2,715 | 11,005 | 1,026,970 |
+| `two-ON (less testimony_shapes)` | `vote_ballot` | 3,631 | 3,614 | 26,522 | 4,982,723 |
+
+**§6.2's one cross-lever interaction is now zero.** The +61,750 ballot bytes that neither
+lever produced alone were the adopted clause re-wording under the joint slate; the clause no
+longer forks on `testimony_shapes` at all, because the arm cannot tell a silent voice from
+one whose sighting the record refused from one who said they watched the kill, and the
+ledger can. The ballot's added bytes are now identical on the `corroboration_discipline`,
+`two-ON` and `all-three-ON` legs, so added prose is additive in BOTH lines and bytes on
+every seam. §9's candidate tripwire built on that interaction has lost its premise; it was
+never adopted as one (`audits/audit-phase-21-preregistration.md` ratifies T1-T7, none of
+them this), and the successor reading is the flat additivity just stated.
+
+Recomputed, the §6.2 cost table reads 620 + 11,005 = 11,625 / 7,262 = 1.60 for the reporter
+leg, 26,522 / 7,262 = 3.65 for corroboration, 1,344 + 4,046 = 5,390 / 7,262 = 0.74 for
+testimony shapes, 43,537 / 7,262 = 5.99 for all three, and 38,147 / 7,262 = 5.25 for the
+leave-one-out leg; the ballot-bytes column is +4,982,723 on all three ballot-carrying legs.
+§6.1's render budget — 255,918 rendered memory rows over 7,271 snapshots, 99,710 testimony
+rows, the three living buckets — is untouched, because none of it reads a lever.
+
+Two published cells move with those totals, and only those two. `B-3` counts the prose lines
+the slate adds per rendered prompt and `B-4` the same figure with `testimony_shapes` withheld;
+both fall by the 1,910 ladder lines. Every other cell of §10 stands as published.
+
+| cell | what it counts | RECORDED-OFF | RECONSTRUCTED-OFF | ON |
+|---|---|---|---|---|
+| B-3 | prose lines the slate ADDS, per rendered prompt | — | 0/7262 | 43537/7262 |
+| B-4 | prose lines added, leave-one-out | — | 0/7262 | 38147/7262 |
+
+| set | cell | RECORDED-OFF | RECONSTRUCTED-OFF | ON |
+|---|---|---|---|---|
+| samples/9p2i | B-3 | — | 0/1738 | 10741/1738 |
+| samples/9p2i | B-4 | — | 0/1738 | 9439/1738 |
+| ml_corpus/9p2i | B-3 | — | 0/5032 | 30239/5032 |
+| ml_corpus/9p2i | B-4 | — | 0/5032 | 26479/5032 |
+| samples/4p1i | B-3 | — | 0/234 | 1242/234 |
+| samples/4p1i | B-4 | — | 0/234 | 1086/234 |
+| ml_corpus/4p1i | B-3 | — | 0/258 | 1315/258 |
+| ml_corpus/4p1i | B-4 | — | 0/258 | 1143/258 |
+
+One quotation elsewhere in the memo is stale rather than wrong: §6.2 quotes the joint-slate
+adopted clause verbatim ("named them without an account their own record bears out"), which
+the ballot no longer renders. The sentence it names is now three, chosen per speaker.

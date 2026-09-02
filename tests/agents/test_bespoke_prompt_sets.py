@@ -1058,8 +1058,9 @@ _KILL_MENU_ROW: str = (
     "from your memory line; name the killer, not the victim."
 )
 _KILL_MANDATE_PREFIX: str = (
-    "If instead you watched a KILL happen, that outranks even a vent: file it "
-    'as a structured "saw_kill" observation copied from your memory line'
+    "If instead you watched a KILL happen, say that too — it is testimony, not "
+    'proof, and it always makes the cut: file it as a structured "saw_kill" '
+    "observation copied from your memory line"
 )
 
 _SHAPES_ON: dict[str, str] = {"AILIBI_TESTIMONY_SHAPES": "1"}
@@ -1157,6 +1158,35 @@ class TestTestimonyShapesIsExactlyTwoLines:
         assert len(inserted) == 2
         assert inserted[0].startswith(_KILL_MANDATE_PREFIX)
         assert inserted[1] == _KILL_MENU_ROW
+
+    def test_the_mandate_does_not_outrank_the_paragraph_it_lands_in(self) -> None:
+        # It sits directly under the vent's primacy sentence and every weight
+        # downstream inverts the rank it used to teach: a spoken ``saw_kill``
+        # mints no flag, no band and no suspicion delta, earns no first-hand
+        # credit in the ledger, and renders on the ballot as an unconfirmed
+        # account. So the line asks for the row without ranking it.
+        for render in (self._crewmate(_SHAPES_ON), self._statement(_SHAPES_ON)):
+            assert "outranks" not in _KILL_MANDATE_PREFIX
+            assert _KILL_MANDATE_PREFIX in render
+            assert "it is testimony, not proof" in render
+        off = self._crewmate({})
+        assert "A witnessed vent is the single strongest fact this game produces" in off
+        assert "A witnessed vent outranks everything else you hold" in self._statement(
+            {}
+        )
+
+    def test_the_mandate_carries_the_budget_duty_the_curation_line_omits(self) -> None:
+        # The 3-5-row budget the kill competes for is an UNGUARDED line that
+        # names the vent, the body report, the roll-call answer and the
+        # suspect-naming sightings, and cannot name a shape that does not exist
+        # while the arm is down. The guarded sentence is therefore where the
+        # must-carry duty has to be stated — and the budget line must still be
+        # the OFF bytes it was, or the guard would be leaking.
+        budget = "pick the 3-5 MOST PROBATIVE observations"
+        assert budget in self._crewmate({})
+        assert budget in self._crewmate(_SHAPES_ON)
+        assert "saw_kill" not in budget
+        assert "it always makes the cut" in _KILL_MANDATE_PREFIX
 
     @pytest.mark.parametrize("turn_kind", ["reply", "opt_in"])
     def test_the_impostor_is_never_OFFERED_the_shape(self, turn_kind: str) -> None:

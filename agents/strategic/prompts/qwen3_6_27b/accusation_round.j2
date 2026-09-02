@@ -83,10 +83,11 @@
    BEFORE it picks a target rather than only at ballot time. It sits after the
    turn header and before the memory block; it carries no markdown header of its
    own, so the first-header slot classifier still reads "## Your turn: ...".
-   A second guarded line, on at_body, tells a speaker whose own record places
-   them at the body that it does — self-addressed, factual, and naming no other
-   player: a third of the players holding that row are impostors, so exculpatory
-   framing there would defend one.
+   A second guarded line, on at_body, tells a speaker whose own record has them
+   seeing the body that it does — a sighting, not a placement, because an
+   impostor perceives the adjacent room and can log a corpse it was never beside.
+   Self-addressed, factual, and naming no other player: a third of the players
+   holding that row are impostors, so exculpatory framing there would defend one.
 
    Inputs (loader kwargs only — observation firewall, DESIGN.md §1.3):
      agent_id, rendered_memory, transcript, contradictions, prior_turn,
@@ -135,7 +136,7 @@ This terminal turn does not extend the chain — it is your chance to put eviden
 <who_reported>
 `{{ reporter_context.reporter_id }}` reported the body that opened this meeting. In this game self-report is weakly exculpatory: the impostor almost never reports its own kill, so being first to the scene is not by itself evidence of guilt. Do not accuse `{{ reporter_context.reporter_id }}` merely for having reported it — weigh them on the same testimony, contradictions, and memory as everyone else.
 {% if at_body is defined and at_body %}
-Your own record places you at the body when it was reported.
+Your own record shows you saw the body when it was reported.
 {% endif %}
 </who_reported>
 {% endif %}
@@ -253,13 +254,13 @@ Write your reply as 1-2 short sentences plus your structured items, then stop. D
 3. Redirect: if anything you saw points at a living player, name them in one "accusation" claim so the chain follows the real suspect. Stay purely defensive only if you genuinely have no one to point at.
 A witnessed vent outranks everything else you hold — speak it FIRST, even if it happened many ticks ago and even if you already said it at an earlier meeting: a held vent wins the game only once it is on the record. One exception, and only one: if the player you saw vent is already dead or ejected, that case is closed — say nothing about it and spend your turn on someone still in the game. If your memory contains one — a line like "You witnessed p-3 vent in MEDBAY." — ALWAYS put it on the record as a structured "saw_vent" observation, copying the player, room, and tick from that line exactly: only the impostor can vent, so one witnessed vent identifies the impostor outright. Speak a "saw_vent" only for a vent your memory says you witnessed — never one you merely heard about or suspect.
 {% if testimony_shapes is defined and testimony_shapes and not is_impostor %}
-If instead you watched a KILL happen, that outranks even a vent: file it as a structured "saw_kill" observation copied from your memory line — a line like "You witnessed p-8 kill in ADMIN." becomes {"type": "saw_kill", "tick": 11, "subject": "p-8", "room": "ADMIN"}. Name the killer, not the person killed, and never file a kill you watched as a "saw_vent" — say what you actually saw.
+If instead you watched a KILL happen, say that too — it is testimony, not proof, and it always makes the cut: file it as a structured "saw_kill" observation copied from your memory line — a line like "You witnessed p-8 kill in ADMIN." becomes {"type": "saw_kill", "tick": 11, "subject": "p-8", "room": "ADMIN"}. Name the killer, not the person killed, and never file a kill you watched as a "saw_vent" — say what you actually saw.
 {% endif %}
 {% endif %}
 {% else %}
 Write 1-2 short sentences plus your structured items, then stop. If your memory backs an accusation already on the table (especially against a suspected killer), SECOND it with a "corroboration" claim or state the observation that implicates them. A witnessed vent outranks everything else you hold — speak it FIRST, even if it happened many ticks ago and even if you already said it at an earlier meeting: a held vent wins the game only once it is on the record. One exception, and only one: if the player you saw vent is already dead or ejected, that case is closed — say nothing about it and spend your turn on someone still in the game. If your memory contains one — a line like "You witnessed p-3 vent in MEDBAY." — ALWAYS put it on the record as a structured "saw_vent" observation, copying the player, room, and tick from that line exactly: only the impostor can vent, so one witnessed vent identifies the impostor outright. Speak a "saw_vent" only for a vent your memory says you witnessed — never one you merely heard about or suspect. Answer the roll-call: one structured "whereabouts" observation naming the room you were in at the tick that matters — one room, one tick, copied from your own record; a placement of ANOTHER player at that tick goes in one "saw_player" row. Share only the few rows that matter — not your whole movement log. Pass only if you recorded nothing relevant.
 {% if testimony_shapes is defined and testimony_shapes and not is_impostor %}
-If instead you watched a KILL happen, that outranks even a vent: file it as a structured "saw_kill" observation copied from your memory line — a line like "You witnessed p-8 kill in ADMIN." becomes {"type": "saw_kill", "tick": 11, "subject": "p-8", "room": "ADMIN"}. Name the killer, not the person killed, and never file a kill you watched as a "saw_vent" — say what you actually saw.
+If instead you watched a KILL happen, say that too — it is testimony, not proof, and it always makes the cut: file it as a structured "saw_kill" observation copied from your memory line — a line like "You witnessed p-8 kill in ADMIN." becomes {"type": "saw_kill", "tick": 11, "subject": "p-8", "room": "ADMIN"}. Name the killer, not the person killed, and never file a kill you watched as a "saw_vent" — say what you actually saw.
 {% endif %}
 {% endif %}
 {% if persona %}
