@@ -6616,6 +6616,44 @@ mode is terminal and lands after ~22 hours of spend. (R5) The §5.1-vs-helper Wi
 divergence is recorded by name, the helper governing. (R6, FYI forward) 21.24's own prose is
 baseline-7 vintage (42/30/618, a stale beliefs.py anchor) — its re-anchor carries the fix list.
 
+**Merge-reality record (2026-09-02, MERGED BY THE ORCHESTRATOR ON THE OWNER'S EXPLICIT DELEGATION — #419,
+squash `5ae452d8`):** the owner ruled in the design thread on 2026-09-02 — "Judge how the questions in 419
+should be handled. Take your recommended actions with the PR. And then merge it when ready." — so the
+ratification is the owner's by delegation, recorded here, in the memo's §10 sign-off and on the PR. The
+rulings, each with its grounds on the PR's `## Rulings` block: **Q1** the residue bars STAND as drafted
+(bar 3 ≤ 12, bar 4 < 40% — both unchanged from #396; the constant-burden reading holds the ASK constant
+across a moved baseline, which is the re-pricing §10 rejects for bars 1 and 2, and its share pairing was
+not boundary-consistent); the `n ≥ 30` clause carried VERBATIM. **Q2** the four anchors in THIS contract
+that disagree with HEAD are stale prose, recorded here rather than adopted: the committed sets stamp v5
+(not v4) and `tests/fixtures/prompt_archive/` no longer exists; there are TWO crew-side `report` emitters
+(`crewmate_policy.py` and the opt-in `learned/crew_forward.py`), both unreachable from an impostor, so
+§4.3's premise holds through two; the pooled Wilson spelling is the helper's `[0.4220, 0.6180]`; and only
+the SPEECH half of the reporter thread is lever-gated — the ballot's `## Who reported the body` is the
+unconditional 15.5 exculpation, the structural reason T3 predicts zero ballot bytes. **Q3** the T5/T7
+reader is an orchestrator-ruled instrument amendment under the memo's own §5.1 routing rule, dispatched
+at this merge and owing THREE cells — `T-9` split by the speaker's recorded role and restricted to the
+ELICITATION block, a meeting-1-scoped `B-1`, and the `saw_kill` split of bar 1's non-direct cell — and it
+must merge before 21.23; until it does T5 and T7 read UNREAD and the record does not start (its PR also
+re-words the §8.1 T5 cell's "UNREAD until 21.23" to name the contract, as a dated §11 row). **Q4** merged
+by delegation. Two pre-merge drafting changes by the orchestrator's hardening pass (`a59d6fbc`,
+`83580b58`): T5's predicate now reads the elicitation block only — `T-9` is a role-blind byte diff and the
+public-transcript `saw_kill` row is role-blind by ratified, test-pinned design, so a naive role split
+would have STOPPED a correct record on a crew `saw_kill` — and the audits inventory byte count
+recomputed. Three Questions the pass raised, ruled and applied at `aa2b3c64`: a **decisiveness**
+secondary cell (I-3's `report_ejections` 377/620 and the SKIP share 243/620, printed beside bar 2 — 243
+of 620 body reports already SKIP; observed, never gated, no floor); the **`saw_kill` split of bar 1's
+cell** as a secondary owed by the reader contract (`ROLE_PROOF_KINDS = {"vent_sighting"}`, so an
+eyewitness-kill conviction enters the non-direct cell; baseline 8 reads 0 of 96); the §7 "INVERTED"
+adjective on the false-whereabouts arm withdrawn (0/106's Wilson interval covers the crew rate; pooled
+4/409 against 27/2748, written in the reader's re-run shape so the interval count moved 16 → 17 with its
+perturbation) and the "+61,750-byte ballot" token-cost bullet re-priced to the counterfactual's post-#420
+errata. Two independent reviewers verified that no bar, cell, tripwire predicate or decision-rule
+sentence moved between `83580b58` and the merged head and re-derived every new figure from the raw
+replays; the memo's own §12 reader printed `0 mismatches` at every head; Codex on the memo: three rounds,
+fifteen findings, all fixed. Routed onward: the reader contract (dispatched), the rerecord audit's
+§5.1.2(d) erratum (the hardening audit's commit), and the arm-stamp body-generation question to 21.24's
+re-anchor.
+
 **Ready-to-paste prompt:** `agent_prompts/task-21-22-preregistration.md`
 
 ### Task 21.23 — The Wave-2 smoke (operator): the lever slate ON, live, ruled against the ratified memos
