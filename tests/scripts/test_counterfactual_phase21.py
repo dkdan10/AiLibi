@@ -25,10 +25,11 @@ Six things are pinned, each with a case proving it bites:
    including a moved tally and a deleted zero-count row.
 6. **The tripwire readers.** The elicitation marker is read off the shipped
    template and appears nowhere in the reader's own source; a spoken kill moves
-   an impostor prompt's BYTES while offering it no block; the first-meeting
-   budget catches a difference the whole-run total nets away; and the spoken-kill
-   split of bar 1's cell counts a planted conviction that the committed bytes,
-   which hold no spoken kill, could never exercise.
+   an impostor prompt's BYTES while offering it no block; a template whose
+   crew-only guard is stripped takes T-9b off zero through the real walk; the
+   first-meeting budget catches a difference the whole-run total nets away; and
+   the spoken-kill split of bar 1's cell counts a planted conviction that the
+   committed bytes, which hold no spoken kill, could never exercise.
 """
 
 from __future__ import annotations
@@ -854,6 +855,39 @@ def test_the_marker_derivation_refuses_when_the_arm_offers_nothing(
     with pytest.raises(SystemExit) as excinfo:
         cf._RendererCache().elicitation_markers(_PROMPT_SET, "reply")
     assert "elicitation block" in str(excinfo.value)
+
+
+def test_the_impostor_half_bites_on_a_breached_firewall(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The planted case for T5's NEVER-WORSE half, driven through the real walk
+    # rather than through one render: strip ``and not is_impostor`` from the
+    # crew-only guards -- the exact breach the tripwire exists to catch -- and
+    # T-9b must leave zero. The OFF body is byte-identical either way, because
+    # the guard's first conjunct is false with the arm down, so the walk still
+    # reproduces the record and only the ON column moves.
+    scratch = tmp_path / "prompts"
+    shutil.copytree(_PROMPTS_ROOT, scratch)
+    target = scratch / _PROMPT_SET / "accusation_round.j2"
+    body = target.read_text(encoding="utf-8")
+    breached = body.replace(
+        _CREW_GUARD, "{% if testimony_shapes is defined and testimony_shapes %}"
+    )
+    assert breached != body
+    target.write_text(breached, encoding="utf-8")
+    monkeypatch.setattr(
+        cf,
+        "build_prompt_renderers",
+        functools.partial(build_prompt_renderers, root=scratch),
+    )
+    rows = {
+        row["cell"]: row
+        for row in _set_block(cf.run([_FAST_SET]), _FAST_SET)["tripwire_rows"]
+    }
+    # Six of the 39 impostor speech prompts on this set are opt-in turns, which
+    # is where the role-blind guard now reaches; the crew half is unmoved.
+    assert rows["T-9b"]["on"][0] > 0
+    assert rows["T-9a"]["on"] == [39, 39]
 
 
 def test_a_block_that_renders_in_pieces_refuses(
