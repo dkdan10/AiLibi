@@ -589,21 +589,24 @@ class _RendererCache:
         template-owned runs. Derived from the shipped template for the reason
         :meth:`elicitation_markers` gives — a copied sentence stops matching in
         silence and reads every opening as having lost the block.
+
+        The line has text on BOTH sides of what it interpolates — it says who
+        reported, optionally which body, and then what to do about it — and both
+        sides are required. Half of it is still a sixteen-character run, so a
+        reader that took any surviving run would credit an opening that names
+        the report and no longer asks for the account.
         """
 
         if set_name not in self._opening_block:
             off = self.off(set_name)
             plain = _probe_crew_opening(off)
-            held, runs = _block_markers(
-                _added_lines(
-                    plain,
-                    _probe_crew_opening(off, reporter_context=_REPORTER_BINDING_A),
-                ),
-                _added_lines(
-                    plain,
-                    _probe_crew_opening(off, reporter_context=_REPORTER_BINDING_B),
-                ),
+            first = _added_lines(
+                plain, _probe_crew_opening(off, reporter_context=_REPORTER_BINDING_A)
             )
+            second = _added_lines(
+                plain, _probe_crew_opening(off, reporter_context=_REPORTER_BINDING_B)
+            )
+            held, runs = _block_markers(first, second)
             # The block is a sentence and nothing else, so its RUNS are what
             # says the sentence arrived. A wrapper it might one day grow would
             # be welcome as extra evidence and is never enough on its own.
@@ -617,6 +620,18 @@ class _RendererCache:
                     "returned 0 here would report every opening as missing the "
                     "block and STOP a correct record. This is a DEFECT IN THIS "
                     "SCRIPT's reader, not a finding about the bytes"
+                )
+            if not _straddles_its_interpolation(first, second):
+                raise SystemExit(
+                    f"{set_name}: the discovery-account block's own text now "
+                    "sits on ONE side of the clause it interpolates, so half of "
+                    "it has gone: the line either names the report without "
+                    "asking for the account, or asks without naming it. R-13 "
+                    "would credit every opening for a block that no longer asks "
+                    "the reporter where they were, when they came upon the body "
+                    "and what they saw on the way, and T2 would pass on it. "
+                    "This is a DEFECT IN THIS SCRIPT's reader against a changed "
+                    "template, not a finding about the bytes"
                 )
             self._opening_block[set_name] = held | runs
         return self._opening_block[set_name]
@@ -692,11 +707,16 @@ class _RendererCache:
         row states them as ``N voice(s), M account(s)``, and the noun follows
         the number, so no run of template text sits on every row — requiring the
         plural form would drop every single-source row and move a published
-        cell. They are checked at derivation instead, and the check is exact: the
-        counts are the first thing the row varies by, so two rows with DIFFERENT
-        counts must diverge before any text this reader identifies them by. Take
-        the clause away and they first diverge at the originating turn instead,
-        which puts a marker inside their shared prefix and refuses here.
+        cell. They are checked at derivation instead, and the check is exact: a
+        count is the first thing the row varies by, so two rows differing in
+        THAT count alone must diverge before any text this reader identifies
+        them by. Take the clause away and they first diverge at the originating
+        turn instead, which puts a marker inside their shared prefix.
+
+        Both counts are probed SEPARATELY, against partners sharing this row's
+        subject and originating turn. Either clause can be deleted while the
+        other still moves the divergence early, so one probe would accept a
+        block that had stopped reporting half of what it promises.
         """
 
         if set_name not in self._ballot_block:
@@ -752,18 +772,26 @@ class _RendererCache:
                     "correct record. This is a DEFECT IN THIS SCRIPT's reader, "
                     "not a finding about the bytes"
                 )
-            shared = _common_prefix(bodies[0][0], bodies[1][0])
-            if any(run in shared for run in row_runs):
-                raise SystemExit(
-                    f"{set_name}: two ledger rows with DIFFERENT source counts "
-                    "render the same text up to and past the block's own "
-                    "markers, so the row no longer states how many voices and "
-                    "how many first-hand accounts stand behind the name. C-9 "
-                    "would then credit every ballot for a source-count block "
-                    "that counts no sources, and T6 would pass on it. This is a "
-                    "DEFECT IN THIS SCRIPT's reader against a changed template, "
-                    "not a finding about the bytes"
+            for count, partner in (
+                ("first-hand accounts", _LEDGER_SAME_VOICES_TWO_ACCOUNTS),
+                ("voices", _LEDGER_THREE_VOICES_ONE_ACCOUNT),
+            ):
+                against = _nonblank(
+                    _added_lines(plain, _probe_ballot(off, testimony_ledger=partner))
                 )
+                rows = [line for line in against if line not in ledger_invariant]
+                shared = _common_prefix(bodies[0][0], rows[0]) if rows else bodies[0][0]
+                if any(run in shared for run in row_runs):
+                    raise SystemExit(
+                        f"{set_name}: two ledger rows differing ONLY in their "
+                        f"{count} render the same text up to and past the "
+                        "block's own markers, so the row no longer states how "
+                        f"many {count} stand behind the name. C-9 would credit "
+                        "every ballot for a source-count block that reports one "
+                        "of its two counts or neither, and T6 would pass on it. "
+                        "This is a DEFECT IN THIS SCRIPT's reader against a "
+                        "changed template, not a finding about the bytes"
+                    )
             self._ballot_block[set_name] = frame | row_runs
         return self._ballot_block[set_name]
 
@@ -1042,6 +1070,41 @@ _LEDGER_NO_ACCOUNT: Final[MeetingTestimonyLedger] = MeetingTestimonyLedger(
     opener="p-9",
 )
 
+#: Two ledgers that move ONE source count each, against
+#: :data:`_LEDGER_ONE_ACCOUNT`'s two voices and one account. The row states both
+#: counts, and either can be deleted while the other still makes two rows
+#: diverge early — so each is probed on its own, against a partner that shares
+#: this row's subject and originating turn so the shared prefix really does run
+#: on when the clause goes.
+_LEDGER_SAME_VOICES_TWO_ACCOUNTS: Final[MeetingTestimonyLedger] = (
+    MeetingTestimonyLedger(
+        rows=(
+            _support(
+                subject="p-2",
+                turn="t-1",
+                places=(
+                    ("p-3", (("saw_move", "ADMIN", 4),)),
+                    ("p-4", (("saw_player", "MEDBAY", 6),)),
+                ),
+            ),
+        ),
+        opener="p-9",
+    )
+)
+_LEDGER_THREE_VOICES_ONE_ACCOUNT: Final[MeetingTestimonyLedger] = (
+    MeetingTestimonyLedger(
+        rows=(
+            _support(
+                subject="p-2",
+                turn="t-1",
+                places=(("p-3", (("saw_move", "ADMIN", 4),)),),
+                silent=("p-4", "p-5"),
+            ),
+        ),
+        opener="p-9",
+    )
+)
+
 #: One role-proof contradiction, for the probe that separates the block's
 #: unconditional frame from the closing sentence the proof branch suppresses.
 _ROLE_PROOF_FLAGS: Final[tuple[ContradictionRef, ...]] = (
@@ -1079,6 +1142,29 @@ def _common_prefix(left: str, right: str) -> str:
         if one != other:
             return left[:index]
     return left[: min(len(left), len(right))]
+
+
+def _straddles_its_interpolation(first: Sequence[str], second: Sequence[str]) -> bool:
+    """Whether a block's own text sits on BOTH sides of what it interpolates.
+
+    Half a sentence is still a sixteen-character run, so a block that kept only
+    its opening clause — or only its closing one — would still be identified by
+    a non-empty marker set and credited on every prompt. The two sides are told
+    apart without naming either: what two bindings share BEFORE they first
+    diverge is the text ahead of the interpolation, and a run that is not part
+    of that prefix is text behind it.
+    """
+
+    for one, other in zip(_nonblank(first), _nonblank(second)):
+        if one == other:
+            continue
+        shared = _common_prefix(one, other)
+        runs = _shared_runs(one, other)
+        if any(run in shared for run in runs) and any(
+            run not in shared for run in runs
+        ):
+            return True
+    return False
 
 
 def _shared_runs(left: str, right: str) -> tuple[str, ...]:
