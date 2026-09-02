@@ -64,7 +64,7 @@ from meetings.schemas import (
     SawVentObservation,
     SightingRecord,
 )
-from meetings.transcript import room_hops
+from meetings.transcript import reconstruct_stated_paths, room_hops
 from llm.fake_provider import FakeProvider
 from orchestrator.game import (
     CORROBORATION_DISCIPLINE_PROMPT_VERSION_SETS,
@@ -533,6 +533,63 @@ class TestFirstHandSources:
                 "p-5",
             ).first_hand
             == ()
+        )
+
+    @pytest.mark.parametrize("spoken", ["saw_player", "saw_move"])
+    def test_a_channel_that_disagrees_with_itself_grounds_neither_shape(
+        self, spoken: str
+    ) -> None:
+        # Codex round 2. Engine truth forbids two transitions of one subject
+        # landing on one tick, so the movement chokepoint refuses a channel that
+        # says otherwise BEFORE either of its arms matches. The ledger's movement
+        # channel adjudicates the same way, for both spoken shapes: without it
+        # the row could claim the speaker's record bears the placement out while
+        # the transit clause's own reconstruction, reading the same rows, refused
+        # every one of them.
+        observation = (
+            _saw(subject="p-5", room="MEDBAY", tick=9)
+            if spoken == "saw_player"
+            else _saw_move(
+                subject="p-5", from_room="WEST_HALL", to_room="MEDBAY", tick=9
+            )
+        )
+        transcript = _transcript(
+            _turn(
+                index=0,
+                speaker="p-2",
+                observations=(observation,),
+                claims=(_accuses("p-5"),),
+            ),
+        )
+        agreeing = (
+            _move_record(
+                subject="p-5", from_room="WEST_HALL", to_room="MEDBAY", tick=9
+            ),
+        )
+        conflicting = (
+            *agreeing,
+            _move_record(subject="p-5", from_room="WEST_HALL", to_room="LABS", tick=9),
+        )
+        assert _row(
+            _ledger(transcript, move_witness_records={"p-2": agreeing}), "p-5"
+        ).first_hand == ("p-2",)
+        assert (
+            _row(
+                _ledger(transcript, move_witness_records={"p-2": conflicting}), "p-5"
+            ).first_hand
+            == ()
+        )
+        # The two readings agree on the same rows: the chokepoint takes no
+        # placement from the conflicted channel either, so nothing this ledger
+        # refuses to credit is quietly placed by its own transit input.
+        placed = reconstruct_stated_paths(
+            transcript,
+            roster=_ROSTER,
+            trigger_kind="report",
+            movement_witness_records={"p-2": conflicting},
+        )
+        assert [sorted(placement.rooms) for placement in placed.get("p-5", ())] == (
+            [["MEDBAY"]] if spoken == "saw_player" else []
         )
 
     def test_a_spoken_vent_grounds_only_through_the_flag_channel(self) -> None:

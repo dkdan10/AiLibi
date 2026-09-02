@@ -349,17 +349,56 @@ def _placement_grounded(
     (:func:`_move_record_places_sighting`). The origin half stays unplaced in
     both directions, exactly as :func:`~meetings.transcript.sighting_placement`
     defines it.
+
+    The movement channel is ADJUDICATED before it is matched, the discipline
+    :func:`meetings.transcript._apply_movement_claim_shape` applies to both of
+    its own arms: engine truth forbids two transitions of one subject landing on
+    one tick, so a channel saying otherwise is wrong about something and no arm
+    may take a placement from it (:func:`_movement_channel_conflicts`). Without
+    that, this function could credit an account off the record that happens to
+    fit the spoken room while the transit clause's own reconstruction, reading
+    the same rows through the chokepoint, refused them all.
     """
 
     if any(
         sighting_observation_matches_record(placement, record) for record in sightings
     ):
         return True
+    if _movement_channel_conflicts(
+        moves, subject=placement.subject, tick=placement.tick
+    ):
+        return False
     if isinstance(observation, SawMoveObservation):
         return any(
             move_observation_matches_record(observation, record) for record in moves
         )
     return any(_move_record_places_sighting(observation, record) for record in moves)
+
+
+def _movement_channel_conflicts(
+    records: tuple[MoveWitnessRecord, ...], *, subject: PlayerId, tick: int
+) -> bool:
+    """Whether the speaker's own transitions disagree about where ``subject`` landed.
+
+    :func:`meetings.transcript._destinations_conflict`'s reading of one speaker's
+    channel, over the records naming this subject at this tick. Engine truth
+    forbids two transitions of one subject landing on one tick, so a channel that
+    says otherwise is describing something other than the transition the speaker
+    meant, and neither the ledger nor the movement chokepoint may take a
+    destination from it. Both agree on the same rows by construction: the tick
+    window is :data:`~meetings.transcript.MOVE_GROUNDING_TICK_TOLERANCE`, the
+    chokepoint's own, and the destinations are compared as
+    :func:`~meetings.transcript.canonical_rooms` sets, the meeting layer's one
+    room normalisation.
+    """
+
+    at_tick = [
+        record
+        for record in records
+        if record.subject == subject
+        and abs(record.tick - tick) <= MOVE_GROUNDING_TICK_TOLERANCE
+    ]
+    return len({canonical_rooms(record.to_room) for record in at_tick}) > 1
 
 
 def _move_record_places_sighting(
