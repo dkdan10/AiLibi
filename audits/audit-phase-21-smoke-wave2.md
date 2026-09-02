@@ -5,18 +5,29 @@
 
 ## 0. The verdict, in one line
 
-**GO** — five live seeds recorded at the ratified Wave-2 slate, the validity gate PASSED on all ten
-checks, both reconstructions byte-identical, **all seven §8.1 tripwires PASS against their own
-sample-local predicates** (`verdict: every GATED predicate PASSES on these bytes`, the reader
-exiting 0 with `stopped_cells` empty), **no §9.2 abandon criterion met**, and the committed record
-untouched. The criterion it is ruled against is
-`audits/audit-phase-21-preregistration.md` §9.2, read one by one in §14.
+**GO — with one watch item FIRED, reported rather than absorbed.** Five live seeds recorded at the
+ratified Wave-2 slate; the validity gate PASSED on all ten checks; both reconstructions
+byte-identical; **all seven §8.1 tripwires PASS against their own sample-local predicates**
+(`verdict: every GATED predicate PASSES on these bytes`, the reader exiting 0 with `stopped_cells`
+empty); **no `audits/audit-phase-21-preregistration.md` §9.2 abandon criterion met**, read one by
+one in §14; and the committed record untouched.
 
-**Two things this smoke found that no previous bytes could show, both registered rather than
-drift:** a crew speaker filed the project's **first spoken `saw_kill`** (baseline 8 holds zero
-anywhere), and with it the **cross-lever ballot interaction Errata E.1 re-registered FIRED for the
-first time on live bytes** (§8.4). Neither is a STOP; both are named here because the record will
-meet them at scale.
+**The watch item fired, and it is the headline the record must plan around.** One recorded
+`failed_call` row on seed 26 carries `error_type == "deadline_default"` — the first this phase has
+seen — and the corpus recorder's freeze guard is demonstrated refusing that seed (§11.2). §9.2's
+criterion names **a seed whose OPENING defaults**, and no opening defaulted (`lost_openings 0`); the
+defaulted turn is an `opt_in` speech turn, so the criterion as written is NOT met and this report
+does not stretch it. The remedy is the one the recorder itself prescribes — re-record the seed — and
+it has a precedent at the baseline-7 record. **The seed was NOT re-recorded to make this report
+green**: a smoke that re-rolls until it is clean measures nothing.
+
+**Three further things no previous bytes could show.** A crew speaker filed the project's **first
+spoken `saw_kill`** (baseline 8 holds zero anywhere), and with it the **cross-lever ballot
+interaction Errata E.1 re-registered FIRED for the first time on live bytes** — both registered
+rather than drift (§8.4). And what the table then DID with those accounts, which no offline
+instrument could reach: **both were true, both named a real impostor, neither convicted, and one
+ended with the truthful crew witness ejected instead** (§8.5). Two cases decide nothing and no
+criterion names them; they are the most decision-relevant thing these bytes contain for 21.24.
 
 **Source state this report certifies:** `14854a06`. The freeze the ratified pre-registration
 declares (`audits/audit-phase-21-preregistration.md` §9) governs from its own stated merge point.
@@ -60,22 +71,18 @@ AILIBI_PROMPT_SET=qwen3_6_27b
 AILIBI_LLM_MEETING_MODEL=Qwen/Qwen3.6-27B
 AILIBI_NUM_PLAYERS=9  AILIBI_NUM_IMPOSTORS=2  AILIBI_TASKS_PER_CREWMATE=2
 AILIBI_SAMPLE_DIR=/Users/danielkeinan/ailibi-smoke-21-23/9p2i     # absolute, OUTSIDE the repo
+AILIBI_REFRESH_WORKERS=2
+AILIBI_SEED_MAX_ATTEMPTS=8
 AILIBI_REPORTER_REASONING=1
 AILIBI_CORROBORATION_DISCIPLINE=1
 AILIBI_TESTIMONY_SHAPES=1
 # AILIBI_IMPOSTOR_ROLL_CALL — unset, in this and in every later gate/instrument shell
-# AILIBI_REFRESH_WORKERS   — unset; the wrapper's featherless default is 2 (:441)
-# AILIBI_SEED_MAX_ATTEMPTS — unset; the wrapper's featherless default is 4 (:461)
 ```
 
-**Two knobs the contract's Step 3 block names were left at the wrapper's own defaults, and the
-divergence is recorded rather than absorbed.** `AILIBI_REFRESH_WORKERS` and
-`AILIBI_SEED_MAX_ATTEMPTS` were not exported: the wrapper's featherless defaults are **2 workers**
-(`scripts/refresh_samples.sh`:441), which is what Step 3 asks for, and **4 attempts per seed**
-(:461), where Step 3's block carries the 21.14 value of 8. The contract's own re-verified anchor
-list names 4 as the wrapper's budget at this HEAD, so the two halves of the contract disagree and
-the tree wins. **The knob never bound: zero seeds consumed a second attempt** (§12), so the recorded
-bytes are exactly what an 8-attempt run would have produced.
+**That is the contract's Step-3 block exactly**, and the wrapper's own preview confirms both knobs
+took effect: `seed workers: 2 parallel` and `seed crash-retry: up to 8 attempt(s) per seed`. The
+wrapper's featherless defaults are 2 and **4** (`scripts/refresh_samples.sh`:441, :461), so the
+retry budget is an override and is exported rather than assumed.
 
 **The three lever env names were read out of the registry and `.env.example`, not typed from the
 contract.** `orchestrator/replay.py`:675-682 holds the four live toggles and
@@ -96,6 +103,29 @@ toggles.
 (`scripts/verify_samples.sh`:16-23), so a scratch set under `replays/samples/` would silently join
 the committed gate; the per-refresh stage is created under `dirname "$SAMPLE_DIR"`
 (`scripts/refresh_samples.sh`:737); and §12 preserves these bytes.
+
+### 2.0 Two attempts, and why this report certifies the second
+
+**A first attempt ran at the wrapper's DEFAULT retry budget of 4 rather than the Step-3 export of
+8.** The reasoning at the time — that the contract's re-verified anchor list names 4 as the
+wrapper's default, so the two halves of the contract disagreed — was wrong: the anchor describes a
+DEFAULT and Step 3 overrides it, and those are not in tension. Zero seeds consumed a second attempt
+on either run, so the deviation changed no recorded byte; it still meant the execution
+configuration was not the one the contract prescribes, and a smoke may not certify a run it did not
+perform as written.
+
+**So the five seeds were recorded again under the full Step-3 block, and this report reads the
+second run only.** Not one cell below comes from the first attempt. Both are preserved:
+
+| attempt | retry budget | path | status |
+|---|---|---|---|
+| 1 | 4 (the wrapper default) | `/Users/danielkeinan/ailibi-smoke-21-23/9p2i-attempt-1-default-retry-budget` | superseded; quoted nowhere |
+| **2** | **8 (the contracted export)** | `/Users/danielkeinan/ailibi-smoke-21-23/9p2i` | **the run this report certifies** |
+
+A live model is sampled per call, so the two attempts are different bytes, not a re-derivation of
+the same ones. **The first attempt is kept and named rather than deleted** — an operator who wants
+to know what the wrong configuration produced can read it — and nothing in this report depends on
+it.
 
 ### 2.1 The two shells, and the mechanism that makes crossing them a refusal
 
@@ -165,7 +195,7 @@ Error: the live substrate-lever slate does not match --expect-levers.
           testimony_shapes; every other live toggle OFF; the graduated levers unconditional ON
 [dry-run] seed workers: 2 parallel (each records one seed, then pulls the next available seed
           from the queue; Featherless: 2 units per 32B request → 4-unit cap)
-[dry-run] seed crash-retry: up to 4 attempt(s) per seed on a transport/crash error
+[dry-run] seed crash-retry: up to 8 attempt(s) per seed on a transport/crash error
 [dry-run] no API calls made; no files written.
 Substrate slate OK: expected levers ON = reporter_reasoning,corroboration_discipline,
 testimony_shapes; every other live toggle OFF; the graduated levers unconditional ON.
@@ -293,7 +323,22 @@ each MANIFEST row against the expected map and runs only on the FREEZE path, i.e
 * `check_prompt_version_registry` additionally re-derives the slate-resolved map in a fresh process
   and refuses if it has moved since startup, so a lever export that changed mid-run cannot record
   one substrate and freeze against another;
-* `check_recorded_prompt_versions` and the two dry-run echoes read the derived map.
+* `check_recorded_prompt_versions` and the two dry-run echoes read the derived map;
+* the acceptance CLI's `KEY=VALUE` pairs are emitted by the SAME derivation, **from the map's own
+  keys**. This is the one place the shape of the old constant could not be carried forward: the old
+  code inferred each template key from its version string's first dot-segment, which is correct
+  only while key and value share a prefix. An arm that swaps a variant FILE breaks that —
+  `impostor_roll_call` resolves `accusation_round` to
+  `accusation_round_roll_call.qwen3_6_27b.v1` — so an inferred key would print an
+  `--expected-prompt-versions` map `scripts/validity_gate.py` REJECTS, after the record had already
+  frozen. The derivation now prints both renderings and the shell re-derives neither.
+
+  **The planted case for that half is `impostor_roll_call`, the arm this phase records OFF**, which
+  is exactly why it needs one: `test_acceptance_pairs_carry_the_maps_own_keys_not_the_version_prefix`
+  first asserts the premise (at least one key differs from its value's first dot-segment, so the
+  case cannot pass vacuously), then drives the committed dry-run under that arm and pins the printed
+  line to `accusation_round=accusation_round_roll_call.qwen3_6_27b.v1, …`. Under the old inference
+  it read `accusation_round_roll_call=…` and failed.
 
 **Under the bare slate the derivation reproduces the committed literals byte-for-byte**, so nothing
 about a bare-slate record changes:
@@ -369,15 +414,15 @@ The first seed was recorded ALONE and probed before the remaining four queued
 
 | seed | wall (serial) | meetings | ejections | ending | winner | calls | tokens | cost |
 |---|---|---|---|---|---|---|---|---|
-| 19 | 419 s | 4 | 3 | CREWMATE_EJECT | CREWMATES | 46 | 239,246 | $0.0000 |
-| 17 | 300 s | 2 | 2 | CREWMATE_EJECT | CREWMATES | 28 | 130,800 | $0.0000 |
-| 4 | 384 s | 3 | 0 | IMPOSTOR_PARITY | IMPOSTORS | 36 | 185,120 | $0.0000 |
-| 46 | 262 s | 2 | 1 | IMPOSTOR_PARITY | IMPOSTORS | 22 | 111,897 | $0.0000 |
-| 26 | 448 s | 4 | 1 | IMPOSTOR_PARITY | IMPOSTORS | 44 | 228,201 | $0.0000 |
-| **all** | **19m28s wall** | **15** | **7** | — | CREW 2 / IMP 3 | **176** | **895,264** | **$0.0000** |
+| 19 | 480 s | 5 | 3 | CREWMATE_EJECT | CREWMATES | 54 | 278,435 | $0.0000 |
+| 17 | 373 s | 2 | 2 | CREWMATE_EJECT | CREWMATES | 28 | 130,690 | $0.0000 |
+| 4 | 434 s | 3 | 0 | IMPOSTOR_PARITY | IMPOSTORS | 36 | 183,823 | $0.0000 |
+| 26 | 411 s | 4 | 2 | IMPOSTOR_PARITY | IMPOSTORS | 43 | 220,219 | $0.0000 |
+| 46 | 388 s | 4 | 0 | IMPOSTOR_PARITY | IMPOSTORS | 43 | 231,949 | $0.0000 |
+| **all** | **21m42s wall** | **18** | **7** | — | CREW 2 / IMP 3 | **204** | **1,045,116** | **$0.0000** |
 
-Wall clock: seed 19 alone **7m00s** (recorded first, for the §6 probe), then 4/17/26/46 on two
-workers in **12m28s**. Total operator wall **19m28s**.
+Wall clock: seed 19 alone **8m00s** (recorded first, for the §6 probe), then 4/17/26/46 on two
+workers in **13m42s**. Total operator wall **21m42s**.
 
 ### 5.1 Stratum coverage as OBSERVED, not assumed from the census
 
@@ -385,19 +430,20 @@ The DoD verifies the stratum on the smoke's own recorded meetings, because the c
 slate is a proxy over OFF bytes:
 
 ```
-seeds=5  meetings=15  body reports=14  emergency=1  ejections=7
-body reports WITHOUT a vent_sighting: 12    WITH one: 2
-reporter ejected: 0            spoken saw_kill observations: 2
+seeds=5  meetings=18  body reports=17  emergency=1  ejections=7
+body reports WITHOUT a vent_sighting: 14    WITH one: 3
+reporter ejected: 2            spoken saw_kill observations: 2
 endings: CREWMATE_EJECT 2, IMPOSTOR_PARITY 3
 ```
 
-**12 of the 14 recorded body reports sit in the no-vent-flag stratum** — the only stratum in which
-A-47's verifier found a reporter penalty at all. The slate is therefore **NOT vacuous for the
-reporter lever**, and that is verified rather than assumed.
+**14 of the 17 recorded body reports sit in the no-vent-flag stratum** — the only stratum in which
+A-47's verifier found a reporter penalty at all — and **the penalty occurred: 2 reporters were
+ejected**, both of them innocent. The slate is therefore **NOT vacuous for the reporter lever**, and
+that is verified on the recorded meetings rather than assumed from the draw.
 
 **The proxy moved, exactly as the contract warned.** Against the committed census the drawn seeds
 predicted 21 meetings / 20 body reports / 17 no-vent / 11 ejections / 4 reporter convictions; the ON
-run recorded 15 / 14 / 12 / 7 / 0. Seed 4 recorded 3 meetings and 0 ejections where the committed
+run recorded 18 / 17 / 14 / 7 / 2. Seed 46 recorded 4 meetings and 0 ejections where the committed
 bytes carry 4 and 2. Six behavioural repairs and three levers move trajectories; the census selects,
 it does not predict.
 
@@ -422,17 +468,24 @@ uv run python scripts/validity_gate.py "$SMOKE_DIR" \
 ```
 Validity gate over /Users/danielkeinan/ailibi-smoke-21-23/9p2i (5 games):
   [PASS] all_games_reach_game_over: 5/5 games reached a reconstructed game_over with a consistent win condition
-  [PASS] meeting_rate_and_resolution: meeting_rate 1.0 (floor 0.60); 15 resolved meetings; 0 unresolved
-  [PASS] no_duplicate_meeting_rows: 0 duplicate meeting rows over 15 (want 0)
+  [PASS] meeting_rate_and_resolution: meeting_rate 1.0 (floor 0.60); 18 resolved meetings; 0 unresolved
+  [PASS] no_duplicate_meeting_rows: 0 duplicate meeting rows over 18 (want 0)
   [PASS] no_tick_1_kills: 0 kills at tick <= 1 (want 0)
   [PASS] no_friendly_fire_kills: 0 impostor-on-impostor kills (want 0)
-  [PASS] no_betrayal_ballots_or_accusations: 0 teammate-betrayal ballots/accusations over 88 multi-impostor ballots (want 0)
-  [PASS] no_railroaded_crew_ejections: 0 railroaded crew rows over 310 rendered crew suspicions (want 0)
-  [PASS] no_dangling_primary_reason_id: 0 dangling primary_reason_id over 88 ballots (want 0)
+  [PASS] no_betrayal_ballots_or_accusations: 0 teammate-betrayal ballots/accusations over 102 multi-impostor ballots (want 0)
+  [PASS] no_railroaded_crew_ejections: 0 railroaded crew rows over 396 rendered crew suspicions (want 0)
+  [PASS] no_dangling_primary_reason_id: 0 dangling primary_reason_id over 102 ballots (want 0)
   [PASS] cost_and_provenance_exact: model='Qwen/Qwen3.6-27B', 4 prompt versions, substrate stamped exact on 5 games
   [PASS] byte_identical_reconstruction: 0 samples drifted from byte-identical reconstruction (want 0)
 Validity gate PASSED (all checks green).
 ```
+
+**The gate is green and one seed still carries a defaulted turn** (§11.2). That is not a
+contradiction: `eval/validity.py` has no `deadline_default` check at all, which the corpus
+recorder's own ledger comment states in as many words — *"the validity gate has no deadline_default
+check at all — the recorder is deliberately stricter than the gate"*
+(`scripts/record_ml_corpus.sh`, the freeze-guard branch). **This is exactly why the DoD scans that
+watch item by hand and forbids delegating it to the gate.**
 
 The two the DoD quotes verbatim are the last two, above:
 **`cost_and_provenance_exact: model='Qwen/Qwen3.6-27B', 4 prompt versions, substrate stamped exact
@@ -533,54 +586,59 @@ counterpart says "no reference" rather than borrowing a baseline-7 figure.
 
 | cell | smoke (5 seeds) | ratified baseline-8 reference |
 |---|---|---|
-| body-report openings gaining the discovery-account block (`R-13`, block level) | **14/14 = 100%** | 620/620 (counterfactual §10.1) |
-| — the same cell counted by byte diff (informational) | 14/14 = 100%, agrees | — |
-| non-reporter speech turns in a body-report meeting gaining the base-rate block (`R-14`, block level) | **67/67 = 100%** | 2,715/2,715 |
-| — the same cell counted by byte diff (informational) | 67/67 = 100%, agrees | — |
+| body-report openings gaining the discovery-account block (`R-13`, block level) | **17/17 = 100%** | 620/620 (counterfactual §10.1) |
+| — the same cell counted by byte diff (informational) | 17/17 = 100%, agrees | — |
+| non-reporter speech turns in a body-report meeting gaining the base-rate block (`R-14`, block level) | **78/78 = 100%** | 2,715/2,715 |
+| — the same cell counted by byte diff (informational) | 78/78 = 100%, agrees | — |
 | emergency-meeting prompts gaining either block | **0** | 0 |
-| ballots gaining a reporter block (`R-15`) | **0/88** | 0/3,631 |
-| prompts carrying `<who_reported>` (direct byte read) | 67 of 73 speech, 14 of 15 openings | no reference |
-| prompts carrying the `at_body` line (direct byte read) | 4 of 73 speech | no reference |
-| lines THIS LEVER adds, per opening it changes (leave-one-out) | 14/14 = **1.00** | 620/620 = 1.00 (counterfactual §3.3) |
-| lines THIS LEVER adds, per speech turn it changes (leave-one-out) | 272/67 = **4.06** | 11,005/2,715 = 4.05 |
+| ballots gaining a reporter block (`R-15`) | **0/102** | 0/3,631 |
+| prompts carrying `<who_reported>` (direct byte read) | 77 of 83 speech, 18 of 19 openings | no reference |
+| prompts carrying the `at_body` line (direct byte read) | 4 of 83 speech | no reference |
+| lines THIS LEVER adds, per opening it changes (leave-one-out) | 17/17 = **1.00** | 620/620 = 1.00 (counterfactual §3.3) |
+| lines THIS LEVER adds, per speech turn it changes (leave-one-out) | 316/78 = **4.05** | 11,005/2,715 = 4.05 |
 
 The six speech prompts and one opening without `<who_reported>` are the emergency meeting's, which
-has no reporter. **The reporter thread lands on every body report and nowhere else.**
+has no reporter. **The reporter thread lands on every body report and nowhere else**, and the
+per-prompt prose it adds reproduces the counterfactual's per-prompt values to two decimal places.
 
 ### 8.2 `corroboration_discipline`
 
 | cell | smoke (5 seeds) | ratified baseline-8 reference |
 |---|---|---|
-| ballots gaining the source-count block (`C-9`, block level) | **88/88 = 100%** | 3,614/3,631 = 99.5% |
-| — the same cell counted by byte diff (informational) | 88/88 = 100%, agrees | — |
-| ballots carrying `<testimony_sources>` (direct byte read) | 88/88 | no reference |
-| ballots rendering a sole-source chain ("an answer to a charge, not a second witness") | 61/88 | no reference |
-| ballots rendering the map's impossible-transit counter | 44/88 | no reference |
-| accused subjects with NO first-hand source (`C-1`) | 13/35 = 37.1% | 475/1,525 = 31.1% |
-| ejected subjects with NO first-hand source (`C-2`) | 1/7 = 14.3% `[ADV]` | 11/425 = 2.6% |
-| ejections whose charge ANSWERED the ejectee's own (`C-3`) | 0/7 `[ADV]` | 33/429 |
+| ballots gaining the source-count block (`C-9`, block level) | **101/102 = 99.02%** | 3,614/3,631 = 99.5% |
+| — the same cell counted by byte diff (informational) | 101/102 = 99.02%, agrees | — |
+| ballots carrying `<testimony_sources>` (direct byte read) | 101/102 — the instrument and the byte read agree exactly | no reference |
+| ballots rendering a sole-source chain ("an answer to a charge, not a second witness") | 66/102 | no reference |
+| ballots rendering the map's impossible-transit counter | 42/102 | no reference |
+| accused subjects with NO first-hand source (`C-1`) | 15/41 = 36.6% | 475/1,525 = 31.1% |
+| ejected subjects with NO first-hand source (`C-2`) | 2/7 = 28.6% `[ADV]` | 11/425 = 2.6% |
+| ejections whose charge ANSWERED the ejectee's own (`C-3`) | 2/7 = 28.6% `[ADV]` | 33/429 |
 | ejected subjects with a map-satisfied placement pair (`C-4`) | 0/7 `[ADV]` | 48/429 |
-| **the ejecting-ballot citation mix** (`C-5`/`C-6`/`C-7`, over the 7 ballots that ejected the 2 innocents) | **hearsay 2 / own-observation 1 / own-turn 4 / other 0 / uncited 0** | 89 / 37 / 23 / 0 / 1 of 150 (counterfactual §4.3) |
+| **the ejecting-ballot citation mix** (`C-5`/`C-6`/`C-7`, over the 5 ballots that ejected the 2 innocents) | **hearsay 3 / own-observation 0 / own-turn 2 / other 0 / uncited 0** | 89 / 37 / 23 / 0 / 1 of 150 (counterfactual §4.3) |
 | openings and speech turns gaining anything under this lever alone | **0** | 0 |
-| lines THIS LEVER adds, per ballot it changes (leave-one-out) | 718/88 = **8.16** | 26,522/3,614 = 7.34 (Errata E.1) |
+| lines THIS LEVER adds, per ballot it changes (leave-one-out) | 799/101 = **7.91** | 26,522/3,614 = 7.34 (Errata E.1) |
 
-The citation mix is 7 ballots and is directional to the point of being anecdotal; it is reported
-because the DoD names it, with its denominator beside it.
+**The one ballot of 102 that does NOT gain the block is the residue §8.1 names**, in its own words:
+"meetings whose ledger holds no row for any of that voter's candidate targets". §8.1 rules that
+residue "context rather than a second criterion, because `C-9` publishes the share and not the
+residue's membership", and the share is 99.02% against a ≥ 99% floor. The citation mix is 5 ballots
+and is directional to the point of being anecdotal; it is reported because the DoD names it, with
+its denominator beside it.
 
 ### 8.3 `testimony_shapes`
 
 | cell | smoke (5 seeds) | ratified baseline-8 reference |
 |---|---|---|
-| CREW speech turns gaining the elicitation block (`T-9a`) | **49/49 = 100%** | 2,023 of 2,959 aggregate (§10.1 `T-9`) |
-| IMPOSTOR speech turns gaining an elicitation block (`T-9b`) | **0/24** | 0 |
-| openings gaining an elicitation block (direct byte read) | 15/15 | 672/672 (§5.6) |
-| `whereabouts` statements surviving the reduction | **81** (OFF: 0) | 0 → 3,157 (§5.2) |
-| `saw_move` statements surviving the reduction | **41** (OFF: 0) | 0 → 1,606 |
+| CREW speech turns gaining the elicitation block (`T-9a`) | **55/55 = 100%** | 2,023 of 2,959 aggregate (§10.1 `T-9`) |
+| IMPOSTOR speech turns gaining an elicitation block (`T-9b`) | **0/29** | 0 |
+| openings gaining an elicitation block (direct byte read) | 19/19 | 672/672 (§5.6) |
+| `whereabouts` statements surviving the reduction | **102** (OFF: 0) | 0 → 3,157 (§5.2) |
+| `saw_move` statements surviving the reduction | **35** (OFF: 0) | 0 → 1,606 |
 | `saw_kill` statements surviving the reduction | **2** (OFF: 0) | 0 → 0 (`T-4`, `[ADV]`) |
-| episodic rows the ingest writes at recorded boundaries (`T-5`) | 1,935 ON against 1,280 OFF | 73,218 against 49,667 |
-| location accounts reaching the alibi map (`T-6`) | **102/102 = 100%** ON, 21/102 = 20.6% OFF | 4,173/4,173 ON, 1,016/4,173 = 24.35% OFF |
-| spoken vent accounts naming a player who never vented (`T-7`) | **0/3** `[ADV]` | 0/512 |
-| lines THIS LEVER adds, per opening / speech turn / ballot it changes (leave-one-out) | 30/15 = **2.00**, 108/52 = **2.08**, 12/12 = **1.00** | 1,344/672 = 2.00, 4,046/2,023 = 2.00, **0** (Errata E.1) |
+| episodic rows the ingest writes at recorded boundaries (`T-5`) | 2,020 ON against 1,339 OFF | 73,218 against 49,667 |
+| location accounts reaching the alibi map (`T-6`) | **130/130 = 100%** ON, 28/130 = 21.5% OFF | 4,173/4,173 ON, 1,016/4,173 = 24.35% OFF |
+| spoken vent accounts naming a player who never vented (`T-7`) | **0/4** `[ADV]` | 0/512 |
+| lines THIS LEVER adds, per opening / speech turn / ballot it changes (leave-one-out) | 36/18 = **2.00**, 121/58 = **2.09**, 13/13 = **1.00** | 1,344/672 = 2.00, 4,046/2,023 = 2.00, **0** (Errata E.1) |
 
 **The witnessed-kill half is EXERCISED, not untested.** The census (§3) found four committed seeds
 carrying a crew-witnessed kill and all four were drawn; on the smoke's own bytes the walk finds
@@ -593,43 +651,76 @@ slate was drawn for it.
 
 **Baseline 8 holds zero spoken `saw_kill` anywhere** (`grep -rn saw_kill replays/` returns nothing),
 so the `saw_kill` path had zero committed exposure and these are the first bytes in the project that
-could carry one. **They do.** Seed 19, meeting 3, turn 0:
+could carry one. **They do — twice, both by a reporter opening a body report:**
 
 ```json
-{"room": "ENGINEERING", "subject": "p-9", "tick": 16, "type": "saw_kill"}
+seed 19, meeting-3, turn 0, p-1:  {"room": "ENGINEERING", "subject": "p-9", "tick": 16, "type": "saw_kill"}
+seed 26, meeting-0, turn 0, p-1:  {"room": "EAST_HALL",   "subject": "p-3", "tick": 6,  "type": "saw_kill"}
 ```
 
-spoken as *"I walked into Engineering at tick 16 and found p-7's body. I saw p-9 kill him right
-there."* Two spoken `saw_kill` observations were filed in total (seeds 19 and 26).
+spoken as *"I found p-7's body in Engineering at tick 16, and I saw p-9 perform the kill right
+there"* and *"I found p-8's body in East Hall at tick 6, and I saw p-3 kill him right there."*
 
 The DoD requires the two REGISTERED consequences be named rather than filed as drift, and both are
 observed:
 
 1. **The role-blind PUBLIC-TRANSCRIPT row reaches every later speaker, impostors included.** The
-   direct byte read finds the row `(spoken account, nothing confirms it)` in **10 of 73 speech
-   prompts and 12 of 88 ballots**. This is CORRECT — it is the one table every seat reads, it is
+   direct byte read finds the row `(spoken account, nothing confirms it)` in **11 of 83 speech
+   prompts and 13 of 102 ballots**. This is CORRECT — it is the one table every seat reads, it is
    pinned by `tests/agents/test_bespoke_prompt_sets.py::test_a_spoken_kill_reaches_every_later_speaker`,
-   and §8.1 EXCLUDES it from T5 by construction. T5's impostor half reads 0/24 with those rows
+   and §8.1 EXCLUDES it from T5 by construction. T5's impostor half reads 0/29 with those rows
    present, which is the reader doing exactly what the ratified note says it must.
 2. **The joint-slate ballot moves by more than the two arms alone.** The leave-one-out leg that
-   withdraws `testimony_shapes` while `corroboration_discipline` stays ON moves **12 of 88 ballots,
-   by −12 lines and −1,026 bytes**. On the committed baseline-8 bytes that same leg moves the ballot
+   withdraws `testimony_shapes` while `corroboration_discipline` stays ON moves **13 of 102 ballots,
+   by −13 lines and −1,160 bytes**. On the committed baseline-8 bytes that same leg moves the ballot
    by **exactly zero** (Errata E.1: *"on the recorded bytes the ballot's added bytes are identical on
    the `corroboration_discipline`, `two-ON` and `all-three-ON` legs"*). **The interaction E.1
    re-registered has now fired on live bytes for the first time**, which E.1 itself predicts in as
    many words: *"the FIRST spoken kill at 21.23 or 21.24 will move the joint ballot by more than the
-   two arms alone, which is expected and is not unregistered drift."** This report does not
+   two arms alone, which is expected and is not unregistered drift."* This report does not
    decompose that delta between the public-transcript row and the adopted-clause fork, and does not
    re-price E.1's per-row arithmetic — that is pinned on a synthetic kill meeting by
    `tests/meetings/test_corroboration.py::TestAdoptedClauseWording`.
 
-### 8.5 The slate's own render prediction
+**The superseded first attempt (§2.0) also carried a spoken `saw_kill` and also fired the
+interaction.** Two independent five-seed samples at this slate each produced one, which is stated as
+an observation about the shape's reachability and NOT as a rate: two samples cannot price one.
+
+### 8.5 What the table DID with the two spoken kills — a model fact, at n = 2
+
+The render is only half the question, and the counterfactual's §7 puts the other half beyond any
+offline instrument: *"whether crew stop laundering witnessed kills into `saw_vent` rows"* and every
+vote outcome are on its NOT-PREDICTABLE-OFFLINE list. **These are the first two live data points the
+project has**, and they are reported as such — two cases, no rate, no criterion.
+
+| | seed 19, meeting 3 | seed 26, meeting 0 |
+|---|---|---|
+| speaker | p-1, CREWMATE, **and the meeting's own reporter** | p-1, CREWMATE, **and the meeting's own reporter** |
+| named as the killer | p-9 — **a real IMPOSTOR** | p-3 — **a real IMPOSTOR** |
+| ballot tally | p-1 ×3, p-9 ×1, SKIP ×1 | SKIP ×5, p-3 ×3 |
+| outcome | **EJECTED p-1** — the truthful witness, a CREWMATE | **SKIPPED** |
+| engine contradiction naming anyone | none | none |
+
+**Both accounts were TRUE and neither converted.** In seed 19 the table ejected the reporter who had
+just testified to watching the kill, three votes to one for the impostor he named. That is A-4's
+reporter class (`audits/review-2026-08-26/A/collated-findings.md`:431) occurring with the strongest
+testimony the game can produce on the record, and under the very lever that exists to elicit it.
+
+**What this is not.** It is not a bar, not a tripwire, and no §9.2 criterion names it — T5 governs
+whether the elicitation block RENDERS, and it rendered on 55 of 55 crew turns. It is not evidence
+that the lever fails: two meetings cannot separate a lever effect from a five-seed draw, and the
+counterfactual's governing sentence applies unchanged — **a sentence added to a prompt is not a vote
+that changes.** It is the single most decision-relevant thing these bytes contain for 21.24, which
+is why it is on the page rather than in a footnote.
+
+### 8.6 The slate's own render prediction
 
 Counterfactual §8.4 predicts added prose is additive in LINES on every seam and that the only
 cross-lever interaction is the ballot's. On the smoke's leave-one-out legs the opening reads
-14 + 30 = 44 lines against the whole slate's 44 (additive to the line), the speech turn reads
-272 + 108 = 380 against 380 (additive to the line), and **the ballot reads 718 + 12 = 730 against
-730 — additive in lines, with the 12-line testimony term existing only because a kill was spoken.**
+17 + 36 = 53 lines against the whole slate's 53 (additive to the line), the speech turn reads
+316 + 121 = 437 against 437 (additive to the line), and **the ballot reads 799 + 13 = 812 against
+812 — additive in lines, with the 13-line testimony term existing only because a kill was spoken.**
+**The prediction holds on all three seams.**
 
 ## 9. The three watch cells
 
@@ -642,19 +733,20 @@ A-19's verifier WITHDREW the advice to down-weight agreement with the opener: sa
 crew accusations hit 79.2% (n=48) and 88.5% (n=122) against different-target 4.7% (n=106) and 3.1%
 (n=287). **A lever that flattens that is a regression to report, not a success.** No committed
 reader emits this split — it is §5.1's measured-but-not-registered class — so it is computed here as
-a session walk (§17 names the reader), on the smoke bytes and on the SAME five committed seeds with
+a session walk (§17.5 carries the reader), on the smoke bytes and on the SAME five committed seeds with
 the same code:
 
 | cell | committed same-five (OFF) | **smoke (ON)** |
 |---|---|---|
-| turn-0 CREW accusations, accuracy | 14/21 = 66.7% | **11/15 = 73.3%** |
-| turn ≥ 2 CREW accusations, SAME target as turn 0 | 22/22 = 100.0% | **17/19 = 89.5%** |
+| turn-0 CREW accusations, accuracy | 14/21 = 66.7% | **11/18 = 61.1%** |
+| turn ≥ 2 CREW accusations, SAME target as turn 0 | 22/22 = 100.0% | **14/16 = 87.5%** |
 | turn ≥ 2 CREW accusations, DIFFERENT target | 2/24 = 8.3% | **2/21 = 9.5%** |
 
 **Agreement with the opener is NOT flattened**: the same-target/different-target separation stays
-enormous (89.5% against 9.5%), and both columns reproduce the shape A-19's verifier measured. The
-same-target cell falls from 100% to 89.5% on 19 cases — two convictions — which one game moves; it
-is reported, and it is not a regression this n can establish.
+enormous (87.5% against 9.5%), and both columns reproduce the shape A-19's verifier measured — the
+ON column lands between his two published same-target readings (79.2% and 88.5%). The same-target
+cell falls from 100% to 87.5% on 16 cases — two convictions — which one game moves; it is reported,
+and **it is not a regression this n can establish.**
 
 ### 9.2 The co-discoverer hazard (A-38), and who actually received framing
 
@@ -669,7 +761,7 @@ the neutral self-addressed `at_body` sentence, and that is the seam the widening
 
 | cell | smoke (5 seeds) | ratified baseline-8 reference |
 |---|---|---|
-| body-report meetings carrying a non-reporter co-discoverer (`R-11`) | 3/14 | 118/620 |
+| body-report meetings carrying a non-reporter co-discoverer (`R-11`) | 3/17 | 118/620 |
 | co-discoverer slots, CREW / IMPOSTOR (`R-12`) | 2 / 2 = **50.0% impostor** | 71/145 = **49.0% impostor** |
 | prompts that received the `at_body` line | 4 | no reference |
 | — of those, the speaker was an IMPOSTOR | **2 of 4 = 50.0%** | no reference |
@@ -682,7 +774,7 @@ invents none.
 
 A-16's verifier requires any published confession cell to carry its precision beside its count. On
 the smoke bytes the disambiguated pair #416 shipped reads **`model_self_disclosure_visible_turns` 0
-and `crew_self_disclosure_control_turns` 0**, with `player_visible_leak_turns` **0 of 88 turns**.
+and `crew_self_disclosure_control_turns` 0**, with `player_visible_leak_turns` **0 of 102 turns**.
 There is no cell to publish, so none is published; the register's "10 fires, 20% precision" is a
 baseline-7 figure over a pre-disambiguation net and is not quoted as a cell here (counterfactual
 §5.5).
@@ -694,29 +786,30 @@ column re-derived at `$0` from the SAME five committed seeds. **Every row is dir
 
 | cell | committed same-five (OFF) | **smoke (ON)** |
 |---|---|---|
-| I-2 false crew self-placement | 0/80 | **0/68** |
-| — copyable from a rendered self-location line | 5/80 = 6.25% | **6/68 = 8.82%** |
+| I-2 false crew self-placement | 0/80 | **0/82** |
+| — copyable from a rendered self-location line | 5/80 = 6.25% | **5/82 = 6.10%** |
 | I-3 sole-flag precision | 0/0 (no sole-flag meeting) | **0/0** |
 | I-4 grounded sighting side | 0/0 | **0/0** |
 | I-5 fabricated completion lines | 0/34 | **0/25** |
 | I-6 adjacent-room STRONG share | 0/0 | **0/0** |
-| I-7 movement-origin flags | 0/2 | **1/1** `[ADV]` (move-backed 1, memory-truthful 1) |
-| I-8 marker contamination (turns / prompts) | 0/110, 0/221 | **0/88, 0/176** |
-| I-9 singular-persona prompts | 0/221 | **0/176** |
-| I-10 meetings with a venting participant | 2/21 | **2/15** |
-| I-11 free zero-witness kills declined | 0/28 | **1/24** (fellow-defer 1) |
-| — ghost-top decisions mismatched | 0/249 | **0/209** |
-| render budget, mean rendered lines/snapshot | 40.52 over 221 | **38.09 over 176** |
-| render budget, testimony rows (≤4 / 5-6 / ≥7) | 4,181 (2,090 / 1,859 / 232) | **3,748 (1,082 / 2,182 / 484)** |
-| solvability (the memo's I-5): killer in candidate set | 19/20 = 0.95 | **13/14 = 0.9286** |
-| — one candidate, and it is the killer | 6/20; 6/6 | **3/14; 3/3** |
-| — ejected an already-cleared player | 3/10 = 0.30 | **0/6 = 0.00** |
+| I-7 movement-origin flags | 0/2 | **0/1** `[ADV]` (move-backed 1, destination 1) |
+| I-8 marker contamination (turns / prompts) | 0/110, 0/221 | **0/102, 0/204** |
+| I-9 singular-persona prompts | 0/221 | **0/204** |
+| I-10 meetings with a venting participant | 2/21 | **2/18** |
+| — reporter killed within 3 ticks | 2/21 | **3/18** |
+| I-11 free zero-witness kills declined | 0/28 | **2/27** (fellow-defer 2) |
+| — ghost-top decisions mismatched | 0/249 | **0/249** |
+| render budget, mean rendered lines/snapshot | 40.52 over 221 | **39.57 over 204** |
+| render budget, testimony rows (≤4 / 5-6 / ≥7) | 4,181 (2,090 / 1,859 / 232) | **4,920 (948 / 3,606 / 366)** |
+| solvability (the memo's I-5): killer in candidate set | 19/20 = 0.95 | **16/17 = 0.9412** |
+| — one candidate, and it is the killer | 6/20; 6/6 | **4/17; 4/4** |
+| — ejected an already-cleared player | 3/10 = 0.30 | **1/6 = 0.1667** `[ADV]` |
 
 The `I-n` labels in the first thirteen rows are `measure_baseline.py --honesty`'s own numbering and
 are NOT the pre-registration's §2 instrument list; the two solvability rows carry the memo's label
 explicitly so the collision cannot be misread.
 
-`measure_baseline.py --honesty` exited 0 on the FIRST completed seed alone (seed 19, 4 meetings —
+`measure_baseline.py --honesty` exited 0 on the FIRST completed seed alone (seed 19, 5 meetings —
 **not vacuous**) and again over the whole set; `--solvability` exited 0. **Neither raised.**
 
 ### 10.1 The secondary cells §5 registers, observed and never gated
@@ -724,15 +817,18 @@ explicitly so the collision cannot be misread.
 | cell | committed same-five (OFF) | **smoke (ON)** | ratified baseline-8 reference |
 |---|---|---|---|
 | win split | CREW 2 / IMP 3 (impostor 60%) | **CREW 2 / IMP 3 (impostor 60%)** | `samples/9p2i` 15/50 = 30% |
-| decisiveness (body-report ejections / body-report meetings) | 10/20 = 50.0% | **6/14 = 42.9%** | 377/620 = 60.8% |
-| bar 1's cell split by a spoken kill (`P-1k`) | 0 of 7 by construction — the census finds no spoken `saw_kill` anywhere in the committed bytes | **1/4 = 25.0%** `[ADV]` | 0 of 96 |
-| — of those, convicted an IMPOSTOR (`P-1ka`) | 0/0 `[ADV]` | **1/1 = 100%** `[ADV]` | 0/0 `[ADV]` |
-| zero-flag convictions (`eval/vj_instruments.py`) | not re-derived | **4/7**, 2 CREW / 2 IMPOSTOR | 86/429, 37 CREW |
+| decisiveness (body-report ejections / body-report meetings) | 10/20 = 50.0% | **6/17 = 35.3%** | 377/620 = 60.8% |
+| bar 1's cell split by a spoken kill (`P-1k`) | 0 of 7 by construction — the census finds no spoken `saw_kill` anywhere in the committed bytes | **0/3** `[ADV]` | 0 of 96 |
+| — of those, convicted an IMPOSTOR (`P-1ka`) | 0/0 `[ADV]` | **0/0** `[ADV]` | 0/0 `[ADV]` |
+| zero-flag convictions (`eval/vj_instruments.py`) | not re-derived | **3/7**, 2 CREW / 1 IMPOSTOR | 86/429, 37 CREW |
 
 The win split is 5 games against a ±15-point band written for a 50-game leg; it is printed because
-§5 registers it and it decides nothing. **`P-1k` is non-empty for the first time**: one of the four
-non-direct convictions named an ejectee a spoken `saw_kill` identified, and that conviction was
-correct. Baseline 8 reads 0 of 96 because nothing could speak one.
+§5 registers it and it decides nothing.
+
+**`P-1k` reads 0/3 and NOT `n/a`**, per §12's own reader rule for an empty denominator. The split is
+empty for the reason §8.5 sets out: **neither spoken kill convicted anybody**, so no conviction of
+any kind — direct or non-direct — has a spoken kill behind it. **A spoken kill was filed and the
+split is still empty**, and the report does not read that zero as absence of the shape.
 
 ## 11. The Wave-1 no-regression check, and the watch item scanned by hand
 
@@ -743,58 +839,117 @@ The 21.14 marker pass, run unchanged (§17 quotes its two censuses; the marker p
 
 | # | repair | marker | committed same-five | **smoke (ON)** | reading |
 |---|---|---|---|---|---|
-| 1 | A-6 (21.1) | the taught oracle line inside a rendered proof block | 0 of 221 prompts; 46 `Proof.` blocks; banned vocabulary absent | **0 of 176 prompts; 41 `Proof.` blocks; banned vocabulary absent** | **NO REGRESSION** |
-| 1b | A-6, spoken | the oracle net over `free_text`, rationales and claim reasons | 0 hits / 351 utterances (FLOOR net fires 109) | **0 hits / 294 utterances (FLOOR net fires 89)** | **NO REGRESSION** — the over-broad floor demonstrably reaches these surfaces |
-| 2 | A-17 (21.2) | structured testimony rows in the vote-ballot prompts | 110/110 carry `saw:`/`claims:`/`said:` | **88/88 carry all three**, over 546 rendered turn heads | **NO REGRESSION** |
-| 3 | A-14 (21.3) | every recorded action row carries an explicit disposition | 184/184 tick rows | **133/133 tick rows**; 58 of 844 = 6.9% `discarded_by_meeting` over 15 trigger ticks | **NO REGRESSION** |
-| 4 | A-3 (21.3) | redirected ballots carry machine-readable provenance | 110 ballots, 0 missing provenance | **88 ballots, 6 machine rows (`under_gate_redirect` 5, `teammate_coerced` 1), 0 missing** | **NO REGRESSION** |
-| 5 | B-8 (21.4) | the belief line's last-seen agrees with the agent's own sightings | 0/650 stale | **0/476 stale, 0 stale-and-wrong-room** | **NO REGRESSION** |
-| 6 | A-31 (21.5) | exactly one memory row per witnessed vent | 20 witnessed, 0 heard, 0 double | **14 witnessed, 0 heard, 0 double**, 4 distinct, 0 heard-only | **NO REGRESSION** |
+| 1 | A-6 (21.1) | the taught oracle line inside a rendered proof block | 0 of 221 prompts; 46 `Proof.` blocks; banned vocabulary absent | **0 of 204 prompts; 45 `Proof.` blocks; banned vocabulary absent** | **NO REGRESSION** |
+| 1b | A-6, spoken | the oracle net over `free_text`, rationales and claim reasons | 0 hits / 351 utterances (FLOOR net fires 109) | **0 hits / 325 utterances (FLOOR net fires 91)** | **NO REGRESSION** — the over-broad floor demonstrably reaches these surfaces |
+| 2 | A-17 (21.2) | structured testimony rows in the vote-ballot prompts | 110/110 carry `saw:`/`claims:`/`said:` | **102/102 carry all three**, over 614 rendered turn heads | **NO REGRESSION** |
+| 3 | A-14 (21.3) | every recorded action row carries an explicit disposition | 184/184 tick rows | **159/159 tick rows**; 65 of 965 = 6.7% `discarded_by_meeting` over 17 trigger ticks | **NO REGRESSION** |
+| 4 | A-3 (21.3) | redirected ballots carry machine-readable provenance | 110 ballots, 2 display-marked, 4 machine rows, 0 missing | **102 ballots, 0 display-marked, 0 machine rows, 0 missing** | **NO REGRESSION**, and UNEXERCISED — no ballot was redirected on these bytes, so the marker is vacuous here rather than green |
+| 5 | B-8 (21.4) | the belief line's last-seen agrees with the agent's own sightings | 0/650 stale | **0/515 stale, 0 stale-and-wrong-room** | **NO REGRESSION** |
+| 6 | A-31 (21.5) | exactly one memory row per witnessed vent | 20 witnessed, 0 heard, 0 double | **16 witnessed, 0 heard, 0 double**, 5 distinct, 0 heard-only | **NO REGRESSION** |
 
-### 11.2 The watch item, scanned by hand and not delegated to the gate
+Row 4 is marked UNEXERCISED rather than passed: `ballot_redirects 0 (eject 0)` on this run, so a
+guard-redirect provenance defect could not have shown here. The superseded first attempt did
+exercise it (5 redirects, 6 machine rows, 0 missing), but that run is quoted nowhere as a cell
+(§2.0) and this row does not borrow it.
+
+### 11.2 The watch item — SCANNED BY HAND, and it FIRED
 
 The validity gate has no `deadline_default` check at all. Scanned directly over the recorded bytes:
 
 ```
-failed_call rows by error_type: {} (none recorded)
-deadline_default rows (EITHER shape): 0
+failed_call rows by error_type: {'deadline_default': 1}
+deadline_default rows (EITHER shape): 1
 ```
 
-**No recorded `failed_call` row of any kind exists in the five seeds**, so the question of
-`error_type == "deadline_default"` is answered under both shapes at once, and the
-`"(deadline_default)"` model sentinel is likewise absent from every row. The freeze guard
-`check_replay_provenance` refused two seeds for exactly this at the baseline-7 record; nothing here
-would trip it.
+**One recorded `failed_call` row on seed 26 carries `error_type == "deadline_default"`.** This is
+the watch item the DoD forbids delegating to the gate, and it fired. The row in full, with the
+prompt and the raw response elided:
+
+```
+game_id      headless-seed-26      meeting_id  headless-seed-26:meeting-1   tick 11
+error_type   deadline_default      model  Qwen/Qwen3.6-27B   cost_usd 0.0
+error_message
+  opt_in turn (turn 5) defaulted (validation); p-5 submitted no turn
+  [ValidationError: 1 validation error for MeetingTurn
+   observations.1
+     Input tag 'corroboration' found using 'type' does not match any of the expected tags:
+     'saw_player', 'completed_task', 'found_body', 'saw_vent', 'saw…]
+```
+
+and the transcript carries the husk it left:
+
+```json
+{"turn_id": "headless-seed-26:meeting-1:turn-5", "turn_index": 5, "speaker": "p-5",
+ "turn_kind": "opt_in", "observations": [], "claims": [],
+ "free_text": "(missed deadline; no turn submitted)"}
+```
+
+**Four things about it, each stated rather than inferred.**
+
+1. **No OPENING defaulted.** The recorder's own counters read `lost_openings 0 (defaults 1)`: the
+   defaulted turn is `turn_index 5`, an `opt_in` speech turn. §9.2's criterion names *"a seed whose
+   opening defaults"*, so **the criterion as written is NOT met** (§14) and this report does not
+   stretch it to fit.
+2. **No deadline was missed.** The cause is a SCHEMA VALIDATION failure — the model put a
+   `corroboration` item, which is a CLAIM type, into `observations`. Both the `error_type` and the
+   husk's `free_text` say "deadline" for a validation default, which makes the watch item read
+   wrongly on its face. That mislabel is itself worth the record's attention: an operator scanning
+   for wall-clock misses will find this row and mis-diagnose it.
+3. **The corpus freeze guard WOULD refuse this seed, and it is demonstrated doing so** rather than
+   asserted. `check_replay_provenance` keys on `error_type` (deliberately — *"the burned-generation
+   branch stamps the REAL baseline model, so a model-only check misses it entirely"*), and its
+   branch run against these bytes exits 1:
+
+   ```
+   check_replay_provenance (deadline_default branch): 1 violation(s) in …/9p2i —
+   replay-seed-26.jsonl: 1 deadline_default failed-call row(s) — the turn(s) were DEFAULTED,
+   so the transcript carries a fallback husk rather than model output; re-record the seed
+   ```
+
+   That guard is on the **corpus** path only; `scripts/refresh_samples.sh` contains no
+   `deadline_default` check (`grep -c` → 0) and neither does the validity gate. So the two roster
+   families would treat this seed differently — a known, ledgered asymmetry, in the recorder's own
+   words: *"the validity gate has no deadline_default check at all — the recorder is deliberately
+   stricter than the gate."*
+4. **The seed was NOT re-recorded.** The recorder's prescribed remedy is to re-record it, and the
+   baseline-7 record did exactly that for two seeds. Applying it here would have made this report
+   green by re-rolling, which is the one thing a smoke must not do. **The record inherits the item
+   with its remedy named** (§16).
 
 The recorder's own summary counters, from the whole-set eval-report rebuild:
 
 ```
-lost_openings 0 (defaults 0) | vote_defaults 0 (must_vote 0) | ballot_redirects 5 (eject 5)
-missed_skip 9 | meeting_rate 1.00 (15 meetings) | ejection_accuracy 0.7143 (5/7)
+lost_openings 0 (defaults 1) | vote_defaults 0 (must_vote 0) | ballot_redirects 0 (eject 0)
+missed_skip 15 | meeting_rate 1.00 (18 meetings) | ejection_accuracy 0.7143 (5/7)
 ```
 
-**Zero lost openings, zero defaults, zero vote defaults.**
+**Zero lost openings and zero vote defaults; one non-opening default.** The observed rate is **1
+defaulted turn in 204 recorded calls**; the superseded first attempt carried 0 in 176 (§2.0). Two
+five-seed samples cannot price this, and the report gives no rate for the record to plan against —
+only the two observations and their denominators.
 
 ## 12. Operating data, and the re-priced projection
 
 Measured, not inherited.
 
 ```
-15 meetings | 176 LLM calls | 856,878 input + 38,386 output = 895,264 tokens | $0.0000
-tokens/call    5,086.7
-calls/meeting     11.73
-tokens/meeting 59,684.3
-per-seed serial wall: 419, 300, 384, 262, 448 s  (mean 362.6, min 262, max 448)
-total operator wall: 19m28s  (7m00s serial first seed + 12m28s on two workers)
+18 meetings | 204 LLM calls | 1,001,257 input + 43,859 output = 1,045,116 tokens | $0.0000
+tokens/call    5,123.1
+calls/meeting     11.33
+tokens/meeting 58,062.0
+per-seed serial wall: 480, 373, 434, 411, 388 s  (mean 417.2, min 373, max 480)
+total operator wall: 21m42s  (8m00s serial first seed + 13m42s on two workers)
 ```
 
-**Worker occupancy:** the parallel leg did 1,394 s of serial seed work across 748 s of wall on two
-workers = **93.2%**; the idle 6.8% is the tail after seed 46 finished while seed 26 ran on. The
+**Worker occupancy:** the parallel leg did 1,606 s of serial seed work across 822 s of wall on two
+workers = **97.7%**; the idle 2.3% is the tail after seed 26 finished while seed 46 ran on. The
 first leg was one seed by design, so its capacity figure is not comparable and is not averaged in.
 
 **Retries, transport blips, worker diagnostics: none.** Both run logs were scanned for `WARN`,
-`ERROR`, `Traceback`, retry, lock, dead-owner and claim diagnostics — the only matches were the
-substring `lock` inside `Locked substrate OK`. **No seed consumed a second attempt of its budget.**
+`ERROR`, `Traceback`, retry, dead-owner and claim diagnostics — **zero matches in either**. **No seed
+consumed a second attempt of its budget of 8**, which is why the retry budget never bound (§2.0).
+The one defaulted turn (§11.2) is not a retry: a recorded parse failure is non-fatal to the wrapper
+by design (`scripts/refresh_samples.sh`:457-461) and consumes no attempt.
 
 ### 12.1 The inflation, measured like-for-like
 
@@ -803,9 +958,9 @@ committed seeds; the re-derived all-games mean is its CROSS-CHECK. **Both are pu
 
 | denominator | meetings | tokens | tokens/meeting | ratio against the smoke |
 |---|---|---|---|---|
-| **the SAME FIVE committed seeds** (the like-for-like, and the primary) | 21 | 1,041,851 | **49,612.0** | **×1.2030 (+20.3%)** |
-| both committed 9p2i legs, 200 games (the cross-check, re-derived from the bytes) | 590 | 31,939,656 | 54,135.0 | ×1.1025 (+10.3%) |
-| the smoke | 15 | 895,264 | 59,684.3 | — |
+| **the SAME FIVE committed seeds** (the like-for-like, and the primary) | 21 | 1,041,851 | **49,612.0** | **×1.1703 (+17.0%)** |
+| both committed 9p2i legs, 200 games (the cross-check, re-derived from the bytes) | 590 | 31,939,656 | 54,135.0 | ×1.0725 (+7.3%) |
+| the smoke | 18 | 1,045,116 | 58,062.0 | — |
 
 **The two denominators DISAGREE by 8.4% on the OFF side, where 21.14's agreed to 0.1%, and that
 disagreement is the finding this check exists to produce.** The drawn five are token-LIGHTER per
@@ -819,15 +974,14 @@ The per-meeting increase splits, against the same five committed seeds:
 
 | | same-five committed | smoke | factor |
 |---|---|---|---|
-| calls per meeting | 10.52 | 11.73 | **×1.1149 (+11.5%)** |
-| tokens per call | 4,714.3 | 5,086.7 | **×1.0790 (+7.9%)** |
-| **tokens per meeting** | **49,612.0** | **59,684.3** | **×1.2030 (+20.3%)** |
+| calls per meeting | 10.52 | 11.33 | **×1.0769 (+7.7%)** |
+| tokens per call | 4,714.3 | 5,123.1 | **×1.0867 (+8.7%)** |
+| **tokens per meeting** | **49,612.0** | **58,062.0** | **×1.1703 (+17.0%)** |
 
-and the two factors multiply to the third exactly (1.1149 × 1.0790 = 1.2030). **So roughly
-two-fifths of the per-meeting increase is larger prompts and roughly three-fifths is a higher call
-rate.** The prompt-size term is the Wave-2 blocks paying their way, measured; the call-rate term is
-a trajectory effect at n = 15 meetings, not a render fact, and 10.52 → 11.73 is well inside what
-five seeds can wander.
+and the two factors multiply to the third exactly (1.0769 × 1.0867 = 1.1703). **So the per-meeting
+increase splits almost evenly between larger prompts and a higher call rate.** The prompt-size term
+is the Wave-2 blocks paying their way, measured; the call-rate term is a trajectory effect at
+n = 18 meetings, not a render fact, and 10.52 → 11.33 is well inside what five seeds can wander.
 
 ### 12.2 The four-leg projection, re-derived
 
@@ -838,19 +992,24 @@ up to 50 (×50/49), giving **11h54m58s**, and that baseline is scaled by this sm
 tokens-per-meeting ratio. The bracket's low end is the all-games cross-check ratio; its centre is
 the like-for-like ratio, which the ratified reading rule makes primary; its high end is the
 like-for-like ratio multiplied by a latency allowance taken from this run's own measured per-seed
-spread (slowest 448 s over the mean 362.6 s = ×1.2355), because with `$0` flat-rate billing the wall
+spread (slowest 480 s over the mean 417.2 s = ×1.1505), because with `$0` flat-rate billing the wall
 is dominated by hosted-provider latency, which five seeds measure coarsely.
 
 | | scaling factor | **four-leg total** |
 |---|---|---|
-| low (all-games cross-check ratio) | ×1.1025 | **13h08m16s** |
-| **centre (like-for-like ratio, primary)** | **×1.2030** | **14h20m08s** |
-| high (like-for-like × the latency allowance) | ×1.4864 | **17h42m42s** |
+| low (all-games cross-check ratio) | ×1.0725 | **12h46m50s** |
+| **centre (like-for-like ratio, primary)** | **×1.1703** | **13h56m45s** |
+| high (like-for-like × the latency allowance) | ×1.3465 | **16h02m42s** |
 
-**The bracket is 13h08m – 17h43m, centred at 14h20m**, against the re-record's realized 11h54m28s
+**The bracket is 12h47m – 16h03m, centred at 13h57m**, against the re-record's realized 11h54m28s
 for 299 games and the phase-20 record's 23h25m42s for 300. **The Wave-2 levers add rendered prompt
 bytes, and this ratio is the single number that decides whether the next record fits its window: at
-the centre it does, with roughly nine hours of margin against the phase-20 wall.**
+the centre it does, with roughly nine and a half hours of margin against the phase-20 wall.**
+
+**One honest limit on the bracket.** The projection prices PROMPT growth; it does not price a
+re-record. Each seed the freeze guard refuses for a defaulted turn (§11.2) costs its own wall again
+— the baseline-7 record spent 12m33s re-recording two — and this smoke gives no rate to plan that
+with. The record should carry the re-record cost as a line item rather than inside this bracket.
 
 ## 13. What this smoke does NOT cover
 
@@ -872,8 +1031,13 @@ Named rather than left to be discovered.
    dead-owner detection degrades to a documented no-op (`scripts/refresh_samples.sh`:768-776). The
    mkdir mutex and its release still serialize correctly, and no MANIFEST row was lost across two
    concurrent writers.
-6. **No measurement.** Five seeds, 15 meetings, 7 ejections. Every cell above says so where it
+6. **No measurement.** Five seeds, 18 meetings, 7 ejections. Every cell above says so where it
    appears, and **no pre-registered bar is declared met or missed on five seeds.**
+7. **The guard-redirect provenance marker is UNEXERCISED** on these bytes — zero ballots were
+   redirected (§11.1 row 4), so that repair is neither confirmed nor contradicted here.
+8. **The defaulted-turn rate is NOT priced.** Two five-seed samples produced 1 and 0 defaults over
+   204 and 176 calls (§11.2). That is two observations, not a rate, and §12.2's bracket deliberately
+   excludes any re-record cost derived from it.
 
 ## 14. The criteria, quoted VERBATIM and read one by one
 
@@ -885,16 +1049,18 @@ its §11.1 refusals are properties of the instrument rather than criteria for a 
 | § 9.2 criterion, verbatim | reading on this run | verdict |
 |---|---|---|
 | "a `scripts/validity_gate.py` FAIL on any leg" | one leg, all ten checks PASS (§6.1) | **NOT MET** |
-| "a seed whose opening defaults (the `(deadline_default)` watch item)" | 0 lost openings, 0 defaults, 0 `failed_call` rows of any kind, 0 `(deadline_default)` sentinels under either shape (§11.2) | **NOT MET** |
-| "a guard trip" | no guard fired: the wrapper's four preflights passed on the sanctioned slate and refused every deviation, `check_replay_provenance` was not reached by this wrapper, and the ON-recording reader's four refusals (counterfactual §11.1) all passed | **NOT MET** |
+| "a seed whose opening defaults (the `(deadline_default)` watch item)" | **the closest call on the page, and it is NOT met.** The criterion's subject is an OPENING, and `lost_openings 0 (defaults 1)`: no opening defaulted. One `opt_in` speech turn on seed 26 did, and its `failed_call` row carries `error_type == "deadline_default"` (§11.2). The criterion as written does not reach a non-opening turn, and this report records that rather than stretching it | **NOT MET — and the watch item FIRED; see §11.2 and §16** |
+| "a guard trip" | no guard fired on this run: the wrapper's four preflights passed on the sanctioned slate and refused every deviation, and the ON-recording reader's four refusals (counterfactual §11.1) all passed. `check_replay_provenance` is **not in this wrapper's path at all**, so it could not fire — and driven by hand against these bytes it REFUSES seed 26 (§11.2). Stated plainly: no guard tripped, and a guard the record runs would have | **NOT MET** |
 | "a lever-stamp mismatch between the recorded snapshot and the declared slate, compared through `orchestrator.replay.substrate_slate_mismatches` and **never re-derived**" | `substrate_slate_mismatches(['reporter_reasoning','corroboration_discipline','testimony_shapes'])` → `[]`, and `substrate_stamp_mismatches` empty on each of the five recorded stamps (§7) | **NOT MET** |
 | "any of the seven §8.1 tripwires failing **its predicate** — the sample-local criterion in §8.1's third column, evaluated over whatever the run actually recorded. A denominator smaller than baseline 8's is expected at the smoke and is NOT a trip." | all seven PASS (§15); the reader exits 0 and `payload["stopped_cells"]` is empty | **NOT MET** |
 
-**Classes this run observed that no criterion names.** Three, recorded in the memo's own words
-rather than stretched to fit: the `at_body` line's 50% impostor share (§9.2), the first spoken
-`saw_kill` and its ballot interaction (§8.4), and the like-for-like/all-games denominator
-disagreement (§12.1). **No §9.2 criterion names any of these classes verbatim, and this report
-invents none.**
+**Classes this run observed that no criterion names.** Five, recorded in the memo's own words rather
+than stretched to fit: the `at_body` line's 50% impostor share (§9.2); the first spoken `saw_kill`
+and its ballot interaction (§8.4); **what the table did with those two accounts — both true, neither
+convicting, one of them getting the truthful witness ejected** (§8.5); the like-for-like/all-games
+denominator disagreement (§12.1); and **the non-opening defaulted turn and its `deadline_default`
+label** (§11.2). **No §9.2 criterion names any of these classes verbatim, and this report invents
+none.** The precedent for saying so in those words is `audits/audit-phase-20-smoke.md` §12.
 
 **And the standing canon, stated where the report needs it:** baseline 7 is canon by explicit owner
 override of a FINDING verdict, with bar 1 missed at 61/103 = 0.5922 against ≥ 0.60 and bar 2 missed
@@ -915,39 +1081,53 @@ table ends with **`verdict: every GATED predicate PASSES on these bytes`**.
 
 | tripwire | cell | the ratified SAMPLE-LOCAL predicate | reading on these bytes | verdict |
 |---|---|---|---|---|
-| **T1** (never-worse bar + STOP) | `T-7` | the count is 0, whatever the denominator | **0/3 = 0.0000** `[ADV]` | **PASS** |
-| **T2** (STOP) | `R-13` | every observed body-report opening gains the block — 100% of the observed denominator | **14/14 = 1.0000**; emergency openings that gained one = 0; byte-diff column 14/14, agrees | **PASS** |
-| **T2** (STOP) | `R-14` | every observed non-reporter speech turn in a body-report meeting gains it — 100%, and no emergency-meeting prompt gains either | **67/67 = 1.0000**; emergency speech prompts that gained one = 0; byte-diff column 67/67, agrees | **PASS** |
-| **T3** (STOP) | `R-15` | the count is 0, whatever the ballot denominator | **0/88 = 0.0000** | **PASS** |
-| **T4** (STOP) | `T-6` | 100% of observed location accounts reach the map under ON (and the OFF reconstruction of the same run is strictly below it) | **102/102 = 1.0000** ON against **21/102 = 0.2059** OFF — strictly below, so the ordering clause bites rather than passing on the equality the owner ruled permissible | **PASS** |
-| **T5** (never-worse bar + STOP) | `T-9a` | every observed CREW speech turn gains the ELICITATION block | **49/49 = 1.0000** | **PASS** |
-| **T5** (never-worse bar + STOP) | `T-9b` | the count of IMPOSTOR speech prompts gaining an ELICITATION block is 0 | **0/24 = 0.0000**, with the role-blind public-transcript row present in impostor prompts and correctly EXCLUDED by construction (§8.4) | **PASS** |
-| **T6** (STOP) | `C-9` | the observed share is ≥ 99% of ballots | **88/88 = 1.0000**; byte-diff column 88/88, agrees | **PASS** |
-| **T7** (STOP) | `B-1m1` | the meeting-1 row count is identical between the run's own OFF and ON columns | **1412/72 = 19.6111 in both columns** | **PASS** |
+| **T1** (never-worse bar + STOP) | `T-7` | the count is 0, whatever the denominator | **0/4 = 0.0000** `[ADV]` | **PASS** |
+| **T2** (STOP) | `R-13` | every observed body-report opening gains the block — 100% of the observed denominator | **17/17 = 1.0000**; emergency openings that gained one = 0; byte-diff column 17/17, agrees | **PASS** |
+| **T2** (STOP) | `R-14` | every observed non-reporter speech turn in a body-report meeting gains it — 100%, and no emergency-meeting prompt gains either | **78/78 = 1.0000**; emergency speech prompts that gained one = 0; byte-diff column 78/78, agrees | **PASS** |
+| **T3** (STOP) | `R-15` | the count is 0, whatever the ballot denominator | **0/102 = 0.0000** | **PASS** |
+| **T4** (STOP) | `T-6` | 100% of observed location accounts reach the map under ON (and the OFF reconstruction of the same run is strictly below it) | **130/130 = 1.0000** ON against **28/130 = 0.2154** OFF — strictly below, so the ordering clause bites rather than passing on the equality the owner ruled permissible | **PASS** |
+| **T5** (never-worse bar + STOP) | `T-9a` | every observed CREW speech turn gains the ELICITATION block | **55/55 = 1.0000** | **PASS** |
+| **T5** (never-worse bar + STOP) | `T-9b` | the count of IMPOSTOR speech prompts gaining an ELICITATION block is 0 | **0/29 = 0.0000**, with the role-blind public-transcript row present in impostor prompts and correctly EXCLUDED by construction (§8.4) | **PASS** |
+| **T6** (STOP) | `C-9` | the observed share is ≥ 99% of ballots | **101/102 = 0.9902**; byte-diff column 101/102, agrees. The one ballot short is §8.1's own stated residue, which it rules context rather than a second criterion | **PASS** |
+| **T7** (STOP) | `B-1m1` | the meeting-1 row count is identical between the run's own OFF and ON columns | **1425/73 = 19.5205 in both columns** | **PASS** |
+
+**T6 is the row this run actually tested.** On the superseded first attempt `C-9` read 88/88 = 100%,
+which passes a ≥ 99% floor without ever approaching it; here it reads 99.02% with one ballot in the
+residue, so the predicate was exercised against a real margin rather than satisfied by construction.
 
 **The population column binds neither run.** Every denominator here is smaller than baseline 8's —
-14 openings against 620, 67 speech turns against 2,715, 88 ballots against 3,631, 102 location
+17 openings against 620, 78 speech turns against 2,715, 102 ballots against 3,631, 130 location
 accounts against 4,173 — and §8.1 ratifies that as expected and **NOT a trip**. Each row is judged
 on its predicate; the baseline-8 figure appears in §8's tables as a reference and nowhere as a
 criterion. **No tripwire is a graduating bar and none contributes to any verdict but this smoke's.**
 
 ## 16. The verdict, the bytes, and what happens next
 
-**GO.** Ruled against `audits/audit-phase-21-preregistration.md` §9.2: **no abandon criterion is
-met** (§14), all seven §8.1 tripwires PASS against their sample-local predicates (§15), the validity
-gate PASSED on all ten checks with both reconstructions byte-identical (§6), the recorded substrate
-stamp is the declared slate on all five seeds by both registered comparisons (§7), no Wave-1 repair
-regressed (§11.1), and the committed record is untouched (§6.3).
+**GO, with one watch item FIRED.** Ruled against `audits/audit-phase-21-preregistration.md` §9.2:
+**no abandon criterion is met** (§14), all seven §8.1 tripwires PASS against their sample-local
+predicates (§15), the validity gate PASSED on all ten checks with both reconstructions
+byte-identical (§6), the recorded substrate stamp is the declared slate on all five seeds by both
+registered comparisons (§7), no Wave-1 repair regressed (§11.1), and the committed record is
+untouched (§6.3).
+
+**The GO is not a clean bill.** One seed carries a defaulted turn whose `failed_call` row the corpus
+freeze guard refuses (§11.2), and §9.2's criterion does not reach it because its subject is an
+opening and no opening defaulted. That is the ratified criteria producing GO on a run that also
+surfaced a defect — which is the smoke working, not the smoke being waved through. **The owner is
+the one who weighs the two**; this report's job was to put both on the page with their evidence.
 
 **The adopting record's window opens on `14854a06`**, this report's certified source state, and the
 freeze governs from the pre-registration's own merge point. Any merge into `agents/`, `meetings/`,
 `observation/`, `orchestrator/` or `agents/strategic/prompts/` between this report and the record
 reopens it.
 
-**The bytes are PRESERVED, not deleted:**
+**The bytes are PRESERVED, not deleted** — both attempts, at stable absolute paths:
 
 ```
-/Users/danielkeinan/ailibi-smoke-21-23/9p2i     6,305,418 bytes over 8 files
+/Users/danielkeinan/ailibi-smoke-21-23/9p2i                              7,330,736 bytes over 8 files
+  — the CONTRACTED run, and the only one this report reads
+/Users/danielkeinan/ailibi-smoke-21-23/9p2i-attempt-1-default-retry-budget   6,305,418 bytes over 8 files
+  — superseded (§2.0); quoted nowhere as a cell
 ```
 
 so a routed repair can be re-measured on the same bytes at `$0` without re-recording a seed. The
@@ -955,20 +1135,31 @@ like-for-like OFF reference this report reads against is preserved beside them a
 `/Users/danielkeinan/ailibi-smoke-21-23/committed-same-five` (five copies of committed replays,
 read-only; nothing under `replays/` moved).
 
-**Three items the record inherits**, none of them a STOP and none of them blocking:
+**Five items the record inherits**, none of them a STOP and none of them blocking:
 
-1. **The first spoken `saw_kill` and its ballot interaction** (§8.4). The record will meet both at
-   scale. Both are registered — the public-transcript row by `test_a_spoken_kill_reaches_every_later_speaker`
-   and the ballot fork by Errata E.1 — and 21.24's audit should report the interaction's realized
-   size rather than E.1's synthetic per-row arithmetic.
-2. **The seed slate is not a representative token sample** (§12.1). The projection's low end is the
+1. **The defaulted turn, and the guard that refuses it** (§11.2). The record will meet this and its
+   own freeze guard will catch it on the corpus legs — and NOT on the samples legs, where neither
+   the wrapper nor the validity gate looks. The remedy is the recorder's own (`re-record the seed`),
+   the precedent is baseline 7's two seeds in 12m33s, and the cost sits outside §12.2's bracket.
+   **Two sub-items ride it:** the label is wrong (a validation default reported as a deadline miss,
+   in both the `error_type` and the husk's `free_text`), and the wrapper/gate asymmetry is ledgered
+   but unassigned.
+2. **What the table did with the two spoken kills** (§8.5). Both accounts were true, neither
+   convicted, and one ended with the truthful crew witness ejected. Two cases decide nothing; they
+   are the first live evidence on a question the counterfactual declares unreachable offline, and
+   21.24's audit should read this cell deliberately rather than incidentally.
+3. **The first spoken `saw_kill` and its ballot interaction** (§8.4). Both are registered — the
+   public-transcript row by `test_a_spoken_kill_reaches_every_later_speaker` and the ballot fork by
+   Errata E.1 — and 21.24's audit should report the interaction's realized size rather than E.1's
+   synthetic per-row arithmetic.
+4. **The seed slate is not a representative token sample** (§12.1). The projection's low end is the
    all-games cross-check for that reason, and the record should re-derive its own ratio per leg.
-3. **The `at_body` line reached an impostor in 2 of 4 firings** (§9.2), reproducing the
+5. **The `at_body` line reached an impostor in 2 of 4 firings** (§9.2), reproducing the
    counterfactual's 49.0% co-discoverer hazard at n = 4. It is observed and gated by nothing.
 
 ### 16.1 The project gate, and the two exceptions the contract asks be stated
 
-`bash scripts/check.sh` passes in this clean worktree: **6,002 tests passed, 20 skipped, 3 xfailed**,
+`bash scripts/check.sh` passes in this clean worktree: **6,003 tests passed, 20 skipped, 3 xfailed**,
 with `mypy`, `ruff check`, `ruff format --check`, `lint-imports`, `generate_prompts.py --check`
 (390 tasks, 390 prompts in sync) and `validate_task_docs.py` all green.
 
@@ -1346,7 +1537,40 @@ if __name__ == "__main__":
     raise SystemExit(main())
 ```
 
-### 17.6 The `at_body` recipient read (§9.2)
+### 17.6 The freeze-guard branch, driven by hand (§11.2)
+
+`scripts/refresh_samples.sh` never calls `check_replay_provenance`, so the smoke's own run could not
+trip it. This asks the same question the corpus path asks — does any recorded `failed_call` row
+carry `error_type == "deadline_default"` — over the smoke bytes, so "the record's guard would refuse
+this seed" is demonstrated rather than asserted. Its message is the committed guard's own, copied
+verbatim so the two cannot drift apart in this report's telling.
+
+```python
+for path in sorted(TARGET.glob("replay-seed-*.jsonl")):
+    defaulted = 0
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        row = json.loads(line)
+        if row.get("kind") == "failed_call" and row.get("error_type") == "deadline_default":
+            defaulted += 1
+    if defaulted:
+        bad.append(
+            f"{path.name}: {defaulted} deadline_default failed-call row(s) — the "
+            "turn(s) were DEFAULTED, so the transcript carries a fallback husk "
+            "rather than model output; re-record the seed"
+        )
+```
+
+### 17.7 The spoken-kill outcome read (§8.5)
+
+Walks every recorded meeting for a spoken `saw_kill`, and prints the speaker's role, the named
+player's role, the ballot tally and the outcome. Roles come from the committed
+`eval.validity.roles_by_seed` re-seeding, never from the replay — roles are firewalled out of the
+JSONL — so "the account was true" is checked against ground truth rather than against the transcript
+that made the claim.
+
+### 17.8 The `at_body` recipient read (§9.2)
 
 The same roster/roles resolution, over every recorded prompt carrying
 `Your own record shows you saw the body when it was reported.`, printing each recipient's recorded

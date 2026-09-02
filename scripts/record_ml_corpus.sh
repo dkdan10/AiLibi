@@ -173,10 +173,10 @@ REQUIRED_PROMPT_VERSIONS_BASE="accusation_round.qwen3_6_27b.v5, crewmate_report.
 # runs; every consumer reads it after that point.
 REQUIRED_PROMPT_VERSIONS=""
 # The same map rendered as the acceptance CLI's KEY=VER pairs
-# (scripts/validity_gate.py --expected-prompt-versions). Each version string is
-# "<template>.<set>.<version>…", so its template key is the first dot-segment —
-# one derivation, two renderings, and no way for the acceptance command this
-# script prints to drift from the map it freezes against.
+# (scripts/validity_gate.py --expected-prompt-versions). Emitted by the same
+# derivation, from the map's own keys — one resolution, two renderings, and no
+# way for the acceptance command this script prints to drift from the map it
+# freezes against.
 REQUIRED_PROMPT_VERSIONS_CLI=""
 # The 15.9 tactical-policy stamp for the canonical scripted FSMs. Every corpus
 # game is FSM-default (no learned mover exists yet); the stamp makes that explicit
@@ -346,18 +346,25 @@ if unknown:
     )
     raise SystemExit(1)
 env = {env_var_for_lever(key): "1" for key in keys}
-print(", ".join(sorted(prompt_versions_for_set(set_name, env=env).values())))
+resolved = prompt_versions_for_set(set_name, env=env)
+# TWO renderings of ONE map, both emitted here: the MANIFEST cell's sorted,
+# comma+space-joined values, and the acceptance CLI's KEY=VALUE pairs. The keys
+# come from the map itself and are never re-derived from a version string -- an
+# arm that swaps a variant FILE serves a value whose first dot-segment is the
+# VARIANT's name (accusation_round_roll_call...) while its map key stays
+# accusation_round, so inferring the key would print an
+# --expected-prompt-versions map validity_gate.py rejects after the record froze.
+print(", ".join(sorted(resolved.values())))
+print(",".join(f"{key}={resolved[key]}" for key in sorted(resolved)))
 PYINNER
 }
 
-if ! REQUIRED_PROMPT_VERSIONS="$(derive_required_prompt_versions)"; then
+if ! _derived_prompt_versions="$(derive_required_prompt_versions)"; then
   exit 1
 fi
-IFS=', ' read -ra _resolved_versions <<<"$REQUIRED_PROMPT_VERSIONS"
-for _resolved_version in "${_resolved_versions[@]}"; do
-  REQUIRED_PROMPT_VERSIONS_CLI="${REQUIRED_PROMPT_VERSIONS_CLI:+$REQUIRED_PROMPT_VERSIONS_CLI,}${_resolved_version%%.*}=$_resolved_version"
-done
-unset _resolved_versions _resolved_version
+REQUIRED_PROMPT_VERSIONS="$(printf '%s\n' "$_derived_prompt_versions" | sed -n '1p')"
+REQUIRED_PROMPT_VERSIONS_CLI="$(printf '%s\n' "$_derived_prompt_versions" | sed -n '2p')"
+unset _derived_prompt_versions
 
 # Validate a comma-separated seed list and echo the normalized, de-duplicated
 # form. Surrounding whitespace around a seed is tolerated; whitespace *inside* a

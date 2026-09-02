@@ -678,6 +678,43 @@ def test_declared_slate_resolves_the_prompt_versions_the_dry_run_prints() -> Non
     assert "accusation_round.qwen3_6_27b.v5.reporter_reasoning" in proc.stdout
 
 
+def test_acceptance_pairs_carry_the_maps_own_keys_not_the_version_prefix() -> None:
+    # The acceptance line the script prints feeds
+    # `validity_gate.py --expected-prompt-versions`, which matches on TEMPLATE
+    # KEYS. An arm that swaps a variant FILE serves a value whose first
+    # dot-segment is the VARIANT's name while its map key is unchanged, so a key
+    # inferred from the version string would print a map the gate rejects AFTER
+    # the record froze. impostor_roll_call is exactly that arm, which is why it
+    # is the planted case here even though this phase records it OFF.
+    from orchestrator.game import prompt_versions_for_set
+    from orchestrator.replay import env_var_for_lever
+
+    resolved = prompt_versions_for_set(
+        "qwen3_6_27b", env={env_var_for_lever("impostor_roll_call"): "1"}
+    )
+    # The premise the planted case rests on: at least one key differs from its
+    # value's first dot-segment. Without this the test could not fail.
+    assert any(key != value.split(".", 1)[0] for key, value in resolved.items()), (
+        "impostor_roll_call no longer swaps a variant file; re-plant this case"
+    )
+
+    env = _clean_env()
+    env["AILIBI_PROMPT_SET"] = "qwen3_6_27b"
+    env[env_var_for_lever("impostor_roll_call")] = "1"
+    proc = _run(
+        "--set",
+        "9p2i",
+        "--dry-run",
+        "--expect-levers",
+        "impostor_roll_call",
+        env=env,
+    )
+
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    expected = ",".join(f"{key}={resolved[key]}" for key in sorted(resolved))
+    assert f"--expected-prompt-versions {expected};" in proc.stdout, proc.stdout
+
+
 def test_derivation_refuses_an_expect_levers_key_that_is_not_a_live_toggle() -> None:
     # A typo in --expect-levers would otherwise resolve to the BARE map and
     # freeze a lever-ON record against provenance it does not carry, hours after
@@ -699,9 +736,10 @@ REPO_ROOT="{repo_root}"
 REQUIRED_PROMPT_SET="qwen3_6_27b"
 expect_levers="{expect_levers}"
 {derivation}
-if ! REQUIRED_PROMPT_VERSIONS="$(derive_required_prompt_versions)"; then
+if ! _derived="$(derive_required_prompt_versions)"; then
   exit 1
 fi
+REQUIRED_PROMPT_VERSIONS="$(printf '%s\\n' "$_derived" | sed -n '1p')"
 {check}
 check_recorded_prompt_versions "$1" "$2"
 """
