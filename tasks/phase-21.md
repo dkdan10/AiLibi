@@ -5068,6 +5068,19 @@ smoke-validated at 21.23, deriving through `prompt_versions_for_set` from `--exp
 `BodyDiscoveryAgent` stays OPTIONAL on the `MoveWitnessAgent` precedent (Codex's REQUIRED
 argument declined — a Protocol-wide test-double churn for no behavioral gain).
 
+**Amendment record (2026-09-02, the hardening-pass rulings executed — #420, squash `5ab03fd7`):**
+the co-discoverer line claims a sighting, not a position. "Your own record places you at the body when
+it was reported." rendered for 145 speakers on the 21.24 slate, and for 57 of them — every one an
+impostor, who perceives a corpse from an adjacent room — the engine had the reader in a different room,
+so the placement was false on 39.3% of its renders while the memory line it paraphrases says only "You
+discovered X's body in ROOM". It now reads "Your own record shows you saw the body when it was reported."
+— still neutral, still self-addressed, still role-blind (the over-damping canary and its planted
+exculpatory-word perturbation stand), the same byte length, so T2's populations (620 openings, 2,715
+speech turns) are untouched. Forced touches ratified per the #403 precedent: `_CO_DISCOVERY_LINE` and its
+planted twin in `tests/meetings/test_manager_reporter_render.py`, one test name, the module docstring's
+mirror, a new sighting-not-position case, and `accusation_round.j2`'s own Jinja header comment. The
+reporter block's victim/room clause was engine-correct on 620 of 620 openings and needed nothing.
+
 **Ready-to-paste prompt:** `agent_prompts/task-21-18-reporter-voice.md`
 
 ### Task 21.19 — Testimony needs a second source (lever `corroboration_discipline`, default OFF)
@@ -5409,6 +5422,33 @@ its own arm — generalising the refusal from inside this PR would have changed 
 contract, so it is bound to 21.24's re-anchor (21.23's smoke is the earlier catch if it bites
 sooner). The OFF-path guarantee held after every round: golden unedited, `verify_samples.sh`
 100/100.
+
+**Amendment record (2026-09-02, the hardening-pass rulings executed — #420, squash `5ab03fd7`):**
+the source-count block now says what the ledger computes. Its flag clause names the section it reads
+("A contradiction above names them — read it there, in its own class." / "No contradiction above names
+them."; the old "the evidence above" wording was false in the block's own vocabulary on 5,086 of 6,896
+slate rows, 3,083 in the same sentence that credited an eyewitness). Its header defines a voice as an
+ACCUSER, states who falls outside the count (a witness who accused a different name; a corroborator; a
+player nobody accused) and that an account only places the subject somewhere. Each first-hand credit
+now renders its grounding coordinate as (kind, room, tick) — `_speaker_grounds_subject` BECAME
+`_speaker_grounding_places`, whose emptiness is the old predicate, so `first_hand` membership is provably
+unchanged. The adopted clause forks PER SPEAKER — silent / an ungrounded sighting / a watched kill —
+instead of on the `testimony_shapes` arm, with one narrower arm-shaped guard Codex raised to P2: the
+kill clause may name a watched kill only while the transcript renders that row. The imported
+calibration ladder yields where the Proof paragraph renders (1,910 of 3,614 ballots). The transit line's
+tail names the charge the map forecloses instead of calling thin a conflict the row has just said does
+not exist. The four 21.19 cells re-derive identically (475/1,525, 11/425, 33/429, 48/429) and every
+`rendered`/`changed` count stands (T6's 3,614/3,631, T2's 620/2,715, T5's 2,023/0); the counterfactual's
+byte/line deltas and its B-3/B-4 line totals moved and are carried by a dated Errata section that its
+drift test now reads as the pin when present (three planted rows prove it bites). The slate's
+cross-lever interaction is RE-REGISTERED rather than retired: it fires only on rows carrying an adopted
+kill witness (+6 / +73 bytes) and measures 0 on the record. Referred onward: Codex's ask for a body
+generation on the arm stamps (declined here — the v5 line is OPEN until the record and a bump would move
+`_ALL_ON_STAMPS`) is 21.24's re-anchor question; the memo's "+61,750-byte ballot" token-cost bullet is
+stale for the owner to re-price; the two grounding-semantics fixes the pass verified (cross-channel
+grounding, `saw_move` placements for the transit clause) move the 475/1,525 cell the memo adopts by
+reference and are the OWNER's decision, sequenced after this merge. Codex: 3 rounds, all findings fixed,
+none moved a published number.
 
 **Ready-to-paste prompt:** `agent_prompts/task-21-19-corroboration.md`
 
@@ -5907,6 +5947,21 @@ right count, false sentence, on the exact slate 21.24 records; per-slate digests
 composite moves). Routed onward: `testimony_shapes` lacks the stamp-vs-environment guard its
 21.19 sibling carries — joining the version/environment generalisation and the Q2 seam items at
 21.24. Codex: 3 rounds, 3 P1s fixed, round 3 closed with no findings.
+
+**Amendment record (2026-09-02, the hardening-pass rulings executed — #420, squash `5ab03fd7`):**
+the kill mandate no longer claims a rank the substrate inverts. On 2,695 of 2,695 crew slate renders the
+guarded sentence sat on the line after "A witnessed vent is the single strongest fact this game produces
+… One exception, and only one" and opened "that outranks even a vent" — a clause BLOCK 4 never specified
+and every downstream weight contradicts (a spoken `saw_kill` mints no flag, earns no first-hand credit
+and renders "(spoken account, nothing confirms it)"). All three sites now read "say that too — it is
+testimony, not proof, and it always makes the cut: file it as …", the last clause reconciling the
+unguarded 3-5-row curation list beside it without touching an OFF byte; `_KILL_MANDATE_PREFIX` re-pinned,
+`TestTestimonyShapesIsExactlyTwoLines` still sees exactly two added lines. `loader.py`'s claim that an
+impostor-facing render is byte-identical under both states is corrected: only the ELICITATION block is
+crew-only; the public-transcript `saw_kill` row is role-blind by design. The `testimony_shapes` fork in
+the ballot's adopted clause (the #417 amendment above) is superseded by the per-speaker split recorded
+on 21.19; T5's elicitation-block predicate is unaffected (the block's text moves, its presence and shape
+do not).
 
 **Ready-to-paste prompt:** `agent_prompts/task-21-20-testimony-shapes.md`
 
