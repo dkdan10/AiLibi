@@ -6654,6 +6654,31 @@ fifteen findings, all fixed. Routed onward: the reader contract (dispatched), th
 §5.1.2(d) erratum (the hardening audit's commit), and the arm-stamp body-generation question to 21.24's
 re-anchor.
 
+**Amendment record (2026-09-02, the reader contract Q3 owed — #421, squash `75e2e782`, self-merged under
+the owner's delegation):** the three cells exist and read on baseline 8 exactly as the memo predicted —
+`T-9a` crew speech turns gaining the witnessed-kill ELICITATION block 2,023/2,023 pooled; `T-9b` the
+impostor count 0/936 (T5's never-worse count; the marker is DERIVED from the shipped template by rendering
+one crew turn through the OFF and shapes-ON bundles with an empty transcript, so the role-blind
+public-transcript row cannot enter the marker set, and the test is a GAIN, never a presence); `B-1m1` the
+first-meeting memory-row budget 68,288/3,368 identical across RECORDED-OFF, RECONSTRUCTED-OFF and ON
+(T7); `P-1k` bar 1's non-direct cell split by a spoken `saw_kill` 0/96 with its accuracy twin `P-1ka`
+0/0 [ADV] (the §5 secondary this contract owed). The numerators of `T-9` and `T-9a` coincide only because
+no `saw_kill` was ever spoken — the planted case proves the byte diff moves for both roles while the
+elicitation count reads 0 for the impostor. Ten planted cases, incl. a breached `not is_impostor` guard
+driven through the real walk (T-9b leaves zero) and a later-meeting difference masking a first-meeting one
+(B-1 blind, B-1m1 catches it). Every published row, the four corroboration pins and the Errata pins
+re-derive unchanged; the memo's §12 reader prints `0 mismatches`; the §8.1 T5 cell's "UNREAD until 21.23"
+re-worded to name this contract as a dated §11 row. Codex: 3 rounds. **A gap it surfaced, ruled by the
+orchestrator into a further instrument amendment before 21.23:** the script as a WHOLE cannot walk a
+lever-ON recording (`--sets` resolves only under `replays/`; the capturing bundle is the OFF renderers, so
+every recorded-response lookup on ON bytes misses; the ambient guard refuses the exporting shell the loader
+needs) — so the smoke could not have read its own tripwires with the registered reader. Dispatched as
+"the counterfactual reads a lever-ON recording" (an `--recording <dir>` mode keyed on the ON renderers,
+every tripwire row with RECORDED-ON / RECONSTRUCTED-ON / OFF-re-render columns and the memo's predicate
+printed beside it, the guard checking the shell's exports EQUAL the recording's stamp, a fake-provider ON
+recording as the planted case; it also marks T7 READ in §8.1 as the second §11 row). P-1ka is printed
+0/0 [ADV] rather than suppressed, on T-4's precedent.
+
 **Ready-to-paste prompt:** `agent_prompts/task-21-22-preregistration.md`
 
 ### Task 21.23 — The Wave-2 smoke (operator): the lever slate ON, live, ruled against the ratified memos
