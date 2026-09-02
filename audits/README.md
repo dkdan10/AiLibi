@@ -292,6 +292,12 @@ directory's `README.md`, which carries the tallies and the proposed routing.
   exposure printed as an upper bound, the cells no offline instrument can reach
   named with their reasons, and tripwire candidates offered to the
   pre-registration. It writes no bar, no target and no decision rule.
+- [audit-phase-21-hardening.md](audit-phase-21-hardening.md) — the fresh-eyes
+  hardening pass before the injustice record: the game read as prose on
+  baseline 8 and under the lever-ON renders, 91 adversarially verified
+  findings and a second round of 32, the nine render defects amended before the
+  record, the two grounding fixes put to the owner, the errata, and the clean
+  reads — what does form a coherent story. Nothing in it moves a bar.
 - [audit-phase-21-preregistration.md](audit-phase-21-preregistration.md) — the
   falsifiability contract for the injustice record: six instruments, the
   before-cells read from committed pins, four primary bars (the two the previous

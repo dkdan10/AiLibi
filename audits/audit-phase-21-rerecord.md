@@ -690,6 +690,13 @@ cannot all be true" over the same unchanged bytes turns the journey RED; restori
 turns it green. A sibling test constructs both mismatch directions against the real rendered meeting
 so the property is pinned in the suite rather than only in this paragraph.
 
+**Erratum (2026-09-02, the hardening pass — `audits/audit-phase-21-hardening.md` H-31).** This section
+names the head card only. `FEATURED_GAMES[2]` (9p2i seed 13, "Five meetings, the longest run any
+nine-player game here needed") is also falsified by these bytes: the game holds three meetings (turns 7,
+6, 5), meeting 0 ejects nobody, and the longest run in the set is five, held by seeds 19 and 47. The card's
+second and third legs were already false at baseline 7; the leading claim is what this record moved. The
+fix is the owner's under the #412 copy rule and is routed to Task 21.24, whose scope owns the picker.
+
 ### 5.1.1b THE I-13 INJUSTICE FIXTURES: 4/4 FLIPPED becomes 3/4 flipped + 1 partial
 
 **This is the fourth movement against the justice cells, and it lands on a stated ground of the
@@ -792,6 +799,14 @@ as a served measurement would be the defect this phase opened against.
 
 Item (c) is the only movement in this record that is unambiguously an improvement, and it is stated
 as one cell rather than allowed to colour the rest.
+
+**Erratum (2026-09-02, the hardening pass — `audits/audit-phase-21-hardening.md` H-29).** Row (d)'s
+"0/106 impostor vs 6/660 crew — INVERTED" is the `samples/9p2i` reading of a cell the same instrument
+gives on all four sets; pooled it reads impostor 4/409 = 0.98% against crew 27/2748 = 0.98%, and on the
+single set 0/106's Wilson interval [0, 0.035] covers the crew rate. The direction the adjective asserts is
+not supported by the cell in either scope; the numbers stand. The channel observation that motivated the
+row — impostors state structured whereabouts only on opt-in turns because the reply branch mandates an
+empty observation list — is recorded in the hardening audit (R2-responses-2).
 
 ## 6. What this record does NOT discharge
 

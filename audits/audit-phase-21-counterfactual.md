@@ -216,6 +216,17 @@ IMP-RIDES overlap in 26, all three overlap in 25, and their union is 44 of 46 �
 outside it are `samples/9p2i` 1:m1 p-5 and `ml_corpus/9p2i` 1091:m1 p-9. PIT overlaps RC in 17.
 §8 states each lever's exposure against the ledger and then states the join, never a sum.
 
+**Erratum (2026-09-02, the hardening pass — `audits/audit-phase-21-hardening.md` H-30).** §2.1's tag
+vocabulary has a WEAK-flag tag and no STRONG-flag tag, so §2.3 renders `samples/9p2i` 41:m2 as
+`IMP-RIDES` only and §2.2 lists it among the six rows that "carry nothing beyond the generic herd". On the
+same bytes that meeting is the corpus's one innocent ejection named by STRONG `alibi_vs_sighting` flags —
+two of them, from two distinct speakers, the entire baseline-8 population of the class — and all four
+convicting rationales quote the ADMIN sighting; five of the six rows carry zero flags naming the ejectee,
+41:m2 carries five. The class totals, the 46 rows and every published cell are unchanged; the correction
+is to §2.2's sentence, which is true of five of its six. (The conviction rests on the crewmate's own
+structured alibi over-claiming its room against its own evidence array — the hardening audit's
+close-ledger class of claim-shape defects — not on a detector error.)
+
 ---
 
 ## §3 The reporter lever (`reporter_reasoning`)
