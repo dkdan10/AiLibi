@@ -68,6 +68,15 @@ AILIBI_TESTIMONY_SHAPES=1
 # AILIBI_SEED_MAX_ATTEMPTS — unset; the wrapper's featherless default is 4 (:461)
 ```
 
+**Two knobs the contract's Step 3 block names were left at the wrapper's own defaults, and the
+divergence is recorded rather than absorbed.** `AILIBI_REFRESH_WORKERS` and
+`AILIBI_SEED_MAX_ATTEMPTS` were not exported: the wrapper's featherless defaults are **2 workers**
+(`scripts/refresh_samples.sh`:441), which is what Step 3 asks for, and **4 attempts per seed**
+(:461), where Step 3's block carries the 21.14 value of 8. The contract's own re-verified anchor
+list names 4 as the wrapper's budget at this HEAD, so the two halves of the contract disagree and
+the tree wins. **The knob never bound: zero seeds consumed a second attempt** (§12), so the recorded
+bytes are exactly what an 8-attempt run would have produced.
+
 **The three lever env names were read out of the registry and `.env.example`, not typed from the
 contract.** `orchestrator/replay.py`:675-682 holds the four live toggles and
 `orchestrator.replay.env_var_for_lever` derives each variable as `AILIBI_<UPPER_SNAKE>`;
@@ -204,7 +213,7 @@ set=replays/samples/9p2i  seeds=50
   ending:CREWMATE_EJECT: 35   ending:IMPOSTOR_PARITY: 15
 ```
 
-Four of those cells are the pre-registration's own baseline-8 pins and reproduce exactly:
+Three of those cells are the pre-registration's own baseline-8 pins and reproduce exactly:
 `samples/9p2i` body-report meetings **141/151** (§3.1, I-2), innocent-ejection denominator
 **95** (I-1), reporter ejected per slot **7/141** (I-2). The census reader is therefore calibrated
 against committed pins before it is trusted to draw a slate.
@@ -500,8 +509,8 @@ counterpart says "no reference" rather than borrowing a baseline-7 figure.
 | ballots gaining a reporter block (`R-15`) | **0/88** | 0/3,631 |
 | prompts carrying `<who_reported>` (direct byte read) | 67 of 73 speech, 14 of 15 openings | no reference |
 | prompts carrying the `at_body` line (direct byte read) | 4 of 73 speech | no reference |
-| lines the block adds, per opening | 44/15 = **2.93** | 1,964/672 = 2.92 (counterfactual §6.2) |
-| lines the block adds, per changed speech turn | 380/71 = **5.35** | 15,051/2,879 = 5.23 |
+| lines THIS LEVER adds, per opening it changes (leave-one-out) | 14/14 = **1.00** | 620/620 = 1.00 (counterfactual §3.3) |
+| lines THIS LEVER adds, per speech turn it changes (leave-one-out) | 272/67 = **4.06** | 11,005/2,715 = 4.05 |
 
 The six speech prompts and one opening without `<who_reported>` are the emergency meeting's, which
 has no reporter. **The reporter thread lands on every body report and nowhere else.**
@@ -521,7 +530,7 @@ has no reporter. **The reporter thread lands on every body report and nowhere el
 | ejected subjects with a map-satisfied placement pair (`C-4`) | 0/7 `[ADV]` | 48/429 |
 | **the ejecting-ballot citation mix** (`C-5`/`C-6`/`C-7`, over the 7 ballots that ejected the 2 innocents) | **hearsay 2 / own-observation 1 / own-turn 4 / other 0 / uncited 0** | 89 / 37 / 23 / 0 / 1 of 150 (counterfactual §4.3) |
 | openings and speech turns gaining anything under this lever alone | **0** | 0 |
-| lines the block adds, per ballot | 730/88 = **8.30** | 26,522/3,614 = 7.34 (Errata E.1) |
+| lines THIS LEVER adds, per ballot it changes (leave-one-out) | 718/88 = **8.16** | 26,522/3,614 = 7.34 (Errata E.1) |
 
 The citation mix is 7 ballots and is directional to the point of being anecdotal; it is reported
 because the DoD names it, with its denominator beside it.
@@ -539,6 +548,7 @@ because the DoD names it, with its denominator beside it.
 | episodic rows the ingest writes at recorded boundaries (`T-5`) | 1,935 ON against 1,280 OFF | 73,218 against 49,667 |
 | location accounts reaching the alibi map (`T-6`) | **102/102 = 100%** ON, 21/102 = 20.6% OFF | 4,173/4,173 ON, 1,016/4,173 = 24.35% OFF |
 | spoken vent accounts naming a player who never vented (`T-7`) | **0/3** `[ADV]` | 0/512 |
+| lines THIS LEVER adds, per opening / speech turn / ballot it changes (leave-one-out) | 30/15 = **2.00**, 108/52 = **2.08**, 12/12 = **1.00** | 1,344/672 = 2.00, 4,046/2,023 = 2.00, **0** (Errata E.1) |
 
 **The witnessed-kill half is EXERCISED, not untested.** The census (§3) found four committed seeds
 carrying a crew-witnessed kill and all four were drawn; on the smoke's own bytes the walk finds
@@ -666,9 +676,13 @@ column re-derived at `$0` from the SAME five committed seeds. **Every row is dir
 | — ghost-top decisions mismatched | 0/249 | **0/209** |
 | render budget, mean rendered lines/snapshot | 40.52 over 221 | **38.09 over 176** |
 | render budget, testimony rows (≤4 / 5-6 / ≥7) | 4,181 (2,090 / 1,859 / 232) | **3,748 (1,082 / 2,182 / 484)** |
-| I-5 containment: killer in candidate set | 19/20 = 0.95 | **13/14 = 0.9286** |
+| solvability (the memo's I-5): killer in candidate set | 19/20 = 0.95 | **13/14 = 0.9286** |
 | — one candidate, and it is the killer | 6/20; 6/6 | **3/14; 3/3** |
 | — ejected an already-cleared player | 3/10 = 0.30 | **0/6 = 0.00** |
+
+The `I-n` labels in the first thirteen rows are `measure_baseline.py --honesty`'s own numbering and
+are NOT the pre-registration's §2 instrument list; the two solvability rows carry the memo's label
+explicitly so the collision cannot be misread.
 
 `measure_baseline.py --honesty` exited 0 on the FIRST completed seed alone (seed 19, 4 meetings —
 **not vacuous**) and again over the whole set; `--solvability` exited 0. **Neither raised.**
@@ -679,9 +693,9 @@ column re-derived at `$0` from the SAME five committed seeds. **Every row is dir
 |---|---|---|---|
 | win split | CREW 2 / IMP 3 (impostor 60%) | **CREW 2 / IMP 3 (impostor 60%)** | `samples/9p2i` 15/50 = 30% |
 | decisiveness (body-report ejections / body-report meetings) | 10/20 = 50.0% | **6/14 = 42.9%** | 377/620 = 60.8% |
-| bar 1's cell split by a spoken kill (`P-1k`) | 0 of 7 | **1/4 = 25.0%** `[ADV]` | 0 of 96 |
+| bar 1's cell split by a spoken kill (`P-1k`) | 0 of 7 by construction — the census finds no spoken `saw_kill` anywhere in the committed bytes | **1/4 = 25.0%** `[ADV]` | 0 of 96 |
 | — of those, convicted an IMPOSTOR (`P-1ka`) | 0/0 `[ADV]` | **1/1 = 100%** `[ADV]` | 0/0 `[ADV]` |
-| I-6 zero-flag convictions | not re-derived | **4/7**, 2 CREW / 2 IMPOSTOR | 86/429, 37 CREW |
+| zero-flag convictions (`eval/vj_instruments.py`) | not re-derived | **4/7**, 2 CREW / 2 IMPOSTOR | 86/429, 37 CREW |
 
 The win split is 5 games against a ±15-point band written for a 50-game leg; it is printed because
 §5 registers it and it decides nothing. **`P-1k` is non-empty for the first time**: one of the four
@@ -919,6 +933,22 @@ read-only; nothing under `replays/` moved).
    all-games cross-check for that reason, and the record should re-derive its own ratio per leg.
 3. **The `at_body` line reached an impostor in 2 of 4 firings** (§9.2), reproducing the
    counterfactual's 49.0% co-discoverer hazard at n = 4. It is observed and gated by nothing.
+
+### 16.1 The project gate, and the two exceptions the contract asks be stated
+
+`bash scripts/check.sh` passes in this clean worktree: **6,002 tests passed, 20 skipped, 3 xfailed**,
+with `mypy`, `ruff check`, `ruff format --check`, `lint-imports`, `generate_prompts.py --check`
+(390 tasks, 390 prompts in sync) and `validate_task_docs.py` all green.
+
+Two exceptions the contract asks be recorded rather than discovered:
+
+* **The ES hash-pin test did NOT fail here.**
+  `tests/training/test_es.py::test_evolve_is_deterministic_and_hash_pinned` is a Linux-CI hash pin
+  known to fail on this Mac on bare `main`; in this worktree it **passed**, so there is no known
+  local failure to report and none is claimed. Had it failed it would have been reported as the
+  known local failure it is and never as a smoke finding.
+* **The frontend leg was skipped** with `AILIBI_SKIP_FRONTEND=1` because `frontend/node_modules` is
+  absent in this worktree. Nothing in this PR touches `frontend/`.
 
 ## 17. Appendix — the readers this report ran, in full
 
