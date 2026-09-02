@@ -1,6 +1,6 @@
 """Pins for the Phase-21 offline counterfactual and the memo it publishes.
 
-Five things are pinned, each with a case proving it bites:
+Six things are pinned, each with a case proving it bites:
 
 1. **The slate.** Three Wave-2 keys with the file-swapping arm OFF, every one of
    them still a live toggle that reads OFF under an empty environment. A fourth
@@ -23,18 +23,35 @@ Five things are pinned, each with a case proving it bites:
    a live four-set run, the size of each join included, and the memo carries no
    bar, no target and no decision rule. Perturbed copies prove each check bites,
    including a moved tally and a deleted zero-count row.
+6. **The tripwire readers.** The elicitation marker is read off the shipped
+   template and appears nowhere in the reader's own source; a spoken kill moves
+   an impostor prompt's BYTES while offering it no block; a template whose
+   crew-only guard is stripped takes T-9b off zero through the real walk; the
+   first-meeting budget catches a difference the whole-run total nets away; and
+   the spoken-kill split of bar 1's cell counts a planted conviction that the
+   committed bytes, which hold no spoken kill, could never exercise.
 """
 
 from __future__ import annotations
 
+import functools
 import os
 import re
+import shutil
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, Final
 
 import pytest
 
+from agents.strategic.prompts.loader import build_prompt_renderers
+from meetings.schemas import (
+    ContradictionRef,
+    MeetingResult,
+    MeetingTranscript,
+    MeetingTurn,
+    SawKillObservation,
+)
 from orchestrator.replay import (
     TOGGLEABLE_SUBSTRATE_FLAG_KEYS,
     env_var_for_lever,
@@ -202,6 +219,13 @@ def fast_run() -> dict[str, object]:
     """One run over the smallest committed set, reused by every fast pin."""
 
     return cf.run([_FAST_SET])
+
+
+@pytest.fixture(scope="module")
+def full_run() -> dict[str, object]:
+    """One four-set walk, shared by the memo drift gate and the cell pins."""
+
+    return cf.run(list(cf.CANONICAL_SETS))
 
 
 def test_a_whole_run_writes_nothing_to_the_environment() -> None:
@@ -622,7 +646,9 @@ def _strip_one_advisory_marker() -> str:
 
 
 @pytest.mark.slow
-def test_the_memo_table_equals_a_live_four_set_run() -> None:
+def test_the_memo_table_equals_a_live_four_set_run(
+    full_run: Mapping[str, object],
+) -> None:
     """The document cannot drift from the instrument.
 
     Every published row -- per set and pooled -- is re-derived here and compared
@@ -632,7 +658,7 @@ def test_the_memo_table_equals_a_live_four_set_run() -> None:
     prints them and deliberately asserts no figure.
     """
 
-    payload = cf.run(list(cf.CANONICAL_SETS))
+    payload = full_run
     pins = payload["corroboration_pins"]
     assert isinstance(pins, dict) and pins["checked"] is True
     for cell, expected in cf.COMMITTED_CORROBORATION_CELLS.items():
@@ -700,6 +726,347 @@ def _totals(payload: Mapping[str, object]) -> dict[str, int]:
     totals = payload["pooled_ledger_class_totals"]
     assert isinstance(totals, dict)
     return totals
+
+
+# --------------------------------------------------------------------------- #
+# 6. The tripwire readers the ratified pre-registration owed.                  #
+# --------------------------------------------------------------------------- #
+
+_PROMPT_SET: Final[str] = "qwen3_6_27b"
+_PROMPTS_ROOT: Final[Path] = _REPO_ROOT / "agents" / "strategic" / "prompts"
+_SHAPES_ON: Final[dict[str, str]] = {"AILIBI_TESTIMONY_SHAPES": "1"}
+_CREW_GUARD: Final[str] = (
+    "{% if testimony_shapes is defined and testimony_shapes and not is_impostor %}"
+)
+
+# One already-spoken witnessed kill, the shape the arm makes speakable.
+_KILL_TURN: Final[MeetingTurn] = MeetingTurn(
+    turn_id="m-1:turn-0",
+    turn_index=0,
+    speaker="p-4",
+    turn_kind="opening",
+    reply_to=None,
+    observations=(
+        SawKillObservation(type="saw_kill", tick=11, subject="p-8", room="ADMIN"),
+    ),
+    claims=(),
+    free_text="I watched it happen.",
+)
+
+
+def _statement(
+    *, env: Mapping[str, str], transcript: MeetingTranscript, is_impostor: bool
+) -> str:
+    return build_prompt_renderers(_PROMPT_SET, env=env).statement(
+        agent_id="p-3",
+        rendered_memory="(memory)",
+        transcript=transcript,
+        contradictions=(),
+        prior_turn=None,
+        turn_kind="reply",
+        living_ids=("p-1", "p-2"),
+        is_impostor=is_impostor,
+    )
+
+
+def _markers() -> frozenset[str]:
+    return cf._RendererCache().elicitation_markers(_PROMPT_SET, "reply")
+
+
+def test_the_elicitation_marker_is_read_off_the_shipped_template() -> None:
+    # The reader must not carry a copy of a sentence the templates own: PR #420
+    # re-worded this block, and a copied sentence would have gone on matching
+    # nothing while reporting every crew turn as having lost the offer.
+    markers = _markers()
+    assert len(markers) == 2
+    template = (_PROMPTS_ROOT / _PROMPT_SET / "accusation_round.j2").read_text(
+        encoding="utf-8"
+    )
+    source = Path(cf.__file__).read_text(encoding="utf-8")
+    for marker in markers:
+        assert marker in template
+        assert marker not in source
+    # The reply and opt-in branches offer the same block, so one marker set
+    # reads both -- asserted rather than assumed, because the reader keys on
+    # the capture's own turn kind.
+    assert cf._RendererCache().elicitation_markers(_PROMPT_SET, "opt_in") == markers
+
+
+def test_a_spoken_kill_moves_the_impostor_bytes_but_offers_it_no_block() -> None:
+    # The reason T5 needs a reader rather than a role split of T-9's byte diff.
+    # A crew-spoken kill renders the role-blind PUBLIC-TRANSCRIPT row into every
+    # later prompt, impostor prompts included, which is correct and pinned by
+    # tests/agents/test_bespoke_prompt_sets.py. A role split of the byte diff
+    # would read that as an impostor turn being offered the shape and STOP a
+    # good record; the elicitation reader reads it as what it is.
+    markers = _markers()
+    spoken = MeetingTranscript(turns=(_KILL_TURN,))
+    for is_impostor, offered in ((True, 0), (False, len(markers))):
+        off = _statement(env={}, transcript=spoken, is_impostor=is_impostor)
+        on = _statement(env=_SHAPES_ON, transcript=spoken, is_impostor=is_impostor)
+        assert on != off, "the byte diff moves for BOTH roles"
+        assert (
+            cf.elicitation_lines_gained(off_prompt=off, on_prompt=on, markers=markers)
+            == offered
+        )
+
+
+def test_only_what_the_arm_adds_counts_as_an_offer() -> None:
+    # A sentence a speaker quoted into the transcript stands in both renders, so
+    # presence is not an offer. Counting the difference is what makes the
+    # impostor half a true zero rather than a substring search.
+    marker = sorted(_markers())[0]
+    assert (
+        cf.elicitation_lines_gained(
+            off_prompt=marker, on_prompt=marker, markers=frozenset({marker})
+        )
+        == 0
+    )
+    assert (
+        cf.elicitation_lines_gained(
+            off_prompt=marker, on_prompt=marker * 2, markers=frozenset({marker})
+        )
+        == 1
+    )
+
+
+def test_the_marker_derivation_refuses_when_the_arm_offers_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The planted case, and the plausible authoring slip rather than a contrived
+    # one: a guard that tests only ``is defined`` is always true, because the
+    # loader binds the kwarg on both paths. The block then renders with the arm
+    # DOWN, so the ON render adds nothing and a reader that shrugged would
+    # report every crew turn as missing the block -- an UNREAD tripwire read as
+    # a failing one.
+    scratch = tmp_path / _PROMPT_SET
+    shutil.copytree(_PROMPTS_ROOT / _PROMPT_SET, scratch)
+    body = (scratch / "accusation_round.j2").read_text(encoding="utf-8")
+    leaked = body.replace(
+        _CREW_GUARD, "{% if testimony_shapes is defined and not is_impostor %}"
+    )
+    assert leaked != body
+    (scratch / "accusation_round.j2").write_text(leaked, encoding="utf-8")
+    monkeypatch.setattr(
+        cf,
+        "build_prompt_renderers",
+        functools.partial(build_prompt_renderers, root=tmp_path),
+    )
+    with pytest.raises(SystemExit) as excinfo:
+        cf._RendererCache().elicitation_markers(_PROMPT_SET, "reply")
+    assert "elicitation block" in str(excinfo.value)
+
+
+def test_an_unknown_speech_turn_kind_refuses_rather_than_probing_another() -> None:
+    # The block is derived PER TURN KIND, so a kind this reader has not seen has
+    # no block of its own. Coercing it to the reply branch would read the wrong
+    # lines and report a real gap as a clean 100%; the refusal names the kind.
+    with pytest.raises(SystemExit) as excinfo:
+        cf._RendererCache().elicitation_markers(_PROMPT_SET, "opening")
+    assert "turn kind 'opening'" in str(excinfo.value)
+    # ...and both kinds the statement renderer really serves still read.
+    for kind in cf._SPEECH_TURN_KINDS:
+        assert len(cf._RendererCache().elicitation_markers(_PROMPT_SET, kind)) == 2
+
+
+def test_the_impostor_half_bites_on_a_breached_firewall(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The planted case for T5's NEVER-WORSE half, driven through the real walk
+    # rather than through one render: strip ``and not is_impostor`` from the
+    # crew-only guards -- the exact breach the tripwire exists to catch -- and
+    # T-9b must leave zero. The OFF body is byte-identical either way, because
+    # the guard's first conjunct is false with the arm down, so the walk still
+    # reproduces the record and only the ON column moves.
+    scratch = tmp_path / "prompts"
+    shutil.copytree(_PROMPTS_ROOT, scratch)
+    target = scratch / _PROMPT_SET / "accusation_round.j2"
+    body = target.read_text(encoding="utf-8")
+    breached = body.replace(
+        _CREW_GUARD, "{% if testimony_shapes is defined and testimony_shapes %}"
+    )
+    assert breached != body
+    target.write_text(breached, encoding="utf-8")
+    monkeypatch.setattr(
+        cf,
+        "build_prompt_renderers",
+        functools.partial(build_prompt_renderers, root=scratch),
+    )
+    rows = {
+        row["cell"]: row
+        for row in _set_block(cf.run([_FAST_SET]), _FAST_SET)["tripwire_rows"]
+    }
+    # Six of the 39 impostor speech prompts on this set are opt-in turns, which
+    # is where the role-blind guard now reaches; the crew half is unmoved.
+    assert rows["T-9b"]["on"][0] > 0
+    assert rows["T-9a"]["on"] == [39, 39]
+
+
+def test_a_block_that_renders_in_pieces_refuses(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The block is one offer whose lines share a guard, so the reader counts it
+    # as a unit. Plant a marker no template renders and the run must refuse
+    # rather than silently count half an offer as none.
+    real = cf._RendererCache.elicitation_markers
+
+    def phantom(self: Any, set_name: str, turn_kind: str) -> frozenset[str]:
+        return real(self, set_name, turn_kind) | {"a line no template renders"}
+
+    monkeypatch.setattr(cf._RendererCache, "elicitation_markers", phantom)
+    with pytest.raises(SystemExit) as excinfo:
+        cf.run([_FAST_SET])
+    assert "gained SOME but not all" in str(excinfo.value)
+
+
+def test_the_role_join_refuses_a_seat_the_two_derivations_disagree_on() -> None:
+    # The split is only as good as the seat it is drawn on. The roster and the
+    # render inputs are independent derivations, so a disagreement must stop the
+    # read rather than move a crew turn into the impostor column.
+    capture = cf._Capture(
+        kind=cf._KIND_ACCUSATION_ROUND,
+        agent_id="p-3",
+        kwargs={"is_impostor": True, "turn_kind": "reply"},
+        off_prompt="",
+    )
+    roles: dict[str, Any] = {"p-3": "CREWMATE"}
+    with pytest.raises(SystemExit) as excinfo:
+        cf.speaker_role(capture, roles, where="planted")
+    assert "role join" in str(excinfo.value)
+    # ...and the unperturbed capture still reads, so the gate is not vacuous.
+    assert cf.speaker_role(capture, {"p-3": "IMPOSTOR"}, where="planted") == "IMPOSTOR"
+
+
+def test_a_later_meeting_can_mask_a_first_meeting_budget_difference() -> None:
+    # T7's predicate is a first-meeting identity, and the published B-1 sums
+    # every captured meeting. Plant the exact case the aggregate cannot see: one
+    # row fewer at meeting 1 and one row more later.
+    row = "- [obs a] p-2 in ADMIN\n"
+    off, on = cf._LegTallies(), cf._LegTallies()
+    off.fold_snapshot(row * 3, bucket="<=4", first_meeting=True)
+    on.fold_snapshot(row * 2, bucket="<=4", first_meeting=True)
+    off.fold_snapshot(row * 2, bucket="<=4", first_meeting=False)
+    on.fold_snapshot(row * 3, bucket="<=4", first_meeting=False)
+    assert off.rendered_lines == on.rendered_lines == 5, "B-1 sees nothing move"
+    assert (off.first_meeting_rendered_lines, on.first_meeting_rendered_lines) == (3, 2)
+
+
+def _conviction(
+    *, ejected: str, transcript: MeetingTranscript, flags: tuple[Any, ...] = ()
+) -> MeetingResult:
+    return MeetingResult(
+        meeting_id="m-1",
+        triggered_by="p-1",
+        trigger_tick=11,
+        outcome="EJECTED",
+        ejected_player_id=ejected,
+        ballots=(),
+        contradictions=flags,
+        transcript=transcript,
+    )
+
+
+def test_the_spoken_kill_split_counts_a_planted_conviction() -> None:
+    # Baseline 8 holds no spoken kill at all, so the split is empty there and an
+    # empty cell proves nothing about the reader. Plant the meeting the record
+    # may produce: a kill spoken against the player the table then ejects.
+    spoken = MeetingTranscript(turns=(_KILL_TURN,))
+    assert cf.spoken_kill_subjects(spoken) == frozenset({"p-8"})
+    census = cf._KillNamedConvictions()
+    cf._fold_kill_named_conviction(
+        result=_conviction(ejected="p-8", transcript=spoken),
+        roles={"p-8": "IMPOSTOR"},
+        census=census,
+    )
+    assert (census.non_direct, census.kill_named, census.kill_named_impostor) == (
+        1,
+        1,
+        1,
+    )
+    # A kill spoken about someone else leaves the conviction in the cell but out
+    # of the split -- the subject is the ejectee, never merely the meeting.
+    other = cf._KillNamedConvictions()
+    cf._fold_kill_named_conviction(
+        result=_conviction(ejected="p-2", transcript=spoken),
+        roles={"p-2": "CREWMATE"},
+        census=other,
+    )
+    assert (other.non_direct, other.kill_named) == (1, 0)
+
+
+def test_a_vent_flag_naming_the_ejectee_leaves_bar_1s_cell_entirely() -> None:
+    # The split decomposes the NON-DIRECT cell, so it must inherit that cell's
+    # own boundary: a ``vent_sighting`` naming the ejectee is direct proof and
+    # bar 1 never counted it.
+    spoken = MeetingTranscript(turns=(_KILL_TURN,))
+    vent = ContradictionRef(
+        contradiction_id="c-1",
+        kind="vent_sighting",
+        event_a_id="o-1",
+        event_b_id="o-1",
+        subjects=("p-8",),
+        description="p-8 was seen venting",
+    )
+    assert not cf.is_non_direct_ejection((vent,), "p-8")
+    census = cf._KillNamedConvictions()
+    cf._fold_kill_named_conviction(
+        result=_conviction(ejected="p-8", transcript=spoken, flags=(vent,)),
+        roles={"p-8": "IMPOSTOR"},
+        census=census,
+    )
+    assert (census.non_direct, census.kill_named) == (0, 0)
+
+
+def test_a_split_over_the_wrong_population_refuses(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The planted case for the denominator: the split is bar 1's own cell, so a
+    # partition that stops agreeing with the committed cross-tab must refuse
+    # rather than publish "n of 96" over a different n.
+    monkeypatch.setattr(cf, "is_non_direct_ejection", lambda *args, **kwargs: True)
+    with pytest.raises(SystemExit) as excinfo:
+        cf.run([_FAST_SET])
+    message = str(excinfo.value)
+    assert "non-direct" in message and "EjecteeProofCrossTab" in message
+
+
+@pytest.mark.slow
+def test_the_baseline_8_tripwire_readings(full_run: Mapping[str, object]) -> None:
+    """The three readings the pre-registration's §8.1 and §5 will be read on."""
+
+    rows = {row["cell"]: row for row in _rows(full_run, "pooled_tripwire_rows")}
+    published = {row["cell"]: row for row in _rows(full_run, "pooled")}
+    # T5, both halves. No `saw_kill` was ever spoken on these bytes.
+    assert rows["T-9a"]["on"] == [2023, 2023]
+    assert rows["T-9b"]["on"] == [0, 936]
+    # The split partitions T-9's own population exactly, which is what makes it
+    # a decomposition of that row rather than a second measurement.
+    assert (
+        rows["T-9a"]["on"][1] + rows["T-9b"]["on"][1]
+        == published["T-9"]["on"][1]
+        == 2959
+    )
+    # On THESE bytes the elicitation reading and the byte diff coincide. That is
+    # a property of a corpus holding no spoken kill, not an invariant: the first
+    # spoken kill at the smoke or the record separates them.
+    assert rows["T-9a"]["on"][0] + rows["T-9b"]["on"][0] == published["T-9"]["on"][0]
+    # T7: the first meeting reads identical in all three columns.
+    assert (
+        rows["B-1m1"]["recorded_off"]
+        == rows["B-1m1"]["reconstructed_off"]
+        == rows["B-1m1"]["on"]
+        == [68288, 3368]
+    )
+    # Bar 1's cell split by a spoken kill: empty, over bar 1's own denominator.
+    assert rows["P-1k"]["recorded_off"] == [0, 96]
+    assert published["P-1"]["recorded_off"][1] == 96
+    assert rows["P-1ka"]["recorded_off"] == [0, 0]
+
+
+def _rows(payload: Mapping[str, object], key: str) -> list[Any]:
+    rows = payload[key]
+    assert isinstance(rows, list)
+    return rows
 
 
 # --------------------------------------------------------------------------- #

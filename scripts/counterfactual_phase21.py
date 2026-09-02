@@ -51,6 +51,13 @@ born here except the injustice ledger, which is a join over recorded fields plus
 one declared judgment regex and lives here until a task that owns a gauge asks
 for it.
 
+Beside that table it prints a short block of TRIPWIRE READERS -- cells the
+ratified pre-registration names as criteria and no published cell can evaluate:
+the elicitation offer split by the speaker's role (its T5), the render budget at
+the first meeting alone (its T7) and bar 1's non-direct cell split by a spoken
+kill (its §5). They sit outside the published table because that table is a
+census pinned row for row by the memo it appears in. None of them is a bar.
+
 The reconstruction walk is :func:`tests.meetings.test_prompt_byte_golden.
 walk_replay_meetings`. Importing it from a test module is deliberate and ruled:
 it is the only committed reconstruction that drives the real ``MeetingManager``
@@ -98,7 +105,7 @@ from eval.evidence_honesty import (  # noqa: E402
     _living_bucket,
     compute_evidence_honesty,
 )
-from eval.deduction_metrics import ScaffoldLeakageCells  # noqa: E402
+from eval.deduction_metrics import ScaffoldLeakageCells, classify_flag  # noqa: E402
 from eval.meeting_quality import TournamentEvalReport  # noqa: E402
 from eval.reporter_justice import (  # noqa: E402
     ReporterJusticeCells,
@@ -123,9 +130,12 @@ from meetings.schemas import (  # noqa: E402
     AccusationClaim,
     ContradictionRef,
     MeetingResult,
+    MeetingTranscript,
     ReportedStatement,
+    SawKillObservation,
     SawVentObservation,
     SightingRecord,
+    TurnKind,
     VoteBallot,
 )
 from meetings.transcript import is_weak_contradiction, turn_observation_id  # noqa: E402
@@ -390,6 +400,7 @@ class _RendererCache:
     def __init__(self) -> None:
         self._off: dict[str, PromptRenderers] = {}
         self._on: dict[str, PromptRenderers] = {}
+        self._markers: dict[tuple[str, str], frozenset[str]] = {}
 
     def off(self, set_name: str) -> PromptRenderers:
         if set_name not in self._off:
@@ -402,6 +413,46 @@ class _RendererCache:
                 set_name, env=_TESTIMONY_SHAPES_ENV
             )
         return self._on[set_name]
+
+    def elicitation_markers(self, set_name: str, turn_kind: str) -> frozenset[str]:
+        """The lines a CREW speech prompt gains when the testimony arm is up.
+
+        Derived by rendering one crew turn of this kind through both bundles,
+        never written out here: the block's wording moves whenever the template
+        is amended (PR #420 re-worded it), and a copied sentence would stop
+        matching in silence and read every crew turn as having lost the block.
+
+        The probe renders an EMPTY transcript, which is what keeps the marker
+        set the ELICITATION block alone. A spoken ``saw_kill`` also puts a
+        role-blind PUBLIC-TRANSCRIPT row in front of every later speaker,
+        impostor prompts included; that row is correct, and a marker set derived
+        from a render that carried one would read it as an impostor turn being
+        offered the shape.
+        """
+
+        key = (set_name, turn_kind)
+        if key not in self._markers:
+            markers = frozenset(
+                line
+                for line in _added_lines(
+                    _probe_crew_statement(self.off(set_name), turn_kind=turn_kind),
+                    _probe_crew_statement(
+                        self.shapes_on(set_name), turn_kind=turn_kind
+                    ),
+                )
+                if line.strip()
+            )
+            if not markers:
+                raise SystemExit(
+                    f"{set_name}: a crew {turn_kind!r} turn gains NO line when "
+                    "testimony_shapes is supplied, so this build offers no "
+                    "elicitation block for the T5 reader to find. Either the "
+                    "block left the template or its guard leaked into the OFF "
+                    "body — a reader that returned 0 here would report every "
+                    "crew turn as missing the block and STOP a correct record"
+                )
+            self._markers[key] = markers
+        return self._markers[key]
 
     def capturing(self, sink: list[_Capture]) -> dict[str, PromptRenderers]:
         """A capturing renderer bundle for every registered prompt set.
@@ -437,6 +488,109 @@ def _renderer_for(renderers: PromptRenderers, kind: str) -> Any:
     if kind == _KIND_ACCUSATION_ROUND:
         return renderers.statement
     return renderers.vote
+
+
+# --------------------------------------------------------------------------- #
+# The elicitation block: what the testimony arm OFFERS a crew speaker.         #
+# --------------------------------------------------------------------------- #
+
+
+#: The turn kinds a speech prompt is rendered for. ``opening`` is the report
+#: templates' kind and never reaches the statement renderer, so a capture
+#: carrying anything else means the reader is probing a branch it has not seen.
+_SPEECH_TURN_KINDS: Final[tuple[TurnKind, ...]] = ("reply", "opt_in")
+
+
+def _probe_crew_statement(renderers: PromptRenderers, *, turn_kind: str) -> str:
+    """One minimal CREW speech render, for deriving the arm's own block.
+
+    Everything optional is left at its default so the render carries as little
+    as possible beside the block being derived, and the transcript is empty so
+    no publicly spoken row can join it.
+    """
+
+    kind = next((k for k in _SPEECH_TURN_KINDS if k == turn_kind), None)
+    if kind is None:
+        raise SystemExit(
+            f"a speech prompt was rendered for turn kind {turn_kind!r}, which "
+            f"is not one of {list(_SPEECH_TURN_KINDS)}. The elicitation block is "
+            "derived per turn kind, so this reader cannot probe a branch it does "
+            "not know exists — falling back to another kind's block would read "
+            "the wrong lines. This is a DEFECT IN THIS SCRIPT's reader"
+        )
+    return renderers.statement(
+        agent_id="p-1",
+        rendered_memory="",
+        transcript=MeetingTranscript(turns=()),
+        contradictions=(),
+        prior_turn=None,
+        turn_kind=kind,
+        living_ids=("p-2",),
+    )
+
+
+def _added_lines(off: str, on: str) -> tuple[str, ...]:
+    """The lines ``on`` renders that ``off`` does not, as a MULTISET difference.
+
+    Containment would call a line "added" that both renders already carried; the
+    multiset difference reports exactly what the second render puts on the page.
+    """
+
+    remaining = Counter(off.splitlines())
+    added: list[str] = []
+    for line in on.splitlines():
+        if remaining[line]:
+            remaining[line] -= 1
+        else:
+            added.append(line)
+    return tuple(added)
+
+
+def elicitation_lines_gained(
+    *, off_prompt: str, on_prompt: str, markers: frozenset[str]
+) -> int:
+    """How many of the elicitation block's own lines the ON render ADDS.
+
+    A GAIN, never a presence. A line already in the OFF bytes was not put there
+    by the arm, and a sentence some speaker quoted into the transcript sits in
+    both renders — counting the difference is what lets the crew half and the
+    impostor half of T5's predicate be read off the same function.
+    """
+
+    return sum(
+        1 for marker in markers if on_prompt.count(marker) > off_prompt.count(marker)
+    )
+
+
+def spoken_kill_subjects(transcript: MeetingTranscript) -> frozenset[PlayerId]:
+    """Every player a spoken ``saw_kill`` observation names as the killer."""
+
+    return frozenset(
+        observation.subject
+        for turn in transcript.turns
+        for observation in turn.observations
+        if isinstance(observation, SawKillObservation)
+    )
+
+
+def is_non_direct_ejection(
+    contradictions: Sequence[ContradictionRef], ejected: PlayerId
+) -> bool:
+    """Whether bar 1's non-direct cell holds this conviction.
+
+    The partition is ``EjecteeProofCrossTab``'s and is imported rather than
+    restated: an ejection is DIRECT exactly when a ``role_proof`` flag named the
+    ejectee, so everything else is the non-direct cell. ``ROLE_PROOF_KINDS`` is
+    ``{"vent_sighting"}``, which is why an eyewitness-kill conviction lands here
+    as deduction and needs a split of its own.
+    """
+
+    return ejected not in frozenset(
+        subject
+        for flag in contradictions
+        if classify_flag(flag) == "role_proof"
+        for subject in flag.subjects
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -573,6 +727,28 @@ class _LegTallies:
     rendered_lines: int = 0
     testimony_rows: int = 0
     testimony_by_bucket: Counter[str] = field(default_factory=Counter)
+    # The same fold restricted to the game's FIRST meeting. A whole-game total
+    # can net a first-meeting difference against an opposite later one, and the
+    # first meeting is the only one whose ON render is derivable from recorded
+    # inputs, so the cell that answers "did prose displace memory here" has to
+    # be scoped to it.
+    first_meeting_snapshots: int = 0
+    first_meeting_rendered_lines: int = 0
+
+    def fold_snapshot(self, prompt: str, *, bucket: str, first_meeting: bool) -> None:
+        """Count one rendered prompt's memory rows into the budget."""
+
+        rows = len(_RENDERED_ROW.findall(prompt))
+        testimony = sum(
+            1 for line in prompt.splitlines() if _TESTIMONY_ROW.match(line) is not None
+        )
+        self.snapshots += 1
+        self.rendered_lines += rows
+        self.testimony_rows += testimony
+        self.testimony_by_bucket[bucket] += testimony
+        if first_meeting:
+            self.first_meeting_snapshots += 1
+            self.first_meeting_rendered_lines += rows
 
     def budget(self) -> RenderBudgetCells:
         return RenderBudgetCells(
@@ -650,6 +826,8 @@ def _fold_render_diff(
     ledger: MeetingTestimonyLedger,
     legs: Sequence[tuple[str, frozenset[str]]],
     tallies: Mapping[str, _LegTallies],
+    roles: Mapping[PlayerId, Role],
+    elicitation: _ElicitationCensus,
 ) -> None:
     """Render every captured prompt once per slate and count what moved."""
 
@@ -692,19 +870,114 @@ def _fold_render_diff(
         if touched or not levers:
             leg.meetings_touched += 1
         on_prompts[label] = rendered_for_leg
+    first_meeting = meeting.meeting_index == 0
     for label, _levers in legs:
         leg = tallies[label]
         for index, suffix in paired:
-            prompt = on_prompts[label][index] + suffix
-            leg.snapshots += 1
-            leg.rendered_lines += len(_RENDERED_ROW.findall(prompt))
-            testimony = sum(
-                1
-                for line in prompt.splitlines()
-                if _TESTIMONY_ROW.match(line) is not None
+            leg.fold_snapshot(
+                on_prompts[label][index] + suffix,
+                bucket=bucket,
+                first_meeting=first_meeting,
             )
-            leg.testimony_rows += testimony
-            leg.testimony_by_bucket[bucket] += testimony
+    _fold_elicitation(
+        meeting=meeting,
+        captures=captures,
+        renderers=renderers,
+        on_prompts=on_prompts[_ELICITATION_LEG],
+        roles=roles,
+        census=elicitation,
+    )
+
+
+#: The leg whose ON renders the T5 reader reads. The elicitation block is
+#: ``testimony_shapes``'s alone, so the single-lever leg is the one that isolates
+#: it — and it reads the same on every leg that carries the arm, because the
+#: marker is the block's own text rather than a byte diff.
+_ELICITATION_LEG: Final[str] = "testimony_shapes"
+
+
+@dataclass
+class _ElicitationCensus:
+    """Speech prompts OFFERED the witnessed-kill shape, split by speaker role.
+
+    The T5 predicate has two halves — every observed crew speech turn gains the
+    block, and no impostor speech prompt does — and neither half can be read off
+    the aggregate byte diff: two offsetting errors leave it unchanged, and a
+    role split of the byte diff would count the role-blind public-transcript row
+    an impostor prompt correctly carries as an offer it must never receive.
+    """
+
+    rendered: Counter[str] = field(default_factory=Counter)
+    gained: Counter[str] = field(default_factory=Counter)
+    #: Prompts that gained SOME but not all of the block's lines. The block is
+    #: one offer rendered by guards that share a condition, so a partial gain
+    #: means this reader can no longer read it as one unit.
+    partial: int = 0
+
+
+def speaker_role(
+    capture: _Capture, roles: Mapping[PlayerId, Role], *, where: str
+) -> Role:
+    """The rendering speaker's role, taken from the re-seeded roster.
+
+    The role the roster re-derives and the role the template was rendered under
+    must describe the same seat. They come from different places — the re-seeded
+    engine and the recorded render inputs — so a disagreement means one of them
+    is reading a different player, and T5's whole split would be drawn on the
+    wrong line rather than fail visibly.
+    """
+
+    speaker = capture.agent_id
+    if speaker is None:
+        raise SystemExit(
+            f"{where}: a {capture.kind} render carries no speaker, so its "
+            "prompt cannot be split by role. This is a DEFECT IN THIS SCRIPT's "
+            "capture, not a finding about the committed bytes"
+        )
+    role = roles[speaker]
+    rendered_as_impostor = capture.kwargs.get("is_impostor")
+    if rendered_as_impostor is not None and bool(rendered_as_impostor) != (
+        role == "IMPOSTOR"
+    ):
+        raise SystemExit(
+            f"{where}: {speaker} renders with "
+            f"is_impostor={rendered_as_impostor!r} but the re-seeded roster "
+            f"calls them {role}. This is a DEFECT IN THIS SCRIPT's role join, "
+            "not a finding about the committed bytes"
+        )
+    return role
+
+
+def _fold_elicitation(
+    *,
+    meeting: ReconstructedMeeting,
+    captures: Sequence[_Capture],
+    renderers: _RendererCache,
+    on_prompts: Mapping[int, str],
+    roles: Mapping[PlayerId, Role],
+    census: _ElicitationCensus,
+) -> None:
+    """Count, per speaker role, the speech prompts that gain the block."""
+
+    for index, capture in enumerate(captures):
+        if capture.kind != _KIND_ACCUSATION_ROUND:
+            continue
+        role = speaker_role(
+            capture, roles, where=f"{meeting.set_name} {meeting.meeting_id}"
+        )
+        markers = renderers.elicitation_markers(
+            meeting.set_name, str(capture.kwargs.get("turn_kind"))
+        )
+        gained = elicitation_lines_gained(
+            off_prompt=capture.off_prompt,
+            on_prompt=on_prompts[index],
+            markers=markers,
+        )
+        census.rendered[role] += 1
+        if gained == len(markers):
+            census.gained[role] += 1
+        elif gained:
+            census.partial += 1
 
 
 # --------------------------------------------------------------------------- #
@@ -935,6 +1208,42 @@ def _ingest_rows(
 
 
 @dataclass
+class _KillNamedConvictions:
+    """Bar 1's non-direct cell, split by whether a spoken kill named the ejectee.
+
+    ``ROLE_PROOF_KINDS`` is ``{"vent_sighting"}``, so under ``testimony_shapes``
+    an eyewitness-kill conviction enters the non-direct cell as deduction and is
+    not separable there. This is the split that lets bar 1's movement be
+    decomposed at the record; it is observed and gates nothing.
+    """
+
+    non_direct: int = 0
+    kill_named: int = 0
+    kill_named_impostor: int = 0
+
+
+def _fold_kill_named_conviction(
+    *,
+    result: MeetingResult,
+    roles: Mapping[PlayerId, Role],
+    census: _KillNamedConvictions,
+) -> None:
+    """Join this meeting's conviction (if any) onto the spoken-kill split."""
+
+    ejected = result.ejected_player_id
+    if ejected is None:
+        return
+    if not is_non_direct_ejection(result.contradictions, ejected):
+        return
+    census.non_direct += 1
+    if ejected not in spoken_kill_subjects(result.transcript):
+        return
+    census.kill_named += 1
+    if roles[ejected] == "IMPOSTOR":
+        census.kill_named_impostor += 1
+
+
+@dataclass
 class _SetWalk:
     """Everything one reconstruction pass over one committed set produced."""
 
@@ -951,6 +1260,13 @@ class _SetWalk:
     corroboration: Counter[str] = field(default_factory=Counter)
     reporter_openings: int = 0
     non_reporter_speech_turns: int = 0
+    elicitation: _ElicitationCensus = field(default_factory=_ElicitationCensus)
+    kill_named: _KillNamedConvictions = field(default_factory=_KillNamedConvictions)
+    # The render budget at the FIRST meeting, folded straight off the recorded
+    # call bytes rather than through the reconstruction, so the meeting-1 cell
+    # carries the same two independent OFF readings the whole-run one does.
+    recorded_first_meeting_snapshots: int = 0
+    recorded_first_meeting_rendered_lines: int = 0
     elapsed: float = 0.0
 
 
@@ -1184,6 +1500,12 @@ def walk_set(sample_dir: Path, *, set_name: str, withhold: str) -> _SetWalk:
                     if capture.kind == _KIND_ACCUSATION_ROUND
                     and capture.agent_id != reporter.reporter_id
                 )
+            if meeting.meeting_index == 0:
+                for call in meeting.entry.llm_calls:
+                    walk.recorded_first_meeting_snapshots += 1
+                    walk.recorded_first_meeting_rendered_lines += len(
+                        _RENDERED_ROW.findall(call.prompt)
+                    )
             ledger = _ledger_for(meeting)
             _fold_render_diff(
                 meeting=meeting,
@@ -1193,12 +1515,26 @@ def walk_set(sample_dir: Path, *, set_name: str, withhold: str) -> _SetWalk:
                 ledger=ledger,
                 legs=legs,
                 tallies=walk.legs,
+                roles=roles,
+                elicitation=walk.elicitation,
+            )
+            _fold_kill_named_conviction(
+                result=meeting.result, roles=roles, census=walk.kill_named
             )
             _fold_corroboration(meeting, ledger, walk.corroboration)
             _fold_testimony(meeting, walk.testimony, venters=venters)
             _fold_ledger(
                 meeting=meeting, roles=roles, trigger_kind=trigger_kind, walk=walk
             )
+    if walk.elicitation.partial:
+        raise SystemExit(
+            f"{set_name}: {walk.elicitation.partial} speech prompts gained SOME "
+            "but not all of the elicitation block's lines. The block is one "
+            "offer whose lines share a guard, so this reader counts it as one "
+            "unit; a partial gain means the template now renders it in pieces "
+            "and T5's two halves would be read against different things. This "
+            "is a DEFECT IN THIS SCRIPT's reader, not a finding about the bytes"
+        )
     walk.elapsed = time.monotonic() - started
     return walk
 
@@ -1850,6 +2186,108 @@ def _rendered_prompts(leg: _LegTallies) -> int:
 
 
 # --------------------------------------------------------------------------- #
+# The tripwire readers the pre-registration ratified but had no cell for.      #
+# --------------------------------------------------------------------------- #
+
+
+def build_tripwire_rows(
+    *, walk: _SetWalk, committed: TournamentEvalReport
+) -> list[Row]:
+    """The three cells the ratified pre-registration named and could not read.
+
+    Published BESIDE the counterfactual's own table rather than inside it: that
+    table is a published census, pinned row for row by the memo it appears in,
+    and these cells are readers for criteria ratified after it. Each answers one
+    predicate of ``audits/audit-phase-21-preregistration.md`` — T5's role split
+    (§8.1), T7's first-meeting identity (§8.1) and bar 1's spoken-kill split
+    (§5) — and none of them is a bar.
+    """
+
+    census = walk.elicitation
+    off_leg = walk.legs[_SLATE_OFF]
+    all_on = walk.legs[_SLATE_ALL_ON]
+    cross_tab = committed.deduction.ejectee_proof_cross_tab
+    kills = walk.kill_named
+    return [
+        Row(
+            cell_id="T-9a",
+            label="CREW speech turns gaining the witnessed-kill elicitation block",
+            population="prompt",
+            note=(
+                "T5's first half. Presence of the BLOCK's own lines, derived "
+                "from the shipped template by rendering one crew turn both "
+                "ways — not a byte diff, which also moves for the role-blind "
+                "public-transcript row"
+            ),
+            reconstructed_off=_pair(0, census.rendered["CREWMATE"]),
+            on=_pair(census.gained["CREWMATE"], census.rendered["CREWMATE"]),
+            on_slate=_ELICITATION_LEG,
+        ),
+        Row(
+            cell_id="T-9b",
+            label="IMPOSTOR speech turns gaining the witnessed-kill elicitation block",
+            population="prompt",
+            note=(
+                "T5's second half, a NEVER-WORSE bar's count: an impostor "
+                "offered the shape is a firewall question. An impostor prompt "
+                "merely rendering a publicly spoken kill row is CORRECT and is "
+                "excluded here by construction"
+            ),
+            reconstructed_off=_pair(0, census.rendered["IMPOSTOR"]),
+            on=_pair(census.gained["IMPOSTOR"], census.rendered["IMPOSTOR"]),
+            on_slate=_ELICITATION_LEG,
+        ),
+        Row(
+            cell_id="B-1m1",
+            label="rendered memory rows per prompt snapshot, FIRST meeting only",
+            population="row per snapshot",
+            note=(
+                "T7's predicate, which is a first-meeting identity: the "
+                "published B-1 sums every captured meeting, where a "
+                "first-meeting difference and an opposite later one cancel. "
+                "RECORDED-OFF is folded from the recorded call bytes, "
+                "RECONSTRUCTED-OFF from the re-render that reproduces them"
+            ),
+            recorded_off=_pair(
+                walk.recorded_first_meeting_rendered_lines,
+                walk.recorded_first_meeting_snapshots,
+            ),
+            reconstructed_off=_pair(
+                off_leg.first_meeting_rendered_lines, off_leg.first_meeting_snapshots
+            ),
+            on=_pair(
+                all_on.first_meeting_rendered_lines, all_on.first_meeting_snapshots
+            ),
+        ),
+        Row(
+            cell_id="P-1k",
+            label="non-direct convictions whose ejectee a spoken kill named",
+            population="ejection",
+            note=(
+                "bar 1's cell split by a spoken kill, observed and never "
+                "gated. The denominator is bar 1's own, from the committed "
+                "cross-tab; NOT predictable offline, because whether anyone "
+                "speaks the shape is a model output"
+            ),
+            recorded_off=_pair(kills.kill_named, cross_tab.non_direct_ejections),
+            reconstructed_off=_pair(kills.kill_named, kills.non_direct),
+        ),
+        Row(
+            cell_id="P-1ka",
+            label="of those, the ones that convicted an IMPOSTOR",
+            population="ejection",
+            note=(
+                "the accuracy side of the same split, so a movement in bar 1 "
+                "can be attributed to the eyewitness channel rather than "
+                "credited to it by assumption"
+            ),
+            recorded_off=_pair(kills.kill_named_impostor, kills.kill_named),
+            reconstructed_off=_pair(kills.kill_named_impostor, kills.kill_named),
+        ),
+    ]
+
+
+# --------------------------------------------------------------------------- #
 # The guard, written before the folds.                                         #
 # --------------------------------------------------------------------------- #
 
@@ -1961,8 +2399,8 @@ def run(
     per_set: dict[str, object] = {}
     pooled_walks: list[_SetWalk] = []
     pooled_reporter: list[ReporterJusticeCells] = []
-    pooled: Counter[str] = Counter()
-    pooled_labels: dict[str, tuple[str, str, str, str, str]] = {}
+    pooled = _PooledRows()
+    pooled_tripwires = _PooledRows()
     ledger_rows: list[InjusticeLedgerRow] = []
     # Cells whose two OFF readings disagreed on ANY set. The pooled ON column is
     # withdrawn for every one of them: summing the sets that DID reproduce would
@@ -1999,9 +2437,13 @@ def run(
             committed=committed,
             withhold=withhold,
         )
-        disagreeing = [row for row in rows if not row.agrees]
+        tripwires = build_tripwire_rows(walk=walk, committed=committed)
+        disagreeing = [row for row in (*rows, *tripwires) if not row.agrees]
         withdrawn.update(row.cell_id for row in disagreeing)
         rows = [row if row.agrees else _withdraw_on_column(row) for row in rows]
+        tripwires = [
+            row if row.agrees else _withdraw_on_column(row) for row in tripwires
+        ]
         per_set[set_name] = {
             "games": walk.games,
             "meetings": walk.meetings,
@@ -2011,6 +2453,7 @@ def run(
             "elapsed_seconds": round(walk.elapsed, 2),
             "advisory": walk.innocent_ejections <= ADVISORY_INNOCENT_EJECTIONS,
             "rows": [row.payload() for row in rows],
+            "tripwire_rows": [row.payload() for row in tripwires],
             "render_census": _render_census_payload(walk, withhold=withhold),
             "ballot_census": walk.ballots.payload(),
             "testimony_census": walk.testimony.payload(),
@@ -2022,37 +2465,12 @@ def run(
         pooled_walks.append(walk)
         pooled_reporter.append(reporter)
         for row in rows:
-            key = f"{row.cell_id}|{row.label}"
-            pooled_labels[key] = (
-                row.cell_id,
-                row.label,
-                row.population,
-                row.note,
-                row.on_slate,
-            )
-            for column, pair in (
-                ("recorded_off", row.recorded_off),
-                ("reconstructed_off", row.reconstructed_off),
-                ("on", row.on),
-            ):
-                if pair is None:
-                    continue
-                pooled[f"{key}|{column}|n"] += pair[0]
-                pooled[f"{key}|{column}|d"] += pair[1]
+            pooled.add(row)
+        for row in tripwires:
+            pooled_tripwires.add(row)
     payload["sets"] = per_set
-    payload["pooled"] = [
-        _pooled_row(
-            key=key,
-            cell_id=cell_id,
-            label=label,
-            population=population,
-            note=note,
-            on_slate=on_slate,
-            totals=pooled,
-            withdrawn=withdrawn,
-        )
-        for key, (cell_id, label, population, note, on_slate) in pooled_labels.items()
-    ]
+    payload["pooled"] = pooled.payload(withdrawn=withdrawn)
+    payload["pooled_tripwire_rows"] = pooled_tripwires.payload(withdrawn=withdrawn)
     payload["withdrawn_on_cells"] = sorted(withdrawn)
     payload["pooled_ledger_class_totals"] = _class_totals(ledger_rows)
     payload["pooled_injustice_ledger"] = [row.payload() for row in ledger_rows]
@@ -2107,6 +2525,59 @@ def _pooled_row(
         "on_withdrawn": withheld,
         **columns,
     }
+
+
+class _PooledRows:
+    """One table's rows summed across sets, published in first-seen order.
+
+    The sets are disjoint games, so pooling is addition. A cell is keyed by its
+    id AND its label, so a row whose meaning changed between sets cannot be
+    summed onto the old one.
+    """
+
+    def __init__(self) -> None:
+        self._totals: Counter[str] = Counter()
+        self._labels: dict[str, tuple[str, str, str, str, str]] = {}
+
+    def add(self, row: Row) -> None:
+        key = f"{row.cell_id}|{row.label}"
+        self._labels[key] = (
+            row.cell_id,
+            row.label,
+            row.population,
+            row.note,
+            row.on_slate,
+        )
+        for column, pair in (
+            ("recorded_off", row.recorded_off),
+            ("reconstructed_off", row.reconstructed_off),
+            ("on", row.on),
+        ):
+            if pair is None:
+                continue
+            self._totals[f"{key}|{column}|n"] += pair[0]
+            self._totals[f"{key}|{column}|d"] += pair[1]
+
+    def payload(self, *, withdrawn: set[str]) -> list[dict[str, object]]:
+        return [
+            _pooled_row(
+                key=key,
+                cell_id=cell_id,
+                label=label,
+                population=population,
+                note=note,
+                on_slate=on_slate,
+                totals=self._totals,
+                withdrawn=withdrawn,
+            )
+            for key, (
+                cell_id,
+                label,
+                population,
+                note,
+                on_slate,
+            ) in self._labels.items()
+        ]
 
 
 def _pool_ballot_census(walks: Sequence[_SetWalk]) -> dict[str, object]:
@@ -2230,6 +2701,10 @@ def _assert_ledger_matches_the_instruments(
     weak-flag conviction cell's innocent count. Both are joins over the same
     recorded fields by two independently written folds, so a disagreement is a
     DEFECT IN THIS SCRIPT's tagging, not a finding about the bytes.
+
+    The spoken-kill split's own denominator is checked the same way: it is bar
+    1's non-direct cell, so this walk's partition must land on the committed
+    cross-tab's count or the split is decomposing a different population.
     """
 
     totals = _class_totals(walk.ledger_rows)
@@ -2246,14 +2721,20 @@ def _assert_ledger_matches_the_instruments(
             committed.deduction.weak_flag_conviction.weak_flag_only_innocent,
             "the committed weak-flag conviction cell",
         ),
+        (
+            "non-direct",
+            walk.kill_named.non_direct,
+            committed.deduction.ejectee_proof_cross_tab.non_direct_ejections,
+            "the committed EjecteeProofCrossTab",
+        ),
     )
     for tag, measured, expected, source in checks:
         if measured != expected:
             raise SystemExit(
-                f"{walk.set_name}: the injustice ledger's {tag} class counted "
+                f"{walk.set_name}: this walk's {tag} class counted "
                 f"{measured} against {expected} from {source} — this is a DEFECT "
-                "IN THIS SCRIPT's tagging, not a finding about the committed "
-                "bytes; fix the tag before reading any ON number"
+                "IN THIS SCRIPT's join, not a finding about the committed "
+                "bytes; fix the join before reading any ON number"
             )
 
 
@@ -2365,6 +2846,11 @@ def _rate(pair: object) -> str:
 ADVISORY_MARK: Final[str] = "[ADV]"
 """Printed beside any cell whose own denominator one case would dominate."""
 
+_TRIPWIRE_HEADING: Final[str] = (
+    "tripwire readers (pre-registration §8.1 T5 / T7 and §5's spoken-kill "
+    "split); not part of this memo's published table, and no bar"
+)
+
 
 def _print_row(row: Mapping[str, object], *, out: TextIO) -> None:
     mark = f" {ADVISORY_MARK}" if row.get("advisory") else ""
@@ -2404,6 +2890,9 @@ def _print_table(
         print(header, file=out)
         for row in block["rows"]:
             _print_row(row, out=out)
+        print(f"   -- {_TRIPWIRE_HEADING}", file=out)
+        for row in block["tripwire_rows"]:
+            _print_row(row, out=out)
         print(f"   injustice-ledger classes: {block['ledger_class_totals']}", file=out)
         for row in block["injustice_ledger"]:
             tags = "+".join(row["tags"]) or "(no tag)"
@@ -2421,6 +2910,11 @@ def _print_table(
     pooled = payload["pooled"]
     assert isinstance(pooled, list)
     for row in pooled:
+        _print_row(row, out=out)
+    print(f"-- {_TRIPWIRE_HEADING}", file=out)
+    pooled_tripwires = payload["pooled_tripwire_rows"]
+    assert isinstance(pooled_tripwires, list)
+    for row in pooled_tripwires:
         _print_row(row, out=out)
     print(
         f"\npooled injustice-ledger classes: {payload['pooled_ledger_class_totals']}",
@@ -2475,6 +2969,12 @@ def _print_reading_rules(payload: Mapping[str, object], *, out: TextIO) -> None:
         "P-1, P-2, R-8, R-9, the stated-confidence response to any anchoring "
         "rule, whether crew stop laundering witnessed kills into vent rows, and "
         "the win split carry NO ON column at all.",
+        "The tripwire rows (T-9a, T-9b, B-1m1, P-1k, P-1ka) read predicates "
+        "the pre-registration ratified and no cell of the table above can "
+        "evaluate. T-9a/T-9b test for the ELICITATION BLOCK's own lines, not "
+        "for a byte difference: a spoken kill renders a role-blind "
+        "public-transcript row into every later prompt, and an impostor "
+        "carrying that row is correct.",
         f"The slate is the THREE Wave-2 levers with {payload['held_off']} OFF; "
         f"the leave-one-out leg withholds {payload['decomposition_withholds']}.",
         "This table writes no bar, no target and no decision rule.",
