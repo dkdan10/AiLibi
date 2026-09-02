@@ -1235,6 +1235,8 @@ def reconstruct_stated_paths(
     roster: frozenset[PlayerId] | None = None,
     trigger_kind: MeetingTriggerKind | None = None,
     include_kill_scene: bool = False,
+    movement_witness_records: Mapping[PlayerId, tuple[MoveWitnessRecord, ...]]
+    | None = None,
 ) -> Mapping[PlayerId, tuple[StatedPlacement, ...]]:
     """Each subject's STATED room-by-tick path from the transcript (Task 13.2).
 
@@ -1282,6 +1284,18 @@ def reconstruct_stated_paths(
     The returned mapping is therefore a SUPERSET of the default reconstruction
     (the same regular placements, plus the recovered kill-scene ones).
 
+    ``movement_witness_records`` (default ``None`` -> byte-identical for every
+    existing caller, the ``include_kill_scene`` shape). Supplied, the indexed
+    sightings are routed through :func:`_apply_movement_claim_shape` before the
+    placement loop, so this reconstruction reads the movement channel the way
+    the rest of the meeting layer does: a spoken ``saw_move`` the speaker's own
+    record confirms places its subject at the DESTINATION
+    (:func:`sighting_placement`), and an origin-half ``saw_player`` the same
+    record moved out of that room is re-read where it left them. Withheld, a
+    ``saw_move`` places nobody -- which is what :func:`detect_contradictions`
+    wants for its physical detector, and what the corroboration ledger's
+    walkable-transit clause does not.
+
     ``whereabouts`` self-placements (Task 16.7). A spoken
     :class:`~meetings.schemas.WhereaboutsClaim` places its SPEAKER (the
     claim carries no subject -- the speaker is the subject by construction)
@@ -1313,8 +1327,17 @@ def reconstruct_stated_paths(
     # prong still applies), so kill-scene placements are recovered.
     relevance_body_rooms = frozenset() if include_kill_scene else body_rooms
 
+    sightings = tuple(_iter_sightings(transcript))
+    if movement_witness_records is not None:
+        sightings = _apply_movement_claim_shape(
+            transcript,
+            sightings=sightings,
+            move_witness_records=movement_witness_records,
+            roster=effective_roster,
+        )
+
     paths: dict[PlayerId, list[StatedPlacement]] = {}
-    for sighting in _iter_sightings(transcript):
+    for sighting in sightings:
         # A non-spatial label locates nobody (Task 10.1), and the §6.3
         # relevance gate drops the evidentially-empty spawn-window /
         # kill-scene sightings -- reused verbatim so the reconstruction
@@ -2342,7 +2365,9 @@ def _apply_movement_claim_shape(
     The movement channel's one chokepoint,
     applied to the indexed sightings before any detector sees them, so the
     contradiction path, the subject-account index and the direct-sighting
-    exclusion set all read ONE set of placements. Two arms:
+    exclusion set all read ONE set of placements -- and, through
+    :func:`reconstruct_stated_paths`'s ``movement_witness_records`` keyword, the
+    corroboration ledger's walkable-transit clause too. Two arms:
 
     * **resolution** -- a spoken ``saw_player`` whose SPEAKER's own
       :class:`~meetings.schemas.MoveWitnessRecord` moved the subject OUT of that

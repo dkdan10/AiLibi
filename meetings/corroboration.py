@@ -16,7 +16,10 @@ The grounding predicates are the detector's own
 :func:`~meetings.transcript.move_observation_matches_record`, and the
 ``vent_sighting`` flag channel), so "first-hand" means here exactly what it
 means everywhere else in the meeting layer -- an invented sighting matches no
-record and earns no account.
+record and earns no account. What is tested is the PLACEMENT
+(:func:`~meetings.transcript.sighting_placement`), not the shape it was spoken
+in: a sighting and a transition that put the subject in one room at one tick are
+one placement, so either of the speaker's own record channels can bear it out.
 
 A spoken :class:`~meetings.schemas.SawKillObservation` is therefore excluded: the
 three channels are GROUNDED ones and the kill shape has none here to be tested
@@ -52,12 +55,15 @@ from meetings.schemas import (
     TurnId,
 )
 from meetings.transcript import (
+    MOVE_GROUNDING_TICK_TOLERANCE,
     MeetingTriggerKind,
     StatedPlacement,
+    canonical_rooms,
     move_observation_matches_record,
     reconstruct_stated_paths,
     room_hops,
     sighting_observation_matches_record,
+    sighting_placement,
     turn_observation_id,
 )
 
@@ -249,14 +255,17 @@ def _speaker_grounding_places(
     may be quoting. A ``saw_move`` is labelled by its destination, the room it
     places the subject in.
 
-    The three grounded channels, each through the detector's own predicate: a
-    ``saw_player`` matched by the speaker's own
-    :class:`~meetings.schemas.SightingRecord` rows, a ``saw_move`` matched by
-    their own :class:`~meetings.schemas.MoveWitnessRecord` rows, or a spoken vent
-    whose OWN observation id the detector minted a flag from
-    (:func:`_grounded_vent_observation_ids`). A fabricated observation matches
-    nothing and grounds nothing, which is the whole point of testing the record
-    rather than the turn.
+    Two grounded channels test a PLACEMENT and one tests a flag. A
+    ``saw_player`` and a ``saw_move`` are one shape here --
+    :func:`~meetings.transcript.sighting_placement` reads both as "the subject
+    was in this room at this tick", a ``saw_move`` at its DESTINATION -- so
+    either the speaker's own :class:`~meetings.schemas.SightingRecord` rows or
+    their own :class:`~meetings.schemas.MoveWitnessRecord` rows may bear that
+    placement out (:func:`_placement_grounded`). A spoken vent is the third
+    channel and grounds only through the OWN observation id the detector minted
+    a flag from (:func:`_grounded_vent_observation_ids`). A fabricated
+    observation matches nothing in either channel and grounds nothing, which is
+    the whole point of testing the record rather than the turn.
 
     Every channel is tested per STATEMENT, not per speaker: a witness who spoke
     two vents of one subject and had one of them grounded is one account, and
@@ -265,7 +274,7 @@ def _speaker_grounding_places(
     The sighting mapping arrives §4.7-firewalled from the manager, so an
     impostor's row naming a teammate cannot ground a case against that teammate.
 
-    A spoken :class:`~meetings.schemas.SawKillObservation` is NOT a fourth
+    A spoken :class:`~meetings.schemas.SawKillObservation` is NOT a further
     channel. Each of the three above tests an account against a typed record or a
     minted flag, and the kill shape has neither: ``KillWitnessRecord`` is an
     ``orchestrator.game`` tactical-agent surface that never reaches the meeting
@@ -289,27 +298,91 @@ def _speaker_grounding_places(
         if turn.speaker != speaker:
             continue
         for index, observation in enumerate(turn.observations):
-            if isinstance(observation, SawPlayerObservation):
-                if observation.subject == subject and any(
-                    sighting_observation_matches_record(observation, record)
-                    for record in sightings
-                ):
-                    places.add((observation.type, observation.room, observation.tick))
-            elif isinstance(observation, SawMoveObservation):
-                if observation.subject == subject and any(
-                    move_observation_matches_record(observation, record)
-                    for record in moves
-                ):
-                    places.add(
-                        (observation.type, observation.to_room, observation.tick)
-                    )
-            elif isinstance(observation, SawVentObservation):
+            if isinstance(observation, SawVentObservation):
                 if (
                     observation.subject == subject
                     and turn_observation_id(turn=turn, index=index) in grounded_vent_ids
                 ):
                     places.add((observation.type, observation.room, observation.tick))
+                continue
+            if not isinstance(observation, SawPlayerObservation | SawMoveObservation):
+                continue
+            # The two shapes ``sighting_placement`` places; every other one
+            # locates nobody and returns ``None``.
+            placement = sighting_placement(observation)
+            if placement is None or placement.subject != subject:
+                continue
+            if _placement_grounded(
+                observation, placement, sightings=sightings, moves=moves
+            ):
+                places.add((observation.type, placement.room, placement.tick))
     return tuple(sorted(places, key=lambda place: (place[2], place[1], place[0])))
+
+
+def _placement_grounded(
+    observation: SawPlayerObservation | SawMoveObservation,
+    placement: SawPlayerObservation,
+    *,
+    sightings: tuple[SightingRecord, ...],
+    moves: tuple[MoveWitnessRecord, ...],
+) -> bool:
+    """Whether either of the speaker's OWN record channels bears this placement out.
+
+    ``placement`` is what :func:`~meetings.transcript.sighting_placement` reads
+    off ``observation`` -- the sighting itself, or a transition's arrival. Both
+    channels are consulted for both shapes, because the two shapes assert the
+    same thing and a witness records whichever one their own perception minted:
+    someone who watched a subject walk into a room holds a
+    :class:`~meetings.schemas.MoveWitnessRecord` and may say "I saw them there",
+    and someone who saw them standing there holds a
+    :class:`~meetings.schemas.SightingRecord` and may say "I saw them arrive".
+
+    Each channel keeps its own predicate and its own tick tolerance, so nothing
+    is loosened by crossing them: the sighting channel is
+    :func:`~meetings.transcript.sighting_observation_matches_record` at
+    :data:`~meetings.transcript.SIGHTING_GROUNDING_TICK_TOLERANCE`, and the
+    movement channel is exact
+    (:data:`~meetings.transcript.MOVE_GROUNDING_TICK_TOLERANCE`) -- both halves
+    of the transition for a spoken ``saw_move``
+    (:func:`~meetings.transcript.move_observation_matches_record`), and the
+    ARRIVAL half alone for a spoken ``saw_player``
+    (:func:`_move_record_places_sighting`). The origin half stays unplaced in
+    both directions, exactly as :func:`~meetings.transcript.sighting_placement`
+    defines it.
+    """
+
+    if any(
+        sighting_observation_matches_record(placement, record) for record in sightings
+    ):
+        return True
+    if isinstance(observation, SawMoveObservation):
+        return any(
+            move_observation_matches_record(observation, record) for record in moves
+        )
+    return any(_move_record_places_sighting(observation, record) for record in moves)
+
+
+def _move_record_places_sighting(
+    observation: SawPlayerObservation, record: MoveWitnessRecord
+) -> bool:
+    """Whether one own transition record puts the subject where the speaker said.
+
+    The arrival half only: a :class:`~meetings.schemas.MoveWitnessRecord` places
+    its subject in ``to_room`` at ``tick`` and nowhere else, which is the
+    placement :func:`~meetings.transcript.sighting_placement` reads off the
+    spoken twin of this record. A sighting naming the ORIGIN room grounds
+    nothing here, since the record does not place the subject there at ``tick``.
+    The tick must be EXACT: the channel under test sets the tolerance, and this
+    is the movement channel
+    (:data:`~meetings.transcript.MOVE_GROUNDING_TICK_TOLERANCE`).
+    """
+
+    if observation.subject != record.subject:
+        return False
+    if abs(observation.tick - record.tick) > MOVE_GROUNDING_TICK_TOLERANCE:
+        return False
+    spoken_rooms = canonical_rooms(observation.room)
+    return bool(spoken_rooms and canonical_rooms(record.to_room) & spoken_rooms)
 
 
 def _spoke_of_subject(
@@ -439,8 +512,15 @@ def build_testimony_ledger(
 
     ``sighting_records`` must be the §4.7-firewalled mapping the detector
     receives, not the raw accessor output. ``roster`` and ``trigger_kind`` are
-    passed straight to :func:`~meetings.transcript.reconstruct_stated_paths`, so
-    the placements this reads are the ones the detector reconstructed.
+    passed straight to :func:`~meetings.transcript.reconstruct_stated_paths`,
+    together with ``move_witness_records``, so the placements the
+    walkable-transit clause reads are the movement-shaped ones the rest of the
+    meeting layer reads -- a transition the speaker's own record confirms places
+    its subject at the destination instead of placing nobody. That set is a
+    SUPERSET of the detector's own unshaped reconstruction, which is safe here
+    only because this block weakens charges and mints nothing: the widened
+    placements reach ``walkable_transits`` alone, while ``first_hand``,
+    ``adopted`` and ``flagged`` keep the inputs they had.
     """
 
     accusations = _accused_by_turn(transcript)
@@ -454,7 +534,10 @@ def build_testimony_ledger(
         for subject in contradiction.subjects
     )
     paths = reconstruct_stated_paths(
-        transcript, roster=roster, trigger_kind=trigger_kind
+        transcript,
+        roster=roster,
+        trigger_kind=trigger_kind,
+        movement_witness_records=move_witness_records,
     )
     # Every turn in which the opener accused someone, so a charge answering one
     # of them can be recognised as an answer rather than a second witness.
