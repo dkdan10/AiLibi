@@ -117,15 +117,16 @@ class TestimonySupport:
     * ``originating_turn_id`` -- the turn the charge started in (the first turn
       of this meeting whose accusation names ``subject``).
     * ``first_hand_places`` -- per first-hand speaker, sorted by speaker, the
-      ``(room, tick)`` coordinates of the observations of ``subject`` their OWN
-      record bore out, earliest first. A speaker counts ONCE however many
+      ``(kind, room, tick)`` coordinates of the observations of ``subject`` their
+      OWN record bore out, earliest first. A speaker counts ONCE however many
       records they hold or observations they spoke; the coordinates say WHICH of
       their statements earned the credit, so a speaker whose other sighting of
       the same subject is the one a contradiction above quotes is not thereby
-      credited for that one. Room AND tick, because one speaker can place a
-      subject in two rooms at one tick and only one of those can be borne out --
-      the pair is exactly what the transcript above prints, so a statement this
-      cannot tell apart is one the transcript did not distinguish either.
+      credited for that one. All three, because one speaker can place a subject
+      in two rooms at one tick, or speak a sighting and a vent at one room and
+      tick, with only one of them borne out. The triple is exactly what the
+      transcript above distinguishes a row by, so a statement this cannot tell
+      apart is one the transcript did not distinguish either.
     * ``adopted_silent`` -- accusing speakers who described nothing they saw of
       ``subject`` at all.
     * ``adopted_spoke_ungrounded`` -- accusing speakers who described seeing
@@ -154,7 +155,7 @@ class TestimonySupport:
 
     subject: PlayerId
     originating_turn_id: TurnId
-    first_hand_places: tuple[tuple[PlayerId, tuple[tuple[str, int], ...]], ...]
+    first_hand_places: tuple[tuple[PlayerId, tuple[tuple[str, str, int], ...]], ...]
     adopted_silent: tuple[PlayerId, ...]
     adopted_spoke_ungrounded: tuple[PlayerId, ...]
     adopted_spoke_kill: tuple[PlayerId, ...]
@@ -238,8 +239,8 @@ def _speaker_grounding_places(
     sighting_records: Mapping[PlayerId, tuple[SightingRecord, ...]],
     move_witness_records: Mapping[PlayerId, tuple[MoveWitnessRecord, ...]],
     grounded_vent_ids: frozenset[str],
-) -> tuple[tuple[str, int], ...]:
-    """``(room, tick)`` for each FIRST-HAND observation of ``subject`` here.
+) -> tuple[tuple[str, str, int], ...]:
+    """``(kind, room, tick)`` per FIRST-HAND observation of ``subject`` here.
 
     Empty means they grounded nothing, so this is the ledger's one definition of
     "first-hand" and the row's coordinates in a single pass: the ballot names
@@ -283,7 +284,7 @@ def _speaker_grounding_places(
 
     sightings = sighting_records.get(speaker, ())
     moves = move_witness_records.get(speaker, ())
-    places: set[tuple[str, int]] = set()
+    places: set[tuple[str, str, int]] = set()
     for turn in transcript.turns:
         if turn.speaker != speaker:
             continue
@@ -293,20 +294,22 @@ def _speaker_grounding_places(
                     sighting_observation_matches_record(observation, record)
                     for record in sightings
                 ):
-                    places.add((observation.room, observation.tick))
+                    places.add((observation.type, observation.room, observation.tick))
             elif isinstance(observation, SawMoveObservation):
                 if observation.subject == subject and any(
                     move_observation_matches_record(observation, record)
                     for record in moves
                 ):
-                    places.add((observation.to_room, observation.tick))
+                    places.add(
+                        (observation.type, observation.to_room, observation.tick)
+                    )
             elif isinstance(observation, SawVentObservation):
                 if (
                     observation.subject == subject
                     and turn_observation_id(turn=turn, index=index) in grounded_vent_ids
                 ):
-                    places.add((observation.room, observation.tick))
-    return tuple(sorted(places, key=lambda place: (place[1], place[0])))
+                    places.add((observation.type, observation.room, observation.tick))
+    return tuple(sorted(places, key=lambda place: (place[2], place[1], place[0])))
 
 
 def _spoke_of_subject(
@@ -471,7 +474,7 @@ def build_testimony_ledger(
 
     rows: list[TestimonySupport] = []
     for subject, (origin_index, origin_turn_id, origin_speaker) in origins.items():
-        first_hand_places: list[tuple[PlayerId, tuple[tuple[str, int], ...]]] = []
+        first_hand_places: list[tuple[PlayerId, tuple[tuple[str, str, int], ...]]] = []
         silent: list[PlayerId] = []
         ungrounded: list[PlayerId] = []
         spoke_kill: list[PlayerId] = []

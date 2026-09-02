@@ -922,16 +922,16 @@ the sentence it replaces.
 
 | leg | prompt class | rendered | changed | lines added | bytes added |
 |---|---|---|---|---|---|
-| `corroboration_discipline` | `vote_ballot` | 3,631 | 3,614 | 26,522 | 5,613,449 |
+| `corroboration_discipline` | `vote_ballot` | 3,631 | 3,614 | 26,522 | 5,676,313 |
 | `corroboration_discipline` | `crewmate_report` | 672 | 0 | 0 | 0 |
 | `corroboration_discipline` | `accusation_round` | 2,959 | 0 | 0 | 0 |
 
-The ballot loses 1,910 lines and gains 1,642,834 bytes. The lines are the calibration
+The ballot loses 1,910 lines and gains 1,705,698 bytes. The lines are the calibration
 ladder, which now yields on the 1,910 ballots that also render the Proof paragraph — two
 pricing instructions on one page disagreed about a vent someone else watched, and the
 paragraph that owns the strongest evidence class is the one the voter keeps. The bytes are
 the header's added sentences — what a voice is, who falls outside the count, and what a
-second account does and does not settle — the room-and-tick coordinates beside each
+second account does and does not settle — the kind-room-and-tick coordinates beside each
 credited account, and the three-way split of the adopted clause.
 
 | leg | prompt class | rendered | changed | lines added | bytes added |
@@ -949,13 +949,13 @@ mandate no longer claims to outrank a vent and states the must-carry duty the un
 |---|---|---|---|---|---|
 | `all-three-ON` | `crewmate_report` | 672 | 672 | 1,964 | 604,662 |
 | `all-three-ON` | `accusation_round` | 2,959 | 2,879 | 15,051 | 2,307,529 |
-| `all-three-ON` | `vote_ballot` | 3,631 | 3,614 | 26,522 | 5,613,449 |
+| `all-three-ON` | `vote_ballot` | 3,631 | 3,614 | 26,522 | 5,676,313 |
 
 | leg | prompt class | rendered | changed | lines added | bytes added |
 |---|---|---|---|---|---|
 | `two-ON (less testimony_shapes)` | `crewmate_report` | 672 | 620 | 620 | 171,222 |
 | `two-ON (less testimony_shapes)` | `accusation_round` | 2,959 | 2,715 | 11,005 | 1,026,970 |
-| `two-ON (less testimony_shapes)` | `vote_ballot` | 3,631 | 3,614 | 26,522 | 5,613,449 |
+| `two-ON (less testimony_shapes)` | `vote_ballot` | 3,631 | 3,614 | 26,522 | 5,676,313 |
 
 **The slate's cross-lever interaction is RE-REGISTERED, not retired: it is now conditional
 on a spoken kill, and it measures zero here only because the corpus holds none.** The
@@ -966,8 +966,13 @@ kill, and the ledger can, so the clause forks on the SPEAKER. One arm-shaped for
 and follows the transcript: a voice may be named as having watched the KILL only while the
 arm renders the row behind it, and reads as an ungrounded sighting otherwise. That fork IS
 an interaction — the clause exists only under `corroboration_discipline` and its wording
-moves only under `testimony_shapes` — worth **+6 UTF-8 bytes per adopted kill witness on a
-joint-slate ballot**, and it is registered as a prediction rather than measured, because on
+moves only under `testimony_shapes`. It fires on exactly the ledger rows carrying at least
+one adopted kill witness, and its size is set by the ROW's composition, not by a
+per-witness rate: the template joins names into one clause, so a row whose adopted voices
+are all kill witnesses pays **+6 UTF-8 bytes whatever their number** (one clause, moved
+tail), while a row that ALSO carries an ungrounded voice pays the SPLIT — the OFF arm
+merges both into one clause and the joint arm emits two — **+73 bytes plus each further
+kill witness's name**. It is registered as a prediction rather than measured, because on
 these bytes it cannot fire: the corpus holds 0 spoken `saw_kill`
 (`grep -rn "saw_kill" replays/ | wc -l` → 0), the same zero §5.6 already records. So on the
 recorded bytes the ballot's added bytes are identical on the `corroboration_discipline`,
@@ -976,7 +981,9 @@ every seam — and the FIRST spoken kill at 21.23 or 21.24 will move the joint b
 than the two arms alone, which is expected and is not unregistered drift.
 `tests/meetings/test_corroboration.py::TestAdoptedClauseWording` proves both halves on a
 SYNTHETIC kill meeting rather than inferring them from the corpus's zero:
-`test_a_spoken_kill_is_the_one_cross_lever_interaction_on_this_page` and
+`test_a_spoken_kill_is_the_one_cross_lever_interaction_on_this_page`,
+`test_the_interaction_does_not_scale_with_the_witness_count`,
+`test_a_mixed_row_pays_a_whole_clause_not_a_tail` and
 `test_a_table_with_no_kill_has_no_interaction`. Two recorded sentences read otherwise and
 stay as published; each is quoted here with its erratum.
 
@@ -992,8 +999,9 @@ stay as published; each is quoted here with its erratum.
 slate, so the ballot's added bytes are identical on the `corroboration_discipline`,
 `two-ON` and `all-three-ON` legs and the interaction MEASURES 0 here. It is not gone: the
 clause may name a watched KILL only where the transcript above renders one, which is an
-interaction of the two arms worth +6 bytes per adopted kill witness on a joint-slate
-ballot, reaching 0 of 3,631 ballots only because this corpus holds no spoken `saw_kill`.
+interaction of the two arms worth +6 bytes on a row whose adopted voices are all kill
+witnesses and +73 bytes on a row that also carries an ungrounded one, reaching 0 of 3,631
+ballots only because this corpus holds no spoken `saw_kill`.
 The ballot's added lines were already additive and remain so.
 
 §8.4's first prediction row, as published:
@@ -1006,9 +1014,9 @@ The ballot's added lines were already additive and remain so.
 stays additive in lines on every seam, and the ballot is still the only seam carrying a
 cross-lever interaction — but the interaction is no longer the adopted-clause re-wording
 and no longer has a fixed size. It is now conditional: a joint-slate ballot at a table
-where a `saw_kill` was SPOKEN carries +6 bytes per adopted kill witness that neither arm
-produces alone, and the recorded bytes hold no such table, so the published census
-correctly shows 0. Read the row as: additive in lines everywhere; on the BALLOT seam,
+where a `saw_kill` was SPOKEN carries bytes neither arm produces alone — +6 where the
+row's adopted voices are all kill witnesses, +73 where it also carries an ungrounded one —
+and the recorded bytes hold no such table, so the published census correctly shows 0. Read the row as: additive in lines everywhere; on the BALLOT seam,
 additive in bytes too except where a kill was spoken. The FALSIFIER — "a byte delta on any
 other seam that neither lever produces alone" — is unchanged and is still the criterion the
 smoke reads; a ballot-seam byte delta at 21.23's first spoken kill is this prediction coming
@@ -1020,7 +1028,7 @@ and none of them is this row, and §9's seven candidates name no cross-lever cel
 Recomputed, the §6.2 cost table reads 620 + 11,005 = 11,625 / 7,262 = 1.60 for the reporter
 leg, 26,522 / 7,262 = 3.65 for corroboration, 1,344 + 4,046 = 5,390 / 7,262 = 0.74 for
 testimony shapes, 43,537 / 7,262 = 5.99 for all three, and 38,147 / 7,262 = 5.25 for the
-leave-one-out leg; the ballot-bytes column is +5,613,449 on all three ballot-carrying legs.
+leave-one-out leg; the ballot-bytes column is +5,676,313 on all three ballot-carrying legs.
 §6.1's render budget — 255,918 rendered memory rows over 7,271 snapshots, 99,710 testimony
 rows, the three living buckets — is untouched, because none of it reads a lever.
 

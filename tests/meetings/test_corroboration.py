@@ -507,7 +507,9 @@ class TestFirstHandSources:
         )
         assert row.first_hand == ("p-2",)
         assert row.voices == 1
-        assert row.first_hand_places == (("p-2", (("MEDBAY", 11), ("LABS", 13))),)
+        assert row.first_hand_places == (
+            ("p-2", (("saw_vent", "MEDBAY", 11), ("saw_vent", "LABS", 13))),
+        )
 
     def test_one_grounded_vent_does_not_vouch_for_the_speaker_s_other_one(
         self,
@@ -538,7 +540,7 @@ class TestFirstHandSources:
         )
         assert row.first_hand == ("p-2",)
         assert row.voices == 1
-        assert row.first_hand_places == (("p-2", (("MEDBAY", 11),)),)
+        assert row.first_hand_places == (("p-2", (("saw_vent", "MEDBAY", 11),)),)
 
     def test_two_statements_at_one_tick_are_told_apart_by_room(self) -> None:
         # Codex round 2: the tick alone could not separate a grounded MEDBAY
@@ -557,16 +559,47 @@ class TestFirstHandSources:
                 claims=(_accuses("p-5"),),
             ),
         )
-        row = _row(
-            _ledger(
-                transcript,
-                contradictions=(_vent_flag("p-5", turn_index=0, obs_index=0),),
-            ),
-            "p-5",
+        ledger = _ledger(
+            transcript, contradictions=(_vent_flag("p-5", turn_index=0, obs_index=0),)
         )
-        assert row.first_hand_places == (("p-2", (("MEDBAY", 11),)),)
-        rendered = _render(ledger=_ledger(transcript), transcript=transcript)
+        assert _row(ledger, "p-5").first_hand_places == (
+            ("p-2", (("saw_vent", "MEDBAY", 11),)),
+        )
+        # Codex round 3: render the SAME grounded ledger. Rebuilding it without
+        # the flag left zero accounts and no coordinate at all, so the negative
+        # assertion would have passed even if coordinates stopped rendering —
+        # the positive half is what stops this going vacuous.
+        rendered = _render(ledger=ledger, transcript=transcript)
+        assert "venting in MEDBAY at tick 11" in rendered
         assert "LABS at tick 11" not in rendered
+
+    def test_one_shape_grounded_beside_another_at_the_same_coordinate(self) -> None:
+        # Codex round 3: room and tick alone still collided when the two
+        # statements were different SHAPES — a grounded sighting beside an
+        # ungrounded vent in the same room at the same tick. The coordinate
+        # carries the kind too, which is the last thing the transcript row
+        # above distinguishes them by.
+        transcript = _transcript(
+            _turn(
+                index=0,
+                speaker="p-2",
+                observations=(
+                    _saw(subject="p-5", room="MEDBAY", tick=11),
+                    _saw_vent(subject="p-5", room="MEDBAY", tick=11),
+                ),
+                claims=(_accuses("p-5"),),
+            ),
+        )
+        ledger = _ledger(
+            transcript,
+            sighting_records={"p-2": (_record(subject="p-5", room="MEDBAY", tick=11),)},
+        )
+        assert _row(ledger, "p-5").first_hand_places == (
+            ("p-2", (("saw_player", "MEDBAY", 11),)),
+        )
+        rendered = _render(ledger=ledger, transcript=transcript)
+        assert "p-2 described seeing them (MEDBAY at tick 11)" in rendered
+        assert "venting in MEDBAY at tick 11" not in rendered
 
     def test_one_speaker_counts_once_however_much_they_hold(self) -> None:
         # The double-count guard: two matching records AND two matching
@@ -599,7 +632,9 @@ class TestFirstHandSources:
         # One voice, both statements named: the ticks are coordinates, not a
         # second count, and they are what tells the credited statement apart
         # from the speaker's other sighting of the same subject.
-        assert row.first_hand_places == (("p-2", (("MEDBAY", 14), ("LABS", 16))),)
+        assert row.first_hand_places == (
+            ("p-2", (("saw_player", "MEDBAY", 14), ("saw_player", "LABS", 16))),
+        )
 
     def test_the_ticks_name_only_the_statements_the_record_bore_out(self) -> None:
         # The perturbation of the pair above: drop the second record and the
@@ -625,7 +660,7 @@ class TestFirstHandSources:
             "p-5",
         )
         assert row.first_hand == ("p-2",)
-        assert row.first_hand_places == (("p-2", (("MEDBAY", 14),)),)
+        assert row.first_hand_places == (("p-2", (("saw_player", "MEDBAY", 14),)),)
 
     def test_a_second_grounded_speaker_makes_it_a_two_account_row(self) -> None:
         # The perturbation of the guard above: an otherwise identical transcript
@@ -1127,13 +1162,17 @@ class TestAdoptedClauseWording:
     )
     _ON: Final[Mapping[str, str]] = {ENV_TESTIMONY_SHAPES: "1"}
 
-    @staticmethod
+    _KILL_WITNESSES: Final[tuple[PlayerId, ...]] = ("p-7", "p-8")
+
+    @classmethod
     def _table(
+        cls,
         *,
         p3_observation: tuple[ObservationClaim, ...] = (),
         with_kill: bool = True,
+        kills: int = 1,
     ) -> tuple[MeetingTranscript, MeetingTestimonyLedger]:
-        """One table: p-1 and p-2 silent, p-3 as given, p-7 the kill witness.
+        """One table: p-1 and p-2 silent, p-3 as given, then ``kills`` witnesses.
 
         The transcript is returned WITH its ledger so a render can pass both —
         the production seam builds them from one meeting, and a case about the
@@ -1151,14 +1190,15 @@ class TestAdoptedClauseWording:
             ),
         ]
         if with_kill:
-            turns.append(
-                _turn(
-                    index=3,
-                    speaker="p-7",
-                    observations=(_saw_kill(subject="p-5"),),
-                    claims=(_accuses("p-5"),),
+            for offset, witness in enumerate(cls._KILL_WITNESSES[:kills]):
+                turns.append(
+                    _turn(
+                        index=3 + offset,
+                        speaker=witness,
+                        observations=(_saw_kill(subject="p-5"),),
+                        claims=(_accuses("p-5"),),
+                    )
                 )
-            )
         transcript = _transcript(*turns)
         return transcript, _ledger(transcript, opener="p-1")
 
@@ -1168,11 +1208,27 @@ class TestAdoptedClauseWording:
         env: Mapping[str, str] | None = None,
         p3_observation: tuple[ObservationClaim, ...] = (),
         with_kill: bool = True,
+        kills: int = 1,
     ) -> str:
         transcript, ledger = self._table(
-            p3_observation=p3_observation, with_kill=with_kill
+            p3_observation=p3_observation, with_kill=with_kill, kills=kills
         )
         return _render(ledger=ledger, transcript=transcript, env=env)
+
+    @staticmethod
+    def _interaction(
+        transcript: MeetingTranscript, ledger: MeetingTestimonyLedger
+    ) -> int:
+        """Joint-slate bytes minus what the two arms add on their own."""
+
+        def size(**kwargs: object) -> int:
+            return len(_render(transcript=transcript, **kwargs).encode("utf-8"))  # type: ignore[arg-type]
+
+        off = size(ledger=None)
+        shapes = size(ledger=None, env={ENV_TESTIMONY_SHAPES: "1"})
+        source = size(ledger=ledger)
+        both = size(ledger=ledger, env={ENV_TESTIMONY_SHAPES: "1"})
+        return (both - off) - ((shapes - off) + (source - off))
 
     def test_each_voice_gets_the_sentence_its_own_shapes_earn(self) -> None:
         rendered = self._rendered(
@@ -1248,28 +1304,50 @@ class TestAdoptedClauseWording:
         # bytes carry 0 spoken ``saw_kill``, which is why the published census
         # shows the interaction at zero and not why it is absent.
         transcript, ledger = self._table()
-        off = _render(ledger=None, transcript=transcript)
-        shapes_only = _render(ledger=None, transcript=transcript, env=self._ON)
-        ledger_only = _render(ledger=ledger, transcript=transcript)
-        both = _render(ledger=ledger, transcript=transcript, env=self._ON)
-        alone = (len(shapes_only) - len(off)) + (len(ledger_only) - len(off))
-        joint = len(both) - len(off)
-        assert joint > alone
-        # And the excess is exactly this clause, not a second seam moving.
-        assert joint - alone == len(self._KILL) - len(self._UNGROUNDED)
+        interaction = self._interaction(transcript, ledger)
+        assert interaction > 0
+        # The floor of the class: kill witnesses ONLY, so both arms render one
+        # clause and only its tail moves.
+        assert interaction == len(self._KILL.encode("utf-8")) - len(
+            self._UNGROUNDED.encode("utf-8")
+        )
+
+    def test_the_interaction_does_not_scale_with_the_witness_count(self) -> None:
+        # Codex round 3: "per adopted kill witness" was the wrong unit. The
+        # template joins every kill witness into ONE clause, so a second witness
+        # moves the names on both arms and leaves the interaction where it was.
+        one = self._table(kills=1)
+        two = self._table(kills=2)
+        assert "p-7, p-8" in self._rendered(env=self._ON, kills=2)
+        assert self._interaction(*two) == self._interaction(*one)
+
+    def test_a_mixed_row_pays_a_whole_clause_not_a_tail(self) -> None:
+        # Codex round 3, the other half of the composition: when the row also
+        # carries an ungrounded voice, the OFF arm merges both names into one
+        # clause while the joint arm emits two. The interaction is then the
+        # SPLIT — a second "; " lead-in, the kill names again, and the kill
+        # sentence in full, less the separator that leaves the merged list — an
+        # order of magnitude above the tail-only floor, which is why the
+        # prediction has to name the row composition and not a per-witness rate.
+        mixed = self._table(p3_observation=(_saw(subject="p-5", tick=14),))
+        floor = self._interaction(*self._table())
+        assert self._interaction(*mixed) > 10 * floor
+        # It is the split, exactly: one extra clause carrying p-7's name, minus
+        # the ", p-7" the merged OFF clause no longer needs.
+        assert self._interaction(*mixed) == len(f"; p-7 {self._KILL}".encode()) - len(
+            b", p-7"
+        )
 
     def test_a_table_with_no_kill_has_no_interaction(self) -> None:
-        # The perturbation for the prediction above: strip the kill witness and
-        # the joint ballot is exactly the two arms added, which is the shape the
-        # published census records over the committed bytes.
-        transcript, ledger = self._table(with_kill=False)
-        off = _render(ledger=None, transcript=transcript)
-        shapes_only = _render(ledger=None, transcript=transcript, env=self._ON)
-        ledger_only = _render(ledger=ledger, transcript=transcript)
-        both = _render(ledger=ledger, transcript=transcript, env=self._ON)
-        assert len(both) - len(off) == (len(shapes_only) - len(off)) + (
-            len(ledger_only) - len(off)
-        )
+        # The perturbation for all three above: strip the kill witnesses and the
+        # joint ballot is exactly the two arms added, whatever else the row
+        # carries. That is the shape the published census records over the
+        # committed bytes, and the reason it records zero.
+        for observation in ((), (_saw(subject="p-5", tick=14),)):
+            transcript, ledger = self._table(
+                with_kill=False, p3_observation=observation
+            )
+            assert self._interaction(transcript, ledger) == 0
 
     def test_the_counts_are_untouched_by_the_wording(self) -> None:
         # The perturbation that would make the class vacuous is a reworded
