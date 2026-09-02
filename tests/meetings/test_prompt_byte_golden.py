@@ -95,7 +95,6 @@ from __future__ import annotations
 
 import asyncio
 import difflib
-import functools
 import shutil
 from collections.abc import Iterator, Mapping, Sequence
 from itertools import combinations
@@ -159,6 +158,7 @@ from orchestrator.replay import (
     MeetingReplayEntry,
     ReplayEntry,
     _state_hash,
+    env_var_for_lever,
     fold_meeting_outcome_into_memories,
     read_all_entries,
 )
@@ -460,7 +460,12 @@ def resolve_prompt_set(prompt_versions: Mapping[str, str]) -> str:
         for name, versions in registry.items()
         if dict(versions) == wanted
     ]
-    matches.extend(_overlay_stamp_index().get(_stamp_key(wanted), ()))
+    # The ON-arm index is consulted only when the registries above hold nothing.
+    # An arm stamp can never equal a default one (the invariant below pins it),
+    # so this cannot hide an ambiguity -- and it keeps the enumeration off the
+    # path every lever-OFF recording takes.
+    if not matches:
+        matches = list(_overlay_stamp_owners(wanted))
     if len(matches) != 1:
         raise AssertionError(
             f"recorded prompt_versions {wanted} matched {len(matches)} registered "
@@ -475,19 +480,18 @@ def _stamp_key(versions: Mapping[str, str]) -> tuple[tuple[str, str], ...]:
     return tuple(sorted(versions.items()))
 
 
-@functools.cache
-def _overlay_stamp_index() -> Mapping[tuple[tuple[str, str], ...], tuple[str, ...]]:
-    """Every ON-ARM stamp this build can write, mapped back to its own set.
+def _overlay_stamp_owners(wanted: Mapping[str, str]) -> tuple[str, ...]:
+    """The sets whose ON-ARM stamp for some lever slate equals ``wanted``.
 
     A lever with a version overlay moves provenance with the bytes it re-bodies,
     so a recording made under one stamps that arm's version strings and a
     multi-lever slate stamps a per-template composite of them
     (:func:`orchestrator.game.prompt_versions_for_set`). None of those mappings
-    is a value in the default registry — that separation is the point, and
-    ``test_an_arm_stamp_never_collides_with_a_default_one`` pins it — so without
-    this index a lever-ON recording reverse-looks up to NO set and cannot be
-    reconstructed at all, which is the state the Wave-2 record's own bytes would
-    otherwise be in.
+    is a value in the default registry -- that separation is the point, and
+    ``test_a_lever_on_recording_can_never_wear_a_default_stamp`` pins it -- so
+    without this lookup a lever-ON recording reverse-looks up to NO set and
+    cannot be reconstructed at all, which is the state the Wave-2 record's own
+    bytes would otherwise be in.
 
     Enumerated over every SUBSET of the live overlay keys rather than the all-ON
     slate alone, so a half-exported or single-lever recording resolves and is
@@ -495,21 +499,29 @@ def _overlay_stamp_index() -> Mapping[tuple[tuple[str, str], ...], tuple[str, ..
     from the resolver and is skipped for that subset only: it cannot have
     stamped an arm it cannot render, and its no-arm stamp is already covered by
     the default registry.
+
+    Recomputed per call rather than cached: the registries it reads are this
+    build's, and a memoised copy would answer from an earlier process state
+    after a test replaced one. It costs a fraction of a millisecond and only
+    runs for a stamp the default registries could not place.
     """
 
-    index: dict[tuple[tuple[str, str], ...], tuple[str, ...]] = {}
+    wanted_key = _stamp_key(wanted)
+    owners: list[str] = []
     for name in PROMPT_VERSION_SETS:
         for size in range(1, len(_OVERLAY_KEYS) + 1):
+            if name in owners:
+                break
             for subset in combinations(_OVERLAY_KEYS, size):
-                env = {f"AILIBI_{key.upper()}": "1" for key in subset}
+                env = {env_var_for_lever(key): "1" for key in subset}
                 try:
                     versions = prompt_versions_for_set(name, env=env)
                 except ValueError:
                     continue
-                key = _stamp_key(versions)
-                if name not in index.get(key, ()):
-                    index[key] = (*index.get(key, ()), name)
-    return index
+                if _stamp_key(versions) == wanted_key:
+                    owners.append(name)
+                    break
+    return tuple(owners)
 
 
 def _roster_for(
@@ -1202,7 +1214,7 @@ def _resolve_every_subset() -> dict[frozenset[str], Mapping[str, str]]:
     resolved: dict[frozenset[str], Mapping[str, str]] = {}
     for size in range(len(_OVERLAY_KEYS) + 1):
         for subset in combinations(_OVERLAY_KEYS, size):
-            env = {f"AILIBI_{key.upper()}": "1" for key in subset}
+            env = {env_var_for_lever(key): "1" for key in subset}
             resolved[frozenset(subset)] = prompt_versions_for_set(_OVERLAY_SET, env=env)
     return resolved
 

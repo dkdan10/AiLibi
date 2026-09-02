@@ -1135,6 +1135,13 @@ _RENDER_CELLS: Final[tuple[str, ...]] = (
     "B-1m1",
 )
 
+#: The subset of those the fake provider's own bytes exercise. It files no
+#: accusation, so no ledger row reaches a candidate target and `C-9` has nothing
+#: to read; the reader must say UNREAD rather than pass it.
+_EXERCISED_CELLS: Final[tuple[str, ...]] = tuple(
+    cell for cell in _RENDER_CELLS if cell != "C-9"
+)
+
 
 def _export_the_slate(monkeypatch: pytest.MonkeyPatch) -> None:
     """Make this process the shell a Wave-2 recording is made and read in."""
@@ -1224,8 +1231,15 @@ def test_the_on_mode_walks_a_lever_on_recording_prompt_for_prompt(
     assert recording["games"] == len(_ON_SEEDS)
     assert recording["meetings"] > 0
     # The walk re-rendered every recorded prompt, and this script's own mirror of
-    # the manager's derivation reproduced them too.
-    assert recording["reconstruction_mismatches"] == {}
+    # the manager's derivation reproduced them too — the second half is a hard
+    # refusal (`_assert_the_mirror_reproduced_the_record`), so reaching here at
+    # all is the assertion.
+    #
+    # The fake speaks no alibi and files no accusation, so T4's and T6's
+    # populations are empty on these bytes and both read UNREAD. Everything with
+    # a population to read must pass, and the reader must name the two rather
+    # than smooth them.
+    assert set(recording["stopped_cells"]) <= {"T-6", "C-9"}, recording["stopped_cells"]
     # The recording's stamp is the ratified slate, read off its own game_over
     # rows rather than off this shell.
     stamps = payload["recorded_substrate"]
@@ -1244,12 +1258,23 @@ def test_the_on_mode_walks_a_lever_on_recording_prompt_for_prompt(
         # The record and the walk's re-render of it agree, so no row is withdrawn.
         assert row["recorded_on"] == row["reconstructed_on"], cell
         assert row["on_withdrawn"] is False, cell
-    # The three render predicates the fake's own bytes can actually exercise.
+    # Every render predicate the fake's own bytes can exercise reads PASS. C-9 is
+    # not among them: the fake files no accusation, so the ledger holds no row
+    # for any candidate target and no ballot gains the block.
+    for cell in _EXERCISED_CELLS:
+        assert rows[cell]["verdict"] == "PASS", (cell, rows[cell])
     assert rows["R-13"]["recorded_on"] == [recording["body_report_meetings"]] * 2
-    assert rows["R-15"]["verdict"] == "PASS"
     assert rows["T-9a"]["recorded_on"][0] == rows["T-9a"]["recorded_on"][1]
     assert rows["T-9b"]["recorded_on"][0] == 0
     assert rows["B-1m1"]["recorded_on"] == rows["B-1m1"]["off"]
+    # T2's third clause has its own reading beside the share, and it is zero.
+    assert rows["R-13"]["also_zero"][1] == 0
+    assert rows["R-14"]["also_zero"][1] == 0
+    # The two cells that cannot fail on this reader say so on their own row.
+    assert "BY CONSTRUCTION" in rows["R-15"]["caveat"]
+    assert "BY CONSTRUCTION" in rows["T-6"]["caveat"]
+    # The pooled block is informational; the verdict is the per-recording union.
+    assert payload["pooled_is_informational"] is True
 
 
 def test_the_on_mode_prints_every_predicate_beside_its_reading(
@@ -1259,22 +1284,48 @@ def test_the_on_mode_prints_every_predicate_beside_its_reading(
 
     _export_the_slate(monkeypatch)
     _record_on(tmp_path, seeds=(1,))
-    assert (
-        cf.main(
-            [
-                "--recording",
-                str(tmp_path),
-                "--recorded-slate",
-                cf.RECORDED_SLATE_ON,
-            ]
-        )
-        == 0
+    # A one-seed fake recording speaks no alibi, so T4 has an empty population
+    # and reads UNREAD — which is a STOP, and the exit status has to say so or a
+    # `set -e` smoke script would carry straight on into the record.
+    status = cf.main(
+        ["--recording", str(tmp_path), "--recorded-slate", cf.RECORDED_SLATE_ON]
     )
     printed = capsys.readouterr().out
+    assert status == 1
     assert "RECORDED-ON" in printed and "RECONSTRUCTED-ON" in printed
     assert "the count is 0, whatever the ballot denominator" in printed
     assert "→ PASS" in printed
+    assert "→ UNREAD (a STOP)" in printed
+    assert "this command exits non-zero" in printed
+    assert "READS ZERO BY CONSTRUCTION" in printed
     assert "writes no bar, no target and no decision rule" in printed
+
+
+def test_the_cli_exits_zero_when_every_gated_predicate_passes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The other half of the exit contract, so the status is a real signal.
+
+    A status that were always 1 would be as useless as one that were always 0.
+    The two vacuous cells are the ones a fake corpus cannot populate, so they are
+    struck from the judged set here — the point of the case is the STATUS, and it
+    has to be reachable in both directions.
+    """
+
+    _export_the_slate(monkeypatch)
+    _record_on(tmp_path, seeds=(1,))
+    build = cf.build_on_recording_rows
+    monkeypatch.setattr(
+        cf,
+        "build_on_recording_rows",
+        lambda walk: [row for row in build(walk) if row.cell_id not in {"T-6", "C-9"}],
+    )
+    status = cf.main(
+        ["--recording", str(tmp_path), "--recorded-slate", cf.RECORDED_SLATE_ON]
+    )
+    printed = capsys.readouterr().out
+    assert status == 0
+    assert "every GATED predicate PASSES on these bytes" in printed
 
 
 def test_a_recording_whose_stamp_disagrees_with_the_declared_slate_refuses(
@@ -1488,6 +1539,113 @@ def test_a_first_meeting_row_difference_trips_the_meeting_1_cell(
     assert tripped["B-1m1"].recorded_on != tripped["B-1m1"].off
 
 
+def test_a_drifted_mirror_refuses_rather_than_passing_two_agreeing_columns(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The planted case the row-level column comparison cannot catch.
+
+    Both of a row's ON columns are counted against this script's own whole-slate
+    re-render, so a mirror that drifts on EVERY reporter-affected prompt moves
+    them together: the columns agree, the row passes, and nothing reproduced the
+    record. The refusal is over the mirror itself, not over the columns.
+    """
+
+    _export_the_slate(monkeypatch)
+    _record_on(tmp_path, seeds=(1,))
+    empty = cf._ReporterInputs(reporter_id=None, contexts={}, at_body={})
+    monkeypatch.setattr(cf, "_reporter_inputs", lambda *a, **k: empty)
+    with pytest.raises(SystemExit) as excinfo:
+        cf.run_recording([tmp_path], recorded_slate=cf.RECORDED_SLATE_ON)
+    message = str(excinfo.value)
+    assert "does not reproduce the recording" in message
+    assert "DEFECT IN THIS SCRIPT's mirror" in message
+
+
+def test_pooling_cannot_pass_a_predicate_a_recording_failed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """§8.1's predicates are SAMPLE-LOCAL, so the verdict is a union not a sum.
+
+    Two legs at 98/100 and 100/100 pool to exactly T6's floor while one of them
+    failed it. The planted case drives that arithmetic through the shipped
+    accumulator and asserts the pooled row would have passed — which is why the
+    verdict is taken from the members instead.
+    """
+
+    def leg(numerator: int) -> cf.OnRow:
+        return cf.OnRow(
+            cell_id="C-9",
+            tripwire="T6",
+            label="planted",
+            population="ballot",
+            predicate="planted",
+            note="planted",
+            rule="share",
+            recorded_on=(numerator, 100),
+            reconstructed_on=(numerator, 100),
+            off=(0, 100),
+        )
+
+    failing, passing = leg(98), leg(100)
+    assert failing.verdict() == "STOP"
+    assert passing.verdict() == "PASS"
+    pooled = cf._PooledOnRows()
+    pooled.add(failing)
+    pooled.add(passing)
+    (summed,) = pooled.rows()
+    assert summed.recorded_on == (198, 200)
+    assert summed.verdict() == "PASS"
+
+    # And the shipped run reports per recording, so the union is available.
+    _export_the_slate(monkeypatch)
+    _record_on(tmp_path, seeds=(1,))
+    payload = cf.run_recording([tmp_path], recorded_slate=cf.RECORDED_SLATE_ON)
+    sets = payload["sets"]
+    assert isinstance(sets, dict)
+    (block,) = sets.values()
+    assert isinstance(block, dict)
+    assert payload["stopped_cells"] == block["stopped_cells"]
+    assert payload["pooled_is_informational"] is True
+
+
+def test_an_emergency_prompt_that_gains_a_reporter_block_stops_t2(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """T2's third clause, which neither share denominator can express.
+
+    An emergency meeting has no reporter seat, so its prompts are outside both
+    body-report populations — a lever that reached one would move no share at
+    all. The planted case gives an emergency meeting a reporter context and
+    asserts the row STOPs on its second reading rather than passing on its first.
+    """
+
+    _export_the_slate(monkeypatch)
+    _record_on(tmp_path, seeds=(1,))
+    walk = cf.walk_recording(
+        tmp_path, set_name="planted", slate_set=cf._arm_serving_set(tmp_path)
+    )
+    clean = {row.cell_id: row for row in cf.build_on_recording_rows(walk)}
+    assert clean["R-14"].also_zero is not None
+    assert clean["R-14"].also_zero[1] == 0
+    assert clean["R-14"].verdict() == "PASS"
+
+    # One more moved prompt, in an emergency meeting — counted in all three
+    # places exactly as the fold counts it, so the row's two ON columns still
+    # agree and the STOP comes from the clause rather than from a withdrawal.
+    withdrawn = walk.legs[cf.decomposition_label("reporter_reasoning")]
+    withdrawn.changed[cf._KIND_ACCUSATION_ROUND] += 1
+    withdrawn.changed_vs_reconstruction[cf._KIND_ACCUSATION_ROUND] += 1
+    withdrawn.changed_in_emergency[cf._KIND_ACCUSATION_ROUND] += 1
+    tripped = {row.cell_id: row for row in cf.build_on_recording_rows(walk)}
+    assert tripped["R-14"].also_zero is not None
+    assert tripped["R-14"].also_zero[1] == 1
+    assert tripped["R-14"].verdict() == "STOP"
+    # And the share it is printed beside is unmoved: the two clauses are read
+    # over different populations, so neither can hide the other — a naive
+    # numerator would have counted the leak as a body-report gain.
+    assert tripped["R-14"].recorded_on == clean["R-14"].recorded_on
+
+
 def test_a_row_whose_two_on_readings_disagree_reads_unread(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -1547,6 +1705,48 @@ def test_each_predicate_rule_reads_its_own_verdict(
         off=(0, reading[1]),
     )
     assert row.verdict() == expected
+
+
+def test_a_row_with_no_reading_at_all_is_unread_not_passed() -> None:
+    """The floor of every gated rule: no column, no verdict.
+
+    Nothing ``build_on_recording_rows`` constructs leaves both ON columns empty,
+    so this is exercised here rather than through a walk — a rule that returned
+    PASS on an absent reading would make every future cell that forgot to fill
+    one look satisfied.
+    """
+
+    blank = cf.OnRow(
+        cell_id="planted",
+        tripwire="planted",
+        label="planted",
+        population="planted",
+        predicate="planted",
+        note="planted",
+        rule="zero",
+    )
+    assert blank.verdict() == "UNREAD (a STOP)"
+    # And an identity with nothing to be identical TO is not an identity.
+    lonely = cf.OnRow(
+        cell_id="planted",
+        tripwire="planted",
+        label="planted",
+        population="planted",
+        predicate="planted",
+        note="planted",
+        rule="identity",
+        recorded_on=(10, 2),
+    )
+    assert lonely.verdict() == "UNREAD (a STOP)"
+
+
+def test_a_verdict_over_zero_recordings_is_refused(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _export_the_slate(monkeypatch)
+    with pytest.raises(SystemExit) as excinfo:
+        cf.run_recording([], recorded_slate=cf.RECORDED_SLATE_ON)
+    assert "a pass over nothing" in str(excinfo.value)
 
 
 def test_the_cli_refuses_a_recording_with_no_declared_slate(tmp_path: Path) -> None:
