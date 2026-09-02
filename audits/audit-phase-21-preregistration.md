@@ -487,6 +487,21 @@ Reported in the record audit beside the bars; **none of them can decide the verd
   **`samples/9p2i` 15/50 = 30%, `ml_corpus/9p2i` 36/150 = 24%, `samples/4p1i` 18/50 = 36%,
   `ml_corpus/4p1i` 13/50 = 26%.** A leg outside its band is reported, and §7 explains why it
   cannot attribute.
+* **Decisiveness** — body-report ejections over body-report meetings, and the SKIP share, read
+  from I-3's `report_ejections` twin (`eval/funnel.py`, pinned `tests/eval/test_funnel.py`:633).
+  Baseline 8: **377/620 = 60.8% ejected, 243/620 = 39.2% skipped**, per set 85/141, 249/407,
+  21/36, 22/36. Printed beside bar 2 in the record audit so a bar-2 pass that came from deciding
+  LESS reads as such: 243 of the 620 body-report meetings already end in no ejection, so a record
+  that lowers bar 2's count by skipping more meetings rather than by convicting better moves this
+  cell too. Reported, never gated; it decides nothing.
+* **Bar 1's cell split by a spoken kill** — the non-direct convictions whose ejectee is named by a
+  spoken `saw_kill` observation at that meeting (count and accuracy). `ROLE_PROOF_KINDS` is
+  `{"vent_sighting"}` (`eval/deduction_metrics.py`:447), so under `testimony_shapes` an
+  eyewitness-kill conviction enters the non-direct cell as deduction; this split lets bar 1's
+  movement be decomposed at the record. Baseline 8 reads **0 of 96** — no `saw_kill` was ever
+  spoken on these bytes (`grep -rn saw_kill replays/` returns nothing). Reader: owed by the
+  T5/T7 reader contract (§9.1); until it merges the cell sits in §5.1 as
+  measured-but-not-registered.
 * **The solvability y-axis (I-5)** — containment 557/620 pooled, singleton rate and correctness,
   and ejections landing on an already-cleared player 63/377 pooled. Reader:
   `eval/solvability.py`:395 / `scripts/measure_baseline.py --solvability --json`.
@@ -501,8 +516,10 @@ Reported in the record audit beside the bars; **none of them can decide the verd
   `samples/9p2i` [VERIFIED]: **1,740 snapshots, 63,624 rendered rows, mean 36.5655, 25,628
   testimony rows** (buckets ≤4: 6,882; 5-6: 17,340; ≥7: 1,406). Reported per bucket and never as
   one blended number.
-* **Token cost per meeting call** — the Wave-2 blocks add tokens (§8's +61,750-byte ballot
-  interaction is the priced example); reported, not gated.
+* **Token cost per meeting call** — the Wave-2 blocks add tokens (the counterfactual's §6.2
+  render census, as re-derived in its Errata after PR #420 — the ballot's one cross-lever
+  interaction now fires only on a spoken kill and measures 0 on the record); reported, not
+  gated.
 
 ### 5.1 Measured but not registered
 
@@ -518,6 +535,10 @@ its **VERIFIER-CORRECTED** form, not as originally filed.
 | the impossible-transit charge (A-12) | the verifier **REPLACES** "provably false every time" (the test performed is true by construction for every crewmate) and re-prices the within-stratum enrichment at **15/19 = 78.9%** against a **42/103 = 40.8%** base = **1.9x**, with the ≥half figure **15/42 = 35.7%** | same |
 | the citation mix of the ejecting ballots (A-10) | 79 hearsay / 40 own-observation / 26 own-turn of 145 ejecting ballots at baseline 7 | same; `audits/audit-phase-21-counterfactual.md` §4.3 publishes the baseline-8 re-derivation (C-5…C-7) offline |
 | the per-turn calibration decomposition (A-19) | the verifier **REFUTES** the pooled "turn ≥ 2 is pure noise" headline by a decomposition the filing never ran — same-target turn ≥ 2 crew accusations hit 79.2% (n=48) and 88.5% (n=122) against different-target 4.7% (n=106) and 3.1% (n=287); the pooled lift is a mixture artifact and the ML advice is **WITHDRAWN** | same |
+| bar 1's cell split by a spoken kill (§5) | 0 of the 96 non-direct convictions name an ejectee a spoken `saw_kill` observation identified — no `saw_kill` is spoken anywhere in the recorded bytes, so the split is empty at baseline 8 and bar 1's cell is unchanged by it | no committed reader emits the split: `ROLE_PROOF_KINDS` is `{"vent_sighting"}` (`eval/deduction_metrics.py`:447), so an eyewitness-kill conviction enters the non-direct cell as deduction and is not separable there. Owed by the T5/T7 reader contract (§9.1); until that merges it stays observed |
+
+The last row is not a 2026-08-26 register class: it is a split this memo itself wants and no
+committed reader emits, and the same routing rule governs it.
 
 **The routing rule** [PROPOSED — ratified at merge]: **a class the owner wants gated becomes an
 instrument contract that merges BEFORE the record, or it stays observed.** A number typed into
@@ -620,7 +641,7 @@ exactly the sense that matters here: they moved the "before" this memo prices ag
 | the I-13 injustice fixtures | **4/4 FLIPPED → 3/4 flipped + 1 partial** — fixture (b), content-vs-own-memory miss, `9p2i` seed 12 M0, held its evidence half and regressed its outcome half, ejecting the crewmate p-5 | §5.1.1b |
 | the STRONG `alibi_vs_sighting` prosecution class | 11 / 12 → **21 / 27** — grew | §5.1.2 (b) |
 | the oracle-register leak class, all four sets | non-zero → **ZERO** — the one unambiguously good movement | §5.1.2 (c) |
-| the impostor false-whereabouts arm | **INVERTED**: 0/106 impostor against 6/660 crew on `samples/9p2i` (the old comment had it at ~twice the crew rate and was backwards) | §5.1.2 (d) |
+| the impostor false-whereabouts arm | 0/106 impostor against 6/660 crew on `samples/9p2i` — a direction the cell cannot support: the impostor interval 0/106 = 0.0000 [0.0000, 0.0350] covers the crew rate, and pooled over the four sets the two rates are equal, 4/409 against 27/2748 (the old comment had it at ~twice the crew rate and was backwards) | §5.1.2 (d) |
 | `weak_flag_only_impostor` on `samples` | 0 → **1** | §5.1.2 (e) |
 | the `_COALESCED_ROW_PIN` margin | 37.05 → **36.59** against a **36.0** floor — margin 1.05 → 0.59, **MARGIN WATCH** | §5.1.2 (f) |
 
@@ -691,10 +712,12 @@ rather than assumed:**
 **Both route to ONE instrument contract that must merge BEFORE 21.23** — not to 21.23 itself,
 whose contract puts **every code path** out of scope (`tasks/phase-21.md`, Task 21.23's "Files
 NOT in scope"), so the reader cannot be written there and a smoke that invented one would be
-executing a criterion it had just authored. That contract owes exactly two cells: **`T-9` split by
-the speaker's recorded role and restricted to the elicitation block**, and **a meeting-1-scoped
-`B-1`**. Scheduling it is an owner decision and it is raised as such in this PR's `## Questions`;
-until it merges, **T5 and T7 read UNREAD and the record does not start.**
+executing a criterion it had just authored. That contract owes exactly three cells: **`T-9` split
+by the speaker's recorded role and restricted to the elicitation block**, **a meeting-1-scoped
+`B-1`**, and **the `saw_kill` split of bar 1's non-direct cell** (§5), which is
+measured-but-not-registered until it lands. Scheduling it is an owner decision — **ratified
+2026-09-02: the orchestrator dispatches it immediately after this merge, and it must merge before
+21.23**; until it merges, **T5 and T7 read UNREAD and the record does not start.**
 
 The other five tripwires are readable as registered, checked against the script's own rows: T1's
 count over `T-7` (:1711), T2's two 100%-of-denominator cells `R-13` and `R-14` (:1483, :1496 —
@@ -781,7 +804,10 @@ stale).
   difference at all, so a role split of THAT would count the public-transcript row an impostor
   prompt correctly carries), and T7 needs a **meeting-1-scoped `B-1`** (:695-703 accumulates
   across every captured meeting and :1804-1808 publishes only the totals). It cannot be written
-  at 21.23, whose contract puts every code path out of scope.
+  at 21.23, whose contract puts every code path out of scope. It carries a THIRD cell beside those
+  two — the `saw_kill` split of bar 1's non-direct cell (§5) — which stays observed until it
+  lands. **Ratified 2026-09-02: the orchestrator dispatches that contract immediately after this
+  merge, and it must merge before 21.23.**
   **Until that contract merges, T5 and T7 are UNREAD and the record does not start.**
 
 Named as **21.24's own re-anchor business rather than this memo's**: the version/environment
@@ -854,7 +880,9 @@ asymmetry (#416/#417), and the roll_call sibling-block gap.
 
 **Sign-off.** Ratification rides the merge of Task 21.22's PR: **the owner ratifies the MERGED
 text.** Nothing in this memo is normative before that merge. 21.23 and 21.24 read it verbatim;
-anything after the merge is a dated erratum in §11.
+anything after the merge is a dated erratum in §11. **Merged 2026-09-02 by the orchestrator on the
+owner's explicit delegation, after ruling on the PR's Questions; the rulings and their provenance
+are recorded on the PR and in Task 21.22's merge-reality record.**
 
 ## 11. Amendment log
 
@@ -915,7 +943,7 @@ this reader — quoted inside the memo — cannot satisfy its own checks.
 |---|---|
 | a changed cell digit (`20/95` → `21/95`) | `I-6 zero-flag convictions [samples/9p2i]: (21, 95) != (20, 95)` |
 | a changed interval | `interval 34/46: 0.7391 1.0000 1.0000 != (0.7391, 0.5974, 0.844)` |
-| an interval re-spelled out of the parsed shape (`[0.0037, 0.0112]` → `[0.0037,0.0112]`) | `16 intervals quoted but only 15 are in a shape this reader can re-run` **and** `only 15 intervals parsed` |
+| an interval re-spelled out of the parsed shape (`[0.0037, 0.0112]` → `[0.0037,0.0112]`) | `17 intervals quoted but only 16 are in a shape this reader can re-run` **and** `only 16 intervals parsed` |
 | a deleted §3.1 row | `table inventory: 14 rows, expected 15` |
 | a target moved in §4.1's TABLE | `bar 3: the table's target is not '**≤ 12 pooled**'` **and** `bar 3: §4's prose states ≤ 12.0 but §4.1's table says ≤ 16.0` |
 | a target moved in §4's PROSE, table left alone | `bar 3: §4's HEADING states ≤ 13.0 but §4.1's table says ≤ 12.0` |
@@ -1234,7 +1262,7 @@ if quoted_pairs != len(intervals):
         f"{quoted_pairs} intervals quoted but only {len(intervals)} are in a shape "
         "this reader can re-run"
     )
-if len(intervals) < 16:
+if len(intervals) < 17:
     mismatches.append(f"only {len(intervals)} intervals parsed -- a claim went missing")
 if len(BRACKET.findall(_reconciliation)) != 2:
     mismatches.append("§3.2 no longer carries exactly the two divergent bounds")
