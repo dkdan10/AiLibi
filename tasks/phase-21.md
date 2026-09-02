@@ -109,6 +109,19 @@ owns no bar; cells with no committed reader are listed as measured-but-not-regis
 may ride them. The record (21.24) reads the memo verbatim; the verdict is ADOPTED or FINDING and
 either way the numbers publish.
 
+**As merged, that memo is the document 21.23, 21.24 and the post-record sweep read VERBATIM.** It
+registers six instruments, the baseline-8 cells behind them, FOUR primary bars — bars 1 and 2
+inherited verbatim from `audits/audit-phase-20-preregistration.md` §4 with unchanged targets, and
+the two reporter bars its §4 prices from bar 2's own arithmetic — the granularity advisory
+discipline, the secondary and measured-but-not-registered lists, a conjunctive decision rule with
+its no-partial-graduation ruling, the declared co-interventions, the record order, the freeze, the
+slate (the three Wave-2 keys ON, `impostor_roll_call` OFF), the preconditions and the abandon
+criteria, and it dispositions all seven of 21.21's tripwire candidates by name. Where any contract,
+generated prompt or later audit disagrees with it, the memo governs and the other surface is
+re-anchored at its pre-dispatch review — never read as a second baseline and never as a second
+rule. No bar is re-priced after that merge; a miss publishes as a miss, and anything after the
+merge is a dated erratum in the memo's own amendment log.
+
 ## The DAG
 
 ```
