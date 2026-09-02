@@ -95,6 +95,7 @@ from __future__ import annotations
 
 import asyncio
 import difflib
+import functools
 import shutil
 from collections.abc import Iterator, Mapping, Sequence
 from itertools import combinations
@@ -446,8 +447,10 @@ def resolve_prompt_set(prompt_versions: Mapping[str, str]) -> str:
     ``build_default_meeting_runner`` guarantees (DESIGN.md §11.4). A recorded
     stamp a later bump moved the live registry past resolves through
     :data:`ARCHIVED_PROMPT_VERSION_SETS` instead (Task 16.15 — the archived
-    bodies are what those recordings rendered). Fail loud unless exactly one
-    set matches across both registries.
+    bodies are what those recordings rendered). A recording made with substrate
+    levers ON stamps those arms' version strings instead, so it resolves through
+    the ON-ARM index (:func:`_overlay_stamp_index`). Fail loud unless exactly one
+    set matches across all three.
     """
 
     wanted = dict(prompt_versions)
@@ -457,12 +460,56 @@ def resolve_prompt_set(prompt_versions: Mapping[str, str]) -> str:
         for name, versions in registry.items()
         if dict(versions) == wanted
     ]
+    matches.extend(_overlay_stamp_index().get(_stamp_key(wanted), ()))
     if len(matches) != 1:
         raise AssertionError(
             f"recorded prompt_versions {wanted} matched {len(matches)} registered "
             f"sets ({matches}); expected exactly one"
         )
     return matches[0]
+
+
+def _stamp_key(versions: Mapping[str, str]) -> tuple[tuple[str, str], ...]:
+    """A recorded ``prompt_versions`` mapping as an order-free lookup key."""
+
+    return tuple(sorted(versions.items()))
+
+
+@functools.cache
+def _overlay_stamp_index() -> Mapping[tuple[tuple[str, str], ...], tuple[str, ...]]:
+    """Every ON-ARM stamp this build can write, mapped back to its own set.
+
+    A lever with a version overlay moves provenance with the bytes it re-bodies,
+    so a recording made under one stamps that arm's version strings and a
+    multi-lever slate stamps a per-template composite of them
+    (:func:`orchestrator.game.prompt_versions_for_set`). None of those mappings
+    is a value in the default registry — that separation is the point, and
+    ``test_an_arm_stamp_never_collides_with_a_default_one`` pins it — so without
+    this index a lever-ON recording reverse-looks up to NO set and cannot be
+    reconstructed at all, which is the state the Wave-2 record's own bytes would
+    otherwise be in.
+
+    Enumerated over every SUBSET of the live overlay keys rather than the all-ON
+    slate alone, so a half-exported or single-lever recording resolves and is
+    named rather than silently unmatched. A set with no body for an arm raises
+    from the resolver and is skipped for that subset only: it cannot have
+    stamped an arm it cannot render, and its no-arm stamp is already covered by
+    the default registry.
+    """
+
+    index: dict[tuple[tuple[str, str], ...], tuple[str, ...]] = {}
+    for name in PROMPT_VERSION_SETS:
+        for size in range(1, len(_OVERLAY_KEYS) + 1):
+            for subset in combinations(_OVERLAY_KEYS, size):
+                env = {f"AILIBI_{key.upper()}": "1" for key in subset}
+                try:
+                    versions = prompt_versions_for_set(name, env=env)
+                except ValueError:
+                    continue
+                key = _stamp_key(versions)
+                if name not in index.get(key, ()):
+                    index[key] = (*index.get(key, ()), name)
+    return index
 
 
 def _roster_for(
@@ -1268,6 +1315,31 @@ def test_a_lever_on_recording_can_never_wear_a_default_stamp() -> None:
     # And the ALL-ON arm -- the one 21.23 smokes and 21.24 records -- is
     # materialised by name rather than left to be derived at the record.
     assert dict(resolved[frozenset(_OVERLAY_KEYS)]) == _ALL_ON_STAMPS
+
+
+def test_a_lever_on_stamp_resolves_to_the_set_that_wrote_it() -> None:
+    """The other half: an arm-shaped stamp must resolve to ITS OWN set.
+
+    The test above proves an arm stamp can never be mistaken for a default one.
+    That separation is what makes a lever-ON recording unresolvable unless the
+    arms are indexed, and an unresolvable recording cannot be reconstructed at
+    all -- which is the state the Wave-2 record's own bytes would be in. Every
+    subset resolves, including the all-ON slate 21.24 records.
+
+    The planted case is the one that matters: a stamp carrying a version string
+    NO arm of this build writes must still refuse. The index widens which stamps
+    resolve, never how loosely they are matched.
+    """
+
+    for keys, versions in _resolve_every_subset().items():
+        assert resolve_prompt_set(versions) == _OVERLAY_SET, sorted(keys)
+
+    fabricated = {
+        **_ALL_ON_STAMPS,
+        "vote_ballot": "vote_ballot.qwen3_6_27b.v5.no_such_arm",
+    }
+    with pytest.raises(AssertionError, match="matched 0 registered sets"):
+        resolve_prompt_set(fabricated)
 
 
 def test_a_file_swapping_arm_serves_a_body_its_siblings_do_not_reach() -> None:

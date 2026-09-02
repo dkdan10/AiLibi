@@ -1,6 +1,6 @@
 """Pins for the Phase-21 offline counterfactual and the memo it publishes.
 
-Six things are pinned, each with a case proving it bites:
+Seven things are pinned, each with a case proving it bites:
 
 1. **The slate.** Three Wave-2 keys with the file-swapping arm OFF, every one of
    them still a live toggle that reads OFF under an empty environment. A fourth
@@ -30,11 +30,21 @@ Six things are pinned, each with a case proving it bites:
    first-meeting budget catches a difference the whole-run total nets away; and
    the spoken-kill split of bar 1's cell counts a planted conviction that the
    committed bytes, which hold no spoken kill, could never exercise.
+7. **The LEVER-ON mode**, over a recording made here for the purpose with the
+   deterministic fake provider: the walk reproduces every recorded prompt, every
+   registered tripwire emits with its predicate and its verdict, and each refusal
+   has its own planted case — a stamp that is not the declared slate, a bare
+   shell, an exporting shell on the committed sets, an unstamped seed, two
+   substrates in one directory, and the OFF bodies pointed at ON bytes. A
+   recorded spoken ``saw_kill`` separates the elicitation reading from the byte
+   diff through the WHOLE walk, and the OFF reduction stays OFF inside a shell
+   that exports the arm.
 """
 
 from __future__ import annotations
 
 import functools
+import json
 import os
 import re
 import shutil
@@ -43,8 +53,11 @@ from pathlib import Path
 from typing import Any, Final
 
 import pytest
+from pydantic import BaseModel
 
-from agents.strategic.prompts.loader import build_prompt_renderers
+from agents.strategic.prompts.loader import ENV_PROMPT_SET, build_prompt_renderers
+from llm.client import CallKind, LLMResponse
+from llm.fake_provider import FakeProvider
 from meetings.schemas import (
     ContradictionRef,
     MeetingResult,
@@ -57,6 +70,7 @@ from orchestrator.replay import (
     env_var_for_lever,
     substrate_flag_snapshot,
 )
+from tests._helpers.lever_on_recording import record_replay_set
 
 import counterfactual_phase21 as cf
 
@@ -206,7 +220,26 @@ def test_the_guard_refuses_a_stale_ambient_export(
     message = str(excinfo.value)
     assert "the ambient environment is not the record's substrate" in message
     assert variable in message
-    assert "Unset" in message
+    assert f"unset {variable}" in message
+
+
+def test_the_guard_refuses_a_shell_that_is_missing_the_records_exports(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The other direction, which the lever-ON mode needs and the committed mode
+    # never sees: a shell with the record's exports ABSENT cannot reconstruct a
+    # lever-ON recording either, so the guard is an equality against whatever
+    # slate the record was made under.
+    for key in cf.WAVE_2_LEVERS:
+        monkeypatch.delenv(env_var_for_lever(key), raising=False)
+    with pytest.raises(SystemExit) as excinfo:
+        cf._assert_live_slate(
+            "in the missing-export case", shell_slate=frozenset(cf.WAVE_2_LEVERS)
+        )
+    message = str(excinfo.value)
+    assert "the ambient environment is not the record's substrate" in message
+    for key in cf.WAVE_2_LEVERS:
+        assert f"export {env_var_for_lever(key)}=1" in message
 
 
 # --------------------------------------------------------------------------- #
@@ -927,7 +960,7 @@ def test_the_role_join_refuses_a_seat_the_two_derivations_disagree_on() -> None:
         kind=cf._KIND_ACCUSATION_ROUND,
         agent_id="p-3",
         kwargs={"is_impostor": True, "turn_kind": "reply"},
-        off_prompt="",
+        recorded_prompt="",
     )
     roles: dict[str, Any] = {"p-3": "CREWMATE"}
     with pytest.raises(SystemExit) as excinfo:
@@ -1067,6 +1100,478 @@ def _rows(payload: Mapping[str, object], key: str) -> list[Any]:
     rows = payload[key]
     assert isinstance(rows, list)
     return rows
+
+
+# --------------------------------------------------------------------------- #
+# 7. The LEVER-ON mode, over a recording made for the purpose.                 #
+# --------------------------------------------------------------------------- #
+
+#: The shell the Wave-2 slate is recorded and read in. The prompt set joins it
+#: because only that set carries the arms' bodies.
+_LEVER_ON_SHELL: Final[dict[str, str]] = {
+    ENV_PROMPT_SET: "qwen3_6_27b",
+    **{env_var_for_lever(key): "1" for key in cf.WAVE_2_LEVERS},
+}
+
+#: Seeds of the flat 4p1i roster, recorded fresh per test. Three is enough to
+#: carry several meetings and still record in a fraction of a second.
+_ON_SEEDS: Final[tuple[int, ...]] = (1, 2, 3)
+
+#: Every tripwire the block must answer: §8.1's seven, §5's spoken-kill split
+#: and §5's four corroboration cells. A missing one is a criterion nobody reads.
+_REGISTERED_TRIPWIRES: Final[frozenset[str]] = frozenset(
+    {"T1", "T2", "T3", "T4", "T5", "T6", "T7", "Q-B", "§5"}
+)
+
+#: The rows whose numerator is a RENDER, and so the ones that must carry all
+#: three columns: two independent ON readings and the withdrawn-lever one.
+_RENDER_CELLS: Final[tuple[str, ...]] = (
+    "R-13",
+    "R-14",
+    "R-15",
+    "T-9a",
+    "T-9b",
+    "C-9",
+    "B-1m1",
+)
+
+
+def _export_the_slate(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make this process the shell a Wave-2 recording is made and read in."""
+
+    for variable, value in _LEVER_ON_SHELL.items():
+        monkeypatch.setenv(variable, value)
+
+
+def _record_on(directory: Path, **kwargs: Any) -> Path:
+    return record_replay_set(
+        directory,
+        seeds=kwargs.pop("seeds", _ON_SEEDS),
+        expect_levers=cf.WAVE_2_LEVERS,
+        **kwargs,
+    )
+
+
+class _SpokenKillProvider:
+    """The fake provider with ONE turn's observations replaced by a saw_kill.
+
+    The fake emits no observations at all, and the corpus holds no spoken kill
+    either — which is exactly why T5 needed a reader rather than a byte diff. So
+    the case that separates the two has to be planted, and planting it in the
+    RECORDING (rather than in a synthetic prompt pair) is what puts it through
+    the whole walk: the manager parses it, the transcript carries it, and every
+    later prompt of that meeting renders the role-blind public row.
+    """
+
+    def __init__(self) -> None:
+        self._inner = FakeProvider()
+        self.planted = 0
+
+    async def complete(
+        self,
+        *,
+        prompt: str,
+        schema: type[BaseModel] | None,
+        max_tokens: int,
+        temperature: float,
+        call_kind: CallKind = "meeting",
+        model: str | None = None,
+        agent_id: str | None = None,
+    ) -> LLMResponse:
+        response = await self._inner.complete(
+            prompt=prompt,
+            schema=schema,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            call_kind=call_kind,
+            model=model,
+            agent_id=agent_id,
+        )
+        if schema is None or agent_id is None or self.planted:
+            return response
+        payload = json.loads(response.text)
+        if "observations" not in payload:
+            return response
+        payload["observations"] = [
+            {
+                "type": "saw_kill",
+                "tick": 1,
+                "subject": "p-2" if agent_id != "p-2" else "p-1",
+                "room": "CAFETERIA",
+            }
+        ]
+        text = json.dumps(payload)
+        schema.model_validate_json(text)
+        self.planted += 1
+        return LLMResponse(
+            text=text, usage=response.usage, cost_usd=0.0, model=response.model
+        )
+
+
+def test_the_on_mode_walks_a_lever_on_recording_prompt_for_prompt(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The whole mode, end to end, on bytes recorded with the slate UP."""
+
+    _export_the_slate(monkeypatch)
+    _record_on(tmp_path)
+    payload = cf.run_recording([tmp_path], recorded_slate=cf.RECORDED_SLATE_ON)
+
+    block = payload["sets"]
+    assert isinstance(block, dict)
+    (recording,) = block.values()
+    assert isinstance(recording, dict)
+    assert recording["games"] == len(_ON_SEEDS)
+    assert recording["meetings"] > 0
+    # The walk re-rendered every recorded prompt, and this script's own mirror of
+    # the manager's derivation reproduced them too.
+    assert recording["reconstruction_mismatches"] == {}
+    # The recording's stamp is the ratified slate, read off its own game_over
+    # rows rather than off this shell.
+    stamps = payload["recorded_substrate"]
+    assert isinstance(stamps, dict)
+    (stamp,) = stamps.values()
+    assert [stamp[key] for key in cf.WAVE_2_LEVERS] == [True, True, True]
+    assert stamp[cf.NON_WAVE_2_LEVER] is False
+
+    rows = {row["cell"]: row for row in _rows(payload, "pooled")}
+    assert {row["tripwire"] for row in rows.values()} == _REGISTERED_TRIPWIRES
+    for cell in _RENDER_CELLS:
+        row = rows[cell]
+        assert row["recorded_on"] is not None, cell
+        assert row["reconstructed_on"] is not None, cell
+        assert row["off"] is not None, cell
+        # The record and the walk's re-render of it agree, so no row is withdrawn.
+        assert row["recorded_on"] == row["reconstructed_on"], cell
+        assert row["on_withdrawn"] is False, cell
+    # The three render predicates the fake's own bytes can actually exercise.
+    assert rows["R-13"]["recorded_on"] == [recording["body_report_meetings"]] * 2
+    assert rows["R-15"]["verdict"] == "PASS"
+    assert rows["T-9a"]["recorded_on"][0] == rows["T-9a"]["recorded_on"][1]
+    assert rows["T-9b"]["recorded_on"][0] == 0
+    assert rows["B-1m1"]["recorded_on"] == rows["B-1m1"]["off"]
+
+
+def test_the_on_mode_prints_every_predicate_beside_its_reading(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The operator reads pass/STOP off the page, not out of a memo."""
+
+    _export_the_slate(monkeypatch)
+    _record_on(tmp_path, seeds=(1,))
+    assert (
+        cf.main(
+            [
+                "--recording",
+                str(tmp_path),
+                "--recorded-slate",
+                cf.RECORDED_SLATE_ON,
+            ]
+        )
+        == 0
+    )
+    printed = capsys.readouterr().out
+    assert "RECORDED-ON" in printed and "RECONSTRUCTED-ON" in printed
+    assert "the count is 0, whatever the ballot denominator" in printed
+    assert "→ PASS" in printed
+    assert "writes no bar, no target and no decision rule" in printed
+
+
+def test_a_recording_whose_stamp_disagrees_with_the_declared_slate_refuses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The §9.2 abandon criterion, executed rather than described."""
+
+    _export_the_slate(monkeypatch)
+    monkeypatch.delenv(env_var_for_lever("corroboration_discipline"))
+    record_replay_set(
+        tmp_path,
+        seeds=(1,),
+        expect_levers=[
+            key for key in cf.WAVE_2_LEVERS if key != "corroboration_discipline"
+        ],
+    )
+    with pytest.raises(SystemExit) as excinfo:
+        cf.run_recording([tmp_path], recorded_slate=cf.RECORDED_SLATE_ON)
+    message = str(excinfo.value)
+    assert "is not the declared" in message
+    assert "corroboration_discipline must be ON" in message
+
+
+def test_a_bare_shell_refuses_the_lever_on_mode(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A shell that cannot reconstruct the recording says so before it tries."""
+
+    _export_the_slate(monkeypatch)
+    _record_on(tmp_path, seeds=(1,))
+    for key in cf.WAVE_2_LEVERS:
+        monkeypatch.delenv(env_var_for_lever(key))
+    with pytest.raises(SystemExit) as excinfo:
+        cf.run_recording([tmp_path], recorded_slate=cf.RECORDED_SLATE_ON)
+    message = str(excinfo.value)
+    assert "this shell cannot reconstruct that recording" in message
+    for key in cf.WAVE_2_LEVERS:
+        assert env_var_for_lever(key) in message
+    assert "api/replay_loader.py refuses the reconstruction" in message
+
+
+def test_an_exporting_shell_refuses_the_committed_mode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The mirror rule: the committed sets are read in a bare shell only."""
+
+    monkeypatch.setenv(env_var_for_lever("reporter_reasoning"), "1")
+    with pytest.raises(SystemExit) as excinfo:
+        cf.run([_FAST_SET])
+    assert "the ambient environment is not the record's substrate" in str(excinfo.value)
+
+
+def test_an_unstamped_recording_is_refused_rather_than_read_as_all_off(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _export_the_slate(monkeypatch)
+    _record_on(tmp_path, seeds=(1,))
+    _strip_substrate_stamp(tmp_path / "replay-seed-1.jsonl")
+    with pytest.raises(SystemExit) as excinfo:
+        cf.read_recorded_slate(tmp_path)
+    assert "carries no substrate stamp" in str(excinfo.value)
+
+
+def test_two_substrates_in_one_directory_are_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """One directory is one recording; pooling two slates would blend them."""
+
+    _export_the_slate(monkeypatch)
+    _record_on(tmp_path, seeds=(1,))
+    monkeypatch.delenv(env_var_for_lever("testimony_shapes"))
+    record_replay_set(
+        tmp_path,
+        seeds=(2,),
+        expect_levers=[key for key in cf.WAVE_2_LEVERS if key != "testimony_shapes"],
+    )
+    with pytest.raises(SystemExit) as excinfo:
+        cf.read_recorded_slate(tmp_path)
+    message = str(excinfo.value)
+    assert "stamp different substrates" in message
+    assert "testimony_shapes" in message
+
+
+def test_a_bundle_built_for_the_wrong_slate_is_caught_not_defaulted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The planted case for the reproduction gate.
+
+    Walking a lever-ON recording with the OFF bodies is the exact failure PR
+    #421 named: every recorded-response lookup misses, the manager defaults each
+    turn, and a whole table would be published over an invented transcript. The
+    walk must refuse instead.
+    """
+
+    _export_the_slate(monkeypatch)
+    _record_on(tmp_path, seeds=(1,))
+    # Take the arm's own env away from the bundle builder: the "shapes-ON"
+    # bundle is then the OFF one, and every recorded ON prompt misses.
+    monkeypatch.setattr(cf, "_TESTIMONY_SHAPES_ENV", {})
+    with pytest.raises(SystemExit) as excinfo:
+        cf.walk_recording(
+            tmp_path, set_name="planted", slate_set=cf._arm_serving_set(tmp_path)
+        )
+    message = str(excinfo.value)
+    assert "were NOT reproduced by the walk" in message
+    assert "DEFECT IN THIS SCRIPT's reconstruction" in message
+
+
+def test_a_set_with_no_body_for_the_arm_cannot_be_asked_to_serve_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The arm's bodies exist for one set, and no other set quietly stands in.
+
+    ``capturing`` gives the slate's bundle to exactly the set named at capture
+    time, so pointing that at a set with no block raises at CONSTRUCTION with the
+    loader's own message — rather than handing the walk an OFF-bodied bundle and
+    letting the arm go missing from a table that claims it.
+    """
+
+    _export_the_slate(monkeypatch)
+    _record_on(tmp_path, seeds=(1,))
+    with pytest.raises(ValueError, match="carries no live 'testimony_shapes' guard"):
+        cf.walk_recording(tmp_path, set_name="planted", slate_set="qwen3_5_9b")
+
+
+def test_the_serving_set_is_read_off_the_recordings_own_stamp(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _export_the_slate(monkeypatch)
+    _record_on(tmp_path, seeds=(1,))
+    assert cf._arm_serving_set(tmp_path) == _LEVER_ON_SHELL[ENV_PROMPT_SET]
+
+
+def test_a_spoken_kill_offers_the_impostor_no_block_through_the_whole_walk(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """T5's reader, separated from the byte diff on a recording that carries one.
+
+    The planted kill puts the role-blind PUBLIC-TRANSCRIPT row in front of every
+    later speaker in that meeting, impostor prompts included. A role split of the
+    byte diff would read that as an impostor turn gaining the block and STOP a
+    good record; this reader tests for the block's own lines and reads 0.
+    """
+
+    _export_the_slate(monkeypatch)
+    provider = _SpokenKillProvider()
+    _record_on(tmp_path, seeds=(3,), llm_client=provider)
+    assert provider.planted == 1
+    walk = cf.walk_recording(
+        tmp_path, set_name="planted", slate_set=cf._arm_serving_set(tmp_path)
+    )
+    census = walk.elicitation
+    assert census.rendered["IMPOSTOR"] > 0
+    assert census.gained["IMPOSTOR"] == 0
+    assert census.gained["CREWMATE"] == census.rendered["CREWMATE"]
+    # The bytes of BOTH prompts move when the arm is withdrawn — crew and
+    # impostor alike — which is the reading this one has to be told apart from.
+    withdrawn = walk.legs[cf.decomposition_label("testimony_shapes")]
+    assert withdrawn.changed[cf._KIND_ACCUSATION_ROUND] == (
+        census.rendered["CREWMATE"] + census.rendered["IMPOSTOR"]
+    )
+    assert withdrawn.changed[cf._KIND_ACCUSATION_ROUND] > census.gained["CREWMATE"]
+    # And the spoken shape reached the reduction, so the record really carries it.
+    assert walk.testimony.on_kinds["saw_kill"] == 1
+    assert walk.testimony.off_kinds["saw_kill"] == 0
+
+
+def test_the_off_reduction_stays_off_inside_a_lever_on_shell(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The seam the bare-shell guard used to cover and this mode gives up.
+
+    ``derive_reported_testimony`` defaults to the ambient environment, and the
+    lever-ON mode runs in a shell that exports the arm on purpose. An unqualified
+    call would return the ON reduction and label it OFF — so the planted case is
+    a spoken shape that MUST be absent from the OFF column while the shell says
+    otherwise.
+    """
+
+    _export_the_slate(monkeypatch)
+    _record_on(tmp_path, seeds=(3,), llm_client=_SpokenKillProvider())
+    walk = cf.walk_recording(
+        tmp_path, set_name="planted", slate_set=cf._arm_serving_set(tmp_path)
+    )
+    assert substrate_flag_snapshot()["testimony_shapes"] is True
+    assert walk.testimony.off_kinds["saw_kill"] == 0
+    assert walk.testimony.off_rows == 0
+
+
+def test_a_first_meeting_row_difference_trips_the_meeting_1_cell(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """T7's predicate is an identity, and the planted case breaks it.
+
+    No lever moves a memory row — that is the claim T7 exists to check — so the
+    difference is planted in the OFF leg's own first-meeting fold and the row is
+    rebuilt through the shipped builder.
+    """
+
+    _export_the_slate(monkeypatch)
+    _record_on(tmp_path, seeds=(1,))
+    walk = cf.walk_recording(
+        tmp_path, set_name="planted", slate_set=cf._arm_serving_set(tmp_path)
+    )
+    clean = {row.cell_id: row for row in cf.build_on_recording_rows(walk)}
+    assert clean["B-1m1"].verdict() == "PASS"
+
+    walk.legs["OFF"].first_meeting_rendered_lines += 1
+    tripped = {row.cell_id: row for row in cf.build_on_recording_rows(walk)}
+    assert tripped["B-1m1"].verdict() == "STOP"
+    assert tripped["B-1m1"].recorded_on != tripped["B-1m1"].off
+
+
+def test_a_row_whose_two_on_readings_disagree_reads_unread(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The mirror of the committed table's fidelity rule, and its planted case."""
+
+    row = cf.OnRow(
+        cell_id="R-13",
+        tripwire="T2",
+        label="planted",
+        population="prompt",
+        predicate="planted",
+        note="planted",
+        rule="full",
+        recorded_on=(9, 9),
+        reconstructed_on=(8, 9),
+        off=(0, 9),
+    )
+    assert row.agrees is False
+    assert row.verdict() == "UNREAD (a STOP)"
+    # A withdrawn row publishes no OFF column: comparing against a
+    # reconstruction that does not reproduce the record measures the
+    # reconstruction.
+    assert row.payload()["off"] is None
+    del tmp_path, monkeypatch
+
+
+@pytest.mark.parametrize(
+    ("rule", "reading", "expected"),
+    [
+        # A one-sided COUNT bar needs no denominator, which is why §8.1 states
+        # T1 and T5's impostor half as counts.
+        ("zero", (0, 0), "PASS"),
+        ("zero", (1, 39), "STOP"),
+        # A SHARE over an empty population is unevaluated, and §8.1 reads a
+        # tripwire its reader cannot evaluate as UNREAD — itself a STOP.
+        ("full", (0, 0), "UNREAD (a STOP)"),
+        ("full", (39, 39), "PASS"),
+        ("full", (38, 39), "STOP"),
+        ("share", (0, 0), "UNREAD (a STOP)"),
+        ("share", (99, 100), "PASS"),
+        ("share", (98, 100), "STOP"),
+        ("observed", (3, 7), "OBSERVED"),
+    ],
+)
+def test_each_predicate_rule_reads_its_own_verdict(
+    rule: str, reading: tuple[int, int], expected: str
+) -> None:
+    row = cf.OnRow(
+        cell_id="planted",
+        tripwire="planted",
+        label="planted",
+        population="planted",
+        predicate="planted",
+        note="planted",
+        rule=rule,
+        recorded_on=reading,
+        off=(0, reading[1]),
+    )
+    assert row.verdict() == expected
+
+
+def test_the_cli_refuses_a_recording_with_no_declared_slate(tmp_path: Path) -> None:
+    with pytest.raises(SystemExit) as excinfo:
+        cf.main(["--recording", str(tmp_path)])
+    assert excinfo.value.code == 2
+
+
+def test_the_cli_refuses_a_declared_slate_on_the_committed_sets() -> None:
+    with pytest.raises(SystemExit) as excinfo:
+        cf.main(["--sets", _FAST_SET, "--recorded-slate", cf.RECORDED_SLATE_ON])
+    assert excinfo.value.code == 2
+
+
+def _strip_substrate_stamp(replay_path: Path) -> None:
+    """Drop the ``substrate_flags`` key from a recording's ``game_over`` row."""
+
+    lines = replay_path.read_text(encoding="utf-8").splitlines()
+    rewritten = []
+    for line in lines:
+        row = json.loads(line)
+        if row.get("kind") == "game_over":
+            row.pop("substrate_flags", None)
+        rewritten.append(json.dumps(row))
+    replay_path.write_text("\n".join(rewritten) + "\n", encoding="utf-8")
 
 
 # --------------------------------------------------------------------------- #
