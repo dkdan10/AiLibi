@@ -1,6 +1,6 @@
 """Pins for the Phase-21 offline counterfactual and the memo it publishes.
 
-Seven things are pinned, each with a case proving it bites:
+Eight things are pinned, each with a case proving it bites:
 
 1. **The slate.** Three Wave-2 keys with the file-swapping arm OFF, every one of
    them still a live toggle that reads OFF under an empty environment. A fourth
@@ -39,6 +39,14 @@ Seven things are pinned, each with a case proving it bites:
    recorded spoken ``saw_kill`` separates the elicitation reading from the byte
    diff through the WHOLE walk, and the OFF reduction stays OFF inside a shell
    that exports the arm.
+8. **The block-level readers** for ``R-13``, ``R-14`` and ``C-9``: every marker
+   is derived from the shipped template and appears in none of the reader's own
+   source; a lever-conditioned byte change that is not the block is credited by
+   the byte column and not by the block-level one; a ballot whose role-proof
+   branch suppresses the block's closing sentence is still credited; an empty
+   derived marker set refuses instead of reading zero; and both modes read the
+   same three cells, the committed bytes identically to the byte column they
+   replace.
 """
 
 from __future__ import annotations
@@ -62,6 +70,7 @@ from engine.world import load_canonical_map
 from llm.fake_provider import FakeProvider
 from meetings.manager import derive_reported_testimony
 from meetings.corroboration import MeetingTestimonyLedger
+from meetings.corroboration import TestimonySupport as _Support
 from meetings.render_contract import ReporterContext
 from meetings.schemas import (
     ContradictionRef,
@@ -2299,6 +2308,480 @@ def _strip_substrate_stamp(replay_path: Path) -> None:
             row.pop("substrate_flags", None)
         rewritten.append(json.dumps(row))
     replay_path.write_text("\n".join(rewritten) + "\n", encoding="utf-8")
+
+
+# --------------------------------------------------------------------------- #
+# 8. The BLOCK-LEVEL readers for R-13, R-14 and C-9.                           #
+# --------------------------------------------------------------------------- #
+
+#: Each block-level cell with the template that owns its block and the guard
+#: that renders it. The guard is what the refusal case misdirects.
+_BLOCK_CELLS: Final[tuple[tuple[str, str, str], ...]] = (
+    (
+        "R-13",
+        "crewmate_report.j2",
+        "{% if reporter_context is defined and reporter_context %}",
+    ),
+    (
+        "R-14",
+        "accusation_round.j2",
+        "{% if reporter_context is defined and reporter_context %}",
+    ),
+    (
+        "C-9",
+        "vote_ballot.j2",
+        "{% if testimony_ledger and candidate_targets is defined and candidate_targets %}",
+    ),
+)
+
+_REPORTER_CONTEXT: Final[ReporterContext] = ReporterContext(
+    reporter_id="p-9", victim_id="p-5", room="REACTOR", tick=6
+)
+
+#: One ledger row for the ballot probes, written here rather than borrowed from
+#: the reader's own fixtures so the case does not test the reader against itself.
+_LEDGER: Final[MeetingTestimonyLedger] = MeetingTestimonyLedger(
+    rows=(
+        _Support(
+            subject="p-2",
+            originating_turn_id="m-1:turn-0",
+            first_hand_places=(("p-5", (("saw_player", "REACTOR", 3),)),),
+            adopted_silent=("p-6",),
+            adopted_spoke_ungrounded=(),
+            adopted_spoke_kill=(),
+            flagged=True,
+            opener_charge_turn_id=None,
+            walkable_transits=(),
+        ),
+    ),
+    opener="p-1",
+)
+
+_ROLE_PROOF: Final[ContradictionRef] = ContradictionRef(
+    contradiction_id="c-1",
+    kind="vent_sighting",
+    event_a_id="o-1",
+    event_b_id="o-1",
+    subjects=("p-2",),
+    description="p-2 was seen venting",
+)
+
+
+def _crew_opening(*, reporter_context: ReporterContext | None) -> str:
+    return build_prompt_renderers(_PROMPT_SET, env={}).crewmate_report(
+        agent_id="p-1",
+        current_tick=6,
+        meeting_trigger="p-5 was found in REACTOR",
+        rendered_memory="(memory)",
+        public_transcript="",
+        living_ids=("p-2", "p-3"),
+        reporter_context=reporter_context,
+    )
+
+
+def _crew_statement(*, reporter_context: ReporterContext | None) -> str:
+    return build_prompt_renderers(_PROMPT_SET, env={}).statement(
+        agent_id="p-1",
+        rendered_memory="(memory)",
+        transcript=MeetingTranscript(turns=()),
+        contradictions=(),
+        prior_turn=None,
+        turn_kind="reply",
+        living_ids=("p-2", "p-3"),
+        reporter_context=reporter_context,
+    )
+
+
+def _vote_ballot(
+    *,
+    testimony_ledger: MeetingTestimonyLedger | None,
+    contradiction_flags: tuple[ContradictionRef, ...] = (),
+) -> str:
+    return build_prompt_renderers(_PROMPT_SET, env={}).vote(
+        voter_id="p-1",
+        rendered_memory="(memory)",
+        transcript=MeetingTranscript(turns=()),
+        contradiction_flags=contradiction_flags,
+        suspicion_graph=(),
+        candidate_targets=("p-2",),
+        skip_confidence_threshold=0.5,
+        reporter_id="p-9",
+        testimony_ledger=testimony_ledger,
+    )
+
+
+def _capture(kind: str) -> Any:
+    return cf._Capture(
+        kind=kind, agent_id="p-1", kwargs={"turn_kind": "reply"}, recorded_prompt=""
+    )
+
+
+def _markers_for(cell: str) -> frozenset[str]:
+    cache = cf._RendererCache()
+    if cell == "R-13":
+        return cache.reporter_opening_markers(_PROMPT_SET)
+    if cell == "R-14":
+        return cache.reporter_statement_markers(_PROMPT_SET, "reply")
+    return cache.corroboration_markers(_PROMPT_SET)
+
+
+def _withdrawn_and_armed(cell: str) -> tuple[str, str]:
+    """The same prompt rendered without the block's lever and with it."""
+
+    if cell == "R-13":
+        return (
+            _crew_opening(reporter_context=None),
+            _crew_opening(reporter_context=_REPORTER_CONTEXT),
+        )
+    if cell == "R-14":
+        return (
+            _crew_statement(reporter_context=None),
+            _crew_statement(reporter_context=_REPORTER_CONTEXT),
+        )
+    return (
+        _vote_ballot(testimony_ledger=None),
+        _vote_ballot(testimony_ledger=_LEDGER),
+    )
+
+
+def _kind_of(cell: str) -> str:
+    if cell == "R-13":
+        return cf._KIND_CREWMATE_REPORT
+    if cell == "R-14":
+        return cf._KIND_ACCUSATION_ROUND
+    return cf._KIND_VOTE_BALLOT
+
+
+def test_the_three_block_markers_are_read_off_the_shipped_templates() -> None:
+    """No marker is a literal in the reader, and every one is in its template.
+
+    The same discipline the elicitation marker carries, for the same reason: the
+    templates are re-worded (PR #420 re-worded two of these blocks), and a copied
+    sentence would go on matching nothing while reporting every prompt as having
+    lost its block. The second half is what keeps the fragment derivation
+    honest — a run that straddled an interpolation boundary would carry a
+    rendered player id and appear in no template.
+    """
+
+    source = Path(cf.__file__).read_text(encoding="utf-8")
+    for cell, template, _guard in _BLOCK_CELLS:
+        markers = _markers_for(cell)
+        assert markers, cell
+        body = (_PROMPTS_ROOT / _PROMPT_SET / template).read_text(encoding="utf-8")
+        for marker in markers:
+            assert marker in body, (cell, marker)
+            assert marker not in source, (cell, marker)
+    # The block is derived PER TURN KIND, and both speech branches carry it.
+    cache = cf._RendererCache()
+    assert cache.reporter_statement_markers(
+        _PROMPT_SET, "opt_in"
+    ) == cache.reporter_statement_markers(_PROMPT_SET, "reply")
+
+
+def test_a_lever_conditioned_byte_change_is_not_a_block_gain() -> None:
+    """Case (a) and case (b), on all three cells and in both directions.
+
+    A guarded branch that renders whitespace, or a line the lever conditions
+    that is not the block, moves exactly the bytes these cells used to count
+    while putting none of the block on the page. The byte column still credits
+    it — that is what makes it exposure rather than effect — and the block-level
+    count must not. The real block must be credited whichever side of the record
+    carries it, because the committed mode supplies the argument and the
+    lever-ON mode strips it.
+    """
+
+    for cell, _template, _guard in _BLOCK_CELLS:
+        markers = _markers_for(cell)
+        capture = _capture(_kind_of(cell))
+        withdrawn, armed = _withdrawn_and_armed(cell)
+        lever = frozenset({cf._BLOCK_LEVER[capture.kind]})
+        for noise in (
+            withdrawn + "\n   \n",
+            withdrawn + "\nAn unrelated line this lever also conditions.\n",
+        ):
+            assert noise != withdrawn, cell  # the byte column credits it
+            assert not cf._block_gain(
+                capture=capture,
+                markers=markers,
+                levers=lever,
+                reference_levers=frozenset(),
+                rendered=noise,
+                reference=withdrawn,
+            ), cell
+        assert armed != withdrawn, cell
+        assert cf._block_gain(
+            capture=capture,
+            markers=markers,
+            levers=lever,
+            reference_levers=frozenset(),
+            rendered=armed,
+            reference=withdrawn,
+        ), cell
+        # The mirrored direction: the RECORD carries the block and the leg
+        # strips it, which is how a lever-ON recording is read.
+        assert cf._block_gain(
+            capture=capture,
+            markers=markers,
+            levers=frozenset(),
+            reference_levers=lever,
+            rendered=withdrawn,
+            reference=armed,
+        ), cell
+        # Two renders on the same side of the lever have no gain to read.
+        assert not cf._block_gain(
+            capture=capture,
+            markers=markers,
+            levers=lever,
+            reference_levers=lever,
+            rendered=armed,
+            reference=withdrawn,
+        ), cell
+
+
+def test_a_quoted_block_in_the_transcript_is_not_a_gain() -> None:
+    """The count is a GAIN, never a presence.
+
+    A speaker who typed the block's own text into their turn puts it in BOTH
+    renders, so a substring search would credit a prompt the lever never
+    reached. Counting the increase is what makes that impossible.
+    """
+
+    markers = _markers_for("R-14")
+    withdrawn, armed = _withdrawn_and_armed("R-14")
+    quoted = "\n".join(sorted(markers))
+    capture = _capture(cf._KIND_ACCUSATION_ROUND)
+    assert not cf._block_gain(
+        capture=capture,
+        markers=markers,
+        levers=frozenset({"reporter_reasoning"}),
+        reference_levers=frozenset(),
+        rendered=withdrawn + "\n" + quoted,
+        reference=withdrawn + "\n" + quoted,
+    )
+    # ...and the arm still reads through a transcript that quotes it.
+    assert cf._block_gain(
+        capture=capture,
+        markers=markers,
+        levers=frozenset({"reporter_reasoning"}),
+        reference_levers=frozenset(),
+        rendered=armed + "\n" + quoted,
+        reference=withdrawn + "\n" + quoted,
+    )
+
+
+def test_a_proof_suppressed_ballot_still_gains_the_source_count_block() -> None:
+    """Case (c): the guard against C-9's 1,704-of-3,631 mis-identification.
+
+    The block's closing calibration sentence is itself guarded on the role-proof
+    branch, so a marker set that kept it would credit only the ballots that
+    carry no proof flag — measuring the suppression rather than the block. The
+    suppressed line must not be a marker, and a ballot that renders a role-proof
+    contradiction must still be credited.
+    """
+
+    markers = _markers_for("C-9")
+    plain_off, plain_on = _withdrawn_and_armed("C-9")
+    proof_off = _vote_ballot(testimony_ledger=None, contradiction_flags=(_ROLE_PROOF,))
+    proof_on = _vote_ballot(
+        testimony_ledger=_LEDGER, contradiction_flags=(_ROLE_PROOF,)
+    )
+    kept = set(proof_on.splitlines())
+    suppressed = frozenset(
+        line for line in plain_on.splitlines() if line.strip() and line not in kept
+    )
+    assert suppressed, "the proof branch suppresses nothing — the guard moved"
+    assert not (suppressed & markers)
+
+    capture = _capture(cf._KIND_VOTE_BALLOT)
+    lever = frozenset({"corroboration_discipline"})
+    for withdrawn, armed in ((plain_off, plain_on), (proof_off, proof_on)):
+        assert cf._block_gain(
+            capture=capture,
+            markers=markers,
+            levers=lever,
+            reference_levers=frozenset(),
+            rendered=armed,
+            reference=withdrawn,
+        )
+    # And the mis-identification really would have missed the proof branch.
+    assert not cf._block_gain(
+        capture=capture,
+        markers=markers | suppressed,
+        levers=lever,
+        reference_levers=frozenset(),
+        rendered=proof_on,
+        reference=proof_off,
+    )
+
+
+def test_the_row_half_stops_an_empty_frame_being_credited() -> None:
+    """C-9's block is its frame AND its body, so a frame alone is not a gain."""
+
+    markers = _markers_for("C-9")
+    plain_off, plain_on = _withdrawn_and_armed("C-9")
+    body = frozenset(_markers_for("C-9")) - frozenset(plain_on.splitlines())
+    assert body, "the row half contributed no marker"
+    frame_only = (
+        plain_off
+        + "\n"
+        + "\n".join(sorted(marker for marker in markers if marker not in body))
+    )
+    capture = _capture(cf._KIND_VOTE_BALLOT)
+    assert frame_only != plain_off
+    assert not cf._block_gain(
+        capture=capture,
+        markers=markers,
+        levers=frozenset({"corroboration_discipline"}),
+        reference_levers=frozenset(),
+        rendered=frame_only,
+        reference=plain_off,
+    )
+
+
+@pytest.mark.parametrize("cell", [cell for cell, _template, _guard in _BLOCK_CELLS])
+def test_a_block_that_renders_nothing_refuses_rather_than_reading_zero(
+    cell: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Case (d): an empty derived marker set is a refusal, never a zero.
+
+    The planted slip is a plausible one — the block's guard picks up a second,
+    unrelated lever, so the shipped body renders it nowhere. A reader that
+    shrugged would report every prompt as missing its block and STOP a correct
+    record; the refusal names the cell instead.
+    """
+
+    ((_cell, template, guard),) = [row for row in _BLOCK_CELLS if row[0] == cell]
+    scratch = tmp_path / "prompts"
+    shutil.copytree(_PROMPTS_ROOT, scratch)
+    target = scratch / _PROMPT_SET / template
+    body = target.read_text(encoding="utf-8")
+    misdirected = body.replace(guard, guard[:-3] + " and testimony_shapes %}", 1)
+    assert misdirected != body
+    target.write_text(misdirected, encoding="utf-8")
+    monkeypatch.setattr(
+        cf,
+        "build_prompt_renderers",
+        functools.partial(build_prompt_renderers, root=scratch),
+    )
+    with pytest.raises(SystemExit) as excinfo:
+        _markers_for(cell)
+    assert cell in str(excinfo.value)
+
+
+def test_the_marker_pairing_refuses_a_block_it_cannot_line_up() -> None:
+    """The two ways a derivation returns nothing, at the function that decides."""
+
+    # Different numbers of lines: the pairing is positional, so a block that
+    # renders an extra line under one binding cannot be identified at all.
+    assert cf._block_markers(("one line", "two lines"), ("one line",)) == frozenset()
+    # An interpolated line with no template-length run: `p-2` and `p-7` share
+    # `p-`, and a marker that short would match anything.
+    assert cf._block_markers(("p-2",), ("p-7",)) == frozenset()
+    assert cf._invariant_lines(("`p-2` spoke",), ("`p-7` spoke",)) == frozenset()
+    # ...and the unperturbed pairing still reads, so neither gate is vacuous.
+    shared = "a sentence long enough to be template text"
+    assert cf._block_markers((shared,), (shared,)) == frozenset({shared})
+    assert cf._invariant_lines((shared,), (shared,)) == frozenset({shared})
+
+
+def test_the_block_level_column_is_the_marker_scan_not_the_byte_count(
+    fast_run: Mapping[str, object], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The published ON value really comes from the block scan.
+
+    A reader that had merely renamed the byte count would be unmoved by this.
+    Plant a marker no template renders on each of the three blocks and the three
+    ON cells fall to zero through the real walk, while the informational byte
+    column beside each of them stands exactly where it was.
+    """
+
+    clean = {row["cell"]: row for row in _set_block(fast_run, _FAST_SET)["rows"]}
+    phantom = frozenset({"a line no template renders"})
+    monkeypatch.setattr(
+        cf._RendererCache, "reporter_opening_markers", lambda self, s: phantom
+    )
+    monkeypatch.setattr(
+        cf._RendererCache, "reporter_statement_markers", lambda self, s, k: phantom
+    )
+    monkeypatch.setattr(
+        cf._RendererCache, "corroboration_markers", lambda self, s: phantom
+    )
+    tripped = {
+        row["cell"]: row for row in _set_block(cf.run([_FAST_SET]), _FAST_SET)["rows"]
+    }
+    for cell, _template, _guard in _BLOCK_CELLS:
+        assert clean[cell]["on"] == clean[cell]["byte_diff"], cell
+        assert tripped[cell]["byte_diff"] == clean[cell]["byte_diff"], cell
+        assert tripped[cell]["on"] == [0, clean[cell]["on"][1]], cell
+
+
+@pytest.mark.slow
+def test_the_block_level_cells_equal_the_byte_cells_on_the_committed_bytes(
+    full_run: Mapping[str, object],
+) -> None:
+    """Baseline 8 re-derives identically under the stronger reading.
+
+    This is the whole warrant for re-reading these three cells without
+    re-pinning anything: no published figure moves, on any set or pooled.
+    """
+
+    pooled = {row["cell"]: row for row in _rows(full_run, "pooled")}
+    assert pooled["R-13"]["on"] == pooled["R-13"]["byte_diff"] == [620, 620]
+    assert pooled["R-14"]["on"] == pooled["R-14"]["byte_diff"] == [2715, 2715]
+    assert pooled["C-9"]["on"] == pooled["C-9"]["byte_diff"] == [3614, 3631]
+    sets = full_run["sets"]
+    assert isinstance(sets, dict)
+    for block in sets.values():
+        # No committed set holds an impostor-filed report, so R-13's
+        # crewmate-only denominator excludes nothing.
+        assert block["reporter_openings_by_an_impostor"] == 0
+        rows = {row["cell"]: row for row in block["rows"]}
+        for cell, _template, _guard in _BLOCK_CELLS:
+            assert rows[cell]["on"] == rows[cell]["byte_diff"], cell
+
+
+def test_the_on_mode_reads_the_three_blocks_at_block_level(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Case (e): the same three rows, read backwards off lever-ON bytes.
+
+    Both ON columns are block-level and the byte column travels beside them;
+    silencing the markers moves the reading and leaves the byte column alone,
+    which is what says the verdict is taken from the block scan.
+    """
+
+    _export_the_slate(monkeypatch)
+    _record_on(tmp_path)
+    walk = cf.walk_recording(
+        tmp_path, set_name="planted", slate_set=cf._arm_serving_set(tmp_path)
+    )
+    rows = {row.cell_id: row for row in cf.build_on_recording_rows(walk)}
+    for cell, _template, _guard in _BLOCK_CELLS:
+        row = rows[cell]
+        assert row.byte_diff is not None, cell
+        assert row.recorded_on == row.reconstructed_on, cell
+        assert row.recorded_on == row.byte_diff, cell
+    assert rows["R-13"].verdict() == "PASS"
+    assert rows["R-14"].verdict() == "PASS"
+    speech = rows["R-14"].recorded_on
+    assert speech is not None and speech[0] > 0, "no speech turn to read"
+
+    monkeypatch.setattr(
+        cf._RendererCache,
+        "reporter_statement_markers",
+        lambda self, s, k: frozenset({"a line no template renders"}),
+    )
+    silenced = {
+        row.cell_id: row
+        for row in cf.build_on_recording_rows(
+            cf.walk_recording(
+                tmp_path, set_name="planted", slate_set=cf._arm_serving_set(tmp_path)
+            )
+        )
+    }
+    assert silenced["R-14"].recorded_on == (0, speech[1])
+    assert silenced["R-14"].byte_diff == rows["R-14"].byte_diff
+    assert silenced["R-14"].verdict() == "STOP"
 
 
 # --------------------------------------------------------------------------- #
