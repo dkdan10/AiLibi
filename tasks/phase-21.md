@@ -7006,8 +7006,8 @@ like-for-like on the same five seeds, cross-checked by the record's own all-game
 the committed bytes (R-7). (R7) Gates in a clean worktree; the ES hash-pin local failure is not a
 smoke finding (R-8). (R8) The three-key slate is settled — the strike hedges are gone (edit 17).
 (R9) PR #422 merged as `96b61318`: its golden-file widening ratified as part of the instrument; T4's
-ordering clause PASSES on equality (a population fact under §8.1's own rule; the owner may rule the
-literal); `--recorded-slate` kept; `R-13`/`R-14`/`C-9` are read at BLOCK level in both modes since
+ordering clause PASSES on equality (a population fact under §8.1's own rule — THE OWNER SO RULED on
+2026-09-02, with the go for this smoke); `--recorded-slate` kept; `R-13`/`R-14`/`C-9` are read at BLOCK level in both modes since
 PR #423 (`88bc8be7`) — the "published-cell mover" routing was FALSIFIED by a read-only derivation
 (block-level == byte-diff on every prompt of every committed set), so it merged as an instrument
 amendment and the smoke's T2/T6 rows carry the byte-diff count as an informational column beside the
