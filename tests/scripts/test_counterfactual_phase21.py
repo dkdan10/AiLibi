@@ -580,12 +580,14 @@ def test_a_memo_with_no_errata_folds_to_the_recorded_tables() -> None:
     "planted",
     [
         (
-            "| `corroboration_discipline` | `vote_ballot` | 3,631 | 3,614 | 26,522 |"
-            " 5,676,313 |"
+            "| `corroboration_discipline` | `vote_ballot` | 3,631 | 3,614 | 27,679 |"
+            " 5,880,995 |"
         ),
         "| B-3 | prose lines the slate ADDS, per rendered prompt | — | 0/7262 |"
-        " 43537/7262 |",
-        "| samples/9p2i | B-3 | — | 0/1738 | 10741/1738 |",
+        " 44694/7262 |",
+        "| samples/9p2i | B-3 | — | 0/1738 | 11032/1738 |",
+        "| C-1 | accused subjects with NO first-hand source | — | 460/1525 |"
+        " 460/1525 |",
     ],
 )
 def test_a_wrong_erratum_cannot_pass_the_drift_gate(planted: str) -> None:
@@ -593,7 +595,9 @@ def test_a_wrong_erratum_cannot_pass_the_drift_gate(planted: str) -> None:
     # parse equals a live run, so an erratum that misstates a figure has to move
     # the fold — otherwise the errata block would be prose that pins nothing.
     # One planted row per published shape: the six-column census, a pooled cell,
-    # a per-set cell.
+    # a per-set cell. Each names the LAST erratum to republish that row, because
+    # only the last one is the fold's pin -- bending a superseded row would move
+    # nothing and the case would stop biting.
     text = _MEMO.read_text(encoding="utf-8")
     assert text.count(planted) == 1, planted
     bent = text.replace(planted, _bump_last_number(planted))

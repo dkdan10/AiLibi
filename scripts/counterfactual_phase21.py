@@ -259,16 +259,20 @@ COMMITTED_INNOCENT_EJECTIONS: Final[Mapping[str, int]] = MappingProxyType(
     }
 )
 
-# The four corroboration cells as the #415 merge-reality and #417 amendment
-# records left them, over the pooled four-set walk. Task 21.19 shipped a walk
-# that PRINTS them and deliberately asserts no figure; this script is where they
-# first become an assertion.
+# The four corroboration cells over the pooled four-set walk, as the
+# counterfactual audit's Errata section republishes them. Task 21.19 shipped a
+# walk that PRINTS them and deliberately asserts no figure; this script is where
+# they first become an assertion. Three moved when the ledger's grounding
+# semantics were amended before the record: a placement is now tested against
+# BOTH of the speaker's own record channels, and the walkable-transit clause
+# reads movement-shaped placements (#415 merge-reality, #417 amendment, then
+# audits/audit-phase-21-counterfactual.md Errata E.2).
 COMMITTED_CORROBORATION_CELLS: Final[Mapping[str, tuple[int, int]]] = MappingProxyType(
     {
-        "accused_without_a_first_hand_source": (475, 1525),
-        "ejected_without_a_first_hand_source": (11, 425),
+        "accused_without_a_first_hand_source": (460, 1525),
+        "ejected_without_a_first_hand_source": (10, 425),
         "ejected_on_an_answering_turn": (33, 429),
-        "ejected_with_a_walkable_pair": (48, 429),
+        "ejected_with_a_walkable_pair": (79, 429),
     }
 )
 
@@ -4996,7 +5000,8 @@ def _corroboration_pin_check(walks: Sequence[_SetWalk]) -> dict[str, object]:
     if disagreeing:
         raise SystemExit(
             "the corroboration ledger cells disagree with the records that "
-            f"published them (#415 merge-reality, #417 amendment): {disagreeing}. "
+            "published them (#415 merge-reality, #417 amendment, the "
+            f"counterfactual audit's Errata E.2): {disagreeing}. "
             "This is a DEFECT IN THIS SCRIPT's walk, not a finding about the "
             "committed bytes; this script is where those four cells FIRST become "
             "a pin, so fix the walk before reading any ON number"
