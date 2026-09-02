@@ -507,14 +507,14 @@ class TestFirstHandSources:
         )
         assert row.first_hand == ("p-2",)
         assert row.voices == 1
-        assert row.first_hand_ticks == (("p-2", (11, 13)),)
+        assert row.first_hand_places == (("p-2", (("MEDBAY", 11), ("LABS", 13))),)
 
     def test_one_grounded_vent_does_not_vouch_for_the_speaker_s_other_one(
         self,
     ) -> None:
         # Codex round 1: the flag names the OBSERVATION it was minted from, so a
         # witness who spoke two vents of one subject and had one grounded is one
-        # account whose row names one tick. Crediting the pair would print a
+        # account whose row names one statement. Crediting the pair would print a
         # fabricated vent detail as verified testimony beside a real one — the
         # laundering hole the id resolution exists to close, in its
         # same-speaker form.
@@ -538,7 +538,35 @@ class TestFirstHandSources:
         )
         assert row.first_hand == ("p-2",)
         assert row.voices == 1
-        assert row.first_hand_ticks == (("p-2", (11,)),)
+        assert row.first_hand_places == (("p-2", (("MEDBAY", 11),)),)
+
+    def test_two_statements_at_one_tick_are_told_apart_by_room(self) -> None:
+        # Codex round 2: the tick alone could not separate a grounded MEDBAY
+        # vent from a fabricated LABS one spoken at the SAME tick — the row
+        # would have printed one coordinate covering both. The coordinate is
+        # room AND tick, which is exactly the pair the transcript above prints,
+        # so the credited statement is identifiable on the page.
+        transcript = _transcript(
+            _turn(
+                index=0,
+                speaker="p-2",
+                observations=(
+                    _saw_vent(subject="p-5", room="MEDBAY", tick=11),
+                    _saw_vent(subject="p-5", room="LABS", tick=11),
+                ),
+                claims=(_accuses("p-5"),),
+            ),
+        )
+        row = _row(
+            _ledger(
+                transcript,
+                contradictions=(_vent_flag("p-5", turn_index=0, obs_index=0),),
+            ),
+            "p-5",
+        )
+        assert row.first_hand_places == (("p-2", (("MEDBAY", 11),)),)
+        rendered = _render(ledger=_ledger(transcript), transcript=transcript)
+        assert "LABS at tick 11" not in rendered
 
     def test_one_speaker_counts_once_however_much_they_hold(self) -> None:
         # The double-count guard: two matching records AND two matching
@@ -571,7 +599,7 @@ class TestFirstHandSources:
         # One voice, both statements named: the ticks are coordinates, not a
         # second count, and they are what tells the credited statement apart
         # from the speaker's other sighting of the same subject.
-        assert row.first_hand_ticks == (("p-2", (14, 16)),)
+        assert row.first_hand_places == (("p-2", (("MEDBAY", 14), ("LABS", 16))),)
 
     def test_the_ticks_name_only_the_statements_the_record_bore_out(self) -> None:
         # The perturbation of the pair above: drop the second record and the
@@ -597,7 +625,7 @@ class TestFirstHandSources:
             "p-5",
         )
         assert row.first_hand == ("p-2",)
-        assert row.first_hand_ticks == (("p-2", (14,)),)
+        assert row.first_hand_places == (("p-2", (("MEDBAY", 14),)),)
 
     def test_a_second_grounded_speaker_makes_it_a_two_account_row(self) -> None:
         # The perturbation of the guard above: an otherwise identical transcript
@@ -1209,6 +1237,40 @@ class TestAdoptedClauseWording:
         assert "witnessed p-5 KILL" in on
         assert f"p-7 {self._KILL}" in on
 
+    def test_a_spoken_kill_is_the_one_cross_lever_interaction_on_this_page(
+        self,
+    ) -> None:
+        # Codex round 2, and the prediction 21.23's smoke has to be able to
+        # read: the gate above IS an interaction between the two arms, so a
+        # joint-slate ballot at a table where a kill was spoken carries bytes
+        # neither arm produces alone. Registered here on a SYNTHETIC kill rather
+        # than inferred from a corpus that happens to hold none — the committed
+        # bytes carry 0 spoken ``saw_kill``, which is why the published census
+        # shows the interaction at zero and not why it is absent.
+        transcript, ledger = self._table()
+        off = _render(ledger=None, transcript=transcript)
+        shapes_only = _render(ledger=None, transcript=transcript, env=self._ON)
+        ledger_only = _render(ledger=ledger, transcript=transcript)
+        both = _render(ledger=ledger, transcript=transcript, env=self._ON)
+        alone = (len(shapes_only) - len(off)) + (len(ledger_only) - len(off))
+        joint = len(both) - len(off)
+        assert joint > alone
+        # And the excess is exactly this clause, not a second seam moving.
+        assert joint - alone == len(self._KILL) - len(self._UNGROUNDED)
+
+    def test_a_table_with_no_kill_has_no_interaction(self) -> None:
+        # The perturbation for the prediction above: strip the kill witness and
+        # the joint ballot is exactly the two arms added, which is the shape the
+        # published census records over the committed bytes.
+        transcript, ledger = self._table(with_kill=False)
+        off = _render(ledger=None, transcript=transcript)
+        shapes_only = _render(ledger=None, transcript=transcript, env=self._ON)
+        ledger_only = _render(ledger=ledger, transcript=transcript)
+        both = _render(ledger=ledger, transcript=transcript, env=self._ON)
+        assert len(both) - len(off) == (len(shapes_only) - len(off)) + (
+            len(ledger_only) - len(off)
+        )
+
     def test_the_counts_are_untouched_by_the_wording(self) -> None:
         # The perturbation that would make the class vacuous is a reworded
         # clause that also moved a number. Every variant states the SAME split.
@@ -1249,7 +1311,7 @@ class TestRender:
         assert "<testimony_sources>" in rendered
         assert "p-5: 3 voices, 1 account" in rendered
         assert "it started at [m-1:turn-0]" in rendered
-        assert "p-1 described seeing them (tick 14)" in rendered
+        assert "p-1 described seeing them (MEDBAY at tick 14)" in rendered
         assert "p-3, p-8 named them without adding anything they saw" in rendered
 
     def test_the_account_names_the_statement_it_rests_on(self) -> None:
@@ -1272,8 +1334,8 @@ class TestRender:
         )
         records = {"p-1": (_record(subject="p-5", room="MEDBAY", tick=14),)}
         rendered = _render(ledger=_ledger(transcript, sighting_records=records))
-        assert "p-1 described seeing them (tick 14)" in rendered
-        assert "tick 19" not in rendered
+        assert "p-1 described seeing them (MEDBAY at tick 14)" in rendered
+        assert "ADMIN at tick 19" not in rendered
 
     def test_two_borne_out_statements_are_both_named(self) -> None:
         # The plural leg, and the non-vacuity twin of the test above: add the
@@ -1298,7 +1360,10 @@ class TestRender:
             )
         }
         rendered = _render(ledger=_ledger(transcript, sighting_records=records))
-        assert "p-1 described seeing them (ticks 14, 19)" in rendered
+        assert (
+            "p-1 described seeing them (MEDBAY at tick 14, ADMIN at tick 19)"
+            in rendered
+        )
         assert "p-5: 1 voice, 1 account" in rendered
 
     def test_the_header_glosses_a_voice_as_the_accusation_channel(self) -> None:
