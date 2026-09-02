@@ -1327,17 +1327,16 @@ def reconstruct_stated_paths(
     # prong still applies), so kill-scene placements are recovered.
     relevance_body_rooms = frozenset() if include_kill_scene else body_rooms
 
-    sightings = tuple(_iter_sightings(transcript))
-    if movement_witness_records is not None:
-        sightings = _apply_movement_claim_shape(
-            transcript,
-            sightings=sightings,
-            move_witness_records=movement_witness_records,
-            roster=effective_roster,
-        )
+    spoken = tuple(_iter_sightings(transcript))
+    entries = _placement_entries(
+        transcript,
+        spoken=spoken,
+        movement_witness_records=movement_witness_records,
+        roster=effective_roster,
+    )
 
     paths: dict[PlayerId, list[StatedPlacement]] = {}
-    for sighting in sightings:
+    for sighting, placed_players in entries:
         # A non-spatial label locates nobody (Task 10.1), and the §6.3
         # relevance gate drops the evidentially-empty spawn-window /
         # kill-scene sightings -- reused verbatim so the reconstruction
@@ -1356,13 +1355,6 @@ def reconstruct_stated_paths(
             speaker=sighting.speaker,
             event_id=sighting.event_id,
         )
-        # The subject and every co-present player are placed by this one
-        # observation; the set literal collapses a player who is their own
-        # co-presence so each observation places a player at most once.
-        placed_players = {
-            sighting.observation.subject,
-            *sighting.observation.co_present,
-        }
         for player in placed_players:
             if not _subject_in_roster(player, effective_roster):
                 continue
@@ -1402,6 +1394,67 @@ def reconstruct_stated_paths(
         subject: tuple(sorted(placements, key=_placement_sort_key))
         for subject, placements in sorted(paths.items())
     }
+
+
+def _placement_entries(
+    transcript: MeetingTranscript,
+    *,
+    spoken: tuple[_IndexedSighting, ...],
+    movement_witness_records: Mapping[PlayerId, tuple[MoveWitnessRecord, ...]] | None,
+    roster: frozenset[PlayerId],
+) -> tuple[tuple[_IndexedSighting, frozenset[PlayerId]], ...]:
+    """Each sighting to place, paired with the players THAT reading places.
+
+    Without ``movement_witness_records`` every sighting places its subject and
+    every co-present player it lists -- one observation, one placement, the
+    whole company.
+
+    With them, the sightings are the movement-shaped ones
+    (:func:`_apply_movement_claim_shape`) and the company splits. A RESOLUTION
+    re-read says the SUBJECT was really at the destination the witness's own
+    record left them in; it says nothing new about the people seen WITH them,
+    who were where the witness said they were. Placing the company at the
+    destination would invent a placement nobody spoke -- and, in the
+    corroboration ledger, could hand an unrelated accused a walk on it. So a
+    re-read places the subject alone, and the sighting AS SPOKEN keeps placing
+    its co-present players. Every other shaped sighting -- an untouched one, or
+    a transition indexed as its destination arrival -- places its company as it
+    always did.
+    """
+
+    if movement_witness_records is None:
+        return tuple(
+            (
+                sighting,
+                frozenset(
+                    {sighting.observation.subject, *sighting.observation.co_present}
+                ),
+            )
+            for sighting in spoken
+        )
+    by_id = {sighting.event_id: sighting for sighting in spoken}
+    entries: list[tuple[_IndexedSighting, frozenset[PlayerId]]] = []
+    for sighting in _apply_movement_claim_shape(
+        transcript,
+        sightings=spoken,
+        move_witness_records=movement_witness_records,
+        roster=roster,
+    ):
+        origin = by_id.get(sighting.event_id)
+        if origin is not None and origin.rooms != sighting.rooms:
+            entries.append((sighting, frozenset({sighting.observation.subject})))
+            if origin.observation.co_present:
+                entries.append((origin, frozenset(origin.observation.co_present)))
+            continue
+        entries.append(
+            (
+                sighting,
+                frozenset(
+                    {sighting.observation.subject, *sighting.observation.co_present}
+                ),
+            )
+        )
+    return tuple(entries)
 
 
 def absent_players(

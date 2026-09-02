@@ -580,12 +580,12 @@ def test_a_memo_with_no_errata_folds_to_the_recorded_tables() -> None:
     "planted",
     [
         (
-            "| `corroboration_discipline` | `vote_ballot` | 3,631 | 3,614 | 27,679 |"
-            " 5,880,995 |"
+            "| `corroboration_discipline` | `vote_ballot` | 3,631 | 3,614 | 27,654 |"
+            " 5,876,738 |"
         ),
         "| B-3 | prose lines the slate ADDS, per rendered prompt | — | 0/7262 |"
-        " 44694/7262 |",
-        "| samples/9p2i | B-3 | — | 0/1738 | 11032/1738 |",
+        " 44669/7262 |",
+        "| samples/9p2i | B-3 | — | 0/1738 | 11021/1738 |",
         "| C-1 | accused subjects with NO first-hand source | — | 460/1525 |"
         " 460/1525 |",
     ],

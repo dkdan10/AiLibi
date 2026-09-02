@@ -2361,6 +2361,38 @@ class TestMovementResolutionArm:
             == default
         )
 
+    def test_a_re_read_moves_the_subject_and_leaves_the_company_behind(self) -> None:
+        # Codex round 3. A resolution re-read says the SUBJECT was really at the
+        # room their own record left them in. It says nothing about the people
+        # seen WITH them, whom no record moved -- so placing the whole company at
+        # the destination would invent a placement nobody spoke, and the
+        # corroboration ledger could hand an unrelated accused a walk on it.
+        tx = MeetingTranscript(
+            turns=(
+                _turn(
+                    turn_index=0,
+                    speaker="p-9",
+                    observations=(
+                        _saw(tick=3, subject="p-3", room="MEDBAY", co_present=("p-5",)),
+                    ),
+                ),
+            )
+        )
+        records = {
+            "p-9": (
+                _move_record(tick=3, subject="p-3", from_room="MEDBAY", to_room="LABS"),
+            )
+        }
+        shaped = reconstruct_stated_paths(
+            tx, roster=_ROSTER_3, movement_witness_records=records
+        )
+        assert [sorted(placement.rooms) for placement in shaped["p-3"]] == [["LABS"]]
+        assert [sorted(placement.rooms) for placement in shaped["p-5"]] == [["MEDBAY"]]
+        # The default reading is untouched: both stay where the witness said.
+        default = reconstruct_stated_paths(tx, roster=_ROSTER_3)
+        assert [sorted(placement.rooms) for placement in default["p-3"]] == [["MEDBAY"]]
+        assert [sorted(placement.rooms) for placement in default["p-5"]] == [["MEDBAY"]]
+
 
 class TestMovementShapeArm:
     """ON, a grounded spoken transition participates as ONE destination placement."""

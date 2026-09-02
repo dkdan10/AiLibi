@@ -1092,7 +1092,8 @@ placed nobody and the clause was silent on charges it could answer. `reconstruct
 gains a defaulted `movement_witness_records` keyword on the `include_kill_scene` precedent — every
 existing caller keeps the default and is byte-identical — and the ledger supplies the mapping it
 already receives. The widened placements reach `walkable_transits` alone. Pooled, the clause's
-lines go from 287 to 537 and the rows carrying at least one from 241 to 415. At
+lines go from 287 to 532, the rows carrying at least one from 241 to 412, and 172
+rows gain a line they did not carry. At
 `ml_corpus/9p2i` seed 1111 meeting 0, where six ballots ejected crewmate p-2 for an impossible
 West Hall → East Hall walk, the block now certifies that walk for p-2 as well as for the
 uninvolved p-9 it already certified it for. The 1-hop / 1-tick bounds and the two-line cap are
@@ -1138,46 +1139,46 @@ accusation-round rows of every leg stand exactly as `E.1` republished them:
 
 | leg | prompt class | rendered | changed | lines added | bytes added |
 |---|---|---|---|---|---|
-| `corroboration_discipline` | `vote_ballot` | 3,631 | 3,614 | 27,679 | 5,880,995 |
+| `corroboration_discipline` | `vote_ballot` | 3,631 | 3,614 | 27,654 | 5,876,738 |
 
 | leg | prompt class | rendered | changed | lines added | bytes added |
 |---|---|---|---|---|---|
-| `all-three-ON` | `vote_ballot` | 3,631 | 3,614 | 27,679 | 5,880,995 |
+| `all-three-ON` | `vote_ballot` | 3,631 | 3,614 | 27,654 | 5,876,738 |
 
 | leg | prompt class | rendered | changed | lines added | bytes added |
 |---|---|---|---|---|---|
-| `two-ON (less testimony_shapes)` | `vote_ballot` | 3,631 | 3,614 | 27,679 | 5,880,995 |
+| `two-ON (less testimony_shapes)` | `vote_ballot` | 3,631 | 3,614 | 27,654 | 5,876,738 |
 
-The ballot gains 1,157 lines and 204,682 bytes on `E.1`'s figures. Every one of the lines is a
+The ballot gains 1,132 lines and 200,425 bytes on `E.1`'s figures. Every one of the lines is a
 walkable-transit line the clause could not previously see; the bytes are those lines plus the
 per-account coordinates the newly credited voices bring onto their rows.
 
 Recomputed, the §6.2 cost table reads 620 + 11,005 = 11,625 / 7,262 = 1.60 for the reporter leg,
-27,679 / 7,262 = 3.81 for corroboration, 1,344 + 4,046 = 5,390 / 7,262 = 0.74 for testimony
-shapes, 44,694 / 7,262 = 6.15 for all three, and 39,304 / 7,262 = 5.41 for the leave-one-out leg;
-the ballot-bytes column is +5,880,995 on all three ballot-carrying legs.
+27,654 / 7,262 = 3.81 for corroboration, 1,344 + 4,046 = 5,390 / 7,262 = 0.74 for testimony
+shapes, 44,669 / 7,262 = 6.15 for all three, and 39,279 / 7,262 = 5.41 for the leave-one-out leg;
+the ballot-bytes column is +5,876,738 on all three ballot-carrying legs.
 
 Five published §10 cells move with those totals, and only those five. `B-3` and `B-4` count the
 prose lines the slate adds per rendered prompt, with and without `testimony_shapes`; both rise by
-the 1,157 transit lines. `C-1`, `C-2` and `C-4` are three of the four ledger cells above.
+the 1,132 transit lines. `C-1`, `C-2` and `C-4` are three of the four ledger cells above.
 
 | cell | what it counts | RECORDED-OFF | RECONSTRUCTED-OFF | ON |
 |---|---|---|---|---|
-| B-3 | prose lines the slate ADDS, per rendered prompt | — | 0/7262 | 44694/7262 |
-| B-4 | prose lines added, leave-one-out | — | 0/7262 | 39304/7262 |
+| B-3 | prose lines the slate ADDS, per rendered prompt | — | 0/7262 | 44669/7262 |
+| B-4 | prose lines added, leave-one-out | — | 0/7262 | 39279/7262 |
 | C-1 | accused subjects with NO first-hand source | — | 460/1525 | 460/1525 |
 | C-2 | ejected subjects with NO first-hand source | — | 10/425 | 10/425 |
 | C-4 | ejected subjects with a map-satisfied placement pair | — | 79/429 | 79/429 |
 
 | set | cell | RECORDED-OFF | RECONSTRUCTED-OFF | ON |
 |---|---|---|---|---|
-| samples/9p2i | B-3 | — | 0/1738 | 11032/1738 |
-| samples/9p2i | B-4 | — | 0/1738 | 9730/1738 |
+| samples/9p2i | B-3 | — | 0/1738 | 11021/1738 |
+| samples/9p2i | B-4 | — | 0/1738 | 9719/1738 |
 | samples/9p2i | C-1 | — | 91/354 | 91/354 |
 | samples/9p2i | C-2 | — | 2/92 | 2/92 |
 | samples/9p2i | C-4 | — | 25/95 | 25/95 |
-| ml_corpus/9p2i | B-3 | — | 0/5032 | 31077/5032 |
-| ml_corpus/9p2i | B-4 | — | 0/5032 | 27317/5032 |
+| ml_corpus/9p2i | B-3 | — | 0/5032 | 31063/5032 |
+| ml_corpus/9p2i | B-4 | — | 0/5032 | 27303/5032 |
 | ml_corpus/9p2i | C-1 | — | 300/1006 | 300/1006 |
 | ml_corpus/9p2i | C-4 | — | 53/281 | 53/281 |
 | samples/4p1i | B-3 | — | 0/234 | 1256/234 |
@@ -1189,3 +1190,12 @@ the 1,157 transit lines. `C-1`, `C-2` and `C-4` are three of the four ledger cel
 `E.1`'s own sentence naming the four corroboration cells as unmoved (475/1,525; 11/425; 33/429;
 48/429) was true of PR #420 and stays as published; three of those four now read as this section
 states.
+
+A co-present player is placed where the witness SAID they were, never where a
+resolution re-read moved the SUBJECT to. The movement chokepoint's resolution arm re-reads a
+spoken placement at the room the witness's own record left the subject in; the people seen WITH
+them were not moved by that record, and placing the whole company at the destination would invent
+a placement nobody spoke — and could hand an unrelated accused a walk on it. On these bytes the
+company splits on 103 of 200 re-reads and 151 co-present placements stay where they were spoken.
+The four ledger cells above are unaffected either way; the ballot's added lines are 25 fewer than
+they would be without the split, and those 25 are the figures this section publishes.
