@@ -1030,6 +1030,7 @@ def test_a_split_over_the_wrong_population_refuses(
     assert "non-direct" in message and "EjecteeProofCrossTab" in message
 
 
+@pytest.mark.slow
 def test_the_baseline_8_tripwire_readings(full_run: Mapping[str, object]) -> None:
     """The three readings the pre-registration's §8.1 and §5 will be read on."""
 
