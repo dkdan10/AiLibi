@@ -1,0 +1,12 @@
+# Sample Replay Manifest
+
+Provenance for the replay samples under `replays/samples/`. Each row records the
+model snapshot and prompt-template versions a sample was generated with, so
+Phase 5 metric outputs can be attributed to a specific prompt version + model
+snapshot (DESIGN.md §9, §11.4). Maintained by `scripts/refresh_samples.sh` (Task
+4.17); run `scripts/verify_samples.sh` to confirm every sample still reconstructs
+byte-identically under the current engine.
+
+| seed | model | prompt_versions | flags | policy | refreshed_at | git_sha | cost_usd | winner |
+|------|-------|-----------------|-------|--------|--------------|---------|----------|--------|
+| 0 | Qwen/Qwen3.6-27B | accusation_round.qwen3_6_27b.v5.reporter_reasoning+accusation_round.qwen3_6_27b.v5.testimony_shapes, crewmate_report.qwen3_6_27b.v5.reporter_reasoning+crewmate_report.qwen3_6_27b.v5.testimony_shapes, impostor_report.qwen3_6_27b.v5, vote_ballot.qwen3_6_27b.v5.corroboration_discipline+vote_ballot.qwen3_6_27b.v5.testimony_shapes | absence_prior, citation_gate, coalesced_memory_render, corroboration_discipline, evidence_quality_lift, grounded_prosecution, hard_evidence_gate, map_aware_arbitration, meeting_outcome_memory, movement_claim_shape, movement_perception, observation_id_rendering, reporter_exculpation, reporter_reasoning, roll_call_round, self_location_trail, structured_turn_markers, task_completion_from_events, testimony_as_content, testimony_shapes, unfreeze_memory, vent_placement_contradictions, whereabouts_interior_flags, witnessed_kill_evidence | fsm-default | 2026-09-03 | c8c2c13c | 0.0000 | CREWMATES |
