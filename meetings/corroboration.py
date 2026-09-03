@@ -199,6 +199,33 @@ class TestimonySupport:
 
         return len(self.first_hand) + len(self.adopted)
 
+    @property
+    def rendered_first_hand_places(
+        self,
+    ) -> tuple[tuple[PlayerId, tuple[tuple[str, str, int], ...]], ...]:
+        """``first_hand_places`` with each (room, tick) named once per speaker.
+
+        One speaker can earn credit for one coordinate under two shapes -- a
+        transition and the sighting standing behind it, or a sighting and a vent
+        -- and the account line would then say the same room and tick twice
+        ("arriving in EAST_HALL at tick 19, EAST_HALL at tick 19"). The FIRST
+        entry of a repeated coordinate is the one printed, which is the movement
+        shape wherever there is one: the coordinates are sorted by
+        ``(tick, room, kind)`` and ``saw_move`` sorts ahead of ``saw_player``
+        and ``saw_vent``. Where a sighting and a vent collide the plain sighting
+        survives -- the weaker of the two wordings, the direction this block
+        always moves in.
+
+        Membership is untouched. This drops no speaker, no account and no
+        statement from the ledger; the triple is still what says WHICH statement
+        earned the credit, and only the second printing of one coordinate goes.
+        """
+
+        return tuple(
+            (speaker, _distinct_coordinates(places))
+            for speaker, places in self.first_hand_places
+        )
+
 
 @dataclass(frozen=True)
 class MeetingTestimonyLedger:
@@ -217,6 +244,21 @@ class MeetingTestimonyLedger:
         """Truthy only with rows, so an empty ledger renders nothing."""
 
         return bool(self.rows)
+
+
+def _distinct_coordinates(
+    places: tuple[tuple[str, str, int], ...],
+) -> tuple[tuple[str, str, int], ...]:
+    """One ``(kind, room, tick)`` per (room, tick), the first of each kept."""
+
+    seen: set[tuple[str, int]] = set()
+    kept: list[tuple[str, str, int]] = []
+    for kind, room, tick in places:
+        if (room, tick) in seen:
+            continue
+        seen.add((room, tick))
+        kept.append((kind, room, tick))
+    return tuple(kept)
 
 
 def _accused_by_turn(
@@ -555,11 +597,20 @@ def build_testimony_ledger(
     together with ``move_witness_records``, so the placements the
     walkable-transit clause reads are the movement-shaped ones the rest of the
     meeting layer reads -- a transition the speaker's own record confirms places
-    its subject at the destination instead of placing nobody. That set is a
-    SUPERSET of the detector's own unshaped reconstruction, which is safe here
-    only because this block weakens charges and mints nothing: the widened
-    placements reach ``walkable_transits`` alone, while ``first_hand``,
-    ``adopted`` and ``flagged`` keep the inputs they had.
+    its subject at the destination instead of placing nobody.
+
+    That set is NOT a superset of the detector's own unshaped reconstruction. It
+    mostly adds, and it also takes away: a re-read replaces the room a witness
+    spoke, so a transit line resting on the spoken room goes, and a row already
+    at :data:`MAX_WALKABLE_TRANSITS_PER_SUBJECT` can have an earlier pair push a
+    later one off the page. Over the four committed sets the shaping GAINS 256
+    lines across 196 rows and LOSES 11 lines across 11 rows -- 8 to that cap
+    displacement and 3 to a replaced room -- for 287 lines -> 532 and 241 rows
+    carrying one -> 412 (172 rows go from none to at least one, and 1 goes the
+    other way). Both directions are safe here only because this block weakens
+    charges and mints nothing, and because the shaped placements reach
+    ``walkable_transits`` alone, while ``first_hand``, ``adopted`` and
+    ``flagged`` keep the inputs they had.
     """
 
     accusations = _accused_by_turn(transcript)

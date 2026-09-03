@@ -581,7 +581,7 @@ def test_a_memo_with_no_errata_folds_to_the_recorded_tables() -> None:
     [
         (
             "| `corroboration_discipline` | `vote_ballot` | 3,631 | 3,614 | 27,654 |"
-            " 5,876,738 |"
+            " 5,871,323 |"
         ),
         "| B-3 | prose lines the slate ADDS, per rendered prompt | — | 0/7262 |"
         " 44669/7262 |",

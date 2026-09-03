@@ -1139,24 +1139,25 @@ accusation-round rows of every leg stand exactly as `E.1` republished them:
 
 | leg | prompt class | rendered | changed | lines added | bytes added |
 |---|---|---|---|---|---|
-| `corroboration_discipline` | `vote_ballot` | 3,631 | 3,614 | 27,654 | 5,876,738 |
+| `corroboration_discipline` | `vote_ballot` | 3,631 | 3,614 | 27,654 | 5,871,323 |
 
 | leg | prompt class | rendered | changed | lines added | bytes added |
 |---|---|---|---|---|---|
-| `all-three-ON` | `vote_ballot` | 3,631 | 3,614 | 27,654 | 5,876,738 |
+| `all-three-ON` | `vote_ballot` | 3,631 | 3,614 | 27,654 | 5,871,323 |
 
 | leg | prompt class | rendered | changed | lines added | bytes added |
 |---|---|---|---|---|---|
-| `two-ON (less testimony_shapes)` | `vote_ballot` | 3,631 | 3,614 | 27,654 | 5,876,738 |
+| `two-ON (less testimony_shapes)` | `vote_ballot` | 3,631 | 3,614 | 27,654 | 5,871,323 |
 
-The ballot gains 1,132 lines and 200,425 bytes on `E.1`'s figures. Every one of the lines is a
-walkable-transit line the clause could not previously see; the bytes are those lines plus the
-per-account coordinates the newly credited voices bring onto their rows.
+The ballot gains 1,132 lines and 195,010 bytes on `E.1`'s figures. Every one of the lines is a
+walkable-transit line the clause could not previously see; the bytes are those lines, plus the
+per-account coordinates the newly credited voices bring onto their rows, less the 5,415 bytes of
+repeated coordinate the account line no longer prints (below).
 
 Recomputed, the §6.2 cost table reads 620 + 11,005 = 11,625 / 7,262 = 1.60 for the reporter leg,
 27,654 / 7,262 = 3.81 for corroboration, 1,344 + 4,046 = 5,390 / 7,262 = 0.74 for testimony
 shapes, 44,669 / 7,262 = 6.15 for all three, and 39,279 / 7,262 = 5.41 for the leave-one-out leg;
-the ballot-bytes column is +5,876,738 on all three ballot-carrying legs.
+the ballot-bytes column is +5,871,323 on all three ballot-carrying legs.
 
 Five published §10 cells move with those totals, and only those five. `B-3` and `B-4` count the
 prose lines the slate adds per rendered prompt, with and without `testimony_shapes`; both rise by
@@ -1198,4 +1199,18 @@ them were not moved by that record, and placing the whole company at the destina
 a placement nobody spoke — and could hand an unrelated accused a walk on it. On these bytes the
 company splits on 103 of 200 re-reads and 151 co-present placements stay where they were spoken.
 The four ledger cells above are unaffected either way; the ballot's added lines are 25 fewer than
-they would be without the split, and those 25 are the figures this section publishes.
+they would be without the split, and those 25 are the figures this section publishes. The company
+left behind excludes the SUBJECT, whom the schema lets a speaker list among their own co-present
+players — 4 spoken sightings on these bytes, none of them re-read, so no figure above moves.
+Left in, the subject would stand in the origin room and the destination at one tick, and the
+transit clause could certify a walk OUT of a room the speaker's own record says they had left.
+
+**An account line names each place once.** A speaker can earn credit for one (room, tick) under
+two shapes — a transition and the arrival standing behind it, or a sighting and a vent — and the
+line printed the coordinate once per shape: "arriving in EAST_HALL at tick 19, EAST_HALL at tick
+19" (`samples/9p2i` seed 21, meeting 2, p-4). A repeated coordinate is now named once, under the
+FIRST of its shapes, which is the movement shape wherever there is one. The ledger's membership is
+untouched — no speaker, no account and no statement leaves a row, and the triple still says which
+statement earned the credit — so every cell above holds and no line moves. It reaches 54 credited
+speakers here (51 a transition beside its arrival, 3 a sighting beside a vent) and is worth
+−5,415 ballot bytes, already inside the figures this section publishes.

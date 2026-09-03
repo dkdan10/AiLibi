@@ -722,11 +722,14 @@ class MeetingParticipant:
     :func:`derive_belief_evidence`, which routes the same rows through
     :func:`meetings.transcript.grounded_vouch_subjects` into the
     relevance-gated ``corroborated`` set -- stays fixture-pinned and unfed,
-    because feeding it moves committed ballot-prompt bytes at rest. The
-    channel never reaches a prompt surface. The default ``()`` keeps every
-    existing construction site valid and means "this speaker grounds nothing":
-    their spoken sightings are ordinary testimony that exculpates no one and
-    convicts no one.
+    because feeding it moves committed ballot-prompt bytes at rest. Under
+    ``corroboration_discipline`` ONLY, the same mapping also reaches
+    :func:`meetings.corroboration.build_testimony_ledger`, which tests each
+    spoken placement against it and renders the ones it bears out as accounts in
+    the ballot's guarded source-count block; OFF, the channel reaches no prompt
+    surface. The default ``()`` keeps every existing construction site valid and
+    means "this speaker grounds nothing": their spoken sightings are ordinary
+    testimony that exculpates no one and convicts no one.
 
     ``move_witness_records`` is the vent channel's movement sibling: the
     participant's OWN typed witnessed-transition channel, the grounding input
@@ -735,8 +738,12 @@ class MeetingParticipant:
     ``MoveWitnessAgent.move_witness_records_for_meeting()`` (episodic memory,
     self-channel only, so it is firewall-clean); the manager threads the
     per-speaker mapping into every
-    :func:`meetings.transcript.detect_contradictions` call and NOTHING else
-    reads it -- in particular it never reaches a prompt surface. The default
+    :func:`meetings.transcript.detect_contradictions` call and -- under
+    ``corroboration_discipline`` ONLY -- into
+    :func:`meetings.corroboration.build_testimony_ledger`, which grounds spoken
+    placements against it and shapes the transit clause's reconstruction with
+    it; the ballot's guarded source-count block is where those rows are read.
+    Nothing else reads it, and OFF it reaches no prompt surface. The default
     ``()`` keeps every existing construction site valid and means "this speaker
     grounds nothing": their spoken placements are read exactly as spoken.
 

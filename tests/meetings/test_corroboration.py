@@ -1303,6 +1303,66 @@ class TestWalkableTransits:
             "p-5",
         ).walkable_transits == (("MEDBAY", "WEST_HALL"),)
 
+    def test_a_subject_among_its_own_company_starts_no_walk(self) -> None:
+        # p-3 says they saw p-5 in WEST_HALL and lists p-5 among the company;
+        # p-3's own record moved p-5 out of WEST_HALL into MEDBAY on that tick.
+        # The re-read leaves the COMPANY at WEST_HALL, so a subject who is their
+        # own co-presence would stand in both rooms at tick 9 -- and WEST_HALL
+        # is one door from CAFETERIA, where p-1 places p-5 a tick later, so the
+        # clause would certify a walk out of a room p-3's record says p-5 had
+        # left. MEDBAY to CAFETERIA is two doors, which is why the certified
+        # pair disappears rather than merely changing endpoints.
+        assert (
+            room_hops(frozenset({"WEST_HALL"}), frozenset({"CAFETERIA"}), max_hops=1)
+            == 1
+        )
+        assert (
+            room_hops(
+                frozenset({"MEDBAY"}),
+                frozenset({"CAFETERIA"}),
+                max_hops=MAP_ARBITRATION_MAX_HOPS,
+            )
+            is None
+        )
+        transcript = _transcript(
+            _turn(
+                index=0,
+                speaker="p-3",
+                observations=(
+                    SawPlayerObservation(
+                        type="saw_player",
+                        tick=9,
+                        subject="p-5",
+                        room="WEST_HALL",
+                        co_present=("p-5", "p-7"),
+                    ),
+                ),
+                claims=(_accuses("p-5"),),
+            ),
+            _turn(
+                index=1,
+                speaker="p-1",
+                observations=(_saw(subject="p-5", room="CAFETERIA", tick=10),),
+            ),
+        )
+        row = _row(
+            _ledger(
+                transcript,
+                move_witness_records={
+                    "p-3": (
+                        _move_record(
+                            subject="p-5",
+                            from_room="WEST_HALL",
+                            to_room="MEDBAY",
+                            tick=9,
+                        ),
+                    )
+                },
+            ),
+            "p-5",
+        )
+        assert row.walkable_transits == ()
+
     def test_an_ungrounded_transition_supplies_nothing(self) -> None:
         # The perturbation: the SAME transcript with p-3 holding no record. An
         # invented transition places nobody, so the clause reports no walk --
@@ -1734,6 +1794,81 @@ class TestRender:
             in rendered
         )
         assert "p-5: 1 voice, 1 account" in rendered
+
+    def test_a_coordinate_earned_under_two_shapes_is_named_once(self) -> None:
+        # p-2 spoke the transition AND the arrival behind it, and one move
+        # record bears both out, so the ledger credits two statements at one
+        # (room, tick). Printed as they stand, the account line says "arriving in
+        # MEDBAY at tick 9, MEDBAY at tick 9" — one place, said twice, reading
+        # like two sightings. The render names it once, under the shape that
+        # says the most about it; the ledger keeps both statements.
+        transcript = _transcript(
+            _turn(
+                index=0,
+                speaker="p-2",
+                observations=(
+                    _saw_move(
+                        subject="p-5", from_room="WEST_HALL", to_room="MEDBAY", tick=9
+                    ),
+                    _saw(subject="p-5", room="MEDBAY", tick=9),
+                ),
+                claims=(_accuses("p-5"),),
+            ),
+        )
+        ledger = _ledger(
+            transcript,
+            move_witness_records={
+                "p-2": (
+                    _move_record(
+                        subject="p-5", from_room="WEST_HALL", to_room="MEDBAY", tick=9
+                    ),
+                )
+            },
+        )
+        row = _row(ledger, "p-5")
+        assert row.first_hand_places == (
+            ("p-2", (("saw_move", "MEDBAY", 9), ("saw_player", "MEDBAY", 9))),
+        )
+        assert row.rendered_first_hand_places == (
+            ("p-2", (("saw_move", "MEDBAY", 9),)),
+        )
+        rendered = _render(ledger=ledger, transcript=transcript)
+        assert "p-2 described seeing them (arriving in MEDBAY at tick 9)" in rendered
+        assert "MEDBAY at tick 9, MEDBAY at tick 9" not in rendered
+
+    def test_two_coordinates_that_differ_are_both_still_named(self) -> None:
+        # The non-vacuity twin: move the arrival one room on and the same two
+        # shapes are two places, so both are printed. The dedupe reads the
+        # coordinate, never the shape.
+        transcript = _transcript(
+            _turn(
+                index=0,
+                speaker="p-2",
+                observations=(
+                    _saw_move(
+                        subject="p-5", from_room="WEST_HALL", to_room="MEDBAY", tick=9
+                    ),
+                    _saw(subject="p-5", room="LABS", tick=10),
+                ),
+                claims=(_accuses("p-5"),),
+            ),
+        )
+        ledger = _ledger(
+            transcript,
+            move_witness_records={
+                "p-2": (
+                    _move_record(
+                        subject="p-5", from_room="WEST_HALL", to_room="MEDBAY", tick=9
+                    ),
+                )
+            },
+            sighting_records={"p-2": (_record(subject="p-5", room="LABS", tick=10),)},
+        )
+        rendered = _render(ledger=ledger, transcript=transcript)
+        assert (
+            "p-2 described seeing them (arriving in MEDBAY at tick 9, LABS at tick 10)"
+            in rendered
+        )
 
     def test_the_header_glosses_a_voice_as_the_accusation_channel(self) -> None:
         # The ledger counts accusers. A header that said "anyone who named them"
