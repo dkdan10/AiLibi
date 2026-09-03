@@ -1870,6 +1870,49 @@ class TestRender:
             in rendered
         )
 
+    def test_a_case_variant_of_one_room_is_still_one_place(self) -> None:
+        # Codex: the model's room labels vary in case, and both grounding
+        # predicates read them through `canonical_rooms`, so a speaker can be
+        # credited for "Medbay" and "MEDBAY" at one tick. On the raw string
+        # those are two coordinates and the line prints the place twice again;
+        # the dedupe reads the same normalisation that credited them. This is
+        # also the case where the coordinate ORDER puts the sighting first
+        # ("MEDBAY" sorts before "Medbay"), so it pins that the movement
+        # wording is chosen by SHAPE and not by position.
+        transcript = _transcript(
+            _turn(
+                index=0,
+                speaker="p-2",
+                observations=(
+                    _saw_move(
+                        subject="p-5", from_room="WEST_HALL", to_room="Medbay", tick=9
+                    ),
+                    _saw(subject="p-5", room="MEDBAY", tick=9),
+                ),
+                claims=(_accuses("p-5"),),
+            ),
+        )
+        ledger = _ledger(
+            transcript,
+            move_witness_records={
+                "p-2": (
+                    _move_record(
+                        subject="p-5", from_room="WEST_HALL", to_room="MEDBAY", tick=9
+                    ),
+                )
+            },
+        )
+        row = _row(ledger, "p-5")
+        assert row.first_hand_places == (
+            ("p-2", (("saw_player", "MEDBAY", 9), ("saw_move", "Medbay", 9))),
+        )
+        assert row.rendered_first_hand_places == (
+            ("p-2", (("saw_move", "Medbay", 9),)),
+        )
+        rendered = _render(ledger=ledger, transcript=transcript)
+        assert "p-2 described seeing them (arriving in Medbay at tick 9)" in rendered
+        assert "MEDBAY at tick 9" not in _block(rendered)
+
     def test_the_header_glosses_a_voice_as_the_accusation_channel(self) -> None:
         # The ledger counts accusers. A header that said "anyone who named them"
         # promised the transcript's whole vocabulary — a corroboration claim, a

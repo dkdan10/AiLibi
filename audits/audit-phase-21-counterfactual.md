@@ -1091,9 +1091,15 @@ rows, and flips 15 rows from carrying no first-hand source to carrying one.
 placed nobody and the clause was silent on charges it could answer. `reconstruct_stated_paths`
 gains a defaulted `movement_witness_records` keyword on the `include_kill_scene` precedent — every
 existing caller keeps the default and is byte-identical — and the ledger supplies the mapping it
-already receives. The widened placements reach `walkable_transits` alone. Pooled, the clause's
-lines go from 287 to 532, the rows carrying at least one from 241 to 412, and 172
-rows gain a line they did not carry. At
+already receives. The shaped placements reach `walkable_transits` alone. Pooled, the clause's
+lines go from 287 to 532 and the rows carrying at least one from 241 to 412.
+
+The shaping is not a one-way widening, and the set it hands the clause is not a superset of the
+detector's unshaped one. It GAINS 256 lines across 196 rows and LOSES 11 lines across 11 rows: 8
+where an earlier pair displaces a later one under the two-line cap, and 3 where a re-read replaces
+the spoken room a line rested on. Net, 172 rows go from carrying no line to carrying one and 1
+goes from one to none. Every line of it, in both directions, is inside the lever's own guarded
+block: no flag, band, threshold or ballot moves either way. At
 `ml_corpus/9p2i` seed 1111 meeting 0, where six ballots ejected crewmate p-2 for an impossible
 West Hall → East Hall walk, the block now certifies that walk for p-2 as well as for the
 uninvolved p-9 it already certified it for. The 1-hop / 1-tick bounds and the two-line cap are

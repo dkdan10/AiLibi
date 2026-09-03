@@ -203,22 +203,19 @@ class TestimonySupport:
     def rendered_first_hand_places(
         self,
     ) -> tuple[tuple[PlayerId, tuple[tuple[str, str, int], ...]], ...]:
-        """``first_hand_places`` with each (room, tick) named once per speaker.
+        """``first_hand_places`` with each PLACE named once per speaker.
 
-        One speaker can earn credit for one coordinate under two shapes -- a
+        One speaker can earn credit for one place under two shapes -- a
         transition and the sighting standing behind it, or a sighting and a vent
         -- and the account line would then say the same room and tick twice
-        ("arriving in EAST_HALL at tick 19, EAST_HALL at tick 19"). The FIRST
-        entry of a repeated coordinate is the one printed, which is the movement
-        shape wherever there is one: the coordinates are sorted by
-        ``(tick, room, kind)`` and ``saw_move`` sorts ahead of ``saw_player``
-        and ``saw_vent``. Where a sighting and a vent collide the plain sighting
-        survives -- the weaker of the two wordings, the direction this block
-        always moves in.
+        ("arriving in EAST_HALL at tick 19, EAST_HALL at tick 19"). A repeated
+        place is named once, under the movement shape where it has one
+        (:func:`_distinct_coordinates`, which also settles what "the same place"
+        means).
 
         Membership is untouched. This drops no speaker, no account and no
         statement from the ledger; the triple is still what says WHICH statement
-        earned the credit, and only the second printing of one coordinate goes.
+        earned the credit, and only the second printing of one place goes.
         """
 
         return tuple(
@@ -249,16 +246,34 @@ class MeetingTestimonyLedger:
 def _distinct_coordinates(
     places: tuple[tuple[str, str, int], ...],
 ) -> tuple[tuple[str, str, int], ...]:
-    """One ``(kind, room, tick)`` per (room, tick), the first of each kept."""
+    """One ``(kind, room, tick)`` per PLACE, in first-seen order.
 
-    seen: set[tuple[str, int]] = set()
-    kept: list[tuple[str, str, int]] = []
+    Two statements name one place when the meeting layer's own normalisation
+    reads them as the same rooms at the same tick, so ``"MEDBAY"`` and
+    ``"Medbay"`` are one place here exactly as they are to the grounding
+    predicates that credited them (:func:`~meetings.transcript.canonical_rooms`;
+    the model's room labels vary in case and joiner). A label with no canonical
+    member keys on itself, so two unlike non-spatial labels stay two places.
+
+    The one printed is the MOVEMENT shape where the place has one: "arriving in
+    EAST_HALL at tick 19" is the same assertion as "EAST_HALL at tick 19" and
+    says more, and choosing by shape rather than by position keeps the wording
+    off the accident of how each speaker spelled the room. Otherwise the first
+    is kept -- so where a sighting and a vent collide the plain sighting
+    survives, the weaker of the two wordings and the direction this block always
+    moves in. The entry keeps the label its own speaker used.
+    """
+
+    order: list[tuple[frozenset[str] | str, int]] = []
+    kept: dict[tuple[frozenset[str] | str, int], tuple[str, str, int]] = {}
     for kind, room, tick in places:
-        if (room, tick) in seen:
-            continue
-        seen.add((room, tick))
-        kept.append((kind, room, tick))
-    return tuple(kept)
+        place = (canonical_rooms(room) or room, tick)
+        if place not in kept:
+            order.append(place)
+            kept[place] = (kind, room, tick)
+        elif kind == "saw_move" and kept[place][0] != "saw_move":
+            kept[place] = (kind, room, tick)
+    return tuple(kept[place] for place in order)
 
 
 def _accused_by_turn(
@@ -599,18 +614,15 @@ def build_testimony_ledger(
     meeting layer reads -- a transition the speaker's own record confirms places
     its subject at the destination instead of placing nobody.
 
-    That set is NOT a superset of the detector's own unshaped reconstruction. It
-    mostly adds, and it also takes away: a re-read replaces the room a witness
-    spoke, so a transit line resting on the spoken room goes, and a row already
-    at :data:`MAX_WALKABLE_TRANSITS_PER_SUBJECT` can have an earlier pair push a
-    later one off the page. Over the four committed sets the shaping GAINS 256
-    lines across 196 rows and LOSES 11 lines across 11 rows -- 8 to that cap
-    displacement and 3 to a replaced room -- for 287 lines -> 532 and 241 rows
-    carrying one -> 412 (172 rows go from none to at least one, and 1 goes the
-    other way). Both directions are safe here only because this block weakens
-    charges and mints nothing, and because the shaped placements reach
+    That set is NOT a superset of the detector's own unshaped reconstruction: it
+    mostly adds, and it also takes away. A re-read replaces the room a witness
+    spoke, so a transit line resting on that room goes; and a row already at
+    :data:`MAX_WALKABLE_TRANSITS_PER_SUBJECT` can have an earlier pair displace a
+    later one off the page. Both directions are safe here only because this block
+    weakens charges and mints nothing, and because the shaped placements reach
     ``walkable_transits`` alone, while ``first_hand``, ``adopted`` and
-    ``flagged`` keep the inputs they had.
+    ``flagged`` keep the inputs they had. Both are measured over the committed
+    bytes in ``audits/audit-phase-21-counterfactual.md`` Errata E.2.
     """
 
     accusations = _accused_by_turn(transcript)
