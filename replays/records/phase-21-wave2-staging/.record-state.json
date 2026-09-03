@@ -5,17 +5,18 @@
   "leg_1": {
     "set": "samples/9p2i",
     "seeds": "0-49 (50 of 50) COMPLETE",
+    "wall": "3h03m29s (09:37:39Z-12:41:08Z), including one killed run's lost tail and the seed-3 re-record",
     "gate": "PASS — all ten checks named individually",
     "byte_verify": "50/50 clean",
-    "tripwire_reader": "exit 0, stopped_cells empty, all nine gated cells PASS (T-7, R-13, R-14, R-15, T-6, T-9a, T-9b, C-9, B-1m1)",
+    "tripwire_reader": "exit 0, stopped_cells empty, all nine gated cells PASS",
     "deadline_default": "0 under either shape; lost_openings 0, defaults 0, vote_defaults 0",
     "re_records": [3],
     "git_shas": ["c8c2c13c", "196f3ccb", "d859e58b", "2cbeff5e", "9248043b", "b102add6"],
     "reconciliation": "every sha: git diff 44f0a28c..<sha> touches 0 frozen-directory files"
   },
-  "seeds_done": [],
-  "next_seed": 1000,
+  "seeds_done": [1000],
+  "next_seed": 1001,
   "branch": "phase-21-adopting-record",
   "started": "2026-09-03",
-  "notes": "LEG 1 COMPLETE AND GREEN. Leg 2 is ml_corpus/9p2i, seeds 1000-1149 (150 games) via scripts/record_ml_corpus.sh --set 9p2i --expect-levers reporter_reasoning,corroboration_discipline,testimony_shapes, recorded in ~8-seed batches under AILIBI_ML_CORPUS_ROOT=<staging>/ml_corpus because the background-task wall cuts a run at ~60 min. CORPUS PROBE FLOW: --seeds <first> for the honesty probe, then the full run, whose resume skips seeds already on disk. CORPUS RE-RECORD FLOW (different from samples): a present replay carrying a deadline_default row refuses the WHOLE re-run at the pre-spend skip-scan, and --seeds N finalizes nothing, so the flow is DELETE that replay and its MANIFEST row -> --seeds N -> re-run without --seeds to finalize. Resume: the corpus recorder skips seeds already on disk."
+  "notes": "Leg 2 honesty probe PASSED on seed 1000 (meeting-bearing, 2 meetings — not vacuous; measure_baseline --honesty exited 0, no raise). Seed 1000 wall 251 s. The probe run's non-zero exit is the EXPECTED subset freeze-refusal (`--seeds N` finalizes nothing, check_seed_count refuses a short set) and is not a STOP. NEXT: seeds 1001-1149 in ~12-seed batches (~40 min each) under AILIBI_ML_CORPUS_ROOT=<staging>/ml_corpus, then ONE finalizing run WITHOUT --seeds (its resume skips every seed on disk) to build the eval report, splits.json and the FROZEN line. CORPUS RE-RECORD FLOW: a present replay carrying a deadline_default row refuses the WHOLE re-run at the pre-spend skip-scan, so the flow is DELETE that replay and its MANIFEST row -> --seeds N -> the finalizing run. Resume: the corpus recorder skips seeds already on disk."
 }
