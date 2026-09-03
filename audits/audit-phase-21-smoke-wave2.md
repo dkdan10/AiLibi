@@ -1122,7 +1122,8 @@ see.** The all-games cross-check is carried as the projection's low end for exac
 report does not present them as like quantities.** 21.14's 0.1% (`audits/audit-phase-21-smoke.md`
 §11: 148,084.8 against 148,135.8) compared the same five seeds against the **fifty**-game
 `samples/9p2i` leg, on tokens per **GAME**, on the **pre-21.15** bytes — and its own 200-game
-both-legs row already disagreed by 4.0% (142,844.1, ×1.2399 against ×1.1961). The 8.4% here
+both-legs row already disagreed by 3.7% on the ratio (142,844.1 tokens/game, ×1.2399 against
+the like-for-like ×1.1961). The 8.4% here
 compares the same five seeds against the **two-hundred**-game both-legs population, on tokens per
 **MEETING**, on the corrected bytes. Different comparator, different unit, different bytes: neither
 number bounds the other, and 21.14's figure is cited as the precedent for running the check, never
