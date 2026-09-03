@@ -1,22 +1,46 @@
 {
-  "task": "21.24 — the adopting record",
+  "task": "21.24 \u2014 the adopting record",
   "leg": 2,
   "set": "ml_corpus/9p2i",
   "leg_1": {
     "set": "samples/9p2i",
     "seeds": "0-49 (50 of 50) COMPLETE",
     "wall": "3h03m29s (09:37:39Z-12:41:08Z), including one killed run's lost tail and the seed-3 re-record",
-    "gate": "PASS — all ten checks named individually",
+    "gate": "PASS \u2014 all ten checks named individually",
     "byte_verify": "50/50 clean",
     "tripwire_reader": "exit 0, stopped_cells empty, all nine gated cells PASS",
     "deadline_default": "0 under either shape; lost_openings 0, defaults 0, vote_defaults 0",
-    "re_records": [3],
-    "git_shas": ["c8c2c13c", "196f3ccb", "d859e58b", "2cbeff5e", "9248043b", "b102add6"],
+    "re_records": [
+      3
+    ],
+    "git_shas": [
+      "c8c2c13c",
+      "196f3ccb",
+      "d859e58b",
+      "2cbeff5e",
+      "9248043b",
+      "b102add6"
+    ],
     "reconciliation": "every sha: git diff 44f0a28c..<sha> touches 0 frozen-directory files"
   },
-  "seeds_done": [1000],
-  "next_seed": 1001,
+  "seeds_done": [
+    1000,
+    1001,
+    1002,
+    1003,
+    1004,
+    1005,
+    1006,
+    1007,
+    1008,
+    1009,
+    1010,
+    1011,
+    1012
+  ],
+  "next_seed": 1013,
   "branch": "phase-21-adopting-record",
   "started": "2026-09-03",
-  "notes": "Leg 2 honesty probe PASSED on seed 1000 (meeting-bearing, 2 meetings — not vacuous; measure_baseline --honesty exited 0, no raise). Seed 1000 wall 251 s. The probe run's non-zero exit is the EXPECTED subset freeze-refusal (`--seeds N` finalizes nothing, check_seed_count refuses a short set) and is not a STOP. NEXT: seeds 1001-1149 in ~12-seed batches (~40 min each) under AILIBI_ML_CORPUS_ROOT=<staging>/ml_corpus, then ONE finalizing run WITHOUT --seeds (its resume skips every seed on disk) to build the eval report, splits.json and the FROZEN line. CORPUS RE-RECORD FLOW: a present replay carrying a deadline_default row refuses the WHOLE re-run at the pre-spend skip-scan, so the flow is DELETE that replay and its MANIFEST row -> --seeds N -> the finalizing run. Resume: the corpus recorder skips seeds already on disk."
+  "notes": "RECOVERY CHECKPOINT (orchestrator, 2026-09-03 12:45 EDT): the operator was killed by a provider-side HTTP 529 after the 1001-1012 batch completed (replays + MANIFEST rows on disk by 09:30 EDT, uncommitted); the orchestrator committed them and pushed the branch. Leg 2 honesty probe PASSED on seed 1000 (2 meetings; measure_baseline --honesty exit 0). NEXT: seeds 1013-1149 in ~12-seed batches under AILIBI_ML_CORPUS_ROOT=<staging>/ml_corpus (the corpus recorder skips seeds already on disk), then ONE finalizing run WITHOUT --seeds (resume skips every seed on disk) to build the eval report, splits.json and the FROZEN line; then the per-leg gate + reader + git_sha reconciliation + deadline_default hand scan for leg 2; then legs 3 and 4. CORPUS RE-RECORD FLOW: a present replay carrying a deadline_default row refuses the whole re-run at the pre-spend skip-scan \u2014 DELETE that replay and its MANIFEST row -> --seeds N -> the finalizing run. Checkpoint-PUSH after every batch (the first operator never pushed).",
+  "head": "78750e8d"
 }
