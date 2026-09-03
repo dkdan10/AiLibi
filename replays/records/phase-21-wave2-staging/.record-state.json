@@ -2,10 +2,11 @@
   "task": "21.24 — the adopting record",
   "leg": 1,
   "set": "samples/9p2i",
-  "seeds_done": [0],
-  "next_seed": 1,
+  "seeds_done": "0-18 (19 of 50)",
+  "next_seed": 19,
+  "re_records_pending": [3],
   "branch": "phase-21-adopting-record",
-  "head": "c8c2c13c",
+  "head": "196f3ccb",
   "started": "2026-09-03",
-  "notes": "Leg 1 honesty probe PASSED on seed 0 (meeting-bearing, 3 meetings — not vacuous; measure_baseline --honesty exited 0, no raise). Seed 0 wall 340 s. lost_openings 0 / defaults 0 / vote_defaults 0. MANIFEST carries the four composite lever-ON stamps, git_sha c8c2c13c, cost 0.0000; git diff 44f0a28c..c8c2c13c touches no frozen directory. NEXT: refresh_samples.sh --seeds 1..49 for leg 1 (NEVER --full: it would re-record seed 0 with --force and double-spend). Resume: samples legs take --seeds ranges; the corpus recorder skips seeds already on disk."
+  "notes": "Leg 1 in progress. The 49-seed remainder was KILLED by the background-task wall at ~60 min with seeds 0-18 promoted; seeds 19 and 20 were in flight and did NOT promote, so nothing partial is on disk. Batch size reduced to ~8 seeds (~27 min) per background run, checkpoint-pushed each time, to stay under that wall. RE-RECORD DUE: seed 3 carries one deadline_default failed_call row on a NON-OPENING turn (opt_in turn 3, validation: MeetingTurn observations.1 Input tag 'alibi'), which under the amended memo §9.2 (prerequisite (a), PR #427) re-records the seed and does NOT abandon the run; on a samples leg `--seeds 3` is itself a per-seed --force re-record. Honesty probe on seed 0 PASSED (meeting-bearing, no raise). git_sha values so far: c8c2c13c (seed 0), 196f3ccb (seeds 1-18) — both reconcile against the window-open sha 44f0a28c with no frozen directory touched. Resume: samples legs take --seeds ranges; the corpus recorder skips seeds already on disk."
 }
