@@ -710,6 +710,23 @@ residue's membership", and the share is 99.02% against a ≥ 99% floor. The cita
 and is directional to the point of being anecdotal; it is reported because the DoD names it, with
 its denominator beside it.
 
+**ERRATUM 2026-09-03 — additive; the table above is NOT rewritten.** This section's
+`ratified baseline-8 reference` column quotes the corroboration cells as they stood BEFORE PR #424
+(`ffaf9991`), i.e. through the counterfactual's Errata `E.1`: **475/1,525** (`C-1`), **11/425**
+(`C-2`), **48/429** (`C-4`) and **26,522/3,614 = 7.34** lines per changed ballot. #424 amended the
+ledger's grounding semantics before the record, and the counterfactual's Errata `E.2` republishes
+those cells — they now read **460/1,525**, **10/425**, **79/429** and **27,654/3,614 = 7.65**.
+`C-3` (33/429) is unmoved and `C-9` still reads 3,614/3,631, because no ledger row is added or
+removed.
+
+**The smoke's own column does not move, and that is why this is an erratum rather than an edit.**
+The five-seed cells beside the reference were measured on bytes recorded and certified at
+`14854a06` — pre-#424 semantics — so re-pointing the reference column at `E.2` would set a
+post-#424 reference against a pre-#424 measurement and invite exactly the comparison §0 forbids.
+**The smoke's ON cells are pinned to `14854a06` semantics**; the reference column stays as
+published, and this erratum names which pin it quotes. §18 is the run made under `E.2` semantics.
+Logged as a row in `audits/audit-phase-21-preregistration.md` §11.
+
 ### 8.3 `testimony_shapes`
 
 | cell | smoke (5 seeds) | ratified baseline-8 reference |
