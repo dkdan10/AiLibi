@@ -221,7 +221,8 @@ def test_dry_run_announces_endpoint_and_prompt_version_locks() -> None:
         "AILIBI_FEATHERLESS_BASE_URL override is refused)" in proc.stdout
     )
     assert (
-        "prompt versions: locked to [accusation_round.qwen3_6_27b.v5, "
+        "prompt versions: the declared slate resolves to "
+        "[accusation_round.qwen3_6_27b.v5, "
         "crewmate_report.qwen3_6_27b.v5, impostor_report.qwen3_6_27b.v5, "
         "vote_ballot.qwen3_6_27b.v5]" in proc.stdout
     )
@@ -612,15 +613,21 @@ def test_preflight_refuses_non_default_base_url(tmp_path: Path) -> None:
 def test_prompt_version_registry_matches_locked_script_constant() -> None:
     # The corpus contract freezes the prompt VERSIONS (all four templates at
     # v5), not just the set name — the recorder's preflight asserts the live
-    # registry still resolves qwen3_6_27b to its locked constant. Pin the two
-    # together here: if a later task bumps the registry entry, this test fails
-    # and forces the corpus re-lock conversation instead of letting the
-    # recorder's guard and the registry drift apart silently.
+    # registry still resolves qwen3_6_27b to its locked BASE constant. Pin the
+    # two together here: if a later task bumps the registry entry, this test
+    # fails and forces the corpus re-lock conversation instead of letting the
+    # recorder's guard and the registry drift apart silently. The slate-resolved
+    # map the recorder freezes against is derived from that base at runtime; the
+    # base is what an owner decision moves.
     from orchestrator.game import PROMPT_VERSION_SETS
 
     script = _RECORD_SH.read_text(encoding="utf-8")
-    match = re.search(r'^REQUIRED_PROMPT_VERSIONS="([^"]+)"$', script, re.MULTILINE)
-    assert match is not None, "REQUIRED_PROMPT_VERSIONS constant missing from script"
+    match = re.search(
+        r'^REQUIRED_PROMPT_VERSIONS_BASE="([^"]+)"$', script, re.MULTILINE
+    )
+    assert match is not None, (
+        "REQUIRED_PROMPT_VERSIONS_BASE constant missing from script"
+    )
     locked = match.group(1)
     resolved = ", ".join(sorted(PROMPT_VERSION_SETS["qwen3_6_27b"].values()))
     assert resolved == locked, (
@@ -628,6 +635,396 @@ def test_prompt_version_registry_matches_locked_script_constant() -> None:
         "corpus versions; recording/resuming the 15.12 corpus would now drift. "
         "Re-locking is an owner decision (re-record + re-freeze)."
     )
+
+
+def test_declared_slate_resolves_the_prompt_versions_the_dry_run_prints() -> None:
+    # The recorder must freeze against what its meetings STAMP, not against the
+    # bare literals: a lever with a prompt-version overlay serves its own arm's
+    # strings, so a lever-ON record carries composites. Drive both slates through
+    # the committed dry-run and compare each against the registry's own
+    # resolution, so the script's derivation cannot drift from the map the
+    # manager writes.
+    from orchestrator.game import prompt_versions_for_set
+    from orchestrator.replay import env_var_for_lever
+
+    wave2 = ("reporter_reasoning", "corroboration_discipline", "testimony_shapes")
+    for declared in ((), wave2):
+        env = _clean_env()
+        env["AILIBI_PROMPT_SET"] = "qwen3_6_27b"
+        for key in declared:
+            env[env_var_for_lever(key)] = "1"
+        proc = _run(
+            "--set",
+            "9p2i",
+            "--dry-run",
+            "--expect-levers",
+            ",".join(declared),
+            env=env,
+        )
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        expected = ", ".join(
+            sorted(
+                prompt_versions_for_set(
+                    "qwen3_6_27b",
+                    env={env_var_for_lever(key): "1" for key in declared},
+                ).values()
+            )
+        )
+        assert f"[{expected}]" in proc.stdout, proc.stdout
+    # The loop's expectation is computed from the same registry the script reads,
+    # so it would also pass if BOTH went on printing the bare literals. The last
+    # iteration is the Wave-2 slate: assert its output actually carries a
+    # composite, or the comparison above proves nothing about the lever arm.
+    assert "accusation_round.qwen3_6_27b.v5.reporter_reasoning" in proc.stdout
+
+
+def test_acceptance_pairs_carry_the_maps_own_keys_not_the_version_prefix() -> None:
+    # The acceptance line the script prints feeds
+    # `validity_gate.py --expected-prompt-versions`, which matches on TEMPLATE
+    # KEYS. An arm that swaps a variant FILE serves a value whose first
+    # dot-segment is the VARIANT's name while its map key is unchanged, so a key
+    # inferred from the version string would print a map the gate rejects AFTER
+    # the record froze. impostor_roll_call is exactly that arm, which is why it
+    # is the planted case here even though this phase records it OFF.
+    from orchestrator.game import prompt_versions_for_set
+    from orchestrator.replay import env_var_for_lever
+
+    resolved = prompt_versions_for_set(
+        "qwen3_6_27b", env={env_var_for_lever("impostor_roll_call"): "1"}
+    )
+    # The premise the planted case rests on: at least one key differs from its
+    # value's first dot-segment. Without this the test could not fail.
+    assert any(key != value.split(".", 1)[0] for key, value in resolved.items()), (
+        "impostor_roll_call no longer swaps a variant file; re-plant this case"
+    )
+
+    env = _clean_env()
+    env["AILIBI_PROMPT_SET"] = "qwen3_6_27b"
+    env[env_var_for_lever("impostor_roll_call")] = "1"
+    proc = _run(
+        "--set",
+        "9p2i",
+        "--dry-run",
+        "--expect-levers",
+        "impostor_roll_call",
+        env=env,
+    )
+
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    expected = ",".join(f"{key}={resolved[key]}" for key in sorted(resolved))
+    assert f"--expected-prompt-versions {expected};" in proc.stdout, proc.stdout
+
+
+# The slates whose STAMP outpaces their BODIES, derived from the registry rather
+# than typed here: an arm SWAPS a variant file for template T when its overlay
+# value's first dot-segment is not T, and a sibling RE-BODIES T when its overlay
+# value for T differs from the default. Deriving the expectation the same way the
+# guard does would make the test vacuous, so the pairs are enumerated below and a
+# separate case asserts the registry still produces exactly them.
+_OUTPACING_PAIRS = (
+    ("impostor_roll_call", "reporter_reasoning"),
+    ("impostor_roll_call", "testimony_shapes"),
+)
+_NON_OUTPACING_SLATES = (
+    ("reporter_reasoning", "corroboration_discipline", "testimony_shapes"),
+    ("impostor_roll_call", "corroboration_discipline"),
+    ("impostor_roll_call",),
+    ("reporter_reasoning",),
+    ("testimony_shapes",),
+)
+
+
+def _env_for(declared: "tuple[str, ...]") -> dict[str, str]:
+    from orchestrator.replay import env_var_for_lever
+
+    env = _clean_env()
+    env["AILIBI_PROMPT_SET"] = "qwen3_6_27b"
+    for key in declared:
+        env[env_var_for_lever(key)] = "1"
+    return env
+
+
+def test_the_registry_still_produces_exactly_the_enumerated_outpacing_pairs() -> None:
+    # The premise the planted cases rest on. If a future arm changes which
+    # templates are swapped or re-bodied, this fails FIRST and says so, instead of
+    # letting the refusal tests pass over a set of pairs nobody re-checked.
+    from orchestrator.game import PROMPT_VERSION_SETS, prompt_versions_for_set
+    from orchestrator.replay import (
+        TOGGLEABLE_SUBSTRATE_FLAG_KEYS,
+        env_var_for_lever,
+    )
+
+    default = PROMPT_VERSION_SETS["qwen3_6_27b"]
+    entries = {
+        key: prompt_versions_for_set("qwen3_6_27b", env={env_var_for_lever(key): "1"})
+        for key in TOGGLEABLE_SUBSTRATE_FLAG_KEYS
+    }
+    derived = {
+        (swapper, sibling)
+        for swapper, swapper_entry in entries.items()
+        for sibling, sibling_entry in entries.items()
+        if sibling != swapper
+        for template, value in swapper_entry.items()
+        if value.split(".", 1)[0] != template
+        and sibling_entry[template] != default[template]
+    }
+
+    assert derived == set(_OUTPACING_PAIRS), (
+        "the registry's file-swapping arms changed; re-check _OUTPACING_PAIRS "
+        f"(derived {sorted(derived)})"
+    )
+
+
+@pytest.mark.parametrize(("swapper", "sibling"), _OUTPACING_PAIRS)
+def test_the_startup_derivation_refuses_a_slate_whose_stamps_outpace_its_bodies(
+    swapper: str, sibling: str
+) -> None:
+    # PATH A: the startup derivation, which is where --expect-levers first
+    # becomes a map. impostor_roll_call swaps accusation_round.j2 for a variant
+    # carrying neither the reporter block nor the testimony_shapes blocks, so
+    # with either sibling ON the two compose in the STAMP and not in the BYTES
+    # (pinned by tests/meetings/test_prompt_byte_golden.py::
+    # test_a_file_swapping_arm_serves_a_body_its_siblings_do_not_reach).
+    proc = _run(
+        "--set",
+        "9p2i",
+        "--dry-run",
+        "--expect-levers",
+        f"{swapper},{sibling}",
+        env=_env_for((swapper, sibling)),
+    )
+
+    assert proc.returncode != 0
+    out = proc.stdout + proc.stderr
+    assert "outpace its bodies" in out
+    assert f"{swapper!r} swaps a variant file for 'accusation_round'" in out
+    assert sibling in out
+    assert "nothing was recorded" in out
+
+
+@pytest.mark.parametrize(("swapper", "sibling"), _OUTPACING_PAIRS)
+def test_the_preflight_path_refuses_the_same_slate(
+    tmp_path: Path, swapper: str, sibling: str
+) -> None:
+    # PATH B: the preflight's registry check is the SECOND place a derived map is
+    # accepted, and the dry-run exits before it. A guard wired into only the
+    # startup derivation would leave this path able to freeze a record against
+    # provenance its prompts do not carry, so the shared guard is driven here
+    # directly out of the committed script.
+    driver = _slate_guard_driver(tmp_path)
+    proc = subprocess.run(
+        ["bash", str(driver), f"{swapper},{sibling}"],
+        cwd=_REPO_ROOT,
+        capture_output=True,
+        text=True,
+        env=_clean_env(),
+        timeout=300,
+    )
+
+    assert proc.returncode != 0
+    out = proc.stdout + proc.stderr
+    assert "outpace its bodies" in out
+    assert sibling in out
+
+
+@pytest.mark.parametrize("declared", _NON_OUTPACING_SLATES)
+def test_the_outpacing_refusal_reaches_no_slate_without_a_collision(
+    tmp_path: Path, declared: "tuple[str, ...]"
+) -> None:
+    # The refusal must bite on the colliding pairs and nothing else — the Wave-2
+    # slate the record runs, each arm alone, and roll_call beside a lever that
+    # re-bodies only the ballot. A guard that also refused these would block the
+    # record it exists to protect. Both paths are checked.
+    proc = _run(
+        "--set",
+        "9p2i",
+        "--dry-run",
+        "--expect-levers",
+        ",".join(declared),
+        env=_env_for(declared),
+    )
+    assert proc.returncode == 0, (declared, proc.stdout + proc.stderr)
+    assert "outpace its bodies" not in (proc.stdout + proc.stderr)
+
+    guard = subprocess.run(
+        ["bash", str(_slate_guard_driver(tmp_path)), ",".join(declared)],
+        cwd=_REPO_ROOT,
+        capture_output=True,
+        text=True,
+        env=_clean_env(),
+        timeout=300,
+    )
+    assert guard.returncode == 0, (declared, guard.stdout + guard.stderr)
+
+
+def test_derivation_refuses_an_expect_levers_key_that_is_not_a_live_toggle() -> None:
+    # A typo in --expect-levers would otherwise resolve to the BARE map and
+    # freeze a lever-ON record against provenance it does not carry, hours after
+    # the spend. Refuse before anything stages.
+    env = _clean_env()
+    env["AILIBI_PROMPT_SET"] = "qwen3_6_27b"
+    proc = _run(
+        "--set", "9p2i", "--dry-run", "--expect-levers", "reporter_resoning", env=env
+    )
+    assert proc.returncode != 0
+    out = proc.stdout + proc.stderr
+    assert "not a live substrate toggle" in out
+    assert "reporter_resoning" in out
+
+
+_SLATE_GUARD_DRIVER = """\
+set -euo pipefail
+REPO_ROOT="{repo_root}"
+REQUIRED_PROMPT_SET="qwen3_6_27b"
+expect_levers="$1"
+{functions}
+check_slate_bodies_carry_their_stamps
+"""
+
+
+def _slate_guard_driver(tmp_path: Path) -> Path:
+    """A driver around the committed body/stamp guard, as the preflight calls it."""
+
+    script = _RECORD_SH.read_text(encoding="utf-8")
+    # Anchored on the heredoc terminator, not on the first bare "}": the guard's
+    # own Python body closes a dict comprehension at column 0, which a
+    # first-brace match would truncate at — silently producing a driver that
+    # cannot fail.
+    match = re.search(
+        r"(?ms)^check_slate_bodies_carry_their_stamps\(\) \{\n.*?\nPYINNER\n\}$",
+        script,
+    )
+    assert match is not None, "check_slate_bodies_carry_their_stamps not found"
+    driver = tmp_path / "slate_guard.sh"
+    driver.write_text(
+        _SLATE_GUARD_DRIVER.format(repo_root=_REPO_ROOT, functions=match.group(0)),
+        encoding="utf-8",
+    )
+    return driver
+
+
+_PROMPT_VERSION_FREEZE_DRIVER = """\
+set -euo pipefail
+REPO_ROOT="{repo_root}"
+REQUIRED_PROMPT_SET="qwen3_6_27b"
+expect_levers="{expect_levers}"
+{derivation}
+if ! _derived="$(derive_required_prompt_versions)"; then
+  exit 1
+fi
+REQUIRED_PROMPT_VERSIONS="$(printf '%s\\n' "$_derived" | sed -n '1p')"
+{check}
+check_recorded_prompt_versions "$1" "$2"
+"""
+
+
+def _prompt_version_freeze_driver(tmp_path: Path, expect_levers: str) -> Path:
+    """A driver around the committed derivation + freeze-path version check."""
+
+    script = _RECORD_SH.read_text(encoding="utf-8")
+    derivation = re.search(
+        r"(?ms)^derive_required_prompt_versions\(\) \{\n.*?\n\}$", script
+    )
+    check = re.search(r"(?ms)^check_recorded_prompt_versions\(\) \{\n.*?\n\}$", script)
+    assert derivation is not None, "derive_required_prompt_versions not found"
+    assert check is not None, "check_recorded_prompt_versions not found"
+    driver = tmp_path / f"prompt_versions_{expect_levers or 'bare'}.sh"
+    driver.write_text(
+        _PROMPT_VERSION_FREEZE_DRIVER.format(
+            repo_root=_REPO_ROOT,
+            expect_levers=expect_levers,
+            derivation=derivation.group(0),
+            check=check.group(0),
+        ),
+        encoding="utf-8",
+    )
+    return driver
+
+
+def _manifest_with_prompt_versions(path: Path, cell: str) -> Path:
+    path.mkdir(parents=True, exist_ok=True)
+    manifest = path / "MANIFEST.md"
+    manifest.write_text(
+        "# Sample Replay Manifest\n\n"
+        "| seed | model | prompt_versions | flags | policy | refreshed_at | "
+        "git_sha | cost_usd | winner |\n"
+        "|------|-------|-----------------|-------|--------|--------------|"
+        "---------|----------|--------|\n"
+        f"| 1000 | Qwen/Qwen3.6-27B | {cell} | reporter_reasoning | fsm-default | "
+        "2026-09-02 | abc1234 | 0.0000 | CREWMATES |\n",
+        encoding="utf-8",
+    )
+    return manifest
+
+
+def _run_prompt_version_check(
+    tmp_path: Path, expect_levers: str, cell: str
+) -> subprocess.CompletedProcess[str]:
+    manifest = _manifest_with_prompt_versions(tmp_path, cell)
+    return subprocess.run(
+        [
+            "bash",
+            str(_prompt_version_freeze_driver(tmp_path, expect_levers)),
+            str(tmp_path),
+            str(manifest),
+        ],
+        cwd=_REPO_ROOT,
+        capture_output=True,
+        text=True,
+        env=_clean_env(),
+        timeout=300,
+    )
+
+
+_BARE_VERSION_CELL = (
+    "accusation_round.qwen3_6_27b.v5, crewmate_report.qwen3_6_27b.v5, "
+    "impostor_report.qwen3_6_27b.v5, vote_ballot.qwen3_6_27b.v5"
+)
+_WAVE2_VERSION_CELL = (
+    "accusation_round.qwen3_6_27b.v5.reporter_reasoning"
+    "+accusation_round.qwen3_6_27b.v5.testimony_shapes, "
+    "crewmate_report.qwen3_6_27b.v5.reporter_reasoning"
+    "+crewmate_report.qwen3_6_27b.v5.testimony_shapes, "
+    "impostor_report.qwen3_6_27b.v5, "
+    "vote_ballot.qwen3_6_27b.v5.corroboration_discipline"
+    "+vote_ballot.qwen3_6_27b.v5.testimony_shapes"
+)
+_WAVE2_SLATE = "reporter_reasoning,corroboration_discipline,testimony_shapes"
+
+
+def test_freeze_accepts_the_rows_the_declared_slate_stamps(tmp_path: Path) -> None:
+    # Both directions of the derivation, on the freeze path that actually breaks
+    # a record: a bare-slate run accepts the base literals, and a Wave-2 run
+    # accepts the composites its own meetings stamp.
+    bare = _run_prompt_version_check(tmp_path / "bare", "", _BARE_VERSION_CELL)
+    assert bare.returncode == 0, bare.stdout + bare.stderr
+    wave2 = _run_prompt_version_check(
+        tmp_path / "wave2", _WAVE2_SLATE, _WAVE2_VERSION_CELL
+    )
+    assert wave2.returncode == 0, wave2.stdout + wave2.stderr
+
+
+@pytest.mark.parametrize(
+    ("expect_levers", "planted_cell"),
+    [
+        # The defect this fix removes: a lever-ON record whose rows carry the
+        # bare literals. Before the derivation the guard compared against those
+        # literals and PASSED, so the failure landed only at the end of a
+        # multi-hour spend; now the row is refused for the provenance it lacks.
+        (_WAVE2_SLATE, _BARE_VERSION_CELL),
+        # The mirror: a bare-slate freeze must refuse rows stamped by an ON run.
+        ("", _WAVE2_VERSION_CELL),
+    ],
+)
+def test_freeze_refuses_rows_recorded_under_another_slate(
+    tmp_path: Path, expect_levers: str, planted_cell: str
+) -> None:
+    proc = _run_prompt_version_check(tmp_path, expect_levers, planted_cell)
+
+    assert proc.returncode != 0, proc.stdout + proc.stderr
+    out = proc.stdout + proc.stderr
+    assert "do not carry EXACTLY the slate-resolved prompt versions" in out
+    assert "seed 1000" in out
 
 
 def test_record_path_accepts_baseline_model_override_and_rejects_stray_replay(
