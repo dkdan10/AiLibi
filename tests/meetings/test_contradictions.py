@@ -2330,6 +2330,102 @@ class TestMovementResolutionArm:
         # leaves you absent, and the re-read does not change that either.
         assert absent_players(tx, roster=_ROSTER_3) == ("p-5", "p-9")
 
+    def test_the_reconstruction_shapes_placements_only_when_asked(self) -> None:
+        # The paired case for the test above. `reconstruct_stated_paths` takes
+        # the movement mapping as a DEFAULTED keyword, so the detector's own
+        # calls -- and `absent_players`, and every lab probe -- keep reading the
+        # room the witness spoke, while a consumer that asks for the shaped
+        # placements gets the destination the record left the subject in. The
+        # default is the assertion above; withholding the keyword is what makes
+        # this arm invisible to the detector, and supplying it is what lets the
+        # corroboration ledger's transit clause see a spoken transition at all.
+        tx = _origin_spoken_transcript(answer_room="ADMIN")
+        records = {
+            "p-9": (
+                _move_record(tick=3, subject="p-3", from_room="MEDBAY", to_room="LABS"),
+            )
+        }
+        default = reconstruct_stated_paths(tx, roster=_ROSTER_3)
+        shaped = reconstruct_stated_paths(
+            tx, roster=_ROSTER_3, movement_witness_records=records
+        )
+        assert [
+            (placement.tick, sorted(placement.rooms), placement.speaker)
+            for placement in shaped["p-3"]
+        ] == [(3, ["ADMIN"], "p-3"), (3, ["LABS"], "p-9")]
+        assert default != shaped
+        # An EMPTY mapping is still "supplied", and a speaker with no records
+        # grounds nothing, so the shaped walk agrees with the default there.
+        assert (
+            reconstruct_stated_paths(tx, roster=_ROSTER_3, movement_witness_records={})
+            == default
+        )
+
+    def test_a_re_read_moves_the_subject_and_leaves_the_company_behind(self) -> None:
+        # Codex round 3. A resolution re-read says the SUBJECT was really at the
+        # room their own record left them in. It says nothing about the people
+        # seen WITH them, whom no record moved -- so placing the whole company at
+        # the destination would invent a placement nobody spoke, and the
+        # corroboration ledger could hand an unrelated accused a walk on it.
+        tx = MeetingTranscript(
+            turns=(
+                _turn(
+                    turn_index=0,
+                    speaker="p-9",
+                    observations=(
+                        _saw(tick=3, subject="p-3", room="MEDBAY", co_present=("p-5",)),
+                    ),
+                ),
+            )
+        )
+        records = {
+            "p-9": (
+                _move_record(tick=3, subject="p-3", from_room="MEDBAY", to_room="LABS"),
+            )
+        }
+        shaped = reconstruct_stated_paths(
+            tx, roster=_ROSTER_3, movement_witness_records=records
+        )
+        assert [sorted(placement.rooms) for placement in shaped["p-3"]] == [["LABS"]]
+        assert [sorted(placement.rooms) for placement in shaped["p-5"]] == [["MEDBAY"]]
+        # The default reading is untouched: both stay where the witness said.
+        default = reconstruct_stated_paths(tx, roster=_ROSTER_3)
+        assert [sorted(placement.rooms) for placement in default["p-3"]] == [["MEDBAY"]]
+        assert [sorted(placement.rooms) for placement in default["p-5"]] == [["MEDBAY"]]
+
+    def test_a_subject_among_its_own_company_is_not_left_at_the_origin(self) -> None:
+        # The schema lets a speaker list the subject among the co-present
+        # players, and the company the re-read leaves behind is that list. Left
+        # whole, it would put p-3 in the origin AND the destination at one tick,
+        # so a consumer reading the pair as two statements could certify a walk
+        # out of the room this speaker's own record says p-3 had left.
+        tx = MeetingTranscript(
+            turns=(
+                _turn(
+                    turn_index=0,
+                    speaker="p-9",
+                    observations=(
+                        _saw(
+                            tick=3,
+                            subject="p-3",
+                            room="MEDBAY",
+                            co_present=("p-3", "p-5"),
+                        ),
+                    ),
+                ),
+            )
+        )
+        records = {
+            "p-9": (
+                _move_record(tick=3, subject="p-3", from_room="MEDBAY", to_room="LABS"),
+            )
+        }
+        shaped = reconstruct_stated_paths(
+            tx, roster=_ROSTER_3, movement_witness_records=records
+        )
+        assert [sorted(placement.rooms) for placement in shaped["p-3"]] == [["LABS"]]
+        assert [sorted(placement.rooms) for placement in shaped["p-5"]] == [["MEDBAY"]]
+
 
 class TestMovementShapeArm:
     """ON, a grounded spoken transition participates as ONE destination placement."""

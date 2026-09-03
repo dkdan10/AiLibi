@@ -16,7 +16,10 @@ The grounding predicates are the detector's own
 :func:`~meetings.transcript.move_observation_matches_record`, and the
 ``vent_sighting`` flag channel), so "first-hand" means here exactly what it
 means everywhere else in the meeting layer -- an invented sighting matches no
-record and earns no account.
+record and earns no account. What is tested is the PLACEMENT
+(:func:`~meetings.transcript.sighting_placement`), not the shape it was spoken
+in: a sighting and a transition that put the subject in one room at one tick are
+one placement, so either of the speaker's own record channels can bear it out.
 
 A spoken :class:`~meetings.schemas.SawKillObservation` is therefore excluded: the
 three channels are GROUNDED ones and the kill shape has none here to be tested
@@ -52,12 +55,15 @@ from meetings.schemas import (
     TurnId,
 )
 from meetings.transcript import (
+    MOVE_GROUNDING_TICK_TOLERANCE,
     MeetingTriggerKind,
     StatedPlacement,
+    canonical_rooms,
     move_observation_matches_record,
     reconstruct_stated_paths,
     room_hops,
     sighting_observation_matches_record,
+    sighting_placement,
     turn_observation_id,
 )
 
@@ -193,6 +199,30 @@ class TestimonySupport:
 
         return len(self.first_hand) + len(self.adopted)
 
+    @property
+    def rendered_first_hand_places(
+        self,
+    ) -> tuple[tuple[PlayerId, tuple[tuple[str, str, int], ...]], ...]:
+        """``first_hand_places`` with each PLACE named once per speaker.
+
+        One speaker can earn credit for one place under two shapes -- a
+        transition and the sighting standing behind it, or a sighting and a vent
+        -- and the account line would then say the same room and tick twice
+        ("arriving in EAST_HALL at tick 19, EAST_HALL at tick 19"). A repeated
+        place is named once, under the movement shape where it has one
+        (:func:`_distinct_coordinates`, which also settles what "the same place"
+        means).
+
+        Membership is untouched. This drops no speaker, no account and no
+        statement from the ledger; the triple is still what says WHICH statement
+        earned the credit, and only the second printing of one place goes.
+        """
+
+        return tuple(
+            (speaker, _distinct_coordinates(places))
+            for speaker, places in self.first_hand_places
+        )
+
 
 @dataclass(frozen=True)
 class MeetingTestimonyLedger:
@@ -211,6 +241,39 @@ class MeetingTestimonyLedger:
         """Truthy only with rows, so an empty ledger renders nothing."""
 
         return bool(self.rows)
+
+
+def _distinct_coordinates(
+    places: tuple[tuple[str, str, int], ...],
+) -> tuple[tuple[str, str, int], ...]:
+    """One ``(kind, room, tick)`` per PLACE, in first-seen order.
+
+    Two statements name one place when the meeting layer's own normalisation
+    reads them as the same rooms at the same tick, so ``"MEDBAY"`` and
+    ``"Medbay"`` are one place here exactly as they are to the grounding
+    predicates that credited them (:func:`~meetings.transcript.canonical_rooms`;
+    the model's room labels vary in case and joiner). A label with no canonical
+    member keys on itself, so two unlike non-spatial labels stay two places.
+
+    The one printed is the MOVEMENT shape where the place has one: "arriving in
+    EAST_HALL at tick 19" is the same assertion as "EAST_HALL at tick 19" and
+    says more, and choosing by shape rather than by position keeps the wording
+    off the accident of how each speaker spelled the room. Otherwise the first
+    is kept -- so where a sighting and a vent collide the plain sighting
+    survives, the weaker of the two wordings and the direction this block always
+    moves in. The entry keeps the label its own speaker used.
+    """
+
+    order: list[tuple[frozenset[str] | str, int]] = []
+    kept: dict[tuple[frozenset[str] | str, int], tuple[str, str, int]] = {}
+    for kind, room, tick in places:
+        place = (canonical_rooms(room) or room, tick)
+        if place not in kept:
+            order.append(place)
+            kept[place] = (kind, room, tick)
+        elif kind == "saw_move" and kept[place][0] != "saw_move":
+            kept[place] = (kind, room, tick)
+    return tuple(kept[place] for place in order)
 
 
 def _accused_by_turn(
@@ -249,14 +312,17 @@ def _speaker_grounding_places(
     may be quoting. A ``saw_move`` is labelled by its destination, the room it
     places the subject in.
 
-    The three grounded channels, each through the detector's own predicate: a
-    ``saw_player`` matched by the speaker's own
-    :class:`~meetings.schemas.SightingRecord` rows, a ``saw_move`` matched by
-    their own :class:`~meetings.schemas.MoveWitnessRecord` rows, or a spoken vent
-    whose OWN observation id the detector minted a flag from
-    (:func:`_grounded_vent_observation_ids`). A fabricated observation matches
-    nothing and grounds nothing, which is the whole point of testing the record
-    rather than the turn.
+    Two grounded channels test a PLACEMENT and one tests a flag. A
+    ``saw_player`` and a ``saw_move`` are one shape here --
+    :func:`~meetings.transcript.sighting_placement` reads both as "the subject
+    was in this room at this tick", a ``saw_move`` at its DESTINATION -- so
+    either the speaker's own :class:`~meetings.schemas.SightingRecord` rows or
+    their own :class:`~meetings.schemas.MoveWitnessRecord` rows may bear that
+    placement out (:func:`_placement_grounded`). A spoken vent is the third
+    channel and grounds only through the OWN observation id the detector minted
+    a flag from (:func:`_grounded_vent_observation_ids`). A fabricated
+    observation matches nothing in either channel and grounds nothing, which is
+    the whole point of testing the record rather than the turn.
 
     Every channel is tested per STATEMENT, not per speaker: a witness who spoke
     two vents of one subject and had one of them grounded is one account, and
@@ -265,7 +331,7 @@ def _speaker_grounding_places(
     The sighting mapping arrives §4.7-firewalled from the manager, so an
     impostor's row naming a teammate cannot ground a case against that teammate.
 
-    A spoken :class:`~meetings.schemas.SawKillObservation` is NOT a fourth
+    A spoken :class:`~meetings.schemas.SawKillObservation` is NOT a further
     channel. Each of the three above tests an account against a typed record or a
     minted flag, and the kill shape has neither: ``KillWitnessRecord`` is an
     ``orchestrator.game`` tactical-agent surface that never reaches the meeting
@@ -289,27 +355,130 @@ def _speaker_grounding_places(
         if turn.speaker != speaker:
             continue
         for index, observation in enumerate(turn.observations):
-            if isinstance(observation, SawPlayerObservation):
-                if observation.subject == subject and any(
-                    sighting_observation_matches_record(observation, record)
-                    for record in sightings
-                ):
-                    places.add((observation.type, observation.room, observation.tick))
-            elif isinstance(observation, SawMoveObservation):
-                if observation.subject == subject and any(
-                    move_observation_matches_record(observation, record)
-                    for record in moves
-                ):
-                    places.add(
-                        (observation.type, observation.to_room, observation.tick)
-                    )
-            elif isinstance(observation, SawVentObservation):
+            if isinstance(observation, SawVentObservation):
                 if (
                     observation.subject == subject
                     and turn_observation_id(turn=turn, index=index) in grounded_vent_ids
                 ):
                     places.add((observation.type, observation.room, observation.tick))
+                continue
+            if not isinstance(observation, SawPlayerObservation | SawMoveObservation):
+                continue
+            # The two shapes ``sighting_placement`` places; every other one
+            # locates nobody and returns ``None``.
+            placement = sighting_placement(observation)
+            if placement is None or placement.subject != subject:
+                continue
+            if _placement_grounded(
+                observation, placement, sightings=sightings, moves=moves
+            ):
+                places.add((observation.type, placement.room, placement.tick))
     return tuple(sorted(places, key=lambda place: (place[2], place[1], place[0])))
+
+
+def _placement_grounded(
+    observation: SawPlayerObservation | SawMoveObservation,
+    placement: SawPlayerObservation,
+    *,
+    sightings: tuple[SightingRecord, ...],
+    moves: tuple[MoveWitnessRecord, ...],
+) -> bool:
+    """Whether either of the speaker's OWN record channels bears this placement out.
+
+    ``placement`` is what :func:`~meetings.transcript.sighting_placement` reads
+    off ``observation`` -- the sighting itself, or a transition's arrival. Both
+    channels are consulted for both shapes, because the two shapes assert the
+    same thing and a witness records whichever one their own perception minted:
+    someone who watched a subject walk into a room holds a
+    :class:`~meetings.schemas.MoveWitnessRecord` and may say "I saw them there",
+    and someone who saw them standing there holds a
+    :class:`~meetings.schemas.SightingRecord` and may say "I saw them arrive".
+
+    Each channel keeps its own predicate and its own tick tolerance, so nothing
+    is loosened by crossing them: the sighting channel is
+    :func:`~meetings.transcript.sighting_observation_matches_record` at
+    :data:`~meetings.transcript.SIGHTING_GROUNDING_TICK_TOLERANCE`, and the
+    movement channel is exact
+    (:data:`~meetings.transcript.MOVE_GROUNDING_TICK_TOLERANCE`) -- both halves
+    of the transition for a spoken ``saw_move``
+    (:func:`~meetings.transcript.move_observation_matches_record`), and the
+    ARRIVAL half alone for a spoken ``saw_player``
+    (:func:`_move_record_places_sighting`). The origin half stays unplaced in
+    both directions, exactly as :func:`~meetings.transcript.sighting_placement`
+    defines it.
+
+    The movement channel is ADJUDICATED before it is matched, the discipline
+    :func:`meetings.transcript._apply_movement_claim_shape` applies to both of
+    its own arms: engine truth forbids two transitions of one subject landing on
+    one tick, so a channel saying otherwise is wrong about something and no arm
+    may take a placement from it (:func:`_movement_channel_conflicts`). Without
+    that, this function could credit an account off the record that happens to
+    fit the spoken room while the transit clause's own reconstruction, reading
+    the same rows through the chokepoint, refused them all.
+    """
+
+    if any(
+        sighting_observation_matches_record(placement, record) for record in sightings
+    ):
+        return True
+    if _movement_channel_conflicts(
+        moves, subject=placement.subject, tick=placement.tick
+    ):
+        return False
+    if isinstance(observation, SawMoveObservation):
+        return any(
+            move_observation_matches_record(observation, record) for record in moves
+        )
+    return any(_move_record_places_sighting(observation, record) for record in moves)
+
+
+def _movement_channel_conflicts(
+    records: tuple[MoveWitnessRecord, ...], *, subject: PlayerId, tick: int
+) -> bool:
+    """Whether the speaker's own transitions disagree about where ``subject`` landed.
+
+    :func:`meetings.transcript._destinations_conflict`'s reading of one speaker's
+    channel, over the records naming this subject at this tick. Engine truth
+    forbids two transitions of one subject landing on one tick, so a channel that
+    says otherwise is describing something other than the transition the speaker
+    meant, and neither the ledger nor the movement chokepoint may take a
+    destination from it. Both agree on the same rows by construction: the tick
+    window is :data:`~meetings.transcript.MOVE_GROUNDING_TICK_TOLERANCE`, the
+    chokepoint's own, and the destinations are compared as
+    :func:`~meetings.transcript.canonical_rooms` sets, the meeting layer's one
+    room normalisation.
+    """
+
+    at_tick = [
+        record
+        for record in records
+        if record.subject == subject
+        and abs(record.tick - tick) <= MOVE_GROUNDING_TICK_TOLERANCE
+    ]
+    return len({canonical_rooms(record.to_room) for record in at_tick}) > 1
+
+
+def _move_record_places_sighting(
+    observation: SawPlayerObservation, record: MoveWitnessRecord
+) -> bool:
+    """Whether one own transition record puts the subject where the speaker said.
+
+    The arrival half only: a :class:`~meetings.schemas.MoveWitnessRecord` places
+    its subject in ``to_room`` at ``tick`` and nowhere else, which is the
+    placement :func:`~meetings.transcript.sighting_placement` reads off the
+    spoken twin of this record. A sighting naming the ORIGIN room grounds
+    nothing here, since the record does not place the subject there at ``tick``.
+    The tick must be EXACT: the channel under test sets the tolerance, and this
+    is the movement channel
+    (:data:`~meetings.transcript.MOVE_GROUNDING_TICK_TOLERANCE`).
+    """
+
+    if observation.subject != record.subject:
+        return False
+    if abs(observation.tick - record.tick) > MOVE_GROUNDING_TICK_TOLERANCE:
+        return False
+    spoken_rooms = canonical_rooms(observation.room)
+    return bool(spoken_rooms and canonical_rooms(record.to_room) & spoken_rooms)
 
 
 def _spoke_of_subject(
@@ -439,8 +608,21 @@ def build_testimony_ledger(
 
     ``sighting_records`` must be the §4.7-firewalled mapping the detector
     receives, not the raw accessor output. ``roster`` and ``trigger_kind`` are
-    passed straight to :func:`~meetings.transcript.reconstruct_stated_paths`, so
-    the placements this reads are the ones the detector reconstructed.
+    passed straight to :func:`~meetings.transcript.reconstruct_stated_paths`,
+    together with ``move_witness_records``, so the placements the
+    walkable-transit clause reads are the movement-shaped ones the rest of the
+    meeting layer reads -- a transition the speaker's own record confirms places
+    its subject at the destination instead of placing nobody.
+
+    That set is NOT a superset of the detector's own unshaped reconstruction: it
+    mostly adds, and it also takes away. A re-read replaces the room a witness
+    spoke, so a transit line resting on that room goes; and a row already at
+    :data:`MAX_WALKABLE_TRANSITS_PER_SUBJECT` can have an earlier pair displace a
+    later one off the page. Both directions are safe here only because this block
+    weakens charges and mints nothing, and because the shaped placements reach
+    ``walkable_transits`` alone, while ``first_hand``, ``adopted`` and
+    ``flagged`` keep the inputs they had. Both are measured over the committed
+    bytes in ``audits/audit-phase-21-counterfactual.md`` Errata E.2.
     """
 
     accusations = _accused_by_turn(transcript)
@@ -454,7 +636,10 @@ def build_testimony_ledger(
         for subject in contradiction.subjects
     )
     paths = reconstruct_stated_paths(
-        transcript, roster=roster, trigger_kind=trigger_kind
+        transcript,
+        roster=roster,
+        trigger_kind=trigger_kind,
+        movement_witness_records=move_witness_records,
     )
     # Every turn in which the opener accused someone, so a charge answering one
     # of them can be recognised as an answer rather than a second witness.

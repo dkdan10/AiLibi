@@ -64,7 +64,7 @@ from meetings.schemas import (
     SawVentObservation,
     SightingRecord,
 )
-from meetings.transcript import room_hops
+from meetings.transcript import reconstruct_stated_paths, room_hops
 from llm.fake_provider import FakeProvider
 from orchestrator.game import (
     CORROBORATION_DISCIPLINE_PROMPT_VERSION_SETS,
@@ -368,7 +368,229 @@ class TestFirstHandSources:
             ),
             "p-5",
         ).first_hand == ("p-2",)
+        # The negative leg is "no record in EITHER channel", now that a
+        # ``saw_move`` can also be borne out by a sighting of the destination.
         assert _row(_ledger(transcript), "p-5").first_hand == ()
+
+    def test_a_sighting_the_speakers_own_move_record_bears_out_is_an_account(
+        self,
+    ) -> None:
+        # A witness who watched p-5 walk into MEDBAY holds a MoveWitnessRecord
+        # and may say "I saw p-5 in MEDBAY". Both artifacts assert ONE placement
+        # (transcript.sighting_placement), so the record bears the sighting out.
+        transcript = _transcript(
+            _turn(
+                index=0,
+                speaker="p-2",
+                observations=(_saw(subject="p-5", room="MEDBAY", tick=9),),
+                claims=(_accuses("p-5"),),
+            ),
+        )
+        row = _row(
+            _ledger(
+                transcript,
+                move_witness_records={
+                    "p-2": (
+                        _move_record(
+                            subject="p-5",
+                            from_room="WEST_HALL",
+                            to_room="MEDBAY",
+                            tick=9,
+                        ),
+                    )
+                },
+            ),
+            "p-5",
+        )
+        assert row.first_hand == ("p-2",)
+        assert row.first_hand_places == (("p-2", (("saw_player", "MEDBAY", 9),)),)
+
+    def test_the_origin_half_of_a_move_record_places_nobody(self) -> None:
+        # The perturbation: the SAME record, and a sighting naming the room it
+        # moved p-5 OUT of. A transition places its subject at the destination
+        # and nowhere else, so this one is a voice with no account.
+        transcript = _transcript(
+            _turn(
+                index=0,
+                speaker="p-2",
+                observations=(_saw(subject="p-5", room="WEST_HALL", tick=9),),
+                claims=(_accuses("p-5"),),
+            ),
+        )
+        row = _row(
+            _ledger(
+                transcript,
+                move_witness_records={
+                    "p-2": (
+                        _move_record(
+                            subject="p-5",
+                            from_room="WEST_HALL",
+                            to_room="MEDBAY",
+                            tick=9,
+                        ),
+                    )
+                },
+            ),
+            "p-5",
+        )
+        assert row.first_hand == ()
+        assert row.adopted_spoke_ungrounded == ("p-2",)
+
+    def test_the_move_channel_keeps_its_exact_tick(self) -> None:
+        # The perturbation for the tolerance: one tick off the record. The
+        # channel under test sets the tolerance, and the movement channel's is
+        # exact -- crossing the channels must not import the sighting
+        # channel's +-2 into it.
+        transcript = _transcript(
+            _turn(
+                index=0,
+                speaker="p-2",
+                observations=(_saw(subject="p-5", room="MEDBAY", tick=10),),
+                claims=(_accuses("p-5"),),
+            ),
+        )
+        assert (
+            _row(
+                _ledger(
+                    transcript,
+                    move_witness_records={
+                        "p-2": (
+                            _move_record(
+                                subject="p-5",
+                                from_room="WEST_HALL",
+                                to_room="MEDBAY",
+                                tick=9,
+                            ),
+                        )
+                    },
+                ),
+                "p-5",
+            ).first_hand
+            == ()
+        )
+
+    def test_a_transition_the_speakers_own_sighting_bears_out_is_an_account(
+        self,
+    ) -> None:
+        # The mirror: a witness who saw p-5 standing in MEDBAY holds a
+        # SightingRecord and may say "I saw p-5 move into MEDBAY". The spoken
+        # transition's DESTINATION placement is what the record is tested
+        # against, through the sighting channel's own predicate.
+        transcript = _transcript(
+            _turn(
+                index=0,
+                speaker="p-2",
+                observations=(
+                    _saw_move(
+                        subject="p-5",
+                        from_room="WEST_HALL",
+                        to_room="MEDBAY",
+                        tick=9,
+                    ),
+                ),
+                claims=(_accuses("p-5"),),
+            ),
+        )
+        row = _row(
+            _ledger(
+                transcript,
+                sighting_records={
+                    "p-2": (_record(subject="p-5", room="MEDBAY", tick=9),)
+                },
+            ),
+            "p-5",
+        )
+        assert row.first_hand == ("p-2",)
+        assert row.first_hand_places == (("p-2", (("saw_move", "MEDBAY", 9),)),)
+
+    def test_a_sighting_at_the_transitions_origin_bears_nothing_out(self) -> None:
+        # The perturbation: the same spoken transition, and a record placing p-5
+        # in the room they were said to LEAVE. The origin half is unplaced in
+        # this direction too.
+        transcript = _transcript(
+            _turn(
+                index=0,
+                speaker="p-2",
+                observations=(
+                    _saw_move(
+                        subject="p-5",
+                        from_room="WEST_HALL",
+                        to_room="MEDBAY",
+                        tick=9,
+                    ),
+                ),
+                claims=(_accuses("p-5"),),
+            ),
+        )
+        assert (
+            _row(
+                _ledger(
+                    transcript,
+                    sighting_records={
+                        "p-2": (_record(subject="p-5", room="WEST_HALL", tick=9),)
+                    },
+                ),
+                "p-5",
+            ).first_hand
+            == ()
+        )
+
+    @pytest.mark.parametrize("spoken", ["saw_player", "saw_move"])
+    def test_a_channel_that_disagrees_with_itself_grounds_neither_shape(
+        self, spoken: str
+    ) -> None:
+        # Codex round 2. Engine truth forbids two transitions of one subject
+        # landing on one tick, so the movement chokepoint refuses a channel that
+        # says otherwise BEFORE either of its arms matches. The ledger's movement
+        # channel adjudicates the same way, for both spoken shapes: without it
+        # the row could claim the speaker's record bears the placement out while
+        # the transit clause's own reconstruction, reading the same rows, refused
+        # every one of them.
+        observation = (
+            _saw(subject="p-5", room="MEDBAY", tick=9)
+            if spoken == "saw_player"
+            else _saw_move(
+                subject="p-5", from_room="WEST_HALL", to_room="MEDBAY", tick=9
+            )
+        )
+        transcript = _transcript(
+            _turn(
+                index=0,
+                speaker="p-2",
+                observations=(observation,),
+                claims=(_accuses("p-5"),),
+            ),
+        )
+        agreeing = (
+            _move_record(
+                subject="p-5", from_room="WEST_HALL", to_room="MEDBAY", tick=9
+            ),
+        )
+        conflicting = (
+            *agreeing,
+            _move_record(subject="p-5", from_room="WEST_HALL", to_room="LABS", tick=9),
+        )
+        assert _row(
+            _ledger(transcript, move_witness_records={"p-2": agreeing}), "p-5"
+        ).first_hand == ("p-2",)
+        assert (
+            _row(
+                _ledger(transcript, move_witness_records={"p-2": conflicting}), "p-5"
+            ).first_hand
+            == ()
+        )
+        # The two readings agree on the same rows: the chokepoint takes no
+        # placement from the conflicted channel either, so nothing this ledger
+        # refuses to credit is quietly placed by its own transit input.
+        placed = reconstruct_stated_paths(
+            transcript,
+            roster=_ROSTER,
+            trigger_kind="report",
+            movement_witness_records={"p-2": conflicting},
+        )
+        assert [sorted(placement.rooms) for placement in placed.get("p-5", ())] == (
+            [["MEDBAY"]] if spoken == "saw_player" else []
+        )
 
     def test_a_spoken_vent_grounds_only_through_the_flag_channel(self) -> None:
         transcript = _transcript(
@@ -1038,6 +1260,135 @@ class TestWalkableTransits:
         )
         assert _row(_ledger(transcript), "p-5").walkable_transits == ()
 
+    def test_a_grounded_transition_supplies_the_second_endpoint(self) -> None:
+        # The clause reads the movement channel: p-5's WEST_HALL placement
+        # arrives only inside p-3's ``saw_move``, which p-3's own record
+        # confirms, so the pair the map reconciles is on the page instead of
+        # missing. The 1111 m0 shape, where six ballots convicted a crewmate of
+        # a walk this clause could not see.
+        transcript = _transcript(
+            _turn(
+                index=0,
+                speaker="p-1",
+                observations=(_saw(subject="p-5", room="MEDBAY", tick=14),),
+                claims=(_accuses("p-5"),),
+            ),
+            _turn(
+                index=1,
+                speaker="p-3",
+                observations=(
+                    _saw_move(
+                        subject="p-5",
+                        from_room="MEDBAY",
+                        to_room="WEST_HALL",
+                        tick=15,
+                    ),
+                ),
+            ),
+        )
+        assert _row(
+            _ledger(
+                transcript,
+                move_witness_records={
+                    "p-3": (
+                        _move_record(
+                            subject="p-5",
+                            from_room="MEDBAY",
+                            to_room="WEST_HALL",
+                            tick=15,
+                        ),
+                    )
+                },
+            ),
+            "p-5",
+        ).walkable_transits == (("MEDBAY", "WEST_HALL"),)
+
+    def test_a_subject_among_its_own_company_starts_no_walk(self) -> None:
+        # p-3 says they saw p-5 in WEST_HALL and lists p-5 among the company;
+        # p-3's own record moved p-5 out of WEST_HALL into MEDBAY on that tick.
+        # The re-read leaves the COMPANY at WEST_HALL, so a subject who is their
+        # own co-presence would stand in both rooms at tick 9 -- and WEST_HALL
+        # is one door from CAFETERIA, where p-1 places p-5 a tick later, so the
+        # clause would certify a walk out of a room p-3's record says p-5 had
+        # left. MEDBAY to CAFETERIA is two doors, which is why the certified
+        # pair disappears rather than merely changing endpoints.
+        assert (
+            room_hops(frozenset({"WEST_HALL"}), frozenset({"CAFETERIA"}), max_hops=1)
+            == 1
+        )
+        assert (
+            room_hops(
+                frozenset({"MEDBAY"}),
+                frozenset({"CAFETERIA"}),
+                max_hops=MAP_ARBITRATION_MAX_HOPS,
+            )
+            is None
+        )
+        transcript = _transcript(
+            _turn(
+                index=0,
+                speaker="p-3",
+                observations=(
+                    SawPlayerObservation(
+                        type="saw_player",
+                        tick=9,
+                        subject="p-5",
+                        room="WEST_HALL",
+                        co_present=("p-5", "p-7"),
+                    ),
+                ),
+                claims=(_accuses("p-5"),),
+            ),
+            _turn(
+                index=1,
+                speaker="p-1",
+                observations=(_saw(subject="p-5", room="CAFETERIA", tick=10),),
+            ),
+        )
+        row = _row(
+            _ledger(
+                transcript,
+                move_witness_records={
+                    "p-3": (
+                        _move_record(
+                            subject="p-5",
+                            from_room="WEST_HALL",
+                            to_room="MEDBAY",
+                            tick=9,
+                        ),
+                    )
+                },
+            ),
+            "p-5",
+        )
+        assert row.walkable_transits == ()
+
+    def test_an_ungrounded_transition_supplies_nothing(self) -> None:
+        # The perturbation: the SAME transcript with p-3 holding no record. An
+        # invented transition places nobody, so the clause reports no walk --
+        # the movement chokepoint's rule, not a second copy of it.
+        transcript = _transcript(
+            _turn(
+                index=0,
+                speaker="p-1",
+                observations=(_saw(subject="p-5", room="MEDBAY", tick=14),),
+                claims=(_accuses("p-5"),),
+            ),
+            _turn(
+                index=1,
+                speaker="p-3",
+                observations=(
+                    _saw_move(
+                        subject="p-5",
+                        from_room="MEDBAY",
+                        to_room="WEST_HALL",
+                        tick=15,
+                    ),
+                ),
+            ),
+        )
+        assert _row(_ledger(transcript), "p-5").walkable_transits == ()
+
 
 class TestFlagged:
     _CHARGE = _transcript(_turn(index=0, speaker="p-1", claims=(_accuses("p-5"),)))
@@ -1443,6 +1794,124 @@ class TestRender:
             in rendered
         )
         assert "p-5: 1 voice, 1 account" in rendered
+
+    def test_a_coordinate_earned_under_two_shapes_is_named_once(self) -> None:
+        # p-2 spoke the transition AND the arrival behind it, and one move
+        # record bears both out, so the ledger credits two statements at one
+        # (room, tick). Printed as they stand, the account line says "arriving in
+        # MEDBAY at tick 9, MEDBAY at tick 9" — one place, said twice, reading
+        # like two sightings. The render names it once, under the shape that
+        # says the most about it; the ledger keeps both statements.
+        transcript = _transcript(
+            _turn(
+                index=0,
+                speaker="p-2",
+                observations=(
+                    _saw_move(
+                        subject="p-5", from_room="WEST_HALL", to_room="MEDBAY", tick=9
+                    ),
+                    _saw(subject="p-5", room="MEDBAY", tick=9),
+                ),
+                claims=(_accuses("p-5"),),
+            ),
+        )
+        ledger = _ledger(
+            transcript,
+            move_witness_records={
+                "p-2": (
+                    _move_record(
+                        subject="p-5", from_room="WEST_HALL", to_room="MEDBAY", tick=9
+                    ),
+                )
+            },
+        )
+        row = _row(ledger, "p-5")
+        assert row.first_hand_places == (
+            ("p-2", (("saw_move", "MEDBAY", 9), ("saw_player", "MEDBAY", 9))),
+        )
+        assert row.rendered_first_hand_places == (
+            ("p-2", (("saw_move", "MEDBAY", 9),)),
+        )
+        rendered = _render(ledger=ledger, transcript=transcript)
+        assert "p-2 described seeing them (arriving in MEDBAY at tick 9)" in rendered
+        assert "MEDBAY at tick 9, MEDBAY at tick 9" not in rendered
+
+    def test_two_coordinates_that_differ_are_both_still_named(self) -> None:
+        # The non-vacuity twin: move the arrival one room on and the same two
+        # shapes are two places, so both are printed. The dedupe reads the
+        # coordinate, never the shape.
+        transcript = _transcript(
+            _turn(
+                index=0,
+                speaker="p-2",
+                observations=(
+                    _saw_move(
+                        subject="p-5", from_room="WEST_HALL", to_room="MEDBAY", tick=9
+                    ),
+                    _saw(subject="p-5", room="LABS", tick=10),
+                ),
+                claims=(_accuses("p-5"),),
+            ),
+        )
+        ledger = _ledger(
+            transcript,
+            move_witness_records={
+                "p-2": (
+                    _move_record(
+                        subject="p-5", from_room="WEST_HALL", to_room="MEDBAY", tick=9
+                    ),
+                )
+            },
+            sighting_records={"p-2": (_record(subject="p-5", room="LABS", tick=10),)},
+        )
+        rendered = _render(ledger=ledger, transcript=transcript)
+        assert (
+            "p-2 described seeing them (arriving in MEDBAY at tick 9, LABS at tick 10)"
+            in rendered
+        )
+
+    def test_a_case_variant_of_one_room_is_still_one_place(self) -> None:
+        # Codex: the model's room labels vary in case, and both grounding
+        # predicates read them through `canonical_rooms`, so a speaker can be
+        # credited for "Medbay" and "MEDBAY" at one tick. On the raw string
+        # those are two coordinates and the line prints the place twice again;
+        # the dedupe reads the same normalisation that credited them. This is
+        # also the case where the coordinate ORDER puts the sighting first
+        # ("MEDBAY" sorts before "Medbay"), so it pins that the movement
+        # wording is chosen by SHAPE and not by position.
+        transcript = _transcript(
+            _turn(
+                index=0,
+                speaker="p-2",
+                observations=(
+                    _saw_move(
+                        subject="p-5", from_room="WEST_HALL", to_room="Medbay", tick=9
+                    ),
+                    _saw(subject="p-5", room="MEDBAY", tick=9),
+                ),
+                claims=(_accuses("p-5"),),
+            ),
+        )
+        ledger = _ledger(
+            transcript,
+            move_witness_records={
+                "p-2": (
+                    _move_record(
+                        subject="p-5", from_room="WEST_HALL", to_room="MEDBAY", tick=9
+                    ),
+                )
+            },
+        )
+        row = _row(ledger, "p-5")
+        assert row.first_hand_places == (
+            ("p-2", (("saw_player", "MEDBAY", 9), ("saw_move", "Medbay", 9))),
+        )
+        assert row.rendered_first_hand_places == (
+            ("p-2", (("saw_move", "Medbay", 9),)),
+        )
+        rendered = _render(ledger=ledger, transcript=transcript)
+        assert "p-2 described seeing them (arriving in Medbay at tick 9)" in rendered
+        assert "MEDBAY at tick 9" not in _block(rendered)
 
     def test_the_header_glosses_a_voice_as_the_accusation_channel(self) -> None:
         # The ledger counts accusers. A header that said "anyone who named them"
@@ -2107,3 +2576,105 @@ class TestCommittedWalk:
         assert walk_cells.ejected_without_a_first_hand_source <= walk_cells.ejected_rows
         assert walk_cells.ejected_on_an_answering_turn <= walk_cells.ejected_rows
         assert walk_cells.ejected_with_a_walkable_pair <= walk_cells.ejected_rows
+
+
+# --------------------------------------------------------------------------- #
+# E. The three recorded meetings the two grounding fixes were filed on         #
+# --------------------------------------------------------------------------- #
+
+
+#: ``(set, seed, meeting index)`` for each meeting the hardening pass named as a
+#: worked case, so the amendment is pinned to the recorded bytes it was measured
+#: on rather than to synthetic fixtures alone
+#: (audits/audit-phase-21-hardening.md §3.2).
+_ANCHORS: Final[tuple[tuple[str, int, int], ...]] = (
+    ("ml_corpus/9p2i", 1111, 0),
+    ("samples/9p2i", 48, 2),
+    ("ml_corpus/9p2i", 1002, 2),
+)
+
+
+@pytest.fixture(scope="module")
+def anchor_rows() -> dict[tuple[str, int, int], dict[PlayerId, _TestimonySupport]]:
+    """Each anchor meeting's ledger rows, keyed by subject."""
+
+    from engine.world import load_canonical_map
+    from tests.meetings.test_prompt_byte_golden import (
+        _canonical_renderers,  # noqa: PLC2701
+        walk_replay_meetings,
+    )
+
+    game_map = load_canonical_map()
+    renderers = _canonical_renderers()
+    anchors: dict[tuple[str, int, int], dict[PlayerId, _TestimonySupport]] = {}
+    for set_name, seed, index in _ANCHORS:
+        path = _REPO_ROOT / "replays" / set_name / f"replay-seed-{seed}.jsonl"
+        assert path.is_file(), f"missing committed replay: {path}"
+        meetings = list(
+            walk_replay_meetings(path, game_map=game_map, renderers_for_set=renderers)
+        )
+        meeting = meetings[index]
+        result = meeting.result
+        # The §4.7 firewall, re-applied exactly as the manager applies it.
+        sighting_records: dict[PlayerId, tuple[SightingRecord, ...]] = {}
+        for participant in meeting.participants:
+            fellows = frozenset(participant.fellow_impostor_ids)
+            kept = tuple(
+                record
+                for record in participant.sighting_records
+                if record.subject not in fellows
+            )
+            if kept:
+                sighting_records[participant.agent_id] = kept
+        ledger = build_testimony_ledger(
+            result.transcript,
+            contradictions=result.contradictions,
+            sighting_records=sighting_records,
+            move_witness_records={
+                p.agent_id: p.move_witness_records
+                for p in meeting.participants
+                if p.move_witness_records
+            },
+            opener=result.triggered_by,
+            roster=frozenset(p.agent_id for p in meeting.participants),
+            trigger_kind=meeting.trigger_kind,
+        )
+        anchors[(set_name, seed, index)] = {row.subject: row for row in ledger.rows}
+    return anchors
+
+
+class TestRecordedAnchors:
+    def test_the_convicting_walk_is_now_certified_for_the_convicted(
+        self,
+        anchor_rows: dict[tuple[str, int, int], dict[PlayerId, _TestimonySupport]],
+    ) -> None:
+        # Six ballots ejected crewmate p-2 for travelling West Hall -> East Hall
+        # in the time available. The middle ADMIN placement exists only inside
+        # two spoken transitions, so the clause used to certify the identical
+        # walk for p-9, whom nobody convicted, and say nothing for p-2.
+        rows = anchor_rows[("ml_corpus/9p2i", 1111, 0)]
+        assert rows["p-2"].walkable_transits == (
+            ("WEST_HALL", "ADMIN"),
+            ("ADMIN", "EAST_HALL"),
+        )
+        assert rows["p-9"].walkable_transits == (
+            ("WEST_HALL", "ADMIN"),
+            ("ADMIN", "EAST_HALL"),
+        )
+
+    def test_a_sighting_the_speakers_move_record_bears_out_is_credited(
+        self,
+        anchor_rows: dict[tuple[str, int, int], dict[PlayerId, _TestimonySupport]],
+    ) -> None:
+        # p-9 spoke "p-2 in WEST_HALL at tick 7" and held the transition that
+        # put p-2 there; their own ballot told them they had named p-2 with
+        # nothing their record bore out.
+        assert "p-9" in anchor_rows[("samples/9p2i", 48, 2)]["p-2"].first_hand
+
+    def test_a_transition_the_speakers_sighting_bears_out_is_credited(
+        self,
+        anchor_rows: dict[tuple[str, int, int], dict[PlayerId, _TestimonySupport]],
+    ) -> None:
+        # The mirror direction on the record: p-6 spoke p-2's CAFETERIA ->
+        # EAST_HALL transition and held the EAST_HALL sighting behind it.
+        assert "p-6" in anchor_rows[("ml_corpus/9p2i", 1002, 2)]["p-2"].first_hand

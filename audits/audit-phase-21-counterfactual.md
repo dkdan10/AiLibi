@@ -1066,3 +1066,157 @@ both fall by the 1,910 ladder lines. Every other cell of §10 stands as publishe
 One quotation elsewhere in the memo is stale rather than wrong: §6.2 quotes the joint-slate
 adopted clause verbatim ("named them without an account their own record bears out"), which
 the ballot no longer renders. The sentence it names is now three, chosen per speaker.
+
+### E.2 erratum 2026-09-02, after PR #424: the ledger's grounding semantics amended before the record; three of the four corroboration cells move
+
+PR #424 amended two premises inside `meetings/corroboration.py` that the hardening pass read as
+defects on the page (`audits/audit-phase-21-hardening.md` §3.2, findings H-8 and H-7). Both sit
+under the `corroboration_discipline` guard, so no OFF byte moves: `build_testimony_ledger` is
+reached only from `meetings/manager.py`'s `if corroboration_discipline else None`, the bare
+`verify_samples.sh` walk still reports 100/100 and the prompt-byte golden still passes unedited.
+
+**H-8, cross-channel grounding.** The predicate paired each spoken shape with ONE record channel —
+a `saw_player` tested only against the speaker's `SightingRecord` rows, a `saw_move` only against
+their `MoveWitnessRecord` rows — while `meetings/transcript.py::sighting_placement` defines both
+shapes as ONE placement, a transition placing its subject at the DESTINATION. A witness whose own
+rendered memory carried the same placement in the other channel was therefore printed on their own
+ballot as having "named them without an account their own record bears out". The predicate now
+tests the PLACEMENT against both channels, each keeping its own tick tolerance: the sighting
+channel at ±2 through `sighting_observation_matches_record`, the movement channel exact. Origin
+halves stay unplaced in both directions. Over the pooled walk this credits 41 speakers across 40
+rows, and flips 15 rows from carrying no first-hand source to carrying one.
+
+**H-7, the transit clause reads movement placements.** `build_testimony_ledger` fed
+`_walkable_transits` from `reconstruct_stated_paths` raw, so a placement spoken as a `saw_move`
+placed nobody and the clause was silent on charges it could answer. `reconstruct_stated_paths`
+gains a defaulted `movement_witness_records` keyword on the `include_kill_scene` precedent — every
+existing caller keeps the default and is byte-identical — and the ledger supplies the mapping it
+already receives. The shaped placements reach `walkable_transits` alone. Pooled, the clause's
+lines go from 287 to 532 and the rows carrying at least one from 241 to 412.
+
+The shaping is not a one-way widening, and the set it hands the clause is not a superset of the
+detector's unshaped one. It GAINS 256 lines across 196 rows and LOSES 11 lines across 11 rows: 8
+where an earlier pair displaces a later one under the two-line cap, and 3 where a re-read replaces
+the spoken room a line rested on. Net, 172 rows go from carrying no line to carrying one and 1
+goes from one to none. Every line of it, in both directions, is inside the lever's own guarded
+block: no flag, band, threshold or ballot moves either way. At
+`ml_corpus/9p2i` seed 1111 meeting 0, where six ballots ejected crewmate p-2 for an impossible
+West Hall → East Hall walk, the block now certifies that walk for p-2 as well as for the
+uninvolved p-9 it already certified it for. The 1-hop / 1-tick bounds and the two-line cap are
+ratified design and are untouched, as are `MAP_ARBITRATION_MAX_HOPS` and
+`MAP_ARBITRATION_MAX_TICK_GAP`, which the OFF detector shares.
+
+What moved: three of the four corroboration cells, the ballot leg's `added_lines` and
+`added_bytes` on all three ballot-carrying legs, and the two §10 cells derived from them. What did
+not: `rendered` and `changed` on every leg and every prompt class — so `C-9` reads 3,614/3,631 as
+published and no ledger row is added or removed — `C-3`, the injustice ledger, the ballot census,
+the eight-kind reduction census and every render-budget cell of §6.1.
+
+§4.1, as published:
+
+> **The block renders on 3,614 of 3,631 ballots — 99.5% — and what it would tell those voters is
+> that 475 of 1,525 accused subjects in the record have no first-hand source behind the charge
+> against them.**
+
+*Erratum 2026-09-02, after PR #424:* the share of ballots is unchanged; the count is **460 of
+1,525** (30.2%).
+
+§4.2's four ledger cells, as they now re-derive:
+
+| cell | reading | what it means |
+|---|---|---|
+| accused subjects with no first-hand source | **460 / 1,525** | 30.2% of every charge at every table is carried by voices that added nothing they saw |
+| ejected subjects with no first-hand source | **10 / 425** | of the ejections that carry a ledger row at all |
+| ejections whose charge ANSWERED the ejectee's own | **33 / 429** | unchanged; an answer to a charge is not a second witness |
+| ejected subjects with a map-satisfied placement pair | **79 / 429** | two spoken placements one tick of walking reconciles |
+
+§8.2's second prediction row, as published:
+
+> | the block states 475/1,525 no-first-hand charges over the record's own population | a re-walk
+> of the committed bytes disagreeing | already asserted by this script |
+
+*Erratum 2026-09-02, after PR #424:* the population, the falsifier and the timing are unchanged;
+the number the block states is **460/1,525**. The falsifier is a DRIFT guard over the committed
+bytes — a re-walk disagreeing with the pin — and an amendment that moves the pin before the record
+and republishes it here is that guard working, not a breach of it.
+
+The three render-census legs that carry the ballot, as they now re-derive; the crewmate-report and
+accusation-round rows of every leg stand exactly as `E.1` republished them:
+
+| leg | prompt class | rendered | changed | lines added | bytes added |
+|---|---|---|---|---|---|
+| `corroboration_discipline` | `vote_ballot` | 3,631 | 3,614 | 27,654 | 5,871,323 |
+
+| leg | prompt class | rendered | changed | lines added | bytes added |
+|---|---|---|---|---|---|
+| `all-three-ON` | `vote_ballot` | 3,631 | 3,614 | 27,654 | 5,871,323 |
+
+| leg | prompt class | rendered | changed | lines added | bytes added |
+|---|---|---|---|---|---|
+| `two-ON (less testimony_shapes)` | `vote_ballot` | 3,631 | 3,614 | 27,654 | 5,871,323 |
+
+The ballot gains 1,132 lines and 195,010 bytes on `E.1`'s figures. Every one of the lines is a
+walkable-transit line the clause could not previously see; the bytes are those lines, plus the
+per-account coordinates the newly credited voices bring onto their rows, less the 5,415 bytes of
+repeated coordinate the account line no longer prints (below).
+
+Recomputed, the §6.2 cost table reads 620 + 11,005 = 11,625 / 7,262 = 1.60 for the reporter leg,
+27,654 / 7,262 = 3.81 for corroboration, 1,344 + 4,046 = 5,390 / 7,262 = 0.74 for testimony
+shapes, 44,669 / 7,262 = 6.15 for all three, and 39,279 / 7,262 = 5.41 for the leave-one-out leg;
+the ballot-bytes column is +5,871,323 on all three ballot-carrying legs.
+
+Five published §10 cells move with those totals, and only those five. `B-3` and `B-4` count the
+prose lines the slate adds per rendered prompt, with and without `testimony_shapes`; both rise by
+the 1,132 transit lines. `C-1`, `C-2` and `C-4` are three of the four ledger cells above.
+
+| cell | what it counts | RECORDED-OFF | RECONSTRUCTED-OFF | ON |
+|---|---|---|---|---|
+| B-3 | prose lines the slate ADDS, per rendered prompt | — | 0/7262 | 44669/7262 |
+| B-4 | prose lines added, leave-one-out | — | 0/7262 | 39279/7262 |
+| C-1 | accused subjects with NO first-hand source | — | 460/1525 | 460/1525 |
+| C-2 | ejected subjects with NO first-hand source | — | 10/425 | 10/425 |
+| C-4 | ejected subjects with a map-satisfied placement pair | — | 79/429 | 79/429 |
+
+| set | cell | RECORDED-OFF | RECONSTRUCTED-OFF | ON |
+|---|---|---|---|---|
+| samples/9p2i | B-3 | — | 0/1738 | 11021/1738 |
+| samples/9p2i | B-4 | — | 0/1738 | 9719/1738 |
+| samples/9p2i | C-1 | — | 91/354 | 91/354 |
+| samples/9p2i | C-2 | — | 2/92 | 2/92 |
+| samples/9p2i | C-4 | — | 25/95 | 25/95 |
+| ml_corpus/9p2i | B-3 | — | 0/5032 | 31063/5032 |
+| ml_corpus/9p2i | B-4 | — | 0/5032 | 27303/5032 |
+| ml_corpus/9p2i | C-1 | — | 300/1006 | 300/1006 |
+| ml_corpus/9p2i | C-4 | — | 53/281 | 53/281 |
+| samples/4p1i | B-3 | — | 0/234 | 1256/234 |
+| samples/4p1i | B-4 | — | 0/234 | 1100/234 |
+| ml_corpus/4p1i | B-3 | — | 0/258 | 1329/258 |
+| ml_corpus/4p1i | B-4 | — | 0/258 | 1157/258 |
+| ml_corpus/4p1i | C-4 | — | 1/29 | 1/29 |
+
+`E.1`'s own sentence naming the four corroboration cells as unmoved (475/1,525; 11/425; 33/429;
+48/429) was true of PR #420 and stays as published; three of those four now read as this section
+states.
+
+A co-present player is placed where the witness SAID they were, never where a
+resolution re-read moved the SUBJECT to. The movement chokepoint's resolution arm re-reads a
+spoken placement at the room the witness's own record left the subject in; the people seen WITH
+them were not moved by that record, and placing the whole company at the destination would invent
+a placement nobody spoke — and could hand an unrelated accused a walk on it. On these bytes the
+company splits on 103 of 200 re-reads and 151 co-present placements stay where they were spoken.
+The four ledger cells above are unaffected either way; the ballot's added lines are 25 fewer than
+they would be without the split, and those 25 are the figures this section publishes. The company
+left behind excludes the SUBJECT, whom the schema lets a speaker list among their own co-present
+players — 4 spoken sightings on these bytes, none of them re-read, so no figure above moves.
+Left in, the subject would stand in the origin room and the destination at one tick, and the
+transit clause could certify a walk OUT of a room the speaker's own record says they had left.
+
+**An account line names each place once.** A speaker can earn credit for one (room, tick) under
+two shapes — a transition and the arrival standing behind it, or a sighting and a vent — and the
+line printed the coordinate once per shape: "arriving in EAST_HALL at tick 19, EAST_HALL at tick
+19" (`samples/9p2i` seed 21, meeting 2, p-4). A repeated coordinate is now named once, under the
+FIRST of its shapes, which is the movement shape wherever there is one. The ledger's membership is
+untouched — no speaker, no account and no statement leaves a row, and the triple still says which
+statement earned the credit — so every cell above holds and no line moves. It reaches 54 credited
+speakers here (51 a transition beside its arrival, 3 a sighting beside a vent) and is worth
+−5,415 ballot bytes, already inside the figures this section publishes.

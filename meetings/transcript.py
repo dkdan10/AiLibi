@@ -1235,6 +1235,8 @@ def reconstruct_stated_paths(
     roster: frozenset[PlayerId] | None = None,
     trigger_kind: MeetingTriggerKind | None = None,
     include_kill_scene: bool = False,
+    movement_witness_records: Mapping[PlayerId, tuple[MoveWitnessRecord, ...]]
+    | None = None,
 ) -> Mapping[PlayerId, tuple[StatedPlacement, ...]]:
     """Each subject's STATED room-by-tick path from the transcript (Task 13.2).
 
@@ -1282,6 +1284,18 @@ def reconstruct_stated_paths(
     The returned mapping is therefore a SUPERSET of the default reconstruction
     (the same regular placements, plus the recovered kill-scene ones).
 
+    ``movement_witness_records`` (default ``None`` -> byte-identical for every
+    existing caller, the ``include_kill_scene`` shape). Supplied, the indexed
+    sightings are routed through :func:`_apply_movement_claim_shape` before the
+    placement loop, so this reconstruction reads the movement channel the way
+    the rest of the meeting layer does: a spoken ``saw_move`` the speaker's own
+    record confirms places its subject at the DESTINATION
+    (:func:`sighting_placement`), and an origin-half ``saw_player`` the same
+    record moved out of that room is re-read where it left them. Withheld, a
+    ``saw_move`` places nobody -- which is what :func:`detect_contradictions`
+    wants for its physical detector, and what the corroboration ledger's
+    walkable-transit clause does not.
+
     ``whereabouts`` self-placements (Task 16.7). A spoken
     :class:`~meetings.schemas.WhereaboutsClaim` places its SPEAKER (the
     claim carries no subject -- the speaker is the subject by construction)
@@ -1313,8 +1327,16 @@ def reconstruct_stated_paths(
     # prong still applies), so kill-scene placements are recovered.
     relevance_body_rooms = frozenset() if include_kill_scene else body_rooms
 
+    spoken = tuple(_iter_sightings(transcript))
+    entries = _placement_entries(
+        transcript,
+        spoken=spoken,
+        movement_witness_records=movement_witness_records,
+        roster=effective_roster,
+    )
+
     paths: dict[PlayerId, list[StatedPlacement]] = {}
-    for sighting in _iter_sightings(transcript):
+    for sighting, placed_players in entries:
         # A non-spatial label locates nobody (Task 10.1), and the §6.3
         # relevance gate drops the evidentially-empty spawn-window /
         # kill-scene sightings -- reused verbatim so the reconstruction
@@ -1333,13 +1355,6 @@ def reconstruct_stated_paths(
             speaker=sighting.speaker,
             event_id=sighting.event_id,
         )
-        # The subject and every co-present player are placed by this one
-        # observation; the set literal collapses a player who is their own
-        # co-presence so each observation places a player at most once.
-        placed_players = {
-            sighting.observation.subject,
-            *sighting.observation.co_present,
-        }
         for player in placed_players:
             if not _subject_in_roster(player, effective_roster):
                 continue
@@ -1379,6 +1394,75 @@ def reconstruct_stated_paths(
         subject: tuple(sorted(placements, key=_placement_sort_key))
         for subject, placements in sorted(paths.items())
     }
+
+
+def _placement_entries(
+    transcript: MeetingTranscript,
+    *,
+    spoken: tuple[_IndexedSighting, ...],
+    movement_witness_records: Mapping[PlayerId, tuple[MoveWitnessRecord, ...]] | None,
+    roster: frozenset[PlayerId],
+) -> tuple[tuple[_IndexedSighting, frozenset[PlayerId]], ...]:
+    """Each sighting to place, paired with the players THAT reading places.
+
+    Without ``movement_witness_records`` every sighting places its subject and
+    every co-present player it lists -- one observation, one placement, the
+    whole company.
+
+    With them, the sightings are the movement-shaped ones
+    (:func:`_apply_movement_claim_shape`) and the company splits. A RESOLUTION
+    re-read says the SUBJECT was really at the destination the witness's own
+    record left them in; it says nothing new about the people seen WITH them,
+    who were where the witness said they were. Placing the company at the
+    destination would invent a placement nobody spoke -- and, in the
+    corroboration ledger, could hand an unrelated accused a walk on it. So a
+    re-read places the subject alone, and the sighting AS SPOKEN keeps placing
+    its co-present players -- MINUS the subject, whom the schema lets a speaker
+    list among their own company
+    (:class:`~meetings.schemas.SawPlayerObservation`). Left in, the subject
+    would stand in the origin room and the destination at one tick, and a
+    consumer reading the pair as two statements could certify a walk out of a
+    room this speaker's own record says they had already left. Every other
+    shaped sighting -- an untouched one, or a transition indexed as its
+    destination arrival -- places its company as it always did.
+    """
+
+    if movement_witness_records is None:
+        return tuple(
+            (
+                sighting,
+                frozenset(
+                    {sighting.observation.subject, *sighting.observation.co_present}
+                ),
+            )
+            for sighting in spoken
+        )
+    by_id = {sighting.event_id: sighting for sighting in spoken}
+    entries: list[tuple[_IndexedSighting, frozenset[PlayerId]]] = []
+    for sighting in _apply_movement_claim_shape(
+        transcript,
+        sightings=spoken,
+        move_witness_records=movement_witness_records,
+        roster=roster,
+    ):
+        origin = by_id.get(sighting.event_id)
+        if origin is not None and origin.rooms != sighting.rooms:
+            entries.append((sighting, frozenset({sighting.observation.subject})))
+            company = frozenset(origin.observation.co_present) - {
+                sighting.observation.subject
+            }
+            if company:
+                entries.append((origin, company))
+            continue
+        entries.append(
+            (
+                sighting,
+                frozenset(
+                    {sighting.observation.subject, *sighting.observation.co_present}
+                ),
+            )
+        )
+    return tuple(entries)
 
 
 def absent_players(
@@ -2342,7 +2426,9 @@ def _apply_movement_claim_shape(
     The movement channel's one chokepoint,
     applied to the indexed sightings before any detector sees them, so the
     contradiction path, the subject-account index and the direct-sighting
-    exclusion set all read ONE set of placements. Two arms:
+    exclusion set all read ONE set of placements -- and, through
+    :func:`reconstruct_stated_paths`'s ``movement_witness_records`` keyword, the
+    corroboration ledger's walkable-transit clause too. Two arms:
 
     * **resolution** -- a spoken ``saw_player`` whose SPEAKER's own
       :class:`~meetings.schemas.MoveWitnessRecord` moved the subject OUT of that
