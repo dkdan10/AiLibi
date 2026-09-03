@@ -1417,9 +1417,14 @@ def _placement_entries(
     destination would invent a placement nobody spoke -- and, in the
     corroboration ledger, could hand an unrelated accused a walk on it. So a
     re-read places the subject alone, and the sighting AS SPOKEN keeps placing
-    its co-present players. Every other shaped sighting -- an untouched one, or
-    a transition indexed as its destination arrival -- places its company as it
-    always did.
+    its co-present players -- MINUS the subject, whom the schema lets a speaker
+    list among their own company
+    (:class:`~meetings.schemas.SawPlayerObservation`). Left in, the subject
+    would stand in the origin room and the destination at one tick, and a
+    consumer reading the pair as two statements could certify a walk out of a
+    room this speaker's own record says they had already left. Every other
+    shaped sighting -- an untouched one, or a transition indexed as its
+    destination arrival -- places its company as it always did.
     """
 
     if movement_witness_records is None:
@@ -1443,8 +1448,11 @@ def _placement_entries(
         origin = by_id.get(sighting.event_id)
         if origin is not None and origin.rooms != sighting.rooms:
             entries.append((sighting, frozenset({sighting.observation.subject})))
-            if origin.observation.co_present:
-                entries.append((origin, frozenset(origin.observation.co_present)))
+            company = frozenset(origin.observation.co_present) - {
+                sighting.observation.subject
+            }
+            if company:
+                entries.append((origin, company))
             continue
         entries.append(
             (

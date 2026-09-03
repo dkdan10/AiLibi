@@ -2393,6 +2393,39 @@ class TestMovementResolutionArm:
         assert [sorted(placement.rooms) for placement in default["p-3"]] == [["MEDBAY"]]
         assert [sorted(placement.rooms) for placement in default["p-5"]] == [["MEDBAY"]]
 
+    def test_a_subject_among_its_own_company_is_not_left_at_the_origin(self) -> None:
+        # The schema lets a speaker list the subject among the co-present
+        # players, and the company the re-read leaves behind is that list. Left
+        # whole, it would put p-3 in the origin AND the destination at one tick,
+        # so a consumer reading the pair as two statements could certify a walk
+        # out of the room this speaker's own record says p-3 had left.
+        tx = MeetingTranscript(
+            turns=(
+                _turn(
+                    turn_index=0,
+                    speaker="p-9",
+                    observations=(
+                        _saw(
+                            tick=3,
+                            subject="p-3",
+                            room="MEDBAY",
+                            co_present=("p-3", "p-5"),
+                        ),
+                    ),
+                ),
+            )
+        )
+        records = {
+            "p-9": (
+                _move_record(tick=3, subject="p-3", from_room="MEDBAY", to_room="LABS"),
+            )
+        }
+        shaped = reconstruct_stated_paths(
+            tx, roster=_ROSTER_3, movement_witness_records=records
+        )
+        assert [sorted(placement.rooms) for placement in shaped["p-3"]] == [["LABS"]]
+        assert [sorted(placement.rooms) for placement in shaped["p-5"]] == [["MEDBAY"]]
+
 
 class TestMovementShapeArm:
     """ON, a grounded spoken transition participates as ONE destination placement."""
