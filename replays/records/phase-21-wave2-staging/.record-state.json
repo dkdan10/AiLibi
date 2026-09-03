@@ -2,11 +2,12 @@
   "task": "21.24 — the adopting record",
   "leg": 1,
   "set": "samples/9p2i",
-  "seeds_done": "0-18 (19 of 50)",
-  "next_seed": 19,
-  "re_records_pending": [3],
+  "seeds_done": "0-25 (26 of 50)",
+  "next_seed": 26,
+  "re_records_done": [3],
+  "re_records_pending": [],
   "branch": "phase-21-adopting-record",
-  "head": "196f3ccb",
+  "head": "d859e58b",
   "started": "2026-09-03",
-  "notes": "Leg 1 in progress. The 49-seed remainder was KILLED by the background-task wall at ~60 min with seeds 0-18 promoted; seeds 19 and 20 were in flight and did NOT promote, so nothing partial is on disk. Batch size reduced to ~8 seeds (~27 min) per background run, checkpoint-pushed each time, to stay under that wall. RE-RECORD DUE: seed 3 carries one deadline_default failed_call row on a NON-OPENING turn (opt_in turn 3, validation: MeetingTurn observations.1 Input tag 'alibi'), which under the amended memo §9.2 (prerequisite (a), PR #427) re-records the seed and does NOT abandon the run; on a samples leg `--seeds 3` is itself a per-seed --force re-record. Honesty probe on seed 0 PASSED (meeting-bearing, no raise). git_sha values so far: c8c2c13c (seed 0), 196f3ccb (seeds 1-18) — both reconcile against the window-open sha 44f0a28c with no frozen directory touched. Resume: samples legs take --seeds ranges; the corpus recorder skips seeds already on disk."
+  "notes": "Leg 1 in progress, recorded in ~8-seed batches (~25 min each) because the background-task wall cut the first 49-seed run at ~60 min. Seed 3's re-record is DONE and cleared its row: over all 26 staged games the hand scan now reads ZERO failed_call rows of any kind, deadline_default 0 under either shape. Honesty probe on seed 0 PASSED. Operating data at 26 games: 88 meetings, 999 calls, 5,151,496 tokens, 58,539.7 tokens/meeting, cost 0.0000 on every row. NEXT: batches 26-33, 34-41, 42-49, then the leg's eval-report rebuild, validity gate, byte-verify, lever-ON tripwire reader, git_sha reconciliation. Resume: samples legs take --seeds ranges; the corpus recorder skips seeds already on disk."
 }
