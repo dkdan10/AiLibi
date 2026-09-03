@@ -1220,3 +1220,44 @@ untouched — no speaker, no account and no statement leaves a row, and the trip
 statement earned the credit — so every cell above holds and no line moves. It reaches 54 credited
 speakers here (51 a transition beside its arrival, 3 a sighting beside a vent) and is worth
 −5,415 ballot bytes, already inside the figures this section publishes.
+
+### E.3 erratum 2026-09-03, after PR #424: one composite ballot stamp now names TWO lever-ON bodies, separable only by the recording's `git_sha`
+
+**No figure in this memo moves.** This erratum records a PROVENANCE fact about the stamp every
+lever-ON ballot in this phase wears, found while verifying the post-#424 re-smoke.
+
+PR #424 (`ffaf9991`) changed **one line** of
+`agents/strategic/prompts/qwen3_6_27b/vote_ballot.j2` — `row.first_hand_places` →
+`row.rendered_first_hand_places`, the account line inside the `<testimony_sources>` block — and did
+**not** bump the ballot's version. Reproduce it in one command:
+
+```bash
+git diff 14854a06..44f0a28c -- agents/strategic/prompts/qwen3_6_27b/vote_ballot.j2
+```
+
+**What that means for the stamp.** The composite
+`vote_ballot.qwen3_6_27b.v5.corroboration_discipline+vote_ballot.qwen3_6_27b.v5.testimony_shapes`
+(`orchestrator/game.py`'s `_lever_arm_versions` at :415-430, folded at :600-620) now names **two
+different lever-ON ballot bodies**:
+
+* the **pre-#424** body, which the CERTIFIED 21.23 smoke recorded — that recording's `MANIFEST`
+  carries `git_sha` `3fd12a03` against the certified source state `14854a06`; and
+* the **post-#424** body, which the two-seed re-smoke and 21.24's record render, at `44f0a28c`.
+
+Nothing in the stamp separates them. **The recording's own `MANIFEST` `git_sha` is the only
+discriminator**, which is why 21.24's record audit quotes the per-leg `git_sha` beside the stamp
+rather than resting on the stamp alone.
+
+**The OFF bytes are untouched, and the reason is structural.** The `<testimony_sources>` block
+renders only when `testimony_ledger` is truthy (`vote_ballot.j2`:193-215), and the ledger is built
+only under the `corroboration_discipline` guard — the same guard `E.2` names. Every committed
+lever-OFF byte is therefore unaffected, and `scripts/verify_samples.sh` still reports the committed
+sets whole.
+
+**THE RULING (orchestrator, 2026-09-03): ACCEPT with this erratum and do NOT bump.** A version bump
+is an edit inside a FROZEN directory (`agents/strategic/prompts/`, frozen for the record by the
+pre-registration's §9), and it would reopen the smoke window a THIRD time — after #424 already
+reopened it once — for a change that moves no cell, no bar and no OFF byte. The cost of accepting is
+one ambiguity the `git_sha` resolves; the cost of bumping is another live-spend smoke. The
+pre-registration's §11 carries a row naming this erratum, because §8.1's reader clause and the T2 /
+T6 predicates read that stamp.
