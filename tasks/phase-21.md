@@ -5463,6 +5463,44 @@ grounding, `saw_move` placements for the transit clause) move the 475/1,525 cell
 reference and are the OWNER's decision, sequenced after this merge. Codex: 3 rounds, all findings fixed,
 none moved a published number.
 
+**Amendment record (2026-09-03, the hardening pass's H-7/H-8 grounding semantics — #424, squash `ffaf9991`,
+OWNER-GATED and MERGED BY THE ORCHESTRATOR ON THE OWNER'S INSTRUCTION of 2026-09-03, after #425):** the
+ledger's grounding now reads across channels — a spoken `saw_player` is grounded by the speaker's OWN
+`MoveWitnessRecord` whose subject, tick (exact, not the sighting channel's ±2) and destination match, and a
+spoken `saw_move` by an own `SightingRecord` at its destination placement (origin halves stay unplaced; a
+movement channel that disagrees with itself grounds neither shape); and the transit clause reads movement
+placements through `_apply_movement_claim_shape` via a defaulted keyword on `reconstruct_stated_paths`
+(every existing caller byte-identical). FOUR PUBLISHED CELLS MOVED and the owner's merge is their
+re-ratification (memo §11 row; counterfactual Errata E.2 carries every republished figure; the drift gate
+reads E.2 as the pin): `accused_without_a_first_hand_source` 475/1,525 → **460/1,525**,
+`ejected_without_a_first_hand_source` 11/425 → **10/425**, `ejected_on_an_answering_turn` 33/429 unchanged,
+`ejected_with_a_walkable_pair` 48/429 → **79/429**; the derived render census moved with them (B-3 43,537 →
+44,669; B-4 38,147 → 39,279; vote_ballot added lines 26,522 → 27,654, bytes 5,676,313 → 5,871,323 after the
+account-line dedupe); `C-9` 3,614/3,631 unmoved. H-8 credits 41 speakers across 40 rows and flips 15 rows
+to sourced; H-7 takes the transit clause's lines 287 → 532 — GAINS 256 lines across 196 rows and LOSES 11
+across 11 (8 to the two-line cap's displacement, 3 to a re-read replacing a spoken room): the shaped set is
+NOT a superset, and both directions live inside the lever's guarded block. The hardening prediction held row
+by row: 12 of the 20 impossible-transit railroads had no line and exactly six recover. READING NOTE beside
+the 460: two innocents (ml_corpus/9p2i 1052 m0 p-8, 1133 m0 p-3) become "sourced" on a ±2 sighting their
+accuser's own record contradicts at the spoken tick — the ratified per-channel tolerance, measured under the
+hardening brief's OWNER DECISION heading; they are the 462 → 460 gap. Every OFF byte identical
+(`build_testimony_ledger` reached only under the lever; golden unedited; `verify_samples.sh` 100/100; §12
+reader 0 mismatches). Adversarial verification 38 agents (7 lenses → 2 refuters per finding → critic):
+MERGE-AFTER-FIXES, all landed — a latent origin placement when a subject is listed in their own `co_present`
+(one-token fix, 0 rows moved, planted); the SUPERSET docstring corrected with its figures moved to E.2;
+`meetings/manager.py:726/:739` stale channel docstrings repaired (ruled into this PR so no second `meetings/`
+merge is needed; the vent sentence at :707 still true); duplicate (room, tick) coordinates on the account
+line deduped on CANONICAL room identity keeping the movement shape ("arriving in X at tick T" over "X at
+tick T"; 54 speakers; the sighting-vs-vent collision keeps the sighting's weaker wording — the owner may
+prefer the vent's, a one-line precedence change, ~3 rows, no cell). Codex: 4 rounds plus a fifth set ruled by
+the orchestrator (the "conflicting movement records" finding NOT REACHABLE — the conflict gate precedes both
+arms, pinned both ways). CONSEQUENCE FOR THE SMOKE: after this merge the lever-ON reader REFUSES the 21.23
+recording (seed 17 m0 reproduces 9 of 16 prompts, every miss a vote ballot), so #425 merged FIRST and this
+merge REOPENS the smoke window per the smoke report's §16 — the two-seed re-smoke is dispatched under Task
+21.23's record. Residue for 21.24's re-anchor: memo §5:519-521's pointer to E.1 → E.2; the smoke report's
+§8.2 reference column quotes the pre-#424 cells (an additive erratum). `docs/artifacts.md:107` recounted at
+the merged content.
+
 **Ready-to-paste prompt:** `agent_prompts/task-21-19-corroboration.md`
 
 ### Task 21.20 — What you saw is what you can say (lever `testimony_shapes`, default OFF)
@@ -7014,6 +7052,57 @@ amendment and the smoke's T2/T6 rows carry the byte-diff count as an information
 verdict; the reader EXITS 1 on a STOP, so the wrapper's `set -e` is load-bearing. Thirty-six verifier
 edits applied; anchors re-verified at HEAD `3339b9b8`; the ON-recording lines filled at `96b61318`;
 R9 amended at `88bc8be7`.
+
+**Merge-reality record (2026-09-03, MERGED BY THE ORCHESTRATOR ON THE OWNER'S INSTRUCTION — #425, squash
+`e2b252db`):** the owner ruled in the design thread on 2026-09-02 ("Go for the smoke; T4 equality passes;
+dispatch PR-2") and on 2026-09-03 ("Proceed with merges", after the orchestrator's recommendation set out the
+merge order and three rulings), so the ratification is the owner's, recorded here and on the PR. VERDICT:
+**GO**. Five live seeds (4, 17, 19, 26, 46; `Qwen/Qwen3.6-27B`, $0, 21m42s operator wall; 18 meetings /
+204 calls / 1,045,116 tokens on the `llm_calls` basis — 205 / 1,050,015 counting the one completed-but-
+defaulted call) at the ratified three-key slate; the first attempt ran with the wrapper's default retry
+budget (4, not the contracted 8) and was RE-RECORDED — the superseded bytes are preserved and quoted nowhere
+as a cell. All seven §8.1 tripwires PASS on the certified bytes through the ON-recording reader (exit 0):
+T1 `T-7` 0/4 [ADV]; T2 `R-13` 17/17 and `R-14` 78/78 (block-level, byte-diff agrees; emergency prompts
+gaining 0); T3 `R-15` 0/102; T4 `T-6` 130/130 ON against 28/130 OFF (the ordering clause bit); T5 `T-9a`
+55/55, `T-9b` 0/29; T6 `C-9` 101/102 = 99.0% (one ballot of margin over §8.1's 99%); T7 `B-1m1` 1425/73
+identical across columns. Both §9.1 preconditions DISCHARGED: `scripts/record_ml_corpus.sh` derives
+`REQUIRED_PROMPT_VERSIONS` from `--expect-levers` through `prompt_versions_for_set` (the v5 literals kept as
+the registry-bump base; the acceptance-CLI pairs from the map's own keys;
+`check_slate_bodies_carry_their_stamps` refuses any slate whose stamp outpaces its bodies — registry-derived
+colliding pairs, `impostor_roll_call` with `reporter_reasoning` or `testimony_shapes` — on BOTH derived-map
+paths; thirteen planted cases); the ON-recording reader ran after the validity gate. Projection:
+like-for-like ×1.1703 on tokens per meeting (primary; the same five seeds), all-games cross-check ×1.0725,
+tokens-per-game like-for-like ×1.0031 published beside them → 12h46m50s / 13h56m45s / 16h02m42s for the
+300-game record; a re-record of any refused seed sits outside the bracket. THE WATCH ITEM FIRED (E1): one
+`failed_call` row on seed 26 carries `error_type == "deadline_default"` — an opt_in speech turn at
+turn_index 5, a VALIDATION default (`error_message` "opt_in turn (turn 5) defaulted (validation) …"; the
+shared `error_type` is the recorder's documented design, not a mislabel; the husk's `free_text` "missed
+deadline; no turn submitted" is the legibility item), lost_openings 0. RULING (orchestrator, accepted by the
+owner's merge): §9.2's criterion is "a seed whose OPENING defaults" — NOT MET; the parenthetical names the
+watch item, not a wider trigger; the contract's own DoD item at :6868 as written could not be ticked and is
+walked NOT SATISFIED in the report's §14.1 — the GO is the memo's answer and the DoD line's premise is
+routed. ROUTED TO 21.24 (its re-anchor must carry them): (a) the corpus freeze guard
+`check_replay_provenance` refuses ANY deadline_default row while §9.2 names an opening — an owner amendment
+(§11 row) reconciling guard and criterion before the record starts, and a re-record allowance line item for
+a refused seed; (b) the husk `free_text` wording (frozen directory → owner decision); (c) a §11 row for the
+owner's T4-equality ruling (today only in this contract's R9); (d) §9.2 bullet 4's wording
+(`substrate_slate_mismatches` cannot make the comparison it describes); (e) the samples-leg manual watch for
+the item `refresh_samples.sh` / `validity_gate.py` do not check. E2 (a model fact, no criterion): both
+spoken `saw_kill` accounts were TRUE and named a real impostor; neither convicted (seed 19 m3 — the reporter
+ejected 3-1; seed 26 m0 — SKIPPED), the ballot's source-count block reading "0 accounts" against a true
+kill — 21.24 reads E2. Codex: 3 rounds on the PR (the STOP-on-deadline_default finding repeated twice and
+stands as ruled) plus the orchestrator's read of the final diff; adversarial verification 49 agents (8
+lenses → 2 refuters per finding → critic): NOTHING flips the verdict; a text-fix round landed twelve
+corrections (the PR body's superseded ×1.2355 → ×1.1505; "quoted nowhere" → "as a cell" with the five
+labelled context mentions; MANIFEST `git_sha` `3fd12a03` reconciled with the certified `14854a06` — the
+branch diff touches no frozen directory; §16 names PR #424 as the frozen-directory merge that REOPENS the
+window; 83 recorded vs 84 reconstructed speech prompts; the failed-call tokens; tokens/game vs
+tokens/meeting; the registry check catches registry drift, not env drift; the retry budget is in no byte).
+THE WINDOW IS REOPENED by #424's merge (its record under Task 21.19) — the orchestrator's ruling, accepted by
+the owner: a two-seed re-smoke (17 and 46, whose recorded ballots the reader can no longer reconstruct under
+#424) on the merged head before 21.24's first seed, reported as an additive section of the smoke audit,
+owner-gated. Preserved bytes: `/Users/danielkeinan/ailibi-smoke-21-23/{9p2i, 9p2i-attempt-1-default-retry-budget,
+first-seed-19, committed-same-five}`. `docs/artifacts.md:107` at 165 files / 8,383,265 bytes.
 
 **Ready-to-paste prompt:** `agent_prompts/task-21-23-smoke-wave2.md`
 
