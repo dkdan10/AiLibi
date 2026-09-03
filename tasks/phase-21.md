@@ -7102,7 +7102,17 @@ THE WINDOW IS REOPENED by #424's merge (its record under Task 21.19) — the orc
 the owner: a two-seed re-smoke (17 and 46, whose recorded ballots the reader can no longer reconstruct under
 #424) on the merged head before 21.24's first seed, reported as an additive section of the smoke audit,
 owner-gated. Preserved bytes: `/Users/danielkeinan/ailibi-smoke-21-23/{9p2i, 9p2i-attempt-1-default-retry-budget,
-first-seed-19, committed-same-five}`. `docs/artifacts.md:107` at 165 files / 8,383,265 bytes.
+first-seed-19, committed-same-five}`. `docs/artifacts.md:107` at 165 files / 8,383,265 bytes. **#426 (the two-seed re-smoke) MERGED BY THE OWNER, 2026-09-03, squash `e0c2adde`:** GO for the
+reopened window — seeds 17 and 46 on `44f0a28c`, all seven tripwires PASS through the same reader (T1 `T-7`
+0/2; T2 `R-13` 9/9, `R-14` 34/34; T3 `R-15` 0/43; T4 `T-6` 50/50 ON against 14/50 OFF; T5 `T-9a` 22/22, `T-9b`
+0/12; T6 `C-9` 43/43 — no residue, a WEAKER exercise of the predicate than the certified 101/102, reported as
+such; T7 `B-1m1` 544/28 identical), ZERO `deadline_default` rows under either shape, the certified bytes intact
+under the validity gate and REFUSED by the reader at seed 17 m0 (7 of 16 prompts) exactly as §16 predicted;
+9m38s, 443,176 tokens, $0; a THIRD live spoken `saw_kill` — true, naming a real impostor, SKIPPED (three for
+three unconverting across the two runs); Codex clean in one round; adversarial verification 20 agents, nothing
+flips. The record's window-open sha is `44f0a28c`; the un-bumped ballot stamp now names two lever-ON bodies
+after #424 (accepted with an erratum, no bump — 21.24's prerequisite (h)). The re-smoke's additive §18 lives in
+the smoke audit; its bytes at `/Users/danielkeinan/ailibi-smoke-21-23/post-424-9p2i`.
 
 **Ready-to-paste prompt:** `agent_prompts/task-21-23-smoke-wave2.md`
 
