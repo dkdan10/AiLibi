@@ -314,4 +314,10 @@ directory's `README.md`, which carries the tallies and the proposed routing.
   prompts, the seven tripwires against their sample-local predicates, the three
   watch cells, the Wave-1 no-regression check, the re-priced projection, the
   abandon criteria read one by one, and the GO/ABANDON call. It writes no bar
-  and reads none.
+  and reads none. It also carries a dated **re-smoke addendum** (§18): PR #424
+  merged into two frozen directories and reopened the smoke window by §16's own
+  rule, so seeds 17 and 46 — the two the lever-ON reader could no longer
+  reconstruct — were re-recorded on the merged head, and §18 re-runs the gate,
+  the stamp, the seven tripwires, the by-hand watch scan and the §9.2 criteria
+  over those bytes. Records are not rewritten: §§0–17 stand as the five-seed
+  run they certify.

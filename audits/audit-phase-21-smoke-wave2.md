@@ -2080,3 +2080,439 @@ if __name__ == "__main__":
 
 **Every reader in this appendix was re-run against the preserved bytes after the report was written,
 and each reproduces the numbers it is cited for to the digit.**
+
+---
+
+## 18 — Post-#424 re-smoke, 2026-09-03
+
+**ADDITIVE. Nothing above this line is rewritten.** §§0–17 stand exactly as merged: they are the
+record of the five-seed run certified at `14854a06`, and every cell in them still reads what it read.
+This section is a SECOND run on a SECOND source state, and it says so in every place the two could be
+confused.
+
+### 18.0 The verdict, in one line
+
+**GO on the reopened window — and this time the watch item did NOT fire.** Two live seeds (17 and 46)
+recorded at the ratified Wave-2 slate on the merged head; the validity gate PASSED on all ten checks
+with both reconstructions byte-identical; **all seven §8.1 tripwires PASS against their own
+sample-local predicates** (`verdict: every GATED predicate PASSES on these bytes`, the reader exiting
+0 with `stopped_cells` empty); **no `audits/audit-phase-21-preregistration.md` §9.2 abandon criterion
+is met**, read one by one in §18.6; the committed record untouched; and **zero recorded `failed_call`
+rows of any kind, so `deadline_default` reads 0 under either shape** (§18.5).
+
+**Source state this section certifies: `44f0a28c`** — `origin/main` at this writing, carrying PR #425
+(`e2b252db`, this report) and PR #424 (`ffaf9991`, the ledger's grounding semantics). The freeze rule
+in §0 and §16 governs from here unchanged: any further merge into `agents/`, `meetings/`,
+`observation/`, `orchestrator/` or `agents/strategic/prompts/` reopens the window again.
+
+**The MANIFEST's `git_sha` is `44f0a28c` too**, and there is nothing to reconcile this time: the
+recording ran from a worktree whose only untracked content is a gitignored `scratchpad/`, so the
+stamp and the certified state are the same commit. (§0's reconciliation paragraph for `3fd12a03`
+belongs to the five-seed run and is untouched.)
+
+### 18.1 Why the window reopened, and why these two seeds
+
+§16 states the rule and named the merge in flight. It landed. **Exactly four files under the frozen
+directories moved between the certified state and this head, and all four are #424's:**
+
+```
+$ git diff --stat 14854a06..44f0a28c -- agents meetings observation orchestrator
+ agents/strategic/prompts/qwen3_6_27b/vote_ballot.j2   |   2 +-
+ meetings/corroboration.py                             | 241 ++++++++++++++++++---
+ meetings/manager.py                                   |  21 +-
+ meetings/transcript.py                                | 104 ++++++++-
+ 4 files changed, 323 insertions(+), 45 deletions(-)
+```
+
+**Seeds 17 and 46 are the two §16 names**, and they are drawn for the reason §16 gives rather than
+re-stratified: they are the seeds whose recorded ballots the lever-ON reader can no longer reconstruct
+under #424 (7 of 16 and 6 of 13 recorded ballot prompts), so they are precisely the bytes the
+reopened window costs. **This is a RE-SMOKE of a named consequence, not a second seed draw**: §3's
+stratification is the five-seed run's and is not re-derived here, and no cell below is compared to a
+stratum count.
+
+`scripts/counterfactual_phase21.py` also moved by 21 lines over the same range — #424's re-pin of
+`COMMITTED_CORROBORATION_CELLS`. **The reader run below is therefore the merged head's reader**, not
+the one §15 ran.
+
+### 18.2 The recorded configuration — the Step-3 block, verbatim
+
+The same block §2 publishes, with one path changed. The operator's `FEATHERLESS_API_KEY` is sourced
+from the gitignored `.env` at the main checkout and is **not reproduced here, in the PR, or in any log
+excerpt in this record**; the wrapper prints an eight-character prefix at `scripts/refresh_samples.sh`:551
+and this section keeps none of it.
+
+```
+AILIBI_LLM_PROVIDER=featherless
+AILIBI_PROMPT_SET=qwen3_6_27b
+AILIBI_LLM_MEETING_MODEL=Qwen/Qwen3.6-27B
+AILIBI_NUM_PLAYERS=9  AILIBI_NUM_IMPOSTORS=2  AILIBI_TASKS_PER_CREWMATE=2
+AILIBI_SAMPLE_DIR=/Users/danielkeinan/ailibi-smoke-21-23/post-424-9p2i   # absolute, OUTSIDE the repo
+AILIBI_REFRESH_WORKERS=2
+AILIBI_SEED_MAX_ATTEMPTS=8
+AILIBI_REPORTER_REASONING=1
+AILIBI_CORROBORATION_DISCIPLINE=1
+AILIBI_TESTIMONY_SHAPES=1
+# AILIBI_IMPOSTOR_ROLL_CALL — unset, in this and in every later gate/instrument shell
+```
+
+**The two shells are §2.1's, unchanged.** Shell A carries the three Wave-2 exports and is the only
+shell that touched the new `$SMOKE_DIR`: the recording, the validity gate, both reconstructions and the
+tripwire reader. Shell B carries no lever export at all and is the only shell that ran the bare
+committed-set gate. `api/replay_loader.py`:655 is still the mechanism that makes crossing them a
+refusal rather than a wrong number, and §18.4 records the crossing that was actually run.
+
+**Two wrapper preflights were run before any seed staged**, and `/Users/danielkeinan/ailibi-smoke-21-23`
+gained nothing from either. The sanctioned preview — exported AND declared — echoed the two overridden
+knobs, which is what attests them (no recorded byte carries either; §12's basis note applies unchanged):
+
+```
+[dry-run] seeds: 17,46
+[dry-run] sample dir: /Users/danielkeinan/ailibi-smoke-21-23/post-424-9p2i
+[dry-run] substrate flags: expected levers ON = reporter_reasoning,corroboration_discipline,
+          testimony_shapes; every other live toggle OFF; the graduated levers unconditional ON
+[dry-run] seed workers: 2 parallel …
+[dry-run] seed crash-retry: up to 8 attempt(s) per seed on a transport/crash error
+Substrate slate OK: expected levers ON = reporter_reasoning,corroboration_discipline,testimony_shapes;
+every other live toggle OFF; the graduated levers unconditional ON.
+```
+
+and the HALF-slate direction — one lever removed from the export, the whole slate still declared —
+refuses and exits 1:
+
+```
+Error: the live substrate-lever slate does not match --expect-levers.
+       Expected ON: reporter_reasoning,corroboration_discipline,testimony_shapes
+       Mismatch: corroboration_discipline must be ON but the live slate reads OFF
+       (AILIBI_CORROBORATION_DISCIPLINE)
+       Export exactly the levers you named and unset every other AILIBI_*
+       lever export, then re-run. Nothing was staged.
+```
+
+The real run's own preflight block, before any seed staged:
+
+```
+Using Featherless API key prefix: <redacted — the wrapper prints 8 characters; this record keeps none>
+Locked substrate OK: AILIBI_PROMPT_SET=qwen3_6_27b.
+Model-set coupling OK: qwen3_6_27b on Qwen/Qwen3.6-27B.
+Model registry OK: Qwen/Qwen3.6-27B is registered in the production client.
+Substrate slate OK: expected levers ON = reporter_reasoning,corroboration_discipline,testimony_shapes;
+every other live toggle OFF; the graduated levers unconditional ON.
+```
+
+**Both seeds carry the four COMPOSITE prompt-version strings**, which is §4.1's fix confirmed a second
+time on live bytes at the merged head — the MANIFEST rows read
+`accusation_round.qwen3_6_27b.v5.reporter_reasoning+accusation_round.qwen3_6_27b.v5.testimony_shapes,
+crewmate_report.qwen3_6_27b.v5.reporter_reasoning+crewmate_report.qwen3_6_27b.v5.testimony_shapes,
+impostor_report.qwen3_6_27b.v5,
+vote_ballot.qwen3_6_27b.v5.corroboration_discipline+vote_ballot.qwen3_6_27b.v5.testimony_shapes` for
+seeds 17 and 46 alike, with `git_sha` `44f0a28c` and `cost_usd` `0.0000` on both.
+
+### 18.3 The two seeds, as recorded
+
+| seed | wall (serial) | meetings | ejections | ending | winner | calls | tokens | cost |
+|---|---|---|---|---|---|---|---|---|
+| 17 | 576 s | 4 | 1 | **CREWMATE_TASKS** | CREWMATES | 42 | 210,078 | $0.0000 |
+| 46 | 573 s | 5 | 2 | CREWMATE_EJECT | CREWMATES | 44 | 233,098 | $0.0000 |
+| **both** | **9m36s refresh / 9m38s operator wall** | **9** | **3** | — | CREW 2 / IMP 0 | **86** | **443,176** | **$0.0000** |
+
+```
+9 meetings | 424,945 input + 18,231 output = 443,176 tokens | $0.0000
+tokens/call    5,153.2
+calls/meeting     9.56
+tokens/meeting 49,241.8
+```
+
+Both seeds ran concurrently on the two workers from the first second, so the leg's wall is the slower
+seed: 1,149 s of serial seed work across 576 s of wall on two workers = **99.7% occupancy**. Total
+operator wall **9m38s** (07:23:58Z → 07:33:36Z), the wrapper's own `Refresh complete in 9m36s`.
+
+**Retries, transport blips, worker diagnostics: none**, and no seed consumed a second attempt of its
+budget of 8. As in §12, that reading comes from the operator's shell and the wrapper's log rather than
+from the preserved bytes, which stamp no attempt count.
+
+The recorder's own summary counters, from the whole-set eval-report rebuild:
+
+```
+lost_openings 0 (defaults 0) | vote_defaults 0 (must_vote 0) | ballot_redirects 1 (eject 1)
+meeting_rate 1.00 (9 meetings) | ejection_accuracy 1.0000 (3/3)
+```
+
+**Two things these two seeds exercise that the five-seed run could not**, both stated as observations
+and gated by nothing:
+
+* **a task-completion ending.** Seed 17 ends `CREWMATE_TASKS`. §5.1 and §13 item 4 record that path as
+  UNTESTED at 21.14 and at the certified run, and the committed census carries none either. It is
+  exercised here. No criterion names it and none is invented.
+* **the guard-redirect provenance marker, row 4 of §11.1, is EXERCISED and green.** The certified run
+  marked it UNEXERCISED because no ballot was redirected. Here one was, and it carries machine-readable
+  provenance rather than only a display string: **43 ballots, 1 display-marked (`under_gate_redirect`),
+  1 machine row (`guard_redirected_from='p-5'`, seed 17 meeting-1, voter p-4 → p-8), 0 missing.**
+
+**A third live spoken `saw_kill`, and it behaves like the first two.** §8.4's shape fires again on
+these bytes — the testimony census reads `saw_kill: 1` under ON against 0 under OFF — and §17.7's
+reader, run under Shell A with roles from the committed re-seeding, gives its outcome:
+
+```
+seed 17 headless-seed-17:meeting-3  turn_index 0
+  observation {"room": "EAST_HALL", "subject": "p-4", "tick": 29, "type": "saw_kill"}
+  speaker p-1 = CREWMATE  (reporter: p-1)
+  named   p-4 = IMPOSTOR
+  outcome SKIPPED  ejected None = -
+  ballot tally {'p-4': 1, 'p-1': 1, 'SKIP': 1}
+```
+
+**True, naming a real impostor, and not converted** — three for three across the two runs, which is
+§16 item 3's cell gaining a third case. Three cases still decide nothing and no criterion names them;
+they are carried forward for 21.24's audit exactly as §16 routes them.
+
+### 18.4 The gate, the stamp, and the two shells
+
+**`scripts/validity_gate.py`, Shell A, all ten checks:**
+
+```
+uv run python scripts/validity_gate.py "$SMOKE_DIR" --expected-model Qwen/Qwen3.6-27B --require-zero-cost
+```
+
+```
+Validity gate over /Users/danielkeinan/ailibi-smoke-21-23/post-424-9p2i (2 games):
+  [PASS] all_games_reach_game_over: 2/2 games reached a reconstructed game_over with a consistent win condition
+  [PASS] meeting_rate_and_resolution: meeting_rate 1.0 (floor 0.60); 9 resolved meetings; 0 unresolved
+  [PASS] no_duplicate_meeting_rows: 0 duplicate meeting rows over 9 (want 0)
+  [PASS] no_tick_1_kills: 0 kills at tick <= 1 (want 0)
+  [PASS] no_friendly_fire_kills: 0 impostor-on-impostor kills (want 0)
+  [PASS] no_betrayal_ballots_or_accusations: 0 teammate-betrayal ballots/accusations over 43 multi-impostor ballots (want 0)
+  [PASS] no_railroaded_crew_ejections: 0 railroaded crew rows over 157 rendered crew suspicions (want 0)
+  [PASS] no_dangling_primary_reason_id: 0 dangling primary_reason_id over 43 ballots (want 0)
+  [PASS] cost_and_provenance_exact: model='Qwen/Qwen3.6-27B', 4 prompt versions, substrate stamped exact on 2 games
+  [PASS] byte_identical_reconstruction: 0 samples drifted from byte-identical reconstruction (want 0)
+Validity gate PASSED (all checks green).
+```
+
+`bash scripts/verify_samples.sh "$SMOKE_DIR"` in that same shell, twice: `All 2 samples verified clean.`
+both times.
+
+**The recorded substrate stamp, read off the two `game_over` rows** rather than a live snapshot:
+
+```
+seeds with a game_over stamp: [17, 46]
+live SUBSTRATE_FLAG_KEYS: 25
+distinct recorded stamps: 1   ->  keys: 25   ON: 24   OFF: ['impostor_roll_call']
+substrate_stamp_mismatches(stamp)  ->  differing=[] unknown=[]   (each of the two)
+retired_levers_stamped_off(stamp)  ->  []                        (each of the two)
+substrate_slate_mismatches(['reporter_reasoning','corroboration_discipline','testimony_shapes']) -> []
+```
+
+**Shell B — the bare committed-set gate**, run with no lever export at all:
+
+```
+=== verifying replays/samples/4p1i/ ===   All 50 samples verified clean.
+=== verifying replays/samples/9p2i/ ===   All 50 samples verified clean.
+$ git status --porcelain replays/
+(empty)
+```
+
+`scripts/counterfactual_phase21.py --sets all` also ran in that bare shell and exited 0, and its
+`corroboration_pins` block reads **#424's four re-pinned cells at this head**, `"checked": true`:
+
+```
+{'checked': True, 'measured': {'accused_without_a_first_hand_source': [460, 1525],
+ 'ejected_without_a_first_hand_source': [10, 425], 'ejected_on_an_answering_turn': [33, 429],
+ 'ejected_with_a_walkable_pair': [79, 429]}}
+```
+
+### 18.5 The watch item, scanned by hand — and it did NOT fire
+
+The validity gate still has no `deadline_default` check at all, so the scan is by hand, over the
+recorded bytes, with §17.4's reader:
+
+```
+failed_call rows by error_type: {} (none recorded)
+deadline_default rows (EITHER shape): 0
+```
+
+and the recorder's own counters beside it: **`lost_openings 0 (defaults 0)`** and
+**`vote_defaults 0 (must_vote 0)`**. There is no row to quote, because there is no row.
+
+**The corpus freeze guard would refuse nothing here, and that is demonstrated in BOTH directions**
+rather than asserted. §17.6's branch, driven by hand over the two byte sets:
+
+```
+$ SMOKE_DIR=…/post-424-9p2i   → check_replay_provenance (deadline_default branch): 0 violations, exit 0
+$ SMOKE_DIR=…/9p2i            → check_replay_provenance (deadline_default branch): 1 violation(s) —
+    replay-seed-26.jsonl: 1 deadline_default failed-call row(s) — the turn(s) were DEFAULTED, so the
+    transcript carries a fallback husk rather than model output; re-record the seed, exit 1
+```
+
+**The second run is the planted case for the first**: the same scan over the certified bytes still
+bites on seed 26, so the 0 above is a scan that could have failed and did not — not a scan that cannot
+fail (AGENTS.md craft rule 2).
+
+**The contract's DoD item IS SATISFIED on these bytes.** §14.1 marks it NOT SATISFIED for the
+five-seed run and that verdict is untouched. The item — the watch-item line §14.1 cites at
+`tasks/phase-21.md`:6868, which sits at `:6906` at this head after the phase doc took the two
+merge-reality paragraphs — requires:
+
+> no recorded failed-call row carries `error_type == "deadline_default"` under either shape, and the
+> recorder's own summary counters for lost openings and vote defaults are quoted
+
+Both halves hold here: zero rows under either shape, and the two counters are quoted above. **Two
+seeds do not price a rate and this section gives none** — the observations now stand at 1 default in
+204 recorded calls (the certified run), 0 in 176 (the superseded attempt, §2.0) and 0 in 86 (here).
+**Nothing about §16 items 1 and 2 changes:** the guard/criterion asymmetry and the husk's `free_text`
+wording are defects in the machinery, not facts about a seed, and both remain ROUTED to 21.24 exactly
+as §16 routes them. A clean two-seed run does not discharge either.
+
+### 18.6 The seven tripwires, and the §9.2 criteria
+
+**The reader, run under the SAME lever-ON shell the recording was made in, after the validity gate**,
+exactly as the contract names it:
+
+```bash
+uv run python scripts/counterfactual_phase21.py --recording "$SMOKE_DIR" --recorded-slate on --json
+```
+
+It exited **0**, `payload["stopped_cells"]` is **`[]`**, `payload["pooled_is_informational"]` is
+**true**, and the same command without `--json` ends with
+**`verdict: every GATED predicate PASSES on these bytes`**. The recorded slate the reader checked
+against its own stamp is `on`; the pooled block is the union over one recording and decides nothing.
+
+| tripwire | cell | the ratified SAMPLE-LOCAL predicate | reading on these bytes | verdict |
+|---|---|---|---|---|
+| **T1** (never-worse bar + STOP) | `T-7` | the count is 0, whatever the denominator | **0/2 = 0.0000** `[ADV]` | **PASS** |
+| **T2** (STOP) | `R-13` | every observed body-report opening gains the block — 100% of the observed denominator | **9/9 = 1.0000**; emergency openings that gained one = 0; byte-diff column 9/9, agrees | **PASS** |
+| **T2** (STOP) | `R-14` | every observed non-reporter speech turn in a body-report meeting gains it — 100%, and no emergency-meeting prompt gains either | **34/34 = 1.0000**; emergency speech prompts that gained one = 0; byte-diff column 34/34, agrees | **PASS** |
+| **T3** (STOP) | `R-15` | the count is 0, whatever the ballot denominator | **0/43 = 0.0000** | **PASS** |
+| **T4** (STOP) | `T-6` | 100% of observed location accounts reach the map under ON (and the OFF reconstruction of the same run is strictly below it) | **50/50 = 1.0000** ON against **14/50 = 0.2800** OFF — strictly below, so the ordering clause bites rather than passing on the equality the owner ruled permissible | **PASS** |
+| **T5** (never-worse bar + STOP) | `T-9a` | every observed CREW speech turn gains the ELICITATION block | **22/22 = 1.0000** | **PASS** |
+| **T5** (never-worse bar + STOP) | `T-9b` | the count of IMPOSTOR speech prompts gaining an ELICITATION block is 0 | **0/12 = 0.0000** `[ADV]` | **PASS** |
+| **T6** (STOP) | `C-9` | the observed share is ≥ 99% of ballots | **43/43 = 1.0000** — no residue on these bytes; byte-diff column 43/43, agrees | **PASS** |
+| **T7** (STOP) | `B-1m1` | the meeting-1 row count is identical between the run's own OFF and ON columns | **544/28 = 19.4286 in both columns** | **PASS** |
+
+**T6 reads 100% here where the certified run read 99.02%, and that is a weaker exercise of the
+predicate, not a stronger result.** §15 records why the five-seed reading mattered: one ballot in
+§8.1's stated residue put the ≥ 99% floor against a real margin. These 43 ballots carry no residue, so
+T6 passes without approaching its floor — the same thing §15 says about the superseded attempt's 88/88.
+This section states it rather than reading 100% as an improvement.
+
+**Every denominator here is smaller again** — 9 openings, 34 speech turns, 43 ballots, 50 location
+accounts — and §8.1 ratifies that as expected and **NOT a trip**. The baseline-8 population column
+binds neither run and is not restated here; §8's tables hold it.
+
+**The four corroboration cells the reader prints for these bytes, as THIS RUN's OWN cells.** They are
+`OBSERVED` rows of §5, never gated, and they are **not a prediction of and not a re-derivation of**
+#424's re-pinned committed cells — those are a 672-meeting pooled walk over the committed record and
+are quoted beside them only so the two cannot be confused:
+
+| cell | **these two seeds (ON)** | #424's re-pinned COMMITTED cell (pooled, four sets) |
+|---|---|---|
+| `C-1` accused subjects with NO first-hand source | **9/24 = 37.5%** | 460/1,525 |
+| `C-2` ejected subjects with NO first-hand source | **0/3 = 0.0000** `[ADV]` | 10/425 |
+| `C-3` ejections whose charge ANSWERED the ejectee's own | **0/3 = 0.0000** `[ADV]` | 33/429 |
+| `C-4` ejected subjects with a map-satisfied placement pair | **0/3 = 0.0000** `[ADV]` | 79/429 |
+
+Three of the four sit on a denominator of three. **They are directional to the point of being
+anecdotal and no criterion names any of them**; they are on the page because the re-smoke's brief asks
+for the run's own cells beside the re-pinned ones.
+
+**The §9.2 criteria, quoted VERBATIM and read one at a time:**
+
+| § 9.2 criterion, verbatim | reading on this run | verdict |
+|---|---|---|
+| "a `scripts/validity_gate.py` FAIL on any leg" | one leg, all ten checks PASS (§18.4) | **NOT MET** |
+| "a seed whose opening defaults (the `(deadline_default)` watch item)" | no opening defaulted and **no turn of any kind did**: `lost_openings 0 (defaults 0)`, and zero `failed_call` rows of any error_type over 86 recorded calls (§18.5). The criterion is not reached, and on these bytes neither is the wider reading §14.1 walks | **NOT MET** |
+| "a guard trip" | no guard fired: both wrapper preflights behaved as designed (the sanctioned slate passed, the half-slate refused with nothing staged), and `check_replay_provenance` — still **not in this wrapper's path at all** — refuses nothing when driven by hand over these bytes (§18.5) | **NOT MET** |
+| "a lever-stamp mismatch between the recorded snapshot and the declared slate, compared through `orchestrator.replay.substrate_slate_mismatches` and **never re-derived**" | `substrate_slate_mismatches(['reporter_reasoning','corroboration_discipline','testimony_shapes'])` → `[]`, and `substrate_stamp_mismatches` empty on each of the two recorded stamps (§18.4) | **NOT MET** |
+| "any of the seven §8.1 tripwires failing **its predicate** — the sample-local criterion in §8.1's third column, evaluated over whatever the run actually recorded. A denominator smaller than baseline 8's is expected at the smoke and is NOT a trip." | all seven PASS; the reader exits 0 and `payload["stopped_cells"]` is empty | **NOT MET** |
+
+**Classes this run observed that no criterion names**, recorded in the memo's own words rather than
+stretched to fit: the task-completion ending and the exercised guard-redirect marker (§18.3); the
+third spoken `saw_kill`, true, naming a real impostor, and not converting (§18.3); T6 passing without
+a residue to test it against (above); and the two-seed token reading (§18.7). **No §9.2 criterion
+names any of these, and this section invents none.** The precedent for saying so in those words is
+`audits/audit-phase-20-smoke.md` §12.
+
+### 18.7 The certified bytes under the merged head — the fact that made this run necessary
+
+**The preserved five-seed bytes still validate.** The OFF-side tools reach them unchanged: run in the
+lever-ON shell at this head, `scripts/validity_gate.py` over
+`/Users/danielkeinan/ailibi-smoke-21-23/9p2i` PASSES all ten checks over its 5 games, 18 meetings and
+102 ballots, `byte_identical_reconstruction` included. **The recording is intact; #424 did not corrupt
+it.**
+
+**What #424 removed is the ON reader's ability to walk it.** The same reader §18.6 ran, pointed at the
+certified bytes, exits **1** before it reaches a single tripwire:
+
+```
+qwen3_6_27b headless-seed-17:meeting-0: 7 of 16 recorded prompts were NOT reproduced by the walk, so
+the recorded-response stub missed and the manager defaulted those calls. The first one starts:
+'<persona>\nYou are p-2, voting at an AiLibi meeting: two hidden impostors kill crewmates; the crew
+wins by voting both impostors out, the impostors by surviving until they equal or '. This is a DEFECT
+IN THIS SCRIPT's reconstruction (the wrong renderer bundle, or a shell whose levers are not the
+recording's), not a finding about the recorded bytes
+```
+
+**7 of 16, on seed 17's first meeting, and the prompt it names is a vote ballot** — exactly the count
+and exactly the surface §16 predicted from #424's diff. **This is why the seven tripwires could not
+simply be re-read on the same bytes at `$0`, and it is the whole reason this section exists.** The
+refusal is the instrument being honest about a renderer that no longer matches the record, not a defect
+in either.
+
+**One two-seed operating reading, published with its limits.** Against the SAME two committed seeds
+(the like-for-like denominator §12.1 uses), tokens per meeting read **48,536.9 OFF against 49,241.8
+ON = ×1.0145**. **This does not re-price §12.1 or §12.2 and must not be read as doing so**: it is two
+seeds and nine meetings against the certified run's five and eighteen, the two ON runs disagree with
+each other on the same two seeds (the certified run's seeds 17 and 46 alone read 60,439.8 tokens per
+meeting over six meetings, because a live model is sampled per call and the trajectories differ), and
+§12.1's own finding is that a slate drawn for lever coverage is not a representative token sample.
+**The record's basis stays §12.1's ×1.1703 centre and §12.2's 12h47m–16h03m bracket**, both derived
+from five seeds; this figure is one more observation beside them and bounds nothing.
+
+### 18.8 What this re-smoke does NOT cover
+
+Named rather than left to be discovered. §13's eight items stand; these are the ones specific to a
+two-seed run on the merged head.
+
+1. **Two seeds, nine meetings, three ejections.** Smaller than the certified run in every denominator.
+   **No pre-registered bar is declared met or missed here either**, and every cell above is
+   directional at this n.
+2. **The §8 lever-coverage tables, the §9 watch cells, §10's honesty and solvability probes and
+   §11.1's Wave-1 marker pass are NOT re-run.** This section re-runs what the reopened window
+   invalidated — the gate, the stamp, the seven tripwires and the watch scan — and leaves the
+   five-seed run's measurement sections standing as what they are: measurements of those bytes at
+   `14854a06`, which §18.7 shows are still valid bytes.
+3. **The projection is not re-derived** (§18.7), and §12.2's bracket is unchanged.
+4. **One wrapper, one roster**, as at §13 item 1: `scripts/refresh_samples.sh` on 9p2i only.
+5. **The corpus recorder's freeze path is still exercised only by §4.1's planted cases**, and its
+   `--seeds` slice still finalizes nothing.
+
+### 18.9 The verdict, the bytes, and what is unchanged
+
+**GO on the reopened window**, ruled against `audits/audit-phase-21-preregistration.md` §9.2: no
+abandon criterion is met (§18.6), all seven §8.1 tripwires PASS against their sample-local predicates,
+the validity gate PASSED on all ten checks with both reconstructions byte-identical, the recorded
+substrate stamp is the declared slate on both seeds by both registered comparisons, the committed
+record is untouched, and no recorded `failed_call` row exists of any kind.
+
+**The adopting record's window opens on `44f0a28c`.** The §16 rule is unchanged and governs from here:
+any further merge into `agents/`, `meetings/`, `observation/`, `orchestrator/` or
+`agents/strategic/prompts/` reopens it again. **§16's two ROUTED items are untouched by a clean run**
+— item 1 (the guard/criterion asymmetry, a 21.24 PRECONDITION) and item 2 (the husk's `free_text`
+wording, and a `meetings/` edit that will itself reopen this window) are defects in the machinery, and
+a two-seed run that happened not to default cannot discharge either. Items 3–6 stand, with item 3
+gaining the third case §18.3 records.
+
+**The bytes are PRESERVED, not deleted**, beside the four sets §16 names:
+
+```
+/Users/danielkeinan/ailibi-smoke-21-23/post-424-9p2i    3,115,956 bytes over 5 files
+  — THIS section's run, seeds 17 and 46 at 44f0a28c
+```
+
+so a routed repair can be re-measured on them at `$0` without re-recording a seed.
+
+**And the standing canon, stated where this section needs it, exactly as §0 and §14.1 state it:**
+baseline 7 is canon by explicit owner override of a FINDING verdict, with bar 1 missed at
+61/103 = 0.5922 against ≥ 0.60 and bar 2 missed at 42 against < 35
+(`audits/audit-phase-20-baseline-7.md` §6, §6.1). Nothing in this section states or implies that those
+bars passed.
