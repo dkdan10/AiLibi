@@ -39,6 +39,29 @@ Any merge into `agents/`, `meetings/`, `observation/`, `orchestrator/` or
 `agents/strategic/prompts/` between this report and the record reopens the window; the smoke then
 runs again from zero, on the changed source, with every number re-derived.
 
+**The MANIFEST's `git_sha` is `3fd12a03`, and that is not a second source state.** The wrapper
+stamps the commit the working tree was at when the recording ran; `3fd12a03` is a commit on THIS
+PR's branch, and `14854a06` is the branch's base and the state this report certifies. The whole
+difference between them is:
+
+```
+$ git diff --stat 14854a06..3fd12a03
+ audits/README.md                       |    9 +
+ audits/audit-phase-21-smoke-wave2.md   | 1355 ++++++++++++++++++++++++++++++++
+ docs/artifacts.md                      |    2 +-
+ scripts/record_ml_corpus.sh            |  188 +++--
+ tests/scripts/test_record_ml_corpus.py |  200 ++++-
+ 5 files changed, 1690 insertions(+), 64 deletions(-)
+```
+
+**No frozen directory appears in it** — nothing under `agents/`, `meetings/`, `observation/`,
+`orchestrator/` or `agents/strategic/prompts/` — so the substrate that rendered these prompts and
+stepped these games IS `14854a06`'s, and the two shas name the same recording substrate. Of the
+five paths that did move, `audits/`, `docs/` and `tests/` render nothing, and
+`scripts/record_ml_corpus.sh` is the CORPUS recorder, which this run never drove: the smoke records
+through `scripts/refresh_samples.sh` (§2). The stamp is reported as recorded rather than corrected
+by hand, and this paragraph is the reconciliation.
+
 **The memos own the criteria.** `audits/audit-phase-21-preregistration.md` owns the bars, the
 decision rule, the seven tripwire predicates, the abandon criteria and the preconditions;
 `audits/audit-phase-21-counterfactual.md` owns the predicted cells and its Errata. **Where this
@@ -86,7 +109,9 @@ AILIBI_TESTIMONY_SHAPES=1
 **That is the contract's Step-3 block exactly**, and the wrapper's own preview confirms both knobs
 took effect: `seed workers: 2 parallel` and `seed crash-retry: up to 8 attempt(s) per seed`. The
 wrapper's featherless defaults are 2 and **4** (`scripts/refresh_samples.sh`:441, :461), so the
-retry budget is an override and is exported rather than assumed.
+retry budget is an override and is exported rather than assumed. **Neither knob is recorded into
+any byte this run preserved** — `AILIBI_SEED_MAX_ATTEMPTS` is read at :461 and stamped nowhere — so
+this block and the wrapper's echo are what attest them, not `$SMOKE_DIR` (§12).
 
 **The three lever env names were read out of the registry and `.env.example`, not typed from the
 contract.** `orchestrator/replay.py`:675-682 holds the four live toggles and
@@ -123,13 +148,28 @@ second run only.** Not one cell below comes from the first attempt. Both are pre
 
 | attempt | retry budget | path | status |
 |---|---|---|---|
-| 1 | 4 (the wrapper default) | `/Users/danielkeinan/ailibi-smoke-21-23/9p2i-attempt-1-default-retry-budget` | superseded; quoted nowhere |
+| 1 | 4 (the wrapper default) | `/Users/danielkeinan/ailibi-smoke-21-23/9p2i-attempt-1-default-retry-budget` | superseded; quoted nowhere AS A CELL (five labelled context mentions, enumerated below) |
 | **2** | **8 (the contracted export)** | `/Users/danielkeinan/ailibi-smoke-21-23/9p2i` | **the run this report certifies** |
 
 A live model is sampled per call, so the two attempts are different bytes, not a re-derivation of
 the same ones. **The first attempt is kept and named rather than deleted** — an operator who wants
-to know what the wrong configuration produced can read it — and nothing in this report depends on
-it.
+to know what the wrong configuration produced can read it.
+
+**"Quoted nowhere" means quoted nowhere AS A CELL, and the qualifier is exact.** No number in any
+table, tripwire row, projection or verdict below comes from the first attempt. It IS quoted five
+times as labelled non-cell CONTEXT, each mention naming the attempt as superseded and each true
+against its own bytes:
+
+| § | what the superseded attempt is quoted for |
+|---|---|
+| §8.4 | it also carried a spoken `saw_kill` and also fired the E.1 interaction — stated as reachability, explicitly NOT as a rate |
+| §11.1 | it exercised the guard-redirect marker (5 redirects, 6 machine rows, 0 missing), which is why row 4 here is marked UNEXERCISED rather than borrowing it |
+| §11.2 | 0 defaulted turns in 176 recorded calls, beside this run's 1 in 204 — two observations with their denominators, and no rate |
+| §15 | its `C-9` read 88/88 = 100%, which is why this run's 101/102 is the reading that actually tested the ≥ 99% predicate |
+| §16 | its path and byte count, as preserved bytes |
+
+**No published cell depends on any of them**: delete all five and every table, every tripwire
+verdict and every projection figure in this report is unchanged.
 
 ### 2.1 The two shells, and the mechanism that makes crossing them a refusal
 
@@ -325,8 +365,16 @@ each MANIFEST row against the expected map and runs only on the FREEZE path, i.e
   environment by the committed `orchestrator.replay.env_var_for_lever`. A key that is not a live
   toggle is refused before anything stages;
 * `check_prompt_version_registry` additionally re-derives the slate-resolved map in a fresh process
-  and refuses if it has moved since startup, so a lever export that changed mid-run cannot record
-  one substrate and freeze against another;
+  and refuses if it has moved since startup. **What that catches is narrower than a lever drift,
+  and the report states it precisely rather than claiming the stronger guarantee:** the
+  re-derivation builds its own environment from the `--expect-levers` DECLARATION
+  (`env = {env_var_for_lever(key): "1" for key in keys}`, `scripts/record_ml_corpus.sh`:796-798),
+  never from the live environment, so a lever export that changed mid-run is invisible to it. What
+  it does catch is a REGISTRY or OVERLAY change between the startup derivation and this check —
+  the two launches resolving the same declaration differently — which is the way the map a record
+  freezes against could stop being the map its meetings stamp. The live exports are judged
+  elsewhere: by the wrapper's substrate preflight before recording (§2.2) and by
+  `api/replay_loader.py`:655 at every reconstruction (§2.1);
 * `check_recorded_prompt_versions` and the two dry-run echoes read the derived map;
 * the acceptance CLI's `KEY=VALUE` pairs are emitted by the SAME derivation, **from the map's own
   keys**. This is the one place the shape of the old constant could not be carried forward: the old
@@ -719,6 +767,16 @@ observed:
    re-price E.1's per-row arithmetic — that is pinned on a synthetic kill meeting by
    `tests/meetings/test_corroboration.py::TestAdoptedClauseWording`.
 
+**Two speech denominators appear in this report, and they are different bases rather than a
+discrepancy.** §8's byte census counts RECORDED calls — 83 `accusation_round` prompts in
+`llm_calls`, by §17.3's classifier — while T5 counts one per RECONSTRUCTED render, which is the
+**84** speech turns the transcripts carry (102 turns less 18 openings; 55 crew + 29 impostor in
+§15). The single turn between them is seed 26's defaulted husk (§11.2): it exists as a transcript
+turn, but its burned generation is recorded in the `failed_call` channel rather than in
+`llm_calls`, so the byte census cannot see it and the render count can. Every other meeting's two
+counts agree exactly, and the same split explains 19 recorded opening prompts against 18 opening
+turns (seed 46's meeting-0 recorded two).
+
 **The superseded first attempt (§2.0) also carried a spoken `saw_kill` and also fired the
 interaction.** Two independent five-seed samples at this slate each produced one, which is stated as
 an observation about the shape's reachability and NOT as a rate: two samples cannot price one.
@@ -943,18 +1001,27 @@ and the transcript carries the husk it left:
    defaulted turn is `turn_index 5`, an `opt_in` speech turn. §9.2's criterion names *"a seed whose
    opening defaults"*, so **the criterion as written is NOT met** (§14) and this report does not
    stretch it to fit.
-2. **No deadline was missed — the cause is a SCHEMA VALIDATION failure, and the label is wrong.**
-   The model put a `corroboration` item, which is a CLAIM type, into `observations`, and the turn
-   failed `MeetingTurn` validation. The labelling is `orchestrator/game.py`:2486-2560
-   (`_record_deadline_defaults`), which stamps `error_type="deadline_default"` on BOTH branches —
-   the burned-generation row at :2543 (the one that fired here, carrying the real model and its
-   tokens) and the zero-spend marker at :2557 — while its own docstring records that the trigger
-   kind, *"deadline vs validation"*, is named only inside `error_message`. The husk's
-   `free_text` compounds it: `meetings/manager.py`:209 mints the literal
-   `"(missed deadline; no turn submitted)"` for every default, whatever its cause.
-   **So `error_type` is a CHANNEL name, not a cause — and every consumer keys on it.**
-   `check_replay_provenance`'s own comment says it keys on `error_type` deliberately, so it cannot
-   tell a wall-clock miss from a schema slip. That is a recorder defect, routed in §16.
+2. **No deadline was missed — the cause is a SCHEMA VALIDATION failure, and `error_type` is the
+   DOCUMENTED shared channel rather than a mislabel.** The model put a `corroboration` item, which
+   is a CLAIM type, into `observations`, and the turn failed `MeetingTurn` validation. The
+   labelling is `orchestrator/game.py`:2486-2508 (`_record_deadline_defaults`), and its own
+   docstring DESIGNS the shared channel in as many words: *"written into the EXISTING failed-call
+   channel … with ``error_type="deadline_default"`` -- no new replay record kind … The defaulted
+   phase and the trigger kind (deadline vs validation) are named in ``error_message`` so the husk
+   is auditable."* Both branches stamp it accordingly — the burned-generation row at :2543 (the one
+   that fired here, carrying the real model and its tokens) and the zero-spend marker at :2557 —
+   and **this row honours the contract**: its `error_message` reads *"opt_in turn (turn 5)
+   defaulted (validation); p-5 submitted no turn"*, naming the trigger exactly where the docstring
+   says to look. **So `error_type` is a channel name BY DESIGN; reading it as a cause is a
+   consumer's error, not a recorder defect, and this report withdraws the word "mislabel" for it.**
+   What remains is a LEGIBILITY defect, and it is the husk's `free_text`: `meetings/manager.py`:209
+   mints the literal `"(missed deadline; no turn submitted)"` for every default whatever its cause,
+   so a validation slip leaves a transcript row ASSERTING a missed deadline that never happened,
+   and unlike `error_message` that string carries no trigger at all. **That** is what §16 routes.
+   One consequence of the shared channel stands on its own and is not a defect either:
+   `check_replay_provenance` keys on `error_type` deliberately (its own comment says so), so no
+   guard or gate separates a wall-clock miss from a schema slip without reading `error_message` —
+   which is §16 item 1's asymmetry, not this item.
 3. **The corpus freeze guard WOULD refuse this seed, and it is demonstrated doing so** rather than
    asserted. `check_replay_provenance` keys on `error_type` (deliberately — *"the burned-generation
    branch stamps the REAL baseline model, so a model-only check misses it entirely"*), and its
@@ -1001,6 +1068,17 @@ per-seed serial wall: 480, 373, 434, 411, 388 s  (mean 417.2, min 373, max 480)
 total operator wall: 21m42s  (8m00s serial first seed + 13m42s on two workers)
 ```
 
+**The basis, stated because two totals are defensible.** Every figure above — and §12.1's, §12.2's
+and §11.2's "204 recorded calls" — counts `llm_calls` rows in the recorded meetings ONLY. The
+seed-26 `failed_call` row (§11.2) was a COMPLETED provider call whose spend is real and is recorded
+outside that channel: **4,637 input + 262 output = 4,899 tokens, $0**. Counted inclusively the run
+reads **205 calls and 1,050,015 tokens**, which is exactly what `tournament-eval-report.json`'s
+`cost_dashboard` reports (1,005,894 input + 44,121 output). **The projection uses the `llm_calls`
+basis**, and the difference is not cosmetic on the ON side alone: the like-for-like OFF reference
+carries zero `failed_call` rows, so switching bases would lift the §12.1 ratio from ×1.1703 to
+×1.1758 (58,334.2 tokens/meeting) and the §12.2 centre by about four minutes — inside the bracket's
+own width, and disclosed here rather than folded in.
+
 **Worker occupancy:** the parallel leg did 1,606 s of serial seed work across 822 s of wall on two
 workers = **97.7%**; the idle 2.3% is the tail after seed 26 finished while seed 46 ran on. The
 first leg was one seed by design, so its capacity figure is not comparable and is not averaged in.
@@ -1010,6 +1088,16 @@ first leg was one seed by design, so its capacity figure is not comparable and i
 consumed a second attempt of its budget of 8**, which is why the retry budget never bound (§2.0).
 The one defaulted turn (§11.2) is not a retry: a recorded parse failure is non-fatal to the wrapper
 by design (`scripts/refresh_samples.sh`:457-461) and consumes no attempt.
+
+**Both of those readings come from the operator's shell and the wrapper's logs, NOT from the
+preserved bytes, and the report says so rather than implying the bytes attest them.** No recorded
+byte carries a retry budget or a per-seed attempt count: `AILIBI_SEED_MAX_ATTEMPTS` is read only at
+`scripts/refresh_samples.sh`:461 and is never stamped into a replay row, into `MANIFEST.md` or into
+`tournament-eval-report.json` (`grep -c attempt` over all three → 0). So "budget of 8" and "zero
+retries" are attested by the exported block quoted in §2, by the wrapper's own dry-run echo
+(*"seed crash-retry: up to 8 attempt(s) per seed"*) and by the scanned run logs — checkable, but
+not re-derivable from `$SMOKE_DIR` alone by a later reader. §2.0's account of the two attempts
+rests on the same evidence.
 
 ### 12.1 The inflation, measured like-for-like
 
@@ -1022,13 +1110,40 @@ committed seeds; the re-derived all-games mean is its CROSS-CHECK. **Both are pu
 | both committed 9p2i legs, 200 games (the cross-check, re-derived from the bytes) | 590 | 31,939,656 | 54,135.0 | ×1.0725 (+7.3%) |
 | the smoke | 18 | 1,045,116 | 58,062.0 | — |
 
-**The two denominators DISAGREE by 8.4% on the OFF side, where 21.14's agreed to 0.1%, and that
-disagreement is the finding this check exists to produce.** The drawn five are token-LIGHTER per
+**The two denominators DISAGREE by 8.4% on the OFF side, and that disagreement is the finding this
+check exists to produce.** The drawn five are token-LIGHTER per
 meeting than the set average (49,612.0 against 54,135.0), because this slate was drawn for lever
 coverage — the no-vent-flag stratum, the reporter-conviction seeds and every witnessed-kill seed —
 rather than for typicality. **The five drawn seeds are therefore NOT a representative sample on
 tokens-per-meeting, and the like-for-like ratio is an upper bound on the inflation the record will
 see.** The all-games cross-check is carried as the projection's low end for exactly that reason.
+
+**8.4% against 21.14's 0.1% is a change of measurement, not a degradation of the sample, and this
+report does not present them as like quantities.** 21.14's 0.1% (`audits/audit-phase-21-smoke.md`
+§11: 148,084.8 against 148,135.8) compared the same five seeds against the **fifty**-game
+`samples/9p2i` leg, on tokens per **GAME**, on the **pre-21.15** bytes — and its own 200-game
+both-legs row already disagreed by 4.0% (142,844.1, ×1.2399 against ×1.1961). The 8.4% here
+compares the same five seeds against the **two-hundred**-game both-legs population, on tokens per
+**MEETING**, on the corrected bytes. Different comparator, different unit, different bytes: neither
+number bounds the other, and 21.14's figure is cited as the precedent for running the check, never
+as a threshold this run missed.
+
+**The scaling unit changed deliberately, and the contract prescribes the change.** 21.14 scaled its
+projection on tokens/game; this one scales on tokens/meeting, which the DoD names in as many words
+(*"scaled by this smoke's measured tokens-per-meeting ratio"*). So the like-for-like ratio on
+tokens/GAME is published here as a third figure, to make the change of unit visible rather than
+silent:
+
+| like-for-like unit | same-five committed | smoke | ratio |
+|---|---|---|---|
+| tokens per **meeting** (the contract's unit, and this report's centre) | 49,612.0 | 58,062.0 | **×1.1703** |
+| tokens per **game** (21.14's unit, published for continuity only) | 208,370.2 | 209,023.2 | **×1.0031** |
+
+**×1.0031 is not evidence the levers are nearly free**, and the centre stays on tokens/meeting
+because of what it hides: the ON run produced **18** meetings where the same five committed seeds
+carry **21**, so a per-game unit lets a trajectory difference in meeting count cancel the prompt
+growth the levers actually cause. A record is priced by the meetings it renders, and the per-game
+figure prices a game-count that neither run controls.
 
 The per-meeting increase splits, against the same five committed seeds:
 
@@ -1147,10 +1262,13 @@ error_message
 ```
 
 **The cause is established, not inferred**: a schema-validation failure that
-`orchestrator/game.py`:2486-2560 (`_record_deadline_defaults`) labels `deadline_default` on both its
-branches (:2543 burned-generation, :2557 zero-spend marker), with the true trigger kind carried only
-in `error_message`; `meetings/manager.py`:209 mints the husk's `"(missed deadline; no turn
-submitted)"` regardless of cause.
+`orchestrator/game.py`:2486-2508 (`_record_deadline_defaults`) stamps `deadline_default` on both
+its branches (:2543 burned-generation, :2557 zero-spend marker) BY DOCUMENTED DESIGN, with the
+trigger kind named in `error_message` as its docstring prescribes — so the row is correctly recorded
+and the DoD item's subject, `error_type`, reads exactly what the recorder contracts it to read
+(§11.2). The one thing that is genuinely wrong is downstream of it: `meetings/manager.py`:209 mints
+the husk's `"(missed deadline; no turn submitted)"` regardless of cause, and that is what §16
+routes.
 
 **What no criterion names.** §9.2's second criterion is *"a seed whose opening defaults (the
 `(deadline_default)` watch item)"*, and its subject is an OPENING; the recorder's counters read
@@ -1227,6 +1345,19 @@ freeze governs from the pre-registration's own merge point. Any merge into `agen
 `observation/`, `orchestrator/` or `agents/strategic/prompts/` between this report and the record
 reopens it.
 
+**One such merge is already in flight, and it is named here rather than left to be discovered.**
+PR #424 (`phase-21-ledger-grounding`, OWNER-GATED and open at this writing) edits
+`meetings/corroboration.py`, `meetings/manager.py`, `meetings/transcript.py` and
+`agents/strategic/prompts/qwen3_6_27b/vote_ballot.j2` — two frozen directories — so **by this
+section's own rule it REOPENS this smoke's window the moment it merges.** That is not a formality
+for these bytes: under #424 the lever-ON tripwire reader can no longer walk this preserved
+recording, because the changed ballot block stops matching what was recorded — seeds 17 and 46 lose
+**7 of 16** and **6 of 13** recorded ballot prompts — so the seven tripwires could not simply be
+re-read on the same bytes at `$0`. The fork at 21.24's re-anchor is therefore between a short
+re-smoke on the merged head and accepting this GO on the OFF-byte-identity argument. **That choice
+is the owner's**; this report neither makes it nor prices it, and it applies equally to item 2's
+`meetings/` fix below.
+
 **The bytes are PRESERVED, not deleted** — both attempts, at stable absolute paths:
 
 ```
@@ -1256,16 +1387,22 @@ read-only; nothing under `replays/` moved).
    corpus legs only: `scripts/refresh_samples.sh` contains no `deadline_default` check
    (`grep -c` → 0), so the two samples legs would carry such a husk into the committed record
    unnoticed.
-2. **ROUTED TO 21.24, AS A RECORDER FIX BEFORE THE RECORD — the mislabelling.**
-   `orchestrator/game.py`:2486-2560 (`_record_deadline_defaults`) stamps
-   `error_type="deadline_default"` on both branches (:2543, :2557) for a wall-clock miss AND a
-   schema-validation default alike, carrying the true trigger only inside `error_message`; and
-   `meetings/manager.py`:209 mints `"(missed deadline; no turn submitted)"` as the husk's
-   `free_text` whatever the cause. Every consumer keys on `error_type` — `check_replay_provenance`'s
-   own comment says so deliberately — so no guard, gate or operator scan can currently tell the two
-   apart. **Fix before 21.24**, so the record's own watch item means what it says. The remedy for
-   the seed itself is unchanged and is the recorder's own (`re-record the seed`; the precedent is
-   baseline 7's two seeds in 12m33s), and that cost sits outside §12.2's bracket.
+2. **ROUTED TO 21.24, AS A LEGIBILITY FIX BEFORE THE RECORD — the husk's `free_text`, and NOT
+   `error_type`.** The shared `error_type` is the DESIGN, not a mislabel:
+   `orchestrator/game.py`:2486-2508 documents one `error_type="deadline_default"` for both trigger
+   kinds with the trigger named in `error_message`, both branches (:2543, :2557) stamp it as
+   documented, and this row honours it — its `error_message` names the validation trigger (§11.2).
+   What is neither documented nor recoverable is the husk itself: `meetings/manager.py`:209 mints
+   `"(missed deadline; no turn submitted)"` as the `free_text` of EVERY default whatever its cause,
+   so a schema slip leaves a transcript row asserting a deadline miss that never occurred — a false
+   sentence inside the corpus, which is the surface a later model reads. **Fix that string before
+   21.24**, so the record's own watch item means what it says; `error_type` needs no fix and every
+   consumer wanting the trigger reads `error_message`. **It lives in `meetings/`, a FROZEN
+   directory (§0), so landing it reopens this smoke's window exactly as PR #424 does — an OWNER
+   decision before 21.24, not an operator one**, and it belongs in one window with item 1's
+   reconciliation rather than as a second reopen. The remedy for the seed itself is unchanged and
+   is the recorder's own (`re-record the seed`; the precedent is baseline 7's two seeds in 12m33s),
+   and that cost sits outside §12.2's bracket.
 3. **What the table did with the two spoken kills** (§8.5). Both accounts were true, neither
    convicted, and one ended with the truthful crew witness ejected. Two cases decide nothing; they
    are the first live evidence on a question the counterfactual declares unreachable offline, and
