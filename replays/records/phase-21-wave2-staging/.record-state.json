@@ -2,12 +2,12 @@
   "task": "21.24 — the adopting record",
   "leg": 1,
   "set": "samples/9p2i",
-  "seeds_done": "0-25 (26 of 50)",
-  "next_seed": 26,
+  "seeds_done": "0-33 (34 of 50)",
+  "next_seed": 34,
   "re_records_done": [3],
   "re_records_pending": [],
   "branch": "phase-21-adopting-record",
-  "head": "d859e58b",
+  "head": "9248043b",
   "started": "2026-09-03",
-  "notes": "Leg 1 in progress, recorded in ~8-seed batches (~25 min each) because the background-task wall cut the first 49-seed run at ~60 min. Seed 3's re-record is DONE and cleared its row: over all 26 staged games the hand scan now reads ZERO failed_call rows of any kind, deadline_default 0 under either shape. Honesty probe on seed 0 PASSED. Operating data at 26 games: 88 meetings, 999 calls, 5,151,496 tokens, 58,539.7 tokens/meeting, cost 0.0000 on every row. NEXT: batches 26-33, 34-41, 42-49, then the leg's eval-report rebuild, validity gate, byte-verify, lever-ON tripwire reader, git_sha reconciliation. Resume: samples legs take --seeds ranges; the corpus recorder skips seeds already on disk."
+  "notes": "Leg 1 in progress, recorded in ~8-seed batches (~25 min each) because the background-task wall cut the first 49-seed run at ~60 min. Hand scan over all 34 staged games: ZERO failed_call rows of any kind, deadline_default 0 under either shape. Seed 3's re-record is done and cleared its row. Honesty probe on seed 0 PASSED. Operating data at 34 games: 111 meetings, 1,269 calls, 6,524,109 tokens, 58,775.8 tokens/meeting, cost 0.0000 on every row. NEXT: batches 34-41 and 42-49, then the leg's eval-report rebuild, validity gate, byte-verify, lever-ON tripwire reader, git_sha reconciliation, checkpoint; then leg 2 (ml_corpus/9p2i, seeds 1000-1149). Resume: samples legs take --seeds ranges; the corpus recorder skips seeds already on disk."
 }
