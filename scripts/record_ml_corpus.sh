@@ -316,6 +316,78 @@ fi
 # input, not the ambient environment: the slate preflight refuses any run whose
 # live exports differ from it, so the two agree by the time a seed stages, and a
 # derivation from the declaration fails loud on a lever key nobody registered.
+# Refuse a slate whose STAMP would outpace its BODIES, before any path derives a
+# map from it. An arm that swaps in a VARIANT FILE serves a body written
+# independently of every sibling, so a sibling whose block lives in the DEFAULT
+# body never reaches the render while that swap is on: the two compose in the
+# STAMP and not in the BYTES (the rule is stated in
+# orchestrator.game.prompt_versions_for_set and the known gap is pinned by
+# tests/meetings/test_prompt_byte_golden.py). Freezing a record against such a
+# composite would certify provenance the recorded prompts do not carry — and the
+# hardcoded literal this script's derivation replaced refused those slates by
+# accident, because no composite ever matched it, so the refusal is restored
+# deliberately and generally.
+#
+# The colliding pairs are DERIVED from the registry, never named here: an arm
+# SWAPS a file for template T when its own overlay value's first dot-segment is
+# not T, and a sibling RE-BODIES T when its overlay value for T differs from the
+# default. Every such (swapper, sibling, T) triple is a collision, so a future
+# arm is covered without editing this guard.
+#
+# Called by EVERY path that accepts a derived map: the startup derivation and the
+# preflight's registry check. Pure Python, no network.
+check_slate_bodies_carry_their_stamps() {
+  AILIBI_PROMPT_SET="$REQUIRED_PROMPT_SET" \
+    uv run python - "$REPO_ROOT" "$REQUIRED_PROMPT_SET" "$expect_levers" <<'PYINNER'
+import sys
+
+sys.path.insert(0, sys.argv[1])
+from orchestrator.game import (  # noqa: E402
+    PROMPT_VERSION_SETS,
+    prompt_versions_for_set,
+)
+from orchestrator.replay import env_var_for_lever  # noqa: E402
+
+set_name, declared = sys.argv[2], sys.argv[3]
+keys = [token.strip() for token in declared.split(",") if token.strip()]
+default = PROMPT_VERSION_SETS[set_name]
+entries = {
+    key: prompt_versions_for_set(set_name, env={env_var_for_lever(key): "1"})
+    for key in keys
+}
+collisions = []
+for swapper, swapper_entry in entries.items():
+    swapped = {
+        template
+        for template, value in swapper_entry.items()
+        if value.split(".", 1)[0] != template
+    }
+    for sibling, sibling_entry in entries.items():
+        if sibling == swapper:
+            continue
+        for template in sorted(swapped):
+            if sibling_entry[template] != default[template]:
+                collisions.append((swapper, sibling, template))
+if collisions:
+    lines = "\n".join(
+        f"  {swapper!r} swaps a variant file for {template!r}, which {sibling!r} "
+        f"also re-bodies — {sibling!r}'s block never reaches that render"
+        for swapper, sibling, template in collisions
+    )
+    sys.stderr.write(
+        "Error: --expect-levers names a slate whose stamps would outpace its "
+        "bodies.\n"
+        f"{lines}\n"
+        "The composite stamp would name every arm's lineage while the swapped-in "
+        "body carries only its own, so freezing a record against that map would "
+        "certify provenance the recorded prompts do not have.\n"
+        "Record the colliding arms separately, or author the sibling's block into "
+        "the variant first; nothing was recorded.\n"
+    )
+    raise SystemExit(1)
+PYINNER
+}
+
 # AILIBI_PROMPT_SET is pinned for this subprocess alone: the prompt package
 # builds its Jinja environment from that variable at IMPORT time, so an ambient
 # typo would raise here — before the preflight that exists to name it. The
@@ -345,28 +417,6 @@ if unknown:
         "the wrong map; nothing was recorded.\n"
     )
     raise SystemExit(1)
-# A stamp that outpaces its bodies. An arm that swaps in a VARIANT FILE serves a
-# body written independently of every sibling, so a sibling whose block lives in
-# the DEFAULT body never reaches the render while that swap is on -- the two
-# compose in the STAMP and not in the BYTES (orchestrator/game.py:611-618, pinned
-# by tests/meetings/test_prompt_byte_golden.py:1364-1409). Deriving the expected
-# map from the slate would then freeze a record against a composite claiming
-# provenance its prompts do not carry. The hardcoded literal this derivation
-# replaced refused that combination by accident, because no composite ever
-# matched it; the refusal is restored deliberately here.
-if "impostor_roll_call" in keys and "reporter_reasoning" in keys:
-    sys.stderr.write(
-        "Error: --expect-levers names both 'impostor_roll_call' and "
-        "'reporter_reasoning', whose stamps would outpace their bodies.\n"
-        "impostor_roll_call swaps accusation_round.j2 for the roll-call variant, "
-        "which carries no reporter block, so every statement turn would silently "
-        "lose the reporter-voice effects while the composite stamp still named "
-        "reporter_reasoning as their lineage. Freezing a record against that map "
-        "would certify provenance the recorded prompts do not carry.\n"
-        "Record them separately, or author the reporter block into the roll-call "
-        "variant first; nothing was recorded.\n"
-    )
-    raise SystemExit(1)
 env = {env_var_for_lever(key): "1" for key in keys}
 resolved = prompt_versions_for_set(set_name, env=env)
 # TWO renderings of ONE map, both emitted here: the MANIFEST cell's sorted,
@@ -381,6 +431,9 @@ print(",".join(f"{key}={resolved[key]}" for key in sorted(resolved)))
 PYINNER
 }
 
+if ! check_slate_bodies_carry_their_stamps; then
+  exit 1
+fi
 if ! _derived_prompt_versions="$(derive_required_prompt_versions)"; then
   exit 1
 fi
@@ -1287,6 +1340,13 @@ echo "Locked endpoint OK: base URL pinned to $DEFAULT_FEATHERLESS_BASE_URL."
 # the declared slate still resolves to the map this run derived at startup; a
 # mismatch on either is a fail-loud stop — re-locking the corpus to a new prompt
 # baseline is an owner decision (a re-record + re-freeze), never a silent drift.
+# The SAME body/stamp guard the startup derivation ran, re-run on the preflight
+# path: this is the second place a derived map is accepted, and a guard that
+# fired on only one of them would leave the other able to freeze a record against
+# provenance its prompts do not carry.
+if ! check_slate_bodies_carry_their_stamps; then
+  exit 1
+fi
 if ! check_prompt_version_registry; then
   exit 1
 fi

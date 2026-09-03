@@ -715,64 +715,146 @@ def test_acceptance_pairs_carry_the_maps_own_keys_not_the_version_prefix() -> No
     assert f"--expected-prompt-versions {expected};" in proc.stdout, proc.stdout
 
 
-def test_derivation_refuses_a_pair_whose_stamps_outpace_their_bodies() -> None:
-    # impostor_roll_call swaps accusation_round.j2 for a variant carrying no
-    # reporter block, so with reporter_reasoning also ON the two compose in the
-    # STAMP and not in the BYTES (orchestrator/game.py, pinned by
-    # tests/meetings/test_prompt_byte_golden.py::
-    # test_a_file_swapping_arm_serves_a_body_its_siblings_do_not_reach).
-    # Freezing against the derived composite would certify provenance the
-    # recorded prompts do not carry; the hardcoded literal this derivation
-    # replaced refused that by accident, so the refusal is restored here.
+# The slates whose STAMP outpaces their BODIES, derived from the registry rather
+# than typed here: an arm SWAPS a variant file for template T when its overlay
+# value's first dot-segment is not T, and a sibling RE-BODIES T when its overlay
+# value for T differs from the default. Deriving the expectation the same way the
+# guard does would make the test vacuous, so the pairs are enumerated below and a
+# separate case asserts the registry still produces exactly them.
+_OUTPACING_PAIRS = (
+    ("impostor_roll_call", "reporter_reasoning"),
+    ("impostor_roll_call", "testimony_shapes"),
+)
+_NON_OUTPACING_SLATES = (
+    ("reporter_reasoning", "corroboration_discipline", "testimony_shapes"),
+    ("impostor_roll_call", "corroboration_discipline"),
+    ("impostor_roll_call",),
+    ("reporter_reasoning",),
+    ("testimony_shapes",),
+)
+
+
+def _env_for(declared: "tuple[str, ...]") -> dict[str, str]:
     from orchestrator.replay import env_var_for_lever
 
     env = _clean_env()
     env["AILIBI_PROMPT_SET"] = "qwen3_6_27b"
-    for key in ("impostor_roll_call", "reporter_reasoning"):
+    for key in declared:
         env[env_var_for_lever(key)] = "1"
+    return env
+
+
+def test_the_registry_still_produces_exactly_the_enumerated_outpacing_pairs() -> None:
+    # The premise the planted cases rest on. If a future arm changes which
+    # templates are swapped or re-bodied, this fails FIRST and says so, instead of
+    # letting the refusal tests pass over a set of pairs nobody re-checked.
+    from orchestrator.game import PROMPT_VERSION_SETS, prompt_versions_for_set
+    from orchestrator.replay import (
+        TOGGLEABLE_SUBSTRATE_FLAG_KEYS,
+        env_var_for_lever,
+    )
+
+    default = PROMPT_VERSION_SETS["qwen3_6_27b"]
+    entries = {
+        key: prompt_versions_for_set("qwen3_6_27b", env={env_var_for_lever(key): "1"})
+        for key in TOGGLEABLE_SUBSTRATE_FLAG_KEYS
+    }
+    derived = {
+        (swapper, sibling)
+        for swapper, swapper_entry in entries.items()
+        for sibling, sibling_entry in entries.items()
+        if sibling != swapper
+        for template, value in swapper_entry.items()
+        if value.split(".", 1)[0] != template
+        and sibling_entry[template] != default[template]
+    }
+
+    assert derived == set(_OUTPACING_PAIRS), (
+        "the registry's file-swapping arms changed; re-check _OUTPACING_PAIRS "
+        f"(derived {sorted(derived)})"
+    )
+
+
+@pytest.mark.parametrize(("swapper", "sibling"), _OUTPACING_PAIRS)
+def test_the_startup_derivation_refuses_a_slate_whose_stamps_outpace_its_bodies(
+    swapper: str, sibling: str
+) -> None:
+    # PATH A: the startup derivation, which is where --expect-levers first
+    # becomes a map. impostor_roll_call swaps accusation_round.j2 for a variant
+    # carrying neither the reporter block nor the testimony_shapes blocks, so
+    # with either sibling ON the two compose in the STAMP and not in the BYTES
+    # (pinned by tests/meetings/test_prompt_byte_golden.py::
+    # test_a_file_swapping_arm_serves_a_body_its_siblings_do_not_reach).
     proc = _run(
         "--set",
         "9p2i",
         "--dry-run",
         "--expect-levers",
-        "impostor_roll_call,reporter_reasoning",
-        env=env,
+        f"{swapper},{sibling}",
+        env=_env_for((swapper, sibling)),
     )
 
     assert proc.returncode != 0
     out = proc.stdout + proc.stderr
-    assert "outpace their bodies" in out
-    assert "impostor_roll_call" in out and "reporter_reasoning" in out
+    assert "outpace its bodies" in out
+    assert f"{swapper!r} swaps a variant file for 'accusation_round'" in out
+    assert sibling in out
     assert "nothing was recorded" in out
 
 
-def test_the_outpacing_refusal_does_not_reach_the_ratified_slate_or_either_arm_alone() -> (
-    None
-):
-    # The refusal must bite on the PAIR and nothing else: the Wave-2 slate the
-    # record runs, and each of the two arms on its own, all still resolve. A
-    # guard that also refused these would block the record it exists to protect.
-    from orchestrator.replay import env_var_for_lever
+@pytest.mark.parametrize(("swapper", "sibling"), _OUTPACING_PAIRS)
+def test_the_preflight_path_refuses_the_same_slate(
+    tmp_path: Path, swapper: str, sibling: str
+) -> None:
+    # PATH B: the preflight's registry check is the SECOND place a derived map is
+    # accepted, and the dry-run exits before it. A guard wired into only the
+    # startup derivation would leave this path able to freeze a record against
+    # provenance its prompts do not carry, so the shared guard is driven here
+    # directly out of the committed script.
+    driver = _slate_guard_driver(tmp_path)
+    proc = subprocess.run(
+        ["bash", str(driver), f"{swapper},{sibling}"],
+        cwd=_REPO_ROOT,
+        capture_output=True,
+        text=True,
+        env=_clean_env(),
+        timeout=300,
+    )
 
-    for declared in (
-        ("reporter_reasoning", "corroboration_discipline", "testimony_shapes"),
-        ("impostor_roll_call",),
-        ("reporter_reasoning",),
-    ):
-        env = _clean_env()
-        env["AILIBI_PROMPT_SET"] = "qwen3_6_27b"
-        for key in declared:
-            env[env_var_for_lever(key)] = "1"
-        proc = _run(
-            "--set",
-            "9p2i",
-            "--dry-run",
-            "--expect-levers",
-            ",".join(declared),
-            env=env,
-        )
-        assert proc.returncode == 0, (declared, proc.stdout + proc.stderr)
-        assert "outpace their bodies" not in (proc.stdout + proc.stderr)
+    assert proc.returncode != 0
+    out = proc.stdout + proc.stderr
+    assert "outpace its bodies" in out
+    assert sibling in out
+
+
+@pytest.mark.parametrize("declared", _NON_OUTPACING_SLATES)
+def test_the_outpacing_refusal_reaches_no_slate_without_a_collision(
+    tmp_path: Path, declared: "tuple[str, ...]"
+) -> None:
+    # The refusal must bite on the colliding pairs and nothing else — the Wave-2
+    # slate the record runs, each arm alone, and roll_call beside a lever that
+    # re-bodies only the ballot. A guard that also refused these would block the
+    # record it exists to protect. Both paths are checked.
+    proc = _run(
+        "--set",
+        "9p2i",
+        "--dry-run",
+        "--expect-levers",
+        ",".join(declared),
+        env=_env_for(declared),
+    )
+    assert proc.returncode == 0, (declared, proc.stdout + proc.stderr)
+    assert "outpace its bodies" not in (proc.stdout + proc.stderr)
+
+    guard = subprocess.run(
+        ["bash", str(_slate_guard_driver(tmp_path)), ",".join(declared)],
+        cwd=_REPO_ROOT,
+        capture_output=True,
+        text=True,
+        env=_clean_env(),
+        timeout=300,
+    )
+    assert guard.returncode == 0, (declared, guard.stdout + guard.stderr)
 
 
 def test_derivation_refuses_an_expect_levers_key_that_is_not_a_live_toggle() -> None:
@@ -788,6 +870,37 @@ def test_derivation_refuses_an_expect_levers_key_that_is_not_a_live_toggle() -> 
     out = proc.stdout + proc.stderr
     assert "not a live substrate toggle" in out
     assert "reporter_resoning" in out
+
+
+_SLATE_GUARD_DRIVER = """\
+set -euo pipefail
+REPO_ROOT="{repo_root}"
+REQUIRED_PROMPT_SET="qwen3_6_27b"
+expect_levers="$1"
+{functions}
+check_slate_bodies_carry_their_stamps
+"""
+
+
+def _slate_guard_driver(tmp_path: Path) -> Path:
+    """A driver around the committed body/stamp guard, as the preflight calls it."""
+
+    script = _RECORD_SH.read_text(encoding="utf-8")
+    # Anchored on the heredoc terminator, not on the first bare "}": the guard's
+    # own Python body closes a dict comprehension at column 0, which a
+    # first-brace match would truncate at — silently producing a driver that
+    # cannot fail.
+    match = re.search(
+        r"(?ms)^check_slate_bodies_carry_their_stamps\(\) \{\n.*?\nPYINNER\n\}$",
+        script,
+    )
+    assert match is not None, "check_slate_bodies_carry_their_stamps not found"
+    driver = tmp_path / "slate_guard.sh"
+    driver.write_text(
+        _SLATE_GUARD_DRIVER.format(repo_root=_REPO_ROOT, functions=match.group(0)),
+        encoding="utf-8",
+    )
+    return driver
 
 
 _PROMPT_VERSION_FREEZE_DRIVER = """\

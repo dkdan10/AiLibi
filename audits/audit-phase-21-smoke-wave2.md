@@ -344,6 +344,39 @@ each MANIFEST row against the expected map and runs only on the FREEZE path, i.e
   line to `accusation_round=accusation_round_roll_call.qwen3_6_27b.v1, …`. Under the old inference
   it read `accusation_round_roll_call=…` and failed.
 
+**And one refusal the derivation had to restore, because deriving the map removed it by accident.**
+The hardcoded literal refused a slate whose STAMP outpaces its BODIES — a slate composing an arm
+that swaps in a VARIANT FILE with a sibling whose block lives in the DEFAULT body — not by design
+but because no composite ever matched four fixed literals. A derived map has no such accident, so
+`check_slate_bodies_carry_their_stamps` restores the refusal deliberately, and **generally**: the
+colliding triples are derived from the registry rather than named, an arm SWAPPING template `T` when
+its overlay value's first dot-segment is not `T` and a sibling RE-BODYING `T` when its overlay value
+for `T` differs from the default. On today's registry that derives exactly two colliding pairs and
+refuses both:
+
+```
+$ … --expect-levers impostor_roll_call,reporter_reasoning
+Error: --expect-levers names a slate whose stamps would outpace its bodies.
+  'impostor_roll_call' swaps a variant file for 'accusation_round', which 'reporter_reasoning'
+  also re-bodies — 'reporter_reasoning''s block never reaches that render
+$ … --expect-levers impostor_roll_call,testimony_shapes
+  … 'impostor_roll_call' swaps a variant file for 'accusation_round', which 'testimony_shapes'
+  also re-bodies — 'testimony_shapes''s block never reaches that render
+```
+
+while `impostor_roll_call,corroboration_discipline` (which re-bodies only the ballot), either arm
+alone, and **the ratified three-key slate** all still resolve. The mechanism is the one
+`orchestrator.game.prompt_versions_for_set` states and
+`tests/meetings/test_prompt_byte_golden.py::test_a_file_swapping_arm_serves_a_body_its_siblings_do_not_reach`
+pins; this guard does not patch that known gap, it refuses to freeze a record on top of it.
+
+**The guard runs on EVERY path that accepts a derived map** — the startup derivation and the
+preflight's registry check — from one definition, because a guard wired into only the first would
+leave the second able to freeze a record against provenance its prompts do not carry. Four planted
+cases drive it: one asserts the registry still produces exactly the two enumerated pairs (so the
+refusal tests cannot pass over a set nobody re-checked), two drive each path with each colliding
+pair, and one walks five non-colliding slates through both paths and requires them to pass.
+
 **Under the bare slate the derivation reproduces the committed literals byte-for-byte**, so nothing
 about a bare-slate record changes:
 
@@ -788,33 +821,49 @@ baseline-7 figure over a pre-disambiguation net and is not quoted as a cell here
 Run under the recorded slate, after the gate, over the whole set — and beside a LIKE-FOR-LIKE OFF
 column re-derived at `$0` from the SAME five committed seeds. **Every row is directional at this n.**
 
-| cell | committed same-five (OFF) | **smoke (ON)** |
-|---|---|---|
-| I-2 false crew self-placement | 0/80 | **0/82** |
-| — copyable from a rendered self-location line | 5/80 = 6.25% | **5/82 = 6.10%** |
-| I-3 sole-flag precision | 0/0 (no sole-flag meeting) | **0/0** |
-| I-4 grounded sighting side | 0/0 | **0/0** |
-| I-5 fabricated completion lines | 0/34 | **0/25** |
-| I-6 adjacent-room STRONG share | 0/0 | **0/0** |
-| I-7 movement-origin flags | 0/2 | **0/1** `[ADV]` (move-backed 1, destination 1) |
-| I-8 marker contamination (turns / prompts) | 0/110, 0/221 | **0/102, 0/204** |
-| I-9 singular-persona prompts | 0/221 | **0/204** |
-| I-10 meetings with a venting participant | 2/21 | **2/18** |
-| — reporter killed within 3 ticks | 2/21 | **3/18** |
-| I-11 free zero-witness kills declined | 0/28 | **2/27** (fellow-defer 2) |
-| — ghost-top decisions mismatched | 0/249 | **0/249** |
-| render budget, mean rendered lines/snapshot | 40.52 over 221 | **39.57 over 204** |
-| render budget, testimony rows (≤4 / 5-6 / ≥7) | 4,181 (2,090 / 1,859 / 232) | **4,920 (948 / 3,606 / 366)** |
-| solvability (the memo's I-5): killer in candidate set | 19/20 = 0.95 | **16/17 = 0.9412** |
-| — one candidate, and it is the killer | 6/20; 6/6 | **4/17; 4/4** |
-| — ejected an already-cleared player | 3/10 = 0.30 | **1/6 = 0.1667** `[ADV]` |
+The contract requires BOTH probes quoted with denominators — the first completed seed alone, before
+the remaining four queued, and the whole set — so both columns are here.
+
+| cell | committed same-five (OFF) | **first seed ALONE (ON)** | **whole set (ON)** |
+|---|---|---|---|
+| games / meetings | 5 / 21 | **1 / 5** | **5 / 18** |
+| agent-clock sightings proved | — | **69** | **387** |
+| I-2 false crew self-placement | 0/80 | **0/21** | **0/82** |
+| — copyable from a rendered self-location line | 5/80 = 6.25% | **2/21 = 9.52%** | **5/82 = 6.10%** |
+| I-3 sole-flag precision | 0/0 (no sole-flag meeting) | **0/0** | **0/0** |
+| I-4 grounded sighting side | 0/0 | **0/0** | **0/0** |
+| I-5 fabricated completion lines | 0/34 | **0/4** | **0/25** |
+| I-6 adjacent-room STRONG share | 0/0 | **0/0** | **0/0** |
+| I-7 movement-origin flags | 0/2 | **0/0** | **0/1** `[ADV]` (move-backed 1, destination 1) |
+| I-8 marker contamination (turns / prompts) | 0/110, 0/221 | **0/27, 0/54** | **0/102, 0/204** |
+| I-9 singular-persona prompts | 0/221 | **0/54** | **0/204** |
+| I-10 meetings with a venting participant | 2/21 | **0/5** | **2/18** |
+| — reporter killed within 3 ticks | 2/21 | **0/5** | **3/18** |
+| I-11 free zero-witness kills declined | 0/28 | **0/6** | **2/27** (fellow-defer 2) |
+| — ghost-top decisions mismatched | 0/249 | **0/43** | **0/249** |
+| render budget, mean rendered lines/snapshot | 40.52 over 221 | **42.52 over 54** | **39.57 over 204** |
+| render budget, testimony rows (≤4 / 5-6 / ≥7) | 4,181 (2,090 / 1,859 / 232) | **1,588 (304 / 1,284 / 0)** | **4,920 (948 / 3,606 / 366)** |
+| solvability (the memo's I-5): killer in candidate set | 19/20 = 0.95 | — | **16/17 = 0.9412** |
+| — one candidate, and it is the killer | 6/20; 6/6 | — | **4/17; 4/4** |
+| — ejected an already-cleared player | 3/10 = 0.30 | — | **1/6 = 0.1667** `[ADV]` |
+
+**The first-seed column is a `$0` OFFLINE RE-RUN of the same invocation on the PRESERVED bytes**, not
+a transcription of the live console: seed 19 was copied out of the certified run into
+`/Users/danielkeinan/ailibi-smoke-21-23/first-seed-19` and
+`uv run python scripts/measure_baseline.py --honesty <that dir>` was run in the same lever-ON shell
+the Measurement line used. It reproduces the live probe's own header and render budget to the digit
+(`1 games, 5 meetings; +1 agent clock proved on 69 discriminating sightings`;
+`mean rendered lines/snapshot 42.52 over 54 snapshots; reported-testimony rows 1588`), which is what
+makes it the same reading rather than a second one. The solvability rows have no first-seed column
+because that probe was run over the whole set only.
 
 The `I-n` labels in the first thirteen rows are `measure_baseline.py --honesty`'s own numbering and
 are NOT the pre-registration's §2 instrument list; the two solvability rows carry the memo's label
 explicitly so the collision cannot be misread.
 
-`measure_baseline.py --honesty` exited 0 on the FIRST completed seed alone (seed 19, 5 meetings —
-**not vacuous**) and again over the whole set; `--solvability` exited 0. **Neither raised.**
+`measure_baseline.py --honesty` exited 0 on the FIRST completed seed alone (seed 19, **5 meetings —
+not vacuous**, so the probe is a passed probe and not an empty one) and again over the whole set;
+`--solvability` exited 0. **Neither raised**, on either invocation.
 
 ### 10.1 The secondary cells §5 registers, observed and never gated
 
@@ -1241,12 +1290,12 @@ Contracts: 4 kept, 0 broken.
 Task docs validation passed: 390 tasks and 390 prompts.
 All 390 prompts are in sync.
 Success: no issues found in 377 source files          (mypy)
-=========== 6005 passed, 20 skipped, 3 xfailed in 113.13s (0:01:53) ============
+=========== 6013 passed, 20 skipped, 3 xfailed in 126.78s (0:02:06) ============
 Running frontend checks...
   eslint .                                   — clean
   tsc --noEmit (+ tsconfig.node.json, e2e/tsconfig.json)  — clean
   vitest run   — Test Files 9 passed (9);  Tests 440 passed (440)
-  vite build   — ✓ built in 223ms
+  vite build   — ✓ built in 231ms
 EXIT=0
 ```
 
