@@ -44,6 +44,9 @@ _COPIED = (
     "audits/audit-phase-21-rerecord.md",
     "audits/audit-phase-20-baseline-7.md",
     "audits/audit-phase-21-adopting-record.md",
+    # ...and the memo that registered the four targets before the bytes
+    # existed, which the adopting record's copies of them are held to.
+    "audits/audit-phase-21-preregistration.md",
     "eval/vote_correctness.py",
     "replays/samples/4p1i/tournament-eval-report.json",
     "replays/samples/9p2i/tournament-eval-report.json",
@@ -2443,6 +2446,115 @@ def test_a_claim_document_that_never_states_the_fall_is_not_required_to(
     # audits index carry neither claim and stay green.
     assert "innocent ejections fell from" not in _read(doc_tree, _GLOSSARY)
     assert "innocent ejections fell from" not in _read(doc_tree, _AUDITS_INDEX)
+    assert check_doc_facts.check_facts(doc_tree) == []
+
+
+def test_duplicated_verdict_bar_row_fails_loud(doc_tree: Path) -> None:
+    # Rows are read into a dict, so a duplicate label would let the later row
+    # win while the key set still looked complete — two conflicting verdicts
+    # published under one bar number.
+    contradictory = _FINDING_SHARE_ROW.replace("11/20 = 0.5500", "7/20 = 0.3500")
+    _substitute(
+        doc_tree,
+        _FINDING_AUDIT,
+        _FINDING_SHARE_ROW,
+        f"{contradictory}\n{_FINDING_SHARE_ROW}",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert any("verdict table cannot be located" in error for error in errors)
+
+
+def test_reattributed_verdict_bar_cell_detected(doc_tree: Path) -> None:
+    # The numbers do not say what they measure: a row that keeps its figures
+    # while naming another metric re-attributes the bar, and every check after
+    # it reads those figures as this bar's.
+    _substitute(
+        doc_tree,
+        _FINDING_AUDIT,
+        "| 3 | `reporter_innocent_ejections` pooled |",
+        "| 3 | `some_other_cell` pooled |",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert any(
+        "bar 3 registered the cell 'reporter_innocent_ejections'" in error
+        for error in errors
+    )
+
+
+def test_target_moved_away_from_the_preregistration_detected(doc_tree: Path) -> None:
+    # The whole worth of a pre-registered bar is that its target cannot move
+    # after the measurement, so both of the record's copies are held to the
+    # memo that was merged before a byte was generated.
+    _substitute(
+        doc_tree,
+        _FINDING_AUDIT,
+        _FINDING_SHARE_ROW,
+        _FINDING_SHARE_ROW.replace("| < 0.40 |", "| < 0.60 |"),
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert any(
+        "bar 4's verdict table states the target '< 0.60'" in error
+        and "registered '< 40%' before the bytes existed" in error
+        for error in errors
+    )
+
+
+def test_bar_section_target_moved_away_from_the_preregistration_detected(
+    doc_tree: Path,
+) -> None:
+    # ...and the bar's own section, which is the copy a reader checks the
+    # summary against.
+    _substitute(
+        doc_tree,
+        _FINDING_AUDIT,
+        "Target **< 0.40 pooled**.",
+        "Target **< 0.60 pooled**.",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert any(
+        "bar 4's own section states the target '< 0.60 pooled'" in error
+        for error in errors
+    )
+
+
+def test_deleted_powered_set_row_fails_loud(doc_tree: Path) -> None:
+    # The only powered set is the one observation able to fail bar 1's compound
+    # target, and an absent row reads as a set that constrains nothing.
+    _substitute(doc_tree, _FINDING_AUDIT, _FINDING_POWERED_SET_ROW + "\n", "")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert any(
+        "bar 1's section is missing a row for ml_corpus/9p2i" in error
+        for error in errors
+    )
+
+
+def test_per_set_rate_that_contradicts_its_fraction_detected(doc_tree: Path) -> None:
+    # The per-set cells are read for their fraction, so their printed decimals
+    # would otherwise be the one place in the read nothing recomputes.
+    _substitute(
+        doc_tree,
+        _FINDING_AUDIT,
+        _FINDING_POWERED_SET_ROW,
+        _FINDING_POWERED_SET_ROW.replace("36/51 = 0.7059", "36/51 = 0.9999"),
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert any(
+        "bar 1's 'ml_corpus/9p2i' cell '36/51 = 0.9999 (n = 51, POWERED)' "
+        "prints a rate its own fraction does not recompute to" in error
+        for error in errors
+    )
+
+
+def test_an_unrelated_sample_of_the_same_size_is_left_alone(doc_tree: Path) -> None:
+    # The bars are ejection cells, so a fraction is read as one only inside a
+    # sentence about ejections — otherwise a sample that happens to be twenty
+    # of anything would be rejected for not being the reporter cell.
+    history = _read(doc_tree, _HISTORY)
+    _write(
+        doc_tree,
+        _HISTORY,
+        history + "\nA separate sample covered 5 of 20 = 0.2500 games.\n",
+    )
     assert check_doc_facts.check_facts(doc_tree) == []
 
 

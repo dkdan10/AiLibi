@@ -34,9 +34,9 @@ together, so one run names every drifted fact rather than the first.
    docs/history.md, docs/glossary.md, audits/README.md,
    docs/reading-guide.md and docs/ml-program.md — because a figure the front
    door states twice rots in the copy nobody re-reads. The results tables'
-   ``At baseline 6`` column is the one span held to a different source: its
-   cells state what the previous recording read, and the record's own
-   win-split table owns them.
+   ``At baseline 7`` column is the one span held to a different source: its
+   cells state what the previous recording read, and that recording's own
+   record owns them.
 2. **Ladder tip.** The audit that adopted the current recording owns which
    baseline the substrate ladder stands at. Every front-door sentence naming
    the "ladder tip" — the whole sentence, however long — must name that
@@ -93,7 +93,7 @@ together, so one run names every drifted fact rather than the first.
 8. **The results table agrees with the reading guide.** The numbers are stated
    once: every row of README.md's results table must appear in
    docs/reading-guide.md's numbers table with the SAME figure and the same
-   ``At baseline 6`` cell, so a later edit cannot drift one from the other, and
+   ``At baseline 7`` cell, so a later edit cannot drift one from the other, and
    neither table may state one claim twice.
 9. **The results figures are re-derived from their sources.** Agreement between
    two documents cannot catch a figure edited identically in both, so every row
@@ -101,9 +101,9 @@ together, so one run names every drifted fact rather than the first.
    the verifier's own file population, the citation figure from the committed
    instrument's pinned assertions, the vent headline as arithmetic over the
    reading guide's cross-tab cells, and the proof-vs-inference conviction pair
-   from BOTH recordings that measured it — the current one's pre-registered
-   bar read for the published figure, the phase-19 close audit's own partition
-   table for the ``At baseline 6`` cell. Each is checked against itself first
+   from BOTH recordings that measured it — the current one's published read
+   for the figure, and the read published by the recording it REPLACED for the
+   ``At baseline 7`` cell. Each is checked against itself first
    (an accuracy cell fixes its own injustice count), and the published row must
    still say every innocent ejection sits in the no-proof cell, with the count
    the record read. The win rates are re-derived in check 1.
@@ -654,6 +654,37 @@ _PER_SET_CLAUSE: Final = re.compile(r"no powered set\s*(≥|≤|<|>)\s*(\d+(?:\.
 # inferred: a clause read only where it happens to appear is a clause the next
 # edit of the target cell can delete, taking its own gate with it.
 _PER_SET_CLAUSE_BARS: Final[tuple[int, ...]] = (_ACCURACY_BAR,)
+# The memo that fixed those targets BEFORE the bytes existed, and the shape it
+# states each bar in. A pre-registered target that the record may restate is a
+# target the record may move, so both the verdict table's summary and the bar
+# section's own "Target" line are held to this document. The memo writes bar 4
+# as a percentage, so a trailing ``%`` divides by a hundred.
+_PREREGISTRATION_AUDIT: Final = "audits/audit-phase-21-preregistration.md"
+_MEMO_BAR: Final = re.compile(r"\*\*Bar (\d+) — (.*?)\*\*", re.DOTALL)
+_MEMO_TARGET: Final = re.compile(r"(≥|≤|<|>)\s*(\d+(?:\.\d+)?)(%?)")
+_SECTION_TARGET: Final = re.compile(r"^Target\s+\*\*(.+?)\*\*", re.MULTILINE)
+# Each bar's registered cell, by the identifier the verdict table names it
+# with. Without it a bar keeps its numbers while being re-attributed to another
+# measurement, and every later check goes on reading them as this one's.
+_FINDING_BAR_CELLS: Final[Mapping[int, str]] = {
+    1: "EjecteeProofCrossTab.non_direct_accuracy",
+    2: "MeetingFlagCrossTab",
+    3: "reporter_innocent_ejections",
+    4: "reporter_share_of_innocent_ejections",
+}
+# The four recorded sets every bar's own table reads, by the label it uses.
+# Required as a set, because an absent row reads as a set that constrains
+# nothing — which is how a compound bar loses the observation that fails it.
+_FINDING_SET_LABELS: Final[tuple[str, ...]] = (
+    "samples/9p2i",
+    "ml_corpus/9p2i",
+    "samples/4p1i",
+    "ml_corpus/4p1i",
+)
+# A rate claim is read as a bar's cell only inside a sentence about ejections:
+# every one of these four cells is an ejection cell, and a denominator alone
+# would make an unrelated sample of the same size fail.
+_EJECTION_WORD: Final = re.compile(r"\beject\w*", re.IGNORECASE)
 _COMPARATORS: Final[Mapping[str, Callable[[float, float], bool]]] = {
     "≥": lambda value, against: value >= against,
     "≤": lambda value, against: value <= against,
@@ -1496,7 +1527,9 @@ def labelled_table_rows(
 
     Emphasis and backticks are stripped from the label so a bolded or
     code-spanned row name reads the same as a bare one. ``None`` when no table
-    carries that header row — format drift the caller reports.
+    carries that header row, and ``None`` again when two rows carry the same
+    label — a dict would let the later one win, so a table stating one row
+    twice is drift the caller reports rather than silently resolves.
     """
 
     rows: dict[str, list[str]] | None = None
@@ -1515,7 +1548,10 @@ def labelled_table_rows(
             continue
         if all(_TABLE_RULE_CELL.match(cell) for cell in cells):
             continue
-        rows[_EMPHASIS.sub("", cells[0]).strip()] = cells[1:]
+        label = _EMPHASIS.sub("", cells[0]).strip()
+        if label in rows:
+            return None
+        rows[label] = cells[1:]
     return rows
 
 
@@ -2358,10 +2394,9 @@ def check_result_sources(repo_root: Path, readme: str, errors: list[str]) -> Non
       committed instrument test;
     * the vent-sighting headline, as arithmetic over the reading guide's own
       cross-tab cells, so the headline cannot drift from the table under it;
-    * the proof-vs-inference conviction pair, as the column sums of the
-      phase-19 close audit's partition table — together with the injustice
-      claim riding in the same row, which holds only while that table's
-      proof-present innocent-ejection row is zero.
+    * the proof-vs-inference conviction pair, as the pooled rows of the two
+      records that measured it — together with the injustice claim riding in
+      the same row, which holds only while the proof-present cell is perfect.
 
     What this check does NOT re-derive is deliberate: that the 100 replays
     still *reconstruct* is ``scripts/verify_samples.sh``'s answer, and the
@@ -3415,6 +3450,7 @@ def check_verdict_figures(repo_root: Path, errors: list[str]) -> None:
 class _Bar(NamedTuple):
     """One pre-registered bar, as its record's verdict table publishes it."""
 
+    cell: str
     target: str
     before: str
     after: str
@@ -3436,7 +3472,7 @@ def verdict_bars(audit: str) -> dict[int, _Bar] | None:
     for label, cells in rows.items():
         if not label.isdigit() or len(cells) != _VERDICT_TABLE_COLUMNS - 1:
             return None
-        bars[int(label)] = _Bar(cells[1], cells[2], cells[3], cells[4])
+        bars[int(label)] = _Bar(cells[0], cells[1], cells[2], cells[3], cells[4])
     return bars if set(bars) == set(_FINDING_BARS) else None
 
 
@@ -3514,6 +3550,8 @@ def check_finding_figures(repo_root: Path, errors: list[str]) -> None:
         )
         return
 
+    check_bar_cells(bars, errors)
+    check_registered_targets(repo_root, audit, bars, errors)
     check_bar_sections(audit, bars, errors)
     check_finding_history(repo_root, bars, errors)
     check_share_bar_identity(bars, errors)
@@ -3554,6 +3592,9 @@ def check_finding_figures(repo_root: Path, errors: list[str]) -> None:
         for number, prose in prose_blocks(text):
             for match in _RATE_CLAIM.finditer(prose):
                 cell = recorded.get(int(match.group(2)))
+                sentence = sentence_around(prose, match.start(), match.end())
+                if not _EJECTION_WORD.search(sentence):
+                    continue  # a same-sized sample of something else
                 if cell is not None and cell[0] != int(match.group(1)):
                     errors.append(
                         f"{document}:{number}: the claim {match.group(0)!r} is "
@@ -3682,12 +3723,28 @@ def check_bar_sections(audit: str, bars: dict[int, _Bar], errors: list[str]) -> 
     for number, bar in sorted(bars.items()):
         rows = bar_set_rows(audit, number)
         pooled = None if rows is None else rows.get(_RECORD_POOLED_LABEL)
-        if pooled is None or len(pooled) < 2:
+        if rows is None or pooled is None or len(pooled) < 2:
             errors.append(
                 f"{_FINDING_RECORD_AUDIT}: bar {number}'s own section has no "
                 "pooled row, so its verdict-table cells summarise nothing."
             )
             continue
+        missing = sorted(set(_FINDING_SET_LABELS) - set(rows))
+        if missing:
+            errors.append(
+                f"{_FINDING_RECORD_AUDIT}: bar {number}'s section is missing a "
+                f"row for {', '.join(missing)} — an absent set reads as one "
+                "that constrains nothing, which is how a per-set clause passes "
+                "vacuously."
+            )
+        for label, cells in sorted(rows.items()):
+            for cell in cells:
+                if cell_ratio(cell) is not None and cell_value(cell) is None:
+                    errors.append(
+                        f"{_FINDING_RECORD_AUDIT}: bar {number}'s {label!r} "
+                        f"cell {_EMPHASIS.sub('', cell).strip()!r} prints a "
+                        "rate its own fraction does not recompute to."
+                    )
         for column, summary, detail in (
             ("history", bar.before, pooled[0]),
             ("this record", bar.after, pooled[1]),
@@ -3698,6 +3755,73 @@ def check_bar_sections(audit: str, bars: dict[int, _Bar], errors: list[str]) -> 
                     f"reads {_EMPHASIS.sub('', summary).strip()!r} in the "
                     f"verdict table and {_EMPHASIS.sub('', detail).strip()!r} "
                     "in the bar's own pooled row."
+                )
+
+
+def check_bar_cells(bars: dict[int, _Bar], errors: list[str]) -> None:
+    """Each bar against the cell it registered, by that cell's own identifier.
+
+    The numbers alone do not say what they measure. A row that keeps its
+    figures while naming another metric re-attributes the bar, and every check
+    downstream goes on reading those figures as this bar's.
+    """
+
+    for number, expected in sorted(_FINDING_BAR_CELLS.items()):
+        stated = _EMPHASIS.sub("", bars[number].cell).strip()
+        if expected not in stated:
+            errors.append(
+                f"{_FINDING_RECORD_AUDIT}: bar {number} registered the cell "
+                f"{expected!r} and its verdict-table row now names {stated!r} — "
+                "the figures beside it would be read as this bar's regardless."
+            )
+
+
+def check_registered_targets(
+    repo_root: Path, audit: str, bars: dict[int, _Bar], errors: list[str]
+) -> None:
+    """Every target against the memo that fixed it before the bytes existed.
+
+    A pre-registered bar is worth exactly what its target's immutability is
+    worth, and the record restates each target twice — in the verdict table and
+    in the bar's own section. Both are held to the memo, so moving a threshold
+    after the measurement takes a coordinated edit to a document whose whole
+    purpose is that it was merged first, and still fails here.
+    """
+
+    memo = read_document(repo_root, _PREREGISTRATION_AUDIT, errors)
+    if memo is None:
+        return
+    registered = {
+        int(match.group(1)): target
+        for match in _MEMO_BAR.finditer(memo)
+        if (target := _MEMO_TARGET.search(match.group(2))) is not None
+    }
+    for number in sorted(bars):
+        memo_target = registered.get(number)
+        if memo_target is None:
+            errors.append(
+                f"{_PREREGISTRATION_AUDIT}: it registers no target for bar "
+                f"{number}, so {_FINDING_RECORD_AUDIT}'s copy of that bar is "
+                "the only statement of what it had to show."
+            )
+            continue
+        against = float(memo_target.group(2)) / (100 if memo_target.group(3) else 1)
+        section = bar_section(audit, number)
+        stated = _SECTION_TARGET.search(section or "")
+        for where, text in (
+            ("verdict table", bars[number].target),
+            ("own section", "" if stated is None else stated.group(1)),
+        ):
+            target = _VERDICT_TARGET.match(_EMPHASIS.sub("", text).strip())
+            if target is None or (
+                target.group(1),
+                float(target.group(2)),
+            ) != (memo_target.group(1), against):
+                errors.append(
+                    f"{_FINDING_RECORD_AUDIT}: bar {number}'s {where} states "
+                    f"the target {_EMPHASIS.sub('', text).strip()!r}, but "
+                    f"{_PREREGISTRATION_AUDIT} registered "
+                    f"{memo_target.group(0)!r} before the bytes existed."
                 )
 
 
