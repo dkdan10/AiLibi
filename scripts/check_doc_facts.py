@@ -188,7 +188,7 @@ import sys
 from collections.abc import Callable, Iterator, Sequence
 from datetime import date
 from pathlib import Path
-from typing import Final
+from typing import Final, NamedTuple
 
 _REPO_ROOT: Final = Path(__file__).resolve().parents[1]
 _SCRIPTS_DIR: Final = Path(__file__).resolve().parent
@@ -461,7 +461,7 @@ _RESULTS_TABLE_HEADER: Final[tuple[str, str]] = ("What", "Figure")
 # The column carrying each row's value at the recording this one replaced. Its
 # cells are HISTORY: the claim-shaped scans hold them to what the record itself
 # says the old value was, never to today's committed bytes.
-_BEFORE_COLUMN_HEADER: Final = "At baseline 6"
+_BEFORE_COLUMN_HEADER: Final = "At baseline 7"
 # A markdown link reduced to its text, so a column header may carry its glossary
 # link and still be matched by name.
 _LINK_TEXT: Final = re.compile(r"\[([^\]]*)\]\([^)\s]+\)")
@@ -545,11 +545,12 @@ _GUIDE_EXHIBIT: Final = re.compile(r"\b(4p1i|9p2i) seed (\d+)")
 # Below this the guide names too few exhibits for the binding to mean anything,
 # and a paragraph that quietly lost its seeds would pass vacuously.
 _MIN_EXHIBIT_SEEDS: Final = 2
-# The conviction partition. The BEFORE column is the phase-19 close audit's own
-# per-set table, whose four data columns sum to the pooled pair; the AFTER
-# column is the current record's pre-registered read, which measured the same
-# cells on the new bytes and publishes them pooled.
-_PROOF_PARTITION_AUDIT: Final = "audits/audit-phase-19-close.md"
+# The conviction partition. The AFTER column is the current record's read; the
+# BEFORE column is the read published by the recording the current one REPLACED,
+# which is the only recording a history column can honestly be about. Both are
+# parsed by :func:`record_partition`, so the two columns are the same cells
+# measured on two recordings rather than two differently-shaped tables.
+_PROOF_PARTITION_AUDIT: Final = "audits/audit-phase-20-baseline-7.md"
 # Each cell of the record's read is its own section, and the pooled row of the
 # table inside it is the cell the front door quotes. Located by the heading, so
 # the four ``| set | before | after |`` tables cannot be confused for each other.
@@ -582,20 +583,6 @@ _PROOF_CLAIM: Final = (
     "Ejection accuracy with engine-certified proof of the ejectee's role, "
     "against without"
 )
-_PROOF_TABLE_HEADER: Final = "cell"
-# The four rows read out of that table, by their own labels (emphasis stripped,
-# lowercased), so a reordered table derives the same figures and a renamed row
-# fails loud instead of deriving a silent half-sum.
-_PROOF_ROW: Final = "direct-proof accuracy"
-_NON_PROOF_ROW: Final = "non-direct accuracy"
-_INNOCENT_ROW: Final = "innocent ejections (all in the non-direct cell)"
-_PROOF_INNOCENT_ROW: Final = "proof-present innocent ejections"
-_PROOF_ROW_LABELS: Final[tuple[str, ...]] = (
-    _PROOF_ROW,
-    _NON_PROOF_ROW,
-    _INNOCENT_ROW,
-    _PROOF_INNOCENT_ROW,
-)
 # One reading of the conviction partition: the direct-proof accuracy, the
 # non-direct accuracy, the innocent ejections and the innocent ejections that
 # landed in the direct-proof cell.
@@ -615,10 +602,10 @@ _WIN_RATE_ROW_CLAIM: Final = "Impostor win rate, committed samples"
 _DERIVED_BEFORE_CLAIMS: Final[frozenset[str]] = frozenset(
     {_WIN_RATE_ROW_CLAIM, _PROOF_CLAIM}
 )
-# ...and the ones it only compares, because their baseline-6 values live in
-# audit prose no parser here reads. Naming them is the point: a row that moves
-# without landing in one of these two sets fails, so the unchecked set cannot
-# grow by accident.
+# ...and the ones it only compares, because the previous recording's value for
+# them was published on the front door of its own day and in no audit table a
+# parser here reads. Naming them is the point: a row that moves without landing
+# in one of these two sets fails, so the unchecked set cannot grow by accident.
 _QUOTED_BEFORE_CLAIMS: Final[frozenset[str]] = frozenset(
     {
         _CITATION_CLAIM,
@@ -637,6 +624,43 @@ _INJUSTICE_SENTENCE: Final = re.compile(
 # ``k of n = rate`` / ``k / n = rate`` — checked against its own arithmetic at
 # the precision it prints, wherever the front door writes one.
 _RATE_CLAIM: Final = re.compile(r"(\d+)\s*(?:of|/)\s*(\d+)\s*=\s*(0\.\d+|1\.0+)")
+
+# The record whose pre-registered rule DECIDED, as against the maintenance
+# recording the ladder tip stands at. The two are different documents on a
+# FINDING: the tip does not move, so the deciding record is anchored here or by
+# nothing at all, and its four bar cells would be the only headline figures on
+# the front door no check could hold to a source.
+_FINDING_RECORD_AUDIT: Final = "audits/audit-phase-21-adopting-record.md"
+# Its verdict table, located by its first two header cells. Six columns exactly:
+# bar, cell, target, the previous recording's value, this record's value, the
+# verdict. The width is required so a column added or dropped fails loud instead
+# of reading a neighbour's cell as the verdict.
+_VERDICT_TABLE_HEADER: Final[tuple[str, str]] = ("bar", "cell")
+_VERDICT_TABLE_COLUMNS: Final = 6
+# A target as the memo writes one: a comparator and the number it is against,
+# ahead of any per-set clause ("≥ 0.60, no powered set < 0.50").
+_VERDICT_TARGET: Final = re.compile(r"\A(≥|≤|<|>)\s*(\d+(?:\.\d+)?)")
+_VERDICT_MET: Final = "MET"
+_VERDICT_MISSED: Final = "MISSED"
+# The bars whose cell is a share, and whose numerator and denominator are the
+# two COUNT bars' own cells — the identity that makes the four bars one read
+# rather than four numbers.
+_SHARE_BAR: Final = 4
+_REPORTER_BAR: Final = 3
+# The verdict passage, as the front door must state it. The wrongful-ejection
+# gate admits only a count one of the two conviction partitions carries, so the
+# fall is stated as a pair in one sentence; the reporter split beside it names
+# both ends for the same reason.
+_FINDING_FALL_CLAIM: Final = "innocent ejections fell from {before} to {after}"
+_FINDING_REPORTER_CLAIM: Final = (
+    "{reporter} of those {after} were the meeting's own reporter, "
+    "against {reporter_before} of {before}"
+)
+# ...and the verdict word itself, derived from the bars rather than quoted, so a
+# record whose bars all passed could not be published under this wording.
+_FINDING_VERDICT_CLAIM: Final = "the rule returns {verdict}"
+_FINDING_VERDICT: Final = "a finding"
+_ADOPTION_VERDICT: Final = "an adoption"
 
 # The ML page's results table and the committed measurement it is derived from.
 # The table is located by its own header cells, so renaming the section above it
@@ -773,7 +797,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         f"{_READING_GUIDE} carries no file:line citation, narrates the cells "
         f"{_DEDUCTION_INSTRUMENT} pins, and names only games {_PICKER} "
         f"features; the claim-shaped facts hold across "
-        f"{len(_CLAIM_DOCUMENTS)} documents; every relative link in "
+        f"{len(_CLAIM_DOCUMENTS)} documents, the four bars "
+        f"{_FINDING_RECORD_AUDIT} decided among them; every relative link in "
         f"{len(_LINKED_DOCUMENTS) + len(_PUBLISHED_DOCUMENTS)} front-door and "
         f"published documents resolves; and {_REVIEW_INDEX} accounts for every "
         f"finding {_PHASE_20_CONTRACT} names, each mapped row crediting a "
@@ -812,6 +837,7 @@ def check_facts(repo_root: Path) -> list[str]:
     check_guide_line_citations(repo_root, errors)
     check_guide_narrative(repo_root, errors)
     check_verdict_figures(repo_root, errors)
+    check_finding_figures(repo_root, errors)
     check_featured_exhibits(repo_root, errors)
     check_relative_links(repo_root, errors)
     check_review_map(repo_root, errors)
@@ -2405,21 +2431,25 @@ def check_conviction_partition(
     """
 
     before = audit_partition(
-        repo_root, _PROOF_PARTITION_AUDIT, phase_19_partition, errors
+        repo_root, _PROOF_PARTITION_AUDIT, record_partition, errors
     )
     after = audit_partition(repo_root, _LADDER_TIP_AUDIT, record_partition, errors)
     if before is not None:
-        check_partition_arithmetic(*before, errors)
+        check_record_partition_arithmetic(
+            _PROOF_PARTITION_AUDIT, before[1], before[2], errors
+        )
         compare_before_figure(
             readme,
             _PROOF_CLAIM,
             partition_figure(before[0], before[1]),
-            f"the partition table in {_PROOF_PARTITION_AUDIT}",
+            f"the pre-registered read in {_PROOF_PARTITION_AUDIT}",
             errors,
         )
     if after is not None:
         proof, non_proof, innocent, proof_innocent = after
-        check_record_partition_arithmetic(non_proof, innocent, errors)
+        check_record_partition_arithmetic(
+            _LADDER_TIP_AUDIT, non_proof, innocent, errors
+        )
         compare_result_figure(
             _PROOF_CLAIM,
             figures,
@@ -2439,54 +2469,25 @@ def partition_figure(proof: tuple[int, int], non_proof: tuple[int, int]) -> str:
     )
 
 
-def check_partition_arithmetic(
-    proof: tuple[int, int],
-    non_proof: tuple[int, int],
-    innocent: int,
-    proof_innocent: int,
-    errors: list[str],
-) -> None:
-    """The partition table against itself, before either half is published.
-
-    An ejection is either correct or it convicted an innocent, so each accuracy
-    row already fixes its own injustice count: ``n - k``. The table states that
-    count separately, which makes the two rows checkable against each other —
-    and worth checking, because agreeing the front door with a drifted audit
-    would otherwise publish an internally contradictory table.
-    """
-
-    for label, (correct, total), stated in (
-        ("no-proof", non_proof, innocent),
-        ("proof-present", proof, proof_innocent),
-    ):
-        implied = total - correct
-        if implied != stated:
-            errors.append(
-                f"{_PROOF_PARTITION_AUDIT}: the {label} cell reads "
-                f"{correct}/{total}, so {implied} of its ejections convicted an "
-                f"innocent, but the table's own {label} innocent-ejection row "
-                f"totals {stated}."
-            )
-
-
 def check_record_partition_arithmetic(
-    non_proof: tuple[int, int], innocent: int, errors: list[str]
+    audit: str, non_proof: tuple[int, int], innocent: int, errors: list[str]
 ) -> None:
-    """The record's two decided bars against each other.
+    """One record's two decided cells against each other.
 
-    The accuracy bar and the wrongful-ejection bar are read from different
+    The accuracy cell and the wrongful-ejection cell are read from different
     instruments on the same bytes, and every wrongful ejection sits in the
-    non-direct cell — so one bar's ``n - k`` is the other bar's count. A record
-    whose two headline bars disagreed would put a contradiction on the front
-    door under one date.
+    non-direct cell — so one cell's ``n - k`` is the other's count. A record
+    whose two headline cells disagreed would put a contradiction on the front
+    door under one date. Run over BOTH columns' records, because a drifted
+    history is a contradiction the same way a drifted figure is.
     """
 
     implied = non_proof[1] - non_proof[0]
     if implied != innocent:
         errors.append(
-            f"{_LADDER_TIP_AUDIT}: its non-direct accuracy bar reads "
+            f"{audit}: its non-direct accuracy cell reads "
             f"{non_proof[0]}/{non_proof[1]}, so {implied} of those ejections "
-            f"convicted an innocent, but its wrongful-ejection bar reads "
+            f"convicted an innocent, but its wrongful-ejection cell reads "
             f"{innocent}."
         )
 
@@ -2887,68 +2888,6 @@ def vent_crosstab(guide: str) -> tuple[tuple[int, int], tuple[int, int]] | None:
     if set(labelled) != set(_VENT_ROW_LABELS):
         return None
     return labelled[_VENT_ROW_LABELS[0]], labelled[_VENT_ROW_LABELS[1]]
-
-
-def phase_19_partition(audit: str) -> _Partition | None:
-    """The conviction partition, pooled across the audit table's four sets.
-
-    The recording this one replaced measured these cells per set; pooling its
-    columns is what the front door's before column states. Each accuracy cell
-    contributes its own ``k/n`` — the leading ratio
-    of the cell, ahead of any interval or advisory note — so a set that
-    recorded no cell at all (``0/0``) pools as the nothing it is. Rows are
-    keyed on their own labels, so reordering the table changes nothing while
-    renaming a row fails loud. ``None`` when the table is absent, mislabelled,
-    or a cell holds no number: format drift the caller reports rather than
-    pools a half-sum through.
-    """
-
-    rows: dict[str, list[str]] = {}
-    seen_header = False
-    for line in audit.splitlines():
-        cells = table_cells(line)
-        if cells is None or len(cells) < 5:
-            if seen_header and rows:
-                break
-            continue
-        if not seen_header:
-            seen_header = _EMPHASIS.sub("", cells[0]).strip() == _PROOF_TABLE_HEADER
-            continue
-        if all(_TABLE_RULE_CELL.match(cell) for cell in cells):
-            continue
-        label = _EMPHASIS.sub("", cells[0]).strip().lower()
-        if label in rows:
-            return None
-        rows[label] = cells[1:5]
-    if set(_PROOF_ROW_LABELS) - set(rows):
-        return None
-
-    def ratio(label: str) -> tuple[int, int] | None:
-        pooled = [0, 0]
-        for cell in rows[label]:
-            match = _RATIO_CELL.search(cell)
-            if match is None:
-                return None
-            pooled[0] += int(match.group(1))
-            pooled[1] += int(match.group(2))
-        return (pooled[0], pooled[1]) if pooled[1] else None
-
-    def total(label: str) -> int | None:
-        pooled = 0
-        for cell in rows[label]:
-            match = _COUNT_CELL.search(cell)
-            if match is None:
-                return None
-            pooled += int(match.group(1))
-        return pooled
-
-    proof, non_proof = ratio(_PROOF_ROW), ratio(_NON_PROOF_ROW)
-    innocent, proof_innocent = total(_INNOCENT_ROW), total(_PROOF_INNOCENT_ROW)
-    if proof is None or non_proof is None:
-        return None
-    if innocent is None or proof_innocent is None:
-        return None
-    return proof, non_proof, innocent, proof_innocent
 
 
 def record_partition(audit: str) -> _Partition | None:
@@ -3391,9 +3330,7 @@ def check_verdict_figures(repo_root: Path, errors: list[str]) -> None:
     # already reports a record whose read cannot be found; a second report here
     # would name the same drift twice.
     partition = audit_partition(repo_root, _LADDER_TIP_AUDIT, record_partition, [])
-    previous = audit_partition(
-        repo_root, _PROOF_PARTITION_AUDIT, phase_19_partition, []
-    )
+    previous = audit_partition(repo_root, _PROOF_PARTITION_AUDIT, record_partition, [])
     if partition is None or previous is None:
         return
     counts = {str(partition[2]), str(previous[2])}
@@ -3438,6 +3375,220 @@ def check_verdict_figures(repo_root: Path, errors: list[str]) -> None:
                 "wrongful-ejection sentence names neither the count the record "
                 f"read ({partition[2]}) nor the one before it ({previous[2]}) "
                 f"— “{' '.join(sentence.split())}”."
+            )
+
+
+class _Bar(NamedTuple):
+    """One pre-registered bar, as its record's verdict table publishes it."""
+
+    target: str
+    before: str
+    after: str
+    verdict: str
+
+
+def verdict_bars(audit: str) -> dict[int, _Bar] | None:
+    """The record's verdict table, keyed on the bar number it registered.
+
+    ``None`` when the table is absent or is not the width this reader expects:
+    a column added or dropped would otherwise silently shift which cell reads
+    as the verdict, which is the one cell nothing else could catch.
+    """
+
+    rows = labelled_table_rows(audit, _VERDICT_TABLE_HEADER)
+    if not rows:
+        return None
+    bars: dict[int, _Bar] = {}
+    for label, cells in rows.items():
+        if not label.isdigit() or len(cells) != _VERDICT_TABLE_COLUMNS - 1:
+            return None
+        bars[int(label)] = _Bar(cells[1], cells[2], cells[3], cells[4])
+    return bars or None
+
+
+def cell_value(cell: str) -> float | None:
+    """One published cell as a number: the rate of a ``k/n = r``, or a count."""
+
+    plain = _EMPHASIS.sub("", cell).strip()
+    rate = _RATE_CLAIM.search(plain)
+    if rate is not None:
+        return float(rate.group(3))
+    count = re.fullmatch(r"\d+", plain)
+    return None if count is None else float(count.group(0))
+
+
+def cell_ratio(cell: str) -> tuple[int, int] | None:
+    """One published cell's ``k/n`` pair, or ``None`` where it states a count."""
+
+    rate = _RATE_CLAIM.search(_EMPHASIS.sub("", cell))
+    return None if rate is None else (int(rate.group(1)), int(rate.group(2)))
+
+
+def check_finding_figures(repo_root: Path, errors: list[str]) -> None:
+    """The deciding record's four bars, re-read and held to the front door.
+
+    On a FINDING the ladder tip does NOT move, so the record that decided is a
+    different document from the one :data:`_LADDER_TIP_AUDIT` names and no
+    constant here would reach it. Its four bar cells are the phase's headline
+    figures, so without this check they are the only headline figures the front
+    door states that nothing can fail on.
+
+    Three rules, each on a different failure. The verdict column is RECOMPUTED
+    from the bar's own target and its own cell, so a record cannot publish a
+    verdict its numbers do not support. The share bar's numerator and
+    denominator ARE the two count bars' cells, and are checked to be — that
+    identity is what makes the four bars one read. And every figure the front
+    door repeats is held to the cell that owns it: a rate wherever any claim
+    document writes one over a population THIS record measured, and the two
+    counts through the wording the README's verdict passage has to carry.
+    """
+
+    audit = read_document(repo_root, _FINDING_RECORD_AUDIT, errors)
+    readme = read_document(repo_root, _README, errors)
+    if audit is None or readme is None:
+        return
+    bars = verdict_bars(audit)
+    if bars is None:
+        errors.append(
+            f"{_FINDING_RECORD_AUDIT}: its verdict table cannot be located or "
+            f"is not {_VERDICT_TABLE_COLUMNS} columns wide — the front door's "
+            "account of what the record decided has nothing to be held to."
+        )
+        return
+
+    recorded: dict[int, tuple[int, int]] = {}
+    missed = False
+    for number, bar in sorted(bars.items()):
+        # THIS record's cells only. The table's history column is the ladder
+        # tip's own read, which :func:`check_verdict_figures` already pins, and
+        # registering it twice would name one drift under two causes.
+        ratio = cell_ratio(bar.after)
+        if ratio is not None and ratio[1]:
+            recorded[ratio[1]] = ratio
+        stated = _EMPHASIS.sub("", bar.verdict).strip().upper()
+        target = _VERDICT_TARGET.match(_EMPHASIS.sub("", bar.target).strip())
+        value = cell_value(bar.after)
+        if target is None or value is None:
+            errors.append(
+                f"{_FINDING_RECORD_AUDIT}: bar {number} states target "
+                f"{bar.target.strip()!r} and cell {bar.after.strip()!r}, and "
+                "one of the two cannot be read as a number — a verdict nobody "
+                "can recompute is prose."
+            )
+            continue
+        against = float(target.group(2))
+        met = {
+            "≥": value >= against,
+            "≤": value <= against,
+            "<": value < against,
+            ">": value > against,
+        }[target.group(1)]
+        expected = _VERDICT_MET if met else _VERDICT_MISSED
+        if stated != expected:
+            errors.append(
+                f"{_FINDING_RECORD_AUDIT}: bar {number} reads {value} against "
+                f"a target of {target.group(0)}, which is {expected}, but the "
+                f"verdict column says {stated or '(empty)'}."
+            )
+        missed = missed or expected == _VERDICT_MISSED
+
+    check_share_bar_identity(bars, errors)
+    for document in _CLAIM_DOCUMENTS:
+        text = read_document(repo_root, document, errors)
+        if text is None:
+            continue
+        for number, line in enumerate(text.splitlines(), 1):
+            if table_cells(line) is not None:
+                continue  # every table has a per-cell check of its own
+            for match in _RATE_CLAIM.finditer(line):
+                cell = recorded.get(int(match.group(2)))
+                if cell is not None and cell[0] != int(match.group(1)):
+                    errors.append(
+                        f"{document}:{number}: the claim {match.group(0)!r} is "
+                        f"over a population {_FINDING_RECORD_AUDIT} records, "
+                        f"whose cell is {cell[0]}/{cell[1]}."
+                    )
+    check_verdict_passage(readme, bars, missed, errors)
+
+
+def check_share_bar_identity(bars: dict[int, _Bar], errors: list[str]) -> None:
+    """The share bar's two halves, against the count bars they are taken over.
+
+    The share is not a fifth measurement: its numerator is the reporter bar's
+    count and its denominator the wrongful-ejection bar's, on both recordings.
+    A record whose share moved without either count moving is arithmetic that
+    does not close, and it would reach the front door as a single cell.
+    """
+
+    share, reporter, innocent = (
+        bars.get(_SHARE_BAR),
+        bars.get(_REPORTER_BAR),
+        bars.get(_INNOCENT_BAR),
+    )
+    if share is None or reporter is None or innocent is None:
+        errors.append(
+            f"{_FINDING_RECORD_AUDIT}: its verdict table is missing bar "
+            f"{_SHARE_BAR}, {_REPORTER_BAR} or {_INNOCENT_BAR} — the share and "
+            "the counts it is taken over are read together or not at all."
+        )
+        return
+    for column, share_cell, reporter_cell, innocent_cell in (
+        ("this record", share.after, reporter.after, innocent.after),
+        ("the recording before it", share.before, reporter.before, innocent.before),
+    ):
+        ratio = cell_ratio(share_cell)
+        counts = (cell_value(reporter_cell), cell_value(innocent_cell))
+        if ratio is None or None in counts:
+            continue  # an empty cell is the table's own drift, reported above
+        if [float(part) for part in ratio] != list(counts):
+            errors.append(
+                f"{_FINDING_RECORD_AUDIT}: bar {_SHARE_BAR}'s "
+                f"{column!r} cell reads {ratio[0]}/{ratio[1]}, but bars "
+                f"{_REPORTER_BAR} and {_INNOCENT_BAR} read "
+                f"{counts[0]} and {counts[1]} on the same recording."
+            )
+
+
+def check_verdict_passage(
+    readme: str, bars: dict[int, _Bar], missed: bool, errors: list[str]
+) -> None:
+    """The README's verdict passage, in the wording the two gates leave open.
+
+    The counts are the half no rate claim reaches, so they are held to a
+    required wording instead — the same device the proof row's injustice claim
+    uses. Both required sentences name BOTH recordings' value, because the
+    wrongful-ejection gate admits only a count one of the conviction partitions
+    carries and neither of this record's counts is one.
+    """
+
+    reporter, innocent = bars.get(_REPORTER_BAR), bars.get(_INNOCENT_BAR)
+    if reporter is None or innocent is None:
+        return  # reported by check_share_bar_identity
+    # Emphasis stripped, whitespace collapsed and case folded: the required
+    # sentence may open a paragraph or carry a bolded verdict word, and neither
+    # is a claim about the figures.
+    flat = " ".join(_EMPHASIS.sub("", readme).split()).casefold()
+    required = (
+        _FINDING_FALL_CLAIM.format(
+            before=innocent.before.strip(), after=innocent.after.strip()
+        ),
+        _FINDING_REPORTER_CLAIM.format(
+            reporter=reporter.after.strip(),
+            after=innocent.after.strip(),
+            reporter_before=reporter.before.strip(),
+            before=innocent.before.strip(),
+        ),
+        _FINDING_VERDICT_CLAIM.format(
+            verdict=_FINDING_VERDICT if missed else _ADOPTION_VERDICT
+        ),
+    )
+    for claim in required:
+        if claim.casefold() not in flat:
+            errors.append(
+                f"{_README}: its verdict passage does not state {claim!r} — "
+                f"{_FINDING_RECORD_AUDIT}'s verdict table is what that sentence "
+                "reports, so the front door states it in the wording the "
+                "wrongful-ejection and verdict gates can both read."
             )
 
 

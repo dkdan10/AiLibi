@@ -1,8 +1,8 @@
 # Reading guide — the outsider's five minutes
 
-Five minutes, no context: which numbers are real and where they are committed,
-what to run, what the corpus does and does not demonstrate, and which three
-audits to read first. Every number carries the path that owns it, and where this
+Five minutes, no context: which numbers are real and where they live, what to
+run, what the corpus does and does not demonstrate, and which three audits to
+read first. Every number carries the path that owns it, and where this
 page summarizes, the cited file wins. Private vocabulary is in the
 [glossary](glossary.md); the phase narrative in [history](history.md).
 
@@ -13,29 +13,31 @@ page summarizes, the cited file wins. Private vocabulary is in the
 The middle column is the current reference recording, made 2026-08-31; beside it
 is the recording it replaced. Where the two agree, nothing moved.
 
-| What | Figure | At baseline 6 | Recorded on, and where it lives |
+| What | Figure | At baseline 7 | Recorded on, and where it lives |
 |---|---|---|---|
 | Committed sample replays that reconstruct byte-identically | 100 of 100 | 100 of 100 | every commit — `bash scripts/verify_samples.sh` |
 | Observation-firewall violations, all phases | zero | zero | never breached in CI — the three mechanisms are named below |
 | Impostor win rate, committed samples | 36% (4p1i), 30% (9p2i) | 36% (4p1i), 24% (9p2i) | the 2026-08-31 record — [4p1i](../replays/samples/4p1i/MANIFEST.md), [9p2i](../replays/samples/9p2i/MANIFEST.md) |
 | Eject ballots carrying a valid citation, a turn or an observation id (9p2i) | 526 / 527, zero dangling | 538 / 538, zero dangling | reference recording 8, 2026-08-31 — [instrument](../tests/eval/test_vj_instruments.py) |
-| Ejection accuracy with engine-certified proof of the ejectee's role, against without | 333 / 333 = 1.0000 vs 50 / 96 = 0.5208 | 310 / 310 = 1.0000 vs 46 / 125 = 0.3680 | the 2026-08-31 record, pooled over four recorded sets — [the record](../audits/audit-phase-21-rerecord.md) §5.1, against [phase-19 close](../audits/audit-phase-19-close.md) §4.1 |
-| Correct 9p ejections riding an ejectee-specific vent sighting | 68 / 82 = 83% | 68 / 78 = 87% | reference recording 8, 2026-08-31 — the cross-tab in §3, [pinned](../tests/eval/test_deduction_metrics.py) |
+| Ejection accuracy with engine-certified proof of the ejectee's role, against without | 333 / 333 = 1.0000 vs 50 / 96 = 0.5208 | 326 / 326 = 1.0000 vs 61 / 103 = 0.5922 | the 2026-08-31 record, pooled over four recorded sets — [the record](../audits/audit-phase-21-rerecord.md) §5.1, against [the one before it](../audits/audit-phase-20-baseline-7.md) §3 |
+| Correct 9p ejections riding an ejectee-specific vent sighting | 68 / 82 = 83% | 69 / 85 = 81% | reference recording 8, 2026-08-31 — the cross-tab in §3, [pinned](../tests/eval/test_deduction_metrics.py) |
 | Impostor ballots cast against a partner (9p2i) | 0 of 218 | 0 of 219 | enforced by the meeting layer, not shown by the model — §3 |
 | Pre-registered emergence rulings demonstrated, phase 18 | 0 of 14 | 0 of 14 | [close audit](../audits/audit-phase-18-close.md), derived in [the emergence reading](../audits/audit-phase-18-flip-emergence.md) |
 | Learned tactical policies that became the default | none, ruled twice | none, ruled twice | [phase 17](../audits/audit-phase-17-close.md), [18](../audits/audit-phase-18-close.md) |
 
-The bars the previous recording was measured against were registered before the
-repairs that would be measured on it, and two of them were missed: conviction
-accuracy without engine-certified proof reached 61 of 103 = 0.5922 against a bar
-of 0.60, short by 0.0078, and wrongful ejections reached 42 against a bar of
-fewer than 35; the current recording registered no bars, and re-measured both
-cells the unflattering way, to 50 of 96 = 0.5208 and 46 innocent ejections. The
-rule's verdict on that read was therefore a **finding**, not an adoption. That
-recording became the reference in spite of it, by an explicit owner override of
-that verdict recorded with its grounds on 2026-08-26 — see §6.1 of
-[the phase-20 record](../audits/audit-phase-20-baseline-7.md), and read it before
-citing any row above as a pass.
+The previous recording's bars were registered before the repairs, and two
+missed: conviction accuracy without engine-certified proof
+reached 61 of 103 = 0.5922 against a bar of 0.60, and wrongful ejections reached
+42 against a bar of fewer than 35; the current recording registered no bars, and
+re-measured both cells the unflattering way, to 50 of 96 = 0.5208 and 46
+innocent ejections. That read was a **finding**, not an adoption; the recording
+became the reference by an explicit owner override dated 2026-08-26 — §6.1 of
+[the phase-20 record](../audits/audit-phase-20-baseline-7.md), to read before
+citing any row above as a pass. A later recording was put to four fresh bars and
+met three: innocent ejections fell from 46 to 20, but 11 of 20 = 0.5500 were
+still the meeting's own reporter, against a registered share of 0.40 — a
+**finding** again, and nothing was adopted
+([the record](../audits/audit-phase-21-adopting-record.md)).
 
 **How the firewall claim is enforced.** Three mechanisms: the
 [import-linter contracts](../.importlinter), the planted-leak test in
@@ -60,8 +62,8 @@ The served default is the 9-player, 2-impostor set, the one with meetings and
 suspicion arcs; the 4-player set is a fast fixture of short games. The curated
 list the guided tour opens is hand-picked, not scored, and spoiler-free.
 
-Three of those curated games are the ones to open first, each re-read on the
-2026-08-31 bytes: **9p2i seed 23**, twenty-six spoken turns over four meetings,
+Three of them are the ones to open first, each re-read on the 2026-08-31 bytes:
+**9p2i seed 23**, twenty-six spoken turns over four meetings,
 carrying no trace of the injustice it once held — a crewmate convicted on a
 sighting its speaker could not have made — the meeting in question flagging
 nothing and ejecting nobody; **9p2i seed 46**, four meetings and exactly one flag
@@ -73,9 +75,8 @@ the table.
 One qualification, the seam the project turns on: a flag is a contradiction the
 meeting layer *detected*, not a fact the engine *certified*. The ballot now says
 which is which — engine-certified role proof above two accounts that cannot both
-be true, with the detector's own weak stamp below them — where earlier
-recordings dressed every flag alike as verified proof, and the crew convicted on
-the difference.
+be true, the detector's own weak stamp below — where earlier recordings dressed
+every flag alike as verified proof, and the crew convicted on the difference.
 
 ## 3. What the corpus demonstrates — and what it does not
 
@@ -127,9 +128,8 @@ and these bytes carry four such convictions again
 The commissioned audits are AI auditors, not third parties, and every gameplay
 and ML number here comes from one model on one prompt set at 50 games per set.
 
-The ML program in research shape — problem, environment, method, one results
-table, the two behavioural findings, and what is wrong with the measurement — is
-[ml-program.md](ml-program.md).
+The ML program in research shape — method, results, and what is wrong with the
+measurement — is [ml-program.md](ml-program.md).
 
 ## 5. Where to go next
 

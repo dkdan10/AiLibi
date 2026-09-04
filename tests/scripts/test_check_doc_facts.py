@@ -37,9 +37,13 @@ _COPIED = (
     "replays/samples/9p2i/MANIFEST.md",
     "audits/audit-phase-18-close.md",
     "audits/audit-phase-19-close.md",
-    # The ladder-tip audit: the fixture stands every other audits/*.md up EMPTY,
-    # so the one the checker actually reads has to be copied whole.
+    # The three audits the checker actually reads: the fixture stands every
+    # other audits/*.md up EMPTY, so these are copied whole. The ladder tip
+    # publishes the current record's cells, the baseline-7 record the history
+    # column's, and the adopting record the four bars its verdict table decided.
     "audits/audit-phase-21-rerecord.md",
+    "audits/audit-phase-20-baseline-7.md",
+    "audits/audit-phase-21-adopting-record.md",
     "eval/vote_correctness.py",
     "replays/samples/4p1i/tournament-eval-report.json",
     "replays/samples/9p2i/tournament-eval-report.json",
@@ -116,19 +120,41 @@ _MAP_TASK_CELL = "| 20.8 |"
 # A finding the index names ONLY in its map row, so deleting that row really
 # does remove it from the document (C-31 is also named in the severity block).
 _MAP_ONLY_FINDING = "`C-9`"
-_PROOF_AUDIT = "audits/audit-phase-19-close.md"
-_PROOF_ROW = (
-    "| **direct-proof accuracy** | **68/68 = 1.000** [0.947, 1.0] | "
-    "**213/213 = 1.000** [0.982, 1.0] | 9/9 = 1.000 | 20/20 = 1.000 |\n"
+# The record the history column is history OF: the recording the current one
+# replaced, read through the same bar sections as the current one.
+_PROOF_AUDIT = "audits/audit-phase-20-baseline-7.md"
+_PROOF_ACCURACY_HEADING = "### Bar 1 — I-1 non-direct conviction accuracy: **MISSED**"
+_PROOF_ACCURACY_POOLED = (
+    "| **pooled** | **46/125 = 0.3680** [0.2886, 0.4553] | "
+    "**61/103 = 0.5922** [0.4957, 0.6822] |"
 )
-_NON_PROOF_ROW = (
-    "| **non-direct accuracy** | **10/33 = 0.303** [0.174, 0.473] | "
-    "**35/89 = 0.393** [0.298, 0.497] | 1/3 = 0.333 (advisory) | 0/0 — no cell |\n"
+_PROOF_INNOCENT_POOLED = "| **pooled** | **79** | **42** |"
+_PROOF_DIRECT_POOLED = "**326/326 = 1.000** pooled"
+# The record whose pre-registered rule DECIDED, and the four rows of its verdict
+# table the front door quotes. Each drifted twin moves one cell only.
+_FINDING_AUDIT = "audits/audit-phase-21-adopting-record.md"
+_FINDING_ACCURACY_ROW = (
+    "| 1 | `EjecteeProofCrossTab.non_direct_accuracy` pooled | "
+    "≥ 0.60, no powered set < 0.50 | 50/96 = 0.5208 | 46/66 = 0.6970 | **MET** |"
 )
-_INNOCENT_ROW = "| innocent ejections (all in the non-direct cell) | 23 | 54 | 2 | 0 |"
-_PROOF_INNOCENT_ROW = (
-    "| proof-present innocent ejections | **0** | **0** | **0** | **0** |"
+_FINDING_ACCURACY_DRIFTED = _FINDING_ACCURACY_ROW.replace(
+    "46/66 = 0.6970", "45/66 = 0.6818"
 )
+_FINDING_INNOCENT_ROW = (
+    "| 2 | `MeetingFlagCrossTab` innocent ejections pooled | < 35 | 46 | 20 | **MET** |"
+)
+_FINDING_INNOCENT_DRIFTED = _FINDING_INNOCENT_ROW.replace("| 20 |", "| 19 |")
+_FINDING_REPORTER_ROW = (
+    "| 3 | `reporter_innocent_ejections` pooled | ≤ 12 | 34 | 11 | **MET** |"
+)
+_FINDING_REPORTER_DRIFTED = _FINDING_REPORTER_ROW.replace("| 11 |", "| 10 |")
+_FINDING_SHARE_ROW = (
+    "| 4 | `reporter_share_of_innocent_ejections` pooled | < 0.40 | "
+    "34/46 = 0.7391 | 11/20 = 0.5500 | **MISSED** |"
+)
+_FINDING_SHARE_DRIFTED = _FINDING_SHARE_ROW.replace("11/20 = 0.5500", "9/20 = 0.4500")
+# The history cell both front-door tables carry for the conviction partition.
+_PREVIOUS_PARTITION_CELL = "326 / 326 = 1.0000 vs 61 / 103 = 0.5922"
 _ML_PAGE = "docs/ml-program.md"
 _ML_ARM_ROW = "| `ea4bc955…` (put to the bar) | 26/50 = 0.52 | 13/50 = 0.26 |"
 _ML_DROPPED_ARM_ROW = (
@@ -151,7 +177,7 @@ _UNFLAGGED_ROW = "| no (83 meetings) | 14 | 13 |"
 # first use is the results table's before-column header.
 _BASELINE_LINK = "[baseline 7](docs/glossary.md#baseline-n-the-reference-recording)"
 _BEFORE_COLUMN_LINK = (
-    "[At baseline 6](docs/glossary.md#baseline-n-the-reference-recording)"
+    "[At baseline 7](docs/glossary.md#baseline-n-the-reference-recording)"
 )
 _BASELINE_ANCHOR_HEADING = "### baseline N (the reference recording)"
 # "ladder tip" is private dialect too, so a planted ladder-tip sentence has to
@@ -904,7 +930,7 @@ def test_unlinked_dialect_term_detected(doc_tree: Path) -> None:
     # The one private-dialect term the front door keeps loses its glossary
     # link at its FIRST use — the results table's before-column header — so a
     # reader meets "baseline" with nowhere to look it up.
-    _substitute(doc_tree, _README, _BEFORE_COLUMN_LINK, "At baseline 6")
+    _substitute(doc_tree, _README, _BEFORE_COLUMN_LINK, "At baseline 7")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert "'baseline'" in errors[0]
@@ -955,7 +981,7 @@ def test_repeated_results_claim_detected(doc_tree: Path) -> None:
     # The stale copy is too narrow to reach the history column, so it has no
     # before cell at all — and the page then answers the history question two
     # ways as well.
-    assert any("has no 'At baseline 6' cell" in error for error in errors)
+    assert any("has no 'At baseline 7' cell" in error for error in errors)
     assert any("reads ''" in error for error in errors)
 
 
@@ -1111,25 +1137,17 @@ def test_mislabelled_vent_crosstab_row_fails_loud(doc_tree: Path) -> None:
     assert "no vent cross-tab" in errors[0]
 
 
-def test_proof_partition_derived_from_the_close_audit(doc_tree: Path) -> None:
-    # The before column is the column sum of the previous recording's own
-    # partition table, so a moved cell there moves the history the front door
-    # states rather than being absorbed.
-    _substitute(doc_tree, _PROOF_AUDIT, "**68/68 = 1.000**", "**60/68 = 0.882**")
-    errors = check_doc_facts.check_facts(doc_tree)
-    figure = [error for error in errors if "310 / 310 = 1.0000" in error]
-    assert len(figure) == 1
-    assert "'302 / 310 = 0.9742 vs 46 / 125 = 0.3680'" in figure[0]
-    # The arithmetic cross-check reads the same drift independently: eight of
-    # the proof-present cell's ejections would now have convicted an innocent,
-    # against a row that still totals zero. And the ML page, which quotes the
-    # same baseline-6 pair in prose, is now quoting a cell that moved.
-    assert len(errors) == 3
-    assert any("proof-present cell reads 302/310" in error for error in errors)
-    assert any(
-        error.startswith(_ML_PAGE) and "whose cell is 302/310" in error
-        for error in errors
+def test_proof_partition_derived_from_the_previous_record(doc_tree: Path) -> None:
+    # The before column is the read the recording this one replaced published,
+    # so a moved cell there moves the history the front door states rather than
+    # being absorbed.
+    _substitute(
+        doc_tree, _PROOF_AUDIT, _PROOF_DIRECT_POOLED, "**318/326 = 0.975** pooled"
     )
+    errors = check_doc_facts.check_facts(doc_tree)
+    figure = [error for error in errors if "326 / 326 = 1.0000" in error]
+    assert len(figure) == 1
+    assert "'318 / 326 = 0.9755 vs 61 / 103 = 0.5922'" in figure[0]
 
 
 def test_published_partition_derived_from_the_record(doc_tree: Path) -> None:
@@ -1144,7 +1162,7 @@ def test_published_partition_derived_from_the_record(doc_tree: Path) -> None:
     errors = check_doc_facts.check_facts(doc_tree)
     assert any("'333 / 333 = 1.0000 vs 53 / 96 = 0.5521'" in error for error in errors)
     # ...and the record's two decided bars now contradict each other.
-    assert any("its non-direct accuracy bar reads 53/96" in error for error in errors)
+    assert any("its non-direct accuracy cell reads 53/96" in error for error in errors)
 
 
 def test_record_innocent_bar_reaches_the_front_door(doc_tree: Path) -> None:
@@ -1161,7 +1179,7 @@ def test_record_innocent_bar_reaches_the_front_door(doc_tree: Path) -> None:
         "'40 of 40 innocent ejections sit in the no-proof cell'" in error
         for error in errors
     )
-    assert any("its wrongful-ejection bar reads 40" in error for error in errors)
+    assert any("its wrongful-ejection cell reads 40" in error for error in errors)
 
 
 def test_record_direct_proof_cell_reaches_the_front_door(doc_tree: Path) -> None:
@@ -1193,81 +1211,63 @@ def test_missing_record_bar_fails_loud(doc_tree: Path) -> None:
     assert "conviction-partition cells cannot be located" in errors[0]
 
 
-def test_proof_partition_read_by_label_not_position(doc_tree: Path) -> None:
-    # Reading the rows by order would invert the claim on a reordered table.
-    # Keyed on the labels, reordering changes nothing...
+def test_previous_record_pooled_row_read_by_label_not_position(doc_tree: Path) -> None:
+    # The pooled row is keyed on its own label, so moving it inside the bar's
+    # table changes nothing...
     text = _read(doc_tree, _PROOF_AUDIT)
-    assert _PROOF_ROW + _NON_PROOF_ROW in text
-    _write(
-        doc_tree,
-        _PROOF_AUDIT,
-        text.replace(_PROOF_ROW + _NON_PROOF_ROW, _NON_PROOF_ROW + _PROOF_ROW),
+    assert _PROOF_INNOCENT_POOLED in text
+    rows = text.split(_PROOF_INNOCENT_POOLED)
+    assert len(rows) == 2
+    moved = text.replace("| `samples/9p2i` | 23 | **14** |\n", "", 1).replace(
+        _PROOF_INNOCENT_POOLED,
+        f"{_PROOF_INNOCENT_POOLED}\n| `samples/9p2i` | 23 | **14** |",
+        1,
     )
+    _write(doc_tree, _PROOF_AUDIT, moved)
     assert check_doc_facts.check_facts(doc_tree) == []
 
 
-def test_swapped_proof_partition_labels_detected(doc_tree: Path) -> None:
-    # ...while swapping which cell is the proof cell inverts the finding, and
-    # is caught: convictions would then be near-chance WITH proof.
-    text = _read(doc_tree, _PROOF_AUDIT)
-    assert _PROOF_ROW in text and _NON_PROOF_ROW in text
-    swapped = _PROOF_ROW.replace(
-        "**direct-proof accuracy**", "**non-direct accuracy**"
-    ) + _NON_PROOF_ROW.replace("**non-direct accuracy**", "**direct-proof accuracy**")
-    _write(doc_tree, _PROOF_AUDIT, text.replace(_PROOF_ROW + _NON_PROOF_ROW, swapped))
-    errors = check_doc_facts.check_facts(doc_tree)
-    assert any("'46 / 125 = 0.3680 vs 310 / 310 = 1.0000'" in error for error in errors)
-    # And both injustice identities break with them, because the swap moves the
-    # 79 wrongful convictions into the cell that had none.
-    assert len(errors) == 3
-
-
-def test_proof_present_innocent_ejection_contradicts_the_close_audit(
-    doc_tree: Path,
-) -> None:
-    # The previous recording's own table must stay internally consistent: it
-    # recorded a perfect 310/310, so a proof-present innocent ejection in it
-    # contradicts its own accuracy cell.
+def test_swapped_previous_record_columns_detected(doc_tree: Path) -> None:
+    # ...while swapping the before and after halves of that row inverts the
+    # history: the column would state what the recording BEFORE the previous one
+    # read, on a page whose header names the previous one.
     _substitute(
         doc_tree,
         _PROOF_AUDIT,
-        _PROOF_INNOCENT_ROW,
-        "| proof-present innocent ejections | **1** | **0** | **0** | **0** |",
+        _PROOF_ACCURACY_POOLED,
+        "| **pooled** | **61/103 = 0.5922** [0.4957, 0.6822] | "
+        "**46/125 = 0.3680** [0.2886, 0.4553] |",
     )
     errors = check_doc_facts.check_facts(doc_tree)
-    assert len(errors) == 1
-    assert "proof-present cell reads 310/310" in errors[0]
+    assert any("326 / 326 = 1.0000 vs 46 / 125 = 0.3680" in error for error in errors)
 
 
-def test_innocent_ejection_total_drift_detected(doc_tree: Path) -> None:
-    # The before column's own arithmetic: 46/125 fixes 79 wrongful ejections.
+def test_previous_record_innocent_total_drift_detected(doc_tree: Path) -> None:
+    # The before column's own arithmetic: 61/103 fixes 42 wrongful ejections, so
+    # the two bars of the previous record are checked against each other exactly
+    # as the current record's are.
     _substitute(
         doc_tree,
         _PROOF_AUDIT,
-        _INNOCENT_ROW,
-        "| innocent ejections (all in the non-direct cell) | 25 | 54 | 2 | 0 |",
+        _PROOF_INNOCENT_POOLED,
+        "| **pooled** | **79** | **44** |",
     )
     errors = check_doc_facts.check_facts(doc_tree)
-    assert len(errors) == 2
-    arithmetic = [error for error in errors if "no-proof cell reads 46/125" in error]
+    arithmetic = [
+        error for error in errors if "non-direct accuracy cell reads 61/103" in error
+    ]
     assert len(arithmetic) == 1
-    assert "totals 81" in arithmetic[0]
-    # That total is also the count every "the recording before it" sentence is
-    # read against, so the history page still saying 79 is the same drift one
-    # document on.
-    assert any(
-        error.startswith(f"{_HISTORY}:") and "wrongful-ejection sentence" in error
-        for error in errors
-    )
+    assert _PROOF_AUDIT in arithmetic[0]
+    assert "wrongful-ejection cell reads 44" in arithmetic[0]
 
 
-def test_missing_proof_partition_table_fails_loud(doc_tree: Path) -> None:
-    # Losing the table must not read as "nothing to derive from".
+def test_missing_previous_record_bar_fails_loud(doc_tree: Path) -> None:
+    # Losing the bar must not read as "nothing to derive from".
     _substitute(
         doc_tree,
         _PROOF_AUDIT,
-        "| cell | samples 9p2i |",
-        "| population | samples 9p2i |",
+        _PROOF_ACCURACY_HEADING,
+        "### The first bar — I-1 non-direct conviction accuracy: **MISSED**",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
@@ -1275,11 +1275,14 @@ def test_missing_proof_partition_table_fails_loud(doc_tree: Path) -> None:
     assert "conviction-partition cells cannot be located" in errors[0]
 
 
-def test_renamed_proof_partition_row_fails_loud(doc_tree: Path) -> None:
-    # A row this derivation cannot identify must fail rather than pool a
-    # half-sum out of the rows it does recognize.
+def test_renamed_previous_record_pooled_row_fails_loud(doc_tree: Path) -> None:
+    # A pooled row this derivation cannot identify must fail rather than pool a
+    # half-sum out of the per-set rows it does recognize.
     _substitute(
-        doc_tree, _PROOF_AUDIT, "| **direct-proof accuracy** |", "| **proof cell** |"
+        doc_tree,
+        _PROOF_AUDIT,
+        _PROOF_INNOCENT_POOLED,
+        "| **all four sets** | **79** | **42** |",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
@@ -1482,8 +1485,8 @@ def test_partition_innocent_total_contradicting_its_own_accuracy_detected(
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert any(
-        "its non-direct accuracy bar reads 50/96" in error
-        and "wrongful-ejection bar reads 45" in error
+        "its non-direct accuracy cell reads 50/96" in error
+        and "wrongful-ejection cell reads 45" in error
         for error in errors
     )
     # ...and every surface still narrating the record's own 46 is now naming a
@@ -1493,6 +1496,7 @@ def test_partition_innocent_total_contradicting_its_own_accuracy_detected(
         _README,
         _READING_GUIDE,
         _HISTORY,
+        _ML_PAGE,
     }
 
 
@@ -1868,7 +1872,7 @@ def test_moved_figure_quoted_without_its_baseline_stamp_detected(
     errors = check_doc_facts.check_facts(doc_tree)
     assert any(
         error.startswith(_README)
-        and "has no 'At baseline 6' cell" in error
+        and "has no 'At baseline 7' cell" in error
         and _CITATION_ROW_CLAIM in error
         for error in errors
     )
@@ -1880,12 +1884,12 @@ def test_dropped_before_column_fails_loud(doc_tree: Path) -> None:
     _substitute(
         doc_tree,
         _READING_GUIDE,
-        "| What | Figure | At baseline 6 |",
+        "| What | Figure | At baseline 7 |",
         "| What | Figure |",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert any(
-        f"{_READING_GUIDE}: its results table has no 'At baseline 6' column" in error
+        f"{_READING_GUIDE}: its results table has no 'At baseline 7' column" in error
         for error in errors
     )
 
@@ -2063,7 +2067,7 @@ def test_guide_only_row_losing_its_before_cell_detected(doc_tree: Path) -> None:
     assert len(errors) == 1
     assert errors[0].startswith(_READING_GUIDE)
     assert "'Impostor ballots cast against a partner (9p2i)'" in errors[0]
-    assert "has no 'At baseline 6' cell" in errors[0]
+    assert "has no 'At baseline 7' cell" in errors[0]
 
 
 def test_truncated_row_losing_its_before_cell_detected(doc_tree: Path) -> None:
@@ -2115,14 +2119,15 @@ def test_verdict_rate_that_contradicts_its_own_fraction_detected(
 
 def test_verdict_wrongful_ejection_count_drift_detected(doc_tree: Path) -> None:
     # ...and the bare count beside it is held to the record the same way a
-    # "ladder tip" sentence is held to the baseline. The history page carries
-    # the one sentence that states the count without also saying "wrongful
-    # ejections" a second time, so perturbing it names the drift exactly once.
+    # "ladder tip" sentence is held to the baseline. The sentence perturbed here
+    # names BOTH recordings' counts, which is the shape the gate requires of a
+    # record whose own count it does not carry — so the perturbation moves both
+    # ends, leaving the sentence with neither.
     _substitute(
         doc_tree,
         _HISTORY,
         "wrongful ejections rose from 42 to 46",
-        "wrongful ejections rose from 42 to 47",
+        "wrongful ejections rose from 43 to 47",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
@@ -2149,7 +2154,7 @@ def test_wrongful_ejection_count_inside_a_longer_number_detected(
         doc_tree,
         _HISTORY,
         "wrongful ejections rose from 42 to 46",
-        "wrongful ejections rose from 42 to 146",
+        "wrongful ejections rose from 142 to 146",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
@@ -2165,9 +2170,161 @@ def test_wrongful_ejection_sentence_may_state_the_previous_count(
     _write(
         doc_tree,
         _READING_GUIDE,
-        guide + "\nThe recording before it recorded 79 wrongful ejections.\n",
+        guide + "\nThe one before it read 42 wrongful ejections.\n",
     )
     assert check_doc_facts.check_facts(doc_tree) == []
+
+
+def test_finding_accuracy_bar_reaches_the_front_door(doc_tree: Path) -> None:
+    # The deciding record's own bar-1 cell. Nothing else in this module reads
+    # that audit, so without this check the figure could drift on every page.
+    _substitute(
+        doc_tree, _FINDING_AUDIT, _FINDING_ACCURACY_ROW, _FINDING_ACCURACY_DRIFTED
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert errors[0].startswith(f"{_HISTORY}:")
+    assert "'46 of 66 = 0.6970'" in errors[0]
+    assert "whose cell is 45/66" in errors[0]
+
+
+def test_finding_share_bar_reaches_the_front_door(doc_tree: Path) -> None:
+    # Bar 4's cell is the one the record MISSED, so it is the figure a reader
+    # is most likely to check and the one a summary is most tempted to soften.
+    _substitute(doc_tree, _FINDING_AUDIT, _FINDING_SHARE_ROW, _FINDING_SHARE_DRIFTED)
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert any(
+        "'11 of 20 = 0.5500'" in error and "whose cell is 9/20" in error
+        for error in errors
+    )
+    # ...and the share stops being the two count bars taken over each other.
+    assert any(
+        "cell reads 9/20, but bars 3 and 2 read 11.0 and 20.0" in error
+        for error in errors
+    )
+
+
+def test_finding_innocent_bar_reaches_the_front_door(doc_tree: Path) -> None:
+    # Bar 2's cell is a bare count, so it is pinned through the wording the
+    # verdict passage carries rather than through a rate claim.
+    _substitute(
+        doc_tree, _FINDING_AUDIT, _FINDING_INNOCENT_ROW, _FINDING_INNOCENT_DRIFTED
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert any(
+        "does not state 'innocent ejections fell from 46 to 19'" in error
+        for error in errors
+    )
+
+
+def test_finding_reporter_bar_reaches_the_front_door(doc_tree: Path) -> None:
+    # ...and so is bar 3's, through the sentence that names both ends of it.
+    _substitute(
+        doc_tree, _FINDING_AUDIT, _FINDING_REPORTER_ROW, _FINDING_REPORTER_DRIFTED
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert any(
+        '"10 of those 20 were the meeting\'s own reporter, against 34 of 46"' in error
+        for error in errors
+    )
+
+
+def test_finding_verdict_column_is_recomputed(doc_tree: Path) -> None:
+    # The verdict column is not quoted: it is recomputed from the bar's own
+    # target and its own cell, so a record cannot publish a verdict its numbers
+    # do not support.
+    _substitute(
+        doc_tree,
+        _FINDING_AUDIT,
+        _FINDING_SHARE_ROW,
+        _FINDING_SHARE_ROW.replace("**MISSED**", "**MET**"),
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert any(
+        "bar 4 reads 0.55 against a target of < 0.40, which is MISSED, but the "
+        "verdict column says MET" in error
+        for error in errors
+    )
+
+
+def test_verdict_word_follows_the_bars_in_both_directions(doc_tree: Path) -> None:
+    # The other direction, which is the one no committed tree exercises: a
+    # record whose bars ALL passed may not be published under the finding
+    # wording, so the front door's verdict word is derived rather than typed.
+    _substitute(
+        doc_tree,
+        _FINDING_AUDIT,
+        _FINDING_SHARE_ROW,
+        "| 4 | `reporter_share_of_innocent_ejections` pooled | < 0.40 | "
+        "34/46 = 0.7391 | 7/20 = 0.3500 | **MET** |",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert any(
+        "does not state 'the rule returns an adoption'" in error for error in errors
+    )
+
+
+def test_missing_verdict_table_fails_loud(doc_tree: Path) -> None:
+    # Losing the table must not read as "nothing to be held to".
+    _substitute(
+        doc_tree,
+        _FINDING_AUDIT,
+        "| bar | cell | target |",
+        "| criterion | cell | target |",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert errors[0].startswith(f"{_FINDING_AUDIT}:")
+    assert "verdict table cannot be located" in errors[0]
+
+
+def test_verdict_table_of_the_wrong_width_fails_loud(doc_tree: Path) -> None:
+    # A dropped column would shift which cell reads as the verdict, which is
+    # the one cell nothing else could catch — so the width is required.
+    _substitute(
+        doc_tree,
+        _FINDING_AUDIT,
+        _FINDING_INNOCENT_ROW,
+        "| 2 | `MeetingFlagCrossTab` innocent ejections pooled | < 35 | 20 | **MET** |",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "verdict table cannot be located" in errors[0]
+
+
+def test_standalone_finding_count_sentence_is_refused(doc_tree: Path) -> None:
+    # The shape collision this passage is written around: the wrongful-ejection
+    # gate admits only a count one of the two conviction partitions carries, so
+    # a sentence naming ONLY this record's own count lands red...
+    _substitute(
+        doc_tree,
+        _README,
+        "Innocent ejections fell from 46 to 20, and 11 of those 20",
+        "The recording fell to 20 innocent ejections. 11 of those 20",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert any(
+        error.startswith(f"{_README}:")
+        and "a wrongful-ejection sentence names neither the count" in error
+        for error in errors
+    )
+    # ...and the two-part wording the committed page carries is what passes,
+    # which ``test_unperturbed_copy_passes`` proves on the same tree.
+
+
+def test_history_cell_naming_the_recording_before_the_previous_one_detected(
+    doc_tree: Path,
+) -> None:
+    # The header names the recording this one replaced, so a history cell
+    # holding the value from the recording BEFORE that — correct once, and
+    # still internally consistent between the two tables — has to fail.
+    stale = "310 / 310 = 1.0000 vs 46 / 125 = 0.3680"
+    for document in (_README, _READING_GUIDE):
+        _substitute(doc_tree, document, _PREVIOUS_PARTITION_CELL, stale)
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "the 'At baseline 7' cell of results row" in errors[0]
+    assert "recomputes to '326 / 326 = 1.0000 vs 61 / 103 = 0.5922'" in errors[0]
 
 
 def test_vent_row_without_its_population_fails_loud(doc_tree: Path) -> None:

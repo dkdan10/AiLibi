@@ -199,6 +199,23 @@ are published unchanged, which is the whole point of separating a maintenance
 record from an adopting one.
 [Record](../audits/audit-phase-21-rerecord.md).
 
+Then came what the re-record was for. Three meeting-layer repairs were built and
+kept switched off until a record could judge them — the reporter's own reasoning
+on its turn, a discipline on how corroborating accounts are counted, and
+structured testimony that survives into the ballot — and four bars were written
+down before any of it was measured. A 300-game recording made on 2026-09-03 met
+three: conviction accuracy without engine-certified proof rose to
+46 of 66 = 0.6970 against a bar of 0.60, innocent ejections fell from 46 to 20
+against a ceiling of fewer than 35, and the reporter's own count of them came to
+11 against a ceiling of 12. The fourth asked that the reporter be under 0.40 of
+what was left, and 11 of 20 = 0.5500 is not — the reporter channel closed faster
+than every other route and still dominated the much smaller total behind it. The
+rule is conjunctive, so that is a **finding**, not an adoption: nothing was
+adopted, the three repairs stay switched off, the reference recording did not
+move, and those 300 games are kept as named evidence beside the record instead
+of replacing the committed sets. No override was made.
+[Record](../audits/audit-phase-21-adopting-record.md).
+
 ---
 
 ## Where the sample sets came from
