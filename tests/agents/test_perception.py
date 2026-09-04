@@ -27,8 +27,8 @@ from agents.perception import (
     ingest_packet,
 )
 from agents.runtime import AgentRuntime
-from engine.rng import EngineRng
 from engine.entities import PlayerState, SabotageState
+from engine.rng import EngineRng
 from engine.world import WorldState, load_canonical_map
 from observation.packet import (
     AudibleEvent,
