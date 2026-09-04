@@ -156,11 +156,23 @@
     1129,
     1130,
     1131,
-    1132
+    1132,
+    1133,
+    1134,
+    1135,
+    1136,
+    1137,
+    1138,
+    1139,
+    1140,
+    1141,
+    1142,
+    1143,
+    1144
   ],
-  "next_seed": 1133,
+  "next_seed": 1145,
   "branch": "phase-21-adopting-record",
   "started": "2026-09-03",
   "notes": "RESUMED OPERATOR (2026-09-03, after the HTTP 529 kill). Leg 1 (samples/9p2i) is COMPLETE and was RE-VERIFIED on the staged bytes: validity gate PASS (ten checks), lever-ON tripwire reader exit 0 with stopped_cells empty and all nine gated cells PASS, deadline_default 0 under either shape, 0 failed_call rows, and all six stamped git_shas reconciled against the window-open sha 44f0a28c (0 frozen-directory files). Its figures are written into audits/audit-phase-21-adopting-record.md. LEG 2 (ml_corpus/9p2i, seeds 1000-1149) IN PROGRESS: batches of 12 under AILIBI_ML_CORPUS_ROOT=<staging>/ml_corpus (the recorder APPENDS the set name, so the root is <staging>/ml_corpus and NOT the contract's literal <staging>). OPERATING NOTE: on a --seeds batch the recorder ALWAYS exits 1 with 'is not the exact locked seed set ... NOT freezing' \u2014 check_seed_count refuses to freeze a partial set. That is EXPECTED and is not a stop: the batch's replays and MANIFEST rows are already written. Any other non-zero exit, or a requested seed missing from disk, IS a stop. NEXT: seeds 1025-1149 in 12-seed batches, then ONE finalizing run WITHOUT --seeds to build the eval report, splits.json and the FROZEN line; then leg 2's gate + reader + git_sha reconciliation + deadline_default hand scan; then leg 3 (samples/4p1i, roster 4/1/1, probe on seed 0 then 1-49, never --full) and leg 4 (ml_corpus/4p1i, probe on seed 1000 then the rest). CORPUS RE-RECORD FLOW: a present replay carrying a deadline_default row refuses the whole re-run at the pre-spend skip-scan \u2014 DELETE that replay and its MANIFEST row -> --seeds N -> the finalizing run. Checkpoint-PUSH after every batch and confirm origin carries it before the next begins.",
-  "head": "9b975281"
+  "head": "c9291539"
 }
