@@ -2419,6 +2419,14 @@ _ALLOWED_CLASS_WHERE: Final[dict[str, str]] = {
 _IN_TREE_PROBES: Final[dict[str, tuple[str, ...]]] = {
     "replays/samples/": ("replays/samples/4p1i", "replays/samples/9p2i"),
     "replays/ml_corpus/": ("replays/ml_corpus/4p1i", "replays/ml_corpus/9p2i"),
+    # The FINDING record's in-tree half. The 300 recorded games are NOT here:
+    # they stamp the Wave-2 keys True, the rule that read them said FINDING, and
+    # a bare shell resolves those keys False -- so the bytes live on a pinned
+    # evidence commit and only the pin and the digests are in the tree.
+    "replays/records/phase-21-wave2-finding/": (
+        "replays/records/phase-21-wave2-finding/EVIDENCE-MANIFEST.md",
+        "replays/records/phase-21-wave2-finding/README.md",
+    ),
     "agents/tactical/learned/{weights,crew_weights}.json": (
         "agents/tactical/learned/weights.json",
         "agents/tactical/learned/weights.json.sha256",
@@ -2467,6 +2475,10 @@ _IN_TREE_PROBES: Final[dict[str, tuple[str, ...]]] = {
 _IN_TREE_INVENTORY: Final[dict[str, tuple[tuple[str, ...], tuple[str, ...]]]] = {
     "replays/samples/": (("replays/samples",), ()),
     "replays/ml_corpus/": (("replays/ml_corpus",), ()),
+    "replays/records/phase-21-wave2-finding/": (
+        ("replays/records/phase-21-wave2-finding",),
+        (),
+    ),
     "agents/tactical/learned/{weights,crew_weights}.json": (
         (
             "agents/tactical/learned/weights.json",

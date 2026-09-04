@@ -656,13 +656,30 @@ are, and the recording is preserved at a named path outside them.
 **Prerequisite (G8) was UNRULED at dispatch**, so this record executed the orchestrator's
 recommendation: **a class-(c) orphan evidence commit**, its tip sha pinned in an in-tree class-(b)
 manifest and fetched by that sha, never in the working tree — the rule `docs/artifacts.md:51-58`
-already sets for raw per-seed recordings "read only when someone audits a specific claim". The four
-sets weigh ~224 MB, and no test opens a finding record, so class (a) does not apply. **This is
-PROVISIONAL.** If the owner rules for the in-tree class-(a)+(b) mechanism instead, the bytes move
-into `replays/records/phase-21-wave2-finding/` in a follow-up, one `docs/artifacts.md` row is added
-for the path, and the same path is added to `scripts/verify_ml_evidence.py`'s `_IN_TREE_PROBES` and
-`_IN_TREE_INVENTORY` mappings with its planted case — nothing in this audit's read changes either
-way.
+already sets for raw per-seed recordings "read only when someone audits a specific claim". No test
+opens a finding record, so class (a) does not apply. As executed:
+
+| | |
+|---|---|
+| pinned commit | `evidence/phase-21-wave2-finding` @ `29af85d5457caeba4f8ba8ba77610c6a0ab2213a`, parentless |
+| what is on it | 315 files, 260,113,361 bytes — the four set directories with their MANIFESTs, eval reports, `splits.json`, rosters, and a README whose first line states the reconstruct rule |
+| what is in the tree | 2 files — `replays/records/phase-21-wave2-finding/{EVIDENCE-MANIFEST.md,README.md}`, 40 KiB, holding the pin, the per-file `sha256` digests and the restore command |
+| registration | one `docs/artifacts.md` row for the in-tree path, added to `scripts/verify_ml_evidence.py`'s `_IN_TREE_PROBES` **and** `_IN_TREE_INVENTORY`, with a planted case in `tests/scripts/test_verify_ml_evidence.py` proving a stated count that disagrees with `git ls-files` fails |
+
+The pin is a SHA and not a branch name, which is the immutability guarantee: restored bytes are the
+bytes the manifest hashed or the digest check fails, and they are untracked by design and never
+committed back.
+
+**This is PROVISIONAL, and two things would change under the other ruling.** If the owner rules for
+the in-tree class-(a)+(b) mechanism, the bytes move into `replays/records/phase-21-wave2-finding/`
+itself and the row's class and size cells change with them; the registration, the probes, the
+inventory scope and the planted case are already in place and would carry over unchanged. A second
+consequence is recorded rather than executed: the class-(c) row shape Phase 18 uses pairs the in-tree
+manifest row with a `pinned sha` registry row driven by `scripts/verify_ml_evidence.py`'s
+evidence-manifest parser and restored by `scripts/fetch_evidence.sh`, both of which are hard-wired to
+the Phase-18 manifest family. Generalising them to a second family is real code in files this task's
+scope does not list, so this record registers ONE row — the DoD's own instruction — and routes the
+generalisation with the (G8) ruling. Nothing in the read changes either way.
 
 ### 6.2 The FINDING no-ops, each one a checked no-op rather than a silence
 

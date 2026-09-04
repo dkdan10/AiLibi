@@ -1,0 +1,357 @@
+# Task 21.24 — the Wave-2 lever-ON recording, pinned
+
+The FINDING record's 300 recorded games live on ONE parentless evidence commit and are **never in the working tree**. This manifest is the in-tree half: it owns the pinned sha, the per-file digests and the restore command, so the bytes are addressable and hash-checkable without the repository carrying 254 MB it has no test for.
+
+**Pinned commit:** `evidence/phase-21-wave2-finding` @ `29af85d5457caeba4f8ba8ba77610c6a0ab2213a`
+
+The pin is a SHA and not a branch name, and that is the immutability guarantee: a branch name is a moving pointer, a sha is not. Bytes restored below are the bytes this manifest hashed, or the digest check fails.
+
+## Why these bytes are not the canonical sets
+
+Every game here stamps the three Wave-2 keys `True`. The pre-registered rule (`audits/audit-phase-21-preregistration.md` §6) read **FINDING** over them, so the keys stay live toggles that resolve `False` in a bare shell, and `api/replay_loader.py::_assert_substrate_matches` compares the recorded `True` against a live `False` and REFUSES the game. Putting this recording under `replays/samples/` or `replays/ml_corpus/` would therefore break the bare `scripts/verify_samples.sh` leg, the served frontend and the phase close's own gate rerun — on bytes that are perfectly valid under their own slate. The whole read is `audits/audit-phase-21-adopting-record.md`.
+
+## Restore, by sha
+
+```bash
+# fetch the pinned object (not the branch name) and keep it reachable
+git fetch origin 29af85d5457caeba4f8ba8ba77610c6a0ab2213a
+git update-ref refs/evidence/phase-21-wave2-finding 29af85d5457caeba4f8ba8ba77610c6a0ab2213a
+
+# restore into an UNTRACKED working directory of your choosing
+git archive 29af85d5457caeba4f8ba8ba77610c6a0ab2213a | tar -x -C <somewhere outside the repo>
+```
+
+Restored bytes are **untracked by design and must never be committed back**: the record's verdict is FINDING, and re-introducing them to the tree is the one move the mechanism above forbids.
+
+## What is on the commit
+
+| set | files | bytes |
+|---|---|---|
+| `(root)` | 1 | 3,259 |
+| `ml_corpus/4p1i` | 54 | 6,839,898 |
+| `ml_corpus/9p2i` | 154 | 178,918,427 |
+| `samples/4p1i` | 53 | 6,255,056 |
+| `samples/9p2i` | 53 | 68,096,721 |
+| **total** | **315** | **260,113,361** |
+
+## Digests
+
+`sha256`, over the file as it sits on the pinned commit.
+
+| path | bytes | sha256 |
+|---|---|---|
+| `README.md` | 3259 | `6a67482b2f52c60b13fcf4331425edf2247b3fe89e4e40c88f11f29f619dd908` |
+| `ml_corpus/4p1i/MANIFEST.md` | 46916 | `52167a8f40aa40f6773fd835a992d6421674db27cc29f0ac0167be463d9c071d` |
+| `ml_corpus/4p1i/replay-seed-1000.jsonl` | 80213 | `e65cf3c90833731d869af9d8edbaf18b70d08bdb08c2226d365c6aa0b7c998fd` |
+| `ml_corpus/4p1i/replay-seed-1001.jsonl` | 76125 | `4d00ddf800573d9d98a21ce1a4e71c6137f6981392b0fe27d3b81ffeb35cd823` |
+| `ml_corpus/4p1i/replay-seed-1002.jsonl` | 78871 | `e5a4a706459741d4e9a5edf12c4a16d6bd76a0970895041e666c2f7efe254836` |
+| `ml_corpus/4p1i/replay-seed-1003.jsonl` | 79423 | `d758c4581aa50b73f198ea581e275c6d82b1ebc90e7045c235b56b894e7fba57` |
+| `ml_corpus/4p1i/replay-seed-1004.jsonl` | 80049 | `0b94f5854f7130baa8b5c8326dbee500d52889840571eb8bcca50aff9f49e54b` |
+| `ml_corpus/4p1i/replay-seed-1005.jsonl` | 79130 | `fed78845e6af90d9f8c93c46a22163b5c03271672798415a5f6af1f2bbb39f68` |
+| `ml_corpus/4p1i/replay-seed-1006.jsonl` | 81977 | `78c0990e92403f5c8aa4166b77ffd36828e0ae95e73dd7f629731dab72910733` |
+| `ml_corpus/4p1i/replay-seed-1007.jsonl` | 78709 | `99b20175e7593478013b63c73e6765aa8b86d325a277d68682b7e4acdec10406` |
+| `ml_corpus/4p1i/replay-seed-1008.jsonl` | 75141 | `9a4c8de0123dc4e081ef0f963137b82da934b7852561e680778dd5d3019ff35b` |
+| `ml_corpus/4p1i/replay-seed-1009.jsonl` | 4672 | `69d95d6de5013f9ca53aa4c1ee10e4a0a5c8164117c3381de2fe75971502de52` |
+| `ml_corpus/4p1i/replay-seed-1010.jsonl` | 81813 | `ff14e50922d528e51794780aeeb7050f1381874cdc0b4d142dcd7ad7820530c9` |
+| `ml_corpus/4p1i/replay-seed-1011.jsonl` | 81270 | `c4599ea5f13ba576969381e993391d428e80bb31fa4a0c7bb6bd41f1389647bd` |
+| `ml_corpus/4p1i/replay-seed-1012.jsonl` | 76275 | `a02eb348e5666593f2d0d8fef6f0310675d016309525e2ff8cec2d3fd68af1f5` |
+| `ml_corpus/4p1i/replay-seed-1013.jsonl` | 78968 | `88f8d9637f4c43384aae4330a0388c77f485c2f3de5babe43bc9aae38f58d80a` |
+| `ml_corpus/4p1i/replay-seed-1014.jsonl` | 77451 | `313dbcf272e4c6a69b35e91e4235657f64f555631c6d71b03ba7b376debb2bcf` |
+| `ml_corpus/4p1i/replay-seed-1015.jsonl` | 78659 | `8e00d8daa294419de56929f5a3bf879eea93a91e4b73abd1e1ec9f2f546dd46e` |
+| `ml_corpus/4p1i/replay-seed-1016.jsonl` | 5949 | `08a167139eefea0d5edced4fafadc029f6ec90387c23f8101ce61b014488dfc5` |
+| `ml_corpus/4p1i/replay-seed-1017.jsonl` | 78701 | `3fedcc4abf644091c55928559a8c42dd2255afe2d4e3202a8cd37fff5ab7de24` |
+| `ml_corpus/4p1i/replay-seed-1018.jsonl` | 77196 | `b4e86aa976bd5f3356b91500c646cf936029298d0760bec68e7d44a56d2b9967` |
+| `ml_corpus/4p1i/replay-seed-1019.jsonl` | 75159 | `7633c5c9128b8a98c4a22081368ec4d155dd7f53e92f6b89fa4a18d352607704` |
+| `ml_corpus/4p1i/replay-seed-1020.jsonl` | 78758 | `516b2d6ad66ed0184cd03d1cb9cae67b36be259b546973d6df562c14c95903ca` |
+| `ml_corpus/4p1i/replay-seed-1021.jsonl` | 79054 | `83c8ee7d7c4f4150c2d636f61aefc7365d617a84c4c3efcd19dad023a8ce37ce` |
+| `ml_corpus/4p1i/replay-seed-1022.jsonl` | 76799 | `827d32d778ae1ecf50925692dcb48d5862907603fdc5b5e0f31b6c873e6bf3ff` |
+| `ml_corpus/4p1i/replay-seed-1023.jsonl` | 77296 | `5d6f7b4999a765a73395d7097a253c62692074bd681d3e4a1406c7b2db2e6324` |
+| `ml_corpus/4p1i/replay-seed-1024.jsonl` | 6598 | `aa1d108358e8263f3855160170eda109743d138ebf7c7163d42e3a21260a6135` |
+| `ml_corpus/4p1i/replay-seed-1025.jsonl` | 82185 | `8855bb082d5106fcb1a1140c49e0a97cb8fc20dc6cb8ab842967b4f466785d16` |
+| `ml_corpus/4p1i/replay-seed-1026.jsonl` | 80480 | `7e2c424395fff122bdaf8b60e3c9aba5169176491db81fcb52b8dcda17143bdd` |
+| `ml_corpus/4p1i/replay-seed-1027.jsonl` | 80630 | `272ab92ede3edcb9a2af2f39d640bea552e5d79f99458ce8a90215bec0fe354e` |
+| `ml_corpus/4p1i/replay-seed-1028.jsonl` | 80069 | `11faa08d023bdd9d81716df2290eb7b375a9a6dd831097e8e12af33cc511788c` |
+| `ml_corpus/4p1i/replay-seed-1029.jsonl` | 79775 | `dc67986b78bd955fb90993ed88c6ee1cabcb444fa585781b9a1ca6ca68677e3e` |
+| `ml_corpus/4p1i/replay-seed-1030.jsonl` | 76911 | `8a4752cffe70121ddf95a30296bf640b20fb0afc145be68884cecdebd23fe176` |
+| `ml_corpus/4p1i/replay-seed-1031.jsonl` | 5949 | `970715e89700d88d1e90c5765401bc043747d45605f56127e4ce1f019e016653` |
+| `ml_corpus/4p1i/replay-seed-1032.jsonl` | 79667 | `78735c0a077fb91adb56c59cd0be4c217c4891f81231e0fa5dd7e515f6e2334b` |
+| `ml_corpus/4p1i/replay-seed-1033.jsonl` | 78641 | `204cc15309e8f7aafee85418ab3ce612036dd6de5034732d315aa117f09e5849` |
+| `ml_corpus/4p1i/replay-seed-1034.jsonl` | 79854 | `178700bd069f16da4e44f5ab056301fedf7d7268341956aef13259886d681c7a` |
+| `ml_corpus/4p1i/replay-seed-1035.jsonl` | 75314 | `57476f6c05f7cf9c3c02d044f97f00f047e50d0ae177d54b0a2488066b050d7c` |
+| `ml_corpus/4p1i/replay-seed-1036.jsonl` | 81636 | `71f7e8881520890c0ec65a3ebc7ff7d436848228fd497c6fd3c759d79e708167` |
+| `ml_corpus/4p1i/replay-seed-1037.jsonl` | 3883 | `6d02877d228116b6a7e17bea0a9a75fb01323ca1d219ecca8fb954bf30292ba3` |
+| `ml_corpus/4p1i/replay-seed-1038.jsonl` | 81967 | `bcf1613b876fbabfc6cc2a290c9c5c274ff3f40b345b2a78abb262004d309ca3` |
+| `ml_corpus/4p1i/replay-seed-1039.jsonl` | 78197 | `be60e8af0c42e01f47935928522babc02ea5907a4e204d55e1fe219401da82b9` |
+| `ml_corpus/4p1i/replay-seed-1040.jsonl` | 75866 | `d3bc983e3ede6ee2fcd618339074e531e11f768f7ac6ecbecc8c998ba1c5bbb8` |
+| `ml_corpus/4p1i/replay-seed-1041.jsonl` | 3432 | `af9e3c4996224e25902e678b79b8c7ce58704d566567fbed7763ee5dffb6fc24` |
+| `ml_corpus/4p1i/replay-seed-1042.jsonl` | 82155 | `a5ecf7f592a778ec86fb7e5ae4bf8e195dad6eb34870cc8b8d1dfa16a3cde2ca` |
+| `ml_corpus/4p1i/replay-seed-1043.jsonl` | 81090 | `a17f2b0dfd48fb6bacad30cb38a78ba161c64b594beeb1b9d0b729b387bf703f` |
+| `ml_corpus/4p1i/replay-seed-1044.jsonl` | 79422 | `37f98d0d3bb9ad1919e4419bb120d823b1c69f7ddc9854e38da4c6b36d90214e` |
+| `ml_corpus/4p1i/replay-seed-1045.jsonl` | 76059 | `1a89c7819613e76fc57d265a6232a22ae75dc91eb4890c42718fb24beb3c5c9e` |
+| `ml_corpus/4p1i/replay-seed-1046.jsonl` | 3883 | `16ef933b70ddc369c48b9ee9006149211fead8fa9bdb91e7a8a0d69f93dd09e1` |
+| `ml_corpus/4p1i/replay-seed-1047.jsonl` | 80207 | `6aa8a847130364b215a1767f3588446646caa8566ac62c2d2335c3b76a98866a` |
+| `ml_corpus/4p1i/replay-seed-1048.jsonl` | 75126 | `5b21cdea3b2cf6534f585f7fe916036820467e2a776ece6e3645f5af061dcab8` |
+| `ml_corpus/4p1i/replay-seed-1049.jsonl` | 77424 | `2f2225e518c5b0640f725f7526a94f4da96fe17e487aade2827baf63f43c6cea` |
+| `ml_corpus/4p1i/roster.json` | 64 | `5677a544fbab6db4cc7547ca5605089eaa2feb15fecb11b8c6cda9d11e096a86` |
+| `ml_corpus/4p1i/splits.json` | 719 | `4649805bb831c7140a81c312ffa184be1fa0dc6e98a85d75f1998a6dd852ae1f` |
+| `ml_corpus/4p1i/tournament-eval-report.json` | 3368121 | `6afd74f7e25fd271b4b16dbdc89d581d4a881c3a80347ca67539722c3672b45d` |
+| `ml_corpus/9p2i/MANIFEST.md` | 144551 | `c25d7c47200271d09d9d0b2a079368b4b416d5fb0a240c59aa580926a45b78a6` |
+| `ml_corpus/9p2i/replay-seed-1000.jsonl` | 516693 | `c7215c478fc5b4bbbefcf0dbda5a8d419773a6dfccfd89504fd388b40d51e5fe` |
+| `ml_corpus/9p2i/replay-seed-1001.jsonl` | 434450 | `abb0298d4992d99f6b7bb33f0da94a03cbfdad545e1ae05f0f845421195e2eea` |
+| `ml_corpus/9p2i/replay-seed-1002.jsonl` | 803875 | `50896e2352dca591fc6a924b2230dff6093e9573164f506735b55e4f0e9e5d6f` |
+| `ml_corpus/9p2i/replay-seed-1003.jsonl` | 675348 | `c01393a77ef788fa43a669ef533dac4c7e19d006285d4a5bf4c60425d576c581` |
+| `ml_corpus/9p2i/replay-seed-1004.jsonl` | 379630 | `3027542b0eb7679e6601ec40c0ef7da65a6f92fd145eb77b31136dfcbaf0f6af` |
+| `ml_corpus/9p2i/replay-seed-1005.jsonl` | 419964 | `e46af6b14a9eb67998ee090f6fbf99c5fb8a185272f6c9e1f089855b8a030a41` |
+| `ml_corpus/9p2i/replay-seed-1006.jsonl` | 432469 | `158c1e70856049f34e0709d9b7e9d55ffb3ad150120c168b61dd762ba5c4b8bb` |
+| `ml_corpus/9p2i/replay-seed-1007.jsonl` | 426737 | `c32d37eb66cc73fb3991424d7d008489b39358cf546d360b99885f09ed15636a` |
+| `ml_corpus/9p2i/replay-seed-1008.jsonl` | 464829 | `1a51a0b6b5880912b3437c3611454fad06cf1960f4c933ea199cf93d03e0f9fa` |
+| `ml_corpus/9p2i/replay-seed-1009.jsonl` | 471456 | `7dda46b42867fbdec85b880d92d81c5f16fc592810d00bb37d1422c9d8c9d190` |
+| `ml_corpus/9p2i/replay-seed-1010.jsonl` | 719409 | `2c330d5613edbdb83961cc14f3e99a2acf9f63cbfd3ecc7a865b7a8dd901d907` |
+| `ml_corpus/9p2i/replay-seed-1011.jsonl` | 586340 | `beb8f9a953b4435c04963cb455fe4dc15aa6db93fb0392cd688f2a27b6084ba8` |
+| `ml_corpus/9p2i/replay-seed-1012.jsonl` | 929949 | `ae80a0223cfcd1b9f98643760ac20098c92746e4172aac6168b0f3e37b3d7c82` |
+| `ml_corpus/9p2i/replay-seed-1013.jsonl` | 528709 | `fae7dd9029067278724dd8d5157dc53d54f61883e2e3e3f7419c7fff203c40af` |
+| `ml_corpus/9p2i/replay-seed-1014.jsonl` | 706512 | `0380a45ecc331a6f0994b80aceb7e5ec5b8dfa0a1f46218efdce5ad6cc43f305` |
+| `ml_corpus/9p2i/replay-seed-1015.jsonl` | 786900 | `a61e68ca9666c08ef7938f7ea7687ecf559bc2031a33737f1b36419954de9033` |
+| `ml_corpus/9p2i/replay-seed-1016.jsonl` | 632311 | `d13da22675b59631c45a9b9bc5b25ba7c4e764128c9ef3645c3175ed960797fe` |
+| `ml_corpus/9p2i/replay-seed-1017.jsonl` | 467714 | `ec0488a0086660e38868866be78ad9c40137abd75f26a25ed74009c6ff921c42` |
+| `ml_corpus/9p2i/replay-seed-1018.jsonl` | 745565 | `61df3603cd8b6d0b05450e40fe470f0757bcd94d132fcf999d3d975fa548ed82` |
+| `ml_corpus/9p2i/replay-seed-1019.jsonl` | 401486 | `252be9fef53aae90c4130aec8a335820f2aa6dc85d73ba2a0e0c6bc32f1b864b` |
+| `ml_corpus/9p2i/replay-seed-1020.jsonl` | 676927 | `61e5e85c3ed073bce05db9cadf97db06f07705d755897fb13eeee165aa279fb7` |
+| `ml_corpus/9p2i/replay-seed-1021.jsonl` | 536558 | `9a9e2712ad53c94074013ad9788b7fedae832678a37186443e8b6915ce8d8d36` |
+| `ml_corpus/9p2i/replay-seed-1022.jsonl` | 860228 | `113dcfb8c6c0d0e4db0f34b69fdeef16f4c827b4d29bcdcda2137dde9d8e86b5` |
+| `ml_corpus/9p2i/replay-seed-1023.jsonl` | 960483 | `d3102a9fda8f44348fbbf1621f89c3b04826cc8cbd70fac733f630435e1e2ac7` |
+| `ml_corpus/9p2i/replay-seed-1024.jsonl` | 648839 | `8c52c2916bcbf7383aa62a3b9faf02fbc5292cc2e3c815b4668f5eb5676556c5` |
+| `ml_corpus/9p2i/replay-seed-1025.jsonl` | 420139 | `d35961c5f4a278ce1bf791fa1db07f96c603263256b7047dac173ff7fb869310` |
+| `ml_corpus/9p2i/replay-seed-1026.jsonl` | 541587 | `9964e5ea56d4f90bc4b7839b286d5e3120a8bc7c4a2ef3fff723a0c98a4c4f28` |
+| `ml_corpus/9p2i/replay-seed-1027.jsonl` | 785946 | `3892a764f3172085e07ca02fa2adc1ecc8595ad2fb4365c19efcc49df8de9c5e` |
+| `ml_corpus/9p2i/replay-seed-1028.jsonl` | 637501 | `5eb6af9ab5cf013fee485a571d508a2b052040be7f35ed5927ba2942f80a6bd1` |
+| `ml_corpus/9p2i/replay-seed-1029.jsonl` | 635701 | `fc87e76da8ed45744fbe4f2d489b18adc29b56d5d72710cbe73715f28818cd0b` |
+| `ml_corpus/9p2i/replay-seed-1030.jsonl` | 491131 | `6052c5c8a3d0b44c463729c02ab617ec32b7dc27bc411e88aad213c86f9c32df` |
+| `ml_corpus/9p2i/replay-seed-1031.jsonl` | 425203 | `45a1b2dd33bb74a0a8c53f0d79856873ab741016acc38770e4b9d762dc3926b3` |
+| `ml_corpus/9p2i/replay-seed-1032.jsonl` | 555031 | `a7431226da40ee199c579ed67448651d3bb5a8bfa1606eec8f19bc30f2b9c90f` |
+| `ml_corpus/9p2i/replay-seed-1033.jsonl` | 493717 | `5a9e592a6dd78810607f0c8d77c49a589c544ad5a0f909571ca2df1869af9146` |
+| `ml_corpus/9p2i/replay-seed-1034.jsonl` | 415768 | `d64ee8de924bce6436aa6f4cc18e2c1dcaa9b4d11aa69624cf6f8d3c9e29b533` |
+| `ml_corpus/9p2i/replay-seed-1035.jsonl` | 398797 | `4d96e6652d4aa8c34bf9e0e8b4c1cec3c4812c51d06fdaf84d52b1e2e303cb7c` |
+| `ml_corpus/9p2i/replay-seed-1036.jsonl` | 535660 | `b54bc044d7f9576b60c2fae70c4459035d8d2b8d9001ffcaf95bf9ed185ceea4` |
+| `ml_corpus/9p2i/replay-seed-1037.jsonl` | 490268 | `f009ee763eedcaaa2ca61ed342f2e1cbedd4b30e16faff283753f4c501b859d8` |
+| `ml_corpus/9p2i/replay-seed-1038.jsonl` | 558161 | `8aefd2c7066f2cce6ba9263f8ecc5bba4ff38e5f44d57d15018f18218ca5cfb7` |
+| `ml_corpus/9p2i/replay-seed-1039.jsonl` | 689381 | `581ea925caa496b0b4873c9053ed234f556037e41c032ee3de254804e3af46f1` |
+| `ml_corpus/9p2i/replay-seed-1040.jsonl` | 568226 | `fd533e2468106a23a03eb50039540daa0904bf70767e334a8de840a8e2db257c` |
+| `ml_corpus/9p2i/replay-seed-1041.jsonl` | 785896 | `d4c967873b2e4dce8cf4c394d1451b638027625c82f620fcad13d99ccf292efc` |
+| `ml_corpus/9p2i/replay-seed-1042.jsonl` | 503697 | `625a10c014b8c2b4b0414a592fb8ef2304de9f6993c17fadf97a9ea1af83e0d4` |
+| `ml_corpus/9p2i/replay-seed-1043.jsonl` | 462124 | `6517a622f1f0d7ae43b98998a6eebed432206d37f488ac3a062ae4290d76486b` |
+| `ml_corpus/9p2i/replay-seed-1044.jsonl` | 782101 | `dd7632b29444f16d784114952b51a97827b4e73c9a6de441312b75567c13a9fe` |
+| `ml_corpus/9p2i/replay-seed-1045.jsonl` | 698716 | `2ac97c3637f94101524c10d984d64bb8bb9b2dbac4235183eadadc0cc97f86aa` |
+| `ml_corpus/9p2i/replay-seed-1046.jsonl` | 644670 | `2b055ea241b87f016b15a9edb4cfff933786f6c44f17b02de749482b7080c238` |
+| `ml_corpus/9p2i/replay-seed-1047.jsonl` | 454079 | `7b5d27ce89c5769cea8ee415acd556213cbd16b09f0661c75a1ba8bd75a75840` |
+| `ml_corpus/9p2i/replay-seed-1048.jsonl` | 861950 | `1f9ac173dc299b89beb0612b536be5d9f71636fe9581d904eb389b9f3013ad1e` |
+| `ml_corpus/9p2i/replay-seed-1049.jsonl` | 620460 | `9226b61478720a85128501d813fac4e17e19311e6a00f30a658affa03c582617` |
+| `ml_corpus/9p2i/replay-seed-1050.jsonl` | 692597 | `5d58db04a0e5f439ec4a698f3edcba81b365c0b7bace463c4d3f16c9f7dc09c9` |
+| `ml_corpus/9p2i/replay-seed-1051.jsonl` | 441169 | `9d5c32f2067063a63bebd1daa24e1dda93cde6670c991e959c58b20105b75094` |
+| `ml_corpus/9p2i/replay-seed-1052.jsonl` | 643991 | `850f5a6b1981f01d1fcea93828aa4d3da5f93b699459c5a7581299afb0e90228` |
+| `ml_corpus/9p2i/replay-seed-1053.jsonl` | 884198 | `46fee5ef79c57da716c510490e44446fac9b8e92ed05d8a9b881f61c00986312` |
+| `ml_corpus/9p2i/replay-seed-1054.jsonl` | 1004997 | `6aa5a37d1e75ff04438640644b1a1819e84d08ca9219bdbf0e3556999e1cd0b4` |
+| `ml_corpus/9p2i/replay-seed-1055.jsonl` | 698198 | `6e51e6b804b65e79c4d496a2ae7a1dc01feee466fe69a0cd9b7813aba29d9b85` |
+| `ml_corpus/9p2i/replay-seed-1056.jsonl` | 622536 | `4fba8739dcf6f71d4f5d17fde7a631a314e9684e301812fbacf3558d6f28a3dc` |
+| `ml_corpus/9p2i/replay-seed-1057.jsonl` | 776065 | `01ed4b9013b6100f80bcd7cfb9cba47bf9f4b2fbc4c22f895310a7b552cd2948` |
+| `ml_corpus/9p2i/replay-seed-1058.jsonl` | 880437 | `8328e4163959af688710cf13f4f57b0d267cdb0b21cc4db7ea642fb74945462a` |
+| `ml_corpus/9p2i/replay-seed-1059.jsonl` | 884679 | `b4fe3afd5245f5b20ed312c64446abc28e559ef9aa299fac7f8c2051534c35a9` |
+| `ml_corpus/9p2i/replay-seed-1060.jsonl` | 490919 | `642ed5546391a9eb45fdd48b91127127d32650df676c58cd03cf5b10cc301760` |
+| `ml_corpus/9p2i/replay-seed-1061.jsonl` | 743609 | `c6c99fbdeee0c25f943ce816a89170ca12bb1890fe8d396e7d1e34e7dd8d4577` |
+| `ml_corpus/9p2i/replay-seed-1062.jsonl` | 640856 | `38e43af047b9d7162dbaa63fa856e8d457daccdad73ce0ef2fc2942750bdaabb` |
+| `ml_corpus/9p2i/replay-seed-1063.jsonl` | 418628 | `bf9fe9175bdf61c04950c2bfec3eae4f43b3f8a8189ebe5003d1558f05a58b8f` |
+| `ml_corpus/9p2i/replay-seed-1064.jsonl` | 692027 | `2006cdac2149e5c933cfe202343bfcf951748ed1a212caf35adcc4cd9a82fdcc` |
+| `ml_corpus/9p2i/replay-seed-1065.jsonl` | 525001 | `ebee43527644b80eef44408d2cb668137a2ef29a380e13957b8820d4a6c54356` |
+| `ml_corpus/9p2i/replay-seed-1066.jsonl` | 712281 | `39fcfa6bb94888c77b32dcebdaa303a299505a64f24be8814de49fd06ad4c0de` |
+| `ml_corpus/9p2i/replay-seed-1067.jsonl` | 421234 | `24afae25c48101d9a50fafdab35019a173ccc9d59c22cd6309d1045a7442fbbc` |
+| `ml_corpus/9p2i/replay-seed-1068.jsonl` | 469528 | `df4c13a1bf5cf45dc6996e2a1cc0dd6f5161a302f2e3b2e8fda4621ea54195c0` |
+| `ml_corpus/9p2i/replay-seed-1069.jsonl` | 461662 | `b49f6ebbc2f972452c50ee9ddf283ecd1c7e6ac4b92a4d909c41a80521c9cbcf` |
+| `ml_corpus/9p2i/replay-seed-1070.jsonl` | 429221 | `f0bf987b76a0107c5ce148c091c7acd3b619d65698b0299b427e33e59ee7e458` |
+| `ml_corpus/9p2i/replay-seed-1071.jsonl` | 490179 | `d5e8d588d66eaa2b812647c317b367ffddf1cea2c099f5377d395b44a3fbc17a` |
+| `ml_corpus/9p2i/replay-seed-1072.jsonl` | 483085 | `bb16b43b7de6e7d5b45873009a763a083eeb4a46407ca61149532aea4e2b5217` |
+| `ml_corpus/9p2i/replay-seed-1073.jsonl` | 871174 | `2fdf60d3f1e6c8733638f318649d48612bc46f8df3b96d1e5765e1d9ae0ea4ed` |
+| `ml_corpus/9p2i/replay-seed-1074.jsonl` | 648397 | `710b174f7ad976e01e850341f9dd644f7c34da948f285626fd80f287844cfc05` |
+| `ml_corpus/9p2i/replay-seed-1075.jsonl` | 490931 | `8a98d641ed803e14e8b74ed05a00c46fb569dee4cf3eb2c1a1a057214141b860` |
+| `ml_corpus/9p2i/replay-seed-1076.jsonl` | 598906 | `81d97b489c7cf096694896708dc65cdda8cf422d8d1d8092c1edc9ebc7d91f0b` |
+| `ml_corpus/9p2i/replay-seed-1077.jsonl` | 490939 | `c385c860584f7bc9b42b867396724567e2e63d3eb5ae083751baea89ef247622` |
+| `ml_corpus/9p2i/replay-seed-1078.jsonl` | 458801 | `57bff8c252c0d9dbb326c3c8021c41289fbccead83b1393fab7e9165ce87d061` |
+| `ml_corpus/9p2i/replay-seed-1079.jsonl` | 600640 | `86d5d610e5069289f87e243da2f3b6b597c424e1db9ce67a91af334150736d7d` |
+| `ml_corpus/9p2i/replay-seed-1080.jsonl` | 457374 | `6ab0c3a12808c74c4439a5ed24281b12d250c4e624014511efd915e5df5359d5` |
+| `ml_corpus/9p2i/replay-seed-1081.jsonl` | 903968 | `0449bdf0c83ca1d7bfe3baf5f180e7d5762bbfd725df9c0abdea4fb33386aca2` |
+| `ml_corpus/9p2i/replay-seed-1082.jsonl` | 738773 | `233b6f1db6d88a09a1f38675c3b064c687a945d1bfccd574ecfc8808f3e49234` |
+| `ml_corpus/9p2i/replay-seed-1083.jsonl` | 680664 | `39ea2232082d44b564ddd95516a9aecf8031f111994791e71f8c3c8f8c543f2d` |
+| `ml_corpus/9p2i/replay-seed-1084.jsonl` | 520733 | `a5c42ae20aea30e4ab3db94e8d43dea16b90767267dae2e3870f0b2c8c6758e1` |
+| `ml_corpus/9p2i/replay-seed-1085.jsonl` | 682466 | `e2862f2506e9a7c761efa262dface1a2a7f6ae1b8aa3e36bc95215d2dbcd26f2` |
+| `ml_corpus/9p2i/replay-seed-1086.jsonl` | 549615 | `1ff4d6077d4de3ebe856478101ba901238c83b00601ba6d948dd9b7d20056575` |
+| `ml_corpus/9p2i/replay-seed-1087.jsonl` | 390192 | `98a6afb788902854be425f0c31d2b248a1d5b9c6f4ee3db98bd2b7212601ca9d` |
+| `ml_corpus/9p2i/replay-seed-1088.jsonl` | 400240 | `6ad06c371097f4ac136726259a589cee00930b1530584e19ab410d265333a318` |
+| `ml_corpus/9p2i/replay-seed-1089.jsonl` | 532224 | `63aa914118776b2c13137c8e415d2958836059a1f307a26b5152e396582adad3` |
+| `ml_corpus/9p2i/replay-seed-1090.jsonl` | 650613 | `663377ac099ae58e243f44406c7817bedb0bb3de20530b05871e3d8665228f72` |
+| `ml_corpus/9p2i/replay-seed-1091.jsonl` | 472210 | `3b63a927d05a4bc1d1404bc9339c3ad1736ae961284d3b2d42845e6a98c0abed` |
+| `ml_corpus/9p2i/replay-seed-1092.jsonl` | 592923 | `13fe825e46591bd183e3849fb1f82f84743fb621ab3669e1641f9356c7e7961f` |
+| `ml_corpus/9p2i/replay-seed-1093.jsonl` | 688778 | `a313b96f56fab89b13e8db846c3e8f668d5e9c9fa54e1e5924ad8a023c5d3d4c` |
+| `ml_corpus/9p2i/replay-seed-1094.jsonl` | 420435 | `28991ddef32d29eadc5339e1b75ec4de094aa89866be4c4dd478e5d07e0d6939` |
+| `ml_corpus/9p2i/replay-seed-1095.jsonl` | 944095 | `d7389258ad2498c290f4769606790275ec368ecc126588ebba6bcb9eb9a661ea` |
+| `ml_corpus/9p2i/replay-seed-1096.jsonl` | 592575 | `b83ba5eb2438db11e416a47beade3966e98500898427ac6eaa9432e2f2f4ed49` |
+| `ml_corpus/9p2i/replay-seed-1097.jsonl` | 1015389 | `3516fdd3deae742258c083f529d856739a8a0405a1b53fa48de212b5e2a002d1` |
+| `ml_corpus/9p2i/replay-seed-1098.jsonl` | 413571 | `07bd223e6475ebc8ffc72575082a809fe98ed880074427aaa5752c4c1725245e` |
+| `ml_corpus/9p2i/replay-seed-1099.jsonl` | 441991 | `56dccfa919d0a4bf77df39bff7f81e9730970130d65dc83fa48eaaf04fc728cb` |
+| `ml_corpus/9p2i/replay-seed-1100.jsonl` | 415041 | `0be93d6afb30c031133f93501b75c73145e9cdaa2c169d6acef773cc65fc6730` |
+| `ml_corpus/9p2i/replay-seed-1101.jsonl` | 505787 | `44c17921312c50c270390ce315b218f2dc2addc0da83daf759488027e84da819` |
+| `ml_corpus/9p2i/replay-seed-1102.jsonl` | 370081 | `8636eaff7c7cedee1496e362419906c7e9d34d74fe296beeeab7e14d8fa1a848` |
+| `ml_corpus/9p2i/replay-seed-1103.jsonl` | 401477 | `c8d7855adc966b670ca2478b66e9532e2471c03bdd360d578367fe1aba71915b` |
+| `ml_corpus/9p2i/replay-seed-1104.jsonl` | 709012 | `8a19389d52070bc14866c2453604cd4e6346c1d01a9294f087ac88a59959091b` |
+| `ml_corpus/9p2i/replay-seed-1105.jsonl` | 739135 | `2396165dc5c3976a6f5d741623bec006a7711fc6a670e335fa12babf3633d289` |
+| `ml_corpus/9p2i/replay-seed-1106.jsonl` | 809903 | `5d5f537553da31f9c35c386a21277ea89e22a2074a4c755a285ea3eb6870331d` |
+| `ml_corpus/9p2i/replay-seed-1107.jsonl` | 430823 | `45c70021a0767b3e6b4e57f0f33e2a15ad6fd42dc6e38c03f7a15a0d293c046b` |
+| `ml_corpus/9p2i/replay-seed-1108.jsonl` | 673991 | `a2f2008939496c684cb21e1765f2f0b556bcacc26806ffb56d59b6aec474c5fc` |
+| `ml_corpus/9p2i/replay-seed-1109.jsonl` | 484313 | `022205a69e3dc45b71bb47a0c1507a3cd31ab3af489b602a2a353c9462f88207` |
+| `ml_corpus/9p2i/replay-seed-1110.jsonl` | 441929 | `5901d61bf3319a0485d26ad7ed885e388e51d9e79918ff3c7a3b7fb409cdc2d8` |
+| `ml_corpus/9p2i/replay-seed-1111.jsonl` | 758444 | `91d772cdd143390dc0910d1ed05908260bd99a1cb861da549019ed1d51133d63` |
+| `ml_corpus/9p2i/replay-seed-1112.jsonl` | 737190 | `10cd0dc6df3a014f41a5dd7cac2d7f13207d6323457abe0d73ec7a30cd39d1e6` |
+| `ml_corpus/9p2i/replay-seed-1113.jsonl` | 490276 | `918589717b3909a77605ba21544a192ee8abdf60e52627d25f96fc9ba4ece081` |
+| `ml_corpus/9p2i/replay-seed-1114.jsonl` | 611687 | `7d487f39551e287cee3671f7b7c62718a9d780e6c47e8f8dc38c6f0b61a383b3` |
+| `ml_corpus/9p2i/replay-seed-1115.jsonl` | 309129 | `1f292d7ae69e15d64be79bf4de8b9bc27023e3aa2d3c98d14a1a10dac2987916` |
+| `ml_corpus/9p2i/replay-seed-1116.jsonl` | 607197 | `9a4c0075e250a1fe5bf58f704b243308c9bae4a3b61d730475d7ab4aa1e1ccd0` |
+| `ml_corpus/9p2i/replay-seed-1117.jsonl` | 401429 | `cf72282cc0d8e2e64188b05ffdd9b4a6fd2cb3ba3f8f41bb86610c508897e628` |
+| `ml_corpus/9p2i/replay-seed-1118.jsonl` | 763686 | `456b95195f4fad0718fb1b069fe14061fbb2541d7b0fc31bec52a757abc71401` |
+| `ml_corpus/9p2i/replay-seed-1119.jsonl` | 427569 | `d6c8a8fd50edc2b6e700fac469ea995a81148a858f3792865d318b9ba8aa1038` |
+| `ml_corpus/9p2i/replay-seed-1120.jsonl` | 452603 | `e39b1a1fecd421f390fd15a00352829c444f42ee3c63b57732dec2809f3be4d5` |
+| `ml_corpus/9p2i/replay-seed-1121.jsonl` | 626395 | `d0b59fe4035e4ab0ad33594cbf9e8506ada2816b8e8e3731fb92e45d3a20d360` |
+| `ml_corpus/9p2i/replay-seed-1122.jsonl` | 957814 | `0061e419b4b92417e98caf9ee71c8d59dec77526cf0fe11f36649c1550113693` |
+| `ml_corpus/9p2i/replay-seed-1123.jsonl` | 565510 | `c64e86ee27075f1d1c09ceb3042a4605fab8ad5ce2ee2eab2c1c6e76260a3690` |
+| `ml_corpus/9p2i/replay-seed-1124.jsonl` | 518082 | `857440f94e20331fb6c996b627feb35796db8a97686c143d6c162e819577de71` |
+| `ml_corpus/9p2i/replay-seed-1125.jsonl` | 346067 | `37b8cf05ee6907a37c49fba7ee2bd178be98db3a97c9a077f10028cb01f25357` |
+| `ml_corpus/9p2i/replay-seed-1126.jsonl` | 442780 | `2c20daad0e7cda6f253e151415c530ba20546ea83c487b187a6fad0d2b05770e` |
+| `ml_corpus/9p2i/replay-seed-1127.jsonl` | 886095 | `a7d20689dbb60e7b3ce1cc8e3fa74141b86fea9ecbd1af2ca80531aa888055b5` |
+| `ml_corpus/9p2i/replay-seed-1128.jsonl` | 620622 | `209c1b684c50142173e8592638534701c0b17552535f97701fec987c38a9fe94` |
+| `ml_corpus/9p2i/replay-seed-1129.jsonl` | 568643 | `ff4fc175cdb9a0cf54e372004bb0a68957a82112fc77dd7c1cb5270c81d2b4c9` |
+| `ml_corpus/9p2i/replay-seed-1130.jsonl` | 434202 | `787d7ca315988b1b2589dfc49102ae491aa0e316e19161a1cd0704329255b3f3` |
+| `ml_corpus/9p2i/replay-seed-1131.jsonl` | 402786 | `26d1c55f6375e08317dfb080f070c1de0272dbc376fefc01fe87568ad8bdac3a` |
+| `ml_corpus/9p2i/replay-seed-1132.jsonl` | 714951 | `946c879c4ecd2227b5ed998915dbc28f0036fb1cd01c75f05ee409c8503a982c` |
+| `ml_corpus/9p2i/replay-seed-1133.jsonl` | 535177 | `59c79da2d19bff7e54faa0a4542152be52a9591673de8e078884f6f9c7ad71ca` |
+| `ml_corpus/9p2i/replay-seed-1134.jsonl` | 922221 | `594ad25207358307929cb7773c4a9fe5523a43ce91ddd462cd9dd20dc577f88e` |
+| `ml_corpus/9p2i/replay-seed-1135.jsonl` | 659824 | `74e83af4c0a62d306362af4fe203820a3e90541f4ec5eabd6375fb9fc984dfcb` |
+| `ml_corpus/9p2i/replay-seed-1136.jsonl` | 348707 | `c090d49e1178e05c4e72ae2944b212527da522b86339abd8dda3ce8103ea1230` |
+| `ml_corpus/9p2i/replay-seed-1137.jsonl` | 551332 | `1cda65b174698d5aabc6d7a25abdd2d094f62c0267e0e12cbba2086568c0421a` |
+| `ml_corpus/9p2i/replay-seed-1138.jsonl` | 450482 | `e0c175b2cc4c50eda11d75e496ac678070cce92c32ea92a4bacf9f385f0ae8bb` |
+| `ml_corpus/9p2i/replay-seed-1139.jsonl` | 600595 | `308dbc3ef310fe20a1aefe3ff376b0cb5ed805a8195ebd37eddd9d03a1869ec3` |
+| `ml_corpus/9p2i/replay-seed-1140.jsonl` | 885152 | `5557a927e72e51025f0d57c3f64c7dc245190e029393415c284c16a715a96296` |
+| `ml_corpus/9p2i/replay-seed-1141.jsonl` | 490209 | `baaedd3436d118baa87ceda0b9661d53d072f170d26cc54003a4cce96491a2cb` |
+| `ml_corpus/9p2i/replay-seed-1142.jsonl` | 528015 | `7ff7fe70fd4fad7199d96fa54583210bc0fe9ffae1c00994fc3bb54dfcb7aefb` |
+| `ml_corpus/9p2i/replay-seed-1143.jsonl` | 700278 | `daeacf8283c9060d9311204197baded302804a85fbf91b8bf33e2dcd81b9e44d` |
+| `ml_corpus/9p2i/replay-seed-1144.jsonl` | 457791 | `eb5ae1a6780affef99400190ad2b07e876788288b72a22fe9f795e10998a5d74` |
+| `ml_corpus/9p2i/replay-seed-1145.jsonl` | 445633 | `f6306d4761acfa9b752e72a2f2e0a95f5fb9aa18f2b3d54cc642619df885ea03` |
+| `ml_corpus/9p2i/replay-seed-1146.jsonl` | 803172 | `ae9d8fd8bc8f128b5b1f1b4d616b9d5085caa94b80195f1efb56f2b7c2e337ea` |
+| `ml_corpus/9p2i/replay-seed-1147.jsonl` | 462203 | `3605987ac2de429104b7030459a6567d77c01ab391f34b026e1709299b206011` |
+| `ml_corpus/9p2i/replay-seed-1148.jsonl` | 588919 | `e6339d726cdcbd9d47d0fdf53fd76d62edd1e549d752f63bc52197d202baded5` |
+| `ml_corpus/9p2i/replay-seed-1149.jsonl` | 350330 | `b3c691ba325419e3ee9da010996ba768b087cf7805a8ff033526cad7391832d7` |
+| `ml_corpus/9p2i/roster.json` | 64 | `01ba485b9aed3cc7517a813afe919581861ccc1439c7249db0cbb06a84644340` |
+| `ml_corpus/9p2i/splits.json` | 1720 | `c00563bfd5155b13718ecbcd6ef1b0c511b3e1a01cfcc7aa6cbfd5491b06dd9f` |
+| `ml_corpus/9p2i/tournament-eval-report.json` | 89942398 | `5b8ab9e1b86a5939963c8b3d105bb630607b01b6b3d187e312195a2c4bc08bc5` |
+| `samples/4p1i/MANIFEST.md` | 44949 | `83c87c06c26eae2623d203e851fb5d0ee7956085854dac2bf3575b38703c76d3` |
+| `samples/4p1i/replay-seed-0.jsonl` | 5732 | `388a73007127af55989a3629b125bfde184d17b7f7f6e6f266b30168769331c2` |
+| `samples/4p1i/replay-seed-1.jsonl` | 77760 | `1172743e116b8634a5a25d93cbcce49fa0e014ad7cbc0d647aeb8c125ba12077` |
+| `samples/4p1i/replay-seed-10.jsonl` | 77498 | `c4cd7fcfd61081317c849a89beb1614c58aee9923d6534aed484e689e291071e` |
+| `samples/4p1i/replay-seed-11.jsonl` | 82484 | `975bb72c1b374d0692195cca81c074ab0a6b6ce33acc757a201fffadd885555d` |
+| `samples/4p1i/replay-seed-12.jsonl` | 6305 | `9e655d84807fddfa79b4c5ea79b15bb718571efb7334a0f0441cb5be7f5e2c8f` |
+| `samples/4p1i/replay-seed-13.jsonl` | 77955 | `3a57fcee405aaae78bb79199f230c876665e587b83be10e1447121b2247a1b2b` |
+| `samples/4p1i/replay-seed-14.jsonl` | 78509 | `ffe2433d356f0b87f11c9ed67bb4c7ec940c9dfb289951c06bd7d0ce1a8a5a27` |
+| `samples/4p1i/replay-seed-15.jsonl` | 4578 | `4cecf6366ac28e0624e3c59de3f59fd87b3dd989364de4a12bdbced52e099478` |
+| `samples/4p1i/replay-seed-16.jsonl` | 78316 | `16147d4d80f461da25e6af62d4f7d8aa3e99319e692da428f693fd6bb7aee84d` |
+| `samples/4p1i/replay-seed-17.jsonl` | 79920 | `48e4baf7f9f65837991651f81c6c19c5710eb606c4e68440218f4a16706ece5a` |
+| `samples/4p1i/replay-seed-18.jsonl` | 78004 | `321706e2f33cba309100c774e98da5714369f285af3451aaa23b1251322d6075` |
+| `samples/4p1i/replay-seed-19.jsonl` | 76611 | `15a8ae935ed9d899a1a348a7d1ce8ea4421be6bfa87fb376cd36749786bfd271` |
+| `samples/4p1i/replay-seed-2.jsonl` | 75287 | `c955ee5a62ca40bd25981f73d1ec971013dfe2d3ea140343fa94e5b14fc1ec8e` |
+| `samples/4p1i/replay-seed-20.jsonl` | 77745 | `9aa9629ccd573afee75128b7def9e2583704e4b06ae9b3f955b648b30274bec3` |
+| `samples/4p1i/replay-seed-21.jsonl` | 83321 | `09e40aba629f48795f9a50b50af1228a6650eaeda727ffff58f6dbc853516252` |
+| `samples/4p1i/replay-seed-22.jsonl` | 75507 | `565125d7b1830b74648b969e6e8cdc161c92afa606f899d9f157826deca3f542` |
+| `samples/4p1i/replay-seed-23.jsonl` | 80967 | `19619fc86a31ff928a638005c27e084b5e4560bc28c9d41e518c021055f88c02` |
+| `samples/4p1i/replay-seed-24.jsonl` | 75923 | `31a6665b2f2a2fa93cc55d74d102d7a801c391c00efb391ff0dfa88ce07607fc` |
+| `samples/4p1i/replay-seed-25.jsonl` | 5744 | `547ff75dbaeded50a29b46daaf9a8e5a76c85b4741987abf49ff1f572a687aa8` |
+| `samples/4p1i/replay-seed-26.jsonl` | 79343 | `b3a213885247e6c14e264e9d749c03d4153db0bbe559e0ecf3dd40b1c1828f2d` |
+| `samples/4p1i/replay-seed-27.jsonl` | 78495 | `abb6c2b6e26484d95567f1b9adcb0a6ce380a4e272f98dbdb9d4abafbeed31d0` |
+| `samples/4p1i/replay-seed-28.jsonl` | 82538 | `475bc89eb69a702e92e8eba17f67aa7acad44b0b776cf527769befdcc839d4e3` |
+| `samples/4p1i/replay-seed-29.jsonl` | 77467 | `225da0e7d27a573e63addcad6580f12470609f157b17bfce908e780646ed449a` |
+| `samples/4p1i/replay-seed-3.jsonl` | 5884 | `832a78a95d016f1a064d1ff725f92713a4a4fd1e8cb03bb51dde445c4b5ab96d` |
+| `samples/4p1i/replay-seed-30.jsonl` | 6419 | `7358403c74033090343b16463feb2bb62b5247ee6c1e8c3e0d482813b4de0c3a` |
+| `samples/4p1i/replay-seed-31.jsonl` | 3271 | `f8eaee616dda6b6e97e996463db31c786c5c70e58ebc8943d0490c6995784812` |
+| `samples/4p1i/replay-seed-32.jsonl` | 77347 | `0aee5277aedbbf417d44e222eb864878c70acff6565922e70140582efcc33be4` |
+| `samples/4p1i/replay-seed-33.jsonl` | 79917 | `85aeeba21df4f3e2558b2ac0bf8dc5ff87786f158cd3d032e0211609f0aa8188` |
+| `samples/4p1i/replay-seed-34.jsonl` | 5865 | `63e814018856095c0f5b055c6735de93883583f6ccb0301657d4eea8614a8893` |
+| `samples/4p1i/replay-seed-35.jsonl` | 80150 | `450732acb8d4ae719ba2c3f8b3d64c50b0661c6107519a597e381ed87ef91c4e` |
+| `samples/4p1i/replay-seed-36.jsonl` | 81622 | `784350510849bb0c45ee189d921432291f1685270e734870e36e0de032a2009d` |
+| `samples/4p1i/replay-seed-37.jsonl` | 4598 | `2646aa3af17ffd02fe0918ea9c2dd95db10f52d816c10c5d44ce09870d510a71` |
+| `samples/4p1i/replay-seed-38.jsonl` | 78834 | `cb9df443902485548e43aa369b03a6daf140a9142feb97d323dd0faddc6a0ad8` |
+| `samples/4p1i/replay-seed-39.jsonl` | 77821 | `210b5df5a86f44399fbd8fce48c4c18386bf194aeaefd3f57e1df980d2e5cbe9` |
+| `samples/4p1i/replay-seed-4.jsonl` | 81534 | `5aad5212795cc791323076a4068b95063d337a32aa8d5b0235c2612bd6cfad8a` |
+| `samples/4p1i/replay-seed-40.jsonl` | 79987 | `aa1956ed6a84208b606bfc99ca8d7cde960218c69a30c42bb7f40cf9a97708e0` |
+| `samples/4p1i/replay-seed-41.jsonl` | 79255 | `fb6ae8d1e4316caf6d5547dfdab90f868769207962f56d8f1173389c0affbeca` |
+| `samples/4p1i/replay-seed-42.jsonl` | 78451 | `1c02a28775372d8c1dadc097fffbb793f9467650ace681878a9eeb3657bae799` |
+| `samples/4p1i/replay-seed-43.jsonl` | 6304 | `de74914f8ee4b9287edfcf284327df45381044e0f6048905b304c4c5502c70fb` |
+| `samples/4p1i/replay-seed-44.jsonl` | 81669 | `f183e89c1974bc8b974b0460622ee361a1bb76f1c06377675fb0ce76bcb37e34` |
+| `samples/4p1i/replay-seed-45.jsonl` | 79535 | `3a70d55ebc2ff5452ecd5a5f7f6cadbd505c960afd407a6dfaa31e6c57c8e97a` |
+| `samples/4p1i/replay-seed-46.jsonl` | 75078 | `32c0b334f4698cf28cf34537bc8049e2df3c5b8decdbe9c7ea33bcb2fefbd710` |
+| `samples/4p1i/replay-seed-47.jsonl` | 77205 | `c4aca5076b5e7c84d349791ec3a699e4f3fb47a3998118ce324dcfd99ee0b3f5` |
+| `samples/4p1i/replay-seed-48.jsonl` | 77469 | `071fc5dbf30b67d1db19cb4d192733c24c5d0c397d0936f0b3fc5ae9fb8bcd90` |
+| `samples/4p1i/replay-seed-49.jsonl` | 78326 | `96f16b300e2528944059612b691f57eafa8268160e04d72f0029557599a21161` |
+| `samples/4p1i/replay-seed-5.jsonl` | 81311 | `2fa201ee294df77d62010eab384a295791e6e8b17813cb091395c7cccdbd2a06` |
+| `samples/4p1i/replay-seed-6.jsonl` | 77579 | `800e78a2225ce6512d7e6fc82aa3c5a8ae47ac3a89201df3a68710b5fe765663` |
+| `samples/4p1i/replay-seed-7.jsonl` | 81966 | `ea07c365e80c363cd8b9764f8068f2b7450d033636f5ed43ebdc2b49311fda9a` |
+| `samples/4p1i/replay-seed-8.jsonl` | 6314 | `daf6aef375de2c16cd2e720abcc4b24716e5d9aa7f564a32569f84f9ac1bcb38` |
+| `samples/4p1i/replay-seed-9.jsonl` | 79977 | `43ecd3284b3d148ae273f16e01915ad6ab1f03dfd5c6c6000de2e5008841918c` |
+| `samples/4p1i/roster.json` | 64 | `5677a544fbab6db4cc7547ca5605089eaa2feb15fecb11b8c6cda9d11e096a86` |
+| `samples/4p1i/tournament-eval-report.json` | 3070346 | `27978f934049266db7eb22d164834bd035a27952351a8f0c7762026a501f155e` |
+| `samples/9p2i/MANIFEST.md` | 48304 | `3385837782cd935d4f3241806d23498fa431e3f92ab870fd8f4966ae23d15835` |
+| `samples/9p2i/replay-seed-0.jsonl` | 770312 | `e9511996efe85ef2baf49daed1e81e0e409d15bf62ee36bef1c57c41f12d2f8a` |
+| `samples/9p2i/replay-seed-1.jsonl` | 635597 | `59c9324fdfc5b471de7b07a13421097aa5d7e06d5859c546e17b7ceae676303f` |
+| `samples/9p2i/replay-seed-10.jsonl` | 972449 | `b781b4d4b26d6167a1300e09f078a684081161919070e2c44c19d71deca99b7b` |
+| `samples/9p2i/replay-seed-11.jsonl` | 591720 | `fde876de78ac977ce526a08ad3af68f82aa65b73af93789badc0aaefd23e9eb0` |
+| `samples/9p2i/replay-seed-12.jsonl` | 819053 | `9b67507b400b3a6674adc84a368a2c7fbf7623e7facba904b93084bc58ebafc2` |
+| `samples/9p2i/replay-seed-13.jsonl` | 924895 | `0dfd9aab9fdc224ae611e57ca0a3c634b3091cd6bbf6ee76319c4a018aed9762` |
+| `samples/9p2i/replay-seed-14.jsonl` | 765394 | `b7e45a08ba0cc7620a7181cbac933ae8d98ec7e4930b34e02144eb870da7c342` |
+| `samples/9p2i/replay-seed-15.jsonl` | 451372 | `85f1dc189c3b2188779bba56eb7cae01844d23b8c4f86dd16aed453edd8a3e11` |
+| `samples/9p2i/replay-seed-16.jsonl` | 601940 | `9e89a04bad52e6fadf5de1ac6ed76a8d5ecef3dbad251572a59df9cc3c61f65d` |
+| `samples/9p2i/replay-seed-17.jsonl` | 736324 | `38927364fe543911120aedba422ed49978487808e4ba302342a3405753f174db` |
+| `samples/9p2i/replay-seed-18.jsonl` | 411986 | `3531670fc4ef843e450929ef3995b05485c6a6ec1a3b700e71db175aa4791da6` |
+| `samples/9p2i/replay-seed-19.jsonl` | 953460 | `99ced957253ee6c270f683bf957b3855d95f9297ebf7d403cbbdacb56a31097f` |
+| `samples/9p2i/replay-seed-2.jsonl` | 240917 | `a1ae483ccbd5e48e740e4df2661014c6152bf84f8dd340f78fd71042040f7160` |
+| `samples/9p2i/replay-seed-20.jsonl` | 674357 | `d6b04563c610c10ed06e1795b6751cc69848c6c78a5c68652fc5f8190f05d2ab` |
+| `samples/9p2i/replay-seed-21.jsonl` | 643404 | `2c4557b74fcab25fdafc0a41ebba61cf60d47eb91b3f33a7fd8ce09f124fc492` |
+| `samples/9p2i/replay-seed-22.jsonl` | 427500 | `965420e6792121f868e06756b3ee178d9f08e3126d4a32b23adb6fa184025bb6` |
+| `samples/9p2i/replay-seed-23.jsonl` | 982025 | `9cb308b0525e25a3b01a9d87bf58ec1199b6bc4ded220ac2010db8e0dbb87be2` |
+| `samples/9p2i/replay-seed-24.jsonl` | 630251 | `de88a6f31d7c819bb9aef76efb2d78a0550e7f1f7b32278250b50f54fc6fcda1` |
+| `samples/9p2i/replay-seed-25.jsonl` | 569263 | `d198105d259294e1e2f84c0967e2ee1d9e5fd84a3a28405ed092130578533a18` |
+| `samples/9p2i/replay-seed-26.jsonl` | 682672 | `b641e520b21c4cc21202ded31b713224593a3ae96c3b680c09f54a4997e891f4` |
+| `samples/9p2i/replay-seed-27.jsonl` | 787078 | `61fb42f57f9c84d1684835dd2a05a8a1add7387ce1d4b306788eae115dad040b` |
+| `samples/9p2i/replay-seed-28.jsonl` | 473303 | `6def45cd9af69e1f1bc72d3a93d02332013ae3056454541debbeb3cc28878014` |
+| `samples/9p2i/replay-seed-29.jsonl` | 611993 | `4c9d397502aca35f2351d66773f9e2ee47602ef04c7d5386cd3f3a6c4525eed3` |
+| `samples/9p2i/replay-seed-3.jsonl` | 495650 | `e5fde70a3a7f970c399493655e705cc340e792b3e2ab3ed59317b215c050ea0f` |
+| `samples/9p2i/replay-seed-30.jsonl` | 813827 | `2fed65141c2bb0556cf33b8d3fc1c68bdc9c6f28787f851e996a58e80f10da7a` |
+| `samples/9p2i/replay-seed-31.jsonl` | 624841 | `4f24f98d102ccf4d8dffba6636d83a2b494ee138917c84a75a046cdbbe4b5b2a` |
+| `samples/9p2i/replay-seed-32.jsonl` | 412196 | `f709c1bfb695c27fab8874cee859d6bdac821d9897e59f8aca074f3594723f30` |
+| `samples/9p2i/replay-seed-33.jsonl` | 405493 | `0b9cac23d9751628bdc71bbf2b879e2cb7356cef825d95ef35f8715e6147d1b4` |
+| `samples/9p2i/replay-seed-34.jsonl` | 423380 | `fbf6de8d825f520368a1cbf35944c80961f22b3d958ef3e7f65242d97dcbf1a6` |
+| `samples/9p2i/replay-seed-35.jsonl` | 554373 | `7a3b0614af59844586e2b3c53e02d3f2ce79037160952a155fe0020392773dac` |
+| `samples/9p2i/replay-seed-36.jsonl` | 738011 | `e64e92eb671ba0ebccc74ded0f2d725972d44475421609c1bdfa0e3cdc1d4ae4` |
+| `samples/9p2i/replay-seed-37.jsonl` | 896077 | `ecf943452e8a78f21e046431d15d1bea6d706cf8a2625409d114605a793348cc` |
+| `samples/9p2i/replay-seed-38.jsonl` | 1009615 | `16f9998c05d0ae882e43fdfa7d1985eddaccbe4b15efcbb66f5d66a9fb8c933a` |
+| `samples/9p2i/replay-seed-39.jsonl` | 802894 | `51f664a46a4805cc4fecb601fdddc6362123d829ad526210432a13c459632ca1` |
+| `samples/9p2i/replay-seed-4.jsonl` | 652093 | `c90825e6599aa0387089fe85bd8bfe39d28b6c4bf2e6cf30b3fb8f9a385ccb9c` |
+| `samples/9p2i/replay-seed-40.jsonl` | 807065 | `3ff5878d94cd60bcd44a79f182917eb0cd7a5c45a64c6d174b3e80261ab647bb` |
+| `samples/9p2i/replay-seed-41.jsonl` | 853395 | `f7ccf111d09a27b0cd7e619348e028f47ab7d39a79ad60f9d12001ae030da3d2` |
+| `samples/9p2i/replay-seed-42.jsonl` | 752584 | `e788d8118446501d375ef047c9f170f357afa1e4ab18fc5570679e5503c01a4a` |
+| `samples/9p2i/replay-seed-43.jsonl` | 418864 | `29ad583c60cf1682d19a9641a4e5c9e2be99759208a9cdc434d7d2f0daec826c` |
+| `samples/9p2i/replay-seed-44.jsonl` | 987922 | `8d6230ce7d31f242a94e52dfa2eda66469a9d5a6f5262a9d6b927bcfaffdd8c3` |
+| `samples/9p2i/replay-seed-45.jsonl` | 435445 | `76365cf3fb1b899e3cef026ff6445f46fd64d9a47bbc2f3459d3ec120c4d343f` |
+| `samples/9p2i/replay-seed-46.jsonl` | 588270 | `a6b2e58eb7ec17f0213677284d79105795f14500c3517bdcf50f67bb297be518` |
+| `samples/9p2i/replay-seed-47.jsonl` | 968601 | `6076a5fc64034bd80344cca16058665ce2a015ed4b469247196e6f1e0dd16e6f` |
+| `samples/9p2i/replay-seed-48.jsonl` | 363581 | `d37585a3154eb26d0fd642d101893862cb68c5765a8457292a3f3eb0458a8689` |
+| `samples/9p2i/replay-seed-49.jsonl` | 467363 | `db75f015908ab0f00a2744aeca8b4ded1adcfe99ad1912a019c3fa238dbc125c` |
+| `samples/9p2i/replay-seed-5.jsonl` | 749983 | `db4ab0a3120050fbbfafb4fbe074e4029ff09078c15337512171ee76f2fa456e` |
+| `samples/9p2i/replay-seed-6.jsonl` | 869940 | `071dc8c87c10d767cd5045ee84d9de1b5f7ce2163828d36c685db632854d2d14` |
+| `samples/9p2i/replay-seed-7.jsonl` | 752381 | `a41640c9ed855f89d3c7a26b34bea378d275fcf5102b961e27bef477c86992c9` |
+| `samples/9p2i/replay-seed-8.jsonl` | 892149 | `866447b7d355ff5e07b08dfdf5e0b6e30971e2bf3c67f2242049b7e5275b3db2` |
+| `samples/9p2i/replay-seed-9.jsonl` | 679339 | `c7c624d33c7fbe58bbb93cce0768dda9c977d7ee3f6f580d065dbab4c75dc7e9` |
+| `samples/9p2i/roster.json` | 64 | `01ba485b9aed3cc7517a813afe919581861ccc1439c7249db0cbb06a84644340` |
+| `samples/9p2i/tournament-eval-report.json` | 34275756 | `08186150b460e661530455cee9f89610006729b85207ef9d84744b999949b2b5` |

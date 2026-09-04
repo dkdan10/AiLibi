@@ -135,6 +135,10 @@ def _availability_tree(root: Path) -> None:
         "agents/tactical/learned/crew_weights.json.sha256",
         "replays/samples/9p2i",
         "replays/ml_corpus/9p2i",
+        # Task 21.24's FINDING record: only the pin and the digests are in the
+        # tree, so both probes are single files rather than a set directory.
+        "replays/records/phase-21-wave2-finding/EVIDENCE-MANIFEST.md",
+        "replays/records/phase-21-wave2-finding/README.md",
     ):
         _link(root, probe)
     # coevo/ is rebuilt from its TRACKED entries only — never linked whole.
@@ -1817,6 +1821,36 @@ def test_every_counted_registry_row_matches_the_index() -> None:
     for key, _cls, where, _size in vme.registry_rows(_REPO_ROOT):
         if vme._WHERE_TO_CLASS[where] == "IN-TREE":
             assert vme.in_tree_inventory(_REPO_ROOT, key) is not None
+
+
+def test_the_finding_records_registry_row_is_inventoried_and_its_count_bites() -> None:
+    """Task 21.24's FINDING record is registered, and a wrong count fails.
+
+    The record's 300 recorded games are NOT in the tree — they stamp the Wave-2
+    keys True, the pre-registered rule read FINDING, and a bare shell resolves
+    those keys False, so the bytes live on a pinned evidence commit and only the
+    pin and the digests are committed. That makes the row's promise small and
+    exact, which is the whole reason to check it: a row nothing enumerates would
+    be an artifact silently absent from the availability report.
+    """
+
+    key = "replays/records/phase-21-wave2-finding/"
+    tracked = vme.in_tree_inventory(_REPO_ROOT, key)
+    assert tracked is not None, "no git index"
+    assert sorted(tracked) == [
+        "replays/records/phase-21-wave2-finding/EVIDENCE-MANIFEST.md",
+        "replays/records/phase-21-wave2-finding/README.md",
+    ], tracked
+
+    # The registry states the same count the index tracks...
+    assert not vme.inventory_problems(_REPO_ROOT, [(key, tracked, len(tracked))])
+    # ...and a PLANTED disagreement fails rather than being absorbed. This is the
+    # case that matters: the bytes this row stands for are fetched by sha, so a
+    # count that drifted from the index is the only in-tree signal that the
+    # evidence half was renamed, deleted or split.
+    problems = vme.inventory_problems(_REPO_ROOT, [(key, tracked, len(tracked) + 1)])
+    assert problems, "a stated count that disagrees with the index must fail"
+    assert "promises 3 files" in problems[0], problems
 
 
 def test_a_registry_row_with_no_inventory_scope_raises() -> None:

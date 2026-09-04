@@ -515,6 +515,33 @@ def test_featured_seeds_exist_in_their_committed_sets() -> None:
         assert any(meta.seed == seed for meta in loader.list_replays())
 
 
+def test_featured_seed_13_card_states_the_served_turn_shape() -> None:
+    # The seed-13 card used to claim five meetings; the served game has THREE, of
+    # 7, 6 and 5 spoken turns (audits/audit-phase-21-rerecord.md §5.1.1c). A blurb
+    # that names a countable fact needs a check that counts it, or the next record
+    # falsifies it again in silence — so the card's own numbers are read back out
+    # of the picker and compared against the served set through the loader.
+    #
+    # The turn counts are read from the SET LOADER rather than from the raw
+    # JSONL: the card describes what a viewer sees, which is the served payload.
+    registry = SetLoaderRegistry(_PARENT)
+    replay = registry.get("9p2i").load_replay("headless-seed-13")
+    served = tuple(len(meeting.turns) for meeting in replay.meetings)
+    assert served == (7, 6, 5), served
+
+    label = next(
+        label
+        for (set_name, seed), label in zip(
+            _parse_featured_games(), _FEATURED_LABEL.findall(_featured_block())
+        )
+        if (set_name, seed) == ("9p2i", 13)
+    )
+    # The card names the shrinking run in words; the words and the bytes agree.
+    assert "seven turns, then six, then five" in label
+    # ...and it no longer claims a meeting count the served game does not have.
+    assert "five meetings" not in label.lower()
+
+
 def test_determinism_holds_per_set(monkeypatch: pytest.MonkeyPatch) -> None:
     # The determinism gate runs PER SET (Task 12.12 DoD): each committed set
     # reconstructs byte-identically through its own per-set loader. A divergence
