@@ -221,6 +221,8 @@ DEFAULT_TURN_FREE_TEXT: Final[Mapping[DefaultTrigger, str]] = MappingProxyType(
         "validation": "(unreadable reply; no turn submitted)",
     }
 )
+# The same marker on a defaulted BALLOT. Its trigger is recorded on the
+# ``DefaultedCall`` beside it rather than in this string.
 DEFAULT_VOTE_RATIONALE: Final[str] = "(missed deadline; default skip)"
 
 # Audit-trail marker prefix prepended to ``rationale_text`` when the LLM
