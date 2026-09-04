@@ -140,8 +140,9 @@ actual is read against a number someone else committed to in advance:
 | high (like-for-like × the latency allowance) | ×1.3465 | **16h02m42s** |
 
 **The actual is ≈ 12h05m of recording wall** (§2.6), just under the bracket's low end, and the
-reason is legible rather than lucky: the smoke's like-for-like ratio was measured on five seeds, and
-each leg's own ratio re-derived from its own bytes reads **×1.07 per meeting**, not ×1.17 (§2.6).
+reason is legible rather than lucky: the smoke's like-for-like ratio was measured on five seeds,
+while each leg's own ratio re-derived from its own bytes reads **×1.074 to ×1.087 per meeting** —
+never the projected ×1.1703 (§2.6).
 The smoke's own §16 item 5 says exactly this — the seed slate is not a representative token sample,
 which is why the projection's low end is the all-games cross-check. Re-records are priced outside
 the bracket per prerequisite (a): seven rounds over five seeds, leg 2's six measured at 198–418 s each for 1,749 s = **29m09s**, leg 1's one absorbed inside its batch wall.
@@ -401,10 +402,11 @@ so no leg's ratio is generalised from another's):
 | 3 `samples/4p1i` | 39 | 729,240 | 18,698.5 | 39 | 671,145 | 17,208.8 | **×1.0866** |
 | 4 `ml_corpus/4p1i` | 43 | 807,588 | 18,781.1 | 43 | 743,786 | 17,297.3 | **×1.0858** |
 
-**The four ratios agree to within 1.2 points and none of them is the smoke's ×1.1703.** Legs 2-4 read
-×1.083-×1.087 and leg 1 reads ×1.0737; the spread is real and small, and quoting leg 1's alone would
-have understated the other three. That gap — measured ≈×1.08 against a projected ×1.17 — is the whole
-of the difference between the projection and the actual.
+**The four ratios span 1.29 percentage points — ×1.0737 to ×1.0866 — and none of them is the
+smoke's ×1.1703.** Legs 2-4 read ×1.0829, ×1.0866 and ×1.0858; leg 1 reads ×1.0737 and is the
+lowest of the four, so quoting it alone would understate the other three. That gap — measured
+×1.074-×1.087 against a projected ×1.1703 — is the whole of the difference between the projection
+and the actual.
 
 **The token basis, stated because two are available and they differ.** Every figure above is on the
 `llm_calls` basis: the tokens recorded against each meeting's own completed calls. The eval report's
@@ -1154,7 +1156,8 @@ loader and asserting `(7, 6, 5)`. The blurb stays spoiler-free under the binding
 **Provenance tuple.** Model `Qwen/Qwen3.6-27B` (Task 16.2 lock) on Featherless at the pinned
 endpoint, prompt set `qwen3_6_27b`, the composite lever-ON prompt-version stamp quoted in §0.4,
 tactical policy `fsm-default` on every game, `$0.0000` on every MANIFEST row, source state
-`44f0a28c`, thirty-one stamped `git_sha` values all reconciled to 0 frozen-directory files, recorded
+`44f0a28c`, **33 stamped `git_sha` values — 31 in per-seed rows plus the two corpus FROZEN-line
+stamps (`0747ce2d`, `3fdd1193`) — all reconciled to 0 frozen-directory files** (§2.7), recorded
 2026-09-03 – 2026-09-04.
 
 **Co-interventions, by name, with their attribution consequence.**

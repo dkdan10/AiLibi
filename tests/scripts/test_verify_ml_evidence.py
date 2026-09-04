@@ -2033,6 +2033,25 @@ def test_the_recording_reconstructs_under_its_declared_slate(tmp_path: Path) -> 
         assert all(os.environ[key] == value for key, value in slate.items())
     assert {key: os.environ.get(key) for key in slate} == before
 
+    # PLANTED: a restored recording that no longer reconstructs is DETECTED.
+    # This is the failure the whole leg exists for — digests can still match
+    # while the games they encode have stopped being readable.
+    broken = tmp_path / "broken"
+    _restored_wave2_tree(broken, ("samples/9p2i",))
+    victim = broken / vme.WAVE2_DEST / "samples/9p2i" / "replay-seed-0.jsonl"
+    text = victim.read_text()
+    victim.unlink()  # it is a symlink into the committed set; replace, never edit
+    # Break the recorded state-hash chain: the bytes still parse and their
+    # digests would still match a manifest, but the game no longer reconstructs.
+    broken_text = text.replace('"state_hash":"', '"state_hash":"0', 1)
+    assert broken_text != text, "the fixture no longer carries a state hash to break"
+    victim.write_text(broken_text)
+    row = _row(
+        vme.run_wave2_reconstruction(_context(broken)),
+        f"wave2-finding reconstruction: {vme.WAVE2_DEST}/samples/9p2i",
+    )
+    assert row.status == "FAIL", row.measured
+
     # PLANTED: a manifest with no slate block cannot say what its bytes read
     # under, so it raises instead of falling back to the environment.
     stub = tmp_path / "noslate"
@@ -2043,16 +2062,33 @@ def test_the_recording_reconstructs_under_its_declared_slate(tmp_path: Path) -> 
         vme.read_declared_slate(stub)
 
 
+#: A committed set whose games really do reconstruct, used as the reconstruction
+#: fixture. Its bytes are baseline-8: every live lever toggle OFF — which is what
+#: the scratch manifest below declares, so the fixture's declared slate is the
+#: slate its bytes were actually recorded under.
+_FIXTURE_SET = "replays/samples/4p1i"
+_FIXTURE_SEEDS = (0, 1)
+
+
 def _restored_wave2_tree(root: Path, sets: tuple[str, ...]) -> None:
-    """A scratch tree with the recording's manifest and ``sets`` restored under it."""
+    """A scratch tree with the recording's manifest and ``sets`` restored under it.
+
+    The sets hold REAL committed games (mirrored, not invented), because the
+    reconstruction leg's whole job is to reconstruct: a fixture of placeholder
+    rows makes every row FAIL and turns any "no failures" assertion into a gate
+    that cannot fail.
+    """
 
     _manifests(root)
     rows = []
     for rel in sets:
         seed_dir = root / vme.WAVE2_DEST / rel
         seed_dir.mkdir(parents=True)
-        (seed_dir / "replay-seed-0.jsonl").write_text('{"kind": "game_over"}\n')
-        rows.append(f"{'5' * 64}  wave2-finding/{rel}/replay-seed-0.jsonl")
+        vme.mirror_sampled_set(
+            _REPO_ROOT / _FIXTURE_SET, list(_FIXTURE_SEEDS), seed_dir
+        )
+        for seed in _FIXTURE_SEEDS:
+            rows.append(f"{'5' * 64}  wave2-finding/{rel}/replay-seed-{seed}.jsonl")
     # `_manifests` SYMLINKS the real manifests in, so writing through that link
     # would edit the COMMITTED file. Replace the link instead: a scratch tree
     # must never be able to reach back out of tmp_path.
@@ -2060,7 +2096,9 @@ def _restored_wave2_tree(root: Path, sets: tuple[str, ...]) -> None:
     manifest.unlink()
     manifest.write_text(
         "| **tip sha — THE PIN** | **" + "b" * 40 + "** |\n"
-        "```slate\nAILIBI_REPORTER_REASONING=1\n```\n"
+        # Every live toggle OFF, spelled as one declared key so the block is
+        # well-formed; the rest are cleared by `declared_slate_env`.
+        "```slate\nAILIBI_IMPOSTOR_ROLL_CALL=0\n```\n"
         "```sha256\n"
         + "\n".join(rows)
         + f"\n{'4' * 64}  wave2-finding/README.md\n```\n"
@@ -2081,7 +2119,14 @@ def test_a_partial_restoration_of_the_recording_fails_naming_the_set(
     whole = tmp_path / "whole"
     _restored_wave2_tree(whole, ("samples/9p2i", "ml_corpus/9p2i"))
     rows = vme.run_wave2_reconstruction(_context(whole))
-    assert not [r for r in rows if r.status == "FAIL" and "declared" in r.detail]
+    # The HAPPY PATH is asserted positively: every whole set reconstructs. An
+    # assertion that merely counted the absence of one phrase would pass on a
+    # tree whose recordings could never reconstruct at all.
+    assert len(rows) == 2, [r.name for r in rows]
+    assert all(r.status == "OK" for r in rows), [r.detail for r in rows]
+    assert all("2/2 reconstructed" in r.measured for r in rows), [
+        r.measured for r in rows
+    ]
 
     # PLANTED: one whole declared set removed from an otherwise restored tree.
     partial = tmp_path / "partial"

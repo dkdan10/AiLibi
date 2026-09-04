@@ -25,8 +25,11 @@ it reads.
 
 ## Where the games are
 
-This directory holds the pin and the digests only. The games themselves — 316 files,
-260,116,543 bytes — live on one parentless commit and are fetched by its sha:
+This directory holds the pin and the digests only. The commit carries **316 files /
+260,116,543 bytes**; the fetch RESTORES **315** of them — the games and their per-set metadata —
+and deliberately leaves the commit's own README behind, because the destination already holds the
+one you are reading. That README is still verified: it is hashed straight out of the commit against
+the digest in the manifest. Fetch with:
 
 ```bash
 bash scripts/fetch_evidence.sh            # fetch by sha, restore, verify
