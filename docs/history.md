@@ -203,8 +203,8 @@ Then came what the re-record was for. Three meeting-layer repairs were built and
 kept switched off until a record could judge them — the reporter's own reasoning
 on its turn, a discipline on how corroborating accounts are counted, and
 structured testimony that survives into the ballot — and four bars were written
-down before any of it was measured. A 300-game recording made on 2026-09-03 met
-three: conviction accuracy without engine-certified proof rose to
+down before any of it was measured. A 300-game recording taken over 2026-09-03
+and 2026-09-04 met three: conviction accuracy without engine-certified proof rose to
 46 of 66 = 0.6970 against a bar of 0.60, innocent ejections fell from 46 to 20
 against a ceiling of fewer than 35, and the reporter's own count of them came to
 11 against a ceiling of 12. The fourth asked that the reporter be under 0.40 of

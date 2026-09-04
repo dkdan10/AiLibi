@@ -650,6 +650,10 @@ _POWERED_N: Final = 30
 # The clause itself, read off the target cell rather than assumed: which bar
 # carries one is the record's to say.
 _PER_SET_CLAUSE: Final = re.compile(r"no powered set\s*(≥|≤|<|>)\s*(\d+(?:\.\d+)?)")
+# ...and the bars whose registered target CARRIES one. Named rather than
+# inferred: a clause read only where it happens to appear is a clause the next
+# edit of the target cell can delete, taking its own gate with it.
+_PER_SET_CLAUSE_BARS: Final[tuple[int, ...]] = (_ACCURACY_BAR,)
 _COMPARATORS: Final[Mapping[str, Callable[[float, float], bool]]] = {
     "≥": lambda value, against: value >= against,
     "≤": lambda value, against: value <= against,
@@ -3594,8 +3598,10 @@ def recomputed_verdict(
     the per-set clause the target states in prose after it. A pooled value that
     clears its comparator while an adequately powered set sits below the floor
     is a MISS, and reading only the leading comparator would publish it as a
-    pass. ``None`` when the target or the cell cannot be read as a number, with
-    that reported — a verdict nobody can recompute is prose.
+    pass — and a bar registered WITH a clause has to keep stating one, or
+    deleting the words would delete that half of the gate with them. ``None``
+    when the verdict cannot be recomputed, with the reason reported: a verdict
+    nobody can recompute is prose.
     """
 
     target = _VERDICT_TARGET.match(_EMPHASIS.sub("", bar.target).strip())
@@ -3610,6 +3616,14 @@ def recomputed_verdict(
         return None
     met = _COMPARATORS[target.group(1)](value, float(target.group(2)))
     clause = _PER_SET_CLAUSE.search(_EMPHASIS.sub("", bar.target))
+    if clause is None and number in _PER_SET_CLAUSE_BARS:
+        errors.append(
+            f"{_FINDING_RECORD_AUDIT}: bar {number} registered a per-set clause "
+            f"beside its pooled target, and {bar.target.strip()!r} no longer "
+            "states one — the half of the bar that reads the per-set table "
+            "would go unchecked."
+        )
+        return None
     if met and clause is not None:
         floor = float(clause.group(2))
         below = _COMPARATORS[clause.group(1)]

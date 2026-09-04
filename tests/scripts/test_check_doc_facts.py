@@ -2302,6 +2302,21 @@ def test_powered_set_below_its_floor_makes_the_bar_a_miss(doc_tree: Path) -> Non
     )
 
 
+def test_deleting_bar_1s_per_set_clause_fails_loud(doc_tree: Path) -> None:
+    # The clause is read off the target cell, so the cell could delete it and
+    # take that half of the gate along. The bars that registered one are named,
+    # and losing the words is reported rather than silently obeyed.
+    _substitute(
+        doc_tree,
+        _FINDING_AUDIT,
+        "| ≥ 0.60, no powered set < 0.50 |",
+        "| ≥ 0.60 |",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "bar 1 registered a per-set clause beside its pooled target" in errors[0]
+
+
 def test_underpowered_set_below_the_floor_binds_nothing(doc_tree: Path) -> None:
     # The other half of the same clause: a set with too few ejections takes no
     # part in it, so moving one below the floor must NOT flip the verdict — a
