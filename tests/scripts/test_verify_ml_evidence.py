@@ -2043,6 +2043,96 @@ def test_the_recording_reconstructs_under_its_declared_slate(tmp_path: Path) -> 
         vme.read_declared_slate(stub)
 
 
+def _restored_wave2_tree(root: Path, sets: tuple[str, ...]) -> None:
+    """A scratch tree with the recording's manifest and ``sets`` restored under it."""
+
+    _manifests(root)
+    rows = []
+    for rel in sets:
+        seed_dir = root / vme.WAVE2_DEST / rel
+        seed_dir.mkdir(parents=True)
+        (seed_dir / "replay-seed-0.jsonl").write_text('{"kind": "game_over"}\n')
+        rows.append(f"{'5' * 64}  wave2-finding/{rel}/replay-seed-0.jsonl")
+    # `_manifests` SYMLINKS the real manifests in, so writing through that link
+    # would edit the COMMITTED file. Replace the link instead: a scratch tree
+    # must never be able to reach back out of tmp_path.
+    manifest = root / vme.WAVE2_MANIFEST
+    manifest.unlink()
+    manifest.write_text(
+        "| **tip sha — THE PIN** | **" + "b" * 40 + "** |\n"
+        "```slate\nAILIBI_REPORTER_REASONING=1\n```\n"
+        "```sha256\n"
+        + "\n".join(rows)
+        + f"\n{'4' * 64}  wave2-finding/README.md\n```\n"
+    )
+
+
+def test_a_partial_restoration_of_the_recording_fails_naming_the_set(
+    tmp_path: Path,
+) -> None:
+    """Half a preserved record is a failure, not a smaller record.
+
+    Reconstructing whatever happens to be on disk would print a clean row per
+    surviving set while a whole set had quietly gone — and a recording kept as
+    evidence must never shrink silently. Both states are checked: whole passes
+    the completeness gate, partial fails and NAMES what is missing.
+    """
+
+    whole = tmp_path / "whole"
+    _restored_wave2_tree(whole, ("samples/9p2i", "ml_corpus/9p2i"))
+    rows = vme.run_wave2_reconstruction(_context(whole))
+    assert not [r for r in rows if r.status == "FAIL" and "declared" in r.detail]
+
+    # PLANTED: one whole declared set removed from an otherwise restored tree.
+    partial = tmp_path / "partial"
+    _restored_wave2_tree(partial, ("samples/9p2i", "ml_corpus/9p2i"))
+    shutil.rmtree(partial / vme.WAVE2_DEST / "ml_corpus/9p2i")
+    row = _row(
+        vme.run_wave2_reconstruction(_context(partial)), "wave2-finding reconstruction"
+    )
+    assert row.status == "FAIL", row.detail
+    assert "ml_corpus/9p2i" in row.detail
+    assert "1 of 2 declared set(s) restored" in row.measured
+
+
+def test_the_scoped_walk_clears_every_undeclared_live_toggle(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A lever the manifest does not declare is UNSET for the walk, not inherited.
+
+    "Reconstructs under its declared slate" has to be a statement about the
+    manifest, not about the operator's shell. An ambient toggle left standing
+    would run the reconstruction under a slate the recording never used — bytes
+    that should be refused would reconstruct, and the reverse.
+    """
+
+    names = vme.live_toggle_env_names()
+    # The names are DERIVED from the registry and checked against the resolvers,
+    # so every live toggle is covered without this test restating any of them.
+    from orchestrator.replay import TOGGLEABLE_SUBSTRATE_FLAG_KEYS
+
+    assert set(names) == set(TOGGLEABLE_SUBSTRATE_FLAG_KEYS)
+
+    slate = {"AILIBI_REPORTER_REASONING": "1"}
+    undeclared = sorted(set(names.values()) - set(slate))
+    assert undeclared, "the registry must carry a toggle the slate does not declare"
+
+    # PLANTED: every undeclared toggle set in the ambient environment.
+    for name in undeclared:
+        monkeypatch.setenv(name, "1")
+    monkeypatch.setenv("AILIBI_REPORTER_REASONING", "0")
+
+    with vme.declared_slate_env(slate):
+        assert os.environ["AILIBI_REPORTER_REASONING"] == "1"
+        for name in undeclared:
+            assert name not in os.environ, f"{name} survived the scoped walk"
+
+    # ...and the ambient environment is handed back exactly as it was.
+    assert os.environ["AILIBI_REPORTER_REASONING"] == "0"
+    for name in undeclared:
+        assert os.environ[name] == "1"
+
+
 def test_a_registry_row_with_no_inventory_scope_raises() -> None:
     """A row whose bytes nothing enumerates cannot be reported as complete."""
 

@@ -311,7 +311,7 @@ block's own marker text:
 (§0.6's pooled block reads `body report 626, emergency 59`), so the population is the whole of it
 and not a sample.
 
-### 2.5 The `deadline_default` hand scan, and the six re-record rounds
+### 2.5 The `deadline_default` hand scan, and the seven re-record rounds
 
 Scanned per leg under BOTH shapes (`error_type == "deadline_default"` and the model sentinel
 `(deadline_default)`), by hand on the samples legs — `scripts/refresh_samples.sh` and
@@ -877,7 +877,7 @@ exactly **0.50** (the hardening states 50%).
 | pooled per-row uniform null | **0.3152** | **0.2553** |
 | observed reporter share on those rows | 34/46 = 0.7391 | 11/19 = 0.5789 |
 | three-living rows | 12 of 46 (null 0.50, observed 12/12) | **1** of 19 (null 0.50, observed 0/1) |
-| one-sided binomial P(X ≥ observed \| null) | 4.4 × 10⁻⁹ | **0.0027** |
+| exact Poisson-binomial P(X ≥ observed \| the row nulls) | 1.27 × 10⁻⁹ | **0.0024** |
 
 **The null FELL, 0.3152 → 0.2553. It did not rise toward 0.50, and the hardening's fear did not
 materialise** — because the two 4p1i legs, which supplied 4 of baseline 8's three-living rows and all
@@ -886,9 +886,37 @@ three-living stratum went from 12 rows to 1.
 
 **So 0.40 was reachable on these bytes.** The structural floor a blind process would produce is
 0.2553, well below the target; the bar was not asking for something the roster made impossible. And
-the observed 0.5789 sits **significantly above** that null (p ≈ 0.0027), so the reporter channel is
-still a real channel and not an artifact of who happened to be alive. Both statements are
-observations; neither is a criterion, and neither moves the verdict.
+the observed 0.5789 sits above that null by more than chance comfortably explains, so the reporter
+channel is still a real channel and not an artifact of who happened to be alive.
+
+**The tail is exact rather than approximate, because the rows are not exchangeable.** Each row's null
+is `1/I` for that meeting's own living-innocent count, and on this record those take five distinct
+values — 0.1667, 0.2, 0.25, 0.3333 and 0.5 — so `Binomial(n, mean p)` is the wrong distribution for
+the sum. The tail below is the **Poisson binomial**: the exact distribution of a sum of independent
+non-identical Bernoulli draws, computed by the standard O(n²) convolution over the individual row
+probabilities. On this record it gives **P(X ≥ 11) = 0.0024** against the identical-p binomial's
+0.0027; on baseline 8, **1.27 × 10⁻⁹**.
+
+```python
+def poisson_binomial_pmf(ps):          # P(sum = k) for independent Bernoulli(p_i)
+    pmf = [1.0]
+    for p in ps:
+        nxt = [0.0] * (len(pmf) + 1)
+        for k, v in enumerate(pmf):
+            nxt[k] += v * (1.0 - p)
+            nxt[k + 1] += v * p
+        pmf = nxt
+    return pmf
+# tail = sum(poisson_binomial_pmf(row_nulls)[observed_hits:])
+```
+
+**The caveat, stated rather than buried: the rows are not fully independent.** The 19 rows come from
+18 distinct games, so one game contributes two of them, and wrongful ejections within a game share a
+roster and a run of play; the Poisson binomial assumes independence across rows and that assumption
+is only approximately true here. **This is an OFFLINE READING, published under memo §5's
+observed-never-gated rule.** No bar, tripwire or §9.2 criterion reads it, it did not enter the
+verdict, and it is not a significance test the record relies on — it is a sanity check on whether the
+reporter share could plausibly be an artifact of who happened to be alive, and it says not.
 
 (Bar 4's own registered reading is 11/20 = 0.5500 over ALL wrongful ejections. The null is computed
 over the 19 of those 20 that occurred at a body-report meeting, because only there does a "body

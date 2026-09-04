@@ -1410,18 +1410,60 @@ def restored_wave2_sets(repo_root: Path) -> list[Path]:
     return sets
 
 
-@contextlib.contextmanager
-def declared_slate_env(slate: Mapping[str, str]) -> Iterator[None]:
-    """Run a block with exactly ``slate`` exported, restoring the environment after.
+def live_toggle_env_names() -> dict[str, str]:
+    """Every live lever toggle's env-var name, DERIVED from the registry.
 
-    Scoped to the reconstruction of the sets that DECLARE it, and taken from the
-    manifest rather than the ambient shell, so the leg states what the bytes
-    reconstruct under instead of inheriting whatever the operator had exported.
+    The registry owns the toggle keys (``impostor_roll_call``, ...) and the
+    variables follow from them (``AILIBI_IMPOSTOR_ROLL_CALL``), so the names are
+    derived rather than restated -- a lever registered later is covered without
+    editing this file. The derivation is then CHECKED against each resolver's own
+    behaviour: a name that does not actually turn its lever on is a broken
+    assumption, and it fails loud here instead of silently leaving a toggle set
+    during a scoped walk.
     """
 
-    previous = {key: os.environ.get(key) for key in slate}
+    from orchestrator.replay import _TOGGLEABLE_LEVER_RESOLVERS
+
+    names: dict[str, str] = {}
+    for key, resolver in _TOGGLEABLE_LEVER_RESOLVERS:
+        name = f"AILIBI_{key.upper()}"
+        if not resolver({name: "1"}) or resolver({}):
+            raise EvidenceError(
+                f"the live toggle {key!r} is not driven by {name!r} -- this "
+                "command derives toggle variables from the registry's keys, and "
+                "that derivation no longer holds"
+            )
+        names[key] = name
+    return names
+
+
+@contextlib.contextmanager
+def declared_slate_env(slate: Mapping[str, str]) -> Iterator[None]:
+    """Run a block under EXACTLY ``slate``: declared keys set, every other live
+    toggle cleared, and the whole environment restored afterwards.
+
+    Setting the declared keys is only half of it. A lever the manifest does NOT
+    declare must be OFF for the walk, and "off" means UNSET rather than left at
+    whatever the operator exported: an ambient ``AILIBI_IMPOSTOR_ROLL_CALL=1``
+    would otherwise make the reconstruction run under a slate the recording never
+    used, so bytes that should be refused would reconstruct and bytes that should
+    reconstruct would be refused. Clearing the undeclared toggles is what makes
+    "reconstructs under its declared slate" a statement about the manifest rather
+    than about the shell.
+
+    The toggle names come from the registry (:func:`live_toggle_env_names`), so a
+    lever added later is cleared without editing this function.
+    """
+
+    undeclared = {
+        name for name in live_toggle_env_names().values() if name not in slate
+    }
+    touched = set(slate) | undeclared
+    previous = {key: os.environ.get(key) for key in touched}
     try:
         os.environ.update(slate)
+        for name in undeclared:
+            os.environ.pop(name, None)
         yield
     finally:
         for key, value in previous.items():
@@ -1529,13 +1571,36 @@ def run_wave2_reconstruction(ctx: Context) -> list[CheckRow]:
     drifted export certify bytes it never rendered.
     """
 
+    declared = _wave2_declared_sets(ctx)
     restored = restored_wave2_sets(ctx.repo_root)
+    present = {_relative(d, ctx.repo_root)[len(f"{WAVE2_DEST}/") :] for d in restored}
+    missing = sorted(declared - present)
+    if restored and missing:
+        # A PARTIAL restoration is a failure, not a smaller walk. Reconstructing
+        # whatever happens to be on disk would report a clean row per surviving
+        # set while a whole set of the preserved record had quietly gone -- the
+        # one thing a preserved record must never do is shrink silently.
+        return [
+            CheckRow(
+                name="wave2-finding reconstruction",
+                measured=f"{len(present)} of {len(declared)} declared set(s) restored",
+                committed=f"{len(declared)} declared set(s)",
+                source=WAVE2_MANIFEST,
+                status="FAIL",
+                detail=(
+                    "declared by the manifest but absent from the restore: "
+                    + ", ".join(missing)
+                    + " -- re-run `bash scripts/fetch_evidence.sh`, or `--clean` "
+                    "and re-fetch; a partial restore is not a smaller record"
+                ),
+            )
+        ]
     if not restored:
         return [
             CheckRow(
                 name="wave2-finding reconstruction",
                 measured="EVIDENCE-BRANCH-ABSENT",
-                committed=f"{len(_wave2_declared_sets(ctx))} declared set(s)",
+                committed=f"{len(declared)} declared set(s)",
                 source=WAVE2_MANIFEST,
                 status="ABSENT",
                 detail=(
@@ -1545,7 +1610,10 @@ def run_wave2_reconstruction(ctx: Context) -> list[CheckRow]:
             )
         ]
     slate = read_declared_slate(ctx.repo_root)
-    declared = ", ".join(f"{key}={value}" for key, value in sorted(slate.items()))
+    slate_text = ", ".join(f"{key}={value}" for key, value in sorted(slate.items()))
+    cleared = sorted(
+        name for name in live_toggle_env_names().values() if name not in slate
+    )
     rows: list[CheckRow] = []
     with declared_slate_env(slate):
         for set_dir in restored:
@@ -1555,7 +1623,10 @@ def run_wave2_reconstruction(ctx: Context) -> list[CheckRow]:
                 CheckRow(
                     name=f"wave2-finding reconstruction: {rel}",
                     measured=measured,
-                    committed=f"{committed}; slate {declared}",
+                    committed=(
+                        f"{committed}; slate {slate_text}"
+                        + (f"; cleared {', '.join(cleared)}" if cleared else "")
+                    ),
                     source=f"{WAVE2_MANIFEST} (declared slate)",
                     status="OK" if not failures else "FAIL",
                     detail="\n".join(failure.render() for failure in failures[:10]),
