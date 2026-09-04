@@ -110,6 +110,16 @@ SLATE_MANIFEST: Final = "training/reports/_finalist_eval_raw/MANIFEST.md"
 COEVO_DEST: Final = "training/artifacts/coevo"
 SLATE_DEST: Final = "training/reports/_finalist_eval_raw"
 
+#: Task 21.24's FINDING record — the SECOND evidence family. Its 300 recorded
+#: games stamp the Wave-2 keys True, the pre-registered rule read FINDING over
+#: them, and a bare shell resolves those keys False, so the payload cannot live
+#: under the canonical replay roots and is pinned on its own commit instead. The
+#: manifest and the README are the in-tree wrapper; the payload restores beside
+#: them, untracked.
+WAVE2_MANIFEST: Final = "replays/records/phase-21-wave2-finding/EVIDENCE-MANIFEST.md"
+WAVE2_README: Final = "replays/records/phase-21-wave2-finding/README.md"
+WAVE2_DEST: Final = "replays/records/phase-21-wave2-finding"
+
 CORPUS_SET: Final = "replays/ml_corpus/9p2i"
 SURROGATE_DIR: Final = "training/artifacts/surrogate"
 CONVICTION_DIR: Final = "training/artifacts/conviction"
@@ -161,9 +171,10 @@ _REPLAY_GLOB: Final = "replay-seed-*.jsonl"
 #: The per-set provenance record: what DECLARES a replay set to exist.
 _SET_MANIFEST: Final = "MANIFEST.md"
 
-#: The evidence commit's two top-level prefixes, as the manifests spell them.
+#: The evidence commits' top-level prefixes, as the manifests spell them.
 _COEVO_PREFIX: Final = "coevo/"
 _SLATE_PREFIX: Final = "finalist-eval-raw/"
+_WAVE2_PREFIX: Final = "wave2-finding/"
 
 #: The EVIDENCE-MANIFEST section heading whose table enumerates the bytes the
 #: 19.22 prune RETAINED in-tree — the committed in-tree inventory.
@@ -276,6 +287,9 @@ class Context:
     complete: bool
     evidence: tuple[EvidenceRow, ...]
     pinned_sha: str
+    #: Task 21.24's FINDING-record pin. A second evidence family means a second
+    #: commit to hash the branch README out of, and the two must never be mixed.
+    wave2_pinned_sha: str
     #: The Task 19.21 raw-slate ruling, or ``None`` when the document records
     #: none (which is itself a failure the availability leg reports).
     slate_ruling: Ruling | None
@@ -464,7 +478,30 @@ def evidence_rows(
                     repo_path=slate_path,
                 )
             )
-    elif not slate_lost:
+    # Task 21.24's FINDING record, the second evidence family. Its manifest is
+    # in-tree unconditionally (it is the row `docs/artifacts.md` registers), so
+    # unlike the slate there is no loss path to tolerate: absent is an error.
+    for digest, raw in read_digest_block(repo_root, WAVE2_MANIFEST):
+        if not raw.startswith(_WAVE2_PREFIX):
+            raise EvidenceError(
+                f"{WAVE2_MANIFEST}: digest row {raw!r} is not a "
+                f"{_WAVE2_PREFIX!r} path — the restore map does not cover it"
+            )
+        inner = raw[len(_WAVE2_PREFIX) :]
+        if inner == "README.md":
+            # The branch's own README: hashed here, deliberately NOT restored.
+            # Its destination would be the in-tree wrapper README of the same
+            # name, and a restore that overwrote the committed wrapper with the
+            # branch copy would report itself green while destroying the row
+            # `docs/artifacts.md` registers.
+            _claim(WAVE2_MANIFEST, raw, None)
+            rows.append(EvidenceRow(digest=digest, manifest_path=raw, repo_path=None))
+            continue
+        wave2_path = _confined(WAVE2_DEST, inner, WAVE2_MANIFEST, raw)
+        _claim(WAVE2_MANIFEST, raw, wave2_path)
+        rows.append(EvidenceRow(digest=digest, manifest_path=raw, repo_path=wave2_path))
+
+    if not (repo_root / SLATE_MANIFEST).is_file() and not slate_lost:
         raise EvidenceError(
             f"{SLATE_MANIFEST} is missing, and {ARTIFACTS_DOC} records no loss "
             "for the Phase-18 finalist slate. That manifest is created on Task "
@@ -485,17 +522,15 @@ def _slate_lost(repo_root: Path) -> bool:
     return ruling is not None and ruling.lost
 
 
-def read_pinned_sha(repo_root: Path) -> str:
-    """The evidence commit's tip sha, read from the manifest row that owns it."""
+def read_pinned_sha(repo_root: Path, manifest: str = EVIDENCE_MANIFEST) -> str:
+    """An evidence commit's tip sha, read from the manifest row that owns it."""
 
-    for line in _read_text(repo_root, EVIDENCE_MANIFEST).splitlines():
+    for line in _read_text(repo_root, manifest).splitlines():
         if _PIN_ROW_MARKER in line:
             match = _SHA1_RE.search(line)
             if match is not None:
                 return match.group(0)
-    raise EvidenceError(
-        f"{EVIDENCE_MANIFEST}: no pinned sha on the '{_PIN_ROW_MARKER}' row"
-    )
+    raise EvidenceError(f"{manifest}: no pinned sha on the '{_PIN_ROW_MARKER}' row")
 
 
 def read_slate_ruling(repo_root: Path) -> Ruling | None:
@@ -1216,39 +1251,54 @@ def run_sidecars(ctx: Context) -> LegResult:
             )
         )
 
-    # --- the branch's own README: hashed by the manifest, never restored. ---
+    # --- each branch's own README: hashed by its manifest, never restored. ---
+    # Two evidence families means two of them, and each is hashed out of ITS OWN
+    # pinned commit: crossing the pins would report a green README from the wrong
+    # branch. The pairing is by manifest prefix, the same key the restore map uses.
+    # The blob path is the path ON THE COMMIT, which carries no manifest prefix:
+    # the prefix is the restore map's namespace, not the archive's.
+    readme_pins = {
+        _COEVO_PREFIX: (EVIDENCE_MANIFEST, ctx.pinned_sha, "README.md"),
+        _WAVE2_PREFIX: (WAVE2_MANIFEST, ctx.wave2_pinned_sha, "README.md"),
+    }
     readme_rows = [row for row in ctx.evidence if row.repo_path is None]
-    if len(readme_rows) != 1:
+    if len(readme_rows) != len(readme_pins):
         raise EvidenceError(
-            f"{EVIDENCE_MANIFEST}: expected exactly one non-restored row (the "
-            f"branch README), found {len(readme_rows)}"
+            "expected exactly one non-restored row per evidence family (the "
+            f"branch README), found {len(readme_rows)} for {len(readme_pins)} "
+            "families"
         )
-    readme = readme_rows[0]
-    blob = _git_blob(ctx.repo_root, ctx.pinned_sha, readme.manifest_path)
-    if blob is None:
-        readme_status: Status = "ABSENT"
-        readme_measured = "the pinned commit object is not in this checkout"
-    else:
-        actual = hashlib.sha256(blob).hexdigest()
-        readme_status = "OK" if actual == readme.digest else "FAIL"
-        readme_measured = f"sha256 {actual[:12]}…"
-    rows.append(
-        CheckRow(
-            name="evidence branch README",
-            measured=readme_measured,
-            committed=f"sha256 {readme.digest[:12]}…",
-            source=f"{EVIDENCE_MANIFEST} §7 (row 'README.md')",
-            status=readme_status,
-            detail=(
-                ""
-                if readme_status != "ABSENT"
-                else (
-                    "branch metadata, checked straight out of the commit — "
-                    "`bash scripts/fetch_evidence.sh` pins it locally"
-                )
-            ),
+    for readme in sorted(readme_rows, key=lambda row: row.manifest_path):
+        family = next(
+            (key for key in readme_pins if readme.manifest_path.startswith(key)),
+            _COEVO_PREFIX,
         )
-    )
+        manifest, pin, blob_path = readme_pins[family]
+        blob = _git_blob(ctx.repo_root, pin, blob_path)
+        if blob is None:
+            readme_status: Status = "ABSENT"
+            readme_measured = "the pinned commit object is not in this checkout"
+        else:
+            actual = hashlib.sha256(blob).hexdigest()
+            readme_status = "OK" if actual == readme.digest else "FAIL"
+            readme_measured = f"sha256 {actual[:12]}…"
+        rows.append(
+            CheckRow(
+                name=f"evidence branch README ({family})",
+                measured=readme_measured,
+                committed=f"sha256 {readme.digest[:12]}…",
+                source=f"{manifest} (row {blob_path!r})",
+                status=readme_status,
+                detail=(
+                    ""
+                    if readme_status != "ABSENT"
+                    else (
+                        "branch metadata, checked straight out of the commit — "
+                        "`bash scripts/fetch_evidence.sh` pins it locally"
+                    )
+                ),
+            )
+        )
     return LegResult(leg="sidecars", rows=tuple(rows))
 
 
@@ -2567,11 +2617,12 @@ def in_tree_inventory(repo_root: Path, key: str) -> list[str] | None:
     return [path for path in tracked if path not in owned_elsewhere]
 
 
-#: The two class-(c) rows, keyed the same way, with the evidence-commit prefix
-#: whose manifest rows they cover.
+#: The class-(c) rows, keyed the same way, with the evidence-commit prefix whose
+#: manifest rows they cover.
 _EVIDENCE_PREFIXES: Final[dict[str, str]] = {
     "coevo/": "coevo/",
     "finalist-eval-raw/": "finalist-eval-raw/",
+    "wave2-finding/": "wave2-finding/",
 }
 
 #: Named evidence that `docs/artifacts.md`'s registry table holds no row for,
@@ -3150,6 +3201,7 @@ def main(argv: list[str] | None = None) -> int:
             complete=complete,
             evidence=evidence_rows(repo_root, slate_lost=_slate_lost(repo_root)),
             pinned_sha=read_pinned_sha(repo_root),
+            wave2_pinned_sha=read_pinned_sha(repo_root, WAVE2_MANIFEST),
             slate_ruling=read_slate_ruling(repo_root),
         )
         mode = "complete" if complete else ("fast" if fast else "full")

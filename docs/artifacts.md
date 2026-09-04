@@ -95,7 +95,7 @@ than its output preserved.
 |---|---|---|---|
 | `replays/samples/` — the baseline-8 adopting record (100 replays + per-set `MANIFEST.md`) | (a) + (b) | in git | 61 MB / 107 files |
 | `replays/ml_corpus/` — the committed ML corpus | (a) | in git | 161 MB / 209 files |
-| `replays/records/phase-21-wave2-finding/` — Task 21.24's FINDING record: the pin, the per-file digests and the read's own README. The 300 recorded games (260,113,361 bytes / 315 files) live on `evidence/phase-21-wave2-finding` @ `29af85d5` and are fetched by that sha, never in the working tree | (b) | in git | 2 files |
+| `replays/records/phase-21-wave2-finding/` — the pin and the per-file digests for a 300-game recording that is NOT one of the canonical replay sets, plus a README saying why it is not | (b) | in git | 2 files |
 | `agents/tactical/learned/{weights,crew_weights}.json` + `.sha256` — the **shipped inference weights** the live tactical factories load | (a) + (b) | in git | 4 files |
 | `tests/fixtures/` — golden fixtures (rendered memory views and their inputs; the bump-in-flight prompt archive is EMPTY, as it is whenever every committed replay renders through the live prompt set — the six `qwen3_6_27b` v4 bodies retired at the baseline-8 record) | (a) | in git | 2,054,135 tracked bytes / 23 files |
 | `data/personas.json` — the canonical persona set | (a) | in git | 12 KB |
@@ -111,6 +111,7 @@ than its output preserved.
 | `experiments/lab/`, `experiments/model_probe/` — recorded read-only harness outputs and their syntheses (`experiments/` outputs are artifacts, not behavior — `docs/architecture.md`) | (b) | in git | 7.3 MB / 164 files |
 | **`coevo/` on `evidence/phase-18-coevo`** — every unpinned Phase-18 co-evolution byte | **(c)** | pinned sha | **101.097 MiB / 1,383 files** |
 | **`finalist-eval-raw/` on `evidence/phase-18-coevo`** — the Phase-18 finalist raw slate: recovered, folded onto the pinned commit and hash-verified, with one owner step still open (below) | **(c)** | pinned sha | **298.157 MiB / 1,569 files** |
+| **`wave2-finding/` on `evidence/phase-21-wave2-finding`** — a 300-game recording that is not one of the canonical replay sets: it reads only with the three Wave-2 levers switched on, so it is pinned rather than committed | **(c)** | pinned sha | **248.063 MiB / 315 files** |
 | local `replays/*.jsonl`, tournament report dirs, the firewall's `**/*.audit.jsonl` packet logs, `frontend/dist/`, the demo bundle | (d) | regenerated (`.gitignore`d) | — |
 
 **Why the other `training/artifacts/` families are class (a) and coevo mostly is

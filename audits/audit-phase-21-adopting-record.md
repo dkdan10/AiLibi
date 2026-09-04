@@ -44,7 +44,7 @@ window stayed open for the whole record.
 | item | state |
 |---|---|
 | (i) the re-smoke, merged | **DISCHARGED** — PR #426 merged by the owner 2026-09-03, squash `e0c2adde`; it touched `audits/README.md`, `audits/audit-phase-21-smoke-wave2.md` and `docs/artifacts.md` only, so the window stays open at `44f0a28c`'s substrate |
-| (a) the freeze-guard reconciliation | **DISCHARGED** — landed in PR #427 (`608ae1f6`): a non-opening `deadline_default` row RE-RECORDS the seed at freeze and does not abandon the run, with the re-record allowance priced outside §12.2's bracket, and routing (e) putting the samples legs' scan in the operator's hand. **It was exercised: five re-record rounds over four seeds, all on leg 2, every one a non-opening slot (§2.5)** |
+| (a) the freeze-guard reconciliation | **DISCHARGED** — landed in PR #427 (`608ae1f6`): a non-opening `deadline_default` row RE-RECORDS the seed at freeze and does not abandon the run, with the re-record allowance priced outside §12.2's bracket, and routing (e) putting the samples legs' scan in the operator's hand. **It was exercised: SIX re-record rounds over four seeds, all on leg 2, every one a non-opening slot (§2.5)** |
 | (c) the T4-equality disclosure row | **DISCHARGED** — PR #427 (`608ae1f6`); equality PASSES as a population fact under §8.1, an OFF reading ABOVE ON is the STOP. T-6 read ON 100% on every leg, so the clause was not the deciding one anywhere |
 | (d) §9.2 bullet 4's executor named | **DISCHARGED** — PR #427 (`608ae1f6`); `scripts/counterfactual_phase21.py::assert_recording_declares` executed it over each leg's own bytes, exit 0 on all four |
 | (R-4) the §5.1 row retired as discharged | **DISCHARGED** — PR #427 (`608ae1f6`); `P-1k` / `P-1ka` are the committed reader and are published in §3 as registered secondaries |
@@ -67,8 +67,8 @@ errors = []
 ```
 
 The tip reads **baseline 8**, which is the expected reading. On ADOPTED the successor would have been
-baseline 9. The rule selected FINDING, so no successor is minted and **the ladder tip stands at
-baseline 8**.
+baseline 9. The rule selected FINDING, so no successor is minted:
+**the ladder tip stands at baseline 8**.
 
 ### 0.4 The recorded configuration, and the corpus recorder's preflight
 
@@ -144,7 +144,7 @@ reason is legible rather than lucky: the smoke's like-for-like ratio was measure
 each leg's own ratio re-derived from its own bytes reads **×1.07 per meeting**, not ×1.17 (§2.6).
 The smoke's own §16 item 5 says exactly this — the seed slate is not a representative token sample,
 which is why the projection's low end is the all-games cross-check. Re-records are priced outside
-the bracket per prerequisite (a): five rounds at 244–460 s each, ≈ 28 minutes in total.
+the bracket per prerequisite (a): six rounds at 198–418 s each, 1,749 s = **29m09s** in total.
 
 ### 0.6 The before column
 
@@ -212,7 +212,7 @@ next began. The staging root is EMPTY in the final commit: §6 moved the bytes o
 | leg | set | games | gate | tripwire reader | `deadline_default` | re-records |
 |---|---|---|---|---|---|---|
 | 1 | `samples/9p2i` | 50/50 | **PASS**, ten checks | exit 0, `stopped_cells` empty, 9/9 PASS | 0 under either shape | 1 (seed 3) |
-| 2 | `ml_corpus/9p2i` | 150/150 | **PASS**, ten checks | exit 0, `stopped_cells` empty, 9/9 PASS | 0 under either shape | 5 rounds over 4 seeds |
+| 2 | `ml_corpus/9p2i` | 150/150 | **PASS**, ten checks | exit 0, `stopped_cells` empty, 9/9 PASS | 0 under either shape | 6 rounds over 4 seeds |
 | 3 | `samples/4p1i` | 50/50 | **PASS**, ten checks | exit 0, `stopped_cells` empty, 9/9 PASS | 0 under either shape | 0 |
 | 4 | `ml_corpus/4p1i` | 50/50 | **PASS**, ten checks | exit 0, `stopped_cells` empty, 9/9 PASS | 0 under either shape | 0 |
 
@@ -292,7 +292,7 @@ strictly satisfied rather than decided at equality on any leg — the (c) disclo
 case was never reached. A pooled run over all four leg directories is informational and did not
 substitute for the four per-leg runs.
 
-### 2.5 The `deadline_default` hand scan, and the five re-record rounds
+### 2.5 The `deadline_default` hand scan, and the six re-record rounds
 
 Scanned per leg under BOTH shapes (`error_type == "deadline_default"` and the model sentinel
 `(deadline_default)`), by hand on the samples legs — `scripts/refresh_samples.sh` and
@@ -317,17 +317,22 @@ a meeting that opened without an accusation, not a turn that defaulted, and §9.
 subject is an OPENING DEFAULT — is not reached.
 
 Every `deadline_default` row that DID appear during recording was on a non-opening slot and was
-re-recorded at freeze under §9.2 as amended by PR #427, never abandoned. All five rounds fell on
+re-recorded at freeze under §9.2 as amended by PR #427, never abandoned. All six rounds fell on
 leg 2:
 
-| seed | slot | trigger | rounds |
-|---|---|---|---|
-| 1034 | `opt_in` turn 4 | validation — `Input tag 'corroboration' … does not match any of the expected tags` | 1 |
-| 1061 | `opt_in` turns 3 and 5 | validation — same tag class | 2 |
-| 1078 | `vote` | validation — `1 validation error for ModelAuthoredVoteBallot` | 1 |
-| 1087 | `opt_in` turn 3 | validation — `Input tag 'alibi' … does not match any of the expected tags` | 2 |
+| seed | slot | trigger | rounds | wall |
+|---|---|---|---|---|
+| 1034 | `opt_in` turn 4 | validation — `Input tag 'corroboration' … does not match any of the expected tags` | 1 | 244 s |
+| 1061 | `opt_in` turns 3 and 5 | validation — same tag class | 2 | 337 s + 327 s |
+| 1078 | `vote` | validation — `1 validation error for ModelAuthoredVoteBallot` | 1 | 225 s |
+| 1087 | `opt_in` turn 3 | validation — `Input tag 'alibi' … does not match any of the expected tags` | 2 | 198 s + 418 s |
+| **total** | | | **6 rounds over 4 seeds** | **1,749 s = 29m09s** |
 
-**Every one of the five is a schema-VALIDATION failure, not a wall-clock miss**, which is precisely
+Two seeds needed a SECOND round because the re-recording produced a fresh `deadline_default` row of
+the same class; the driver rescans after every re-record for exactly that reason and stops rather
+than looping (its cap is three rounds per batch, never reached).
+
+**Every one of the six is a schema-VALIDATION failure, not a wall-clock miss**, which is precisely
 the (b) legibility item the close ledger carries: `meetings/manager.py:209`'s
 `DEFAULT_TURN_FREE_TEXT = "(missed deadline; no turn submitted)"` is minted for a validation failure
 too, so the husk asserts a deadline miss that did not happen. The recurring trigger has a shape worth
@@ -338,7 +343,8 @@ survives in any leg here, so the list this item asks for is empty — but the ca
 The corpus re-record flow was followed as written rather than improvised, because a present replay
 carrying such a row refuses the WHOLE re-run at the pre-spend skip-scan: DELETE the replay and its
 MANIFEST row → `--seeds N` → the finalizing run. 21.15 did this five times by hand over 250 completed
-games; this record did it five times over 300.
+games; this record took six rounds over 300, plus leg 1's single re-record of seed 3 — seven rounds
+over five seeds in all.
 
 ### 2.6 Duration, per leg, against the projection — and each leg's own token ratio
 
@@ -594,14 +600,35 @@ Target **< 0.40 pooled**.
 
 **MISSED.** 0.5500 is not < 0.40. The share fell by 18.9 points and stopped 15 points above the bar.
 
-The arithmetic of the miss is worth stating because it is not a failure of the reporter channel: bar
-4 is a SHARE, and its denominator is bar 2, which the same record cut from 46 to 20. The reporter's
-absolute count fell faster than the bar demanded (34 → 11, bar 3 MET with a point to spare) while the
-*other* wrongful-ejection routes closed faster still, so the reporter's share of a much smaller total
-stayed high. That is exactly the mechanism A-4's verifier correction already named on the baseline
-axis — *the headline share is high because the other routes closed, not because this one grew* — now
-observed inside a single record. **It is an explanation and not a re-pricing.** The memo set 0.40
-before these bytes existed, the reading is 0.5500, and the bar is MISSED.
+**The arithmetic of the miss, from this record's own cells: the reporter channel closed FASTER than
+every other route, and the share stayed high anyway.** Split bar 2's total both ways:
+
+| wrongful ejections | baseline 8 | this record | move |
+|---|---|---|---|
+| reporter | 34 | 11 | **−67.6%** |
+| non-reporter | 12 | 9 | −25.0% |
+| **total (bar 2)** | **46** | **20** | −56.5% |
+
+and the same ordering holds per slot, which is the exposure-corrected reading: the reporter's own
+ejection risk fell **5.48% → 1.76% (−68.0%)** while the innocent non-reporter's fell
+**0.65% → 0.43% (−33.9%)**.
+
+So the share did not stay high because the other routes closed faster. It stayed high because the
+reporter DOMINATED the starting composition — 34 of baseline 8's 46 — and cutting the dominant class
+by two thirds still leaves it the majority of a much smaller total. Had the non-reporter routes
+fallen at the reporter's own rate, the share would have read 0.7391, exactly where it started: a
+share is invariant to a cut applied evenly, and this record cut the reporter's side harder.
+
+**That makes bars 3 and 4 pull against each other on this record's composition, and the tension is
+arithmetic rather than rhetorical.** At the record's 9 non-reporter wrongful ejections, bar 4's
+`< 0.40` requires reporter wrongful ejections **≤ 5** — while bar 3, the bar registered on that very
+count, asked for ≤ 12 and the record read 11. A record could therefore meet bar 3 comfortably, cut
+the reporter channel by two thirds, and still miss bar 4; the only other route to bar 4 is a LARGER
+non-reporter wrongful total, which is to say a worse record on bar 2.
+
+**None of that is a re-pricing.** The memo set 0.40 before these bytes existed, the reading is
+0.5500, and the bar is MISSED. What the observation is good for is the NEXT pre-registration, and §7
+routes it there rather than acting on it here.
 
 ### 4.5 Eligibility, per lever — published, graduating nothing
 
@@ -644,11 +671,15 @@ retired always-on levers and four live toggles. The ladder tip does not move and
 The canonical sets keep their baseline-8 bytes. No subset graduates under any verdict.
 
 This record was taken to find out, and it found out. Three of the four bars the pre-registration set
-before these bytes existed are met, several of them comfortably; the fourth is a share bar whose
-denominator the same record more than halved. Whether that is grounds for an owner override is an
-owner's question and not this audit's — and if one is made, it is recorded as an override of a
-FINDING verdict, in the shape `audits/audit-phase-20-baseline-7.md` §6.1 set, and **never as a bar
-that passed**.
+before these bytes existed are met, several of them comfortably. The fourth is a SHARE, and on this
+record's own cells the reporter channel closed faster than every other route — 34 → 11 against
+12 → 9, and 1.76% against 0.43% per slot — yet the share stayed at 0.5500 because the reporter
+dominated the starting composition and a share is invariant to an even cut (§4, bar 4). At the
+record's 9 non-reporter wrongful ejections, bar 4 would have needed the reporter count at ≤ 5 while
+bar 3 asked for ≤ 12; the two bars pull against each other here. Whether that is grounds for an owner
+override is an owner's question and not this audit's — and if one is made, it is recorded as an
+override of a FINDING verdict, in the shape `audits/audit-phase-20-baseline-7.md` §6.1 set, and
+**never as a bar that passed**.
 
 ## 6. Where the bytes landed, and what did NOT move
 
@@ -680,16 +711,26 @@ The pin is a SHA and not a branch name, which is the immutability guarantee: res
 bytes the manifest hashed or the digest check fails, and they are untracked by design and never
 committed back.
 
-**This is PROVISIONAL, and two things would change under the other ruling.** If the owner rules for
-the in-tree class-(a)+(b) mechanism, the bytes move into `replays/records/phase-21-wave2-finding/`
-itself and the row's class and size cells change with them; the registration, the probes, the
-inventory scope and the planted case are already in place and would carry over unchanged. A second
-consequence is recorded rather than executed: the class-(c) row shape Phase 18 uses pairs the in-tree
-manifest row with a `pinned sha` registry row driven by `scripts/verify_ml_evidence.py`'s
-evidence-manifest parser and restored by `scripts/fetch_evidence.sh`, both of which are hard-wired to
-the Phase-18 manifest family. Generalising them to a second family is real code in files this task's
-scope does not list, so this record registers ONE row — the DoD's own instruction — and routes the
-generalisation with the (G8) ruling. Nothing in the read changes either way.
+The payload is registered as class-(c) evidence through the same machinery Phase 18 uses, generalised
+to a second family rather than described in prose: `scripts/verify_ml_evidence.py` parses this
+manifest's digest block, carries a `wave2-finding/` class-(c) registry row, and reports the recording
+**ABSENT** on any checkout that has not fetched it — so `--complete` cannot be satisfied by a tree
+that merely holds the sidecars. `scripts/fetch_evidence.sh` fetches by sha, asserts the commit is a
+parentless orphan, restores the bytes untracked behind a generated `.gitignore`, and hash-verifies
+them; `--clean` removes exactly what it placed. The cycle is exercised in this PR: **3268/3268 files
+match**, and `--complete` reads `OK 54 | FAIL 0 | ABSENT 0` restored against `FAIL 0 | ABSENT 7`
+bare.
+
+**This is PROVISIONAL.** If the owner rules for the in-tree class-(a)+(b) mechanism, the bytes move
+into `replays/records/phase-21-wave2-finding/` itself and the row's class and size cells change with
+them; the probes, the inventory scope, the manifest parser and the planted cases are already in place
+and carry over. Nothing in the read changes either way.
+
+**(G8) is decided AT THE GATE, and this PR is the gate.** The contract's prerequisite block makes the
+landing mechanism an owner decision at dispatch with the orchestrator's recommendation as the
+provisional fallback; this PR is owner-gated and stops open, so the owner's merge — or a ruling
+before it — IS that decision, taken with the mechanism working and its cost visible rather than
+described.
 
 ### 6.2 The FINDING no-ops, each one a checked no-op rather than a silence
 
@@ -707,7 +748,9 @@ recorded with the reason rather than passed over:
 | `scripts/check_doc_facts.py` `_LADDER_TIP_AUDIT`, `_WIN_SPLIT_HEADER` | UNCHANGED | they stay on `audits/audit-phase-21-rerecord.md` and `baseline-7 impostor rate`; `check_conviction_partition` and `check_verdict_figures` parse the named audit's bars against README's live figures, and pointing them at a lever-ON audit whose bytes are not canonical would either fail the checker or re-pin the front door to evidence this record did not adopt |
 | `README.md`, `docs/reading-guide.md` | UNCHANGED | no front-door cell moved |
 | `.env.example` | UNCHANGED | all three Wave-2 keys stay documented as live toggles in the `# AILIBI_*=0` shape `check_lever_registry` requires |
-| `scripts/verify_ml_evidence.py` | UNCHANGED | nothing re-records the corpus, no grounding gap is re-declared, and `grep -c STALE scripts/verify_ml_evidence.py` still reads **0** exactly as 21.17 left it |
+| `scripts/verify_ml_evidence.py` — the grounding-gap / STALE mechanism | UNCHANGED | nothing re-records the corpus, so no gap is re-declared and `grep -c STALE scripts/verify_ml_evidence.py` still reads **0** exactly as 21.17 left it |
+| `scripts/verify_ml_evidence.py` — the evidence registry | **CHANGED** | the FINDING record's in-tree wrapper and its class-(c) payload are registered (`_IN_TREE_PROBES`, `_IN_TREE_INVENTORY`, `_EVIDENCE_PREFIXES` and the manifest parser), which is what makes the new `docs/artifacts.md` rows legal and what makes `--complete` report the recording ABSENT on a checkout that has not fetched it |
+| `scripts/fetch_evidence.sh` | **CHANGED** | taught the second evidence family, so the pinned bytes are fetched by sha, restored untracked and hash-verified rather than described in prose |
 | `orchestrator/replay.py`, `meetings/{manager,corroboration,constants}.py`, `orchestrator/game.py`, `agents/strategic/prompts/loader.py` | UNCHANGED | no resolver is deleted, because no lever graduated |
 
 ### 6.3 The one thing that DID move: the seed-13 featured card
@@ -734,10 +777,12 @@ loader and asserting `(7, 6, 5)`. The blurb stays spoiler-free under the binding
   moved no front-door cell.
 * **The husk `free_text` wording (item (b)).** Deferred to the close ledger with its trigger class
   now named from live bytes (§2.5).
-* **Any judgment about whether bar 4's target was the right target.** The memo owns the bars. A bar
-  that turned out to be a share over a denominator the same intervention improves is a fact about
-  this pre-registration, and it belongs in the close ledger as an observation for the NEXT
-  pre-registration to weigh — never as a retroactive edit to this one.
+* **Any judgment about whether bar 4's target was the right target.** The memo owns the bars. What
+  this record observed — that a SHARE bar over a class which already dominates the baseline
+  composition can be missed by an intervention that cuts that very class hardest, and that it then
+  pulls against the COUNT bar registered on the same cell (§4, bar 4) — is a fact about this
+  pre-registration's construction, not about these bytes. It belongs in the close ledger as an
+  observation for the NEXT pre-registration to weigh, never as a retroactive edit to this one.
 
 ## 8. Provenance and co-interventions
 

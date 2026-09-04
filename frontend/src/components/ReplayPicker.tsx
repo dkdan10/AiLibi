@@ -105,10 +105,9 @@ export interface FeaturedGame {
 // The spoiler rule below is unaffected and still binds — the rewritten label
 // names the setup and the question, never the meeting's outcome.
 //
-// The seed-13 label was repaired the same way at Task 21.24: it claimed five
-// meetings where the served game has three, of seven, six and five spoken turns.
-// Its replacement names those counts, and tests/api/test_sets.py reads them back
-// through the set loader so a future record cannot falsify the card in silence.
+// The seed-13 label names the served game's turn counts, and tests/api/test_sets.py
+// reads them back through the set loader: a card that states a countable fact is
+// pinned to it. (Task 21.24.)
 //
 // SPOILER RULE (BINDING, PR #324 review): this strip renders BEFORE any game is
 // opened, and a static blurb is prose, not outcome-derived data — so 19.10's
