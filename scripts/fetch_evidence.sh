@@ -837,6 +837,31 @@ if [[ "$readme_expected" != "$readme_actual" ]]; then
 fi
 expected=$((expected + 1))
 
+# The SECOND family's branch README, checked the same way and INDEPENDENTLY:
+# against its own in-tree manifest, out of its own pinned commit. Sharing the
+# first family's digest or pin here would report a green README for a branch
+# nothing had looked at.
+if ! git -C "$REPO_ROOT" cat-file -e "${WAVE2_PINNED_SHA}:README.md" 2>/dev/null; then
+  echo "The pinned commit ${WAVE2_PINNED_SHA} is not in this repository, so the" >&2
+  echo "recording's own README.md cannot be verified. Run" >&2
+  echo "'bash scripts/fetch_evidence.sh' — it fetches the commit and pins it" >&2
+  echo "locally at ${WAVE2_LOCAL_REF}, after which --verify works offline." >&2
+  exit 1
+fi
+wave2_readme_expected="$(awk '/^```sha256$/{f=1;next} /^```$/{f=0} f' "$WAVE2_MANIFEST" |
+  awk '$2 == "wave2-finding/README.md" {print $1}')"
+wave2_readme_actual="$(git -C "$REPO_ROOT" cat-file blob "${WAVE2_PINNED_SHA}:README.md" |
+  sha256_stdin)"
+if [[ -z "$wave2_readme_expected" ]]; then
+  echo "$WAVE2_MANIFEST carries no digest row for its branch README." >&2
+  exit 1
+fi
+if [[ "$wave2_readme_expected" != "$wave2_readme_actual" ]]; then
+  echo "The recording commit's README.md does not match its manifest digest." >&2
+  exit 1
+fi
+expected=$((expected + 1))
+
 echo "OK: $expected/$expected files match ${PINNED_SHA} + ${WAVE2_PINNED_SHA}."
 echo "These bytes are UNTRACKED BY DESIGN and are .gitignore'd at each"
 echo "destination root — do not commit them back."

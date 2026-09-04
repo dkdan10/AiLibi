@@ -1969,6 +1969,80 @@ def test_the_finding_records_payload_is_class_c_and_a_drift_fails(
     assert "replay-seed-1000.jsonl" in drifted.detail
 
 
+def test_a_missing_orphan_object_fails_complete_naming_the_payload(
+    tmp_path: Path,
+) -> None:
+    """No orphan commit, no certification — and the failure NAMES the recording.
+
+    The whole claim of a pinned evidence commit is that the bytes are reachable
+    by sha. If the object is gone, `--complete` must say so about the payload
+    rather than passing on the two in-tree sidecars, which are a wrapper and not
+    the record.
+    """
+
+    root = tmp_path / "repo"
+    _availability_tree(root)
+    _link(root, vme.ARTIFACTS_DOC, vme.SLATE_MANIFEST)
+
+    rows = vme.run_availability(_context(root, complete=True)).rows
+    payload = next(row for row in rows if row.name.startswith("wave2-finding/"))
+    assert payload.status == "ABSENT"
+    assert "0/315 present" in payload.measured
+    # ...and the row is sourced from ITS OWN pin, not the Phase-18 one.
+    assert vme.WAVE2_MANIFEST in payload.source
+    assert vme.read_pinned_sha(_REPO_ROOT, vme.WAVE2_MANIFEST)[:12] in payload.source
+
+    # PLANTED: --complete refuses a tree that cannot reach the recording, and the
+    # refusal names it. The in-tree wrapper row is green throughout, which is
+    # exactly why the payload needs a row of its own.
+    failed = {row.name for row in vme._failed(rows, complete=True)}
+    assert "wave2-finding/ [(c)]" in failed
+    wrapper = _row(rows, f"{vme.WAVE2_DEST}/ [(b)]")
+    assert wrapper.status == "OK"
+
+
+def test_the_recording_reconstructs_under_its_declared_slate(tmp_path: Path) -> None:
+    """The preserved recording is READ, not just hashed — under its own slate.
+
+    Digest identity is not readability: the bytes on disk can match the manifest
+    to the byte while the games they encode no longer reconstruct. This leg is
+    the only thing that would notice, because the recording is not a canonical
+    set and `replay_sets` does not walk it.
+    """
+
+    root = tmp_path / "repo"
+    _manifests(root)
+    # Absent is a reported state, never a silent pass.
+    absent = vme.run_wave2_reconstruction(_context(root))
+    assert len(absent) == 1
+    assert absent[0].status == "ABSENT"
+    assert "fetch_evidence.sh" in absent[0].detail
+
+    # The slate is read from the MANIFEST, and it is the record's three levers.
+    slate = vme.read_declared_slate(_REPO_ROOT)
+    assert slate == {
+        "AILIBI_REPORTER_REASONING": "1",
+        "AILIBI_CORROBORATION_DISCIPLINE": "1",
+        "AILIBI_TESTIMONY_SHAPES": "1",
+    }
+
+    # It is scoped: exported for the walk, gone afterwards, and it never reads
+    # what the ambient shell happened to carry.
+    before = {key: os.environ.get(key) for key in slate}
+    with vme.declared_slate_env(slate):
+        assert all(os.environ[key] == value for key, value in slate.items())
+    assert {key: os.environ.get(key) for key in slate} == before
+
+    # PLANTED: a manifest with no slate block cannot say what its bytes read
+    # under, so it raises instead of falling back to the environment.
+    stub = tmp_path / "noslate"
+    stub.mkdir()
+    (stub / vme.WAVE2_MANIFEST).parent.mkdir(parents=True)
+    (stub / vme.WAVE2_MANIFEST).write_text("no slate here\n")
+    with pytest.raises(vme.EvidenceError, match="no ```slate block"):
+        vme.read_declared_slate(stub)
+
+
 def test_a_registry_row_with_no_inventory_scope_raises() -> None:
     """A row whose bytes nothing enumerates cannot be reported as complete."""
 
@@ -2125,7 +2199,8 @@ def test_a_fit_corpus_record_keyed_to_other_weights_fails(tmp_path: Path) -> Non
 
 _FETCH_SCRIPT = "scripts/fetch_evidence.sh"
 _DEST_ASSIGNMENT = re.compile(
-    r'^(?P<var>COEVO_DEST|SLATE_DEST)="\$REPO_ROOT/(?P<rel>[^"]+)"$', re.MULTILINE
+    r'^(?P<var>COEVO_DEST|SLATE_DEST|WAVE2_DEST)="\$REPO_ROOT/(?P<rel>[^"]+)"$',
+    re.MULTILINE,
 )
 
 
@@ -2138,8 +2213,8 @@ def _restore_destinations() -> dict[str, str]:
 
     text = (_REPO_ROOT / _FETCH_SCRIPT).read_text()
     found = {m.group("var"): m.group("rel") for m in _DEST_ASSIGNMENT.finditer(text)}
-    assert set(found) == {"COEVO_DEST", "SLATE_DEST"}, (
-        f"{_FETCH_SCRIPT} no longer assigns both destinations as "
+    assert set(found) == {"COEVO_DEST", "SLATE_DEST", "WAVE2_DEST"}, (
+        f"{_FETCH_SCRIPT} no longer assigns every destination as "
         f'VAR="$REPO_ROOT/<rel>"; got {sorted(found)}'
     )
     return found
@@ -2186,7 +2261,7 @@ def _tracked_python() -> list[str]:
     ).stdout.splitlines()
 
 
-def test_mypy_exclude_fences_both_restore_destinations() -> None:
+def test_mypy_exclude_fences_every_restore_destination() -> None:
     """``mypy .`` must not walk what ``scripts/fetch_evidence.sh`` restores.
 
     The per-destination ``.gitignore`` the restore writes fences ``git add``, not a
@@ -2199,6 +2274,7 @@ def test_mypy_exclude_fences_both_restore_destinations() -> None:
     destinations = _restore_destinations()
     assert destinations["COEVO_DEST"] == vme.COEVO_DEST
     assert destinations["SLATE_DEST"] == vme.SLATE_DEST
+    assert destinations["WAVE2_DEST"] == vme.WAVE2_DEST
 
     pattern = re.compile(_mypy_exclude())
     for dest in destinations.values():

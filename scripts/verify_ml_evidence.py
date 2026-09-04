@@ -59,13 +59,14 @@ usage error (bad leg name, missing repo file the run cannot proceed without).
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import os
 import re
 import subprocess
 import sys
 import tempfile
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from itertools import zip_longest
 from pathlib import Path, PurePosixPath
@@ -96,7 +97,7 @@ for _bootstrap_path in (_REPO_ROOT, _SCRIPTS_DIR):
 
 import paired_stats  # noqa: E402
 
-from _verify_samples import verify_samples  # noqa: E402
+from _verify_samples import VerifyFailure, verify_samples  # noqa: E402
 
 # --------------------------------------------------------------------------- #
 # The committed files this command reads. Every one of them is class (a)/(b) —  #
@@ -183,6 +184,12 @@ _RETAINED_SECTION: Final = "## 3. What stayed in-tree"
 # The fenced digest blocks both evidence manifests carry, and the row shape
 # inside them: ``<64 hex>  <path>`` — shasum-compatible, which is why
 # scripts/fetch_evidence.sh can feed them straight to ``sha256sum -c``.
+#: The FINDING record's manifest also DECLARES the lever slate its bytes were
+#: rendered under, in the same fenced shape. Read from the manifest and never
+#: from the ambient environment: a slate taken from whatever shell happens to
+#: be running would let a drifted export certify the wrong bytes.
+_SLATE_FENCE_OPEN: Final = "```slate"
+_SLATE_ROW: Final = re.compile(r"^(AILIBI_[A-Z0-9_]+)=(\S*)$")
 _DIGEST_FENCE_OPEN: Final = "```sha256"
 _DIGEST_FENCE_CLOSE: Final = "```"
 _DIGEST_ROW: Final = re.compile(r"^([0-9a-f]{64})  (\S.*)$")
@@ -520,6 +527,48 @@ def _slate_lost(repo_root: Path) -> bool:
 
     ruling = read_slate_ruling(repo_root)
     return ruling is not None and ruling.lost
+
+
+def read_declared_slate(
+    repo_root: Path, manifest: str = WAVE2_MANIFEST
+) -> dict[str, str]:
+    """The lever slate a manifest DECLARES its recorded bytes were rendered under.
+
+    The reconstruction leg sets exactly these keys, for exactly these sets. A
+    manifest with no slate block raises rather than defaulting to the ambient
+    environment: "reconstructs under whatever this shell exports" is not a
+    property anyone can check twice.
+    """
+
+    slate: dict[str, str] = {}
+    inside = False
+    found = False
+    for lineno, line in enumerate(
+        _read_text(repo_root, manifest).splitlines(), start=1
+    ):
+        if not inside:
+            if line.rstrip() == _SLATE_FENCE_OPEN:
+                inside = True
+                found = True
+            continue
+        if line.rstrip() == _DIGEST_FENCE_CLOSE:
+            inside = False
+            continue
+        match = _SLATE_ROW.match(line.strip())
+        if match is None:
+            raise EvidenceError(
+                f"{manifest}:{lineno}: not an 'AILIBI_KEY=value' row inside the "
+                f"slate block: {line!r}"
+            )
+        slate[match.group(1)] = match.group(2)
+    if inside:
+        raise EvidenceError(f"{manifest}: an unterminated ```slate block")
+    if not found or not slate:
+        raise EvidenceError(
+            f"{manifest}: no ```slate block — the recorded bytes declare no slate, "
+            "so nothing can state what they reconstruct under"
+        )
+    return slate
 
 
 def read_pinned_sha(repo_root: Path, manifest: str = EVIDENCE_MANIFEST) -> str:
@@ -1335,6 +1384,50 @@ def replay_sets(repo_root: Path) -> list[Path]:
     return sets
 
 
+def restored_wave2_sets(repo_root: Path) -> list[Path]:
+    """The FINDING record's four sets, if they are restored on this checkout.
+
+    Empty on a checkout that has not fetched them, which is the ordinary state:
+    the payload's own availability row is what reports that, and this leg only
+    reconstructs what is actually here.
+    """
+
+    root = repo_root / WAVE2_DEST
+    if not root.is_dir():
+        return []
+    sets: list[Path] = []
+    for kind in sorted(root.iterdir()):
+        if not kind.is_dir():
+            continue
+        for child in sorted(kind.iterdir()):
+            if child.is_dir() and (
+                (child / _SET_MANIFEST).is_file() or any(child.glob(_REPLAY_GLOB))
+            ):
+                sets.append(child)
+    return sets
+
+
+@contextlib.contextmanager
+def declared_slate_env(slate: Mapping[str, str]) -> Iterator[None]:
+    """Run a block with exactly ``slate`` exported, restoring the environment after.
+
+    Scoped to the reconstruction of the sets that DECLARE it, and taken from the
+    manifest rather than the ambient shell, so the leg states what the bytes
+    reconstruct under instead of inheriting whatever the operator had exported.
+    """
+
+    previous = {key: os.environ.get(key) for key in slate}
+    try:
+        os.environ.update(slate)
+        yield
+    finally:
+        for key, value in previous.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+
 def _seed_of(path: Path) -> int:
     return int(path.stem[len("replay-seed-") :])
 
@@ -1390,6 +1483,98 @@ def mirror_sampled_set(set_dir: Path, seeds: Sequence[int], dest: Path) -> None:
     (dest / "MANIFEST.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def _reconstruct_set(
+    ctx: Context, set_dir: Path
+) -> tuple[str, str, list[VerifyFailure], int]:
+    """One set's reconstruction, sampled under ``--fast``. Returns the row's parts."""
+
+    total = len(list(set_dir.glob(_REPLAY_GLOB)))
+    # Nothing to sample: a set that declares seeds but holds no replays is
+    # walked in FULL in every mode, so --fast cannot turn an empty set into
+    # a vacuous pass.
+    if ctx.fast and total:
+        seeds = sampled_seeds(set_dir, FAST_SAMPLE_PER_SET)
+        with tempfile.TemporaryDirectory(prefix="verify-ml-evidence-") as tmp:
+            dest = Path(tmp)
+            mirror_sampled_set(set_dir, seeds, dest)
+            failures = verify_samples(dest)
+        measured = (
+            f"{len(seeds) - len(failures)}/{len(seeds)} reconstructed "
+            f"(SAMPLED from {total}; seeds {', '.join(str(s) for s in seeds)})"
+        )
+        committed = f"{total} committed replays (--fast sampled {len(seeds)})"
+    else:
+        failures = verify_samples(set_dir)
+        measured = f"{total - len(failures)}/{total} reconstructed"
+        committed = f"{total} committed replays"
+    return measured, committed, failures, total
+
+
+def run_wave2_reconstruction(ctx: Context) -> list[CheckRow]:
+    """The FINDING record's restored sets, reconstructed under their DECLARED slate.
+
+    The recording is not a canonical set and is not walked by ``replay_sets``,
+    so without this leg a code change that makes it unreadable would be caught
+    by nothing: its digests would still match — the bytes on disk are the bytes
+    the manifest hashed — while the games they encode no longer reconstruct.
+    Digest identity is not readability, and the whole reason to preserve a
+    record is that someone can open it later.
+
+    The slate comes from the manifest (``read_declared_slate``) and is exported
+    for these sets ONLY, then removed. Nothing here reads the ambient
+    environment, because a slate inherited from the operator's shell would let a
+    drifted export certify bytes it never rendered.
+    """
+
+    restored = restored_wave2_sets(ctx.repo_root)
+    if not restored:
+        return [
+            CheckRow(
+                name="wave2-finding reconstruction",
+                measured="EVIDENCE-BRANCH-ABSENT",
+                committed=f"{len(_wave2_declared_sets(ctx))} declared set(s)",
+                source=WAVE2_MANIFEST,
+                status="ABSENT",
+                detail=(
+                    "not restored on this checkout — run "
+                    "`bash scripts/fetch_evidence.sh` to place them, then re-run"
+                ),
+            )
+        ]
+    slate = read_declared_slate(ctx.repo_root)
+    declared = ", ".join(f"{key}={value}" for key, value in sorted(slate.items()))
+    rows: list[CheckRow] = []
+    with declared_slate_env(slate):
+        for set_dir in restored:
+            rel = _relative(set_dir, ctx.repo_root)
+            measured, committed, failures, _total = _reconstruct_set(ctx, set_dir)
+            rows.append(
+                CheckRow(
+                    name=f"wave2-finding reconstruction: {rel}",
+                    measured=measured,
+                    committed=f"{committed}; slate {declared}",
+                    source=f"{WAVE2_MANIFEST} (declared slate)",
+                    status="OK" if not failures else "FAIL",
+                    detail="\n".join(failure.render() for failure in failures[:10]),
+                )
+            )
+    return rows
+
+
+def _wave2_declared_sets(ctx: Context) -> set[str]:
+    """The set directories the FINDING record's manifest promises, from its rows."""
+
+    prefix = f"{WAVE2_DEST}/"
+    sets: set[str] = set()
+    for row in ctx.evidence:
+        if row.repo_path is None or not row.repo_path.startswith(prefix):
+            continue
+        parts = row.repo_path[len(prefix) :].split("/")
+        if len(parts) >= 3:
+            sets.add("/".join(parts[:2]))
+    return sets
+
+
 def run_corpus(ctx: Context) -> LegResult:
     """Replay reconstruction + the committed fit-corpus identity fingerprint."""
 
@@ -1431,6 +1616,10 @@ def run_corpus(ctx: Context) -> LegResult:
                 detail="\n".join(failure.render() for failure in failures[:10]),
             )
         )
+    # The FINDING record's restored sets, under the slate its manifest declares.
+    # They are not canonical and `replay_sets` does not walk them, so this is the
+    # only thing that would notice the preserved recording becoming unreadable.
+    rows.extend(run_wave2_reconstruction(ctx))
     if ctx.fast:
         notes.append(
             "--fast: the reconstruction walked a SAMPLE of each set (seeds listed "
@@ -2625,6 +2814,16 @@ _EVIDENCE_PREFIXES: Final[dict[str, str]] = {
     "wave2-finding/": "wave2-finding/",
 }
 
+#: Which manifest OWNS each class-(c) prefix, and therefore which pin its
+#: availability row is sourced from. Two evidence commits mean two pins, and a
+#: row that cited the Phase-18 pin for bytes on the other commit would name a sha
+#: that says nothing about what it just counted.
+_EVIDENCE_OWNERS: Final[dict[str, str]] = {
+    "coevo/": EVIDENCE_MANIFEST,
+    "finalist-eval-raw/": EVIDENCE_MANIFEST,
+    "wave2-finding/": WAVE2_MANIFEST,
+}
+
 #: Named evidence that `docs/artifacts.md`'s registry table holds no row for,
 #: because it is not in this repository and never will be. Each entry names the
 #: committed line that RECORDS its class — the anchor is re-read on every run, so
@@ -2833,6 +3032,10 @@ def run_availability(ctx: Context) -> LegResult:
             )
         elif recorded == "EVIDENCE-BRANCH":
             prefix = _EVIDENCE_PREFIXES[key]
+            owner = _EVIDENCE_OWNERS[prefix]
+            owner_pin = (
+                ctx.wave2_pinned_sha if owner == WAVE2_MANIFEST else ctx.pinned_sha
+            )
             total = total_by_prefix.get(prefix, 0)
             present = present_by_prefix.get(prefix, 0)
             # The registry states each class-(c) row's file count; those bytes
@@ -2878,8 +3081,7 @@ def run_availability(ctx: Context) -> LegResult:
                     label,
                     f"{measured} ({present}/{total} present)",
                     recorded,
-                    f"{ARTIFACTS_DOC} + {EVIDENCE_MANIFEST} §1 "
-                    f"(pin {ctx.pinned_sha[:12]}…)",
+                    f"{ARTIFACTS_DOC} + {owner} §1 (pin {owner_pin[:12]}…)",
                     status,
                     detail=count_note
                     or (

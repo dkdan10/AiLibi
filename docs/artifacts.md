@@ -124,10 +124,21 @@ classes, decided the same way in both cases — by what the consumers read.
 
 ### The class-(c) rows in detail
 
-Both live on **one** orphan commit —
-`evidence/phase-18-coevo` @ `476a1f85492439277350af9708f1d120eb1c0a71` — and
-that sha is pinned in `training/artifacts/coevo/EVIDENCE-MANIFEST.md` §1.
-Restore either or both with:
+There are **three** class-(c) payloads on **two** orphan commits, each pinned by
+sha in its own in-tree manifest:
+
+| payload | orphan commit | pinned in |
+|---|---|---|
+| `coevo/` | `evidence/phase-18-coevo` @ `476a1f85492439277350af9708f1d120eb1c0a71` | `training/artifacts/coevo/EVIDENCE-MANIFEST.md` §1 |
+| `finalist-eval-raw/` | the same commit | the same manifest |
+| `wave2-finding/` | `evidence/phase-21-wave2-finding` @ `29af85d5457caeba4f8ba8ba77610c6a0ab2213a` | `replays/records/phase-21-wave2-finding/EVIDENCE-MANIFEST.md` |
+
+`scripts/fetch_evidence.sh` restores **all three**, in one pass: it fetches each
+commit by its own sha, refuses any that is not parentless, restores each payload
+into its own destination root behind a generated `.gitignore`, and re-hashes
+every restored file — plus each commit's own README, checked straight out of the
+commit against its own manifest — against the digests those manifests carry.
+Restore, verify or remove them with:
 
 ```bash
 bash scripts/fetch_evidence.sh            # fetch by the pinned sha, restore, verify
@@ -137,7 +148,7 @@ bash scripts/fetch_evidence.sh --clean    # remove the restored bytes again
 
 The restore and the gate compose in either direction: `bash scripts/check.sh` is
 green with these bytes restored and green after `--clean`, and `uv run mypy .`
-reports the same source-file count in both states because the two destination
+reports the same source-file count in both states because the three destination
 roots are outside its walk (the `[tool.mypy] exclude` above). You do not have to
 `--clean` before running the gate.
 
@@ -166,6 +177,23 @@ busy-hour price is named and declined by the Phase-19 charter. Preserving the
 bytes makes the lineage *auditable* — these are real-provider draws, so it does
 not make the run re-runnable. The research reader's own entry point into all of
 this is the report the slate was measured into: `training/reports/report-finalist-eval.md` §20.
+
+**`wave2-finding/` — a 300-game recording that is not one of the canonical
+replay sets.** It reads only with three optional levers switched on
+(`AILIBI_REPORTER_REASONING`, `AILIBI_CORROBORATION_DISCIPLINE`,
+`AILIBI_TESTIMONY_SHAPES`), and those levers still resolve off in a plain shell,
+so the loader compares the recorded settings against the live ones and refuses
+the games. Committing them under `replays/samples/` or `replays/ml_corpus/` would
+therefore break the plain-shell sample verifier, the served frontend and the
+release gate — on games that are perfectly valid under their own settings. The
+recording was measured against bars fixed in writing beforehand; three of the
+four were met and the fourth was missed, so the levers were not adopted, the
+canonical sets were left untouched, and these bytes are kept as evidence rather
+than promoted. `replays/records/phase-21-wave2-finding/` holds the pin, the
+per-file digests and the declared slate; the reading is
+`audits/audit-phase-21-adopting-record.md`. Whether a recording like this is
+carried in the tree or on a pinned commit is an owner decision that was open when
+it was taken, and the pinned commit is the provisional answer.
 
 **The one step still open, and how to see whether it is.** Deleting the
 superseded staging ref is the one part of the fold Task 19.22 could not execute

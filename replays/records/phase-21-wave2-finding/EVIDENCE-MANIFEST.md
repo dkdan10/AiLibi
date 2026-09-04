@@ -27,6 +27,20 @@ under `replays/samples/` or `replays/ml_corpus/` would therefore break the bare
 bytes that are perfectly valid under their own slate. The whole read is
 `audits/audit-phase-21-adopting-record.md`.
 
+## The slate these bytes require
+
+Reading a recorded game reconstructs its rendered prompts, and these were rendered with the
+three levers below switched ON. A reader that opens them under any other slate is refused by
+`api/replay_loader.py::_assert_substrate_matches`, correctly. The slate is DECLARED here so a
+verifier reads it from the manifest rather than from whatever the ambient shell happens to
+carry — an environment-derived slate would let a drifted shell certify the wrong bytes.
+
+```slate
+AILIBI_REPORTER_REASONING=1
+AILIBI_CORROBORATION_DISCIPLINE=1
+AILIBI_TESTIMONY_SHAPES=1
+```
+
 ## Restore
 
 ```bash
