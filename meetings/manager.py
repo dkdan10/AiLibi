@@ -95,6 +95,7 @@ import os
 import re
 from collections.abc import Callable, Coroutine, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
+from types import MappingProxyType
 from typing import Any, Final, Literal, TypeVar
 
 from pydantic import ValidationError
@@ -214,10 +215,12 @@ DefaultTrigger = Literal["deadline", "validation"]
 # requirement in DESIGN.md §5.2 means we always record *something*; these are
 # the canonical audit markers downstream code (replay, eval) can match on, and
 # they name the same trigger the row's own ``deadline_default`` record carries.
-DEFAULT_TURN_FREE_TEXT: Final[Mapping[DefaultTrigger, str]] = {
-    "deadline": "(missed deadline; no turn submitted)",
-    "validation": "(unreadable reply; no turn submitted)",
-}
+DEFAULT_TURN_FREE_TEXT: Final[Mapping[DefaultTrigger, str]] = MappingProxyType(
+    {
+        "deadline": "(missed deadline; no turn submitted)",
+        "validation": "(unreadable reply; no turn submitted)",
+    }
+)
 DEFAULT_VOTE_RATIONALE: Final[str] = "(missed deadline; default skip)"
 
 # Audit-trail marker prefix prepended to ``rationale_text`` when the LLM

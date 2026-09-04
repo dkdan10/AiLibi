@@ -2922,6 +2922,12 @@ class TestDefaultsSurfacedAndOpeningRetry:
         assert "deadline" not in husk
         assert DEFAULT_TURN_FREE_TEXT["deadline"] != husk
         assert "deadline" in DEFAULT_TURN_FREE_TEXT["deadline"]
+        # The roster is exported, so it is a read-only view: a consumer that
+        # could rewrite a husk would change every later transcript in the
+        # process, which is exactly the module-level mutable state this repo
+        # forbids.
+        with pytest.raises(TypeError):
+            DEFAULT_TURN_FREE_TEXT["validation"] = "anything"  # type: ignore[index]
 
     def test_provider_validation_default_carries_parse_failure_spend(self) -> None:
         # A real provider raises (with metadata) before the recording client can

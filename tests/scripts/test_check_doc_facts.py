@@ -153,6 +153,13 @@ _FINDING_SHARE_ROW = (
     "34/46 = 0.7391 | 11/20 = 0.5500 | **MISSED** |"
 )
 _FINDING_SHARE_DRIFTED = _FINDING_SHARE_ROW.replace("11/20 = 0.5500", "9/20 = 0.4500")
+# Bar 1's own section: the powered per-set row its second clause is about, and
+# the pooled row the verdict table summarises.
+_FINDING_POWERED_SET_ROW = (
+    "| `ml_corpus/9p2i` | 32/61 = 0.5246 | 36/51 = 0.7059 (n = 51, **POWERED**) |"
+)
+_FINDING_ACCURACY_SECTION_POOLED = "| pooled | 50/96 = 0.5208 | **46/66 = 0.6970** |"
+_FINDING_INNOCENT_SECTION_POOLED = "| pooled | 46 | **20** |"
 # The history cell both front-door tables carry for the conviction partition.
 _PREVIOUS_PARTITION_CELL = "326 / 326 = 1.0000 vs 61 / 103 = 0.5922"
 _ML_PAGE = "docs/ml-program.md"
@@ -2182,10 +2189,18 @@ def test_finding_accuracy_bar_reaches_the_front_door(doc_tree: Path) -> None:
         doc_tree, _FINDING_AUDIT, _FINDING_ACCURACY_ROW, _FINDING_ACCURACY_DRIFTED
     )
     errors = check_doc_facts.check_facts(doc_tree)
-    assert len(errors) == 1
-    assert errors[0].startswith(f"{_HISTORY}:")
-    assert "'46 of 66 = 0.6970'" in errors[0]
-    assert "whose cell is 45/66" in errors[0]
+    assert len(errors) == 2
+    assert any(
+        error.startswith(f"{_HISTORY}:")
+        and "'46 of 66 = 0.6970'" in error
+        and "whose cell is 45/66" in error
+        for error in errors
+    )
+    # ...and the summary cell has stopped summarising the bar section above it.
+    assert any(
+        "bar 1's this record cell reads '45/66 = 0.6818' in the verdict table" in error
+        for error in errors
+    )
 
 
 def test_finding_share_bar_reaches_the_front_door(doc_tree: Path) -> None:
@@ -2240,8 +2255,8 @@ def test_finding_verdict_column_is_recomputed(doc_tree: Path) -> None:
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert any(
-        "bar 4 reads 0.55 against a target of < 0.40, which is MISSED, but the "
-        "verdict column says MET" in error
+        "bar 4's own target and cell make it MISSED, but the verdict column "
+        "says MET" in error
         for error in errors
     )
 
@@ -2261,6 +2276,142 @@ def test_verdict_word_follows_the_bars_in_both_directions(doc_tree: Path) -> Non
     assert any(
         "does not state 'the rule returns an adoption'" in error for error in errors
     )
+
+
+def test_powered_set_below_its_floor_makes_the_bar_a_miss(doc_tree: Path) -> None:
+    # Bar 1's target is compound: a pooled pass AND no adequately powered set
+    # below the floor. Reading only the leading comparator would publish a
+    # verdict the record's own per-set table refutes.
+    _substitute(
+        doc_tree,
+        _FINDING_AUDIT,
+        _FINDING_POWERED_SET_ROW,
+        "| `ml_corpus/9p2i` | 32/61 = 0.5246 | 20/51 = 0.3922 (n = 51, **POWERED**) |",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert any(
+        "set 'ml_corpus/9p2i' reads 20/51" in error
+        and "makes a MISSED, but the pooled cell clears the bar" in error
+        for error in errors
+    )
+    # ...which flips the recomputed verdict, so the stated MET fails too.
+    assert any(
+        "bar 1's own target and cell make it MISSED, but the verdict column "
+        "says MET" in error
+        for error in errors
+    )
+
+
+def test_underpowered_set_below_the_floor_binds_nothing(doc_tree: Path) -> None:
+    # The other half of the same clause: a set with too few ejections takes no
+    # part in it, so moving one below the floor must NOT flip the verdict — a
+    # per-set gate that fired on every set would be a different bar.
+    _substitute(
+        doc_tree,
+        _FINDING_AUDIT,
+        "| `samples/9p2i` | 14/27 = 0.5185 | 10/15 = 0.6667 (n = 15, not powered) |",
+        "| `samples/9p2i` | 14/27 = 0.5185 | 1/15 = 0.0667 (n = 15, not powered) |",
+    )
+    assert check_doc_facts.check_facts(doc_tree) == []
+
+
+def test_verdict_table_missing_a_bar_fails_loud(doc_tree: Path) -> None:
+    # A table that lost a row still parses and still satisfies the share
+    # identity, while the figure that row pinned quietly stops being checked.
+    _substitute(doc_tree, _FINDING_AUDIT, _FINDING_ACCURACY_ROW + "\n", "")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "does not carry exactly bars 1, 2, 3, 4" in errors[0]
+
+
+def test_verdict_cell_rate_that_contradicts_its_fraction_detected(
+    doc_tree: Path,
+) -> None:
+    # The printed decimal is re-derived from the fraction beside it: a cell
+    # whose two halves disagree has no single value, and a decimal on the far
+    # side of a target would otherwise drive the verdict from false arithmetic.
+    _substitute(
+        doc_tree,
+        _FINDING_AUDIT,
+        _FINDING_ACCURACY_ROW,
+        _FINDING_ACCURACY_ROW.replace("46/66 = 0.6970", "46/66 = 0.9000"),
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert any(
+        "one of the two cannot be read as a number at the precision it prints" in error
+        for error in errors
+    )
+
+
+def test_verdict_cell_drifting_from_its_bar_section_detected(doc_tree: Path) -> None:
+    # The verdict table SUMMARISES the read above it, so its cells and that
+    # bar's own pooled row are one statement made twice.
+    _substitute(
+        doc_tree,
+        _FINDING_AUDIT,
+        _FINDING_INNOCENT_SECTION_POOLED,
+        "| pooled | 46 | **21** |",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert any(
+        "bar 2's this record cell reads '20' in the verdict table and '21' in "
+        "the bar's own pooled row" in error
+        for error in errors
+    )
+
+
+def test_finding_history_cell_disagreeing_with_the_ladder_tip_detected(
+    doc_tree: Path,
+) -> None:
+    # The deciding record's account of what it moved FROM is the ladder-tip
+    # recording's own published cell, so the two are held together rather than
+    # the summary being taken on trust.
+    drifted = _FINDING_ACCURACY_ROW.replace("50/96 = 0.5208", "49/96 = 0.5104")
+    _substitute(doc_tree, _FINDING_AUDIT, _FINDING_ACCURACY_ROW, drifted)
+    _substitute(
+        doc_tree,
+        _FINDING_AUDIT,
+        _FINDING_ACCURACY_SECTION_POOLED,
+        "| pooled | 49/96 = 0.5104 | **46/66 = 0.6970** |",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "bar 1's history cell reads '49/96 = 0.5104'" in errors[0]
+    assert f"{_LADDER_TIP_AUDIT} — the recording it is read against" in errors[0]
+    assert "published (50, 96)" in errors[0]
+
+
+def test_finding_count_wording_checked_on_every_claim_document(
+    doc_tree: Path,
+) -> None:
+    # The bare counts reach no rate scan, and the older count keeps
+    # _INJUSTICE_SENTENCE satisfied — so a page that states the fall at all is
+    # held to the record's own numbers, not only the README.
+    # The three pages hard-wrap at different columns, so each is perturbed on
+    # the words it actually carries on one line.
+    for document, wording in (
+        (_HISTORY, "innocent ejections fell from 46 to 20"),
+        (_READING_GUIDE, "innocent ejections fell from 46 to 20"),
+        (_ML_PAGE, "ejections fell from 46 to 20"),
+    ):
+        _substitute(doc_tree, document, wording, wording.replace("to 20", "to 21"))
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert {
+        error.split(":")[0]
+        for error in errors
+        if "innocent ejections fell from 46 to 20" in error
+    } == {_HISTORY, _READING_GUIDE, _ML_PAGE}
+
+
+def test_a_claim_document_that_never_states_the_fall_is_not_required_to(
+    doc_tree: Path,
+) -> None:
+    # The converse, so the rule is a wording gate on the pages that publish the
+    # count and not a demand that every page publish it: the glossary and the
+    # audits index carry neither claim and stay green.
+    assert "innocent ejections fell from" not in _read(doc_tree, _GLOSSARY)
+    assert "innocent ejections fell from" not in _read(doc_tree, _AUDITS_INDEX)
+    assert check_doc_facts.check_facts(doc_tree) == []
 
 
 def test_missing_verdict_table_fails_loud(doc_tree: Path) -> None:

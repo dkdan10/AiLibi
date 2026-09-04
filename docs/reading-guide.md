@@ -33,9 +33,9 @@ re-measured both cells the unflattering way, to 50 of 96 = 0.5208 and 46
 innocent ejections. That read was a **finding**, not an adoption; the recording
 became the reference by an explicit owner override dated 2026-08-26 — §6.1 of
 [the phase-20 record](../audits/audit-phase-20-baseline-7.md), to read before
-citing any row above as a pass. A later recording was put to four fresh bars and
-met three: innocent ejections fell from 46 to 20, but 11 of 20 = 0.5500 were
-still the meeting's own reporter, against a registered share of 0.40 — a
+citing any row above as a pass. A later recording met three of four fresh bars:
+innocent ejections fell from 46 to 20, and 11 of those 20 were the meeting's own
+reporter, against 34 of 46 — a share of 0.5500 against a registered 0.40, so a
 **finding** again, and nothing was adopted
 ([the record](../audits/audit-phase-21-adopting-record.md)).
 
