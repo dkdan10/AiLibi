@@ -59,13 +59,14 @@ usage error (bad leg name, missing repo file the run cannot proceed without).
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import os
 import re
 import subprocess
 import sys
 import tempfile
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from itertools import zip_longest
 from pathlib import Path, PurePosixPath
@@ -96,7 +97,7 @@ for _bootstrap_path in (_REPO_ROOT, _SCRIPTS_DIR):
 
 import paired_stats  # noqa: E402
 
-from _verify_samples import verify_samples  # noqa: E402
+from _verify_samples import VerifyFailure, verify_samples  # noqa: E402
 
 # --------------------------------------------------------------------------- #
 # The committed files this command reads. Every one of them is class (a)/(b) —  #
@@ -109,6 +110,16 @@ EVIDENCE_MANIFEST: Final = "training/artifacts/coevo/EVIDENCE-MANIFEST.md"
 SLATE_MANIFEST: Final = "training/reports/_finalist_eval_raw/MANIFEST.md"
 COEVO_DEST: Final = "training/artifacts/coevo"
 SLATE_DEST: Final = "training/reports/_finalist_eval_raw"
+
+#: Task 21.24's FINDING record — the SECOND evidence family. Its 300 recorded
+#: games stamp the Wave-2 keys True, the pre-registered rule read FINDING over
+#: them, and a bare shell resolves those keys False, so the payload cannot live
+#: under the canonical replay roots and is pinned on its own commit instead. The
+#: manifest and the README are the in-tree wrapper; the payload restores beside
+#: them, untracked.
+WAVE2_MANIFEST: Final = "replays/records/phase-21-wave2-finding/EVIDENCE-MANIFEST.md"
+WAVE2_README: Final = "replays/records/phase-21-wave2-finding/README.md"
+WAVE2_DEST: Final = "replays/records/phase-21-wave2-finding"
 
 CORPUS_SET: Final = "replays/ml_corpus/9p2i"
 SURROGATE_DIR: Final = "training/artifacts/surrogate"
@@ -161,9 +172,10 @@ _REPLAY_GLOB: Final = "replay-seed-*.jsonl"
 #: The per-set provenance record: what DECLARES a replay set to exist.
 _SET_MANIFEST: Final = "MANIFEST.md"
 
-#: The evidence commit's two top-level prefixes, as the manifests spell them.
+#: The evidence commits' top-level prefixes, as the manifests spell them.
 _COEVO_PREFIX: Final = "coevo/"
 _SLATE_PREFIX: Final = "finalist-eval-raw/"
+_WAVE2_PREFIX: Final = "wave2-finding/"
 
 #: The EVIDENCE-MANIFEST section heading whose table enumerates the bytes the
 #: 19.22 prune RETAINED in-tree — the committed in-tree inventory.
@@ -172,6 +184,12 @@ _RETAINED_SECTION: Final = "## 3. What stayed in-tree"
 # The fenced digest blocks both evidence manifests carry, and the row shape
 # inside them: ``<64 hex>  <path>`` — shasum-compatible, which is why
 # scripts/fetch_evidence.sh can feed them straight to ``sha256sum -c``.
+#: The FINDING record's manifest also DECLARES the lever slate its bytes were
+#: rendered under, in the same fenced shape. Read from the manifest and never
+#: from the ambient environment: a slate taken from whatever shell happens to
+#: be running would let a drifted export certify the wrong bytes.
+_SLATE_FENCE_OPEN: Final = "```slate"
+_SLATE_ROW: Final = re.compile(r"^(AILIBI_[A-Z0-9_]+)=(\S*)$")
 _DIGEST_FENCE_OPEN: Final = "```sha256"
 _DIGEST_FENCE_CLOSE: Final = "```"
 _DIGEST_ROW: Final = re.compile(r"^([0-9a-f]{64})  (\S.*)$")
@@ -276,6 +294,9 @@ class Context:
     complete: bool
     evidence: tuple[EvidenceRow, ...]
     pinned_sha: str
+    #: Task 21.24's FINDING-record pin. A second evidence family means a second
+    #: commit to hash the branch README out of, and the two must never be mixed.
+    wave2_pinned_sha: str
     #: The Task 19.21 raw-slate ruling, or ``None`` when the document records
     #: none (which is itself a failure the availability leg reports).
     slate_ruling: Ruling | None
@@ -464,7 +485,30 @@ def evidence_rows(
                     repo_path=slate_path,
                 )
             )
-    elif not slate_lost:
+    # Task 21.24's FINDING record, the second evidence family. Its manifest is
+    # in-tree unconditionally (it is the row `docs/artifacts.md` registers), so
+    # unlike the slate there is no loss path to tolerate: absent is an error.
+    for digest, raw in read_digest_block(repo_root, WAVE2_MANIFEST):
+        if not raw.startswith(_WAVE2_PREFIX):
+            raise EvidenceError(
+                f"{WAVE2_MANIFEST}: digest row {raw!r} is not a "
+                f"{_WAVE2_PREFIX!r} path — the restore map does not cover it"
+            )
+        inner = raw[len(_WAVE2_PREFIX) :]
+        if inner == "README.md":
+            # The branch's own README: hashed here, deliberately NOT restored.
+            # Its destination would be the in-tree wrapper README of the same
+            # name, and a restore that overwrote the committed wrapper with the
+            # branch copy would report itself green while destroying the row
+            # `docs/artifacts.md` registers.
+            _claim(WAVE2_MANIFEST, raw, None)
+            rows.append(EvidenceRow(digest=digest, manifest_path=raw, repo_path=None))
+            continue
+        wave2_path = _confined(WAVE2_DEST, inner, WAVE2_MANIFEST, raw)
+        _claim(WAVE2_MANIFEST, raw, wave2_path)
+        rows.append(EvidenceRow(digest=digest, manifest_path=raw, repo_path=wave2_path))
+
+    if not (repo_root / SLATE_MANIFEST).is_file() and not slate_lost:
         raise EvidenceError(
             f"{SLATE_MANIFEST} is missing, and {ARTIFACTS_DOC} records no loss "
             "for the Phase-18 finalist slate. That manifest is created on Task "
@@ -485,17 +529,57 @@ def _slate_lost(repo_root: Path) -> bool:
     return ruling is not None and ruling.lost
 
 
-def read_pinned_sha(repo_root: Path) -> str:
-    """The evidence commit's tip sha, read from the manifest row that owns it."""
+def read_declared_slate(
+    repo_root: Path, manifest: str = WAVE2_MANIFEST
+) -> dict[str, str]:
+    """The lever slate a manifest DECLARES its recorded bytes were rendered under.
 
-    for line in _read_text(repo_root, EVIDENCE_MANIFEST).splitlines():
+    The reconstruction leg sets exactly these keys, for exactly these sets. A
+    manifest with no slate block raises rather than defaulting to the ambient
+    environment: "reconstructs under whatever this shell exports" is not a
+    property anyone can check twice.
+    """
+
+    slate: dict[str, str] = {}
+    inside = False
+    found = False
+    for lineno, line in enumerate(
+        _read_text(repo_root, manifest).splitlines(), start=1
+    ):
+        if not inside:
+            if line.rstrip() == _SLATE_FENCE_OPEN:
+                inside = True
+                found = True
+            continue
+        if line.rstrip() == _DIGEST_FENCE_CLOSE:
+            inside = False
+            continue
+        match = _SLATE_ROW.match(line.strip())
+        if match is None:
+            raise EvidenceError(
+                f"{manifest}:{lineno}: not an 'AILIBI_KEY=value' row inside the "
+                f"slate block: {line!r}"
+            )
+        slate[match.group(1)] = match.group(2)
+    if inside:
+        raise EvidenceError(f"{manifest}: an unterminated ```slate block")
+    if not found or not slate:
+        raise EvidenceError(
+            f"{manifest}: no ```slate block — the recorded bytes declare no slate, "
+            "so nothing can state what they reconstruct under"
+        )
+    return slate
+
+
+def read_pinned_sha(repo_root: Path, manifest: str = EVIDENCE_MANIFEST) -> str:
+    """An evidence commit's tip sha, read from the manifest row that owns it."""
+
+    for line in _read_text(repo_root, manifest).splitlines():
         if _PIN_ROW_MARKER in line:
             match = _SHA1_RE.search(line)
             if match is not None:
                 return match.group(0)
-    raise EvidenceError(
-        f"{EVIDENCE_MANIFEST}: no pinned sha on the '{_PIN_ROW_MARKER}' row"
-    )
+    raise EvidenceError(f"{manifest}: no pinned sha on the '{_PIN_ROW_MARKER}' row")
 
 
 def read_slate_ruling(repo_root: Path) -> Ruling | None:
@@ -1178,8 +1262,11 @@ def run_sidecars(ctx: Context) -> LegResult:
                 f"{payload_present} of {len(promised)} restored and hashed; "
                 f"{payload_absent} EVIDENCE-BRANCH-ABSENT"
             ),
-            committed=f"{len(promised)} PROMISED files on {ctx.pinned_sha[:12]}…",
-            source=f"{EVIDENCE_MANIFEST} §7 + {SLATE_MANIFEST} §7",
+            committed=(
+                f"{len(promised)} PROMISED files on {ctx.pinned_sha[:12]}… + "
+                f"{ctx.wave2_pinned_sha[:12]}…"
+            ),
+            source=(f"{EVIDENCE_MANIFEST} §7 + {SLATE_MANIFEST} §7 + {WAVE2_MANIFEST}"),
             status=payload_status,
             detail=(
                 "\n".join(payload_failures[:10])
@@ -1216,39 +1303,54 @@ def run_sidecars(ctx: Context) -> LegResult:
             )
         )
 
-    # --- the branch's own README: hashed by the manifest, never restored. ---
+    # --- each branch's own README: hashed by its manifest, never restored. ---
+    # Two evidence families means two of them, and each is hashed out of ITS OWN
+    # pinned commit: crossing the pins would report a green README from the wrong
+    # branch. The pairing is by manifest prefix, the same key the restore map uses.
+    # The blob path is the path ON THE COMMIT, which carries no manifest prefix:
+    # the prefix is the restore map's namespace, not the archive's.
+    readme_pins = {
+        _COEVO_PREFIX: (EVIDENCE_MANIFEST, ctx.pinned_sha, "README.md"),
+        _WAVE2_PREFIX: (WAVE2_MANIFEST, ctx.wave2_pinned_sha, "README.md"),
+    }
     readme_rows = [row for row in ctx.evidence if row.repo_path is None]
-    if len(readme_rows) != 1:
+    if len(readme_rows) != len(readme_pins):
         raise EvidenceError(
-            f"{EVIDENCE_MANIFEST}: expected exactly one non-restored row (the "
-            f"branch README), found {len(readme_rows)}"
+            "expected exactly one non-restored row per evidence family (the "
+            f"branch README), found {len(readme_rows)} for {len(readme_pins)} "
+            "families"
         )
-    readme = readme_rows[0]
-    blob = _git_blob(ctx.repo_root, ctx.pinned_sha, readme.manifest_path)
-    if blob is None:
-        readme_status: Status = "ABSENT"
-        readme_measured = "the pinned commit object is not in this checkout"
-    else:
-        actual = hashlib.sha256(blob).hexdigest()
-        readme_status = "OK" if actual == readme.digest else "FAIL"
-        readme_measured = f"sha256 {actual[:12]}…"
-    rows.append(
-        CheckRow(
-            name="evidence branch README",
-            measured=readme_measured,
-            committed=f"sha256 {readme.digest[:12]}…",
-            source=f"{EVIDENCE_MANIFEST} §7 (row 'README.md')",
-            status=readme_status,
-            detail=(
-                ""
-                if readme_status != "ABSENT"
-                else (
-                    "branch metadata, checked straight out of the commit — "
-                    "`bash scripts/fetch_evidence.sh` pins it locally"
-                )
-            ),
+    for readme in sorted(readme_rows, key=lambda row: row.manifest_path):
+        family = next(
+            (key for key in readme_pins if readme.manifest_path.startswith(key)),
+            _COEVO_PREFIX,
         )
-    )
+        manifest, pin, blob_path = readme_pins[family]
+        blob = _git_blob(ctx.repo_root, pin, blob_path)
+        if blob is None:
+            readme_status: Status = "ABSENT"
+            readme_measured = "the pinned commit object is not in this checkout"
+        else:
+            actual = hashlib.sha256(blob).hexdigest()
+            readme_status = "OK" if actual == readme.digest else "FAIL"
+            readme_measured = f"sha256 {actual[:12]}…"
+        rows.append(
+            CheckRow(
+                name=f"evidence branch README ({family})",
+                measured=readme_measured,
+                committed=f"sha256 {readme.digest[:12]}…",
+                source=f"{manifest} (row {blob_path!r})",
+                status=readme_status,
+                detail=(
+                    ""
+                    if readme_status != "ABSENT"
+                    else (
+                        "branch metadata, checked straight out of the commit — "
+                        "`bash scripts/fetch_evidence.sh` pins it locally"
+                    )
+                ),
+            )
+        )
     return LegResult(leg="sidecars", rows=tuple(rows))
 
 
@@ -1283,6 +1385,92 @@ def replay_sets(repo_root: Path) -> list[Path]:
             "there is nothing to reconstruct"
         )
     return sets
+
+
+def restored_wave2_sets(repo_root: Path) -> list[Path]:
+    """The FINDING record's four sets, if they are restored on this checkout.
+
+    Empty on a checkout that has not fetched them, which is the ordinary state:
+    the payload's own availability row is what reports that, and this leg only
+    reconstructs what is actually here.
+    """
+
+    root = repo_root / WAVE2_DEST
+    if not root.is_dir():
+        return []
+    sets: list[Path] = []
+    for kind in sorted(root.iterdir()):
+        if not kind.is_dir():
+            continue
+        for child in sorted(kind.iterdir()):
+            if child.is_dir() and (
+                (child / _SET_MANIFEST).is_file() or any(child.glob(_REPLAY_GLOB))
+            ):
+                sets.append(child)
+    return sets
+
+
+def live_toggle_env_names() -> dict[str, str]:
+    """Every live lever toggle's env-var name, DERIVED from the registry.
+
+    The registry owns the toggle keys (``impostor_roll_call``, ...) and the
+    variables follow from them (``AILIBI_IMPOSTOR_ROLL_CALL``), so the names are
+    derived rather than restated -- a lever registered later is covered without
+    editing this file. The derivation is then CHECKED against each resolver's own
+    behaviour: a name that does not actually turn its lever on is a broken
+    assumption, and it fails loud here instead of silently leaving a toggle set
+    during a scoped walk.
+    """
+
+    from orchestrator.replay import _TOGGLEABLE_LEVER_RESOLVERS
+
+    names: dict[str, str] = {}
+    for key, resolver in _TOGGLEABLE_LEVER_RESOLVERS:
+        name = f"AILIBI_{key.upper()}"
+        if not resolver({name: "1"}) or resolver({}):
+            raise EvidenceError(
+                f"the live toggle {key!r} is not driven by {name!r} -- this "
+                "command derives toggle variables from the registry's keys, and "
+                "that derivation no longer holds"
+            )
+        names[key] = name
+    return names
+
+
+@contextlib.contextmanager
+def declared_slate_env(slate: Mapping[str, str]) -> Iterator[None]:
+    """Run a block under EXACTLY ``slate``: declared keys set, every other live
+    toggle cleared, and the whole environment restored afterwards.
+
+    Setting the declared keys is only half of it. A lever the manifest does NOT
+    declare must be OFF for the walk, and "off" means UNSET rather than left at
+    whatever the operator exported: an ambient ``AILIBI_IMPOSTOR_ROLL_CALL=1``
+    would otherwise make the reconstruction run under a slate the recording never
+    used, so bytes that should be refused would reconstruct and bytes that should
+    reconstruct would be refused. Clearing the undeclared toggles is what makes
+    "reconstructs under its declared slate" a statement about the manifest rather
+    than about the shell.
+
+    The toggle names come from the registry (:func:`live_toggle_env_names`), so a
+    lever added later is cleared without editing this function.
+    """
+
+    undeclared = {
+        name for name in live_toggle_env_names().values() if name not in slate
+    }
+    touched = set(slate) | undeclared
+    previous = {key: os.environ.get(key) for key in touched}
+    try:
+        os.environ.update(slate)
+        for name in undeclared:
+            os.environ.pop(name, None)
+        yield
+    finally:
+        for key, value in previous.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
 
 
 def _seed_of(path: Path) -> int:
@@ -1340,6 +1528,127 @@ def mirror_sampled_set(set_dir: Path, seeds: Sequence[int], dest: Path) -> None:
     (dest / "MANIFEST.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def _reconstruct_set(
+    ctx: Context, set_dir: Path
+) -> tuple[str, str, list[VerifyFailure], int]:
+    """One set's reconstruction, sampled under ``--fast``. Returns the row's parts."""
+
+    total = len(list(set_dir.glob(_REPLAY_GLOB)))
+    # Nothing to sample: a set that declares seeds but holds no replays is
+    # walked in FULL in every mode, so --fast cannot turn an empty set into
+    # a vacuous pass.
+    if ctx.fast and total:
+        seeds = sampled_seeds(set_dir, FAST_SAMPLE_PER_SET)
+        with tempfile.TemporaryDirectory(prefix="verify-ml-evidence-") as tmp:
+            dest = Path(tmp)
+            mirror_sampled_set(set_dir, seeds, dest)
+            failures = verify_samples(dest)
+        measured = (
+            f"{len(seeds) - len(failures)}/{len(seeds)} reconstructed "
+            f"(SAMPLED from {total}; seeds {', '.join(str(s) for s in seeds)})"
+        )
+        committed = f"{total} committed replays (--fast sampled {len(seeds)})"
+    else:
+        failures = verify_samples(set_dir)
+        measured = f"{total - len(failures)}/{total} reconstructed"
+        committed = f"{total} committed replays"
+    return measured, committed, failures, total
+
+
+def run_wave2_reconstruction(ctx: Context) -> list[CheckRow]:
+    """The FINDING record's restored sets, reconstructed under their DECLARED slate.
+
+    The recording is not a canonical set and is not walked by ``replay_sets``,
+    so without this leg a code change that makes it unreadable would be caught
+    by nothing: its digests would still match — the bytes on disk are the bytes
+    the manifest hashed — while the games they encode no longer reconstruct.
+    Digest identity is not readability, and the whole reason to preserve a
+    record is that someone can open it later.
+
+    The slate comes from the manifest (``read_declared_slate``) and is exported
+    for these sets ONLY, then removed. Nothing here reads the ambient
+    environment, because a slate inherited from the operator's shell would let a
+    drifted export certify bytes it never rendered.
+    """
+
+    declared = _wave2_declared_sets(ctx)
+    restored = restored_wave2_sets(ctx.repo_root)
+    present = {_relative(d, ctx.repo_root)[len(f"{WAVE2_DEST}/") :] for d in restored}
+    missing = sorted(declared - present)
+    if restored and missing:
+        # A PARTIAL restoration is a failure, not a smaller walk. Reconstructing
+        # whatever happens to be on disk would report a clean row per surviving
+        # set while a whole set of the preserved record had quietly gone -- the
+        # one thing a preserved record must never do is shrink silently.
+        return [
+            CheckRow(
+                name="wave2-finding reconstruction",
+                measured=f"{len(present)} of {len(declared)} declared set(s) restored",
+                committed=f"{len(declared)} declared set(s)",
+                source=WAVE2_MANIFEST,
+                status="FAIL",
+                detail=(
+                    "declared by the manifest but absent from the restore: "
+                    + ", ".join(missing)
+                    + " -- re-run `bash scripts/fetch_evidence.sh`, or `--clean` "
+                    "and re-fetch; a partial restore is not a smaller record"
+                ),
+            )
+        ]
+    if not restored:
+        return [
+            CheckRow(
+                name="wave2-finding reconstruction",
+                measured="EVIDENCE-BRANCH-ABSENT",
+                committed=f"{len(declared)} declared set(s)",
+                source=WAVE2_MANIFEST,
+                status="ABSENT",
+                detail=(
+                    "not restored on this checkout — run "
+                    "`bash scripts/fetch_evidence.sh` to place them, then re-run"
+                ),
+            )
+        ]
+    slate = read_declared_slate(ctx.repo_root)
+    slate_text = ", ".join(f"{key}={value}" for key, value in sorted(slate.items()))
+    cleared = sorted(
+        name for name in live_toggle_env_names().values() if name not in slate
+    )
+    rows: list[CheckRow] = []
+    with declared_slate_env(slate):
+        for set_dir in restored:
+            rel = _relative(set_dir, ctx.repo_root)
+            measured, committed, failures, _total = _reconstruct_set(ctx, set_dir)
+            rows.append(
+                CheckRow(
+                    name=f"wave2-finding reconstruction: {rel}",
+                    measured=measured,
+                    committed=(
+                        f"{committed}; slate {slate_text}"
+                        + (f"; cleared {', '.join(cleared)}" if cleared else "")
+                    ),
+                    source=f"{WAVE2_MANIFEST} (declared slate)",
+                    status="OK" if not failures else "FAIL",
+                    detail="\n".join(failure.render() for failure in failures[:10]),
+                )
+            )
+    return rows
+
+
+def _wave2_declared_sets(ctx: Context) -> set[str]:
+    """The set directories the FINDING record's manifest promises, from its rows."""
+
+    prefix = f"{WAVE2_DEST}/"
+    sets: set[str] = set()
+    for row in ctx.evidence:
+        if row.repo_path is None or not row.repo_path.startswith(prefix):
+            continue
+        parts = row.repo_path[len(prefix) :].split("/")
+        if len(parts) >= 3:
+            sets.add("/".join(parts[:2]))
+    return sets
+
+
 def run_corpus(ctx: Context) -> LegResult:
     """Replay reconstruction + the committed fit-corpus identity fingerprint."""
 
@@ -1381,6 +1690,10 @@ def run_corpus(ctx: Context) -> LegResult:
                 detail="\n".join(failure.render() for failure in failures[:10]),
             )
         )
+    # The FINDING record's restored sets, under the slate its manifest declares.
+    # They are not canonical and `replay_sets` does not walk them, so this is the
+    # only thing that would notice the preserved recording becoming unreadable.
+    rows.extend(run_wave2_reconstruction(ctx))
     if ctx.fast:
         notes.append(
             "--fast: the reconstruction walked a SAMPLE of each set (seeds listed "
@@ -2419,6 +2732,14 @@ _ALLOWED_CLASS_WHERE: Final[dict[str, str]] = {
 _IN_TREE_PROBES: Final[dict[str, tuple[str, ...]]] = {
     "replays/samples/": ("replays/samples/4p1i", "replays/samples/9p2i"),
     "replays/ml_corpus/": ("replays/ml_corpus/4p1i", "replays/ml_corpus/9p2i"),
+    # The FINDING record's in-tree half. The 300 recorded games are NOT here:
+    # they stamp the Wave-2 keys True, the rule that read them said FINDING, and
+    # a bare shell resolves those keys False -- so the bytes live on a pinned
+    # evidence commit and only the pin and the digests are in the tree.
+    "replays/records/phase-21-wave2-finding/": (
+        "replays/records/phase-21-wave2-finding/EVIDENCE-MANIFEST.md",
+        "replays/records/phase-21-wave2-finding/README.md",
+    ),
     "agents/tactical/learned/{weights,crew_weights}.json": (
         "agents/tactical/learned/weights.json",
         "agents/tactical/learned/weights.json.sha256",
@@ -2467,6 +2788,10 @@ _IN_TREE_PROBES: Final[dict[str, tuple[str, ...]]] = {
 _IN_TREE_INVENTORY: Final[dict[str, tuple[tuple[str, ...], tuple[str, ...]]]] = {
     "replays/samples/": (("replays/samples",), ()),
     "replays/ml_corpus/": (("replays/ml_corpus",), ()),
+    "replays/records/phase-21-wave2-finding/": (
+        ("replays/records/phase-21-wave2-finding",),
+        (),
+    ),
     "agents/tactical/learned/{weights,crew_weights}.json": (
         (
             "agents/tactical/learned/weights.json",
@@ -2555,11 +2880,22 @@ def in_tree_inventory(repo_root: Path, key: str) -> list[str] | None:
     return [path for path in tracked if path not in owned_elsewhere]
 
 
-#: The two class-(c) rows, keyed the same way, with the evidence-commit prefix
-#: whose manifest rows they cover.
+#: The class-(c) rows, keyed the same way, with the evidence-commit prefix whose
+#: manifest rows they cover.
 _EVIDENCE_PREFIXES: Final[dict[str, str]] = {
     "coevo/": "coevo/",
     "finalist-eval-raw/": "finalist-eval-raw/",
+    "wave2-finding/": "wave2-finding/",
+}
+
+#: Which manifest OWNS each class-(c) prefix, and therefore which pin its
+#: availability row is sourced from. Two evidence commits mean two pins, and a
+#: row that cited the Phase-18 pin for bytes on the other commit would name a sha
+#: that says nothing about what it just counted.
+_EVIDENCE_OWNERS: Final[dict[str, str]] = {
+    "coevo/": EVIDENCE_MANIFEST,
+    "finalist-eval-raw/": EVIDENCE_MANIFEST,
+    "wave2-finding/": WAVE2_MANIFEST,
 }
 
 #: Named evidence that `docs/artifacts.md`'s registry table holds no row for,
@@ -2770,6 +3106,10 @@ def run_availability(ctx: Context) -> LegResult:
             )
         elif recorded == "EVIDENCE-BRANCH":
             prefix = _EVIDENCE_PREFIXES[key]
+            owner = _EVIDENCE_OWNERS[prefix]
+            owner_pin = (
+                ctx.wave2_pinned_sha if owner == WAVE2_MANIFEST else ctx.pinned_sha
+            )
             total = total_by_prefix.get(prefix, 0)
             present = present_by_prefix.get(prefix, 0)
             # The registry states each class-(c) row's file count; those bytes
@@ -2815,8 +3155,7 @@ def run_availability(ctx: Context) -> LegResult:
                     label,
                     f"{measured} ({present}/{total} present)",
                     recorded,
-                    f"{ARTIFACTS_DOC} + {EVIDENCE_MANIFEST} §1 "
-                    f"(pin {ctx.pinned_sha[:12]}…)",
+                    f"{ARTIFACTS_DOC} + {owner} §1 (pin {owner_pin[:12]}…)",
                     status,
                     detail=count_note
                     or (
@@ -3138,6 +3477,7 @@ def main(argv: list[str] | None = None) -> int:
             complete=complete,
             evidence=evidence_rows(repo_root, slate_lost=_slate_lost(repo_root)),
             pinned_sha=read_pinned_sha(repo_root),
+            wave2_pinned_sha=read_pinned_sha(repo_root, WAVE2_MANIFEST),
             slate_ruling=read_slate_ruling(repo_root),
         )
         mode = "complete" if complete else ("fast" if fast else "full")

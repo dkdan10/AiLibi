@@ -21,8 +21,9 @@ retention: prune coevo only); `audits/audit-phase-18-close.md` §6.3 C4 (the
 coevo namespace rules).
 
 **The one-line summary.** Small canonical bytes and every manifest stay in git;
-large immutable evidence lives on ONE orphan commit fetched **by sha**;
-regenerable views are never committed at all. A test-pinned byte is never
+large immutable evidence lives on orphan commits fetched **by sha** — there are
+two, each pinned in its own in-tree manifest; regenerable views are never
+committed at all. A test-pinned byte is never
 class (c), whatever it weighs.
 
 ## The four classes
@@ -93,8 +94,9 @@ than its output preserved.
 
 | artifact | class | where | size |
 |---|---|---|---|
-| `replays/samples/` — the baseline-6 adopting record (100 replays + per-set `MANIFEST.md`) | (a) + (b) | in git | 61 MB / 107 files |
+| `replays/samples/` — the baseline-8 maintenance re-record (100 replays + per-set `MANIFEST.md`); it published no bars and adopted nothing, and the later lever-ON candidate returned FINDING, so these stay the canonical bytes | (a) + (b) | in git | 61 MB / 107 files |
 | `replays/ml_corpus/` — the committed ML corpus | (a) | in git | 161 MB / 209 files |
+| `replays/records/phase-21-wave2-finding/` — the pin and the per-file digests for a 300-game recording that is NOT one of the canonical replay sets, plus a README saying why it is not | (b) | in git | 2 files |
 | `agents/tactical/learned/{weights,crew_weights}.json` + `.sha256` — the **shipped inference weights** the live tactical factories load | (a) + (b) | in git | 4 files |
 | `tests/fixtures/` — golden fixtures (rendered memory views and their inputs; the bump-in-flight prompt archive is EMPTY, as it is whenever every committed replay renders through the live prompt set — the six `qwen3_6_27b` v4 bodies retired at the baseline-8 record) | (a) | in git | 2,054,135 tracked bytes / 23 files |
 | `data/personas.json` — the canonical persona set | (a) | in git | 12 KB |
@@ -104,12 +106,13 @@ than its output preserved.
 | `training/artifacts/coevo/EVIDENCE-MANIFEST.md` — the pin + the digests + the consumer enumeration | (b) | in git | 283 KiB |
 | `training/reports/` — the reports and their flattened `results-*.jsonl` rows | (b) | in git | 2.5 MB / 21 files |
 | `training/reports/_finalist_eval_raw/MANIFEST.md` — the slate's per-file digests (Task 19.21) | (b) | in git | 1,569 digests |
-| `audits/` — the audit record, with `audits/README.md` as its index | (b) | in git | 8,437,572 tracked bytes / 165 files |
+| `audits/` — the audit record, with `audits/README.md` as its index | (b) | in git | 8,528,101 tracked bytes / 166 files |
 | `docs/media/` — the README captures + the as-built architecture picture | (a) | in git | 1.4 MB / 6 files |
 | `design/phase-12/` — the design-artifact record (map reference renders + briefs) | (b) | in git | 1.9 MB / 18 files |
 | `experiments/lab/`, `experiments/model_probe/` — recorded read-only harness outputs and their syntheses (`experiments/` outputs are artifacts, not behavior — `docs/architecture.md`) | (b) | in git | 7.3 MB / 164 files |
 | **`coevo/` on `evidence/phase-18-coevo`** — every unpinned Phase-18 co-evolution byte | **(c)** | pinned sha | **101.097 MiB / 1,383 files** |
 | **`finalist-eval-raw/` on `evidence/phase-18-coevo`** — the Phase-18 finalist raw slate: recovered, folded onto the pinned commit and hash-verified, with one owner step still open (below) | **(c)** | pinned sha | **298.157 MiB / 1,569 files** |
+| **`wave2-finding/` on `evidence/phase-21-wave2-finding`** — a 300-game recording that is not one of the canonical replay sets: it reads only with the three Wave-2 levers switched on, so it is pinned rather than committed | **(c)** | pinned sha | **248.063 MiB / 315 restored files** (316 on the commit: its own README is hashed against the manifest but never restored, because the destination already holds the committed one) |
 | local `replays/*.jsonl`, tournament report dirs, the firewall's `**/*.audit.jsonl` packet logs, `frontend/dist/`, the demo bundle | (d) | regenerated (`.gitignore`d) | — |
 
 **Why the other `training/artifacts/` families are class (a) and coevo mostly is
@@ -122,10 +125,21 @@ classes, decided the same way in both cases — by what the consumers read.
 
 ### The class-(c) rows in detail
 
-Both live on **one** orphan commit —
-`evidence/phase-18-coevo` @ `476a1f85492439277350af9708f1d120eb1c0a71` — and
-that sha is pinned in `training/artifacts/coevo/EVIDENCE-MANIFEST.md` §1.
-Restore either or both with:
+There are **three** class-(c) payloads on **two** orphan commits, each pinned by
+sha in its own in-tree manifest:
+
+| payload | orphan commit | pinned in |
+|---|---|---|
+| `coevo/` | `evidence/phase-18-coevo` @ `476a1f85492439277350af9708f1d120eb1c0a71` | `training/artifacts/coevo/EVIDENCE-MANIFEST.md` §1 |
+| `finalist-eval-raw/` | the same commit | the same manifest |
+| `wave2-finding/` | `evidence/phase-21-wave2-finding` @ `29af85d5457caeba4f8ba8ba77610c6a0ab2213a` | `replays/records/phase-21-wave2-finding/EVIDENCE-MANIFEST.md` |
+
+`scripts/fetch_evidence.sh` restores **all three**, in one pass: it fetches each
+commit by its own sha, refuses any that is not parentless, restores each payload
+into its own destination root behind a generated `.gitignore`, and re-hashes
+every restored file — plus each commit's own README, checked straight out of the
+commit against its own manifest — against the digests those manifests carry.
+Restore, verify or remove them with:
 
 ```bash
 bash scripts/fetch_evidence.sh            # fetch by the pinned sha, restore, verify
@@ -135,7 +149,7 @@ bash scripts/fetch_evidence.sh --clean    # remove the restored bytes again
 
 The restore and the gate compose in either direction: `bash scripts/check.sh` is
 green with these bytes restored and green after `--clean`, and `uv run mypy .`
-reports the same source-file count in both states because the two destination
+reports the same source-file count in both states because the three destination
 roots are outside its walk (the `[tool.mypy] exclude` above). You do not have to
 `--clean` before running the gate.
 
@@ -164,6 +178,23 @@ busy-hour price is named and declined by the Phase-19 charter. Preserving the
 bytes makes the lineage *auditable* — these are real-provider draws, so it does
 not make the run re-runnable. The research reader's own entry point into all of
 this is the report the slate was measured into: `training/reports/report-finalist-eval.md` §20.
+
+**`wave2-finding/` — a 300-game recording that is not one of the canonical
+replay sets.** It reads only with three optional levers switched on
+(`AILIBI_REPORTER_REASONING`, `AILIBI_CORROBORATION_DISCIPLINE`,
+`AILIBI_TESTIMONY_SHAPES`), and those levers still resolve off in a plain shell,
+so the loader compares the recorded settings against the live ones and refuses
+the games. Committing them under `replays/samples/` or `replays/ml_corpus/` would
+therefore break the plain-shell sample verifier, the served frontend and the
+release gate — on games that are perfectly valid under their own settings. The
+recording was measured against bars fixed in writing beforehand; three of the
+four were met and the fourth was missed, so the levers were not adopted, the
+canonical sets were left untouched, and these bytes are kept as evidence rather
+than promoted. `replays/records/phase-21-wave2-finding/` holds the pin, the
+per-file digests and the declared slate; the reading is
+`audits/audit-phase-21-adopting-record.md`. Whether a recording like this is
+carried in the tree or on a pinned commit is an owner decision that was open when
+it was taken, and the pinned commit is the provisional answer.
 
 **The one step still open, and how to see whether it is.** Deleting the
 superseded staging ref is the one part of the fold Task 19.22 could not execute

@@ -58,14 +58,14 @@ mypy_path = "scripts"
 # ml_spike grounds (same sys.path bootstrap, too). The maintained top-level
 # lab tools (experiments/lab/*.py) stay type-checked. design/ holds one-off design-artifact
 # generators (e.g. phase-12/gen_map_reference.py), not production code — excluded too.
-# The last two alternatives are the class-(c) evidence destinations
+# The last three alternatives are the class-(c) evidence destinations
 # scripts/fetch_evidence.sh restores into. Their restored bytes are untracked by design —
 # operator-machine slate helpers never held to this bar — and a .gitignore fences
 # `git add`, not a type checker, so without these the documented restore and the
 # documented gate exclude each other. Neither destination holds a tracked .py, so the
 # strict bar loses nothing; tests/scripts/test_verify_ml_evidence.py pins both halves
 # against the script's own destination assignments.
-exclude = "^(experiments/lab/ml_spike/|experiments/lab/torch_probe/|experiments/lab/(visibility|inference|stopwatch|forward_redesign)_|design/|training/artifacts/coevo/|training/reports/_finalist_eval_raw/)"
+exclude = "^(experiments/lab/ml_spike/|experiments/lab/torch_probe/|experiments/lab/(visibility|inference|stopwatch|forward_redesign)_|design/|training/artifacts/coevo/|training/reports/_finalist_eval_raw/|replays/records/phase-21-wave2-finding/)"
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

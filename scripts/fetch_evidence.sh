@@ -43,12 +43,18 @@ MANIFEST="$REPO_ROOT/training/artifacts/coevo/EVIDENCE-MANIFEST.md"
 SLATE_MANIFEST="$REPO_ROOT/training/reports/_finalist_eval_raw/MANIFEST.md"
 COEVO_DEST="$REPO_ROOT/training/artifacts/coevo"
 SLATE_DEST="$REPO_ROOT/training/reports/_finalist_eval_raw"
+# Task 21.24's FINDING record — a SECOND evidence family on its own orphan
+# commit. Its 300 recorded games read only with the three Wave-2 levers ON,
+# so they cannot live under the canonical replay roots and are pinned here.
+WAVE2_MANIFEST="$REPO_ROOT/replays/records/phase-21-wave2-finding/EVIDENCE-MANIFEST.md"
+WAVE2_DEST="$REPO_ROOT/replays/records/phase-21-wave2-finding"
 
 # Where the fetched commit is pinned locally. A fetch with no ref leaves the
 # objects unreachable, so a later `git gc` may prune them and a subsequent
 # offline --verify would lose the branch README it must check. NOT under
 # refs/heads: this is a pinned object, not a branch to work on.
 LOCAL_REF="refs/evidence/phase-18-coevo"
+WAVE2_LOCAL_REF="refs/evidence/phase-21-wave2-finding"
 
 mode="fetch"
 force=0
@@ -103,15 +109,15 @@ fi
 # --------------------------------------------------------------------------- #
 # The pin, and the digest block, both read from the manifest.                  #
 # --------------------------------------------------------------------------- #
-read_pin() {
-  local sha
+read_pin() { # read_pin [MANIFEST]
+  local manifest="${1:-$MANIFEST}" sha
   # `|| true`: with `set -o pipefail` a no-match grep fails the whole
   # substitution and kills the script BEFORE the diagnostic below can explain
   # why — the corrupt-manifest case would exit silently (Codex review, PR #346).
-  sha="$(grep -F 'tip sha — THE PIN' "$MANIFEST" |
+  sha="$(grep -F 'tip sha — THE PIN' "$manifest" |
     grep -oE '[0-9a-f]{40}' | head -1 || true)"
   if [[ -z "$sha" ]]; then
-    echo "no pinned sha in $MANIFEST (the '**tip sha — THE PIN**' row)" >&2
+    echo "no pinned sha in $manifest (the '**tip sha — THE PIN**' row)" >&2
     exit 1
   fi
   printf '%s\n' "$sha"
@@ -128,6 +134,13 @@ peel_digests() {
     sed 's#  coevo/#  training/artifacts/coevo/#'
   awk '/^```sha256$/{f=1;next} /^```$/{f=0} f' "$SLATE_MANIFEST" |
     sed 's#  \./#  training/reports/_finalist_eval_raw/#'
+  # The FINDING record's block. Its branch README is dropped for the same reason
+  # the coevo one is — and here it MUST be: its destination would be the in-tree
+  # wrapper README of the same name, so restoring it would overwrite the very
+  # file docs/artifacts.md registers.
+  awk '/^```sha256$/{f=1;next} /^```$/{f=0} f' "$WAVE2_MANIFEST" |
+    grep -v '  wave2-finding/README.md$' |
+    sed 's#  wave2-finding/#  replays/records/phase-21-wave2-finding/#'
 }
 
 restored_paths() {
@@ -147,7 +160,7 @@ dest_dirs() {
   # directory this script does not own.
   restored_paths |
     awk -F/ '{p=""; for (i=1; i<NF; i++) {p = (i==1 ? $i : p "/" $i); print p}}' |
-    grep -E '^(training/artifacts/coevo|training/reports/_finalist_eval_raw)/' |
+    grep -E '^(training/artifacts/coevo|training/reports/_finalist_eval_raw|replays/records/phase-21-wave2-finding)/' |
     sort -u
 }
 
@@ -158,12 +171,14 @@ dest_dirs() {
 # moves the root's mtime even on a re-fetch that adds nothing (found while
 # verifying the round-6 fix, PR #346).
 dest_roots() {
-  printf '%s\n' "${COEVO_DEST#"$REPO_ROOT/"}" "${SLATE_DEST#"$REPO_ROOT/"}"
+  printf '%s\n' "${COEVO_DEST#"$REPO_ROOT/"}" "${SLATE_DEST#"$REPO_ROOT/"}" \
+    "${WAVE2_DEST#"$REPO_ROOT/"}"
 }
 
 tracked_paths() {
   git -C "$REPO_ROOT" ls-files -- training/artifacts/coevo \
-    training/reports/_finalist_eval_raw | sort
+    training/reports/_finalist_eval_raw \
+    replays/records/phase-21-wave2-finding | sort
 }
 
 # One cleanup list and one trap: several legs below need scratch files, and a
@@ -282,7 +297,7 @@ gitignore_is_ours() { # gitignore_is_ours PATH
 
 assert_gitignores_are_ours_or_absent() {
   local dest offenders=""
-  for dest in "$COEVO_DEST" "$SLATE_DEST"; do
+  for dest in "$COEVO_DEST" "$SLATE_DEST" "$WAVE2_DEST"; do
     if [[ -L "$dest/.gitignore" ]]; then
       offenders+="${dest#"$REPO_ROOT/"}/.gitignore — symlink"$'\n'
     elif [[ -e "$dest/.gitignore" ]] && ! gitignore_is_ours "$dest/.gitignore"; then
@@ -383,6 +398,11 @@ archive_paths() {
     grep -v '^README.md$' |
     sed -e 's#^coevo/#training/artifacts/coevo/#' \
       -e 's#^finalist-eval-raw/#training/reports/_finalist_eval_raw/#'
+  # The second family's commit, listed the same way. Its README is dropped here
+  # too, so this list and peel_digests describe the same set on both sides.
+  git -C "$REPO_ROOT" ls-tree -r --name-only "$WAVE2_PINNED_SHA" |
+    grep -v '^README.md$' |
+    sed 's#^#replays/records/phase-21-wave2-finding/#'
 }
 
 # Called by the two modes that have the commit in hand. `--clean` is offline by
@@ -551,7 +571,7 @@ if [[ "$mode" == "clean" ]]; then
   # Removing it unconditionally meant a --clean that KEPT a modified evidence
   # file (the case above, which exits non-zero) left that file behind with
   # nothing stopping `git add -A` from staging it (Codex review, PR #346).
-  for dest in "$COEVO_DEST" "$SLATE_DEST"; do
+  for dest in "$COEVO_DEST" "$SLATE_DEST" "$WAVE2_DEST"; do
     rel="${dest#"$REPO_ROOT/"}"
     # Counted from the FILESYSTEM, not from the manifest. `--clean` is offline
     # and cannot run the archive/manifest comparison, so a manifest truncated
@@ -600,36 +620,40 @@ fi
 # fetch + restore                                                              #
 # --------------------------------------------------------------------------- #
 PINNED_SHA="$(read_pin)"
+WAVE2_PINNED_SHA="$(read_pin "$WAVE2_MANIFEST")"
 
 if [[ "$mode" == "fetch" ]]; then
-  if ! git -C "$REPO_ROOT" cat-file -e "${PINNED_SHA}^{commit}" 2>/dev/null; then
-    # Fetch through the remote NAME, and print only the name. `git remote
-    # get-url` can carry inline credentials (https://x-access-token:<PAT>@...),
-    # and echoing it would write the secret to the terminal and to CI logs
-    # (Codex review, PR #346).
-    echo "Fetching the evidence commit ${PINNED_SHA} from origin ..."
-    git -C "$REPO_ROOT" fetch --depth 1 origin "$PINNED_SHA"
-  fi
-
-  # The pin buys immutability only if what came back really is the ONE-commit
-  # orphan the manifest describes — asserted loudly, before a single byte lands
-  # in the tree. Read from the RAW commit object, not from `rev-list --parents`:
-  # a --depth 1 fetch makes the commit a shallow boundary, and rev-list then
-  # suppresses its parents and reports any parented commit as an orphan
-  # (Codex review on PR #346, reproduced against a two-commit repo). The `sed`
-  # stops at the header/body boundary so a "parent ..." line in a commit
-  # MESSAGE cannot masquerade as a header.
-  if git -C "$REPO_ROOT" cat-file commit "$PINNED_SHA" |
-    sed -n '/^$/q;p' | grep -q '^parent '; then
-    echo "${PINNED_SHA} has a parent header; the evidence commit is an orphan." >&2
-    echo "Refusing to restore from it." >&2
-    exit 1
-  fi
-
-  # Pin the object locally so `git gc` cannot prune it: a bare sha fetch leaves
-  # it unreachable, and a later offline --verify needs the commit to check the
-  # branch README the manifest also covers.
-  git -C "$REPO_ROOT" update-ref "$LOCAL_REF" "$PINNED_SHA"
+  # Every evidence family, one loop. The pin buys immutability only if what came
+  # back really is the ONE-commit orphan its manifest describes — asserted
+  # loudly, before a single byte lands in the tree. Read from the RAW commit
+  # object, not from `rev-list --parents`: a --depth 1 fetch makes the commit a
+  # shallow boundary, and rev-list then suppresses its parents and reports any
+  # parented commit as an orphan (Codex review on PR #346, reproduced against a
+  # two-commit repo). The `sed` stops at the header/body boundary so a
+  # "parent ..." line in a commit MESSAGE cannot masquerade as a header.
+  #
+  # Each object is then pinned locally so `git gc` cannot prune it: a bare sha
+  # fetch leaves it unreachable, and a later offline --verify needs the commit to
+  # check the branch README its manifest also covers.
+  for family in "$PINNED_SHA $LOCAL_REF" "$WAVE2_PINNED_SHA $WAVE2_LOCAL_REF"; do
+    sha="${family%% *}"
+    ref="${family##* }"
+    if ! git -C "$REPO_ROOT" cat-file -e "${sha}^{commit}" 2>/dev/null; then
+      # Fetch through the remote NAME, and print only the name. `git remote
+      # get-url` can carry inline credentials (https://x-access-token:<PAT>@...),
+      # and echoing it would write the secret to the terminal and to CI logs
+      # (Codex review, PR #346).
+      echo "Fetching the evidence commit ${sha} from origin ..."
+      git -C "$REPO_ROOT" fetch --depth 1 origin "$sha"
+    fi
+    if git -C "$REPO_ROOT" cat-file commit "$sha" |
+      sed -n '/^$/q;p' | grep -q '^parent '; then
+      echo "${sha} has a parent header; the evidence commit is an orphan." >&2
+      echo "Refusing to restore from it." >&2
+      exit 1
+    fi
+    git -C "$REPO_ROOT" update-ref "$ref" "$sha"
+  done
 
   # A restore may only ADD files, so nothing already on disk may be clobbered.
   # Three ways that could happen, all refused BEFORE anything is written.
@@ -734,7 +758,7 @@ if [[ "$mode" == "fetch" ]]; then
   # dies half-way (a full disk) previously left ~1,877 untracked paths with
   # nothing stopping a commit (Codex review, PR #346; reproduced). Writing them
   # first also covers what no trap can: a SIGKILL, or the power going out.
-  for dest in "$COEVO_DEST" "$SLATE_DEST"; do
+  for dest in "$COEVO_DEST" "$SLATE_DEST" "$WAVE2_DEST"; do
     write_gitignore "$dest"
   done
 
@@ -747,6 +771,14 @@ if [[ "$mode" == "fetch" ]]; then
   echo "Restoring finalist-eval-raw/ -> training/reports/_finalist_eval_raw/ ..."
   git -C "$REPO_ROOT" archive "$PINNED_SHA" finalist-eval-raw |
     tar -x ${TAR_SKIP[@]+"${TAR_SKIP[@]}"} --strip-components=1 -C "$SLATE_DEST"
+
+  # The FINDING record's commit has no single top-level prefix directory — its
+  # entries ARE the set directories — so this one extracts whole, with no
+  # --strip-components, and the README is excluded because the destination
+  # already holds the committed wrapper of that name.
+  echo "Restoring wave2-finding/ -> replays/records/phase-21-wave2-finding/ ..."
+  git -C "$REPO_ROOT" archive "$WAVE2_PINNED_SHA" |
+    tar -x ${TAR_SKIP[@]+"${TAR_SKIP[@]}"} --exclude=README.md -C "$WAVE2_DEST"
 
   restore_dir_metadata
   _restore_started=0
@@ -805,7 +837,32 @@ if [[ "$readme_expected" != "$readme_actual" ]]; then
 fi
 expected=$((expected + 1))
 
-echo "OK: $expected/$expected files match ${PINNED_SHA}."
+# The SECOND family's branch README, checked the same way and INDEPENDENTLY:
+# against its own in-tree manifest, out of its own pinned commit. Sharing the
+# first family's digest or pin here would report a green README for a branch
+# nothing had looked at.
+if ! git -C "$REPO_ROOT" cat-file -e "${WAVE2_PINNED_SHA}:README.md" 2>/dev/null; then
+  echo "The pinned commit ${WAVE2_PINNED_SHA} is not in this repository, so the" >&2
+  echo "recording's own README.md cannot be verified. Run" >&2
+  echo "'bash scripts/fetch_evidence.sh' — it fetches the commit and pins it" >&2
+  echo "locally at ${WAVE2_LOCAL_REF}, after which --verify works offline." >&2
+  exit 1
+fi
+wave2_readme_expected="$(awk '/^```sha256$/{f=1;next} /^```$/{f=0} f' "$WAVE2_MANIFEST" |
+  awk '$2 == "wave2-finding/README.md" {print $1}')"
+wave2_readme_actual="$(git -C "$REPO_ROOT" cat-file blob "${WAVE2_PINNED_SHA}:README.md" |
+  sha256_stdin)"
+if [[ -z "$wave2_readme_expected" ]]; then
+  echo "$WAVE2_MANIFEST carries no digest row for its branch README." >&2
+  exit 1
+fi
+if [[ "$wave2_readme_expected" != "$wave2_readme_actual" ]]; then
+  echo "The recording commit's README.md does not match its manifest digest." >&2
+  exit 1
+fi
+expected=$((expected + 1))
+
+echo "OK: $expected/$expected files match ${PINNED_SHA} + ${WAVE2_PINNED_SHA}."
 echo "These bytes are UNTRACKED BY DESIGN and are .gitignore'd at each"
 echo "destination root — do not commit them back."
 echo "Remove them again with: bash scripts/fetch_evidence.sh --clean"

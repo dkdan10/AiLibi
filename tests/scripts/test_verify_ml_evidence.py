@@ -50,6 +50,33 @@ _RETAINED_SECTION_STUB = (
 )
 
 
+def _wave2_manifest_stub(root: Path, *, present: str | None = None) -> None:
+    """The SECOND evidence family's manifest, as a built scratch tree needs it.
+
+    Every :class:`~verify_ml_evidence.Context` reads it, and unlike the slate it
+    has no ratified loss path, so a tree without it cannot be built at all. Its
+    one promised byte is absent by default — the fresh-clone state — unless a
+    caller writes one and names it.
+    """
+
+    (root / vme.WAVE2_DEST).mkdir(parents=True, exist_ok=True)
+    name = present or "absent.jsonl"
+    (root / vme.WAVE2_MANIFEST).write_text(
+        "| **tip sha — THE PIN** | **" + "b" * 40 + "** |\n"
+        "```sha256\n"
+        f"{_sha256_of(root / vme.WAVE2_DEST / name) if present else '3' * 64}"
+        f"  wave2-finding/{name}\n"
+        f"{'4' * 64}  wave2-finding/README.md\n"
+        "```\n"
+    )
+
+
+def _sha256_of(path: Path) -> str:
+    import hashlib
+
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
 # --------------------------------------------------------------------------- #
 # scratch-tree helpers                                                          #
 # --------------------------------------------------------------------------- #
@@ -78,9 +105,14 @@ def _copy(root: Path, rel: str) -> Path:
 
 
 def _manifests(root: Path) -> None:
-    """The two evidence manifests every :class:`Context` is built from."""
+    """Every evidence manifest a :class:`Context` is built from.
 
-    _link(root, vme.EVIDENCE_MANIFEST, vme.SLATE_MANIFEST)
+    Three since Task 21.24 added a second evidence family: the Phase-18 pair and
+    the FINDING record's. The last is linked unconditionally because, unlike the
+    slate, it has no ratified loss path — its absence is an error, not a state.
+    """
+
+    _link(root, vme.EVIDENCE_MANIFEST, vme.SLATE_MANIFEST, vme.WAVE2_MANIFEST)
 
 
 def _context(root: Path, *, fast: bool = False, complete: bool = False) -> vme.Context:
@@ -101,6 +133,7 @@ def _context(root: Path, *, fast: bool = False, complete: bool = False) -> vme.C
         complete=complete,
         evidence=vme.evidence_rows(root, slate_lost=ruling is not None and ruling.lost),
         pinned_sha=vme.read_pinned_sha(root),
+        wave2_pinned_sha=vme.read_pinned_sha(root, vme.WAVE2_MANIFEST),
         slate_ruling=ruling,
     )
 
@@ -135,6 +168,10 @@ def _availability_tree(root: Path) -> None:
         "agents/tactical/learned/crew_weights.json.sha256",
         "replays/samples/9p2i",
         "replays/ml_corpus/9p2i",
+        # Task 21.24's FINDING record: only the pin and the digests are in the
+        # tree, so both probes are single files rather than a set directory.
+        "replays/records/phase-21-wave2-finding/EVIDENCE-MANIFEST.md",
+        "replays/records/phase-21-wave2-finding/README.md",
     ):
         _link(root, probe)
     # coevo/ is rebuilt from its TRACKED entries only — never linked whole.
@@ -226,7 +263,14 @@ def test_sidecar_leg_verifies_every_in_tree_sidecar() -> None:
 
 
 @pytest.mark.parametrize(
-    "name", ["sidecars[EVIDENCE-BRANCH]", "evidence payload", "evidence branch README"]
+    "name",
+    [
+        "sidecars[EVIDENCE-BRANCH]",
+        "evidence payload",
+        # One README row per evidence family since Task 21.24 added a second.
+        "evidence branch README (coevo/)",
+        "evidence branch README (wave2-finding/)",
+    ],
 )
 def test_evidence_branch_classes_are_reported_never_skipped(name: str) -> None:
     """The moved bytes are their OWN class, in both of its two valid states.
@@ -795,14 +839,26 @@ def test_drifted_evidence_manifest_digest_fails_the_payload_check(
     (root / vme.SLATE_MANIFEST).write_text(
         f"```sha256\n{'2' * 64}  ./absent.jsonl\n```\n"
     )
+    # The second evidence family, built the same way: one absent promised byte,
+    # so it contributes to the partial-restore count without adding a drift of
+    # its own — this case is about the coevo digest, and the wave2 rows are here
+    # because a Context cannot be built without its manifest.
+    (root / vme.WAVE2_DEST).mkdir(parents=True)
+    (root / vme.WAVE2_MANIFEST).write_text(
+        "| **tip sha — THE PIN** | **" + "b" * 40 + "** |\n"
+        "```sha256\n"
+        f"{'3' * 64}  wave2-finding/absent.jsonl\n"
+        f"{'4' * 64}  wave2-finding/README.md\n"
+        "```\n"
+    )
 
     rows = vme.run_sidecars(_context(root)).rows
     payload = _row(rows, "evidence payload")
     assert payload.status == "FAIL"
     assert "moved.json" in payload.detail
-    # The slate row is absent, not drifted: a PARTIAL restore is itself a
-    # failure, because "some of the promised bytes" is not a class.
-    assert "1 of 2 restored" in payload.measured
+    # The slate and wave2 rows are absent, not drifted: a PARTIAL restore is
+    # itself a failure, because "some of the promised bytes" is not a class.
+    assert "1 of 3 restored" in payload.measured
 
 
 def test_drifted_report_cell_fails_the_paired_leg(tmp_path: Path) -> None:
@@ -1109,6 +1165,13 @@ def test_a_recorded_loss_does_not_deadlock_a_restored_payload(
     (root / vme.SLATE_MANIFEST).write_text(
         f"```sha256\n{'2' * 64}  ./gone.jsonl\n```\n"
     )
+    # The second family, restored too: this test's subject is that a RECORDED
+    # loss must not fail a leg whose other families are whole, so leaving wave2
+    # absent would fail the payload row for an unrelated reason.
+    wave2_byte = root / vme.WAVE2_DEST / "restored.jsonl"
+    wave2_byte.parent.mkdir(parents=True, exist_ok=True)
+    wave2_byte.write_text("{}\n")
+    _wave2_manifest_stub(root, present="restored.jsonl")
     (root / vme.ARTIFACTS_DOC).parent.mkdir(parents=True, exist_ok=True)
     (root / vme.ARTIFACTS_DOC).write_text("**Ruling 2026-08-15: LOST**\n")
 
@@ -1119,7 +1182,8 @@ def test_a_recorded_loss_does_not_deadlock_a_restored_payload(
     payload = _row(rows, "evidence payload")
     # 1 promised byte, restored and hashed — the lost slate is not counted.
     assert payload.status == "OK", payload.detail
-    assert payload.measured.startswith("1 of 1 restored")
+    # Two families restored, the lost slate excluded at the source.
+    assert payload.measured.startswith("2 of 2 restored")
     assert "PROMISED" in payload.committed
     lost_row = _row(rows, "evidence payload[LOST]")
     assert lost_row.status == "INFO"
@@ -1250,6 +1314,7 @@ def test_the_loss_path_may_omit_the_slate_manifest(tmp_path: Path) -> None:
     root = tmp_path / "repo"
     (root / vme.COEVO_DEST).mkdir(parents=True)
     (root / vme.COEVO_DEST / "PATHS.md").write_text("stub\n")
+    _wave2_manifest_stub(root)
     (root / vme.EVIDENCE_MANIFEST).write_text(
         "| **tip sha — THE PIN** | **" + "a" * 40 + "** |\n"
         f"{_RETAINED_SECTION_STUB}"
@@ -1401,6 +1466,10 @@ def test_complete_accepts_a_manifestless_recorded_loss_end_to_end(
     #    same refusal-to-certify the sidecar inventory already makes.
     assert failed == {
         "coevo/ [(c)]",
+        # Task 21.24's payload is on its own pinned commit and this symlink tree
+        # has not fetched it either — ABSENT failing --complete is the same
+        # correct behaviour the coevo row shows, for the same reason.
+        "wave2-finding/ [(c)]",
         f"{vme.SLATE_MANIFEST} [(b)]",
         "in-tree family inventory",
     }
@@ -1819,6 +1888,296 @@ def test_every_counted_registry_row_matches_the_index() -> None:
             assert vme.in_tree_inventory(_REPO_ROOT, key) is not None
 
 
+def test_the_finding_records_registry_row_is_inventoried_and_its_count_bites() -> None:
+    """Task 21.24's FINDING record is registered, and a wrong count fails.
+
+    The record's 300 recorded games are NOT in the tree — they stamp the Wave-2
+    keys True, the pre-registered rule read FINDING, and a bare shell resolves
+    those keys False, so the bytes live on a pinned evidence commit and only the
+    pin and the digests are committed. That makes the row's promise small and
+    exact, which is the whole reason to check it: a row nothing enumerates would
+    be an artifact silently absent from the availability report.
+    """
+
+    key = "replays/records/phase-21-wave2-finding/"
+    tracked = vme.in_tree_inventory(_REPO_ROOT, key)
+    assert tracked is not None, "no git index"
+    assert sorted(tracked) == [
+        "replays/records/phase-21-wave2-finding/EVIDENCE-MANIFEST.md",
+        "replays/records/phase-21-wave2-finding/README.md",
+    ], tracked
+
+    # The registry states the same count the index tracks...
+    assert not vme.inventory_problems(_REPO_ROOT, [(key, tracked, len(tracked))])
+    # ...and a PLANTED disagreement fails rather than being absorbed. This is the
+    # case that matters: the bytes this row stands for are fetched by sha, so a
+    # count that drifted from the index is the only in-tree signal that the
+    # evidence half was renamed, deleted or split.
+    problems = vme.inventory_problems(_REPO_ROOT, [(key, tracked, len(tracked) + 1)])
+    assert problems, "a stated count that disagrees with the index must fail"
+    assert "promises 3 files" in problems[0], problems
+
+
+def test_the_finding_records_payload_is_class_c_and_a_drift_fails(
+    tmp_path: Path,
+) -> None:
+    """The recording is verified, not merely described beside its sidecars.
+
+    The bytes are on a pinned commit, so the only thing standing between "the
+    evidence exists" and "someone says it does" is this: the manifest's digests
+    are checked against what is restored, and a byte that does not match FAILS
+    whether or not anything else in the tree is green. Built rather than
+    fetched — one file, one digest, both states.
+    """
+
+    root = tmp_path / "repo"
+    # All three families whole, so the aggregate is not PARTIAL for a reason
+    # this test is not about.
+    coevo_byte = root / vme.COEVO_DEST / "restored.json"
+    coevo_byte.parent.mkdir(parents=True)
+    coevo_byte.write_text("{}\n")
+    (root / vme.COEVO_DEST / "PATHS.md").write_text("stub\n")
+    (root / vme.EVIDENCE_MANIFEST).write_text(
+        "| **tip sha — THE PIN** | **" + "a" * 40 + "** |\n"
+        f"{_RETAINED_SECTION_STUB}"
+        "```sha256\n"
+        f"{vme.sha256_file(coevo_byte)}  coevo/restored.json\n"
+        f"{'1' * 64}  README.md\n"
+        "```\n"
+    )
+    slate_byte = root / vme.SLATE_DEST / "restored.jsonl"
+    slate_byte.parent.mkdir(parents=True)
+    slate_byte.write_text("{}\n")
+    (root / vme.SLATE_MANIFEST).write_text(
+        f"```sha256\n{vme.sha256_file(slate_byte)}  ./restored.jsonl\n```\n"
+    )
+    restored = root / vme.WAVE2_DEST / "replay-seed-1000.jsonl"
+    restored.parent.mkdir(parents=True)
+    restored.write_text('{"kind": "game_over"}\n')
+    _wave2_manifest_stub(root, present="replay-seed-1000.jsonl")
+
+    # Restored and matching: the row is OK and names the byte it hashed.
+    payload = _row(vme.run_sidecars(_context(root)).rows, "evidence payload")
+    assert payload.status == "OK", payload.detail
+    assert "replays/records/phase-21-wave2-finding" not in payload.detail
+
+    # PLANTED: the same path, one byte different. A recording nobody can verify
+    # is not evidence, so this must fail rather than report itself restored.
+    restored.write_text('{"kind": "game_over"} \n')
+    drifted = _row(vme.run_sidecars(_context(root)).rows, "evidence payload")
+    assert drifted.status == "FAIL"
+    assert "replay-seed-1000.jsonl" in drifted.detail
+
+
+def test_a_missing_orphan_object_fails_complete_naming_the_payload(
+    tmp_path: Path,
+) -> None:
+    """No orphan commit, no certification — and the failure NAMES the recording.
+
+    The whole claim of a pinned evidence commit is that the bytes are reachable
+    by sha. If the object is gone, `--complete` must say so about the payload
+    rather than passing on the two in-tree sidecars, which are a wrapper and not
+    the record.
+    """
+
+    root = tmp_path / "repo"
+    _availability_tree(root)
+    _link(root, vme.ARTIFACTS_DOC, vme.SLATE_MANIFEST)
+
+    rows = vme.run_availability(_context(root, complete=True)).rows
+    payload = next(row for row in rows if row.name.startswith("wave2-finding/"))
+    assert payload.status == "ABSENT"
+    assert "0/315 present" in payload.measured
+    # ...and the row is sourced from ITS OWN pin, not the Phase-18 one.
+    assert vme.WAVE2_MANIFEST in payload.source
+    assert vme.read_pinned_sha(_REPO_ROOT, vme.WAVE2_MANIFEST)[:12] in payload.source
+
+    # PLANTED: --complete refuses a tree that cannot reach the recording, and the
+    # refusal names it. The in-tree wrapper row is green throughout, which is
+    # exactly why the payload needs a row of its own.
+    failed = {row.name for row in vme._failed(rows, complete=True)}
+    assert "wave2-finding/ [(c)]" in failed
+    wrapper = _row(rows, f"{vme.WAVE2_DEST}/ [(b)]")
+    assert wrapper.status == "OK"
+
+
+def test_the_recording_reconstructs_under_its_declared_slate(tmp_path: Path) -> None:
+    """The preserved recording is READ, not just hashed — under its own slate.
+
+    Digest identity is not readability: the bytes on disk can match the manifest
+    to the byte while the games they encode no longer reconstruct. This leg is
+    the only thing that would notice, because the recording is not a canonical
+    set and `replay_sets` does not walk it.
+    """
+
+    root = tmp_path / "repo"
+    _manifests(root)
+    # Absent is a reported state, never a silent pass.
+    absent = vme.run_wave2_reconstruction(_context(root))
+    assert len(absent) == 1
+    assert absent[0].status == "ABSENT"
+    assert "fetch_evidence.sh" in absent[0].detail
+
+    # The slate is read from the MANIFEST, and it is the record's three levers.
+    slate = vme.read_declared_slate(_REPO_ROOT)
+    assert slate == {
+        "AILIBI_REPORTER_REASONING": "1",
+        "AILIBI_CORROBORATION_DISCIPLINE": "1",
+        "AILIBI_TESTIMONY_SHAPES": "1",
+    }
+
+    # It is scoped: exported for the walk, gone afterwards, and it never reads
+    # what the ambient shell happened to carry.
+    before = {key: os.environ.get(key) for key in slate}
+    with vme.declared_slate_env(slate):
+        assert all(os.environ[key] == value for key, value in slate.items())
+    assert {key: os.environ.get(key) for key in slate} == before
+
+    # PLANTED: a restored recording that no longer reconstructs is DETECTED.
+    # This is the failure the whole leg exists for — digests can still match
+    # while the games they encode have stopped being readable.
+    broken = tmp_path / "broken"
+    _restored_wave2_tree(broken, ("samples/9p2i",))
+    victim = broken / vme.WAVE2_DEST / "samples/9p2i" / "replay-seed-0.jsonl"
+    text = victim.read_text()
+    victim.unlink()  # it is a symlink into the committed set; replace, never edit
+    # Break the recorded state-hash chain: the bytes still parse and their
+    # digests would still match a manifest, but the game no longer reconstructs.
+    broken_text = text.replace('"state_hash":"', '"state_hash":"0', 1)
+    assert broken_text != text, "the fixture no longer carries a state hash to break"
+    victim.write_text(broken_text)
+    row = _row(
+        vme.run_wave2_reconstruction(_context(broken)),
+        f"wave2-finding reconstruction: {vme.WAVE2_DEST}/samples/9p2i",
+    )
+    assert row.status == "FAIL", row.measured
+
+    # PLANTED: a manifest with no slate block cannot say what its bytes read
+    # under, so it raises instead of falling back to the environment.
+    stub = tmp_path / "noslate"
+    stub.mkdir()
+    (stub / vme.WAVE2_MANIFEST).parent.mkdir(parents=True)
+    (stub / vme.WAVE2_MANIFEST).write_text("no slate here\n")
+    with pytest.raises(vme.EvidenceError, match="no ```slate block"):
+        vme.read_declared_slate(stub)
+
+
+#: A committed set whose games really do reconstruct, used as the reconstruction
+#: fixture. Its bytes are baseline-8: every live lever toggle OFF — which is what
+#: the scratch manifest below declares, so the fixture's declared slate is the
+#: slate its bytes were actually recorded under.
+_FIXTURE_SET = "replays/samples/4p1i"
+_FIXTURE_SEEDS = (0, 1)
+
+
+def _restored_wave2_tree(root: Path, sets: tuple[str, ...]) -> None:
+    """A scratch tree with the recording's manifest and ``sets`` restored under it.
+
+    The sets hold REAL committed games (mirrored, not invented), because the
+    reconstruction leg's whole job is to reconstruct: a fixture of placeholder
+    rows makes every row FAIL and turns any "no failures" assertion into a gate
+    that cannot fail.
+    """
+
+    _manifests(root)
+    rows = []
+    for rel in sets:
+        seed_dir = root / vme.WAVE2_DEST / rel
+        seed_dir.mkdir(parents=True)
+        vme.mirror_sampled_set(
+            _REPO_ROOT / _FIXTURE_SET, list(_FIXTURE_SEEDS), seed_dir
+        )
+        for seed in _FIXTURE_SEEDS:
+            rows.append(f"{'5' * 64}  wave2-finding/{rel}/replay-seed-{seed}.jsonl")
+    # `_manifests` SYMLINKS the real manifests in, so writing through that link
+    # would edit the COMMITTED file. Replace the link instead: a scratch tree
+    # must never be able to reach back out of tmp_path.
+    manifest = root / vme.WAVE2_MANIFEST
+    manifest.unlink()
+    manifest.write_text(
+        "| **tip sha — THE PIN** | **" + "b" * 40 + "** |\n"
+        # Every live toggle OFF, spelled as one declared key so the block is
+        # well-formed; the rest are cleared by `declared_slate_env`.
+        "```slate\nAILIBI_IMPOSTOR_ROLL_CALL=0\n```\n"
+        "```sha256\n"
+        + "\n".join(rows)
+        + f"\n{'4' * 64}  wave2-finding/README.md\n```\n"
+    )
+
+
+def test_a_partial_restoration_of_the_recording_fails_naming_the_set(
+    tmp_path: Path,
+) -> None:
+    """Half a preserved record is a failure, not a smaller record.
+
+    Reconstructing whatever happens to be on disk would print a clean row per
+    surviving set while a whole set had quietly gone — and a recording kept as
+    evidence must never shrink silently. Both states are checked: whole passes
+    the completeness gate, partial fails and NAMES what is missing.
+    """
+
+    whole = tmp_path / "whole"
+    _restored_wave2_tree(whole, ("samples/9p2i", "ml_corpus/9p2i"))
+    rows = vme.run_wave2_reconstruction(_context(whole))
+    # The HAPPY PATH is asserted positively: every whole set reconstructs. An
+    # assertion that merely counted the absence of one phrase would pass on a
+    # tree whose recordings could never reconstruct at all.
+    assert len(rows) == 2, [r.name for r in rows]
+    assert all(r.status == "OK" for r in rows), [r.detail for r in rows]
+    assert all("2/2 reconstructed" in r.measured for r in rows), [
+        r.measured for r in rows
+    ]
+
+    # PLANTED: one whole declared set removed from an otherwise restored tree.
+    partial = tmp_path / "partial"
+    _restored_wave2_tree(partial, ("samples/9p2i", "ml_corpus/9p2i"))
+    shutil.rmtree(partial / vme.WAVE2_DEST / "ml_corpus/9p2i")
+    row = _row(
+        vme.run_wave2_reconstruction(_context(partial)), "wave2-finding reconstruction"
+    )
+    assert row.status == "FAIL", row.detail
+    assert "ml_corpus/9p2i" in row.detail
+    assert "1 of 2 declared set(s) restored" in row.measured
+
+
+def test_the_scoped_walk_clears_every_undeclared_live_toggle(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A lever the manifest does not declare is UNSET for the walk, not inherited.
+
+    "Reconstructs under its declared slate" has to be a statement about the
+    manifest, not about the operator's shell. An ambient toggle left standing
+    would run the reconstruction under a slate the recording never used — bytes
+    that should be refused would reconstruct, and the reverse.
+    """
+
+    names = vme.live_toggle_env_names()
+    # The names are DERIVED from the registry and checked against the resolvers,
+    # so every live toggle is covered without this test restating any of them.
+    from orchestrator.replay import TOGGLEABLE_SUBSTRATE_FLAG_KEYS
+
+    assert set(names) == set(TOGGLEABLE_SUBSTRATE_FLAG_KEYS)
+
+    slate = {"AILIBI_REPORTER_REASONING": "1"}
+    undeclared = sorted(set(names.values()) - set(slate))
+    assert undeclared, "the registry must carry a toggle the slate does not declare"
+
+    # PLANTED: every undeclared toggle set in the ambient environment.
+    for name in undeclared:
+        monkeypatch.setenv(name, "1")
+    monkeypatch.setenv("AILIBI_REPORTER_REASONING", "0")
+
+    with vme.declared_slate_env(slate):
+        assert os.environ["AILIBI_REPORTER_REASONING"] == "1"
+        for name in undeclared:
+            assert name not in os.environ, f"{name} survived the scoped walk"
+
+    # ...and the ambient environment is handed back exactly as it was.
+    assert os.environ["AILIBI_REPORTER_REASONING"] == "0"
+    for name in undeclared:
+        assert os.environ[name] == "1"
+
+
 def test_a_registry_row_with_no_inventory_scope_raises() -> None:
     """A row whose bytes nothing enumerates cannot be reported as complete."""
 
@@ -1975,7 +2334,8 @@ def test_a_fit_corpus_record_keyed_to_other_weights_fails(tmp_path: Path) -> Non
 
 _FETCH_SCRIPT = "scripts/fetch_evidence.sh"
 _DEST_ASSIGNMENT = re.compile(
-    r'^(?P<var>COEVO_DEST|SLATE_DEST)="\$REPO_ROOT/(?P<rel>[^"]+)"$', re.MULTILINE
+    r'^(?P<var>COEVO_DEST|SLATE_DEST|WAVE2_DEST)="\$REPO_ROOT/(?P<rel>[^"]+)"$',
+    re.MULTILINE,
 )
 
 
@@ -1988,8 +2348,8 @@ def _restore_destinations() -> dict[str, str]:
 
     text = (_REPO_ROOT / _FETCH_SCRIPT).read_text()
     found = {m.group("var"): m.group("rel") for m in _DEST_ASSIGNMENT.finditer(text)}
-    assert set(found) == {"COEVO_DEST", "SLATE_DEST"}, (
-        f"{_FETCH_SCRIPT} no longer assigns both destinations as "
+    assert set(found) == {"COEVO_DEST", "SLATE_DEST", "WAVE2_DEST"}, (
+        f"{_FETCH_SCRIPT} no longer assigns every destination as "
         f'VAR="$REPO_ROOT/<rel>"; got {sorted(found)}'
     )
     return found
@@ -2036,7 +2396,7 @@ def _tracked_python() -> list[str]:
     ).stdout.splitlines()
 
 
-def test_mypy_exclude_fences_both_restore_destinations() -> None:
+def test_mypy_exclude_fences_every_restore_destination() -> None:
     """``mypy .`` must not walk what ``scripts/fetch_evidence.sh`` restores.
 
     The per-destination ``.gitignore`` the restore writes fences ``git add``, not a
@@ -2049,6 +2409,7 @@ def test_mypy_exclude_fences_both_restore_destinations() -> None:
     destinations = _restore_destinations()
     assert destinations["COEVO_DEST"] == vme.COEVO_DEST
     assert destinations["SLATE_DEST"] == vme.SLATE_DEST
+    assert destinations["WAVE2_DEST"] == vme.WAVE2_DEST
 
     pattern = re.compile(_mypy_exclude())
     for dest in destinations.values():
@@ -2057,7 +2418,7 @@ def test_mypy_exclude_fences_both_restore_destinations() -> None:
 
 
 def test_the_destination_alternatives_swallow_no_tracked_python() -> None:
-    """The fence is exactly the two restore roots — it hides no committed module.
+    """The fence is exactly the restore roots — it hides no committed module.
 
     Checked per added alternative rather than over the whole regex: the pre-existing
     ``experiments/lab/`` and ``design/`` alternatives legitimately cover tracked

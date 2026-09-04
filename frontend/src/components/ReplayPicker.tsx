@@ -105,6 +105,10 @@ export interface FeaturedGame {
 // The spoiler rule below is unaffected and still binds — the rewritten label
 // names the setup and the question, never the meeting's outcome.
 //
+// The seed-13 label names the served game's turn counts, and tests/api/test_sets.py
+// reads them back through the set loader: a card that states a countable fact is
+// pinned to it. (Task 21.24.)
+//
 // SPOILER RULE (BINDING, PR #324 review): this strip renders BEFORE any game is
 // opened, and a static blurb is prose, not outcome-derived data — so 19.10's
 // unspoiled-mode reveal gate cannot cover it, and 19.10's contract explicitly
@@ -128,7 +132,7 @@ export const FEATURED_GAMES: readonly FeaturedGame[] = [
     set: "9p2i",
     seed: 13,
     label:
-      "Five meetings, the longest run any nine-player game here needed. Each round adds testimony and costs a player; watch which is worth more.",
+      "A game where the talking shrinks every round — seven turns, then six, then five. Watch whether less argument means more evidence or just less patience.",
   },
   {
     set: "9p2i",

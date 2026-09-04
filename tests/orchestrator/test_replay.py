@@ -21,7 +21,8 @@ Pure replay-layer tests: no full game loop, no LLM call.
 from __future__ import annotations
 
 import json
-from pathlib import Path
+import subprocess
+from pathlib import Path, PurePosixPath
 from typing import Final
 
 import pytest
@@ -1825,22 +1826,42 @@ class TestRecordTickEventsKeyword:
 
 
 def _committed_substrate_stamps() -> dict[str, dict[str, bool]]:
-    """Every committed replay's substrate stamp, keyed by repo-relative path.
+    """Every COMMITTED replay's substrate stamp, keyed by repo-relative path.
 
     Reads the ``game_over`` line directly instead of parsing 300 whole replays
     through pydantic: the stamp is the only field wanted, and the full parse is
     what would make this a minute-long test.
+
+    The file list comes from the git INDEX, not from a directory glob, and the
+    difference is load-bearing rather than tidy. ``replays/`` also hosts the
+    restored class-(c) recording (``scripts/fetch_evidence.sh``), which is
+    untracked by design and whose stamp differs from a bare build ON PURPOSE —
+    that is precisely why it is preserved outside the canonical sets rather than
+    committed into them. Globbing the directory made this gate pass or fail
+    depending on whether an operator had run the restore, which is the
+    composition `docs/artifacts.md` promises it keeps in both directions.
     """
 
     repo_root = Path(__file__).resolve().parents[2]
+    tracked = subprocess.run(
+        ["git", "-C", str(repo_root), "ls-files", "--", "replays"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.splitlines()
     stamps: dict[str, dict[str, bool]] = {}
-    for path in sorted((repo_root / "replays").rglob("replay-seed-*.jsonl")):
+    for rel in sorted(tracked):
+        if not PurePosixPath(rel).name.startswith("replay-seed-"):
+            continue
+        path = repo_root / rel
+        if not path.is_file():
+            continue
         for line in path.read_text(encoding="utf-8").splitlines():
             if '"game_over"' not in line:
                 continue
             flags = json.loads(line).get("substrate_flags")
             if flags is not None:
-                stamps[str(path.relative_to(repo_root))] = flags
+                stamps[rel] = flags
     return stamps
 
 
