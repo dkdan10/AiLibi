@@ -2283,7 +2283,7 @@ def test_mypy_exclude_fences_every_restore_destination() -> None:
 
 
 def test_the_destination_alternatives_swallow_no_tracked_python() -> None:
-    """The fence is exactly the two restore roots — it hides no committed module.
+    """The fence is exactly the restore roots — it hides no committed module.
 
     Checked per added alternative rather than over the whole regex: the pre-existing
     ``experiments/lab/`` and ``design/`` alternatives legitimately cover tracked

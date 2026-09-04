@@ -44,7 +44,7 @@ window stayed open for the whole record.
 | item | state |
 |---|---|
 | (i) the re-smoke, merged | **DISCHARGED** — PR #426 merged by the owner 2026-09-03, squash `e0c2adde`; it touched `audits/README.md`, `audits/audit-phase-21-smoke-wave2.md` and `docs/artifacts.md` only, so the window stays open at `44f0a28c`'s substrate |
-| (a) the freeze-guard reconciliation | **DISCHARGED** — landed in PR #427 (`608ae1f6`): a non-opening `deadline_default` row RE-RECORDS the seed at freeze and does not abandon the run, with the re-record allowance priced outside §12.2's bracket, and routing (e) putting the samples legs' scan in the operator's hand. **It was exercised: SIX re-record rounds over four seeds, all on leg 2, every one a non-opening slot (§2.5)** |
+| (a) the freeze-guard reconciliation | **DISCHARGED** — landed in PR #427 (`608ae1f6`): a non-opening `deadline_default` row RE-RECORDS the seed at freeze and does not abandon the run, with the re-record allowance priced outside §12.2's bracket, and routing (e) putting the samples legs' scan in the operator's hand. **It was exercised: SEVEN re-record rounds over five seeds — six on leg 2 and one on leg 1 — every one a non-opening slot (§2.5)** |
 | (c) the T4-equality disclosure row | **DISCHARGED** — PR #427 (`608ae1f6`); equality PASSES as a population fact under §8.1, an OFF reading ABOVE ON is the STOP. T-6 read ON 100% on every leg, so the clause was not the deciding one anywhere |
 | (d) §9.2 bullet 4's executor named | **DISCHARGED** — PR #427 (`608ae1f6`); `scripts/counterfactual_phase21.py::assert_recording_declares` executed it over each leg's own bytes, exit 0 on all four |
 | (R-4) the §5.1 row retired as discharged | **DISCHARGED** — PR #427 (`608ae1f6`); `P-1k` / `P-1ka` are the committed reader and are published in §3 as registered secondaries |
@@ -144,7 +144,7 @@ reason is legible rather than lucky: the smoke's like-for-like ratio was measure
 each leg's own ratio re-derived from its own bytes reads **×1.07 per meeting**, not ×1.17 (§2.6).
 The smoke's own §16 item 5 says exactly this — the seed slate is not a representative token sample,
 which is why the projection's low end is the all-games cross-check. Re-records are priced outside
-the bracket per prerequisite (a): six rounds at 198–418 s each, 1,749 s = **29m09s** in total.
+the bracket per prerequisite (a): seven rounds over five seeds, leg 2's six measured at 198–418 s each for 1,749 s = **29m09s**, leg 1's one absorbed inside its batch wall.
 
 ### 0.6 The before column
 
@@ -211,7 +211,7 @@ next began. The staging root is EMPTY in the final commit: §6 moved the bytes o
 
 | leg | set | games | gate | tripwire reader | `deadline_default` | re-records |
 |---|---|---|---|---|---|---|
-| 1 | `samples/9p2i` | 50/50 | **PASS**, ten checks | exit 0, `stopped_cells` empty, 9/9 PASS | 0 under either shape | 1 (seed 3) |
+| 1 | `samples/9p2i` | 50/50 | **PASS**, ten checks | exit 0, `stopped_cells` empty, 9/9 PASS | 0 under either shape | 1 round, 1 seed (3) |
 | 2 | `ml_corpus/9p2i` | 150/150 | **PASS**, ten checks | exit 0, `stopped_cells` empty, 9/9 PASS | 0 under either shape | 6 rounds over 4 seeds |
 | 3 | `samples/4p1i` | 50/50 | **PASS**, ten checks | exit 0, `stopped_cells` empty, 9/9 PASS | 0 under either shape | 0 |
 | 4 | `ml_corpus/4p1i` | 50/50 | **PASS**, ten checks | exit 0, `stopped_cells` empty, 9/9 PASS | 0 under either shape | 0 |
@@ -292,6 +292,25 @@ strictly satisfied rather than decided at equality on any leg — the (c) disclo
 case was never reached. A pooled run over all four leg directories is informational and did not
 substitute for the four per-leg runs.
 
+**T2 has a THIRD clause, and it has its own population.** R-13 and R-14 above count body-report
+openings and body-report speech turns; the memo's T2 row also requires that **no emergency-meeting
+prompt gains either block** (`audits/audit-phase-21-preregistration.md:736`). Emergency meetings are
+not in either denominator, so the clause is read over the recorded prompts directly — every prompt
+rendered at a meeting the tick's action stream shows was an emergency, checked for the reporter
+block's own marker text:
+
+| leg | emergency meetings | prompts rendered at them | prompts carrying a reporter-block marker |
+|---|---|---|---|
+| 1 `samples/9p2i` | 10 | 127 | **0** |
+| 2 `ml_corpus/9p2i` | 39 | 466 | **0** |
+| 3 `samples/4p1i` | 3 | 18 | **0** |
+| 4 `ml_corpus/4p1i` | 7 | 42 | **0** |
+| **pooled** | **59** | **653** | **0** |
+
+**MET on every leg.** The 59 emergency meetings are the same 59 `eval.reporter_justice` counts
+(§0.6's pooled block reads `body report 626, emergency 59`), so the population is the whole of it
+and not a sample.
+
 ### 2.5 The `deadline_default` hand scan, and the six re-record rounds
 
 Scanned per leg under BOTH shapes (`error_type == "deadline_default"` and the model sentinel
@@ -317,22 +336,23 @@ a meeting that opened without an accusation, not a turn that defaulted, and §9.
 subject is an OPENING DEFAULT — is not reached.
 
 Every `deadline_default` row that DID appear during recording was on a non-opening slot and was
-re-recorded at freeze under §9.2 as amended by PR #427, never abandoned. All six rounds fell on
-leg 2:
+re-recorded at freeze under §9.2 as amended by PR #427, never abandoned. **Seven rounds over five
+seeds**, six of them on leg 2 and one on leg 1:
 
-| seed | slot | trigger | rounds | wall |
-|---|---|---|---|---|
-| 1034 | `opt_in` turn 4 | validation — `Input tag 'corroboration' … does not match any of the expected tags` | 1 | 244 s |
-| 1061 | `opt_in` turns 3 and 5 | validation — same tag class | 2 | 337 s + 327 s |
-| 1078 | `vote` | validation — `1 validation error for ModelAuthoredVoteBallot` | 1 | 225 s |
-| 1087 | `opt_in` turn 3 | validation — `Input tag 'alibi' … does not match any of the expected tags` | 2 | 198 s + 418 s |
-| **total** | | | **6 rounds over 4 seeds** | **1,749 s = 29m09s** |
+| leg | seed | slot | trigger | rounds | wall |
+|---|---|---|---|---|---|
+| 1 | 3 | `opt_in` turn 3 | validation — a `MeetingTurn` schema error | 1 | (inside leg 1's batch wall) |
+| 2 | 1034 | `opt_in` turn 4 | validation — `Input tag 'corroboration' … does not match any of the expected tags` | 1 | 244 s |
+| 2 | 1061 | `opt_in` turns 3 and 5 | validation — same tag class | 2 | 337 s + 327 s |
+| 2 | 1078 | `vote` | validation — `1 validation error for ModelAuthoredVoteBallot` | 1 | 225 s |
+| 2 | 1087 | `opt_in` turn 3 | validation — `Input tag 'alibi' … does not match any of the expected tags` | 2 | 198 s + 418 s |
+| **total** | | | | **7 rounds over 5 seeds** | **1,749 s on leg 2 = 29m09s** |
 
 Two seeds needed a SECOND round because the re-recording produced a fresh `deadline_default` row of
 the same class; the driver rescans after every re-record for exactly that reason and stops rather
 than looping (its cap is three rounds per batch, never reached).
 
-**Every one of the six is a schema-VALIDATION failure, not a wall-clock miss**, which is precisely
+**Every one of the seven is a schema-VALIDATION failure, not a wall-clock miss**, which is precisely
 the (b) legibility item the close ledger carries: `meetings/manager.py:209`'s
 `DEFAULT_TURN_FREE_TEXT = "(missed deadline; no turn submitted)"` is minted for a validation failure
 too, so the husk asserts a deadline miss that did not happen. The recurring trigger has a shape worth
@@ -343,42 +363,66 @@ survives in any leg here, so the list this item asks for is empty — but the ca
 The corpus re-record flow was followed as written rather than improvised, because a present replay
 carrying such a row refuses the WHOLE re-run at the pre-spend skip-scan: DELETE the replay and its
 MANIFEST row → `--seeds N` → the finalizing run. 21.15 did this five times by hand over 250 completed
-games; this record took six rounds over 300, plus leg 1's single re-record of seed 3 — seven rounds
-over five seeds in all.
+games; this record took **seven rounds over five seeds** across 300.
 
-### 2.6 Duration, per leg, against the projection — and each leg's own token ratio
+### 2.6 Duration, per leg, against the projection — and every leg's own token ratio
 
-| leg | 21.15's actual | this record | note |
-|---|---|---|---|
-| 1 `samples/9p2i` | 3h07m00s | **3h03m29s** | includes one killed run's lost tail and the seed-3 re-record |
-| 2 `ml_corpus/9p2i` | 7h59m32s | **≈ 8h21m** recording wall | 12h03m55s elapsed across two operator sessions, less ≈ 3h21m dead after the first operator's provider-side HTTP 529 kill and ≈ 22m dead after a reaped background task |
-| 3 `samples/4p1i` | 23m15s | **20m21s** | |
-| 4 `ml_corpus/4p1i` | 24m41s (incomplete) | **20m30s** | complete |
-| **four legs** | 11h54m28s (299 games) | **≈ 12h05m (300 games)** | against the bracket 12h47m – 16h03m |
+**The four-leg total is on a MIXED basis and is reported as one rather than presented as a clean
+number.** Leg 1's figure is inclusive of a killed run's lost tail; leg 2's is exclusive of its dead
+time; legs 3 and 4 are clean. Both totals are given so a reader can choose:
 
-The per-leg token ratio, re-derived from each leg's OWN bytes against the committed baseline-8 set it
-would have replaced (smoke §16 item 5 — the seed slate is not a representative token sample):
+| leg | 21.15's actual | recording wall | elapsed | note |
+|---|---|---|---|---|
+| 1 `samples/9p2i` | 3h07m00s | **3h03m29s** | 3h03m29s | INCLUSIVE of a killed background task's lost tail (§below) and of the seed-3 re-record |
+| 2 `ml_corpus/9p2i` | 7h59m32s | **≈ 8h21m** | 12h03m55s | EXCLUSIVE of ≈ 3h43m dead — ≈ 3h21m after the first operator's provider-side HTTP 529 kill, ≈ 22m after a reaped background task |
+| 3 `samples/4p1i` | 23m15s | **20m21s** | 20m21s | |
+| 4 `ml_corpus/4p1i` | 24m41s (incomplete) | **20m30s** | 20m30s | complete |
+| **four legs** | 11h54m28s (299 games) | **≈ 12h05m** | **≈ 15h48m** | recording wall against the bracket 12h47m – 16h03m |
 
-| | leg 1 ON | baseline-8 `samples/9p2i` | ratio |
-|---|---|---|---|
-| meetings | 168 | 151 | ×1.1126 |
-| calls | 1,891 | 1,740 | ×1.0868 |
-| tokens | 9,717,705 | 8,134,860 | ×1.1946 |
-| **tokens / meeting** | **57,843.5** | **53,873.2** | **×1.0737** |
-| tokens / call | 5,138.9 | 4,675.2 | ×1.0992 |
+**The HTTP 529 kill's lost tail, quantified.** The first operator's leg-2 session was killed by a
+provider-side 529 after the seeds-1001-1012 batch had written its replays and MANIFEST rows; the
+resumed session's recorder re-ran with `--seeds` from 1013, and the corpus recorder's own resume
+skips any seed already on disk. Leg 1 carries a second, smaller instance of the same shape: one batch
+was cut by a background-task wall at ~60 minutes with seeds 19 and 20 in flight, **neither of which
+promoted**, so no partial seed reached the set directory (`d859e58b`). **No seed was recorded twice
+into the committed bytes**, and the check is mechanical rather than asserted: every leg's MANIFEST
+carries exactly one row per seed — 50 / 150 / 50 / 50 rows for 50 / 150 / 50 / 50 replays — and the
+recorders refuse to freeze a set whose row set and file set disagree. The lost tails cost wall, not
+bytes.
 
-Leg 2 reads 25,543,458 tokens over 4,996 calls and 435 meetings — **58,720.6 tokens/meeting**, within
-1.5% of leg 1's — and legs 3 and 4 read 18,698.5 and 18,781.1 tokens/meeting on the far smaller 4p1i
-roster. **The measured like-for-like ratio is ×1.07, not the smoke's ×1.17**, which is the whole of
-the difference between the projection and the actual. The all-games total moved more (×1.19 on leg 1)
-because the ON legs hold MORE meetings than the sets they would have replaced, not because a meeting
-costs more.
+**Every leg's like-for-like ratio, re-derived from its OWN bytes** against the committed baseline-8
+set it would have replaced (smoke §16 item 5 — the seed slate is not a representative token sample,
+so no leg's ratio is generalised from another's):
+
+| leg | ON meetings | ON tokens | ON tok/mtg | OFF meetings | OFF tokens | OFF tok/mtg | **ratio** |
+|---|---|---|---|---|---|---|---|
+| 1 `samples/9p2i` | 168 | 9,717,705 | 57,843.5 | 151 | 8,134,860 | 53,873.2 | **×1.0737** |
+| 2 `ml_corpus/9p2i` | 435 | 25,543,458 | 58,720.6 | 439 | 23,804,796 | 54,225.0 | **×1.0829** |
+| 3 `samples/4p1i` | 39 | 729,240 | 18,698.5 | 39 | 671,145 | 17,208.8 | **×1.0866** |
+| 4 `ml_corpus/4p1i` | 43 | 807,588 | 18,781.1 | 43 | 743,786 | 17,297.3 | **×1.0858** |
+
+**The four ratios agree to within 1.2 points and none of them is the smoke's ×1.1703.** Legs 2-4 read
+×1.083-×1.087 and leg 1 reads ×1.0737; the spread is real and small, and quoting leg 1's alone would
+have understated the other three. That gap — measured ≈×1.08 against a projected ×1.17 — is the whole
+of the difference between the projection and the actual.
+
+**The token basis, stated because two are available and they differ.** Every figure above is on the
+`llm_calls` basis: the tokens recorded against each meeting's own completed calls. The eval report's
+`cost_dashboard` totals the same calls PLUS the burned generations recorded in the `failed_call`
+channel, so the two agree exactly on legs 1, 3 and 4 (9,717,705 / 729,240 / 807,588) and differ on
+leg 2 by **3,562 tokens** — 25,547,020 against 25,543,458 — which is the single `ValidationError`
+`failed_call` row that leg carries (§2.5). Cost is `0.0000` on every row of every MANIFEST and
+`total_cost_usd` 0.0 in all four dashboards.
 
 ### 2.7 The `git_sha` reconciliation
 
 Each recorder stamps one sha at the start of its own run, and this record was taken in checkpoint
-batches, so the legs carry more than one sha each: **6 / 14 / 6 / 5**, thirty-one in total. For every
-one of them:
+batches, so the legs carry more than one sha each. The MANIFESTs carry **33** stamped shas in all,
+and the count needs its two halves named or it does not reconcile: **31** appear in per-seed ROWS
+(6 / 14 / 6 / 5 by leg) and **2 more** appear only in the corpus legs' **FROZEN lines** — `0747ce2d`
+on leg 2 and `3fdd1193` on leg 4 — which are the finalizing runs' own HEADs, stamped when the set was
+frozen rather than when a seed was recorded. The samples legs have no FROZEN line, so they contribute
+none. For every one of the 33:
 
 ```
 $ git diff --name-only 44f0a28c..<sha> -- agents meetings observation orchestrator
@@ -394,9 +438,28 @@ them is a staging-bytes commit on this record's own branch:
 | 2 `ml_corpus/9p2i` | `78750e8d` `a8cb6f33` `035bf197` `c54cd96d` `931b80ad` `088f9e58` `e0792146` `e25e6008` `aab13b08` `853cccf6` `c60fc246` `9b975281` `c9291539` `6893c2c6` |
 | 3 `samples/4p1i` | `5608556d` `e1f69a08` `5ea966b1` `a1d9d384` `b65cad28` `c9c6b891` |
 | 4 `ml_corpus/4p1i` | `a1048b2d` `9f40ff6d` `c93fad1d` `6edf947b` `8da83101` |
+| 2 + 4, FROZEN lines | `0747ce2d` (leg 2) `3fdd1193` (leg 4) |
 
-The batching is why there are thirty-one rather than four, and it is the same discipline that made
+The batching is why there are thirty-three rather than four, and it is the same discipline that made
 the record survive two operator kills: a lost machine cost a batch, never a leg.
+
+### 2.8 §9.2's abandon criteria, walked one by one
+
+The memo's STOP list in its own amended words, each read against what the record actually did. **None
+was met, so the record was never a candidate for abandonment** — which is a different statement from
+"nothing happened", and the third row is why.
+
+| §9.2 criterion (amended) | reading on this record | |
+|---|---|---|
+| "a `scripts/validity_gate.py` FAIL on any leg" | four legs, four PASSes, all ten checks named individually on each (§2.1) | **NOT MET** |
+| "a seed whose opening defaults (the `(deadline_default)` watch item). **The criterion's subject is an OPENING default and nothing else.**" | zero openings defaulted anywhere: `cap_defaulted_turns` reads 0 on all four legs, and the seven `deadline_default` rows that did appear were all on `opt_in` or `vote` slots (§2.5). Leg 2's `lost_openings 1` is a meeting whose opening carried no accusation — a different counter, and the memo's subject is the default | **NOT MET** |
+| "a guard trip" | the corpus freeze guard `check_replay_provenance` TRIPPED — on seeds 1034, 1061, 1078 and 1087, refusing to freeze a set holding a `deadline_default` row. Under prerequisite (a) as PR #427 amended it, a trip on a NON-OPENING row re-records that seed and does not abandon: the guard is stricter than §9.2 by design, and the amendment is what reconciles them. Every trip was resolved by re-recording, every re-record was logged with its cause as it happened, and the final scan reads 0 rows under either shape | **MET-AND-RESOLVED, not an abandon** |
+| "a lever-stamp mismatch between the recorded snapshot and the declared slate" | `assert_recording_declares` exits 0 on all four legs, and the gate's `cost_and_provenance_exact` check reads "substrate stamped exact" on 50 / 150 / 50 / 50 games | **NOT MET** |
+| "any of the seven §8.1 tripwires failing **its predicate**" | all seven hold on all four legs — nine gated cells PASS per leg, `stopped_cells` empty per leg, and T2's third clause read over its own population (§2.4) | **NOT MET** |
+
+The third row is the one worth stating plainly rather than folding into a green column: **a guard did
+trip, four times, and the amendment is the only reason that is not an abandoned record.** It is also
+the reason prerequisite (a) had to merge before the first seed.
 
 ## 3. Secondary cells — observed, reported, never gated
 
@@ -428,10 +491,58 @@ is checked against ground truth rather than against the transcript that made the
   kill account appears anywhere in 300 games.
 * **16 of 30 CONVERTED** — the named player was ejected at that meeting.
 
-Stated as counts and never as a rate, per §5's discipline. The full per-row table — speaker with
-role and whether they were that meeting's reporter, the named killer with the killer's true role, the
-ballot tally, the outcome, and whether any engine contradiction named anyone — is reproduced by the
-reader in §9.
+Stated as counts and never as a rate, per §5's discipline.
+
+**The thirty rows, in the smoke report's §8.5 columns.** Roles are ground truth from the committed
+re-seeding; "converted" means the named player was the one ejected at that meeting.
+
+| # | set | seed / meeting | speaker (role) | reporter? | names (true role) | account | ballot tally | outcome / ejected (role) | converted | engine contradictions |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | `9p2i` | 17 / meeting-3 | p-1 (CREWMATE) | YES | p-4 (IMPOSTOR) | TRUE | `{'p-4': 2, 'p-1': 1}` | EJECTED / p-4 (IMPOSTOR) | YES | 0 |
+| 2 | `9p2i` | 19 / meeting-3 | p-1 (CREWMATE) | YES | p-9 (IMPOSTOR) | TRUE | `{'p-9': 1, 'p-1': 4}` | EJECTED / p-1 (CREWMATE) | no | 0 |
+| 3 | `9p2i` | 26 / meeting-0 | p-1 (CREWMATE) | YES | p-3 (IMPOSTOR) | TRUE | `{'p-3': 1, 'p-9': 3, 'SKIP': 3, 'p-1': 1}` | SKIPPED / None (-) | no | 0 |
+| 4 | `9p2i` | 26 / meeting-1 | p-1 (CREWMATE) | YES | p-3 (IMPOSTOR) | TRUE | `{'p-2': 5, 'SKIP': 2}` | EJECTED / p-2 (IMPOSTOR) | no | 1 |
+| 5 | `9p2i` | 37 / meeting-4 | p-7 (CREWMATE) | YES | p-9 (IMPOSTOR) | TRUE | `{'p-9': 2, 'SKIP': 1}` | EJECTED / p-9 (IMPOSTOR) | YES | 0 |
+| 6 | `9p2i` | 37 / meeting-4 | p-8 (CREWMATE) | no | p-9 (IMPOSTOR) | TRUE | `{'p-9': 2, 'SKIP': 1}` | EJECTED / p-9 (IMPOSTOR) | YES | 0 |
+| 7 | `9p2i` | 44 / meeting-4 | p-3 (CREWMATE) | YES | p-5 (IMPOSTOR) | TRUE | `{'p-5': 2, 'SKIP': 1}` | EJECTED / p-5 (IMPOSTOR) | YES | 0 |
+| 8 | `9p2i` | 1000 / meeting-0 | p-2 (CREWMATE) | YES | p-8 (IMPOSTOR) | TRUE | `{'p-8': 6, 'SKIP': 2}` | EJECTED / p-8 (IMPOSTOR) | YES | 9 |
+| 9 | `9p2i` | 1012 / meeting-3 | p-7 (CREWMATE) | YES | p-9 (IMPOSTOR) | TRUE | `{'SKIP': 2, 'p-7': 1, 'p-9': 1}` | SKIPPED / None (-) | no | 0 |
+| 10 | `9p2i` | 1012 / meeting-4 | p-7 (CREWMATE) | no | p-9 (IMPOSTOR) | TRUE | `{'p-9': 2, 'SKIP': 1}` | EJECTED / p-9 (IMPOSTOR) | YES | 1 |
+| 11 | `9p2i` | 1021 / meeting-2 | p-2 (CREWMATE) | YES | p-6 (IMPOSTOR) | TRUE | `{'p-6': 2, 'SKIP': 1}` | EJECTED / p-6 (IMPOSTOR) | YES | 2 |
+| 12 | `9p2i` | 1023 / meeting-3 | p-2 (CREWMATE) | YES | p-5 (IMPOSTOR) | TRUE | `{'p-5': 2, 'SKIP': 3}` | SKIPPED / None (-) | no | 0 |
+| 13 | `9p2i` | 1030 / meeting-1 | p-5 (CREWMATE) | YES | p-9 (IMPOSTOR) | TRUE | `{'p-9': 5, 'SKIP': 1}` | EJECTED / p-9 (IMPOSTOR) | YES | 0 |
+| 14 | `9p2i` | 1045 / meeting-1 | p-1 (CREWMATE) | YES | p-3 (IMPOSTOR) | TRUE | `{'p-3': 1, 'SKIP': 3, 'p-1': 1}` | SKIPPED / None (-) | no | 0 |
+| 15 | `9p2i` | 1045 / meeting-2 | p-1 (CREWMATE) | YES | p-3 (IMPOSTOR) | TRUE | `{'p-3': 1, 'p-1': 4}` | EJECTED / p-1 (CREWMATE) | no | 0 |
+| 16 | `9p2i` | 1049 / meeting-0 | p-1 (CREWMATE) | YES | p-7 (IMPOSTOR) | TRUE | `{'p-7': 5, 'SKIP': 2}` | EJECTED / p-7 (IMPOSTOR) | YES | 0 |
+| 17 | `9p2i` | 1050 / meeting-1 | p-1 (CREWMATE) | YES | p-9 (IMPOSTOR) | TRUE | `{'p-9': 1, 'SKIP': 3, 'p-1': 1}` | SKIPPED / None (-) | no | 0 |
+| 18 | `9p2i` | 1050 / meeting-2 | p-1 (CREWMATE) | YES | p-9 (IMPOSTOR) | TRUE | `{'p-9': 1, 'p-1': 4}` | EJECTED / p-1 (CREWMATE) | no | 0 |
+| 19 | `9p2i` | 1052 / meeting-2 | p-3 (CREWMATE) | YES | p-6 (IMPOSTOR) | TRUE | `{'p-6': 3, 'SKIP': 1}` | EJECTED / p-6 (IMPOSTOR) | YES | 1 |
+| 20 | `9p2i` | 1062 / meeting-2 | p-1 (CREWMATE) | YES | p-9 (IMPOSTOR) | TRUE | `{'p-9': 4, 'SKIP': 1}` | EJECTED / p-9 (IMPOSTOR) | YES | 0 |
+| 21 | `9p2i` | 1076 / meeting-0 | p-1 (CREWMATE) | YES | p-2 (IMPOSTOR) | TRUE | `{'p-2': 1, 'p-7': 5, 'p-1': 1, 'SKIP': 1}` | EJECTED / p-7 (CREWMATE) | no | 2 |
+| 22 | `9p2i` | 1101 / meeting-1 | p-6 (CREWMATE) | YES | p-8 (IMPOSTOR) | TRUE | `{'p-8': 5, 'SKIP': 1}` | EJECTED / p-8 (IMPOSTOR) | YES | 0 |
+| 23 | `9p2i` | 1102 / meeting-0 | p-3 (CREWMATE) | YES | p-8 (IMPOSTOR) | TRUE | `{'SKIP': 2, 'p-1': 5}` | EJECTED / p-1 (IMPOSTOR) | no | 2 |
+| 24 | `9p2i` | 1102 / meeting-1 | p-3 (CREWMATE) | YES | p-8 (IMPOSTOR) | TRUE | `{'p-8': 3, 'SKIP': 1}` | EJECTED / p-8 (IMPOSTOR) | YES | 0 |
+| 25 | `9p2i` | 1102 / meeting-1 | p-6 (CREWMATE) | no | p-8 (IMPOSTOR) | TRUE | `{'p-8': 3, 'SKIP': 1}` | EJECTED / p-8 (IMPOSTOR) | YES | 0 |
+| 26 | `9p2i` | 1117 / meeting-1 | p-1 (CREWMATE) | YES | p-9 (IMPOSTOR) | TRUE | `{'p-9': 4, 'SKIP': 1}` | EJECTED / p-9 (IMPOSTOR) | YES | 1 |
+| 27 | `9p2i` | 1125 / meeting-0 | p-1 (CREWMATE) | YES | p-2 (IMPOSTOR) | TRUE | `{'p-2': 1, 'p-1': 1, 'SKIP': 3}` | SKIPPED / None (-) | no | 0 |
+| 28 | `9p2i` | 1125 / meeting-1 | p-1 (CREWMATE) | YES | p-2 (IMPOSTOR) | TRUE | `{'p-2': 2, 'SKIP': 3}` | SKIPPED / None (-) | no | 0 |
+| 29 | `9p2i` | 1136 / meeting-0 | p-1 (CREWMATE) | YES | p-8 (IMPOSTOR) | TRUE | `{'p-8': 4, 'SKIP': 2}` | EJECTED / p-8 (IMPOSTOR) | YES | 0 |
+| 30 | `4p1i` | 22 / meeting-0 | p-3 (CREWMATE) | YES | p-4 (IMPOSTOR) | TRUE | `{'SKIP': 2, 'p-4': 1}` | SKIPPED / None (-) | no | 0 |
+
+Three things in that table are worth naming, none of them a criterion:
+
+* **Row 2 is the case this record exists to be able to see.** On `9p2i` seed 19 the meeting's own
+  reporter spoke a TRUE kill account naming p-9 — and the table ejected **the speaker**, 4 ballots to
+  1. A truthful eyewitness was convicted for testifying. It is one row and it prices nothing; it is
+  also exactly the injustice shape the Wave-0 register named, still reachable at this slate.
+* **Not one of the thirty accounts was false.** Across 300 games no player ever spoke a `saw_kill`
+  naming someone who was not an impostor, so the lever did not open a fabrication channel — the
+  question T1 exists to ask, answered on a population instead of on a smoke's two rows.
+* **Sixteen of thirty converted**, and fourteen did not. A spoken kill is heard and is not decisive.
+
+The `[ADV]`-marked rows in the `P-1k` table below and these thirty rows are the same population read
+two ways: the table above is every spoken account, `P-1k` is the subset whose meeting ended in a
+non-direct conviction of the named player.
 
 Bar 1's own cell split by a spoken kill, from the committed ON-recording reader (`P-1k` / `P-1ka`,
 merged in #421):
@@ -463,6 +574,32 @@ re-price E.1's per-row arithmetic; that is pinned on a synthetic kill meeting by
 
 ### 3.4 Decisiveness, beside bar 2
 
+**The registered cell first.** Memo §5 registers decisiveness as **body-report ejections over
+body-report meetings, plus the SKIP share**, read from I-3's `report_ejections` twin
+(`eval/funnel.py`). It is printed beside bar 2 for one reason, which the memo states outright: *a
+bar-2 pass that came from deciding LESS reads as such.* Bar 2 counts wrongful ejections, and a record
+that lowers it by skipping more meetings rather than by convicting better moves this cell too.
+
+| set | baseline 8 (ejected / body-report meetings) | this record | skipped, this record |
+|---|---|---|---|
+| `samples/9p2i` | 85/141 = 60.3% | **79/158 = 50.00%** | 79/158 = 50.00% |
+| `ml_corpus/9p2i` | 249/407 = 61.2% | **238/396 = 60.10%** | 158/396 = 39.90% |
+| `samples/4p1i` | 21/36 = 58.3% | **16/36 = 44.44%** | 20/36 = 55.56% |
+| `ml_corpus/4p1i` | 22/36 = 61.1% | **19/36 = 52.78%** | 17/36 = 47.22% |
+| **pooled** | **377/620 = 60.8%** | **352/626 = 56.23%** | **274/626 = 43.77%** |
+
+**The record decided LESS on every leg, and pooled — 60.8% → 56.23%, a fall of 4.6 points — so part
+of bar 2's fall is a decisiveness fall and this audit says so rather than leaving it to be found.**
+The cell is observed and never gated; it decides nothing, and it does not change bar 2's verdict.
+What it does is bound the reading: the wrongful-ejection total fell 46 → 20 (−56.5%) while the
+ejection RATE fell 60.8% → 56.2% (−7.5% relative), so the great majority of bar 2's movement is not
+accounted for by deciding less. The same point from the other side: ejection ACCURACY rose from
+383/429 = 89.3% to 391/411 = 95.1%.
+
+**A second partition, published because §3.4 carried it before the registered cell was added.** This
+is the flagged/unflagged split of every ejection — a different question from the one above, and not
+interchangeable with it:
+
 | leg | ejections | flagged ejections → impostor / innocent | unflagged ejections → impostor / innocent |
 |---|---|---|---|
 | 1 `samples/9p2i` | 89 | 75 → 74 / **1** | 14 → 10 / 4 |
@@ -473,9 +610,9 @@ re-price E.1's per-row arithmetic; that is pinned on a synthetic kill meeting by
 
 **One of 346 flagged ejections across 300 games took an innocent** — on leg 1 — and the other
 nineteen of bar 2's twenty sit in the unflagged cell. Flagged-meeting ejection accuracy is therefore
-345/346 = 0.9971 pooled. The flagged/unflagged split is a different partition from bar 1's
-proof-present/non-direct split and the two are not interchangeable: proof-present reads 345 ejections
-and non-direct 66, against flagged 346 and unflagged 65.
+345/346 = 0.9971 pooled. This split is a different partition from bar 1's proof-present/non-direct
+one and the two are not interchangeable: proof-present reads 345 ejections and non-direct 66, against
+flagged 346 and unflagged 65.
 
 ### 3.5 The corroboration cells and the render census
 
@@ -486,29 +623,112 @@ and non-direct 66, against flagged 346 and unflagged 65.
 | C-3 ejections whose charge ANSWERED the ejectee's own | 4/89 | 8/277 | 0/19 | 0/26 | 12/411 |
 | C-4 ejected subjects with a map-satisfied placement pair | 9/89 | 38/277 | 0/19 | 1/26 | 48/411 |
 
-The render budget reads 39.4 / 38.2 / 10.9 / 11.5 mean rendered lines per snapshot, over 1,891 /
-4,996 / 234 / 258 snapshots. `fabricated_vent_rows` is **0 on every leg**.
+**The render census, per bucket.** Memo §5 requires it *"reported per bucket and never as one
+blended number"*, so the blended mean sits in its own column beside the buckets rather than standing
+in for them (`eval.evidence_honesty.RenderBudgetCells`; baseline 8 on `samples/9p2i` reads 1,740
+snapshots, 63,624 rendered rows, mean 36.5655, 25,628 testimony rows in buckets ≤4: 6,882; 5-6:
+17,340; ≥7: 1,406):
+
+| leg | snapshots | rendered rows | mean | testimony rows | ≤4 | 5-6 | ≥7 |
+|---|---|---|---|---|---|---|---|
+| 1 `samples/9p2i` | 1,891 | 74,515 | 39.4051 | 43,755 | 13,364 | 27,441 | 2,950 |
+| 2 `ml_corpus/9p2i` | 4,996 | 190,601 | 38.1507 | 97,915 | 28,449 | 63,988 | 5,478 |
+| 3 `samples/4p1i` | 234 | 2,552 | 10.9060 | 0 | 0 | 0 | 0 |
+| 4 `ml_corpus/4p1i` | 258 | 2,958 | 11.4651 | 0 | 0 | 0 | 0 |
+| **pooled** | **7,379** | **270,626** | **36.6752** | **141,670** | **41,813** | **91,429** | **8,428** |
+
+The two 4p1i legs carry **zero** testimony rows in every bucket, which is a property of the roster
+rather than of the levers: a four-player table rarely has a second living witness to report. Pooling
+those zeroes into one blended mean is exactly what the memo's "never as one blended number" rule
+exists to prevent — the pooled 36.6752 is dominated by the 9p2i legs and describes neither shape.
+`fabricated_vent_rows` is **0 on every leg**.
 
 ### 3.6 The evidence-supply floors, scored against baseline 8's block
 
 The committed referee reads this record against the **baseline-8** floors, which were pinned from
-baseline 8's own bytes, and three of the four legs FAIL them:
+baseline 8's own bytes. One treatment throughout, stated in the column header rather than applied
+case by case: **a gauge whose baseline numerator was 0 or 1 is ADVISORY under the standing rare-event
+rule and can never fail the referee** — a floor no sample could miss is not a floor — and every other
+gauge binds.
 
-| leg | referee | the floors that failed |
-|---|---|---|
-| 1 `samples/9p2i` | FAIL (supply floors FAIL, integrity OK) | `flags_per_meeting` 0.857 < 0.974; `testimony_backed_conversion` 0.605 < 0.719; `transcript_flags_per_meeting` 0.268 < 0.377; `persisted_vent_flags_per_meeting` 0.589 < 0.596 |
-| 2 `ml_corpus/9p2i` | FAIL | `transcript_flags_per_meeting` 0.303 < 0.377 (the other four PASS) |
-| 3 `samples/4p1i` | FAIL | `witnessed_event_rate` 0.0152 < 0.0161; `testimony_backed_conversion` 0.559 < 0.577 |
-| 4 `ml_corpus/4p1i` | PASS | — |
+| leg | referee | gauges BELOW their floor (binding) | advisory gauges |
+|---|---|---|---|
+| 1 `samples/9p2i` | **FAIL** (supply floors FAIL, integrity OK) | `flags_per_meeting` 0.857 < 0.974; `testimony_backed_conversion` 0.605 < 0.719; `transcript_flags_per_meeting` 0.268 < 0.377; `persisted_vent_flags_per_meeting` 0.589 < 0.596 | — |
+| 2 `ml_corpus/9p2i` | **FAIL** | `transcript_flags_per_meeting` 0.303 < 0.377 | — (the other four PASS: `witnessed_event_rate` 0.0344, `flags_per_meeting` 1.0322, `testimony_backed_conversion` 0.7041, `persisted_vent_flags_per_meeting` 0.7287) |
+| 3 `samples/4p1i` | **FAIL** | `testimony_backed_conversion` 0.559 < 0.577 | `witnessed_event_rate` 0.0152 < 0.0161 — reported, not referee-failing |
+| 4 `ml_corpus/4p1i` | **PASS** | none | `witnessed_event_rate` 0.0 < 0.0161 — reported, not referee-failing |
+
+**Leg 4's row says PASS while one of its gauges reads below its floor, and that is the advisory rule
+working rather than an inconsistency.** The reader prints
+`referee: PASS (supply floors PASS, integrity OK)` for that leg with
+`witnessed_event_rate: measured 0.0 >= floor 0.016129032258064516 -> FAIL` inside it: the gauge is
+advisory, so the referee does not fail on it, and this table shows both halves rather than picking
+whichever reads cleaner. Leg 3's `witnessed_event_rate` is the same gauge and the same treatment; its
+FAIL comes from `testimony_backed_conversion`, which binds.
 
 **This is a supply reading and not a criterion**: §9.2's abandon list does not name the referee, and
 no bar reads it. It says something worth stating plainly — **the Wave-2 slate convicts more
-accurately on FEWER flags.** On ADOPTED a successor floor block would have been pinned from this
-record's own bytes and the comparison would have moved with it; on FINDING the canonical bytes do not
-move, so `_BASELINE_SUPPLY_FLOORS` and `_DEFAULT_BASELINE_ID` are untouched (§6.2) and this table is
-published as the observation it is.
+accurately on FEWER flags** (§3.4: accuracy 89.3% → 95.1% while `flags_per_meeting` falls below
+baseline 8's floor on the leg that serves the demo). On ADOPTED a successor floor block would have
+been pinned from this record's own bytes and the comparison would have moved with it; on FINDING the
+canonical bytes do not move, so `_BASELINE_SUPPLY_FLOORS` and `_DEFAULT_BASELINE_ID` are untouched
+(§6.2) and this table is published as the observation it is.
 
-### 3.7 Tokens per call, per leg
+### 3.7 The three registered §5 secondaries: solvability, zero-flag convictions, co-discovery
+
+Registered in memo §5 and not published anywhere else in this audit, so they are published here —
+per leg and pooled, beside the baseline-8 figures the memo itself states.
+
+**I-5, the solvability ceiling** (`eval/solvability.py`, `--solvability`). Baseline 8: containment
+557/620 pooled, and ejections landing on an already-cleared player 63/377 pooled.
+
+| leg | containment (`killer_in_set`) | singleton rate | singleton correctness | ejections onto an already-CLEARED player |
+|---|---|---|---|---|
+| 1 `samples/9p2i` | 142/158 = 0.8987 | 30/158 = 0.1899 | 24/30 = 0.8000 | 10/79 = 0.1266 |
+| 2 `ml_corpus/9p2i` | 349/396 = 0.8813 | 53/396 = 0.1338 | 51/53 = 0.9623 | 41/238 = 0.1723 |
+| 3 `samples/4p1i` | 36/36 = 1.0000 | 5/36 `[ADV]` | 5/5 `[ADV]` | 0/16 `[ADV]` |
+| 4 `ml_corpus/4p1i` | 36/36 = 1.0000 | 4/36 `[ADV]` | 4/4 `[ADV]` | 0/19 `[ADV]` |
+| **pooled** | **563/626 = 0.8994** | **92/626 = 0.1470** | **84/92 = 0.9130** | **51/352 = 0.1449** |
+
+Containment holds at 0.8994 pooled against baseline 8's 557/620 = 0.8984 — flat. The
+already-cleared cell reads **51/352 = 14.5%** against baseline 8's 63/377 = 16.7%. `[ADV]` marks the
+reader's own advisory flag on a rare-event denominator.
+
+**I-6, the zero-flag conviction cells** (`eval/vj_instruments.py:312-327`, `--vj`). Baseline 8: 86 of
+429 convictions carry no flag, 37 of them CREW and 49 IMPOSTOR — so 37 of the 46 innocent ejections
+were flagless.
+
+| leg | zero-flag convictions | CREW | IMPOSTOR |
+|---|---|---|---|
+| 1 `samples/9p2i` | 14 | 4 | 10 |
+| 2 `ml_corpus/9p2i` | 49 | 13 | 36 |
+| 3 `samples/4p1i` | 0 | 0 | 0 |
+| 4 `ml_corpus/4p1i` | 0 | 0 | 0 |
+| **pooled** | **63 of 411** | **17** | **46** |
+
+The flagless conviction channel narrowed from 86/429 = 20.0% to **63/411 = 15.3%**, and its CREW half
+— the one that matters for bar 2 — from 37 to **17**. Seventeen of the record's twenty wrongful
+ejections are flagless, against 37 of 46 at baseline 8.
+
+**The `at_body` / co-discoverer recipient read** (memo §5, `eval.reporter_justice`). A-38's proposed
+widening — extending exculpatory framing to non-reporter co-discoverers — was REJECTED on
+measurement, and this is the cell that keeps that decision honest: the co-discoverer seats are close
+to half impostor, so framing them exculpatory would have handed an impostor the same shelter half the
+time. Baseline 8 pooled: 118/620 meetings carry a co-discovery, slots 74 CREWMATE / 71 IMPOSTOR =
+49.0% impostor.
+
+| leg | meetings carrying a co-discovery | CREWMATE slots | IMPOSTOR slots | impostor share |
+|---|---|---|---|---|
+| 1 `samples/9p2i` | 36/158 | 23 | 22 | 48.9% |
+| 2 `ml_corpus/9p2i` | 91/396 | 58 | 54 | 48.2% |
+| 3 `samples/4p1i` | 0/36 | 0 | 0 | n/a |
+| 4 `ml_corpus/4p1i` | 0/36 | 0 | 0 | n/a |
+| **pooled** | **127/626** | **81** | **76** | **48.4%** |
+
+**48.4% against baseline 8's 49.0% — the seat is still a coin flip, and the rejection still holds on
+these bytes.** Both 4p1i legs carry no co-discovery at all, for the roster reason §3.5 gives.
+
+### 3.8 Tokens per call, per leg
 
 5,138.9 / 5,112.8 / 3,116.4 / 3,130.2, over 1,891 / 4,996 / 234 / 258 recorded calls, at
 `$0.0000` on every row of every MANIFEST.
@@ -598,10 +818,27 @@ Target **< 0.40 pooled**.
 | `ml_corpus/4p1i` | 0/0 = n/a | 0/0 = n/a |
 | pooled | 34/46 = 0.7391 | **11/20 = 0.5500** |
 
-**MISSED.** 0.5500 is not < 0.40. The share fell by 18.9 points and stopped 15 points above the bar.
+**MISSED.** 0.5500 is not < 0.40. The Wilson interval from the memo's only interval producer
+(`eval/deduction_metrics.py::_wilson_interval`) is **[0.3421, 0.7418]**, against baseline 8's
+34/46 = 0.7391 [0.5974, 0.8440]. **That interval CONTAINS the 0.40 target.** It is reported as
+context, not as a test: every bar in this memo is a POINT-ESTIMATE bar (§4.2's reading convention),
+and "the interval contains the threshold" is explicitly NOT the advisory test — applied as one it
+would make every bar here advisory. The point estimate is 0.5500 and the bar is MISSED.
 
-**The arithmetic of the miss, from this record's own cells: the reporter channel closed FASTER than
-every other route, and the share stayed high anyway.** Split bar 2's total both ways:
+**What bar 4 is FOR, in the memo's own words, written before these bytes existed:**
+
+> Bar 4 bites in the case bars 2 and 3 cannot see — a record that fixes the reporter class in
+> ABSOLUTE terms and fixes the rest of the ledger too, leaving the reporter still dominant in what
+> remains: **`R = 10`, `I = 20` passes bars 2 and 3 and fails bar 4 at 50%.** That is the outcome
+> this phase would most want to mistake for success, and it is the only thing bar 4 is for.
+> — `audits/audit-phase-21-preregistration.md:365-372`
+
+**This record read `R = 11`, `I = 20` — one event away from the configuration the memo names, and on
+the wrong side of it.** The memo did not describe a hypothetical; it described this record, a phase
+in advance. Bar 4 fired exactly where it was aimed, and the honest reading of the miss is that the
+pre-registration anticipated it and the record produced it.
+
+**The composition, from this record's own cells.** Split bar 2's total both ways:
 
 | wrongful ejections | baseline 8 | this record | move |
 |---|---|---|---|
@@ -609,26 +846,83 @@ every other route, and the share stayed high anyway.** Split bar 2's total both 
 | non-reporter | 12 | 9 | −25.0% |
 | **total (bar 2)** | **46** | **20** | −56.5% |
 
-and the same ordering holds per slot, which is the exposure-corrected reading: the reporter's own
-ejection risk fell **5.48% → 1.76% (−68.0%)** while the innocent non-reporter's fell
-**0.65% → 0.43% (−33.9%)**.
+and the same ordering holds per slot: the reporter's own ejection risk fell **5.48% → 1.76%
+(−68.0%)** while the innocent non-reporter's fell **0.65% → 0.43% (−33.9%)**. The reporter channel
+closed FASTER than every other route; the share stayed high because the reporter DOMINATED the
+starting composition — 34 of 46 — and a share is invariant to a cut applied evenly. Had the other
+routes fallen at the reporter's own rate the share would read 0.7391, exactly where it started.
+**This is the mechanism, not a mitigation: it is precisely the `R` fixed in absolute terms with the
+rest of the ledger fixed too that the memo said bar 4 was built to catch.**
 
-So the share did not stay high because the other routes closed faster. It stayed high because the
-reporter DOMINATED the starting composition — 34 of baseline 8's 46 — and cutting the dominant class
-by two thirds still leaves it the majority of a much smaller total. Had the non-reporter routes
-fallen at the reporter's own rate, the share would have read 0.7391, exactly where it started: a
-share is invariant to a cut applied evenly, and this record cut the reporter's side harder.
+#### The structural null beside bar 4 (the hardening's required reading)
 
-**That makes bars 3 and 4 pull against each other on this record's composition, and the tension is
-arithmetic rather than rhetorical.** At the record's 9 non-reporter wrongful ejections, bar 4's
-`< 0.40` requires reporter wrongful ejections **≤ 5** — while bar 3, the bar registered on that very
-count, asked for ≤ 12 and the record read 11. A record could therefore meet bar 3 comfortably, cut
-the reporter channel by two thirds, and still miss bar 4; the only other route to bar 4 is a LARGER
-non-reporter wrongful total, which is to say a worse record on bar 2.
+`audits/audit-phase-21-hardening.md:266-271` requires the record audit to print the per-row uniform
+null beside bar 4, because the hardening feared the null would RISE toward 0.50 as bar 2 succeeded —
+shrinkage strips the large-roster rows first, and at three living players an innocent ejection is a
+choice between two innocents. A share bar read against a rising null would get harder to pass exactly
+as the record got better.
 
-**None of that is a re-pricing.** The memo set 0.40 before these bytes existed, the reading is
-0.5500, and the bar is MISSED. What the observation is good for is the NEXT pre-registration, and §7
-routes it there rather than acting on it here.
+**The method, so it can be re-run rather than believed.** For each wrongful ejection at a body-report
+meeting, let `I` be the number of living INNOCENT players at that meeting; a process that ejects an
+innocent at random hits the meeting's reporter with probability `1/I`. The per-row null is `1/I` and
+the pooled null is its mean. Living players are the meeting's ballot casters; roles come from the
+committed `eval.validity.roles_by_seed` re-seeding, never from the role-firewalled replay. The proxy
+reproduces the hardening's own baseline-8 figures: pooled null **0.3152** at n = 46 (the hardening
+states 0.32), **12** three-living rows of the 46 (the hardening states 12), and those rows' null
+exactly **0.50** (the hardening states 50%).
+
+| | baseline 8 | this record |
+|---|---|---|
+| wrongful ejections at a body-report meeting | 46 | 19 |
+| pooled per-row uniform null | **0.3152** | **0.2553** |
+| observed reporter share on those rows | 34/46 = 0.7391 | 11/19 = 0.5789 |
+| three-living rows | 12 of 46 (null 0.50, observed 12/12) | **1** of 19 (null 0.50, observed 0/1) |
+| one-sided binomial P(X ≥ observed \| null) | 4.4 × 10⁻⁹ | **0.0027** |
+
+**The null FELL, 0.3152 → 0.2553. It did not rise toward 0.50, and the hardening's fear did not
+materialise** — because the two 4p1i legs, which supplied 4 of baseline 8's three-living rows and all
+of its `samples/4p1i` wrongful ejections, produced **zero** wrongful ejections on this record. The
+three-living stratum went from 12 rows to 1.
+
+**So 0.40 was reachable on these bytes.** The structural floor a blind process would produce is
+0.2553, well below the target; the bar was not asking for something the roster made impossible. And
+the observed 0.5789 sits **significantly above** that null (p ≈ 0.0027), so the reporter channel is
+still a real channel and not an artifact of who happened to be alive. Both statements are
+observations; neither is a criterion, and neither moves the verdict.
+
+(Bar 4's own registered reading is 11/20 = 0.5500 over ALL wrongful ejections. The null is computed
+over the 19 of those 20 that occurred at a body-report meeting, because only there does a "body
+reporter" exist to be the null's target; the twentieth was at an emergency meeting. All 11 reporter
+ejections are in the 19.)
+
+#### The flip cost, in the record's own units
+
+| operation | what it would take |
+|---|---|
+| reclassify reporter → non-reporter (bar 2's total held at 20) | **4** reclassifications: `R = 7`, 7/20 = 0.3500 passes; `R = 8` reads exactly 0.40 and does not |
+| vanish reporter ejections outright (non-reporter held at 9) | **6** vanished: `R = 5`, 5/14 = 0.3571 passes |
+| hold `R = 11` and grow the wrongful total | **+8** more wrongful ejections, to 28 — a worse record on bar 2 |
+
+**No set passes bar 4 on its own**: `samples/9p2i` 3/5 = 0.6000, `ml_corpus/9p2i` 8/15 = 0.5333, and
+the two 4p1i legs have an empty cell. The bar is pooled and has no per-set clause, so this is
+context; it also means the miss is not one leg's.
+
+#### The hardening's §4.1 reading notes, beside the reporter cells
+
+Required by the DoD, each as one line, with this record's own reading where the note names a cell
+this record re-reads. None of them moves a bar.
+
+| note | the hardening's reading (baseline 8) | on this record |
+|---|---|---|
+| **H-26** | the reporter lever adds ZERO bytes to the ballot, and 102 of 102 ballots that ejected a reporter already carried the exculpation paragraph | R-15 reads **0 ballots gaining a reporter block** on all four legs (§2.4) — the lever's ballot footprint is still exactly zero |
+| **H-21** | the exculpation forbids only the naked report-accusation — 17–24 of the 1,041 accusations naming a reporter; the charges that convict cite a sighting or a transit | unchanged in kind: the record's convictions still run through sightings and transits, and C-9 shows 100% of ballots carrying the source-count block (§2.4) |
+| **H-20** | the source-count block credits an "account" for any record-matched sighting, so on 37 of the 43 wrongful convictions with a row it prints ≥1 account, and on 13 accounts == voices | the record's wrongful convictions fell to 20, of which **16 have no first-hand source at all** (C-2, §3.5 — 16/409 ejections pooled) |
+| **H-23** | an impostor speaker is credited as an account 190 times, 119 of them against the meeting's own reporter, and in 17 of the 46 innocent ejections | the channel is open at this slate too — the co-discoverer seat is **48.4% impostor** (§3.7), so an impostor is still credited as an account about half the time it can be |
+| **H-24** | the first-hand/adopted split publishes a record-match verdict on every spoken sighting to every voter, impostors included — the same disclosure a `vent_sighting` flag already makes | unchanged: T-6 reads **100% of location accounts reaching the alibi map** on every leg (§2.4), so the disclosure is total by construction |
+| **H-25** | the block has no row for the ejectee in the three guard-REDIRECT innocent ejections | the record carries **72 redirected ballots** on leg 2 and 21 on leg 1, all eject-directed; the ejectee-row gap is a property of the block and is unchanged by this record |
+| **H-28** | a living impostor's ballot is pivotal in 16 of the 46 innocent ejections, and 24 of the 46 flip on removing ANY one ejecting ballot — thin margins, not a single adversary | the margins are still thin: leg 1's ejecting-ballot census shows **5 pile-driver rows with follower counts of 1-2**, and leg 2's 60 ejecting ballots carry 36 hearsay citations (§3.5's ballot census) |
+| **R2-belief-1, -2** | the belief line is silent on the ejectee in 90 of the 150 ballots that convict an innocent (83 read `this meeting +0.00`, 7 carry no row) against 17 of 1,558 on the guilty side, and **the levers add nothing to that channel** | unchanged by construction — none of the three Wave-2 levers writes the belief line, and B-1m1 reads the meeting-1 render budget **identical between the run's own OFF and ON columns** on all four legs (§2.4) |
+| **R2-fourp-1, -2** (three-living) | 127 of 672 meetings run at exactly three living players; the uniform null there is 50% against 30% elsewhere, and the pooled null RISES as bar 2 succeeds | measured above: the pooled null **FELL** 0.3152 → 0.2553 and the three-living stratum fell from 12 wrongful-ejection rows to **1**, so the predicted rise did not occur on these bytes |
 
 ### 4.5 Eligibility, per lever — published, graduating nothing
 
@@ -671,15 +965,25 @@ retired always-on levers and four live toggles. The ladder tip does not move and
 The canonical sets keep their baseline-8 bytes. No subset graduates under any verdict.
 
 This record was taken to find out, and it found out. Three of the four bars the pre-registration set
-before these bytes existed are met, several of them comfortably. The fourth is a SHARE, and on this
-record's own cells the reporter channel closed faster than every other route — 34 → 11 against
-12 → 9, and 1.76% against 0.43% per slot — yet the share stayed at 0.5500 because the reporter
-dominated the starting composition and a share is invariant to an even cut (§4, bar 4). At the
-record's 9 non-reporter wrongful ejections, bar 4 would have needed the reporter count at ≤ 5 while
-bar 3 asked for ≤ 12; the two bars pull against each other here. Whether that is grounds for an owner
-override is an owner's question and not this audit's — and if one is made, it is recorded as an
-override of a FINDING verdict, in the shape `audits/audit-phase-20-baseline-7.md` §6.1 set, and
-**never as a bar that passed**.
+before these bytes existed are met, several of them comfortably. **The fourth is the one the memo
+said it was building for, and it fired exactly where it was aimed:**
+
+> a record that fixes the reporter class in ABSOLUTE terms and fixes the rest of the ledger too,
+> leaving the reporter still dominant in what remains: **`R = 10`, `I = 20` passes bars 2 and 3 and
+> fails bar 4 at 50%.** That is the outcome this phase would most want to mistake for success, and it
+> is the only thing bar 4 is for.
+> — `audits/audit-phase-21-preregistration.md:365-372`
+
+This record read **`R = 11`, `I = 20`** — one event from that configuration, described a phase before
+the bytes existed. The reporter channel did close faster than every other route (34 → 11 against
+12 → 9; 1.76% against 0.43% per slot), and the structural null it is read against FELL rather than
+rose (0.3152 → 0.2553), so 0.40 was reachable and the miss is not an artifact of who was alive
+(§4, bar 4). That is what "the outcome this phase would most want to mistake for success" looks like
+from the inside, and it is why the bar was written.
+
+Whether that is grounds for an owner override is an owner's question and not this audit's — and if
+one is made, it is recorded as an override of a FINDING verdict, in the shape
+`audits/audit-phase-20-baseline-7.md` §6.1 set, and **never as a bar that passed**.
 
 ## 6. Where the bytes landed, and what did NOT move
 
@@ -703,9 +1007,11 @@ opens a finding record, so class (a) does not apply. As executed:
 | | |
 |---|---|
 | pinned commit | `evidence/phase-21-wave2-finding` @ `29af85d5457caeba4f8ba8ba77610c6a0ab2213a`, parentless |
-| what is on it | 315 files, 260,113,361 bytes — the four set directories with their MANIFESTs, eval reports, `splits.json`, rosters, and a README whose first line states the reconstruct rule |
+| what is on it | **316 files, 260,116,543 bytes** — the four set directories with their MANIFESTs, eval reports, `splits.json`, rosters, the operator's resume state, and a README whose first line states the reconstruct rule |
 | what is in the tree | 2 files — `replays/records/phase-21-wave2-finding/{EVIDENCE-MANIFEST.md,README.md}`, 40 KiB, holding the pin, the per-file `sha256` digests and the restore command |
-| registration | one `docs/artifacts.md` row for the in-tree path, added to `scripts/verify_ml_evidence.py`'s `_IN_TREE_PROBES` **and** `_IN_TREE_INVENTORY`, with a planted case in `tests/scripts/test_verify_ml_evidence.py` proving a stated count that disagrees with `git ls-files` fails |
+| registration | TWO `docs/artifacts.md` rows — a class-(b) row for the in-tree wrapper (added to `scripts/verify_ml_evidence.py`'s `_IN_TREE_PROBES` **and** `_IN_TREE_INVENTORY`) and a class-(c) `pinned sha` row for the payload (added to `_EVIDENCE_PREFIXES` and the manifest parser) — with planted cases proving a stated count that disagrees with `git ls-files` fails and that a restored byte which does not match its digest fails |
+| composes in both directions | `bash scripts/check.sh` is green with the recording RESTORED and green after `--clean` — 6,039 passed either way. Getting there fixed a real defect this landing surfaced: `tests/orchestrator/test_replay.py::_committed_substrate_stamps` globbed `replays/**` and so walked the restored bytes, whose stamp differs from a bare build ON PURPOSE, making a gate result depend on whether an operator had run the restore. It now reads the git INDEX, which is what "committed" meant all along |
+| verified, not described | `scripts/fetch_evidence.sh` fetches both pins, refuses a parented commit, restores untracked behind a generated `.gitignore` and re-hashes everything: **3269/3269 files match**. `--complete` reads `FAIL 0 / ABSENT 0` restored against `ABSENT 7` bare. The manifest DECLARES the lever slate, and the reconstruction leg reconstructs all four restored sets under it — **50/50, 150/150, 50/50, 50/50** — with the ambient slate unset, so the recording is READ and not merely hashed |
 
 The pin is a SHA and not a branch name, which is the immutability guarantee: restored bytes are the
 bytes the manifest hashed or the digest check fails, and they are untracked by design and never
@@ -777,12 +1083,13 @@ loader and asserting `(7, 6, 5)`. The blurb stays spoiler-free under the binding
   moved no front-door cell.
 * **The husk `free_text` wording (item (b)).** Deferred to the close ledger with its trigger class
   now named from live bytes (§2.5).
-* **Any judgment about whether bar 4's target was the right target.** The memo owns the bars. What
-  this record observed — that a SHARE bar over a class which already dominates the baseline
-  composition can be missed by an intervention that cuts that very class hardest, and that it then
-  pulls against the COUNT bar registered on the same cell (§4, bar 4) — is a fact about this
-  pre-registration's construction, not about these bytes. It belongs in the close ledger as an
-  observation for the NEXT pre-registration to weigh, never as a retroactive edit to this one.
+* **Any judgment about whether bar 4's target was the right target.** The memo owns the bars, and on
+  this record bar 4 did its stated job (§4, §5) rather than misfiring. One structural observation is
+  routed to the close ledger for the NEXT pre-registration to weigh, and it is an observation and not
+  a complaint: a SHARE bar and a COUNT bar registered on the same cell can pull against each other,
+  and here they did — at the record's 9 non-reporter wrongful ejections bar 4 needed `R ≤ 7` (holding
+  the total) while bar 3 asked for `R ≤ 12` and got 11. That is a fact about how the two were
+  parameterised together, not about these bytes, and it is never a retroactive edit to this memo.
 
 ## 8. Provenance and co-interventions
 

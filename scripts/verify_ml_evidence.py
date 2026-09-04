@@ -1262,8 +1262,11 @@ def run_sidecars(ctx: Context) -> LegResult:
                 f"{payload_present} of {len(promised)} restored and hashed; "
                 f"{payload_absent} EVIDENCE-BRANCH-ABSENT"
             ),
-            committed=f"{len(promised)} PROMISED files on {ctx.pinned_sha[:12]}…",
-            source=f"{EVIDENCE_MANIFEST} §7 + {SLATE_MANIFEST} §7",
+            committed=(
+                f"{len(promised)} PROMISED files on {ctx.pinned_sha[:12]}… + "
+                f"{ctx.wave2_pinned_sha[:12]}…"
+            ),
+            source=(f"{EVIDENCE_MANIFEST} §7 + {SLATE_MANIFEST} §7 + {WAVE2_MANIFEST}"),
             status=payload_status,
             detail=(
                 "\n".join(payload_failures[:10])

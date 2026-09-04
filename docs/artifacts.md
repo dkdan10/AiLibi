@@ -21,8 +21,9 @@ retention: prune coevo only); `audits/audit-phase-18-close.md` §6.3 C4 (the
 coevo namespace rules).
 
 **The one-line summary.** Small canonical bytes and every manifest stay in git;
-large immutable evidence lives on ONE orphan commit fetched **by sha**;
-regenerable views are never committed at all. A test-pinned byte is never
+large immutable evidence lives on orphan commits fetched **by sha** — there are
+two, each pinned in its own in-tree manifest; regenerable views are never
+committed at all. A test-pinned byte is never
 class (c), whatever it weighs.
 
 ## The four classes
@@ -111,7 +112,7 @@ than its output preserved.
 | `experiments/lab/`, `experiments/model_probe/` — recorded read-only harness outputs and their syntheses (`experiments/` outputs are artifacts, not behavior — `docs/architecture.md`) | (b) | in git | 7.3 MB / 164 files |
 | **`coevo/` on `evidence/phase-18-coevo`** — every unpinned Phase-18 co-evolution byte | **(c)** | pinned sha | **101.097 MiB / 1,383 files** |
 | **`finalist-eval-raw/` on `evidence/phase-18-coevo`** — the Phase-18 finalist raw slate: recovered, folded onto the pinned commit and hash-verified, with one owner step still open (below) | **(c)** | pinned sha | **298.157 MiB / 1,569 files** |
-| **`wave2-finding/` on `evidence/phase-21-wave2-finding`** — a 300-game recording that is not one of the canonical replay sets: it reads only with the three Wave-2 levers switched on, so it is pinned rather than committed | **(c)** | pinned sha | **248.063 MiB / 315 files** |
+| **`wave2-finding/` on `evidence/phase-21-wave2-finding`** — a 300-game recording that is not one of the canonical replay sets: it reads only with the three Wave-2 levers switched on, so it is pinned rather than committed | **(c)** | pinned sha | **248.063 MiB / 315 restored files** (316 on the commit: its own README is hashed against the manifest but never restored, because the destination already holds the committed one) |
 | local `replays/*.jsonl`, tournament report dirs, the firewall's `**/*.audit.jsonl` packet logs, `frontend/dist/`, the demo bundle | (d) | regenerated (`.gitignore`d) | — |
 
 **Why the other `training/artifacts/` families are class (a) and coevo mostly is
