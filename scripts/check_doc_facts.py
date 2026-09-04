@@ -3521,7 +3521,16 @@ def check_finding_figures(repo_root: Path, errors: list[str]) -> None:
         # by :func:`check_finding_history` rather than registered here.
         ratio = cell_ratio(bar.after)
         if ratio is not None and ratio[1]:
-            recorded[ratio[1]] = ratio
+            # Two bars over one population must agree, or the front door has no
+            # single cell to be held to and the later row would silently win.
+            clash = recorded.setdefault(ratio[1], ratio)
+            if clash != ratio:
+                errors.append(
+                    f"{_FINDING_RECORD_AUDIT}: bar {number} reads "
+                    f"{ratio[0]}/{ratio[1]} over a population another bar reads "
+                    f"{clash[0]}/{clash[1]} — the front door cannot be held to "
+                    "both."
+                )
         verdict = recomputed_verdict(audit, number, bar, errors)
         if verdict is None:
             continue

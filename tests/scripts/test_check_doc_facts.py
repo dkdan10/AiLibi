@@ -2315,6 +2315,23 @@ def test_underpowered_set_below_the_floor_binds_nothing(doc_tree: Path) -> None:
     assert check_doc_facts.check_facts(doc_tree) == []
 
 
+def test_two_bars_over_one_population_must_agree(doc_tree: Path) -> None:
+    # The rate registry is keyed on the population, so two bars measuring the
+    # same denominator with different numerators would leave the later row
+    # silently deciding what the front door is held to.
+    _substitute(
+        doc_tree,
+        _FINDING_AUDIT,
+        _FINDING_SHARE_ROW,
+        _FINDING_SHARE_ROW.replace("11/20 = 0.5500", "44/66 = 0.6667"),
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert any(
+        "bar 4 reads 44/66 over a population another bar reads 46/66" in error
+        for error in errors
+    )
+
+
 def test_verdict_table_missing_a_bar_fails_loud(doc_tree: Path) -> None:
     # A table that lost a row still parses and still satisfies the share
     # identity, while the figure that row pinned quietly stops being checked.
