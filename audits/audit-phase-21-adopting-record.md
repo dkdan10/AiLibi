@@ -487,57 +487,86 @@ committed `eval.validity.roles_by_seed` re-seeding, never from the replay, so "t
 is checked against ground truth rather than against the transcript that made the claim.
 
 * **30 spoken `saw_kill` rows** across the four legs.
-* **30 of 30 accounts were TRUE** — every named player really was an impostor. Not one fabricated
-  kill account appears anywhere in 300 games.
+* **30 of 30 accounts named a real impostor**, and — on the stronger joined reading below —
+  **30 of 30 also join the engine's own kill event on killer and room**, each witnessed by the
+  speaker. The no-fabrication conclusion rests on the join, not on the role check.
 * **16 of 30 CONVERTED** — the named player was ejected at that meeting.
 
 Stated as counts and never as a rate, per §5's discipline.
 
-**The thirty rows, in the smoke report's §8.5 columns.** Roles are ground truth from the committed
-re-seeding; "converted" means the named player was the one ejected at that meeting.
+**Two different questions, and only one of them can carry the word "fabrication".** The reader above
+checks the account's SUBJECT against ground truth — was the named player really an impostor — and
+that is a role check, not a truth check. A-22 already found rows that named a real impostor and still
+got the event wrong, so the role check alone cannot support "no fabrication occurred". A spoken
+`saw_kill` carries a killer, a ROOM and a TICK, so the honest check joins all three against the
+engine's own `KilledEvent`, reconstructed by `eval.replay_walk.walk_replay` under a referee-grade
+profile — A-22's own recipe.
 
-| # | set | seed / meeting | speaker (role) | reporter? | names (true role) | account | ballot tally | outcome / ejected (role) | converted | engine contradictions |
-|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | `9p2i` | 17 / meeting-3 | p-1 (CREWMATE) | YES | p-4 (IMPOSTOR) | TRUE | `{'p-4': 2, 'p-1': 1}` | EJECTED / p-4 (IMPOSTOR) | YES | 0 |
-| 2 | `9p2i` | 19 / meeting-3 | p-1 (CREWMATE) | YES | p-9 (IMPOSTOR) | TRUE | `{'p-9': 1, 'p-1': 4}` | EJECTED / p-1 (CREWMATE) | no | 0 |
-| 3 | `9p2i` | 26 / meeting-0 | p-1 (CREWMATE) | YES | p-3 (IMPOSTOR) | TRUE | `{'p-3': 1, 'p-9': 3, 'SKIP': 3, 'p-1': 1}` | SKIPPED / None (-) | no | 0 |
-| 4 | `9p2i` | 26 / meeting-1 | p-1 (CREWMATE) | YES | p-3 (IMPOSTOR) | TRUE | `{'p-2': 5, 'SKIP': 2}` | EJECTED / p-2 (IMPOSTOR) | no | 1 |
-| 5 | `9p2i` | 37 / meeting-4 | p-7 (CREWMATE) | YES | p-9 (IMPOSTOR) | TRUE | `{'p-9': 2, 'SKIP': 1}` | EJECTED / p-9 (IMPOSTOR) | YES | 0 |
-| 6 | `9p2i` | 37 / meeting-4 | p-8 (CREWMATE) | no | p-9 (IMPOSTOR) | TRUE | `{'p-9': 2, 'SKIP': 1}` | EJECTED / p-9 (IMPOSTOR) | YES | 0 |
-| 7 | `9p2i` | 44 / meeting-4 | p-3 (CREWMATE) | YES | p-5 (IMPOSTOR) | TRUE | `{'p-5': 2, 'SKIP': 1}` | EJECTED / p-5 (IMPOSTOR) | YES | 0 |
-| 8 | `9p2i` | 1000 / meeting-0 | p-2 (CREWMATE) | YES | p-8 (IMPOSTOR) | TRUE | `{'p-8': 6, 'SKIP': 2}` | EJECTED / p-8 (IMPOSTOR) | YES | 9 |
-| 9 | `9p2i` | 1012 / meeting-3 | p-7 (CREWMATE) | YES | p-9 (IMPOSTOR) | TRUE | `{'SKIP': 2, 'p-7': 1, 'p-9': 1}` | SKIPPED / None (-) | no | 0 |
-| 10 | `9p2i` | 1012 / meeting-4 | p-7 (CREWMATE) | no | p-9 (IMPOSTOR) | TRUE | `{'p-9': 2, 'SKIP': 1}` | EJECTED / p-9 (IMPOSTOR) | YES | 1 |
-| 11 | `9p2i` | 1021 / meeting-2 | p-2 (CREWMATE) | YES | p-6 (IMPOSTOR) | TRUE | `{'p-6': 2, 'SKIP': 1}` | EJECTED / p-6 (IMPOSTOR) | YES | 2 |
-| 12 | `9p2i` | 1023 / meeting-3 | p-2 (CREWMATE) | YES | p-5 (IMPOSTOR) | TRUE | `{'p-5': 2, 'SKIP': 3}` | SKIPPED / None (-) | no | 0 |
-| 13 | `9p2i` | 1030 / meeting-1 | p-5 (CREWMATE) | YES | p-9 (IMPOSTOR) | TRUE | `{'p-9': 5, 'SKIP': 1}` | EJECTED / p-9 (IMPOSTOR) | YES | 0 |
-| 14 | `9p2i` | 1045 / meeting-1 | p-1 (CREWMATE) | YES | p-3 (IMPOSTOR) | TRUE | `{'p-3': 1, 'SKIP': 3, 'p-1': 1}` | SKIPPED / None (-) | no | 0 |
-| 15 | `9p2i` | 1045 / meeting-2 | p-1 (CREWMATE) | YES | p-3 (IMPOSTOR) | TRUE | `{'p-3': 1, 'p-1': 4}` | EJECTED / p-1 (CREWMATE) | no | 0 |
-| 16 | `9p2i` | 1049 / meeting-0 | p-1 (CREWMATE) | YES | p-7 (IMPOSTOR) | TRUE | `{'p-7': 5, 'SKIP': 2}` | EJECTED / p-7 (IMPOSTOR) | YES | 0 |
-| 17 | `9p2i` | 1050 / meeting-1 | p-1 (CREWMATE) | YES | p-9 (IMPOSTOR) | TRUE | `{'p-9': 1, 'SKIP': 3, 'p-1': 1}` | SKIPPED / None (-) | no | 0 |
-| 18 | `9p2i` | 1050 / meeting-2 | p-1 (CREWMATE) | YES | p-9 (IMPOSTOR) | TRUE | `{'p-9': 1, 'p-1': 4}` | EJECTED / p-1 (CREWMATE) | no | 0 |
-| 19 | `9p2i` | 1052 / meeting-2 | p-3 (CREWMATE) | YES | p-6 (IMPOSTOR) | TRUE | `{'p-6': 3, 'SKIP': 1}` | EJECTED / p-6 (IMPOSTOR) | YES | 1 |
-| 20 | `9p2i` | 1062 / meeting-2 | p-1 (CREWMATE) | YES | p-9 (IMPOSTOR) | TRUE | `{'p-9': 4, 'SKIP': 1}` | EJECTED / p-9 (IMPOSTOR) | YES | 0 |
-| 21 | `9p2i` | 1076 / meeting-0 | p-1 (CREWMATE) | YES | p-2 (IMPOSTOR) | TRUE | `{'p-2': 1, 'p-7': 5, 'p-1': 1, 'SKIP': 1}` | EJECTED / p-7 (CREWMATE) | no | 2 |
-| 22 | `9p2i` | 1101 / meeting-1 | p-6 (CREWMATE) | YES | p-8 (IMPOSTOR) | TRUE | `{'p-8': 5, 'SKIP': 1}` | EJECTED / p-8 (IMPOSTOR) | YES | 0 |
-| 23 | `9p2i` | 1102 / meeting-0 | p-3 (CREWMATE) | YES | p-8 (IMPOSTOR) | TRUE | `{'SKIP': 2, 'p-1': 5}` | EJECTED / p-1 (IMPOSTOR) | no | 2 |
-| 24 | `9p2i` | 1102 / meeting-1 | p-3 (CREWMATE) | YES | p-8 (IMPOSTOR) | TRUE | `{'p-8': 3, 'SKIP': 1}` | EJECTED / p-8 (IMPOSTOR) | YES | 0 |
-| 25 | `9p2i` | 1102 / meeting-1 | p-6 (CREWMATE) | no | p-8 (IMPOSTOR) | TRUE | `{'p-8': 3, 'SKIP': 1}` | EJECTED / p-8 (IMPOSTOR) | YES | 0 |
-| 26 | `9p2i` | 1117 / meeting-1 | p-1 (CREWMATE) | YES | p-9 (IMPOSTOR) | TRUE | `{'p-9': 4, 'SKIP': 1}` | EJECTED / p-9 (IMPOSTOR) | YES | 1 |
-| 27 | `9p2i` | 1125 / meeting-0 | p-1 (CREWMATE) | YES | p-2 (IMPOSTOR) | TRUE | `{'p-2': 1, 'p-1': 1, 'SKIP': 3}` | SKIPPED / None (-) | no | 0 |
-| 28 | `9p2i` | 1125 / meeting-1 | p-1 (CREWMATE) | YES | p-2 (IMPOSTOR) | TRUE | `{'p-2': 2, 'SKIP': 3}` | SKIPPED / None (-) | no | 0 |
-| 29 | `9p2i` | 1136 / meeting-0 | p-1 (CREWMATE) | YES | p-8 (IMPOSTOR) | TRUE | `{'p-8': 4, 'SKIP': 2}` | EJECTED / p-8 (IMPOSTOR) | YES | 0 |
-| 30 | `4p1i` | 22 / meeting-0 | p-3 (CREWMATE) | YES | p-4 (IMPOSTOR) | TRUE | `{'SKIP': 2, 'p-4': 1}` | SKIPPED / None (-) | no | 0 |
+| reading | definition | this record |
+|---|---|---|
+| named a real impostor | the account's subject is an IMPOSTOR by the committed re-seeding | **30 / 30** |
+| joins the kill event on killer + room | an engine `KilledEvent` exists with that actor in that room | **30 / 30** |
+| ...on the exact tick as well | the same event's tick equals the claimed tick | **0 / 30** |
+| ...at a uniform +1 tick | claimed tick = kill tick + 1, on every row | **30 / 30** |
+| the speaker was a recorded WITNESS of that kill | the speaker is in the event's own `witnesses` | **30 / 30** |
+
+**Every one of the thirty accounts joins a real kill, by the killer it names, in the room it names,
+which the speaker actually witnessed — so no fabricated kill account appears anywhere in 300 games.**
+That sentence rests on the JOIN, not on the role check.
+
+**The tick is off by exactly one on all thirty, and it is a labelling convention rather than a wrong
+claim.** The offset is `+1` on every single row — not scattered, not occasionally — which is the
+already-recorded tick-semantics item A-22's merge note carries as its own finding ("its secondary
++1-tick observation is carried as its own item (legibility / tick semantics)"). A uniform offset on
+30 of 30 rows is a frame convention between the memory line and the event stream; a fabrication would
+not be uniform. It is reported here rather than smoothed over, and it changes no count above.
+
+**The thirty rows, in the smoke report's §8.5 columns, with the join as its own column.** Roles are
+ground truth from the committed re-seeding; "converted" means the named player was the one ejected at
+that meeting.
+
+| # | set | seed / meeting | speaker (role) | reporter? | names (true role) | named a real impostor | joins the kill event (killer + room) | victim | speaker witnessed it | ballot tally | outcome / ejected (role) | converted | contradictions |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | `9p2i` | 17 / meeting-3 | p-1 (CREWMATE) | YES | p-4 (IMPOSTOR) | YES | YES (tick +1) | p-6 | YES | `{'p-4': 2, 'p-1': 1}` | EJECTED / p-4 (IMPOSTOR) | YES | 0 |
+| 2 | `9p2i` | 19 / meeting-3 | p-1 (CREWMATE) | YES | p-9 (IMPOSTOR) | YES | YES (tick +1) | p-7 | YES | `{'p-9': 1, 'p-1': 4}` | EJECTED / p-1 (CREWMATE) | no | 0 |
+| 3 | `9p2i` | 26 / meeting-0 | p-1 (CREWMATE) | YES | p-3 (IMPOSTOR) | YES | YES (tick +1) | p-8 | YES | `{'p-3': 1, 'p-9': 3, 'SKIP': 3, 'p-1': 1}` | SKIPPED / None (-) | no | 0 |
+| 4 | `9p2i` | 26 / meeting-1 | p-1 (CREWMATE) | YES | p-3 (IMPOSTOR) | YES | YES (tick +1) | p-8 | YES | `{'p-2': 5, 'SKIP': 2}` | EJECTED / p-2 (IMPOSTOR) | no | 1 |
+| 5 | `9p2i` | 37 / meeting-4 | p-7 (CREWMATE) | YES | p-9 (IMPOSTOR) | YES | YES (tick +1) | p-6 | YES | `{'p-9': 2, 'SKIP': 1}` | EJECTED / p-9 (IMPOSTOR) | YES | 0 |
+| 6 | `9p2i` | 37 / meeting-4 | p-8 (CREWMATE) | no | p-9 (IMPOSTOR) | YES | YES (tick +1) | p-6 | YES | `{'p-9': 2, 'SKIP': 1}` | EJECTED / p-9 (IMPOSTOR) | YES | 0 |
+| 7 | `9p2i` | 44 / meeting-4 | p-3 (CREWMATE) | YES | p-5 (IMPOSTOR) | YES | YES (tick +1) | p-1 | YES | `{'p-5': 2, 'SKIP': 1}` | EJECTED / p-5 (IMPOSTOR) | YES | 0 |
+| 8 | `9p2i` | 1000 / meeting-0 | p-2 (CREWMATE) | YES | p-8 (IMPOSTOR) | YES | YES (tick +1) | p-3 | YES | `{'p-8': 6, 'SKIP': 2}` | EJECTED / p-8 (IMPOSTOR) | YES | 9 |
+| 9 | `9p2i` | 1012 / meeting-3 | p-7 (CREWMATE) | YES | p-9 (IMPOSTOR) | YES | YES (tick +1) | p-6 | YES | `{'SKIP': 2, 'p-7': 1, 'p-9': 1}` | SKIPPED / None (-) | no | 0 |
+| 10 | `9p2i` | 1012 / meeting-4 | p-7 (CREWMATE) | no | p-9 (IMPOSTOR) | YES | YES (tick +1) | p-6 | YES | `{'p-9': 2, 'SKIP': 1}` | EJECTED / p-9 (IMPOSTOR) | YES | 1 |
+| 11 | `9p2i` | 1021 / meeting-2 | p-2 (CREWMATE) | YES | p-6 (IMPOSTOR) | YES | YES (tick +1) | p-4 | YES | `{'p-6': 2, 'SKIP': 1}` | EJECTED / p-6 (IMPOSTOR) | YES | 2 |
+| 12 | `9p2i` | 1023 / meeting-3 | p-2 (CREWMATE) | YES | p-5 (IMPOSTOR) | YES | YES (tick +1) | p-1 | YES | `{'p-5': 2, 'SKIP': 3}` | SKIPPED / None (-) | no | 0 |
+| 13 | `9p2i` | 1030 / meeting-1 | p-5 (CREWMATE) | YES | p-9 (IMPOSTOR) | YES | YES (tick +1) | p-4 | YES | `{'p-9': 5, 'SKIP': 1}` | EJECTED / p-9 (IMPOSTOR) | YES | 0 |
+| 14 | `9p2i` | 1045 / meeting-1 | p-1 (CREWMATE) | YES | p-3 (IMPOSTOR) | YES | YES (tick +1) | p-8 | YES | `{'p-3': 1, 'SKIP': 3, 'p-1': 1}` | SKIPPED / None (-) | no | 0 |
+| 15 | `9p2i` | 1045 / meeting-2 | p-1 (CREWMATE) | YES | p-3 (IMPOSTOR) | YES | YES (tick +1) | p-8 | YES | `{'p-3': 1, 'p-1': 4}` | EJECTED / p-1 (CREWMATE) | no | 0 |
+| 16 | `9p2i` | 1049 / meeting-0 | p-1 (CREWMATE) | YES | p-7 (IMPOSTOR) | YES | YES (tick +1) | p-6 | YES | `{'p-7': 5, 'SKIP': 2}` | EJECTED / p-7 (IMPOSTOR) | YES | 0 |
+| 17 | `9p2i` | 1050 / meeting-1 | p-1 (CREWMATE) | YES | p-9 (IMPOSTOR) | YES | YES (tick +1) | p-4 | YES | `{'p-9': 1, 'SKIP': 3, 'p-1': 1}` | SKIPPED / None (-) | no | 0 |
+| 18 | `9p2i` | 1050 / meeting-2 | p-1 (CREWMATE) | YES | p-9 (IMPOSTOR) | YES | YES (tick +1) | p-4 | YES | `{'p-9': 1, 'p-1': 4}` | EJECTED / p-1 (CREWMATE) | no | 0 |
+| 19 | `9p2i` | 1052 / meeting-2 | p-3 (CREWMATE) | YES | p-6 (IMPOSTOR) | YES | YES (tick +1) | p-1 | YES | `{'p-6': 3, 'SKIP': 1}` | EJECTED / p-6 (IMPOSTOR) | YES | 1 |
+| 20 | `9p2i` | 1062 / meeting-2 | p-1 (CREWMATE) | YES | p-9 (IMPOSTOR) | YES | YES (tick +1) | p-3 | YES | `{'p-9': 4, 'SKIP': 1}` | EJECTED / p-9 (IMPOSTOR) | YES | 0 |
+| 21 | `9p2i` | 1076 / meeting-0 | p-1 (CREWMATE) | YES | p-2 (IMPOSTOR) | YES | YES (tick +1) | p-4 | YES | `{'p-2': 1, 'p-7': 5, 'p-1': 1, 'SKIP': 1}` | EJECTED / p-7 (CREWMATE) | no | 2 |
+| 22 | `9p2i` | 1101 / meeting-1 | p-6 (CREWMATE) | YES | p-8 (IMPOSTOR) | YES | YES (tick +1) | p-3 | YES | `{'p-8': 5, 'SKIP': 1}` | EJECTED / p-8 (IMPOSTOR) | YES | 0 |
+| 23 | `9p2i` | 1102 / meeting-0 | p-3 (CREWMATE) | YES | p-8 (IMPOSTOR) | YES | YES (tick +1) | p-5 | YES | `{'SKIP': 2, 'p-1': 5}` | EJECTED / p-1 (IMPOSTOR) | no | 2 |
+| 24 | `9p2i` | 1102 / meeting-1 | p-3 (CREWMATE) | YES | p-8 (IMPOSTOR) | YES | YES (tick +1) | p-9 | YES | `{'p-8': 3, 'SKIP': 1}` | EJECTED / p-8 (IMPOSTOR) | YES | 0 |
+| 25 | `9p2i` | 1102 / meeting-1 | p-6 (CREWMATE) | no | p-8 (IMPOSTOR) | YES | YES (tick +1) | p-9 | YES | `{'p-8': 3, 'SKIP': 1}` | EJECTED / p-8 (IMPOSTOR) | YES | 0 |
+| 26 | `9p2i` | 1117 / meeting-1 | p-1 (CREWMATE) | YES | p-9 (IMPOSTOR) | YES | YES (tick +1) | p-3 | YES | `{'p-9': 4, 'SKIP': 1}` | EJECTED / p-9 (IMPOSTOR) | YES | 1 |
+| 27 | `9p2i` | 1125 / meeting-0 | p-1 (CREWMATE) | YES | p-2 (IMPOSTOR) | YES | YES (tick +1) | p-7 | YES | `{'p-2': 1, 'p-1': 1, 'SKIP': 3}` | SKIPPED / None (-) | no | 0 |
+| 28 | `9p2i` | 1125 / meeting-1 | p-1 (CREWMATE) | YES | p-2 (IMPOSTOR) | YES | YES (tick +1) | p-7 | YES | `{'p-2': 2, 'SKIP': 3}` | SKIPPED / None (-) | no | 0 |
+| 29 | `9p2i` | 1136 / meeting-0 | p-1 (CREWMATE) | YES | p-8 (IMPOSTOR) | YES | YES (tick +1) | p-3 | YES | `{'p-8': 4, 'SKIP': 2}` | EJECTED / p-8 (IMPOSTOR) | YES | 0 |
+| 30 | `4p1i` | 22 / meeting-0 | p-3 (CREWMATE) | YES | p-4 (IMPOSTOR) | YES | YES (tick +1) | p-1 | YES | `{'SKIP': 2, 'p-4': 1}` | SKIPPED / None (-) | no | 0 |
 
 Three things in that table are worth naming, none of them a criterion:
 
 * **Row 2 is the case this record exists to be able to see.** On `9p2i` seed 19 the meeting's own
-  reporter spoke a TRUE kill account naming p-9 — and the table ejected **the speaker**, 4 ballots to
-  1. A truthful eyewitness was convicted for testifying. It is one row and it prices nothing; it is
-  also exactly the injustice shape the Wave-0 register named, still reachable at this slate.
-* **Not one of the thirty accounts was false.** Across 300 games no player ever spoke a `saw_kill`
-  naming someone who was not an impostor, so the lever did not open a fabrication channel — the
-  question T1 exists to ask, answered on a population instead of on a smoke's two rows.
+  reporter spoke a kill account that JOINS the engine event — right killer, right room, a kill he
+  was a recorded witness to — and the table ejected **the speaker**, 4 ballots to 1. A
+  truthful eyewitness was convicted for testifying. It is one row and it prices nothing; it is also
+  exactly the injustice shape the Wave-0 register named, still reachable at this slate.
+* **Not one of the thirty accounts was fabricated**, on the joined definition above — the question
+  T1 exists to ask, answered on a population instead of on a smoke's two rows.
 * **Sixteen of thirty converted**, and fourteen did not. A spoken kill is heard and is not decisive.
 
 The `[ADV]`-marked rows in the `P-1k` table below and these thirty rows are the same population read
@@ -1051,9 +1080,10 @@ manifest's digest block, carries a `wave2-finding/` class-(c) registry row, and 
 **ABSENT** on any checkout that has not fetched it — so `--complete` cannot be satisfied by a tree
 that merely holds the sidecars. `scripts/fetch_evidence.sh` fetches by sha, asserts the commit is a
 parentless orphan, restores the bytes untracked behind a generated `.gitignore`, and hash-verifies
-them; `--clean` removes exactly what it placed. The cycle is exercised in this PR: **3268/3268 files
-match**, and `--complete` reads `OK 54 | FAIL 0 | ABSENT 0` restored against `FAIL 0 | ABSENT 7`
-bare.
+them; `--clean` removes exactly what it placed. The cycle is exercised in this PR: **3269/3269 files
+match** — the 1,384 + 1,569 + 316 digest rows the three manifests carry, with each commit's own
+README excluded from the restore and then verified independently out of its own pin — and
+`--complete` reads `FAIL 0 | ABSENT 0` restored against `FAIL 0 | ABSENT 7` bare.
 
 **This is PROVISIONAL.** If the owner rules for the in-tree class-(a)+(b) mechanism, the bytes move
 into `replays/records/phase-21-wave2-finding/` itself and the row's class and size cells change with

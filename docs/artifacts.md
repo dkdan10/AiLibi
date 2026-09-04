@@ -94,7 +94,7 @@ than its output preserved.
 
 | artifact | class | where | size |
 |---|---|---|---|
-| `replays/samples/` — the baseline-8 adopting record (100 replays + per-set `MANIFEST.md`) | (a) + (b) | in git | 61 MB / 107 files |
+| `replays/samples/` — the baseline-8 maintenance re-record (100 replays + per-set `MANIFEST.md`); it published no bars and adopted nothing, and the later lever-ON candidate returned FINDING, so these stay the canonical bytes | (a) + (b) | in git | 61 MB / 107 files |
 | `replays/ml_corpus/` — the committed ML corpus | (a) | in git | 161 MB / 209 files |
 | `replays/records/phase-21-wave2-finding/` — the pin and the per-file digests for a 300-game recording that is NOT one of the canonical replay sets, plus a README saying why it is not | (b) | in git | 2 files |
 | `agents/tactical/learned/{weights,crew_weights}.json` + `.sha256` — the **shipped inference weights** the live tactical factories load | (a) + (b) | in git | 4 files |
