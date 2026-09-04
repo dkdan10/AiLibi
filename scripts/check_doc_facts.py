@@ -3409,12 +3409,11 @@ def verdict_bars(audit: str) -> dict[int, _Bar] | None:
 def cell_value(cell: str) -> float | None:
     """One published cell as a number: the rate of a ``k/n = r``, or a count."""
 
-    plain = _EMPHASIS.sub("", cell).strip()
-    rate = _RATE_CLAIM.search(plain)
+    rate = _RATE_CLAIM.search(_EMPHASIS.sub("", cell))
     if rate is not None:
         return float(rate.group(3))
-    count = re.fullmatch(r"\d+", plain)
-    return None if count is None else float(count.group(0))
+    count = cell_count(cell)
+    return None if count is None else float(count)
 
 
 def cell_ratio(cell: str) -> tuple[int, int] | None:
@@ -3422,6 +3421,13 @@ def cell_ratio(cell: str) -> tuple[int, int] | None:
 
     rate = _RATE_CLAIM.search(_EMPHASIS.sub("", cell))
     return None if rate is None else (int(rate.group(1)), int(rate.group(2)))
+
+
+def cell_count(cell: str) -> int | None:
+    """One published cell's bare count, or ``None`` where it states a ratio."""
+
+    count = re.fullmatch(r"\d+", _EMPHASIS.sub("", cell).strip())
+    return None if count is None else int(count.group(0))
 
 
 def check_finding_figures(repo_root: Path, errors: list[str]) -> None:
@@ -3537,10 +3543,10 @@ def check_share_bar_identity(bars: dict[int, _Bar], errors: list[str]) -> None:
         ("the recording before it", share.before, reporter.before, innocent.before),
     ):
         ratio = cell_ratio(share_cell)
-        counts = (cell_value(reporter_cell), cell_value(innocent_cell))
+        counts = tuple(cell_count(cell) for cell in (reporter_cell, innocent_cell))
         if ratio is None or None in counts:
             continue  # an empty cell is the table's own drift, reported above
-        if [float(part) for part in ratio] != list(counts):
+        if ratio != counts:
             errors.append(
                 f"{_FINDING_RECORD_AUDIT}: bar {_SHARE_BAR}'s "
                 f"{column!r} cell reads {ratio[0]}/{ratio[1]}, but bars "

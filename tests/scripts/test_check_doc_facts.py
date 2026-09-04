@@ -2199,7 +2199,7 @@ def test_finding_share_bar_reaches_the_front_door(doc_tree: Path) -> None:
     )
     # ...and the share stops being the two count bars taken over each other.
     assert any(
-        "cell reads 9/20, but bars 3 and 2 read 11.0 and 20.0" in error
+        "cell reads 9/20, but bars 3 and 2 read 11 and 20" in error
         for error in errors
     )
 
