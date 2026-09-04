@@ -3648,6 +3648,14 @@ def check_finding_figures(repo_root: Path, errors: list[str]) -> None:
         verdicts[number] = verdict
     missed = _VERDICT_MISSED in verdicts.values()
     games = recording_games(audit)
+    if games is None:
+        errors.append(
+            f"{_FINDING_RECORD_AUDIT}: its leg table cannot be located, or one "
+            "of its legs states a games cell that is not a recorded/planned "
+            "pair whose two halves agree — the front door's recording size has "
+            "nothing left to be derived from, and every claim of it would go "
+            "unchecked."
+        )
 
     for document in _CLAIM_DOCUMENTS:
         text = read_document(repo_root, document, errors)
@@ -3723,7 +3731,7 @@ def check_recording_size(
     """
 
     if games is None:
-        return
+        return  # an unreadable leg table is reported by name by the caller
     for match in _RECORDING_SIZE_CLAIM.finditer(prose):
         if int(match.group(1)) == games:
             continue
@@ -3740,9 +3748,9 @@ def recording_games(audit: str) -> int | None:
     Each leg publishes ``recorded/planned``; a leg short of its plan is drift
     the record has to state rather than a total to sum, so the two halves must
     agree before it counts. ``None`` when the table is absent or unreadable —
-    a front-door provenance count then rests on the record's prose, which is
-    the state this check is here to end, and it says so through the caller's
-    silence rather than by inventing a total.
+    a front-door provenance count would then rest on the record's prose, which
+    is the state this check is here to end, so the caller reports the table by
+    name rather than inventing a total or reading on without one.
     """
 
     rows = labelled_table_rows(audit, _LEG_TABLE_HEADER)
@@ -4057,13 +4065,19 @@ def check_registered_clause(
         # own shape and both are reduced to the same (operator, floor) pair.
         symbolic = _PER_SET_CLAUSE.search(_EMPHASIS.sub("", bars[number].target))
         prose = _PROSE_PER_SET.search(bar_section(audit, number) or "")
-        for where, clause, stated in (
+        # The last element says whether a clause deleted OUTRIGHT already has a
+        # reader: the verdict table's copy is the one :func:`recomputed_verdict`
+        # reads, and it names the half of the gate that went with it. The bar
+        # section's own Target line has no such reader, so deleting the words
+        # there is reported here rather than read as nothing to hold.
+        for where, clause, stated, deletion_reported in (
             (
                 "verdict table",
                 symbolic,
                 None
                 if symbolic is None
                 else (symbolic.group(1), float(symbolic.group(2))),
+                True,
             ),
             (
                 "own section",
@@ -4071,12 +4085,20 @@ def check_registered_clause(
                 None
                 if prose is None
                 else (_PROSE_PER_SET_COMPARATOR, float(prose.group(1))),
+                False,
             ),
         ):
-            # A clause the record dropped altogether is reported by
-            # :func:`recomputed_verdict`, which names the half of the gate that
-            # went with it.
-            if clause is None or stated == expected:
+            if clause is None:
+                if not deletion_reported:
+                    errors.append(
+                        f"{_FINDING_RECORD_AUDIT}: bar {number}'s {where} states "
+                        f"no per-set clause at all, and {_PREREGISTRATION_AUDIT} "
+                        f"registered {registered.group(0)!r} before the bytes "
+                        "existed — a Target line that drops the words drops that "
+                        "half of the gate with them."
+                    )
+                continue
+            if stated == expected:
                 continue
             errors.append(
                 f"{_FINDING_RECORD_AUDIT}: bar {number}'s {where} states the "

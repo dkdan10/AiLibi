@@ -2658,6 +2658,25 @@ def test_registered_power_threshold_the_checker_does_not_read_detected(
     )
 
 
+def test_section_target_line_that_drops_the_per_set_clause_detected(
+    doc_tree: Path,
+) -> None:
+    # The record states the clause twice, and only the verdict table's copy is
+    # read by the recomputation. A Target line that drops the words leaves the
+    # pooled comparator matching, the memo agreeing with the copy that is left
+    # and nothing at all saying the section stopped stating half of the gate.
+    _substitute(
+        doc_tree,
+        _FINDING_AUDIT,
+        "Target **≥ 0.60 pooled**, with no adequately powered set below 0.50, where",
+        "Target **≥ 0.60 pooled**, where",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "bar 1's own section states no per-set clause at all" in errors[0]
+    assert "registered 'no ADEQUATELY POWERED set below" in errors[0]
+
+
 def test_verdict_history_cell_rate_contradicting_its_fraction_detected(
     doc_tree: Path,
 ) -> None:
@@ -2885,6 +2904,35 @@ def test_recording_size_follows_the_records_own_legs(doc_tree: Path) -> None:
     assert any(
         "the claim '300-game recording' is the size of the recording" in error
         and "come to 290 games" in error
+        for error in errors
+    )
+
+
+def test_unreadable_leg_table_fails_loud(doc_tree: Path) -> None:
+    # ...and a leg whose two halves disagree makes the total unreadable rather
+    # than wrong. Reading on without one would disable every recording-size
+    # check at once, so the table is reported by name; restored, it still holds
+    # the front door's own count.
+    _substitute(
+        doc_tree,
+        _FINDING_AUDIT,
+        "| 2 | `ml_corpus/9p2i` | 150/150 |",
+        "| 2 | `ml_corpus/9p2i` | 150/151 |",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "its leg table cannot be located, or one of its legs states" in errors[0]
+    _substitute(
+        doc_tree,
+        _FINDING_AUDIT,
+        "| 2 | `ml_corpus/9p2i` | 150/151 |",
+        "| 2 | `ml_corpus/9p2i` | 150/150 |",
+    )
+    _substitute(doc_tree, _HISTORY, "A 300-game recording", "A 301-game recording")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert any(
+        "the claim '301-game recording' is the size of the recording" in error
+        and "come to 300 games" in error
         for error in errors
     )
 
