@@ -11,15 +11,16 @@ taught me, including the parts that do not flatter the method.
 
 The unit of work is a written contract, not a conversation. Each one names a branch, its
 dependencies, the files in scope, the files explicitly *out* of scope, and a definition of
-done that ends in a command anyone can run. A generator copies that contract into the agent's prompt
-verbatim, and the gate fails the moment the two disagree, so the prompt cannot quietly become
-a different task than the one I reviewed. Each agent runs in a fresh checkout of its own, which is what makes a dozen of them
-safe to run at the same time.
+done that ends in a command anyone can run. A generator copies that contract into the
+agent's prompt verbatim, and the gate fails the moment the two disagree, so the prompt cannot
+quietly become a different task than the one I reviewed. Each agent runs in a fresh checkout
+of its own, which is what makes a dozen of them safe to run at the same time.
 
 Three habits did more for throughput than any amount of prompt wording. The first is
 re-anchoring. A contract written weeks earlier cites files and line numbers that have since
 moved, and a competent agent follows a stale pointer to the wrong place — so before
-dispatching I re-read every anchor and commit the corrections as their own change. The second is refusing outside patches: this repository
+dispatching I re-read every anchor and commit the corrections as their own change. The second
+is refusing outside patches: this repository
 [takes issues, not pull requests](../CONTRIBUTING.md), because the claim it makes is that
 every line arrived through a contract I wrote and a gate I can re-run, and a merged drive-by
 would make that claim false. The third is contracting for both answers before a measurement
@@ -29,10 +30,10 @@ runs, so a rule that says no is prose, not a redesign.
 
 The most useful sentence to come out of the review is that its two technical tracks disagreed
 about severity and both were correct. The code track found no top-severity defect in a
-hundred and thirty findings; the gameplay track found eight. They used different definitions: for one, a severe
-defect is a correctness, security or data-loss hazard; for the other, anything that stops the
-core loop being believable. Nearly every gameplay defect
-was a faithful implementation of a rule nobody would have written after watching it run. That
+hundred and thirty findings; the gameplay track found eight. They used different definitions:
+for one, a severe defect is a correctness, security or data-loss hazard; for the other,
+anything that stops the core loop being believable. Nearly every gameplay defect was a
+faithful implementation of a rule nobody would have written after watching it run. That
 is why a green build and a broken game are not a contradiction: the test suite defends
 correctness against a specification, and nobody has tested the specification.
 
