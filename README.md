@@ -163,7 +163,7 @@ Eight claims I would not have made in May, in one page: [docs/lessons.md](docs/l
 - The three defects my gates structurally could not see were an invariant that a later configuration change quietly falsified, a check that validated shape instead of entitlement, and architecture contracts that covered a quarter of the tree — all three now closed.
 - A gate only ever sees the axis it was pointed at, so the answer to a gate that missed something is a different axis, not more of the same one.
 - Documentation drift is a defect with a test, not untidiness with a chore: every result figure on this page is recomputed from the bytes that own it, or held against the second table that states it, and every count that ages without an edit carries the date it was taken.
-- A bar written down before the measurement is worth nothing until it is allowed to say no in public — two of mine did, and the miss is [in the section above](#what-the-measurements-said).
+- A bar written down before the measurement is worth nothing until it is allowed to say no in public — three of mine have, and the misses are [in the section above](#what-the-measurements-said).
 - The sharpest review of this project was not a defect report but a line about judgment, and quoting a critic verbatim on your own front page is a stronger claim than any number in the table above.
 
 The review those lessons came out of is published in full — curated, indexed, and titled by the four of its own headline claims it disproved: [the 2026-08-19 three-track review](audits/review-2026-08-19/README.md).
