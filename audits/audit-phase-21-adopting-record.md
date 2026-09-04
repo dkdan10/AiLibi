@@ -379,8 +379,18 @@ $ git diff --name-only 44f0a28c..<sha> -- agents meetings observation orchestrat
 (no output — 0 files)
 ```
 
-Every stamped sha touches **0 frozen-directory files** against the window-open sha. The full list is
-in the PR body.
+Every stamped sha touches **0 frozen-directory files** against the window-open sha, and every one of
+them is a staging-bytes commit on this record's own branch:
+
+| leg | stamped `git_sha` values |
+|---|---|
+| 1 `samples/9p2i` | `c8c2c13c` `196f3ccb` `d859e58b` `2cbeff5e` `9248043b` `b102add6` |
+| 2 `ml_corpus/9p2i` | `78750e8d` `a8cb6f33` `035bf197` `c54cd96d` `931b80ad` `088f9e58` `e0792146` `e25e6008` `aab13b08` `853cccf6` `c60fc246` `9b975281` `c9291539` `6893c2c6` |
+| 3 `samples/4p1i` | `5608556d` `e1f69a08` `5ea966b1` `a1d9d384` `b65cad28` `c9c6b891` |
+| 4 `ml_corpus/4p1i` | `a1048b2d` `9f40ff6d` `c93fad1d` `6edf947b` `8da83101` |
+
+The batching is why there are thirty-one rather than four, and it is the same discipline that made
+the record survive two operator kills: a lost machine cost a batch, never a leg.
 
 ## 3. Secondary cells — observed, reported, never gated
 

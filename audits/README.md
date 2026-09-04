@@ -325,9 +325,9 @@ directory's `README.md`, which carries the tallies and the proposed routing.
   injustice record itself: 300 games over all four sets, recorded live at the
   ratified Wave-2 slate, read by the pre-registration's conjunctive rule. The
   verdict is **FINDING** — bars 1, 2 and 3 are MET (pooled non-direct accuracy
-  0.5208 → 0.6970, wrongful ejections 46 → 20, reporter wrongful ejections
-  34 → 11) and bar 4 is MISSED, the reporter's share of a much smaller wrongful
-  total reading 0.5500 against a target of < 0.40. So the three Wave-2 levers
+  0.5208 → 0.6970, the wrongful-ejection total more than halved, the reporter's
+  own count 34 → 11) and bar 4 is MISSED, the reporter's share of that much
+  smaller total reading 0.5500 against a target of < 0.40. So the three Wave-2 levers
   stay toggles, the ladder tip stays at baseline 8, and the canonical sets keep
   their baseline-8 bytes; the recording is preserved as named non-canonical
   evidence on a pinned commit. It also carries the per-leg gates and tripwire
