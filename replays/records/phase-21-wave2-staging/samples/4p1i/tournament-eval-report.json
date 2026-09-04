@@ -1,0 +1,746 @@
+{
+  "report": {
+    "format_version": 2,
+    "games": [
+      {
+        "game_id": "headless-seed-0",
+        "seed": 0,
+        "winner": "IMPOSTORS",
+        "reason": "IMPOSTOR_PARITY",
+        "final_tick": 10,
+        "roles": {
+          "p-1": "CREWMATE",
+          "p-2": "CREWMATE",
+          "p-3": "IMPOSTOR",
+          "p-4": "CREWMATE"
+        },
+        "replay_ref": "replay-seed-0.jsonl",
+        "meetings": [],
+        "failed_calls": [],
+        "prompt_versions": {},
+        "cost": {
+          "total_cost_usd": 0.0,
+          "total_input_tokens": 0,
+          "total_output_tokens": 0,
+          "by_model": {}
+        },
+        "kill_gifted": false,
+        "instances_dropped": 0,
+        "instances_complete_at_win": 1
+      }
+    ],
+    "seeds_used": [
+      0
+    ],
+    "kill_gifted_wins": 0,
+    "instances_dropped_total": 0,
+    "mean_instances_complete_at_win": null
+  },
+  "vote_correctness": {
+    "total_ejections": 0,
+    "impostor_ejections": 0,
+    "crewmate_ejections": 0,
+    "evidence_backed_impostor_ejections": 0,
+    "vote_correctness_rate": null,
+    "ejection_accuracy": null,
+    "vote_correctness_small_n": true,
+    "contradictions_flagged_but_ignored": 0
+  },
+  "accusation_calibration": {
+    "n_bins": 10,
+    "accusation_claim_bins": [
+      {
+        "bin_index": 0,
+        "lo": 0.0,
+        "hi": 0.1,
+        "midpoint": 0.05,
+        "count": 0,
+        "impostor_hits": 0,
+        "actual_impostor_rate": null,
+        "mean_confidence": null
+      },
+      {
+        "bin_index": 1,
+        "lo": 0.1,
+        "hi": 0.2,
+        "midpoint": 0.15000000000000002,
+        "count": 0,
+        "impostor_hits": 0,
+        "actual_impostor_rate": null,
+        "mean_confidence": null
+      },
+      {
+        "bin_index": 2,
+        "lo": 0.2,
+        "hi": 0.3,
+        "midpoint": 0.25,
+        "count": 0,
+        "impostor_hits": 0,
+        "actual_impostor_rate": null,
+        "mean_confidence": null
+      },
+      {
+        "bin_index": 3,
+        "lo": 0.3,
+        "hi": 0.4,
+        "midpoint": 0.35,
+        "count": 0,
+        "impostor_hits": 0,
+        "actual_impostor_rate": null,
+        "mean_confidence": null
+      },
+      {
+        "bin_index": 4,
+        "lo": 0.4,
+        "hi": 0.5,
+        "midpoint": 0.45,
+        "count": 0,
+        "impostor_hits": 0,
+        "actual_impostor_rate": null,
+        "mean_confidence": null
+      },
+      {
+        "bin_index": 5,
+        "lo": 0.5,
+        "hi": 0.6,
+        "midpoint": 0.55,
+        "count": 0,
+        "impostor_hits": 0,
+        "actual_impostor_rate": null,
+        "mean_confidence": null
+      },
+      {
+        "bin_index": 6,
+        "lo": 0.6,
+        "hi": 0.7,
+        "midpoint": 0.6499999999999999,
+        "count": 0,
+        "impostor_hits": 0,
+        "actual_impostor_rate": null,
+        "mean_confidence": null
+      },
+      {
+        "bin_index": 7,
+        "lo": 0.7,
+        "hi": 0.8,
+        "midpoint": 0.75,
+        "count": 0,
+        "impostor_hits": 0,
+        "actual_impostor_rate": null,
+        "mean_confidence": null
+      },
+      {
+        "bin_index": 8,
+        "lo": 0.8,
+        "hi": 0.9,
+        "midpoint": 0.8500000000000001,
+        "count": 0,
+        "impostor_hits": 0,
+        "actual_impostor_rate": null,
+        "mean_confidence": null
+      },
+      {
+        "bin_index": 9,
+        "lo": 0.9,
+        "hi": 1.0,
+        "midpoint": 0.95,
+        "count": 0,
+        "impostor_hits": 0,
+        "actual_impostor_rate": null,
+        "mean_confidence": null
+      }
+    ],
+    "accusation_claim_total": 0,
+    "accusation_claim_ece": null,
+    "accusation_claim_populated_bins": 0,
+    "accusation_claim_low_power": true,
+    "accusation_claim_crew_accuser": {
+      "bins": [
+        {
+          "bin_index": 0,
+          "lo": 0.0,
+          "hi": 0.1,
+          "midpoint": 0.05,
+          "count": 0,
+          "impostor_hits": 0,
+          "actual_impostor_rate": null,
+          "mean_confidence": null
+        },
+        {
+          "bin_index": 1,
+          "lo": 0.1,
+          "hi": 0.2,
+          "midpoint": 0.15000000000000002,
+          "count": 0,
+          "impostor_hits": 0,
+          "actual_impostor_rate": null,
+          "mean_confidence": null
+        },
+        {
+          "bin_index": 2,
+          "lo": 0.2,
+          "hi": 0.3,
+          "midpoint": 0.25,
+          "count": 0,
+          "impostor_hits": 0,
+          "actual_impostor_rate": null,
+          "mean_confidence": null
+        },
+        {
+          "bin_index": 3,
+          "lo": 0.3,
+          "hi": 0.4,
+          "midpoint": 0.35,
+          "count": 0,
+          "impostor_hits": 0,
+          "actual_impostor_rate": null,
+          "mean_confidence": null
+        },
+        {
+          "bin_index": 4,
+          "lo": 0.4,
+          "hi": 0.5,
+          "midpoint": 0.45,
+          "count": 0,
+          "impostor_hits": 0,
+          "actual_impostor_rate": null,
+          "mean_confidence": null
+        },
+        {
+          "bin_index": 5,
+          "lo": 0.5,
+          "hi": 0.6,
+          "midpoint": 0.55,
+          "count": 0,
+          "impostor_hits": 0,
+          "actual_impostor_rate": null,
+          "mean_confidence": null
+        },
+        {
+          "bin_index": 6,
+          "lo": 0.6,
+          "hi": 0.7,
+          "midpoint": 0.6499999999999999,
+          "count": 0,
+          "impostor_hits": 0,
+          "actual_impostor_rate": null,
+          "mean_confidence": null
+        },
+        {
+          "bin_index": 7,
+          "lo": 0.7,
+          "hi": 0.8,
+          "midpoint": 0.75,
+          "count": 0,
+          "impostor_hits": 0,
+          "actual_impostor_rate": null,
+          "mean_confidence": null
+        },
+        {
+          "bin_index": 8,
+          "lo": 0.8,
+          "hi": 0.9,
+          "midpoint": 0.8500000000000001,
+          "count": 0,
+          "impostor_hits": 0,
+          "actual_impostor_rate": null,
+          "mean_confidence": null
+        },
+        {
+          "bin_index": 9,
+          "lo": 0.9,
+          "hi": 1.0,
+          "midpoint": 0.95,
+          "count": 0,
+          "impostor_hits": 0,
+          "actual_impostor_rate": null,
+          "mean_confidence": null
+        }
+      ],
+      "total": 0,
+      "ece": null,
+      "populated_bins": 0,
+      "low_power": true
+    },
+    "accusation_claim_impostor_accuser": {
+      "bins": [
+        {
+          "bin_index": 0,
+          "lo": 0.0,
+          "hi": 0.1,
+          "midpoint": 0.05,
+          "count": 0,
+          "impostor_hits": 0,
+          "actual_impostor_rate": null,
+          "mean_confidence": null
+        },
+        {
+          "bin_index": 1,
+          "lo": 0.1,
+          "hi": 0.2,
+          "midpoint": 0.15000000000000002,
+          "count": 0,
+          "impostor_hits": 0,
+          "actual_impostor_rate": null,
+          "mean_confidence": null
+        },
+        {
+          "bin_index": 2,
+          "lo": 0.2,
+          "hi": 0.3,
+          "midpoint": 0.25,
+          "count": 0,
+          "impostor_hits": 0,
+          "actual_impostor_rate": null,
+          "mean_confidence": null
+        },
+        {
+          "bin_index": 3,
+          "lo": 0.3,
+          "hi": 0.4,
+          "midpoint": 0.35,
+          "count": 0,
+          "impostor_hits": 0,
+          "actual_impostor_rate": null,
+          "mean_confidence": null
+        },
+        {
+          "bin_index": 4,
+          "lo": 0.4,
+          "hi": 0.5,
+          "midpoint": 0.45,
+          "count": 0,
+          "impostor_hits": 0,
+          "actual_impostor_rate": null,
+          "mean_confidence": null
+        },
+        {
+          "bin_index": 5,
+          "lo": 0.5,
+          "hi": 0.6,
+          "midpoint": 0.55,
+          "count": 0,
+          "impostor_hits": 0,
+          "actual_impostor_rate": null,
+          "mean_confidence": null
+        },
+        {
+          "bin_index": 6,
+          "lo": 0.6,
+          "hi": 0.7,
+          "midpoint": 0.6499999999999999,
+          "count": 0,
+          "impostor_hits": 0,
+          "actual_impostor_rate": null,
+          "mean_confidence": null
+        },
+        {
+          "bin_index": 7,
+          "lo": 0.7,
+          "hi": 0.8,
+          "midpoint": 0.75,
+          "count": 0,
+          "impostor_hits": 0,
+          "actual_impostor_rate": null,
+          "mean_confidence": null
+        },
+        {
+          "bin_index": 8,
+          "lo": 0.8,
+          "hi": 0.9,
+          "midpoint": 0.8500000000000001,
+          "count": 0,
+          "impostor_hits": 0,
+          "actual_impostor_rate": null,
+          "mean_confidence": null
+        },
+        {
+          "bin_index": 9,
+          "lo": 0.9,
+          "hi": 1.0,
+          "midpoint": 0.95,
+          "count": 0,
+          "impostor_hits": 0,
+          "actual_impostor_rate": null,
+          "mean_confidence": null
+        }
+      ],
+      "total": 0,
+      "ece": null,
+      "populated_bins": 0,
+      "low_power": true
+    },
+    "vote_ballot_bins": [
+      {
+        "bin_index": 0,
+        "lo": 0.0,
+        "hi": 0.1,
+        "midpoint": 0.05,
+        "count": 0,
+        "impostor_hits": 0,
+        "actual_impostor_rate": null,
+        "mean_confidence": null
+      },
+      {
+        "bin_index": 1,
+        "lo": 0.1,
+        "hi": 0.2,
+        "midpoint": 0.15000000000000002,
+        "count": 0,
+        "impostor_hits": 0,
+        "actual_impostor_rate": null,
+        "mean_confidence": null
+      },
+      {
+        "bin_index": 2,
+        "lo": 0.2,
+        "hi": 0.3,
+        "midpoint": 0.25,
+        "count": 0,
+        "impostor_hits": 0,
+        "actual_impostor_rate": null,
+        "mean_confidence": null
+      },
+      {
+        "bin_index": 3,
+        "lo": 0.3,
+        "hi": 0.4,
+        "midpoint": 0.35,
+        "count": 0,
+        "impostor_hits": 0,
+        "actual_impostor_rate": null,
+        "mean_confidence": null
+      },
+      {
+        "bin_index": 4,
+        "lo": 0.4,
+        "hi": 0.5,
+        "midpoint": 0.45,
+        "count": 0,
+        "impostor_hits": 0,
+        "actual_impostor_rate": null,
+        "mean_confidence": null
+      },
+      {
+        "bin_index": 5,
+        "lo": 0.5,
+        "hi": 0.6,
+        "midpoint": 0.55,
+        "count": 0,
+        "impostor_hits": 0,
+        "actual_impostor_rate": null,
+        "mean_confidence": null
+      },
+      {
+        "bin_index": 6,
+        "lo": 0.6,
+        "hi": 0.7,
+        "midpoint": 0.6499999999999999,
+        "count": 0,
+        "impostor_hits": 0,
+        "actual_impostor_rate": null,
+        "mean_confidence": null
+      },
+      {
+        "bin_index": 7,
+        "lo": 0.7,
+        "hi": 0.8,
+        "midpoint": 0.75,
+        "count": 0,
+        "impostor_hits": 0,
+        "actual_impostor_rate": null,
+        "mean_confidence": null
+      },
+      {
+        "bin_index": 8,
+        "lo": 0.8,
+        "hi": 0.9,
+        "midpoint": 0.8500000000000001,
+        "count": 0,
+        "impostor_hits": 0,
+        "actual_impostor_rate": null,
+        "mean_confidence": null
+      },
+      {
+        "bin_index": 9,
+        "lo": 0.9,
+        "hi": 1.0,
+        "midpoint": 0.95,
+        "count": 0,
+        "impostor_hits": 0,
+        "actual_impostor_rate": null,
+        "mean_confidence": null
+      }
+    ],
+    "vote_ballot_total": 0,
+    "vote_ballot_ece": null,
+    "vote_ballot_populated_bins": 0,
+    "vote_ballot_low_power": true,
+    "vote_ballot_guard_authored_excluded": 0
+  },
+  "alibi_fabrication": {
+    "total_impostor_alibis": 0,
+    "survived": 0,
+    "survival_rate": null
+  },
+  "cost_dashboard": {
+    "total_cost_usd": 0.0,
+    "total_input_tokens": 0,
+    "total_output_tokens": 0,
+    "game_count": 1,
+    "mean_cost_per_game": 0.0,
+    "by_model": {},
+    "per_prompt_version": []
+  },
+  "meeting_rate": {
+    "games_total": 1,
+    "games_with_meeting": 0,
+    "meeting_rate": 0.0,
+    "meetings_total": 0,
+    "body_report_meetings": 0,
+    "emergency_meetings": 0,
+    "skipped_meetings": 0,
+    "ejected_meetings": 0
+  },
+  "conversion": {
+    "total_ejections": 0,
+    "impostor_ejections": 0,
+    "ejection_accuracy": null,
+    "impostor_accused_meetings": 0,
+    "impostor_accused_conversions": 0,
+    "impostor_accused_conversion_rate": null,
+    "skip_ballots": 0,
+    "correct_skip_ballots": 0,
+    "missed_skip_ballots": 0,
+    "unclassified_skip_ballots": 0,
+    "citation_coerced_skip_ballots": 0,
+    "missed_skip_impostor_voters": 0,
+    "missed_skip_teammate_coerced": 0,
+    "missed_skip_invalid_target": 0,
+    "threshold_inversions": 0
+  },
+  "gate_metrics": {
+    "genuine_class_conversion": {
+      "supplied": 0,
+      "converted": 0,
+      "conversion_rate": null,
+      "note": "genuine_class_conversion is the PRIMARY Phase-10 progress gate. Raw ejection_accuracy comparisons against pre-repair eras are INVALID: the artifact-era 0.63 (and the mixed-era 0.476) were built on detector artifacts -- 14/22 of the old impostor convictions carried zero genuine-shaped flags -- so parity with those numbers would be railroading regained, not detection recovered. Gate on this supplied/converted pair and the accumulator/testimony channels; the win split is likewise excluded as a gate signal (constant ~90/10, zero ejection-driven wins)."
+    },
+    "supplied_channel_conversion": {
+      "supplied": 0,
+      "converted": 0,
+      "conversion_rate": null,
+      "witnessed_vent_supplied": 0,
+      "witnessed_vent_converted": 0,
+      "sighting_contradiction_supplied": 0,
+      "sighting_contradiction_converted": 0,
+      "whereabouts_lie_supplied": 0,
+      "whereabouts_lie_converted": 0,
+      "legacy_alibi_supplied": 0,
+      "legacy_alibi_converted": 0,
+      "legacy_alibi_conversion_rate": null,
+      "note": "supplied_channel_conversion is the Task-17.6 successor of genuine_class_conversion and the ONLY canary-eligible genuine-class cell from baseline 5 onward (audits/audit-phase-16-close.md §8: re-anchor on channels this substrate actually supplies). It reads the RECORDED contradiction rows — witnessed vents (vent_sighting), sighting contradictions (interior non-proxy alibi_vs_sighting), and whereabouts-lies (recorded flags naming a whereabouts claim by event id) — and measures the same question as the legacy cell: supplied hard evidence against a true impostor -> that impostor's ejection. The legacy alibi-anchored cell rides along as a reported column only; see legacy_note.",
+      "legacy_note": "legacy_alibi_* is the Phase-10 alibi-anchored genuine-class cell (compute_genuine_class_conversion), preserved as a labeled REPORTED column: STARVED on this substrate and NEVER a canary. The alibi-lie supply collapsed across baselines 4 and 5 (alibi claims 281 -> 109, alibi_vs_* transcript flags 190 -> 7, every one crew-subject; audits/audit-phase-16-baseline-4.md §6) and single-tick roll-call placements are endpoint-banded out of the CANON-interior class, so the cell reads 0/0 (NO-DATA, not REGRESSION) on both sets. A future substrate that re-supplies checkable alibi lies re-examines this cell (audits/audit-phase-16-close.md §8)."
+    },
+    "lost_opening_accusations": 0,
+    "cap_defaulted_turns": 0,
+    "accused_impostor_events": 0,
+    "accused_impostor_survivals": 0,
+    "survivals_rendered_met": 0,
+    "survivals_sheltered_sub_gate": 0,
+    "survivals_unevidenced": 0
+  },
+  "deduction": {
+    "games_total": 1,
+    "meetings_total": 0,
+    "ejections_total": 0,
+    "ballots_total": 0,
+    "turns_total": 0,
+    "evidence_taxonomy": {
+      "flags_total": 0,
+      "role_proof_flags": 0,
+      "cross_statement_flags": 0,
+      "weak_signal_flags": 0,
+      "meetings_with_any_flag": 0,
+      "weak_signal_share": null
+    },
+    "meeting_flag_cross_tab": {
+      "meetings_total": 0,
+      "flagged_meetings": 0,
+      "unflagged_meetings": 0,
+      "flagged_ejections_impostor": 0,
+      "flagged_ejections_innocent": 0,
+      "unflagged_ejections_impostor": 0,
+      "unflagged_ejections_innocent": 0,
+      "flagged_meeting_accuracy": {
+        "numerator": 0,
+        "denominator": 0,
+        "rate": null,
+        "wilson_low": null,
+        "wilson_high": null,
+        "advisory": true
+      },
+      "unflagged_meeting_accuracy": {
+        "numerator": 0,
+        "denominator": 0,
+        "rate": null,
+        "wilson_low": null,
+        "wilson_high": null,
+        "advisory": true
+      }
+    },
+    "ejectee_proof_cross_tab": {
+      "ejections_total": 0,
+      "proof_present_ejections": 0,
+      "proof_present_impostor": 0,
+      "proof_present_innocent": 0,
+      "non_direct_ejections": 0,
+      "non_direct_impostor": 0,
+      "non_direct_innocent": 0,
+      "direct_proof_accuracy": {
+        "numerator": 0,
+        "denominator": 0,
+        "rate": null,
+        "wilson_low": null,
+        "wilson_high": null,
+        "advisory": true
+      },
+      "non_direct_accuracy": {
+        "numerator": 0,
+        "denominator": 0,
+        "rate": null,
+        "wilson_low": null,
+        "wilson_high": null,
+        "advisory": true
+      }
+    },
+    "weak_flag_conviction": {
+      "flag_named_ejections": 0,
+      "weak_flag_only_convictions": 0,
+      "weak_flag_only_impostor": 0,
+      "weak_flag_only_innocent": 0,
+      "weak_flag_only_rate": {
+        "numerator": 0,
+        "denominator": 0,
+        "rate": null,
+        "wilson_low": null,
+        "wilson_high": null,
+        "advisory": true
+      },
+      "weak_flag_only_innocent_share": {
+        "numerator": 0,
+        "denominator": 0,
+        "rate": null,
+        "wilson_low": null,
+        "wilson_high": null,
+        "advisory": true
+      }
+    },
+    "turn_ballot_consistency": {
+      "accusations_total": 0,
+      "accusations_of_non_votable_targets": 0,
+      "accusing_ballots": 0,
+      "consistent_ballots": 0,
+      "inconsistent_skip_ballots": 0,
+      "inconsistent_other_target_ballots": 0,
+      "inconsistent_invalid_target_ballots": 0,
+      "excluded_no_votable_target_ballots": 0,
+      "guard_rewritten_ballots_unwound": 0,
+      "consistency_rate": null
+    },
+    "public_response_coverage": {
+      "crew_turns": 0,
+      "crew_turns_with_whereabouts": 0,
+      "crew_pooled_coverage": null,
+      "crew_macro_average_coverage": null,
+      "crew_macro_meetings": 0,
+      "impostor_turns": 0,
+      "impostor_turns_with_whereabouts": 0,
+      "impostor_pooled_coverage": null,
+      "impostor_macro_average_coverage": null,
+      "impostor_macro_meetings": 0
+    },
+    "redirected_ballots": {
+      "ballots_total": 0,
+      "redirected_ballots": 0,
+      "redirected_eject_ballots": 0,
+      "redirect_coerced_skip_ballots": 0,
+      "redirected_ballot_share": null
+    },
+    "scaffold_leakage": {
+      "ballots_total": 0,
+      "impostor_ballots": 0,
+      "crew_ballots": 0,
+      "turns_total": 0,
+      "model_partner_naming_ballots": 0,
+      "model_role_statement_ballots": 0,
+      "model_self_kill_disclosure_ballots": 0,
+      "model_omniscient_ballots": 0,
+      "crew_partner_naming_ballots": 0,
+      "crew_omniscient_control_ballots": 0,
+      "player_visible_leak_turns": 0,
+      "model_self_disclosure_visible_turns": 0,
+      "crew_self_disclosure_control_turns": 0,
+      "model_partner_naming_rate": {
+        "numerator": 0,
+        "denominator": 0,
+        "rate": null,
+        "wilson_low": null,
+        "wilson_high": null,
+        "advisory": true
+      },
+      "model_omniscient_rate": {
+        "numerator": 0,
+        "denominator": 0,
+        "rate": null,
+        "wilson_low": null,
+        "wilson_high": null,
+        "advisory": true
+      },
+      "model_machinery_quotation_ballots": 0,
+      "model_machinery_vocabulary_ballots": 0,
+      "model_machinery_quotation_share": null,
+      "claim_reasons_total": 0,
+      "model_oracle_register_ballots": 0,
+      "oracle_register_turns": 0,
+      "oracle_register_claim_reasons": 0,
+      "model_source_pre_guard_ballots": 0,
+      "model_source_unavailable_ballots": 0,
+      "guard_provenance_verified_ballots": 0,
+      "guard_provenance_unverifiable_ballots": 0,
+      "guard_marked_ballots": 0,
+      "guard_target_rewrite_ballots": 0,
+      "guard_preserved_omniscient_ballots": 0,
+      "guard_preserved_omniscient_rate": {
+        "numerator": 0,
+        "denominator": 0,
+        "rate": null,
+        "wilson_low": null,
+        "wilson_high": null,
+        "advisory": true
+      },
+      "guard_marked_ballot_share": null
+    },
+    "witnessed_supply": {
+      "kills_total": 2,
+      "crew_witnessed_kills": 0,
+      "co_present_crew_kills": 0,
+      "crew_witnessed_kill_rate": {
+        "numerator": 0,
+        "denominator": 2,
+        "rate": 0.0,
+        "wilson_low": 0.0,
+        "wilson_high": 0.6576280471103807,
+        "advisory": true
+      },
+      "co_present_crew_kill_rate": {
+        "numerator": 0,
+        "denominator": 2,
+        "rate": 0.0,
+        "wilson_low": 0.0,
+        "wilson_high": 0.6576280471103807,
+        "advisory": true
+      }
+    }
+  }
+}
