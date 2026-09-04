@@ -508,6 +508,42 @@ def test_encode_is_total_over_committed_corpora(set_name: str) -> None:
     assert count > 0, f"no packets swept for {set_name}"
 
 
+def _scalar_index(public_map: PublicMapView, name: str) -> int:
+    """The absolute index of one named scalar, derived from the layout."""
+
+    offset = 0
+    for segment in TacticalFeatureEncoder().feature_layout(public_map):
+        if segment.name == "scalars":
+            return offset + _SCALAR_FEATURE_NAMES.index(name)
+        offset += segment.size
+    raise AssertionError("no scalar segment in the layout")
+
+
+def test_heard_vent_use_slot_is_zero_on_every_committed_packet() -> None:
+    # The slot keeps its index for blast-radius reasons (the v3 vector is this
+    # one plus three appended segments, under a stamp that does not move), so
+    # the honest thing to publish about it is that it reads 0.0 — checked here
+    # over the same packet distribution the committed bytes produce.
+    encoder = TacticalFeatureEncoder()
+    public_map = _canonical_public_map()
+    vent = _scalar_index(public_map, "heard_vent_use")
+    alarm = _scalar_index(public_map, "heard_sabotage_alarm")
+    alarms_heard = 0
+    packets = 0
+    for set_name in _SAMPLE_SETS:
+        for packet, packet_map, memory in _iter_committed_packets(set_name):
+            vector = encoder.encode(packet, packet_map, memory)
+            assert vector[vent] == 0.0
+            alarms_heard += int(vector[alarm] == 1.0)
+            packets += 1
+    assert packets > 0, "no packets swept"
+    # The other half of the audible channel is LIVE on these same bytes, which
+    # is what stops the zero above reading as an encoder that never fires: the
+    # slot beside it does. (Only the 9p2i set sabotages, so the count is taken
+    # over both sets rather than per set.)
+    assert alarms_heard > 0, "no sabotage alarm reached the encoder"
+
+
 # ---------------------------------------------------------------------------- #
 # Wave-1 float64-hex weight serialization + the pure-Python MLP head
 # ---------------------------------------------------------------------------- #
