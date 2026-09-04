@@ -136,6 +136,9 @@ _PROOF_DIRECT_POOLED = "**326/326 = 1.000** pooled"
 # The record whose pre-registered rule DECIDED, and the four rows of its verdict
 # table the front door quotes. Each drifted twin moves one cell only.
 _FINDING_AUDIT = "audits/audit-phase-21-adopting-record.md"
+# ...and the memo that registered its four targets, and bar 1's per-set floor
+# and power threshold, before a byte of it existed.
+_PREREGISTRATION_AUDIT = "audits/audit-phase-21-preregistration.md"
 _FINDING_ACCURACY_ROW = (
     "| 1 | `EjecteeProofCrossTab.non_direct_accuracy` pooled | "
     "≥ 0.60, no powered set < 0.50 | 50/96 = 0.5208 | 46/66 = 0.6970 | **MET** |"
@@ -2323,12 +2326,20 @@ def test_deleting_bar_1s_per_set_clause_fails_loud(doc_tree: Path) -> None:
 def test_underpowered_set_below_the_floor_binds_nothing(doc_tree: Path) -> None:
     # The other half of the same clause: a set with too few ejections takes no
     # part in it, so moving one below the floor must NOT flip the verdict — a
-    # per-set gate that fired on every set would be a different bar.
+    # per-set gate that fired on every set would be a different bar. The nine
+    # ejections move to the powered set rather than vanishing, so the pooled
+    # row still sums and this perturbation stays about the clause alone.
     _substitute(
         doc_tree,
         _FINDING_AUDIT,
         "| `samples/9p2i` | 14/27 = 0.5185 | 10/15 = 0.6667 (n = 15, not powered) |",
         "| `samples/9p2i` | 14/27 = 0.5185 | 1/15 = 0.0667 (n = 15, not powered) |",
+    )
+    _substitute(
+        doc_tree,
+        _FINDING_AUDIT,
+        _FINDING_POWERED_SET_ROW,
+        _FINDING_POWERED_SET_ROW.replace("36/51 = 0.7059", "45/51 = 0.8824"),
     )
     assert check_doc_facts.check_facts(doc_tree) == []
 
@@ -2408,6 +2419,14 @@ def test_finding_history_cell_disagreeing_with_the_ladder_tip_detected(
         _FINDING_AUDIT,
         _FINDING_ACCURACY_SECTION_POOLED,
         "| pooled | 49/96 = 0.5104 | **46/66 = 0.6970** |",
+    )
+    # ...and the set row the pooled history cell is the sum of, so the drift
+    # under test is the one against the recording that owns the cell.
+    _substitute(
+        doc_tree,
+        _FINDING_AUDIT,
+        "| `samples/9p2i` | 14/27 = 0.5185 |",
+        "| `samples/9p2i` | 13/27 = 0.4815 |",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
@@ -2556,6 +2575,318 @@ def test_an_unrelated_sample_of_the_same_size_is_left_alone(doc_tree: Path) -> N
         history + "\nA separate sample covered 5 of 20 = 0.2500 games.\n",
     )
     assert check_doc_facts.check_facts(doc_tree) == []
+
+
+def test_an_ejection_statistic_over_a_bar_population_is_left_alone(
+    doc_tree: Path,
+) -> None:
+    # ...and "a sentence about ejections" is not narrow enough either: every
+    # one of the four cells IS an ejection cell, so an ejection statistic that
+    # happens to be over twenty would be rejected as the reporter's share. The
+    # sentence has to be about that bar's own measurement.
+    history = _read(doc_tree, _HISTORY)
+    _write(
+        doc_tree,
+        _HISTORY,
+        history + "\nHere 5 of 20 = 0.2500 ejection ballots carried a note.\n",
+    )
+    assert check_doc_facts.check_facts(doc_tree) == []
+
+
+def test_a_reporter_claim_over_the_bar_population_is_still_held(
+    doc_tree: Path,
+) -> None:
+    # The other half of the same rule, so narrowing the scope did not empty it:
+    # a sentence that DOES name the bar's subject is held to the bar's cell.
+    history = _read(doc_tree, _HISTORY)
+    _write(
+        doc_tree,
+        _HISTORY,
+        history + "\nThe reporter took 5 of 20 = 0.2500 of that total.\n",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert any(
+        "the claim '5 of 20 = 0.2500' is over a population" in error
+        and "whose cell is 11/20" in error
+        for error in errors
+    )
+
+
+def test_per_set_floor_relaxed_after_the_measurement_detected(doc_tree: Path) -> None:
+    # The leading comparator is half of a compound target. Relaxing the per-set
+    # floor leaves the pooled cell clearing its own bar and the clause still
+    # syntactically present, so both of the record's copies are held to the
+    # memo that fixed the floor before the bytes existed.
+    _substitute(
+        doc_tree,
+        _FINDING_AUDIT,
+        "≥ 0.60, no powered set < 0.50",
+        "≥ 0.60, no powered set < 0.40",
+    )
+    _substitute(
+        doc_tree,
+        _FINDING_AUDIT,
+        "with no adequately powered set below 0.50",
+        "with no adequately powered set below 0.40",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 2
+    assert all(
+        "registered 'no ADEQUATELY POWERED set below" in error for error in errors
+    )
+    assert any("verdict table states the per-set clause" in error for error in errors)
+    assert any("own section states the per-set clause" in error for error in errors)
+
+
+def test_registered_power_threshold_the_checker_does_not_read_detected(
+    doc_tree: Path,
+) -> None:
+    # The clause's third part: which sets it binds. The threshold this module
+    # APPLIES is its own constant, so a memo registering another one would
+    # leave the floor read over a different set of sets.
+    _substitute(
+        doc_tree,
+        _PREREGISTRATION_AUDIT,
+        "a non-direct denominator of **n ≥ 30**",
+        "a non-direct denominator of **n ≥ 40**",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert any(
+        "bar 1's clause is registered at n ≥ 40, and this checker reads it at "
+        "n ≥ 30" in error
+        for error in errors
+    )
+
+
+def test_verdict_history_cell_rate_contradicting_its_fraction_detected(
+    doc_tree: Path,
+) -> None:
+    # The summary's history cell is compared as a FIGURE, which reduces both
+    # copies to a k/n — so a false printed rate beside the right fraction reads
+    # as agreement everywhere, and is published as the baseline it moved from.
+    _substitute(
+        doc_tree,
+        _FINDING_AUDIT,
+        _FINDING_ACCURACY_ROW,
+        _FINDING_ACCURACY_ROW.replace("| 50/96 = 0.5208 |", "| 50/96 = 0.9999 |"),
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert (
+        "bar 1's verdict-table history cell '50/96 = 0.9999' prints a rate its "
+        "own fraction does not recompute to" in errors[0]
+    )
+
+
+def test_reattributed_cell_extending_the_registered_name_detected(
+    doc_tree: Path,
+) -> None:
+    # A row naming `…non_direct_accuracy_adjusted` CONTAINS the registered
+    # identifier and states a different metric, so the name is matched whole
+    # rather than as a substring.
+    _substitute(
+        doc_tree,
+        _FINDING_AUDIT,
+        "| 1 | `EjecteeProofCrossTab.non_direct_accuracy` pooled |",
+        "| 1 | `EjecteeProofCrossTab.non_direct_accuracy_adjusted` pooled |",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert any(
+        "bar 1 registered the cell 'EjecteeProofCrossTab.non_direct_accuracy' "
+        "and its verdict-table row now names "
+        "'EjecteeProofCrossTab.non_direct_accuracy_adjusted'" in error
+        for error in errors
+    )
+
+
+def test_descriptive_words_outside_the_cell_identifier_stay_the_records(
+    doc_tree: Path,
+) -> None:
+    # ...and the words the record writes AROUND the code span are its own, so
+    # matching the identifier whole did not freeze the row's prose.
+    _substitute(
+        doc_tree,
+        _FINDING_AUDIT,
+        "| 1 | `EjecteeProofCrossTab.non_direct_accuracy` pooled |",
+        "| 1 | `EjecteeProofCrossTab.non_direct_accuracy` pooled over four sets |",
+    )
+    assert check_doc_facts.check_facts(doc_tree) == []
+
+
+def test_pooled_row_contradicted_by_its_own_set_rows_detected(doc_tree: Path) -> None:
+    # The pooled cell the verdict is read off is a SUM. Set cells reading 0/15
+    # and 30/51 pool to 30/66, which misses the bar, while the pooled row and
+    # the verdict above them go on saying 46/66 and MET.
+    _substitute(
+        doc_tree,
+        _FINDING_AUDIT,
+        "| `samples/9p2i` | 14/27 = 0.5185 | 10/15 = 0.6667 (n = 15, not powered) |",
+        "| `samples/9p2i` | 14/27 = 0.5185 | 0/15 = 0.0000 (n = 15, not powered) |",
+    )
+    _substitute(
+        doc_tree,
+        _FINDING_AUDIT,
+        _FINDING_POWERED_SET_ROW,
+        _FINDING_POWERED_SET_ROW.replace("36/51 = 0.7059", "30/51 = 0.5882"),
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert any(
+        "bar 1's this record pooled row reads '46/66 = 0.6970', but its own "
+        "four set rows pool to 30/66" in error
+        for error in errors
+    )
+
+
+def test_pooled_count_contradicted_by_its_own_set_rows_detected(doc_tree: Path) -> None:
+    # The same rule on the other cell shape: a count column pools by addition
+    # too, so a bare total is held to the four counts under it.
+    _substitute(
+        doc_tree,
+        _FINDING_AUDIT,
+        "| `samples/9p2i` | 13 | 5 |",
+        "| `samples/9p2i` | 13 | 4 |",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert any(
+        "bar 2's this record pooled row reads '20', but its own four set rows "
+        "pool to 19" in error
+        for error in errors
+    )
+
+
+def test_share_identity_broken_on_a_set_but_not_pooled_detected(
+    doc_tree: Path,
+) -> None:
+    # The pooled cells are a sum, so moving one set's share up and another's
+    # down by the same ejection preserves every pooled figure while the per-set
+    # rows contradict the reporter counts printed a section above them.
+    _substitute(
+        doc_tree,
+        _FINDING_AUDIT,
+        "| `samples/9p2i` | 7/13 = 0.5385 | 3/5 = 0.6000 |",
+        "| `samples/9p2i` | 7/13 = 0.5385 | 2/5 = 0.4000 |",
+    )
+    _substitute(
+        doc_tree,
+        _FINDING_AUDIT,
+        "| `ml_corpus/9p2i` | 23/29 = 0.7931 | 8/15 = 0.5333 |",
+        "| `ml_corpus/9p2i` | 23/29 = 0.7931 | 9/15 = 0.6000 |",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert any(
+        "bar 4's 'samples/9p2i on this record' cell reads 2/5, but bars 3 and "
+        "2 read 3 and 5" in error
+        for error in errors
+    )
+    assert any(
+        "bar 4's 'ml_corpus/9p2i on this record' cell reads 9/15, but bars 3 "
+        "and 2 read 8 and 15" in error
+        for error in errors
+    )
+
+
+def test_adoption_claim_beside_the_finding_sentence_detected(doc_tree: Path) -> None:
+    # The required verdict sentence can be satisfied while the paragraph around
+    # it says the opposite. This record adopted nothing and records no override
+    # of its finding, so a page may not assert one beside its fall.
+    _substitute(
+        doc_tree,
+        _HISTORY,
+        "override was made.\n[Record]",
+        "override was made. The owner overrode that finding and adopted the "
+        "Wave-2 slate.\n[Record]",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert any(
+        "it states this record's fall beside 'overrode'" in error
+        and "adopted nothing and records no override of it" in error
+        for error in errors
+    )
+
+
+def test_the_previous_recordings_dated_override_is_left_alone(
+    doc_tree: Path,
+) -> None:
+    # ...and the front door's account of the recording BEFORE this one — a real
+    # override, stated beside the date it was made on, in the same paragraph as
+    # this record's fall — is not a contradiction, so the rule did not become a
+    # ban on the word.
+    guide = _read(doc_tree, _READING_GUIDE)
+    blocks = [
+        block
+        for _, block in check_doc_facts.prose_blocks(guide)
+        if "innocent ejections fell from 46 to 20" in block
+    ]
+    assert len(blocks) == 1
+    assert "override dated 2026-08-26" in blocks[0]
+    assert check_doc_facts.check_facts(doc_tree) == []
+
+
+def test_published_pass_count_that_the_verdicts_refute_detected(
+    doc_tree: Path,
+) -> None:
+    # The verdict WORD carries no inventory: one bar missed out of four reads
+    # "a finding" exactly as three missed out of four does, so the tally beside
+    # it is its own claim and is held to the recomputed verdict column.
+    _substitute(
+        doc_tree,
+        _README,
+        "written down before the next recording; three passed",
+        "written down before the next recording; two passed",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert any(
+        "states 'two' of them passed, and " in error and "makes it 'three'" in error
+        for error in errors
+    )
+
+
+def test_published_registered_bar_count_that_the_table_refutes_detected(
+    doc_tree: Path,
+) -> None:
+    # ...and the other half of the same tally: how many bars were registered at
+    # all, which is the denominator every "three of four" claim rests on.
+    _substitute(
+        doc_tree,
+        _README,
+        "Four bars were written down before the next recording",
+        "Three bars were written down before the next recording",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert any(
+        "states 'three' bars registered, and " in error and "makes it 'four'" in error
+        for error in errors
+    )
+
+
+def test_front_door_recording_size_drift_detected(doc_tree: Path) -> None:
+    # The provenance count a reader checks the whole account against is stated
+    # on the front door and measured in the record, so it is derived from the
+    # record's own four legs rather than typed beside them.
+    _substitute(doc_tree, _HISTORY, "A 300-game recording", "A 301-game recording")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert any(
+        "the claim '301-game recording' is the size of the recording" in error
+        and "come to 300 games" in error
+        for error in errors
+    )
+
+
+def test_recording_size_follows_the_records_own_legs(doc_tree: Path) -> None:
+    # ...derived, not pinned: a leg recorded at another size moves the count the
+    # front door has to state, rather than the front door moving alone.
+    _substitute(
+        doc_tree,
+        _FINDING_AUDIT,
+        "| 2 | `ml_corpus/9p2i` | 150/150 |",
+        "| 2 | `ml_corpus/9p2i` | 140/140 |",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert any(
+        "the claim '300-game recording' is the size of the recording" in error
+        and "come to 290 games" in error
+        for error in errors
+    )
 
 
 def test_missing_verdict_table_fails_loud(doc_tree: Path) -> None:

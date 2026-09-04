@@ -188,7 +188,7 @@ import sys
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from datetime import date
 from pathlib import Path
-from typing import Final, NamedTuple
+from typing import Final, NamedTuple, cast
 
 _REPO_ROOT: Final = Path(__file__).resolve().parents[1]
 _SCRIPTS_DIR: Final = Path(__file__).resolve().parent
@@ -663,6 +663,22 @@ _PREREGISTRATION_AUDIT: Final = "audits/audit-phase-21-preregistration.md"
 _MEMO_BAR: Final = re.compile(r"\*\*Bar (\d+) — (.*?)\*\*", re.DOTALL)
 _MEMO_TARGET: Final = re.compile(r"(≥|≤|<|>)\s*(\d+(?:\.\d+)?)(%?)")
 _SECTION_TARGET: Final = re.compile(r"^Target\s+\*\*(.+?)\*\*", re.MULTILINE)
+# The per-set clause as the MEMO registered it and as the record's bar section
+# restates it, both in prose ("no adequately powered set below 0.50"); the
+# verdict table states the same clause in symbols, and :data:`_PER_SET_CLAUSE`
+# reads that one. The memo's "below" IS a strict floor, so the record's
+# symbolic copy has to state this comparator and no other — a clause relaxed
+# from ``< 0.50`` to ``< 0.40`` after the measurement is a decision rule
+# rewritten to fit its own result.
+_PROSE_PER_SET: Final = re.compile(
+    r"no adequately powered set below\s*(\d+(?:\.\d+)?)", re.IGNORECASE
+)
+_PROSE_PER_SET_COMPARATOR: Final = "<"
+# ...and the denominator that makes a set adequately powered, which the memo
+# inherits as the literal ``n ≥ 30``. :data:`_POWERED_N` is what this module
+# APPLIES, so it is held to the memo too: a power threshold the checker and
+# the pre-registration disagree on decides which sets the clause reads.
+_MEMO_POWER: Final = re.compile(r"\bn\s*≥\s*(\d+)\b")
 # Each bar's registered cell, by the identifier the verdict table names it
 # with. Without it a bar keeps its numbers while being re-attributed to another
 # measurement, and every later check goes on reading them as this one's.
@@ -672,6 +688,12 @@ _FINDING_BAR_CELLS: Final[Mapping[int, str]] = {
     3: "reporter_innocent_ejections",
     4: "reporter_share_of_innocent_ejections",
 }
+# The identifier itself, read out of the code span that carries it. The cell
+# is matched EXACTLY against the registered name, because a row naming
+# ``…non_direct_accuracy_adjusted`` states a different metric while containing
+# the registered one; the descriptive words the record writes outside the code
+# span ("pooled", "innocent ejections pooled") are the record's to choose.
+_CELL_IDENTIFIER: Final = re.compile(r"`([^`]+)`")
 # The four recorded sets every bar's own table reads, by the label it uses.
 # Required as a set, because an absent row reads as a set that constrains
 # nothing — which is how a compound bar loses the observation that fails it.
@@ -681,10 +703,6 @@ _FINDING_SET_LABELS: Final[tuple[str, ...]] = (
     "samples/4p1i",
     "ml_corpus/4p1i",
 )
-# A rate claim is read as a bar's cell only inside a sentence about ejections:
-# every one of these four cells is an ejection cell, and a denominator alone
-# would make an unrelated sample of the same size fail.
-_EJECTION_WORD: Final = re.compile(r"\beject\w*", re.IGNORECASE)
 _COMPARATORS: Final[Mapping[str, Callable[[float, float], bool]]] = {
     "≥": lambda value, against: value >= against,
     "≤": lambda value, against: value <= against,
@@ -701,6 +719,17 @@ _VERDICT_MISSED: Final = "MISSED"
 # rather than four numbers.
 _SHARE_BAR: Final = 4
 _REPORTER_BAR: Final = 3
+# A rate claim is read as a bar's cell only inside a sentence that names THAT
+# bar's own subject. A denominator alone would reject an unrelated sample of
+# the same size, and "a sentence about ejections" is not narrow enough either:
+# every one of these cells IS an ejection cell, so a sentence about ejection
+# ballots over a population of twenty would be rejected as the reporter's
+# share. Each bar that publishes a rate names the word its measurement is
+# stated in, so the sentence has to be about that measurement to be held to it.
+_FINDING_BAR_SUBJECTS: Final[Mapping[int, str]] = {
+    _ACCURACY_BAR: "accuracy",
+    _SHARE_BAR: "reporter",
+}
 # The verdict passage, as the front door must state it. The wrongful-ejection
 # gate admits only a count one of the two conviction partitions carries, so the
 # fall is stated as a pair in one sentence; the reporter split beside it names
@@ -726,6 +755,36 @@ _FINDING_CLAIM_STEMS: Final[tuple[str | None, ...]] = (
     # the rule, and a page may narrate the counts without restating the rule.
     None,
 )
+# The tally beside that verdict: how many bars were registered, and how many of
+# them passed. The verdict WORD does not carry it — one bar missed and three
+# reads "a finding" exactly as three missed and one does — so the inventory is
+# published as its own claim and held to the recomputed verdicts.
+_PASS_COUNT_CLAIM: Final = re.compile(
+    r"\b(\w+) bars were written down[^.]{0,60}?;\s*(\w+) passed\b", re.IGNORECASE
+)
+_NUMBER_WORDS: Final[tuple[str, ...]] = ("no", "one", "two", "three", "four")
+# The other half of the published decision: what the owner DID about the
+# verdict. On a FINDING nothing graduated and no override was made, so a
+# paragraph that states this record's fall may not also assert one — the
+# required sentences above would otherwise be satisfied while the prose beside
+# them said the opposite. Read as an assertion only when it is POSITIVE: the
+# front door states every one of these words negated ("not an adoption",
+# "nothing was adopted", "no override was made"), and states the PREVIOUS
+# recording's real override beside the date that override carries.
+_OWNER_ACTION: Final = re.compile(
+    r"\b(?:overrode|overrid\w*|override[sd]?|adopt\w*|graduat\w*)\b", re.IGNORECASE
+)
+_NEGATION: Final = re.compile(
+    r"\b(?:no|not|nothing|never|neither|without)\b", re.IGNORECASE
+)
+_PREVIOUS_OVERRIDE_DATE: Final = "2026-08-26"
+# The record's own leg table, and the provenance count the front door takes
+# from it. The games cell reads ``recorded/planned``; a leg short of its plan
+# is drift the record has to state rather than a count to sum, so the two
+# halves must agree before a leg contributes.
+_LEG_TABLE_HEADER: Final[tuple[str, str]] = ("leg", "set")
+_LEG_GAMES: Final = re.compile(r"\A(\d+)\s*/\s*(\d+)\Z")
+_RECORDING_SIZE_CLAIM: Final = re.compile(r"\b(\d+)-game recording\b")
 
 # The ML page's results table and the committed measurement it is derived from.
 # The table is located by its own header cells, so renaming the section above it
@@ -3554,24 +3613,27 @@ def check_finding_figures(repo_root: Path, errors: list[str]) -> None:
     check_registered_targets(repo_root, audit, bars, errors)
     check_bar_sections(audit, bars, errors)
     check_finding_history(repo_root, bars, errors)
-    check_share_bar_identity(bars, errors)
-    recorded: dict[int, tuple[int, int]] = {}
-    missed = False
+    check_share_bar_identity(audit, bars, errors)
+    # Each rate cell keyed on the population it is over, beside the word a
+    # sentence has to name for its claim to be read as that cell's.
+    recorded: dict[int, tuple[tuple[int, int], str]] = {}
+    verdicts: dict[int, str] = {}
     for number, bar in sorted(bars.items()):
         # THIS record's cells only. The table's history column is the previous
         # recording's read, cross-checked against that recording's own audit
         # by :func:`check_finding_history` rather than registered here.
         ratio = cell_ratio(bar.after)
-        if ratio is not None and ratio[1]:
+        subject = _FINDING_BAR_SUBJECTS.get(number)
+        if ratio is not None and ratio[1] and subject is not None:
             # Two bars over one population must agree, or the front door has no
             # single cell to be held to and the later row would silently win.
-            clash = recorded.setdefault(ratio[1], ratio)
-            if clash != ratio:
+            clash = recorded.setdefault(ratio[1], (ratio, subject))
+            if clash[0] != ratio:
                 errors.append(
                     f"{_FINDING_RECORD_AUDIT}: bar {number} reads "
                     f"{ratio[0]}/{ratio[1]} over a population another bar reads "
-                    f"{clash[0]}/{clash[1]} — the front door cannot be held to "
-                    "both."
+                    f"{clash[0][0]}/{clash[0][1]} — the front door cannot be "
+                    "held to both."
                 )
         verdict = recomputed_verdict(audit, number, bar, errors)
         if verdict is None:
@@ -3583,7 +3645,9 @@ def check_finding_figures(repo_root: Path, errors: list[str]) -> None:
                 f"make it {verdict}, but the verdict column says "
                 f"{stated or '(empty)'}."
             )
-        missed = missed or verdict == _VERDICT_MISSED
+        verdicts[number] = verdict
+    missed = _VERDICT_MISSED in verdicts.values()
+    games = recording_games(audit)
 
     for document in _CLAIM_DOCUMENTS:
         text = read_document(repo_root, document, errors)
@@ -3592,16 +3656,107 @@ def check_finding_figures(repo_root: Path, errors: list[str]) -> None:
         for number, prose in prose_blocks(text):
             for match in _RATE_CLAIM.finditer(prose):
                 cell = recorded.get(int(match.group(2)))
+                if cell is None:
+                    continue
                 sentence = sentence_around(prose, match.start(), match.end())
-                if not _EJECTION_WORD.search(sentence):
+                if not re.search(rf"\b{cell[1]}", sentence, re.IGNORECASE):
                     continue  # a same-sized sample of something else
-                if cell is not None and cell[0] != int(match.group(1)):
+                if cell[0][0] != int(match.group(1)):
                     errors.append(
                         f"{document}:{number}: the claim {match.group(0)!r} is "
                         f"over a population {_FINDING_RECORD_AUDIT} records, "
-                        f"whose cell is {cell[0]}/{cell[1]}."
+                        f"whose cell is {cell[0][0]}/{cell[0][1]}."
                     )
+            check_pass_count(document, number, prose, bars, verdicts, errors)
+            check_recording_size(document, number, prose, games, errors)
         check_verdict_passage(document, text, bars, missed, errors)
+
+
+def check_pass_count(
+    document: str,
+    number: int,
+    prose: str,
+    bars: dict[int, _Bar],
+    verdicts: dict[int, str],
+    errors: list[str],
+) -> None:
+    """A published tally of the bars, against the verdicts recomputed above.
+
+    The verdict WORD carries no inventory — one bar missed out of four reads
+    "a finding" exactly as three missed out of four does — so a page may state
+    that three of the four passed while the record says one did, and every
+    other check here would stay green. The tally is therefore read as its own
+    claim wherever a claim document writes one.
+    """
+
+    if len(verdicts) != len(bars):
+        return  # a bar nobody could recompute is reported by name already
+    passed = sum(1 for verdict in verdicts.values() if verdict == _VERDICT_MET)
+    for match in _PASS_COUNT_CLAIM.finditer(prose):
+        for stated, expected, what in (
+            (match.group(1), len(bars), "bars registered"),
+            (match.group(2), passed, "of them passed"),
+        ):
+            if stated.casefold() == number_word(expected):
+                continue
+            errors.append(
+                f"{document}:{number}: the tally {match.group(0)!r} states "
+                f"{stated.casefold()!r} {what}, and {_FINDING_RECORD_AUDIT}'s "
+                f"own verdict column makes it {number_word(expected)!r}."
+            )
+
+
+def number_word(count: int) -> str:
+    """A small count as the front door spells it, or as digits beyond the list."""
+
+    return _NUMBER_WORDS[count] if count < len(_NUMBER_WORDS) else str(count)
+
+
+def check_recording_size(
+    document: str, number: int, prose: str, games: int | None, errors: list[str]
+) -> None:
+    """The recording's size, against the legs the record says it was taken in.
+
+    "A 300-game recording" is the provenance a reader checks the whole account
+    against, and it is stated on the front door rather than in the record. It
+    is the sum of the record's own four legs, so it is derived from them.
+    """
+
+    if games is None:
+        return
+    for match in _RECORDING_SIZE_CLAIM.finditer(prose):
+        if int(match.group(1)) == games:
+            continue
+        errors.append(
+            f"{document}:{number}: the claim {match.group(0)!r} is the size of "
+            f"the recording {_FINDING_RECORD_AUDIT} took, whose own four legs "
+            f"come to {games} games."
+        )
+
+
+def recording_games(audit: str) -> int | None:
+    """The games the record's leg table accounts for, or ``None``.
+
+    Each leg publishes ``recorded/planned``; a leg short of its plan is drift
+    the record has to state rather than a total to sum, so the two halves must
+    agree before it counts. ``None`` when the table is absent or unreadable —
+    a front-door provenance count then rests on the record's prose, which is
+    the state this check is here to end, and it says so through the caller's
+    silence rather than by inventing a total.
+    """
+
+    rows = labelled_table_rows(audit, _LEG_TABLE_HEADER)
+    if not rows:
+        return None
+    total = 0
+    for cells in rows.values():
+        if len(cells) < 2:
+            return None
+        games = _LEG_GAMES.match(_EMPHASIS.sub("", cells[1]).strip())
+        if games is None or games.group(1) != games.group(2):
+            return None
+        total += int(games.group(1))
+    return total
 
 
 def prose_blocks(text: str) -> Iterator[tuple[int, str]]:
@@ -3718,6 +3873,14 @@ def check_bar_sections(audit: str, bars: dict[int, _Bar], errors: list[str]) -> 
     columns are already stated once in that bar's own pooled row. Holding the
     two together is what stops the table a reader quotes from drifting away
     from the read a reader can reproduce.
+
+    Three further rules on the same tables. The pooled row is RECOMPUTED from
+    the four set rows, so a record cannot certify a verdict its own detailed
+    measurements refute — set cells reading 0/15 and 30/51 pool to 30/66, and a
+    46/66 pooled row above them would otherwise stand. The summary's history
+    cell is re-derived from its own fraction, because :func:`cell_figure`
+    reduces both copies to a ``k/n`` and would read a false printed rate as
+    agreement. And every per-set cell prints a rate its own fraction supports.
     """
 
     for number, bar in sorted(bars.items()):
@@ -3745,9 +3908,15 @@ def check_bar_sections(audit: str, bars: dict[int, _Bar], errors: list[str]) -> 
                         f"cell {_EMPHASIS.sub('', cell).strip()!r} prints a "
                         "rate its own fraction does not recompute to."
                     )
-        for column, summary, detail in (
-            ("history", bar.before, pooled[0]),
-            ("this record", bar.after, pooled[1]),
+        if cell_ratio(bar.before) is not None and cell_value(bar.before) is None:
+            errors.append(
+                f"{_FINDING_RECORD_AUDIT}: bar {number}'s verdict-table history "
+                f"cell {_EMPHASIS.sub('', bar.before).strip()!r} prints a rate "
+                "its own fraction does not recompute to."
+            )
+        for index, column, summary, detail in (
+            (0, "history", bar.before, pooled[0]),
+            (1, "this record", bar.after, pooled[1]),
         ):
             if cell_figure(summary) != cell_figure(detail):
                 errors.append(
@@ -3755,6 +3924,17 @@ def check_bar_sections(audit: str, bars: dict[int, _Bar], errors: list[str]) -> 
                     f"reads {_EMPHASIS.sub('', summary).strip()!r} in the "
                     f"verdict table and {_EMPHASIS.sub('', detail).strip()!r} "
                     "in the bar's own pooled row."
+                )
+            aggregated = pooled_from_sets(rows, index)
+            recorded = set_figure(detail)
+            if aggregated is None or recorded is None:
+                continue  # a missing or unreadable set row is reported above
+            if aggregated != recorded:
+                errors.append(
+                    f"{_FINDING_RECORD_AUDIT}: bar {number}'s {column} pooled "
+                    f"row reads {_EMPHASIS.sub('', detail).strip()!r}, but its "
+                    f"own four set rows pool to {figure_text(aggregated)} — a "
+                    "verdict read off a pooled cell its detail refutes."
                 )
 
 
@@ -3764,11 +3944,22 @@ def check_bar_cells(bars: dict[int, _Bar], errors: list[str]) -> None:
     The numbers alone do not say what they measure. A row that keeps its
     figures while naming another metric re-attributes the bar, and every check
     downstream goes on reading those figures as this bar's.
+
+    The identifier is compared WHOLE, out of the code span that carries it: a
+    row naming ``…non_direct_accuracy_adjusted`` contains the registered name
+    and states a different metric, so a substring test would read an adjusted
+    cell's figures as the registered cell's. The descriptive words outside the
+    span ("pooled") are the record's own to write.
     """
 
     for number, expected in sorted(_FINDING_BAR_CELLS.items()):
-        stated = _EMPHASIS.sub("", bars[number].cell).strip()
-        if expected not in stated:
+        identifier = _CELL_IDENTIFIER.search(bars[number].cell)
+        stated = (
+            _EMPHASIS.sub("", bars[number].cell).strip()
+            if identifier is None
+            else identifier.group(1)
+        )
+        if identifier is None or stated != expected:
             errors.append(
                 f"{_FINDING_RECORD_AUDIT}: bar {number} registered the cell "
                 f"{expected!r} and its verdict-table row now names {stated!r} — "
@@ -3823,6 +4014,93 @@ def check_registered_targets(
                     f"{_PREREGISTRATION_AUDIT} registered "
                     f"{memo_target.group(0)!r} before the bytes existed."
                 )
+    check_registered_clause(memo, audit, bars, errors)
+
+
+def check_registered_clause(
+    memo: str, audit: str, bars: dict[int, _Bar], errors: list[str]
+) -> None:
+    """Bar 1's SECOND clause against the memo, in all three of its parts.
+
+    The leading comparator is only half of a compound target. Relaxing the
+    per-set floor from ``< 0.50`` to ``< 0.40`` after the measurement leaves
+    every other check green — the pooled cell still clears its own comparator,
+    and the clause is still syntactically present — so the operator, the floor
+    AND the denominator that makes a set adequately powered are each held to
+    the document that fixed them before the bytes existed. The power threshold
+    is the one this module applies rather than one the record prints, so it is
+    :data:`_POWERED_N` that is compared: a checker reading the clause at a
+    denominator the memo never registered reads the wrong sets.
+    """
+
+    for number in _PER_SET_CLAUSE_BARS:
+        section = memo_bar_section(memo, number)
+        registered = _PROSE_PER_SET.search(section)
+        power = _MEMO_POWER.search(section)
+        if registered is None or power is None:
+            errors.append(
+                f"{_PREREGISTRATION_AUDIT}: it registers no per-set floor or no "
+                f"power threshold for bar {number}, so {_FINDING_RECORD_AUDIT}'s "
+                "copy of that clause is the only statement of it."
+            )
+            continue
+        if int(power.group(1)) != _POWERED_N:
+            errors.append(
+                f"{_PREREGISTRATION_AUDIT}: bar {number}'s clause is registered "
+                f"at n ≥ {power.group(1)}, and this checker reads it at "
+                f"n ≥ {_POWERED_N} — the threshold decides which sets the floor "
+                "binds, so the two cannot disagree."
+            )
+        expected = (_PROSE_PER_SET_COMPARATOR, float(registered.group(1)))
+        # The verdict table writes the clause in symbols and the bar's own
+        # section writes it in the memo's words, so each copy is read in its
+        # own shape and both are reduced to the same (operator, floor) pair.
+        symbolic = _PER_SET_CLAUSE.search(_EMPHASIS.sub("", bars[number].target))
+        prose = _PROSE_PER_SET.search(bar_section(audit, number) or "")
+        for where, clause, stated in (
+            (
+                "verdict table",
+                symbolic,
+                None
+                if symbolic is None
+                else (symbolic.group(1), float(symbolic.group(2))),
+            ),
+            (
+                "own section",
+                prose,
+                None
+                if prose is None
+                else (_PROSE_PER_SET_COMPARATOR, float(prose.group(1))),
+            ),
+        ):
+            # A clause the record dropped altogether is reported by
+            # :func:`recomputed_verdict`, which names the half of the gate that
+            # went with it.
+            if clause is None or stated == expected:
+                continue
+            errors.append(
+                f"{_FINDING_RECORD_AUDIT}: bar {number}'s {where} states the "
+                f"per-set clause {clause.group(0)!r}, but "
+                f"{_PREREGISTRATION_AUDIT} registered "
+                f"{registered.group(0)!r} before the bytes existed."
+            )
+
+
+def memo_bar_section(memo: str, number: int) -> str:
+    """One bar's own region of the pre-registration memo, or ``""``.
+
+    The memo states each bar's target in a bolded lead and the reasoning behind
+    it in the prose below, so the region runs from that bar's lead to the next
+    one — the power threshold the clause is read at is stated in that prose.
+    """
+
+    leads = list(_MEMO_BAR.finditer(memo))
+    for index, lead in enumerate(leads):
+        if int(lead.group(1)) != number:
+            continue
+        following = leads[index + 1].start() if index + 1 < len(leads) else len(memo)
+        return memo[lead.start() : following]
+    return ""
 
 
 def cell_figure(cell: str) -> tuple[int, int] | int | None:
@@ -3830,6 +4108,58 @@ def cell_figure(cell: str) -> tuple[int, int] | int | None:
 
     ratio = cell_ratio(cell)
     return ratio if ratio is not None else cell_count(cell)
+
+
+def set_figure(cell: str) -> tuple[int, int] | int | None:
+    """One per-set cell as the figure it contributes to its bar's pool.
+
+    Read with the bare ``k/n`` locator rather than :func:`cell_ratio`, because
+    an EMPTY set publishes ``0/0 = n/a`` — a cell with no rate to print, which
+    still contributes its two zeroes to the pooled numerator and denominator.
+    A cell that states neither a fraction nor a bare count reads as ``None``,
+    and the caller declines to pool rather than pooling a cell it misread.
+    """
+
+    flat = _EMPHASIS.sub("", cell).strip()
+    ratio = _RATIO_CELL.search(flat)
+    if ratio is not None:
+        return int(ratio.group(1)), int(ratio.group(2))
+    count = re.fullmatch(r"\d+", flat)
+    return None if count is None else int(count.group(0))
+
+
+def pooled_from_sets(
+    rows: Mapping[str, list[str]], column: int
+) -> tuple[int, int] | int | None:
+    """The four required set rows of one column, summed into their pool.
+
+    ``None`` when a required row is absent, when a cell cannot be read, or when
+    the column mixes fractions with counts — each of those is drift another
+    check reports by name, and a pool computed over half a column would be a
+    second, quieter report of it.
+    """
+
+    figures: list[tuple[int, int] | int] = []
+    for label in _FINDING_SET_LABELS:
+        cells = rows.get(label)
+        if cells is None or len(cells) <= column:
+            return None
+        figure = set_figure(cells[column])
+        if figure is None:
+            return None
+        figures.append(figure)
+    if all(isinstance(figure, tuple) for figure in figures):
+        pairs = cast("list[tuple[int, int]]", figures)
+        return sum(pair[0] for pair in pairs), sum(pair[1] for pair in pairs)
+    if all(isinstance(figure, int) for figure in figures):
+        return sum(cast("list[int]", figures))
+    return None
+
+
+def figure_text(figure: tuple[int, int] | int) -> str:
+    """One pooled figure as the record would print it."""
+
+    return f"{figure[0]}/{figure[1]}" if isinstance(figure, tuple) else str(figure)
 
 
 def check_finding_history(
@@ -3861,32 +4191,54 @@ def check_finding_history(
             )
 
 
-def check_share_bar_identity(bars: dict[int, _Bar], errors: list[str]) -> None:
+def check_share_bar_identity(
+    audit: str, bars: dict[int, _Bar], errors: list[str]
+) -> None:
     """The share bar's two halves, against the count bars they are taken over.
 
     The share is not a fifth measurement: its numerator is the reporter bar's
     count and its denominator the wrongful-ejection bar's, on both recordings.
     A record whose share moved without either count moving is arithmetic that
     does not close, and it would reach the front door as a single cell.
+
+    The identity is applied to every recorded SET as well as to the pooled
+    summary, because the pooled cells are a sum: moving one set's share up and
+    another's down by the same ejection preserves all three pooled figures
+    while the per-set rows contradict the reporter counts a section above them.
     """
 
-    share, reporter, innocent = (
-        bars[_SHARE_BAR],
-        bars[_REPORTER_BAR],
-        bars[_INNOCENT_BAR],
-    )
-    for column, share_cell, reporter_cell, innocent_cell in (
-        ("this record", share.after, reporter.after, innocent.after),
-        ("the recording before it", share.before, reporter.before, innocent.before),
-    ):
-        ratio = cell_ratio(share_cell)
-        counts = tuple(cell_count(cell) for cell in (reporter_cell, innocent_cell))
-        if ratio is None or None in counts:
+    identity = (_SHARE_BAR, _REPORTER_BAR, _INNOCENT_BAR)
+    columns = ("the recording before it", "this record")
+    # The pooled reading is the verdict table's own two columns; each set
+    # reading is one row of the same three bars' own detail tables.
+    readings: list[tuple[str, list[str]]] = [
+        (
+            column,
+            [(bars[number].before, bars[number].after)[index] for number in identity],
+        )
+        for index, column in enumerate(columns)
+    ]
+    rows = {number: bar_set_rows(audit, number) for number in identity}
+    if all(table is not None for table in rows.values()):
+        for label in _FINDING_SET_LABELS:
+            detail = [rows[number].get(label) for number in identity]  # type: ignore[union-attr]
+            if any(cell is None or len(cell) < 2 for cell in detail):
+                continue  # a missing set row is reported by check_bar_sections
+            for index, column in enumerate(columns):
+                readings.append(
+                    (f"{label} on {column}", [cell[index] for cell in detail])  # type: ignore[index]
+                )
+    for label, (share_cell, reporter_cell, innocent_cell) in readings:
+        ratio = set_figure(share_cell)
+        counts = tuple(set_figure(cell) for cell in (reporter_cell, innocent_cell))
+        if not isinstance(ratio, tuple) or not all(
+            isinstance(count, int) for count in counts
+        ):
             continue  # an empty cell is the table's own drift, reported above
         if ratio != counts:
             errors.append(
                 f"{_FINDING_RECORD_AUDIT}: bar {_SHARE_BAR}'s "
-                f"{column!r} cell reads {ratio[0]}/{ratio[1]}, but bars "
+                f"{label!r} cell reads {ratio[0]}/{ratio[1]}, but bars "
                 f"{_REPORTER_BAR} and {_INNOCENT_BAR} read "
                 f"{counts[0]} and {counts[1]} on the same recording."
             )
@@ -3943,6 +4295,49 @@ def check_verdict_passage(
             "reports, so the front door states it in the wording the "
             "wrongful-ejection and verdict gates can both read."
         )
+    check_owner_action(document, text, required[0], missed, errors)
+
+
+def check_owner_action(
+    document: str, text: str, fall: str, missed: bool, errors: list[str]
+) -> None:
+    """What the owner DID about the verdict, beside the verdict itself.
+
+    A required sentence can be satisfied while the paragraph around it says the
+    opposite: "the rule returns a finding" stands untouched beside "the owner
+    overrode that finding and adopted the Wave-2 slate", and this record says
+    there was no override and nothing graduated. So the paragraph that states
+    this record's fall is read for the other half of the decision too.
+
+    Only POSITIVE assertions are refused, and only undated ones. The front door
+    states every one of these words negated — "not an adoption", "nothing was
+    adopted", "no override was made" — and it also states the PREVIOUS
+    recording's real override, which is dated: an override the record can name
+    carries the date it was made on, and an override this record did not make
+    cannot.
+    """
+
+    if not missed:
+        return  # an adopting record's own adoption is not a contradiction
+    for number, prose in prose_blocks(text):
+        block = strip_links(prose)
+        if fall.casefold() not in " ".join(_EMPHASIS.sub("", block).split()).casefold():
+            continue
+        for match in _OWNER_ACTION.finditer(block):
+            sentence = sentence_around(block, match.start(), match.end())
+            if _PREVIOUS_OVERRIDE_DATE in sentence:
+                continue  # the previous recording's override, beside its date
+            head = block[: match.start()]
+            boundaries = list(_SENTENCE_END.finditer(head))
+            left = head[boundaries[-1].end() :] if boundaries else head
+            if _NEGATION.search(left) is not None:
+                continue
+            errors.append(
+                f"{document}:{number}: it states this record's fall beside "
+                f"{match.group(0)!r} in “{' '.join(sentence.split())}” — "
+                f"{_FINDING_RECORD_AUDIT} returned a finding, adopted nothing "
+                "and records no override of it."
+            )
 
 
 def check_featured_exhibits(repo_root: Path, errors: list[str]) -> None:
