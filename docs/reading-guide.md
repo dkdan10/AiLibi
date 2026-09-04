@@ -2,8 +2,8 @@
 
 Five minutes, no context: which numbers are real and where they live, what to
 run, what the corpus does and does not demonstrate, and which three audits to
-read first. Every number carries the path that owns it, and where this
-page summarizes, the cited file wins. Private vocabulary is in the
+read first. Every number carries the path that owns it, and where this page
+summarizes, the cited file wins. Private vocabulary is in the
 [glossary](glossary.md); the phase narrative in [history](history.md).
 
 ---
@@ -26,9 +26,9 @@ is the recording it replaced. Where the two agree, nothing moved.
 | Learned tactical policies that became the default | none, ruled twice | none, ruled twice | [phase 17](../audits/audit-phase-17-close.md), [18](../audits/audit-phase-18-close.md) |
 
 The previous recording's bars were registered before the repairs, and two
-missed: conviction accuracy without engine-certified proof
-reached 61 of 103 = 0.5922 against a bar of 0.60, and wrongful ejections reached
-42 against a bar of fewer than 35; the current recording registered no bars, and
+missed: conviction accuracy without engine-certified proof reached
+61 of 103 = 0.5922 against a bar of 0.60, and wrongful ejections reached 42
+against a bar of fewer than 35; the current recording registered no bars, and
 re-measured both cells the unflattering way, to 50 of 96 = 0.5208 and 46
 innocent ejections. That read was a **finding**, not an adoption; the recording
 became the reference by an explicit owner override dated 2026-08-26 — §6.1 of
@@ -63,9 +63,9 @@ suspicion arcs; the 4-player set is a fast fixture of short games. The curated
 list the guided tour opens is hand-picked, not scored, and spoiler-free.
 
 Three of them are the ones to open first, each re-read on the 2026-08-31 bytes:
-**9p2i seed 23**, twenty-six spoken turns over four meetings,
-carrying no trace of the injustice it once held — a crewmate convicted on a
-sighting its speaker could not have made — the meeting in question flagging
+**9p2i seed 23**, twenty-six spoken turns over four meetings, carrying no trace
+of the injustice it once held — a crewmate convicted on a sighting its speaker
+could not have made — the meeting in question flagging
 nothing and ejecting nobody; **9p2i seed 46**, four meetings and exactly one flag
 in the whole game, and that one a pair of conflicting accounts rather than
 anything the engine certified; and **4p1i seed 11**, one meeting and three turns
