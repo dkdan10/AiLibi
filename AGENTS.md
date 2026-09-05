@@ -10,6 +10,21 @@ New work uses one canonical card at `tasks/work/<slug>.md`. Read
 [tasks/README.md](tasks/README.md) names the current outcome and next candidates.
 Cards are dispatched by path and have no generated prompt copies.
 
+### Cleanup branch and final review
+
+Implement the cleanup backlog directly on `codex/cleanup`, the owner's working
+branch. Keep each task in a focused commit or small commit sequence, with its
+acceptance evidence and decisions in the task card. Preserve published commit
+identities so the owner can have Claude review the work by commit or existing PR.
+Do not create a new implementation branch or require a per-task PR for routine
+cleanup work. Push verified commits to `origin/codex/cleanup`.
+
+Keep `main` unchanged throughout the cleanup. After the cleanup tasks are
+complete, the owner arranges Claude's review and the final merge into `main`.
+Task completion never authorizes an intermediate merge into `main`, including
+the existing repair PRs. Keep their links as review records; do not close or
+retarget them merely because their commits are already on `codex/cleanup`.
+
 `tasks/phase-*.md` and `agent_prompts/` remain historical contracts and their
 generated exports. Their existing validators still run. When explicitly
 resuming a phase task, follow that contract, including its exact file scope;
@@ -116,14 +131,15 @@ repeat them.
 5. **Claims are verifiable-shaped.** A documentation claim names the mechanism
    that enforces it ("never breached in CI: import-linter contract +
    planted-leak test + recursive leak sweep"), never a bare superlative; a
-   number is recomputed from committed bytes and the command goes in the PR.
+   number is recomputed from committed bytes and the command goes in the PR
+   or cleanup card's Results.
 6. **Blast radius before scope.** Grep every consumer of a symbol, path, or
    constant before changing it. For a new card, expected files may include
    directly necessary call-site, test, generated-output, and documentation
    updates within its permitted boundaries; record this follow-through in the
-   PR. Changes to protected architecture, behavior beyond the card, public
-   compatibility, dependencies, or spending need an owner decision unless
-   already authorized. A phase task keeps its exact file scope: stop and ask
+   PR or cleanup card's Results. Changes to protected architecture, behavior
+   beyond the card, public compatibility, dependencies, or spending need an
+   owner decision unless already authorized. A phase task keeps its exact file scope: stop and ask
    before widening it.
 7. **Every behaviour change carries its record impact.** New cards state
    `## Record impact` (none / lever-gated until the adopting record / the
@@ -163,7 +179,8 @@ A task is not done until:
 - `bash scripts/check.sh` passes locally.
 - The diff satisfies the assigned scope: a new card's permitted boundaries and
   documented mechanical follow-through, or a phase task's exact file list.
-- The PR description references the section(s) the task contract names
+- The PR description, or the task card's Results for cleanup commits without
+  a per-task PR, references the section(s) the task contract names
   (DESIGN.md sections where the contract cites them; `docs/architecture.md`
   for layering).
 
@@ -211,7 +228,8 @@ bodies and are not permitted.
 ## When you're stuck
 
 Resolve routine implementation choices within the authorized scope and record
-material decisions in the PR. If a missing decision blocks the task, explain
-the concrete choice under "Questions" in a draft PR and ask the owner. Continue
+material decisions in the PR or the cleanup task card's Results. If a missing
+decision blocks the task, explain the concrete choice in the cleanup card or
+under "Questions" in a draft PR and ask the owner. Continue
 independent authorized work while awaiting that answer; do not claim completion
 with acceptance evidence missing.

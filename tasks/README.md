@@ -1,5 +1,11 @@
 # Current work
 
+Work directly on `codex/cleanup`. The owner will have Claude review the completed
+cleanup by commit or PR, then arrange the final merge into `main`. Keep `main`
+unchanged until then. Deliver each task as a focused, verified commit or small
+commit sequence, with its evidence in the card's Results. See
+[cleanup delivery](../docs/workflow.md#cleanup-delivery).
+
 The next release should make simulation records accurate and the evidence
 behind decisions inspectable. Start with accounting and replay integrity, then
 use reliable records to evaluate reasoning and gameplay changes. Public results
@@ -7,20 +13,25 @@ and highlights should describe the same recording they display.
 
 New work follows [the rolling workflow](../docs/workflow.md). Each card under
 `work/` owns its status, acceptance criteria, and results; dispatch it by path.
-The initial cards are:
+The existing repairs are already included in `codex/cleanup`; their PRs are
+review records and remain unmerged into `main`. The cards are:
 
-| Card | Purpose |
-| --- | --- |
-| [Workflow pilot](work/workflow-pilot.md) | Introduce the prospective card format while preserving historical checks. |
-| [Budget accounting](work/budget-accounting.md) | Account for provider usage when a consumed response fails validation. |
-| [Aborted meeting calls](work/aborted-meeting-calls.md) | Retain completed responses and reported failed-attempt usage when a meeting aborts. |
-| [Replay integrity](work/replay-integrity.md) | Bind spectator timelines and terminal claims to reconstructed engine state. |
-| [Recording replacement](work/recording-replacement.md) | Replace a replay and its observation audit as one recording lifecycle. |
+| Card | Purpose | Review record |
+| --- | --- | --- |
+| [Workflow pilot](work/workflow-pilot.md) | Introduce the prospective card format while preserving historical checks. | `ccf42166`, [PR 431](https://github.com/dkdan10/AiLibi/pull/431) |
+| [Budget accounting](work/budget-accounting.md) | Account for provider usage when a consumed response fails validation. | `b64e29b5`, [PR 431](https://github.com/dkdan10/AiLibi/pull/431) |
+| [Aborted meeting calls](work/aborted-meeting-calls.md) | Retain completed responses and reported failed-attempt usage when a meeting aborts. | `26386914`, [PR 432](https://github.com/dkdan10/AiLibi/pull/432) |
+| [Replay integrity](work/replay-integrity.md) | Bind spectator timelines and terminal claims to reconstructed engine state. | `55ed6d9a`, [PR 433](https://github.com/dkdan10/AiLibi/pull/433) |
+| [Recording replacement](work/recording-replacement.md) | Replace a replay and its observation audit as one recording lifecycle. | `62ba0162`, [PR 434](https://github.com/dkdan10/AiLibi/pull/434) |
+| [Cleanup delivery](work/cleanup-delivery.md) | Keep implementation on the working branch until the owner's final review and merge. | Commit history for the card |
 
-Select the next card after the active repair's verification and review,
-using these candidates:
+Select the next card after the active repair's local verification and independent
+implementation review. Claude's owner-arranged review follows the completed
+cleanup, not each card. The next candidates are:
 
 - Prevent tournament report destinations from overwriting recording files.
+- Count distinct failed provider attempts in completed meetings exactly once.
+- Validate current evaluation outcomes through the shared replay validator.
 - Reconcile displayed highlights and results with their recording provenance.
 - Evaluate death-time reasoning and response opportunities against existing
   experiments before adding new gameplay variants.

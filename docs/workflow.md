@@ -6,6 +6,26 @@ what follows. [AGENTS.md](../AGENTS.md) carries the standing rules and
 [task index](../tasks/README.md) describes the current outcome and candidate
 work; only work ready to start receives a detailed card.
 
+## Cleanup delivery
+
+`codex/cleanup` is the working branch for the cleanup backlog. Implement tasks
+there and push verified, focused commits. Keep the original commits from the
+existing repair PRs; their links remain useful review records.
+The existing CI workflow also runs on pushes to this branch.
+
+The owner will have Claude review the completed cleanup by commit or PR before
+the final merge into `main`. There are no intermediate releases into `main`
+during this work. Completion of a card means implemented and verified on the
+cleanup branch, still awaiting that final review and merge.
+
+A per-task PR is optional for this cleanup. When delivering by commit, the
+card's Results carries the validation evidence, referenced contract/architecture
+sections, material decisions, and limitations that would otherwise go in the PR.
+Include the card path in the commit body so a reviewer can locate the contract
+from the commit and locate its implementation with `git log -- <card-path>`.
+Preserve task boundaries and published history; do not squash unrelated tasks
+or amend published task commits while the cleanup is accumulating.
+
 ## One card per change
 
 New tasks live at `tasks/work/<slug>.md`. That file is the canonical contract;
@@ -40,8 +60,9 @@ document.
 2. **Active:** implement one coherent change with relevant tests. Directly
    necessary call-site, test, generated-output, and documentation updates are
    permitted within the card's boundaries. Record material follow-through in
-   the PR. Unrelated cleanup, new behavior, compatibility changes, dependencies,
-   and spending require authorization if the card or owner has not provided it.
+   the PR or cleanup card's Results. Unrelated cleanup, new behavior,
+   compatibility changes, dependencies, and spending require authorization if
+   the card or owner has not provided it.
 3. **Done:** acceptance is demonstrated, the required checks pass, and Results
    records the evidence. This means locally verified and ready for review; it
    does not mean merged, deployed, or adopted as an experimental baseline.
@@ -57,8 +78,9 @@ or review reveals unfinished work.
 Keep the next few candidates in the task index and schedule them manually.
 Declare semantic prerequisites in Constraints. Shared-file ownership is a
 scheduling concern: assign one writer per file at a time, with isolated
-worktrees where useful. Independent investigation, test design, and review can
-run alongside implementation. `scripts/compute_next_task.py` remains the
+worktrees where useful for independent investigation and review; cleanup
+implementation stays on `codex/cleanup`. Independent investigation, test design,
+and review can run alongside implementation. `scripts/compute_next_task.py` remains the
 historical phase scheduler; it does not dispatch these cards.
 
 A reviewer should attempt the adverse case and inspect relevant failure paths,
