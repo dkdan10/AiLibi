@@ -695,14 +695,14 @@ class MeetingArtifacts:
     visible ``deadline_default`` :class:`~orchestrator.replay.FailedCallReplayEntry`
     per entry so a defaulted turn is never lost from the replay.
 
-    ``recovered_call_failures`` carries provider parse-failures the manager
-    recovered on a SUCCEEDING turn (an earlier retry attempt raised before the
-    recording client could log the call, then a later attempt parsed). The
-    orchestrator records each so the burned spend stays visible even though the
-    turn ultimately succeeded and carries no ``DefaultedCall``.
+    ``captured_failures`` is the recorder's authoritative ledger of identified
+    provider attempts. It includes failures recovered by a retry and failures
+    that caused a default. When present, default metadata adds only zero-spend
+    visibility markers; it never charges these attempts again.
 
-    Both default to ``()`` so a runner that produces neither -- the common
-    case -- need not set them.
+    Custom runners without that ledger retain the legacy ``defaulted_calls`` /
+    ``recovered_call_failures`` metadata path. Both default to ``()`` so a
+    runner that produces neither need not set them.
     """
 
     result: MeetingResult
@@ -2272,20 +2272,31 @@ class HeadlessGame:
                 state_hash_before=_state_hash(state),
                 state_hash_after=_state_hash(next_state),
             )
-        # Persist the meeting's side-records: a visible ``deadline_default``
-        # marker per fired default (audit gp-2), and the recovered provider
-        # parse-failures whose burned spend is absent from llm_calls.
+        # The recorder owns each failed attempt's spend. Manager recovery and
+        # default metadata may refer to those same attempts, so retain only
+        # their zero-spend markers when the identified ledger is available.
+        defaults = artifacts.defaulted_calls
+        recovered_failures = artifacts.recovered_call_failures
+        if artifacts.captured_failures is not None:
+            _record_captured_failures(
+                replay=replay,
+                meeting_id=meeting_id,
+                tick=trigger.trigger_tick,
+                failures=artifacts.captured_failures,
+            )
+            defaults = tuple(replace(item, parse_failures=()) for item in defaults)
+            recovered_failures = ()
         _record_deadline_defaults(
             replay=replay,
             meeting_id=meeting_id,
             tick=trigger.trigger_tick,
-            defaulted_calls=artifacts.defaulted_calls,
+            defaulted_calls=defaults,
         )
         _record_recovered_failures(
             replay=replay,
             meeting_id=meeting_id,
             tick=trigger.trigger_tick,
-            failures=artifacts.recovered_call_failures,
+            failures=recovered_failures,
         )
         # Surface the applied meeting to the no-replay trace (Task 15.8.1) so the
         # training env can rebuild the episode's meeting records + post-meeting
@@ -2432,6 +2443,33 @@ def _extract_meeting_side_records(exc: BaseException) -> _MeetingSideRecords:
     return value if isinstance(value, _MeetingSideRecords) else _MeetingSideRecords()
 
 
+def _record_captured_failures(
+    *,
+    replay: ReplayLog | None,
+    meeting_id: str,
+    tick: int,
+    failures: Sequence[tuple[str, LLMCallFailure]],
+) -> None:
+    """Persist distinct provider attempts even when their response data matches."""
+
+    if replay is None:
+        return
+    for call_id, failure in failures:
+        replay.record_failed_call(
+            meeting_id=meeting_id,
+            tick=tick,
+            model=failure.model,
+            prompt_length=failure.prompt_length,
+            raw_response=failure.raw_response,
+            input_tokens=failure.input_tokens,
+            output_tokens=failure.output_tokens,
+            cost_usd=failure.cost_usd,
+            error_type=failure.error_type,
+            error_message=failure.error_message,
+            call_id=call_id,
+        )
+
+
 def _record_recovered_failures(
     *,
     replay: ReplayLog | None,
@@ -2495,22 +2533,14 @@ def _record_meeting_abort(
     if records.captured_failures is not None:
         # The recorder observed each provider attempt, including a parse
         # failure still waiting for retry when the next call aborts.
-        for call_id, failure in records.captured_failures:
-            replay.record_failed_call(
-                meeting_id=meeting_id,
-                tick=tick,
-                model=failure.model,
-                prompt_length=failure.prompt_length,
-                raw_response=failure.raw_response,
-                input_tokens=failure.input_tokens,
-                output_tokens=failure.output_tokens,
-                cost_usd=failure.cost_usd,
-                error_type=failure.error_type,
-                error_message=failure.error_message,
-                call_id=call_id,
-            )
+        _record_captured_failures(
+            replay=replay,
+            meeting_id=meeting_id,
+            tick=tick,
+            failures=records.captured_failures,
+        )
         # Retain default visibility while the identified failed-call rows
-        # own all reported spend. Successful meeting serialization is unchanged.
+        # own all reported spend.
         defaults = tuple(replace(item, parse_failures=()) for item in defaults)
     else:
         # Custom runners may only supply the established recovery metadata.
@@ -2557,12 +2587,11 @@ def _record_deadline_defaults(
     manager-side validation of a returned-but-invalid payload already has its
     spend in ``llm_calls``, so charging it here too would double-count.
 
-    De-dup (Task 9.10, audit gp-4): a deterministic provider regenerates the
-    SAME failing response on the in-turn retry, so a single default can carry
-    the same burned generation twice; :meth:`ReplayLog.record_failed_call`
-    drops the byte-identical second row at the write chokepoint, so each
-    distinct burned generation -- and each distinct zero-spend marker, whose
-    ``error_message`` names its participant -- records exactly once.
+    The default runner records paid attempts separately with call identities
+    and clears ``parse_failures`` before reaching this helper. Legacy custom
+    runners may still supply them here, retaining content-based deduplication.
+    Zero-spend markers name their participant so distinct defaults remain
+    visible even when they share the same empty response and usage.
     """
 
     if replay is None:

@@ -1,17 +1,21 @@
-"""Aborted meetings retain paid calls without inventing a completed meeting."""
+"""Completed and aborted meetings retain every paid provider attempt once."""
 
 from __future__ import annotations
 
 import asyncio
+import json
 from pathlib import Path
 
 import pytest
 from pydantic import BaseModel, ValidationError
 
+from _manifest_writer import sample_provenance
+from api.replay_loader import ReplayLoader
 from agents.tactical.crewmate_policy import CrewmatePolicy
 from agents.tactical.impostor_policy import ImpostorPolicy
 from engine.entities import PlayerId, Role
 from engine.world import load_canonical_map
+from eval.balance_eval import load_tournament_report
 from llm.budget import BudgetExceededError, GameBudget
 from llm.client import CallKind, LLMResponse
 from llm.fake_provider import FakeProvider
@@ -27,6 +31,8 @@ from observation.action_intent import ActionIntent, EmergencyMeetingIntent, Wait
 from observation.packet import ObservationPacket
 from observation.public_map import PublicMapView
 from orchestrator.game import (
+    AgentFactory,
+    DEFAULT_TASKS_PER_CREWMATE,
     DefaultMeetingRunner,
     HeadlessGame,
     TacticalAgent,
@@ -62,12 +68,17 @@ def _agent_factory(agent_id: PlayerId, role: Role) -> _EmergencyCaller:
     return _EmergencyCaller(agent_id=agent_id, role=role, policy=policy)
 
 
-def _game(path: Path | None, runner: DefaultMeetingRunner) -> HeadlessGame:
+def _game(
+    path: Path | None,
+    runner: DefaultMeetingRunner,
+    *,
+    agent_factory: AgentFactory | None = None,
+) -> HeadlessGame:
     return HeadlessGame(
         seed=2026,
         num_players=4,
         game_map=load_canonical_map(),
-        agent_factory=_agent_factory,
+        agent_factory=agent_factory or _agent_factory,
         replay_path=path,
         scheduler=TickScheduler(max_ticks=3),
         meeting_runner=runner,
@@ -322,6 +333,164 @@ def test_identical_paid_invalid_attempts_remain_distinct(tmp_path: Path) -> None
     assert len(defaults) == 1
     assert defaults[0].input_tokens == defaults[0].output_tokens == 0
     assert defaults[0].cost_usd == 0.0
+
+
+@pytest.mark.parametrize("invalid_attempts", [1, 2, 100])
+def test_completed_meeting_failures_reconcile_across_accounting_consumers(
+    tmp_path: Path, invalid_attempts: int
+) -> None:
+    provider = _InjectedProvider(
+        abort_at=None,
+        invalid_at=frozenset(range(1, invalid_attempts + 1)),
+        identical_failure_metadata=True,
+    )
+    budget = GameBudget(max_cost_usd=1.0)
+    path = tmp_path / "replay-seed-2026.jsonl"
+    runner = build_default_meeting_runner(llm_client=provider, budget=budget)
+    result = _game(path, runner).run()
+
+    meetings = read_meeting_entries(path)
+    assert len(meetings) == 1
+    assert meetings[0].llm_calls == tuple(provider.calls)
+    entries = read_all_entries(path)
+    assert not any(entry.kind == "meeting_aborted" for entry in entries)
+    failures = [
+        entry
+        for entry in entries
+        if isinstance(entry, FailedCallReplayEntry)
+        and entry.error_type != "deadline_default"
+    ]
+    assert len(failures) == len(provider.failures)
+    assert len(failures) == (9 if invalid_attempts == 100 else invalid_attempts)
+    call_ids = [failure.call_id for failure in failures]
+    assert None not in call_ids
+    assert len(set(call_ids)) == len(call_ids)
+    if invalid_attempts >= 2:
+        assert provider.failures[0] == provider.failures[1]
+    for recorded, expected in zip(failures, provider.failures, strict=True):
+        assert (
+            LLMCallFailure.model_validate(
+                recorded.model_dump(include=set(LLMCallFailure.model_fields))
+            )
+            == expected
+        )
+
+    defaults = [
+        entry
+        for entry in entries
+        if isinstance(entry, FailedCallReplayEntry)
+        and entry.error_type == "deadline_default"
+    ]
+    assert len(defaults) == {1: 0, 2: 1, 100: 8}[invalid_attempts]
+    assert all(default.cost_usd == 0 for default in defaults)
+    assert all(
+        default.input_tokens == default.output_tokens == 0 for default in defaults
+    )
+    assert all(default.call_id is None for default in defaults)
+    if invalid_attempts == 100:
+        assert not provider.calls
+        assert sum(default.rendered_vote_max is not None for default in defaults) == 4
+
+    snapshot = budget.snapshot()
+    assert compute_cost_usd(path) == pytest.approx(snapshot.cost_usd)
+    (tmp_path / "roster.json").write_text(
+        json.dumps(
+            {
+                "num_players": 4,
+                "num_impostors": 1,
+                "tasks_per_crewmate": DEFAULT_TASKS_PER_CREWMATE,
+            }
+        ),
+        encoding="utf-8",
+    )
+    loader = ReplayLoader(tmp_path)
+    assert loader.cost_summary().total_cost_usd == pytest.approx(snapshot.cost_usd)
+    assert loader.load_replay(
+        "headless-seed-2026"
+    ).metadata.total_cost_usd == pytest.approx(snapshot.cost_usd)
+    report = load_tournament_report(
+        tmp_path,
+        roles_by_seed={
+            2026: {
+                player_id: player.role
+                for player_id, player in result.final_state.players.items()
+            }
+        },
+        tasks_per_crewmate=DEFAULT_TASKS_PER_CREWMATE,
+    )
+    cost = report.games[0].cost
+    assert cost.total_cost_usd == pytest.approx(snapshot.cost_usd)
+    assert cost.total_input_tokens == snapshot.input_tokens
+    assert cost.total_output_tokens == snapshot.output_tokens
+    assert cost.by_model[DEFAULT_MEETING_MODEL] == pytest.approx(snapshot.cost_usd)
+    assert sum(cost.by_model.values()) == pytest.approx(snapshot.cost_usd)
+    model, versions, _, _, manifest_cost, _ = sample_provenance(
+        tmp_path, 2026, "unused-fallback"
+    )
+    assert model == DEFAULT_MEETING_MODEL
+    assert versions
+    assert manifest_cost == f"{snapshot.cost_usd:.4f}"
+
+
+def test_attempt_identity_survives_multiple_meetings_and_runner_reuse(
+    tmp_path: Path,
+) -> None:
+    class SecondCaller(_EmergencyCaller):
+        def decide(
+            self, packet: ObservationPacket, public_map: PublicMapView
+        ) -> ActionIntent:
+            intent = super().decide(packet, public_map)
+            if self.agent_id == "p-2" and packet.tick == 1:
+                return EmergencyMeetingIntent(type="emergency", actor=self.agent_id)
+            return intent
+
+    def factory(agent_id: PlayerId, role: Role) -> SecondCaller:
+        policy = (
+            CrewmatePolicy(agent_id=agent_id)
+            if role == "CREWMATE"
+            else ImpostorPolicy(agent_id=agent_id)
+        )
+        return SecondCaller(agent_id=agent_id, role=role, policy=policy)
+
+    provider = _InjectedProvider(
+        abort_at=None,
+        invalid_at=frozenset({1, 2, 10, 11}),
+        identical_failure_metadata=True,
+    )
+    budget = GameBudget(max_cost_usd=1.0)
+    runner = build_default_meeting_runner(llm_client=provider, budget=budget)
+    path = tmp_path / "first.jsonl"
+    _game(path, runner, agent_factory=factory).run()
+    meetings = read_meeting_entries(path)
+    assert len(meetings) == 2
+    failures = [
+        entry
+        for entry in read_all_entries(path)
+        if isinstance(entry, FailedCallReplayEntry) and entry.call_id is not None
+    ]
+    assert len(failures) == 4
+    assert {entry.meeting_id for entry in failures} == {
+        meeting.meeting_id for meeting in meetings
+    }
+    first_calls = len(provider.calls)
+    assert compute_cost_usd(path) == pytest.approx(budget.snapshot().cost_usd)
+
+    provider.invalid_at = frozenset({provider.attempts + 1, provider.attempts + 2})
+    retry_path = tmp_path / "reuse.jsonl"
+    _game(retry_path, runner).run()
+    retry_meetings = read_meeting_entries(retry_path)
+    assert len(retry_meetings) == 1
+    assert retry_meetings[0].llm_calls == tuple(provider.calls[first_calls:])
+    retry_failures = [
+        entry
+        for entry in read_all_entries(retry_path)
+        if isinstance(entry, FailedCallReplayEntry) and entry.call_id is not None
+    ]
+    assert len(retry_failures) == 2
+    assert len({entry.call_id for entry in [*failures, *retry_failures]}) == 6
+    assert compute_cost_usd(path) + compute_cost_usd(retry_path) == pytest.approx(
+        budget.snapshot().cost_usd
+    )
 
 
 def test_terminal_paid_success_that_exceeds_cap_is_recorded(tmp_path: Path) -> None:

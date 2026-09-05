@@ -566,7 +566,7 @@ class FailedCallReplayEntry(BaseModel):
     """A reported provider failure or a meeting-default visibility marker.
 
     Reported failures carry their actual usage and partial response. A default
-    without separate usage is a zero-spend marker. New aborted attempts carry
+    without separate usage is a zero-spend marker. Newly captured attempts carry
     ``call_id`` so identical paid responses are not collapsed by content.
     """
 
@@ -596,7 +596,7 @@ class FailedCallReplayEntry(BaseModel):
     # the reader tolerates its absence and existing bytes reconstruct
     # unchanged.
     rendered_vote_max: float | None = None
-    # Present on newly captured aborted attempts so identical responses from
+    # Present on newly captured attempts so identical responses from
     # distinct paid calls remain distinct. Legacy rows retain content dedup.
     call_id: str | None = None
 

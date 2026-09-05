@@ -167,14 +167,18 @@ def test_partial_manifest_retains_aborted_call_provenance(tmp_path: Path) -> Non
 
 
 @pytest.mark.parametrize("aborted", [False, True])
-def test_manifest_attributes_failed_attempts_only_in_aborted_meetings(
+@pytest.mark.parametrize("identified", [False, True])
+@pytest.mark.parametrize("provider_cost", [0.0, 0.04])
+def test_manifest_attributes_identified_and_aborted_provider_failures(
     tmp_path: Path,
     aborted: bool,
+    identified: bool,
+    provider_cost: float,
 ) -> None:
     log = ReplayLog(tmp_path / "replay-seed-5.jsonl", game_id="headless-seed-5")
     meeting_id = "headless-seed-5:meeting-0"
     for model, tokens, call_cost, error_type in (
-        ("failed-model", 7, 0.04, "ValidationError"),
+        ("failed-model", 7, provider_cost, "ValidationError"),
         ("(deadline_default)", 0, 0.0, "deadline_default"),
     ):
         log.record_failed_call(
@@ -188,7 +192,7 @@ def test_manifest_attributes_failed_attempts_only_in_aborted_meetings(
             cost_usd=call_cost,
             error_type=error_type,
             error_message="failed",
-            call_id=model,
+            call_id=model if identified else None,
         )
     if aborted:
         log.record_aborted_meeting(
@@ -205,11 +209,11 @@ def test_manifest_attributes_failed_attempts_only_in_aborted_meetings(
         tmp_path, 5, "legacy-fallback"
     )
 
-    assert model == ("failed-model" if aborted else "legacy-fallback")
+    assert model == ("failed-model" if aborted or identified else "legacy-fallback")
     assert versions == ("opening.v1" if aborted else mw._NO_MEETINGS)
-    assert cost == "0.0400"
+    assert cost == f"{provider_cost:.4f}"
     assert winner == "null"
-    if aborted:
+    if aborted or identified:
         assert mw.fallback_model(tmp_path) == "failed-model"
 
 

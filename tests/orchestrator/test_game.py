@@ -1328,20 +1328,32 @@ def test_provider_validation_default_preserves_spend_end_to_end(
     # raised before the recording client logged them, so llm_calls holds only
     # the 3 SKIP votes (no double-count)...
     assert len(meeting.llm_calls) == 3
-    # ...and the burned spend is preserved as a deadline_default row with REAL
-    # values (not zeroed), so the audit trail stays accurate. Each turn's retry
-    # burned a byte-identical generation (this client, like a seeded local
-    # model, regenerates the same failing response for the unchanged prompt), so
-    # the single-write guard collapses each turn to ONE row instead of the
-    # duplicate that double-counted seeds 8/36/39 (Task 9.10, audit gp-4): one
-    # row for the opening plus one per opt_in turn.
-    assert len(failed) == 3
-    assert all(f.error_type == "deadline_default" for f in failed)
-    assert all(f.model == "qwen2.5:7b-instruct" for f in failed)
-    assert all(f.input_tokens == 200 and f.output_tokens == 9 for f in failed)
-    assert all(f.raw_response == "garbage not json" for f in failed)
+    # ...and each consumed attempt has its own identity and real usage: two
+    # opening attempts plus one per opt_in turn. A separate zero-spend marker
+    # keeps each default visible without charging the same response again.
+    attempts = [f for f in failed if f.call_id is not None]
+    defaults = [f for f in failed if f.error_type == "deadline_default"]
+    assert len(failed) == 7
+    assert len(attempts) == len({f.call_id for f in attempts}) == 4
+    assert all(f.error_type == "ValidationError" for f in attempts)
+    assert all(f.model == "qwen2.5:7b-instruct" for f in attempts)
+    assert all(f.input_tokens == 200 and f.output_tokens == 9 for f in attempts)
+    assert all(f.raw_response == "garbage not json" for f in attempts)
+    assert len(defaults) == 3
+    assert all(f.input_tokens == f.output_tokens == 0 for f in defaults)
+    assert all(f.cost_usd == 0 for f in defaults)
     assert all(
-        ("opening" in f.error_message or "opt_in" in f.error_message) for f in failed
+        ("opening" in f.error_message or "opt_in" in f.error_message) for f in defaults
+    )
+    assert (
+        sum(f.input_tokens for f in failed)
+        + sum(call.input_tokens for call in meeting.llm_calls)
+        == 803
+    )
+    assert (
+        sum(f.output_tokens for f in failed)
+        + sum(call.output_tokens for call in meeting.llm_calls)
+        == 39
     )
 
 

@@ -234,7 +234,7 @@ def _recorded_models_and_versions(path: Path) -> tuple[set[str], set[str]]:
             models.update(call.model for call in entry.llm_calls)
         elif (
             isinstance(entry, FailedCallReplayEntry)
-            and entry.meeting_id in aborted_ids
+            and (entry.call_id is not None or entry.meeting_id in aborted_ids)
             and entry.model != _DEADLINE_DEFAULT_MODEL
         ):
             models.add(entry.model)
@@ -242,7 +242,7 @@ def _recorded_models_and_versions(path: Path) -> tuple[set[str], set[str]]:
 
 
 def _meeting_models(sample_dir: Path) -> set[str]:
-    """Models used by resolved meetings and retained aborted attempts."""
+    """Models used by recorded responses and identified or aborted failures."""
 
     models: set[str] = set()
     for seed in discover_seeds(sample_dir):
