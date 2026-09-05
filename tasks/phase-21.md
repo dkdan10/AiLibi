@@ -1,9 +1,25 @@
 # Phase 21 — The re-ground on corrected bytes: Wave-0 defects repaired, one maintenance re-record, the ML re-ground, and the last injustice under its own pre-registered record
 
-STATUS: OPEN — chartered by the owner's merge of the planning PR (the 15.18 convention: the merge
-ratifies this document, the locked decisions below, and the proposed routings of
-`audits/review-2026-08-26/README.md` §3; a different ruling recorded on the PR before merge beats
-any clause here).
+STATUS: CLOSED 2026-09-05 (Task 21.26; `audits/audit-phase-21-close.md`) — the phase merged
+**34 PRs, #396–#429** (2026-08-27 → 2026-09-05), all re-verified at close HEAD `fa739ccb` with
+**34 VERIFIED / 0 DEVIATION-RECORDED** and none silent; the 35th is the close itself, whose own
+merge commit completes the phase. Two operator records were spent in one arc — the combined
+re-record (baseline 8, maintenance-of-record, no bars and no verdict) and the injustice record read
+by the ratified rule, which returned **FINDING**: bars 1, 2 and 3 MET (46/66 = 0.6970 against
+≥ 0.60; 20 against < 35; 11 against ≤ 12) and **bar 4 MISSED** (11/20 = 0.5500 against < 0.40).
+§6's rule is conjunctive, so no lever graduated, the three Wave-2 levers stay live toggles, the
+four canonical sets keep their baseline-8 bytes, and **the ladder tip stands at baseline 8**; the
+owner made no override at the gate, and the `audits/audit-phase-20-baseline-7.md` §6.1-shape path
+stays available and untaken. Both legs the phase-20 close routed forward come back GREEN as
+results: the opt-in campaign tier reads *"331 passed, 6111 deselected"* exit 0, and
+`verify_ml_evidence.py --complete` declares no grounding gap at all. **Five** close-found defects are
+recorded and routed — F1 the close audit's own unbound state, F2 the ungated byte half of the counted
+registry rows, F3 the unguarded finding map, F4 the two surfaces still calling a ratified landing
+provisional, and F5 the prompt-archive narration re-staled by the baseline-8 re-record — and **F6** is
+carried from the phase before. Originally chartered by the owner's merge of the planning PR (the 15.18
+convention: the merge ratifies this document, the locked decisions below, and the proposed routings
+of `audits/review-2026-08-26/README.md` §3; a different ruling recorded on the PR before merge
+beats any clause here).
 
 Chartered from the two-track Wave-0 audit of 2026-08-26 (`audits/review-2026-08-26/`, committed at
 `4002f19b` BEFORE this plan was drafted — the owner's explicit sequencing instruction), which

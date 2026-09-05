@@ -216,6 +216,9 @@ switched off, the reference recording did not move, and those 300 games are kept
 as named evidence beside the record instead of replacing the committed sets. No
 override was made.
 [Record](../audits/audit-phase-21-adopting-record.md).
+The phase closed on 2026-09-05 behind that finding.
+[Contract](../tasks/phase-21.md) ·
+[close audit](../audits/audit-phase-21-close.md).
 
 ---
 

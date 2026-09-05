@@ -26,7 +26,7 @@ Nine LLM agents walk a room graph, work their task lists, witness what they can 
 
 - **Stack** — Python 3.11 · FastAPI · Pydantic · React + Vite + PixiJS · uv · `mypy --strict` · Hypothesis.
 - **Scale** — a snapshot of `main` as of 2026-08-19: 903 commits · 364 merged pull requests · 363 generated agent prompts · 100 committed replays · 4,940 tests in the default gate.
-- **Status** — active; phases 0–19 closed, the last on 2026-08-18; phase 20 open.
+- **Status** — active; phases 0–21 closed, the last on 2026-09-05.
 
 ## Verify it yourself in one minute
 
@@ -170,7 +170,7 @@ The review those lessons came out of is published in full — curated, indexed, 
 
 ## Project status
 
-Active. Phases 0–5 built the MVP; phases 6–19 pushed how well the agents reason, moved the eval onto a hosted model, and ran a four-phase ML program. Phase 20 — evidence honesty — closed 2026-08-26: its repairs shipped, its one pre-registered recording was spent, the rule returned a finding, and I adopted the new reference recording over that finding by explicit override. The whole close, including the defects it found in the tree it was closing, is in [the phase 20 close audit](audits/audit-phase-20-close.md).
+Active. Phases 0–5 built the MVP; phases 6–19 pushed how well the agents reason, moved the eval onto a hosted model, and ran a four-phase ML program. Phase 20 — evidence honesty — closed 2026-08-26: its repairs shipped, its one pre-registered recording was spent, the rule returned a finding, and I adopted the new reference recording over that finding by explicit override. The whole close, including the defects it found in the tree it was closing, is in [the phase 20 close audit](audits/audit-phase-20-close.md). Phase 21 closed 2026-09-05: it repaired and re-recorded that substrate, re-fitted the decision models, and spent a second pre-registered recording that met three of four bars — not an adoption, so the reference recording did not move ([the phase 21 close audit](audits/audit-phase-21-close.md)).
 
 Four learned tactical policies each beat the scripted one on wins. None became the default, because each failed an evidence-quality bar I had written down *before* the measurement that judged it — so both of those phases closed having adopted nothing and moved no reference recording. That is what those two closes mean: the bar was pre-registered, the honest answer was "not yet", and I record the miss rather than move it. The current reference recording is the eighth, which the audits call [baseline 8](docs/glossary.md#baseline-n-the-reference-recording).
 
@@ -200,7 +200,7 @@ Close audits start at the MVP close and resume at phase 13; earlier rows link th
 | 18 | The ML phase: co-evolution, the finalist eval, no adoption | [audit](audits/audit-phase-18-close.md) |
 | 19 | Review and refresh: truth sweeps, spectator pass, ML close | [audit](audits/audit-phase-19-close.md) |
 | 20 | Evidence honesty: claims repaired, the inference channel rebuilt, one pre-registered recording | [audit](audits/audit-phase-20-close.md) |
-| 21 | Open: fixes the defects an audit found, re-records the games, re-fits the decision models on the repaired recordings, then attacks the two remaining fairness defects — the player who reports a body gets convicted for reporting it, and verdicts that form by echo rather than by evidence — under a measurement written down in advance | [contract](tasks/phase-21.md), [plan](audits/audit-phase-21-planning.md) |
+| 21 | Defects repaired, games re-recorded, decision models re-fitted, three fairness levers measured against pre-set bars | [audit](audits/audit-phase-21-close.md), [contract](tasks/phase-21.md) |
 
 ## Run it
 

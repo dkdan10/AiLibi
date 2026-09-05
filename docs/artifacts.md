@@ -106,7 +106,7 @@ than its output preserved.
 | `training/artifacts/coevo/EVIDENCE-MANIFEST.md` — the pin + the digests + the consumer enumeration | (b) | in git | 283 KiB |
 | `training/reports/` — the reports and their flattened `results-*.jsonl` rows | (b) | in git | 2.5 MB / 21 files |
 | `training/reports/_finalist_eval_raw/MANIFEST.md` — the slate's per-file digests (Task 19.21) | (b) | in git | 1,569 digests |
-| `audits/` — the audit record, with `audits/README.md` as its index | (b) | in git | 8,528,101 tracked bytes / 166 files |
+| `audits/` — the audit record, with `audits/README.md` as its index | (b) | in git | 8,644,243 tracked bytes / 167 files |
 | `docs/media/` — the README captures + the as-built architecture picture | (a) | in git | 1.4 MB / 6 files |
 | `design/phase-12/` — the design-artifact record (map reference renders + briefs) | (b) | in git | 1.9 MB / 18 files |
 | `experiments/lab/`, `experiments/model_probe/` — recorded read-only harness outputs and their syntheses (`experiments/` outputs are artifacts, not behavior — `docs/architecture.md`) | (b) | in git | 7.3 MB / 164 files |
@@ -195,6 +195,9 @@ per-file digests and the declared slate; the reading is
 `audits/audit-phase-21-adopting-record.md`. Whether a recording like this is
 carried in the tree or on a pinned commit is an owner decision that was open when
 it was taken, and the pinned commit is the provisional answer.
+**Ruled 2026-09-04:** the owner's merge of that record ratified the pinned commit,
+so the sentence above describes the state at the time of writing and not an open
+question; a move into the tree would now be a fresh decision of its own.
 
 **The one step still open, and how to see whether it is.** Deleting the
 superseded staging ref is the one part of the fold Task 19.22 could not execute
