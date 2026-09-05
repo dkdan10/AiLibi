@@ -255,11 +255,9 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         "--force",
         action="store_true",
         help=(
-            "overwrite existing per-seed replay files in --output-dir. "
-            "Without it, re-using an --output-dir whose replay files already "
-            "exist raises ReplayLog.AlreadyExistsError and exits non-zero, "
-            "guarding against the silent doubled-file corruption that broke "
-            "replay reads in Phase 4 (DESIGN.md §11.4)."
+            "replace each seed's replay and observation audit together in "
+            "--output-dir. Without it, either existing output is refused. "
+            "Outputs for seeds not reached by this run are left intact."
         ),
     )
     parser.add_argument(
@@ -1168,12 +1166,9 @@ def main(argv: list[str] | None = None) -> int:
         explicit_stamp=explicit_stamp,
     )
     seeds = range(args.start_seed, args.start_seed + args.num_games)
-    # ``force`` is threaded into each per-seed ReplayLog construction inside
-    # run_tournament_eval, so a conflicting replay-seed-{seed}.jsonl is truncated
-    # immediately before that game writes it. A crash partway through a re-run
-    # therefore never deletes a later seed's replay that was never reached;
-    # without --force, the first existing file raises and exits non-zero
-    # (DESIGN.md §11.4; Task 4.16).
+    # Each seed owns its replay and observation audit as a pair. ``force``
+    # replaces that pair when the seed starts; it never pre-deletes outputs for
+    # later seeds. Without it, either existing output fails before replacement.
     #
     # Three-branch call (Task 18.7, extending the Task-15.21 two-branch seam;
     # Task 18.19 reuses the crew_auto_stamp branch for dual-role recordings):

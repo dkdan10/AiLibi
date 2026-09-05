@@ -277,14 +277,11 @@ def run_tournament_eval(
     non-MeetingAware factory only stays valid for sweeps whose tick budget is
     too small to trigger any meeting (e.g. the wait-agent unit tests).
 
-    ``force`` is threaded into each per-seed
-    :class:`~orchestrator.replay.ReplayLog`: ``force=True`` truncates a
-    pre-existing ``replay-seed-{seed}.jsonl`` at construction — immediately
-    before that seed's game writes it, so a crash partway through a re-run never
-    deletes a later seed's replay that was never reached. The default
-    (``False``) makes a re-run against an ``output_dir`` whose replay files
-    exist fail loud rather than silently doubling them (DESIGN.md §11.4; Task
-    4.16).
+    ``force`` is threaded into each per-seed :class:`HeadlessGame`.
+    ``force=True`` replaces that seed's replay and observation audit together
+    when it starts, leaving later seeds' outputs intact if the run stops early.
+    The default (``False``) refuses either existing output before replacement,
+    so an old audit cannot silently accumulate another game's packets.
 
     A meeting that aborts on a structured-output parse failure is caught per
     seed: the orchestrator has already recorded the failed call's spend to the

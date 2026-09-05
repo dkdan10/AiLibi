@@ -46,7 +46,18 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         "--audit-log-path",
         type=Path,
         default=None,
-        help="output path for the observation audit log (default: alongside replay)",
+        help=(
+            "observation audit output (default: alongside replay); /dev/null "
+            "discards audit packets and is never replaced"
+        ),
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help=(
+            "replace an existing replay and its observation audit together; "
+            "without it, either existing output is refused"
+        ),
     )
     parser.add_argument(
         "--num-players",
@@ -95,6 +106,7 @@ def main(argv: list[str] | None = None) -> int:
         agent_factory=build_default_agent_factory(),
         replay_path=args.replay_path,
         audit_log_path=args.audit_log_path,
+        force=args.force,
         num_players=args.num_players,
         num_impostors=args.num_impostors,
         tasks_per_crewmate=args.tasks_per_crewmate,
