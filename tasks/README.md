@@ -27,13 +27,16 @@ review records and remain unmerged into `main`. The cards are:
 | [Recording replacement](work/recording-replacement.md) | Replace a replay and its observation audit as one recording lifecycle. | `62ba0162`, [PR 434](https://github.com/dkdan10/AiLibi/pull/434) |
 | [Cleanup delivery](work/cleanup-delivery.md) | Keep implementation on the working branch until the owner's final review and merge. | Commit history for the card |
 
-The first parallel implementation batch addresses recording integrity:
+The first parallel implementation batch completed three recording-integrity
+repairs. Each passed independent implementation review and the combined project
+gate; their cards hold the evidence and remaining limitations. Milestone 1
+continues with the next candidates below.
 
-| Card | File ownership | Review |
-| --- | --- | --- |
-| [Report destinations](work/report-destinations.md) | Tournament CLI and destination helper/tests | Independent review after implementation |
-| [Completed meeting attempts](work/completed-meeting-attempts.md) | Orchestrator call recording and manifest provenance/tests | Independent review after implementation |
-| [Evaluation replay integrity](work/evaluation-replay-integrity.md) | Evaluation walker, report loaders, and their consumers/tests | Independent review after implementation |
+| Card | File ownership | Commit | Independent reviewer |
+| --- | --- | --- | --- |
+| [Report destinations](work/report-destinations.md) | Tournament CLI and destination helper/tests | `27885b10` | Portfolio-review agent |
+| [Completed meeting attempts](work/completed-meeting-attempts.md) | Orchestrator call recording and manifest provenance/tests | `9bfe86d0` | Workflow-redesign agent |
+| [Evaluation replay integrity](work/evaluation-replay-integrity.md) | Evaluation walker, report loaders, and their consumers/tests | `bf2689f9` | Code-review agent |
 
 One agent writes each file at a time. The coordinating agent owns this index,
 integrates review fixes, runs the shared full gate, and commits each task
