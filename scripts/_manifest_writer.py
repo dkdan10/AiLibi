@@ -10,7 +10,7 @@ can then be attributed to a specific prompt version + model snapshot.
 This module is the Python half of the refresh workflow; ``refresh_samples.sh``
 is the bash front end that runs the tournament and then calls the ``update`` /
 ``sum-cost`` commands here. It reads provenance straight from the replay JSONLs
-via the existing :mod:`orchestrator.replay` helpers (``read_meeting_entries``,
+via the existing :mod:`orchestrator.replay` helpers (``read_all_entries``,
 ``read_game_outcome``, ``compute_cost_usd``) — it never re-runs a game.
 
 Commands:
@@ -50,13 +50,16 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from llm.provider import DEFAULT_MEETING_MODEL  # noqa: E402
+from orchestrator.game import _DEADLINE_DEFAULT_MODEL  # noqa: E402
 from orchestrator.replay import (  # noqa: E402
     FSM_DEFAULT_POLICY_ID,
+    AbortedMeetingReplayEntry,
+    FailedCallReplayEntry,
+    MeetingReplayEntry,
     ReplayEntry,
     compute_cost_usd,
     read_all_entries,
     read_game_outcome,
-    read_meeting_entries,
     read_substrate_flags,
     read_tactical_policy_stamp,
 )
@@ -214,13 +217,39 @@ def discover_seeds(sample_dir: Path) -> list[int]:
     return sorted(seeds)
 
 
+def _recorded_models_and_versions(path: Path) -> tuple[set[str], set[str]]:
+    """Attribute calls without treating a synthetic default as a model."""
+
+    entries = read_all_entries(path)
+    aborted_ids = {
+        entry.meeting_id
+        for entry in entries
+        if isinstance(entry, AbortedMeetingReplayEntry)
+    }
+    models: set[str] = set()
+    versions: set[str] = set()
+    for entry in entries:
+        if isinstance(entry, (MeetingReplayEntry, AbortedMeetingReplayEntry)):
+            versions.update(entry.prompt_versions.values())
+            models.update(call.model for call in entry.llm_calls)
+        elif (
+            isinstance(entry, FailedCallReplayEntry)
+            and entry.meeting_id in aborted_ids
+            and entry.model != _DEADLINE_DEFAULT_MODEL
+        ):
+            models.add(entry.model)
+    return models, versions
+
+
 def _meeting_models(sample_dir: Path) -> set[str]:
-    """Distinct LLM model ids across every meeting in the sample directory."""
+    """Models used by resolved meetings and retained aborted attempts."""
 
     models: set[str] = set()
     for seed in discover_seeds(sample_dir):
-        for meeting in read_meeting_entries(_sample_path(sample_dir, seed)):
-            models.update(call.model for call in meeting.llm_calls)
+        recorded_models, _ = _recorded_models_and_versions(
+            _sample_path(sample_dir, seed)
+        )
+        models.update(recorded_models)
     return models
 
 
@@ -245,7 +274,7 @@ def sample_provenance(
     """Return ``(model, prompt_versions, flags, policy, cost_usd, winner)``.
 
     Provenance for one sample, derived entirely from the replay JSONL: the union
-    of every meeting's ``prompt_versions`` values, the distinct models its LLM
+    of resolved and aborted meetings' ``prompt_versions``, the models their LLM
     calls used, the Phase-13.5 substrate config stamped on the ``game_over``
     record (Task 14.7), the tactical-policy stamp on that same record (Task 15.9),
     the summed cost, and the decisive outcome. Both the ``flags`` and ``policy``
@@ -256,11 +285,7 @@ def sample_provenance(
     """
 
     path = _sample_path(sample_dir, seed)
-    versions: set[str] = set()
-    models: set[str] = set()
-    for meeting in read_meeting_entries(path):
-        versions.update(meeting.prompt_versions.values())
-        models.update(call.model for call in meeting.llm_calls)
+    models, versions = _recorded_models_and_versions(path)
     model = ", ".join(sorted(models)) if models else fallback
     prompt_versions = ", ".join(sorted(versions)) if versions else _NO_MEETINGS
     flags = _render_flags(read_substrate_flags(path))

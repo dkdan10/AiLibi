@@ -90,6 +90,7 @@ from orchestrator.game import (
     build_default_meeting_runner,
 )
 from orchestrator.replay import (
+    AbortedMeetingReplayEntry,
     CrewTacticalPolicyStamp,
     FailedCallReplayEntry,
     GameEndReplayEntry,
@@ -986,10 +987,15 @@ def _game_report_from_replay(
     failed_calls = tuple(e for e in entries if isinstance(e, FailedCallReplayEntry))
     end = next((e for e in entries if isinstance(e, GameEndReplayEntry)), None)
 
-    # prompt_versions are constant within a run (templates load once), so they
-    # collapse losslessly to game granularity; empty for a game with no meeting.
-    prompt_versions: Mapping[str, str] = (
-        dict(meeting_entries[0].prompt_versions) if meeting_entries else {}
+    # An aborted opening still used the run's prompt set. Preserve its version
+    # stamp even when no meeting reached a resolution.
+    prompt_versions: Mapping[str, str] = next(
+        (
+            dict(entry.prompt_versions)
+            for entry in entries
+            if isinstance(entry, (MeetingReplayEntry, AbortedMeetingReplayEntry))
+        ),
+        {},
     )
     game_id = entries[0].game_id if entries else f"headless-seed-{seed}"
 
@@ -1097,7 +1103,8 @@ def _game_cost_summary(
     :func:`orchestrator.replay.compute_cost_usd` (which already folds in
     failed-call spend). ``total_input_tokens`` / ``total_output_tokens`` /
     ``by_model`` are summed across the SAME records — meeting ``llm_calls`` plus
-    ``failed_calls`` — in one pass, so ``sum(by_model.values())`` reconciles to
+    aborted-meeting calls and ``failed_calls`` — in one pass, so
+    ``sum(by_model.values())`` reconciles to
     ``total_cost_usd``. Counting spend here once is the single place it is
     counted; the cost dashboard (Task 5.5) must not re-add failed-call cost.
     """
@@ -1106,7 +1113,7 @@ def _game_cost_summary(
     total_output_tokens = 0
     by_model: dict[str, float] = {}
     for entry in entries:
-        if isinstance(entry, MeetingReplayEntry):
+        if isinstance(entry, (MeetingReplayEntry, AbortedMeetingReplayEntry)):
             for call in entry.llm_calls:
                 total_input_tokens += call.input_tokens
                 total_output_tokens += call.output_tokens

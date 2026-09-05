@@ -303,6 +303,8 @@ FORBIDDEN_EVAL_ENGINE_FIELDS: Final[frozenset[str]] = frozenset(
 # ROUTE redacts them on the served payload via ``api.schemas.FailedCallEvalView``
 # (covered end-to-end in ``test_eval_routes.py``); this structural snapshot is
 # over the report TYPE, which still carries them, so they are listed.
+# ``call_id`` identifies a provider attempt, contains no engine state, and is
+# also omitted by the served failed-call projection.
 #
 # ``rendered_vote_max`` (Task 10.12) is the rendered §4.6 max suspicion a
 # DEFAULTED vote prompt computed over the voter's living ejection candidates,
@@ -492,6 +494,7 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "body_of",
         "body_report_meetings",
         "by_model",
+        "call_id",
         "call_kind",
         "cap_defaulted_turns",
         "citation_coerced_skip_ballots",

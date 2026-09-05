@@ -13,11 +13,11 @@ The initial cards are:
 | --- | --- |
 | [Workflow pilot](work/workflow-pilot.md) | Introduce the prospective card format while preserving historical checks. |
 | [Budget accounting](work/budget-accounting.md) | Account for provider usage when a consumed response fails validation. |
+| [Aborted meeting calls](work/aborted-meeting-calls.md) | Retain completed responses and reported failed-attempt usage when a meeting aborts. |
 
-Only the first repair is fully specified. Select the next card after its
-verification and review, using these candidates:
+Select the next card after the active repair's verification and review,
+using these candidates:
 
-- Preserve successful model calls when a later call aborts a meeting.
 - Validate replay chronology and terminal metadata against reconstructed state.
 - Keep replay replacement and its observation audit consistent.
 - Reconcile displayed highlights and results with their recording provenance.

@@ -54,6 +54,7 @@ _FAILED_CALL = FailedCallReplayEntry(
     cost_usd=0.013,
     error_type="ValidationError",
     error_message=_LONG_ERROR_MESSAGE,
+    call_id="call-7",
 )
 
 
@@ -112,7 +113,13 @@ def served_failed_call(tmp_path: Path) -> Iterator[dict[str, object]]:
 def test_failed_call_excludes_raw_fields(served_failed_call: dict[str, object]) -> None:
     # The raw blob, the prompt length, and the per-call token counts are dropped
     # — exactly what the parallel FailedCallView surface suppresses (B-B-1/D-D-1).
-    for dropped in ("raw_response", "prompt_length", "input_tokens", "output_tokens"):
+    for dropped in (
+        "raw_response",
+        "prompt_length",
+        "input_tokens",
+        "output_tokens",
+        "call_id",
+    ):
         assert dropped not in served_failed_call, (
             f"eval route re-exposed redacted field {dropped!r}"
         )
