@@ -9,7 +9,8 @@ close **verifies and routes**: the whole gate re-run at close HEAD by the verifi
 (§1), one ledger row per merged PR with a fresh contract-specific command (§2, none silent), the
 before/after story in generated numbers with the four pre-registered bars read back (§3), both
 records' rulings checked against the tree (§3.3), the two registers' finding→outcome map (§3.4), and
-the routed next decision put to the owner with a costed recommendation (§4).
+everything the phase routed by name, carried forward with a disposition each (§4), and the routed
+next decision put to the owner with a costed recommendation (§5).
 
 **Close HEAD:** `fa739ccb` (= `origin/main` tip at the close session: *"coordination: re-anchor Task
 21.26 (the close audit and ledger) to the FINDING outcome at 9618fe95 …"*, on top of the 21.25
@@ -19,8 +20,15 @@ merge-reality commit `9618fe95` / PR #429 `d255f5fe`). The clone was complete, n
 **Grounding:** every number below is either read from a committed pin / recorded audit named beside
 it, or computed at close HEAD by a command in §7. Everything ran `$0`, deterministic, against the
 fake provider. Network was touched only by the named tooling legs: the evidence fetch by pinned sha
-(`scripts/fetch_evidence.sh`, §1), the read-only `git ls-remote` queries (§6), and read-only GitHub
-API reads of the Pages workflow's run status (§1) and of the merged-PR list (§2, §6).
+(`scripts/fetch_evidence.sh`, §1), the read-only `git ls-remote` queries (§7), and read-only GitHub
+API reads of the Pages workflow's run status (§1) and of the merged-PR list (§2, §7).
+
+**One reading convention, so no anchor here is stale on arrival.** Every `tasks/phase-21.md` line
+number below reads that file **at close HEAD `fa739ccb`** (`git show fa739ccb:tasks/phase-21.md`).
+This PR's own STATUS-banner edit replaces a 4-line block with an 18-line one at the top of that file,
+so on the merged tree every anchor below line 3 sits **+14 lines** lower — H-38's citation, quoted as
+`:6781` here, reads `:6795` after the merge. Anchors into every other file are at close HEAD and this
+PR does not move them.
 
 **Verdict in one line:** Phase 21 **CLOSES COMPLETE** — its other 34 merged PRs (2026-08-27 →
 2026-09-05, **#396–#429**, 83 commits from the planning commit through close HEAD) are re-verified
@@ -46,23 +54,32 @@ by no gate.
 
 ## 1. The gate rerun at close HEAD (the WHOLE gate, the verifiers' actual paths)
 
-Every leg below ran at close HEAD `fa739ccb` in ONE session; §7's first block lists them in the order
+Every leg below ran at close HEAD `fa739ccb` in ONE session; §8's first block lists them in the order
 they actually ran, while the table groups them by leg for reading. The **state** column matters: the
 phase-20 close found its F1 precisely by noticing which state each leg was in, so the state is
 recorded beside every row rather than assumed.
 
+**The `wall` column is measured, not estimated**, and it is honest about where it comes from: the
+whole cycle was re-run end to end on this branch with each leg timed, so the walls are that timed
+session's and the quoted outputs are the close-HEAD session's. The two agree everywhere they can —
+the campaign tier reads 154.67 s at close HEAD and 159.03 s on the timed re-run, the two `check.sh`
+runs report the same counts — because the only difference between the trees is this PR's own
+doc-only commits. This session shared a machine with sibling worktrees; the correctness legs are
+load-independent and are quoted as measured.
+
 | leg | invocation | state | result (quoted) | wall |
 |---|---|---|---|---|
-| default gate | `bash scripts/check.sh` | clean | **GREEN — exit 0.** ruff *"All checks passed!"*; format *"406 files already formatted"*; `lint-imports` *"Analyzed 155 files, 834 dependencies."* / *"Contracts: 4 kept, 0 broken."*; *"Task docs validation passed: 390 tasks and 390 prompts."*; *"All 390 prompts are in sync."*; mypy *"Success: no issues found in 377 source files"*; pytest **"6088 passed, 20 skipped, 3 xfailed in 149.84s (0:02:29)"**; frontend lint + `tsc:check` + vitest *"Test Files 9 passed (9) / Tests 440 passed (440)"* + build *"✓ built in 214ms"* | 191 s |
-| evidence restore | `bash scripts/fetch_evidence.sh` | → restored | *"OK: 3269/3269 files match 476a1f85492439277350af9708f1d120eb1c0a71 + 29af85d5457caeba4f8ba8ba77610c6a0ab2213a."* — **TWO** evidence families now, the phase-18 co-evolution slate and the FINDING recording 21.24 landed; the prior close's 2953/2953 is against ONE | 10 s |
-| campaign tier | `uv run pytest -m campaign -q` | restored | **GREEN — exit 0: "331 passed, 6111 deselected in 154.67s (0:02:34)"**. This is the prior close's F1, **CLOSED BY MEASUREMENT** — see below | 155 s |
-| evidence completeness | `uv run python scripts/verify_ml_evidence.py --complete` | restored | *"checks: 63 \| OK 58 \| FAIL 0 \| ABSENT 0 \| INFO 5"* / *"verify-ml-evidence: every check passed."* — exit 0. **There is no STALE column, because there is no STALE status**: 21.17 deleted the amnesty and nothing re-recorded the corpus afterwards to need one (`grep -c STALE scripts/verify_ml_evidence.py` → **0**). The `ML grounding` row reads `OK` with both fingerprints equal at `cc54d3c02a98…` | 33 s |
-| **default gate, again** | `bash scripts/check.sh` | **restored** | **GREEN — exit 0.** mypy *"Success: no issues found in 377 source files"* (the SAME source-file count as the clean run) and pytest **"6088 passed, 20 skipped, 3 xfailed in 132.54s (0:02:12)"**; frontend 440 passed, *"✓ built in 226ms"*. This is the pair `audits/audit-phase-19-close.md` §1 recorded as mutually exclusive; Task 20.17 repaired it, and the repair now holds with a **second** restored family in the tree, which no prior close exercised | 175 s |
-| byte identity | `bash scripts/verify_samples.sh` | restored, **bare env** (`env -i`) | *"All 50 samples verified clean."* (4p1i) / *"All 50 samples verified clean."* (9p2i) — 100/100, with zero `AILIBI_*` exports of any kind. On a FINDING branch this is the leg the ON-stamped recording could not have passed had it overwritten the canonical sets (§3.3) | 2 s |
-| validity gates | `uv run python scripts/validity_gate.py <set>` × 4 | restored | *"Validity gate PASSED (all checks green)."* on all four committed sets, each with *"byte_identical_reconstruction: 0 samples drifted"* and *"cost_and_provenance_exact: model='Qwen/Qwen3.6-27B', 4 prompt versions, substrate stamped exact"* over 50 / 150 / 50 / 50 games | 41 s |
-| front-door truth | `uv run python scripts/check_doc_facts.py` | restored | exit 0, four lines, and the third is the one this phase added: *"the claim-shaped facts hold across 6 documents, the four bars audits/audit-phase-21-adopting-record.md decided among them"*; also *"the 25-lever substrate registry"* and *"Budgets verified: 4 front-door pages sit inside their word budgets"* | 2 s |
-| evidence clean-up | `bash scripts/fetch_evidence.sh --clean` | → clean | *"Removed 3267 restored file(s). Tracked bytes are untouched."*; afterwards `git status --porcelain` shows nothing but this PR's own five doc edits and `git status --porcelain replays/` is **empty**, **including under the new `replays/records/phase-21-wave2-finding/` destination** — see below | 4 s |
-| Pages deploy | `Deploy to GitHub Pages` (`.github/workflows/pages.yml:85`) | — | **success on `fa739ccb`** — run 33950817155, both jobs green (`Build the demo bundle` 50 s, `Deploy to GitHub Pages` 12 s incl. its own verification step). **This is close HEAD, not the close commit** — see the note below | 67 s |
+| default gate | `bash scripts/check.sh` | clean | **GREEN — exit 0.** ruff *"All checks passed!"*; format *"406 files already formatted"*; `lint-imports` *"Analyzed 155 files, 834 dependencies."* / *"Contracts: 4 kept, 0 broken."*; *"Task docs validation passed: 390 tasks and 390 prompts."*; *"All 390 prompts are in sync."*; mypy *"Success: no issues found in 377 source files"*; pytest **"6088 passed, 20 skipped, 3 xfailed in 149.84s (0:02:29)"**; frontend lint + `tsc:check` + vitest *"Test Files 9 passed (9) / Tests 440 passed (440)"* + build *"✓ built in 214ms"* | **146 s** |
+| evidence restore | `bash scripts/fetch_evidence.sh` | → restored | *"OK: 3269/3269 files match 476a1f85492439277350af9708f1d120eb1c0a71 + 29af85d5457caeba4f8ba8ba77610c6a0ab2213a."* — **TWO** evidence families now, the phase-18 co-evolution slate and the FINDING recording 21.24 landed; the prior close's 2953/2953 is against ONE | **6 s** |
+| campaign tier | `uv run pytest -m campaign -q` | restored | **GREEN — exit 0: "331 passed, 6111 deselected in 154.67s (0:02:34)"**. This is the prior close's F1, **CLOSED BY MEASUREMENT** — see below | **160 s** |
+| evidence completeness | `uv run python scripts/verify_ml_evidence.py --complete` | restored | *"checks: 63 \| OK 58 \| FAIL 0 \| ABSENT 0 \| INFO 5"* / *"verify-ml-evidence: every check passed."* — exit 0. **There is no STALE column, because there is no STALE status**: 21.17 deleted the amnesty and nothing re-recorded the corpus afterwards to need one (`grep -c STALE scripts/verify_ml_evidence.py` → **0**). The `ML grounding` row reads `OK` with both fingerprints equal at `cc54d3c02a98…` | **29 s** |
+| **default gate, again** | `bash scripts/check.sh` | **restored** | **GREEN — exit 0.** mypy *"Success: no issues found in 377 source files"* (the SAME source-file count as the clean run) and pytest **"6088 passed, 20 skipped, 3 xfailed in 132.54s (0:02:12)"**; frontend 440 passed, *"✓ built in 226ms"*. This is the pair `audits/audit-phase-19-close.md` §1 recorded as mutually exclusive; Task 20.17 repaired it, and the repair now holds with a **second** restored family in the tree, which no prior close exercised | **148 s** |
+| byte identity | `bash scripts/verify_samples.sh` | restored, **bare env** (`env -i`) | *"All 50 samples verified clean."* (4p1i) / *"All 50 samples verified clean."* (9p2i) — 100/100, with zero `AILIBI_*` exports of any kind. On a FINDING branch this is the leg the ON-stamped recording could not have passed had it overwritten the canonical sets (§3.3) | **2 s** |
+| validity gates | `uv run python scripts/validity_gate.py <set>` × 4 | restored | *"Validity gate PASSED (all checks green)."* on all four committed sets, each with *"byte_identical_reconstruction: 0 samples drifted"* and *"cost_and_provenance_exact: model='Qwen/Qwen3.6-27B', 4 prompt versions, substrate stamped exact"* over 50 / 150 / 50 / 50 games | **12 s** (3 + 7 + 1 + 1) |
+| front-door truth | `uv run python scripts/check_doc_facts.py` | restored | exit 0, four lines, and the third is the one this phase added: *"the claim-shaped facts hold across 6 documents, the four bars audits/audit-phase-21-adopting-record.md decided among them"*; also *"the 25-lever substrate registry"* and *"Budgets verified: 4 front-door pages sit inside their word budgets"* | **1 s** |
+| evidence clean-up | `bash scripts/fetch_evidence.sh --clean` | → clean | *"Removed 3267 restored file(s). Tracked bytes are untouched."*; afterwards `git status --porcelain` shows nothing but this PR's own five doc edits and `git status --porcelain replays/` is **empty**, **including under the new `replays/records/phase-21-wave2-finding/` destination** — see below | **14 s** |
+| evidence completeness, **the other state** | `uv run python scripts/verify_ml_evidence.py --complete` | clean | *"checks: 60 \| OK 48 \| FAIL 0 \| ABSENT 7 \| INFO 5"* — **exit 1**, and that is the check working: `--complete` REFUSES a checkout that holds only the sidecars, and the seven ABSENT rows name both families with the note *"restore with `bash scripts/fetch_evidence.sh`"*. The `ABSENT 7` / `ABSENT 0` pair is the one `audits/audit-phase-21-adopting-record.md` §6.1 records, reproduced here at a different HEAD | **24 s** |
+| Pages deploy | `Deploy to GitHub Pages` (`.github/workflows/pages.yml:85`) | — | **success on `fa739ccb`** — run 33950817155, both jobs green (`Build the demo bundle` 50 s, `Deploy to GitHub Pages` 12 s incl. its own verification step). **This is close HEAD, not the close commit** — see the note below | 62 s (GitHub's) |
 
 **The Pages leg is the one that cannot complete before the merge, and it is not claimed as complete.**
 `pages.yml` triggers on `push` to `main`, so no run can exist for the close commit until the merge
@@ -81,10 +98,11 @@ Measured rather than assumed — after `--clean`, `git status --porcelain replay
 the whole-tree porcelain shows nothing but this PR's own doc edits. `git status --porcelain
 replays/` was empty at every gate in this session.
 
-**And once more on the tree this close leaves behind.** The rows above are close HEAD itself, before
-this PR's own doc-only commits. Re-run on the final tree — the close audit landed, the index entry
-added, the registry row re-derived, the banners flipped — `bash scripts/check.sh` is green again:
-see §7's final block for the quoted legs.
+**And once more on the tree this close leaves behind.** The rows above quote the close-HEAD session,
+before this PR's own doc-only commits. The whole cycle was then re-run on the final tree — the close
+audit landed, the index entry added, the registry row re-derived, the banners flipped — and every leg
+is green again, with the walls above coming from that run. §8's final block lists all twelve legs
+with their exit codes.
 
 ### F1 — the close audit itself is bound by no gate, and this is the third instance in three phases
 
@@ -230,10 +248,11 @@ this command is a second evidence **FAMILY**, not a gap: the FINDING recording's
 `_IN_TREE_INVENTORY`, `_EVIDENCE_PREFIXES` and the manifest parser, so the row reads
 `EVIDENCE-BRANCH-RESTORED (315/315 present)` restored — and the close ran the other state too rather
 than describing it: on the cleaned checkout the same command reads
-**"checks: 60 | OK 48 | FAIL 0 | ABSENT 7 | INFO 5"**, the seven ABSENT rows naming both families, so
-`--complete` cannot be satisfied by a tree that merely holds the sidecars. That is the `ABSENT 7`
-against `ABSENT 0` pair `audits/audit-phase-21-adopting-record.md` §6.1 records, reproduced here at a
-different HEAD. Any fingerprint mismatch still FAILS; that is the whole gate, and it is intact.
+**"checks: 60 | OK 48 | FAIL 0 | ABSENT 7 | INFO 5"** and **exits 1**, the seven ABSENT rows naming
+both families, so `--complete` cannot be satisfied by a tree that merely holds the sidecars. That is
+the `ABSENT 7` against `ABSENT 0` pair `audits/audit-phase-21-adopting-record.md` §6.1 records,
+reproduced here at a different HEAD. Any fingerprint mismatch still FAILS; that is the whole gate,
+and it is intact.
 
 ---
 
@@ -527,7 +546,7 @@ prerogative the owner adopted the substrate over that verdict on 2026-08-26
 (`audits/audit-phase-20-baseline-7.md` §6, §6.1). That document's *"what no surface may say"*
 paragraph binds this phase's tree exactly as it bound the last one.
 
-The sweep (§7 lists it) walked every tracked file for the full forbidden set — `bars? (were )?(passed|met)`,
+The sweep (§8 lists it) walked every tracked file for the full forbidden set — `bars? (were )?(passed|met)`,
 `passed the bars?`, `met the bars?`, `met its bars?`, `adopted on the (arithmetic|numbers)`,
 `verdict was ADOPTED`, `ADOPTED under the rule` — and over the commit half for the phase's whole
 history, `772742c2^..fa739ccb`, subjects and bodies together. **Every hit is either the constraint
@@ -715,12 +734,15 @@ phase opens only when its own `tasks/phase-N.md` is authored and ratified.
 - **The README phase-21 row KEEPS its contract link, breaking the table's own convention.** Every closed row carries `[audit](…)` alone, but `README.md`:203's `[contract](tasks/phase-21.md)` cell is the **only** link to this phase's contract in either front-door document — `docs/history.md`'s `## Phase 21` section, alone among the phases, never linked it (compare `docs/history.md`:173's `[Contract](../tasks/phase-20.md)`) — and `docs/history.md` is out of scope here. Following the convention would orphan `tasks/phase-21.md` and fail `check_phase_coverage` in the DEFAULT tier. The cell is written `[audit](…), [contract](…)` on the two-link precedent the table already carries at `README.md`:188, and **the missing `docs/history.md` contract link is routed as a named carried item** for the next contract that owns that page.
 - **`README.md:29`'s Status bullet is corrected in the same pass, and the scope admission is recorded.** It read *"phases 0–19 closed, the last on 2026-08-18; phase 20 open"* and contradicted `:173` two sections below. The contract widens the README scope line to admit it for a **word-neutral** rewording; 21.25 routed it here by name as an F2-class instance. The rewording is fourteen words for fourteen. Precedent: `audits/audit-phase-20-close.md`:475-477.
 - **The word budgets bind and were measured, not hoped — and the real headroom is smaller than the ceiling.** `wc -w README.md` read **3,535** against the gated ceiling **3,550** (`scripts/check_doc_facts.py:835-840`) before the edit and **3,536** after it: the phase-table row's trim from its 62-word `Open:` blurb to the table's closed one-line convention is word-NEGATIVE and very nearly pays for the status paragraph, so all three edits fit with **no ceiling change and no unrelated prose cut**. **The binding constraint turned out not to be the ceiling but the perturbation suite**: `tests/scripts/test_check_doc_facts.py`'s `test_stray_win_rate_claim_detected` and `test_repeated_results_claim_detected` APPEND 9 and ~12 words to the real README and then assert an exact error count, so a page inside its ceiling by fewer than about a dozen words makes those tests fail with a budget error beside the drift they are testing — which the second test's own comment already warns about. A first draft at **3,543** did exactly that; the page was trimmed to 3,536 and the suite reads *"237 passed"*. Worth stating because the effective ceiling is ~3,538, not 3,550, and nothing says so where an author would look. `docs/lessons.md` at 1,499/1,500 is why its carry (§4) is a trim-plus-add. **No ceiling was raised**; raising one takes an owner-ratified contract.
+- **Every `tasks/phase-21.md` anchor is stated at close HEAD, and the shift this PR introduces is stated with it.** The contract's anchors were re-verified before editing; the STATUS-banner edit then moved every line below line 3 down by 14 (a 4-line block became 18), so `:6781` becomes `:6795`, `:7286` becomes `:7300`, `:7501` becomes `:7515`, and so on. Rather than half-updating them, the audit fixes ONE convention in its Grounding paragraph — the numbers read `git show fa739ccb:tasks/phase-21.md` — and names the offset. Anchors into every other file are unmoved by this PR.
 - **`_LADDER_TIP_AUDIT` is NOT "corrected".** It points at the maintenance re-record because nothing graduated, which is right on a FINDING (§3.3). `scripts/` is out of scope and the constant is correct; the close states the inversion in one place so a later reader does not repair it.
 - **The gate's two states are both quoted and nothing is averaged.** The default tier is green in the clean state AND in the restored state — that is the finding, and it is the point of running the pair. The campaign tier, `--complete` and the validity gates ran restored; `verify_samples.sh` ran in a bare environment (`env -i`); every §1 row names its state. **The record's own end-to-end proof (`…adopting-record.md` §6.1) is quoted beside this close's run, never in place of it.**
 - **The before/after table quotes; it never recomputes.** Every baseline-8 cell is the instrument pin the memo cites or the re-record audit's published cell; every post-record cell is read from the adopting record's §3/§4/§5. A close-session recomputation with new definitions is exactly how a pre-registered read gets quietly re-priced.
 - **Bar 4's two denominators are kept apart on purpose.** The verdict restatement carries **11/20 = 0.5500 alone** — the registered cell, pooled over all twenty wrongful ejections. The per-row null read (19 rows, 11/19 = 0.5789) lives in one paragraph of its own, labelled OFFLINE and observed-never-gated, because the record states it did not enter the verdict. No gate can catch a mis-scope here, which is why the rule is written down rather than assumed.
 - **The hardening audit's §4.2 counts are reconciled, not contradicted, and no erratum is offered.** The heading's 36 is the round-1 register's routing tally across nine themed bullets; the tenth bullet carries six round-2 ids; 42 entries in total (§3.5). Filing a "discrepancy" against a record that counts consistently within its own registers would be a false finding.
-- **No tag is minted.** Nothing this close produced needs byte-level provenance beyond git. The honest precedent stands: no `phase-17-close`, `phase-18-close`, `phase-19-close` or `phase-20-close` tag was ever minted (§7's `git ls-remote --tags`).
+- **No tag is minted.** Nothing this close produced needs byte-level provenance beyond git. The honest precedent stands: no `phase-17-close`, `phase-18-close`, `phase-19-close` or `phase-20-close` tag was ever minted (§8's `git ls-remote --tags`, which
+returns only `attempt-1-phase-10-wave1-rerecord`, `phase-16-baseline-4`, `phase-16-baseline-5` and
+`phase-18-corpus-8f5f434`).
 - **The PR STOPS OPEN.** This contract is owner-gated on its own face — the title says `(owner)`, the ratified plan's owner-gate roster lists `21.26 (the close)` (`tasks/phase-21.md`:253-261), and the DAG edge is tagged `[OWNER]` (:159). The 2026-09-02 per-PR delegation recorded on #419 **did not generalize**: #424, #426, #427 and #428 each stopped open and were owner-merged. No ruling of a worker's or an orchestrator's stands in for the owner's here.
 
 ---
@@ -762,7 +784,7 @@ for s in replays/samples/9p2i replays/ml_corpus/9p2i \
 uv run python scripts/check_doc_facts.py                    # 8. front-door facts green
 bash scripts/fetch_evidence.sh --clean                      # 9. removes the 3,267 restored files
 git status --porcelain replays/                             # 10. empty, incl. replays/records/
-uv run python scripts/verify_ml_evidence.py --complete      # 11. CLEAN — 60 | OK 48 | FAIL 0 | ABSENT 7 | INFO 5
+uv run python scripts/verify_ml_evidence.py --complete      # 11. CLEAN — 60 | OK 48 | FAIL 0 | ABSENT 7 | INFO 5, exit 1 BY DESIGN
 grep -c STALE scripts/verify_ml_evidence.py                 # 0 — the amnesty is gone from the source
 
 # §2 — the ledger, one fresh command per contract
@@ -890,13 +912,25 @@ print(cnt.compute_frontier(tasks, set(), titles + [
 
 ### The gate on the tree this close leaves behind
 
-Re-run after this PR's own doc-only commits — the close audit landed, the index entry added, the
-registry row re-derived, the three banners flipped:
+The whole cycle above was re-run end to end on this branch — the close audit landed, the index entry
+added, the registry row re-derived from the index, the three banners flipped — with every leg timed.
+**All twelve legs green, exit 0** (bar the deliberate clean-state `--complete`, exit 1 by design):
 
 ```
-bash scripts/check.sh
-uv run python scripts/check_doc_facts.py
-wc -w README.md
+check.sh CLEAN                        146 s (exit 0)   ✓ built in 223ms
+fetch_evidence                          6 s (exit 0)   OK: 3269/3269
+campaign tier                         160 s (exit 0)   331 passed, 6111 deselected in 159.03s (0:02:39)
+verify_ml_evidence --complete RESTORED 29 s (exit 0)   checks: 63 | OK 58 | FAIL 0 | ABSENT 0 | INFO 5
+check.sh RESTORED                     148 s (exit 0)   ✓ built in 229ms
+verify_samples BARE                     2 s (exit 0)   All 50 samples verified clean.  (×2)
+validity gate 9p2i samples              3 s (exit 0)   Validity gate PASSED (all checks green).
+validity gate 9p2i corpus               7 s (exit 0)   Validity gate PASSED (all checks green).
+validity gate 4p1i samples              1 s (exit 0)   Validity gate PASSED (all checks green).
+validity gate 4p1i corpus               1 s (exit 0)   Validity gate PASSED (all checks green).
+check_doc_facts                         1 s (exit 0)   Front door verified: … Budgets verified: 4 pages
+fetch_evidence --clean                 14 s (exit 0)   Removed 3267 restored file(s).
+verify_ml_evidence --complete CLEAN    24 s (exit 1)   checks: 60 | OK 48 | FAIL 0 | ABSENT 7 | INFO 5
 ```
 
-The quoted outputs are in the PR's `## Summary`, and they are the last measurement this phase takes.
+and `wc -w README.md` reads **3,536** against its gated 3,550. That is the last measurement this
+phase takes.
