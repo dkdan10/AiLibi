@@ -33,53 +33,7 @@ import type {
 
 export const _fidelityReplay: ReplayView = {
   "failed_calls": [],
-  "finale": {
-    "agent_recaps": [
-      {
-        "agent_id": "p-1",
-        "alive_at_end": true,
-        "final_vote_named_impostor": null,
-        "final_vote_rewritten": false,
-        "final_vote_target": null,
-        "role": "CREWMATE"
-      },
-      {
-        "agent_id": "p-2",
-        "alive_at_end": true,
-        "final_vote_named_impostor": null,
-        "final_vote_rewritten": false,
-        "final_vote_target": null,
-        "role": "CREWMATE"
-      },
-      {
-        "agent_id": "p-3",
-        "alive_at_end": true,
-        "final_vote_named_impostor": null,
-        "final_vote_rewritten": false,
-        "final_vote_target": null,
-        "role": "IMPOSTOR"
-      },
-      {
-        "agent_id": "p-4",
-        "alive_at_end": true,
-        "final_vote_named_impostor": null,
-        "final_vote_rewritten": false,
-        "final_vote_target": null,
-        "role": "CREWMATE"
-      }
-    ],
-    "decisive_events": [
-      {
-        "actor_id": null,
-        "kind": "game_end",
-        "subject_id": null,
-        "tick": 2
-      }
-    ],
-    "final_tick": 2,
-    "winner": "CREWMATES",
-    "winner_reason": "all_tasks_complete"
-  },
+  "finale": null,
   "map": {
     "edges": [
       {
@@ -320,8 +274,8 @@ export const _fidelityReplay: ReplayView = {
     "seed": 0,
     "total_cost_usd": 0.0,
     "total_ticks": 3,
-    "winner": "CREWMATES",
-    "winner_reason": "all_tasks_complete"
+    "winner": null,
+    "winner_reason": null
   },
   "players": [
     {

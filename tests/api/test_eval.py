@@ -52,7 +52,7 @@ def test_cost_summary_aggregates(populated_client: TestClient) -> None:
     assert body["total_cost_usd"] == pytest.approx(0.03)
     assert body["max_cost_per_replay"] == pytest.approx(0.03)
     assert body["mean_cost_per_replay"] == pytest.approx(0.015)
-    assert body["decisive_split"] == {"CREWMATES": 1.0, "IMPOSTORS": 0.0}
+    assert body["decisive_split"] == {"CREWMATES": 0.0, "IMPOSTORS": 1.0}
 
 
 def test_cost_summary_empty_dir_returns_zeros(tmp_path: Path) -> None:

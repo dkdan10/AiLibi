@@ -175,6 +175,7 @@ from orchestrator.replay import (
     MeetingReplayEntry,
     ReplayEntry,
     ReplayLog,
+    ReplayLogEntry,
     TacticalPolicyStamp,
     WinnerSide,
     _state_hash,
@@ -187,6 +188,7 @@ from orchestrator.replay import (
     substrate_stamp_mismatches,
 )
 from orchestrator.seeder import seed_initial_state
+from orchestrator.replay_integrity import ReplayIntegrityError, ReplayIntegrityValidator
 
 _LOGGER: Final[logging.Logger] = logging.getLogger(__name__)
 
@@ -557,6 +559,10 @@ def _log_skipped_replay(path: Path, exc: Exception) -> None:
         reason = "doubled write"
     elif isinstance(exc, ReplaySubstrateMismatchError):
         reason = "substrate mismatch"
+    elif isinstance(exc, ReplayIntegrityError):
+        reason = "timeline integrity mismatch"
+    elif isinstance(exc, (ReplayStateMismatchError, ReplayPolicyMismatchError)):
+        reason = "reconstruction mismatch"
     else:
         reason = "unparseable row"
     _LOGGER.warning("Skipping unreadable replay file %s (%s): %s", path, reason, exc)
@@ -733,6 +739,7 @@ class _WalkResult:
     failed_calls: tuple[FailedCallReplayEntry, ...]
     trigger_kind_by_meeting_id: Mapping[str, _TriggerKind]
     memories: Mapping[tuple[str, str], AgentMemoryView]
+    summary: _ReplaySummary
 
 
 @dataclass(frozen=True)
@@ -796,17 +803,16 @@ class ReplayLoader:
         # otherwise correctly refuses. Default False — the serving/verify paths
         # keep failing loud; the ablation harness passes True explicitly and a
         # permitted mismatched (re)construction is logged at WARNING, never
-        # silent. An override loader additionally folds the ambient substrate
-        # snapshot into its reconstruction cache keys (``_substrate_cache_key``)
-        # so flipping the ``AILIBI_*`` levers between loads re-derives instead
-        # of silently serving the previous substrate's cached reconstruction.
+        # silent. Every loader folds the ambient substrate snapshot into its
+        # reconstruction cache keys (``_substrate_cache_key``), so changing a
+        # live lever rechecks compatibility before any cached view is served.
         # ``expected_tactical_policy`` is the Task-15.9 policy claim: when set, the
         # walk refuses to serve a replay whose tactical-policy stamp conflicts with
         # it (:func:`_assert_policy_matches`). Default ``None`` leaves the guard
         # inert, so the committed canonical sets and every ordinary serve are
         # unaffected. It is fixed per loader instance (not env-derived) and changes
         # nothing about the reconstruction output — only whether the walk raises —
-        # so, unlike ``allow_substrate_mismatch``, it does NOT fold into the
+        # so, unlike the ambient substrate, it does NOT fold into the
         # reconstruction cache key.
         self._replay_dir = replay_dir
         self._allow_substrate_mismatch = allow_substrate_mismatch
@@ -823,6 +829,9 @@ class ReplayLoader:
         self._cached_summary = lru_cache(maxsize=metadata_cache_size)(
             self._read_summary
         )
+        self._cached_validated_summary = lru_cache(maxsize=metadata_cache_size)(
+            self._validated_summary
+        )
 
     # -- public API -------------------------------------------------------
 
@@ -836,26 +845,14 @@ class ReplayLoader:
         rather than the whole directory; absent params (``limit=None,
         offset=0``) list every replay.
 
-        A file the picker cannot honestly advertise is excluded from the listing
-        and logged once at WARNING with its path and failure class, so no single
-        bad file can 500 the whole picker. Four classes are skipped here: the
-        doubled-write :class:`ReplayLog.CorruptedFileError`, any unparseable or
-        schema-invalid row (a ``ValueError``, which pydantic's
-        ``ValidationError`` subclasses — the shape an interrupted tournament
-        write leaves behind), :class:`EmptyReplayError` (a file holding no
-        replay records), and :class:`ReplaySubstrateMismatchError` — a perfectly
-        readable recording of a substrate this build cannot reconstruct, which
-        the picker would otherwise advertise and then 500 on when opened. The
-        stamp comes from the same memoized summary pass the metadata view reads,
-        so the guard adds no second parse. The degradation stops at this
-        collection view: :meth:`load_replay` of a skipped game id still raises,
-        so a half-written or off-substrate game is never served as if it were
-        whole.
+        Each advertised timeline is reconstructed and validated, including its
+        recorded winner. Bad files are skipped and logged individually: parse,
+        chronology, state-hash, policy, and substrate failures cannot advertise
+        an unusable game or break the rest of the picker. Compact validated
+        metadata is cached separately from visibility and memory playback.
 
-        :meth:`cost_summary` deliberately does NOT skip the substrate class —
-        see its docstring for why a mismatched game's cost is still real.
-
-        Audits G-G-3, K-K-8.
+        :meth:`cost_summary` remains raw accounting, so refusing an artifact for
+        playback never erases its recorded spend.
         """
 
         paths = self._replay_paths()
@@ -863,15 +860,12 @@ class ReplayLoader:
         views: list[ReplayMetadataView] = []
         for seed, path in window:
             try:
-                _assert_recorded_substrate(
-                    _game_id_for_seed(seed),
-                    self._file_summary(path).substrate_flags,
-                    allow_substrate_mismatch=self._allow_substrate_mismatch,
-                )
                 views.append(self._metadata_view(path, seed))
             except (
                 ReplayLog.CorruptedFileError,
                 ValueError,
+                ReplayStateMismatchError,
+                ReplayPolicyMismatchError,
                 ReplaySubstrateMismatchError,
             ) as exc:
                 _log_skipped_replay(path, exc)
@@ -911,8 +905,9 @@ class ReplayLoader:
         :meth:`list_replays`. Everything this summary reduces — cost, winner,
         ticks, meeting count — is read straight off the recorded bytes and needs
         no reconstruction, so a game recorded under another lever slate is a real
-        game that really cost that much and really ended that way. Dropping it
-        would understate the spend; only the reconstruction-dependent picker,
+        accounting artifact. Its recorded outcome split is unverified; this
+        endpoint does not certify game integrity. Dropping it would understate
+        the spend; only the reconstruction-dependent picker,
         which promises a replay it can actually open, has to refuse it.
 
         Audit G-G-2.
@@ -1080,24 +1075,19 @@ class ReplayLoader:
         self._cached_memories.cache_clear()
         self._cached_belief_frames.cache_clear()
         self._cached_summary.cache_clear()
+        self._cached_validated_summary.cache_clear()
 
     # -- cached implementations ------------------------------------------
 
-    def _substrate_cache_key(self) -> tuple[tuple[str, bool], ...] | None:
-        """The ambient substrate's contribution to the reconstruction cache key.
+    def _substrate_cache_key(self) -> tuple[tuple[str, bool], ...]:
+        """Invalidate cached views when the ambient substrate changes.
 
-        ``None`` (a constant) for a default loader — its guard raises on any
-        mismatch before a wrong-substrate reconstruction could be cached, so the
-        key stays byte-identical to the pre-14.8 shape. An ANALYSIS-ONLY
-        override loader (``allow_substrate_mismatch=True``) deliberately walks
-        under whatever ``AILIBI_*`` levers are ambient, so the snapshot must
-        participate in the key: flipping levers between loads on the same
-        instance re-derives (a cache miss) instead of silently serving the
-        previous substrate's reconstruction (AGENTS.md "no silent fallbacks").
+        A default loader must recheck its compatibility guard after a live
+        lever changes. An analysis override must rederive the requested view.
+        Both checks sit inside cached walks, so every loader keys its playback,
+        memory, and validated metadata by the current substrate snapshot.
         """
 
-        if not self._allow_substrate_mismatch:
-            return None
         return tuple(sorted(substrate_flag_snapshot().items()))
 
     def _load_replay(
@@ -1122,7 +1112,7 @@ class ReplayLoader:
         # never recomputed per request.
         walk = self._walk(path, seed, collect_memory=False, collect_visibility=True)
         return ReplayView(
-            metadata=self._metadata_view(path, seed),
+            metadata=self._metadata_from_summary(path, seed, walk.summary),
             map=self._map_view,
             players=self._players_view(walk.initial_state),
             ticks=walk.ticks,
@@ -1131,10 +1121,8 @@ class ReplayLoader:
                 for entry in walk.meeting_entries
             ),
             failed_calls=tuple(_failed_call_view(entry) for entry in walk.failed_calls),
-            # Task 19.10. ``_file_summary`` is separately memoized per
-            # ``(path, mtime)`` and was already parsed by ``_metadata_view``
-            # above, so the finale costs no extra file read.
-            finale=self._finale_view(walk, self._file_summary(path)),
+            # The verified walk reduced these same parsed rows; no second read.
+            finale=self._finale_view(walk, walk.summary),
         )
 
     def _reconstruct_meeting_memories(
@@ -1190,6 +1178,7 @@ class ReplayLoader:
 
         game_id = _game_id_for_seed(seed)
         entries = read_all_entries(path)
+        integrity = ReplayIntegrityValidator(entries, game_id=game_id)
         # Honor the stamped substrate (Task 14.7): the memory reconstruction
         # below re-derives under the active substrate (the four 13.5 levers
         # unconditionally ON since Task 14.9), so refuse to reconstruct a
@@ -1314,6 +1303,7 @@ class ReplayLoader:
 
         try:
             for entry in replay_entries:
+                integrity.check_tick(entry, state)
                 if collect_memory and service is not None:
                     self._ingest_tick(service, memories, state, last_events)
 
@@ -1341,6 +1331,7 @@ class ReplayLoader:
                             actual=",".join(reconstructed),
                         )
 
+                integrity.check_advance(entry, state, events)
                 meeting_entry: MeetingReplayEntry | None = None
                 meeting_id: str | None = None
                 trigger_kind: _TriggerKind | None = None
@@ -1351,7 +1342,8 @@ class ReplayLoader:
                     meeting_id = (
                         meeting_entry.meeting_id
                         if meeting_entry is not None
-                        else _meeting_id_for(game_id, meeting_index)
+                        else integrity.meeting_id_for_tick(entry.tick)
+                        or _meeting_id_for(game_id, meeting_index)
                     )
                     trigger_kind_by_meeting_id[meeting_id] = trigger_kind
 
@@ -1430,6 +1422,7 @@ class ReplayLoader:
                         expected=meeting_entry.state_hash_after,
                         actual=after,
                     )
+                integrity.observe_events(post_events)
                 # The meeting TickView was appended from the PRE-resolution state
                 # (its agent_states / events represent the meeting itself), but
                 # the advantage frame is the win-progress trajectory, so it must
@@ -1519,6 +1512,7 @@ class ReplayLoader:
             if audit_dir is not None:
                 audit_dir.cleanup()
 
+        integrity.finish()
         return _WalkResult(
             initial_state=initial_state,
             ticks=tuple(ticks),
@@ -1526,6 +1520,7 @@ class ReplayLoader:
             failed_calls=failed_calls,
             trigger_kind_by_meeting_id=trigger_kind_by_meeting_id,
             memories=memory_views,
+            summary=self._summarize_entries(path, entries),
         )
 
     def _ingest_tick(
@@ -1895,11 +1890,12 @@ class ReplayLoader:
         return self._cached_summary(path, _mtime_ns(path))
 
     def _read_summary(self, path: Path, _mtime_key: int) -> _ReplaySummary:
-        # Walk the file once and derive every listing/cost field from the single
-        # entry list (Audit G-G-2): cost includes calls from resolved and aborted
-        # meetings plus every failed-call row; ``winner`` is the
-        # game-end record (mirrors ``read_game_outcome``). ``_mtime_key`` keys the
-        # cache only (Audit H-H-2).
+        return self._summarize_entries(path, read_all_entries(path))
+
+    def _summarize_entries(
+        self, path: Path, entries: Sequence[ReplayLogEntry]
+    ) -> _ReplaySummary:
+        """Reduce parsed rows without claiming they form a playable timeline."""
         tick_count = 0
         meeting_count = 0
         winner: WinnerSide | None = None
@@ -1908,7 +1904,6 @@ class ReplayLoader:
         total_cost = 0.0
         prompt_versions: dict[str, str] = {}
         substrate_flags: dict[str, bool] | None = None
-        entries = read_all_entries(path)
         if not entries:
             # A file that contributes no records is an unusable artifact, not a
             # 0-tick game; reducing it would advertise it in the picker and
@@ -1945,7 +1940,34 @@ class ReplayLoader:
         )
 
     def _metadata_view(self, path: Path, seed: int) -> ReplayMetadataView:
-        summary = self._file_summary(path)
+        summary = self._cached_validated_summary(
+            seed,
+            path,
+            _mtime_ns(path),
+            self._roster_mtime(),
+            self._substrate_cache_key(),
+        )
+        return self._metadata_from_summary(path, seed, summary)
+
+    def _validated_summary(
+        self,
+        seed: int,
+        path: Path,
+        _mtime_key: int,
+        _roster_mtime_key: int,
+        _substrate_key: tuple[tuple[str, bool], ...] | None,
+    ) -> _ReplaySummary:
+        """Advertise only a verified timeline, caching its compact metadata.
+
+        The roster and substrate affect reconstruction, so they invalidate this
+        cache along with the replay. Visibility and memory are unnecessary for
+        the picker; their larger playback results have separate bounded caches.
+        """
+        return self._walk(path, seed, collect_memory=False).summary
+
+    def _metadata_from_summary(
+        self, path: Path, seed: int, summary: _ReplaySummary
+    ) -> ReplayMetadataView:
         return ReplayMetadataView(
             game_id=_game_id_for_seed(seed),
             seed=seed,
@@ -1974,18 +1996,9 @@ class ReplayLoader:
     ) -> GameFinale | None:
         """Compose the recorded outcome into one :class:`GameFinale` (Task 19.10).
 
-        The finale is built from RECORDED bytes only — the ``game_over`` row
-        (via ``summary``), the recorded meeting records, and the kill events the
-        walk already re-derived — and is never cross-validated against re-walked
-        state. That is deliberate: a direct-``ReplayLog`` writer may legitimately
-        stamp a winner onto a non-terminal state (the codegen fidelity fixture in
-        ``scripts/gen_frontend_types.py`` records ``CREWMATES`` on a 3-tick game
-        with zero tasks completed), and re-validating would turn that into a
-        raise on a path that only wants to *show* what was recorded.
-
-        Pure function of ``walk`` + ``summary``: it reads NO set-level sidecar
-        (``roster.json`` / ``MANIFEST.md`` / the rubric), because the fidelity
-        generator runs it inside a bare temp dir holding a single ``.jsonl``.
+        The recorded outcome has already been checked against the engine's
+        terminal event by the walk. The finale combines that verified record
+        with its meeting records and reconstructed decisive events.
 
         ``None`` when no winner was recorded — a partial replay (crash /
         tick-budget / meeting-phase exit) has no outcome to show.

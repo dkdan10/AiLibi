@@ -20,6 +20,7 @@ from api.replay_loader import (
 from api.routes import eval as eval_routes
 from api.routes import replays as replays_routes
 from api.routes import sets as sets_routes
+from orchestrator.replay_integrity import ReplayIntegrityError
 
 # The repo anchor (Task 19.24). The fallback replay directories are resolved
 # against the directory this file lives in — ``api/main.py`` -> repo root — and
@@ -175,6 +176,7 @@ class _NamesItsGame(Protocol):
 _REPLAY_MISMATCH_HANDLERS: Final[
     tuple[tuple[type[Exception], Callable[[Any], dict[str, object]]], ...]
 ] = (
+    (ReplayIntegrityError, lambda exc: {"tick": exc.tick, "code": exc.code}),
     (ReplayStateMismatchError, lambda exc: {"tick": exc.tick}),
     (
         ReplaySubstrateMismatchError,

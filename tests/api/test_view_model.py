@@ -59,7 +59,9 @@ from meetings.transcript import WEAK_CONTRADICTION_MARKER_PREFIX
 from meetings.voting import INVALID_VOTE_TARGET_MARKER, SKIP_TARGET, tally_ballots
 from observation.service import ObservationService
 from orchestrator.seeder import seed_initial_state
+from orchestrator.replay_integrity import ReplayIntegrityError
 from tests.api.fixtures.sample_replay import (
+    write_completed_replay,
     write_meeting_replay,
     write_partial_replay,
     write_sample_replay,
@@ -843,11 +845,12 @@ def test_skipped_meeting_frame_is_labeled_resolved(
     # tick after it resumes play (``write_meeting_replay``).
     finale = replay.finale
     assert finale is not None
-    assert finale.final_tick == meeting.tick + 1
+    assert finale.final_tick == replay.ticks[-1].tick
     assert [(e.tick, e.kind) for e in finale.decisive_events] == [
         (meeting.tick - 1, "kill"),
         (meeting.tick, "meeting_skipped"),
-        (meeting.tick + 1, "game_end"),
+        (finale.final_tick, "kill"),
+        (finale.final_tick, "game_end"),
     ]
 
 
@@ -865,71 +868,49 @@ def test_finale_is_none_for_a_partial_replay(tmp_path: Path) -> None:
     assert replay.finale is None
 
 
-def test_finale_final_tick_prefers_the_recorded_game_end_tick(
-    tmp_path: Path,
-) -> None:
-    """``finale.final_tick`` follows the RECORDED game-end row, not the walk.
+def test_finale_refuses_a_forged_recorded_end_tick(tmp_path: Path) -> None:
+    """An otherwise valid completion cannot advertise a different terminal tick."""
+    path = tmp_path / "replay-seed-0.jsonl"
+    write_completed_replay(path)
+    rows = [json.loads(line) for line in path.read_text().splitlines()]
+    rows[-1]["tick"] += 41
+    path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+    with pytest.raises(ReplayIntegrityError, match="terminal_tick_mismatch"):
+        ReplayLoader(replay_dir=tmp_path).load_replay("headless-seed-0")
 
-    On every orchestrator-shaped recording the two coincide (``GameOverEvent.tick``
-    is the emitting tick), so a fixture must force them apart or the
-    recorded-tick path in ``_finale_view`` is unobserved — deleting the
-    ``_ReplaySummary.final_tick`` threading would leave every other finale pin
-    green (Task 19.10 review). The writer permits the disagreement: ``tick`` is a
-    free argument on ``ReplayLog.record_game_end``.
-    """
 
-    write_sample_replay(
-        tmp_path / "replay-seed-0.jsonl", seed=0, ticks=3, game_end_tick=41
-    )
+def test_finale_final_tick_falls_back_without_a_recorded_tick(tmp_path: Path) -> None:
+    """Legacy omission is compatible when the outcome itself is engine-backed."""
+    path = tmp_path / "replay-seed-0.jsonl"
+    write_completed_replay(path)
+    rows = [json.loads(line) for line in path.read_text().splitlines()]
+    terminal_tick = rows[-1].pop("tick")
+    path.write_text("".join(json.dumps(row) + "\n" for row in rows))
     replay = ReplayLoader(replay_dir=tmp_path).load_replay("headless-seed-0")
-    finale = replay.finale
-    assert finale is not None
-    assert replay.ticks[-1].tick == 2, "the walk position the fallback would pick"
-    assert finale.final_tick == 41, "the recorded row wins over the walk position"
-    assert [(e.tick, e.kind) for e in finale.decisive_events] == [(41, "game_end")]
+    assert replay.finale is not None
+    assert replay.finale.final_tick == replay.ticks[-1].tick == terminal_tick
 
 
-def test_finale_final_tick_falls_back_to_the_walk_without_a_recorded_tick(
-    tmp_path: Path,
-) -> None:
-    """A game-end row with no ``tick`` (a direct-``ReplayLog`` writer) falls back
-    to where the walk stopped — the documented ``_finale_view`` fallback."""
-
-    write_sample_replay(
-        tmp_path / "replay-seed-0.jsonl", seed=0, ticks=3, game_end_tick=None
-    )
+def test_finale_without_meetings_has_no_ballot_recaps(tmp_path: Path) -> None:
+    """A meeting-free parity win has kill/end beats and no attributed votes."""
+    write_completed_replay(tmp_path / "replay-seed-0.jsonl")
     replay = ReplayLoader(replay_dir=tmp_path).load_replay("headless-seed-0")
-    finale = replay.finale
-    assert finale is not None
-    assert finale.final_tick == replay.ticks[-1].tick == 2
-
-
-def test_finale_degrades_to_the_terminal_beat_without_meetings(
-    meeting_loader: ReplayLoader,
-) -> None:
-    """A meeting-less game still gets a finale — one ``game_end`` beat, no votes.
-
-    This is the shape the codegen fidelity fixture records
-    (``scripts/gen_frontend_types.py``), so it must never raise: no meetings
-    means no ballots, hence ``final_vote_target is None`` on every recap, and the
-    decisive-events list degrades to the terminal beat alone rather than being
-    empty (the card still has a tick to name).
-    """
-
-    replay = meeting_loader.load_replay("headless-seed-0")
     assert replay.meetings == ()
     finale = replay.finale
     assert finale is not None
-    assert finale.winner == "CREWMATES"
-    assert finale.final_tick == 2
-    assert [(e.tick, e.kind) for e in finale.decisive_events] == [(2, "game_end")]
-    assert {r.agent_id for r in finale.agent_recaps} == {
-        p.agent_id for p in replay.players
+    assert finale.winner == "IMPOSTORS"
+    assert [event.kind for event in finale.decisive_events] == [
+        "kill",
+        "kill",
+        "game_end",
+    ]
+    assert finale.final_tick == replay.ticks[-1].tick
+    assert {recap.agent_id for recap in finale.agent_recaps} == {
+        player.agent_id for player in replay.players
     }
-    for recap in finale.agent_recaps:
-        assert recap.final_vote_target is None
-        assert recap.final_vote_named_impostor is None
-    assert all(t.meeting_resolution is None for t in replay.ticks)
+    assert all(recap.final_vote_target is None for recap in finale.agent_recaps)
+    assert all(recap.final_vote_named_impostor is None for recap in finale.agent_recaps)
+    assert all(tick.meeting_resolution is None for tick in replay.ticks)
 
 
 # ---------------------------------------------------------------------------

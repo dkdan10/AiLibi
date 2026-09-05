@@ -1209,15 +1209,11 @@ class GameFinale(_FrozenView):
     Winner, win reason, the recorded final tick, the decisive events, and the
     per-agent recap — everything the finale card renders, composed once
     server-side. Built from the recorded ``game_over`` row and the recorded
-    meeting records (shadowing ``orchestrator.replay.GameEndReplayEntry``) and
-    NEVER re-validated against re-walked state: recorded bytes are authoritative
-    (a direct-``ReplayLog`` writer may legitimately stamp a winner onto a
-    non-terminal state, as the codegen fidelity fixture does).
+    meeting records after their chronology and terminal outcome have been
+    validated against the reconstructed engine transitions.
 
-    ``winner_reason`` stays a plain ``str`` rather than the four-value
-    ``engine.win_conditions.WinResultType`` literal: fixtures and pre-Phase-14
-    recordings carry other strings (e.g. ``"all_tasks_complete"``), and this DTO
-    shadows what was recorded, not what the current engine would emit.
+    ``winner_reason`` remains a string on the wire; the replay loader verifies
+    that a served reason matches the engine's terminal event.
 
     ``None`` on :class:`ReplayView` for a partial replay with no ``game_over`` row
     (a crashed / tick-budget-exhausted run) — the game has no recorded outcome, so

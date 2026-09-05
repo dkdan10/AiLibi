@@ -764,9 +764,9 @@ def test_byte_identity_fails_on_corrupted_hash(tmp_path: Path) -> None:
     assert check.facts["drifted_samples"] == 1
 
 
-def test_byte_identity_reports_verifier_crash_as_failure(tmp_path: Path) -> None:
-    # A replay malformed so the verifier RAISES (a dropped meeting row a later
-    # tick still references) is reported as a failed check, not a crash.
+def test_byte_identity_reports_dropped_meeting_as_drift(tmp_path: Path) -> None:
+    # A dropped meeting leaves later ticks that cannot be reconstructed. The
+    # strict sample verifier reports that integrity failure without crashing.
     mini = _mini_set(tmp_path, seeds=(0,))
     path = mini / "replay-seed-0.jsonl"
     lines = path.read_text().splitlines()
@@ -778,10 +778,26 @@ def test_byte_identity_reports_verifier_crash_as_failure(tmp_path: Path) -> None
             dropped = True
             continue
         out.append(line)
+    assert dropped
     path.write_text("\n".join(out) + "\n")
     check = check_byte_identical_reconstruction(mini)  # must not raise
     assert not check.passed
-    assert check.facts["raised"] is True
+    assert check.facts == {"drifted_samples": 1}
+    assert any("row_order" in violation for violation in check.violations)
+
+
+def test_byte_identity_reports_verifier_crash_as_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def crash(sample_dir: Path) -> None:
+        assert sample_dir == tmp_path
+        raise RuntimeError("injected verifier crash")
+
+    monkeypatch.setattr("eval.validity.verify_samples", crash)
+    check = check_byte_identical_reconstruction(tmp_path)
+    assert not check.passed
+    assert check.facts == {"drifted_samples": -1, "raised": True}
+    assert check.violations == ("RuntimeError: injected verifier crash",)
 
 
 # --------------------------------------------------------------------------- #
@@ -893,13 +909,16 @@ def test_run_validity_gate_reproduces_4p1i_close() -> None:
 
 def test_run_validity_gate_rejects_a_truncated_replay(tmp_path: Path) -> None:
     # seed 12 ends `tick, tick, tick, game_over`, so dropping its last tick row
-    # leaves every OTHER check green — the gate-can-fail proof that this fixture
-    # isolates the truncation clause.
+    # fails both the reconstructed-terminal check and the strict sample
+    # verifier. The remaining validity checks stay green.
     mini = _mini_set(tmp_path, seeds=(12,))
     _truncate_tick_stream(mini / "replay-seed-12.jsonl")
     report = run_validity_gate(mini)
     assert not report.passed
-    assert report.failing_checks() == ("all_games_reach_game_over",)
+    assert report.failing_checks() == (
+        "all_games_reach_game_over",
+        "byte_identical_reconstruction",
+    )
     check = next(c for c in report.checks if c.name == "all_games_reach_game_over")
     assert any(TRUNCATED_REPLAY_REASON in v for v in check.violations)
     assert check.facts["games_reached_game_over"] == 0
@@ -931,8 +950,8 @@ def test_run_validity_gate_rejects_a_record_after_the_game_over_row(
 ) -> None:
     # A failed_call row appended after game_over: it names an already-resolved
     # meeting, carries zero cost, and claims a tick the walk never reaches, so
-    # every other check reads it as inert. Physical record order is what
-    # catches it.
+    # content checks read it as inert. Both the terminal-order check and the
+    # strict sample verifier reject its physical placement.
     mini = _mini_set(tmp_path, seeds=(12,))
     path = mini / "replay-seed-12.jsonl"
     lines = path.read_text(encoding="utf-8").splitlines()
@@ -957,7 +976,10 @@ def test_run_validity_gate_rejects_a_record_after_the_game_over_row(
 
     report = run_validity_gate(mini)
     assert not report.passed
-    assert report.failing_checks() == ("all_games_reach_game_over",)
+    assert report.failing_checks() == (
+        "all_games_reach_game_over",
+        "byte_identical_reconstruction",
+    )
     check = next(c for c in report.checks if c.name == "all_games_reach_game_over")
     assert any("after the game_over row" in v for v in check.violations)
 
