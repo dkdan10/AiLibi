@@ -150,6 +150,7 @@ from orchestrator.replay import (  # noqa: E402
     TacticalPolicyStamp,
     fsm_default_tactical_policy_stamp,
 )
+from _report_output import atomic_write_report, preflight_report_output  # noqa: E402
 
 if TYPE_CHECKING:
     # Type-only imports for the artifact-arm resolvers' policy annotations. Kept
@@ -206,7 +207,8 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         default=None,
         help=(
             "path for the JSON TournamentEvalReport "
-            f"(default: <output-dir>/{_DEFAULT_REPORT_FILENAME})"
+            f"(default: <output-dir>/{_DEFAULT_REPORT_FILENAME}); must be separate "
+            "from every selected replay and observation audit"
         ),
     )
     # The roster flags default to None (not their constants) so main() can tell
@@ -1099,13 +1101,25 @@ def _emit_report_json(eval_report: TournamentEvalReport, report_output: Path) ->
     json_text = eval_report.model_dump_json(indent=2)
     TournamentEvalReport.model_validate_json(json_text)
     report_output.parent.mkdir(parents=True, exist_ok=True)
-    report_output.write_text(json_text + "\n", encoding="utf-8")
+    atomic_write_report(report_output, json_text + "\n")
 
 
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
     if args.num_games < 1:
         raise SystemExit(f"--num-games must be at least 1, got {args.num_games}")
+    seeds = range(args.start_seed, args.start_seed + args.num_games)
+    report_output: Path = (
+        args.report_output
+        if args.report_output is not None
+        else args.output_dir / _DEFAULT_REPORT_FILENAME
+    )
+    recording_paths = tuple(
+        args.output_dir / f"replay-seed-{seed}{suffix}.jsonl"
+        for seed in seeds
+        for suffix in ("", ".audit")
+    )
+    preflight_report_output(report_output, recording_paths)
     num_players, num_impostors, tasks_per_crewmate = _resolve_roster(args)
     explicit_stamp = _resolve_tactical_policy_stamp(args.tactical_policy_stamp)
     # Arm selection (Task 18.19 puts the dual-role co-evo arm FIRST, leaving the
@@ -1165,7 +1179,6 @@ def main(argv: list[str] | None = None) -> int:
         auto_stamp=auto_stamp,
         explicit_stamp=explicit_stamp,
     )
-    seeds = range(args.start_seed, args.start_seed + args.num_games)
     # Each seed owns its replay and observation audit as a pair. ``force``
     # replaces that pair when the seed starts; it never pre-deletes outputs for
     # later seeds. Without it, either existing output fails before replacement.
@@ -1220,11 +1233,7 @@ def main(argv: list[str] | None = None) -> int:
         )
     eval_report = build_tournament_eval_report(report)
 
-    report_output: Path = (
-        args.report_output
-        if args.report_output is not None
-        else args.output_dir / _DEFAULT_REPORT_FILENAME
-    )
+    preflight_report_output(report_output, recording_paths)
     _emit_report_json(eval_report, report_output)
 
     print(_format_summary(eval_report))
