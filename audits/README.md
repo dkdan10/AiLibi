@@ -335,3 +335,17 @@ directory's `README.md`, which carries the tallies and the proposed routing.
   against the pre-committed projection, and a secondary section — observed,
   never gated — whose sharpest cell is the first spoken kills to appear on a
   record: 30 accounts, 30 of them true.
+- [audit-phase-21-close.md](audit-phase-21-close.md) — the phase close: the
+  whole gate re-run at close HEAD in both evidence states, one ledger row per
+  merged pull request, the two records carried forward as their own rulings,
+  the two registers' finding-to-outcome map, the defects it found, and the next
+  decision put to the owner. Two legs the previous close routed forward come
+  back green as results rather than as debts — the opt-in campaign tier, and an
+  evidence check that now declares no grounding gap at all. Three of the four
+  pre-registered bars were met; the fourth was not, the body reporter's share
+  of a wrongful-ejection total that fell from 46 to 20 reading
+  11 of 20 = 0.5500 against a registered 0.40, so the rule returns a finding.
+  Nothing graduated, no override was made, the three Wave-2 levers stay live
+  toggles, and the ladder tip stands at baseline 8. The close files four
+  defects of its own and carries a fifth from the phase before it; the sharpest
+  is that this document is itself held by no gate.
