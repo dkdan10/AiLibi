@@ -45,10 +45,12 @@ at baseline 8**, and the four canonical sets keep their baseline-8 bytes (§3.1,
 decision goes to the owner as **a next pre-registration that re-parameterises the share-and-count
 pair, against the §6.1-shape override and against carrying the slate as toggles** (§5).
 
-**Four close-found defects (F1–F4) and one carried forward (F5).** All five are routed to the next
-phase's inputs; none is fixed here, with the two mechanical scope admissions §6 records. **F1 is the
-third instance in three phases of the same class** — the document that restates the verdict is held
-by no gate.
+**Four close-found defects (F1–F4) and one carried forward (F5).** F1, F2, F3 and F5 are routed to the
+next phase's inputs and none of them is fixed here; F4 is half of each — the surface this PR was
+already opening is corrected by a dated line, and the record's own README is carried, because a
+record is never rewritten. Both mechanical scope admissions are recorded in §6. **F1 is the third
+instance in three phases of the same class** — the document that restates the verdict is held by no
+gate.
 
 ---
 
@@ -180,7 +182,7 @@ perturbation case (craft rule 2: a mapped row crediting a contract that does not
 back must fail). Claiming a gate that does not exist would be the same defect class in a different
 file.
 
-### F4 — two living surfaces still call a ratified decision "provisional"
+### F4 — two living surfaces called a ratified decision "provisional"; one is fixed here, one is carried
 
 The owner's merge of #428 on 2026-09-04 **ratified the class-(c) landing mechanism** for the FINDING
 recording (§3.3). Two surfaces written before that ruling existed still describe it in the present
@@ -190,10 +192,11 @@ tense as undecided:
 * **`replays/records/phase-21-wave2-finding/README.md`:43-46** — the same sentence under a `## How the landing may still change` heading.
 
 Neither is gated: `docs/artifacts.md` is not in `_CLAIM_DOCUMENTS`, and the record's own README is a
-record and is never rewritten. Both are **carried** with file, line and the ruling that disagrees with
-them. The `docs/artifacts.md` half is corrected here by one **dated additive line** — that page is
-already open in this PR for the registry row — recorded in §5 as a mechanical scope admission. The
-record README is left exactly as it was written.
+record and is never rewritten. **The two halves take DIFFERENT dispositions, and the finding says so
+rather than carrying both:**
+
+* **`docs/artifacts.md`:195-197 — FIXED HERE**, by one dated additive line, because that page is already open in this PR for the registry row; recorded in §6 as a mechanical scope admission.
+* **`replays/records/phase-21-wave2-finding/README.md`:43-46 — CARRIED**, with file, line and the ruling that disagrees with it. It is a record, and a record is never rewritten. It is the only surface still presenting the ratified landing as an open question, and it is the whole of what F4 hands forward.
 
 ### F5 — the phase-19 close's F2, still open, carried rather than re-found
 
@@ -543,8 +546,8 @@ row, not a reopened question.** The class-(c) parentless evidence commit
 `audits/audit-phase-21-adopting-record.md` §6.1's PROVISIONAL heading and its in-tree-alternative
 paragraph are **DISCHARGED by the merge** and stand unrewritten as the record's own text
 (`tasks/phase-21.md`:7297, ticked, and :7509). An in-tree class-(a)+(b) re-landing would be a
-follow-up of the owner's own asking, not a close option. The two surfaces that still call it
-provisional are **F4**.
+follow-up of the owner's own asking, not a close option. The two surfaces that called it provisional
+are **F4** — `docs/artifacts.md` corrected here by a dated line, the record's own README carried.
 
 #### The inherited constraint, re-swept across everything this phase wrote
 
@@ -573,7 +576,7 @@ re-priced a cell, and asserts so here in its own words.**
 
 The 2026-08-26 audit published **48 canonical findings on track A** (13 CONFIRMED / 35 ADJUSTED / 0
 REFUTED) and **56 on track B** (18 / 37 / 1 REFUTED) — `audits/review-2026-08-26/README.md` §1.
-**No gate holds this map** (F3), so it is published in a form a reader can check, derived by the §7
+**No gate holds this map** (F3), so it is published in a form a reader can check, derived by the §8
 command rather than assembled by hand: the acted-on set is every `A-`/`B-` id named inside a
 `### Task 21.N` section of `tasks/phase-21.md`, excluding ids only this close's own section cites.
 
@@ -583,7 +586,8 @@ command rather than assembled by hand: the acted-on set is every `A-`/`B-` id na
 | **partly fixed, remainder CARRIED** (a split id, given its own row rather than credited whole) | 1 | `B-26` — 21.16 took its objective half; its `world.py` half is unexecuted and is carried by name in §4 |
 | **lever-ON, measured, NOT adopted** (shipped default-OFF, recorded, and left as toggles by the FINDING) | 15 | `A-4`, `A-5`, `A-24`, `A-37`, `A-38` (`reporter_reasoning`); `A-10`, `A-11`, `A-12`, `A-19`, `A-44`, `B-3`, `B-4` (`corroboration_discipline`); `A-16`, `A-22`, `B-7` (`testimony_shapes`) |
 | **recorded-as-finding** (answered by measurement, not by change) | 4 | `A-20` — the meeting's two regimes, republished in §3.2's flagged/unflagged split rather than "fixed"; `A-25` — recorded impostor reports **0 of 626** on this record too, the premise bars 3 and 4 rest on; `A-42` — the clean negative re-verified as 21.1's control; `A-47` — an observation the smoke reports |
-| **triaged backlog** | 40 | the remainder of the 104: 20 on track A and 20 on track B, none of them touched by any contract in this phase |
+| **triaged backlog** (untouched, and actionable) | 39 | the live remainder of the 104: **20 on track A and 19 on track B**, none of them touched by any contract in this phase |
+| **refuted by the review's own verifier — no work to carry** | 1 | `B-34`, the track-B register's single REFUTED id, severity *"n/a (not a defect)"* — a specified-and-ratified behaviour filed as one (`audits/review-2026-08-26/README.md` §1). It is untouched, but it is not backlog, and counting it as such would overstate the next phase's inputs by one |
 
 **The `lever-ON` row is the one this close will not let read as a success.** All three levers were
 ELIGIBLE by the memo's own per-lever RENDER test — every render prediction held on all four legs and
@@ -598,9 +602,13 @@ took its objective half, its `world.py` half is unexecuted, and it is carried by
 opens. Nothing else in the fixed column has an open half — the derivation snippet in §8 prints every
 id with the contracts that named it, so a second split would be visible the same way.
 
-**The rows partition the 104 exactly:** 44 + 1 + 15 + 4 = 64 accounted for, leaving 40 untouched.
-`A-20` and `A-25` are the two ids no `### Task` section cites — the close's own section cites them —
-so they enter through the recorded-as-finding row and not through the derived acted-on set.
+**The rows partition the 104 exactly:** 44 + 1 + 15 + 4 + 39 + 1 = 104. `A-20` and `A-25` are the two
+ids no `### Task` section cites — the close's own section cites them — so they enter through the
+recorded-as-finding row and not through the derived acted-on set. **The actionable backlog is 39, not
+40**, because the untouched remainder contains the review's one REFUTED id; a close that hands
+forward a refuted finding as work is doing the thing the prior close's map went out of its way not to
+do (`audits/audit-phase-20-close.md` §3.4 lists its five retracted claims in their own row for the
+same reason).
 
 ### 3.5 The hardening audit's routings, reconciled by measurement
 
@@ -636,7 +644,7 @@ it is open and its size is stated; **OWNER-DECIDED** means a ruling closed it.
 | item | where it was routed from | disposition |
 |---|---|---|
 | **the second ML re-fit** | `…adopting-record.md` §7 — *"becomes due at that record and not before"* | **DISCHARGED-BY-RECORD, carried not scheduled.** The trigger is falsifiable: an adoption that LANDS BYTES IN TREE, by a later record OR by a §6.1-shape owner override of this FINDING, at which point §10.2's dated digest-pair re-declaration and the re-fit become due AT THAT RECORD. The corpus is unmoved at close HEAD (`grep -c STALE` = 0), so this needs no owner ruling. Size: **zero now; one corpus re-fit at the triggering record** |
-| **21.17's Q1** — the λ-grid and campaign re-search under 21.16's repaired objective | 21.17, *"an OWNER decision at campaign scale, held for the close ledger"* | **OWNER-DECIDED — live, in §4.1's standing ML-cadence decision.** Costed at campaign scale, and it sits BESIDE the re-fit row rather than folded into it |
+| **21.17's Q1** — the λ-grid and campaign re-search under 21.16's repaired objective | 21.17, *"an OWNER decision at campaign scale, held for the close ledger"* | **CARRIED, and put to the owner in §5.1 and in this PR's `## Questions`.** No ruling has closed it, so it is not OWNER-DECIDED; it is a live open, costed at campaign scale, sitting BESIDE the re-fit row rather than folded into it |
 | **the `heard_vent_use` encoder slot** | 21.25 | **CARRIED** to the next encoder revision. Retained as a structurally-zero scalar because `TacticalFeatureEncoderV3` inherits the v2 layout; removing it re-shapes the v3 vector under an unchanged `ENCODER_VERSION_V3`, so it belongs to the revision that owns both version stamps and every downstream consumer |
 | **the dead `vent_use_heard` path** | 21.25, as ONE named open to a wire-owning contract | **CARRIED**, with its full census: `observation/packet.py:157` and `api/schemas.py:201` `Literal` members, `agents/perception.py:85`, `agents/memory/beliefs.py:533`/`:1107`, `agents/tactical/features.py:382`, `frontend/src/types/api.ts:140`, `EventTicker.tsx:43`, six test files. A partial deletion is refused on the coupling gate. **`grep -rl vent_use_heard replays` = 0 is NOT evidence of deadness** — audible kinds never enter replay bytes, and the live `sabotage_alarm` reads 0 too |
 | **`observation.packet.AudibleEvent.kind`'s `Literal` member and the served `AudibleEventView`** | 21.25 | **CARRIED** — a DTO narrowing with a `viewModelVersion` question attached |
@@ -650,7 +658,7 @@ it is open and its size is stated; **OWNER-DECIDED** means a ruling closed it.
 | **the checker prose heuristics — now THREE** | 21.25 (two, after a fifth Codex round), plus one this close met while drafting | **CARRIED** as checker-hardening residue, each with a required perturbation case: (i) negation binding in `check_owner_action` (`scripts/check_doc_facts.py:4348-4360` searches `_NEGATION` (:777-779) over the sentence HEAD, so a negation in an unrelated earlier clause licenses a positive adoption assertion later in the same sentence); (ii) the word `"reporter"` alone scoping a rate claim to bar 4 (`_FINDING_BAR_SUBJECTS[_SHARE_BAR]`, `:729-732`); (iii) **new, met while drafting this close's own index entry** — `check_owner_action`'s unit is a `prose_blocks` block, which in a tight bullet list is the whole section, and its verb pattern matches inside a link's own FILENAME, so `audit-phase-21-adopting-record.md` in a neighbouring bullet reads as an adoption assertion (§6). Not fixed here: `scripts/` is out of scope |
 | **the un-bumped ballot stamp (E.3)** | memo §11's tenth row, PR #427 | **DISCHARGED — ACCEPTED with the erratum and no bump.** A version bump would have been an edit inside a §9-frozen directory and would have reopened the smoke window a third time for a change that moves no cell, no bar and no OFF byte; the record quotes each leg's `git_sha` beside the stamp |
 | **the featured-strip cards [1] and [3]** | `…adopting-record.md` §6.3, deferred *"to whichever record adopts"* | **CARRIED** — no record adopted. Their copy is misattributed rather than false (H-34/H-39), and the served surface is named: `frontend/src/components/ReplayPicker.tsx`:118 `FEATURED_GAMES`. **This is the only conditional-on-adoption open the phase leaves that a visitor can see today** |
-| **`README.md:29`'s Status bullet** | 21.25 | **DISCHARGED here** — the scope admission in §5, reworded word-neutrally |
+| **`README.md:29`'s Status bullet** | 21.25 | **DISCHARGED here** — the scope admission in §6; corrected to the final closed state, eleven words for eight, so the edit is word-NEGATIVE |
 | **`docs/lessons.md`'s "Writing the bar down before the measurement" (:88-99)** | this close | **CARRIED, with its price stated.** The section narrates only the phase-20 finding-then-override and is silent on this phase's FINDING — the project's second pre-registered miss and **the first not overridden**, i.e. the strongest instance of that essay's own thesis. The page is Files-NOT-in-scope here and `wc -w docs/lessons.md` = **1,499** against the 800–1,500 band, so taking it is a **trim-plus-add, not an add**. It sits in `_PUBLISHED_DOCUMENTS` and NOT in `_CLAIM_DOCUMENTS` — a second live instance of F1's ungated-figures class |
 
 **Four items were routed BY NAME to Task 21.24 that a recording contract could not execute, and its
@@ -712,9 +720,10 @@ and rides none of these options (§3.3).
 | **(ii) the §6.1-shape owner override of the FINDING verdict** | zero operator wall | the slate graduates now; the ladder tip moves; the ML re-fit and the §10.2 digest-pair re-declaration become due AT THAT RECORD (§4) | it is the **second** override in two phases. The apparatus survives one override that is written down as one; a habit of them is the failure mode pre-registration exists to prevent. **Available and UNTAKEN — the owner's alone, at any later point, recorded as an override of a FINDING verdict and never as a bar that passed** |
 | **(iii) neither — carry the slate as its three live toggles** | zero | optionality | the featured-strip residue stays visible to visitors (§4), and three measured levers sit unadopted with no scheduled decision. This is the status quo, and it is what the tree does if nothing is chartered |
 
-**The backlog the two registers added, sized for whichever route is taken:** **40 findings** untouched
-(20 A, 20 B — §3.4), plus the hardening audit's **42** close-ledger entries and **19** informational
-ones, all of BASELINE-8 vintage (§3.5). The balance wave the prior close recommended
+**The backlog the two registers added, sized for whichever route is taken:** **39 actionable findings**
+untouched (20 A, 19 B — §3.4; the fortieth untouched id is `B-34`, which the register itself REFUTED
+and which is therefore not work), plus the hardening audit's **42** close-ledger entries and **19**
+informational ones, all of BASELINE-8 vintage (§3.5). The balance wave the prior close recommended
 (`audits/audit-phase-20-close.md` §4, six levers with their measured evidence) **chartered nothing and
 is unspent**; it is still the largest single block of measured, unaddressed gameplay work, and it now
 competes with the injustice slate rather than following it.
@@ -746,7 +755,7 @@ phase opens only when its own `tasks/phase-N.md` is authored and ratified.
 
 ## 6. Decisions
 
-- **The close verifies; it does not fix.** F1 (the close audit's own unbound state), F2 (the ungated byte half of the registry rows), F3 (the unguarded finding map) and F5 (the carried staging ref) are recorded and routed. No test, script, production package or front-door page outside this contract's files was touched, with the two mechanical scope admissions below — each forced by a fail-loud check that the close's own mandated artifact trips, or named by the contract.
+- **The close verifies; it does not fix.** F1 (the close audit's own unbound state), F2 (the ungated byte half of the registry rows), F3 (the unguarded finding map), F4's record-README half and F5 (the carried staging ref) are recorded and routed. No test, script, production package or front-door page outside this contract's files was touched, with the two mechanical scope admissions below — each forced by a fail-loud check that the close's own mandated artifact trips, or named by the contract.
 - **`audits/README.md` gains exactly one entry — forced, and drafted to the gates that scan it.** `scripts/check_doc_facts.py::check_audits_index` fails the DEFAULT tier on any top-level `audits/*.md` the index does not link exactly once, so landing this file forces the entry. That entry is itself scanned by `check_ladder_tip` (it names **baseline 8** as the tip), by `_INJUSTICE_SENTENCE` (its wrongful-ejection sentence names the record's own counts), by `check_finding_figures` (its `11/20 = 0.5500` is the verdict table's own cell, and no bare `11/19` appears) and by `check_owner_action` (no positive undated owner-action verb, because **this phase's owner made no override** — the phase-20 close's *"the owner ratified … and adopted"* banner may not be reprised).
 - **The index entry states the fall in its own words rather than in `_FINDING_FALL_CLAIM`'s, because the gate's own test suite pins it that way.** The first draft carried the required sentence *"innocent ejections fell from 46 to 20"* verbatim. `tests/scripts/test_check_doc_facts.py:2460-2468` (`test_a_claim_document_that_never_states_the_fall_is_not_required_to`) asserts that `audits/README.md` carries **neither** claim stem — it is the deliberate NEGATIVE CONTROL proving the wording rule is a gate on pages that publish the count and not a demand that every claim document publish it — and three sibling perturbation tests count errors against that same tree. So the entry writes the counts as *"a wrongful-ejection total that fell from 46 to 20"* and *"11 of 20 = 0.5500"*. **The figures stay gated**: `check_finding_figures` binds the share to the verdict table wherever a claim document writes it beside the word "reporter", and `check_ladder_tip` binds the tip. Only the fall's phrasing is the index's own, which is exactly what that test exists to permit.
 - **A checker false positive met while drafting, recorded because it is reproducible.** With the required fall sentence present, `check_owner_action` fired on the word *"adopting"* inside the **filename** `audit-phase-21-adopting-record.md` in the neighbouring bullet — *"it states this record's fall beside 'adopting'"* — because `prose_blocks` splits on blank lines only, so a tight bullet list is one block, and a link's own filename is read as prose. It is moot for the wording finally used, and it is filed with the other two checker-prose heuristics (§4) with its perturbation case: a positive owner-action verb in a NEIGHBOURING list item must not fail this check, and one in the same sentence must.
