@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 import _manifest_writer as mw
-from orchestrator.replay import ReplayLog, TacticalPolicyStamp
+from orchestrator.replay import LLMCallRecord, ReplayLog, TacticalPolicyStamp
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 # The flat 4p1i baseline now lives under replays/samples/4p1i/ (Task 12.12).
@@ -130,6 +130,87 @@ def test_provenance_no_meeting_seed(small_samples: Path) -> None:
     # No LLM call recorded -> attributed to the directory's meeting model.
     assert model == fallback == "Qwen/Qwen3.6-27B"
     assert winner in {"CREWMATES", "IMPOSTORS", "null"}
+
+
+def test_partial_manifest_retains_aborted_call_provenance(tmp_path: Path) -> None:
+    path = tmp_path / "replay-seed-5.jsonl"
+    log = ReplayLog(path, game_id="headless-seed-5")
+    log.record_aborted_meeting(
+        meeting_id="headless-seed-5:meeting-0",
+        tick=0,
+        llm_calls=(
+            LLMCallRecord(
+                call_kind="meeting",
+                model="aborted-model",
+                prompt="prompt",
+                response_text="response",
+                input_tokens=10,
+                output_tokens=2,
+                cost_usd=0.03,
+            ),
+        ),
+        prompt_versions={"opening": "opening.v1"},
+        error_type="RuntimeError",
+        error_message="transport stopped",
+    )
+    log.close()
+
+    model, versions, _, _, cost, winner = mw.sample_provenance(
+        tmp_path, 5, "unused-fallback"
+    )
+
+    assert model == "aborted-model"
+    assert versions == "opening.v1"
+    assert cost == "0.0300"
+    assert winner == "null"
+    assert mw.fallback_model(tmp_path) == "aborted-model"
+
+
+@pytest.mark.parametrize("aborted", [False, True])
+def test_manifest_attributes_failed_attempts_only_in_aborted_meetings(
+    tmp_path: Path,
+    aborted: bool,
+) -> None:
+    log = ReplayLog(tmp_path / "replay-seed-5.jsonl", game_id="headless-seed-5")
+    meeting_id = "headless-seed-5:meeting-0"
+    for model, tokens, call_cost, error_type in (
+        ("failed-model", 7, 0.04, "ValidationError"),
+        ("(deadline_default)", 0, 0.0, "deadline_default"),
+    ):
+        log.record_failed_call(
+            meeting_id=meeting_id,
+            tick=0,
+            model=model,
+            prompt_length=tokens,
+            raw_response="",
+            input_tokens=tokens,
+            output_tokens=0,
+            cost_usd=call_cost,
+            error_type=error_type,
+            error_message="failed",
+            call_id=model,
+        )
+    if aborted:
+        log.record_aborted_meeting(
+            meeting_id=meeting_id,
+            tick=0,
+            llm_calls=(),
+            prompt_versions={"opening": "opening.v1"},
+            error_type="RuntimeError",
+            error_message="retry interrupted",
+        )
+    log.close()
+
+    model, versions, _, _, cost, winner = mw.sample_provenance(
+        tmp_path, 5, "legacy-fallback"
+    )
+
+    assert model == ("failed-model" if aborted else "legacy-fallback")
+    assert versions == ("opening.v1" if aborted else mw._NO_MEETINGS)
+    assert cost == "0.0400"
+    assert winner == "null"
+    if aborted:
+        assert mw.fallback_model(tmp_path) == "failed-model"
 
 
 def test_provenance_reads_stamped_substrate_flags(tmp_path: Path) -> None:

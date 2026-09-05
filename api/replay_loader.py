@@ -167,6 +167,7 @@ from orchestrator.game import (
 )
 from orchestrator.replay import (
     TOGGLEABLE_SUBSTRATE_FLAG_KEYS,
+    AbortedMeetingReplayEntry,
     ActionDisposition,
     FailedCallReplayEntry,
     GameEndReplayEntry,
@@ -1895,8 +1896,8 @@ class ReplayLoader:
 
     def _read_summary(self, path: Path, _mtime_key: int) -> _ReplaySummary:
         # Walk the file once and derive every listing/cost field from the single
-        # entry list (Audit G-G-2): cost folds each meeting's ``llm_calls`` plus
-        # every failed-call row (mirrors ``compute_cost_usd``); ``winner`` is the
+        # entry list (Audit G-G-2): cost includes calls from resolved and aborted
+        # meetings plus every failed-call row; ``winner`` is the
         # game-end record (mirrors ``read_game_outcome``). ``_mtime_key`` keys the
         # cache only (Audit H-H-2).
         tick_count = 0
@@ -1916,8 +1917,9 @@ class ReplayLoader:
         for entry in entries:
             if isinstance(entry, ReplayEntry):
                 tick_count += 1
-            elif isinstance(entry, MeetingReplayEntry):
-                meeting_count += 1
+            elif isinstance(entry, (MeetingReplayEntry, AbortedMeetingReplayEntry)):
+                if isinstance(entry, MeetingReplayEntry):
+                    meeting_count += 1
                 total_cost += sum((call.cost_usd for call in entry.llm_calls), 0.0)
                 prompt_versions.update(entry.prompt_versions)
             elif isinstance(entry, GameEndReplayEntry):

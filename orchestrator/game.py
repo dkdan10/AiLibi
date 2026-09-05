@@ -35,7 +35,7 @@ import os
 from collections.abc import Callable, Coroutine, Mapping, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Final, Literal, Protocol, TypeAlias, TypeVar, runtime_checkable
+from typing import Final, Literal, Protocol, TypeAlias, TypeVar, cast, runtime_checkable
 
 from agents.base import AgentInterface
 from agents.memory.beliefs import (
@@ -708,6 +708,7 @@ class MeetingArtifacts:
     prompt_versions: Mapping[str, str]
     defaulted_calls: tuple[DefaultedCall, ...] = ()
     recovered_call_failures: tuple[LLMCallFailure, ...] = ()
+    captured_failures: tuple[tuple[str, LLMCallFailure], ...] | None = None
 
 
 @runtime_checkable
@@ -959,15 +960,32 @@ class _RecordingLLMClient:
     def __init__(self, inner: LLMClient) -> None:
         self._inner = inner
         self._calls: list[LLMCallRecord] = []
+        self._failures: list[tuple[str, LLMCallFailure]] = []
+        self._next_call_id = 0
 
     @property
     def calls(self) -> tuple[LLMCallRecord, ...]:
         return tuple(self._calls)
 
+    @property
+    def preflight_cost_per_input_token_usd(self) -> float:
+        # Preserve the provider's optional pricing capability. AttributeError
+        # means the inner client supplies no hint, as for a direct wrapper.
+        return cast(float, getattr(self._inner, "preflight_cost_per_input_token_usd"))
+
+    @property
+    def preflight_cost_per_output_token_usd(self) -> float:
+        return cast(float, getattr(self._inner, "preflight_cost_per_output_token_usd"))
+
     def drain(self) -> tuple[LLMCallRecord, ...]:
         drained = tuple(self._calls)
         self._calls.clear()
         return drained
+
+    def drain_failures(self) -> tuple[tuple[str, LLMCallFailure], ...]:
+        failures = tuple(self._failures)
+        self._failures.clear()
+        return failures
 
     async def complete(
         self,
@@ -980,15 +998,23 @@ class _RecordingLLMClient:
         model: str | None = None,
         agent_id: str | None = None,
     ) -> LLMResponse:
-        response = await self._inner.complete(
-            prompt=prompt,
-            schema=schema,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            call_kind=call_kind,
-            model=model,
-            agent_id=agent_id,
-        )
+        call_id = f"call-{self._next_call_id}"
+        self._next_call_id += 1
+        try:
+            response = await self._inner.complete(
+                prompt=prompt,
+                schema=schema,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                call_kind=call_kind,
+                model=model,
+                agent_id=agent_id,
+            )
+        except BaseException as exc:
+            failure = extract_parse_failure(exc)
+            if failure is not None:
+                self._failures.append((call_id, failure))
+            raise
         self._calls.append(
             LLMCallRecord(
                 call_kind=call_kind,
@@ -1028,12 +1054,18 @@ class DefaultMeetingRunner:
         config: MeetingConfig | None = None,
         prompt_versions: Mapping[str, str] = DEFAULT_PROMPT_VERSIONS,
         token_budget: int = DEFAULT_TOKEN_BUDGET,
+        budget: GameBudget | None = None,
         reporter_reasoning: bool | None = None,
         corroboration_discipline: bool | None = None,
     ) -> None:
         self._recording_client = _RecordingLLMClient(llm_client)
+        manager_client: LLMClient = (
+            BudgetedLLMClient(inner=self._recording_client, budget=budget)
+            if budget is not None
+            else self._recording_client
+        )
         self._manager = MeetingManager(
-            llm_client=self._recording_client,
+            llm_client=manager_client,
             crewmate_report_prompt=crewmate_report_prompt,
             impostor_report_prompt=impostor_report_prompt,
             statement_prompt=statement_prompt,
@@ -1056,11 +1088,9 @@ class DefaultMeetingRunner:
         state: WorldState,
         agents: Mapping[PlayerId, AgentInterface],
     ) -> MeetingArtifacts:
-        # Drop any stale captures left over from a prior run that
-        # raised mid-meeting. Without this the leftover records would
-        # silently attach to this meeting's replay payload and
-        # contaminate llm_calls counts + cost metadata.
+        # Each prior attempt transferred its buffers to artifacts or an error.
         self._recording_client.drain()
+        self._recording_client.drain_failures()
         participants = _build_participants(
             state=state,
             agents=agents,
@@ -1097,19 +1127,16 @@ class DefaultMeetingRunner:
                 impostor_count=impostor_count,
             )
         except BaseException as exc:
-            # On failure, drop the partial captures so a retry against
-            # the same runner does not double-count completed prefixes.
-            self._recording_client.drain()
-            # Carry the side-records that fired BEFORE the abort onto the
-            # exception so the orchestrator can still persist them (audit gp-2:
-            # a default must be visible -- and a recovered provider parse-failure
-            # accounted -- even when a LATER call aborts the meeting, where
-            # record_meeting and this success-path return never run).
+            # Transfer captures once, preserving the original exception and
+            # keeping this attempt out of the next meeting's buffers.
             _attach_meeting_side_records(
                 exc,
                 _MeetingSideRecords(
                     defaulted_calls=self._manager.defaulted_calls,
                     recovered_call_failures=self._manager.recovered_call_failures,
+                    llm_calls=self._recording_client.drain(),
+                    prompt_versions=dict(self._prompt_versions),
+                    captured_failures=self._recording_client.drain_failures(),
                 ),
             )
             raise
@@ -1123,6 +1150,7 @@ class DefaultMeetingRunner:
             # replay accurately.
             defaulted_calls=self._manager.defaulted_calls,
             recovered_call_failures=self._manager.recovered_call_failures,
+            captured_failures=self._recording_client.drain_failures(),
         )
 
 
@@ -1150,11 +1178,9 @@ def build_default_meeting_runner(
     ``AILIBI_LLM_PROVIDER=anthropic`` routes the public entry-points
     through :class:`llm.provider.AnthropicClient`; callers may still pass
     an explicit ``llm_client`` to bypass env selection. When ``budget`` is
-    provided the client is wrapped in
-    :class:`llm.budgeted_client.BudgetedLLMClient` *before* the runner's
-    :class:`_RecordingLLMClient` layer, so the per-game cost cap is
-    enforced at call time (pre-flight) rather than measured post-hoc
-    from the replay log.
+    provided, budget preflight runs before the provider and accounting runs
+    afterward. Recording sits inside that budget wrapper so a returned response
+    survives even when its actual charge exceeds the estimate and raises.
 
     When ``config`` is omitted the runner is wired deadline-free
     (:data:`HEADLESS_MEETING_DEADLINES`, i.e. ``turn_seconds=None`` /
@@ -1228,9 +1254,6 @@ def build_default_meeting_runner(
             "the variable"
         )
     inner: LLMClient = llm_client if llm_client is not None else build_default_client()
-    client: LLMClient = (
-        BudgetedLLMClient(inner=inner, budget=budget) if budget is not None else inner
-    )
     # This is the production HEADLESS recording surface, so an unspecified
     # config runs deadline-free (audit gp-2): recording must never lose a turn
     # to a wall-clock race. An explicit ``config`` is honoured unchanged, so an
@@ -1242,7 +1265,8 @@ def build_default_meeting_runner(
         else MeetingConfig(deadlines=HEADLESS_MEETING_DEADLINES)
     )
     return DefaultMeetingRunner(
-        llm_client=client,
+        llm_client=inner,
+        budget=budget,
         crewmate_report_prompt=renderers.crewmate_report,
         impostor_report_prompt=renderers.impostor_report,
         statement_prompt=renderers.statement,
@@ -2193,6 +2217,7 @@ class HeadlessGame:
             state=state, events=events
         )
         meeting_id = f"{self._game_id()}:meeting-{meeting_index}"
+        side_records: _MeetingSideRecords | None = None
         try:
             artifacts = _drive_async(
                 self._meeting_runner.run_meeting(
@@ -2202,78 +2227,43 @@ class HeadlessGame:
                     agents=agents,
                 )
             )
-        except BaseException as exc:
-            # A meeting that aborts because a structured-output response
-            # failed schema validation carries the rejected call's cost +
-            # partial response on the propagating ValidationError (see
-            # llm.provider.extract_parse_failure). Persist it before the
-            # crash propagates so per-meeting cost is auditable for the
-            # meeting that broke the run (Task 3.19 finding 2). The meeting
-            # still aborts — the caller cannot proceed without a valid
-            # response — so the exception is re-raised unchanged. On the
-            # no-replay path (``replay`` None) there is nothing to persist, so
-            # the guarded writes are skipped and the exception still propagates.
-            failure = extract_parse_failure(exc)
-            if failure is not None and replay is not None:
-                replay.record_failed_call(
-                    meeting_id=meeting_id,
-                    tick=trigger.trigger_tick,
-                    model=failure.model,
-                    prompt_length=failure.prompt_length,
-                    raw_response=failure.raw_response,
-                    input_tokens=failure.input_tokens,
-                    output_tokens=failure.output_tokens,
-                    cost_usd=failure.cost_usd,
-                    error_type=failure.error_type,
-                    error_message=failure.error_message,
-                )
-            # Persist the side-records that fired BEFORE this abort (audit
-            # gp-2): record_meeting never runs for an aborted meeting, so
-            # without this the earlier default / recovered failure would vanish.
-            # The DefaultMeetingRunner attached them to the propagating exception.
-            side_records = _extract_meeting_side_records(exc)
-            _record_deadline_defaults(
-                replay=replay,
-                meeting_id=meeting_id,
-                tick=trigger.trigger_tick,
-                defaulted_calls=side_records.defaulted_calls,
+            side_records = _MeetingSideRecords(
+                llm_calls=artifacts.llm_calls,
+                prompt_versions=artifacts.prompt_versions,
+                defaulted_calls=artifacts.defaulted_calls,
+                recovered_call_failures=artifacts.recovered_call_failures,
+                captured_failures=artifacts.captured_failures,
             )
-            _record_recovered_failures(
+            _validate_runner_result(
+                result=artifacts.result,
+                expected_meeting_id=meeting_id,
+                expected_trigger=trigger,
+            )
+            next_state, post_events = apply_meeting_result(
+                state,
+                artifacts.result,
+                game_map=self._game_map,
+                triggering_body_id=triggering_body_id,
+                rng_hash_policy=self._rng_hash_policy,
+            )
+            # An emergency has no body report. Check before committing a
+            # resolved meeting, retaining its calls if the guard rejects it.
+            _assert_no_emergency_opening_body(
+                trigger_kind=trigger_kind, result=artifacts.result
+            )
+        except BaseException as exc:
+            _record_meeting_abort(
                 replay=replay,
                 meeting_id=meeting_id,
                 tick=trigger.trigger_tick,
-                failures=side_records.recovered_call_failures,
+                error=exc,
+                records=(
+                    side_records
+                    if side_records is not None
+                    else _extract_meeting_side_records(exc)
+                ),
             )
             raise
-        _validate_runner_result(
-            result=artifacts.result,
-            expected_meeting_id=meeting_id,
-            expected_trigger=trigger,
-        )
-        # The before/after state hashes are RECORDING artifacts only, so the
-        # no-replay path (``replay`` None) skips them entirely (Task 15.8.1) —
-        # the whole point of the fast training mode is to not serialize state.
-        # ``state`` is frozen and ``apply_meeting_result`` returns a new state,
-        # so computing ``state_hash_before`` after the apply is byte-equivalent
-        # to before it (kept here to guard both computations under one branch).
-        next_state, post_events = apply_meeting_result(
-            state,
-            artifacts.result,
-            game_map=self._game_map,
-            triggering_body_id=triggering_body_id,
-            rng_hash_policy=self._rng_hash_policy,
-        )
-        # Task 10.11 self-check (audit-2026-06-13-1816 B-B-1): an EMERGENCY
-        # meeting has NO kill scene by design (§5.2 PHASE 1) -- the caller
-        # pressed the button on suspicion, no body was reported. The 10.8
-        # check ("engine body_id is None") was TRUE yet MASKED a transcript
-        # fabrication: every emergency opening re-narrated a stale corpse as a
-        # fresh `found_body`. Fail loud on any emergency opening that still
-        # carries one, so a model that ignores the v7 prompt is caught at the
-        # source rather than silently anchoring votes on a non-existent body.
-        _assert_no_emergency_opening_body(
-            trigger_kind=trigger_kind, result=artifacts.result
-        )
         if replay is not None:
             replay.record_meeting(
                 meeting_id=meeting_id,
@@ -2414,19 +2404,17 @@ class HeadlessGame:
 
 @dataclass(frozen=True)
 class _MeetingSideRecords:
-    """Meeting side-records that must survive a meeting abort (audit gp-2).
+    """Attempt-owned captures carried through an abort without changing its error.
 
-    Bundles the two non-result outputs the orchestrator persists -- fired
-    ``deadline_default`` markers and recovered provider parse-failures -- so a
-    LATER aborting call (after which ``record_meeting`` never runs) does not
-    lose them. Rides the propagating exception like ``llm.provider``'s
-    parse-failure-on-exception pattern, which keeps the ``MeetingRunner``
-    Protocol unchanged (a custom runner that does not attach simply yields an
-    empty bundle here) and avoids module-level mutable state.
+    ``captured_failures=None`` identifies custom runners using the older
+    recovery metadata; a tuple is the recorder's complete failed-attempt list.
     """
 
     defaulted_calls: tuple[DefaultedCall, ...] = ()
     recovered_call_failures: tuple[LLMCallFailure, ...] = ()
+    llm_calls: tuple[LLMCallRecord, ...] = ()
+    prompt_versions: Mapping[str, str] | None = None
+    captured_failures: tuple[tuple[str, LLMCallFailure], ...] | None = None
 
 
 _MEETING_SIDE_RECORDS_ATTR: Final[str] = "_ailibi_meeting_side_records"
@@ -2481,6 +2469,62 @@ def _record_recovered_failures(
             error_type=failure.error_type,
             error_message=failure.error_message,
         )
+
+
+def _record_meeting_abort(
+    *,
+    replay: ReplayLog | None,
+    meeting_id: str,
+    tick: int,
+    error: BaseException,
+    records: _MeetingSideRecords,
+) -> None:
+    """Persist one attempt's known responses and failures without a resolution."""
+
+    if replay is None:
+        return
+    if records.prompt_versions is not None:
+        replay.record_aborted_meeting(
+            meeting_id=meeting_id,
+            tick=tick,
+            llm_calls=records.llm_calls,
+            prompt_versions=records.prompt_versions,
+            error_type=type(error).__name__,
+            error_message=str(error),
+        )
+    defaults = records.defaulted_calls
+    if records.captured_failures is not None:
+        # The recorder observed each provider attempt, including a parse
+        # failure still waiting for retry when the next call aborts.
+        for call_id, failure in records.captured_failures:
+            replay.record_failed_call(
+                meeting_id=meeting_id,
+                tick=tick,
+                model=failure.model,
+                prompt_length=failure.prompt_length,
+                raw_response=failure.raw_response,
+                input_tokens=failure.input_tokens,
+                output_tokens=failure.output_tokens,
+                cost_usd=failure.cost_usd,
+                error_type=failure.error_type,
+                error_message=failure.error_message,
+                call_id=call_id,
+            )
+        # Retain default visibility while the identified failed-call rows
+        # own all reported spend. Successful meeting serialization is unchanged.
+        defaults = tuple(replace(item, parse_failures=()) for item in defaults)
+    else:
+        # Custom runners may only supply the established recovery metadata.
+        terminal_failure = extract_parse_failure(error)
+        failures = records.recovered_call_failures
+        if terminal_failure is not None:
+            failures = (*failures, terminal_failure)
+        _record_recovered_failures(
+            replay=replay, meeting_id=meeting_id, tick=tick, failures=failures
+        )
+    _record_deadline_defaults(
+        replay=replay, meeting_id=meeting_id, tick=tick, defaulted_calls=defaults
+    )
 
 
 def _record_deadline_defaults(

@@ -290,6 +290,21 @@ class MeetingReplayEntry(BaseModel):
     state_hash_after: str
 
 
+class AbortedMeetingReplayEntry(BaseModel):
+    """Captured calls from an unresolved meeting, without an engine transition."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    kind: Literal["meeting_aborted"] = "meeting_aborted"
+    game_id: str
+    meeting_id: str
+    tick: int
+    llm_calls: tuple[LLMCallRecord, ...]
+    prompt_versions: Mapping[str, str]
+    error_type: str
+    error_message: str
+
+
 WinnerSide: TypeAlias = Literal["CREWMATES", "IMPOSTORS"]
 
 
@@ -548,17 +563,11 @@ class GameEndReplayEntry(BaseModel):
 
 
 class FailedCallReplayEntry(BaseModel):
-    """One failed-LLM-call replay record (DESIGN.md §11.4; Task 3.19 finding 2).
+    """A reported provider failure or a meeting-default visibility marker.
 
-    Written by :meth:`ReplayLog.record_failed_call` when a meeting aborts
-    because a structured-output response failed schema validation. The
-    ``ValidationError`` fires inside the provider before an
-    :class:`~llm.client.LLMResponse` exists, so the tokens the model
-    already burned would otherwise be invisible to both the budget layer
-    and :meth:`ReplayLog.record_meeting` (which never runs for the crashed
-    meeting). This row captures that spend — plus enough of the raw
-    response and the error to reconstruct what broke — so per-meeting cost
-    is auditable even for the meeting that crashed the run.
+    Reported failures carry their actual usage and partial response. A default
+    without separate usage is a zero-spend marker. New aborted attempts carry
+    ``call_id`` so identical paid responses are not collapsed by content.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -587,10 +596,17 @@ class FailedCallReplayEntry(BaseModel):
     # the reader tolerates its absence and existing bytes reconstruct
     # unchanged.
     rendered_vote_max: float | None = None
+    # Present on newly captured aborted attempts so identical responses from
+    # distinct paid calls remain distinct. Legacy rows retain content dedup.
+    call_id: str | None = None
 
 
 ReplayLogEntry: TypeAlias = Annotated[
-    ReplayEntry | MeetingReplayEntry | GameEndReplayEntry | FailedCallReplayEntry,
+    ReplayEntry
+    | MeetingReplayEntry
+    | AbortedMeetingReplayEntry
+    | GameEndReplayEntry
+    | FailedCallReplayEntry,
     Field(discriminator="kind"),
 ]
 
@@ -1144,6 +1160,33 @@ class ReplayLog:
             del payload["crew_tactical_policy"]
         self._append(payload)
 
+    def record_aborted_meeting(
+        self,
+        *,
+        meeting_id: str,
+        tick: int,
+        llm_calls: Sequence[LLMCallRecord],
+        prompt_versions: Mapping[str, str],
+        error_type: str,
+        error_message: str,
+    ) -> None:
+        """Persist a drained attempt's calls without claiming a resolution.
+
+        Each call in the tuple is a distinct response, even if two responses
+        have identical content. The runner transfers the buffer once.
+        """
+
+        entry = AbortedMeetingReplayEntry(
+            game_id=self._game_id,
+            meeting_id=meeting_id,
+            tick=tick,
+            llm_calls=tuple(llm_calls),
+            prompt_versions=prompt_versions,
+            error_type=error_type,
+            error_message=error_message[:200],
+        )
+        self._append(entry.model_dump(mode="json"))
+
     def record_failed_call(
         self,
         *,
@@ -1158,30 +1201,14 @@ class ReplayLog:
         error_type: str,
         error_message: str,
         rendered_vote_max: float | None = None,
+        call_id: str | None = None,
     ) -> None:
-        """Persist a meeting-aborting failed LLM call (DESIGN.md §11.4; Task 3.19).
+        """Persist reported failure usage or a zero-spend default marker.
 
-        Called by the orchestrator on the meeting-failure path when a
-        structured-output response failed schema validation (the metadata
-        rides the propagating ``ValidationError`` and is recovered via
-        :func:`llm.provider.extract_parse_failure`). Captures the spend
-        and partial response for the rejected call so per-meeting cost is
-        reconstructable even though the meeting crashed and
-        :meth:`record_meeting` never ran.
-
-        Single-write guard (Task 9.10, audit gp-4 / MECH-B-1): a row that is
-        byte-identical to one already written by this log is dropped instead
-        of appended. A deterministic provider (seeded local model, fixed
-        prompt) regenerates the SAME failing response on the in-turn retry,
-        so a single defaulted opening surfaced the same burned generation
-        twice — seeds 8/36/39 each persisted a duplicate ``failed_call`` row,
-        double-counting 5,969 input / 6,144 output tokens. De-duplication is
-        on the FULL frozen entry — the audit's byte-identity tuple
-        ``(model, raw_response, input_tokens, output_tokens)`` scoped by
-        ``meeting_id`` / ``tick`` / error fields — so two zero-spend
-        ``deadline_default`` visibility markers from DIFFERENT participants
-        (which share the zero tuple but differ in ``error_message``) and any
-        genuinely distinct failures in one meeting still each record once.
+        Identical rows are written once. Callers recording distinct paid
+        attempts supply distinct ``call_id`` values even when response content
+        matches. Calls without an identity retain the legacy content-based
+        deduplication and omit the new field from serialized bytes.
         """
 
         entry = FailedCallReplayEntry(
@@ -1197,11 +1224,15 @@ class ReplayLog:
             error_type=error_type,
             error_message=error_message,
             rendered_vote_max=rendered_vote_max,
+            call_id=call_id,
         )
         if entry in self._recorded_failed_calls:
             return
         self._recorded_failed_calls.add(entry)
-        self._append(entry.model_dump(mode="json"))
+        payload = entry.model_dump(mode="json")
+        if call_id is None:
+            del payload["call_id"]
+        self._append(payload)
 
     def read_entries(self) -> tuple[ReplayEntry, ...]:
         return read_replay_entries(self._path)
@@ -1440,28 +1471,17 @@ def read_policy_stamps(path: Path) -> PolicyStamps:
 
 
 def compute_cost_usd(path: Path) -> float:
-    """Sum LLM cost (USD) across a replay log (DESIGN.md §11.4; Task 3.19).
+    """Sum reported USD spend from resolved meetings, aborted meetings and failures.
 
-    Reads every record once and sums :attr:`LLMCallRecord.cost_usd` over
-    each ``kind == "meeting"`` record's captured calls *plus* each
-    ``kind == "failed_call"`` record's cost. This is the canonical
-    per-game cost reduction: future eval code (including the real-provider
-    50-game eval that checks the ``<= $0.30`` merge criterion) consumes it
-    rather than re-deriving the sum inline. Folding in the failed-call
-    rows means a meeting that aborted on a rejected response still
-    contributes the tokens the model already burned, so a crashed run's
-    spend is not silently undercounted (Task 3.19 finding 2).
-
-    Returns ``0.0`` for replay logs with no meeting or failed-call entries
-    (e.g. games that ended before any meeting fired) and for meetings
-    whose ``llm_calls`` list is empty. The sum is seeded with a float so
-    the return value is always a finite, non-negative float (fake-provider
-    runs report ``cost_usd == 0.0`` per call).
+    Each captured response contributes once, regardless of whether its meeting
+    resolved. Separate failed-call rows contribute their own reported spend;
+    zero-spend default markers add nothing. An unfinished run can have cost
+    without a winner or any resolved meeting.
     """
 
     total = 0.0
     for entry in read_all_entries(path):
-        if isinstance(entry, MeetingReplayEntry):
+        if isinstance(entry, (MeetingReplayEntry, AbortedMeetingReplayEntry)):
             total += sum((call.cost_usd for call in entry.llm_calls), 0.0)
         elif isinstance(entry, FailedCallReplayEntry):
             total += entry.cost_usd
@@ -1534,6 +1554,8 @@ def _parse_entry(raw_entry: Any) -> ReplayLogEntry:
         return ReplayEntry.model_validate({**raw_entry, "kind": "tick"})
     if kind == "meeting":
         return MeetingReplayEntry.model_validate(raw_entry)
+    if kind == "meeting_aborted":
+        return AbortedMeetingReplayEntry.model_validate(raw_entry)
     if kind == "game_over":
         return GameEndReplayEntry.model_validate(raw_entry)
     if kind == "failed_call":
@@ -1600,6 +1622,7 @@ __all__ = [
     "SUBSTRATE_FLAG_KEYS",
     "TOGGLEABLE_SUBSTRATE_FLAG_KEYS",
     "ActionDisposition",
+    "AbortedMeetingReplayEntry",
     "CrewTacticalPolicyStamp",
     "FailedCallReplayEntry",
     "GameEndReplayEntry",

@@ -886,6 +886,7 @@ PYINNER
 #     not contain degraded turns under either shape, so key on error_type, which
 #     is the property that actually matters, rather than on the model sentinel,
 #     which is an artifact of which branch emitted the row;
+#   * no meeting aborted, even if a game_over row was appended afterwards;
 #   * its summed cost is exactly $0 (the flat-rate provider contract);
 #   * its game_over substrate_flags stamp POSITIVELY carries the DECLARED lever
 #     slate — every retired always-on lever present and True, every toggle named
@@ -909,6 +910,7 @@ sys.path.insert(0, sys.argv[1])
 from orchestrator.replay import (  # noqa: E402
     SUBSTRATE_FLAG_KEYS,
     TOGGLEABLE_SUBSTRATE_FLAG_KEYS,
+    AbortedMeetingReplayEntry,
     FailedCallReplayEntry,
     MeetingReplayEntry,
     compute_cost_usd,
@@ -950,8 +952,10 @@ for path in sorted(set_dir.glob("replay-seed-*.jsonl")):
     models: set[str] = set()
     defaulted = 0
     for entry in read_all_entries(path):
-        if isinstance(entry, MeetingReplayEntry):
+        if isinstance(entry, (MeetingReplayEntry, AbortedMeetingReplayEntry)):
             models.update(call.model for call in entry.llm_calls)
+            if isinstance(entry, AbortedMeetingReplayEntry):
+                bad.append(f"{path.name}: meeting {entry.meeting_id} aborted")
         elif isinstance(entry, FailedCallReplayEntry):
             models.add(entry.model)
             # Phase-18 ledger, labeled in place (Phase 19 tier map,

@@ -80,6 +80,7 @@ from orchestrator.game import (
     build_default_meeting_runner,
 )
 from orchestrator.replay import (
+    AbortedMeetingReplayEntry,
     GameEndReplayEntry,
     LLMCallRecord,
     MeetingReplayEntry,
@@ -287,6 +288,51 @@ def test_unresolved_meeting_is_not_exposed_via_memory(tmp_path: Path) -> None:
 def test_unknown_game_raises_file_not_found(loader: ReplayLoader) -> None:
     with pytest.raises(FileNotFoundError):
         loader.load_replay("headless-seed-404")
+
+
+def test_aborted_call_summary_preserves_spend_without_resolving_meeting(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "replay-seed-0.jsonl"
+    meeting_id = write_unresolved_meeting_replay(path, seed=0)
+    entry = AbortedMeetingReplayEntry(
+        game_id="headless-seed-0",
+        meeting_id=meeting_id,
+        tick=load_canonical_map().kill_cooldown_ticks + 1,
+        llm_calls=(
+            LLMCallRecord(
+                call_kind="meeting",
+                model="paid-model",
+                prompt="saved prompt",
+                response_text="saved response",
+                input_tokens=10,
+                output_tokens=2,
+                cost_usd=0.06,
+                agent_id="p-2",
+            ),
+        ),
+        prompt_versions={"opening": "opening.v1"},
+        error_type="RuntimeError",
+        error_message="transport stopped",
+    )
+    with path.open("a", encoding="utf-8") as stream:
+        stream.write(entry.model_dump_json() + "\n")
+    loader = ReplayLoader(replay_dir=tmp_path)
+
+    replay = loader.load_replay("headless-seed-0")
+
+    assert replay.metadata.total_cost_usd == pytest.approx(0.06)
+    assert replay.metadata.prompt_versions == {"opening": "opening.v1"}
+    assert replay.metadata.meeting_count == 0
+    assert replay.metadata.winner is None
+    assert replay.finale is None
+    assert replay.meetings == ()
+    assert replay.failed_calls == ()
+    assert loader.list_replays()[0].total_cost_usd == pytest.approx(0.06)
+    assert loader.cost_summary().total_cost_usd == pytest.approx(0.06)
+    assert "saved prompt" not in replay.model_dump_json()
+    with pytest.raises(KeyError):
+        loader.get_meeting_memory("headless-seed-0", meeting_id, "p-2")
 
 
 def test_lru_cache_returns_same_instance_until_cleared(tmp_path: Path) -> None:

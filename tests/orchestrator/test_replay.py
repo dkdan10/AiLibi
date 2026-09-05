@@ -47,6 +47,7 @@ from orchestrator.replay import (
     TOGGLEABLE_SUBSTRATE_FLAG_KEYS,
     _impostor_roll_call_enabled,
     _TOGGLEABLE_LEVER_RESOLVERS,
+    AbortedMeetingReplayEntry,
     FailedCallReplayEntry,
     GameEndReplayEntry,
     LLMCallRecord,
@@ -59,6 +60,7 @@ from orchestrator.replay import (
     read_all_entries,
     read_failed_call_entries,
     read_game_outcome,
+    read_meeting_entries,
     read_replay_entries,
     read_substrate_flags,
     substrate_flag_snapshot,
@@ -699,6 +701,66 @@ class TestSubstrateFlagStamp:
         assert entry.substrate_flags is None
 
 
+class TestAbortedMeetingRecording:
+    def test_identical_paid_responses_round_trip_without_a_resolution(
+        self, tmp_path: Path
+    ) -> None:
+        path = tmp_path / "aborted.jsonl"
+        call = LLMCallRecord(
+            call_kind="meeting",
+            model="injected",
+            prompt="A recorded prompt",
+            response_text="A recorded response",
+            input_tokens=13,
+            output_tokens=7,
+            cost_usd=0.02,
+            agent_id="p-1",
+        )
+        with ReplayLog(path, game_id="game") as log:
+            log.record_aborted_meeting(
+                meeting_id="game:meeting-0",
+                tick=10,
+                llm_calls=(call, call),
+                prompt_versions={"crewmate_report": "fixture"},
+                error_type="RuntimeError",
+                error_message="failure" * 100,
+            )
+        entries = read_all_entries(path)
+        assert len(entries) == 1
+        entry = entries[0]
+        assert isinstance(entry, AbortedMeetingReplayEntry)
+        assert entry.llm_calls == (call, call)
+        assert entry.prompt_versions == {"crewmate_report": "fixture"}
+        assert len(entry.error_message) == 200
+        assert compute_cost_usd(path) == pytest.approx(0.04)
+        assert read_meeting_entries(path) == ()
+        assert read_game_outcome(path) is None
+        assert "outcome" not in entry.model_dump()
+
+    def test_identified_failed_attempts_do_not_collapse_equal_responses(
+        self, tmp_path: Path
+    ) -> None:
+        path = tmp_path / "failed.jsonl"
+        with ReplayLog(path, game_id="game") as log:
+            for call_id in ("call-0", "call-1", "call-1"):
+                log.record_failed_call(
+                    meeting_id="game:meeting-0",
+                    tick=10,
+                    model="injected",
+                    prompt_length=30,
+                    raw_response="{}",
+                    input_tokens=13,
+                    output_tokens=7,
+                    cost_usd=0.02,
+                    error_type="ValidationError",
+                    error_message="Missing field",
+                    call_id=call_id,
+                )
+        failures = read_failed_call_entries(path)
+        assert [item.call_id for item in failures] == ["call-0", "call-1"]
+        assert compute_cost_usd(path) == pytest.approx(0.04)
+
+
 class TestFailedCallRecording:
     def test_record_failed_call_round_trips(self, tmp_path: Path) -> None:
         path = tmp_path / "failed.jsonl"
@@ -735,6 +797,8 @@ class TestFailedCallRecording:
         assert entry.error_message == "1 validation error for ReportDocument"
         # A non-vote failed call carries no §4.6 verdict (Task 10.12).
         assert entry.rendered_vote_max is None
+        assert entry.call_id is None
+        assert "call_id" not in json.loads(path.read_text())
 
     def test_defaulted_vote_persists_rendered_max(self, tmp_path: Path) -> None:
         # Task 10.12 (audit H-H-2): a defaulted VOTE row carries the rendered
