@@ -346,6 +346,8 @@ directory's `README.md`, which carries the tallies and the proposed routing.
   of a wrongful-ejection total that fell from 46 to 20 reading
   11 of 20 = 0.5500 against a registered 0.40, so the rule returns a finding.
   Nothing graduated, no override was made, the three Wave-2 levers stay live
-  toggles, and the ladder tip stands at baseline 8. The close files four
-  defects of its own and carries a fifth from the phase before it; the sharpest
-  is that this document is itself held by no gate.
+  toggles, and the ladder tip stands at baseline 8. The close files five
+  defects of its own and carries a sixth from the phase before it; the sharpest
+  is that this document is itself held by no gate, and one of the five is a
+  narration the previous close had already caught once, re-staled by the
+  intervening re-record.
