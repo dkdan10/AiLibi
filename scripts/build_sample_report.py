@@ -16,9 +16,9 @@ live entry points cannot drift), and writes the report in the SAME format
 ``run_tournament.py`` emits (``model_dump_json(indent=2)`` + a trailing newline,
 guarded by a ``model_validate_json`` round-trip).
 
-It is $0 and deterministic: no live model, and ``load_tournament_report`` does no
-engine re-run (it folds recorded outcomes), so it is unaffected by the Wave 0.5
-friendly-fire guard that breaks raw replay reconstruction.
+It is $0 and deterministic: no live model is called. The current report loader
+reconstructs the recorded actions to verify chronology, state hashes, meeting
+boundaries, and terminal outcomes before any report is published.
 
 Usage::
 

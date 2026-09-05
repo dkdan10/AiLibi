@@ -17,7 +17,7 @@ regression suite needs no live model and no engine re-run. It:
    not in the replay JSONL — the leak firewall keeps it out — so it is
    recomputed, never stored in the fixture);
 3. folds the recorded replays into a :class:`TournamentReport` via the public
-   :func:`eval.balance_eval.load_tournament_report` (the same per-seed assembly
+   :func:`eval.balance_eval.load_historical_tournament_report` (the same per-seed assembly
    the live tournament path uses — no duplicated record->report mapping);
 4. runs the four §11.3 analyzers via
    :func:`eval.meeting_quality.build_tournament_eval_report`; and
@@ -83,7 +83,7 @@ from pydantic import BaseModel, ConfigDict
 
 from engine.entities import PlayerId, Role
 from engine.world import Map, load_canonical_map
-from eval.balance_eval import load_tournament_report
+from eval.balance_eval import load_historical_tournament_report
 from eval.meeting_quality import build_tournament_eval_report
 from orchestrator.game import DEFAULT_NUM_IMPOSTORS, DEFAULT_NUM_PLAYERS
 from orchestrator.seeder import seed_initial_state
@@ -205,7 +205,7 @@ def run_prompt_regression(
     seed's role ground truth via :func:`orchestrator.seeder.seed_initial_state`
     (deterministic; never read from the replay), assembles a
     :class:`TournamentReport` with
-    :func:`eval.balance_eval.load_tournament_report`, runs
+    :func:`eval.balance_eval.load_historical_tournament_report`, runs
     :func:`eval.meeting_quality.build_tournament_eval_report`, and packs the
     metric scalars plus per-version provenance into a
     :class:`PromptRegressionSummary`.
@@ -237,18 +237,12 @@ def run_prompt_regression(
         for seed in seeds
     }
 
-    # The regression metrics read only the meeting analyzers (vote correctness,
-    # alibi, calibration, cost, meeting rate), never the Task 8.17 kill-gift
-    # fields, so skip the kill-gift reconstruction walk: it would re-seed the
-    # frozen fixtures under the current seeder, which the Task 8.14 round-start
-    # cooldown changed (the fixtures are re-recorded in Task 8.18). This keeps
-    # run_prompt_regression a pure no-engine-re-run analyzer over the fixtures.
-    report = load_tournament_report(
+    # Frozen regression fixtures keep their recorded-output semantics even when
+    # they predate the current engine. This explicitly historical fold does not
+    # certify a new outcome or derive task-accounting metrics.
+    report = load_historical_tournament_report(
         fixture_dir,
         roles_by_seed=roles_by_seed,
-        tasks_per_crewmate=tasks_per_crewmate,
-        game_map=resolved_map,
-        derive_kill_gift=False,
     )
     evaluated = build_tournament_eval_report(report)
 

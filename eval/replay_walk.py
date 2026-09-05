@@ -1,5 +1,10 @@
 """The parameterized replay walker — shared MECHANICS, per-consumer PROFILES.
 
+Current outcome-certifying reports additionally select
+``verify_chronology_and_outcome``. This delegates ordered-row, meeting-trigger,
+and terminal-metadata checks to the same validator as spectator playback. The
+historical profiles below retain their explicit compatibility contracts.
+
 Task 19.25 (audits/audit-phase-19-triage.md §7 item 25 + C3, closing §7 items
 1–2): eight eval modules carried nine independent ``advance_tick`` /
 ``apply_meeting_result`` reconstruction loop bodies. This module is their one
@@ -218,6 +223,7 @@ from orchestrator.replay import (
     substrate_stamp_mismatches,
 )
 from orchestrator.seeder import seed_initial_state
+from orchestrator.replay_integrity import ReplayIntegrityValidator
 
 _ACTION_ADAPTER: Final[TypeAdapter[Action]] = TypeAdapter(Action)
 
@@ -292,6 +298,10 @@ class ReplayWalkConfig:
     they never ran. An UNSTAMPED recording is skipped, its substrate being
     unknown rather than OFF
     (:func:`orchestrator.replay.substrate_stamp_mismatches`).
+    ``verify_chronology_and_outcome`` delegates original-row and terminal-event
+    checks to the shared spectator validator, which raises
+    :class:`orchestrator.replay_integrity.ReplayIntegrityError` directly. Select
+    tick and meeting-post hash checks alongside it to certify current reports.
     """
 
     profile: str
@@ -309,6 +319,7 @@ class ReplayWalkConfig:
     reject_trailing_rows: bool = False
     require_game_end_row: bool = False
     verify_recorded_outcome: bool = False
+    verify_chronology_and_outcome: bool = False
 
 
 @dataclass(frozen=True)
@@ -426,6 +437,11 @@ def walk_replay(
 
     game_id = f"headless-seed-{seed}"
     entries = read_all_entries(replay_path)
+    integrity = (
+        ReplayIntegrityValidator(entries, game_id=game_id)
+        if config.verify_chronology_and_outcome
+        else None
+    )
     tick_entries = [entry for entry in entries if isinstance(entry, ReplayEntry)]
     meeting_entries = [
         entry for entry in entries if isinstance(entry, MeetingReplayEntry)
@@ -482,6 +498,8 @@ def walk_replay(
     reconstructed_reason: str | None = None
 
     for entry in tick_entries:
+        if integrity is not None:
+            integrity.check_tick(entry, state)
         yield TickOpened(entry=entry, state=state, last_events=last_events)
 
         pre_state = state
@@ -513,6 +531,8 @@ def walk_replay(
                         actual=",".join(reconstructed),
                     ),
                 )
+        if integrity is not None:
+            integrity.check_advance(entry, state, events)
         for event in events:
             if isinstance(event, GameOverEvent):
                 reconstructed_winner = event.winner
@@ -594,6 +614,8 @@ def walk_replay(
                         actual=after,
                     ),
                 )
+        if integrity is not None:
+            integrity.observe_events(post_events)
         for event in post_events:
             if isinstance(event, GameOverEvent):
                 reconstructed_winner = event.winner
@@ -610,6 +632,9 @@ def walk_replay(
         if state.phase == "GAME_OVER":
             terminal_tick = entry.tick
             break
+
+    if integrity is not None:
+        integrity.finish()
 
     if config.require_terminal_tick and terminal_tick is None:
         _violate(
