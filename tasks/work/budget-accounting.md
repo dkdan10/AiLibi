@@ -1,6 +1,6 @@
 # Account for provider usage even when response validation fails
 
-**Status:** active
+**Status:** done
 
 ## Outcome
 
@@ -20,15 +20,15 @@ incurred over-cap spend before recording it.
 
 ## Acceptance
 
-- [ ] A real adapter with an injected transport proves invalid output still
+- [x] A real adapter with an injected transport proves invalid output still
   charges its reported usage and subsequent calls stop at the budget boundary.
-- [ ] Valid incurred charges remain recorded when over cap; preflight remains
+- [x] Valid incurred charges remain recorded when over cap; preflight remains
   nonmutating and rejects new calls that would exceed remaining capacity.
-- [ ] Failure metadata and the original validation error remain available to
+- [x] Failure metadata and the original validation error remain available to
   existing recovery and audit consumers; no duplicate charge occurs.
-- [ ] Concurrent calls and cancellation release reservations, and failures
+- [x] Concurrent calls and cancellation release reservations, and failures
   without reported usage do not fabricate charges.
-- [ ] Focused tests, the full project gate, and committed replay verification pass.
+- [x] Focused tests, the full project gate, and committed replay verification pass.
 
 ## Constraints
 
@@ -46,7 +46,7 @@ heuristics, not guarantees about a provider's tokenizer or final bill.
 
 ## Record impact
 
-Unconditional accounting repair. Future live runs with provider validation
+Post-record, unconditional accounting repair. Future live runs with provider validation
 failures may hit caps earlier; already incurred over-cap spend becomes visible.
 Successful within-budget runs, prompt bytes, and historical recording files
 are unchanged. No canonical re-record or experiment adoption is performed.
@@ -58,3 +58,21 @@ Run `uv run pytest tests/llm/test_budget.py tests/llm/test_budgeted_client.py`,
 The failure regression must fail against the prior implementation and pass
 after repair; all provider traffic in validation uses deterministic fakes or
 injected transports.
+
+## Results
+
+Verified 2026-09-05: 55 focused budget tests passed; the full LLM suite passed
+311 tests with 17 opt-in skips. `bash scripts/check.sh` passed 6,115 Python
+tests (20 skips, 3 expected failures), 440 frontend tests, and all other gates.
+`bash scripts/verify_samples.sh` verified all 100 samples it selects.
+
+Five accounting regressions failed against isolated budget modules from
+`cfde4c89`; the cancellation control passed. All six pass after repair.
+The cases cover incurred overruns, invalid Featherless token usage, invalid
+Anthropic dollar usage, concurrent failure settlement, and cancellation.
+
+Independent review confirmed the charge consumers are confined to the wrapper
+and the original validation exception and metadata reach recovery consumers.
+Known spend is retained even over cap; estimates still cannot guarantee the
+final provider bill. Aborted-meeting audit retention is the next separate
+repair, so this card does not claim complete replay/live-ledger reconciliation.
