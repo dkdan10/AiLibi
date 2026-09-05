@@ -185,13 +185,9 @@ def _write_pooling_meeting_replay(path: Path, *, seed: int = 0) -> dict[str, str
         state_hash_after=state_hash_after,
     )
 
-    quiet_tick = state.tick
     input_tick = state.tick
     state, _events = advance_tick(state, [], game_map=game_map)
     log.record_tick(input_tick, [], state)
-    log.record_game_end(
-        winner="CREWMATES", reason="all_tasks_complete", tick=quiet_tick
-    )
 
     return {
         "game_id": game_id,

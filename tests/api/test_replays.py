@@ -9,6 +9,7 @@ OpenAPI smoke checks that remain valid after the bodies landed.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -77,9 +78,9 @@ def test_get_replay_returns_full_view(client: TestClient) -> None:
     body = response.json()
     assert body["metadata"]["game_id"] == "headless-seed-1"
     # The round-start cooldown (DESIGN.md §3.4) delays the opening kill, so the
-    # meeting fixture records 7 ticks; +1 synthesized tick=-1 "Start" frame.
-    assert len(body["ticks"]) == 8
-    assert body["metadata"]["total_ticks"] == 7
+    # fixture records through the second kill, which actually ends the game.
+    assert len(body["ticks"]) == body["metadata"]["total_ticks"] + 1
+    assert body["metadata"]["winner"] == "IMPOSTORS"
     assert len(body["meetings"]) == 1
 
 
@@ -256,3 +257,21 @@ def test_openapi_lists_expected_dtos_and_paths() -> None:
     assert "/replays/{game_id}/meetings/{meeting_id}" in paths
     assert "/replays/{game_id}/meetings/{meeting_id}/memory/{agent_id}" in paths
     assert "/eval/cost-summary" in paths
+
+
+def test_integrity_refusal_has_a_controlled_http_error(tmp_path: Path) -> None:
+    path = tmp_path / "replay-seed-0.jsonl"
+    write_sample_replay(path)
+    rows = [json.loads(line) for line in path.read_text().splitlines()]
+    rows[0]["tick"] = 100
+    path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+    test_app = create_app()
+    loader = ReplayLoader(replay_dir=tmp_path)
+    test_app.dependency_overrides[get_replay_loader] = lambda: loader
+    with TestClient(test_app, raise_server_exceptions=False) as client:
+        assert client.get("/replays").json() == []
+        response = client.get("/replays/headless-seed-0")
+    assert response.status_code == 500
+    assert response.json()["game_id"] == "headless-seed-0"
+    assert response.json()["code"] == "tick_label_mismatch"
+    assert response.json()["tick"] == 100

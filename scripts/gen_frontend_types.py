@@ -415,7 +415,6 @@ def _real_replay_payload() -> str:
             input_tick = state.tick
             state, _events = advance_tick(state, [], game_map=game_map)
             log.record_tick(input_tick, [], state)
-        log.record_game_end(winner="CREWMATES", reason="all_tasks_complete", tick=2)
         loader = ReplayLoader(path.parent)
         replay = loader.load_replay("headless-seed-0")
     # by_alias mirrors FastAPI's response serialization (so the fixture key is
