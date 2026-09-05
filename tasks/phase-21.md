@@ -7817,6 +7817,54 @@ record corrects three draft figures to the audit's (the null 0.3152 → 0.2553; 
 verifier edits applied with the checker's six fixes, three widened for coherence, four twin anchors moved to
 match; anchors re-verified at HEAD `7e21b62e`.
 
+**Merge-reality record (2026-09-04, #429, squash `d255f5fe`, merged by the orchestrator on the self-merge rule after two
+further Codex rounds it authorised and one no-review fail-closed fix):** the branch actually taken was FINDING, so
+the graduation sweep is a RECORDED NO-OP, quoted from the registry rather than passed in silence: four live
+toggles, twenty-one retired keys, twenty-five stamp keys, the `*_enabled` census reading 5 = 1 + 4,
+`substrate_flag_snapshot({})` stamping every retired key `True` and every toggle `False`; no resolver, `ENV_*`
+constant, `__all__` entry, `.env.example` line or `_PHASE20_ADOPTED` key touched. THE RESULTS ON THE PHASE'S OWN
+BYTES: the front door's history column was MIXED VINTAGE before this PR (the win-rate and citation rows already
+carried baseline-7 values under a header naming baseline 6, the conviction-partition and vent rows baseline-6
+values) — both halves now name BASELINE 7, the recording baseline 8 replaced, with `_BEFORE_COLUMN_HEADER` and
+`_PROOF_PARTITION_AUDIT` re-pointed to `audits/audit-phase-20-baseline-7.md` and parsed by `record_partition` at
+both call sites (`phase_19_partition` and its six row constants DELETED with their last caller). The FINDING is
+written on README, the reading guide, the ML page and history in the two-part wording the injustice-sentence
+gate admits ("fell from 46 to 20"), inside the binding word budgets with every cut named (README 3,537 → 3,535
+of 3,550; the guide 1,335 → 1,339 of 1,350; the ML page 2,135 of 2,150; lessons 1,491 → 1,499 of 1,500; no
+ceiling moved). THE F-CLASS RE-RUNS: F2 — both previously named instances re-verified CLOSED, the mixed-vintage
+column closed here, one fresh instance closed (README's bar-miss bullet said two published misses where its
+section records three), `README.md:29`'s Status bullet routed onward to 21.26; F3 — not raised; F4 — the closed
+half re-run green and a FRESH instance closed: the checker anchored no adopting record, so the phase's four
+headline figures were UNGATED — `_FINDING_RECORD_AUDIT` and `check_finding_figures` now gate them (the verdict
+recomputed from each bar's own target and cell), joined by `check_registered_targets` (both copies of every
+target held to the memo's bar headings), `check_bar_cells`, `check_bar_sections` (every summary cell held to its
+section's pooled row over the four recorded sets), `check_finding_history`, `check_share_bar_identity` (bar 4
+IS bars 3 and 2 over each other, both columns) and `check_verdict_passage`; prose scanned whitespace-collapsed so
+a wrapped claim cannot slip between lines; twenty-six perturbation cases (the doc-facts suite 192 → 211). THE
+HUSK FIX (routed here by name): `meetings/manager.py`'s `DEFAULT_TURN_FREE_TEXT` is now a read-only mapping keyed
+on the default's trigger — "(missed deadline; no turn submitted)" byte-for-byte on a deadline, "(unreadable
+reply; no turn submitted)" on a validation default — `_default_turn` taking the trigger from its one call site;
+record impact nil (the literal reads 0 in `replays/` before and after; `verify_samples.sh` 100/100; the prompt
+byte golden 23/23). OBSERVED AND ROUTED, NOT SWEPT: `DEFAULT_VOTE_RATIONALE` carries the SAME defect on the same
+trigger split (the contract named one string); the vent census `grep -rl vent_use_heard replays` → 0 is NOT
+evidence the path is dead (audible kinds never enter replay bytes — the live `sabotage_alarm` reads 0 too; the
+deadness rests on 21.5's producer removal and its pin). ROUTED TO 21.26: the dead `vent_use_heard` path as ONE
+named open with its full census and the coupling-gate reason a partial deletion is refused; the encoder's
+`heard_vent_use` slot to the next encoder revision; the husk fix's ledger row; the SHARE-vs-COUNT bar-design
+observation and the reporter-share balance question; 21.17's Q4 and D7 (frozen `training/`); README's Status
+bullet; 21.17's Q3 executed as a re-verified no-op (both sites already state their own staleness). Codex: three
+rounds (6, 2, 7 findings, all fifteen fixed with planted cases) and two more the orchestrator authorised: a fourth because the
+round-3 fixes were unreviewed at the cap, which returned nine MUTATION GAPS in the new checker (a relaxed per-set
+floor, a false history decimal, a pooled row not the sum of its set rows, a contradictory adoption sentence, a
+wrong pass count, per-set share identities, an unbound game count, an over-broad rate scope, a substring-matched
+cell identifier — none a published-number mover, every one a way the gate could be fooled), and a fifth that
+reviewed their fixes and returned four more — the two FAIL-OPEN holes (a missing section-level per-set clause
+was skipped rather than refused; an unreadable leg table disabled the recording-size check) fixed in a
+no-review round with reproducing cases and read by the orchestrator, the two prose heuristics (negation binding
+in the owner-action check; the word "reporter" alone scoping a rate claim) ROUTED to 21.26's ledger as
+checker-hardening residue, because a mutation-tested prose gate can be sharpened without end and the loop had
+to terminate on a gate that already catches every substantive mutation. `bash scripts/check.sh` 6,070 green locally; CI green.
+
 **Ready-to-paste prompt:** `agent_prompts/task-21-25-postrecord.md`
 
 ### Task 21.26 — THE PHASE CLOSE (owner): the close audit, the gate rerun on re-ground bytes, the ledger, the routed next decision
