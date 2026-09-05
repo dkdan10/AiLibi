@@ -15,11 +15,12 @@ The initial cards are:
 | [Budget accounting](work/budget-accounting.md) | Account for provider usage when a consumed response fails validation. |
 | [Aborted meeting calls](work/aborted-meeting-calls.md) | Retain completed responses and reported failed-attempt usage when a meeting aborts. |
 | [Replay integrity](work/replay-integrity.md) | Bind spectator timelines and terminal claims to reconstructed engine state. |
+| [Recording replacement](work/recording-replacement.md) | Replace a replay and its observation audit as one recording lifecycle. |
 
 Select the next card after the active repair's verification and review,
 using these candidates:
 
-- Keep replay replacement and its observation audit consistent.
+- Prevent tournament report destinations from overwriting recording files.
 - Reconcile displayed highlights and results with their recording provenance.
 - Evaluate death-time reasoning and response opportunities against existing
   experiments before adding new gameplay variants.

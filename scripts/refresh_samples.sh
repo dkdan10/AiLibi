@@ -20,9 +20,8 @@
 #
 # run_tournament.py drives contiguous seed ranges (--start-seed/--num-games),
 # not arbitrary sets, so we invoke it once per seed (--num-games 1 --force).
-# That keeps run_tournament.py frozen (Task 4.16) while supporting the
-# non-contiguous --meetings / --seeds subsets, and each per-seed --force re-run
-# truncates only that seed's replay.
+# This supports non-contiguous --meetings / --seeds subsets; each per-seed
+# --force re-run replaces only that seed's replay and audit in staging.
 
 set -euo pipefail
 
@@ -872,8 +871,8 @@ record_one_seed() {
   # FailedCallReplayEntry and the game continues), so only genuine transport /
   # unhandled errors reach here. A PERSISTENT failure (bad key, endpoint down,
   # reproducible crash) exhausts the attempts and fails loud -- resilience to
-  # blips, never a silent paper-over (AGENTS.md). --force overwrites the partial
-  # stage replay each attempt. Tunable via AILIBI_SEED_MAX_ATTEMPTS.
+  # blips, never a silent paper-over (AGENTS.md). --force replaces the partial
+  # stage replay and audit together each attempt. Tunable via AILIBI_SEED_MAX_ATTEMPTS.
   attempt=0
   while :; do
     attempt=$((attempt + 1))

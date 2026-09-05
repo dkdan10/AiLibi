@@ -24,6 +24,25 @@ from orchestrator.replay import (
 )
 
 
+def test_force_rerun_preserves_fresh_replay_and_audit_bytes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("AILIBI_LLM_PROVIDER", "fake")
+    args = ["--num-games", "2", "--output-dir", str(tmp_path), "--max-ticks", "2"]
+    assert rt.main(args) == 0
+    paths = [
+        tmp_path / f"replay-seed-{seed}{suffix}.jsonl"
+        for seed in range(2)
+        for suffix in ("", ".audit")
+    ]
+    original = {path: path.read_bytes() for path in paths}
+    with pytest.raises(FileExistsError):
+        rt.main(args)
+    assert {path: path.read_bytes() for path in paths} == original
+    assert rt.main([*args, "--force"]) == 0
+    assert {path: path.read_bytes() for path in paths} == original
+
+
 def _install_capturing_spy(
     monkeypatch: pytest.MonkeyPatch, captured: dict[str, int]
 ) -> None:

@@ -33,6 +33,7 @@ from __future__ import annotations
 import asyncio
 import os
 from collections.abc import Callable, Coroutine, Mapping, Sequence
+from contextlib import ExitStack
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Final, Literal, Protocol, TypeAlias, TypeVar, cast, runtime_checkable
@@ -123,6 +124,7 @@ from orchestrator.boundary import (
     translate_action_intents_for_tick,
 )
 from orchestrator.personas import assign_personas
+from orchestrator.recording import prepare_recording_paths
 from orchestrator.replay import (
     CrewTacticalPolicyStamp,
     LLMCallRecord,
@@ -1923,11 +1925,8 @@ class HeadlessGame:
         # :meth:`run`. Default ``None`` = absent = scripted crew default,
         # byte-identical to today's path.
         self._crew_tactical_policy_stamp = crew_tactical_policy_stamp
-        # Passed through to ReplayLog: force=True truncates a pre-existing
-        # replay file at construction (just before this game writes it),
-        # force=False (default) makes a re-run against an existing path fail
-        # loud (DESIGN.md §11.4; Task 4.16). run() keeps its existing
-        # signature; the flag rides the constructor.
+        # Replacement belongs to the game: its replay and audit start fresh
+        # together. Standalone logs retain their own append/existence contracts.
         self._force = force
         # No-replay mode writes nothing, so the observation audit log (which the
         # ObservationService writes a row to per packet) is routed to the null
@@ -2009,35 +2008,35 @@ class HeadlessGame:
             num_impostors=self._num_impostors,
             tasks_per_crewmate=self._tasks_per_crewmate,
         )
-        observation_service = ObservationService(
-            game_map=self._game_map,
-            audit_log_path=self._audit_log_path,
-        )
-        replay = ReplayLog(
-            replay_path,
-            game_id=self._game_id(),
-            force=self._force,
-            tactical_policy_stamp=self._tactical_policy_stamp,
-            crew_tactical_policy_stamp=self._crew_tactical_policy_stamp,
-        )
         agents = self._build_agents(state.players)
 
-        # Close the per-game replay + audit handles deterministically at every
-        # loop exit (game over, tick budget, meeting pause, or exception). Both
-        # logs flush each row as it is written, so this only releases the file
-        # descriptors (Task 5.9 write-cadence pass); the recorded bytes — and
-        # therefore the determinism contract — are unchanged.
-        try:
-            final_state, outcome = self._run_loop(
-                state=state,
-                observation_service=observation_service,
-                replay=replay,
-                agents=agents,
-                trace=None,
-            )
-        finally:
-            replay.close()
-            observation_service.close()
+        # Prepare both files only after seed/agent setup succeeds. Register each
+        # resource as acquired, so setup and loop failures close every handle.
+        with prepare_recording_paths(
+            replay_path, self._audit_log_path, force=self._force
+        ) as begin_recording:
+            with ExitStack() as resources:
+                replay = resources.enter_context(
+                    ReplayLog(
+                        replay_path,
+                        game_id=self._game_id(),
+                        tactical_policy_stamp=self._tactical_policy_stamp,
+                        crew_tactical_policy_stamp=self._crew_tactical_policy_stamp,
+                    )
+                )
+                observation_service = ObservationService(
+                    game_map=self._game_map,
+                    audit_log_path=self._audit_log_path,
+                )
+                resources.callback(observation_service.close)
+                begin_recording()
+                final_state, outcome = self._run_loop(
+                    state=state,
+                    observation_service=observation_service,
+                    replay=replay,
+                    agents=agents,
+                    trace=None,
+                )
         return HeadlessGameResult(
             final_state=final_state, outcome=outcome, replay_path=replay_path
         )
