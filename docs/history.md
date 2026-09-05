@@ -214,8 +214,10 @@ the much smaller total behind it. The rule is conjunctive, so that is a
 **finding**, not an adoption: nothing was adopted, the three repairs stay
 switched off, the reference recording did not move, and those 300 games are kept
 as named evidence beside the record instead of replacing the committed sets. No
-override was made.
-[Record](../audits/audit-phase-21-adopting-record.md).
+override was made. The phase closed on 2026-09-05 behind that finding.
+[Contract](../tasks/phase-21.md) ·
+[record](../audits/audit-phase-21-adopting-record.md) ·
+[close audit](../audits/audit-phase-21-close.md).
 
 ---
 
