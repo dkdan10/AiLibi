@@ -104,6 +104,7 @@ class TestBudgetFailLoudOnOverrun:
         assert excinfo.value.cap == pytest.approx(0.10)
         assert excinfo.value.current == pytest.approx(0.09)
         assert excinfo.value.delta == pytest.approx(0.02)
+        assert budget.snapshot().cost_usd == pytest.approx(0.11)
 
     def test_input_token_overrun_raises_typed_exception(self) -> None:
         budget = GameBudget(
@@ -116,6 +117,7 @@ class TestBudgetFailLoudOnOverrun:
             budget.charge(usage=_usage(input_tokens=30), cost_usd=0.0)
 
         assert excinfo.value.dimension == "input_tokens"
+        assert budget.snapshot().input_tokens == 110
 
     def test_output_token_overrun_raises_typed_exception(self) -> None:
         budget = GameBudget(
@@ -128,17 +130,25 @@ class TestBudgetFailLoudOnOverrun:
             budget.charge(usage=_usage(output_tokens=20), cost_usd=0.0)
 
         assert excinfo.value.dimension == "output_tokens"
+        assert budget.snapshot().output_tokens == 60
 
-    def test_overrun_does_not_mutate_state(self) -> None:
+    def test_overrun_records_all_incurred_spend_and_blocks_new_calls(self) -> None:
         budget = GameBudget(max_cost_usd=0.10)
         budget.charge(usage=_usage(), cost_usd=0.09)
 
-        before = budget.snapshot()
         with pytest.raises(BudgetExceededError):
-            budget.charge(usage=_usage(), cost_usd=0.02)
-        after = budget.snapshot()
+            budget.charge(
+                usage=_usage(input_tokens=80, output_tokens=10), cost_usd=0.02
+            )
+        snapshot = budget.snapshot()
 
-        assert before == after
+        assert snapshot.cost_usd == pytest.approx(0.11)
+        assert snapshot.input_tokens == 80
+        assert snapshot.output_tokens == 10
+        assert snapshot.remaining_cost_usd == pytest.approx(-0.01)
+        with pytest.raises(BudgetExceededError):
+            budget.preflight(usage=_usage(), cost_usd=0.0)
+        assert budget.snapshot() == snapshot
 
     def test_exact_cap_is_allowed_not_an_overrun(self) -> None:
         budget = GameBudget(max_cost_usd=0.10)

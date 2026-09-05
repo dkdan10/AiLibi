@@ -68,15 +68,15 @@ uv run python scripts/build_demo_bundle.py && python -m http.server -d frontend/
 I'm Daniel Keinan. I built AiLibi solo between May and August 2026 by directing AI coding agents — Claude Code for the code, Codex for review and audit — against written task contracts. I wrote the contracts in `tasks/`, the standing rules in [AGENTS.md](AGENTS.md), the review gates, the audit rulings and the product direction; I did not write production code by hand. The agents wrote every coding pull request and most of the audits. Check that in git instead of taking my word: agent branches are named `claude/…`, agent commits are authored "Claude", and, as of 2026-08-19, 328 commits carry a `Co-Authored-By` trailer naming the model. Two disclosures ride with it: the "independent external audits" here are AI auditors I commissioned, not third parties, and every gameplay and ML number comes from one model on one prompt set, at 50 games per set.
 <!-- OWNER: end. -->
 
-Every coding task follows the same five steps:
+New coding work follows the [rolling workflow](docs/workflow.md), starting from the [current task index](tasks/README.md):
 
-1. **Author a contract** in `tasks/phase-N.md` — branch, dependencies, files in and out of scope, definition of done.
-2. **Generate the prompt** with `uv run python scripts/generate_prompts.py`, which refuses to let a prompt drift from its contract.
-3. **Dispatch an agent** against that prompt, in a fresh checkout.
+1. **Write one card** in `tasks/work/` — outcome, evidence, acceptance, boundaries, record impact, and validation.
+2. **Dispatch an agent by card path.**
+3. **Have the agent investigate and implement:** inspect current code, reproduce the problem, and verify the bounded change with tests.
 4. **Review the pull request.** CI is required on `main` ([the workflow](.github/workflows/ci.yml)); `bash scripts/check.sh` runs all of it locally except the Playwright browser journey, which CI runs as its own job (`cd frontend && npm run e2e`). I review what a gate cannot judge.
-5. **Checkpoint** before high-blast-radius work with a read-only audit.
+5. **Record the evidence** and choose the next task from the result.
 
-Here is one of those tasks end to end — what I wrote, what the generator made of it, and what came back.
+Earlier phases used generated prompts. This historical example shows the contract, generated prompt, and resulting pull request; those artifacts remain checked.
 
 <!-- EXHIBIT: both excerpts below are byte-checked against their sources by tests/scripts/test_check_doc_facts.py. -->
 

@@ -1,18 +1,21 @@
-"""Validate AiLibi task files and paste-ready task prompts.
+"""Validate current work cards and historical phase/prompt contracts.
 
-The phase task files are the source of truth. Prompt files are allowed to add
-execution guidance, but the copied task contract must stay byte-for-byte in
+New work cards have a small structural check; acceptance evidence still needs
+review. Historical phase task files are their prompts' source of truth.
+Prompt files may add execution guidance, but the copied contract stays in
 sync with the matching task section.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
+import re
 import sys
 
 from _task_parser import (
     COMPLEXITY_VALUES,
     PROMPTS_DIR,
+    TASKS_DIR,
     TaskDoc,
     extract_field,
     parse_all_tasks,
@@ -50,6 +53,7 @@ def main() -> int:
     validate_prompt_set(tasks, errors)
     validate_prompts(tasks, errors)
     validate_parallel_file_scope(tasks, errors)
+    work_count = validate_work_cards(TASKS_DIR / "work", errors)
 
     if errors:
         print_errors(errors)
@@ -57,9 +61,82 @@ def main() -> int:
 
     print(
         "Task docs validation passed: "
-        f"{len(tasks)} tasks and {len(list(PROMPTS_DIR.glob('task-*.md')))} prompts."
+        f"{len(tasks)} historical phase tasks and "
+        f"{len(list(PROMPTS_DIR.glob('task-*.md')))} prompts; "
+        f"{work_count} work cards."
     )
     return 0
+
+
+def validate_work_cards(directory: Path, errors: list[str]) -> int:
+    """Check card structure and completion declarations, not evidence quality."""
+
+    paths = sorted(directory.glob("*.md"))
+    if not paths:
+        errors.append(f"{directory}: expected at least one work card.")
+    for path in paths:
+        body = _without_fenced_content(path.read_text())
+        if re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", path.stem) is None:
+            errors.append(f"{path}: use a lowercase, hyphen-separated card name.")
+        if len(re.findall(r"^# \S.*$", body, re.MULTILINE)) != 1:
+            errors.append(f"{path}: expected one # title.")
+        statuses = re.findall(r"^\*\*Status:\*\* (.*)$", body, re.MULTILINE)
+        if len(statuses) != 1 or statuses[0] not in {"ready", "active", "done"}:
+            errors.append(f"{path}: expected one Status: ready, active, or done.")
+
+        sections: dict[str, str] = {}
+        for block in re.split(r"^## ", body, flags=re.MULTILINE)[1:]:
+            heading, _, content = block.partition("\n")
+            if heading in sections:
+                errors.append(f"{path}: duplicate section {heading!r}.")
+            sections[heading] = content.strip()
+        for heading in (
+            "Outcome",
+            "Evidence",
+            "Acceptance",
+            "Constraints",
+            "Expected scope",
+            "Record impact",
+            "Validation",
+        ):
+            if not sections.get(heading):
+                errors.append(f"{path}: missing or empty ## {heading}.")
+
+        checks = re.findall(
+            r"^[ \t]*(?:[-*+]|\d+[.)]) \[([^\]]*)\] \S.*$",
+            sections.get("Acceptance", ""),
+            re.MULTILINE,
+        )
+        if not checks:
+            errors.append(f"{path}: Acceptance needs at least one checkbox.")
+        if any(check not in {" ", "x", "X"} for check in checks):
+            errors.append(f"{path}: Acceptance checkbox must be [ ] or [x].")
+        if statuses == ["done"]:
+            if " " in checks:
+                errors.append(f"{path}: done card has unchecked acceptance items.")
+            if not sections.get("Results"):
+                errors.append(f"{path}: done card needs ## Results with evidence.")
+    return len(paths)
+
+
+def _without_fenced_content(body: str) -> str:
+    """Ignore example syntax while retaining fences as nonempty section content."""
+
+    lines: list[str] = []
+    fence: str | None = None
+    for line in body.splitlines():
+        if fence is not None:
+            if re.fullmatch(
+                rf" {{0,3}}{re.escape(fence[0])}{{{len(fence)},}}[ \t]*", line
+            ):
+                fence = None
+                lines.append(line)
+            continue
+        match = re.match(r"^ {0,3}(`{3,}|~{3,})", line)
+        if match is not None:
+            fence = match.group(1)
+        lines.append(line)
+    return "\n".join(lines)
 
 
 def validate_complexity(tasks: list[TaskDoc], errors: list[str]) -> None:

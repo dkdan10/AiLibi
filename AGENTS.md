@@ -1,15 +1,21 @@
 # AGENTS.md
 
 You are an AI coding agent working on AiLibi. Read this file before every
-task, then read docs/architecture.md and the task contract in tasks/phase-N.md.
+task, then read docs/architecture.md and the assigned task card.
 
-## One-time onboarding
+## Work routing
 
-Read once, before your first task: `AGENT_IMPLEMENTATION.md`. It is the
-provider-neutral build plan and orients you on the overall multi-phase shape.
-You do not need to re-read it per task — the task contract in
-tasks/phase-N.md plus the prompt in agent_prompts/ is the implementation
-contract for each PR.
+New work uses one canonical card at `tasks/work/<slug>.md`. Read
+[docs/workflow.md](docs/workflow.md) when starting work with this format;
+[tasks/README.md](tasks/README.md) names the current outcome and next candidates.
+Cards are dispatched by path and have no generated prompt copies.
+
+`tasks/phase-*.md` and `agent_prompts/` remain historical contracts and their
+generated exports. Their existing validators still run. When explicitly
+resuming a phase task, follow that contract, including its exact file scope;
+edit its source and regenerate rather than hand-editing its prompt.
+`AGENT_IMPLEMENTATION.md` is optional historical onboarding, not required
+reading for new cards.
 
 ## Source of truth
 
@@ -21,15 +27,14 @@ contract for each PR.
   HEAD as of the Phase 6 close (2026-05-30). Read it for design rationale and
   the history of a decision, not for current architecture. Where the two
   disagree, `docs/architecture.md` wins.
-- Every task references specific sections — of its own contract and of the
-  documents that contract names. If the section says X, you do X — even if you
-  think Y is better. If you genuinely think the design is wrong, leave a comment
-  in the PR description and stop. Do not change the design unilaterally.
-- `tasks/phase-N.md` is the task contract — branch, dependencies, files in/out
-  of scope, definition of done, implementation hint, public types introduced.
-  The matching `agent_prompts/task-*.md` is generated from this contract by
-  `scripts/generate_prompts.py`. Do not hand-edit prompts; edit
-  `tasks/phase-N.md` and regenerate.
+- The assigned card defines the problem, acceptance evidence, permitted scope,
+  and record impact. Its referenced architecture and decision sections bind.
+  Inspect the current implementation before choosing a solution. If meeting
+  the goal requires changing a protected decision that the owner has not
+  already authorized, describe the concrete choice and ask; do not change the
+  design unilaterally.
+- `docs/workflow.md` defines the prospective task lifecycle. It does not amend
+  historical task contracts, recorded experiment verdicts, or baseline evidence.
 
 ## Three load-bearing rules (DESIGN.md §0)
 
@@ -90,10 +95,8 @@ reads its `env` argument nor returns anything but a bare `True`.
 
 ## Craft rules (added at the Phase-20 planning PR)
 
-Seven rules the 2026-08-19 three-track review (`audits/review-2026-08-19/`,
-summarized in `audits/audit-phase-20-planning.md`) found this codebase violating
-at scale. They bind every PR from Phase 20 on; the generated task prompts repeat
-them.
+These rules bind new cards and phase tasks alike. Historical task prompts also
+repeat them.
 
 1. **Lead with intent, not history.** A docstring or comment states what the
    code does and why, now. Provenance (task ids, audit paths, PR numbers) is at
@@ -115,12 +118,18 @@ them.
    planted-leak test + recursive leak sweep"), never a bare superlative; a
    number is recomputed from committed bytes and the command goes in the PR.
 6. **Blast radius before scope.** Grep every consumer of a symbol, path, or
-   constant before changing it; if a hit lies outside the task's files in
-   scope, stop and ask rather than widening scope silently.
-7. **Every behaviour change carries its record impact.** Phase contracts state
-   `**Record impact:**` (none / lever-gated until the adopting record / the
-   record itself / post-record) and `**Measurement:**` (the command that proves
-   the DoD). Anything that changes rendered prompt bytes or detector output is
+   constant before changing it. For a new card, expected files may include
+   directly necessary call-site, test, generated-output, and documentation
+   updates within its permitted boundaries; record this follow-through in the
+   PR. Changes to protected architecture, behavior beyond the card, public
+   compatibility, dependencies, or spending need an owner decision unless
+   already authorized. A phase task keeps its exact file scope: stop and ask
+   before widening it.
+7. **Every behaviour change carries its record impact.** New cards state
+   `## Record impact` (none / lever-gated until the adopting record / the
+   record itself / post-record) and `## Validation` (commands that prove
+   acceptance). Phase contracts retain `**Record impact:**` and
+   `**Measurement:**`. Anything that changes rendered prompt bytes or detector output is
    lever-gated default-OFF until its adopting record, and graduates under rule 3.
 
 ## Environment setup
@@ -138,37 +147,22 @@ them.
   unshallowed). Any history-derived claim — merged-PR counts, `git log --follow`
   provenance — requires `git fetch --unshallow` (or an equivalent full fetch)
   first. Never read a truncated log as the project's history.
-- **LLM providers.** CI and `bash scripts/check.sh` always run against the
-  deterministic fake provider and never hit the network. Four providers sit
-  behind the `LLMClient` Protocol — the fake plus three real ones — selected by
-  `AILIBI_LLM_PROVIDER`: Anthropic (`anthropic`, needs `ANTHROPIC_API_KEY`);
-  a local **Ollama** open model (`ollama`, `qwen3.5:9b` on `localhost:11434`,
-  run with thinking disabled, free); and hosted **Featherless**
-  (`featherless`, `Qwen/Qwen3.6-27B`, OpenAI-compatible, needs
-  `FEATHERLESS_API_KEY`, recorded as $0 on a flat-rate subscription) — the
-  **canonical eval provider** since Phase 14, its model locked 2026-07-12 at
-  Task 16.2 (audits/audit-phase-16-model-lock.md) and pinned non-thinking. The
-  committed sample sets under `replays/samples/` are the **baseline-6** record
-  (the Task-18.12 meeting-layer adopting record), recorded on that locked
-  model; each set's `MANIFEST.md` is the canonical provenance record.
-  No real provider is reached in CI: the live integration tests are opt-in
-  behind env gates — `AILIBI_RUN_REAL_PROVIDER_TESTS=1` covers the Anthropic
-  tests AND the live Featherless smoke tests (which additionally need
-  `FEATHERLESS_API_KEY`; `tests/llm/test_real_provider.py`), and
-  `AILIBI_RUN_OLLAMA_TESTS=1` the local Ollama round-trip. The Featherless
-  client's CI coverage is unit tests against a mock transport (no network).
-  A second variable, `AILIBI_PROMPT_SET`, selects which per-model prompt
-  family renders — unset means the frozen `qwen3_5_9b` reference set, whose
-  bytes and recorded stamp never move, while the baseline-6 record above was
-  recorded with `qwen3_6_27b`; `.env.example` documents both, and a
-  real-provider run with it unset says so once on stderr.
+- **LLM providers.** CI and `bash scripts/check.sh` use the deterministic fake
+  provider; real-provider integration tests remain opt-in. Read
+  [llm/README.md](llm/README.md) and [.env.example](.env.example) for provider,
+  prompt-family, model, and test-gate configuration. Read each recording set's
+  `MANIFEST.md` for its actual provenance and `docs/architecture.md` for the
+  current baseline routing. A live run needs an authorized provider and run
+  budget, including token and wall-time limits even on a flat-rate subscription.
 
 ## Definition of done (always)
 
 A task is not done until:
-- All checkboxes in the task's "Definition of done" are checked.
+- All checkboxes in the card's "Acceptance" or phase task's "Definition of
+  done" are checked, with evidence for each claim.
 - `bash scripts/check.sh` passes locally.
-- The diff touches only the files listed as in scope.
+- The diff satisfies the assigned scope: a new card's permitted boundaries and
+  documented mechanical follow-through, or a phase task's exact file list.
 - The PR description references the section(s) the task contract names
   (DESIGN.md sections where the contract cites them; `docs/architecture.md`
   for layering).
@@ -189,8 +183,8 @@ it — do not declare GitHub work impossible without trying both.
   the other rather than giving up.
 - **For PR creation,** populate every section of
   `.github/pull_request_template.md` (see "PR description (always)" below).
-  On the `gh` path use the `gh pr create --body "$(cat <<EOF ... EOF)"`
-  pattern; on the integration-tool path pass the same populated body to the
+  On the `gh` path write the body to a file and use `gh pr create --body-file`;
+  on the integration-tool path pass the same populated body to the
   create-PR call. Either way the body must contain every required section —
   never ship an empty body.
 
@@ -207,7 +201,7 @@ populate the sections in `.github/pull_request_template.md`:
 - `## Questions` — blocking questions only; omit the section if none.
 
 When creating the PR, pass the fully populated template as the body: on the
-`gh` path, `gh pr create --body` with a here-doc containing it; on the
+`gh` path, `gh pr create --body-file` with the prepared file; on the
 integration-tool path, the body parameter of the create-PR call. An
 explicit body overrides the repo template, so the body you pass must itself
 include every required section. Auto-fill or empty-body shortcuts (e.g.
@@ -216,5 +210,8 @@ bodies and are not permitted.
 
 ## When you're stuck
 
-Don't guess. In the PR description, write a "Questions" section listing what
-you need clarified. Stop and open the PR; the human will respond.
+Resolve routine implementation choices within the authorized scope and record
+material decisions in the PR. If a missing decision blocks the task, explain
+the concrete choice under "Questions" in a draft PR and ask the owner. Continue
+independent authorized work while awaiting that answer; do not claim completion
+with acceptance evidence missing.
