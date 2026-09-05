@@ -13,6 +13,8 @@ and highlights should describe the same recording they display.
 
 New work follows [the rolling workflow](../docs/workflow.md). Each card under
 `work/` owns its status, acceptance criteria, and results; dispatch it by path.
+The [cleanup roadmap](cleanup-roadmap.md) preserves all 49 priorities, grouped
+by outcome and including the experiments that need a measured disposition.
 The existing repairs are already included in `codex/cleanup`; their PRs are
 review records and remain unmerged into `main`. The cards are:
 
@@ -25,13 +27,28 @@ review records and remain unmerged into `main`. The cards are:
 | [Recording replacement](work/recording-replacement.md) | Replace a replay and its observation audit as one recording lifecycle. | `62ba0162`, [PR 434](https://github.com/dkdan10/AiLibi/pull/434) |
 | [Cleanup delivery](work/cleanup-delivery.md) | Keep implementation on the working branch until the owner's final review and merge. | Commit history for the card |
 
+The first parallel implementation batch addresses recording integrity:
+
+| Card | File ownership | Review |
+| --- | --- | --- |
+| [Report destinations](work/report-destinations.md) | Tournament CLI and destination helper/tests | Independent review after implementation |
+| [Completed meeting attempts](work/completed-meeting-attempts.md) | Orchestrator call recording and manifest provenance/tests | Independent review after implementation |
+| [Evaluation replay integrity](work/evaluation-replay-integrity.md) | Evaluation walker, report loaders, and their consumers/tests | Independent review after implementation |
+
+One agent writes each file at a time. The coordinating agent owns this index,
+integrates review fixes, runs the shared full gate, and commits each task
+separately. Investigation and test design may proceed in parallel; shared-file
+changes are scheduled explicitly. Each card's Results records verification and
+remaining limitations for the owner's final review.
+
 Select the next card after the active repair's local verification and independent
 implementation review. Claude's owner-arranged review follows the completed
 cleanup, not each card. The next candidates are:
 
-- Prevent tournament report destinations from overwriting recording files.
-- Count distinct failed provider attempts in completed meetings exactly once.
-- Validate current evaluation outcomes through the shared replay validator.
+- Separate reported spending from verified outcome claims.
+- Distinguish aborted, unfinished, and tick-limited runs.
+- Bind tournament progress and reports to their actual recording inputs.
+- Enforce whole-run token, cost, and wall-time limits.
 - Reconcile displayed highlights and results with their recording provenance.
 - Evaluate death-time reasoning and response opportunities against existing
   experiments before adding new gameplay variants.
