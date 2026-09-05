@@ -18,7 +18,7 @@ merge-reality commit `9618fe95` / PR #429 `d255f5fe`). The clone was complete, n
 (`git rev-parse --is-shallow-repository` → `false`), before any history-derived claim below.
 
 **Grounding:** every number below is either read from a committed pin / recorded audit named beside
-it, or computed at close HEAD by a command in §7. Everything ran `$0`, deterministic, against the
+it, or computed at close HEAD by a command in §8. Everything ran `$0`, deterministic, against the
 fake provider. Network was touched only by the named tooling legs: the evidence fetch by pinned sha
 (`scripts/fetch_evidence.sh`, §1), the read-only `git ls-remote` queries (§7), and read-only GitHub
 API reads of the Pages workflow's run status (§1) and of the merged-PR list (§2, §7).
@@ -43,10 +43,10 @@ verdict**, and the adopting record's pre-registered rule returned **FINDING**, b
 and **bar 4 MISSED at 11/20 = 0.5500 against < 0.40**, so no lever graduated, the **ladder tip stands
 at baseline 8**, and the four canonical sets keep their baseline-8 bytes (§3.1, §3.3); and the next
 decision goes to the owner as **a next pre-registration that re-parameterises the share-and-count
-pair, against the §6.1-shape override and against carrying the slate as toggles** (§4).
+pair, against the §6.1-shape override and against carrying the slate as toggles** (§5).
 
 **Four close-found defects (F1–F4) and one carried forward (F5).** All five are routed to the next
-phase's inputs; none is fixed here, with the two mechanical scope admissions §5 records. **F1 is the
+phase's inputs; none is fixed here, with the two mechanical scope admissions §6 records. **F1 is the
 third instance in three phases of the same class** — the document that restates the verdict is held
 by no gate.
 
@@ -125,9 +125,18 @@ surface nobody has caught yet, and it is the one that speaks last.
 **Filed, not fixed** (`scripts/` and `tests/` are out of scope on a close). The minimal gate, sketched
 so the next phase inherits a shape and not a complaint: add the close audit to `_CLAIM_DOCUMENTS`;
 pin its verdict WORD and its four bar readings against `_FINDING_RECORD_AUDIT`'s §5 table
-(`scripts/check_doc_facts.py`:635 with `check_finding_figures` :3577); add it to
-`check_relative_links`'s set. Per craft rule 2 it ships with its own perturbation case — a close
-audit stating "bar 4 met" or "the ladder tip stands at baseline 9" must fail the DEFAULT tier.
+(`scripts/check_doc_facts.py`:635 with `check_finding_figures` :3577); and add it to
+`check_relative_links`'s set — **but that half needs one repair to the checker before it can be
+turned on, and this document is the case that proves it.** `relative_targets`
+(`scripts/check_doc_facts.py`:4435-4454) runs `_MARKDOWN_LINK` over RAW text with no code-span
+stripping, so a close audit that quotes a front-door table cell — as §6 does, with
+`` `[audit](…), [contract](tasks/phase-21.md)` `` inside backticks — would resolve that example
+against `audits/` and fail on `audits/tasks/phase-21.md`, a path that does not exist. The gate would
+bite on a clean document rather than on a broken link, which is the opposite of craft rule 2. So the
+routed item is **two lines, not one**: enrol the document, and teach `relative_targets` to skip
+inline code first. Per craft rule 2 it ships with its own perturbation cases — a close audit stating
+"bar 4 met" or "the ladder tip stands at baseline 9" must fail the DEFAULT tier, a genuinely broken
+relative link must fail it, and a *quoted* link inside backticks must NOT.
 
 ### F2 — the `docs/artifacts.md` registry rows state a byte count nothing can fail
 
@@ -153,7 +162,7 @@ cannot see the mutation that moves bytes without moving the file count — which
 case: a one-byte edit to a tracked file under `audits/` must fail the DEFAULT tier. The MB/KiB
 approximations on the other rows are left alone; they are not falsifiable at byte precision and
 generalising to them would be inventing a claim. This PR re-derives the `audits/` row's **both**
-halves in the same edit (§5), which is the scope admission the contract names, not the fix.
+halves in the same edit (§6), which is the scope admission the contract names, not the fix.
 
 ### F3 — the finding→outcome map this close publishes is held by no gate either
 
@@ -163,7 +172,7 @@ pinned to `_REVIEW_INDEX` = `audits/review-2026-08-19/README.md` (:236) and to `
 2026-08-26 registers this phase was chartered from use `A-`/`B-` ids, which those patterns do not
 match, in an index the constant does not name. **So §3.4's map below is unguarded**, and this close
 says so plainly rather than letting a green checker imply otherwise. The map is published in a form
-a reader can check by hand, with the command that derived it in §7.
+a reader can check by hand, with the command that derived it in §8.
 
 **Routed, not patched.** The generalization — a review index and a phase contract per phase rather
 than one pinned pair, with the id pattern read from the index — is a `scripts/` change with its own
@@ -570,7 +579,8 @@ command rather than assembled by hand: the acted-on set is every `A-`/`B-` id na
 
 | outcome | count | the findings |
 |---|---|---|
-| **fixed** (repair merged and re-verified at close HEAD) | 45 | `A-1`, `A-3`, `A-6`, `A-8`, `A-9`, `A-14`, `A-15`, `A-17`, `A-26`, `A-31`, `A-34`, `A-48`; `B-1`, `B-2`, `B-6`, `B-8`, `B-9`, `B-10`, `B-11`, `B-12`, `B-13`, `B-14`, `B-15`, `B-16`, `B-17`, `B-18`, `B-19`, `B-20`, `B-21`, `B-22`, `B-23`, `B-26`, `B-28`, `B-35`, `B-40`, `B-43`, `B-46`, `B-47`, `B-48`, `B-50`, `B-51`, `B-52`, `B-53`, `B-55`, `B-56` |
+| **fixed** (repair merged and re-verified at close HEAD, **no open half**) | 44 | `A-1`, `A-3`, `A-6`, `A-8`, `A-9`, `A-14`, `A-15`, `A-17`, `A-26`, `A-31`, `A-34`, `A-48`; `B-1`, `B-2`, `B-6`, `B-8`, `B-9`, `B-10`, `B-11`, `B-12`, `B-13`, `B-14`, `B-15`, `B-16`, `B-17`, `B-18`, `B-19`, `B-20`, `B-21`, `B-22`, `B-23`, `B-28`, `B-35`, `B-40`, `B-43`, `B-46`, `B-47`, `B-48`, `B-50`, `B-51`, `B-52`, `B-53`, `B-55`, `B-56` |
+| **partly fixed, remainder CARRIED** (a split id, given its own row rather than credited whole) | 1 | `B-26` — 21.16 took its objective half; its `world.py` half is unexecuted and is carried by name in §4 |
 | **lever-ON, measured, NOT adopted** (shipped default-OFF, recorded, and left as toggles by the FINDING) | 15 | `A-4`, `A-5`, `A-24`, `A-37`, `A-38` (`reporter_reasoning`); `A-10`, `A-11`, `A-12`, `A-19`, `A-44`, `B-3`, `B-4` (`corroboration_discipline`); `A-16`, `A-22`, `B-7` (`testimony_shapes`) |
 | **recorded-as-finding** (answered by measurement, not by change) | 4 | `A-20` — the meeting's two regimes, republished in §3.2's flagged/unflagged split rather than "fixed"; `A-25` — recorded impostor reports **0 of 626** on this record too, the premise bars 3 and 4 rest on; `A-42` — the clean negative re-verified as 21.1's control; `A-47` — an observation the smoke reports |
 | **triaged backlog** | 40 | the remainder of the 104: 20 on track A and 20 on track B, none of them touched by any contract in this phase |
@@ -582,9 +592,15 @@ nothing.** Fifteen findings were shipped, recorded, measured against pre-registe
 exactly the state they were in before, because one bar of four missed. That is the whole cost of the
 apparatus, and it is what the apparatus is for.
 
-**`B-26` is the one split id, stated rather than glossed:** 21.16 took its objective half; its
-`world.py` half is unexecuted and is carried by name in §4's routed opens. Nothing else in the fixed
-column has an open half.
+**`B-26` is the one split id and it gets its own row rather than a footnote**, because a "fixed" row
+that quietly contains a half-open finding is the arithmetic this map exists to make checkable: 21.16
+took its objective half, its `world.py` half is unexecuted, and it is carried by name in §4's routed
+opens. Nothing else in the fixed column has an open half — the derivation snippet in §8 prints every
+id with the contracts that named it, so a second split would be visible the same way.
+
+**The rows partition the 104 exactly:** 44 + 1 + 15 + 4 = 64 accounted for, leaving 40 untouched.
+`A-20` and `A-25` are the two ids no `### Task` section cites — the close's own section cites them —
+so they enter through the recorded-as-finding row and not through the derived acted-on set.
 
 ### 3.5 The hardening audit's routings, reconciled by measurement
 
@@ -684,13 +700,17 @@ A share bar and a count bar on the same cell is a design question, not a result.
 them is cheap — it is a memo, not a record — and it is the only option that converts this phase's
 FINDING into a decision rather than a stalemate.
 
-**The three options, priced.**
+**The three options, priced. One counting note first, because the two numbers are easy to conflate:
+the Wave-2 SLATE is THREE levers** — `reporter_reasoning`, `corroboration_discipline`,
+`testimony_shapes` — and every option below scopes exactly those three. The registry's **four** live
+toggles are those three plus `impostor_roll_call`, which is Phase 18's, is unrelated to this record,
+and rides none of these options (§3.3).
 
 | option | what it costs | what it buys | what it risks |
 |---|---|---|---|
 | **(i) a next pre-registration + a further record on the same slate** — *recommended* | one memo (offline, `$0`), then one record: **≈ 12h05m of recording wall, ≈ 15h48m elapsed with outages** at this phase's own measured rate (`…adopting-record.md` §2.6), against the smoke's bracket 12h46m50s / 13h56m45s / 16h02m42s and 21.15's realized **11h54m28s** | a verdict the slate can actually reach, on bars that do not pull against each other; and a second read of a slate that already met three of four | a second FINDING, if the reporter share is structural rather than parameterised. The counter-evidence is the falling null |
 | **(ii) the §6.1-shape owner override of the FINDING verdict** | zero operator wall | the slate graduates now; the ladder tip moves; the ML re-fit and the §10.2 digest-pair re-declaration become due AT THAT RECORD (§4) | it is the **second** override in two phases. The apparatus survives one override that is written down as one; a habit of them is the failure mode pre-registration exists to prevent. **Available and UNTAKEN — the owner's alone, at any later point, recorded as an override of a FINDING verdict and never as a bar that passed** |
-| **(iii) neither — carry the slate as four live toggles** | zero | optionality | the featured-strip residue stays visible to visitors (§4), and three measured levers sit unadopted with no scheduled decision. This is the status quo, and it is what the tree does if nothing is chartered |
+| **(iii) neither — carry the slate as its three live toggles** | zero | optionality | the featured-strip residue stays visible to visitors (§4), and three measured levers sit unadopted with no scheduled decision. This is the status quo, and it is what the tree does if nothing is chartered |
 
 **The backlog the two registers added, sized for whichever route is taken:** **40 findings** untouched
 (20 A, 20 B — §3.4), plus the hardening audit's **42** close-ledger entries and **19** informational
@@ -732,8 +752,8 @@ phase opens only when its own `tasks/phase-N.md` is authored and ratified.
 - **A checker false positive met while drafting, recorded because it is reproducible.** With the required fall sentence present, `check_owner_action` fired on the word *"adopting"* inside the **filename** `audit-phase-21-adopting-record.md` in the neighbouring bullet — *"it states this record's fall beside 'adopting'"* — because `prose_blocks` splits on blank lines only, so a tight bullet list is one block, and a link's own filename is read as prose. It is moot for the wording finally used, and it is filed with the other two checker-prose heuristics (§4) with its perturbation case: a positive owner-action verb in a NEIGHBOURING list item must not fail this check, and one in the same sentence must.
 - **`docs/artifacts.md` is edited twice, both named.** (a) The `audits/` registry row, re-derived from the git index rather than incremented by hand — landing the close audit trips `inventory_problems` in the DEFAULT tier — with **both** halves re-derived in the same edit because the byte half drifts silently (F2). (b) One **dated additive line** correcting the "provisional answer" sentence at :195-197, which the owner's merge of #428 ratified (F4). The page was already open for (a); leaving a ratified decision described as open while editing the paragraph beside it would close the phase on the exact defect class the phase opened against. The record's own README is **not** touched.
 - **The README phase-21 row KEEPS its contract link, breaking the table's own convention.** Every closed row carries `[audit](…)` alone, but `README.md`:203's `[contract](tasks/phase-21.md)` cell is the **only** link to this phase's contract in either front-door document — `docs/history.md`'s `## Phase 21` section, alone among the phases, never linked it (compare `docs/history.md`:173's `[Contract](../tasks/phase-20.md)`) — and `docs/history.md` is out of scope here. Following the convention would orphan `tasks/phase-21.md` and fail `check_phase_coverage` in the DEFAULT tier. The cell is written `[audit](…), [contract](…)` on the two-link precedent the table already carries at `README.md`:188, and **the missing `docs/history.md` contract link is routed as a named carried item** for the next contract that owns that page.
-- **`README.md:29`'s Status bullet is corrected in the same pass, and the scope admission is recorded.** It read *"phases 0–19 closed, the last on 2026-08-18; phase 20 open"* and contradicted `:173` two sections below. The contract widens the README scope line to admit it for a **word-neutral** rewording; 21.25 routed it here by name as an F2-class instance. The rewording is fourteen words for fourteen. Precedent: `audits/audit-phase-20-close.md`:475-477.
-- **The word budgets bind and were measured, not hoped — and the real headroom is smaller than the ceiling.** `wc -w README.md` read **3,535** against the gated ceiling **3,550** (`scripts/check_doc_facts.py:835-840`) before the edit and **3,536** after it: the phase-table row's trim from its 62-word `Open:` blurb to the table's closed one-line convention is word-NEGATIVE and very nearly pays for the status paragraph, so all three edits fit with **no ceiling change and no unrelated prose cut**. **The binding constraint turned out not to be the ceiling but the perturbation suite**: `tests/scripts/test_check_doc_facts.py`'s `test_stray_win_rate_claim_detected` and `test_repeated_results_claim_detected` APPEND 9 and ~12 words to the real README and then assert an exact error count, so a page inside its ceiling by fewer than about a dozen words makes those tests fail with a budget error beside the drift they are testing — which the second test's own comment already warns about. A first draft at **3,543** did exactly that; the page was trimmed to 3,536 and the suite reads *"237 passed"*. Worth stating because the effective ceiling is ~3,538, not 3,550, and nothing says so where an author would look. `docs/lessons.md` at 1,499/1,500 is why its carry (§4) is a trim-plus-add. **No ceiling was raised**; raising one takes an owner-ratified contract.
+- **`README.md:29`'s Status bullet is corrected in the same pass, and the scope admission is recorded.** It read *"phases 0–19 closed, the last on 2026-08-18; phase 20 open"* and contradicted `:173` two sections below. The contract widens the README scope line to admit it and prices the rewording as word-neutral; 21.25 routed it here by name as an F2-class instance. **It is corrected to the final state — *"phases 0–21 closed, the last on 2026-09-05"* — rather than to the contract's example wording *"phase 21 closing"***, because after this merge "closing" is the same contradiction one word softer: the DoD requires that a reader of either surface cannot conclude the phase is still under way. The correction is word-NEGATIVE (eleven for eight), which the ceiling permits. Precedent: `audits/audit-phase-20-close.md`:475-477.
+- **The word budgets bind and were measured, not hoped — and the real headroom is smaller than the ceiling.** `wc -w README.md` read **3,535** against the gated ceiling **3,550** (`scripts/check_doc_facts.py:835-840`) before the edit and **3,533** after it: the phase-table row's trim from its 62-word `Open:` blurb to the table's closed one-line convention is word-NEGATIVE and more than pays for the status paragraph, so all three edits fit with **no ceiling change and no unrelated prose cut**. **The binding constraint turned out not to be the ceiling but the perturbation suite**: `tests/scripts/test_check_doc_facts.py`'s `test_stray_win_rate_claim_detected` and `test_repeated_results_claim_detected` APPEND 9 and ~12 words to the real README and then assert an exact error count, so a page inside its ceiling by fewer than about a dozen words makes those tests fail with a budget error beside the drift they are testing — which the second test's own comment already warns about. A first draft at **3,543** did exactly that; the page was trimmed and the suite reads *"237 passed"*. Worth stating because the effective ceiling is ~3,538, not 3,550, and nothing says so where an author would look. `docs/lessons.md` at 1,499/1,500 is why its carry (§4) is a trim-plus-add. **No ceiling was raised**; raising one takes an owner-ratified contract.
 - **Every `tasks/phase-21.md` anchor is stated at close HEAD, and the shift this PR introduces is stated with it.** The contract's anchors were re-verified before editing; the STATUS-banner edit then moved every line below line 3 down by 14 (a 4-line block became 18), so `:6781` becomes `:6795`, `:7286` becomes `:7300`, `:7501` becomes `:7515`, and so on. Rather than half-updating them, the audit fixes ONE convention in its Grounding paragraph — the numbers read `git show fa739ccb:tasks/phase-21.md` — and names the offset. Anchors into every other file are unmoved by this PR.
 - **`_LADDER_TIP_AUDIT` is NOT "corrected".** It points at the maintenance re-record because nothing graduated, which is right on a FINDING (§3.3). `scripts/` is out of scope and the constant is correct; the close states the inversion in one place so a later reader does not repair it.
 - **The gate's two states are both quoted and nothing is averaged.** The default tier is green in the clean state AND in the restored state — that is the finding, and it is the point of running the pair. The campaign tier, `--complete` and the validity gates ran restored; `verify_samples.sh` ran in a bare environment (`env -i`); every §1 row names its state. **The record's own end-to-end proof (`…adopting-record.md` §6.1) is quoted beside this close's run, never in place of it.**
@@ -932,5 +952,5 @@ fetch_evidence --clean                 14 s (exit 0)   Removed 3267 restored fil
 verify_ml_evidence --complete CLEAN    24 s (exit 1)   checks: 60 | OK 48 | FAIL 0 | ABSENT 7 | INFO 5
 ```
 
-and `wc -w README.md` reads **3,536** against its gated 3,550. That is the last measurement this
+and `wc -w README.md` reads **3,533** against its gated 3,550. That is the last measurement this
 phase takes.

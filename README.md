@@ -26,7 +26,7 @@ Nine LLM agents walk a room graph, work their task lists, witness what they can 
 
 - **Stack** — Python 3.11 · FastAPI · Pydantic · React + Vite + PixiJS · uv · `mypy --strict` · Hypothesis.
 - **Scale** — a snapshot of `main` as of 2026-08-19: 903 commits · 364 merged pull requests · 363 generated agent prompts · 100 committed replays · 4,940 tests in the default gate.
-- **Status** — active; phases 0–20 closed, the last on 2026-08-26; phase 21 closing.
+- **Status** — active; phases 0–21 closed, the last on 2026-09-05.
 
 ## Verify it yourself in one minute
 
@@ -200,7 +200,7 @@ Close audits start at the MVP close and resume at phase 13; earlier rows link th
 | 18 | The ML phase: co-evolution, the finalist eval, no adoption | [audit](audits/audit-phase-18-close.md) |
 | 19 | Review and refresh: truth sweeps, spectator pass, ML close | [audit](audits/audit-phase-19-close.md) |
 | 20 | Evidence honesty: claims repaired, the inference channel rebuilt, one pre-registered recording | [audit](audits/audit-phase-20-close.md) |
-| 21 | Defects repaired, games re-recorded, decision models re-fitted, two fairness levers measured against pre-set bars | [audit](audits/audit-phase-21-close.md), [contract](tasks/phase-21.md) |
+| 21 | Defects repaired, games re-recorded, decision models re-fitted, three fairness levers measured against pre-set bars | [audit](audits/audit-phase-21-close.md), [contract](tasks/phase-21.md) |
 
 ## Run it
 
