@@ -8134,4 +8134,57 @@ phase-20 precedent; the full fetch / restore / `--complete` / `--clean` cycle ru
 and is never replaced by the record's own proof. Twenty-three verifier edits applied with the checker's eight
 fixes; anchors re-verified at HEAD `9618fe95`.
 
+**Merge-reality record (2026-09-05, MERGED BY THE OWNER — #430, squash
+`509e92edce465361eeb1168c611752465b0c0ef4`): PHASE 21 CLOSED.** The close audit `audits/audit-phase-21-close.md`
+(eight sections) restates the record's verdict cell for cell — FINDING: bars 1–3 met (46/66 = 0.6970 against ≥
+0.60; 20 against < 35; 11 against ≤ 12) and bar 4 the registered cell `reporter_share_of_innocent_ejections` 11/20
+= 0.5500 pooled against < 0.40, MISSED, alone in the restatement; the conjunctive rule read; no lever graduated
+(the three Wave-2 levers stay live toggles), the four canonical sets keep their baseline-8 bytes, the ladder tip
+stands at BASELINE 8 with `_LADDER_TIP_AUDIT` correctly on the maintenance re-record and left alone; the
+§6.1-shape override stated AVAILABLE AND UNTAKEN; the per-row null (19 rows, 0.3152 → 0.2553, 11/19 = 0.5789,
+exact tail 0.0024) scoped to one OFFLINE hand-off paragraph; the flip-cost table quoted whole. THE LEDGER: one row
+per merged PR — thirty-four, #396 through #429 (the planning PR, twenty-five task PRs, eight amendment and
+follow-up PRs) — reconciled against the merged-PR list; the sixteen merge-reality records re-read (21.2, 21.4,
+21.6, 21.8, 21.9, 21.11, 21.15, 21.17–21.25); the pre-registration memo's eleven §11 rows tallied; the hardening
+audit's §4.2 routing counted as its registers count it (36 round-1 entries across nine themed bullets plus six
+round-2 ids = 42). THE MEASUREMENTS at close HEAD in both states: the clean-worktree gate green (6,088 passed);
+`fetch_evidence.sh` 3269/3269 across both pinned families; the campaign tier green (331 passed — the prior close's
+F1 CLOSED BY MEASUREMENT); `verify_ml_evidence.py --complete` restored 63 checks / 58 OK / 0 FAIL / 0 ABSENT and,
+after `--clean`, ABSENT 7 by design with `replays/` porcelain empty; `verify_samples.sh` 100/100 under an empty
+environment; the validity gate green on all four sets; the frontier reading `dispatchable []` with 21.26 merged.
+THE ROUTED NEXT DECISION, the owner's by the merge: (i) RECOMMENDED — a next pre-registration that
+re-parameterises the SHARE-and-COUNT pair, then a further record on the same slate (the reporter channel closed
+faster than every other route, 34 → 11 against 12 → 9; the structural null fell so 0.40 was reachable; bars 3 and
+4 provably pulled against each other); (ii) the §6.1-shape override, untaken; (iii) carry the slate as three live
+toggles. The owner's merge was silent on the route, so under the 15.18 convention the audit's §5 states, the merge
+itself RATIFIES the ledger's recommendation (i) as the route; the ruling charters nothing by itself, so the
+chartering remains the owner's to give at the next phase's planning. Two standing decisions stated separately: the
+ML cadence (21.17's Q1 λ-grid and campaign re-search CARRIED; Phase C co-evolution CARRIED as its own
+owner-appetite item; the second re-fit NOT DUE, discharged by the record's §7) and the live-API deployment, still
+refused. CLOSE-FOUND DEFECTS, five plus one carry: F1 the close audit's own unbound state (the F4 class one level
+up, the third instance in three phases; the minimal gate sketched); F2 the ungated `tracked bytes` half of the
+counted registry rows (the byte figure moved six times inside this PR unnoticed); F3 the A-/B- finding map held by
+no gate; F4's record-README half still calling the ratified landing provisional; F5 the prompt-archive narration
+re-staled (the v4 sites against v5 manifests); F6 the `evidence/raw-slate-staging` ref, the owner's one-line
+delete. CARRIED with homes: the dead `vent_use_heard` path and the encoder slot; the AudibleEvent wire members;
+three checker prose heuristics; B-26's `world.py` half, B-28's entitlement scan, C-120's docstring half; B-39,
+B-44, B-45 routed by the ratified table and picked up by no contract (a ROUTING GAP); H-32/H-33 undisposed and
+H-37 open; the four items routed to 21.24 that a recording contract could not execute; G7(b)/(c); 21.17's Q4/D7;
+the featured cards [1]/[3]; lessons.md's essay at 1,499/1,500. DISCHARGED: the prior close's F1 (measured), F2
+(swept, the class recurring as F5), F3 (the budgets now a gate), F4's gate-coverage half; the staging-rule tally;
+the husk fix; E.3; the three mechanical scope admissions — README's widening to :29, docs/artifacts.md's F4 line
+and history's two missing links — the last two ruled in by the orchestrator; `DEFAULT_VOTE_RATIONALE` FALSIFIED by
+derivation and landed as an additive erratum. Front door: README's :29 Status bullet, its `## Project status`
+paragraph (one sentence added) and its `| 21 |` row updated in place keeping the contract link (3,533 of 3,550
+words); the forced `audits/README.md` entry drafted to the gates that scan it; `docs/history.md`'s Phase 21
+section gains its two missing links, contract and close audit; `docs/artifacts.md`'s `audits/` row recounted last,
+both halves. Codex: four review rounds (5, 5, 6, 4 findings) plus a last no-review consistency pass read by the
+orchestrator; adversarial verification 48 Opus agents: nothing moved a figure, a bar, a ledger row or a routed
+decision — its residue (the phase row's lever count, the merge-reality roster, eight of nine section
+cross-references (the ninth, the §8 code-comment label that names the frontier as §6, still reads so at HEAD —
+cosmetic, carried), the gates that reach the forced entry, the sweep's scope, history's link) closed on the branch
+before the merge. This record closes the phase: twenty-six contracts, thirty-four PRs plus this one, the Wave-2
+hypothesis tested against pre-registered bars and returned FINDING, and the next decision routed to the owner on
+the record's own numbers.
+
 **Ready-to-paste prompt:** `agent_prompts/task-21-26-phase-close.md`
