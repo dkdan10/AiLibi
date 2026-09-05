@@ -195,6 +195,9 @@ per-file digests and the declared slate; the reading is
 `audits/audit-phase-21-adopting-record.md`. Whether a recording like this is
 carried in the tree or on a pinned commit is an owner decision that was open when
 it was taken, and the pinned commit is the provisional answer.
+**Ruled 2026-09-04:** the owner's merge of that record ratified the pinned commit,
+so the sentence above describes the state at the time of writing and not an open
+question; a move into the tree would now be a fresh decision of its own.
 
 **The one step still open, and how to see whether it is.** Deleting the
 superseded staging ref is the one part of the fold Task 19.22 could not execute
