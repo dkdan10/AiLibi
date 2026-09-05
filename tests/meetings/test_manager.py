@@ -328,7 +328,7 @@ class TestOpeningTurn:
         )
 
         opening = result.transcript.turns[0]
-        assert opening.free_text == DEFAULT_TURN_FREE_TEXT
+        assert opening.free_text == DEFAULT_TURN_FREE_TEXT["deadline"]
         assert opening.turn_kind == "opening"
         assert opening.claims == ()
 
@@ -673,7 +673,7 @@ class TestRollCallRound:
         assert kinds == ["opening", "reply", "opt_in", "opt_in"]
         p2_turn = next(t for t in result.transcript.turns if t.speaker == "p-2")
         assert p2_turn.turn_kind == "opt_in"
-        assert p2_turn.free_text == DEFAULT_TURN_FREE_TEXT
+        assert p2_turn.free_text == DEFAULT_TURN_FREE_TEXT["validation"]
         # Attempted exactly once -- roll-call inherits the opt-in single-attempt
         # (no-retry) fail-soft, not the opening's retry.
         assert client.invalid_calls == 1
@@ -731,7 +731,7 @@ class TestRollCallRound:
 
         p2_turn = next(t for t in result.transcript.turns if t.speaker == "p-2")
         assert p2_turn.turn_kind == "opt_in"
-        assert p2_turn.free_text == DEFAULT_TURN_FREE_TEXT
+        assert p2_turn.free_text == DEFAULT_TURN_FREE_TEXT["deadline"]
         assert len(manager.defaulted_calls) == 1
         default = manager.defaulted_calls[0]
         assert default.phase == "opt_in"
@@ -2029,7 +2029,7 @@ class TestTurnFailSoft:
         result, _ = _run_meeting(_responder)
 
         opening = result.transcript.turns[0]
-        assert opening.free_text == DEFAULT_TURN_FREE_TEXT
+        assert opening.free_text == DEFAULT_TURN_FREE_TEXT["validation"]
         assert result.outcome == "SKIPPED"
 
     def test_reversed_alibi_turn_fails_soft(self) -> None:
@@ -2051,7 +2051,9 @@ class TestTurnFailSoft:
 
         result, _ = _run_meeting(_responder)
 
-        assert result.transcript.turns[0].free_text == DEFAULT_TURN_FREE_TEXT
+        assert (
+            result.transcript.turns[0].free_text == DEFAULT_TURN_FREE_TEXT["validation"]
+        )
         assert result.outcome == "SKIPPED"
 
 
@@ -2166,7 +2168,9 @@ class TestProviderTimeoutDistinctFromDeadline:
             )
         )
 
-        assert result.transcript.turns[0].free_text == DEFAULT_TURN_FREE_TEXT
+        assert (
+            result.transcript.turns[0].free_text == DEFAULT_TURN_FREE_TEXT["deadline"]
+        )
 
 
 # --- Engine independence ---------------------------------------------------
@@ -2360,7 +2364,7 @@ class TestInvalidAccusationTargetDropped:
             "opening_degraded_unsure",
             "invalid_accusation_target",
         ]
-        assert opening.free_text != DEFAULT_TURN_FREE_TEXT
+        assert opening.free_text not in DEFAULT_TURN_FREE_TEXT.values()
         assert not any(isinstance(c, AccusationClaim) for c in opening.claims)
         # Exactly one retry: two opening attempts, then the degrade.
         opening_calls = [c for c in client.calls if "PHASE=OPENING" in c.prompt]
@@ -2859,7 +2863,7 @@ class TestDefaultsSurfacedAndOpeningRetry:
 
         opening = result.transcript.turns[0]
         assert opening.turn_kind == "opening"
-        assert opening.free_text != DEFAULT_TURN_FREE_TEXT
+        assert opening.free_text not in DEFAULT_TURN_FREE_TEXT.values()
         # Attempted twice: the first (invalid) + the recovering retry.
         assert client.opening_calls == 2
         assert manager.defaulted_calls == ()
@@ -2880,7 +2884,9 @@ class TestDefaultsSurfacedAndOpeningRetry:
             )
         )
 
-        assert result.transcript.turns[0].free_text == DEFAULT_TURN_FREE_TEXT
+        assert (
+            result.transcript.turns[0].free_text == DEFAULT_TURN_FREE_TEXT["validation"]
+        )
         # Retried once before defaulting: exactly two attempts.
         assert client.opening_calls == 2
         assert len(manager.defaulted_calls) == 1
@@ -2889,6 +2895,39 @@ class TestDefaultsSurfacedAndOpeningRetry:
         assert default.agent_id == "p-1"
         assert default.trigger == "validation"
         assert default.turn_index == 0
+
+    def test_the_husk_names_the_trigger_that_produced_it(self) -> None:
+        # The husk is the only account of the failure a reader of the transcript
+        # ever sees, and a schema-invalid reply is not a missed deadline. The
+        # two shapes are pinned to their triggers here, in one place, so a
+        # future default cannot quietly inherit the wrong sentence.
+        client = _OpeningValidationClient(invalid_opening_attempts=2)
+        manager = _make_manager(
+            llm_client=client,
+            deadlines=MeetingDeadlines(turn_seconds=None, vote_seconds=None),
+        )
+        result = _run(
+            manager.run(
+                meeting_id="m-1",
+                trigger=_default_trigger(),
+                participants=_crew_participants(),
+            )
+        )
+
+        husk = result.transcript.turns[0].free_text
+        assert manager.defaulted_calls[0].trigger == "validation"
+        assert husk == DEFAULT_TURN_FREE_TEXT["validation"]
+        # The planted half: the wall-clock wording is what this run must NOT
+        # produce, and the two strings are genuinely different.
+        assert "deadline" not in husk
+        assert DEFAULT_TURN_FREE_TEXT["deadline"] != husk
+        assert "deadline" in DEFAULT_TURN_FREE_TEXT["deadline"]
+        # The roster is exported, so it is a read-only view: a consumer that
+        # could rewrite a husk would change every later transcript in the
+        # process, which is exactly the module-level mutable state this repo
+        # forbids.
+        with pytest.raises(TypeError):
+            DEFAULT_TURN_FREE_TEXT["validation"] = "anything"  # type: ignore[index]
 
     def test_provider_validation_default_carries_parse_failure_spend(self) -> None:
         # A real provider raises (with metadata) before the recording client can
@@ -2907,7 +2946,9 @@ class TestDefaultsSurfacedAndOpeningRetry:
             )
         )
 
-        assert result.transcript.turns[0].free_text == DEFAULT_TURN_FREE_TEXT
+        assert (
+            result.transcript.turns[0].free_text == DEFAULT_TURN_FREE_TEXT["validation"]
+        )
         assert client.raised == 2  # opening attempted twice (retry)
         assert len(manager.defaulted_calls) == 1
         default = manager.defaulted_calls[0]
@@ -2944,7 +2985,9 @@ class TestDefaultsSurfacedAndOpeningRetry:
         )
 
         # Recovered on the retry: a real opening turn, no default fired.
-        assert result.transcript.turns[0].free_text != DEFAULT_TURN_FREE_TEXT
+        assert (
+            result.transcript.turns[0].free_text not in DEFAULT_TURN_FREE_TEXT.values()
+        )
         assert client.raised == 1
         assert manager.defaulted_calls == ()
         # The burned first attempt's spend is surfaced for the orchestrator.
@@ -3009,7 +3052,9 @@ class TestDefaultsSurfacedAndOpeningRetry:
             "opt_in",
             "opt_in",
         ]
-        assert result.transcript.turns[1].free_text == DEFAULT_TURN_FREE_TEXT
+        assert (
+            result.transcript.turns[1].free_text == DEFAULT_TURN_FREE_TEXT["validation"]
+        )
         # No turn retries: the reply and the two roll-call opt-ins are each
         # attempted exactly once (3 PHASE=TURN calls in all).
         assert client.reply_calls == 3
@@ -4533,7 +4578,9 @@ class TestOpeningUnsureDegrade:
             )
         )
 
-        assert result.transcript.turns[0].free_text == DEFAULT_TURN_FREE_TEXT
+        assert (
+            result.transcript.turns[0].free_text == DEFAULT_TURN_FREE_TEXT["validation"]
+        )
         assert len(manager.defaulted_calls) == 1
         assert manager.defaulted_calls[0].degraded is False
 
@@ -7583,7 +7630,7 @@ class TestTurnAnnotationRecordShape:
         _assert_free_of_forged_annotation(result.transcript.turns, prompts)
         assert result.transcript.turns, "the meeting still reaches a transcript"
         for turn in result.transcript.turns:
-            assert turn.free_text == DEFAULT_TURN_FREE_TEXT, turn.turn_id
+            assert turn.free_text == DEFAULT_TURN_FREE_TEXT["validation"], turn.turn_id
 
     def test_the_forged_annotation_assertion_bites(self) -> None:
         # The perturbation: put the forged row back onto a recorded turn (and

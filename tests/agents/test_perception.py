@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import get_args
 
 import pytest
@@ -11,6 +12,7 @@ from agents.memory.beliefs import (
     VENTING_SUSPICION_DELTA,
 )
 from agents.memory.episodic import MemoryStore
+from agents.memory.store import AgentMemory, render_for_prompt
 from agents.perception import (
     EVENT_COOLDOWN_STATUS,
     EVENT_GLOBAL_STATUS,
@@ -25,6 +27,9 @@ from agents.perception import (
     ingest_packet,
 )
 from agents.runtime import AgentRuntime
+from engine.entities import PlayerState, SabotageState
+from engine.rng import EngineRng
+from engine.world import WorldState, load_canonical_map
 from observation.packet import (
     AudibleEvent,
     BodyView,
@@ -35,6 +40,7 @@ from observation.packet import (
     SelfView,
 )
 from observation.public_map import PublicMapView
+from observation.service import ObservationService
 
 
 def _public_map() -> PublicMapView:
@@ -427,6 +433,74 @@ class TestIngestPacketMovement:
         types = [e.type for e in store.recent(since_tick=0)]
         assert types.index(EVENT_SAW_PLAYER) < types.index(EVENT_SAW_PLAYER_MOVE)
         assert types.index(EVENT_SAW_PLAYER_MOVE) < types.index(EVENT_SAW_BODY)
+
+
+def _sabotage_world_state(*, seed: int = 42) -> WorldState:
+    """Four players on the canonical map with a reactor sabotage running."""
+
+    def _player(player_id: str, role: str, room: str) -> PlayerState:
+        return PlayerState(
+            id=player_id,
+            role="IMPOSTOR" if role == "IMPOSTOR" else "CREWMATE",
+            alive=True,
+            room=room,
+            position=(0.0, 0.0),
+            last_action=None,
+            in_vent=False,
+        )
+
+    return WorldState(
+        tick=4,
+        phase="PLAY",
+        map=load_canonical_map().id,
+        players={
+            "p-1": _player("p-1", "CREWMATE", "STORAGE"),
+            "p-2": _player("p-2", "CREWMATE", "REACTOR"),
+            "p-3": _player("p-3", "CREWMATE", "ADMIN"),
+            "p-4": _player("p-4", "IMPOSTOR", "STORAGE"),
+        },
+        bodies={},
+        tasks={},
+        sabotage=SabotageState(
+            kind="reactor", remaining_ticks=5, affected_rooms=(), active=True
+        ),
+        cooldowns={"p-4": 0},
+        emergency_uses={},
+        rng_state=EngineRng.from_seed(seed).snapshot(),
+        seed=seed,
+    )
+
+
+def test_active_sabotage_tick_reaches_episodic_memory_and_renders(
+    tmp_path: Path,
+) -> None:
+    # The alarm is the surviving audible producer and it shares every structure
+    # the retired vent copy used — the mapping, the ingest loop and the render.
+    # This drives the whole leg on one active-sabotage tick so a sweep that cut
+    # too wide fails here rather than in a recording.
+    state = _sabotage_world_state()
+    service = ObservationService(
+        game_map=load_canonical_map(), audit_log_path=tmp_path / "audit.jsonl"
+    )
+    try:
+        packet = service.build_packet(
+            world_state=state, agent_id="p-1", engine_events=[]
+        )
+    finally:
+        service.close()
+
+    assert [event.kind for event in packet.audible_events] == ["sabotage_alarm"]
+
+    memory = AgentMemory()
+    ingest_packet(packet=packet, memory=memory.episodic, beliefs=memory.beliefs)
+    heard = [
+        event
+        for event in memory.episodic.recent(since_tick=0)
+        if event.type == EVENT_HEARD_SABOTAGE_ALARM
+    ]
+    assert len(heard) == 1
+    assert heard[0].provenance == PROVENANCE_OBSERVED
+    assert "sabotage alarm" in render_for_prompt(memory)
 
 
 class TestIngestPacketAudibles:

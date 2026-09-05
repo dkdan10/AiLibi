@@ -171,13 +171,15 @@ paragraph attached to it.
 ## What the next recording changed under all of this
 
 The social layer these policies were searched against was rebuilt after the campaign closed,
-and the committed sample sets were re-recorded on it — twice, most recently at impostor win
-rates 36% (4p1i) and 30% (9p2i). The first of those recordings was read bar by bar in
-[`audit-phase-20-baseline-7.md`](../audits/audit-phase-20-baseline-7.md) §3: two met their
-bars, two missed, the win split did not move.
-**The rule's verdict on that read is a FINDING, not an adoption: two bars missed. The
-recording is canon in spite of it, by an explicit owner override recorded with its grounds
-on 2026-08-26 (§6.1).** None of it re-prices a referee verdict.
+and the committed sets re-recorded twice, most recently at impostor win rates
+36% (4p1i) and 30% (9p2i).
+[`audit-phase-20-baseline-7.md`](../audits/audit-phase-20-baseline-7.md) §3
+read the first: two met, two missed — **a FINDING, not an adoption; canon by an owner
+override dated 2026-08-26 (§6.1)**. A later recording met three of four: innocent
+ejections fell from 46 to 20, and 11 of those 20 were the meeting's own reporter, against
+34 of 46, a share of 0.5500 against a registered 0.40 — **a finding again, nothing
+adopted** ([the record](../audits/audit-phase-21-adopting-record.md)). Neither re-prices a
+referee verdict.
 
 ## What the instruments now stand on
 

@@ -95,6 +95,7 @@ import os
 import re
 from collections.abc import Callable, Coroutine, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
+from types import MappingProxyType
 from typing import Any, Final, Literal, TypeVar
 
 from pydantic import ValidationError
@@ -202,11 +203,26 @@ DEFAULT_TURN_TEMPERATURE: Final[float] = 0.4
 DEFAULT_VOTE_MAX_TOKENS: Final[int] = 1024
 DEFAULT_VOTE_TEMPERATURE: Final[float] = 0.2
 
-# Free-text recorded on a turn / ballot when a participant misses a
-# deadline or emits an unparseable payload. The audit-trail requirement in
-# DESIGN.md §5.2 means we always record *something*; these strings are the
-# canonical audit markers downstream code (replay, eval) can match on.
-DEFAULT_TURN_FREE_TEXT: Final[str] = "(missed deadline; no turn submitted)"
+# Why a default fired. ``deadline`` is a wall-clock miss (only reachable with a
+# configured deadline -- interactive mode); ``validation`` is a payload that
+# failed schema validation even after the provider's parse-tolerance (reachable
+# even in deadline-free headless recording).
+DefaultTrigger = Literal["deadline", "validation"]
+
+# Free-text recorded on a turn when a participant submits nothing, one string
+# per trigger: a schema-invalid reply is not a missed deadline, and a transcript
+# that says otherwise asserts an event that did not happen. The audit-trail
+# requirement in DESIGN.md §5.2 means we always record *something*; these are
+# the canonical audit markers downstream code (replay, eval) can match on, and
+# they name the same trigger the row's own ``deadline_default`` record carries.
+DEFAULT_TURN_FREE_TEXT: Final[Mapping[DefaultTrigger, str]] = MappingProxyType(
+    {
+        "deadline": "(missed deadline; no turn submitted)",
+        "validation": "(unreadable reply; no turn submitted)",
+    }
+)
+# The same marker on a defaulted BALLOT. Its trigger is recorded on the
+# ``DefaultedCall`` beside it rather than in this string.
 DEFAULT_VOTE_RATIONALE: Final[str] = "(missed deadline; default skip)"
 
 # Audit-trail marker prefix prepended to ``rationale_text`` when the LLM
@@ -865,11 +881,6 @@ class MeetingConfig:
 
 # Phase the default fell back on; a turn kind (:data:`TurnKind`) or the vote.
 DefaultedPhase = Literal["opening", "reply", "opt_in", "vote"]
-# Why a default fired. ``deadline`` is a wall-clock miss (only reachable with a
-# configured deadline -- interactive mode); ``validation`` is a payload that
-# failed schema validation even after the provider's parse-tolerance (reachable
-# even in deadline-free headless recording).
-DefaultTrigger = Literal["deadline", "validation"]
 
 
 @dataclass(frozen=True)
@@ -1788,6 +1799,7 @@ class MeetingManager:
             speaker=participant.agent_id,
             turn_kind=turn_kind,
             reply_to=reply_to,
+            trigger=trigger_kind,
         )
 
     def _render_turn_prompt(
@@ -2778,7 +2790,15 @@ def _default_turn(
     speaker: PlayerId,
     turn_kind: TurnKind,
     reply_to: str | None,
+    trigger: DefaultTrigger,
 ) -> MeetingTurn:
+    """The placeholder turn, marked with the trigger that produced it.
+
+    ``trigger`` comes from the caller, which already knows which of the two
+    failures it is in: a husk that names the wrong one puts an event in the
+    transcript that did not happen.
+    """
+
     return MeetingTurn(
         turn_id=turn_id,
         turn_index=turn_index,
@@ -2787,7 +2807,7 @@ def _default_turn(
         reply_to=reply_to,
         observations=(),
         claims=(),
-        free_text=DEFAULT_TURN_FREE_TEXT,
+        free_text=DEFAULT_TURN_FREE_TEXT[trigger],
     )
 
 

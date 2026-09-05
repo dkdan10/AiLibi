@@ -146,6 +146,14 @@ _LASTSEEN_FEATURES_PER_SLOT: Final[int] = 2  # age, seen
 
 # The fixed scalar block, in order. Named here so the golden test and the module
 # both read one source of truth for the layout.
+#
+# ``heard_vent_use`` is structurally zero: the audible it reads has had no
+# producer since baseline 8, so it is 0.0 on every committed packet. It keeps
+# its index anyway, because :class:`TacticalFeatureEncoderV3` appends to this
+# vector rather than redefining it — dropping a scalar here re-shapes the v3
+# vector too, under an unchanged ``ENCODER_VERSION_V3``, which would silently
+# invalidate every committed artifact. Removing it belongs to the next encoder
+# revision, which owns both version stamps (Task 21.5 removed the producer).
 _SCALAR_FEATURE_NAMES: Final[tuple[str, ...]] = (
     "cooldown_norm",
     "has_cooldown",
