@@ -52,16 +52,27 @@ and cumulative limits, public provenance, dependency fixes, map validation, and
 stronger audit checks. Their commits, independent reviews, and combined
 6,409-Python / 455-frontend / 100-recording verification are in the ledger.
 
+The third batch completed temporal observation implementation, exact citation
+navigation, compact public results, lean replay delivery and measured performance.
+Its 6,599-Python / 467-frontend / 100-recording verification and review are in the
+ledger. The temporal behavior remains OFF; adoption is a separate decision.
+
 The next parallel batch has one writer per shared surface:
 
 | Card | Writer | Coordination |
 | --- | --- | --- |
-| [Temporal observations](work/temporal-observation-contract.md) | Workflow-redesign agent | Observation entitlement, body handles, orchestration; explicit compatibility and behavior decision before repair |
-| [Portfolio evidence experience](work/portfolio-evidence-experience.md) | Portfolio-review agent | Evidence UI/store/URL, compact summary/bundle, curation and README; API projections by code agent |
-| [Replay loading performance](work/replay-loading-performance.md) | Code-review agent | API/schema/generated types/client; measure before selecting further cache/extraction changes |
+| [Reasoning evidence experiments](work/reasoning-evidence-experiments.md) | Workflow-redesign agent | Meetings, memory, strategic rendering and scorecard; shared registry wiring by provenance owner |
+| [Tactical gameplay experiments](work/tactical-gameplay-experiments.md) | Code-review agent | Tactical policy experiments, engine reset comparison and measurements; shared orchestration edits by handover |
+| [Model evidence provenance](work/model-evidence-provenance.md) | Portfolio-review agent | Training identity and recorded-substrate bindings; first writer of shared game/replay/readers |
 | [Carried audit dispositions](work/carried-audit-dispositions.md) | Coordinator | Semantic gates, current findings ledger, lessons and source prose after handover |
 
 The owner authorized continued implementation through the cleanup roadmap.
+The active queue is
+[reasoning evidence experiments](work/reasoning-evidence-experiments.md),
+[tactical gameplay experiments](work/tactical-gameplay-experiments.md), and
+[model evidence provenance](work/model-evidence-provenance.md). Dispatch after
+shared surfaces are assigned; the preceding combined gate is recorded. Each
+experiment retains its own measured disposition.
 Write the next compact card when its evidence, dependencies, and scope are
 understood. Experimental adoption and live-provider budgets remain explicit
 separate decisions. Schedule shared-file ownership manually; the existing

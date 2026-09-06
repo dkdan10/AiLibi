@@ -57,6 +57,7 @@ can be contested; adoption decisions use independent measurements. Inspect the
 three existing unadopted reasoning candidates before adding overlapping work.
 
 Card: [temporal observations](work/temporal-observation-contract.md) (12–13).
+The following seven items use [reasoning evidence experiments](work/reasoning-evidence-experiments.md).
 
 | Item | Outcome / acceptance direction |
 | --- | --- |
@@ -75,6 +76,9 @@ Card: [temporal observations](work/temporal-observation-contract.md) (12–13).
 Exit: selected changes improve measured play on held-out cases without erasing
 meaningful uncertainty or producing a new stagnant equilibrium. Compare each
 candidate separately before testing interacting combinations.
+
+Card: [tactical gameplay experiments](work/tactical-gameplay-experiments.md)
+(21–25, with the separately measured 43–46 comparisons).
 
 | Item | Outcome / acceptance direction |
 | --- | --- |
@@ -126,6 +130,8 @@ Cards: [replay loading performance](work/replay-loading-performance.md) (32–33
 [audit fact gates](work/audit-fact-gates.md) (part of 38; remaining carried
 findings still require a disposition), and
 [carried audit dispositions](work/carried-audit-dispositions.md) (remaining 38).
+Current model/evaluation identity repairs and the next ML decision use
+[model evidence provenance](work/model-evidence-provenance.md) (36, 48).
 
 ## Milestone 7: lightweight iteration
 
