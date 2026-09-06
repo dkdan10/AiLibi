@@ -222,8 +222,7 @@ function SubScoreBar({ rubric }: { rubric: RubricGameView }) {
 interface HighlightCardProps {
   data: HighlightCardData;
   onOpen: (gameId: string) => void;
-  // When the WHOLE set is unscored, the "Not scored" note is hoisted to one
-  // banner above the grid (Task 12.13), so the per-card note is suppressed here.
+  // Set-wide absent or withheld scores are explained once above the grid.
   hideUnscoredNote?: boolean;
   // Outcome reveal (Task 19.10). Required, not optional: an omitted spoiler gate
   // must be a compile error, never a silent default to "show everything".
@@ -242,7 +241,7 @@ export function HighlightCard({
     ? `Open replay seed ${data.seed}, interestingness score ${Math.round(
         rubric.score,
       )} of 100`
-    : `Open replay seed ${data.seed} (unscored)`;
+    : `Open replay seed ${data.seed} (score unavailable)`;
 
   return (
     <button
@@ -281,23 +280,17 @@ export function HighlightCard({
           <SubScoreBar rubric={rubric} />
         </>
       ) : hideUnscoredNote ? (
-        // Whole set unscored: the note is hoisted to one banner above the grid
-        // (Task 12.13). Keep just the factual tick count per card.
+        // The set banner explains why scores are unavailable; retain factual ticks.
         data.totalTicks !== null && (
           <span className="font-mono text-[11px] text-ink-500">
             {data.totalTicks} ticks
           </span>
         )
       ) : (
-        // Unscored: the set ships no rubric (the 4p1i fixture case). A real
-        // state, never a broken score panel — show what we do know and say it
-        // plainly.
+        // A missing per-game entry says nothing about whether the set has a rubric.
         <div className="flex flex-col gap-1 rounded-md border border-dashed border-ink-300 bg-paper-1 px-3 py-2">
           <span className="font-mono text-xs font-semibold text-ink-700">
-            Not scored
-          </span>
-          <span className="font-mono text-[11px] text-ink-500">
-            This set ships no interestingness rubric.
+            No score available for this recording
           </span>
           {data.totalTicks !== null && (
             <span className="font-mono text-[11px] text-ink-500">

@@ -51,7 +51,7 @@ export function PublicResultsView({ results }: { results: PublicResultsDTO }) {
         <p>Without role proof: <Fraction n={results.proof_free_correct} d={results.proof_free_ejections} />
         </p>
       </div>
-      <p className="max-w-3xl text-xs leading-relaxed">Each fraction counts impostors among ejected players in that group. “Role proof” means the meeting contained a certified role-revealing observation about the ejectee, such as witnessed venting. Its presence does not prove it caused the vote. These groups describe this recording set; they are not a controlled comparison or a general measure of model reasoning.</p>
+      <p className="max-w-3xl text-xs leading-relaxed">Each fraction counts impostors among ejected players in that group. “Role proof” here is certified witnessed venting about the ejectee. Only impostors can vent, so this group is 100% by construction when present; it does not measure deduction quality. The {results.proof_free_ejections} ejections without role proof are the informative split for decisions under uncertainty. Proof appearing in a meeting does not establish that it caused the vote. These groups describe this recording set; they are not a controlled comparison or a general measure of model reasoning.</p>
     </div>
     {results.cases.length > 0 ? <div>
       <h3 className="mb-3 text-xl">Three decisions to investigate</h3>

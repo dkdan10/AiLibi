@@ -73,6 +73,22 @@ and scene facts must be checked against source bytes when published.
   private memory stays hidden after a lens change.
 - [x] The combined full project gate passes.
 
+### Post-review corrections
+
+- [x] Resolution readouts hide other voters’ numeric confidence in every agent
+  lens, including after outcome reveal. An own-ballot readout uses only that
+  voter’s ballot; omniscient mode retains the aggregate. Render tests plant a
+  different voter’s higher confidence.
+- [x] Replay cards distinguish withheld stale scores from absent rubrics without
+  contradictory per-card copy. Both states retain playback and factual ticks.
+- [x] The media inventory names each asset’s actual current placement, with a
+  removed README link proving the placement check fails. Historical media bytes
+  and source provenance remain unchanged.
+- [x] Public results explain that certified vent proof guarantees correctness by
+  construction and identify the proof-free split as the uncertain evidence group.
+- [x] Targeted frontend/media checks, browser verification and the root’s combined
+  project gate pass on these corrections.
+
 ## Constraints
 
 Implementation starts only after root explicitly starts the next batch. Follow
@@ -122,6 +138,10 @@ fingerprints in Results; pre-existing passing installation evidence is a startin
 point, not a substitute for checking the changed journey.
 
 ## Results
+
+Reopened for the owner-supplied review on 2026-09-06, findings G6-2, G6-1,
+P1-1 and C5-1. The earlier verification below remains historical evidence; it
+does not establish completion of these newly reproduced presentation defects.
 
 Implemented exact transcript/structured-artifact navigation and bounded observation
 references within the architecture's privileged-reader boundary. A citation does
@@ -235,3 +255,53 @@ fake seed-42 runs were byte-identical at tick 12 and $0; all 100 samples, the
 7-game/156-JSON static bundle and documented HTTP smoke passed. The copy locator
 is `/tmp/ailibi-public-clean-copy-path`, with `clean-final-verification.json` and
 the offline/browser logs inside it. No deployment or live call occurred.
+
+### Post-review correction evidence (2026-09-06)
+
+Before implementation, the new render controls produced seven failures and
+sixteen passes: Resolution exposed another voter’s confidence, stale cards
+claimed the rubric was absent, an individual missing entry made the same claim,
+and the results caption omitted the structural guarantee. The corrected agent
+readout uses only that observer’s own ballot, labeled “your ballot”; the table’s
+maximum is omniscient-only. Ejection, tally and threshold outcome remain public.
+Passed, failed and tied gates, outcome reveal and a lower-confidence own ballot
+are covered. This remains a presentation boundary, not API authorization.
+
+Stale and absent set explanations now suppress repeated card notes. A missing
+individual entry states only that its score is unavailable. The absent-highlight
+view also stops claiming that the current nine-player reel has usable scores.
+The results caption states that certified vent evidence makes the proof-backed
+figure 100% by construction and directs interpretation to the proof-free split.
+The media table names the PNG/WebM README placements, architecture diagram and
+two archive-only assets. A removed image target and a fabricated placement both
+fail the check; preserved media hashes are unchanged.
+
+- `cd frontend && npm test -- src/components/PrivateReasoning.test.tsx src/components/ReplayPicker.test.tsx src/components/HighlightCard.test.tsx src/components/PublicResults.test.tsx src/lib/copy.test.ts`:
+  271 passed. `npm run tsc:check` and `npm run lint` passed.
+- `.venv/bin/python -m pytest tests/scripts/test_public_recording_provenance.py -q`:
+  10 passed; strict mypy and Ruff/format passed for the changed test file.
+- `cd frontend && CI=1 UV_CACHE_DIR=/tmp/ailibi-post-review-browser-uv UV_OFFLINE=1 npx playwright test e2e/evidence.spec.ts e2e/bundle.spec.ts --grep 'exact evidence' --retries=0`:
+  both live and freshly rebuilt static journeys passed in 31.1 seconds. The
+  servers were exclusive, retries disabled, and the static test forbade API
+  requests. The real seed-23 scene shows the maximum only in omniscient mode,
+  hides it through p-2’s lens, and labels p-5’s own value after explicit switching.
+  Both score-availability states and the structural results caption are checked.
+
+Logs: `/tmp/ailibi-post-review-viewer-before.log`,
+`/tmp/ailibi-post-review-viewer-final-targeted.log`,
+`/tmp/ailibi-post-review-media-tests.log` and
+`/tmp/ailibi-post-review-viewer-browser.log`. The initial browser attempt could
+not bind localhost under the sandbox; the identical approved local-server run
+passed. No live provider calls, recording/media mutation or adoption occurred.
+Independent review approved the four repairs after 26 selected frontend tests
+and 43 media/evidence-taxonomy tests. The reviewer checked own-ballot selection
+against another voter’s maximum, outcome-reveal independence, all three score
+states, the proof caption and media mutation controls. The coordinator’s combined
+gate remains pending.
+
+The correction checkpoint passed `bash scripts/check.sh`: 6,833 Python tests,
+20 optional skips, three expected failures, 500 frontend tests, strict typing,
+lint/format, import/document contracts and the production build. All 100
+canonical recordings verified. The [durable correction record](../../audits/review-2026-09-06/correction-record.md)
+records the independent reviews, discovered rollback repair and integration
+checks. This completion is on cleanup, awaiting owner review and merge.

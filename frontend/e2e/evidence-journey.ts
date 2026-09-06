@@ -5,11 +5,21 @@ export async function evidenceJourney(page: Page, origin: string): Promise<void>
   await page.addInitScript(() => localStorage.setItem("ailibi.guidedTourSeen.v1", "1"));
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
+  await page.goto(`${origin}/?set=9p2i&view=replays`);
+  const browser = page.getByRole("region", { name: "Replay browser", exact: true });
+  await expect(browser).toContainText("Earlier scores");
+  await expect(browser.getByRole("button", { name: /^Open replay seed/ }).first()).toBeVisible();
+  await expect(browser).not.toContainText("ships no");
+  await expect(browser).not.toContainText("No score available for this recording");
+  await page.goto(`${origin}/?set=4p1i&view=replays`);
+  await expect(browser).toContainText("ships no");
+  await expect(browser).not.toContainText("Earlier scores");
   const resultsUrl = `${origin}/?set=9p2i&view=tournament`;
   const openCase = async (title: string) => {
     await page.goto(resultsUrl);
     await expect(page.getByRole("heading", { name: "What the recordings show" })).toBeVisible();
     await expect(page.getByRole("region", { name: "Recorded results and cases" })).toContainText("50 games");
+    await expect(page.getByRole("region", { name: "Recorded results and cases" })).toContainText("100% by construction");
     const card = page.getByRole("article").filter({ has: page.getByRole("heading", { name: title }) });
     await expect(card.getByRole("button", { name: "Reveal case analysis (spoilers)", exact: true })).toHaveAttribute("aria-expanded", "false");
     await expect(card.getByRole("link", { name: "Pinned recording source" })).toHaveAttribute("href", /5006a32f/);
@@ -18,6 +28,8 @@ export async function evidenceJourney(page: Page, origin: string): Promise<void>
   const evidence = page.getByRole("region", { name: "Selected evidence" });
   await openCase("A sighting the table can check");
   await expect(page.getByRole("dialog", { name: "Meeting at tick 10", exact: true })).toBeVisible();
+  const gate = page.getByText(/How the vote resolved/);
+  await expect(gate).toContainText("top ballot 1.00");
   await expect(evidence).toContainText(/p-6.*ENGINEERING/i);
   await expect(evidence).toContainText("observation tick 8");
   const scene = evidence.getByRole("button", { name: "View scene frame 7", exact: true });
@@ -43,12 +55,17 @@ export async function evidenceJourney(page: Page, origin: string): Promise<void>
   await expect(evidence).toContainText("private observation");
   await expect(evidence).not.toContainText("You witnessed");
   await expect(page).toHaveURL(/perspective=p-2/);
+  await expect(gate).not.toContainText("top ballot");
+  await expect(gate).not.toContainText("1.00");
+  await expect(gate).toContainText("EJECTED");
   const ballots = page.getByRole("region", { name: /^Ballots/ });
   await expect(ballots).toContainText("Private ballot reasoning. View p-5");
   await expect(ballots.getByRole("button", { name: "Cited observation · p-5:8:1", exact: true })).toHaveCount(0);
   await evidence.getByRole("button", { name: "Switch to p-5's perspective" }).click();
   await expect(evidence).toContainText(/p-6.*ENGINEERING/i);
   await expect(page).toHaveURL(/perspective=p-5/);
+  await expect(gate).toContainText("your ballot 1.00");
+  await expect(gate).not.toContainText("top ballot");
   await expect(ballots.getByRole("button", { name: "Cited observation · p-5:8:1", exact: true })).toBeVisible();
   await expect(ballots).not.toContainText("Private ballot reasoning. View p-5");
   await expect(ballots).toContainText("Private ballot reasoning. View p-1");

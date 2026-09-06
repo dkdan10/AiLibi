@@ -299,8 +299,7 @@ export interface ReplayBrowserViewProps {
   onFiltersChange: (next: ReplayFilterState) => void;
   winShapeOptions: readonly string[];
   set: string | null;
-  /** Rubric staleness: the rubric's stamped provenance key ≠ the set's own
-   *  (the loader recomputes it from MANIFEST.md) → honesty banner. */
+  /** The rubric cannot be verified against the set's current source bytes. */
   stale: boolean;
   /** Highlights view, but the served set ships no rubric (the 4p1i case). */
   rubricMissing: boolean;
@@ -387,7 +386,7 @@ export function ReplayBrowserView({
           {reveal
             ? ", and 23 of 50 decided by the task timer rather than by an ejection"
             : ""}
-          . The default set, 9p2i, is scored and populates the reel.
+          . Browse Replays to inspect this set without highlight scores.
         </p>
         <button type="button" onClick={onBrowseReplays} className={EMPTY_ACTION_BTN}>
           Browse all replays
@@ -435,7 +434,7 @@ export function ReplayBrowserView({
               <HighlightCard
                 data={card}
                 onOpen={onOpen}
-                hideUnscoredNote={!isHighlights && rubricMissing}
+                hideUnscoredNote={!isHighlights && (rubricMissing || stale)}
                 reveal={reveal}
               />
             </li>

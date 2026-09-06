@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -161,3 +162,76 @@ def test_historical_media_hashes_and_labels_are_current(tmp_path: Path) -> None:
     changed = tmp_path / names[0]
     changed.write_bytes(changed.read_bytes() + b"changed")
     assert _asset_mismatches(tmp_path) == [names[0]]
+
+
+def _media_placement_mismatches(root: Path) -> list[str]:
+    """Compare the media inventory's placement claims to actual Markdown targets."""
+
+    media = root / "docs/media"
+    rows = re.findall(
+        r"^\| `([^`]+)` \| [^|\n]+ \| ([^|\n]+) \|$",
+        (media / "README.md").read_text(),
+        re.MULTILINE,
+    )
+    assets = {
+        path.name
+        for path in media.iterdir()
+        if path.suffix in {".png", ".gif", ".webm", ".svg"}
+    }
+    problems: list[str] = []
+    if len(rows) != len(assets) or {name for name, _ in rows} != assets:
+        problems.append("media placement table does not match the visual inventory")
+    documents = [root / "README.md", root / "docs/architecture.md"]
+    targets = {
+        document.resolve(): {
+            (document.parent / target).resolve()
+            for target in re.findall(r"\]\(([^)\s]+)\)", document.read_text())
+        }
+        for document in documents
+    }
+    for name, placement in rows:
+        declared = {
+            (media / target).resolve()
+            for target in re.findall(r"\]\(([^)]+)\)", placement)
+        }
+        actual = {
+            document
+            for document, links in targets.items()
+            if (media / name).resolve() in links
+        }
+        if declared != actual or (
+            not declared and placement != "Historical archive only"
+        ):
+            problems.append(name)
+    return problems
+
+
+def test_media_placement_claims_follow_actual_frontdoor_links(tmp_path: Path) -> None:
+    root = Path(__file__).resolve().parents[2]
+    assert _media_placement_mismatches(root) == []
+    for relative in ("README.md", "docs/architecture.md", "docs/media/README.md"):
+        copied = tmp_path / relative
+        copied.parent.mkdir(parents=True, exist_ok=True)
+        copied.write_bytes((root / relative).read_bytes())
+    for source in (root / "docs/media").iterdir():
+        if source.suffix in {".png", ".gif", ".webm", ".svg"}:
+            (tmp_path / "docs/media" / source.name).touch()
+    assert _media_placement_mismatches(tmp_path) == []
+
+    readme = tmp_path / "README.md"
+    original = readme.read_text()
+    readme.write_text(
+        original.replace(
+            "docs/media/spectator-two-truths.png", "docs/media/missing.png"
+        )
+    )
+    assert _media_placement_mismatches(tmp_path) == ["spectator-two-truths.png"]
+    readme.write_text(original)
+
+    inventory = tmp_path / "docs/media/README.md"
+    inventory.write_text(
+        inventory.read_text().replace(
+            "| Historical archive only |", "| [README image](../../README.md) |", 1
+        )
+    )
+    assert _media_placement_mismatches(tmp_path) == ["spectator-meeting.png"]

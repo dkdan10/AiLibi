@@ -1,17 +1,21 @@
 # docs/media — the committed pictures
 
-Five assets, all shown in or linked from the repository [README](../../README.md).
+Five visual assets are preserved here. The repository [README](../../README.md)
+shows the two-perspective PNG and links the WebM clip. The architecture note
+embeds the diagram; the meeting still and GIF remain historical archive assets.
 The four spectator captures are **historical**, preserved from the previous
 reference recording; they do not depict the current demo recording.
 [provenance.json](provenance.json) identifies their source and exact asset bytes:
 
-| File | What it is |
-| --- | --- |
-| `spectator-two-truths.png` | 2036×850 — one tick shown twice: the omniscient map beside the same tick under one crewmate's fog, with the accusation that crewmate wrote at the meeting that followed |
-| `spectator-meeting.png` | 1440×900 — mid-deliberation: accusation chain, ballots, mind inspector |
-| `spectator-journey.gif` | 640×400, 8 frames — the walk from the first tick to the meeting the transport stops at |
-| `spectator-journey.webm` | 1440×900, 9 s — the same walk recorded live: a token crossing rooms, the kill flash, the transport pausing itself, the flip into fog |
-| `architecture.svg` | The layering as built — hand-authored, not captured: the packages, the data-flow arrows, and the barred import the observation firewall forbids |
+Placement below refers to the README and architecture note.
+
+| File | What it is | Current placement |
+| --- | --- | --- |
+| `spectator-two-truths.png` | 2036×850 — the same scene through omniscient and crewmate views, with the following accusation | [README image](../../README.md) |
+| `spectator-meeting.png` | 1440×900 — accusation chain, ballots and mind inspector | Historical archive only |
+| `spectator-journey.gif` | 640×400, 8 frames — playback from the opening tick to a meeting | Historical archive only |
+| `spectator-journey.webm` | 1440×900, 9 s — movement, a kill flash, a meeting pause and fog | [README clip link](../../README.md) |
+| `architecture.svg` | Text SVG of the packages, data flow and observation firewall | [Architecture image](../architecture.md) |
 
 The four spectator assets were captured from the **static demo bundle**
 (`scripts/build_demo_bundle.py`) at the source revision below. Building the
@@ -117,15 +121,13 @@ published clip's first and final frames and matches each against what the page
 looked like at the first and last beat; if the fog flip has fallen past the cut,
 the final frame resolves to the opening view and the capture fails.
 
-### Why the clip is linked and the GIF is shown
+### Current README presentation
 
-GitHub's README renderer strips `<video>`. Checked, not assumed: a `<video>`
-element pointing at a repository-relative path — `.webm` and `.mp4` alike —
-renders as an empty paragraph both through the rendered-README API and on the
-repository's own landing page. So the README shows the GIF, which renders, and
-links the clip, which does not. Re-check this before swapping the two; if GitHub
-ever starts rendering repository-relative video, the clip becomes the inline
-asset and the GIF retires.
+The README embeds `spectator-two-truths.png` and links
+`spectator-journey.webm`; it does not embed the GIF or meeting still. Its caption
+labels both displayed/linked captures historical and directs readers to the
+current interactive demo. The retained GIF and still document that earlier
+capture without claiming to show the current product.
 
 Budget: the directory is currently 1.4 MB. Keep the still under 400 kB, the clip
 under 3 MB and the GIF under 1.5 MB — the capture asserts all three, so a walk

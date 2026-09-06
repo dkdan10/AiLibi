@@ -11,6 +11,8 @@ describe("public result interpretation", () => {
     expect(html).toContain("35/48");
     expect(html).toContain("68/68");
     expect(html).toContain("14/27");
+    expect(html).toContain("100% by construction");
+    expect(html).toContain("27 ejections without role proof");
     expect(html).toContain("1 aborted");
     expect(html).toContain("not a bill");
     expect(html).toContain("https://example.com/source");
