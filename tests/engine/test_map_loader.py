@@ -4,12 +4,61 @@ from collections.abc import Callable
 from pathlib import Path
 
 import pytest
+import yaml
 from pydantic import ValidationError
 
-from engine.world import Map, MapValidationError, load_canonical_map, load_map
+from engine.world import (
+    Edge,
+    Map,
+    MapValidationError,
+    Vent,
+    load_canonical_map,
+    load_map,
+)
 
 MapData = dict[str, object]
 MapMutator = Callable[[MapData], None]
+
+
+@pytest.mark.parametrize("kind", ["edge", "vent"])
+@pytest.mark.parametrize("duration", [1, 2, 10])
+def test_only_unit_traversal_is_supported(
+    tmp_path: Path, kind: str, duration: int
+) -> None:
+    data = _minimal_map_data()
+    if kind == "edge":
+        _add_admin_room(data)
+        definition: dict[str, object] = {
+            "from": "CAFETERIA",
+            "to": "ADMIN",
+            "kind": "doorway",
+            "traversal_ticks": duration,
+            "door_id": None,
+        }
+        _sequence(data, "edges").append(definition)
+        model: type[Edge] | type[Vent] = Edge
+    else:
+        definition = _entry(data, "vents", "CAFETERIA_VENT")
+        definition["traversal_ticks"] = duration
+        definition["id"] = "CAFETERIA_VENT"
+        model = Vent
+    _entry(data, "tasks", "empty_trash")["duration_ticks"] = 7
+    _entry(data, "sabotages", "lights")["duration_ticks"] = 9
+    path = tmp_path / "custom.yaml"
+    path.write_text(yaml.safe_dump(data), encoding="utf-8")
+    if duration == 1:
+        assert model.model_validate(definition).traversal_ticks == 1
+        loaded = load_map(path)
+        assert loaded.tasks["empty_trash"].duration_ticks == 7
+        assert loaded.sabotages["lights"].duration_ticks == 9
+        return
+    message = f"{kind} traversal_ticks must be 1; multi-tick traversal is unsupported"
+    with pytest.raises(ValidationError, match=message):
+        model.model_validate(definition)
+    with pytest.raises(ValidationError, match=message):
+        Map.model_validate(data)
+    with pytest.raises(ValidationError, match=message):
+        load_map(path)
 
 
 def _minimal_map_data() -> MapData:
