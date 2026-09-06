@@ -56,6 +56,7 @@ from eval.replay_walk import (
     WalkViolation,
     walk_replay,
 )
+from eval.witness_entitlement import assert_event_witnesses_match_source_state
 from llm.provider import ENV_PROVIDER, PROVIDER_FAKE, build_default_client
 from observation.packet import EventObservationBatch, ObservationPacket
 from observation.service import ObservationService, impostor_pretend_task_set
@@ -979,6 +980,12 @@ def _reconstruct_factory_records(
             config=_FACTORY_WALK_CONFIG,
         ):
             if isinstance(walk_event, TickAdvanced):
+                assert_event_witnesses_match_source_state(
+                    pre_state=walk_event.pre_state,
+                    state=walk_event.state,
+                    events=walk_event.events,
+                    game_map=game_map,
+                )
                 context = PacketContext(
                     walk_event.events,
                     walk_event.state,
@@ -1147,6 +1154,9 @@ def assert_packet_is_leak_clean(
     # The owned-task byte-shape + role-blind consistency discipline (Task 15.22),
     # scanned on EVERY factory-mode packet.
     _assert_owned_task_discipline(packet)
+    _assert_owned_tasks_match_engine_truth(
+        packet, state=context.world_state, game_map=context.game_map
+    )
     assert_visible_entities_match_engine_truth(
         packet,
         state=context.world_state,
