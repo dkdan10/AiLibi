@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import stat
 import tempfile
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Iterator, Sequence
 from contextlib import ExitStack, contextmanager
 from pathlib import Path
 
@@ -44,9 +44,12 @@ def _recording_paths(replay_path: Path, audit_path: Path) -> tuple[Path, ...]:
 
 
 def _restore_backups(
-    backups: Sequence[tuple[Path, Path]], error: BaseException | None
+    backups: Sequence[tuple[Path, Path]],
+    error: BaseException | None,
+    *,
+    remove_empty: Sequence[Path] = (),
 ) -> None:
-    """Attempt every restoration, retaining recoverable files if one fails."""
+    """Restore prior bytes and absence, attempting every path after a failure."""
     failures: list[BaseException] = []
     for target, backup in reversed(backups):
         try:
@@ -54,10 +57,24 @@ def _restore_backups(
             backup.parent.rmdir()
         except OSError as exc:
             failures.append(exc)
+    for path in remove_empty:
+        try:
+            if path.exists():
+                if path.stat().st_size:
+                    raise OSError(
+                        f"Refusing to remove nonempty recording output: {path}"
+                    )
+                path.unlink()
+        except OSError as exc:
+            failures.append(exc)
     if failures:
-        locations = ", ".join(str(backup) for _, backup in backups if backup.exists())
+        locations = ", ".join(
+            str(path)
+            for path in (*(backup for _, backup in backups), *remove_empty)
+            if path.exists()
+        )
         raise BaseExceptionGroup(
-            f"Recording setup and rollback failed; recover retained backups at: {locations}",
+            f"Recording setup and rollback failed; recover retained paths at: {locations}",
             ([error] if error is not None else []) + failures,
         )
 
@@ -84,14 +101,15 @@ def _discard_backups(backups: Sequence[tuple[Path, Path]]) -> None:
 @contextmanager
 def prepare_recording_paths(
     replay_path: Path, audit_path: Path, *, force: bool
-) -> Iterator[Callable[[], None]]:
-    """Replace both outputs, restoring previous files if writer setup fails.
+) -> Iterator[None]:
+    """Replace both outputs, restoring previous files until new bytes exist.
 
-    Construct and close the writers inside this context. Call the yielded
-    ``begin_recording`` after construction succeeds, before writing any rows.
-    Before that boundary, setup failures restore previous files. Afterwards,
-    failures retain the new partial evidence. Backups are retired only after
-    the run and its handles finish; a cleanup error cannot destroy current data.
+    Construct and close the writers inside this context. Writer construction
+    and entering the run loop do not commit replacement: either output must
+    actually contain bytes after the handles close. Before that boundary,
+    failures restore previous files. Afterwards, failures retain new partial
+    evidence, including an audit-only prefix or an incomplete write. Backups
+    retire after the handles finish; cleanup cannot destroy current data.
     Sibling backups also support audits on another filesystem.
 
     This handles ordinary exceptions; it is not a crash-atomic publication
@@ -121,12 +139,9 @@ def prepare_recording_paths(
         _recording_paths(replay_path, audit_path)
 
     backups: list[tuple[Path, Path]] = []
-    recording_started = False
+    initially_absent = tuple(path for path in paths if not path.exists())
+    preparation_finished = False
     failure: BaseException | None = None
-
-    def begin_recording() -> None:
-        nonlocal recording_started
-        recording_started = True
 
     try:
         if force:
@@ -143,13 +158,16 @@ def prepare_recording_paths(
                     directory.rmdir()
                     raise
                 backups.append((path, backup))
-        yield begin_recording
+        preparation_finished = True
+        yield
     except BaseException as exc:
         failure = exc
         raise
     finally:
-        if not recording_started:
-            _restore_backups(backups, failure)
+        if not preparation_finished or not any(
+            path.exists() and path.stat().st_size for path in paths
+        ):
+            _restore_backups(backups, failure, remove_empty=initially_absent)
         else:
             try:
                 _discard_backups(backups)

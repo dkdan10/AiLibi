@@ -17,6 +17,12 @@ replacing its genuine replay with report JSON.
 
 ## Acceptance
 
+- [x] Review correction: report and progress destinations protect existing
+  unselected replay/audit files in the output directory, including aliases,
+  before evaluator or provider work.
+- [x] Review correction: new planted collision cases and the combined project
+  gate pass on the corrected implementation.
+
 - [x] Preflight the report destination against all selected replay and audit
   paths before running games; cover normalized paths and filesystem aliases.
 - [x] Invalid, unwritable, or colliding destinations preserve existing files
@@ -102,3 +108,40 @@ This follows the architecture's privileged script/evaluation layering. Existing
 artifact bytes survive refusal; newly created parent directories may remain.
 Concurrent writers, later filesystem changes, and crash durability are outside
 the guarantee. No multi-game transaction or recording lifecycle was changed.
+
+### Independent review correction (2026-09-06)
+
+Reopened for C2-4 in the
+[owner review](../../audits/review-2026-09-06/REVIEW_REPORT.md).
+The original selected-seed guarantee was too narrow for output-directory
+integrity. Report and progress preflight now include every existing
+`replay-seed-*.jsonl` file in the output directory, covering both replay and
+audit names in addition to selected future paths and archived-attempt storage.
+Direct paths, hardlinks and parent-directory symlinks to unselected evidence
+are refused before evaluator work. The report cases require no force flag;
+progress cases explicitly exercise force so ordinary existence refusal cannot
+disguise missing alias protection. The original valid custom-output and selected
+recording controls remain unchanged.
+
+Focused command:
+
+```sh
+.venv/bin/pytest tests/scripts/test_report_destinations.py tests/scripts/test_run_tournament.py tests/scripts/test_tournament_progress.py -q --tb=short
+```
+
+All 12 new unselected-file alias controls fail against `9b333a76` and pass with
+the repair. The broader lifecycle/CLI/observation selection passed 235 tests;
+[shared correction verification](recording-replacement.md#independent-review-correction-2026-09-06)
+records commands, source-isolation controls and strict typing/lint results.
+
+This extends preflight scope without changing atomic publication, schemas,
+canonical evidence or engine behavior. Later filesystem changes and concurrent
+writers remain outside the stated contract. Scope follows architecture Packages
+and Determinism. Combined project verification and independent review are pending.
+
+The correction checkpoint passed `bash scripts/check.sh`: 6,833 Python tests,
+20 optional skips, three expected failures, 500 frontend tests, strict typing,
+lint/format, import/document contracts and the production build. All 100
+canonical recordings verified. The [durable correction record](../../audits/review-2026-09-06/correction-record.md)
+records the independent reviews, discovered rollback repair and integration
+checks. This completion is on cleanup, awaiting owner review and merge.

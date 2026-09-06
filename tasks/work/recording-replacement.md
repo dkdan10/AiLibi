@@ -18,6 +18,11 @@ destroy an existing replay before recording starts.
 
 ## Acceptance
 
+- [x] Review correction: a forced run failing before either output contains
+  bytes restores its previous pair; an audit-only partial write is retained.
+- [x] Review correction: focused adverse controls and the combined project gate
+  pass on the corrected implementation.
+
 - [x] Forced replacement produces the same replay and audit bytes as a clean
   run, for default and explicit audit paths, including shorter and partial runs.
 - [x] Without force, either existing output refuses the run and preserves both
@@ -100,3 +105,70 @@ outputs when setup aborts. Recovery/cleanup failures name retained backup
 locations and preserve original exceptions. The guarantee excludes process
 termination and concurrent writers. The independent tournament report-output
 collision is queued separately in the task index.
+
+### Independent review correction (2026-09-06)
+
+Reopened for C2-1 in the [owner review](../../audits/review-2026-09-06/REVIEW_REPORT.md#54-forced-re-record-that-fails-before-the-first-row-destroys-both-previous-artifacts-c2-1).
+The historical verification above missed failure after writer construction but
+before either lazy writer produced bytes. A zero-second `RunDeadline` reproduced
+deletion of both prior files. Replacement now inspects actual output sizes after
+both handles close, while a separate preparation boundary keeps a failed backup
+rotation on the rollback path. The unused eager callback and its sole call site
+are removed rather than retained as a second, conflicting lifecycle signal.
+
+The semantic controls cover an empty first audit write, an audit-only partial
+write, and a buffered partial write flushed while closing after an exception.
+Zero-byte failures restore the prior pair; any retained new byte commits the
+new partial generation. Existing after-tick/provider failure, clean-control,
+backup-rotation, handle-close and rollback/retirement tests remain in the gate.
+No log schema, engine rule, provider, prompt, historical recording or observation
+append behavior changed. This follows architecture Layering and Determinism.
+
+Focused command:
+
+```sh
+.venv/bin/pytest tests/orchestrator/test_recording_replacement.py tests/orchestrator/test_recording_destinations.py tests/orchestrator/test_run_limits.py tests/scripts/test_report_destinations.py tests/scripts/test_tournament_progress.py tests/scripts/test_run_game.py tests/scripts/test_run_tournament.py tests/scripts/test_run_tournament_agent_factory.py tests/scripts/test_run_tournament_candidate_artifact.py tests/observation/test_service.py -q --tb=short
+```
+
+The focused selection passed 235 tests in 9.29 seconds. Ruff/format and strict
+mypy passed on the seven changed Python files; `git diff --check` passed.
+For the negative control, load isolated `git show 9b333a76:<path>` copies of
+`orchestrator/recording.py`, `orchestrator/game.py`,
+`scripts/_tournament_progress.py` and `scripts/run_tournament.py` under their
+original module names, assert each module resolves to the temporary copy, then
+run the current replacement, report-destination and tournament-progress tests
+with this selector:
+
+```text
+deadline_before_first or first_audit_write or outputs_cannot or first_seed_failure or crashed_attempt or failed_forced_run or unresolved_capture or changes_during_inspection
+```
+
+That adverse run produced 24 failures and two passing partial-write controls;
+the same 26 cases pass with the corrections. No tracked source was replaced
+during the negative run.
+
+The correction remains active until the coordinator records the combined
+project gate and independent review. Concurrent writers and hard-kill durability
+remain outside the exception-safety contract.
+
+The independent correction review found a remaining rollback defect: when an
+output was initially absent, a zero-byte failed write left an empty file behind.
+Rollback now restores both prior bytes and prior absence, preserving existing
+empty files and attempting every restoration even if empty-file cleanup fails.
+Cleanup failures retain the original exception and identify the retained path.
+The absent-replay, absent-audit, both-absent and pre-existing-empty controls plus
+an injected unlink failure pass; the isolated `9b333a76` recording helper fails
+seven and passes two of those nine cases. Reproduce with the preceding module
+isolation recipe and `-k 'original_absence or empty_output_cleanup'`.
+
+After that review repair, replacement/destination/tournament-progress/report-
+destination verification passed 123 tests in 5.13 seconds; Ruff/format, strict
+mypy on the two affected files, and whitespace checks passed. The coordinator
+owns the full-project recheck on the final integrated runtime.
+
+The correction checkpoint passed `bash scripts/check.sh`: 6,833 Python tests,
+20 optional skips, three expected failures, 500 frontend tests, strict typing,
+lint/format, import/document contracts and the production build. All 100
+canonical recordings verified. The [durable correction record](../../audits/review-2026-09-06/correction-record.md)
+records the independent reviews, discovered rollback repair and integration
+checks. This completion is on cleanup, awaiting owner review and merge.

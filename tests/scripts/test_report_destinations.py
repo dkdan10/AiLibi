@@ -76,6 +76,49 @@ def test_report_cannot_alias_any_selected_recording(
 
 
 @pytest.mark.parametrize("suffix", ["", ".audit"])
+@pytest.mark.parametrize("destination_flag", ["--report-output", "--progress-output"])
+@pytest.mark.parametrize("alias", ["direct", "hardlink", "parent_link"])
+def test_outputs_cannot_replace_unselected_recordings(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    suffix: str,
+    destination_flag: str,
+    alias: str,
+) -> None:
+    output_dir = tmp_path / "games"
+    output_dir.mkdir()
+    recording = output_dir / f"replay-seed-99{suffix}.jsonl"
+    recording.write_bytes(b"unselected recording evidence\n")
+    destination = recording
+    if alias == "hardlink":
+        destination = tmp_path / "aliased.json"
+        destination.hardlink_to(recording)
+    elif alias == "parent_link":
+        parent = tmp_path / "linked-games"
+        parent.symlink_to(output_dir, target_is_directory=True)
+        destination = parent / recording.name
+    called = _refuse_evaluator(monkeypatch)
+    with pytest.raises(ValueError, match="overlap"):
+        rt.main(
+            [
+                "--output-dir",
+                str(output_dir),
+                "--start-seed",
+                "5",
+                "--num-games",
+                "1",
+                "--max-ticks",
+                "2",
+                *(["--force"] if destination_flag == "--progress-output" else []),
+                destination_flag,
+                str(destination),
+            ]
+        )
+    assert called == []
+    assert recording.read_bytes() == b"unselected recording evidence\n"
+
+
+@pytest.mark.parametrize("suffix", ["", ".audit"])
 def test_report_rejects_a_fresh_case_alias_on_insensitive_filesystems(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, suffix: str
 ) -> None:

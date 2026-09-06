@@ -193,7 +193,7 @@ class TournamentProgress:
                 # Count the unobserved interval conservatively, including downtime.
                 self._elapsed_before += max(0.0, time.time() - self.record.updated_at)
             for attempt in self.record.attempts:
-                if attempt.status == "running":
+                if attempt.status == "running" or not attempt.accounting_complete:
                     self.capture(
                         attempt, error="Previous process stopped before checkpoint"
                     )
@@ -203,6 +203,7 @@ class TournamentProgress:
                     }:
                         attempt.status = "finished"
                         attempt.error = None
+            self._require_accounting_complete()
         else:
             if path.exists() and not force:
                 raise FileExistsError(
@@ -213,6 +214,7 @@ class TournamentProgress:
                 fingerprint=fingerprint,
                 configuration=configuration,
                 seeds=seeds,
+                report_sha256=digest(report_path) if report_path.exists() else None,
             )
 
     @property
@@ -281,7 +283,12 @@ class TournamentProgress:
             preflight_report_output(paths[1], (paths[0], self.path, self.report_path))
             preflight_report_output(self.path, (*paths, self.report_path))
             preflight_report_output(self.report_path, (*paths, self.path))
-            if attempt.status != "running":
+            if attempt.status != "running" and attempt.accounting_complete:
+                if not paths[0].exists() or not paths[0].stat().st_size:
+                    raise ValueError(
+                        f"Usage accounting is unresolved for seed {attempt.seed}: "
+                        "recording is missing or empty"
+                    )
                 if self._hashes(attempt) != attempt.hashes:
                     raise ValueError(f"Recording bytes changed for seed {attempt.seed}")
                 game = self._load_game(attempt)
@@ -304,39 +311,84 @@ class TournamentProgress:
         return next((a for a in reversed(self.record.attempts) if a.seed == seed), None)
 
     def totals(self) -> tuple[float, int, int]:
+        self._require_accounting_complete()
         return (
             sum(a.cost_usd for a in self.record.attempts),
             sum(a.input_tokens for a in self.record.attempts),
             sum(a.output_tokens for a in self.record.attempts),
         )
 
+    def _require_accounting_complete(self) -> None:
+        for attempt in self.record.attempts:
+            if not attempt.accounting_complete:
+                raise ValueError(
+                    f"Usage accounting is unresolved for seed {attempt.seed} "
+                    f"attempt {attempt.number}; restore its recording evidence "
+                    "before continuing or calculating cumulative allowance"
+                )
+
     def capture(self, attempt: Attempt, *, error: str | None = None) -> None:
-        attempt.hashes = self._hashes(attempt)
         replay, _ = self.paths(attempt)
-        attempt.status = "interrupted" if error is not None else "finished"
+        attempt.status = "interrupted"
         attempt.error = error
-        if replay.exists() and replay.stat().st_size:
-            entries = read_all_entries(replay)
-            calls = [
-                call
-                for entry in entries
-                if isinstance(entry, (MeetingReplayEntry, AbortedMeetingReplayEntry))
-                for call in entry.llm_calls
-            ]
-            failures = [
-                entry for entry in entries if isinstance(entry, FailedCallReplayEntry)
-            ]
-            attempt.cost_usd = sum(c.cost_usd for c in calls) + sum(
-                f.cost_usd for f in failures
+        attempt.accounting_complete = False
+        if not replay.exists() or not replay.stat().st_size:
+            attempt.status = "interrupted"
+            raise ValueError(
+                f"Usage accounting is unresolved for seed {attempt.seed}: "
+                "recording is missing or empty; restore its evidence before retrying"
             )
-            attempt.input_tokens = sum(c.input_tokens for c in calls) + sum(
-                f.input_tokens for f in failures
+        hashes = self._hashes(attempt)
+        if (
+            error is not None
+            and attempt.game is None
+            and attempt.hashes
+            and hashes == attempt.hashes
+        ):
+            attempt.status = "interrupted"
+            raise ValueError(
+                f"Usage accounting is unresolved for seed {attempt.seed}: "
+                "recording still matches the prior files; no new attempt evidence "
+                "can be distinguished"
             )
-            attempt.output_tokens = sum(c.output_tokens for c in calls) + sum(
-                f.output_tokens for f in failures
+        entries = read_all_entries(replay)
+        calls = [
+            call
+            for entry in entries
+            if isinstance(entry, (MeetingReplayEntry, AbortedMeetingReplayEntry))
+            for call in entry.llm_calls
+        ]
+        failures = [
+            entry for entry in entries if isinstance(entry, FailedCallReplayEntry)
+        ]
+        # Stage inspection before replacing any known counters or input hashes.
+        # An unreadable recording cannot erase a previously checkpointed charge.
+        game = self._load_game(attempt)
+        if self._hashes(attempt) != hashes:
+            raise ValueError("Recording bytes changed during usage inspection")
+        cost_usd = sum(c.cost_usd for c in calls) + sum(f.cost_usd for f in failures)
+        input_tokens = sum(c.input_tokens for c in calls) + sum(
+            f.input_tokens for f in failures
+        )
+        output_tokens = sum(c.output_tokens for c in calls) + sum(
+            f.output_tokens for f in failures
+        )
+        if (
+            cost_usd + 1e-12 < attempt.cost_usd
+            or input_tokens < attempt.input_tokens
+            or output_tokens < attempt.output_tokens
+        ):
+            attempt.status = "interrupted"
+            raise ValueError(
+                f"Usage accounting is unresolved for seed {attempt.seed}: "
+                "recording accounts for less usage than its previous checkpoint"
             )
-        attempt.accounting_complete = True
-        attempt.game = self._load_game(attempt)
+        attempt.cost_usd = cost_usd
+        attempt.input_tokens = input_tokens
+        attempt.output_tokens = output_tokens
+        attempt.game = game
+        attempt.hashes = hashes
+        attempt.accounting_complete = game is not None
         if error is None and (
             attempt.game is None
             or attempt.game.completion_status in {"aborted", "unfinished"}
@@ -345,8 +397,11 @@ class TournamentProgress:
             attempt.error = (
                 "Recording did not finish or reach its configured tick limit"
             )
+        elif error is None:
+            attempt.status = "finished"
 
     def start(self, seed: int, *, retry: bool) -> Attempt:
+        self._require_accounting_complete()
         previous = self.latest(seed)
         if previous is not None:
             if previous.status == "finished":
@@ -402,6 +457,9 @@ class TournamentProgress:
             replay=f"replay-seed-{seed}.jsonl",
             audit=f"replay-seed-{seed}.audit.jsonl",
         )
+        # Forced runs may preserve an earlier generation after a zero-byte
+        # failure. Such files must never be charged as the new attempt's work.
+        attempt.hashes = self._hashes(attempt)
         self.record.attempts.append(attempt)
         self.record.status = "running"
         self.save()
@@ -418,6 +476,12 @@ class TournamentProgress:
             for seed in self.record.seeds
             if (a := self.latest(seed)) is not None and a.game is not None
         ]
+        if not games:
+            # No attempt has yielded an inspectable game. Checkpoint the failure
+            # while preserving the last published report, including another run's.
+            self.record.status = "interrupted"
+            self.save()
+            return
         report = build_tournament_eval_report(
             build_tournament_report(
                 games=games,

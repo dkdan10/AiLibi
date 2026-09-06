@@ -20,6 +20,14 @@ destination and recording-pair protections must survive the follow-through.
 
 ## Acceptance
 
+- [x] Review correction: first-seed failure preserves an existing report and
+  never publishes an empty replacement; progress binds its previous bytes.
+- [x] Review correction: missing/empty attempt recordings leave usage unresolved,
+  preserve known counters, and block retry and cumulative-budget calculations.
+  Restoring genuine evidence permits inspection without inventing zero spend.
+- [x] Review correction: targeted adverse controls and the combined project gate
+  pass on the corrected implementation.
+
 - [x] Atomic progress and report snapshots survive a later-seed interruption;
   progress identifies pending, running, finished, and interrupted attempts.
 - [x] Explicit continuation verifies configuration and recording/report hashes,
@@ -157,3 +165,58 @@ canonical recording or historical report bytes changed. Logs: `/tmp/ailibi-clean
 Independent review: Portfolio-review agent; source fingerprint coverage and byte-preserving archival findings were repaired and independently rechecked.
 Implemented and verified for cleanup; the owner's final Claude review and merge
 remain pending. This work does not adopt an experimental behavior.
+
+### Independent review corrections (2026-09-06)
+
+Reopened for C7b-2 and GC-2 in the
+[owner review](../../audits/review-2026-09-06/REVIEW_REPORT.md).
+The earlier verification missed zero-row failures: the CLI published an empty
+report before its first seed, and capture declared a missing or empty replay to
+have completely accounted zero usage. Reproductions now exercise both paths.
+
+The initial checkpoint binds the existing report hash without replacing its
+bytes. Publication waits for at least one inspectable game. A first-seed failure
+therefore preserves an earlier report, including failure after forced recording
+replacement restores the earlier pair. Starting identities distinguish unchanged
+prior files from new attempt evidence on a failed forced run; ambiguous identical
+bytes fail closed rather than attributing old work to the new attempt.
+
+Capture stages validated usage and source hashes before replacing known counters.
+Missing/empty inputs, a valid prefix with less usage than its checkpoint, and
+bytes changed during inspection leave accounting unresolved. Resume, retry and
+cumulative allowance calculations refuse unresolved attempts before provider
+work or archival. Existing known charges and evidence identities remain intact;
+restoring genuine partial recording bytes lets the same checkpoint reconcile.
+This deliberately refuses a zero-row retry whose incurred usage cannot be
+established. It does not claim to recover unreported provider usage, or silently
+certify zero after a process kill. Complete prior attempts, normal partial retry,
+identical paid attempts and interrupted publication retain their existing tests.
+
+The second-seed continuation test now interrupts after a genuine first tick,
+so its interrupted attempt has inspectable evidence; assuming a missing file
+means zero would recreate the defect. Its report truthfully includes the
+unfinished game alongside the completed first seed. A separate missing/empty
+crash test verifies refusal without provider calls.
+
+Focused reproduction and positive controls:
+
+```sh
+.venv/bin/pytest tests/scripts/test_tournament_progress.py tests/scripts/test_report_destinations.py tests/orchestrator/test_recording_replacement.py -q --tb=short
+```
+
+The broader lifecycle/CLI/observation selection passed 235 tests. The shared
+[correction verification](recording-replacement.md#independent-review-correction-2026-09-06)
+records the exact command, strict typing/lint result and the 24-failure,
+two-positive-control comparison against `9b333a76`.
+
+Record impact remains operational and post-record: no report DTO, prompt,
+engine behavior, historical evidence or adopted experiment changes. Sidecar
+fields are unchanged. Scope follows architecture Packages and Determinism.
+Combined project verification and independent review are pending coordination.
+
+The correction checkpoint passed `bash scripts/check.sh`: 6,833 Python tests,
+20 optional skips, three expected failures, 500 frontend tests, strict typing,
+lint/format, import/document contracts and the production build. All 100
+canonical recordings verified. The [durable correction record](../../audits/review-2026-09-06/correction-record.md)
+records the independent reviews, discovered rollback repair and integration
+checks. This completion is on cleanup, awaiting owner review and merge.

@@ -10,18 +10,19 @@ from typing import Any
 import pytest
 
 import run_tournament as rt
-from _tournament_progress import ProgressRecord
+from _tournament_progress import Attempt, ProgressRecord, TournamentProgress
 from _report_output import atomic_write_bytes, atomic_write_report
 from _tournament_progress import artifact_fingerprint, configuration_fingerprint, digest
 from agents.tactical.crewmate_policy import CrewmatePolicy
 from llm.budget import BudgetExceededError
 from llm.client import LLMResponse
 from llm.fake_provider import FakeProvider
+from eval.report_schema import GameReport
 from observation.action_intent import ActionIntent, EmergencyMeetingIntent, WaitIntent
 from observation.packet import ObservationPacket
 from observation.public_map import PublicMapView
 from orchestrator.game import HeadlessGame, TacticalAgent
-from orchestrator.replay import compute_cost_usd
+from orchestrator.replay import ReplayLog, compute_cost_usd
 from orchestrator.run_limits import RunDeadlineExceeded
 
 
@@ -42,6 +43,178 @@ def progress(directory: Path) -> ProgressRecord:
     )
 
 
+@pytest.mark.parametrize("existing_report", [False, True])
+def test_first_seed_failure_does_not_publish_an_empty_report(
+    tmp_path: Path, existing_report: bool
+) -> None:
+    report = tmp_path / "tournament-eval-report.json"
+    before = b"previous published report\n"
+    if existing_report:
+        report.write_bytes(before)
+    with pytest.raises(ValueError):
+        rt.main([*arguments(tmp_path, games=1), "--num-players", "1"])
+    if existing_report:
+        assert report.read_bytes() == before
+        assert progress(tmp_path).report_sha256 == digest(report)
+    else:
+        assert not report.exists()
+        assert progress(tmp_path).report_sha256 is None
+    assert not progress(tmp_path).attempts[0].accounting_complete
+
+
+def test_failed_forced_run_does_not_attribute_preserved_old_recordings_to_new_work(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    args = arguments(tmp_path, games=1)
+    assert rt.main(args) == 0
+    paths = [
+        tmp_path / "replay-seed-0.jsonl",
+        tmp_path / "replay-seed-0.audit.jsonl",
+        tmp_path / "tournament-eval-report.json",
+    ]
+    before = {path: path.read_bytes() for path in paths}
+
+    def fail_before_game(**kwargs: Any) -> Any:
+        raise RuntimeError("first seed failed before recording")
+
+    monkeypatch.setattr(rt, "run_tournament_eval", fail_before_game)
+    with pytest.raises(RuntimeError, match="before recording"):
+        rt.main([*args, "--force"])
+    assert {path: path.read_bytes() for path in paths} == before
+    attempt = progress(tmp_path).attempts[0]
+    assert attempt.game is None
+    assert not attempt.accounting_complete
+    assert "no new attempt evidence" in (attempt.error or "")
+
+
+@pytest.mark.parametrize("damage", ["missing", "empty", "lower_usage"])
+def test_unresolved_capture_preserves_known_usage_and_blocks_all_allowance_consumers(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, damage: str
+) -> None:
+    provider = PaidProvider()
+    install_paid_run(monkeypatch, provider)
+    args = arguments(tmp_path, games=1)
+    with pytest.raises(RuntimeError, match="provider interruption"):
+        rt.main(args)
+    saved = progress(tmp_path)
+    ledger = TournamentProgress(
+        path=tmp_path / "tournament-progress.json",
+        report_path=tmp_path / "tournament-eval-report.json",
+        output_dir=tmp_path,
+        configuration=saved.configuration,
+        fingerprint=saved.fingerprint,
+        seeds=saved.seeds,
+        resume=True,
+        force=False,
+    )
+    attempt = ledger.record.attempts[0]
+    known = (attempt.cost_usd, attempt.input_tokens, attempt.output_tokens)
+    known_hashes = attempt.hashes.copy()
+    assert all(known)
+    path = tmp_path / attempt.replay
+    original = path.read_bytes()
+    if damage == "missing":
+        path.unlink()
+    elif damage == "empty":
+        path.write_bytes(b"")
+    else:
+        # A valid tick prefix still cannot erase the checkpointed paid call.
+        path.write_bytes(original.splitlines(keepends=True)[0])
+    with pytest.raises(ValueError, match="[Uu]sage.*unresolved"):
+        ledger.capture(attempt, error="interrupted capture")
+    assert (attempt.cost_usd, attempt.input_tokens, attempt.output_tokens) == known
+    assert attempt.hashes == known_hashes
+    assert not attempt.accounting_complete
+    assert attempt.status == "interrupted"
+    ledger.save()
+    with pytest.raises(ValueError, match="[Uu]sage.*unresolved"):
+        ledger.totals()
+    with pytest.raises(ValueError, match="[Uu]sage.*unresolved"):
+        ledger.start(attempt.seed, retry=True)
+    assert not (tmp_path / ".tournament-attempts").exists()
+    # Restoring the actual evidence resolves accounting without inventing usage.
+    path.write_bytes(original)
+    restored = TournamentProgress(
+        path=ledger.path,
+        report_path=ledger.report_path,
+        output_dir=tmp_path,
+        configuration=saved.configuration,
+        fingerprint=saved.fingerprint,
+        seeds=saved.seeds,
+        resume=True,
+        force=False,
+    )
+    assert restored.totals() == known
+    assert restored.record.attempts[0].accounting_complete
+
+
+def test_capture_refuses_recording_changes_during_inspection(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    assert rt.main(arguments(tmp_path, games=1)) == 0
+    saved = progress(tmp_path)
+    ledger = TournamentProgress(
+        path=tmp_path / "tournament-progress.json",
+        report_path=tmp_path / "tournament-eval-report.json",
+        output_dir=tmp_path,
+        configuration=saved.configuration,
+        fingerprint=saved.fingerprint,
+        seeds=saved.seeds,
+        resume=True,
+        force=False,
+    )
+    attempt = ledger.record.attempts[0]
+    known_hashes = attempt.hashes.copy()
+    original_load = ledger._load_game
+
+    def change_after_load(candidate: Attempt) -> GameReport | None:
+        game = original_load(candidate)
+        path = tmp_path / candidate.replay
+        path.write_bytes(path.read_bytes() + b"\n")
+        return game
+
+    monkeypatch.setattr(ledger, "_load_game", change_after_load)
+    with pytest.raises(ValueError, match="changed during usage inspection"):
+        ledger.capture(attempt)
+    assert attempt.hashes == known_hashes
+    assert not attempt.accounting_complete
+
+
+@pytest.mark.parametrize("missing", [False, True])
+def test_missing_or_empty_crashed_attempt_refuses_continuation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, missing: bool
+) -> None:
+    provider = PaidProvider()
+    install_paid_run(monkeypatch, provider)
+    args = arguments(tmp_path, games=1)
+    with pytest.raises(RuntimeError, match="provider interruption"):
+        rt.main(args)
+    saved = progress(tmp_path)
+    attempt = saved.attempts[0]
+    assert attempt.input_tokens > 0
+    # Reproduce a killed process before its checkpoint, followed by deletion
+    # or truncation of its only usage evidence. No trustworthy zero is possible.
+    attempt.status = "running"
+    attempt.hashes = {}
+    attempt.game = None
+    attempt.accounting_complete = False
+    attempt.cost_usd = 0.0
+    attempt.input_tokens = 0
+    attempt.output_tokens = 0
+    replay = tmp_path / attempt.replay
+    if missing:
+        replay.unlink()
+    else:
+        replay.write_bytes(b"")
+    (tmp_path / "tournament-progress.json").write_text(saved.model_dump_json())
+    prior_calls = provider.calls
+    provider.abort_at = None
+    with pytest.raises(ValueError, match="[Uu]sage.*unresolved"):
+        rt.main([*args, "--resume", "--retry-incomplete"])
+    assert provider.calls == prior_calls
+    assert not (tmp_path / ".tournament-attempts").exists()
+
+
 def test_second_seed_interruption_preserves_report_and_explicit_continuation(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -53,7 +226,15 @@ def test_second_seed_interruption_preserves_report_and_explicit_continuation(
         nonlocal calls
         calls += 1
         if calls == 2:
-            raise KeyboardInterrupt("injected interruption")
+            append_tick = ReplayLog.record_tick
+
+            def interrupt_tick(log: ReplayLog, *args: Any, **kwargs: Any) -> None:
+                append_tick(log, *args, **kwargs)
+                raise KeyboardInterrupt("injected interruption")
+
+            with monkeypatch.context() as patch:
+                patch.setattr(ReplayLog, "record_tick", interrupt_tick)
+                return original(game)
         return original(game)
 
     monkeypatch.setattr(HeadlessGame, "run", interrupt_second)
@@ -64,8 +245,9 @@ def test_second_seed_interruption_preserves_report_and_explicit_continuation(
     saved = progress(tmp_path)
     assert [a.status for a in saved.attempts] == ["finished", "interrupted"]
     report = json.loads((tmp_path / "tournament-eval-report.json").read_text())
-    assert len(report["report"]["games"]) == 1
+    assert len(report["report"]["games"]) == 2
     assert report["report"]["games"][0]["completion_status"] == "tick_limited"
+    assert report["report"]["games"][1]["completion_status"] == "unfinished"
     with pytest.raises(ValueError, match="retry-incomplete"):
         rt.main([*args, "--resume"])
     assert calls == 2

@@ -2147,7 +2147,7 @@ class HeadlessGame:
         # resource as acquired, so setup and loop failures close every handle.
         with prepare_recording_paths(
             replay_path, self._audit_log_path, force=self._force
-        ) as begin_recording:
+        ):
             with ExitStack() as resources:
                 replay = resources.enter_context(
                     ReplayLog(
@@ -2168,7 +2168,6 @@ class HeadlessGame:
                     temporal_observations=replay.temporal_observations,
                 )
                 resources.callback(observation_service.close)
-                begin_recording()
                 final_state, outcome = self._run_loop(
                     state=state,
                     observation_service=observation_service,

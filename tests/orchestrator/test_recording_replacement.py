@@ -23,6 +23,8 @@ from orchestrator.game import (
     build_default_meeting_runner,
 )
 from orchestrator.replay import ReplayLog, read_all_entries, read_replay_entries
+from orchestrator.recording import prepare_recording_paths
+from orchestrator.run_limits import RunDeadline, RunDeadlineExceeded
 from orchestrator.scheduler import TickScheduler
 
 
@@ -50,6 +52,7 @@ def _game(
     force: bool = False,
     fail_meeting: bool = False,
     agent_factory: AgentFactory | None = None,
+    deadline: RunDeadline | None = None,
 ) -> HeadlessGame:
     provider = _FailingProvider() if fail_meeting else FakeProvider()
     return HeadlessGame(
@@ -63,11 +66,106 @@ def _game(
         scheduler=TickScheduler(max_ticks=max_ticks),
         meeting_runner=build_default_meeting_runner(llm_client=provider),
         force=force,
+        deadline=deadline,
     )
 
 
 def _audit_path(replay: Path) -> Path:
     return replay.with_name(f"{replay.stem}.audit.jsonl")
+
+
+def test_deadline_before_first_output_restores_previous_pair(tmp_path: Path) -> None:
+    replay = tmp_path / "replay.jsonl"
+    audit = _audit_path(replay)
+    _game(replay).run()
+    before = _snapshot((replay, audit))
+    with pytest.raises(RunDeadlineExceeded):
+        _game(replay, force=True, deadline=RunDeadline(0.0)).run()
+    assert _snapshot((replay, audit)) == before
+    assert set(tmp_path.iterdir()) == {replay, audit}
+
+
+@pytest.mark.parametrize("bytes_written", [b"", b"partial audit"])
+@pytest.mark.parametrize("buffered", [False, True])
+def test_first_audit_write_failure_uses_actual_bytes_as_replacement_boundary(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    bytes_written: bytes,
+    buffered: bool,
+) -> None:
+    replay = tmp_path / "replay.jsonl"
+    audit = _audit_path(replay)
+    _game(replay).run()
+    before = _snapshot((replay, audit))
+
+    def fail_write(log: ObservationAuditLog, packet: ObservationPacket) -> None:
+        # A partial low-level write is still evidence, even without a full row.
+        if buffered:
+            log._handle = audit.open("w", encoding="utf-8")
+            log._handle.write(bytes_written.decode())
+            assert audit.stat().st_size == 0
+        else:
+            audit.write_bytes(bytes_written)
+        raise OSError("injected first audit write failure")
+
+    monkeypatch.setattr(ObservationAuditLog, "record_packet", fail_write)
+    with pytest.raises(OSError, match="first audit write failure"):
+        _game(replay, force=True).run()
+    if bytes_written:
+        assert not replay.exists()
+        assert audit.read_bytes() == bytes_written
+        assert set(tmp_path.iterdir()) == {audit}
+    else:
+        assert _snapshot((replay, audit)) == before
+        assert set(tmp_path.iterdir()) == {replay, audit}
+
+
+@pytest.mark.parametrize("existing", ["replay", "audit", "neither", "both"])
+@pytest.mark.parametrize("existing_bytes", [b"", b"prior evidence"])
+def test_zero_byte_rollback_restores_original_absence_and_existing_empty_files(
+    tmp_path: Path, existing: str, existing_bytes: bytes
+) -> None:
+    replay = tmp_path / "replay.jsonl"
+    audit = _audit_path(replay)
+    for name, path in (("replay", replay), ("audit", audit)):
+        if existing in {name, "both"}:
+            path.write_bytes(existing_bytes)
+    before = _snapshot((replay, audit))
+    with pytest.raises(RuntimeError, match="zero-byte failure"):
+        with prepare_recording_paths(replay, audit, force=True):
+            replay.touch()
+            audit.touch()
+            raise RuntimeError("injected zero-byte failure")
+    assert _snapshot((replay, audit)) == before
+    assert set(tmp_path.iterdir()) == {
+        path for path, content in before.items() if content is not None
+    }
+
+
+def test_empty_output_cleanup_failure_preserves_old_bytes_and_original_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    replay = tmp_path / "replay.jsonl"
+    audit = _audit_path(replay)
+    replay.write_bytes(b"prior replay")
+    original_error = RuntimeError("recording failed before writing")
+    cleanup_error = PermissionError("empty audit could not be removed")
+    original_unlink = Path.unlink
+
+    def refuse_audit(path: Path, *args: Any, **kwargs: Any) -> None:
+        if path == audit:
+            raise cleanup_error
+        original_unlink(path, *args, **kwargs)
+
+    with pytest.raises(BaseExceptionGroup) as caught:
+        with prepare_recording_paths(replay, audit, force=True):
+            audit.touch()
+            monkeypatch.setattr(Path, "unlink", refuse_audit)
+            raise original_error
+    assert caught.value.exceptions == (original_error, cleanup_error)
+    assert str(audit) in str(caught.value)
+    assert replay.read_bytes() == b"prior replay"
+    assert audit.read_bytes() == b""
 
 
 def _packets(path: Path) -> tuple[ObservationPacket, ...]:

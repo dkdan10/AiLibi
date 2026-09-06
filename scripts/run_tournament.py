@@ -1207,7 +1207,11 @@ def main(argv: list[str] | None = None) -> int:
         for seed in seeds
         for suffix in ("", ".audit")
     )
-    protected_paths = (*recording_paths, args.output_dir / ".tournament-attempts")
+    protected_paths = (
+        *recording_paths,
+        *args.output_dir.glob("replay-seed-*.jsonl"),
+        args.output_dir / ".tournament-attempts",
+    )
     preflight_report_output(report_output, protected_paths)
     progress_output = (
         args.progress_output or args.output_dir / "tournament-progress.json"
@@ -1402,7 +1406,7 @@ def main(argv: list[str] | None = None) -> int:
                 tactical_policy_stamp=tactical_policy_stamp,
             )
 
-    progress.publish()
+    progress.save()
     for seed in seeds:
         previous = progress.latest(seed)
         if previous is not None and previous.status == "finished":
