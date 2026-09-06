@@ -173,6 +173,8 @@ from orchestrator.game import (
 from orchestrator.observation_delivery import ingest_event_observations_for_memories
 from orchestrator.recording_fingerprint import recording_fingerprint
 from orchestrator.replay import (
+    recorded_experiment_config,
+    recorded_testimony_shapes,
     TOGGLEABLE_SUBSTRATE_FLAG_KEYS,
     AbortedMeetingReplayEntry,
     ActionDisposition,
@@ -197,6 +199,8 @@ from orchestrator.replay import (
     recorded_temporal_observations,
     substrate_stamp_mismatches,
 )
+from agents.memory.evidence_context import ingest_public_meeting_roster
+from orchestrator.boundary import public_map_from_engine_map
 from orchestrator.seeder import seed_initial_state
 from orchestrator.replay_integrity import ReplayIntegrityError, ReplayIntegrityValidator
 
@@ -1333,6 +1337,8 @@ class ReplayLoader:
         game_id = _game_id_for_seed(seed)
         entries = read_all_entries(path)
         integrity = ReplayIntegrityValidator(entries, game_id=game_id)
+        experiment = recorded_experiment_config(entries)
+        testimony_shapes = recorded_testimony_shapes(entries)
         temporal = recorded_temporal_observations(entries)
         # Honor the stamped substrate (Task 14.7): the memory reconstruction
         # below re-derives under the active substrate (the four 13.5 levers
@@ -1418,7 +1424,15 @@ class ReplayLoader:
                 temporal_observations=temporal,
             )
         if collect_memory:
-            memories = {pid: AgentMemory() for pid in initial_state.players}
+            memories = {
+                pid: AgentMemory(
+                    evidence_reasoning_version=(
+                        experiment.evidence_reasoning_version if experiment else None
+                    ),
+                    public_map=public_map_from_engine_map(self._game_map),
+                )
+                for pid in initial_state.players
+            }
 
         # Finding 1 (DESIGN.md §3.1, §11.4): ReplayLog.record_tick snapshots
         # state AFTER advance_tick, so the recorded tick 0 already reflects the
@@ -1471,7 +1485,14 @@ class ReplayLoader:
                                 )
 
                 actions = _deserialize_actions(entry.actions)
-                state, events = advance_tick(state, actions, game_map=self._game_map)
+                state, events = advance_tick(
+                    state,
+                    actions,
+                    game_map=self._game_map,
+                    redistribution_policy=experiment.redistribution_policy
+                    if experiment
+                    else "lowest_id",
+                )
                 actual = _state_hash(state)
                 if actual != entry.state_hash:
                     raise ReplayStateMismatchError(
@@ -1571,6 +1592,25 @@ class ReplayLoader:
                     # retrievable; their memory is frozen at death (perception
                     # stops ingesting once they are dead).
                     for pid in sorted(state.players):
+                        if state.players[pid].alive:
+                            ingest_public_meeting_roster(
+                                memories[pid],
+                                tick=state.tick,
+                                living_ids=tuple(
+                                    sorted(
+                                        p
+                                        for p, player in state.players.items()
+                                        if player.alive
+                                    )
+                                ),
+                                dead_ids=tuple(
+                                    sorted(
+                                        p
+                                        for p, player in state.players.items()
+                                        if not player.alive
+                                    )
+                                ),
+                            )
                         memory_views[(meeting_id, pid)] = self._agent_memory_view(
                             agent_id=pid,
                             tick=entry.tick,
@@ -1587,6 +1627,12 @@ class ReplayLoader:
                     result,
                     game_map=self._game_map,
                     triggering_body_id=body_id,
+                    redistribution_policy=experiment.redistribution_policy
+                    if experiment
+                    else "lowest_id",
+                    meeting_reset=experiment.meeting_reset
+                    if experiment
+                    else "preserve",
                 )
                 after = _state_hash(state)
                 if after != meeting_entry.state_hash_after:
@@ -1657,7 +1703,13 @@ class ReplayLoader:
                     # uses, so the live and replay reconstructions are
                     # identical. Memory-side only -- engine state and its hash
                     # checks are untouched.
-                    statements = derive_reported_testimony(result)
+                    statements = derive_reported_testimony(
+                        result,
+                        testimony_shapes=testimony_shapes,
+                        evidence_reasoning_version=experiment.evidence_reasoning_version
+                        if experiment is not None
+                        else None,
+                    )
                     for pid in sorted(state.players):
                         if not state.players[pid].alive:
                             continue
@@ -2945,28 +2997,9 @@ def _turn_view(turn: MeetingTurn) -> TurnView:
 
 
 def _contradiction_view(contradiction: ContradictionRef) -> ContradictionView:
-    # Lift the weak/strong class out of the free-text ``description`` marker via
-    # the canonical predicate (imported, never re-implemented) so the meeting
-    # view can draw weak=dashed / strong=solid without re-parsing client-side.
-    # ``kind`` passes through verbatim -- the Task 13.4 ``alibi_vs_physical`` kind
-    # a recorded ``MeetingResult`` carries (the manager persists
-    # ``detect_contradictions`` at close) renders like the other alibi kinds.
-    # Task 15.4.1 teaches the view layer the fourth kind: the Task 15.4
-    # ``vent_sighting`` role-proving flag mirrors through here like the others.
-    # It is always STRONG (the grounding chokepoint is the precision gate, so it
-    # carries no weak marker), which ``is_weak_contradiction`` resolves below
-    # (no ``vent_sighting`` special-case is needed -- the predicate is
-    # marker-based). Committed v4 replays predate the kind and never carry it.
-    # What the kind no longer shares with the others is how it RENDERS -- see
-    # the taxonomy below.
-    #
-    # Task 19.11: the evidence TAXONOMY derives here too, from the same recorded
-    # fields -- ``classify_evidence`` is the one place the rules live, and it is
-    # fail-loud (an unknown kind raises ``UnclassifiableEvidenceError`` rather
-    # than defaulting to "contradiction", which is exactly how a grounded vent
-    # proof came to render as ``p-X ↔ p-X``). ``weak`` is passed in rather than
-    # re-derived inside the classifier so the marker predicate stays
-    # single-sourced beside the marker writer in ``meetings.transcript``.
+    # The canonical predicate reads typed evidence_band on current recordings
+    # and the historical description marker only when that field is absent.
+    # Project its decision once; the browser never reparses evidence prose.
     weak = is_weak_contradiction(contradiction)
     return ContradictionView(
         contradiction_id=contradiction.contradiction_id,

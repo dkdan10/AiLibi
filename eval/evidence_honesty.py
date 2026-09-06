@@ -1362,7 +1362,9 @@ def _fold_meeting_into_memories(
     """
 
     evidence = extract_belief_evidence(walk_event.result)
-    statements = derive_reported_testimony(walk_event.result)
+    statements = derive_reported_testimony(
+        walk_event.result, testimony_shapes=walk_event.testimony_shapes
+    )
     for pid in sorted(walk_event.state.players):
         if not walk_event.state.players[pid].alive:
             continue

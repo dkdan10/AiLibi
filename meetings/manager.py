@@ -112,13 +112,14 @@ from llm.client import LLMClient, LLMResponse
 from llm.provider import LLMCallFailure, extract_parse_failure
 from meetings.constants import (
     DEFAULT_SKIP_CONFIDENCE_THRESHOLD,
-    testimony_shapes_enabled,
 )
 from meetings.corroboration import (
     MeetingTestimonyLedger,
     build_testimony_ledger,
     corroboration_discipline_enabled,
 )
+from meetings.evidence_profile import MeetingEvidenceProfile
+from meetings.rebuttal import select_bounded_rebuttal
 from meetings.render_contract import (
     BodyDiscoveryRecord,
     PromptRenderInputs,
@@ -979,6 +980,7 @@ class MeetingManager:
         config: MeetingConfig | None = None,
         reporter_reasoning: bool | None = None,
         corroboration_discipline: bool | None = None,
+        evidence_profile: MeetingEvidenceProfile | None = None,
     ) -> None:
         if config is None:
             config = MeetingConfig()
@@ -1010,6 +1012,7 @@ class MeetingManager:
         self._statement_prompt = statement_prompt
         self._vote_prompt = vote_prompt
         self._config = config
+        self._evidence_profile = evidence_profile or MeetingEvidenceProfile()
         # The reporter-voice lever, BOUND AT CONSTRUCTION when the caller
         # resolves it (``build_default_meeting_runner`` does, from the same
         # ``env`` that picks the recorded ``prompt_versions``). Binding here is
@@ -1267,6 +1270,7 @@ class MeetingManager:
                 vent_witness_records=vent_witness_records,
                 move_witness_records=move_witness_records,
                 sighting_records=sighting_records,
+                evidence_reasoning_version=self._evidence_profile.evidence_reasoning_version,
             )
             reply_turn = await self._collect_turn(
                 meeting_id=meeting_id,
@@ -1303,6 +1307,7 @@ class MeetingManager:
                 vent_witness_records=vent_witness_records,
                 move_witness_records=move_witness_records,
                 sighting_records=sighting_records,
+                evidence_reasoning_version=self._evidence_profile.evidence_reasoning_version,
             )
             opt_in_turn = await self._collect_turn(
                 meeting_id=meeting_id,
@@ -1341,6 +1346,7 @@ class MeetingManager:
                 vent_witness_records=vent_witness_records,
                 move_witness_records=move_witness_records,
                 sighting_records=sighting_records,
+                evidence_reasoning_version=self._evidence_profile.evidence_reasoning_version,
             )
             roll_call_turn = await self._collect_turn(
                 meeting_id=meeting_id,
@@ -1359,6 +1365,38 @@ class MeetingManager:
             )
             turns.append(roll_call_turn)
             spoken.add(roll_call_id)
+
+        if self._evidence_profile.bounded_rebuttal_version == 1:
+            transcript_so_far = MeetingTranscript(turns=tuple(turns))
+            opportunity = select_bounded_rebuttal(transcript_so_far, living_ids=roster)
+            if opportunity is not None:
+                prior = next(
+                    turn for turn in turns if turn.turn_id == opportunity.reply_to
+                )
+                contradictions_so_far = detect_contradictions(
+                    transcript_so_far,
+                    roster=roster,
+                    vent_witness_records=vent_witness_records,
+                    move_witness_records=move_witness_records,
+                    sighting_records=sighting_records,
+                    evidence_reasoning_version=self._evidence_profile.evidence_reasoning_version,
+                )
+                response = await self._collect_turn(
+                    meeting_id=meeting_id,
+                    trigger=trigger,
+                    participant=by_id[opportunity.speaker],
+                    living_ids=roster,
+                    dead_ids=dead_ids,
+                    render_inputs=render_inputs,
+                    render_reporter_id=render_reporter_id,
+                    turn_index=len(turns),
+                    turn_kind="reply",
+                    reply_to=prior.turn_id,
+                    prior_turn=prior,
+                    transcript_so_far=transcript_so_far,
+                    contradictions=contradictions_so_far,
+                )
+                turns.append(response)
 
         transcript = MeetingTranscript(turns=tuple(turns))
 
@@ -1387,6 +1425,7 @@ class MeetingManager:
             vent_witness_records=vent_witness_records,
             move_witness_records=move_witness_records,
             sighting_records=sighting_records,
+            evidence_reasoning_version=self._evidence_profile.evidence_reasoning_version,
         )
         # The VOUCH half of the sighting channel is still not threaded here.
         # Detection above receives the per-speaker mapping (grounding a spoken
@@ -3995,7 +4034,7 @@ def extract_belief_evidence(
 
 def _reported_statement_sort_key(
     statement: ReportedStatement,
-) -> tuple[PlayerId, str, PlayerId, int, int, str]:
+) -> tuple[PlayerId, str, PlayerId, int, int, str, str, str]:
     """Total order over reported statements for replay-deterministic output.
 
     Every component is concrete (``None`` ticks/room collapse to a sentinel),
@@ -4010,6 +4049,8 @@ def _reported_statement_sort_key(
         statement.from_tick if statement.from_tick is not None else -1,
         statement.to_tick if statement.to_tick is not None else -1,
         statement.room if statement.room is not None else "",
+        statement.from_room or "",
+        statement.source_event_id or "",
     )
 
 
@@ -4060,7 +4101,8 @@ def derive_meeting_outcome_summary(result: MeetingResult) -> MeetingOutcomeSumma
 def derive_reported_testimony(
     result: MeetingResult,
     *,
-    env: Mapping[str, str] | None = None,
+    testimony_shapes: bool = False,
+    evidence_reasoning_version: Literal[1] | None = None,
 ) -> tuple[ReportedStatement, ...]:
     """Reduce a resolved meeting to its public reported testimony (Task 13.5.2).
 
@@ -4086,12 +4128,11 @@ def derive_reported_testimony(
     mints no evidence -- the STRONG ``vent_sighting`` flag is a separate,
     grounded channel.
 
-    Under the ``testimony_shapes`` lever (default OFF,
-    :func:`meetings.constants.testimony_shapes_enabled`, resolved ONCE here from
-    ``env``) three more spoken shapes survive:
+    With the explicitly bound ``testimony_shapes`` option, three more spoken
+    shapes survive:
     :class:`~meetings.schemas.WhereaboutsClaim` as a ``whereabouts``
     self-placement, :class:`~meetings.schemas.SawMoveObservation` as a
-    ``saw_move`` carrying its DESTINATION placement alone, and
+    ``saw_move`` carrying its destination placement, and
     :class:`~meetings.schemas.SawKillObservation` as a ``saw_kill``. They mint no
     evidence either. With the lever OFF the returned tuple is produced by
     exactly the code that produced it before the lever existed, which is what
@@ -4099,6 +4140,11 @@ def derive_reported_testimony(
     recording's substrate stamp carries the lever's state
     (``orchestrator.replay.SUBSTRATE_FLAG_KEYS``), so a load-time re-derivation
     can never run a slate the recording did not.
+
+    Evidence reasoning version 1 retains the transcript event identity on each
+    statement and the stated origin on a movement. Both endpoints retain the
+    spoken tick; this metadata never upgrades reported speech to first-hand
+    evidence. The absent version preserves the earlier reduction bytes.
 
     Speaker-gated; subject gating deferred to ingest (Codex P2, Task 13.5.2):
     ``roster`` is the meeting's living-participant set read off the recorded
@@ -4123,14 +4169,15 @@ def derive_reported_testimony(
     :func:`apply_meeting_evidence_rules`).
     """
 
-    shapes_on = testimony_shapes_enabled(env)
+    shapes_on = testimony_shapes
     roster = frozenset(ballot.voter for ballot in result.ballots)
     statements: list[ReportedStatement] = []
     for turn in result.transcript.turns:
         speaker = turn.speaker
         if speaker not in roster:
             continue
-        for observation in turn.observations:
+        for index, observation in enumerate(turn.observations):
+            before = len(statements)
             if isinstance(observation, SawPlayerObservation):
                 statements.append(
                     ReportedStatement(
@@ -4192,7 +4239,17 @@ def derive_reported_testimony(
                         room=observation.to_room,
                     )
                 )
-        for claim in turn.claims:
+            if evidence_reasoning_version == 1 and len(statements) > before:
+                statements[-1] = statements[-1].model_copy(
+                    update={
+                        "source_event_id": f"turn:{turn.turn_id}:obs:{index}",
+                        "from_room": observation.from_room
+                        if isinstance(observation, SawMoveObservation)
+                        else None,
+                    }
+                )
+        for index, claim in enumerate(turn.claims):
+            before = len(statements)
             if isinstance(claim, AlibiClaim):
                 statements.append(
                     ReportedStatement(
@@ -4221,6 +4278,12 @@ def derive_reported_testimony(
                         from_tick=claim.on_tick,
                         to_tick=claim.on_tick,
                     )
+                )
+            if evidence_reasoning_version == 1 and len(statements) > before:
+                statements[-1] = statements[-1].model_copy(
+                    update={
+                        "source_event_id": f"turn:{turn.turn_id}:claim:{index}",
+                    }
                 )
     return tuple(sorted(statements, key=_reported_statement_sort_key))
 

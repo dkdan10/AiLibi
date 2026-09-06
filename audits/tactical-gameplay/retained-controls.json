@@ -1,0 +1,175 @@
+{
+  "anti_oscillation": {
+    "comparisons": [
+      {
+        "baseline_trajectory": "719eac75eb805591d96f43942585cb19836d9eaca6384ec7dc35d03115cb639a",
+        "candidate_trajectory": "719eac75eb805591d96f43942585cb19836d9eaca6384ec7dc35d03115cb639a",
+        "matches_final_baseline_trajectory": true,
+        "players": 4,
+        "same_counts": true,
+        "same_trajectory": true,
+        "seed": 1000
+      },
+      {
+        "baseline_trajectory": "b1e31c24d33205c2cb9fafae70dca4fb27bae405a0763096cc2d33af5bf7e135",
+        "candidate_trajectory": "b1e31c24d33205c2cb9fafae70dca4fb27bae405a0763096cc2d33af5bf7e135",
+        "matches_final_baseline_trajectory": true,
+        "players": 4,
+        "same_counts": true,
+        "same_trajectory": true,
+        "seed": 1001
+      },
+      {
+        "baseline_trajectory": "3765179512bff68c3174da9d1b066cca1b7239de1d92f556ad4d74370b462038",
+        "candidate_trajectory": "3765179512bff68c3174da9d1b066cca1b7239de1d92f556ad4d74370b462038",
+        "matches_final_baseline_trajectory": true,
+        "players": 4,
+        "same_counts": true,
+        "same_trajectory": true,
+        "seed": 1002
+      },
+      {
+        "baseline_trajectory": "fbd62314e37ae071e84187813473ee87f3e1ca46f739648b87356698e71579bd",
+        "candidate_trajectory": "fbd62314e37ae071e84187813473ee87f3e1ca46f739648b87356698e71579bd",
+        "matches_final_baseline_trajectory": true,
+        "players": 4,
+        "same_counts": true,
+        "same_trajectory": true,
+        "seed": 1003
+      },
+      {
+        "baseline_trajectory": "7cb093da1920e583433bfb6a1e655d2d1c7257f86e528a4b3c7d83c4176936f7",
+        "candidate_trajectory": "7cb093da1920e583433bfb6a1e655d2d1c7257f86e528a4b3c7d83c4176936f7",
+        "matches_final_baseline_trajectory": true,
+        "players": 4,
+        "same_counts": true,
+        "same_trajectory": true,
+        "seed": 1004
+      },
+      {
+        "baseline_trajectory": "97e89cfb6c3116ad8d1b73735cdad690cbc94bdfb0c9db2debc48866febd6211",
+        "candidate_trajectory": "97e89cfb6c3116ad8d1b73735cdad690cbc94bdfb0c9db2debc48866febd6211",
+        "matches_final_baseline_trajectory": true,
+        "players": 4,
+        "same_counts": true,
+        "same_trajectory": true,
+        "seed": 1005
+      },
+      {
+        "baseline_trajectory": "0552a41631f5737114f26e4de572e4d6c62303fc0aa3fe5de9cf95e837eda29d",
+        "candidate_trajectory": "0552a41631f5737114f26e4de572e4d6c62303fc0aa3fe5de9cf95e837eda29d",
+        "matches_final_baseline_trajectory": true,
+        "players": 4,
+        "same_counts": true,
+        "same_trajectory": true,
+        "seed": 1006
+      },
+      {
+        "baseline_trajectory": "079ba7afe1ddc3f4502e148da309d2bf02345eb98af0584a553fea504711d590",
+        "candidate_trajectory": "079ba7afe1ddc3f4502e148da309d2bf02345eb98af0584a553fea504711d590",
+        "matches_final_baseline_trajectory": true,
+        "players": 4,
+        "same_counts": true,
+        "same_trajectory": true,
+        "seed": 1007
+      },
+      {
+        "baseline_trajectory": "1d47bd825018101892d538eee1f6c0bd186d50b03ac3a3abe4f5e08209fd733a",
+        "candidate_trajectory": "1d47bd825018101892d538eee1f6c0bd186d50b03ac3a3abe4f5e08209fd733a",
+        "matches_final_baseline_trajectory": true,
+        "players": 9,
+        "same_counts": true,
+        "same_trajectory": true,
+        "seed": 1000
+      },
+      {
+        "baseline_trajectory": "44b0f2af75d34270dc5c56a3bae9d91bc49aff5403f3bf1ff4f9118f8b393dcf",
+        "candidate_trajectory": "44b0f2af75d34270dc5c56a3bae9d91bc49aff5403f3bf1ff4f9118f8b393dcf",
+        "matches_final_baseline_trajectory": true,
+        "players": 9,
+        "same_counts": true,
+        "same_trajectory": true,
+        "seed": 1001
+      },
+      {
+        "baseline_trajectory": "2f2fae3948c50bb87f9de579bd3da6d74a04f270155e9eb2ec1e65234893f3d6",
+        "candidate_trajectory": "2f2fae3948c50bb87f9de579bd3da6d74a04f270155e9eb2ec1e65234893f3d6",
+        "matches_final_baseline_trajectory": true,
+        "players": 9,
+        "same_counts": true,
+        "same_trajectory": true,
+        "seed": 1002
+      },
+      {
+        "baseline_trajectory": "bc74ebfdee2869b08b93fcb185f471dc2ce07ef590d288d420e1830df7439568",
+        "candidate_trajectory": "bc74ebfdee2869b08b93fcb185f471dc2ce07ef590d288d420e1830df7439568",
+        "matches_final_baseline_trajectory": true,
+        "players": 9,
+        "same_counts": true,
+        "same_trajectory": true,
+        "seed": 1003
+      },
+      {
+        "baseline_trajectory": "d2be5f8c62df1b77fd0013ea575cd414db96c78039c620e8697868c026aac57b",
+        "candidate_trajectory": "d2be5f8c62df1b77fd0013ea575cd414db96c78039c620e8697868c026aac57b",
+        "matches_final_baseline_trajectory": true,
+        "players": 9,
+        "same_counts": true,
+        "same_trajectory": true,
+        "seed": 1004
+      },
+      {
+        "baseline_trajectory": "bfc4e98366a2ff96cf66c5d7045a67ad0edb53f094a3e501824c3bca45c37ba5",
+        "candidate_trajectory": "bfc4e98366a2ff96cf66c5d7045a67ad0edb53f094a3e501824c3bca45c37ba5",
+        "matches_final_baseline_trajectory": true,
+        "players": 9,
+        "same_counts": true,
+        "same_trajectory": true,
+        "seed": 1005
+      },
+      {
+        "baseline_trajectory": "687499872f2741c6994152cd45c653ee3cfa7ac0ced15dab5f4dfe7536fba616",
+        "candidate_trajectory": "687499872f2741c6994152cd45c653ee3cfa7ac0ced15dab5f4dfe7536fba616",
+        "matches_final_baseline_trajectory": true,
+        "players": 9,
+        "same_counts": true,
+        "same_trajectory": true,
+        "seed": 1006
+      },
+      {
+        "baseline_trajectory": "8c13173d647410a24469f47fb03b83d4309b15ef81fb148aba32977a2d4b8e66",
+        "candidate_trajectory": "8c13173d647410a24469f47fb03b83d4309b15ef81fb148aba32977a2d4b8e66",
+        "matches_final_baseline_trajectory": true,
+        "players": 9,
+        "same_counts": true,
+        "same_trajectory": true,
+        "seed": 1007
+      }
+    ],
+    "control_source_scope": "exploratory Python packages, canonical map and harness fingerprint; predates template and dependency-lock inclusion",
+    "control_source_sha256": "406fe96f2ec1c0bad24452c468f644317bf510cf77abf67b238ced6ca20a1b29",
+    "control_source_stable": true,
+    "current_control_files": [
+      "tests/agents/test_tactical_experiments.py",
+      "tests/orchestrator/test_experiment_config.py"
+    ],
+    "current_controls": [
+      "unchanged task goal reduces shortest-path distance",
+      "new repair goal permits reversal",
+      "new body permits reverse escape",
+      "unknown anti_oscillation configuration is refused"
+    ],
+    "disposition": "discarded scoped guard and accepted config field; retain baseline shortest-path behavior",
+    "final_source_sha256": "d93f9d096e4b23572915e0ab128ee4ad266420bbbc266231eb7d49322d09bbd8",
+    "implementation_retained": false,
+    "measurement_scope": "16 paired development games; no held-out or model-reasoning claim"
+  },
+  "format_version": 1,
+  "kind": "retained decisions; no adopted behavior change",
+  "world_mapping_copies": {
+    "disposition": "retain safe copies; no behavior or RNG state change",
+    "measurement_source": "development.json world_copy_control",
+    "reason": "RNG reconstruction already bypasses initialization. Reusing arbitrary mapping proxies permits external alias mutation; the measured copies preserve immutability.",
+    "source_sha256": "d93f9d096e4b23572915e0ab128ee4ad266420bbbc266231eb7d49322d09bbd8"
+  }
+}

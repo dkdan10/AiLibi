@@ -2803,16 +2803,14 @@ class TestVentWitnessRecordsAccessor:
             VentWitnessRecord(subject="p-6", room="REACTOR", tick=9),
         )
 
-    def test_heard_vent_use_grounds_nothing(self) -> None:
-        # The room-only audible channel carries no player attribution and
-        # must never mint a record (only the witnessed "vent" action stamp).
+    def test_alarm_grounds_no_vent_witness(self) -> None:
+        # A global alarm carries no player attribution; only a witnessed vent
+        # action can mint a first-hand vent record.
         from agents.perception import ingest_packet
 
         agent = self._crew_agent()
         packet = _witness_packet(agent_id="p-2", tick=5, action=None).model_copy(
-            update={
-                "audible_events": (AudibleEvent(kind="vent_use_heard", room="MEDBAY"),)
-            }
+            update={"audible_events": (AudibleEvent(kind="sabotage_alarm"),)}
         )
         ingest_packet(packet=packet, memory=agent.memory.episodic)
 

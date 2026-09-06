@@ -530,8 +530,7 @@ evidence outlives weak evidence."""
 # The action label the observation layer stamps on a ``PlayerView`` when the
 # observer *witnesses* a player using a vent (observation/service.py
 # ``_vent_observation_for_agent``). Seeing the vent is the player-attributed
-# signal Rule 4 keys on; the room-only ``vent_use_heard`` AudibleEvent carries
-# no subject and is deliberately not used.
+# signal Rule 4 keys on; unattributed sounds supply no such evidence.
 OBSERVED_VENT_ACTION: Final[str] = "vent"
 
 # The action label the observation layer stamps on a ``PlayerView`` when the
@@ -1136,9 +1135,8 @@ def apply_observation_rules(
     Rule 4 -- observed venting (``VENTING_SUSPICION_DELTA``). Venting is
     impostor-exclusive, so a *witnessed* vent is the strongest signal an agent
     can hold ("almost certain"). The witness lands as a ``PlayerView`` carrying
-    ``action == "vent"`` in ``visible_players``; the room-only
-    ``vent_use_heard`` AudibleEvent is deliberately ignored because it has no
-    player attribution and would smear suspicion across the whole room.
+    ``action == "vent"`` in ``visible_players``. Only attributed witnessing
+    supports this update; an unattributed sound supplies no subject.
 
     Witnessed kill (``WITNESSED_KILL_SUSPICION_DELTA``, Task 13.5.3 -- the
     2026-06-25 eyewitness-strength decision). A kill is even more conclusive

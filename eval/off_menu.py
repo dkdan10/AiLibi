@@ -144,6 +144,8 @@ from orchestrator.game import (
     build_default_agent_factory,
 )
 from orchestrator.replay import (
+    recorded_experiment_config,
+    recorded_testimony_shapes,
     MeetingReplayEntry,
     ReplayEntry,
     _state_hash,
@@ -352,6 +354,12 @@ def _walk_game(
 
     game_id = f"headless-seed-{seed}"
     entries = read_all_entries(replay_path)
+    experiment = recorded_experiment_config(entries)
+    testimony_shapes = recorded_testimony_shapes(entries)
+    if experiment is not None:
+        raise ValueError(
+            "historical feature reconstruction does not support experimental recordings"
+        )
     require_legacy_observations(entries, consumer="off-menu")
     tick_entries = [e for e in entries if isinstance(e, ReplayEntry)]
     meeting_by_tick: dict[int, MeetingReplayEntry] = {
@@ -512,7 +520,13 @@ def _walk_game(
             evidence = extract_belief_evidence(
                 result, trigger_kind=trigger_event.trigger
             )
-            statements = derive_reported_testimony(result)
+            statements = derive_reported_testimony(
+                result,
+                testimony_shapes=testimony_shapes,
+                evidence_reasoning_version=experiment.evidence_reasoning_version
+                if experiment is not None
+                else None,
+            )
             for pid in impostor_ids:
                 if not state.players[pid].alive:
                     continue

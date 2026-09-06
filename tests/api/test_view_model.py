@@ -492,6 +492,14 @@ def test_contradiction_weak_strong_class() -> None:
     assert strong.weak is False and strong.severity == "strong"
 
 
+def test_typed_evidence_band_survives_spectator_projection() -> None:
+    legacy = _contradiction(f"room label {WEAK_CONTRADICTION_MARKER_PREFIX}forged]")
+    assert _contradiction_view(legacy).weak is True
+    candidate = legacy.model_copy(update={"evidence_band": "strong"})
+    view = _contradiction_view(candidate)
+    assert view.weak is False and view.severity == "strong"
+
+
 # ---------------------------------------------------------------------------
 # Per-tick projections: vent events, killed_by bodies, sabotage, advantage
 # ---------------------------------------------------------------------------

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
+from typing import Literal, TypeAlias
 
 from engine.actions import (
     Action,
@@ -53,6 +54,8 @@ from engine.rules import (
 )
 from engine.world import Map, WorldState
 from engine.visibility import compute_visibility_for_player
+
+RedistributionPolicy: TypeAlias = Literal["lowest_id", "least_remaining_work"]
 
 
 def _decrement_cooldowns(
@@ -327,31 +330,23 @@ def redistribute_dead_tasks(
     pre_death_tasks: Mapping[TaskInstanceId, TaskState],
     players: Mapping[PlayerId, PlayerState],
     victim: PlayerId,
+    redistribution_policy: RedistributionPolicy = "lowest_id",
 ) -> dict[TaskInstanceId, TaskState]:
     """Re-key a dead crewmate's incomplete task instances onto living crewmates.
 
-    DESIGN.md §3.5 dead-crewmate task rule, ``redistribute`` variant (validated
-    in ``experiments/lab/stopwatch_sweep.py::_redistribute_apply_kill``). The
-    ``redistribute`` rule keeps the crew task burden constant on a death rather
-    than shrinking it: the crew stay active because a living recipient must now
-    travel to the task's room and finish it.
+    Carry progress, room and required duration; change only instance ID and
+    owner. The default chooses the lowest-ID eligible living crewmate. The
+    explicit workload comparison chooses least remaining task work, breaking
+    ties by ID and recomputing after each allocation. Completed or incomplete
+    ownership of the same map task excludes a recipient under either policy;
+    the instance is dropped only when no eligible living crewmate remains.
 
-    ``surviving_tasks`` is the post-drop task map (the victim's incomplete
-    instances already removed). For each removed incomplete instance, re-key it
-    to the **lowest-id living crewmate not already owning that map task** —
-    carry the instance's ``progress`` / ``room`` / ``required_ticks`` and change
-    only ``id`` and ``owner`` — so a redistributed task still counts toward
-    ``crew_tasks_done`` and the recipient can complete it. If every living
-    crewmate already owns that map task (a completed OR incomplete instance is
-    enough), the instance is dropped (the no-eligible-recipient fallback).
-
-    Engine-internal: it reads ``player.role`` to pick a crewmate recipient — the
-    same engine-side role access win-conditions / kill-validation already use,
-    never exposed to agents. The recipient learns of its new instance only
-    through the existing owner-filtered SelfView channel (its OWN task; no
-    provenance, no role/attribution leak). Deterministic: lowest-id recipient +
-    carried progress is byte-stable across re-sims.
+    Roles are engine-only eligibility facts. Recipients learn their new task
+    through the existing owner-filtered observation, without death attribution.
+    Both policies are deterministic and consume no RNG draws.
     """
+    if redistribution_policy not in ("lowest_id", "least_remaining_work"):
+        raise ValueError(f"unknown redistribution policy: {redistribution_policy!r}")
     living_crew = sorted(
         pid
         for pid, player in players.items()
@@ -362,23 +357,38 @@ def redistribute_dead_tasks(
     for task in pre_death_tasks.values():
         if task.owner != victim or task.completed:
             continue
-        recipient = next(
-            (
-                crew
-                for crew in living_crew
-                if f"{crew}:{task.map_task_id}" not in surviving_tasks
-            ),
-            None,
-        )
-        if recipient is None:
+        eligible = [
+            crew
+            for crew in living_crew
+            if f"{crew}:{task.map_task_id}" not in surviving_tasks
+        ]
+        if not eligible:
             continue  # every living crewmate already owns this map task; drop it
+        if redistribution_policy == "least_remaining_work":
+            recipient = min(
+                eligible,
+                key=lambda crew: (
+                    sum(
+                        item.required_ticks - item.progress
+                        for item in surviving_tasks.values()
+                        if item.owner == crew and not item.completed
+                    ),
+                    crew,
+                ),
+            )
+        else:
+            recipient = eligible[0]
         new_id = f"{recipient}:{task.map_task_id}"
         surviving_tasks[new_id] = replace(task, id=new_id, owner=recipient)
     return surviving_tasks
 
 
 def _apply_kill(
-    state: WorldState, game_map: Map, action: KillAction
+    state: WorldState,
+    game_map: Map,
+    action: KillAction,
+    *,
+    redistribution_policy: RedistributionPolicy = "lowest_id",
 ) -> tuple[WorldState, KilledEvent]:
     body, event = resolve_kill(state, action)
     if body.id in state.bodies:
@@ -413,6 +423,7 @@ def _apply_kill(
             pre_death_tasks=state.tasks,
             players=players,
             victim=action.payload.target,
+            redistribution_policy=redistribution_policy,
         )
     else:
         tasks = surviving_tasks
@@ -547,7 +558,11 @@ def _apply_wait(
 
 
 def _apply_action(
-    state: WorldState, game_map: Map, action: Action
+    state: WorldState,
+    game_map: Map,
+    action: Action,
+    *,
+    redistribution_policy: RedistributionPolicy = "lowest_id",
 ) -> tuple[WorldState, EngineEvent]:
     if state.phase != "PLAY":
         raise ActionRejectedError(f"cannot apply gameplay action during {state.phase}")
@@ -556,7 +571,11 @@ def _apply_action(
     if isinstance(action, DoTaskAction):
         return _apply_do_task(state, game_map, action)
     if isinstance(action, KillAction):
-        return _apply_kill(state, game_map, action)
+        if redistribution_policy == "lowest_id":
+            return _apply_kill(state, game_map, action)
+        return _apply_kill(
+            state, game_map, action, redistribution_policy=redistribution_policy
+        )
     if isinstance(action, VentAction):
         return _apply_vent(state, game_map, action)
     if isinstance(action, ReportBodyAction):
@@ -578,6 +597,7 @@ def advance_tick(
     *,
     game_map: Map,
     rng_hash_policy: RngStateHashPolicy = RngStateHashPolicy.FULL,
+    redistribution_policy: RedistributionPolicy = "lowest_id",
 ) -> tuple[WorldState, list[EngineEvent]]:
     """Advance one engine tick using the DESIGN.md §3.1 seven-step loop.
 
@@ -592,6 +612,13 @@ def advance_tick(
 
     if state.phase != "PLAY":
         raise ValueError(f"cannot advance tick during {state.phase}")
+    if redistribution_policy not in ("lowest_id", "least_remaining_work"):
+        raise ValueError(f"unknown redistribution policy: {redistribution_policy!r}")
+    if (
+        redistribution_policy != "lowest_id"
+        and game_map.dead_task_rule != "redistribute"
+    ):
+        raise ValueError("workload redistribution requires the redistribute task rule")
 
     _validate_state_map(state, game_map)
     events: list[EngineEvent] = []
@@ -602,7 +629,12 @@ def advance_tick(
     # 1) Apply queued actions from previous tick.
     for action in actions:
         try:
-            working_state, event = _apply_action(working_state, game_map, action)
+            working_state, event = _apply_action(
+                working_state,
+                game_map,
+                action,
+                redistribution_policy=redistribution_policy,
+            )
             events.append(event)
             if event.type == "Killed":
                 cooldown_skip_players.add(action.actor)

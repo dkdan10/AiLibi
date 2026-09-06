@@ -356,3 +356,11 @@ directory's `README.md`, which carries the tallies and the proposed routing.
   is that this document is itself held by no gate, and one of the five is a
   narration the previous close had already caught once, re-staled by the
   intervening re-record.
+
+## Cleanup measurements
+
+- [reasoning-evidence/](reasoning-evidence/) — source-bound offline engineering
+  scorecard, historical population diagnostics and explicit non-adoption limits.
+- [tactical-gameplay/](tactical-gameplay/) — independently selected tactical
+  comparisons, held-out mechanics, identity interventions and retained negative
+  controls. Scripted-provider results do not measure new model judgment.

@@ -323,13 +323,13 @@ class TestTestimonyShapesLever:
         # The OFF tuple is produced by exactly the code that produced it before
         # the lever existed: the three shapes fall through both loops, and the
         # meeting reduces to nothing at all.
-        assert derive_reported_testimony(result, env={}) == ()
-        # Unset reads the same as an explicitly empty mapping (default OFF).
+        assert derive_reported_testimony(result, testimony_shapes=False) == ()
+        # Omission is the explicit baseline profile, independent of ambient state.
         assert derive_reported_testimony(result) == ()
 
     def test_on_emits_one_statement_per_new_shape(self) -> None:
         statements = derive_reported_testimony(
-            _result_with(turns=_THREE_SHAPE_TURNS), env=_SHAPES_ON
+            _result_with(turns=_THREE_SHAPE_TURNS), testimony_shapes=True
         )
 
         by_kind = {statement.kind: statement for statement in statements}
@@ -359,7 +359,7 @@ class TestTestimonyShapesLever:
         # the arrival. Carrying the origin at ``tick - 1`` would re-open the
         # off-by-one class the shape closes.
         statements = derive_reported_testimony(
-            _result_with(turns=_THREE_SHAPE_TURNS), env=_SHAPES_ON
+            _result_with(turns=_THREE_SHAPE_TURNS), testimony_shapes=True
         )
 
         moves = [s for s in statements if s.kind == "saw_move"]
@@ -401,8 +401,8 @@ class TestTestimonyShapesLever:
             )
         )
 
-        off = derive_reported_testimony(result, env={})
-        on = derive_reported_testimony(result, env=_SHAPES_ON)
+        off = derive_reported_testimony(result, testimony_shapes=False)
+        on = derive_reported_testimony(result, testimony_shapes=True)
         assert set(off) < set(on)
         assert len(on) - len(off) == 3
 
@@ -410,9 +410,9 @@ class TestTestimonyShapesLever:
         # The module's own promise: the same recorded meeting reduces to the same
         # tuple every time, with the lever as its only other input.
         result = _result_with(turns=_THREE_SHAPE_TURNS)
-        for env in ({}, _SHAPES_ON):
-            first = derive_reported_testimony(result, env=env)
-            assert first == derive_reported_testimony(result, env=env)
+        for enabled in (False, True):
+            first = derive_reported_testimony(result, testimony_shapes=enabled)
+            assert first == derive_reported_testimony(result, testimony_shapes=enabled)
 
     def test_the_sort_key_totally_orders_a_mixed_statement_set(self) -> None:
         # A mixed set of every kind, spoken out of order, still reduces to one
@@ -453,7 +453,7 @@ class TestTestimonyShapesLever:
             ),
         )
         statements = derive_reported_testimony(
-            _result_with(turns=turns), env=_SHAPES_ON
+            _result_with(turns=turns), testimony_shapes=True
         )
 
         assert [(s.speaker, s.kind) for s in statements] == [
@@ -486,4 +486,4 @@ class TestTestimonyShapesLever:
             voters=("p-1", "p-2", "p-3"),
         )
 
-        assert derive_reported_testimony(result, env=_SHAPES_ON) == ()
+        assert derive_reported_testimony(result, testimony_shapes=True) == ()

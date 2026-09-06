@@ -20,6 +20,8 @@ from orchestrator.replay import (
     MeetingReplayEntry,
     ReplayEntry,
     ReplayLogEntry,
+    recorded_experiment_config,
+    recorded_testimony_shapes,
     recorded_temporal_observations,
 )
 
@@ -52,6 +54,11 @@ class ReplayIntegrityValidator:
             recorded_temporal_observations(entries)
         except ValueError as exc:
             self._fail("observation_version_mismatch", str(exc))
+        try:
+            recorded_experiment_config(entries)
+            recorded_testimony_shapes(entries)
+        except ValueError as exc:
+            self._fail("substrate_version_mismatch", str(exc))
         self._ticks: list[ReplayEntry] = []
         self._meetings: dict[int, MeetingReplayEntry | AbortedMeetingReplayEntry] = {}
         self._side_ids: dict[int, str] = {}

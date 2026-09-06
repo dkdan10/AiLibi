@@ -82,6 +82,11 @@ from typing import Annotated, Any, Final, Literal, NamedTuple, TextIO, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from orchestrator.experiment_config import (
+    RecordedExperimentConfig,
+    normalize_experiment_config,
+    validate_recorded_experiment_config,
+)
 from agents.memory.store import (
     AgentMemory,
     record_meeting_outcome,
@@ -244,6 +249,7 @@ class ReplayEntry(BaseModel):
     action_dispositions: tuple[ActionDisposition, ...] | None = None
     state_hash: str
     temporal_observation_version: Literal[1] | None = None
+    experiment_config: RecordedExperimentConfig | None = None
 
     @model_validator(mode="after")
     def _dispositions_cover_every_action(self) -> ReplayEntry:
@@ -557,6 +563,7 @@ class GameEndReplayEntry(BaseModel):
     # replay under a DIFFERENT ambient substrate — no silent cross-substrate
     # replay.
     substrate_flags: Mapping[str, bool] | None = None
+    experiment_config: RecordedExperimentConfig | None = None
     # The tactical-policy provenance stamp (Task 15.9; DESIGN.md §11.4; audit
     # post-phase-14-ML-planning.md §7.2-7.3). Answers "which tactical policy
     # produced these bytes" the same way ``substrate_flags`` answers "which
@@ -634,6 +641,66 @@ ReplayLogEntry: TypeAlias = Annotated[
     | FailedCallReplayEntry,
     Field(discriminator="kind"),
 ]
+
+
+def recorded_experiment_config(
+    entries: Sequence[ReplayLogEntry],
+) -> RecordedExperimentConfig | None:
+    """Resolve one immutable experimental profile, including partial recordings."""
+
+    ends = [entry for entry in entries if isinstance(entry, GameEndReplayEntry)]
+    if len(ends) > 1:
+        raise ValueError("multiple terminal experiment configurations")
+    return validate_recorded_experiment_config(
+        [
+            entry.experiment_config
+            for entry in entries
+            if isinstance(entry, ReplayEntry)
+        ],
+        terminal_config=ends[0].experiment_config if ends else None,
+        terminal_present=bool(ends),
+    )
+
+
+def require_baseline_experiments(
+    entries: Sequence[ReplayLogEntry], *, consumer: str
+) -> None:
+    """Refuse experimental runs in an instrument that implements baseline rules."""
+
+    if recorded_experiment_config(entries) is not None:
+        raise ValueError(f"{consumer} does not support experimental recordings")
+
+
+def recorded_testimony_shapes(entries: Sequence[ReplayLogEntry]) -> bool:
+    """Bind testimony reconstruction to recorded versions, never the shell.
+
+    Resolved meetings carry prompt versions even in interrupted recordings.
+    Pre-version custom/legacy meetings use the historical OFF fold. A terminal
+    stamp may identify a custom runner, but cannot contradict versioned speech.
+    """
+
+    versions = {
+        any(
+            part.endswith(".testimony_shapes")
+            for value in entry.prompt_versions.values()
+            for part in value.split("+")
+        )
+        for entry in entries
+        if isinstance(entry, MeetingReplayEntry) and entry.prompt_versions
+    }
+    if len(versions) > 1:
+        raise ValueError("testimony shape version changes between meetings")
+    flags = [
+        entry.substrate_flags
+        for entry in entries
+        if isinstance(entry, GameEndReplayEntry) and entry.substrate_flags is not None
+    ]
+    if flags:
+        stamped = flags[0].get("testimony_shapes", False)
+        if versions and stamped not in versions:
+            raise ValueError("testimony shape version disagrees with substrate stamp")
+        return stamped
+    return versions == {True}
 
 
 def recorded_temporal_observations(entries: Sequence[ReplayLogEntry]) -> bool:
@@ -1080,6 +1147,8 @@ class ReplayLog:
         tactical_policy_stamp: TacticalPolicyStamp | None = None,
         crew_tactical_policy_stamp: CrewTacticalPolicyStamp | None = None,
         temporal_observations: bool | None = None,
+        substrate_flags: Mapping[str, bool] | None = None,
+        experiment_config: RecordedExperimentConfig | None = None,
     ) -> None:
         # ``tactical_policy_stamp`` is the recorder-supplied provenance stamp
         # (Task 15.9) written onto the ``game_over`` record by
@@ -1101,6 +1170,11 @@ class ReplayLog:
             if temporal_observations is None
             else temporal_observations
         )
+        self._substrate_flags = dict(
+            substrate_flag_snapshot() if substrate_flags is None else substrate_flags
+        )
+        self._substrate_flags["temporal_observations"] = self.temporal_observations
+        self.experiment_config = normalize_experiment_config(experiment_config)
         # Assigned first so __del__ is safe even if construction raises below
         # (e.g. AlreadyExistsError on an existing path).
         self._handle: TextIO | None = None
@@ -1162,6 +1236,8 @@ class ReplayLog:
             )
         if self.temporal_observations:
             entry["temporal_observation_version"] = 1
+        if self.experiment_config is not None:
+            entry["experiment_config"] = self.experiment_config.model_dump(mode="json")
         self._append(entry)
 
     def record_meeting(
@@ -1235,14 +1311,14 @@ class ReplayLog:
             tick=tick,
             winner=winner,
             reason=reason,
-            substrate_flags={
-                **substrate_flag_snapshot(),
-                "temporal_observations": self.temporal_observations,
-            },
+            substrate_flags=self._substrate_flags,
+            experiment_config=self.experiment_config,
             tactical_policy=self._tactical_policy_stamp,
             crew_tactical_policy=self._crew_tactical_policy_stamp,
         )
         payload = entry.model_dump(mode="json")
+        if entry.experiment_config is None:
+            del payload["experiment_config"]
         # Byte-identity carve-out for the tactical-policy stamp (Task 15.9): an
         # ABSENT stamp is the FSM default and MUST record byte-identically to the
         # pre-15.9 game_over row, so the optional field is OMITTED from the JSON

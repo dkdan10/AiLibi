@@ -45,11 +45,10 @@ def evaluate_win_conditions(state: WorldState) -> WinResult | None:
     if alive_impostors == 0:
         return WinResult(winner="CREWMATES", reason="CREWMATE_EJECT")
 
-    # Dead-crewmate task rule lives in DESIGN.md §3.5 (dropped). The kill
-    # handler in engine/tick.py removes a victim's incomplete tasks, so
-    # the comparison below already counts only alive-owned tasks. Impostor
-    # parity is checked first per §3.5: a kill that simultaneously reaches
-    # parity AND drops the last incomplete task resolves as an impostor win.
+    # Kill and ejection handlers resolve incomplete tasks under the map rule:
+    # canonical redistribution reassigns them to eligible living crew, while
+    # drop removes them. Completed instances remain in either case. Parity is
+    # checked first, including when a death also removes the last unfinished task.
     #
     # Per-player re-key (DESIGN.md §3.2/§3.5): the count is over live task
     # *instances*, so the denominator scales with the roster (e.g. 9p/2i is 14

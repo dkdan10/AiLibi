@@ -53,6 +53,7 @@ from agents.memory.store import (
     record_meeting_outcome,
     render_for_prompt,
 )
+from agents.memory.evidence_context import ingest_public_meeting_roster
 from agents.perception import (
     EVENT_OWN_KILL,
     EVENT_SAW_BODY,
@@ -70,6 +71,11 @@ from agents.strategic.prompts import (
 )
 from agents.tactical.crewmate_policy import CrewmatePolicy, EmergencyPacingTracker
 from agents.tactical.impostor_policy import ImpostorPolicy
+from agents.tactical.experimental import (
+    ExperimentalCrewmatePolicy,
+    ExperimentalImpostorPolicy,
+    TacticalExperimentOptions,
+)
 from engine.actions import Action
 from engine.entities import BodyId, PlayerId, PlayerState, Role, RoomId
 from engine.events import (
@@ -78,8 +84,9 @@ from engine.events import (
     MeetingTriggeredEvent,
 )
 from engine.rng import EngineRng, RngStateHashPolicy
+from engine.meeting_reset import regroup_after_meeting
 from engine.rules import resolve_win_conditions
-from engine.tick import advance_tick, redistribute_dead_tasks
+from engine.tick import RedistributionPolicy, advance_tick, redistribute_dead_tasks
 from engine.world import Map, WorldState
 from llm.budget import GameBudget
 from llm.budgeted_client import BudgetedLLMClient
@@ -87,6 +94,7 @@ from llm.client import LLMClient, LLMResponse
 from llm.client import CallKind as _LLMCallKind
 from llm.provider import LLMCallFailure, build_default_client, extract_parse_failure
 from meetings.corroboration import corroboration_discipline_enabled
+from meetings.evidence_profile import MeetingEvidenceProfile
 from meetings.manager import (
     EMERGENCY_TRIGGER_PHRASE,
     BodyDiscoveryRecord,
@@ -119,7 +127,10 @@ from meetings.transcript import MeetingTriggerKind
 from observation.action_intent import ActionIntent
 from observation.body_ids import public_body_id
 from observation.packet import EventObservationBatch, ObservationPacket
-from observation.version import temporal_observations_enabled
+from orchestrator.experiment_config import (
+    RecordedExperimentConfig,
+    normalize_experiment_config,
+)
 from orchestrator.observation_delivery import event_observation_batches
 from observation.public_map import PublicMapView
 from observation.service import ObservationService
@@ -133,9 +144,12 @@ from orchestrator.replay import (
     CrewTacticalPolicyStamp,
     LLMCallRecord,
     ReplayLog,
+    SUBSTRATE_FLAG_KEYS,
+    TOGGLEABLE_SUBSTRATE_FLAG_KEYS,
     TacticalPolicyStamp,
     _state_hash,
     _TOGGLEABLE_LEVER_RESOLVERS,
+    substrate_flag_snapshot,
 )
 from orchestrator.scheduler import TickScheduler
 from orchestrator.run_limits import RunDeadline
@@ -1064,7 +1078,24 @@ class DefaultMeetingRunner:
         deadline: RunDeadline | None = None,
         reporter_reasoning: bool | None = None,
         corroboration_discipline: bool | None = None,
+        substrate_flags: Mapping[str, bool] | None = None,
+        evidence_profile: MeetingEvidenceProfile | None = None,
     ) -> None:
+        self.substrate_flags = dict(
+            substrate_flag_snapshot() if substrate_flags is None else substrate_flags
+        )
+        for key, override in (
+            ("reporter_reasoning", reporter_reasoning),
+            ("corroboration_discipline", corroboration_discipline),
+        ):
+            if override is not None:
+                if (
+                    substrate_flags is not None
+                    and self.substrate_flags[key] != override
+                ):
+                    raise ValueError(f"explicit {key} disagrees with substrate_flags")
+                self.substrate_flags[key] = override
+        self.evidence_profile = evidence_profile or MeetingEvidenceProfile()
         self._recording_client = _RecordingLLMClient(llm_client)
         self._deadline = deadline
         manager_client: LLMClient = (
@@ -1080,10 +1111,18 @@ class DefaultMeetingRunner:
             vote_prompt=vote_prompt,
             config=config,
             # Bound here so the lever that shapes the rendered bytes and the
-            # ``prompt_versions`` recorded beside them are ONE decision, taken
-            # once. ``None`` leaves the manager on its own per-run env read.
-            reporter_reasoning=reporter_reasoning,
-            corroboration_discipline=corroboration_discipline,
+            # ``prompt_versions`` recorded beside them are one captured choice.
+            reporter_reasoning=(
+                self.substrate_flags["reporter_reasoning"]
+                if reporter_reasoning is None
+                else reporter_reasoning
+            ),
+            corroboration_discipline=(
+                self.substrate_flags["corroboration_discipline"]
+                if corroboration_discipline is None
+                else corroboration_discipline
+            ),
+            evidence_profile=self.evidence_profile,
         )
         self._prompt_versions = dict(prompt_versions)
         self._token_budget = token_budget
@@ -1173,6 +1212,7 @@ def build_default_meeting_runner(
     prompt_versions: Mapping[str, str] | None = None,
     token_budget: int = DEFAULT_TOKEN_BUDGET,
     deadline: RunDeadline | None = None,
+    env: Mapping[str, str] | None = None,
 ) -> DefaultMeetingRunner:
     """Construct the production default meeting runner (DESIGN.md §5.1, §11.4).
 
@@ -1218,12 +1258,14 @@ def build_default_meeting_runner(
     # are byte-identical to pre-task HEAD, so committed replays + the version
     # assertions stay green with no re-record. An explicit ``prompt_versions``
     # mapping still wins (the caller pins its own provenance).
-    active_prompt_set = resolve_prompt_set()
-    renderers = build_prompt_renderers(active_prompt_set)
+    frozen_env = dict(os.environ if env is None else env)
+    frozen_flags = substrate_flag_snapshot(frozen_env)
+    active_prompt_set = resolve_prompt_set(env=frozen_env)
+    renderers = build_prompt_renderers(active_prompt_set, env=frozen_env)
     resolved_versions = (
         prompt_versions
         if prompt_versions is not None
-        else prompt_versions_for_set(active_prompt_set)
+        else prompt_versions_for_set(active_prompt_set, env=frozen_env)
     )
     # The meeting-layer levers are resolved HERE, once each, beside the versions
     # they are stamped into -- the same pairing the prompt set gets. Reading one
@@ -1231,7 +1273,7 @@ def build_default_meeting_runner(
     # rendered bytes while ``resolved_versions`` stayed frozen at what
     # construction saw, which is the render-one-stamp-another failure this whole
     # block exists to prevent.
-    resolved_reporter_reasoning = reporter_reasoning_enabled()
+    resolved_reporter_reasoning = reporter_reasoning_enabled(frozen_env)
     # The source-count arm reads its decision off the versions ACTUALLY SERVED
     # rather than off the environment a second time, so the rendered bytes and
     # the recorded ``prompt_versions`` cannot disagree even when a caller pins
@@ -1253,7 +1295,9 @@ def build_default_meeting_runner(
             arm=_corroboration_arm["vote_ballot"],
         )
     )
-    if resolved_corroboration_discipline != corroboration_discipline_enabled():
+    if resolved_corroboration_discipline != corroboration_discipline_enabled(
+        frozen_env
+    ):
         variable = f"AILIBI_{_CORROBORATION_DISCIPLINE_KEY.upper()}"
         raise ValueError(
             "Explicit prompt_versions disagree with the "
@@ -1267,7 +1311,20 @@ def build_default_meeting_runner(
             f"registry entry for the active set ({active_prompt_set!r}) or unset "
             "the variable"
         )
-    inner: LLMClient = llm_client if llm_client is not None else build_default_client()
+    testimony_arm = TESTIMONY_SHAPES_PROMPT_VERSION_SETS.get(active_prompt_set)
+    served_testimony = testimony_arm is not None and all(
+        _arm_is_served(resolved_versions, template=template, arm=arm)
+        for template, arm in testimony_arm.items()
+        if arm.endswith(".testimony_shapes")
+    )
+    if served_testimony != frozen_flags["testimony_shapes"]:
+        raise ValueError(
+            "Explicit prompt_versions disagree with AILIBI_TESTIMONY_SHAPES; "
+            "the rendered testimony arm and recording stamp must agree"
+        )
+    inner: LLMClient = (
+        llm_client if llm_client is not None else build_default_client(env=frozen_env)
+    )
     # This is the production HEADLESS recording surface, so an unspecified
     # config runs deadline-free (audit gp-2): recording must never lose a turn
     # to a wall-clock race. An explicit ``config`` is honoured unchanged, so an
@@ -1291,6 +1348,8 @@ def build_default_meeting_runner(
         reporter_reasoning=resolved_reporter_reasoning,
         corroboration_discipline=resolved_corroboration_discipline,
         token_budget=token_budget,
+        substrate_flags=frozen_flags,
+        evidence_profile=MeetingEvidenceProfile.from_environment(frozen_env),
     )
 
 
@@ -1514,6 +1573,8 @@ def apply_meeting_result(
     game_map: Map,
     triggering_body_id: BodyId | None = None,
     rng_hash_policy: RngStateHashPolicy = RngStateHashPolicy.FULL,
+    redistribution_policy: RedistributionPolicy = "lowest_id",
+    meeting_reset: Literal["preserve", "hub_with_grace"] = "preserve",
 ) -> tuple[WorldState, list[EngineEvent]]:
     """Apply a :class:`MeetingResult` to engine-owned state (DESIGN.md §3.1, §5.1).
 
@@ -1564,6 +1625,15 @@ def apply_meeting_result(
         raise ValueError(
             f"apply_meeting_result requires state.phase=='MEETING', got {state.phase!r}"
         )
+    if redistribution_policy not in ("lowest_id", "least_remaining_work"):
+        raise ValueError(f"unknown redistribution policy: {redistribution_policy!r}")
+    if (
+        redistribution_policy != "lowest_id"
+        and game_map.dead_task_rule != "redistribute"
+    ):
+        raise ValueError("workload redistribution requires the redistribute task rule")
+    if meeting_reset not in ("preserve", "hub_with_grace"):
+        raise ValueError(f"unknown meeting reset profile: {meeting_reset!r}")
 
     events: list[EngineEvent] = []
     working = state
@@ -1607,6 +1677,7 @@ def apply_meeting_result(
                 pre_death_tasks=working.tasks,
                 players=players,
                 victim=ejected_id,
+                redistribution_policy=redistribution_policy,
             )
         else:
             tasks = surviving_tasks
@@ -1644,6 +1715,9 @@ def apply_meeting_result(
             )
         )
         return game_over_state, events
+
+    if meeting_reset == "hub_with_grace":
+        working = regroup_after_meeting(working, game_map=game_map)
 
     # Advance the rng cursor one step so the per-tick rng-state
     # transition mirrors the end-of-tick advance in
@@ -1821,6 +1895,8 @@ class HeadlessGame:
         rng_hash_policy: RngStateHashPolicy = RngStateHashPolicy.FULL,
         initial_state: WorldState | None = None,
         deadline: RunDeadline | None = None,
+        experiment_config: RecordedExperimentConfig | None = None,
+        substrate_flags: Mapping[str, bool] | None = None,
     ) -> None:
         # No-replay training mode (Task 15.8.1): ``replay_path=None`` runs the
         # game through :meth:`run_unrecorded` writing NOTHING to disk (no
@@ -1916,6 +1992,48 @@ class HeadlessGame:
                     f"the game was constructed with num_impostors={num_impostors}"
                 )
         self._initial_state = initial_state
+        self._substrate_flags = (
+            dict(substrate_flags)
+            if substrate_flags is not None
+            else (
+                dict(meeting_runner.substrate_flags)
+                if isinstance(meeting_runner, DefaultMeetingRunner)
+                else substrate_flag_snapshot()
+            )
+        )
+        if (
+            set(self._substrate_flags) != set(SUBSTRATE_FLAG_KEYS)
+            or any(type(value) is not bool for value in self._substrate_flags.values())
+            or any(
+                not self._substrate_flags[key]
+                for key in set(SUBSTRATE_FLAG_KEYS)
+                - set(TOGGLEABLE_SUBSTRATE_FLAG_KEYS)
+            )
+        ):
+            raise ValueError(
+                "live substrate_flags require every registered boolean and all graduated levers ON"
+            )
+        if isinstance(
+            meeting_runner, DefaultMeetingRunner
+        ) and self._substrate_flags != dict(meeting_runner.substrate_flags):
+            raise ValueError(
+                "explicit substrate_flags disagree with DefaultMeetingRunner"
+            )
+        experiment = experiment_config or RecordedExperimentConfig()
+        if isinstance(meeting_runner, DefaultMeetingRunner):
+            profile = meeting_runner.evidence_profile
+            for key in ("evidence_reasoning_version", "bounded_rebuttal_version"):
+                recorded_version = getattr(experiment, key)
+                served_version = getattr(profile, key)
+                if recorded_version is not None and recorded_version != served_version:
+                    raise ValueError(f"experiment_config disagrees with runner {key}")
+            experiment = experiment.model_copy(
+                update={
+                    "evidence_reasoning_version": profile.evidence_reasoning_version,
+                    "bounded_rebuttal_version": profile.bounded_rebuttal_version,
+                }
+            )
+        self._experiment_config = normalize_experiment_config(experiment)
         self._deadline = deadline
         self._seed = seed
         self._game_map = game_map
@@ -2037,6 +2155,11 @@ class HeadlessGame:
                         game_id=self._game_id(),
                         tactical_policy_stamp=self._tactical_policy_stamp,
                         crew_tactical_policy_stamp=self._crew_tactical_policy_stamp,
+                        substrate_flags=self._substrate_flags,
+                        temporal_observations=self._substrate_flags[
+                            "temporal_observations"
+                        ],
+                        experiment_config=self._experiment_config,
                     )
                 )
                 observation_service = ObservationService(
@@ -2096,7 +2219,7 @@ class HeadlessGame:
         observation_service = ObservationService(
             game_map=self._game_map,
             audit_log_path=self._audit_log_path,
-            temporal_observations=temporal_observations_enabled(),
+            temporal_observations=self._substrate_flags["temporal_observations"],
         )
         agents = self._build_agents(state.players)
         trace = _EpisodeTraceCollector()
@@ -2161,12 +2284,27 @@ class HeadlessGame:
             actions = list(
                 translate_action_intents_for_tick(intents, world_state=state)
             )
+            expected_actors = {
+                pid for pid, player in state.players.items() if player.alive
+            }
+            actual_actors = {action.actor for action in actions}
+            if actual_actors != expected_actors:
+                raise ValueError(
+                    "a live tick requires one action from every living player; "
+                    f"missing={sorted(expected_actors - actual_actors)}, "
+                    f"extra={sorted(actual_actors - expected_actors)}"
+                )
             input_tick = state.tick
             state, events = advance_tick(
                 state,
                 actions,
                 game_map=self._game_map,
                 rng_hash_policy=self._rng_hash_policy,
+                redistribution_policy=(
+                    self._experiment_config.redistribution_policy
+                    if self._experiment_config is not None
+                    else "lowest_id"
+                ),
             )
             last_events = tuple(events)
             if replay is not None:
@@ -2253,6 +2391,21 @@ class HeadlessGame:
             raise RuntimeError(
                 "_run_and_apply_meeting called without a configured meeting runner"
             )
+        living_ids = tuple(
+            sorted(pid for pid, player in state.players.items() if player.alive)
+        )
+        dead_ids = tuple(
+            sorted(pid for pid, player in state.players.items() if not player.alive)
+        )
+        for pid in living_ids:
+            agent = agents[pid]
+            if isinstance(agent, TacticalAgent):
+                ingest_public_meeting_roster(
+                    agent.memory,
+                    tick=state.tick,
+                    living_ids=living_ids,
+                    dead_ids=dead_ids,
+                )
         trigger, triggering_body_id, trigger_kind = _build_meeting_trigger(
             state=state, events=events, temporal_observations=temporal_observations
         )
@@ -2285,6 +2438,16 @@ class HeadlessGame:
                 game_map=self._game_map,
                 triggering_body_id=triggering_body_id,
                 rng_hash_policy=self._rng_hash_policy,
+                redistribution_policy=(
+                    self._experiment_config.redistribution_policy
+                    if self._experiment_config is not None
+                    else "lowest_id"
+                ),
+                meeting_reset=(
+                    self._experiment_config.meeting_reset
+                    if self._experiment_config is not None
+                    else "preserve"
+                ),
             )
             # An emergency has no body report. Check before committing a
             # resolved meeting, retaining its calls if the guard rejects it.
@@ -2362,6 +2525,12 @@ class HeadlessGame:
             state=next_state,
             agents=agents,
             trigger_kind=trigger_kind,
+            testimony_shapes=self._substrate_flags["testimony_shapes"],
+            evidence_reasoning_version=(
+                self._experiment_config.evidence_reasoning_version
+                if self._experiment_config is not None
+                else None
+            ),
         )
         # Meeting-end pacing notification (Task 10.8). Runs AFTER the belief
         # fold so the emergency tracker's post-meeting over-gate baseline
@@ -2385,6 +2554,27 @@ class HeadlessGame:
         agents: dict[PlayerId, AgentInterface] = {}
         for player_id in sorted(players):
             agents[player_id] = self._agent_factory(player_id, players[player_id].role)
+            built_agent = agents[player_id]
+            if isinstance(built_agent, TacticalAgent):
+                built_agent.memory.evidence_reasoning_version = (
+                    self._experiment_config.evidence_reasoning_version
+                    if self._experiment_config is not None
+                    else None
+                )
+                built_agent.memory.public_map = self._public_map
+            if (
+                self._experiment_config is not None
+                and self._experiment_config.has_tactical_changes
+            ):
+                agent = agents[player_id]
+                expected = _tactical_experiment_options(self._experiment_config)
+                if (
+                    not isinstance(agent, TacticalAgent)
+                    or agent.tactical_experiment_options != expected
+                ):
+                    raise ValueError(
+                        "agent factory does not implement the recorded tactical experiment"
+                    )
         return agents
 
     def _build_packets(
@@ -2707,6 +2897,8 @@ def _absorb_meeting_beliefs(
     state: WorldState,
     agents: Mapping[PlayerId, AgentInterface],
     trigger_kind: MeetingTriggerKind,
+    testimony_shapes: bool = False,
+    evidence_reasoning_version: Literal[1] | None = None,
 ) -> None:
     """Fold a resolved meeting's evidence into living agents' beliefs (Task 9.8).
 
@@ -2738,7 +2930,11 @@ def _absorb_meeting_beliefs(
     # Task 14.9 (the adopted lever is the default substrate). The derivation is
     # a pure function of the recorded ``result``, identical to the replay
     # loader's, so reconstruction stays byte-identical.
-    statements: tuple[ReportedStatement, ...] = derive_reported_testimony(result)
+    statements: tuple[ReportedStatement, ...] = derive_reported_testimony(
+        result,
+        testimony_shapes=testimony_shapes,
+        evidence_reasoning_version=evidence_reasoning_version,
+    )
     for player_id in sorted(state.players):
         if not state.players[player_id].alive:
             continue
@@ -3085,6 +3281,14 @@ class TacticalAgent:
     @property
     def memory(self) -> AgentMemory:
         return self._memory
+
+    @property
+    def tactical_experiment_options(self) -> TacticalExperimentOptions | None:
+        if isinstance(
+            self._policy, (ExperimentalCrewmatePolicy, ExperimentalImpostorPolicy)
+        ):
+            return self._policy.options
+        return None
 
     def decide(
         self,
@@ -3733,6 +3937,8 @@ class TacticalAgent:
             skip_votes=skip_votes,
             roster_impostor_count=roster_impostor_count,
         )
+        if isinstance(self._policy, ExperimentalImpostorPolicy):
+            self._policy.note_meeting_concluded(dead_ids=dead_ids)
         if self._emergency_tracker is None:
             return
         self._emergency_tracker.observe_meeting_end(
@@ -3751,7 +3957,23 @@ def _infer_role_from_policy(policy: CrewmatePolicy | ImpostorPolicy) -> Role:
     return "CREWMATE"
 
 
-def build_default_agent_factory() -> AgentFactory:
+def _tactical_experiment_options(
+    config: RecordedExperimentConfig,
+) -> TacticalExperimentOptions:
+    return TacticalExperimentOptions(
+        crew_idle_policy=config.crew_idle_policy,
+        vent_exit_policy=config.vent_exit_policy,
+        post_meeting_retarget=config.post_meeting_retarget,
+        self_report=config.self_report,
+        sabotage_threshold=config.sabotage_threshold,
+        meeting_positions_preserved=config.meeting_reset == "preserve",
+    )
+
+
+def build_default_agent_factory(
+    *,
+    experiment_config: RecordedExperimentConfig | None = None,
+) -> AgentFactory:
     """Return the orchestrator's default :data:`AgentFactory`.
 
     Each constructed agent is a :class:`TacticalAgent` with the role-
@@ -3762,7 +3984,14 @@ def build_default_agent_factory() -> AgentFactory:
 
     def factory(agent_id: PlayerId, role: Role) -> AgentInterface:
         policy: CrewmatePolicy | ImpostorPolicy
-        if role == "IMPOSTOR":
+        if experiment_config is not None and experiment_config.has_tactical_changes:
+            options = _tactical_experiment_options(experiment_config)
+            policy = (
+                ExperimentalImpostorPolicy(agent_id=agent_id, options=options)
+                if role == "IMPOSTOR"
+                else ExperimentalCrewmatePolicy(agent_id=agent_id, options=options)
+            )
+        elif role == "IMPOSTOR":
             policy = ImpostorPolicy(agent_id=agent_id)
         else:
             policy = CrewmatePolicy(agent_id=agent_id)

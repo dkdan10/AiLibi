@@ -86,6 +86,8 @@ from observation.service import ObservationService
 from orchestrator.boundary import public_map_from_engine_map, translate_action_intent
 from orchestrator.game import TacticalAgent, apply_meeting_result
 from orchestrator.replay import (
+    recorded_experiment_config,
+    recorded_testimony_shapes,
     GameEndReplayEntry,
     MeetingReplayEntry,
     ReplayEntry,
@@ -435,6 +437,12 @@ def walk_corpus_game(
     public_map = public_map_from_engine_map(resolved_map)
 
     entries = read_all_entries(replay_path)
+    experiment = recorded_experiment_config(entries)
+    testimony_shapes = recorded_testimony_shapes(entries)
+    if experiment is not None:
+        raise ValueError(
+            "historical feature reconstruction does not support experimental recordings"
+        )
     require_legacy_observations(entries, consumer="anchor study")
     tick_entries = [entry for entry in entries if isinstance(entry, ReplayEntry)]
     meeting_by_tick: dict[int, MeetingReplayEntry] = {}
@@ -636,7 +644,13 @@ def walk_corpus_game(
             evidence = extract_belief_evidence(
                 result, trigger_kind=trigger_event.trigger
             )
-            statements = derive_reported_testimony(result)
+            statements = derive_reported_testimony(
+                result,
+                testimony_shapes=testimony_shapes,
+                evidence_reasoning_version=experiment.evidence_reasoning_version
+                if experiment is not None
+                else None,
+            )
             for pid in impostor_ids:
                 if not state.players[pid].alive:
                     continue

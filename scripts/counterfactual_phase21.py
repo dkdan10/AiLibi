@@ -2153,13 +2153,10 @@ def _fold_testimony(
     bound and are printed as one.
     """
 
-    # BOTH sides pass an explicit env. The reduction's default is the ambient
-    # process environment, and the lever-ON mode runs in a shell that exports the
-    # arm on purpose -- so an unqualified call would return the ON reduction and
-    # label it OFF, which is precisely the seam the committed mode's bare-shell
-    # guard protects and the ON mode necessarily gives up.
-    off = derive_reported_testimony(meeting.result, env={})
-    on = derive_reported_testimony(meeting.result, env=_TESTIMONY_SHAPES_ENV)
+    # Compare explicit historical arms of the pure reducer. Shell exports affect
+    # neither column; the newer evidence-reasoning profile remains disabled.
+    off = derive_reported_testimony(meeting.result, testimony_shapes=False)
+    on = derive_reported_testimony(meeting.result, testimony_shapes=True)
     census.off_kinds.update(statement.kind for statement in off)
     census.on_kinds.update(statement.kind for statement in on)
     listeners = frozenset(ballot.voter for ballot in meeting.result.ballots)

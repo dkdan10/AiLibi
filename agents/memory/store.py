@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
-from typing import Any, Final, TypeAlias
+from typing import Any, Final, Literal, TypeAlias
 
 from agents.memory.beliefs import (
     BODY_PROXIMITY_WINDOW_TICKS,
@@ -25,6 +25,7 @@ from agents.memory.beliefs import (
     hard_evidence_gated_suspicion,
 )
 from agents.memory.episodic import EpisodicEvent, MemoryStore
+from agents.memory.evidence_context import evidence_context_lines, publicly_dead_ids
 from agents.memory.working import (
     LastSeen,
     MeetingHistory,
@@ -37,6 +38,7 @@ from agents.perception import (
     PROVENANCE_REPORTED,
 )
 from meetings.schemas import ReportedStatement
+from observation.public_map import PublicMapView
 
 PlayerId: TypeAlias = str
 RoomId: TypeAlias = str
@@ -132,6 +134,8 @@ class AgentMemory:
     working: WorkingMemory = field(default_factory=WorkingMemory)
     beliefs: BeliefState = field(default_factory=BeliefState)
     meeting_history: MeetingHistory = field(default_factory=MeetingHistory)
+    evidence_reasoning_version: Literal[1] | None = None
+    public_map: PublicMapView | None = None
 
 
 @dataclass(frozen=True)
@@ -399,6 +403,7 @@ def render_for_prompt(
         memory.episodic,
         own_agent_id=own_agent_id,
         teammate_ids=teammate_ids,
+        evidence_reasoning_version=memory.evidence_reasoning_version,
     )
     # §6.6 roster filter (Task 10.2, audit gp-6 C-C-8): belief rows AND
     # open-contradiction lines render only for engine-witnessed player
@@ -417,6 +422,13 @@ def render_for_prompt(
     observations = _coalesce_sightings(
         observations, roster=roster, own_agent_id=own_agent_id
     )
+    if memory.evidence_reasoning_version == 1:
+        observations.extend(
+            _Observation(salience=90, tick=0, line=line)
+            for line in evidence_context_lines(
+                memory, own_agent_id=own_agent_id, teammate_ids=teammate_ids
+            )
+        )
     # Fold each first-hand observation's stable id into its line BEFORE the
     # salience sort, so ordering, tie-breaks and the token-budget arithmetic all
     # see the final bytes. RECONSTRUCTED lines (breadcrumb transitions, the
@@ -445,13 +457,18 @@ def render_for_prompt(
         teammate_ids=teammate_ids,
         body_sightings=_collect_body_sightings(memory.episodic),
     )
+    active_roster = roster
+    if memory.evidence_reasoning_version == 1 and roster is not None:
+        active_roster = roster - publicly_dead_ids(memory)
     beliefs_lines = _build_belief_lines(
         memory.beliefs,
         memory.working,
-        roster=roster,
+        roster=active_roster,
         suspicion_override=suspicion_override,
     )
-    contradiction_lines = _build_contradiction_lines(memory.beliefs, roster=roster)
+    contradiction_lines = _build_contradiction_lines(
+        memory.beliefs, roster=active_roster
+    )
     spans = _collect_self_location_spans(memory.episodic)
     trail_truncated = len(spans) > SELF_LOCATION_TRAIL_MAX_SPANS
     trail_spans = spans[-SELF_LOCATION_TRAIL_MAX_SPANS:]
@@ -676,6 +693,14 @@ def absorb_reported_testimony(
                     "from_tick": statement.from_tick,
                     "to_tick": statement.to_tick,
                     "room": statement.room,
+                    **(
+                        {
+                            "from_room": statement.from_room,
+                            "source_event_id": statement.source_event_id,
+                        }
+                        if statement.source_event_id is not None
+                        else {}
+                    ),
                     # Co-present companions, roster-gated like the subject -- the
                     # public "who was with whom" sighting evidence (Codex P2).
                     "co_present": sorted(
@@ -928,6 +953,7 @@ def _collect_movement_breadcrumbs(
     own_agent_id: str | None,
     teammate_ids: frozenset[str],
     body_sightings: tuple[tuple[str, int], ...],
+    include_moves: bool = False,
 ) -> dict[str, _Breadcrumb]:
     """Each subject's most-recent room change, from the agent's own sightings (Task 13.6).
 
@@ -952,12 +978,33 @@ def _collect_movement_breadcrumbs(
     (self-subject, teammate kill-window), so a suppressed sighting never
     contributes a breadcrumb. A subject seen in only one room (or once) yields no
     breadcrumb.
+
+    The evidence candidate also reads witnessed movement origins and
+    destinations at their source tick. It preserves the ordinary anchor and
+    never fabricates an origin sighting at the preceding tick.
     """
 
     # ``(tick, room, is_ordinary)``: the flag separates anchor candidates (ordinary
     # only) from prior-room candidates (all recorded rows).
     paths: dict[str, list[tuple[int, str, bool]]] = {}
     for event in episodic.recent(since_tick=0):
+        if include_moves and event.type == EVENT_SAW_PLAYER_MOVE:
+            subject = event.payload.get("player_id")
+            origin = event.payload.get("from_room")
+            destination = event.payload.get("to_room")
+            if (
+                isinstance(subject, str)
+                and isinstance(origin, str)
+                and isinstance(destination, str)
+                and subject != own_agent_id
+                and subject not in teammate_ids
+            ):
+                # Both endpoints belong to this witnessed transition. Never
+                # fabricate an origin observation at tick - 1.
+                paths.setdefault(subject, []).extend(
+                    [(event.tick, origin, False), (event.tick, destination, False)]
+                )
+            continue
         if event.type != _EVENT_SAW_PLAYER:
             continue
         player_id = event.payload.get("player_id")
@@ -1297,6 +1344,7 @@ def _collect_transitions(
     own_agent_id: str | None,
     teammate_ids: frozenset[str],
     body_sightings: tuple[tuple[str, int], ...],
+    preserve_suppressed_gaps: bool = False,
 ) -> list[_Observation]:
     """Within-vision entry/exit lines at the observer's OWN rooms (Task 13.9).
 
@@ -1328,6 +1376,7 @@ def _collect_transitions(
         for tick, placement in _self_placement_by_tick(episodic).items()
     }
     seen_in_own_room: dict[int, set[str]] = {}
+    suppressed_by_tick: dict[int, set[str]] = {}
     # Resume ticks of concluded meetings (recorded by ``absorb_meeting_evidence``).
     # The world changes DISCONTINUOUSLY across a meeting -- a player can be ejected
     # or otherwise removed with no gameplay movement -- and the resume tick is
@@ -1371,6 +1420,7 @@ def _collect_transitions(
             teammate_ids=teammate_ids,
             body_sightings=body_sightings,
         ):
+            suppressed_by_tick.setdefault(event.tick, set()).add(player_id)
             continue
         seen_in_own_room.setdefault(event.tick, set()).add(player_id)
 
@@ -1394,7 +1444,15 @@ def _collect_transitions(
             for victim, body_room in body_victims_by_tick.get(tick, set())
             if body_room == room
         }
+        withheld = (
+            suppressed_by_tick.get(prev_tick, set())
+            | suppressed_by_tick.get(tick, set())
+            if preserve_suppressed_gaps
+            else set()
+        )
         for subject in sorted(now_seen - prev_seen):
+            if subject in withheld:
+                continue
             transitions.append(
                 _Observation(
                     salience=_SALIENCE_TRANSITION,
@@ -1403,6 +1461,8 @@ def _collect_transitions(
                 )
             )
         for subject in sorted(prev_seen - now_seen):
+            if subject in withheld:
+                continue
             if subject in killed_in_room:
                 # Killed in place (body visible in this room/tick): a death, not a
                 # departure. The saw_body line carries the truthful testimony.
@@ -1469,6 +1529,7 @@ def _build_observations(
     *,
     own_agent_id: str | None = None,
     teammate_ids: frozenset[str] = frozenset(),
+    evidence_reasoning_version: Literal[1] | None = None,
 ) -> list[_Observation]:
     observations: list[_Observation] = []
     seen_body_ids: set[str] = set()
@@ -1480,6 +1541,7 @@ def _build_observations(
         own_agent_id=own_agent_id,
         teammate_ids=teammate_ids,
         body_sightings=body_sightings,
+        include_moves=evidence_reasoning_version == 1,
     )
     # Task 13.9 same-room enrichment, both pure reads of the existing episodic
     # ``saw_player`` log (no packet field, firewall untouched): co-presence
@@ -1497,6 +1559,7 @@ def _build_observations(
             own_agent_id=own_agent_id,
             teammate_ids=teammate_ids,
             body_sightings=body_sightings,
+            preserve_suppressed_gaps=evidence_reasoning_version == 1,
         )
     )
 
@@ -1973,7 +2036,12 @@ def _render_reported_testimony(event: EpisodicEvent) -> _Observation | None:
     elif kind == "whereabouts" and isinstance(room, str) and isinstance(from_tick, int):
         body = f"{subject} placed themselves in {room} @ tick {from_tick}"
     elif kind == "saw_move" and isinstance(room, str) and isinstance(from_tick, int):
-        body = f"saw {subject} arrive in {room} @ tick {from_tick}"
+        origin = event.payload.get("from_room")
+        body = (
+            f"saw {subject} move from {origin} to {room} @ tick {from_tick}"
+            if isinstance(origin, str)
+            else f"saw {subject} arrive in {room} @ tick {from_tick}"
+        )
     elif kind == "saw_player" and isinstance(room, str) and isinstance(from_tick, int):
         companions = event.payload.get("co_present")
         with_suffix = ""
@@ -1993,6 +2061,9 @@ def _render_reported_testimony(event: EpisodicEvent) -> _Observation | None:
         body = f"backed {subject}'s account @ tick {from_tick}"
     else:
         return None
+    source = event.payload.get("source_event_id")
+    if isinstance(source, str):
+        body += f" (reported source {source}; not your own observation)"
     return _Observation(
         salience=_SALIENCE_REPORTED_TESTIMONY,
         tick=event.tick,

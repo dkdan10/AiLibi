@@ -279,6 +279,23 @@ def test_headless_game_writes_audit_log_alongside_replay(tmp_path: Path) -> None
     assert len(audit_lines) == 4 * 3
 
 
+def test_live_loop_refuses_incomplete_dispatch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    game = HeadlessGame(
+        seed=42,
+        game_map=load_canonical_map(),
+        agent_factory=_wait_factory({}),
+        replay_path=tmp_path / "incomplete.jsonl",
+        scheduler=TickScheduler(max_ticks=1),
+    )
+    monkeypatch.setattr(game, "_collect_intents", lambda **kwargs: [])
+    with pytest.raises(ValueError, match="every living player.*missing="):
+        game.run()
+    # Refusal occurs before an engine tick or a replay tick can claim execution.
+    assert not (tmp_path / "incomplete.jsonl").exists()
+
+
 def test_headless_game_stops_when_meeting_phase_reached(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

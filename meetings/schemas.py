@@ -215,8 +215,8 @@ class SawMoveObservation(_FrozenModel):
     ``to_room``, arriving at ``tick``".
 
     The sayable form of what a witness's memory already holds. A witnessed
-    transition asserts two placements — the subject stood in ``from_room`` at
-    ``tick - 1`` and in ``to_room`` at ``tick`` — and until this shape existed a
+    transition names its origin and destination at the witnessed tick. It does
+    not assert an observation of the origin at ``tick - 1``. Before this shape, a
     witness had to re-encode it as one static
     :class:`SawPlayerObservation`, where naming the origin room places the
     subject at a tick they had already left.
@@ -234,10 +234,11 @@ class SawMoveObservation(_FrozenModel):
     speaker who can emit one.
 
     Under the ``testimony_shapes`` lever it reduces to a ``saw_move``
-    :class:`ReportedStatement` carrying that SAME single destination placement
-    (``room == to_room``, ``from_tick == to_tick == tick``), for the same
-    reason: the reduction may not mint an origin placement the detector
-    refuses to make. With the lever OFF the reduction drops the shape whole.
+    :class:`ReportedStatement` carrying that single destination placement
+    (``room == to_room``, ``from_tick == to_tick == tick``). Evidence reasoning
+    version 1 also retains the stated origin and transcript source identity,
+    without inventing an earlier observation. With the lever OFF the reduction
+    drops the shape whole.
     """
 
     type: Literal["saw_move"]
@@ -331,11 +332,9 @@ class MoveWitnessRecord(_FrozenModel):
     The vent and sighting channels' third sibling: the speaker's first-hand
     ``saw_player_move`` episodic rows, projected into the shape
     :func:`meetings.transcript.detect_contradictions` grounds a movement claim
-    against. ``tick`` is the agent-clock tick the transition RESOLVED at — the
-    subject stood in ``from_room`` at ``tick - 1`` and in ``to_room`` at
-    ``tick``, which is exactly what the rendered "You saw p-3 move from X to Y"
-    line asserts, so the typed channel and the prose the model speaks from
-    cannot drift.
+    against. ``tick`` uses the recorded observation profile's clock. The origin
+    and destination describe one transition; neither grants a separate origin
+    observation at ``tick - 1``.
 
     Grounding is the whole firewall for the movement lever: a spoken placement
     with no matching record in the SPEAKER's own channel is never re-read, so
@@ -677,6 +676,19 @@ class ReportedStatement(_FrozenModel):
     to_tick: int | None = None
     room: RoomId | None = None
     co_present: tuple[PlayerId, ...] = ()
+    from_room: RoomId | None = None
+    source_event_id: str | None = None
+
+    @model_serializer(mode="wrap")
+    def _serialize(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        """Keep historical reductions byte-identical when provenance is absent."""
+
+        data: dict[str, Any] = handler(self)
+        if self.from_room is None:
+            data.pop("from_room", None)
+        if self.source_event_id is None:
+            data.pop("source_event_id", None)
+        return data
 
 
 # ---------------------------------------------------------------------------
@@ -875,6 +887,24 @@ class ContradictionRef(_FrozenModel):
     event_b_id: str
     subjects: tuple[PlayerId, ...]
     description: str
+    evidence_band: Literal["weak", "strong"] | None = None
+
+    @model_serializer(mode="wrap")
+    def _serialize(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        """Omit the candidate's explicit band from legacy recording shapes."""
+
+        data: dict[str, Any] = handler(self)
+        if self.evidence_band is None:
+            data.pop("evidence_band", None)
+        return data
+
+    @classmethod
+    def __get_pydantic_json_schema__(
+        cls, core_schema: CoreSchema, handler: GetJsonSchemaHandler
+    ) -> JsonSchemaValue:
+        """Keep typed fields discoverable despite conditional serialization."""
+
+        return handler(_core_schema_without_serializer(core_schema))
 
 
 # ---------------------------------------------------------------------------

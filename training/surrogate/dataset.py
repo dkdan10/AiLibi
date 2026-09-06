@@ -156,6 +156,7 @@ from orchestrator.replay import (
     _state_hash,
     read_all_entries,
     require_legacy_observations,
+    require_baseline_experiments,
 )
 from orchestrator.seeder import seed_initial_state
 
@@ -988,6 +989,7 @@ def _walk_game(
     game_id = f"headless-seed-{seed}"
     entries = read_all_entries(replay_path)
     require_legacy_observations(entries, consumer="frozen surrogate meeting table")
+    require_baseline_experiments(entries, consumer="frozen surrogate meeting table")
     tick_entries = [entry for entry in entries if isinstance(entry, ReplayEntry)]
     meeting_by_tick: dict[int, MeetingReplayEntry] = {
         entry.tick: entry for entry in entries if isinstance(entry, MeetingReplayEntry)

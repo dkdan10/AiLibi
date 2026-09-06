@@ -212,6 +212,8 @@ from meetings.schemas import MeetingResult
 from meetings.voting import tally_ballots
 from orchestrator.game import apply_meeting_result
 from orchestrator.replay import (
+    recorded_experiment_config,
+    recorded_testimony_shapes,
     TOGGLEABLE_SUBSTRATE_FLAG_KEYS,
     GameEndReplayEntry,
     MeetingReplayEntry,
@@ -322,6 +324,7 @@ class ReplayWalkConfig:
     verify_recorded_outcome: bool = False
     verify_chronology_and_outcome: bool = False
     supports_temporal_observations: bool = False
+    supports_experiments: bool = False
 
 
 @dataclass(frozen=True)
@@ -375,6 +378,7 @@ class MeetingApplied:
     body_id: BodyId | None
     state: WorldState
     post_events: tuple[EngineEvent, ...]
+    testimony_shapes: bool = False
 
 
 @dataclass(frozen=True)
@@ -439,6 +443,12 @@ def walk_replay(
 
     game_id = f"headless-seed-{seed}"
     entries = read_all_entries(replay_path)
+    experiment = recorded_experiment_config(entries)
+    testimony_shapes = recorded_testimony_shapes(entries)
+    if experiment is not None and not config.supports_experiments:
+        raise ValueError(
+            f"replay profile {config.profile!r} does not support experimental recordings"
+        )
     if (
         recorded_temporal_observations(entries)
         and not config.supports_temporal_observations
@@ -513,7 +523,14 @@ def walk_replay(
 
         pre_state = state
         actions = [_ACTION_ADAPTER.validate_python(dict(raw)) for raw in entry.actions]
-        state, raw_events = advance_tick(state, actions, game_map=game_map)
+        state, raw_events = advance_tick(
+            state,
+            actions,
+            game_map=game_map,
+            redistribution_policy=experiment.redistribution_policy
+            if experiment
+            else "lowest_id",
+        )
         events = tuple(raw_events)
         actual = _state_hash(state) if hash_needed else None
         if config.verify_tick_hashes and actual != entry.state_hash:
@@ -607,7 +624,14 @@ def walk_replay(
 
         result = _meeting_result_from_entry(meeting_entry)
         state, raw_post_events = apply_meeting_result(
-            state, result, game_map=game_map, triggering_body_id=body_id
+            state,
+            result,
+            game_map=game_map,
+            triggering_body_id=body_id,
+            redistribution_policy=experiment.redistribution_policy
+            if experiment
+            else "lowest_id",
+            meeting_reset=experiment.meeting_reset if experiment else "preserve",
         )
         post_events = tuple(raw_post_events)
         if config.verify_meeting_post_hashes:
@@ -635,6 +659,7 @@ def walk_replay(
             body_id=body_id,
             state=state,
             post_events=post_events,
+            testimony_shapes=testimony_shapes,
         )
 
         last_events = events + post_events
