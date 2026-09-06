@@ -26,9 +26,16 @@ import hashlib
 import json
 import math
 import statistics
+import sys
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from orchestrator.recording_fingerprint import recording_fingerprint  # noqa: E402
 
 # Filename the per-set rubric is co-located under, inside a served replay set
 # dir, so ``api.replay_loader.ReplayLoader.rubric`` can serve it (Task 12.2;
@@ -1313,8 +1320,8 @@ def _set_manifest_sha(set_dir: Path) -> str | None:
     stamps the ``multi:<digest>`` fingerprint over its sorted ``(seed, sha)``
     rows instead (Task 19.9). Both sides returned ``None`` there before, and a
     missing key reads stale unconditionally, so no re-score could clear the
-    banner; the fingerprint is a real key that changes exactly when a seed's
-    recording sha changes. ``None`` only when the manifest is absent or ships no
+    banner. This commit-label key is retained for display; the separate source
+    fingerprint verifies the actual recording inputs. ``None`` only when the manifest is absent or ships no
     data rows.
     """
 
@@ -1336,26 +1343,25 @@ def regen_for_set(
     (the gameplay-facts extractor's output) into the served interestingness
     surface and writes it into ``set_dir`` so ``/eval/rubric`` can serve it.
 
-    The result is stamped with the version of the replay SET it was scored from
-    — the set's ``MANIFEST.md`` provenance key: its single recording sha, or the
-    ``multi:<digest>`` fingerprint for a piecemeal-recorded set — NOT the scoring
-    code commit (the ``git_head`` FIELD keeps its name for DTO compatibility; it
-    has carried the set's stamp, not a scoring HEAD, since Task 12.2). That makes
-    the loader's staleness guard meaningful: it reads FRESH while the on-disk
-    replays match what the rubric scored, and STALE only once the set is
-    re-recorded (manifest sha bumped) without a re-score. (An explicit
-    ``git_head`` overrides — used by tests; ``facts['git_head']`` is the last
-    fallback when the set ships no manifest.) Stamping the scoring ``HEAD`` here
-    instead would false-positive as stale whenever scoring ran at a later commit
-    than recording, and would depend on the caller's cwd — both avoided.
+    ``facts.source_fingerprint`` must match the current replay, roster, and
+    manifest bytes. Facts extracted before a source change cannot be relabelled
+    current merely by copying the new manifest's commit identifier. Missing
+    fingerprints require re-extraction. The manifest provenance key remains in
+    ``git_head`` for compatible display, alongside the new raw source stamp.
 
-    Writes the SERVED subset (``seedset`` / ``git_head`` / ``interestingness``);
+    Writes the served score rows and their source/provenance stamps;
     the human-readable R1–R7 ``rows`` table stays the lab-local artifact
     :func:`main` writes. Wired into the refresh / re-record path
     (``scripts/refresh_samples.sh``) so the happy path stays fresh rather than
     only banner-guarded when stale.
     """
 
+    source_fingerprint = facts.get("source_fingerprint")
+    if source_fingerprint != recording_fingerprint(set_dir):
+        raise ValueError(
+            "facts do not identify the current recording bytes; re-extract them "
+            "before publishing highlight scores"
+        )
     head = (
         git_head
         if git_head is not None
@@ -1364,6 +1370,7 @@ def regen_for_set(
     out = {
         "seedset": facts.get("seedset"),
         "git_head": head,
+        "source_fingerprint": source_fingerprint,
         "interestingness": interestingness(facts),
     }
     dest = Path(set_dir) / RUBRIC_RESULTS_FILENAME

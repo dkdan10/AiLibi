@@ -31,7 +31,7 @@
 import { scoreBucketOf, type ScoreBucket } from "./ReplayFilters";
 
 import { RUBRIC_SPOKES, rubricSpokeTitle } from "../lib/copy";
-import type { RubricGameView, Winner } from "../types/api";
+import type { ReplayMetadataView, RubricGameView, Winner } from "../types/api";
 
 /** One card's data: a rubric row (when scored) joined to its replay metadata. */
 export interface HighlightCardData {
@@ -42,6 +42,7 @@ export interface HighlightCardData {
   readonly seed: number;
   /** From replay metadata; role-neutral display only. `null` when unknown. */
   readonly winner: Winner | null;
+  readonly completionStatus?: ReplayMetadataView["completion_status"];
   readonly totalTicks: number | null;
   /** `null` = unscored (the set ships no rubric, e.g. the 4p1i fixture set). */
   readonly rubric: RubricGameView | null;
@@ -53,20 +54,28 @@ const SCORE_BUCKET_LABEL: Record<ScoreBucket, string> = {
   high: "High",
 };
 
-function winnerLabel(winner: Winner | null): string {
+function winnerLabel(
+  winner: Winner | null,
+  completionStatus: ReplayMetadataView["completion_status"],
+): string {
   if (winner === "CREWMATES") return "Crew win";
   if (winner === "IMPOSTORS") return "Impostor win";
-  return "Outcome —";
+  if (completionStatus === "aborted") return "Aborted";
+  if (completionStatus === "tick_limited") return "Tick limit";
+  return "Unfinished";
 }
 
-// Role-neutral outcome chip: text + a neutral shape glyph, never a guilt hue.
-//
-// `hidden` is NOT the same slot as `winner === null` (Task 19.10). A null winner
-// means genuinely unknown ("Outcome —" — a partial replay with no game_over);
-// hidden means recorded-but-withheld. They must read differently or the unspoiled
-// mode looks like broken data. The pill styling is identical in all three states
-// so the header does not reflow when the reveal is toggled.
-function WinnerTag({ winner, hidden }: { winner: Winner | null; hidden: boolean }) {
+// The reveal control withholds both winning teams and recorded stop reasons.
+// Older bundles omit stop classification, so a missing winner stays unfinished.
+function WinnerTag({
+  winner,
+  completionStatus,
+  hidden,
+}: {
+  winner: Winner | null;
+  completionStatus: ReplayMetadataView["completion_status"];
+  hidden: boolean;
+}) {
   const glyph = hidden
     ? "·"
     : winner === "IMPOSTORS"
@@ -83,7 +92,7 @@ function WinnerTag({ winner, hidden }: { winner: Winner | null; hidden: boolean 
       className="inline-flex items-center gap-1 rounded-pill border border-ink-300 px-2 py-0.5 font-mono text-3xs text-ink-600"
     >
       <span aria-hidden>{glyph}</span>
-      {hidden ? "Outcome hidden" : winnerLabel(winner)}
+      {hidden ? "Outcome hidden" : winnerLabel(winner, completionStatus)}
     </span>
   );
 }
@@ -249,7 +258,11 @@ export function HighlightCard({
         <span className="font-mono text-xs font-semibold text-ink-900">
           seed {data.seed}
         </span>
-        <WinnerTag winner={data.winner} hidden={!reveal} />
+        <WinnerTag
+          winner={data.winner}
+          completionStatus={data.completionStatus}
+          hidden={!reveal}
+        />
       </div>
 
       {scored ? (

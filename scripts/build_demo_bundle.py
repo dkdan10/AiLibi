@@ -56,7 +56,7 @@ Usage::
 
 Then serve it with anything::
 
-    python -m http.server -d <out> 8080
+    uv run --offline python -m http.server --bind 127.0.0.1 -d <out> 8080
 
 The default ``--out`` lands inside ``frontend/dist/``, which ``frontend/.gitignore``
 already excludes, so a built bundle never shows up in the index. Note that a plain
@@ -315,7 +315,13 @@ def _trimmed_rubric(rubric: RubricView, seeds: frozenset[int]) -> str:
     """
 
     trimmed = rubric.model_copy(
-        update={"per_game": tuple(g for g in rubric.per_game if g.seed in seeds)}
+        update={
+            "per_game": (
+                ()
+                if rubric.stale
+                else tuple(g for g in rubric.per_game if g.seed in seeds)
+            )
+        }
     )
     return trimmed.model_dump_json(by_alias=True)
 

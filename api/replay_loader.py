@@ -168,6 +168,7 @@ from orchestrator.game import (
     DEFAULT_NUM_PLAYERS,
     apply_meeting_result,
 )
+from orchestrator.recording_fingerprint import recording_fingerprint
 from orchestrator.replay import (
     TOGGLEABLE_SUBSTRATE_FLAG_KEYS,
     AbortedMeetingReplayEntry,
@@ -1165,6 +1166,8 @@ class ReplayLoader:
                 f"invalid rubric file {path}: 'interestingness.per_game' must be a list"
             )
         per_game = tuple(RubricGameView.model_validate(g) for g in per_game_raw)
+        # A content fingerprint binds scores to replay, roster and manifest bytes;
+        # stale sources suppress score rows instead of serving them as evidence.
         manifest_sha = _manifest_git_sha(self._replay_dir)
         # Staleness is BOTH a sha mismatch (rubric scored vs replays recorded)
         # AND a SET mismatch (DESIGN.md §7: "fail-loud/banner on set or sha
@@ -1174,12 +1177,19 @@ class ReplayLoader:
         expected_seedset = _expected_seedset(self._replay_dir)
         sha_stale = _rubric_is_stale(git_head, manifest_sha)
         set_stale = expected_seedset is not None and seedset != expected_seedset
+        try:
+            source_stale = raw.get("source_fingerprint") != recording_fingerprint(
+                self._replay_dir
+            )
+        except ValueError:
+            source_stale = True
+        stale = sha_stale or set_stale or source_stale
         return RubricView(
             seedset=seedset,
             git_head=git_head,
             manifest_sha=manifest_sha,
-            stale=sha_stale or set_stale,
-            per_game=per_game,
+            stale=stale,
+            per_game=() if stale else per_game,
         )
 
     def clear_cache(self) -> None:

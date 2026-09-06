@@ -4,6 +4,8 @@ by **Daniel Keinan** · code by Claude Code agents, reviewed by Codex · [MIT](L
 
 **▶ [Live demo](https://dkdan10.github.io/AiLibi/)** — the spectator as a static directory, no server behind it.
 
+The images below show an **earlier recording**: seed 2 on prompt v4, recorded 2026-08-25. The current demo and results use v5. [Media provenance](docs/media/README.md#provenance) identifies the preserved source and asset bytes.
+
 [![One tick of seed 2 shown twice: the whole map on the left, the same tick under one crewmate's fog on the right, and that crewmate's accusation underneath](docs/media/spectator-two-truths.png)](docs/media/spectator-two-truths.png)
 
 *One tick, two truths. Left: two players are already dead and both impostors are on screen. Right: everything the crewmate p-3 was allowed to know at that same tick — one lit room and one other player. Underneath, what p-3 said at the meeting two ticks later: it accused p-1, who is also a crewmate.*
@@ -28,35 +30,46 @@ Nine LLM agents walk a room graph, work their task lists, witness what they can 
 - **Scale** — a snapshot of `main` as of 2026-08-19: 903 commits · 364 merged pull requests · 363 generated agent prompts · 100 committed replays · 4,940 tests in the default gate.
 - **Status** — active; phases 0–21 closed, the last on 2026-09-05.
 
-## Verify it yourself in one minute
+## Install, then verify offline
 
-Three commands, three claims, all free and offline.
+Local prerequisites: [uv](https://docs.astral.sh/uv/getting-started/installation/),
+Python 3.11 (`uv python install 3.11`), and Node.js 24+ with npm
+(22.x works from 22.13). Installation downloads locked dependencies; allow
+several minutes:
 
 ```bash
-bash scripts/setup_env.sh   # one-time: uv sync + npm ci
+git clone --filter=blob:none https://github.com/dkdan10/AiLibi.git
+cd AiLibi
+bash scripts/setup_env.sh
+```
 
-# 1. Proves determinism — the same seed twice, byte-identical replay JSONL.
-#    (A fresh dir each time: the recorder refuses to overwrite a replay path.
-#    Each run also leaves r1.audit.jsonl / r2.audit.jsonl beside its replay —
-#    the log of what each agent was allowed to see, explained in
-#    docs/deployment.md under "The audit sidecar beside a replay".)
+After setup, verification needs no provider account or network access:
+
+```bash
+# 1. Compare two bounded fake-provider runs in a fresh directory.
 d=$(mktemp -d)
-uv run python scripts/run_game.py --seed 42 --replay-path "$d/r1.jsonl" &&
-  uv run python scripts/run_game.py --seed 42 --replay-path "$d/r2.jsonl" &&
+AILIBI_LLM_PROVIDER=fake uv run --offline python scripts/run_game.py \
+  --seed 42 --max-ticks 50 --replay-path "$d/r1.jsonl" &&
+  AILIBI_LLM_PROVIDER=fake uv run --offline python scripts/run_game.py \
+  --seed 42 --max-ticks 50 --replay-path "$d/r2.jsonl" &&
   diff -q "$d/r1.jsonl" "$d/r2.jsonl"
 
-# 2. Proves replay integrity — every committed sample still reconstructs through
-#    the engine's per-tick state hashes.
-bash scripts/verify_samples.sh
+# 2. Verify every committed recording.
+UV_OFFLINE=1 bash scripts/verify_samples.sh
 
-# 3. Proves the demo is a static directory — a built bundle with no API process
-#    in it, playable from any file server.
-uv run python scripts/build_demo_bundle.py && python -m http.server -d frontend/dist/demo-bundle 8080
+# 3. Build the demo; open http://127.0.0.1:8080.
+uv run --offline python scripts/build_demo_bundle.py
+uv run --offline python -m http.server --bind 127.0.0.1 \
+  -d frontend/dist/demo-bundle 8080
 ```
+
+Stop serving with Ctrl-C. Fake runs test mechanics; samples preserve hosted
+dialogue. Each replay has an audit sidecar; `--force` replaces both together.
+[Recording details](docs/deployment.md).
 
 ### Three reproducibility scopes
 
-"Reproducible" is three claims here, kept apart rather than traded on the strongest.
+Three distinct claims:
 
 1. **Replay integrity** — committed replay bytes reconstruct through the engine's per-tick state hashes. Command 2 above, free and offline. **Verified strong.**
 2. **Same-runtime repeatability** — one seed, config, agent factory and set of provider responses produce byte-identical replays on one runtime. Command 1 above, under the fake provider. With a real provider, fresh generation is *not* deterministic: the recording reproduces, the seed does not.
@@ -117,7 +130,7 @@ Rather than take the paragraph above on trust, read the authorship out of git yo
 
 ## What it is
 
-A deterministic testbed for studying multi-agent reasoning under hidden information, not a game with AI players bolted on. Three decisions carry the weight. The three below restate them in this page's words; the decision record is [ADR-0001](docs/adr/0001-three-load-bearing-decisions.md), which takes them from [DESIGN.md](DESIGN.md) §0 and states two design targets the restatement drops — a 2 Hz tick rate, and no more than 100 LLM calls in a full game.
+A deterministic testbed for studying multi-agent reasoning under hidden information, not a game with AI players bolted on. Three decisions follow [ADR-0001](docs/adr/0001-three-load-bearing-decisions.md) and [DESIGN.md](DESIGN.md) §0, which also target 2 Hz ticks and at most 100 LLM calls per game.
 
 1. **A deterministic engine behind a strict observation firewall.** The engine advances world state as a pure tick function — no wall clock, no unseeded randomness, no global state — so the same seed and inputs always produce the same bytes. Agents cannot import the engine, directly or transitively: an agent physically cannot read the state it must deduce. It sees an `ObservationPacket` and a `PublicMapView`, and emits an `ActionIntent`. The firewall covers the *agent* surface; the spectator is privileged by design.
 2. **Two-tier reasoning.** Movement, tasks and venting are rule-based, every tick. Meeting speech, voting and suspicion updates call an LLM, only at meetings and triggers. Without that split, cost and latency make the system unviable.
@@ -131,7 +144,7 @@ The system as built: [docs/architecture.md](docs/architecture.md).
 
 ## What the measurements said
 
-Every figure is the current reference recording, made 2026-08-31, with the one it replaced beside it. A row that reads the same in both columns is a row nothing moved.
+Figures compare the current reference recording, made 2026-08-31, with its predecessor.
 
 | What | Figure | [At baseline 7](docs/glossary.md#baseline-n-the-reference-recording) | Recorded on, and where it lives |
 |---|---|---|---|
@@ -205,7 +218,7 @@ Close audits start at the MVP close and resume at phase 13; earlier rows link th
 ## Run it
 
 ```bash
-bash scripts/setup_env.sh   # uv sync + npm ci; Python 3.11 and Node are both required
+bash scripts/setup_env.sh   # downloads locked Python/frontend dependencies
 bash scripts/check.sh       # the full local gate: lint, types, imports, tests, frontend build
 bash scripts/run_spectator.sh                       # API + UI on http://localhost:5173
 uv run python scripts/run_tournament.py --num-games 50 --output-dir replays --roster-preset 4p1i

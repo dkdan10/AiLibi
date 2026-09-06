@@ -273,8 +273,9 @@ def test_baked_bytes_are_the_bytes_the_live_api_serves(
 def test_rubric_is_trimmed_to_the_baked_seeds(tmp_path: Path, api: TestClient) -> None:
     """Everything but ``per_game`` passes through; ``per_game`` is subsetted.
 
-    The Highlights reel builds its cards FROM ``per_game``, so a full 50-row
-    rubric in a one-game bundle would render 49 cards that 404 on click.
+    The committed rubric is historical, so its stale verdict survives while
+    obsolete rows are suppressed. Fresh trimming is covered by the source-bound
+    positive control in test_public_recording_provenance.py.
     """
 
     bdb.bake_data(tmp_path, games=_ONE_9P2I, samples_dir=_SAMPLES)
@@ -282,7 +283,8 @@ def test_rubric_is_trimmed_to_the_baked_seeds(tmp_path: Path, api: TestClient) -
     live = api.get("/eval/rubric", params={"set": "9p2i"}).json()
 
     assert isinstance(baked, dict)
-    assert [row["seed"] for row in baked["per_game"]] == [2]
+    assert baked["stale"] is True
+    assert baked["per_game"] == []
     assert baked["per_game"] == [row for row in live["per_game"] if row["seed"] == 2]
     for field in ("seedset", "git_head", "manifest_sha", "stale", "viewModelVersion"):
         assert baked[field] == live[field], field

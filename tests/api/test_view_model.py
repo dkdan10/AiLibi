@@ -1158,8 +1158,12 @@ def _write_manifest_flags(
     )
 
 
-def _facts() -> dict[str, object]:
+def _facts(replay_dir: Path) -> dict[str, object]:
+    from orchestrator.recording_fingerprint import recording_fingerprint
+
+    (replay_dir / "replay-seed-5.jsonl").write_text("synthetic scorer input\n")
     return {
+        "source_fingerprint": recording_fingerprint(replay_dir),
         "seedset": "9p2i",
         "git_head": "ignored-rest-stamped",
         "games": [
@@ -1209,7 +1213,9 @@ def test_rubric_stamps_git_sha_from_8col_flags_manifest(tmp_path: Path) -> None:
     # The rubric producer's _set_manifest_sha must likewise read git_sha (not the
     # date) from the 8-column manifest, so the freshness guard stays meaningful.
     _write_manifest_flags(tmp_path, "1e48c40", refreshed_at="2026-06-30")
-    _rubric_score.regen_for_set(_facts(), tmp_path)  # no git_head -> stamps set sha
+    _rubric_score.regen_for_set(
+        _facts(tmp_path), tmp_path
+    )  # no git_head -> stamps set sha
     view = ReplayLoader(replay_dir=tmp_path).rubric()
     assert view.git_head == "1e48c40"
     assert view.manifest_sha == "1e48c40"
@@ -1227,7 +1233,8 @@ def test_rubric_is_stale_prefix_logic() -> None:
 def test_rubric_regen_producer_and_staleness(tmp_path: Path) -> None:
     # The PRODUCER co-locates the rubric, stamped with a chosen git_head.
     fresh_head = "1e48c40aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-    dest = _rubric_score.regen_for_set(_facts(), tmp_path, git_head=fresh_head)
+    _write_manifest(tmp_path, "1e48c40")
+    dest = _rubric_score.regen_for_set(_facts(tmp_path), tmp_path, git_head=fresh_head)
     assert dest == tmp_path / "results-rubric-score.json"
 
     # The loader SERVES it and reports FRESH when the rubric commit prefixes the
@@ -1243,7 +1250,7 @@ def test_rubric_regen_producer_and_staleness(tmp_path: Path) -> None:
     assert view.per_game[0].win_shape == "eject-decided"
 
     # A rubric scored at a different commit reads STALE.
-    _rubric_score.regen_for_set(_facts(), tmp_path, git_head="deadbeefdeadbeef")
+    _rubric_score.regen_for_set(_facts(tmp_path), tmp_path, git_head="deadbeefdeadbeef")
     assert ReplayLoader(replay_dir=tmp_path).rubric().stale is True
 
 
@@ -1253,7 +1260,7 @@ def test_rubric_regen_defaults_to_set_manifest_sha(tmp_path: Path) -> None:
     # and the stamp is independent of cwd / git HEAD (review fixes for the
     # refresh-path + committed-artifact staleness).
     _write_manifest(tmp_path, "1e48c40")
-    _rubric_score.regen_for_set(_facts(), tmp_path)
+    _rubric_score.regen_for_set(_facts(tmp_path), tmp_path)
     view = ReplayLoader(replay_dir=tmp_path).rubric()
     assert view.git_head == "1e48c40"
     assert view.stale is False
@@ -1287,14 +1294,14 @@ def test_rubric_set_mismatch_is_stale(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     _write_manifest(tmp_path, "1e48c40")
-    facts = {**_facts(), "seedset": "4p1i"}
+    facts = {**_facts(tmp_path), "seedset": "4p1i"}
     _rubric_score.regen_for_set(facts, tmp_path, git_head="1e48c40")
     view = ReplayLoader(replay_dir=tmp_path).rubric()
     assert view.seedset == "4p1i"
     assert view.stale is True  # set mismatch, despite the matching sha
 
     # The right-set rubric (seedset 9p2i) over the same roster reads FRESH.
-    _rubric_score.regen_for_set(_facts(), tmp_path, git_head="1e48c40")
+    _rubric_score.regen_for_set(_facts(tmp_path), tmp_path, git_head="1e48c40")
     assert ReplayLoader(replay_dir=tmp_path).rubric().stale is False
 
 

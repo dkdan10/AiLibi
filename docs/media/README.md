@@ -1,7 +1,9 @@
 # docs/media — the committed pictures
 
-Five assets, all of them shown in or linked from the repository
-[README](../../README.md) — this note is the directory's sixth file:
+Five assets, all shown in or linked from the repository [README](../../README.md).
+The four spectator captures are **historical**, preserved from the previous
+reference recording; they do not depict the current demo recording.
+[provenance.json](provenance.json) identifies their source and exact asset bytes:
 
 | File | What it is |
 | --- | --- |
@@ -11,11 +13,10 @@ Five assets, all of them shown in or linked from the repository
 | `spectator-journey.webm` | 1440×900, 9 s — the same walk recorded live: a token crossing rooms, the kill flash, the transport pausing itself, the flip into fog |
 | `architecture.svg` | The layering as built — hand-authored, not captured: the packages, the data-flow arrows, and the barred import the observation firewall forbids |
 
-The four spectator assets are captures of the **static demo bundle**
-(`scripts/build_demo_bundle.py`), not of a dev server. That is deliberate: the
-picture in the README is then a picture of the artifact a reader can build and
-run themselves in one command, and it cannot drift into showing a surface the
-bundle does not ship.
+The four spectator assets were captured from the **static demo bundle**
+(`scripts/build_demo_bundle.py`) at the source revision below. Building the
+current checkout uses the current recordings, so it does not recreate these
+historical scenes.
 
 `architecture.svg` is not a capture at all: it is hand-written SVG text — real
 `<text>`, no raster, no external font — so it diffs line by line and reads in
@@ -32,9 +33,9 @@ name or a washed-out palette fails the gate.
 Nothing regenerates any of them automatically. They are committed bytes,
 refreshed by hand when the surface changes enough that they misrepresent it — a
 screenshot is a claim about the product, and a stale one is a false claim. That
-standard cuts both ways: a capture is also a claim about a GAME, so when the
-recorded corpus moves, every asset below has to be re-shot from the bytes the
-repository now holds.
+standard also applies to the recorded game: when the corpus changes, captures
+must either be refreshed from the new bytes or clearly labelled historical, as
+they are here. A new capture must update the provenance file and its captions.
 
 ## Regenerating all four spectator assets
 
@@ -66,7 +67,19 @@ fails rather than shipping a picture of the dock.
 
 Every spectator asset is a capture of **9p2i seed 2** (`headless-seed-2`) from
 the baseline-7 record: recorded 2026-08-25 on `Qwen/Qwen3.6-27B` at prompt set
-v4, $0, and listed in [`replays/samples/9p2i/MANIFEST.md`](../../replays/samples/9p2i/MANIFEST.md).
+v4, $0. Its [historical manifest](https://github.com/dkdan10/AiLibi/blob/5184417779d26a0ddc26c703574fdcf341e16098/replays/samples/9p2i/MANIFEST.md) and [source replay](https://github.com/dkdan10/AiLibi/blob/5184417779d26a0ddc26c703574fdcf341e16098/replays/samples/9p2i/replay-seed-2.jsonl) are pinned to the capture revision. The current manifest describes a later v5 recording.
+
+Verify the source replay without replacing current samples (the commit must be
+available locally; a shallow clone may need to fetch it first):
+
+```bash
+git show 5184417779d26a0ddc26c703574fdcf341e16098:replays/samples/9p2i/replay-seed-2.jsonl | shasum -a 256
+```
+
+The digest must equal `recording.sha256` in `provenance.json`.
+`tests/scripts/test_public_recording_provenance.py` verifies each committed
+asset digest and rejects a changed image with unchanged provenance. It does not
+claim that historical images represent the current corpus.
 
 | Asset | Engine tick | Perspective | Capture viewport |
 | --- | --- | --- | --- |
@@ -78,9 +91,10 @@ v4, $0, and listed in [`replays/samples/9p2i/MANIFEST.md`](../../replays/samples
 `p-3` is the fog subject because the picture's argument depends on it: at tick 5
 `p-3` is a crewmate in MedBay who can see one other player, while the omniscient
 half of the same tick carries two bodies and both impostors — and at the meeting
-that follows, `p-3` accuses `p-1`, who is also a crewmate. The capture re-checks
-each of those facts against the bundle's own replay JSON before it shoots, so the
-caption is a checked claim rather than a remembered one.
+that follows, `p-3` accuses `p-1`, who is also a crewmate. The capture harness checks these scene and accusation facts before shooting.
+The preserved source replay was also checked when this historical provenance
+was recorded: the meeting is at tick 7 and p-3 accuses p-1. A current capture
+must establish its own scene facts instead of copying this caption.
 
 ### What is deterministic, and what is not
 

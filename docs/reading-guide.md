@@ -1,17 +1,15 @@
 # Reading guide — the outsider's five minutes
 
-Five minutes, no context: which numbers are real and where they live, what to
-run, what the corpus does and does not demonstrate, and which three audits to
-read first. Every number carries the path that owns it, and where this page
-summarizes, the cited file wins. Private vocabulary is in the
-[glossary](glossary.md); the phase narrative in [history](history.md).
+Numbers, reproduction commands, findings, and starting points. Cited sources
+take precedence over summaries. See the [glossary](glossary.md) for terms and
+[history](history.md) for earlier phases.
 
 ---
 
 ## 1. The numbers worth knowing
 
-The middle column is the current reference recording, made 2026-08-31; beside it
-is the recording it replaced. Where the two agree, nothing moved.
+The middle column shows the current reference recording, made 2026-08-31;
+the next shows its predecessor.
 
 | What | Figure | At baseline 7 | Recorded on, and where it lives |
 |---|---|---|---|
@@ -51,6 +49,10 @@ never the checkout, and parses the committed configuration, so a contract added
 there is exercised without editing the test.
 
 ## 2. What to run, and what to watch
+
+Open the [recorded demo](https://dkdan10.github.io/AiLibi/) without installing.
+For local prerequisites and the offline verification path, follow the
+[README](../README.md#install-then-verify-offline). Setup downloads dependencies.
 
 ```bash
 git clone --filter=blob:none https://github.com/dkdan10/AiLibi.git && cd AiLibi

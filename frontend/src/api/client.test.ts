@@ -70,6 +70,20 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+describe("highlight source freshness", () => {
+  it.each([false, true])("only passes current enrichment through (stale=%s)", async (stale) => {
+    const row = { seed: 13, n_meetings: 5, win_shape: "impostor-win", score: 51.2 };
+    stubFetch(jsonResponse({
+      viewModelVersion: VIEW_MODEL_VERSION,
+      seedset: "9p2i", git_head: "old", manifest_sha: "current", stale,
+      per_game: [row],
+    }));
+    const rubric = await getRubric("9p2i");
+    expect(rubric.stale).toBe(stale);
+    expect(rubric.per_game).toEqual(stale ? [] : [row]);
+  });
+});
+
 describe("the view-model version gate", () => {
   it("rejects a payload stamped with a different contract version", async () => {
     stubFetch(jsonResponse(stampedReplay("99-from-the-future")));

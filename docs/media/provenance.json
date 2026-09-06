@@ -1,0 +1,21 @@
+{
+  "status": "historical",
+  "capture_revision": "5184417779d26a0ddc26c703574fdcf341e16098",
+  "recording": {
+    "path": "replays/samples/9p2i/replay-seed-2.jsonl",
+    "sha256": "6f6fe02fa8bb5dc042b0b730f01458ebeec863f1592df63ed2d3651a51fbe57c",
+    "game_id": "headless-seed-2",
+    "seed": 2,
+    "recorded_on": "2026-08-25",
+    "model": "Qwen/Qwen3.6-27B",
+    "prompt_family": "qwen3_6_27b",
+    "prompt_version": "v4",
+    "reference_recording": 7
+  },
+  "assets_sha256": {
+    "spectator-two-truths.png": "f745b3a308da06fde24be41ad130f4b3144a1dfaaac9ef98e12d0de9b18cac51",
+    "spectator-meeting.png": "75c1f2bfabefa5c626bc0eb724bd8ac1780fc17cb6958f6ecd242ec1473a0245",
+    "spectator-journey.gif": "1ab365dcd67ab60fe38a97280ced62d0216ccc486ef8f479fc382a0398f89c6e",
+    "spectator-journey.webm": "8d0e66542642f6301c633ae2ea6f4e34263ac394993b2935c7952185d79c7a8b"
+  }
+}

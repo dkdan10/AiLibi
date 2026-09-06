@@ -336,6 +336,8 @@ export function getTournamentReport(
 // Highlights reel can render its first-class "no rubric" empty state rather than
 // an error. The score itself is an internal pacing/structure heuristic, not a
 // human rating: render it labelled, and never as a watchability ranking.
-export function getRubric(set?: string): Promise<RubricView> {
-  return getJson<RubricView>(apiUrl("/eval/rubric", set));
+export async function getRubric(set?: string): Promise<RubricView> {
+  const rubric = await getJson<RubricView>(apiUrl("/eval/rubric", set));
+  // Older bundles can retain obsolete rows alongside their stale flag.
+  return rubric.stale ? { ...rubric, per_game: [] } : rubric;
 }

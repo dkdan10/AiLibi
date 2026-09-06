@@ -144,6 +144,7 @@ from agents.memory.beliefs import (
 )
 from eval.action_ingest import tally_actions_by_role
 from eval.balance_eval import load_tournament_report
+from orchestrator.recording_fingerprint import recording_fingerprint
 from eval.meeting_quality import (
     CHANNEL_SINGLE_WITNESS_INFORM,
     compute_ballot_target_redirects,
@@ -1997,6 +1998,7 @@ def _analyze_meeting(
 
 
 def main() -> int:
+    source_fingerprint = recording_fingerprint(SAMPLE_DIR)
     game_map = load_canonical_map()
     roster = json.loads((SAMPLE_DIR / "roster.json").read_text(encoding="utf-8"))
     num_players = int(roster["num_players"])
@@ -4587,8 +4589,11 @@ def main() -> int:
         },
     }
 
+    if recording_fingerprint(SAMPLE_DIR) != source_fingerprint:
+        raise ValueError("recording inputs changed during gameplay fact extraction")
     facts = {
         "git_head": _git_head(),
+        "source_fingerprint": source_fingerprint,
         "sample_dir": str(SAMPLE_DIR),
         "seedset": SEEDSET,
         "roster": roster,

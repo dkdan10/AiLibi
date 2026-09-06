@@ -239,6 +239,7 @@ function buildCards(
         gameId: meta?.game_id ?? `headless-seed-${game.seed}`,
         seed: game.seed,
         winner: meta?.winner ?? null,
+        completionStatus: meta?.completion_status,
         totalTicks: meta?.total_ticks ?? null,
         rubric: game,
       };
@@ -250,6 +251,7 @@ function buildCards(
     gameId: meta.game_id,
     seed: meta.seed,
     winner: meta.winner,
+    completionStatus: meta.completion_status,
     totalTicks: meta.total_ticks,
     rubric: rubrics.get(meta.seed) ?? null,
   }));
@@ -384,6 +386,15 @@ export function ReplayBrowserView({
         {error ?? "unknown error"}
       </Banner>
     );
+  } else if (isHighlights && stale) {
+    body = (
+      <EmptyState title="No current highlight scores">
+        <p>The recordings remain available through Featured and Replays.</p>
+        <button type="button" onClick={onBrowseReplays} className={EMPTY_ACTION_BTN}>
+          Browse all replays
+        </button>
+      </EmptyState>
+    );
   } else if (isHighlights && rubricMissing) {
     body = (
       <EmptyState title="No interestingness rubric for this set">
@@ -481,24 +492,23 @@ export function ReplayBrowserView({
             viewer hit on Replays), and on neither when the set ships no rubric,
             where it would sit above an empty state explaining four bars that
             are not on the page. */}
-        {(isHighlights || !rubricMissing) && (
+        {!stale && (isHighlights || !rubricMissing) && (
           <p className="font-mono text-xs text-ink-500">
             The 0–100 score is an internal pacing/structure heuristic — not a
             human rating, and not a watchability ranking. For games worth
             watching, see Featured below.
           </p>
         )}
-        {!rubricMissing && (
+        {!stale && !rubricMissing && (
           <p className="font-mono text-xs text-ink-500">{rubricLegendLine()}</p>
         )}
       </header>
 
       {stale && (
         <Banner tone="caveat">
-          Scores may be stale — the rubric's stamped provenance key no longer
-          matches these replays' recording provenance (their MANIFEST.md rows), so
-          it was scored against different bytes. Treat the numbers as indicative,
-          not fresh.
+          Scores are unavailable for these recordings. Earlier scores and their
+          game descriptions have been hidden because their source recordings
+          cannot be verified. You can still open Featured games or browse Replays.
         </Banner>
       )}
 
