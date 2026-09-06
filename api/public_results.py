@@ -205,16 +205,36 @@ def _source_url(fingerprint: str) -> str | None:
 
 
 def build_public_results(loader: ReplayLoader) -> PublicResultsView:
+    """Reuse one verified result per loader while source bytes and substrate agree.
+
+    Content hashes include the roster and manifest. On a miss, clear the
+    mtime-keyed playback caches too: replacement bytes can preserve their mtime.
+    Concurrent cold requests may each reconstruct; this cache does not coalesce
+    in-flight work or create threads.
+    """
+    if loader._allow_substrate_mismatch:
+        raise ValueError("Public results require strict substrate validation")
+    fingerprint = recording_fingerprint(loader._replay_dir)
+    substrate = loader._substrate_cache_key()
+    cached = loader._public_results_cache
+    if cached is not None and cached[:2] == (fingerprint, substrate):
+        return cached[2]
+    loader.clear_cache()
+    result = _build_public_results(loader, fingerprint)
+    if loader._substrate_cache_key() != substrate:
+        raise ValueError("Substrate changed during public-results generation")
+    loader._public_results_cache = (fingerprint, substrate, result)
+    return result
+
+
+def _build_public_results(loader: ReplayLoader, fingerprint: str) -> PublicResultsView:
     """Validate every replay before publishing outcomes, with no historical fold.
 
     Raw reported usage remains explicitly labelled as such. Curated prose is
     omitted when its exact recording changed; current numeric results still
     derive from the new valid source. Invalid recordings fail publication.
     """
-    if loader._allow_substrate_mismatch:
-        raise ValueError("Public results require strict substrate validation")
     directory = loader._replay_dir
-    fingerprint = recording_fingerprint(directory)
     metadata = loader.list_replays()
     source_names = {
         path.name

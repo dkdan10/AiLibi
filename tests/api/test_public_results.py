@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -12,7 +14,7 @@ from fastapi.testclient import TestClient
 import api.public_results as public
 from api.main import ENV_REPLAY_DIR, create_app
 from api.replay_loader import ReplayLoader
-from api.schemas import AgentMemoryView, PublicResultsView
+from api.schemas import AgentMemoryView, PublicResultsView, ReplayView
 from tests.orchestrator.test_replay_integrity import (
     completed_recording as completed_recording,
 )
@@ -153,3 +155,124 @@ def test_a_changed_case_projection_cannot_keep_its_prose(
     monkeypatch.setattr(loader, "get_meeting_memory", altered)
     with pytest.raises(ValueError, match="Curated case"):
         public.build_public_results(loader)
+
+
+@pytest.fixture
+def summary_recording(completed_recording: Path, tmp_path: Path) -> Path:
+    destination = tmp_path / completed_recording.name
+    shutil.copyfile(completed_recording, destination)
+    roster = completed_recording.parent / "roster.json"
+    if roster.exists():
+        shutil.copyfile(roster, tmp_path / roster.name)
+    return destination
+
+
+def test_public_summary_reuses_walks_and_clear_cache_revalidates() -> None:
+    # The real set exceeds the loader's sixteen-entry playback cache.
+    loader = ReplayLoader(SAMPLES / "9p2i")
+    with patch.object(loader, "_walk", wraps=loader._walk) as walk:
+        first = public.build_public_results(loader)
+        initial_walks = walk.call_count
+        assert initial_walks > 0
+        assert public.build_public_results(loader) == first
+        assert walk.call_count == initial_walks
+        loader.clear_cache()
+        assert public.build_public_results(loader) == first
+        assert walk.call_count > initial_walks
+
+
+def test_warm_summary_refuses_same_mtime_corruption_and_recovers(
+    summary_recording: Path,
+) -> None:
+    completed_recording = summary_recording
+    loader = ReplayLoader(completed_recording.parent)
+    first = public.build_public_results(loader)
+    original = completed_recording.read_bytes()
+    stamp = completed_recording.stat()
+    rows = [json.loads(line) for line in original.splitlines()]
+    rows[-1]["winner"] = (
+        "IMPOSTORS" if rows[-1]["winner"] == "CREWMATES" else "CREWMATES"
+    )
+    completed_recording.write_text("\n".join(json.dumps(row) for row in rows) + "\n")
+    os.utime(completed_recording, ns=(stamp.st_atime_ns, stamp.st_mtime_ns))
+    with pytest.raises(ValueError, match="invalid or unverified"):
+        public.build_public_results(loader)
+    completed_recording.write_bytes(original)
+    os.utime(completed_recording, ns=(stamp.st_atime_ns, stamp.st_mtime_ns))
+    assert public.build_public_results(loader) == first
+
+
+def test_warm_summary_refreshes_manifest_provenance(summary_recording: Path) -> None:
+    completed_recording = summary_recording
+    loader = ReplayLoader(completed_recording.parent)
+    first = public.build_public_results(loader)
+    manifest = completed_recording.parent / "MANIFEST.md"
+    seed = int(completed_recording.stem.removeprefix("replay-seed-"))
+    manifest.write_text(
+        f"| seed | refreshed_at |\n| --- | --- |\n| {seed} | 2026-09-06 |\n"
+    )
+    refreshed = public.build_public_results(loader)
+    assert refreshed.source_fingerprint != first.source_fingerprint
+    assert refreshed.recorded_from == refreshed.recorded_until == "2026-09-06"
+    assert refreshed.games == first.games
+
+
+def test_warm_summary_rechecks_ambient_substrate(
+    summary_recording: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    loader = ReplayLoader(summary_recording.parent)
+    public.build_public_results(loader)
+    monkeypatch.setenv("AILIBI_TEMPORAL_OBSERVATIONS", "1")
+    with pytest.raises(ValueError, match="invalid or unverified"):
+        public.build_public_results(loader)
+
+
+def test_warm_summary_rechecks_same_mtime_roster(summary_recording: Path) -> None:
+    roster = summary_recording.parent / "roster.json"
+    roster.write_text(
+        json.dumps({"num_players": 7, "num_impostors": 1, "tasks_per_crewmate": 1})
+    )
+    loader = ReplayLoader(summary_recording.parent)
+    public.build_public_results(loader)
+    stamp = roster.stat()
+    roster.write_text(
+        json.dumps({"num_players": 7, "num_impostors": 2, "tasks_per_crewmate": 1})
+    )
+    os.utime(roster, ns=(stamp.st_atime_ns, stamp.st_mtime_ns))
+    with pytest.raises(ValueError, match="invalid or unverified"):
+        public.build_public_results(loader)
+
+
+@pytest.mark.parametrize("changed", ["source", "substrate"])
+def test_generation_drift_is_refused_and_not_cached(
+    summary_recording: Path, monkeypatch: pytest.MonkeyPatch, changed: str
+) -> None:
+    loader = ReplayLoader(summary_recording.parent)
+    original = loader.load_replay
+    altered = False
+
+    def load(game_id: str, *, include_llm_bodies: bool = True) -> ReplayView:
+        nonlocal altered
+        result = original(game_id, include_llm_bodies=include_llm_bodies)
+        if not altered:
+            altered = True
+            if changed == "source":
+                with summary_recording.open("ab") as stream:
+                    stream.write(b"\n")
+            else:
+                monkeypatch.setenv("AILIBI_TEMPORAL_OBSERVATIONS", "1")
+        return result
+
+    monkeypatch.setattr(loader, "load_replay", load)
+    with pytest.raises(ValueError, match="changed during public-results"):
+        public.build_public_results(loader)
+    assert loader._public_results_cache is None
+
+
+def test_public_results_cache_is_scoped_to_its_loader(summary_recording: Path) -> None:
+    first_loader = ReplayLoader(summary_recording.parent)
+    first = public.build_public_results(first_loader)
+    second_loader = ReplayLoader(summary_recording.parent)
+    with patch.object(second_loader, "_walk", wraps=second_loader._walk) as walk:
+        assert public.build_public_results(second_loader) == first
+        assert walk.call_count > 0

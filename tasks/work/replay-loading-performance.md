@@ -254,3 +254,19 @@ import/document contracts and production build. `bash scripts/verify_samples.sh`
 passed all 100 canonical recordings. The owner’s final branch review remains
 pending. The measurements concern initial replay JSON and local ASGI execution,
 not total bundle size, network latency, browser rendering or a deployment SLO.
+
+### Review qualification (2026-09-06)
+
+The supplied review found that `after.json` binds the reader at `e805ddd6`,
+before later cleanup changes. The earlier phrase "once runtime sources froze"
+describes that capture, not the final cleanup head. Its timing, RSS and walk
+counts remain historical diagnostics and must not be advertised as measurements
+of a later checkout. The before capture includes a harness introduced after its
+measured source state, so no single historical commit reproduces that whole
+instrument/source combination. Both original captures remain unchanged.
+
+The [summary-cache card](public-results-cache.md) supplies a fresh, independently
+source-bound measurement of sequential summary requests on the reviewed repair.
+It does not remeasure cold replay listing, concurrent requests, RSS or HTTP
+latency. The review's cold-listing regression remains an explicit unmeasured
+tradeoff of validating timelines before exposing them; no speedup is claimed.

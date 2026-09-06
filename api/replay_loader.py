@@ -86,6 +86,7 @@ from api.schemas import (
     MeetingView,
     PlayerView,
     PositionView,
+    PublicResultsView,
     ReplayMetadataView,
     ReplayView,
     ReportBodyEventView,
@@ -847,6 +848,9 @@ class ReplayLoader:
         self._cached_validated_summary = lru_cache(maxsize=metadata_cache_size)(
             self._validated_summary
         )
+        self._public_results_cache: (
+            tuple[str, tuple[tuple[str, bool], ...], PublicResultsView] | None
+        ) = None
 
     # -- public API -------------------------------------------------------
 
@@ -1234,6 +1238,7 @@ class ReplayLoader:
         self._cached_belief_frames.cache_clear()
         self._cached_summary.cache_clear()
         self._cached_validated_summary.cache_clear()
+        self._public_results_cache = None
 
     # -- cached implementations ------------------------------------------
 
