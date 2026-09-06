@@ -101,7 +101,7 @@ at exact head `ee7cbe7a319ba6ede5612be4a348d8a1cec71c79`.
 | Audio retirement and private spectator views | `9b0735ba` | Portfolio-review agent approved version compatibility and cached-private-data controls; isolated snapshot passed 134 Python checks, two golden/layout checks and 43 frontend checks. |
 | Recorded reasoning/tactical experiments and offline measurements | `ee46d114` | Coordinator reviewed reasoning; workflow-redesign agent reviewed tactics; code-review agent reviewed shared provenance. Isolated snapshot passed strict mypy on 436 files and 235 selected tests. |
 | Current model evidence and historical compatibility | `a0285760` | Code-review agent verified current refusals, historical/synthetic distinctions and scope metadata after the additional campaign-tier repairs. |
-| Final integration, disposition ledger and completion | This ledger’s final integration commit | All three agents reviewed their independent scopes; coordinator ran the complete gates below. |
+| Final integration, disposition ledger and completion | `1843b1b2` | All three agents reviewed their independent scopes; coordinator ran the complete gates below. |
 
 Final local verification on 2026-09-06:
 
