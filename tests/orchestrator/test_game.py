@@ -734,9 +734,9 @@ def test_discovered_body_is_hidden_from_every_observer(tmp_path: Path) -> None:
             agent_id=observer_id,
             engine_events=[],
         )
-        assert any(body.id == body_id for body in packet.visible_bodies), (
-            f"observer {observer_id} should see the undiscovered body"
-        )
+        assert any(
+            body.id == f"body-{fresh_body.player_id}" for body in packet.visible_bodies
+        ), f"observer {observer_id} should see the undiscovered body"
 
     discovered_body = replace(fresh_body, discovered_by="p-1")
     state_after_discovery = replace(
@@ -748,7 +748,7 @@ def test_discovered_body_is_hidden_from_every_observer(tmp_path: Path) -> None:
             agent_id=observer_id,
             engine_events=[],
         )
-        assert all(body.id != body_id for body in packet.visible_bodies), (
+        assert packet.visible_bodies == (), (
             f"discovered body must be hidden from {observer_id}"
         )
 

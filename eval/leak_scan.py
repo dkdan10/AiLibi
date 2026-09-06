@@ -51,12 +51,13 @@ from engine.world import Map, WorldState, load_canonical_map
 from eval.replay_walk import (
     MeetingOpened,
     ReplayWalkConfig,
+    TickAdvanced,
     TickOpened,
     WalkViolation,
     walk_replay,
 )
 from llm.provider import ENV_PROVIDER, PROVIDER_FAKE, build_default_client
-from observation.packet import ObservationPacket
+from observation.packet import EventObservationBatch, ObservationPacket
 from observation.service import ObservationService, impostor_pretend_task_set
 from orchestrator.game import (
     DEFAULT_MAX_TICKS,
@@ -64,6 +65,8 @@ from orchestrator.game import (
     HeadlessGame,
     build_default_meeting_runner,
 )
+from orchestrator.observation_delivery import event_observation_batches
+from orchestrator.replay import read_all_entries, recorded_temporal_observations
 from orchestrator.scheduler import TickScheduler
 
 _FORBIDDEN_VISIBLE_PLAYER_FIELDS = frozenset({"role", "kill_attribution", "killed_by"})
@@ -613,6 +616,8 @@ class PacketContext:
     engine_events: Sequence[EngineEvent]
     world_state: WorldState
     game_map: Map
+    legacy_body_ids: bool = False
+    temporal_observations: bool = False
 
 
 def assert_visible_entities_match_engine_truth(
@@ -621,6 +626,7 @@ def assert_visible_entities_match_engine_truth(
     state: WorldState,
     game_map: Map,
     engine_events: Sequence[EngineEvent],
+    legacy_body_ids: bool = False,
 ) -> None:
     """Cross-player engine-truth check: the observer saw EXACTLY what it may see.
 
@@ -697,7 +703,7 @@ def assert_visible_entities_match_engine_truth(
             and player.room in room_set
         }
         entitled_bodies = {
-            body_id
+            body_id if legacy_body_ids else f"body-{body.player_id}"
             for body_id, body in state.bodies.items()
             if body.discovered_by is None and body.room in room_set
         }
@@ -767,6 +773,105 @@ def assert_visible_entities_match_engine_truth(
             f"{agent} packet places body {body_view.id!r} in "
             f"{body_view.room!r}, outside its visible rooms {sorted(room_set)}"
         )
+        matches = [
+            body
+            for body in state.bodies.values()
+            if (body.id if legacy_body_ids else f"body-{body.player_id}")
+            == body_view.id
+        ]
+        assert len(matches) == 1, "a visible body must identify exactly one corpse"
+        assert (body_view.victim_id, body_view.room) == (
+            matches[0].player_id,
+            matches[0].room,
+        ), "a visible body carries a forged victim or room"
+
+
+def assert_audible_events_are_entitled(
+    packet: ObservationPacket, *, state: WorldState
+) -> None:
+    """Only the active global alarm is entitled, once and without a room.
+
+    The protocol still accepts the historical vent sound variant, but the
+    current producer has no such channel. Shape validity is not entitlement.
+    """
+
+    expected = (
+        [("sabotage_alarm", None)]
+        if state.sabotage is not None and state.sabotage.active
+        else []
+    )
+    actual = [(event.kind, event.room) for event in packet.audible_events]
+    assert actual == expected, (
+        f"{packet.agent_id} audible events {actual!r} != entitled {expected!r}"
+    )
+
+
+def assert_event_observations_are_entitled(
+    batch: EventObservationBatch | None,
+    context: PacketContext,
+    *,
+    agent_id: str | None = None,
+) -> None:
+    """Require every source-time claim, and only claims its recipient witnessed."""
+
+    agent = batch.agent_id if batch is not None else agent_id
+    assert agent is not None, "a missing batch requires its intended recipient"
+    assert agent_id is None or agent_id == agent, "batch addressed to another recipient"
+    expected_actions: dict[str, tuple[str, str]] = {}
+    expected_moves: dict[str, tuple[str, str]] = {}
+    expected_own: tuple[str, str] | None = None
+    source_ticks: set[int] = set()
+    for event in context.engine_events:
+        if isinstance(event, KilledEvent):
+            if event.actor == agent:
+                expected_own = event.target, event.room
+                source_ticks.add(event.tick)
+            if agent in event.witnesses:
+                expected_actions[event.actor] = "kill", event.room
+                source_ticks.add(event.tick)
+        elif isinstance(event, (VentEnteredEvent, VentExitedEvent)):
+            room = (
+                event.source_room
+                if agent in event.source_witnesses
+                else event.destination_room
+                if agent in event.destination_witnesses
+                else None
+            )
+            if room is not None:
+                expected_actions[event.actor] = "vent", room
+                source_ticks.add(event.tick)
+        elif isinstance(event, MovedEvent):
+            assert event.witnesses is not None, "movement lacks event-local entitlement"
+            if agent in event.witnesses and event.from_room != event.to_room:
+                expected_moves[event.actor] = event.from_room, event.to_room
+                source_ticks.add(event.tick)
+    if batch is None:
+        assert not source_ticks, "entitled event batch was not delivered"
+        return
+    assert source_ticks == {batch.tick}, "event observation source tick is unearned"
+    own = (
+        None
+        if batch.own_kill is None
+        else (batch.own_kill.victim_id, batch.own_kill.room)
+    )
+    assert own == expected_own, "own-kill event is not the recipient's resolved kill"
+    assert tuple((v.id, v.action, v.room) for v in batch.witnessed_actions) == tuple(
+        (actor, action, room)
+        for actor, (action, room) in sorted(expected_actions.items())
+    ), "event observations contain missing, duplicate or unwitnessed actions"
+    assert tuple((v.id, v.from_room, v.to_room) for v in batch.moved_players) == tuple(
+        (actor, source, destination)
+        for actor, (source, destination) in sorted(expected_moves.items())
+    ), "event observations contain missing, duplicate or unwitnessed moves"
+    player = context.world_state.players[agent]
+    fellows = tuple(
+        sorted(
+            pid
+            for pid, other in context.world_state.players.items()
+            if player.role == "IMPOSTOR" and other.role == "IMPOSTOR" and pid != agent
+        )
+    )
+    assert batch.fellow_impostor_ids == fellows, "event batch leaks another team"
 
 
 # --------------------------------------------------------------------------- #
@@ -821,6 +926,7 @@ def _raise_factory_walk_violation(violation: WalkViolation) -> NoReturn:
 # verification nor doubled-record detection before 19.25; enabling either
 # would change what it accepts.
 _FACTORY_WALK_CONFIG: ReplayWalkConfig = ReplayWalkConfig(
+    supports_temporal_observations=True,
     profile="leak-scan-factory",
     on_violation=_raise_factory_walk_violation,
     missing_meeting_row="violation",
@@ -855,7 +961,13 @@ def _reconstruct_factory_records(
 
     records: list[PacketRecord] = []
     audit_path = audit_dir / f"_leak_audit_{replay_path.stem}.jsonl"
-    service = ObservationService(game_map=game_map, audit_log_path=audit_path)
+    service = ObservationService(
+        game_map=game_map,
+        audit_log_path=audit_path,
+        temporal_observations=recorded_temporal_observations(
+            read_all_entries(replay_path)
+        ),
+    )
     try:
         for walk_event in walk_replay(
             replay_path,
@@ -866,6 +978,22 @@ def _reconstruct_factory_records(
             game_map=game_map,
             config=_FACTORY_WALK_CONFIG,
         ):
+            if isinstance(walk_event, TickAdvanced):
+                context = PacketContext(
+                    walk_event.events,
+                    walk_event.state,
+                    game_map,
+                    temporal_observations=service.temporal_observations,
+                )
+                batches = event_observation_batches(
+                    service=service, state=walk_event.state, events=walk_event.events
+                )
+                if service.temporal_observations:
+                    for agent_id in walk_event.state.players:
+                        assert_event_observations_are_entitled(
+                            batches.get(agent_id), context, agent_id=agent_id
+                        )
+                continue
             if isinstance(walk_event, MeetingOpened):
                 if walk_event.trigger is None:  # pragma: no cover - engine invariant
                     # Pre-19.25 this path crashed as a bare StopIteration from a
@@ -889,6 +1017,7 @@ def _reconstruct_factory_records(
                 engine_events=list(walk_event.last_events),
                 world_state=state,
                 game_map=game_map,
+                temporal_observations=service.temporal_observations,
             )
             for player_id in sorted(state.players):
                 if state.players[player_id].alive:
@@ -985,6 +1114,14 @@ def assert_packet_is_leak_clean(
     _assert_no_recursive_hidden_fields(packet_dump)
     _assert_no_role_bearing_values(packet_dump)
     events = list(context.engine_events)
+    if context.temporal_observations:
+        events = [
+            event
+            for event in events
+            if not isinstance(
+                event, (KilledEvent, VentEnteredEvent, VentExitedEvent, MovedEvent)
+            )
+        ]
     for visible_player in packet.visible_players:
         visible_player_dump = visible_player.model_dump(mode="json")
         assert set(visible_player_dump.keys()) == {"id", "room", "action"}
@@ -1014,14 +1151,16 @@ def assert_packet_is_leak_clean(
         packet,
         state=context.world_state,
         game_map=context.game_map,
-        engine_events=context.engine_events,
+        engine_events=events,
+        legacy_body_ids=context.legacy_body_ids,
     )
+    assert_audible_events_are_entitled(packet, state=context.world_state)
     # ``departure_visible_rooms=None`` asserts the rule observation/service.py
     # implements today (post-move rooms gate the departure); the stricter
     # pre-move rule is the parameter a future flip would pass.
     assert_moved_players_are_witness_gated(
         packet,
-        engine_events=context.engine_events,
+        engine_events=events,
         visible_rooms=compute_visibility_for_player(
             observer_id=packet.agent_id,
             world_state=context.world_state,

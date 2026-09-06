@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Protocol, runtime_checkable
 
 from observation.action_intent import ActionIntent
-from observation.packet import ObservationPacket
+from observation.packet import EventObservationBatch, ObservationPacket
 from observation.public_map import PublicMapView
 
 
@@ -21,3 +21,10 @@ class AgentInterface(Protocol):
         packet: ObservationPacket,
         public_map: PublicMapView,
     ) -> ActionIntent: ...
+
+
+@runtime_checkable
+class EventObservingAgent(Protocol):
+    """Optional source-time event ingestion, without another tactical decision."""
+
+    def observe_events(self, batch: EventObservationBatch) -> None: ...

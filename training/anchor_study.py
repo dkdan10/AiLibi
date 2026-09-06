@@ -94,6 +94,7 @@ from orchestrator.replay import (
     # training/rollout.py does (the 15.8 precedent for this private seam).
     _state_hash,
     read_all_entries,
+    require_legacy_observations,
 )
 from orchestrator.seeder import seed_initial_state
 from training.bakeoff.harness import (
@@ -434,6 +435,7 @@ def walk_corpus_game(
     public_map = public_map_from_engine_map(resolved_map)
 
     entries = read_all_entries(replay_path)
+    require_legacy_observations(entries, consumer="anchor study")
     tick_entries = [entry for entry in entries if isinstance(entry, ReplayEntry)]
     meeting_by_tick: dict[int, MeetingReplayEntry] = {}
     for meeting_row in entries:
@@ -533,7 +535,7 @@ def walk_corpus_game(
                     world_state=state, agent_id=pid, engine_events=last_events
                 )
                 fsm_intent = agents[pid].decide(packet, public_map)
-                derived = translate_action_intent(fsm_intent)
+                derived = translate_action_intent(fsm_intent, world_state=state)
                 recorded = _ACTION_ADAPTER.validate_python(dict(raw_action))
                 if derived != recorded:
                     raise CorpusWalkError(

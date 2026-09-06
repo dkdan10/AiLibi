@@ -52,6 +52,7 @@ from engine.rules import (
     resolve_win_conditions,
 )
 from engine.world import Map, WorldState
+from engine.visibility import compute_visibility_for_player
 
 
 def _decrement_cooldowns(
@@ -264,6 +265,15 @@ def _apply_move(
         actor=action.actor,
         from_room=actor.room,
         to_room=action.payload.to_room,
+        witnesses=tuple(
+            observer_id
+            for observer_id in sorted(state.players)
+            if observer_id != action.actor
+            and action.actor
+            in compute_visibility_for_player(
+                observer_id=observer_id, world_state=state, game_map=game_map
+            ).visible_player_ids
+        ),
     )
     return replace(state, players=players), event
 

@@ -38,7 +38,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Final, Literal, Protocol, TypeAlias, TypeVar, cast, runtime_checkable
 
-from agents.base import AgentInterface
+from agents.base import AgentInterface, EventObservingAgent
 from agents.memory.beliefs import (
     BODY_PROXIMITY_WINDOW_TICKS,
     OBSERVED_KILL_ACTION,
@@ -60,6 +60,7 @@ from agents.perception import (
     EVENT_SAW_PLAYER_MOVE,
     EVENT_SELF_STATE,
     PROVENANCE_OBSERVED,
+    ingest_event_observations,
     ingest_packet,
 )
 from agents.strategic.prompts import (
@@ -116,7 +117,10 @@ from meetings.schemas import (
 )
 from meetings.transcript import MeetingTriggerKind
 from observation.action_intent import ActionIntent
-from observation.packet import ObservationPacket
+from observation.body_ids import public_body_id
+from observation.packet import EventObservationBatch, ObservationPacket
+from observation.version import temporal_observations_enabled
+from orchestrator.observation_delivery import event_observation_batches
 from observation.public_map import PublicMapView
 from observation.service import ObservationService
 from orchestrator.boundary import (
@@ -376,9 +380,8 @@ PROMPT_VERSION_SETS: Final[Mapping[str, Mapping[str, str]]] = {
     # a certification, and the ``<map>`` card writes each room as
     # ``Prose Name (ROOM_ID)`` so the table has an authored spelling to speak.
     # Every template renders that card, so the four stamps bump as a unit and no
-    # two bodies can ever share one. The committed sample sets stamp v4 and
-    # resolve through tests/fixtures/prompt_archive/qwen3_6_27b_v4/ until the
-    # adopting record retires that entry.
+    # two bodies can ever share one. Current recordings resolve through this
+    # PROMPT_VERSION_SETS entry; there is no separate archived v4 template set.
     # Lineage: 16.13 port, 16.15 elicitation, 16.16 persona, 20.31 evidence
     # honesty, 21.1 in-world register.
     "qwen3_6_27b": _bespoke_versions("qwen3_6_27b", version="v5"),
@@ -2039,6 +2042,7 @@ class HeadlessGame:
                 observation_service = ObservationService(
                     game_map=self._game_map,
                     audit_log_path=self._audit_log_path,
+                    temporal_observations=replay.temporal_observations,
                 )
                 resources.callback(observation_service.close)
                 begin_recording()
@@ -2092,6 +2096,7 @@ class HeadlessGame:
         observation_service = ObservationService(
             game_map=self._game_map,
             audit_log_path=self._audit_log_path,
+            temporal_observations=temporal_observations_enabled(),
         )
         agents = self._build_agents(state.players)
         trace = _EpisodeTraceCollector()
@@ -2153,7 +2158,9 @@ class HeadlessGame:
                 last_events=last_events,
             )
             intents = self._collect_intents(packets=packets, agents=agents)
-            actions = list(translate_action_intents_for_tick(intents))
+            actions = list(
+                translate_action_intents_for_tick(intents, world_state=state)
+            )
             input_tick = state.tick
             state, events = advance_tick(
                 state,
@@ -2171,6 +2178,16 @@ class HeadlessGame:
                     state=state,
                     events=events,
                 )
+
+            for player_id, batch in event_observation_batches(
+                service=observation_service, state=state, events=events
+            ).items():
+                agent = agents[player_id]
+                if not isinstance(agent, EventObservingAgent):
+                    raise TypeError(
+                        "temporal observations require an agent observe_events method"
+                    )
+                agent.observe_events(batch)
 
             if state.phase == "MEETING":
                 if self._meeting_runner is None:
@@ -2194,6 +2211,7 @@ class HeadlessGame:
                     replay=replay,
                     trace=trace,
                     meeting_index=meeting_counter,
+                    temporal_observations=observation_service.temporal_observations,
                 )
                 meeting_counter += 1
                 # Preserve the events the engine emitted on the
@@ -2229,13 +2247,14 @@ class HeadlessGame:
         replay: ReplayLog | None,
         trace: _EpisodeTraceCollector | None,
         meeting_index: int,
+        temporal_observations: bool,
     ) -> tuple[WorldState, list[EngineEvent]]:
         if self._meeting_runner is None:
             raise RuntimeError(
                 "_run_and_apply_meeting called without a configured meeting runner"
             )
         trigger, triggering_body_id, trigger_kind = _build_meeting_trigger(
-            state=state, events=events
+            state=state, events=events, temporal_observations=temporal_observations
         )
         meeting_id = f"{self._game_id()}:meeting-{meeting_index}"
         side_records: _MeetingSideRecords | None = None
@@ -2844,6 +2863,7 @@ def _build_meeting_trigger(
     *,
     state: WorldState,
     events: Sequence[EngineEvent],
+    temporal_observations: bool = False,
 ) -> tuple[MeetingTrigger, BodyId | None, Literal["report", "emergency"]]:
     """Construct a :class:`MeetingTrigger` from the engine's transition events.
 
@@ -2899,9 +2919,16 @@ def _build_meeting_trigger(
         if body_id is not None:
             corpse = state.bodies.get(body_id)
             victim_id = corpse.player_id if corpse is not None else None
+        # Trigger text reaches the model. Preserve recorded legacy bytes OFF;
+        # the temporal experiment exposes only the already-public victim handle.
+        described_body = (
+            (public_body_id(victim_id) if victim_id is not None else None)
+            if temporal_observations
+            else body_id
+        )
         description = (
             f"{trigger_event.actor} reported "
-            + (f"body {body_id} " if body_id is not None else "a body ")
+            + (f"body {described_body} " if described_body is not None else "a body ")
             + f"at tick {trigger_event.tick}"
         )
     else:
@@ -3092,6 +3119,15 @@ class TacticalAgent:
                 self._memory.episodic, public_map, emergency=view
             )
         return self._policy.decide(self._memory.episodic, public_map)
+
+    def observe_events(self, batch: EventObservationBatch) -> None:
+        """Ingest source-time evidence without invoking tactical policy twice."""
+
+        if batch.agent_id != self._agent_id:
+            raise ValueError("event observations addressed to a different agent")
+        ingest_event_observations(
+            batch=batch, memory=self._memory.episodic, beliefs=self._memory.beliefs
+        )
 
     def render_memory_for_meeting(
         self,

@@ -103,6 +103,7 @@ from meetings.schemas import (
     PlayerId,
     VoteBallot,
 )
+from observation.version import temporal_observations_enabled
 
 # The Task-18.10 impostor-answer lever, resolved LOCALLY instead of importing
 # ``agents.strategic.prompts.loader.impostor_roll_call_enabled``: the loader
@@ -242,6 +243,7 @@ class ReplayEntry(BaseModel):
     actions: tuple[dict[str, Any], ...]
     action_dispositions: tuple[ActionDisposition, ...] | None = None
     state_hash: str
+    temporal_observation_version: Literal[1] | None = None
 
     @model_validator(mode="after")
     def _dispositions_cover_every_action(self) -> ReplayEntry:
@@ -634,6 +636,38 @@ ReplayLogEntry: TypeAlias = Annotated[
 ]
 
 
+def recorded_temporal_observations(entries: Sequence[ReplayLogEntry]) -> bool:
+    """Read and validate the evidence version, including interrupted prefixes."""
+
+    versions = {
+        entry.temporal_observation_version
+        for entry in entries
+        if isinstance(entry, ReplayEntry)
+    }
+    if len(versions) > 1:
+        raise ValueError("mixed temporal observation versions in one replay")
+    enabled = versions == {1}
+    for entry in entries:
+        if isinstance(entry, GameEndReplayEntry) and entry.substrate_flags is not None:
+            if (
+                bool(entry.substrate_flags.get("temporal_observations", False))
+                != enabled
+            ):
+                raise ValueError(
+                    "temporal observation version disagrees with substrate stamp"
+                )
+    return enabled
+
+
+def require_legacy_observations(
+    entries: Sequence[ReplayLogEntry], *, consumer: str
+) -> None:
+    """Refuse new evidence in a frozen instrument that has no temporal adapter."""
+
+    if recorded_temporal_observations(entries):
+        raise ValueError(f"{consumer} does not support temporal observations")
+
+
 def recorded_completion_status(entries: Sequence[ReplayLogEntry]) -> CompletionStatus:
     """Classify recorded evidence without certifying its integrity or outcome."""
     if any(isinstance(entry, GameEndReplayEntry) for entry in entries):
@@ -725,10 +759,13 @@ _RETIRED_ALWAYS_ON_LEVERS: Final[tuple[str, ...]] = (
 #   reduction and the prompt loader must read ONE lever and the ``agents ↛
 #   meetings.manager`` contract forbids the manager as its home.
 #
-# All four are LEVERS: an arm a future gate may decide to ship, which would
+# * ``temporal_observations`` — source-time evidence delivery, bound to the
+#   stdlib-only observation version resolver.
+#
+# All five are LEVERS: an arm a future gate may decide to ship, which would
 # graduate it into ``_RETIRED_ALWAYS_ON_LEVERS`` at its adopting record.
 #
-# A bare environment stamps all four ``False``, which IS the committed substrate: the
+# A bare environment stamps all five ``False``, which IS the committed substrate: the
 # missing-key-reads-False rule makes a stamp recorded before a key existed agree
 # with a build that has it. A lever graduates by moving into
 # ``_RETIRED_ALWAYS_ON_LEVERS`` at the record that adopts it — which appends it
@@ -744,6 +781,7 @@ _TOGGLEABLE_LEVER_RESOLVERS: Final[
     ("reporter_reasoning", reporter_reasoning_enabled),
     ("corroboration_discipline", corroboration_discipline_enabled),
     ("testimony_shapes", testimony_shapes_enabled),
+    ("temporal_observations", temporal_observations_enabled),
 )
 
 # The still-toggleable subset of ``SUBSTRATE_FLAG_KEYS`` (Task 14.10):
@@ -1041,6 +1079,7 @@ class ReplayLog:
         force: bool = False,
         tactical_policy_stamp: TacticalPolicyStamp | None = None,
         crew_tactical_policy_stamp: CrewTacticalPolicyStamp | None = None,
+        temporal_observations: bool | None = None,
     ) -> None:
         # ``tactical_policy_stamp`` is the recorder-supplied provenance stamp
         # (Task 15.9) written onto the ``game_over`` record by
@@ -1057,6 +1096,11 @@ class ReplayLog:
         # the pre-18.7 writer. Kept in its own DISTINCT field so a crew recording
         # can never wear the impostor champion's stamp (the conflation guard).
         self._crew_tactical_policy_stamp = crew_tactical_policy_stamp
+        self.temporal_observations = (
+            temporal_observations_enabled()
+            if temporal_observations is None
+            else temporal_observations
+        )
         # Assigned first so __del__ is safe even if construction raises below
         # (e.g. AlreadyExistsError on an existing path).
         self._handle: TextIO | None = None
@@ -1116,6 +1160,8 @@ class ReplayLog:
             entry["action_dispositions"] = list(
                 classify_action_dispositions(actions, events)
             )
+        if self.temporal_observations:
+            entry["temporal_observation_version"] = 1
         self._append(entry)
 
     def record_meeting(
@@ -1189,7 +1235,10 @@ class ReplayLog:
             tick=tick,
             winner=winner,
             reason=reason,
-            substrate_flags=substrate_flag_snapshot(),
+            substrate_flags={
+                **substrate_flag_snapshot(),
+                "temporal_observations": self.temporal_observations,
+            },
             tactical_policy=self._tactical_policy_stamp,
             crew_tactical_policy=self._crew_tactical_policy_stamp,
         )
@@ -1700,6 +1749,8 @@ __all__ = [
     "fold_meeting_outcome_into_memories",
     "fsm_default_tactical_policy_stamp",
     "read_all_entries",
+    "recorded_temporal_observations",
+    "require_legacy_observations",
     "read_crew_tactical_policy_stamp",
     "read_failed_call_entries",
     "read_game_outcome",

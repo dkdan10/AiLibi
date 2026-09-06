@@ -1040,11 +1040,11 @@ def _observer_class_state(game_map: Map) -> WorldState:
     ("observer", "expected_players", "expected_bodies"),
     [
         # CREWMATE: its own room only.
-        ("p-3", ("p-1", "p-7"), ("body-p-6-0",)),
+        ("p-3", ("p-1", "p-7"), ("body-p-6",)),
         # IMPOSTOR: its room plus the map neighbours (WEST_HALL, UPPER_HALL).
-        ("p-1", ("p-3", "p-4", "p-7", "p-8"), ("body-p-6-0",)),
+        ("p-1", ("p-3", "p-4", "p-7", "p-8"), ("body-p-6",)),
         # VENTED (impostor in a LABS vent): still LABS + MEDBAY.
-        ("p-2", ("p-5",), ("body-p-9-0",)),
+        ("p-2", ("p-5",), ("body-p-9",)),
         # The vented player's neighbour: p-2 shares LABS with p-5 and is
         # invisible to it -- venting is one-directional.
         ("p-5", (), ()),

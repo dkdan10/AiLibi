@@ -220,6 +220,7 @@ from orchestrator.replay import (
     _state_hash,
     classify_action_dispositions,
     read_all_entries,
+    recorded_temporal_observations,
     substrate_stamp_mismatches,
 )
 from orchestrator.seeder import seed_initial_state
@@ -320,6 +321,7 @@ class ReplayWalkConfig:
     require_game_end_row: bool = False
     verify_recorded_outcome: bool = False
     verify_chronology_and_outcome: bool = False
+    supports_temporal_observations: bool = False
 
 
 @dataclass(frozen=True)
@@ -437,6 +439,13 @@ def walk_replay(
 
     game_id = f"headless-seed-{seed}"
     entries = read_all_entries(replay_path)
+    if (
+        recorded_temporal_observations(entries)
+        and not config.supports_temporal_observations
+    ):
+        raise ValueError(
+            f"replay profile {config.profile!r} does not support temporal observations"
+        )
     integrity = (
         ReplayIntegrityValidator(entries, game_id=game_id)
         if config.verify_chronology_and_outcome

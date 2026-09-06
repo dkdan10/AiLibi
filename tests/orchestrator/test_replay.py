@@ -67,6 +67,7 @@ from orchestrator.replay import (
     substrate_slate_mismatches,
     substrate_stamp_mismatches,
 )
+from observation.version import temporal_observations_enabled
 from engine.actions import Action
 from engine.events import EngineEvent
 from engine.tick import advance_tick
@@ -103,6 +104,7 @@ ENV_IMPOSTOR_ROLL_CALL_KEY = "impostor_roll_call"
 ENV_REPORTER_REASONING_KEY = "reporter_reasoning"
 ENV_CORROBORATION_DISCIPLINE_KEY = "corroboration_discipline"
 ENV_TESTIMONY_SHAPES_KEY = "testimony_shapes"
+ENV_TEMPORAL_OBSERVATIONS_KEY = "temporal_observations"
 
 # Every RETIRED lever: snapshot key and the ``AILIBI_*`` variable its key
 # derives, in graduation order. Written out as literals rather than derived from
@@ -181,6 +183,7 @@ _BARE_STAMP: dict[str, bool] = {
     "reporter_reasoning": False,
     "corroboration_discipline": False,
     "testimony_shapes": False,
+    "temporal_observations": False,
 }
 
 # The eight keys the baseline-7 record appended: the Phase-20 belief-substrate
@@ -376,6 +379,7 @@ class TestSubstrateFlagStamp:
             ENV_REPORTER_REASONING_KEY,
             ENV_CORROBORATION_DISCIPLINE_KEY,
             ENV_TESTIMONY_SHAPES_KEY,
+            ENV_TEMPORAL_OBSERVATIONS_KEY,
         )
 
     def test_the_retired_stamp_pin_bites(self) -> None:
@@ -389,14 +393,14 @@ class TestSubstrateFlagStamp:
         assert substrate_flag_snapshot({}) != broken
 
     def test_live_toggle_registrations(self) -> None:
-        # Registration pin: FOUR live toggles, all DEFAULT-OFF -- the
+        # Registration pin: FIVE live toggles, all DEFAULT-OFF -- the
         # impostor-answer arm, the reporter-voice arm, the ballot's
         # source-count arm and the testimony-shapes arm. The graduated levers
         # are not here: they moved into ``_RETIRED_ALWAYS_ON_LEVERS`` at the
         # records that adopted them and their env gates are gone. Neither are the
         # two Wave-1a repair gates: a repair records no arm, so the baseline-8
         # record deleted them outright and promoted them nowhere.
-        assert len(_TOGGLEABLE_LEVER_RESOLVERS) == 4
+        assert len(_TOGGLEABLE_LEVER_RESOLVERS) == 5
         registry = dict(_TOGGLEABLE_LEVER_RESOLVERS)
         assert registry[ENV_IMPOSTOR_ROLL_CALL_KEY] is _impostor_roll_call_enabled
         # Bound BY IDENTITY, not by a mirror: this module already imports
@@ -413,6 +417,7 @@ class TestSubstrateFlagStamp:
         # the stdlib-only leaf BOTH sides of the firewall read, so the stamp and
         # the reduction's read-site are one function.
         assert registry[ENV_TESTIMONY_SHAPES_KEY] is resolve_testimony_shapes
+        assert registry[ENV_TEMPORAL_OBSERVATIONS_KEY] is temporal_observations_enabled
         for key, _env_var in _RETIRED_LEVERS:
             assert key not in registry, key
         assert TOGGLEABLE_SUBSTRATE_FLAG_KEYS == (
@@ -420,6 +425,7 @@ class TestSubstrateFlagStamp:
             ENV_REPORTER_REASONING_KEY,
             ENV_CORROBORATION_DISCIPLINE_KEY,
             ENV_TESTIMONY_SHAPES_KEY,
+            ENV_TEMPORAL_OBSERVATIONS_KEY,
         )
         # The full stamp key order: twenty-one graduated levers in graduation
         # order, then the live toggles in registration order. Each half grows only
@@ -454,6 +460,7 @@ class TestSubstrateFlagStamp:
             "reporter_reasoning",
             "corroboration_discipline",
             "testimony_shapes",
+            "temporal_observations",
         )
 
     def test_env_var_for_lever_derives_the_documented_variable(self) -> None:
@@ -491,16 +498,19 @@ class TestSubstrateFlagStamp:
             "reporter_reasoning",
             "corroboration_discipline",
             "testimony_shapes",
+            "temporal_observations",
         }
         assert _BARE_STAMP["reporter_reasoning"] is False
         assert _BARE_STAMP["corroboration_discipline"] is False
         assert _BARE_STAMP["testimony_shapes"] is False
+        assert _BARE_STAMP["temporal_observations"] is False
         assert all(_BARE_STAMP[key] == value for key, value in _BASELINE7_STAMP.items())
         # And the committed literal must not have grown them: the committed bytes
         # carry twenty-two keys and never named any of the three.
         assert "reporter_reasoning" not in _BASELINE7_STAMP
         assert "corroboration_discipline" not in _BASELINE7_STAMP
         assert "testimony_shapes" not in _BASELINE7_STAMP
+        assert "temporal_observations" not in _BASELINE7_STAMP
 
     def test_every_recording_stamps_the_full_snapshot(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

@@ -1,10 +1,7 @@
 # Architecture (as built)
 
-The current-architecture note `AGENTS.md` routes to — authoritative for the
-system's layering, its enforced boundaries, and its determinism contracts **as
-built**. `DESIGN.md` is the historical design record (a v0.1 draft reconciled to
-HEAD as of the Phase 6 close, 2026-05-30): rationale and history, not current
-shape. Written from the code under Task 19.1; **current as of Phase 19 (2026-08)**.
+This note defines current layering, enforced boundaries and determinism.
+`AGENTS.md` routes here; `DESIGN.md` records historical rationale.
 
 ## Layering
 
@@ -105,12 +102,6 @@ default mover; learned arms stay opt-in.
 Only the spikes listed in `pyproject.toml`'s `[tool.mypy] exclude` skip the
 strict gate (along with `design/`, the one-off design-artifact generators).
 
-`meetings/manager.py` and `orchestrator/game.py` are the two large modules here:
-each is a single state machine whose steps share one piece of mutable run state,
-so splitting either before it has characterization tests would trade a long file
-for a wrong one — the decomposition is on the recorded backlog
-(`audits/audit-phase-19-planning.md` §5), not overlooked.
-
 ## Enforced boundaries
 
 Four `import-linter` contracts (`.importlinter`, run by `uv run lint-imports` in
@@ -148,21 +139,33 @@ the recording — not the seed — is the determinism boundary (the README's
 every metric attributable and every regression bisectable. Behavioral changes to the belief substrate land as
 **levers**, registered in `orchestrator/replay.py`: `SUBSTRATE_FLAG_KEYS` is
 twenty-one graduated levers (`_RETIRED_ALWAYS_ON_LEVERS` — env gates deleted,
-unconditionally ON, kept in the stamp for provenance) plus four live toggles
+unconditionally ON, kept in the stamp for provenance) plus five live toggles
 (`TOGGLEABLE_SUBSTRATE_FLAG_KEYS` — `impostor_roll_call`,
-`reporter_reasoning`, `corroboration_discipline`, `testimony_shapes`; each its
+`reporter_reasoning`, `corroboration_discipline`, `testimony_shapes`,
+`temporal_observations`; each its
 own `AILIBI_*` variable, default OFF; `.env.example` documents them). Every recording stamps the snapshot
 onto its `game_over` record and into the set's `MANIFEST.md` `flags` column, and
 the loader refuses a recording made under a different substrate. Graduating a
 lever also carries the prose-sweep obligation in `AGENTS.md`.
 
-**Baselines are adopting records**, not tags: a baseline is the recording that
-adopts a substrate. The ladder tip is baseline 8 — the maintenance re-record on
-the corrected substrate (`audits/audit-phase-21-rerecord.md`), no bars by
-design. Beneath it, baseline 7 (`audits/audit-phase-20-baseline-7.md`): its
-pre-registered rule returned **FINDING** and the owner adopted it anyway, by
-explicit override; §6.1 holds the ruling. The three reproducibility
-scopes this project claims — replay integrity, same-runtime repeatability, and
-cross-platform optimizer portability (designed for, not yet confirmed) — are
-stated under the README's "Three reproducibility scopes"; never restate them
-stronger elsewhere.
+### Observation timing and public identities
+
+Observation packets use victim-derived body handles; privileged report
+translation retains engine IDs. The default-OFF `temporal_observations` version
+adds event-local movement entitlement and source-tick kill/vent/move delivery
+before meetings, including witnesses killed later that tick. Shared live/reader
+helpers preserve exact-once ingestion. Tick-row versions identify partial runs;
+missing means legacy, conflicting versions fail, and unsupported instruments
+refuse ON inputs.
+
+[The observation contract](observation-contract.md) defines channel entitlement,
+timing, citations and compatibility. Complete model-facing body-ID privacy is
+also gated: legacy OFF opening prompts still expose internal body IDs until an
+adopting decision; typed packet handles are repaired unconditionally.
+
+**Baselines are adopting records**, not tags. Baseline 8 is the maintenance
+re-record on corrected behavior (`audits/audit-phase-21-rerecord.md`); baseline 7
+was adopted by an explicit override of its FINDING ruling
+(`audits/audit-phase-20-baseline-7.md` §6.1). The README states the separate
+replay integrity, same-runtime repeatability and optimizer portability claims;
+never restate them more strongly.

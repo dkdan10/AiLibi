@@ -5,8 +5,9 @@ from collections.abc import Sequence
 from pydantic import TypeAdapter
 
 from engine.actions import Action
-from engine.world import Map
+from engine.world import Map, WorldState
 from observation.action_intent import ActionIntent
+from observation.body_ids import public_body_id
 from observation.public_map import PublicMapView
 from orchestrator.action_ordering import order_actions_for_tick
 
@@ -34,17 +35,38 @@ def public_map_from_engine_map(game_map: Map) -> PublicMapView:
     )
 
 
-def translate_action_intent(intent: ActionIntent) -> Action:
-    """Translate one engine-free agent intent into an engine-owned action."""
+def translate_action_intent(
+    intent: ActionIntent, *, world_state: WorldState | None = None
+) -> Action:
+    """Translate public body handles at the privileged engine boundary.
+
+    Recorded engine actions and callers using established internal identifiers
+    remain valid. Unknown handles reach the engine's ordinary report rejection;
+    translation never grants report legality or guesses a victim from a string.
+    """
 
     action_data = intent.model_dump(mode="python")
+    if intent.type == "report" and world_state is not None:
+        matches = [
+            body.id
+            for body in world_state.bodies.values()
+            if public_body_id(body.player_id) == intent.payload.body_id
+        ]
+        if len(matches) > 1:
+            raise ValueError("multiple engine bodies share one public victim handle")
+        if matches:
+            action_data["payload"]["body_id"] = matches[0]
     return _ACTION_ADAPTER.validate_python(action_data)
 
 
 def translate_action_intents_for_tick(
     intents: Sequence[ActionIntent],
+    *,
+    world_state: WorldState | None = None,
 ) -> tuple[Action, ...]:
     """Translate and sort the only action batch shape future agents may submit."""
 
-    actions = [translate_action_intent(intent) for intent in intents]
+    actions = [
+        translate_action_intent(intent, world_state=world_state) for intent in intents
+    ]
     return order_actions_for_tick(actions)

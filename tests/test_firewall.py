@@ -986,7 +986,7 @@ def test_the_unmutated_entitlement_scenario_is_clean(tmp_path: Path) -> None:
         (
             "_visible_body_ids",
             _m6_bodies_everywhere,
-            r"^p-4 visible_bodies \['body-p-1-0'\] != undiscovered bodies in "
+            r"^p-4 visible_bodies \['body-p-1'\] != undiscovered bodies in "
             r"\['ADMIN'\] \[\]",
         ),
         (

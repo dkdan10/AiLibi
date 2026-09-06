@@ -179,6 +179,7 @@ from orchestrator.replay import (  # noqa: E402
     _TOGGLEABLE_LEVER_RESOLVERS,
     env_var_for_lever,
     read_all_entries,
+    require_legacy_observations,
     read_substrate_flags,
     retired_levers_stamped_off,
     substrate_flag_snapshot,
@@ -2635,11 +2636,9 @@ def _walk(
         walk.games += 1
         seed = int(seed_path.stem.rsplit("-", 1)[-1])
         roles = per_seed_roles[seed]
-        ticks = [
-            entry
-            for entry in read_all_entries(seed_path)
-            if isinstance(entry, ReplayEntry)
-        ]
+        entries = read_all_entries(seed_path)
+        require_legacy_observations(entries, consumer="phase21 counterfactual")
+        ticks = [entry for entry in entries if isinstance(entry, ReplayEntry)]
         venters = venters_in_game(ticks)
         sink.clear()
         for meeting in walk_replay_meetings(
@@ -4565,7 +4564,9 @@ def _arm_serving_set(recording_dir: Path) -> str:
     """
 
     for seed in seeds_on_disk(recording_dir):
-        for entry in read_all_entries(recording_dir / f"replay-seed-{seed}.jsonl"):
+        entries = read_all_entries(recording_dir / f"replay-seed-{seed}.jsonl")
+        require_legacy_observations(entries, consumer="phase21 counterfactual")
+        for entry in entries:
             if isinstance(entry, MeetingReplayEntry):
                 return resolve_prompt_set(entry.prompt_versions)
     raise SystemExit(

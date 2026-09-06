@@ -926,6 +926,7 @@ def _raise_current_report_violation(violation: WalkViolation) -> NoReturn:
 
 
 _CURRENT_REPORT_WALK_CONFIG: Final[ReplayWalkConfig] = ReplayWalkConfig(
+    supports_temporal_observations=True,
     profile="current-report",
     on_violation=_raise_current_report_violation,
     verify_tick_hashes=True,

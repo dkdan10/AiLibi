@@ -56,26 +56,16 @@ _VALID = '{"target": "p-1", "confidence": 0.5}'
 # can emit, which must surface as ``parsed is None`` + a ``parse_error``.
 _MALFORMED = '{"target": "p-1"}'
 
-# An arbitrary EXPLICIT provenance dict threaded through call_turn verbatim.
-# (Historical flag-OFF shape; since Task 14.9 the live snapshot is
-# unconditionally all-ON, so an explicit dict is the only way a row can carry
-# anything else — which is exactly what the passthrough contract covers.)
+# Historical explicit provenance passes through call_turn verbatim, even when
+# its shape and values differ from the current live snapshot.
 _FLAGS_OFF = {
     "testimony_as_content": False,
     "witnessed_kill_evidence": False,
     "movement_perception": False,
     "unfreeze_memory": False,
 }
-# The live snapshot under a bare env: the nine graduated levers unconditionally ON
-# -- the four 13.5 levers since Task 14.9, the Task-14.10 evidence-quality lever
-# since the Task-14.12 close, Task 15.5's reporter_exculpation since the
-# Task-15.7 baseline-3 record, and the three Phase-16 levers graduated at the
-# Task-16.17 baseline-5 record (16.4's hard_evidence_gate, 16.5's
-# observation_id_rendering, 16.6's citation_gate) -- each env gate retired once the
-# baseline adopted it, so the snapshot no longer reads an AILIBI_* var for any of
-# them -- plus the FOUR live default-OFF toggles, stamped False under the bare
-# env: 18.10's impostor_roll_call, the reporter-voice arm, the source-count arm
-# and the testimony-shapes arm.
+# The independent expected snapshot pins graduated levers ON and live toggles
+# OFF, so accidentally dropping a registry entry cannot pass this comparison.
 _FLAGS_ON = {
     "testimony_as_content": True,
     "witnessed_kill_evidence": True,
@@ -104,14 +94,12 @@ _FLAGS_ON = {
     "structured_turn_markers": True,
     "meeting_outcome_memory": True,
     "coalesced_memory_render": True,
-    # The FOUR live toggles, all DEFAULT-OFF: the impostor-answer arm the
-    # CREW-ONLY ruling did not ship, plus the ballot's source-count arm, the
-    # reporter-voice arm and the testimony-shapes arm, each awaiting its own
-    # adopting record. A probe backend runs bare, so it stamps all four False.
+    # Live experiments stay OFF until their adopting decision.
     "impostor_roll_call": False,
     "reporter_reasoning": False,
     "corroboration_discipline": False,
     "testimony_shapes": False,
+    "temporal_observations": False,
 }
 
 
@@ -426,16 +414,10 @@ def test_unknown_backend_raises(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_substrate_flags_default_snapshot(monkeypatch: pytest.MonkeyPatch) -> None:
     # No explicit substrate_flags: call_turn snapshots the live substrate.
-    # Twenty-one levers are unconditionally ON -- the four 13.5 levers since Task 14.9, the
-    # 14.10 evidence-quality lever since the Task-14.12 close, Task 15.5's
-    # reporter_exculpation since the Task-15.7 baseline-3 record, the three Phase-16
-    # levers graduated at the Task-16.17 baseline-5 record, and the four
-    # meeting-layer levers graduated at the Task-18.12 baseline-6 record, and the
-    # eight Phase-20 levers graduated at the baseline-7 record -- so no AILIBI_*
-    # var can flip any of THEM (a stray AILIBI_EVIDENCE_QUALITY_LIFT export
-    # cannot). Task 18.10's impostor_roll_call is the lone live default-OFF
-    # toggle, stamped False under this bare env.
     monkeypatch.delenv("AILIBI_EVIDENCE_QUALITY_LIFT", raising=False)
+    for key, enabled in _FLAGS_ON.items():
+        if not enabled:
+            monkeypatch.delenv(f"AILIBI_{key.upper()}", raising=False)
     send = _RecordingOllama(text=_VALID)
     monkeypatch.setattr(pb, "_ollama_send", send)
     result = asyncio.run(
@@ -539,28 +521,14 @@ def test_featherless_explicit_base_url_wins(
 def test_active_substrate_flags_every_graduated_lever_unconditional(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # The thirteen GRADUATED substrate levers are unconditionally ON: the four 13.5
-    # gates retired at Task 14.9, the Task-14.10 evidence-quality gate at the
-    # Task-14.12 close, Task 15.5's reporter_exculpation gate at the Task-15.7
-    # baseline-3 record, the three Phase-16 gates (16.4's hard_evidence_gate, 16.5's
-    # observation_id_rendering, 16.6's citation_gate) at the Task-16.17 baseline-5
-    # record, and the four meeting-layer gates (16.8's absence_prior, 18.8's
-    # roll_call_round, 18.9's whereabouts_interior_flags /
-    # vent_placement_contradictions) at the Task-18.12 baseline-6 record, and the
-    # eight Phase-20 belief-substrate levers at the baseline-7 record. So
-    # active_substrate_flags reads them all-True under ANY env — bare, a legacy
-    # all-ON export, a legacy "0", or a stray lever export (either polarity) — and
-    # no AILIBI_* var can flip any of them (the delegation to
-    # orchestrator.replay.substrate_flag_snapshot carries this for free). The
-    # four live default-OFF toggles — 18.10's impostor_roll_call, the
-    # reporter-voice arm, the source-count arm and the testimony-shapes arm —
-    # keep a bare env at _FLAGS_ON
-    # (all False); their env-liveness is pinned separately below.
+    # Historical exports cannot switch graduated levers off. Live experiments
+    # retain their default-OFF snapshot; their liveness is checked below.
     monkeypatch.delenv("AILIBI_EVIDENCE_QUALITY_LIFT", raising=False)
     monkeypatch.delenv("AILIBI_IMPOSTOR_ROLL_CALL", raising=False)
     monkeypatch.delenv("AILIBI_REPORTER_REASONING", raising=False)
     monkeypatch.delenv("AILIBI_CORROBORATION_DISCIPLINE", raising=False)
     monkeypatch.delenv("AILIBI_TESTIMONY_SHAPES", raising=False)
+    monkeypatch.delenv("AILIBI_TEMPORAL_OBSERVATIONS", raising=False)
     assert active_substrate_flags(env={}) == _FLAGS_ON
     assert active_substrate_flags() == _FLAGS_ON
     assert active_substrate_flags(env={"AILIBI_TESTIMONY_AS_CONTENT": "0"}) == _FLAGS_ON
@@ -609,24 +577,20 @@ def test_active_substrate_flags_every_graduated_lever_unconditional(
 def test_active_substrate_flags_reads_env_for_the_live_toggles(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # The levers active_substrate_flags still reads from env: Task 18.10's
-    # impostor_roll_call (the arm the CREW-ONLY ruling did NOT ship), the
-    # reporter-voice arm, the source-count arm and the testimony-shapes arm. A
-    # bare / unset / "0" env
-    # stamps each False — the
-    # _FLAGS_ON default — while a truthy export flips exactly its own key. Run as
-    # a GRID over all four, so an export of one can never be shown to move
-    # another and the twenty-one graduated levers stay ON throughout.
+    # Each truthy export flips exactly its own key. Testing the full grid keeps
+    # unrelated toggles and graduated levers unchanged.
     monkeypatch.delenv("AILIBI_IMPOSTOR_ROLL_CALL", raising=False)
     monkeypatch.delenv("AILIBI_REPORTER_REASONING", raising=False)
     monkeypatch.delenv("AILIBI_CORROBORATION_DISCIPLINE", raising=False)
     monkeypatch.delenv("AILIBI_TESTIMONY_SHAPES", raising=False)
+    monkeypatch.delenv("AILIBI_TEMPORAL_OBSERVATIONS", raising=False)
     assert active_substrate_flags(env={}) == _FLAGS_ON
     toggles = {
         "impostor_roll_call": "AILIBI_IMPOSTOR_ROLL_CALL",
         "reporter_reasoning": "AILIBI_REPORTER_REASONING",
         "corroboration_discipline": "AILIBI_CORROBORATION_DISCIPLINE",
         "testimony_shapes": "AILIBI_TESTIMONY_SHAPES",
+        "temporal_observations": "AILIBI_TEMPORAL_OBSERVATIONS",
     }
     for key, variable in toggles.items():
         assert active_substrate_flags(env={variable: "0"}) == _FLAGS_ON, key

@@ -614,7 +614,7 @@ def test_discovered_body_is_hidden_from_subsequent_packets(tmp_path: Path) -> No
         agent_id="p-2",
         engine_events=[],
     )
-    assert "body-p-1-0" in {b.id for b in packet_before.visible_bodies}
+    assert "body-p-1" in {b.id for b in packet_before.visible_bodies}
 
     discovered_body = dataclasses.replace(body, discovered_by="p-2")
     state_after_discovery = dataclasses.replace(
@@ -668,9 +668,9 @@ def test_visible_body_carries_victim_id_from_body_state(tmp_path: Path) -> None:
     )
 
     bodies_by_id = {body.id: body for body in packet.visible_bodies}
-    assert set(bodies_by_id) == {"body-p-1-3", "body-p-3-4"}
-    assert bodies_by_id["body-p-1-3"].victim_id == bodies["body-p-1-3"].player_id
-    assert bodies_by_id["body-p-3-4"].victim_id == bodies["body-p-3-4"].player_id
+    assert set(bodies_by_id) == {"body-p-1", "body-p-3"}
+    assert bodies_by_id["body-p-1"].victim_id == bodies["body-p-1-3"].player_id
+    assert bodies_by_id["body-p-3"].victim_id == bodies["body-p-3-4"].player_id
     # Every visible body has the field populated; victim_id is required by
     # the Pydantic schema, so an unset value would have failed validation
     # before the packet was returned.

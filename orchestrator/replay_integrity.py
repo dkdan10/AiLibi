@@ -20,6 +20,7 @@ from orchestrator.replay import (
     MeetingReplayEntry,
     ReplayEntry,
     ReplayLogEntry,
+    recorded_temporal_observations,
 )
 
 
@@ -47,6 +48,10 @@ class ReplayIntegrityValidator:
 
     def __init__(self, entries: Sequence[ReplayLogEntry], *, game_id: str) -> None:
         self._game_id = game_id
+        try:
+            recorded_temporal_observations(entries)
+        except ValueError as exc:
+            self._fail("observation_version_mismatch", str(exc))
         self._ticks: list[ReplayEntry] = []
         self._meetings: dict[int, MeetingReplayEntry | AbortedMeetingReplayEntry] = {}
         self._side_ids: dict[int, str] = {}

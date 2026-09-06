@@ -86,9 +86,9 @@ def _env(**overrides: object) -> TacticalRolloutEnv:
 
 
 def _engine_rejects(state: WorldState, intent: ActionIntent, game_map: Map) -> bool:
-    """Whether the engine REJECTS ``intent`` from ``state`` (single-action tick)."""
+    """Check a public intent through production translation and engine legality."""
 
-    action = translate_action_intent(intent)
+    action = translate_action_intent(intent, world_state=state)
     _, events = advance_tick(state, [action], game_map=game_map)
     return any(
         isinstance(event, ActionRejectedEvent) and event.actor == action.actor
@@ -495,8 +495,18 @@ def test_in_vent_impostor_cannot_kill_report_or_sabotage() -> None:
         {"type": "kill", "actor": impostor, "payload": {"target": victim}}
     )
     report = ReportBodyIntent.model_validate(
-        {"type": "report", "actor": impostor, "payload": {"body_id": body.id}}
+        {
+            "type": "report",
+            "actor": impostor,
+            "payload": {"body_id": f"body-{corpse}"},
+        }
     )
+    # The mask consumes public handles; engine legality still uses the actual
+    # corpse identity in both states. Translation must not grant permission.
+    for state in (vented, standing):
+        action = translate_action_intent(report, world_state=state)
+        assert action.type == "report"
+        assert action.payload.body_id == body.id
     sabotage = SabotageIntent.model_validate(
         {"type": "sabotage", "actor": impostor, "payload": {"kind": sabotage_kinds[0]}}
     )

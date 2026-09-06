@@ -42,6 +42,7 @@ from typing import Any, Final, Literal, get_args
 from fastapi import HTTPException, Query, Request
 from pydantic import TypeAdapter
 
+from agents.memory.episodic import EpisodicEvent
 from agents.memory.store import (
     DEFAULT_TOKEN_BUDGET,
     AgentMemory,
@@ -50,6 +51,7 @@ from agents.memory.store import (
     render_for_prompt,
 )
 from agents.perception import EVENT_SAW_BODY, EVENT_SAW_PLAYER, ingest_packet
+from api.observation_references import observation_references
 from api.schemas import (
     AccusationClaimView,
     AdvantageView,
@@ -168,6 +170,7 @@ from orchestrator.game import (
     DEFAULT_NUM_PLAYERS,
     apply_meeting_result,
 )
+from orchestrator.observation_delivery import ingest_event_observations_for_memories
 from orchestrator.recording_fingerprint import recording_fingerprint
 from orchestrator.replay import (
     TOGGLEABLE_SUBSTRATE_FLAG_KEYS,
@@ -191,6 +194,7 @@ from orchestrator.replay import (
     read_all_entries,
     recorded_completion_status,
     substrate_flag_snapshot,
+    recorded_temporal_observations,
     substrate_stamp_mismatches,
 )
 from orchestrator.seeder import seed_initial_state
@@ -1303,6 +1307,7 @@ class ReplayLoader:
         game_id = _game_id_for_seed(seed)
         entries = read_all_entries(path)
         integrity = ReplayIntegrityValidator(entries, game_id=game_id)
+        temporal = recorded_temporal_observations(entries)
         # Honor the stamped substrate (Task 14.7): the memory reconstruction
         # below re-derives under the active substrate (the four 13.5 levers
         # unconditionally ON since Task 14.9), so refuse to reconstruct a
@@ -1384,6 +1389,7 @@ class ReplayLoader:
             service = ObservationService(
                 game_map=self._game_map,
                 audit_log_path=Path(audit_dir.name) / "audit.jsonl",
+                temporal_observations=temporal,
             )
         if collect_memory:
             memories = {pid: AgentMemory() for pid in initial_state.players}
@@ -1422,6 +1428,7 @@ class ReplayLoader:
         ]
         trigger_kind_by_meeting_id: dict[str, _TriggerKind] = {}
         memory_views: dict[tuple[str, str], AgentMemoryView] = {}
+        observation_scene_ticks: dict[str, int] = {}
         last_events: tuple[EngineEvent, ...] = ()
         meeting_index = 0
 
@@ -1429,7 +1436,13 @@ class ReplayLoader:
             for entry in replay_entries:
                 integrity.check_tick(entry, state)
                 if collect_memory and service is not None:
-                    self._ingest_tick(service, memories, state, last_events)
+                    delivered = self._ingest_tick(service, memories, state, last_events)
+                    for batch in delivered.values():
+                        for observation in batch:
+                            if observation.observation_id is not None:
+                                observation_scene_ticks[observation.observation_id] = (
+                                    ticks[-1].tick
+                                )
 
                 actions = _deserialize_actions(entry.actions)
                 state, events = advance_tick(state, actions, game_map=self._game_map)
@@ -1456,6 +1469,16 @@ class ReplayLoader:
                         )
 
                 integrity.check_advance(entry, state, events)
+                if collect_memory and service is not None:
+                    event_deliveries = ingest_event_observations_for_memories(
+                        service=service, state=state, events=events, memories=memories
+                    )
+                    for batch in event_deliveries.values():
+                        for observation in batch:
+                            if observation.observation_id is not None:
+                                observation_scene_ticks[observation.observation_id] = (
+                                    entry.tick
+                                )
                 meeting_entry: MeetingReplayEntry | None = None
                 meeting_id: str | None = None
                 trigger_kind: _TriggerKind | None = None
@@ -1528,6 +1551,7 @@ class ReplayLoader:
                             meeting_state=state,
                             memory=memories[pid],
                             meeting_entry=meeting_entry,
+                            observation_scene_ticks=observation_scene_ticks,
                         )
 
                 pre_meeting_events = tuple(events)
@@ -1653,7 +1677,7 @@ class ReplayLoader:
         memories: Mapping[str, AgentMemory],
         state: WorldState,
         last_events: Sequence[EngineEvent],
-    ) -> None:
+    ) -> dict[str, tuple[EpisodicEvent, ...]]:
         """Re-run perception for every alive agent (mirrors the game loop).
 
         Matches :meth:`orchestrator.game.TacticalAgent.decide`: a packet is
@@ -1663,17 +1687,23 @@ class ReplayLoader:
         side effect matters.
         """
 
+        delivered: dict[str, tuple[EpisodicEvent, ...]] = {}
         for pid in sorted(state.players):
             if not state.players[pid].alive:
                 continue
             packet = service.build_packet(
                 world_state=state, agent_id=pid, engine_events=last_events
             )
+            before = len(memories[pid].episodic.recent(since_tick=packet.tick))
             ingest_packet(
                 packet=packet,
                 memory=memories[pid].episodic,
                 beliefs=memories[pid].beliefs,
             )
+            delivered[pid] = memories[pid].episodic.recent(since_tick=packet.tick)[
+                before:
+            ]
+        return delivered
 
     def _agent_visibility_map(
         self,
@@ -1963,6 +1993,7 @@ class ReplayLoader:
         meeting_state: WorldState,
         memory: AgentMemory,
         meeting_entry: MeetingReplayEntry | None,
+        observation_scene_ticks: Mapping[str, int] | None = None,
     ) -> AgentMemoryView:
         role = meeting_state.players[agent_id].role
         # Per-agent task counts are this agent's OWN instances only (owner-scoped
@@ -2005,6 +2036,19 @@ class ReplayLoader:
             open_contradictions=open_contradictions,
             rendered_memory_text=render_for_prompt(
                 memory, token_budget=DEFAULT_TOKEN_BUDGET
+            ),
+            observation_references=observation_references(
+                observer_id=agent_id,
+                cited_ids=tuple(
+                    ballot.primary_reason_observation_id
+                    for ballot in meeting_entry.ballots
+                    if ballot.voter == agent_id
+                    and ballot.primary_reason_observation_id is not None
+                )
+                if meeting_entry is not None
+                else (),
+                events=memory.episodic.recent(since_tick=0),
+                scene_ticks=observation_scene_ticks or {},
             ),
         )
 

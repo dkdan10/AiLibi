@@ -33,12 +33,14 @@ from agents.memory.beliefs import (
     BODY_PROXIMITY_WINDOW_TICKS,
     BeliefState,
     apply_observation_rules,
+    apply_witnessed_action_rules,
 )
 from agents.memory.episodic import EpisodicEvent, MemoryStore, derive_observation_id
 from observation.packet import (
     AudibleEvent,
     BodyId,
     BodyView,
+    EventObservationBatch,
     GlobalView,
     MovedPlayerView,
     ObservationPacket,
@@ -85,6 +87,85 @@ _AUDIBLE_EVENT_TYPES: Final[Mapping[str, str]] = {
     "vent_use_heard": EVENT_HEARD_VENT_USE,
     "sabotage_alarm": EVENT_HEARD_SABOTAGE_ALARM,
 }
+
+
+def ingest_event_observations(
+    *,
+    batch: EventObservationBatch,
+    memory: MemoryStore,
+    beliefs: BeliefState | None = None,
+) -> tuple[EpisodicEvent, ...]:
+    """Append only new source-time evidence, preserving exact-once belief lifts."""
+
+    candidates: list[tuple[str, str, Mapping[str, Any]]] = []
+    if batch.own_kill is not None:
+        candidates.append(
+            (
+                EVENT_OWN_KILL,
+                batch.own_kill.victim_id,
+                _own_kill_payload(batch.own_kill),
+            )
+        )
+    for player in batch.witnessed_actions:
+        if player.action not in ("kill", "vent"):
+            raise ValueError("event batches only contain witnessed kill/vent actions")
+        candidates.append(
+            (EVENT_SAW_PLAYER, player.id, _visible_player_payload(player))
+        )
+    for moved in batch.moved_players:
+        candidates.append(
+            (EVENT_SAW_PLAYER_MOVE, moved.id, _moved_player_payload(moved))
+        )
+    existing = memory.recent(since_tick=batch.tick)
+    source_rows = {
+        event.payload["source_event_id"]: event
+        for event in existing
+        if "source_event_id" in event.payload
+    }
+    seq = sum(
+        event.tick == batch.tick and event.observation_id is not None
+        for event in existing
+    )
+    appended: list[EpisodicEvent] = []
+    new_action_ids: set[str] = set()
+    for kind, subject, payload in candidates:
+        # Every component is already entitled; no hidden global event ordinal
+        # or engine identifier crosses this boundary.
+        source_id = f"{batch.agent_id}:{batch.tick}:{kind}:{subject}"
+        data = {**payload, "source_event_id": source_id}
+        prior = source_rows.get(source_id)
+        if prior is not None:
+            if prior.type != kind or dict(prior.payload) != data:
+                raise ValueError("conflicting content for a delivered source event")
+            continue
+        event = EpisodicEvent(
+            tick=batch.tick,
+            type=kind,
+            payload=data,
+            provenance=PROVENANCE_OBSERVED,
+            observation_id=derive_observation_id(
+                agent_id=batch.agent_id, tick=batch.tick, seq=seq
+            ),
+        )
+        memory.append(event)
+        source_rows[source_id] = event
+        appended.append(event)
+        seq += 1
+        if kind == EVENT_SAW_PLAYER:
+            new_action_ids.add(subject)
+    if beliefs is not None and new_action_ids:
+        beliefs.load_from(
+            apply_witnessed_action_rules(
+                beliefs,
+                witnessed_actions=tuple(
+                    action
+                    for action in batch.witnessed_actions
+                    if action.id in new_action_ids
+                ),
+                fellow_impostor_ids=batch.fellow_impostor_ids,
+            )
+        )
+    return tuple(appended)
 
 
 def ingest_packet(

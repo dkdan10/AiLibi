@@ -1026,6 +1026,28 @@ class BeliefEntryView(_FrozenView):
     snapshot_tick: int
 
 
+class ObservationReferenceView(_FrozenView):
+    """One cited ID resolved only against its observer's meeting memory.
+
+    Unknown IDs remain explicit unresolved rows. Observation time and scene
+    time are separate: a scene is linked only when the replay walk knows the
+    frame at which that observation was delivered.
+    """
+
+    observation_id: str
+    observer_id: str
+    resolved: bool
+    observation_tick: int | None
+    scene_tick: int | None
+    provenance: str | None
+    kind: str | None
+    text: str | None
+    subject_id: str | None
+    room: str | None
+    from_room: str | None
+    to_room: str | None
+
+
 class AgentMemoryView(_FrozenView):
     """Shadows the ``agents.memory.store`` surface at a meeting boundary.
 
@@ -1050,6 +1072,7 @@ class AgentMemoryView(_FrozenView):
     beliefs: tuple[BeliefEntryView, ...]
     open_contradictions: tuple[ContradictionView, ...]
     rendered_memory_text: str
+    observation_references: tuple[ObservationReferenceView, ...] = ()
 
 
 class BeliefErrorView(_FrozenView):
@@ -1455,6 +1478,7 @@ __all__ = [
     "MeetingResolutionView",
     "MeetingTriggeredEventView",
     "MeetingView",
+    "ObservationReferenceView",
     "PlayerView",
     "PositionView",
     "ReplayMetadataView",

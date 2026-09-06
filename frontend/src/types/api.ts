@@ -410,6 +410,7 @@ export interface AgentMemoryView {
   beliefs: BeliefEntryView[];
   open_contradictions: ContradictionView[];
   rendered_memory_text: string;
+  observation_references?: ObservationReferenceView[];
 }
 
 export interface BeliefEntryView {
@@ -417,6 +418,21 @@ export interface BeliefEntryView {
   suspicion: number;
   confidence: number;
   snapshot_tick: number;
+}
+
+export interface ObservationReferenceView {
+  observation_id: string;
+  observer_id: string;
+  resolved: boolean;
+  observation_tick: number | null;
+  scene_tick: number | null;
+  provenance: string | null;
+  kind: string | null;
+  text: string | null;
+  subject_id: string | null;
+  room: string | null;
+  from_room: string | null;
+  to_room: string | null;
 }
 
 export interface BeliefFrameView {

@@ -52,7 +52,7 @@ from meetings.transcript import (
     is_weak_contradiction,
     self_refuted_alibi_claim_ids,
 )
-from observation.packet import ObservationPacket
+from observation.packet import ObservationPacket, PlayerView
 
 PlayerId: TypeAlias = str
 RoomId: TypeAlias = str
@@ -1089,6 +1089,39 @@ class BeliefState:
         return belief
 
 
+def apply_witnessed_action_rules(
+    beliefs: BeliefState,
+    *,
+    witnessed_actions: Sequence[PlayerView],
+    fellow_impostor_ids: AbstractSet[PlayerId] | Sequence[PlayerId] = (),
+) -> BeliefState:
+    """Apply each first-hand kill/vent lift without replaying body proximity."""
+
+    result = beliefs.copy()
+
+    fellow_impostor_ids = frozenset(fellow_impostor_ids)
+
+    for player in witnessed_actions:
+        # Task 16.3: the witnessed vent and kill pins are the grounded HARD
+        # kill-or-vent-pin channel (perception-time, persists into the stored
+        # BeliefState the meeting graph reads).
+        if player.action == OBSERVED_VENT_ACTION:
+            result.adjust_suspicion(
+                player.id, delta=VENTING_SUSPICION_DELTA, source="kill_or_vent_pin"
+            )
+        elif (
+            player.action == OBSERVED_KILL_ACTION
+            and player.id not in fellow_impostor_ids
+        ):
+            result.adjust_suspicion(
+                player.id,
+                delta=WITNESSED_KILL_SUSPICION_DELTA,
+                source="kill_or_vent_pin",
+            )
+
+    return result
+
+
 def apply_observation_rules(
     beliefs: BeliefState,
     *,
@@ -1137,27 +1170,11 @@ def apply_observation_rules(
     which preserves both the observation firewall and its own purity.
     """
 
-    result = beliefs.copy()
-
-    fellow_impostor_ids = frozenset(observation.self_state.fellow_impostor_ids)
-
-    for player in observation.visible_players:
-        # Task 16.3: the witnessed vent and kill pins are the grounded HARD
-        # kill-or-vent-pin channel (perception-time, persists into the stored
-        # BeliefState the meeting graph reads).
-        if player.action == OBSERVED_VENT_ACTION:
-            result.adjust_suspicion(
-                player.id, delta=VENTING_SUSPICION_DELTA, source="kill_or_vent_pin"
-            )
-        elif (
-            player.action == OBSERVED_KILL_ACTION
-            and player.id not in fellow_impostor_ids
-        ):
-            result.adjust_suspicion(
-                player.id,
-                delta=WITNESSED_KILL_SUSPICION_DELTA,
-                source="kill_or_vent_pin",
-            )
+    result = apply_witnessed_action_rules(
+        beliefs,
+        witnessed_actions=observation.visible_players,
+        fellow_impostor_ids=observation.self_state.fellow_impostor_ids,
+    )
 
     for body in observation.visible_bodies:
         if body.id in previous_visible_bodies:

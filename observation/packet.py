@@ -8,6 +8,7 @@ from pydantic import (
     Field,
     SerializerFunctionWrapHandler,
     model_serializer,
+    model_validator,
 )
 
 BodyId: TypeAlias = str
@@ -104,25 +105,12 @@ class PlayerView(_FrozenModel):
 
 
 class MovedPlayerView(_FrozenModel):
-    """A room→room transition the observer DIRECTLY witnessed this tick (Task 13.5.4).
+    """An entitled room transition without private actor state.
 
-    The movement-perception channel (2026-06-25 memory diagnosis, workflow
-    `wg54kfoxy`: "movement is never perceived"). The engine emits a
-    ``MovedEvent`` (from_room→to_room) every tick, but the observation layer
-    never read it, so a witness could not perceive a transition it directly saw.
-    ``ObservationService`` now derives this view from that ``MovedEvent`` for an
-    actor the observer can currently SEE -- WITNESS-gated exactly like a
-    ``saw_player`` sighting (the actor is in ``visibility.visible_player_ids``),
-    so the §1.3 / §4.7 firewall and the leak suite hold: a movement the observer
-    could not see never appears here.
-
-    Field names carry no role information; ``id`` / ``from_room`` / ``to_room``
-    are all leak-allowed (ids and rooms). It is NOT named ``player_id`` because
-    the leak scanner forbids that key anywhere in the packet
-    (``eval/leak_test.py``), matching the ``PlayerView`` / ``BodyView`` ``id``
-    convention. Surfaced unconditionally since Task 14.9 (the adopted 13.5.4
-    lever is the default substrate; the ``AILIBI_MOVEMENT_PERCEPTION`` gate is
-    retired).
+    Legacy snapshots gate the departure room against post-tick visibility.
+    Temporal batches use the engine's event-local witness set instead; both
+    expose only the actor and the two rooms. Delivery mode belongs to the
+    containing packet or batch, not to this common value object.
     """
 
     id: PlayerId
@@ -131,15 +119,11 @@ class MovedPlayerView(_FrozenModel):
 
 
 class BodyView(_FrozenModel):
-    """A body visible to the observer.
+    """A visible body with a public victim-derived handle and no death time.
 
-    ``victim_id`` formalizes the body's victim player id at the
-    observation boundary (DESIGN.md §1.3 / Appendix A). It carries the
-    same information that was previously inferrable from the
-    ``body-{victim_id}-{tick}`` id format emitted by ``engine/rules.py``,
-    so exposing it does not weaken the firewall -- it removes the
-    agent→engine string coupling flagged as R-4 in
-    ``audits/audit-2026-05-16-0036-reconciled.md``.
+    The privileged action boundary translates the handle back to the engine's
+    internal identifier for a report. Explicit historical projections may
+    retain the old identifier; agents use ``victim_id`` for victim identity.
     """
 
     id: BodyId
@@ -176,6 +160,31 @@ class GlobalView(_FrozenModel):
     # (``reactor``) from a non-gating one (``lights``).
     sabotage_repair_rooms: tuple[RoomId, ...] = ()
     sabotage_is_gating: bool = False
+
+
+class EventObservationBatch(_FrozenModel):
+    """One source tick's entitled events, delivered separately from snapshots."""
+
+    kind: Literal["event_observations"] = "event_observations"
+    tick: int = Field(ge=0)
+    agent_id: PlayerId
+    own_kill: OwnKillView | None = None
+    witnessed_actions: tuple[PlayerView, ...] = ()
+    moved_players: tuple[MovedPlayerView, ...] = ()
+    fellow_impostor_ids: tuple[PlayerId, ...] = ()
+
+    @model_validator(mode="after")
+    def _unique_events(self) -> EventObservationBatch:
+        for name, ids in (
+            ("witnessed actions", [view.id for view in self.witnessed_actions]),
+            ("movements", [view.id for view in self.moved_players]),
+            ("fellow impostors", list(self.fellow_impostor_ids)),
+        ):
+            if len(set(ids)) != len(ids):
+                raise ValueError(f"duplicate {name} in event observation batch")
+        if any(view.action not in ("kill", "vent") for view in self.witnessed_actions):
+            raise ValueError("event observations require a witnessed kill or vent")
+        return self
 
 
 class ObservationPacket(_FrozenModel):

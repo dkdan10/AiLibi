@@ -161,6 +161,7 @@ from orchestrator.replay import (
     env_var_for_lever,
     fold_meeting_outcome_into_memories,
     read_all_entries,
+    require_legacy_observations,
 )
 from orchestrator.seeder import seed_initial_state
 
@@ -629,6 +630,7 @@ def walk_replay_meetings(
     seed = _seed_from_path(replay_path)
     game_id = _game_id_for_seed(seed)
     entries = read_all_entries(replay_path)
+    require_legacy_observations(entries, consumer="frozen prompt-byte reconstruction")
     replay_entries = [e for e in entries if isinstance(e, ReplayEntry)]
     meeting_by_tick = {e.tick: e for e in entries if isinstance(e, MeetingReplayEntry)}
     num_players, num_impostors, tasks_per_crewmate = _roster_for(

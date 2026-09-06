@@ -43,6 +43,7 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
+import json
 import sys
 import tempfile
 import types as _pytypes
@@ -226,12 +227,18 @@ class _Generator:
         raise TypeError(f"unsupported annotation for TS codegen: {annotation!r}")
 
     def _ts_literal(self, values: tuple[Any, ...]) -> str:
-        str_values = tuple(str(v) for v in values)
-        alias = _ENUM_BY_VALUES.get(frozenset(str_values))
+        alias = (
+            _ENUM_BY_VALUES.get(frozenset(values))
+            if all(isinstance(value, str) for value in values)
+            else None
+        )
         if alias is not None:
             self.used_enums.add(alias)
             return alias
-        return " | ".join(_ts_string_literal(v) for v in str_values)
+        return " | ".join(
+            _ts_string_literal(value) if isinstance(value, str) else json.dumps(value)
+            for value in values
+        )
 
     def _ts_union(self, args: tuple[Any, ...]) -> str:
         model_members = [
@@ -265,11 +272,15 @@ class _Generator:
             # serialization_alias when set (e.g. view_model_version ->
             # viewModelVersion, the contract name); fall back to the field name.
             wire_name = field.serialization_alias or name
-            # Older static recording bundles omit these additive status fields.
+            # Older static bundles omit these additive reader fields.
             optional = (
                 "?"
-                if model.__name__ == "ReplayMetadataView"
-                and name in {"completion_status", "outcome_verified"}
+                if (model.__name__, name)
+                in {
+                    ("ReplayMetadataView", "completion_status"),
+                    ("ReplayMetadataView", "outcome_verified"),
+                    ("AgentMemoryView", "observation_references"),
+                }
                 else ""
             )
             lines.append(f"  {wire_name}{optional}: {self._ts_type(field.annotation)};")
