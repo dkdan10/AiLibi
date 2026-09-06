@@ -1888,6 +1888,40 @@ def test_every_counted_registry_row_matches_the_index() -> None:
             assert vme.in_tree_inventory(_REPO_ROOT, key) is not None
 
 
+def test_availability_rejects_exact_byte_drift_without_count_change(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    rows = vme.registry_rows(_REPO_ROOT)
+    changed: list[tuple[str, str, str, str]] = []
+    for key, category, where, size in rows:
+        if key == "data/personas.json":
+            actual = (_REPO_ROOT / key).stat().st_size
+            size = f"{actual + 1:,} tracked bytes / 1 file"
+        changed.append((key, category, where, size))
+    monkeypatch.setattr(vme, "registry_rows", lambda _root: changed)
+    result = _row(
+        vme.run_availability(_context(_REPO_ROOT)).rows, "in-tree family inventory"
+    )
+    assert result.status == "FAIL", result.detail
+    assert "data/personas.json" in result.detail
+    assert "bytes" in result.detail
+
+
+def test_exact_inventory_detects_changed_bytes_with_same_paths(tmp_path: Path) -> None:
+    artifact = tmp_path / "artifact.json"
+    artifact.write_bytes(b"{}\n")
+    inventory = [("fixture/", [artifact.name], 1)]
+    sizes = {"fixture/": "3 tracked bytes / 1 file"}
+    assert not vme.inventory_problems(tmp_path, inventory, stated_sizes=sizes)
+    artifact.write_bytes(b"{}\n\n")
+    failures = vme.inventory_problems(tmp_path, inventory, stated_sizes=sizes)
+    assert len(failures) == 1
+    assert "contain 4 bytes" in failures[0]
+    assert not vme.inventory_problems(
+        tmp_path, inventory, stated_sizes={"fixture/": "approximately 1 KB / 1 file"}
+    )
+
+
 def test_the_finding_records_registry_row_is_inventoried_and_its_count_bites() -> None:
     """Task 21.24's FINDING record is registered, and a wrong count fails.
 

@@ -2829,22 +2829,19 @@ _IN_TREE_INVENTORY: Final[dict[str, tuple[tuple[str, ...], tuple[str, ...]]]] = 
 #: matters: the slate row reads "1,569 digests", which is a digest count and not
 #: an inventory of files on this checkout.
 _STATED_FILES: Final = re.compile(r"([\d,]+) files")
+_STATED_BYTES: Final = re.compile(r"\b([\d,]+) tracked bytes\b")
 
 
 def inventory_problems(
-    repo_root: Path, inventories: Sequence[tuple[str, list[str], int | None]]
+    repo_root: Path,
+    inventories: Sequence[tuple[str, list[str], int | None]],
+    *,
+    stated_sizes: Mapping[str, str] | None = None,
 ) -> list[str]:
-    """Every disagreement between the registry, the git index, and the disk.
+    """Compare promised counts and exact byte sizes with tracked files on disk.
 
-    Two independent questions, because one of them cannot answer the other:
-
-    * is every tracked file actually on disk? — catches a working-tree deletion;
-    * does the index hold as many files as `docs/artifacts.md` PROMISES? —
-      catches a COMMITTED deletion, which removes the path from the index too,
-      so a check that used the index count as its own expectation watched both
-      sides shrink together and still read OK (Codex review, PR #348). This is
-      round 1's finding in a second place: an inventory derived from the thing
-      it is checking cannot notice a deletion.
+    Missing files, changed index counts, and changed content are independent
+    failures. Approximate sizes are not interpreted as exact promises.
     """
 
     problems: list[str] = []
@@ -2860,6 +2857,15 @@ def inventory_problems(
                 f"{key}: {ARTIFACTS_DOC} promises {stated_count} files, "
                 f"the index tracks {len(tracked)}"
             )
+        exact_bytes = _STATED_BYTES.search((stated_sizes or {}).get(key, ""))
+        if exact_bytes is not None and not gone:
+            promised = int(exact_bytes.group(1).replace(",", ""))
+            actual = sum((repo_root / path).stat().st_size for path in tracked)
+            if actual != promised:
+                problems.append(
+                    f"{key}: {ARTIFACTS_DOC} promises {promised:,} tracked bytes, "
+                    f"the tracked files contain {actual:,} bytes"
+                )
     return problems
 
 
@@ -3229,7 +3235,11 @@ def run_availability(ctx: Context) -> LegResult:
         # together and the row still read OK while the registry went on
         # promising the file (Codex review, PR #348). The document's stated
         # count is the independent side — it does not move when the index does.
-        problems = inventory_problems(ctx.repo_root, inventories)
+        problems = inventory_problems(
+            ctx.repo_root,
+            inventories,
+            stated_sizes={key: size for key, _cls, _where, size in doc_rows},
+        )
         tracked_total = sum(len(tracked) for _key, tracked, _stated in inventories)
         pinned = sum(1 for _key, _tracked, stated in inventories if stated is not None)
         rows.append(

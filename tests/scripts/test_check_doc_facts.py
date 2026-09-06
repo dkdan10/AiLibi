@@ -28,6 +28,60 @@ import check_doc_facts
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SCRIPT = _REPO_ROOT / "scripts" / "check_doc_facts.py"
 
+
+@pytest.mark.parametrize(
+    "example",
+    [
+        "`[example](missing.md)`",
+        "``[example](missing.md) with ` inside``",
+        "`a multiline\n[example](missing.md) code span`",
+        "```md\n[example](missing.md)\n```",
+        "~~~md\n[example](missing.md)\n~~~~",
+        "````md\n```\n[example](missing.md)\n````",
+        "```md\n[example](missing.md)\n",
+        "> ```md\n> [example](missing.md)\n",
+        "    [example](missing.md)",
+        r"\\`[example](missing.md)`",
+    ],
+)
+def test_relative_links_ignore_code_examples(tmp_path: Path, example: str) -> None:
+    text = f"[real](actual.md)\n\n{example}"
+    assert list(check_doc_facts.relative_targets(tmp_path, "docs/page.md", text)) == [
+        ("actual.md", tmp_path / "docs" / "actual.md")
+    ]
+
+
+def test_relative_links_retain_broken_links_after_code(tmp_path: Path) -> None:
+    text = "`[example](ignored.md)` then [broken](missing.md)"
+    assert list(check_doc_facts.relative_targets(tmp_path, "page.md", text)) == [
+        ("missing.md", tmp_path / "missing.md")
+    ]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "`unmatched\n\n[broken](missing.md)\n\n`later`",
+        "`unmatched\n# Heading\n[broken](missing.md)\n`later`",
+        "`unmatched\n- [broken](missing.md)\n\n`later`",
+        r"\`[broken](missing.md)`",
+        "[broken][ref]\n\n[ref]: missing.md",
+    ],
+)
+def test_relative_links_preserve_rendered_links(tmp_path: Path, text: str) -> None:
+    assert list(check_doc_facts.relative_targets(tmp_path, "page.md", text)) == [
+        ("missing.md", tmp_path / "missing.md")
+    ]
+
+
+def test_relative_links_decode_paths_and_include_images(tmp_path: Path) -> None:
+    text = '[space](<two words.md>) ![image](pic.png "caption")'
+    assert list(check_doc_facts.relative_targets(tmp_path, "page.md", text)) == [
+        ("two%20words.md", tmp_path / "two words.md"),
+        ("pic.png", tmp_path / "pic.png"),
+    ]
+
+
 # Exactly the files the checker reads, in their relative layout so the tmp tree
 # is a faithful (and perturbable) stand-in for a checkout.
 _COPIED = (

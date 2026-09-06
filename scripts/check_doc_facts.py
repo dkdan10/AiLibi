@@ -189,6 +189,10 @@ from collections.abc import Callable, Iterator, Mapping, Sequence
 from datetime import date
 from pathlib import Path
 from typing import Final, NamedTuple, cast
+from urllib.parse import unquote
+
+from markdown_it import MarkdownIt
+from markdown_it.token import Token
 
 _REPO_ROOT: Final = Path(__file__).resolve().parents[1]
 _SCRIPTS_DIR: Final = Path(__file__).resolve().parent
@@ -402,9 +406,6 @@ _DIALECT_TERMS: Final[tuple[tuple[str, str, str], ...]] = (
 # A markdown link whose target is the glossary, with the anchor it names and the
 # span of its link TEXT — the only place a dialect term counts as defined.
 _GLOSSARY_LINK: Final = re.compile(rf"\[([^\]]*)\]\({re.escape(_GLOSSARY)}#([\w-]+)\)")
-# Any markdown (or image) link, with its target. Targets are checked for
-# resolution; absolute and in-page ones are skipped by :func:`relative_targets`.
-_MARKDOWN_LINK: Final = re.compile(r"\[[^\]]*\]\(([^)\s]+)\)")
 _ABSOLUTE_TARGET: Final = re.compile(r"\A(?:[a-z][a-z0-9+.-]*:|//)", re.IGNORECASE)
 # GitHub's heading-anchor rule, reduced to what this tree's headings need:
 # lowercase, drop everything but word characters, spaces and hyphens, then
@@ -4444,14 +4445,28 @@ def relative_targets(
     """
 
     base = posixpath.dirname(document)
-    for match in _MARKDOWN_LINK.finditer(text):
-        target = match.group(1)
+    for target in markdown_targets(MarkdownIt("commonmark").parse(text)):
         if target.startswith("#") or _ABSOLUTE_TARGET.match(target):
             continue
-        path = target.split("#", 1)[0]
+        path = unquote(target.split("#", 1)[0])
         if not path:
             continue
         yield target, repo_root / posixpath.normpath(posixpath.join(base, path))
+
+
+def markdown_targets(tokens: Sequence[Token]) -> Iterator[str]:
+    """Yield rendered link and image targets, excluding code and image alt text."""
+
+    for token in tokens:
+        attribute = {"link_open": "href", "image": "src"}.get(token.type)
+        if attribute is not None:
+            target = token.attrGet(attribute)
+            if target is not None:
+                if not isinstance(target, str):
+                    raise TypeError(f"Markdown {attribute} must be text: {target!r}")
+                yield target
+        elif token.children is not None:
+            yield from markdown_targets(token.children)
 
 
 def check_review_map(repo_root: Path, errors: list[str]) -> None:
