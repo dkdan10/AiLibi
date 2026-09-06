@@ -1,10 +1,27 @@
-# Cleanup handoff
+# Cleanup corrections and gameplay work
 
-Implementation on **`codex/cleanup`** is complete: all 26 work cards are done,
-covering the roadmap's 49 priorities through implemented repairs, measured
-experiments or supported retained decisions. The owner will arrange Claude's
-review by commit or PR, then decide the final merge into `main`. Main remains
-unchanged. Implementation completion does not adopt an experiment.
+Implementation continues on **`codex/cleanup`** after the owner's independent
+Claude review. The earlier 26-card handoff covered 49 priorities through repairs,
+experiments and retained decisions; the review reproduced incomplete acceptance
+items, so affected cards are reopened. Main remains unchanged. The owner decides
+the final merge and any experimental adoption separately.
+
+The [post-review plan](post-review-plan.md) orders corrections, trustworthy
+evaluation, one playable deduction case, meeting replies, investigation and a
+separately budgeted fresh-model decision. The supplied
+[review and findings](../audits/review-2026-09-06/README.md) are preserved verbatim.
+
+## Active ownership
+
+| Worker | Current scope |
+| --- | --- |
+| Recording worker | Replacement, publication, output protection, unresolved accounting |
+| Viewer worker | Private confidence, stale-result copy, media and public claims |
+| Report worker | Historical projection, isolated collection, terminal type fixture |
+| Coordinator | Source-bound summary cache, review archive, integration and scenario plan |
+
+Cards own precise acceptance and file boundaries. The coordinator serializes
+shared-file handovers and commits; implementation workers do not commit.
 
 Start with the [review ledger](review-ledger.md) for commits, independent reviews
 and verification. The [roadmap](cleanup-roadmap.md) preserves priority numbers;
@@ -12,7 +29,7 @@ the [current finding dispositions](../docs/cleanup-dispositions.md) account for
 all 104 original findings and the carried close/hardening routes. Historical
 findings and current repairs remain distinct.
 
-## Completed work
+## Original implementation inventory
 
 Each card owns its acceptance criteria, decisions, measurements and limitations.
 The ledger retains original PR links for inherited work; those PRs remain review
@@ -28,16 +45,17 @@ records and have not been merged or otherwise managed during cleanup.
 | Engineering boundaries | [Map traversal](work/map-traversal-contract.md), [replay loading](work/replay-loading-performance.md), [model provenance](work/model-evidence-provenance.md), [protocol retirement](work/protocol-retirement.md), [semantic validation](work/semantic-validation.md) |
 | Claim checking and synthesis | [Audit facts](work/audit-fact-gates.md), [carried findings](work/carried-audit-dispositions.md), [synthesis](work/cleanup-synthesis.md) |
 
-Final local verification passed 6,775 Python tests, 489 frontend tests and all
+The original handoff's local verification passed 6,775 Python tests, 489 frontend tests and all
 335 campaign-tier tests, plus typing, lint, formatting, import/document contracts
 and the production build. All 100 canonical recordings verified. The isolated
 API/static browser suite passed 13 tests with three intentional media skips.
 The ledger states the ordinary Python skips, expected failures and archived
 ML-evidence availability limits.
 
-## After review
+## Review follow-through
 
-There is no remaining active implementation queue for this cleanup. Future work
+The current queue follows the [authorized plan](post-review-plan.md), including
+the [public-results cache](work/public-results-cache.md). New work
 uses [one canonical work card](../docs/workflow.md), with evidence, acceptance,
 record impact, measurement and one writer per shared file. Preserve the separate
 gameplay-first and code-first investigations before combining their decisions.

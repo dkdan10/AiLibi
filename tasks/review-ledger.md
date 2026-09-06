@@ -2,9 +2,12 @@
 
 This ledger locates focused implementation commits and their evidence for the
 owner's final Claude review. Cards own acceptance and current work status.
-All rows remain **unmerged into main** and **awaiting the owner's final review**.
-Independent implementation review is a separate earlier check. No cleanup
-experiment is adopted by appearing in this ledger.
+All rows remain **unmerged into main**. The owner supplied an independent Claude
+review of `9b333a76`; the [original report and appendix](../audits/review-2026-09-06/README.md)
+are preserved verbatim. Reproduced findings reopen the affected cards under the
+[post-review plan](post-review-plan.md). Earlier verification and reviewer
+attributions below are historical claims, not certification that the newly
+reported defects were absent. No experiment is adopted by appearing here.
 
 ## Inherited foundation
 
@@ -144,9 +147,9 @@ gate that accepted rebinding. Their positive and adverse controls now pass.
 The static shared-link test waits for the selected meeting to reach the URL;
 it does not hide failures with retries or sleeps.
 
-## Review boundary and remaining decisions
+## Original handoff boundary and remaining decisions
 
-All **26 cards** are done and all **49 roadmap priorities** have an implemented,
+At the `9b333a76` handoff, all **26 cards** were marked done and all **49 roadmap priorities** had an implemented,
 experimental or supported retained disposition. The
 [current finding ledger](../docs/cleanup-dispositions.md) covers all 104 original
 IDs, named close residue and the hardening routes. It does not relabel every
@@ -166,6 +169,20 @@ latency or model-quality improvement is inferred. Q1 search, Phase C co-evolutio
 resumption and a corpus-triggered refit are separate retained owner decisions.
 No live provider, deployment, remote deletion or main merge occurred.
 
-The owner’s final Claude review and merge remain pending. Local `main` and
+The subsequent Claude review required corrections; final merge remains pending. Local `main` and
 `origin/main` remain `cfde4c8960a865eeaa39a004b2c33d302cbe4733`. Future work starts
-from a new evidence-backed card, not an unfinished cleanup implementation queue.
+from a new evidence-backed card or reopens an existing card whose acceptance
+the review disproves. The current queue is in the task index.
+
+## Maintenance correction checkpoint (2026-09-06)
+
+The nine required review corrections, output-directory-wide recording
+protection, unresolved usage accounting and source-bound summary caching are
+verified on cleanup. The [correction record](../audits/review-2026-09-06/correction-record.md)
+contains finding-to-card links, independent adverse reviews and verification.
+The full gate passed 6,833 Python and 500 frontend tests, with 20 optional skips
+and three expected failures; 100 canonical recordings and two API/static browser
+journeys passed. Main, historical evidence and adoption decisions are unchanged.
+This checkpoint completes maintenance and the summary-cache slice only. The
+[remaining plan](post-review-plan.md) proceeds through experimental provenance,
+evidence v2, attributed accounts and investigation before budgeted live evaluation.
