@@ -26,6 +26,7 @@ import type {
   SawMoveObservationView,
   SawPlayerView,
   SawVentObservationView,
+  TaskActivityAccountView,
   TaskCompletedEventView,
   VentEventView,
   WhereaboutsClaimView,
@@ -326,13 +327,45 @@ export const _fidelityReplay: ReplayView = {
   },
   "meetings": [],
   "metadata": {
+    "agent_factory_kind": null,
     "completion_status": "completed",
     "created_at": null,
+    "crew_tactical_policy": null,
+    "experiment_config": null,
     "game_id": "headless-seed-0",
     "meeting_count": 0,
     "outcome_verified": true,
     "prompt_versions": {},
     "seed": 0,
+    "substrate_flags": {
+      "absence_prior": true,
+      "citation_gate": true,
+      "coalesced_memory_render": true,
+      "corroboration_discipline": false,
+      "evidence_quality_lift": true,
+      "grounded_prosecution": true,
+      "hard_evidence_gate": true,
+      "impostor_roll_call": false,
+      "map_aware_arbitration": true,
+      "meeting_outcome_memory": true,
+      "movement_claim_shape": true,
+      "movement_perception": true,
+      "observation_id_rendering": true,
+      "reporter_exculpation": true,
+      "reporter_reasoning": false,
+      "roll_call_round": true,
+      "self_location_trail": true,
+      "structured_turn_markers": true,
+      "task_completion_from_events": true,
+      "temporal_observations": false,
+      "testimony_as_content": true,
+      "testimony_shapes": false,
+      "unfreeze_memory": true,
+      "vent_placement_contradictions": true,
+      "whereabouts_interior_flags": true,
+      "witnessed_kill_evidence": true
+    },
+    "tactical_policy": null,
     "total_cost_usd": 0.0,
     "total_ticks": 10,
     "winner": "IMPOSTORS",
@@ -1803,7 +1836,7 @@ export const _fidelityReplay: ReplayView = {
       "tick": 9
     }
   ],
-  "viewModelVersion": "3"
+  "viewModelVersion": "4"
 };
 void _fidelityReplay;
 
@@ -1850,6 +1883,8 @@ export function _narrow_ObservationClaimView(e: ObservationClaimView): Observati
       return e satisfies WhereaboutsClaimView;
     case "saw_move":
       return e satisfies SawMoveObservationView;
+    case "task_activity":
+      return e satisfies TaskActivityAccountView;
     default: {
       const _exhaustive: never = e;
       return _exhaustive;

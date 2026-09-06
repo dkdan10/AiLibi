@@ -58,6 +58,10 @@ from tests._helpers.world_state import scripted_initial_world_state
 # DTOs.
 EXPECTED_DTOS: Final[frozenset[str]] = frozenset(
     {
+        "ExperimentConfigView",
+        "TacticalPolicyView",
+        "TaskActivityAccountView",
+        "ReportProvenanceGroupView",
         "PositionView",
         "SizeView",
         "RoomView",
@@ -468,6 +472,31 @@ FORBIDDEN_EVAL_ENGINE_FIELDS: Final[frozenset[str]] = frozenset(
 # player id crosses the model boundary.
 EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
     {
+        # Recorded behavior identity and configured tally; no new hidden state.
+        "agent_factory_kind",
+        "experiment_config",
+        "substrate_flags",
+        "tactical_policy",
+        "crew_tactical_policy",
+        "policy_id",
+        "method",
+        "encoder_version",
+        "weights_sha256",
+        "anchor_policy",
+        "redistribution_policy",
+        "meeting_reset",
+        "crew_idle_policy",
+        "vent_exit_policy",
+        "post_meeting_retarget",
+        "self_report",
+        "sabotage_threshold",
+        "evidence_reasoning_version",
+        "bounded_rebuttal_version",
+        "public_account_version",
+        "attributed_testimony_version",
+        "provenance_groups",
+        "game_ids",
+        "skip_confidence_threshold",
         "accusation_calibration",
         "accusation_claim_bins",
         "accusation_claim_crew_accuser",

@@ -14,6 +14,7 @@ from agents.base import AgentInterface
 from api.replay_loader import ReplayLoader
 from engine.entities import PlayerId
 from engine.world import WorldState, load_canonical_map
+from eval.balance_eval import load_tournament_report
 from llm.client import CallKind, LLMResponse
 from llm.fake_provider import FakeProvider
 from meetings.manager import MeetingTrigger
@@ -27,6 +28,7 @@ from orchestrator.game import (
 from orchestrator.replay import GameEndReplayEntry, MeetingReplayEntry, read_all_entries
 from orchestrator.replay_integrity import ReplayIntegrityError
 from orchestrator.scheduler import TickScheduler
+from orchestrator.seeder import seed_initial_state
 
 if TYPE_CHECKING:
     from _verify_samples import VerifyFailure
@@ -224,6 +226,50 @@ def test_genuine_completed_recording_reconstructs(
     assert replay.metadata.winner_reason == "CREWMATE_TASKS"
     assert len(replay.meetings) == 2
     assert sample_verifier(completed_recording.parent) == []
+
+
+def test_forged_ballot_targets_cannot_keep_a_verified_ejection(
+    ejection_recording: Path, tmp_path: Path
+) -> None:
+    rows = _rows(ejection_recording)
+    original_hashes = tuple(
+        (
+            row.get("state_hash"),
+            row.get("state_hash_before"),
+            row.get("state_hash_after"),
+        )
+        for row in rows
+    )
+    meeting = next(row for row in rows if row["kind"] == "meeting")
+    assert meeting["outcome"] == "EJECTED"
+    ballots = meeting["ballots"]
+    assert isinstance(ballots, list)
+    for ballot in ballots:
+        ballot["target"] = "SKIP"
+    assert (
+        tuple(
+            (
+                row.get("state_hash"),
+                row.get("state_hash_before"),
+                row.get("state_hash_after"),
+            )
+            for row in rows
+        )
+        == original_hashes
+    )
+    _write(tmp_path / ejection_recording.name, rows)
+    with pytest.raises(ReplayIntegrityError, match="ballot_tally_mismatch"):
+        ReplayLoader(tmp_path).load_replay("headless-seed-1")
+    state = seed_initial_state(
+        seed=1, game_map=load_canonical_map(), num_players=7, tasks_per_crewmate=1
+    )
+    with pytest.raises(ReplayIntegrityError, match="ballot_tally_mismatch"):
+        load_tournament_report(
+            tmp_path,
+            roles_by_seed={
+                1: {pid: player.role for pid, player in state.players.items()}
+            },
+        )
 
 
 def test_legacy_terminal_without_optional_tick_remains_valid(

@@ -76,6 +76,10 @@ from eval.meeting_quality import (  # noqa: E402
     decompose_ejection_channels,
 )
 from orchestrator.seeder import seed_initial_state  # noqa: E402
+from orchestrator.replay import (  # noqa: E402
+    TOGGLEABLE_SUBSTRATE_FLAG_KEYS,
+    fsm_default_tactical_policy_stamp,
+)
 
 _REPORT_FILENAME = "tournament-eval-report.json"
 
@@ -197,13 +201,20 @@ def build_report(sample_dir: Path) -> TournamentEvalReport:
 
 
 def _historical_report_exclusions(report: TournamentEvalReport) -> dict[str, Any]:
-    """Preserve legacy bytes without dropping identities of newly captured calls."""
+    """Project the legacy report format without rewriting its recorded cells."""
     return {
         "report": {
+            "provenance_groups": True,
             "games": {
                 index: {
                     "completion_status": True,
                     "outcome_verified": True,
+                    "agent_factory_kind": True,
+                    "experiment_config": True,
+                    "substrate_flags": True,
+                    "tactical_policy": True,
+                    "crew_tactical_policy": True,
+                    "meetings": {"__all__": {"skip_confidence_threshold"}},
                     "failed_calls": {
                         call_index: {"call_id"}
                         for call_index, call in enumerate(game.failed_calls)
@@ -211,13 +222,34 @@ def _historical_report_exclusions(report: TournamentEvalReport) -> dict[str, Any
                     },
                 }
                 for index, game in enumerate(report.report.games)
-            }
+            },
         }
     }
 
 
+def _can_project_historical(report: TournamentEvalReport) -> bool:
+    """Only unstamped legacy behavior can use the old report comparison shape."""
+    return all(
+        game.agent_factory_kind is None
+        and game.experiment_config is None
+        and (
+            game.tactical_policy is None
+            or game.tactical_policy == fsm_default_tactical_policy_stamp()
+        )
+        and game.crew_tactical_policy is None
+        and not any(
+            (game.substrate_flags or {}).get(key, False)
+            for key in TOGGLEABLE_SUBSTRATE_FLAG_KEYS
+        )
+        and all(meeting.skip_confidence_threshold is None for meeting in game.meetings)
+        for game in report.report.games
+    )
+
+
 def historical_report_payload(report: TournamentEvalReport) -> dict[str, Any]:
-    """Omit additive outcome metadata and absent attempt identities."""
+    """Keep old comparisons exact without hiding a candidate's recorded identity."""
+    if not _can_project_historical(report):
+        return report.model_dump(mode="json")
     return report.model_dump(mode="json", exclude=_historical_report_exclusions(report))
 
 
@@ -230,7 +262,9 @@ def _serialize(report: TournamentEvalReport) -> str:
 
     json_text = report.model_dump_json(
         indent=2,
-        exclude=_historical_report_exclusions(report),
+        exclude=_historical_report_exclusions(report)
+        if _can_project_historical(report)
+        else None,
     )
     TournamentEvalReport.model_validate_json(json_text)
     return json_text + "\n"
@@ -403,10 +437,12 @@ def _summary(report: TournamentEvalReport, sample_dir: Path) -> str:
 
 
 def write_report(sample_dir: Path) -> TournamentEvalReport:
-    """Rebuild and write ``sample_dir/tournament-eval-report.json``."""
+    """Write a current report, retaining known and unknown recorded provenance."""
 
     report = build_report(sample_dir)
-    (sample_dir / _REPORT_FILENAME).write_text(_serialize(report), encoding="utf-8")
+    json_text = report.model_dump_json(indent=2)
+    TournamentEvalReport.model_validate_json(json_text)
+    (sample_dir / _REPORT_FILENAME).write_text(json_text + "\n", encoding="utf-8")
     return report
 
 
@@ -469,8 +505,32 @@ def check_report(sample_dir: Path) -> int:
     if not report_path.exists():
         print(f"--check: no committed report at {report_path}")
         return 1
-    rebuilt = historical_report_payload(build_report(sample_dir))
+    report = build_report(sample_dir)
+    rebuilt = report.model_dump(mode="json")
     committed = json.loads(report_path.read_text(encoding="utf-8"))
+    if (
+        rebuilt != committed
+        and _can_project_historical(report)
+        and "provenance_groups" not in committed.get("report", {})
+        and all(
+            not any(
+                key in game
+                for key in (
+                    "agent_factory_kind",
+                    "experiment_config",
+                    "substrate_flags",
+                    "tactical_policy",
+                    "crew_tactical_policy",
+                )
+            )
+            and all(
+                "skip_confidence_threshold" not in meeting
+                for meeting in game.get("meetings", ())
+            )
+            for game in committed.get("report", {}).get("games", ())
+        )
+    ):
+        rebuilt = historical_report_payload(report)
     if rebuilt != committed:
         print(
             f"--check: {report_path} is STALE — it does not match a rebuild from "

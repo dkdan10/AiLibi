@@ -9,6 +9,32 @@ afterEach(() => {
 });
 
 describe("on-demand model text", () => {
+  it.each(["2", "3", VIEW_MODEL_VERSION])("reads old and current static payloads while retaining the audio gate (%s)", async (version) => {
+    vi.stubEnv("VITE_AILIBI_STATIC_DATA", "1");
+    vi.stubEnv("VITE_AILIBI_STATIC_DEFAULT_SET", "9p2i");
+    vi.resetModules();
+    const client = await import("./client");
+    const replay = {
+      viewModelVersion: version,
+      ticks: [{ agent_states: [{ visibility: { audible_events: [
+        { kind: "sabotage_alarm", room: null },
+      ] } }] }],
+      meetings: [],
+    };
+    const fetch = vi.fn<typeof globalThis.fetch>(() => Promise.resolve(new Response(JSON.stringify(replay), { status: 200 })));
+    vi.stubGlobal("fetch", fetch);
+    await expect(client.getReplay("headless-seed-23")).resolves.toEqual(replay);
+    expect(fetch.mock.calls[0]?.[0]).toBe("./data/9p2i/replays/headless-seed-23.json");
+    const corrupted = {
+      ...replay,
+      ticks: [{ agent_states: [{ visibility: { audible_events: [
+        { kind: "vent_use_heard", room: "ADMIN" },
+      ] } }] }],
+    };
+    fetch.mockImplementation(() => Promise.resolve(new Response(JSON.stringify(corrupted), { status: 200 })));
+    await expect(client.getReplay("headless-seed-23")).rejects.toThrow("Unsupported audio cue");
+  });
+
   it.each([false, true])("uses a lean live request or stable static filename (static=%s)", async (isStatic) => {
     vi.stubEnv("VITE_AILIBI_STATIC_DATA", isStatic ? "1" : "0");
     vi.stubEnv("VITE_AILIBI_STATIC_DEFAULT_SET", "9p2i");

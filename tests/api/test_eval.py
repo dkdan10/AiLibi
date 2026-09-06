@@ -21,6 +21,7 @@ from api.main import create_app
 from api.replay_loader import ReplayLoader, get_replay_loader
 from eval.meeting_quality import TournamentEvalReport, build_tournament_eval_report
 from eval.report_schema import (
+    build_provenance_groups,
     CURRENT_FORMAT_VERSION,
     GameCostSummary,
     GameReport,
@@ -139,8 +140,26 @@ def test_tournament_report_present_returns_200(tmp_path: Path) -> None:
 
     assert response.status_code == 200
     body = response.json()
-    # Served faithfully: the body round-trips back into an equal model.
-    assert TournamentEvalReport.model_validate(body) == eval_report
+    # No source recordings exist. The served projection groups the explicit
+    # unknown identities and leaves every descriptive metric and cost unchanged.
+    expected = eval_report.model_copy(
+        update={
+            "report": eval_report.report.model_copy(
+                update={
+                    "provenance_groups": build_provenance_groups(
+                        eval_report.report.games
+                    )
+                }
+            )
+        }
+    )
+    served = TournamentEvalReport.model_validate(body)
+    assert served == expected
+    assert all(not game.outcome_verified for game in served.report.games)
+    assert served.report.provenance_groups is not None
+    assert all(
+        group.agent_factory_kind is None for group in served.report.provenance_groups
+    )
     # Balance summary inputs: per-game winners, including the IMPOSTORS win.
     assert [g["winner"] for g in body["report"]["games"]] == [
         "CREWMATES",

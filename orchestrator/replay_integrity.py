@@ -8,10 +8,11 @@ outcome claims before presenting the reconstructed timeline as a game.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import NoReturn
+from typing import Final, NoReturn
 
 from engine.events import EngineEvent, GameOverEvent, MeetingTriggeredEvent
 from engine.world import WorldState
+from meetings.voting import SKIP_TARGET, tally_ballots
 from orchestrator.replay import (
     AbortedMeetingReplayEntry,
     FailedCallReplayEntry,
@@ -20,10 +21,31 @@ from orchestrator.replay import (
     MeetingReplayEntry,
     ReplayEntry,
     ReplayLogEntry,
+    recorded_agent_factory_kind,
     recorded_experiment_config,
+    recorded_substrate_flags,
     recorded_testimony_shapes,
     recorded_temporal_observations,
 )
+
+
+LEGACY_SKIP_CONFIDENCE_THRESHOLD: Final[float] = 0.6
+"""Supported cutoff for recordings that predate explicit meeting provenance."""
+
+
+def resolve_ballot_tally_threshold(entry: MeetingReplayEntry) -> float:
+    """Read the recorded cutoff or the frozen historical compatibility rule.
+
+    This is a compatibility interpretation, not evidence that an old recorder
+    stamped its cutoff. Keep the recorded nullable field in reports so callers
+    can distinguish those two sources independently of outcome verification.
+    """
+
+    return (
+        entry.skip_confidence_threshold
+        if entry.skip_confidence_threshold is not None
+        else LEGACY_SKIP_CONFIDENCE_THRESHOLD
+    )
 
 
 class ReplayIntegrityError(ValueError):
@@ -57,6 +79,8 @@ class ReplayIntegrityValidator:
         try:
             recorded_experiment_config(entries)
             recorded_testimony_shapes(entries)
+            recorded_agent_factory_kind(entries)
+            recorded_substrate_flags(entries)
         except ValueError as exc:
             self._fail("substrate_version_mismatch", str(exc))
         self._ticks: list[ReplayEntry] = []
@@ -194,6 +218,34 @@ class ReplayIntegrityValidator:
                 self._fail(
                     "meeting_pre_hash_mismatch",
                     "meeting pre-state differs from the verified trigger state",
+                    entry.tick,
+                )
+            living = {pid for pid, player in state.players.items() if player.alive}
+            voters = [ballot.voter for ballot in meeting.ballots]
+            if len(voters) != len(living) or set(voters) != living:
+                self._fail(
+                    "ballot_roster_mismatch",
+                    "meeting requires exactly one ballot from each living player",
+                    entry.tick,
+                )
+            if any(
+                ballot.target != SKIP_TARGET
+                and (ballot.target not in living or ballot.target == ballot.voter)
+                for ballot in meeting.ballots
+            ):
+                self._fail(
+                    "ballot_target_mismatch",
+                    "normalized ballot target must be SKIP or another living player",
+                    entry.tick,
+                )
+            outcome, ejected = tally_ballots(
+                meeting.ballots,
+                skip_confidence_threshold=resolve_ballot_tally_threshold(meeting),
+            )
+            if (outcome, ejected) != (meeting.outcome, meeting.ejected_player_id):
+                self._fail(
+                    "ballot_tally_mismatch",
+                    "recorded ballots do not resolve to the recorded meeting outcome",
                     entry.tick,
                 )
 

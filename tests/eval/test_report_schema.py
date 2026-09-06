@@ -524,6 +524,7 @@ def test_tournament_report_field_set_is_pinned_to_its_two_mirrors() -> None:
         "kill_gifted_wins",
         "instances_dropped_total",
         "mean_instances_complete_at_win",
+        "provenance_groups",
     }, (
         "TournamentReport's field set changed. A field added here must be "
         "mirrored on api/routes/eval.py::_TournamentReportEvalView (extra="

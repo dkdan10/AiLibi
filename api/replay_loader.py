@@ -78,6 +78,9 @@ from api.schemas import (
     FoundBodyObsView,
     GameFinale,
     GateView,
+    TaskActivityAccountView,
+    ExperimentConfigView,
+    TacticalPolicyView,
     KillEventView,
     LLMCallView,
     MapLayoutView,
@@ -125,10 +128,9 @@ from engine.events import (
 from engine.tick import advance_tick
 from engine.world import Map, WorldState, load_canonical_map
 from eval.meeting_quality import TournamentEvalReport
-from eval.report_schema import GameReport
+from eval.report_schema import GameReport, build_provenance_groups
 from meetings.manager import (
     BALLOT_TARGET_REDIRECT_MARKER,
-    DEFAULT_SKIP_CONFIDENCE_THRESHOLD,
     EMERGENCY_BODY_STRIP_MARKER,
     INVALID_ACCUSATION_TARGET_MARKER,
     INVALID_ALIBI_SUBJECT_MARKER,
@@ -143,6 +145,7 @@ from meetings.manager import (
     extract_belief_evidence,
 )
 from meetings.schemas import (
+    TaskActivityAccount,
     AccusationClaim,
     AlibiClaim,
     BallotTargetRewriteReason,
@@ -174,6 +177,11 @@ from orchestrator.game import (
 from orchestrator.observation_delivery import ingest_event_observations_for_memories
 from orchestrator.recording_fingerprint import recording_fingerprint
 from orchestrator.replay import (
+    AgentFactoryKind,
+    CrewTacticalPolicyStamp,
+    recorded_agent_factory_kind,
+    recorded_substrate_flags,
+    recorded_temporal_observation_version,
     recorded_experiment_config,
     recorded_testimony_shapes,
     TOGGLEABLE_SUBSTRATE_FLAG_KEYS,
@@ -197,13 +205,21 @@ from orchestrator.replay import (
     read_all_entries,
     recorded_completion_status,
     substrate_flag_snapshot,
-    recorded_temporal_observations,
     substrate_stamp_mismatches,
 )
-from agents.memory.evidence_context import ingest_public_meeting_roster
+from agents.memory.evidence_context import (
+    ingest_public_meeting_roster,
+    ingest_public_regroup,
+)
 from orchestrator.boundary import public_map_from_engine_map
 from orchestrator.seeder import seed_initial_state
-from orchestrator.replay_integrity import ReplayIntegrityError, ReplayIntegrityValidator
+from orchestrator.replay_integrity import (
+    LEGACY_SKIP_CONFIDENCE_THRESHOLD,
+    ReplayIntegrityError,
+    ReplayIntegrityValidator,
+    resolve_ballot_tally_threshold,
+)
+from orchestrator.experiment_config import RecordedExperimentConfig
 
 _LOGGER: Final[logging.Logger] = logging.getLogger(__name__)
 
@@ -510,27 +526,30 @@ class ReplayPolicyMismatchError(RuntimeError):
         self,
         *,
         game_id: str,
-        recorded: TacticalPolicyStamp,
+        recorded: TacticalPolicyStamp | None,
         expected: TacticalPolicyStamp,
     ) -> None:
         self.game_id = game_id
         self.recorded = recorded
         self.expected = expected
         #: Stamp fields whose recorded value contradicts the served claim.
-        self.differing: list[str] = sorted(
-            field
-            for field in TacticalPolicyStamp.model_fields
-            if getattr(recorded, field) != getattr(expected, field)
+        self.differing: list[str] = (
+            ["unrecorded_policy"]
+            if recorded is None
+            else sorted(
+                field
+                for field in TacticalPolicyStamp.model_fields
+                if getattr(recorded, field) != getattr(expected, field)
+            )
         )
         super().__init__(
             f"replay tactical-policy mismatch for {game_id!r}: recorded "
-            f"{recorded.model_dump()!r} but the loader is serving under a "
+            f"{recorded.model_dump() if recorded is not None else 'unknown'!r} but the loader is serving under a "
             f"conflicting policy claim {expected.model_dump()!r} (differing "
             f"fields: {self.differing}). Replay reconstruction re-feeds the recorded "
             "actions and never re-invokes a policy, so the stamp is provenance, "
             "not a replay input; this guard refuses to SERVE a stamped replay "
-            "under a conflicting policy claim (an unstamped replay reads as the "
-            "scripted FSM default). This is not a determinism break — the "
+            "under a conflicting or unsupported policy claim. This is not a determinism break — the "
             "per-tick state hash is policy-independent."
         )
 
@@ -608,32 +627,28 @@ def _assert_policy_matches(
     *,
     expected_tactical_policy: TacticalPolicyStamp | None,
 ) -> None:
-    """Fail loud if a replay is served under a conflicting tactical-policy claim.
+    """Validate an explicit policy claim without certifying known custom agents.
 
-    The honoring half of the Task-15.9 stamp. When the loader is constructed with
-    an ``expected_tactical_policy`` (a caller asserting which policy's output it
-    intends to serve), a recording whose stamp conflicts with that claim is
-    refused via :class:`ReplayPolicyMismatchError`. A COMPLETED but UNSTAMPED
-    replay reads as the scripted FSM default
-    (:func:`orchestrator.replay.fsm_default_tactical_policy_stamp`), so it matches
-    an ``fsm-default`` claim and conflicts with a learned-policy claim. When
-    ``expected_tactical_policy`` is ``None`` (the default), the guard is inert —
-    the committed canonical sets, and every ordinary serve, are unaffected.
-    Unlike the substrate guard there is no ambient policy and no reconstruction
-    difference: this is a provenance assertion, so it neither reads env nor
-    participates in the reconstruction cache key.
-
-    A PARTIAL replay — one with no ``game_over`` row — is a crashed / aborted
-    recording whose provenance footer (the stamp lives on the ``game_over`` entry
-    beside ``substrate_flags``) was never written, so its policy is UNKNOWN, not
-    the FSM default: the claim is NOT enforced against it, mirroring
-    :func:`_assert_substrate_matches`, which likewise skips an unstamped replay.
-    Only a COMPLETED replay (``game_over`` present) with no stamp is definitively
-    the FSM default (absent = FSM default), so only then is the claim enforced.
+    Current custom/experimental factories require a matching recorded policy
+    stamp. Ordinary readers make no policy claim. Historical completed recordings
+    retain the explicit legacy absent-stamp/FSM compatibility rule; historical
+    partials without a factory identity remain unknown and do not certify it.
     """
 
     if expected_tactical_policy is None:
         return
+    known_factory = recorded_agent_factory_kind(
+        tuple(
+            entry
+            for entry in entries
+            if isinstance(entry, (ReplayEntry, GameEndReplayEntry))
+        )
+    )
+    recorded = _recorded_tactical_policy(entries)
+    if known_factory in ("custom", "experimental") and recorded is None:
+        raise ReplayPolicyMismatchError(
+            game_id=game_id, recorded=None, expected=expected_tactical_policy
+        )
     # A replay with no game_over footer never wrote its provenance stamp — the
     # policy is UNKNOWN, not the FSM default — so skip the claim (see docstring):
     # the tournament harness intentionally keeps such partials (a seed that
@@ -643,7 +658,6 @@ def _assert_policy_matches(
     # likewise skips an unstamped replay.
     if not any(isinstance(entry, GameEndReplayEntry) for entry in entries):
         return
-    recorded = _recorded_tactical_policy(entries)
     effective = (
         recorded if recorded is not None else fsm_default_tactical_policy_stamp()
     )
@@ -667,11 +681,14 @@ def _recorded_substrate_flags(
     substrate check entirely for unstamped replays.
     """
 
-    flags: dict[str, bool] | None = None
-    for entry in entries:
-        if isinstance(entry, GameEndReplayEntry) and entry.substrate_flags is not None:
-            flags = dict(entry.substrate_flags)
-    return flags
+    flags = recorded_substrate_flags(
+        tuple(
+            entry
+            for entry in entries
+            if isinstance(entry, (ReplayEntry, GameEndReplayEntry))
+        )
+    )
+    return dict(flags) if flags is not None else None
 
 
 def _assert_substrate_matches(
@@ -702,6 +719,13 @@ def _assert_substrate_matches(
         game_id,
         _recorded_substrate_flags(entries),
         allow_substrate_mismatch=allow_substrate_mismatch,
+        temporal_version=recorded_temporal_observation_version(
+            tuple(
+                entry
+                for entry in entries
+                if isinstance(entry, (ReplayEntry, GameEndReplayEntry))
+            )
+        ),
     )
 
 
@@ -710,6 +734,7 @@ def _assert_recorded_substrate(
     recorded: Mapping[str, bool] | None,
     *,
     allow_substrate_mismatch: bool = False,
+    temporal_version: Literal[1, 2] | None = None,
 ) -> None:
     """Compare one already-extracted stamp against the live substrate.
 
@@ -723,7 +748,7 @@ def _assert_recorded_substrate(
 
     if recorded is None:
         return
-    ambient = substrate_flag_snapshot()
+    ambient = _reader_substrate(temporal_version)
     mismatch = substrate_stamp_mismatches(recorded, ambient=ambient)
     if not mismatch:
         return
@@ -742,6 +767,14 @@ def _assert_recorded_substrate(
     raise ReplaySubstrateMismatchError(
         game_id=game_id, recorded=recorded, ambient=ambient
     )
+
+
+def _reader_substrate(temporal_version: Literal[1, 2] | None) -> dict[str, bool]:
+    """Versioned delivery is explicit; unversioned legacy levers retain their guard."""
+    flags = substrate_flag_snapshot()
+    if temporal_version is not None:
+        flags["temporal_observations"] = True
+    return flags
 
 
 @dataclass(frozen=True)
@@ -791,6 +824,11 @@ class _ReplaySummary:
     # reconstruct without a second read. ``None`` for an unstamped (legacy)
     # recording, which is never checked.
     substrate_flags: Mapping[str, bool] | None
+    agent_factory_kind: AgentFactoryKind | None = None
+    experiment_config: RecordedExperimentConfig | None = None
+    tactical_policy: TacticalPolicyStamp | None = None
+    crew_tactical_policy: CrewTacticalPolicyStamp | None = None
+    temporal_version: Literal[1, 2] | None = None
 
 
 class ReplayLoader:
@@ -954,7 +992,11 @@ class ReplayLoader:
                     self._substrate_cache_key(),
                 )
                 # Analysis overrides cannot certify incompatible outcome claims.
-                _assert_recorded_substrate(game_id, summary.substrate_flags)
+                _assert_recorded_substrate(
+                    game_id,
+                    summary.substrate_flags,
+                    temporal_version=summary.temporal_version,
+                )
             except (ReplayPolicyMismatchError, ReplaySubstrateMismatchError) as exc:
                 integrity = "unverified"
                 error = type(exc).__name__
@@ -1050,9 +1092,8 @@ class ReplayLoader:
         report = TournamentEvalReport.model_validate_json(
             path.read_text(encoding="utf-8")
         )
-        # A persisted boolean is a claim, not a validation result. Rebind only
-        # outcome/status metadata; historical metric and cost cells remain the
-        # recorded report's values and are not certified by this flag.
+        # Rebind outcomes and behavior identity to the served source. Historical
+        # metric and cost cells remain report values, without certification.
         games = report.report.games
         game_ids = Counter(game.game_id for game in games)
         seeds = Counter(game.seed for game in games)
@@ -1068,7 +1109,14 @@ class ReplayLoader:
             for game in games
         )
         return report.model_copy(
-            update={"report": report.report.model_copy(update={"games": rebound})}
+            update={
+                "report": report.report.model_copy(
+                    update={
+                        "games": rebound,
+                        "provenance_groups": build_provenance_groups(rebound),
+                    }
+                )
+            }
         )
 
     def _rebind_report_outcome(
@@ -1077,6 +1125,13 @@ class ReplayLoader:
         """Verify the report's outcome against its currently served recording."""
         verified = False
         status = game.completion_status
+        identity: dict[str, Any] = {
+            "agent_factory_kind": None,
+            "experiment_config": None,
+            "substrate_flags": None,
+            "tactical_policy": None,
+            "crew_tactical_policy": None,
+        }
         try:
             path, seed = self._resolve(game.game_id)
             summary = self._cached_validated_summary(
@@ -1086,7 +1141,18 @@ class ReplayLoader:
                 self._roster_mtime(),
                 self._substrate_cache_key(),
             )
-            _assert_recorded_substrate(game.game_id, summary.substrate_flags)
+            _assert_recorded_substrate(
+                game.game_id,
+                summary.substrate_flags,
+                temporal_version=summary.temporal_version,
+            )
+            identity = {
+                "agent_factory_kind": summary.agent_factory_kind,
+                "experiment_config": summary.experiment_config,
+                "substrate_flags": summary.substrate_flags,
+                "tactical_policy": summary.tactical_policy,
+                "crew_tactical_policy": summary.crew_tactical_policy,
+            }
             verified = (
                 unique_identity
                 and game.seed == seed
@@ -1110,7 +1176,11 @@ class ReplayLoader:
             # report readable and its recorded spending visible as unverified.
             pass
         return game.model_copy(
-            update={"completion_status": status, "outcome_verified": verified}
+            update={
+                **identity,
+                "completion_status": status,
+                "outcome_verified": verified,
+            }
         )
 
     def get_meeting_memory(
@@ -1344,7 +1414,8 @@ class ReplayLoader:
         integrity = ReplayIntegrityValidator(entries, game_id=game_id)
         experiment = recorded_experiment_config(entries)
         testimony_shapes = recorded_testimony_shapes(entries)
-        temporal = recorded_temporal_observations(entries)
+        temporal_version = recorded_temporal_observation_version(entries)
+        temporal = temporal_version is not None
         # Honor the stamped substrate (Task 14.7): the memory reconstruction
         # below re-derives under the active substrate (the four 13.5 levers
         # unconditionally ON since Task 14.9), so refuse to reconstruct a
@@ -1427,6 +1498,7 @@ class ReplayLoader:
                 game_map=self._game_map,
                 audit_log_path=Path(audit_dir.name) / "audit.jsonl",
                 temporal_observations=temporal,
+                temporal_observation_version=temporal_version,
             )
         if collect_memory:
             memories = {
@@ -1435,6 +1507,12 @@ class ReplayLoader:
                         experiment.evidence_reasoning_version if experiment else None
                     ),
                     public_map=public_map_from_engine_map(self._game_map),
+                    public_account_version=experiment.public_account_version
+                    if experiment is not None
+                    else None,
+                    attributed_testimony_version=experiment.attributed_testimony_version
+                    if experiment is not None
+                    else None,
                 )
                 for pid in initial_state.players
             }
@@ -1490,6 +1568,7 @@ class ReplayLoader:
                                 )
 
                 actions = _deserialize_actions(entry.actions)
+                source_state = state
                 state, events = advance_tick(
                     state,
                     actions,
@@ -1523,7 +1602,12 @@ class ReplayLoader:
                 integrity.check_advance(entry, state, events)
                 if collect_memory and service is not None:
                     event_deliveries = ingest_event_observations_for_memories(
-                        service=service, state=state, events=events, memories=memories
+                        service=service,
+                        state=state,
+                        events=events,
+                        memories=memories,
+                        source_state=source_state,
+                        submitted_actions=actions,
                     )
                     for batch in event_deliveries.values():
                         for observation in batch:
@@ -1699,7 +1783,18 @@ class ReplayLoader:
                     # memory snapshot shows the same accumulated/decayed
                     # suspicion the live agents held. Memory-side only --
                     # engine state and its hash checks are untouched.
-                    evidence = extract_belief_evidence(result)
+                    evidence = extract_belief_evidence(
+                        result,
+                        trigger_kind="report"
+                        if trigger_kind == "body"
+                        else trigger_kind,
+                        public_account_version=experiment.public_account_version
+                        if experiment is not None
+                        else None,
+                        attributed_testimony_version=experiment.attributed_testimony_version
+                        if experiment is not None
+                        else None,
+                    )
                     # Task 13.5.2: mirror the live loop's reported-testimony
                     # content fold in the SAME per-living-agent loop,
                     # unconditionally since Task 14.9 (the adopted lever is the
@@ -1712,6 +1807,12 @@ class ReplayLoader:
                         result,
                         testimony_shapes=testimony_shapes,
                         evidence_reasoning_version=experiment.evidence_reasoning_version
+                        if experiment is not None
+                        else None,
+                        public_account_version=experiment.public_account_version
+                        if experiment is not None
+                        else None,
+                        attributed_testimony_version=experiment.attributed_testimony_version
                         if experiment is not None
                         else None,
                     )
@@ -1735,6 +1836,25 @@ class ReplayLoader:
                     fold_meeting_outcome_into_memories(
                         result, state=state, memories=memories
                     )
+                    if (
+                        experiment is not None
+                        and experiment.meeting_reset == "hub_with_grace"
+                        and state.phase == "PLAY"
+                    ):
+                        living_ids = tuple(
+                            sorted(
+                                pid
+                                for pid, player in state.players.items()
+                                if player.alive
+                            )
+                        )
+                        for pid in living_ids:
+                            ingest_public_regroup(
+                                memories[pid],
+                                tick=state.tick,
+                                room=self._game_map.meeting.room,
+                                player_ids=living_ids,
+                            )
                 meeting_index += 1
                 if state.phase == "GAME_OVER":
                     break
@@ -2065,7 +2185,13 @@ class ReplayLoader:
             ),
             prompt_versions=dict(entry.prompt_versions),
             total_cost_usd=sum((call.cost_usd for call in entry.llm_calls), 0.0),
-            gate=_gate_view(entry.ballots),
+            gate=_gate_view(
+                entry.ballots,
+                threshold=resolve_ballot_tally_threshold(entry),
+                threshold_source="recorded"
+                if entry.skip_confidence_threshold is not None
+                else "legacy_compatibility",
+            ),
         )
 
     def _agent_memory_view(
@@ -2154,7 +2280,9 @@ class ReplayLoader:
         final_tick: int | None = None
         total_cost = 0.0
         prompt_versions: dict[str, str] = {}
-        substrate_flags: dict[str, bool] | None = None
+        substrate_flags = recorded_substrate_flags(entries)
+        tactical_policy: TacticalPolicyStamp | None = None
+        crew_tactical_policy: CrewTacticalPolicyStamp | None = None
         if not entries:
             # A file that contributes no records is an unusable artifact, not a
             # 0-tick game; reducing it would advertise it in the picker and
@@ -2177,6 +2305,8 @@ class ReplayLoader:
                 final_tick = entry.tick
                 if entry.substrate_flags is not None:
                     substrate_flags = dict(entry.substrate_flags)
+                tactical_policy = entry.tactical_policy
+                crew_tactical_policy = entry.crew_tactical_policy
             elif isinstance(entry, FailedCallReplayEntry):
                 total_cost += entry.cost_usd
         return _ReplaySummary(
@@ -2189,6 +2319,11 @@ class ReplayLoader:
             total_cost_usd=total_cost,
             prompt_versions=prompt_versions,
             substrate_flags=substrate_flags,
+            agent_factory_kind=recorded_agent_factory_kind(entries),
+            experiment_config=recorded_experiment_config(entries),
+            tactical_policy=tactical_policy,
+            crew_tactical_policy=crew_tactical_policy,
+            temporal_version=recorded_temporal_observation_version(entries),
         )
 
     def _metadata_view(self, path: Path, seed: int) -> ReplayMetadataView:
@@ -2231,13 +2366,31 @@ class ReplayLoader:
             and (
                 summary.substrate_flags is None
                 or not substrate_stamp_mismatches(
-                    summary.substrate_flags, ambient=substrate_flag_snapshot()
+                    summary.substrate_flags,
+                    ambient=_reader_substrate(summary.temporal_version),
                 )
             ),
             meeting_count=summary.meeting_count,
             total_cost_usd=summary.total_cost_usd,
             prompt_versions=dict(summary.prompt_versions),
             created_at=_iso_mtime(path),
+            agent_factory_kind=summary.agent_factory_kind,
+            experiment_config=ExperimentConfigView.model_validate(
+                summary.experiment_config.model_dump()
+            )
+            if summary.experiment_config is not None
+            else None,
+            substrate_flags=summary.substrate_flags,
+            tactical_policy=TacticalPolicyView.model_validate(
+                summary.tactical_policy.model_dump()
+            )
+            if summary.tactical_policy is not None
+            else None,
+            crew_tactical_policy=TacticalPolicyView.model_validate(
+                summary.crew_tactical_policy.model_dump()
+            )
+            if summary.crew_tactical_policy is not None
+            else None,
         )
 
     def _players_view(self, initial_state: WorldState) -> tuple[PlayerView, ...]:
@@ -2889,7 +3042,16 @@ def _observation_claim_view(
     | SawKillObservationView
     | WhereaboutsClaimView
     | SawMoveObservationView
+    | TaskActivityAccountView
 ):
+    if isinstance(claim, TaskActivityAccount):
+        return TaskActivityAccountView(
+            type="task_activity",
+            task_id=claim.task_id,
+            room=claim.room,
+            from_tick=claim.from_tick,
+            to_tick=claim.to_tick,
+        )
     if isinstance(claim, SawPlayerObservation):
         return SawPlayerView(
             type="saw_player",
@@ -3236,30 +3398,45 @@ def _advantage_view(
     )
 
 
-def _gate_view(ballots: Sequence[VoteBallot]) -> GateView:
+def _gate_view(
+    ballots: Sequence[VoteBallot],
+    *,
+    threshold: float = LEGACY_SKIP_CONFIDENCE_THRESHOLD,
+    threshold_source: Literal[
+        "recorded", "legacy_compatibility"
+    ] = "legacy_compatibility",
+) -> GateView:
     """Recompute the per-meeting §4.6 verdict from the persisted ballots.
 
     Mirrors :func:`meetings.voting.tally_ballots` exactly — plurality + at least
-    one leader ballot ``confidence >= threshold`` (0.6); a SKIP plurality or a
+    one leader ballot ``confidence >= threshold``; the caller supplies the recorded
+    cutoff or the explicit legacy compatibility cutoff. A SKIP plurality or a
     tie of non-SKIP targets → no leader / not passed — so ``passed`` matches the
     recorded outcome and ``leader`` the recorded ``ejected_player_id``. The
     template-time ``rendered_max`` is intentionally dropped (it is transient and
     only persisted on failed calls).
     """
 
-    threshold = DEFAULT_SKIP_CONFIDENCE_THRESHOLD
     tallies: dict[str, int] = {}
     for ballot in ballots:
         tallies[ballot.target] = tallies.get(ballot.target, 0) + 1
     if not tallies:
         return GateView(
-            leader=None, leader_max_confidence=0.0, threshold=threshold, passed=False
+            leader=None,
+            leader_max_confidence=0.0,
+            threshold=threshold,
+            threshold_source=threshold_source,
+            passed=False,
         )
     max_votes = max(tallies.values())
     leaders = sorted(target for target, count in tallies.items() if count == max_votes)
     if SKIP_TARGET in leaders or len(leaders) > 1:
         return GateView(
-            leader=None, leader_max_confidence=0.0, threshold=threshold, passed=False
+            leader=None,
+            leader_max_confidence=0.0,
+            threshold=threshold,
+            threshold_source=threshold_source,
+            passed=False,
         )
     leader = leaders[0]
     leader_max_confidence = max(b.confidence for b in ballots if b.target == leader)
@@ -3267,6 +3444,7 @@ def _gate_view(ballots: Sequence[VoteBallot]) -> GateView:
         leader=leader,
         leader_max_confidence=leader_max_confidence,
         threshold=threshold,
+        threshold_source=threshold_source,
         passed=leader_max_confidence >= threshold,
     )
 

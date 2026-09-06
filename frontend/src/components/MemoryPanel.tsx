@@ -25,15 +25,8 @@ function Empty({ children }: { children: ReactNode }) {
   return <p className="text-xs italic text-ink-400">{children}</p>;
 }
 
-// Task 16.7.1: this local switch renders the FULL `ObservationClaimView` union
-// even though the runtime producer here (`api.replay_loader._observations_from_memory`)
-// only ever emits saw_player / completed_task / found_body. The explicit
-// `ReactElement` return type + a case for every union member means a future
-// producer widening can never SILENTLY blank a memory line (the 15-midwave
-// dormant trap, closed): saw_vent was the 15.4.1 gap, whereabouts is 16.7.1,
-// and saw_kill is the witnessed-murder shape.
-// The wording mirrors `ui/ObservationLine.tsx`; the styling keeps this file's
-// local convention (`text-ink-900` on the root span).
+// Exhaustive rendering keeps additive account kinds visible. Reported task
+// activity is a claim, and never becomes a completed task in this panel.
 function ObservationLine({ obs }: { obs: ObservationClaimView }): ReactElement {
   switch (obs.type) {
     case "saw_player":
@@ -51,6 +44,13 @@ function ObservationLine({ obs }: { obs: ObservationClaimView }): ReactElement {
         <span className="min-w-0 break-words text-ink-900">
           <span className="font-semibold">completed</span> {obs.task_id} in {obs.room}{" "}
           at tick {obs.tick}
+        </span>
+      );
+    case "task_activity":
+      return (
+        <span className="min-w-0 break-words text-ink-900">
+          <span className="font-semibold">claimed task activity</span>{" "}
+          {obs.task_id} in {obs.room}, ticks {obs.from_tick}–{obs.to_tick}
         </span>
       );
     case "found_body":
@@ -129,7 +129,11 @@ export function MemoryPanel({
         ),
     )
     // The DTO arrives salience-ordered; show the episodic feed newest-first.
-    .sort((a, b) => b.tick - a.tick);
+    .sort((a, b) => {
+      const aTick = a.type === "task_activity" ? a.to_tick : a.tick;
+      const bTick = b.type === "task_activity" ? b.to_tick : b.tick;
+      return bTick - aTick;
+    });
 
   // The raw rendered memory IS the verbatim prompt memory — it carries the
   // agent's `Your role` block + (for an impostor) the own-kill self-channel — so

@@ -51,7 +51,9 @@ from pydantic import BaseModel, ConfigDict, Field
 # value set is not an additive projection: a consumer that indexes the old seven
 # exhaustively (the map's glyph registry does) has no entry for the four new ones,
 # so a build on the old contract must fail loudly rather than render a hole.
-VIEW_MODEL_VERSION: Final[str] = "3"
+# "4" adds the public task-activity account to the spoken observation union.
+# Current clients explicitly retain version-2/3 reads with the same audio guard.
+VIEW_MODEL_VERSION: Final[str] = "4"
 
 
 class _FrozenView(BaseModel):
@@ -526,6 +528,16 @@ class CompletedTaskObsView(_FrozenView):
     room: str
 
 
+class TaskActivityAccountView(_FrozenView):
+    """A speaker's task-activity account, without certifying completion or role."""
+
+    type: Literal["task_activity"]
+    task_id: str
+    room: str
+    from_tick: int
+    to_tick: int
+
+
 class FoundBodyObsView(_FrozenView):
     """Shadows ``meetings.schemas.FoundBodyObservation``."""
 
@@ -611,7 +623,8 @@ ObservationClaimView: TypeAlias = Annotated[
     | SawVentObservationView
     | SawKillObservationView
     | WhereaboutsClaimView
-    | SawMoveObservationView,
+    | SawMoveObservationView
+    | TaskActivityAccountView,
     Field(discriminator="type"),
 ]
 
@@ -966,6 +979,9 @@ class GateView(_FrozenView):
     leader_max_confidence: float
     threshold: float
     passed: bool
+    threshold_source: Literal["recorded", "legacy_compatibility"] = (
+        "legacy_compatibility"
+    )
 
 
 class MeetingView(_FrozenView):
@@ -1025,6 +1041,11 @@ class ObservationReferenceView(_FrozenView):
     """
 
     observation_id: str
+    source_tick: int | None = None
+    observation_phase: Literal["snapshot", "event"] | None = None
+    observation_order: int | None = None
+    observer_room: str | None = None
+    observer_in_vent: bool | None = None
     observer_id: str
     resolved: bool
     observation_tick: int | None
@@ -1245,6 +1266,44 @@ class GameFinale(_FrozenView):
 # ---------------------------------------------------------------------------
 
 
+class ExperimentConfigView(_FrozenView):
+    """Public copy of the recorded experimental settings, without runtime imports."""
+
+    format_version: Literal[1, 2] = 1
+    redistribution_policy: Literal["lowest_id", "least_remaining_work"] = "lowest_id"
+    meeting_reset: Literal["preserve", "hub_with_grace"] = "preserve"
+    crew_idle_policy: Literal["hub_wait", "patrol", "accompany"] = "hub_wait"
+    vent_exit_policy: Literal["target_distance", "observed_risk"] = "target_distance"
+    post_meeting_retarget: bool = False
+    self_report: bool = False
+    sabotage_threshold: Literal["six_sevenths", "two_thirds"] = "six_sevenths"
+    evidence_reasoning_version: Literal[1, 2] | None = None
+    bounded_rebuttal_version: Literal[1] | None = None
+    public_account_version: Literal[1] | None = None
+    attributed_testimony_version: Literal[1] | None = None
+
+
+class TacticalPolicyView(_FrozenView):
+    """Recorded policy identity, used separately for crew and impostor policies."""
+
+    policy_id: str
+    method: str
+    encoder_version: str
+    weights_sha256: str
+    anchor_policy: str
+
+
+class ReportProvenanceGroupView(_FrozenView):
+    """Recorded behavior identities kept distinct in public aggregate results."""
+
+    agent_factory_kind: Literal["scripted", "experimental", "custom"] | None = None
+    experiment_config: ExperimentConfigView | None = None
+    substrate_flags: Mapping[str, bool] | None = None
+    tactical_policy: TacticalPolicyView | None = None
+    crew_tactical_policy: TacticalPolicyView | None = None
+    game_ids: tuple[str, ...]
+
+
 class ReplayMetadataView(_FrozenView):
     """Shadows ``orchestrator.replay.GameEndReplayEntry`` plus the
     ``compute_cost_usd`` reduction.
@@ -1268,6 +1327,11 @@ class ReplayMetadataView(_FrozenView):
         "unfinished"
     )
     outcome_verified: bool = False
+    agent_factory_kind: Literal["scripted", "experimental", "custom"] | None = None
+    experiment_config: ExperimentConfigView | None = None
+    substrate_flags: Mapping[str, bool] | None = None
+    tactical_policy: TacticalPolicyView | None = None
+    crew_tactical_policy: TacticalPolicyView | None = None
 
 
 class FailedCallView(_FrozenView):
@@ -1413,6 +1477,7 @@ class PublicResultsView(_FrozenView):
     """Compact results derived from verified recordings, with explicit counts."""
 
     format_version: Literal[1] = 1
+    provenance_groups: tuple[ReportProvenanceGroupView, ...] | None = None
     set_name: str
     source_fingerprint: str
     recorded_from: str | None
@@ -1507,6 +1572,7 @@ __all__ = [
     "CorroborationClaimView",
     "EdgeView",
     "EvalCostSummaryView",
+    "ExperimentConfigView",
     "ReplayAccountingView",
     "FailedCallEvalView",
     "FailedCallView",
@@ -1529,6 +1595,7 @@ __all__ = [
     "ReplayMetadataView",
     "ReplayView",
     "ReportBodyEventView",
+    "ReportProvenanceGroupView",
     "RoomView",
     "RubricGameView",
     "RubricView",
@@ -1542,6 +1609,8 @@ __all__ = [
     "SuspicionEntryView",
     "SuspicionGraphView",
     "TaskCompletedEventView",
+    "TaskActivityAccountView",
+    "TacticalPolicyView",
     "TickView",
     "TurnView",
     "VentEventView",

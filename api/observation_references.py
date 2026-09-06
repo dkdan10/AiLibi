@@ -56,6 +56,14 @@ def observation_references(
                             if other.type == "saw_player"
                             and other.tick == event.tick
                             and other.payload.get("room") == room
+                            and (
+                                payload.get("observation_phase") is None
+                                or (
+                                    payload.get("observation_phase") == "snapshot"
+                                    and other.payload.get("observation_phase")
+                                    == "snapshot"
+                                )
+                            )
                             and (player := _string(other.payload, "player_id"))
                             is not None
                             and player != subject
@@ -79,6 +87,23 @@ def observation_references(
             elif kind == "self_state" and room is not None:
                 subject = observer_id
                 text = f"{observer_id} was in {room}."
+            elif (
+                kind == "own_transition"
+                and from_room is not None
+                and to_room is not None
+            ):
+                subject = observer_id
+                room = to_room
+                text = f"{observer_id} moved from {from_room} to {to_room}."
+                if payload.get("in_vent"):
+                    text = f"{observer_id} entered a vent from {from_room}."
+                elif payload.get("was_in_vent"):
+                    text = f"{observer_id} left a vent into {to_room}."
+            elif kind == "own_task_attempt" and room is not None:
+                subject = observer_id
+                outcome = _string(payload, "outcome")
+                task = _string(payload, "task_id")
+                text = f"{observer_id} attempted {task} in {room}; outcome: {outcome}."
             elif kind == "heard_sabotage_alarm":
                 text = f"{observer_id} heard a sabotage alarm."
         references.append(
@@ -97,6 +122,21 @@ def observation_references(
                 room=room,
                 from_room=from_room,
                 to_room=to_room,
+                source_tick=event.payload.get("source_tick")
+                if event is not None
+                else None,
+                observation_phase=event.payload.get("observation_phase")
+                if event is not None
+                else None,
+                observation_order=event.payload.get("observation_order")
+                if event is not None
+                else None,
+                observer_room=event.payload.get("observer_room")
+                if event is not None
+                else None,
+                observer_in_vent=event.payload.get("observer_in_vent")
+                if event is not None
+                else None,
             )
         )
     return tuple(references)

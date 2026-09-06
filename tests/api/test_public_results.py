@@ -276,3 +276,43 @@ def test_public_results_cache_is_scoped_to_its_loader(summary_recording: Path) -
     with patch.object(second_loader, "_walk", wraps=second_loader._walk) as walk:
         assert public.build_public_results(second_loader) == first
         assert walk.call_count > 0
+
+
+def test_public_summary_keeps_actual_candidate_identity(tmp_path: Path) -> None:
+    from experiments.deduction_scenarios import run_case
+    from orchestrator.experiment_config import RecordedExperimentConfig
+
+    config = RecordedExperimentConfig(
+        format_version=2,
+        evidence_reasoning_version=2,
+        public_account_version=1,
+        attributed_testimony_version=1,
+    )
+    run_case(tmp_path, case="honest", experiment_config=config)
+    (tmp_path / "roster.json").write_text(
+        json.dumps({"num_players": 4, "num_impostors": 1, "tasks_per_crewmate": 1})
+    )
+    result = public.build_public_results(ReplayLoader(tmp_path))
+    assert result.provenance_groups is not None
+    assert len(result.provenance_groups) == 1
+    identity = result.provenance_groups[0]
+    assert identity.agent_factory_kind == "custom"
+    assert identity.experiment_config is not None
+    assert identity.experiment_config.public_account_version == 1
+    assert identity.experiment_config.attributed_testimony_version == 1
+    assert identity.tactical_policy is None
+    assert identity.game_ids == ("headless-seed-1",)
+
+
+def test_historical_summary_never_invents_a_default_factory(
+    canonical_summary: PublicResultsView,
+) -> None:
+    assert canonical_summary.provenance_groups
+    assert all(
+        group.agent_factory_kind is None
+        for group in canonical_summary.provenance_groups
+    )
+    assert (
+        sum(len(group.game_ids) for group in canonical_summary.provenance_groups)
+        == canonical_summary.games
+    )

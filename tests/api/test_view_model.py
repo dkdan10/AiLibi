@@ -155,11 +155,11 @@ def test_contract_version_and_action_set_move_in_lockstep() -> None:
     # carrying an unsupported one, reading the value from the generated module. The
     # assertions above compare each side to itself and so cannot see a Python
     # bump that never reached the generated file; these pin the literal.
-    assert VIEW_MODEL_VERSION == "3"
+    assert VIEW_MODEL_VERSION == "4"
     generated = gen_frontend_types._OUT_TYPES.read_text(encoding="utf-8")
     assert f'export const VIEW_MODEL_VERSION = "{VIEW_MODEL_VERSION}";' in generated
 
-    # Version 3 preserves the eleven-value action vocabulary introduced in v2.
+    # Version 4 preserves v2's action vocabulary and adds a spoken account kind.
     assert get_args(CurrentAction) == (
         "IDLE",
         "MOVING",
@@ -176,6 +176,9 @@ def test_contract_version_and_action_set_move_in_lockstep() -> None:
     alias = " | ".join(f'"{value}"' for value in get_args(CurrentAction))
     assert f"export type CurrentAction = {alias};" in generated
     assert "current_action: CurrentAction;" in generated
+    assert "export interface TaskActivityAccountView" in generated
+    assert 'type: "task_activity";' in generated
+    assert "| TaskActivityAccountView;" in generated
 
 
 def test_player_color_serves_playful_identity_palette(

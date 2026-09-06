@@ -70,12 +70,14 @@ Phase 5 metric outputs are likewise attached by downstream tooling that
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+import json
+from collections.abc import Mapping, Sequence
 from typing import Any, Final, Literal
 
 from pydantic import (
     BaseModel,
     ConfigDict,
+    Field,
     field_validator,
     model_validator,
 )
@@ -89,11 +91,15 @@ from meetings.schemas import (
     VoteBallot,
 )
 from orchestrator.replay import (
+    AgentFactoryKind,
     CompletionStatus,
+    CrewTacticalPolicyStamp,
     FailedCallReplayEntry,
     LLMCallRecord,
+    TacticalPolicyStamp,
     WinnerSide,
 )
+from orchestrator.experiment_config import RecordedExperimentConfig
 
 # Current on-disk format of :class:`TournamentReport`. Bumped only when the
 # schema changes shape in a way older readers cannot interpret. The version is
@@ -202,6 +208,38 @@ class MeetingReport(_FrozenModel):
     ballots: tuple[VoteBallot, ...]
     contradictions: tuple[ContradictionRef, ...]
     llm_calls: tuple[LLMCallRecord, ...]
+    # None means that the recording did not identify its configured cutoff.
+    skip_confidence_threshold: float | None = Field(
+        default=None, ge=0, le=1, allow_inf_nan=False
+    )
+
+    @field_validator("skip_confidence_threshold", mode="before")
+    @classmethod
+    def _cutoff_is_numeric(cls, value: object) -> object:
+        if value is not None and type(value) not in (int, float):
+            raise ValueError("meeting cutoff must be a numeric probability")
+        return value
+
+
+class GameProvenance(_FrozenModel):
+    """Recorded behavior identity; absent historical fields remain unknown.
+
+    A scripted factory describes the built-in policy classes, not a whole-run
+    baseline certificate. Engine experiments, substrate and learned policy
+    stamps are independent parts of the identity and remain visible together.
+    """
+
+    agent_factory_kind: AgentFactoryKind | None = None
+    experiment_config: RecordedExperimentConfig | None = None
+    substrate_flags: Mapping[str, bool] | None = None
+    tactical_policy: TacticalPolicyStamp | None = None
+    crew_tactical_policy: CrewTacticalPolicyStamp | None = None
+
+
+class ReportProvenanceGroup(GameProvenance):
+    """Games sharing the same recorded identity, including its unknown fields."""
+
+    game_ids: tuple[str, ...]
 
 
 class GameReport(_FrozenModel):
@@ -301,6 +339,21 @@ class GameReport(_FrozenModel):
     kill_gifted: bool = False
     instances_dropped: int = 0
     instances_complete_at_win: int = 0
+    agent_factory_kind: AgentFactoryKind | None = None
+    experiment_config: RecordedExperimentConfig | None = None
+    substrate_flags: Mapping[str, bool] | None = None
+    tactical_policy: TacticalPolicyStamp | None = None
+    crew_tactical_policy: CrewTacticalPolicyStamp | None = None
+
+    def recorded_provenance(self) -> GameProvenance:
+        """Project recorded identity without resolving unknowns from this runtime."""
+        return GameProvenance(
+            agent_factory_kind=self.agent_factory_kind,
+            experiment_config=self.experiment_config,
+            substrate_flags=self.substrate_flags,
+            tactical_policy=self.tactical_policy,
+            crew_tactical_policy=self.crew_tactical_policy,
+        )
 
     @model_validator(mode="before")
     @classmethod
@@ -323,6 +376,23 @@ class GameReport(_FrozenModel):
         ):
             raise ValueError("a verified outcome requires a completed game and winner")
         return self
+
+
+def build_provenance_groups(
+    games: Sequence[GameReport],
+) -> tuple[ReportProvenanceGroup, ...]:
+    """Group exact recorded identities without collapsing unknown or mixed arms."""
+    groups: dict[str, tuple[GameProvenance, list[str]]] = {}
+    for game in games:
+        identity = game.recorded_provenance()
+        key = json.dumps(identity.model_dump(mode="json"), sort_keys=True)
+        if key not in groups:
+            groups[key] = (identity, [])
+        groups[key][1].append(game.game_id)
+    return tuple(
+        ReportProvenanceGroup(**identity.model_dump(), game_ids=tuple(sorted(game_ids)))
+        for _, (identity, game_ids) in sorted(groups.items())
+    )
 
 
 class TournamentReport(_FrozenModel):
@@ -408,6 +478,17 @@ class TournamentReport(_FrozenModel):
     kill_gifted_wins: int = 0
     instances_dropped_total: int = 0
     mean_instances_complete_at_win: float | None = None
+    # Missing on historical serialized reports. Current builders always retain
+    # groups, even when every identity field in a group is unknown.
+    provenance_groups: tuple[ReportProvenanceGroup, ...] | None = None
+
+    @model_validator(mode="after")
+    def _recorded_groups_match_games(self) -> TournamentReport:
+        if self.provenance_groups is not None and (
+            self.provenance_groups != build_provenance_groups(self.games)
+        ):
+            raise ValueError("report provenance groups disagree with their games")
+        return self
 
     @model_validator(mode="before")
     @classmethod

@@ -47,3 +47,81 @@ historical cues are refused. Spectator version 3 narrows this vocabulary and
 explicitly reads version-2 payloads with compatible audio, including direct tick
 requests. Frozen encoder versions keep the former cue's position as a reserved
 zero so their weights and dimensions remain valid.
+
+## Explicit temporal version 2
+
+Temporal OFF and recorded version 1 retain their original projection, identifiers
+and rendering. `AILIBI_TEMPORAL_OBSERVATIONS=2` selects the new ordered contract;
+historical `true`/`1` selects version 1. Unknown or coerced version numbers fail.
+A boolean can describe enabled status but does not replace an explicit version.
+Evidence reasoning version 2 requires temporal version 2. Both remain experiments
+without an adopting record.
+
+A snapshot at tick T describes the state **before** that tick's actions. Version
+2 snapshots carry their version and contain no action evidence. After the engine
+resolves actions, `observation/temporal.py` folds the actual pre-state and ordered
+events to project each recipient's entitled observations. Its inputs include the
+actual submitted actions, so a resolved task attempt can be distinguished from
+a discarded action or passive task continuation. Existing engine witness lists
+continue serving version 1; version 2 derives entitlement independently.
+
+`EventObservationBatch.ordered_events` is authoritative in version 2. Each row
+contains `observation_order`, `observer_before_event` (room and vent occupancy),
+and a discriminated event payload. Order is dense **within one recipient and
+source tick**; it reveals neither a hidden global event count nor another
+recipient's ordering. It is not a simultaneous whole-tick view. The envelope
+supports witnessed action, witnessed movement, own transition, own kill and own
+task-attempt payloads. Own transitions locate the observer before a later action
+in the same tick. An actor taking a visible departure through a public connecting
+door entitles the atomic movement endpoint; only an observed movement supports
+movement testimony. Vent evidence exposes the witnessed endpoint only. Event
+witnesses must be alive and outside vents when the action occurs; death later in
+the batch does not erase earlier observations or grant later ones.
+
+An own task-attempt receipt includes map task ID, room and one of `progressed`,
+`completed` or `rejected`. A rejection has no progress or completion. This is an
+actor-private channel. Other observers receive only source-time task activity,
+without task identity, ownership, rejection reason or a completion certificate.
+A public `task_activity` account remains attributed speech even when the same
+words happen to describe an actual receipt. Public assertions never rewrite the
+listener's observed memory or become private task progress.
+
+Version 2 episodic rows preserve explicit `source_tick`, `observation_phase`,
+recipient-local `observation_order`, observer position and an opaque
+`source_event_id`. Citation lookup matches retained observation IDs; it does not
+parse an ID to infer timing. The recorded viewer separately identifies the scene
+where delivery became available. Source time, delivery scene and public testimony
+time serve different purposes.
+
+Version 2 rendering states the snapshot/event distinction, preserves own event
+transitions and renders separated sightings individually. It does not infer
+watched arrivals, departures, companions or task completions from successive
+snapshots. Death evidence separates last-alive observations, public dead-by
+announcements and body discovery. Public death bounds exclude later co-presence
+from murder-opportunity suspicion for that victim. Walking checks retain earlier
+change intervals and explicitly condition public-placement comparisons on the
+claim being accurate. A feasible route is neither proof of presence nor proof of
+innocence; tick-only claims retain conservative phase uncertainty.
+
+When the configured rules publicly regroup survivors, `public_regroup` records
+the actual resume tick, public destination and living participants. It is public
+knowledge, not a first-hand movement observation. The memory's meeting history
+retains this boundary; walking checks do not accuse a player based on crossing
+that relocation, and subsequent intervals start from the public destination.
+Ordinary meetings do not suppress cross-meeting travel checks.
+
+`eval/temporal_entitlement.py` independently compares every ordered channel,
+position and local order with an event-local reconstruction. The snapshot gate
+binds source tick, version and own position, and rejects action evidence on v2
+snapshots. Separate legacy witness checks validate actual movement witness lists
+without changing their producer. Planted missing/extra movement, forged endpoint,
+wrong order/observer/tick, invented task activity and removed version controls
+exercise these gates. Packet census format 2 includes checked event batches,
+source-time kill/vent/movement views and actor task receipts, so temporal channels
+are counted rather than disappearing from the census.
+
+Spectator contract version 4 admits the `task_activity` observation/account union
+and attributed public statement fields. Compatible version-2/3 inputs retain
+their historical audio and event interpretation; unsupported audio and versions
+still fail. Spectator knowledge remains privileged: a public account is labeled
+as a speaker's claim even if the viewer can independently inspect engine truth.

@@ -19,6 +19,13 @@ imports these back and re-exports them, so every existing
 Observation shapes a turn may answer with
 ========================================
 
+Explicit public-account renderers bind their profile at construction. They
+offer the same account vocabulary to both roles, including task activity, and
+label transcript rows as speaker assertions. Attributed testimony compares
+public accounts without certifying them from another speaker's private memory.
+The callable protocols stay unchanged: these versions are renderer-construction
+inputs, not mutable per-call options.
+
 The renderers above show the transcript and take the model's structured turn
 back, so the shapes a turn may carry are part of this contract:
 :class:`~meetings.schemas.SawPlayerObservation` (a player at a room and tick),

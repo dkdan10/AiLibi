@@ -114,6 +114,39 @@ def ingest_public_meeting_roster(
     )
 
 
+def ingest_public_regroup(
+    memory: AgentMemory,
+    *,
+    tick: int,
+    room: str,
+    player_ids: tuple[str, ...],
+) -> None:
+    """Record an announced relocation, not an inferred walk or hidden route."""
+    if memory.evidence_reasoning_version != 2:
+        return
+    if tick < 0 or not room or len(set(player_ids)) != len(player_ids):
+        raise ValueError(
+            "public regroup requires a valid tick, room and distinct players"
+        )
+    if memory.public_map is not None and room not in memory.public_map.room_ids:
+        raise ValueError("public regroup names an unknown room")
+    payload = {"room": room, "player_ids": tuple(sorted(player_ids))}
+    existing = [
+        row
+        for row in memory.episodic.recent(since_tick=tick)
+        if row.tick == tick and row.type == "public_regroup"
+    ]
+    if existing:
+        if existing[-1].payload != payload:
+            raise ValueError("conflicting public regroups at one tick")
+        return
+    memory.episodic.append(
+        EpisodicEvent(
+            tick=tick, type="public_regroup", payload=payload, provenance="public"
+        )
+    )
+
+
 def publicly_dead_ids(memory: AgentMemory) -> frozenset[str]:
     """Read announced deaths; the permanent known-player roster stays untouched."""
 
@@ -132,6 +165,10 @@ def evidence_context_lines(
 
     if memory.evidence_reasoning_version is None:
         return ()
+    if memory.evidence_reasoning_version == 2:
+        return _v2_evidence_context_lines(
+            memory, own_agent_id=own_agent_id, teammate_ids=teammate_ids
+        )
     last_alive: dict[str, int] = {}
     dead_by: dict[str, int] = {}
     discovered: dict[str, int] = {}
@@ -207,4 +244,197 @@ def evidence_context_lines(
                 lines.append(
                     f"Travel check for {subject}: {earlier[1]} at tick {earlier[0]} to {later[1]} at tick {later[0]} cannot be reconciled by walking in that interval. Check the placement sources; this alone does not prove a role."
                 )
+    return tuple(lines)
+
+
+def _v2_evidence_context_lines(
+    memory: AgentMemory,
+    *,
+    own_agent_id: str | None,
+    teammate_ids: frozenset[str],
+) -> tuple[str, ...]:
+    """Keep earlier intervals and explicitly condition checks on public claims.
+
+    A claim has no within-tick phase. The conservative unknown-phase assessment
+    cannot turn that missing precision into an impossible-travel verdict.
+    """
+    rows = memory.episodic.recent(since_tick=0)
+    own_victims = {
+        row.payload.get("victim_id")
+        for row in rows
+        if row.type == "own_kill" and row.provenance == "observed"
+    }
+    dead_by: dict[str, int] = {}
+    discovered: dict[str, int] = {}
+    alive: dict[str, tuple[int, str]] = {}
+    placements: dict[str, list[tuple[int, str, ObservationPhase, str]]] = {}
+    claims: list[tuple[str, int, str, str]] = []
+    regroups: list[tuple[int, str, frozenset[str]]] = []
+    for row in rows:
+        if row.type == "public_regroup" and row.provenance == "public":
+            regroup_room = str(row.payload["room"])
+            regrouped = frozenset(str(pid) for pid in row.payload["player_ids"])
+            regroups.append((row.tick, regroup_room, regrouped))
+            for regroup_subject in sorted(regrouped):
+                if (
+                    regroup_subject != own_agent_id
+                    and regroup_subject not in teammate_ids
+                ):
+                    placements.setdefault(regroup_subject, []).append(
+                        (row.tick, regroup_room, "snapshot", "the public regroup")
+                    )
+        if row.type == "public_meeting_roster":
+            for victim in row.payload["dead_ids"]:
+                dead_by.setdefault(str(victim), row.tick)
+        if row.type == "reported_testimony" and row.provenance == "reported":
+            subject, room = row.payload.get("subject"), row.payload.get("room")
+            tick, kind = row.payload.get("from_tick"), row.payload.get("kind")
+            if (
+                kind in ("whereabouts", "alibi", "saw_player")
+                and isinstance(subject, str)
+                and isinstance(room, str)
+                and isinstance(tick, int)
+            ):
+                claims.append(
+                    (subject, tick, room, f"claim by {row.payload.get('speaker')}")
+                )
+        if row.provenance != "observed":
+            continue
+        if row.type == "saw_body":
+            victim = row.payload.get("victim_id")
+            if isinstance(victim, str) and victim not in own_victims:
+                dead_by.setdefault(victim, row.tick)
+                discovered.setdefault(victim, row.tick)
+        if row.type not in ("saw_player", "saw_player_move"):
+            continue
+        subject = row.payload.get("player_id")
+        room = (
+            row.payload.get("to_room")
+            if row.type == "saw_player_move"
+            else row.payload.get("room")
+        )
+        if not isinstance(subject, str) or not isinstance(room, str):
+            continue
+        phase: ObservationPhase = "unknown"
+        if row.payload.get("observation_phase") == "snapshot":
+            phase = "snapshot"
+        elif row.payload.get("observation_phase") == "event":
+            phase = "event"
+        timing = (
+            f"start of tick {row.tick}"
+            if phase == "snapshot"
+            else f"during tick {row.tick}"
+            if phase == "event"
+            else f"tick {row.tick}, timing unspecified"
+        )
+        alive[subject] = row.tick, timing
+        if subject != own_agent_id and subject not in teammate_ids:
+            source = (
+                f"your observation {row.observation_id}"
+                if row.observation_id
+                else "your recorded sighting"
+            )
+            placements.setdefault(subject, []).append((row.tick, room, phase, source))
+    lines: list[str] = []
+    for victim, upper in sorted(dead_by.items()):
+        facts = [f"known dead by tick {upper}"]
+        if victim in alive:
+            facts.insert(0, f"you last saw them alive at {alive[victim][1]}")
+        if victim in discovered:
+            facts.append(
+                f"you discovered their body at the start of tick {discovered[victim]}"
+            )
+        lines.append(
+            f"Death evidence for {victim}: {'; '.join(facts)}. Discovery does not date the death."
+        )
+    if memory.public_map is None:
+        return tuple(lines)
+    checks: list[
+        tuple[
+            str,
+            tuple[int, str, ObservationPhase, str],
+            tuple[int, str, ObservationPhase, str],
+            bool,
+        ]
+    ] = []
+    for subject, observed in sorted(placements.items()):
+        # Each change interval survives a later harmless sighting. We do not
+        # replace the historical interval with the latest pair of rooms.
+        for earlier, later in zip(observed, observed[1:], strict=False):
+            if earlier[1] != later[1]:
+                checks.append((subject, earlier, later, False))
+    for subject, tick, room, source in claims:
+        if subject == own_agent_id or subject in teammate_ids:
+            continue
+        claimed: tuple[int, str, ObservationPhase, str] = (
+            tick,
+            room,
+            "unknown",
+            source,
+        )
+        observed = placements.get(subject, [])
+        before = [row for row in observed if row[0] <= tick]
+        after = [row for row in observed if row[0] >= tick]
+        if before:
+            checks.append((subject, before[-1], claimed, True))
+        if after and (not before or after[0] != before[-1]):
+            checks.append((subject, claimed, after[0], True))
+        lines.append(
+            f"Account uncertainty for {subject}: route feasibility alone cannot establish the {source}'s claimed presence in {room} at tick {tick}."
+        )
+        if not before and not after:
+            lines.append(
+                f"Travel check for {subject}: insufficient observed placements to check the {source} at tick {tick}."
+            )
+    seen: set[str] = set()
+    for subject, earlier, later, includes_claim in checks:
+        crossed = [
+            regroup
+            for regroup in regroups
+            if subject in regroup[2] and earlier[0] < regroup[0] <= later[0]
+        ]
+        if crossed:
+            when, destination, _ = crossed[-1]
+            line = f"Travel check for {subject}: the interval from tick {earlier[0]} to tick {later[0]} crosses the public regroup at tick {when} in {destination}. A walking-only check cannot decide this interval."
+            if line not in seen:
+                lines.append(line)
+                seen.add(line)
+            continue
+        assessment = assess_travel(
+            memory.public_map,
+            from_room=earlier[1],
+            to_room=later[1],
+            from_tick=earlier[0],
+            to_tick=later[0],
+            from_phase=earlier[2],
+            to_phase=later[2],
+        )
+        timing_a = (
+            "start"
+            if earlier[2] == "snapshot"
+            else "during"
+            if earlier[2] == "event"
+            else "unspecified phase"
+        )
+        timing_b = (
+            "start"
+            if later[2] == "snapshot"
+            else "during"
+            if later[2] == "event"
+            else "unspecified phase"
+        )
+        subject_clause = (
+            "Assuming the claimed placement is accurate, " if includes_claim else ""
+        )
+        prefix = f"Travel check for {subject}: {earlier[1]} at tick {earlier[0]} ({timing_a}; {earlier[3]}) to {later[1]} at tick {later[0]} ({timing_b}; {later[3]}). {subject_clause}"
+        if assessment.feasible is True:
+            result = "a walk fits the public map; this contests an impossible-travel allegation and does not establish innocence."
+        elif assessment.feasible is False:
+            result = "walking cannot reconcile these placements. Check their sources; this alone does not prove a role."
+        else:
+            result = "the available timing or placements are insufficient for a walking verdict."
+        line = prefix + result
+        if line not in seen:
+            lines.append(line)
+            seen.add(line)
     return tuple(lines)

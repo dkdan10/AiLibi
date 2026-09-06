@@ -149,6 +149,7 @@ _UNION_ALIASES: Final[dict[str, tuple[str, ...]]] = {
         "SawKillObservationView",
         "WhereaboutsClaimView",
         "SawMoveObservationView",
+        "TaskActivityAccountView",
     ),
     "StatementClaimView": (
         "AlibiClaimView",
@@ -163,6 +164,14 @@ _UNION_BY_MEMBERS: Final[dict[frozenset[str], str]] = {
 # Eval report sub-tree cut points: emitted as fixed stubs instead of expanding
 # the full internal meeting graph (see module docstring). Bodies match the prior
 # hand-authored contract; ``Winner`` is the only enum they reference.
+_PROVENANCE_STUB_FIELDS: Final[str] = (
+    '  agent_factory_kind?: "scripted" | "experimental" | "custom" | null;\n'
+    "  experiment_config?: ExperimentConfigView | null;\n"
+    "  substrate_flags?: Record<string, boolean> | null;\n"
+    "  tactical_policy?: TacticalPolicyView | null;\n"
+    "  crew_tactical_policy?: TacticalPolicyView | null;"
+)
+
 _STUB_BODIES: Final[dict[str, str]] = {
     "GameReport": (
         "  game_id: string;\n"
@@ -171,11 +180,13 @@ _STUB_BODIES: Final[dict[str, str]] = {
         "  reason: string;\n"
         "  final_tick: number | null;\n"
         '  completion_status?: "completed" | "aborted" | "tick_limited" | "unfinished";\n'
-        "  outcome_verified?: boolean;"
+        "  outcome_verified?: boolean;\n" + _PROVENANCE_STUB_FIELDS
     ),
     "TournamentReport": (
-        "  format_version: number;\n  games: GameReport[];\n  seeds_used: number[];"
+        "  format_version: number;\n  games: GameReport[];\n  seeds_used: number[];\n"
+        "  provenance_groups?: ReportProvenanceGroup[] | null;"
     ),
+    "ReportProvenanceGroup": _PROVENANCE_STUB_FIELDS + "\n  game_ids: string[];",
 }
 
 
@@ -281,6 +292,18 @@ class _Generator:
                 in {
                     ("ReplayMetadataView", "completion_status"),
                     ("ReplayMetadataView", "outcome_verified"),
+                    ("ReplayMetadataView", "agent_factory_kind"),
+                    ("ReplayMetadataView", "experiment_config"),
+                    ("ReplayMetadataView", "substrate_flags"),
+                    ("ReplayMetadataView", "tactical_policy"),
+                    ("ReplayMetadataView", "crew_tactical_policy"),
+                    ("GateView", "threshold_source"),
+                    ("PublicResultsView", "provenance_groups"),
+                    ("ObservationReferenceView", "source_tick"),
+                    ("ObservationReferenceView", "observation_phase"),
+                    ("ObservationReferenceView", "observation_order"),
+                    ("ObservationReferenceView", "observer_room"),
+                    ("ObservationReferenceView", "observer_in_vent"),
                     ("ReplayView", "llm_bodies_included"),
                     ("AgentMemoryView", "observation_references"),
                 }

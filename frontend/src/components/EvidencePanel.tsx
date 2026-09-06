@@ -3,6 +3,16 @@ import { evidenceDomId, observationSource, statementSource, type EvidenceSelecti
 import { useReplayStore } from "../store/replayStore";
 import { ClaimLine } from "../ui/ClaimLine";
 import { ObservationLine } from "../ui/ObservationLine";
+import type { ObservationReferenceView } from "../types/api";
+
+export function ObservationClock({ observation }: { observation: ObservationReferenceView }) {
+  if (!observation.observation_phase || observation.source_tick == null) return <p className="text-xs text-ink-500">Scene frame {observation.scene_tick ?? "unavailable"}. Observation time and replay input-frame time use different boundaries.</p>;
+  return <div className="text-xs text-ink-500">
+    <p>{observation.observation_phase === "snapshot" ? "Before actions" : "During actions"} at tick {observation.source_tick}{observation.observation_order == null ? "" : ` · observed event ${observation.observation_order + 1} for this agent`}.</p>
+    {observation.observer_room && <p>The observer was {observation.observer_in_vent ? "inside a vent at" : "in"} {observation.observer_room} {observation.observation_phase === "event" ? "just before this event" : "at this snapshot"}.</p>}
+    <p>Scene frame {observation.scene_tick ?? "unavailable"}{observation.observation_phase === "event" ? " shows the end of that tick; later actions may have changed positions." : " shows the state before these actions."}</p>
+  </div>;
+}
 
 export function EvidenceLink({ target, children }: { target: EvidenceSelection; children: React.ReactNode }) {
   const select = useReplayStore((s) => s.selectEvidence);
@@ -56,7 +66,7 @@ export function EvidencePanel({ inMeeting = false }: { inMeeting?: boolean }) {
     </p> : !memory ? <p role="status">Loading the cited observation…</p> : observation ? <div>
       <p className="text-xs font-semibold">{observation.observer_id} · observation tick {observation.observation_tick} · {observation.provenance}</p>
       <p className="my-2 whitespace-pre-wrap">{observation.text}</p>
-      <p className="text-xs text-ink-500">Scene frame {observation.scene_tick ?? "unavailable"}. Observation time and replay input-frame time use different boundaries.</p>
+      <ObservationClock observation={observation} />
     </div> : null : source ? <div>
       <p className="text-xs font-semibold">{source.turn.speaker} · public {source.turn.turn_kind === "opt_in" ? "opt-in" : source.turn.turn_kind} · meeting tick {meeting?.tick}</p>{source.kind === "statement" ? <p className="my-2 whitespace-pre-wrap">{source.turn.free_text}</p> : source.kind === "claim" ? <ClaimLine claim={source.value} /> : <ObservationLine obs={source.value} />}</div> : null}
     <div className="mt-3 flex flex-wrap gap-2">

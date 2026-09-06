@@ -3,13 +3,19 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 from datetime import date
 from collections import Counter
 from pathlib import Path
 
 from api.replay_loader import ReplayLoader
-from api.schemas import PublicCaseView, PublicResultsView, ReplayView
+from api.schemas import (
+    PublicCaseView,
+    PublicResultsView,
+    ReplayView,
+    ReportProvenanceGroupView,
+)
 from orchestrator.recording_fingerprint import recording_fingerprint
 from orchestrator.replay import (
     AbortedMeetingReplayEntry,
@@ -248,10 +254,24 @@ def _build_public_results(loader: ReplayLoader, fingerprint: str) -> PublicResul
     models: set[str] = set()
     prompts: set[str] = set()
     cases: list[PublicCaseView] = []
+    groups: dict[str, ReportProvenanceGroupView] = {}
     cost = 0.0
     for meta in metadata:
         replay = loader.load_replay(meta.game_id, include_llm_bodies=False)
         meta = replay.metadata
+        identity = ReportProvenanceGroupView(
+            agent_factory_kind=meta.agent_factory_kind,
+            experiment_config=meta.experiment_config,
+            substrate_flags=meta.substrate_flags,
+            tactical_policy=meta.tactical_policy,
+            crew_tactical_policy=meta.crew_tactical_policy,
+            game_ids=(),
+        )
+        key = json.dumps(identity.model_dump(mode="json"), sort_keys=True)
+        previous = groups.get(key, identity)
+        groups[key] = previous.model_copy(
+            update={"game_ids": (*previous.game_ids, meta.game_id)}
+        )
         status = meta.completion_status
         if status == "completed" and not meta.outcome_verified:
             raise ValueError(f"Unverified terminal outcome: {meta.game_id}")
@@ -305,6 +325,7 @@ def _build_public_results(loader: ReplayLoader, fingerprint: str) -> PublicResul
     if recording_fingerprint(directory) != fingerprint:
         raise ValueError("Recording inputs changed during public-results generation")
     result = PublicResultsView(
+        provenance_groups=tuple(groups[key] for key in sorted(groups)),
         set_name=directory.name,
         source_fingerprint=fingerprint,
         recorded_from=min(dates) if dates else None,

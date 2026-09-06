@@ -333,6 +333,7 @@ from meetings.schemas import (
     RoomId,
     SawKillObservation,
     SawMoveObservation,
+    TaskActivityAccount,
     SawPlayerObservation,
     SawVentObservation,
     SightingRecord,
@@ -1574,7 +1575,7 @@ def detect_contradictions(
     move_witness_records: Mapping[PlayerId, tuple[MoveWitnessRecord, ...]]
     | None = None,
     sighting_records: Mapping[PlayerId, tuple[SightingRecord, ...]] | None = None,
-    evidence_reasoning_version: Literal[1] | None = None,
+    evidence_reasoning_version: Literal[1, 2] | None = None,
 ) -> tuple[ContradictionRef, ...]:
     """Flag incompatible alibi and saw-player claims (DESIGN.md §5.4, §6.4).
 
@@ -1740,7 +1741,7 @@ def detect_contradictions(
     side effects.
     """
 
-    if evidence_reasoning_version == 1:
+    if evidence_reasoning_version is not None:
         transcript = _escape_untrusted_band_markers(transcript)
 
     # The three grounded-prosecution rules need the records to ground against:
@@ -2254,7 +2255,13 @@ def _carries_relevant_observation(
         # :func:`_iter_move_placements`), and a spoken kill is ungrounded
         # content that must move no suspicion. None backs an accusation here.
         if isinstance(
-            observation, (WhereaboutsClaim, SawMoveObservation, SawKillObservation)
+            observation,
+            (
+                WhereaboutsClaim,
+                SawMoveObservation,
+                SawKillObservation,
+                TaskActivityAccount,
+            ),
         ):
             continue
         rooms = canonical_rooms(observation.room)
@@ -2867,7 +2874,7 @@ def _detect_alibi_conflicts(
     alibis: tuple[_IndexedAlibi, ...],
     *,
     accusation_pairs: frozenset[tuple[PlayerId, PlayerId]],
-    evidence_reasoning_version: Literal[1] | None = None,
+    evidence_reasoning_version: Literal[1, 2] | None = None,
 ) -> Iterator[ContradictionRef]:
     for i, left in enumerate(alibis):
         for right in alibis[i + 1 :]:
@@ -2934,7 +2941,7 @@ def _detect_alibi_vs_sightings(
     sightings: tuple[_IndexedSighting, ...],
     subject_accounts: Mapping[PlayerId, tuple[_SubjectAccount, ...]],
     grounded_prosecution: bool = False,
-    evidence_reasoning_version: Literal[1] | None = None,
+    evidence_reasoning_version: Literal[1, 2] | None = None,
 ) -> Iterator[ContradictionRef]:
     for alibi in alibis:
         if not alibi.rooms:
@@ -3147,7 +3154,7 @@ def _detect_alibi_vs_physical(
     accusation_pairs: frozenset[tuple[PlayerId, PlayerId]],
     kill_scene_paths: Mapping[PlayerId, tuple[StatedPlacement, ...]] | None = None,
     body_rooms: frozenset[str] = frozenset(),
-    evidence_reasoning_version: Literal[1] | None = None,
+    evidence_reasoning_version: Literal[1, 2] | None = None,
 ) -> Iterator[ContradictionRef]:
     """The Task 13.4 inferential ``alibi_vs_physical`` flags (B3/B4).
 
@@ -3486,7 +3493,7 @@ def _detect_grounded_vent_flags(
     *,
     vent_witness_records: Mapping[PlayerId, tuple[VentWitnessRecord, ...]],
     roster: frozenset[PlayerId],
-    evidence_reasoning_version: Literal[1] | None = None,
+    evidence_reasoning_version: Literal[1, 2] | None = None,
 ) -> Iterator[ContradictionRef]:
     """Yield one STRONG ``vent_sighting`` flag per grounded vent observation.
 
@@ -3550,7 +3557,7 @@ def _detect_vent_placement_contradictions(
     self_alibis: tuple[_IndexedAlibi, ...],
     vent_witness_records: Mapping[PlayerId, tuple[VentWitnessRecord, ...]],
     roster: frozenset[PlayerId],
-    evidence_reasoning_version: Literal[1] | None = None,
+    evidence_reasoning_version: Literal[1, 2] | None = None,
 ) -> Iterator[ContradictionRef]:
     """Yield STRONG ``alibi_vs_physical`` flags for grounded vent placements.
 
@@ -3730,7 +3737,7 @@ def _conflict_weak_reasons(
     right: _IndexedAlibi,
     *,
     accusation_pairs: frozenset[tuple[PlayerId, PlayerId]],
-    evidence_reasoning_version: Literal[1] | None = None,
+    evidence_reasoning_version: Literal[1, 2] | None = None,
 ) -> tuple[str, ...]:
     """The Task 10.1 weak patterns an alibi-conflict pair matches, if any.
 

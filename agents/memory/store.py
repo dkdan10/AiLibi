@@ -134,8 +134,19 @@ class AgentMemory:
     working: WorkingMemory = field(default_factory=WorkingMemory)
     beliefs: BeliefState = field(default_factory=BeliefState)
     meeting_history: MeetingHistory = field(default_factory=MeetingHistory)
-    evidence_reasoning_version: Literal[1] | None = None
+    evidence_reasoning_version: Literal[1, 2] | None = None
     public_map: PublicMapView | None = None
+    public_account_version: Literal[1] | None = None
+    attributed_testimony_version: Literal[1] | None = None
+
+    def __post_init__(self) -> None:
+        for name, value, supported in (
+            ("evidence reasoning", self.evidence_reasoning_version, (1, 2)),
+            ("public account", self.public_account_version, (1,)),
+            ("attributed testimony", self.attributed_testimony_version, (1,)),
+        ):
+            if value is not None and (type(value) is not int or value not in supported):
+                raise ValueError(f"unsupported {name} version")
 
 
 @dataclass(frozen=True)
@@ -419,10 +430,11 @@ def render_for_prompt(
     # Fold the runs BEFORE the id prefix and the sort: the fold works on the
     # built observations, so every firewall suppression, co-presence suffix
     # and breadcrumb is already settled and a span cites a real stored id.
-    observations = _coalesce_sightings(
-        observations, roster=roster, own_agent_id=own_agent_id
-    )
-    if memory.evidence_reasoning_version == 1:
+    if memory.evidence_reasoning_version != 2:
+        observations = _coalesce_sightings(
+            observations, roster=roster, own_agent_id=own_agent_id
+        )
+    if memory.evidence_reasoning_version in (1, 2):
         observations.extend(
             _Observation(salience=90, tick=0, line=line)
             for line in evidence_context_lines(
@@ -458,7 +470,7 @@ def render_for_prompt(
         body_sightings=_collect_body_sightings(memory.episodic),
     )
     active_roster = roster
-    if memory.evidence_reasoning_version == 1 and roster is not None:
+    if memory.evidence_reasoning_version in (1, 2) and roster is not None:
         active_roster = roster - publicly_dead_ids(memory)
     beliefs_lines = _build_belief_lines(
         memory.beliefs,
@@ -474,6 +486,12 @@ def render_for_prompt(
     trail_spans = spans[-SELF_LOCATION_TRAIL_MAX_SPANS:]
 
     meeting_lines = _meeting_history_lines(memory.meeting_history)
+    if memory.evidence_reasoning_version == 2:
+        meeting_lines.extend(
+            f"Public regroup at the start of tick {row.tick}: living players were placed in {row.payload['room']}; this was not a walking journey."
+            for row in memory.episodic.recent(since_tick=0)
+            if row.type == "public_regroup" and row.provenance == "public"
+        )
 
     return _assemble_view(
         role=role,
@@ -485,6 +503,7 @@ def render_for_prompt(
         trail_spans=trail_spans,
         trail_truncated=trail_truncated,
         token_budget=token_budget,
+        snapshot_clock=memory.evidence_reasoning_version == 2,
     )
 
 
@@ -677,6 +696,11 @@ def absorb_reported_testimony(
     # meeting this is cannot be known -- state nothing rather than guess.
     meeting_index = boundaries if boundaries > 0 else None
     for statement in statements:
+        if (
+            statement.kind in ("task_activity", "completed_task", "found_body")
+            and memory.public_account_version != 1
+        ):
+            continue
         if statement.speaker == own_agent_id:
             continue
         if statement.speaker not in roster or statement.subject not in roster:
@@ -693,6 +717,11 @@ def absorb_reported_testimony(
                     "from_tick": statement.from_tick,
                     "to_tick": statement.to_tick,
                     "room": statement.room,
+                    **(
+                        {"task_id": statement.task_id}
+                        if statement.task_id is not None
+                        else {}
+                    ),
                     **(
                         {
                             "from_room": statement.from_room,
@@ -1524,13 +1553,107 @@ def _completed_task_observation(
     )
 
 
+def _build_v2_observations(
+    episodic: MemoryStore,
+    *,
+    own_agent_id: str | None,
+    teammate_ids: frozenset[str],
+) -> list[_Observation]:
+    """Render actual records without inferring transitions or simultaneity."""
+    observations: list[_Observation] = []
+    seen_bodies: set[str] = set()
+    own_victims = _collect_own_kill_victims(episodic)
+    for event in episodic.recent(since_tick=0):
+        if event.type == EVENT_REPORTED_TESTIMONY:
+            reported = _render_reported_testimony(event)
+            if reported is not None:
+                observations.append(reported)
+            continue
+        if event.provenance != "observed":
+            continue
+        payload = event.payload
+        body: str
+        salience = _SALIENCE_SAW_PLAYER
+        if event.type == _EVENT_SAW_PLAYER:
+            player, room, action = (
+                payload.get("player_id"),
+                payload.get("room"),
+                payload.get("action"),
+            )
+            if player == own_agent_id or (player in teammate_ids and action == "kill"):
+                continue
+            if action in ("kill", "vent"):
+                body = f"You witnessed {player} {action} in {room}."
+                salience = (
+                    _SALIENCE_KILL_WITNESSED
+                    if action == "kill"
+                    else _SALIENCE_VENT_WITNESSED
+                )
+            elif action == "task":
+                body = f"You saw {player} attempt task activity in {room}; completion was not observed."
+            else:
+                body = f"You saw {player} in {room}."
+        elif event.type == EVENT_SAW_PLAYER_MOVE:
+            body = f"You witnessed {payload.get('player_id')} move from {payload.get('from_room')} to {payload.get('to_room')}."
+        elif event.type == "own_transition":
+            mode = " (inside a vent)" if payload.get("in_vent") else ""
+            body = f"You moved from {payload.get('from_room')} to {payload.get('to_room')}{mode}."
+            salience = 90
+        elif event.type == "own_task_attempt":
+            outcome = payload.get("outcome")
+            result = (
+                "you completed it"
+                if outcome == "completed"
+                else "you made progress; it was not completed"
+                if outcome == "progressed"
+                else "the attempt was rejected; no progress or completion occurred"
+            )
+            body = f"You attempted {payload.get('task_id')} in {payload.get('room')}: {result}."
+            salience = 90
+        elif event.type == _EVENT_OWN_KILL:
+            body = f"You (IMPOSTOR) killed {payload.get('victim_id')} in {payload.get('room')}."
+            salience = _SALIENCE_OWN_KILL
+        elif event.type == _EVENT_SAW_BODY:
+            victim = payload.get("victim_id")
+            if victim in own_victims or victim in seen_bodies:
+                continue
+            seen_bodies.add(str(victim))
+            body = f"You discovered {victim}'s body in {payload.get('room')}. Discovery does not date the death."
+            salience = _SALIENCE_FOUND_BODY
+        elif event.type == "heard_sabotage_alarm":
+            body = "You heard a sabotage alarm."
+        else:
+            continue
+        if payload.get("observation_phase") == "snapshot":
+            clock = f"start of tick {event.tick}, before actions"
+        elif payload.get("observation_phase") == "event":
+            clock = f"during tick {event.tick}, your observation {payload.get('observation_order')}"
+            position = "inside a vent in" if payload.get("observer_in_vent") else "in"
+            body += f" You were {position} {payload.get('observer_room')} immediately before this event."
+        else:
+            clock = f"tick {event.tick}, timing unspecified"
+        observations.append(
+            _Observation(
+                salience=salience,
+                tick=event.tick,
+                line=f"[{clock}] {body}",
+                observation_id=event.observation_id,
+            )
+        )
+    return observations
+
+
 def _build_observations(
     episodic: MemoryStore,
     *,
     own_agent_id: str | None = None,
     teammate_ids: frozenset[str] = frozenset(),
-    evidence_reasoning_version: Literal[1] | None = None,
+    evidence_reasoning_version: Literal[1, 2] | None = None,
 ) -> list[_Observation]:
+    if evidence_reasoning_version == 2:
+        return _build_v2_observations(
+            episodic, own_agent_id=own_agent_id, teammate_ids=teammate_ids
+        )
     observations: list[_Observation] = []
     seen_body_ids: set[str] = set()
     last_owned_task_ids: frozenset[TaskId] | None = None
@@ -2055,6 +2178,12 @@ def _render_reported_testimony(event: EpisodicEvent) -> _Observation | None:
         and isinstance(to_tick, int)
     ):
         body = f"{subject} was in {room} during ticks {from_tick}-{to_tick}"
+    elif kind == "task_activity" and isinstance(room, str):
+        body = f"attempted task activity for {event.payload.get('task_id')} in {room} during ticks {from_tick}-{to_tick}; this does not certify task progress"
+    elif kind == "completed_task" and isinstance(room, str):
+        body = f"claimed completion of {event.payload.get('task_id')} in {room} @ tick {from_tick}; completion is unverified"
+    elif kind == "found_body" and isinstance(room, str):
+        body = f"claimed finding {subject}'s body in {room} @ tick {from_tick}; this does not establish when the death occurred"
     elif kind == "accusation":
         body = f"accused {subject}"
     elif kind == "corroboration" and isinstance(from_tick, int):
@@ -2378,6 +2507,7 @@ def _assemble_view(
     trail_spans: Sequence[_SelfLocationSpan],
     trail_truncated: bool,
     token_budget: int,
+    snapshot_clock: bool = False,
 ) -> str:
     """Assemble the final Markdown view, enforcing token budget on observations.
 
@@ -2404,6 +2534,12 @@ def _assemble_view(
     """
 
     fixed_lines: list[str] = [f"## Your role: {role}"]
+    if snapshot_clock:
+        fixed_lines.append(
+            "Time guide: your route lists locations at the START of each tick, before actions. "
+            "Ordered observations occur DURING that tick, in your own observation order only; "
+            "another player's order is not comparable. Separated sightings do not establish a watched transition."
+        )
     if tasks_summary is not None:
         fixed_lines.append(f"## Tasks completed (global): {tasks_summary}")
 

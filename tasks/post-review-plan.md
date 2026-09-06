@@ -40,17 +40,26 @@ Review claims require reproduction; their original severity labels remain intact
 
 ## Current ownership
 
-| Worker | Owned correction scope |
+| Worker | Current bounded scope |
 | --- | --- |
-| Recording worker | Recording replacement, tournament publication, output protection and incomplete accounting; their existing cards |
-| Viewer worker | Private-confidence display, stale rubric explanations, public-results wording and media documentation; portfolio card |
-| Report worker | Historical report projection, isolated test imports, genuine terminal type fixture; aborted-call and replay-integrity cards |
-| Coordinator | Review archive, index/ledger, scenario planning, integration gates, independent review and commits |
+| Observation worker | Versioned timing, private task receipts, real canonical scenarios and source-aware gameplay verification |
+| Meeting worker | Common public vocabulary, attributed accounts, bounded replies, public-record noninterference and next investigation design |
+| Report worker | Recorded factory/profile identity, ballot entitlement, independent code review and fresh-evaluation prerequisites |
+| Coordinator | Cross-layer wiring, strict readers, finite offline matrix, viewer integration, synthesis, full gates and commits |
 
 One writer owns each file. Implementation workers do not commit or push; the
 coordinator preserves focused commit boundaries and published identities.
 Only ready work receives a detailed card. No new maps, roles, providers, training,
 historical re-recording or automatic adoption is part of the offline work.
+
+Maintenance corrections are committed through `144fc2e1`. Verified checkpoint cards
+cover [evaluation integrity](work/experimental-evaluation-integrity.md),
+[temporal evidence](work/temporal-evidence-v2.md),
+[public accounts](work/attributed-public-accounts.md), and the
+[scenario matrix](work/deduction-evaluation-matrix.md). The next runtime card is
+[bounded investigation](work/bounded-investigation.md); the
+[fresh-evaluation card](work/fresh-deduction-evaluation.md) completes
+preregistration only. Live execution still needs its explicit budget.
 
 ## Verification and review
 

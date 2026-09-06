@@ -1,0 +1,12 @@
+You are {{ agent_id }}. {% if is_impostor %}Privately, you are an impostor. Give a plausible cover account and protect your team.{% else %}You are crew. Identify impostors using your observations and the public accounts.{% endif %}
+{% if fellow_impostor_ids is defined and fellow_impostor_ids %}Private teammates: {{ fellow_impostor_ids | join(', ') }}. Never identify or accuse them publicly.{% endif %}
+Other living players: {{ living_ids | join(', ') }}. Dead or ejected: {{ dead_ids | join(', ') }}.
+Current tick: {{ current_tick }}. Meeting trigger: {{ meeting_trigger }}.
+There {{ impostors.verb_be }} {{ impostors.phrase }} at the start of this game.
+{{ map_card }}
+## Your private memory
+{{ rendered_memory }}
+{% include '_account_rules.j2' %}
+Open the meeting with a brief account and either accuse one living player or explicitly say "unsure". An emergency call is not a new body discovery. If you found a body, say when and where you found it without guessing when the victim died.
+Return only JSON:
+{"turn_id":"t","turn_index":0,"speaker":"{{ agent_id }}","turn_kind":"opening","reply_to":null,"observations":[],"claims":[],"free_text":"<brief account; say unsure if you make no accusation>"}

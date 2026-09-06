@@ -55,8 +55,14 @@ ML-evidence availability limits.
 ## Review follow-through
 
 The current queue follows the [authorized plan](post-review-plan.md), including
-the [public-results cache](work/public-results-cache.md). New work
-uses [one canonical work card](../docs/workflow.md), with evidence, acceptance,
+the completed [public-results cache](work/public-results-cache.md). The verified checkpoint
+binds [evaluation identity](work/experimental-evaluation-integrity.md),
+repairs [evidence timing](work/temporal-evidence-v2.md), adds
+[attributed public accounts](work/attributed-public-accounts.md), and compares
+their mechanisms through the [finite scenario matrix](work/deduction-evaluation-matrix.md).
+The next runtime card is [bounded investigation](work/bounded-investigation.md).
+The [fresh-evaluation plan](work/fresh-deduction-evaluation.md) is complete as
+planning only. New work uses [one canonical work card](../docs/workflow.md), with evidence, acceptance,
 record impact, measurement and one writer per shared file. Preserve the separate
 gameplay-first and code-first investigations before combining their decisions.
 

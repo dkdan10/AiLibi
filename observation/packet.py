@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from typing import Any, Literal, TypeAlias
+from typing import Annotated, Any, Literal, TypeAlias
 
 from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    field_validator,
     SerializerFunctionWrapHandler,
     model_serializer,
     model_validator,
@@ -158,6 +159,78 @@ class GlobalView(_FrozenModel):
     sabotage_is_gating: bool = False
 
 
+class ObserverPositionView(_FrozenModel):
+    room: RoomId
+    in_vent: bool
+
+
+class OwnTaskAttemptView(_FrozenModel):
+    """An actor-private receipt, never a public success certificate."""
+
+    task_id: TaskId
+    room: RoomId
+    outcome: Literal["progressed", "completed", "rejected"]
+    rejection_reason: str | None = None
+
+    @model_validator(mode="after")
+    def _rejection(self) -> OwnTaskAttemptView:
+        if (self.outcome == "rejected") != (self.rejection_reason is not None):
+            raise ValueError("only rejected attempts require a rejection reason")
+        return self
+
+
+class WitnessedActionEvent(_FrozenModel):
+    kind: Literal["witnessed_action"] = "witnessed_action"
+    player: PlayerView
+
+    @model_validator(mode="after")
+    def _observed_action(self) -> WitnessedActionEvent:
+        if self.player.action not in ("kill", "vent", "task"):
+            raise ValueError("v2 action evidence requires kill, vent or task activity")
+        return self
+
+
+class WitnessedMoveEvent(_FrozenModel):
+    kind: Literal["witnessed_move"] = "witnessed_move"
+    movement: MovedPlayerView
+
+
+class OwnTransitionEvent(_FrozenModel):
+    kind: Literal["own_transition"] = "own_transition"
+    from_room: RoomId
+    to_room: RoomId
+    was_in_vent: bool
+    in_vent: bool
+
+
+class OwnKillEvent(_FrozenModel):
+    kind: Literal["own_kill"] = "own_kill"
+    kill: OwnKillView
+
+
+class OwnTaskAttemptEvent(_FrozenModel):
+    kind: Literal["own_task_attempt"] = "own_task_attempt"
+    attempt: OwnTaskAttemptView
+
+
+TemporalEventPayload: TypeAlias = Annotated[
+    WitnessedActionEvent
+    | WitnessedMoveEvent
+    | OwnTransitionEvent
+    | OwnKillEvent
+    | OwnTaskAttemptEvent,
+    Field(discriminator="kind"),
+]
+
+
+class TemporalEventView(_FrozenModel):
+    """Dense observer-local order reveals no count of hidden engine events."""
+
+    observation_order: int = Field(ge=0, strict=True)
+    observer_before_event: ObserverPositionView
+    event: TemporalEventPayload
+
+
 class EventObservationBatch(_FrozenModel):
     """One source tick's entitled events, delivered separately from snapshots."""
 
@@ -168,9 +241,38 @@ class EventObservationBatch(_FrozenModel):
     witnessed_actions: tuple[PlayerView, ...] = ()
     moved_players: tuple[MovedPlayerView, ...] = ()
     fellow_impostor_ids: tuple[PlayerId, ...] = ()
+    temporal_observation_version: Literal[2] | None = None
+
+    @field_validator("temporal_observation_version", mode="before")
+    @classmethod
+    def _strict_version(cls, value: object) -> object:
+        if value is not None and type(value) is not int:
+            raise ValueError("temporal version must be an integer")
+        return value
+
+    ordered_events: tuple[TemporalEventView, ...] = ()
+
+    @model_serializer(mode="wrap")
+    def _serialize(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        data: dict[str, Any] = handler(self)
+        if self.temporal_observation_version is None:
+            data.pop("temporal_observation_version", None)
+            data.pop("ordered_events", None)
+        return data
 
     @model_validator(mode="after")
     def _unique_events(self) -> EventObservationBatch:
+        if self.temporal_observation_version == 2:
+            if not self.ordered_events:
+                raise ValueError("empty v2 evidence must not produce a batch")
+            if self.own_kill or self.witnessed_actions or self.moved_players:
+                raise ValueError("v2 batches cannot mix legacy event channels")
+            if [row.observation_order for row in self.ordered_events] != list(
+                range(len(self.ordered_events))
+            ):
+                raise ValueError("v2 observations require dense recipient-local order")
+        elif self.ordered_events:
+            raise ValueError("ordered events require temporal version 2")
         for name, ids in (
             ("witnessed actions", [view.id for view in self.witnessed_actions]),
             ("movements", [view.id for view in self.moved_players]),
@@ -199,6 +301,14 @@ class ObservationPacket(_FrozenModel):
     # Carried as a top-level packet field (not a ``PlayerView``
     # key) because the leak suite pins ``PlayerView``'s key set exactly.
     moved_players: tuple[MovedPlayerView, ...] = ()
+    temporal_observation_version: Literal[2] | None = None
+
+    @field_validator("temporal_observation_version", mode="before")
+    @classmethod
+    def _strict_version(cls, value: object) -> object:
+        if value is not None and type(value) is not int:
+            raise ValueError("temporal version must be an integer")
+        return value
 
     @model_serializer(mode="wrap")
     def _serialize(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
@@ -212,4 +322,6 @@ class ObservationPacket(_FrozenModel):
         data: dict[str, Any] = handler(self)
         if not self.moved_players:
             data.pop("moved_players", None)
+        if self.temporal_observation_version is None:
+            data.pop("temporal_observation_version", None)
         return data

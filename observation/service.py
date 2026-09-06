@@ -3,8 +3,9 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final
+from typing import Final, Literal
 
+from engine.actions import Action
 from engine.entities import PlayerId
 from engine.events import (
     ActionRejectedEvent,
@@ -20,6 +21,8 @@ from engine.visibility import VisibilityResult, compute_visibility_for_player
 from engine.world import Map, RoomId, TaskId, WorldState
 from observation.audit import ObservationAuditLog
 from observation.body_ids import public_body_id
+from observation.temporal import project_temporal_events
+from observation.version import validate_temporal_version
 from observation.packet import (
     AudibleEvent,
     BodyView,
@@ -205,12 +208,34 @@ class ObservationService:
         game_map: Map,
         audit_log_path: Path,
         legacy_body_ids: bool = False,
-        temporal_observations: bool = False,
+        temporal_observations: bool | None = None,
+        temporal_observation_version: Literal[1, 2] | None = None,
     ) -> None:
         self._game_map = game_map
         self._audit_log = ObservationAuditLog(audit_log_path)
         self._legacy_body_ids = legacy_body_ids
-        self.temporal_observations = temporal_observations
+        temporal_observation_version = validate_temporal_version(
+            temporal_observation_version
+        )
+        if (
+            temporal_observations is not None
+            and type(temporal_observations) is not bool
+        ):
+            raise ValueError("temporal enabled status must be boolean")
+        if (
+            temporal_observations is not None
+            and temporal_observation_version is not None
+            and (not temporal_observations)
+        ):
+            raise ValueError("conflicting temporal boolean and explicit version")
+        self.temporal_observation_version: Literal[1, 2] | None = (
+            temporal_observation_version
+            if temporal_observation_version is not None
+            else (1 if temporal_observations else None)
+        )
+        if self.temporal_observation_version == 2 and legacy_body_ids:
+            raise ValueError("v2 observations cannot expose legacy body identifiers")
+        self.temporal_observations = self.temporal_observation_version is not None
 
     def build_event_observations(
         self,
@@ -218,11 +243,28 @@ class ObservationService:
         world_state: WorldState,
         agent_id: PlayerId,
         engine_events: Sequence[EngineEvent],
+        source_state: WorldState | None = None,
+        submitted_actions: Sequence[Action] | None = None,
     ) -> EventObservationBatch | None:
         """Project resolved events once, including witnesses killed later that tick."""
 
         if not self.temporal_observations:
             return None
+        if self.temporal_observation_version == 2:
+            if source_state is None or submitted_actions is None:
+                raise ValueError(
+                    "v2 event observations require source_state and submitted_actions"
+                )
+            batch = project_temporal_events(
+                source_state=source_state,
+                submitted_actions=submitted_actions,
+                engine_events=engine_events,
+                agent_id=agent_id,
+                game_map=self._game_map,
+            )
+            if batch is not None:
+                self._audit_log.record_packet(batch)
+            return batch
         player = world_state.players[agent_id]
         actions: dict[str, PlayerView] = {}
         moves: dict[str, MovedPlayerView] = {}
@@ -327,6 +369,9 @@ class ObservationService:
                     event, (KilledEvent, VentEnteredEvent, VentExitedEvent, MovedEvent)
                 )
             )
+        if self.temporal_observation_version == 2:
+            # All action evidence has an event-local channel in v2.
+            engine_events = ()
         player = world_state.players.get(agent_id)
         if player is None:
             raise ValueError(f"unknown agent id: {agent_id}")
@@ -405,6 +450,9 @@ class ObservationService:
             global_state=self._global_view(world_state=world_state),
             cooldown=cooldown,
             moved_players=moved_players,
+            temporal_observation_version=2
+            if self.temporal_observation_version == 2
+            else None,
         )
         return packet
 

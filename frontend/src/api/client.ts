@@ -102,8 +102,8 @@ export class ViewModelVersionError extends Error {
 }
 
 /**
- * Version 3 narrows audio to the only live producer, the sabotage alarm.
- * Version 2 remains readable with compatible audio, checked separately below.
+ * Version 4 adds task-activity accounts to spoken observations. Versions 2/3
+ * remain readable; the sabotage-alarm-only audio guard still applies to all.
  * Other or non-string stamps fail; endpoints that never had a stamp still work.
  */
 function assertViewModelVersion(data: unknown, url: string): void {
@@ -114,7 +114,7 @@ function assertViewModelVersion(data: unknown, url: string): void {
     return;
   }
   const received = (data as { viewModelVersion: unknown }).viewModelVersion;
-  if (received === VIEW_MODEL_VERSION || received === "2") {
+  if (received === VIEW_MODEL_VERSION || received === "2" || received === "3") {
     return;
   }
   throw new ViewModelVersionError(

@@ -32,6 +32,13 @@ export function ObservationLine({ obs }: { obs: ObservationClaimView }): ReactEl
           {obs.task_id} in {obs.room} at tick {obs.tick}
         </span>
       );
+    case "task_activity":
+      return (
+        <span className="min-w-0 break-words">
+          <span className="font-semibold text-ink-900">claimed task activity</span>{" "}
+          {obs.task_id} in {obs.room}, ticks {obs.from_tick}–{obs.to_tick}
+        </span>
+      );
     case "found_body":
       return (
         <span className="min-w-0 break-words">

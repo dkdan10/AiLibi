@@ -53,7 +53,10 @@ from agents.memory.store import (
     record_meeting_outcome,
     render_for_prompt,
 )
-from agents.memory.evidence_context import ingest_public_meeting_roster
+from agents.memory.evidence_context import (
+    ingest_public_meeting_roster,
+    ingest_public_regroup,
+)
 from agents.perception import (
     EVENT_OWN_KILL,
     EVENT_SAW_BODY,
@@ -67,6 +70,8 @@ from agents.perception import (
 from agents.strategic.prompts import (
     DEFAULT_PROMPT_SET,
     build_prompt_renderers,
+    public_account_prompt_versions,
+    validate_public_account_renderers,
     resolve_prompt_set,
 )
 from agents.tactical.crewmate_policy import CrewmatePolicy, EmergencyPacingTracker
@@ -87,7 +92,7 @@ from engine.rng import EngineRng, RngStateHashPolicy
 from engine.meeting_reset import regroup_after_meeting
 from engine.rules import resolve_win_conditions
 from engine.tick import RedistributionPolicy, advance_tick, redistribute_dead_tasks
-from engine.world import Map, WorldState
+from engine.world import Map, WorldState, load_canonical_map
 from llm.budget import GameBudget
 from llm.budgeted_client import BudgetedLLMClient
 from llm.client import LLMClient, LLMResponse
@@ -134,6 +139,9 @@ from orchestrator.experiment_config import (
 from orchestrator.observation_delivery import event_observation_batches
 from observation.public_map import PublicMapView
 from observation.service import ObservationService
+from observation.version import (
+    temporal_observation_version as resolve_temporal_observation_version,
+)
 from orchestrator.boundary import (
     public_map_from_engine_map,
     translate_action_intents_for_tick,
@@ -141,6 +149,7 @@ from orchestrator.boundary import (
 from orchestrator.personas import assign_personas
 from orchestrator.recording import prepare_recording_paths
 from orchestrator.replay import (
+    AgentFactoryKind,
     CrewTacticalPolicyStamp,
     LLMCallRecord,
     ReplayLog,
@@ -729,6 +738,7 @@ class MeetingArtifacts:
     defaulted_calls: tuple[DefaultedCall, ...] = ()
     recovered_call_failures: tuple[LLMCallFailure, ...] = ()
     captured_failures: tuple[tuple[str, LLMCallFailure], ...] | None = None
+    skip_confidence_threshold: float | None = None
 
 
 @runtime_checkable
@@ -1080,6 +1090,8 @@ class DefaultMeetingRunner:
         corroboration_discipline: bool | None = None,
         substrate_flags: Mapping[str, bool] | None = None,
         evidence_profile: MeetingEvidenceProfile | None = None,
+        temporal_observation_version: Literal[1, 2] | None = None,
+        public_map: PublicMapView | None = None,
     ) -> None:
         self.substrate_flags = dict(
             substrate_flag_snapshot() if substrate_flags is None else substrate_flags
@@ -1096,6 +1108,31 @@ class DefaultMeetingRunner:
                     raise ValueError(f"explicit {key} disagrees with substrate_flags")
                 self.substrate_flags[key] = override
         self.evidence_profile = evidence_profile or MeetingEvidenceProfile()
+        self.temporal_observation_version = (
+            temporal_observation_version
+            if temporal_observation_version is not None
+            else (1 if self.substrate_flags["temporal_observations"] else None)
+        )
+        if self.temporal_observation_version is not None and (
+            type(self.temporal_observation_version) is not int
+            or self.temporal_observation_version not in (1, 2)
+        ):
+            raise ValueError("unsupported temporal observation version")
+        if self.substrate_flags["temporal_observations"] != (
+            self.temporal_observation_version is not None
+        ):
+            raise ValueError("runner temporal version disagrees with substrate flags")
+        self.public_map = public_map
+        validate_public_account_renderers(
+            crewmate_report=crewmate_report_prompt,
+            impostor_report=impostor_report_prompt,
+            statement=statement_prompt,
+            vote=vote_prompt,
+            prompt_versions=prompt_versions,
+            public_account_version=self.evidence_profile.public_account_version,
+            attributed_testimony_version=self.evidence_profile.attributed_testimony_version,
+        )
+        self._meeting_config = config or MeetingConfig()
         self._recording_client = _RecordingLLMClient(llm_client)
         self._deadline = deadline
         manager_client: LLMClient = (
@@ -1109,7 +1146,7 @@ class DefaultMeetingRunner:
             impostor_report_prompt=impostor_report_prompt,
             statement_prompt=statement_prompt,
             vote_prompt=vote_prompt,
-            config=config,
+            config=self._meeting_config,
             # Bound here so the lever that shapes the rendered bytes and the
             # ``prompt_versions`` recorded beside them are one captured choice.
             reporter_reasoning=(
@@ -1123,6 +1160,7 @@ class DefaultMeetingRunner:
                 else corroboration_discipline
             ),
             evidence_profile=self.evidence_profile,
+            public_map=public_map,
         )
         self._prompt_versions = dict(prompt_versions)
         self._token_budget = token_budget
@@ -1201,6 +1239,7 @@ class DefaultMeetingRunner:
             defaulted_calls=self._manager.defaulted_calls,
             recovered_call_failures=self._manager.recovered_call_failures,
             captured_failures=self._recording_client.drain_failures(),
+            skip_confidence_threshold=self._meeting_config.skip_confidence_threshold,
         )
 
 
@@ -1213,6 +1252,7 @@ def build_default_meeting_runner(
     token_budget: int = DEFAULT_TOKEN_BUDGET,
     deadline: RunDeadline | None = None,
     env: Mapping[str, str] | None = None,
+    public_map: PublicMapView | None = None,
 ) -> DefaultMeetingRunner:
     """Construct the production default meeting runner (DESIGN.md §5.1, §11.4).
 
@@ -1261,12 +1301,58 @@ def build_default_meeting_runner(
     frozen_env = dict(os.environ if env is None else env)
     frozen_flags = substrate_flag_snapshot(frozen_env)
     active_prompt_set = resolve_prompt_set(env=frozen_env)
-    renderers = build_prompt_renderers(active_prompt_set, env=frozen_env)
+    profile = MeetingEvidenceProfile.from_environment(frozen_env)
+    if (
+        profile.evidence_reasoning_version == 2
+        or profile.public_account_version is not None
+    ) and resolve_temporal_observation_version(frozen_env) != 2:
+        raise ValueError(
+            "new evidence and public accounts require temporal observations version 2"
+        )
+    account_mode = (
+        profile.public_account_version is not None
+        or profile.attributed_testimony_version is not None
+    )
+    if account_mode and any(
+        frozen_flags[key]
+        for key in (
+            "impostor_roll_call",
+            "reporter_reasoning",
+            "corroboration_discipline",
+            "testimony_shapes",
+        )
+    ):
+        raise ValueError(
+            "public account profiles cannot combine with legacy meeting overlays"
+        )
+    renderers = build_prompt_renderers(
+        active_prompt_set,
+        env=frozen_env,
+        public_account_version=profile.public_account_version,
+        attributed_testimony_version=profile.attributed_testimony_version,
+    )
+    account_versions = (
+        public_account_prompt_versions(
+            active_prompt_set,
+            public_account_version=profile.public_account_version,
+            attributed_testimony_version=profile.attributed_testimony_version,
+        )
+        if account_mode
+        else None
+    )
     resolved_versions = (
         prompt_versions
         if prompt_versions is not None
+        else account_versions
+        if account_versions is not None
         else prompt_versions_for_set(active_prompt_set, env=frozen_env)
     )
+    if account_versions is not None and dict(resolved_versions) != dict(
+        account_versions
+    ):
+        raise ValueError(
+            "public account prompt versions disagree with the served profile"
+        )
     # The meeting-layer levers are resolved HERE, once each, beside the versions
     # they are stamped into -- the same pairing the prompt set gets. Reading one
     # per-run inside the manager instead would let a mid-game export move the
@@ -1349,7 +1435,11 @@ def build_default_meeting_runner(
         corroboration_discipline=resolved_corroboration_discipline,
         token_budget=token_budget,
         substrate_flags=frozen_flags,
-        evidence_profile=MeetingEvidenceProfile.from_environment(frozen_env),
+        evidence_profile=profile,
+        temporal_observation_version=resolve_temporal_observation_version(frozen_env),
+        public_map=public_map
+        if public_map is not None
+        else public_map_from_engine_map(load_canonical_map()),
     )
 
 
@@ -1897,6 +1987,7 @@ class HeadlessGame:
         deadline: RunDeadline | None = None,
         experiment_config: RecordedExperimentConfig | None = None,
         substrate_flags: Mapping[str, bool] | None = None,
+        temporal_observation_version: Literal[1, 2] | None = None,
     ) -> None:
         # No-replay training mode (Task 15.8.1): ``replay_path=None`` runs the
         # game through :meth:`run_unrecorded` writing NOTHING to disk (no
@@ -2020,18 +2111,65 @@ class HeadlessGame:
                 "explicit substrate_flags disagree with DefaultMeetingRunner"
             )
         experiment = experiment_config or RecordedExperimentConfig()
+        selected_temporal = temporal_observation_version
+        if selected_temporal is None:
+            selected_temporal = (
+                meeting_runner.temporal_observation_version
+                if isinstance(meeting_runner, DefaultMeetingRunner)
+                else (1 if self._substrate_flags["temporal_observations"] else None)
+                if substrate_flags is not None
+                else resolve_temporal_observation_version()
+            )
+        if selected_temporal is not None and (
+            type(selected_temporal) is not int or selected_temporal not in (1, 2)
+        ):
+            raise ValueError("unsupported temporal observation version")
+        if self._substrate_flags["temporal_observations"] != (
+            selected_temporal is not None
+        ):
+            raise ValueError(
+                "temporal observation version disagrees with substrate flags"
+            )
+        if (
+            isinstance(meeting_runner, DefaultMeetingRunner)
+            and selected_temporal != meeting_runner.temporal_observation_version
+        ):
+            raise ValueError("temporal observation version disagrees with runner")
+        self._temporal_observation_version = selected_temporal
         if isinstance(meeting_runner, DefaultMeetingRunner):
             profile = meeting_runner.evidence_profile
-            for key in ("evidence_reasoning_version", "bounded_rebuttal_version"):
+            for key in (
+                "evidence_reasoning_version",
+                "bounded_rebuttal_version",
+                "public_account_version",
+                "attributed_testimony_version",
+            ):
                 recorded_version = getattr(experiment, key)
                 served_version = getattr(profile, key)
                 if recorded_version is not None and recorded_version != served_version:
                     raise ValueError(f"experiment_config disagrees with runner {key}")
-            experiment = experiment.model_copy(
-                update={
-                    "evidence_reasoning_version": profile.evidence_reasoning_version,
-                    "bounded_rebuttal_version": profile.bounded_rebuttal_version,
-                }
+            payload = experiment.model_dump()
+            payload.update(profile.model_dump())
+            if (
+                profile.evidence_reasoning_version == 2
+                or profile.public_account_version is not None
+                or profile.attributed_testimony_version is not None
+            ):
+                payload["format_version"] = 2
+            experiment = RecordedExperimentConfig.model_validate(payload)
+            if (
+                profile.public_account_version is not None
+                or profile.attributed_testimony_version is not None
+            ) and meeting_runner.public_map != public_map_from_engine_map(game_map):
+                raise ValueError(
+                    "public account runner requires this game's public map"
+                )
+        if (
+            experiment.evidence_reasoning_version == 2
+            or experiment.public_account_version is not None
+        ) and selected_temporal != 2:
+            raise ValueError(
+                "new evidence and public accounts require temporal observations version 2"
             )
         self._experiment_config = normalize_experiment_config(experiment)
         self._deadline = deadline
@@ -2160,12 +2298,15 @@ class HeadlessGame:
                             "temporal_observations"
                         ],
                         experiment_config=self._experiment_config,
+                        agent_factory_kind=self._agent_factory_kind,
+                        temporal_observation_version=self._temporal_observation_version,
                     )
                 )
                 observation_service = ObservationService(
                     game_map=self._game_map,
                     audit_log_path=self._audit_log_path,
                     temporal_observations=replay.temporal_observations,
+                    temporal_observation_version=replay.temporal_observation_version,
                 )
                 resources.callback(observation_service.close)
                 final_state, outcome = self._run_loop(
@@ -2219,6 +2360,7 @@ class HeadlessGame:
             game_map=self._game_map,
             audit_log_path=self._audit_log_path,
             temporal_observations=self._substrate_flags["temporal_observations"],
+            temporal_observation_version=self._temporal_observation_version,
         )
         agents = self._build_agents(state.players)
         trace = _EpisodeTraceCollector()
@@ -2294,6 +2436,7 @@ class HeadlessGame:
                     f"extra={sorted(actual_actors - expected_actors)}"
                 )
             input_tick = state.tick
+            source_state = state
             state, events = advance_tick(
                 state,
                 actions,
@@ -2317,7 +2460,11 @@ class HeadlessGame:
                 )
 
             for player_id, batch in event_observation_batches(
-                service=observation_service, state=state, events=events
+                service=observation_service,
+                state=state,
+                events=events,
+                source_state=source_state,
+                submitted_actions=actions,
             ).items():
                 agent = agents[player_id]
                 if not isinstance(agent, EventObservingAgent):
@@ -2474,6 +2621,7 @@ class HeadlessGame:
                 prompt_versions=artifacts.prompt_versions,
                 state_hash_before=_state_hash(state),
                 state_hash_after=_state_hash(next_state),
+                skip_confidence_threshold=artifacts.skip_confidence_threshold,
             )
         # The recorder owns each failed attempt's spend. Manager recovery and
         # default metadata may refer to those same attempts, so retain only
@@ -2530,6 +2678,12 @@ class HeadlessGame:
                 if self._experiment_config is not None
                 else None
             ),
+            public_account_version=self._experiment_config.public_account_version
+            if self._experiment_config is not None
+            else None,
+            attributed_testimony_version=self._experiment_config.attributed_testimony_version
+            if self._experiment_config is not None
+            else None,
         )
         # Meeting-end pacing notification (Task 10.8). Runs AFTER the belief
         # fold so the emergency tracker's post-meeting over-gate baseline
@@ -2544,6 +2698,25 @@ class HeadlessGame:
             outcome=derive_meeting_outcome_summary(artifacts.result),
             roster_impostor_count=self._num_impostors,
         )
+        if (
+            self._experiment_config is not None
+            and self._experiment_config.meeting_reset == "hub_with_grace"
+            and next_state.phase == "PLAY"
+        ):
+            living_ids = tuple(
+                sorted(
+                    pid for pid, player in next_state.players.items() if player.alive
+                )
+            )
+            for pid in living_ids:
+                agent = agents[pid]
+                if isinstance(agent, TacticalAgent):
+                    ingest_public_regroup(
+                        agent.memory,
+                        tick=next_state.tick,
+                        room=self._game_map.meeting.room,
+                        player_ids=living_ids,
+                    )
         return next_state, post_events
 
     def _build_agents(
@@ -2551,29 +2724,65 @@ class HeadlessGame:
         players: Mapping[PlayerId, PlayerState],
     ) -> dict[PlayerId, AgentInterface]:
         agents: dict[PlayerId, AgentInterface] = {}
+        expected = (
+            _tactical_experiment_options(self._experiment_config)
+            if self._experiment_config is not None
+            and self._experiment_config.has_tactical_changes
+            else None
+        )
+        all_builtin = True
         for player_id in sorted(players):
             agents[player_id] = self._agent_factory(player_id, players[player_id].role)
             built_agent = agents[player_id]
             if isinstance(built_agent, TacticalAgent):
+                if built_agent.tactical_experiment_options != expected:
+                    raise ValueError(
+                        "agent factory does not implement the recorded tactical experiment"
+                    )
                 built_agent.memory.evidence_reasoning_version = (
                     self._experiment_config.evidence_reasoning_version
                     if self._experiment_config is not None
                     else None
                 )
                 built_agent.memory.public_map = self._public_map
-            if (
-                self._experiment_config is not None
-                and self._experiment_config.has_tactical_changes
-            ):
-                agent = agents[player_id]
-                expected = _tactical_experiment_options(self._experiment_config)
-                if (
-                    not isinstance(agent, TacticalAgent)
-                    or agent.tactical_experiment_options != expected
-                ):
+                built_agent.memory.public_account_version = (
+                    self._experiment_config.public_account_version
+                    if self._experiment_config is not None
+                    else None
+                )
+                built_agent.memory.attributed_testimony_version = (
+                    self._experiment_config.attributed_testimony_version
+                    if self._experiment_config is not None
+                    else None
+                )
+                policy_class = (
+                    ExperimentalImpostorPolicy
+                    if expected is not None and players[player_id].role == "IMPOSTOR"
+                    else ExperimentalCrewmatePolicy
+                    if expected is not None
+                    else ImpostorPolicy
+                    if players[player_id].role == "IMPOSTOR"
+                    else CrewmatePolicy
+                )
+                # A subclass can replace decisions while retaining the same
+                # option property, so only the exact built-ins identify this arm.
+                all_builtin = all_builtin and (
+                    type(built_agent) is TacticalAgent
+                    and type(built_agent._policy) is policy_class
+                )
+            else:
+                all_builtin = False
+                if expected is not None:
                     raise ValueError(
                         "agent factory does not implement the recorded tactical experiment"
                     )
+        self._agent_factory_kind: AgentFactoryKind = (
+            "custom"
+            if not all_builtin
+            else "experimental"
+            if expected is not None
+            else "scripted"
+        )
         return agents
 
     def _build_packets(
@@ -2897,7 +3106,9 @@ def _absorb_meeting_beliefs(
     agents: Mapping[PlayerId, AgentInterface],
     trigger_kind: MeetingTriggerKind,
     testimony_shapes: bool = False,
-    evidence_reasoning_version: Literal[1] | None = None,
+    evidence_reasoning_version: Literal[1, 2] | None = None,
+    public_account_version: Literal[1] | None = None,
+    attributed_testimony_version: Literal[1] | None = None,
 ) -> None:
     """Fold a resolved meeting's evidence into living agents' beliefs (Task 9.8).
 
@@ -2923,7 +3134,12 @@ def _absorb_meeting_beliefs(
     exclusion zone that the persisted corroborations / voices fold through.
     """
 
-    evidence = extract_belief_evidence(result, trigger_kind=trigger_kind)
+    evidence = extract_belief_evidence(
+        result,
+        trigger_kind=trigger_kind,
+        public_account_version=public_account_version,
+        attributed_testimony_version=attributed_testimony_version,
+    )
     # Task 13.5.2: the reported-testimony content fold rides the SAME
     # per-living-agent loop as the scalar belief fold, unconditionally since
     # Task 14.9 (the adopted lever is the default substrate). The derivation is
@@ -2933,6 +3149,8 @@ def _absorb_meeting_beliefs(
         result,
         testimony_shapes=testimony_shapes,
         evidence_reasoning_version=evidence_reasoning_version,
+        public_account_version=public_account_version,
+        attributed_testimony_version=attributed_testimony_version,
     )
     for player_id in sorted(state.players):
         if not state.players[player_id].alive:

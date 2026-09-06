@@ -190,7 +190,7 @@ def test_profiles_are_independently_bound_and_frozen() -> None:
         is None
     )
     with pytest.raises(ValueError):
-        MeetingEvidenceProfile.model_validate({"evidence_reasoning_version": 2})
+        MeetingEvidenceProfile.model_validate({"evidence_reasoning_version": 3})
 
 
 @pytest.mark.parametrize("independent", (False, True))
@@ -222,7 +222,7 @@ def test_reply_preserves_distinct_attribution_without_rewarding_repetition(
 @pytest.mark.parametrize(
     "field", ("evidence_reasoning_version", "bounded_rebuttal_version")
 )
-@pytest.mark.parametrize("value", (True, 1.0, "1", 2))
+@pytest.mark.parametrize("value", (True, 1.0, "1", 3))
 def test_profile_rejects_coerced_or_unsupported_version(
     field: str, value: object
 ) -> None:
@@ -236,3 +236,14 @@ def test_profile_rejects_coerced_or_unsupported_version(
 def test_new_switch_typo_is_not_silent_off(name: str) -> None:
     with pytest.raises(ValueError, match="requires a boolean"):
         MeetingEvidenceProfile.from_environment({name: "enable"})
+
+
+def test_clock_profile_two_is_explicit_and_reply_two_stays_unsupported() -> None:
+    profile = MeetingEvidenceProfile.from_environment(
+        {"AILIBI_EVIDENCE_REASONING": "2"}
+    )
+    assert profile.evidence_reasoning_version == 2
+    assert profile.bounded_rebuttal_version is None
+    assert MeetingEvidenceProfile(evidence_reasoning_version=2) == profile
+    with pytest.raises(ValueError):
+        MeetingEvidenceProfile.model_validate({"bounded_rebuttal_version": 2})

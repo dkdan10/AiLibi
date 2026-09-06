@@ -248,6 +248,22 @@ class SawMoveObservation(_FrozenModel):
     to_room: RoomId
 
 
+class TaskActivityAccount(_FrozenModel):
+    """A speaker's account of task activity, never a completion certificate."""
+
+    type: Literal["task_activity"]
+    task_id: TaskId
+    room: RoomId
+    from_tick: int = Field(ge=0)
+    to_tick: int = Field(ge=0)
+
+    @model_validator(mode="after")
+    def _ordered_interval(self) -> TaskActivityAccount:
+        if self.to_tick < self.from_tick:
+            raise ValueError("task activity must have an ordered tick interval")
+        return self
+
+
 ObservationClaim: TypeAlias = Annotated[
     SawPlayerObservation
     | CompletedTaskObservation
@@ -255,7 +271,8 @@ ObservationClaim: TypeAlias = Annotated[
     | SawVentObservation
     | SawKillObservation
     | WhereaboutsClaim
-    | SawMoveObservation,
+    | SawMoveObservation
+    | TaskActivityAccount,
     Field(discriminator="type"),
 ]
 
@@ -622,15 +639,20 @@ ReportedStatementKind: TypeAlias = Literal[
     "alibi",
     "accusation",
     "corroboration",
+    "task_activity",
+    "completed_task",
+    "found_body",
 ]
 """Discriminator for the STRUCTURED testimony shapes carried as content.
 
 The structured claim/observation kinds that survive the reduction -- a
 :class:`SawPlayerObservation` sighting, a :class:`SawVentObservation` sighting,
 an :class:`AlibiClaim`, an :class:`AccusationClaim`, a
-:class:`CorroborationClaim`, and under the ``testimony_shapes`` lever a
+:class:`CorroborationClaim`, and under ``testimony_shapes`` or an account profile a
 :class:`SawKillObservation`, a :class:`WhereaboutsClaim` self-placement and a
-:class:`SawMoveObservation` transition. Free-text is excluded by construction
+:class:`SawMoveObservation` transition. Public-account version 1 also retains
+task activity, claimed completion and body discovery as attributed statements.
+Free-text is excluded by construction
 (it never produces a :class:`ReportedStatement`).
 """
 
@@ -659,11 +681,14 @@ class ReportedStatement(_FrozenModel):
       not carried, because the witness's own record does not hold one).
     * ``whereabouts`` -- ``from_tick == to_tick`` (the placed tick) and
       ``room``; the subject IS the speaker, a self-placement.
-    * ``saw_move`` -- ``from_tick == to_tick`` (the arrival tick) and ``room``,
-      which is the DESTINATION; the origin half is not carried.
+    * ``saw_move`` -- ``from_tick == to_tick`` (the spoken tick) and ``room``,
+      the destination; versioned provenance also retains ``from_room``.
     * ``alibi`` -- the inclusive ``from_tick``/``to_tick`` window and ``room``.
     * ``accusation`` -- ``subject`` only (no tick, no room).
     * ``corroboration`` -- ``from_tick == to_tick`` (the corroborated tick); no room.
+    * ``task_activity`` -- speaker as subject, task, room and claimed interval.
+    * ``completed_task`` -- speaker as subject, task, room and claimed tick.
+    * ``found_body`` -- victim as subject, room and discovery tick, never death time.
 
     Frozen and ``extra='forbid'`` like every meeting DTO, so the reduction is a
     pure, replay-deterministic function of the recorded ``MeetingResult``.
@@ -678,6 +703,7 @@ class ReportedStatement(_FrozenModel):
     co_present: tuple[PlayerId, ...] = ()
     from_room: RoomId | None = None
     source_event_id: str | None = None
+    task_id: TaskId | None = None
 
     @model_serializer(mode="wrap")
     def _serialize(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
@@ -688,6 +714,8 @@ class ReportedStatement(_FrozenModel):
             data.pop("from_room", None)
         if self.source_event_id is None:
             data.pop("source_event_id", None)
+        if self.task_id is None:
+            data.pop("task_id", None)
         return data
 
 

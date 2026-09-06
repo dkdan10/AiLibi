@@ -222,7 +222,7 @@ from orchestrator.replay import (
     _state_hash,
     classify_action_dispositions,
     read_all_entries,
-    recorded_temporal_observations,
+    recorded_temporal_observation_version,
     substrate_stamp_mismatches,
 )
 from orchestrator.seeder import seed_initial_state
@@ -283,7 +283,8 @@ class ReplayWalkConfig:
     Every check is an OPTION (module docstring: no check is core-mandatory).
     ``on_violation`` MUST raise; the walker raises ``RuntimeError`` if it
     returns. ``ballot_tally_threshold`` non-``None`` enables the recorded
-    ballots-tally-to-outcome check under that skip-confidence threshold
+    ballots-tally-to-outcome check. A recorded cutoff takes precedence; the
+    profile's threshold is the explicit compatibility rule for older records
     (:func:`meetings.voting.tally_ballots`). ``verify_meeting_pre_hashes``
     compares each meeting row's ``state_hash_before`` against the
     reconstructed post-advance hash of its trigger tick (equal to the recorded
@@ -349,6 +350,7 @@ class TickAdvanced:
     pre_state: WorldState
     state: WorldState
     events: tuple[EngineEvent, ...]
+    actions: tuple[Action, ...]
 
 
 @dataclass(frozen=True)
@@ -450,7 +452,7 @@ def walk_replay(
             f"replay profile {config.profile!r} does not support experimental recordings"
         )
     if (
-        recorded_temporal_observations(entries)
+        recorded_temporal_observation_version(entries) is not None
         and not config.supports_temporal_observations
     ):
         raise ValueError(
@@ -563,7 +565,13 @@ def walk_replay(
             if isinstance(event, GameOverEvent):
                 reconstructed_winner = event.winner
                 reconstructed_reason = event.reason
-        yield TickAdvanced(entry=entry, pre_state=pre_state, state=state, events=events)
+        yield TickAdvanced(
+            entry=entry,
+            pre_state=pre_state,
+            state=state,
+            events=events,
+            actions=tuple(actions),
+        )
 
         if state.phase == "GAME_OVER":
             terminal_tick = entry.tick
@@ -600,7 +608,11 @@ def walk_replay(
             )
         if config.ballot_tally_threshold is not None and tally_ballots(
             meeting_entry.ballots,
-            skip_confidence_threshold=config.ballot_tally_threshold,
+            skip_confidence_threshold=(
+                meeting_entry.skip_confidence_threshold
+                if meeting_entry.skip_confidence_threshold is not None
+                else config.ballot_tally_threshold
+            ),
         ) != (meeting_entry.outcome, meeting_entry.ejected_player_id):
             _violate(
                 config,

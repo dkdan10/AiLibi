@@ -40,7 +40,7 @@ def test_reasoning_versions_are_independently_selectable(field: str) -> None:
 @pytest.mark.parametrize(
     "raw",
     [
-        {"format_version": 2},
+        {"format_version": 3},
         {"format_version": True},
         {"evidence_reasoning_version": "1"},
         {"bounded_rebuttal_version": True},
@@ -48,6 +48,12 @@ def test_reasoning_versions_are_independently_selectable(field: str) -> None:
         {"self_report": "false"},
         {"anti_oscillation": True},
         {"unknown_arm": True},
+        {"evidence_reasoning_version": 2},
+        {"public_account_version": 1},
+        {"attributed_testimony_version": 1},
+        {"format_version": 2, "bounded_rebuttal_version": 2},
+        {"format_version": 2, "public_account_version": True},
+        {"format_version": 2, "attributed_testimony_version": "1"},
     ],
 )
 def test_unknown_or_coerced_configuration_is_rejected(raw: dict[str, object]) -> None:
@@ -83,3 +89,29 @@ def test_config_is_immutable_and_can_select_independent_arms_together() -> None:
     assert config.bounded_rebuttal_version == 1
     with pytest.raises(ValidationError, match="frozen"):
         config.self_report = True
+
+
+def test_version_two_profiles_preserve_version_one_encoding_and_typed_schema() -> None:
+    legacy = RecordedExperimentConfig(evidence_reasoning_version=1)
+    assert "public_account_version" not in legacy.model_dump()
+    assert "attributed_testimony_version" not in legacy.model_dump()
+    candidate = RecordedExperimentConfig(
+        format_version=2,
+        evidence_reasoning_version=2,
+        public_account_version=1,
+        attributed_testimony_version=1,
+    )
+    assert candidate.model_dump()["public_account_version"] == 1
+    assert (
+        RecordedExperimentConfig.model_validate_json(candidate.model_dump_json())
+        == candidate
+    )
+    assert (
+        "public_account_version"
+        in RecordedExperimentConfig.model_json_schema(mode="serialization")[
+            "properties"
+        ]
+    )
+    assert (
+        normalize_experiment_config(RecordedExperimentConfig(format_version=2)) is None
+    )

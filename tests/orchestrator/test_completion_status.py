@@ -107,6 +107,10 @@ def test_stop_claims_cannot_rewrite_chronology(
                 "tick": 5,
                 "winner": "CREWMATES",
                 "reason": "CREWMATE_TASKS",
+                # Keep identity consistent so this plant isolates conflicting
+                # final rows rather than failing the earlier provenance gate.
+                "agent_factory_kind": rows[0]["agent_factory_kind"],
+                "substrate_flags": rows[0]["substrate_flags"],
             }
         )
     else:

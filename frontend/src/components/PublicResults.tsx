@@ -1,7 +1,24 @@
 import { useEffect, useState } from "react";
 import { getPublicResults } from "../api/client";
 import { serializePlaybackParams, OMNISCIENT } from "../lib/playback";
-import type { PublicCaseView, PublicResultsView as PublicResultsDTO } from "../types/api";
+import type { PublicCaseView, PublicResultsView as PublicResultsDTO, ReportProvenanceGroupView } from "../types/api";
+
+function BehaviorIdentity({ group }: { group: ReportProvenanceGroupView }) {
+  const config = group.experiment_config;
+  const mechanisms: string[] = [];
+  if (config?.evidence_reasoning_version) mechanisms.push(`observation timing and travel checks v${config.evidence_reasoning_version}`);
+  if (config?.public_account_version) mechanisms.push("common public accounts");
+  if (config?.attributed_testimony_version) mechanisms.push("attributed witness testimony");
+  if (config?.bounded_rebuttal_version) mechanisms.push("one reply to a late accusation");
+  if (config && (config.crew_idle_policy !== "hub_wait" || config.vent_exit_policy !== "target_distance" || config.post_meeting_retarget || config.self_report || config.sabotage_threshold !== "six_sevenths")) mechanisms.push("experimental movement or action policies");
+  if (config && (config.meeting_reset !== "preserve" || config.redistribution_policy !== "lowest_id")) mechanisms.push("experimental round or task rules");
+  const factory = group.agent_factory_kind === "custom" ? "Custom agent factory" : group.agent_factory_kind === "experimental" ? "Experimental agent factory" : group.agent_factory_kind === "scripted" ? "Built-in scripted agent factory" : "Agent factory not recorded";
+  return <li className="rounded border border-ink-300 p-3">
+    <p><strong>{factory}</strong> · {group.game_ids.length} recording{group.game_ids.length === 1 ? "" : "s"}.</p>
+    <p>{mechanisms.length ? `Recorded experiments: ${mechanisms.join(", ")}.` : "No enabled experiments recorded. This alone does not certify the default behavior."}</p>
+    <p>Impostor policy: {group.tactical_policy?.method ?? "not recorded"}. Crew policy: {group.crew_tactical_policy?.method ?? "not recorded"}. Rule settings: {group.substrate_flags ? "recorded" : "not recorded"}.</p>
+  </li>;
+}
 
 function CaseCard({ example, setName }: { example: PublicCaseView; setName: string }) {
   const [revealed, setRevealed] = useState(false);
@@ -25,6 +42,7 @@ export function PublicResultsView({ results }: { results: PublicResultsDTO }) {
     <header>
       <h2 className="text-2xl">What the recordings show</h2>
       <p className="mt-2 max-w-3xl text-sm leading-relaxed">These are recorded games, not live AI responses. Results cover all {results.games} games in {results.set_name}; the replay browser may offer a smaller featured selection. The engine reconstructed each recording before these outcomes were counted.</p>
+      {(results.provenance_groups?.length ?? 0) > 1 && <p className="mt-2 text-sm font-bold">This set mixes recorded behavior configurations. Its totals are descriptive; inspect the groups below before comparing policies.</p>}
     </header>
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
       <div className="rounded-lg border border-ink-300 bg-paper-0 p-4">
@@ -60,6 +78,7 @@ export function PublicResultsView({ results }: { results: PublicResultsDTO }) {
     <details className="rounded-lg border border-ink-300 bg-paper-0 p-4">
       <summary className="cursor-pointer text-sm font-bold">Recording provenance and reported usage</summary>
       <div className="mt-3 space-y-2 break-words text-xs">
+        {results.provenance_groups?.length ? <ul className="space-y-2" aria-label="Recorded behavior groups">{results.provenance_groups.map((group, index) => <BehaviorIdentity key={index} group={group} />)}</ul> : <p>Behavior provenance is unavailable in this bundle; the agent factory and experiment settings are unknown.</p>}
         <p>Manifest recording dates: {results.recorded_from ?? "not recorded"}{results.recorded_until !== results.recorded_from ? ` – ${results.recorded_until ?? "not recorded"}` : ""}.</p>
         <p>Models: {results.models.join(", ") || "no model calls recorded"}.</p>
         <p>Prompt versions: {results.prompt_versions.join(", ") || "not recorded"}.</p>

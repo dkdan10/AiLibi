@@ -45,6 +45,7 @@ from api.schemas import (
     EvalCostSummaryView,
     FailedCallEvalView,
     PublicResultsView,
+    ReportProvenanceGroupView,
     RubricView,
 )
 from engine.entities import Role
@@ -61,7 +62,14 @@ from eval.meeting_quality import (
 from eval.report_schema import GameCostSummary, MeetingReport
 from eval.vote_correctness import VoteCorrectnessReport
 from meetings.schemas import PlayerId
-from orchestrator.replay import CompletionStatus, WinnerSide
+from orchestrator.replay import (
+    AgentFactoryKind,
+    CompletionStatus,
+    CrewTacticalPolicyStamp,
+    TacticalPolicyStamp,
+    WinnerSide,
+)
+from orchestrator.experiment_config import RecordedExperimentConfig
 
 router = APIRouter()
 
@@ -122,6 +130,11 @@ class _GameReportEvalView(BaseModel):
     kill_gifted: bool = False
     instances_dropped: int = 0
     instances_complete_at_win: int = 0
+    agent_factory_kind: AgentFactoryKind | None = None
+    experiment_config: RecordedExperimentConfig | None = None
+    substrate_flags: Mapping[str, bool] | None = None
+    tactical_policy: TacticalPolicyStamp | None = None
+    crew_tactical_policy: CrewTacticalPolicyStamp | None = None
 
 
 class _TournamentReportEvalView(BaseModel):
@@ -137,6 +150,7 @@ class _TournamentReportEvalView(BaseModel):
     kill_gifted_wins: int = 0
     instances_dropped_total: int = 0
     mean_instances_complete_at_win: float | None = None
+    provenance_groups: tuple[ReportProvenanceGroupView, ...] | None = None
 
 
 class _TournamentEvalReportView(BaseModel):

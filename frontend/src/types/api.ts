@@ -17,7 +17,7 @@
 // DESIGN.md §7) the server stamps on every payload that carries one.
 // `src/api/client.ts` rejects unsupported versions and checks the
 // explicitly compatible historical version's audio before use.
-export const VIEW_MODEL_VERSION = "3";
+export const VIEW_MODEL_VERSION = "4";
 
 export type PlayerRole = "CREWMATE" | "IMPOSTOR";
 export type CurrentAction = "IDLE" | "MOVING" | "TASK" | "KILL" | "VENT" | "REPORT" | "SABOTAGE" | "PRETEND_TASK" | "EMERGENCY" | "REPAIR" | "BLOCKED";
@@ -52,6 +52,34 @@ export interface ReplayMetadataView {
   created_at: string | null;
   completion_status?: "completed" | "aborted" | "tick_limited" | "unfinished";
   outcome_verified?: boolean;
+  agent_factory_kind?: "scripted" | "experimental" | "custom" | null;
+  experiment_config?: ExperimentConfigView | null;
+  substrate_flags?: Record<string, boolean> | null;
+  tactical_policy?: TacticalPolicyView | null;
+  crew_tactical_policy?: TacticalPolicyView | null;
+}
+
+export interface ExperimentConfigView {
+  format_version: 1 | 2;
+  redistribution_policy: "lowest_id" | "least_remaining_work";
+  meeting_reset: "preserve" | "hub_with_grace";
+  crew_idle_policy: "hub_wait" | "patrol" | "accompany";
+  vent_exit_policy: "target_distance" | "observed_risk";
+  post_meeting_retarget: boolean;
+  self_report: boolean;
+  sabotage_threshold: "six_sevenths" | "two_thirds";
+  evidence_reasoning_version: 1 | 2 | null;
+  bounded_rebuttal_version: 1 | null;
+  public_account_version: 1 | null;
+  attributed_testimony_version: 1 | null;
+}
+
+export interface TacticalPolicyView {
+  policy_id: string;
+  method: string;
+  encoder_version: string;
+  weights_sha256: string;
+  anchor_policy: string;
 }
 
 export interface MapLayoutView {
@@ -300,6 +328,14 @@ export interface SawMoveObservationView {
   to_room: string;
 }
 
+export interface TaskActivityAccountView {
+  type: "task_activity";
+  task_id: string;
+  room: string;
+  from_tick: number;
+  to_tick: number;
+}
+
 export interface AlibiClaimView {
   type: "alibi";
   subject: string;
@@ -364,6 +400,7 @@ export interface GateView {
   leader_max_confidence: number;
   threshold: number;
   passed: boolean;
+  threshold_source?: "recorded" | "legacy_compatibility";
 }
 
 export interface FailedCallView {
@@ -421,6 +458,11 @@ export interface BeliefEntryView {
 
 export interface ObservationReferenceView {
   observation_id: string;
+  source_tick?: number | null;
+  observation_phase?: "snapshot" | "event" | null;
+  observation_order?: number | null;
+  observer_room?: string | null;
+  observer_in_vent?: boolean | null;
   observer_id: string;
   resolved: boolean;
   observation_tick: number | null;
@@ -477,6 +519,7 @@ export interface ReplayAccountingView {
 
 export interface PublicResultsView {
   format_version: 1;
+  provenance_groups?: ReportProvenanceGroupView[] | null;
   set_name: string;
   source_fingerprint: string;
   recorded_from: string | null;
@@ -504,6 +547,15 @@ export interface PublicResultsView {
   input_tokens: number;
   output_tokens: number;
   cases: PublicCaseView[];
+}
+
+export interface ReportProvenanceGroupView {
+  agent_factory_kind: "scripted" | "experimental" | "custom" | null;
+  experiment_config: ExperimentConfigView | null;
+  substrate_flags: Record<string, boolean> | null;
+  tactical_policy: TacticalPolicyView | null;
+  crew_tactical_policy: TacticalPolicyView | null;
+  game_ids: string[];
 }
 
 export interface PublicCaseView {
@@ -849,7 +901,7 @@ export interface WitnessedSupplyCells {
 }
 
 export type TickEventView = KillEventView | ReportBodyEventView | SabotageEventView | TaskCompletedEventView | MeetingTriggeredEventView | VentEventView;
-export type ObservationClaimView = SawPlayerView | CompletedTaskObsView | FoundBodyObsView | SawVentObservationView | SawKillObservationView | WhereaboutsClaimView | SawMoveObservationView;
+export type ObservationClaimView = SawPlayerView | CompletedTaskObsView | FoundBodyObsView | SawVentObservationView | SawKillObservationView | WhereaboutsClaimView | SawMoveObservationView | TaskActivityAccountView;
 export type StatementClaimView = AlibiClaimView | AccusationClaimView | CorroborationClaimView;
 
 export interface GameReport {
@@ -860,10 +912,25 @@ export interface GameReport {
   final_tick: number | null;
   completion_status?: "completed" | "aborted" | "tick_limited" | "unfinished";
   outcome_verified?: boolean;
+  agent_factory_kind?: "scripted" | "experimental" | "custom" | null;
+  experiment_config?: ExperimentConfigView | null;
+  substrate_flags?: Record<string, boolean> | null;
+  tactical_policy?: TacticalPolicyView | null;
+  crew_tactical_policy?: TacticalPolicyView | null;
 }
 
 export interface TournamentReport {
   format_version: number;
   games: GameReport[];
   seeds_used: number[];
+  provenance_groups?: ReportProvenanceGroup[] | null;
+}
+
+export interface ReportProvenanceGroup {
+  agent_factory_kind?: "scripted" | "experimental" | "custom" | null;
+  experiment_config?: ExperimentConfigView | null;
+  substrate_flags?: Record<string, boolean> | null;
+  tactical_policy?: TacticalPolicyView | null;
+  crew_tactical_policy?: TacticalPolicyView | null;
+  game_ids: string[];
 }

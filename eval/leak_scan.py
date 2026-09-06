@@ -33,7 +33,7 @@ import tempfile
 from collections.abc import Collection, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import NoReturn, TypeAlias, cast
+from typing import Literal, NoReturn, TypeAlias, cast
 
 from pydantic import TypeAdapter
 
@@ -56,6 +56,7 @@ from eval.replay_walk import (
     WalkViolation,
     walk_replay,
 )
+from eval.temporal_entitlement import assert_temporal_batch_entitled
 from eval.witness_entitlement import assert_event_witnesses_match_source_state
 from llm.provider import ENV_PROVIDER, PROVIDER_FAKE, build_default_client
 from observation.packet import EventObservationBatch, ObservationPacket
@@ -67,7 +68,7 @@ from orchestrator.game import (
     build_default_meeting_runner,
 )
 from orchestrator.observation_delivery import event_observation_batches
-from orchestrator.replay import read_all_entries, recorded_temporal_observations
+from orchestrator.replay import read_all_entries, recorded_temporal_observation_version
 from orchestrator.scheduler import TickScheduler
 
 _FORBIDDEN_VISIBLE_PLAYER_FIELDS = frozenset({"role", "kill_attribution", "killed_by"})
@@ -619,6 +620,9 @@ class PacketContext:
     game_map: Map
     legacy_body_ids: bool = False
     temporal_observations: bool = False
+    temporal_observation_version: Literal[1, 2] | None = None
+    source_state: WorldState | None = None
+    submitted_actions: Sequence[Action] | None = None
 
 
 def assert_visible_entities_match_engine_truth(
@@ -818,6 +822,23 @@ def assert_event_observations_are_entitled(
     agent = batch.agent_id if batch is not None else agent_id
     assert agent is not None, "a missing batch requires its intended recipient"
     assert agent_id is None or agent_id == agent, "batch addressed to another recipient"
+    if context.temporal_observation_version == 2:
+        assert (
+            context.source_state is not None and context.submitted_actions is not None
+        ), "v2 scan requires source state and submitted actions"
+        assert_temporal_batch_entitled(
+            batch,
+            agent_id=agent,
+            source_state=context.source_state,
+            state=context.world_state,
+            events=context.engine_events,
+            submitted_actions=context.submitted_actions,
+            game_map=context.game_map,
+        )
+        return
+    assert batch is None or batch.temporal_observation_version is None, (
+        "v2 batch requires explicit v2 scan context"
+    )
     expected_actions: dict[str, tuple[str, str]] = {}
     expected_moves: dict[str, tuple[str, str]] = {}
     expected_own: tuple[str, str] | None = None
@@ -927,6 +948,7 @@ def _raise_factory_walk_violation(violation: WalkViolation) -> NoReturn:
 # verification nor doubled-record detection before 19.25; enabling either
 # would change what it accepts.
 _FACTORY_WALK_CONFIG: ReplayWalkConfig = ReplayWalkConfig(
+    supports_experiments=True,
     supports_temporal_observations=True,
     profile="leak-scan-factory",
     on_violation=_raise_factory_walk_violation,
@@ -943,6 +965,7 @@ def _reconstruct_factory_records(
     num_impostors: int,
     tasks_per_crewmate: int,
     audit_dir: Path,
+    event_records: list[EventObservationBatch] | None = None,
 ) -> list[PacketRecord]:
     """Re-seed + replay one factory game, yielding (packet, context) records.
 
@@ -965,7 +988,7 @@ def _reconstruct_factory_records(
     service = ObservationService(
         game_map=game_map,
         audit_log_path=audit_path,
-        temporal_observations=recorded_temporal_observations(
+        temporal_observation_version=recorded_temporal_observation_version(
             read_all_entries(replay_path)
         ),
     )
@@ -991,10 +1014,19 @@ def _reconstruct_factory_records(
                     walk_event.state,
                     game_map,
                     temporal_observations=service.temporal_observations,
+                    temporal_observation_version=service.temporal_observation_version,
+                    source_state=walk_event.pre_state,
+                    submitted_actions=walk_event.actions,
                 )
                 batches = event_observation_batches(
-                    service=service, state=walk_event.state, events=walk_event.events
+                    service=service,
+                    state=walk_event.state,
+                    events=walk_event.events,
+                    source_state=walk_event.pre_state,
+                    submitted_actions=walk_event.actions,
                 )
+                if event_records is not None:
+                    event_records.extend(batches.values())
                 if service.temporal_observations:
                     for agent_id in walk_event.state.players:
                         assert_event_observations_are_entitled(
@@ -1025,6 +1057,7 @@ def _reconstruct_factory_records(
                 world_state=state,
                 game_map=game_map,
                 temporal_observations=service.temporal_observations,
+                temporal_observation_version=service.temporal_observation_version,
             )
             for player_id in sorted(state.players):
                 if state.players[player_id].alive:
@@ -1117,6 +1150,28 @@ def assert_packet_is_leak_clean(
     to close. Raises ``AssertionError`` on any leak.
     """
 
+    if context.temporal_observation_version == 2:
+        assert packet.temporal_observation_version == 2, (
+            "v2 snapshot version is missing or changed"
+        )
+        assert packet.tick == context.world_state.tick, (
+            "v2 snapshot tick differs from source state"
+        )
+        assert all(player.action is None for player in packet.visible_players), (
+            "v2 snapshots cannot carry action evidence"
+        )
+        assert not packet.moved_players and packet.self_state.own_kill is None, (
+            "v2 snapshots cannot repeat event evidence"
+        )
+        recipient = context.world_state.players[packet.agent_id]
+        assert (packet.self_state.room, packet.self_state.in_vent) == (
+            recipient.room,
+            recipient.in_vent,
+        ), "v2 self position differs from snapshot source state"
+    else:
+        assert packet.temporal_observation_version is None, (
+            "v2 snapshot requires explicit v2 scan context"
+        )
     packet_dump = cast(JsonValue, packet.model_dump(mode="json"))
     _assert_no_recursive_hidden_fields(packet_dump)
     _assert_no_role_bearing_values(packet_dump)

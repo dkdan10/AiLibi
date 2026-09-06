@@ -49,6 +49,10 @@ cleanup branch and its findings appendix, with subsequent correction notes and
 source-bound public-results measurements. Start at its
 [review index](review-2026-09-06/README.md).
 
+`deduction-candidate/` holds the unadopted evidence-timing, public-account and
+investigation follow-through, separate code and scenario reviews, and the next
+evaluation's prerequisites. Start at its [evidence index](deduction-candidate/README.md).
+
 ## The 2026-08-26 Wave-0 audit — [`review-2026-08-26/`](review-2026-08-26/README.md)
 
 The two-track pre-phase audit that grounds Phase 21: **A** gameplay on the

@@ -80,7 +80,14 @@ import os
 from pathlib import Path
 from typing import Annotated, Any, Final, Literal, NamedTuple, TextIO, TypeAlias
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictBool,
+    field_validator,
+    model_validator,
+)
 
 from orchestrator.experiment_config import (
     RecordedExperimentConfig,
@@ -108,7 +115,10 @@ from meetings.schemas import (
     PlayerId,
     VoteBallot,
 )
-from observation.version import temporal_observations_enabled
+from observation.version import (
+    temporal_observations_enabled,
+    temporal_observation_version as resolve_temporal_observation_version,
+)
 
 # The Task-18.10 impostor-answer lever, resolved LOCALLY instead of importing
 # ``agents.strategic.prompts.loader.impostor_roll_call_enabled``: the loader
@@ -229,6 +239,10 @@ def classify_action_dispositions(
     return tuple(dispositions)
 
 
+AgentFactoryKind: TypeAlias = Literal["scripted", "experimental", "custom"]
+TemporalObservationVersion: TypeAlias = Literal[1, 2]
+
+
 class ReplayEntry(BaseModel):
     """One per-tick replay record written by :meth:`ReplayLog.record_tick`.
 
@@ -248,8 +262,17 @@ class ReplayEntry(BaseModel):
     actions: tuple[dict[str, Any], ...]
     action_dispositions: tuple[ActionDisposition, ...] | None = None
     state_hash: str
-    temporal_observation_version: Literal[1] | None = None
+    temporal_observation_version: TemporalObservationVersion | None = None
     experiment_config: RecordedExperimentConfig | None = None
+    agent_factory_kind: AgentFactoryKind | None = None
+    substrate_flags: Mapping[str, StrictBool] | None = None
+
+    @field_validator("temporal_observation_version", mode="before")
+    @classmethod
+    def _temporal_version_is_integer(cls, value: object) -> object:
+        if value is not None and type(value) is not int:
+            raise ValueError("temporal observation versions must be integers")
+        return value
 
     @model_validator(mode="after")
     def _dispositions_cover_every_action(self) -> ReplayEntry:
@@ -296,6 +319,20 @@ class MeetingReplayEntry(BaseModel):
     prompt_versions: Mapping[str, str]
     state_hash_before: str
     state_hash_after: str
+    skip_confidence_threshold: float | None = Field(
+        default=None,
+        ge=0,
+        le=1,
+        allow_inf_nan=False,
+        exclude_if=lambda value: value is None,
+    )
+
+    @field_validator("skip_confidence_threshold", mode="before")
+    @classmethod
+    def _threshold_is_numeric(cls, value: object) -> object:
+        if value is not None and type(value) not in (int, float):
+            raise ValueError("skip confidence threshold must be numeric")
+        return value
 
 
 class AbortedMeetingReplayEntry(BaseModel):
@@ -562,8 +599,9 @@ class GameEndReplayEntry(BaseModel):
     # honors it (``api.replay_loader``) by refusing to reconstruct a stamped
     # replay under a DIFFERENT ambient substrate — no silent cross-substrate
     # replay.
-    substrate_flags: Mapping[str, bool] | None = None
+    substrate_flags: Mapping[str, StrictBool] | None = None
     experiment_config: RecordedExperimentConfig | None = None
+    agent_factory_kind: AgentFactoryKind | None = None
     # The tactical-policy provenance stamp (Task 15.9; DESIGN.md §11.4; audit
     # post-phase-14-ML-planning.md §7.2-7.3). Answers "which tactical policy
     # produced these bytes" the same way ``substrate_flags`` answers "which
@@ -651,7 +689,7 @@ def recorded_experiment_config(
     ends = [entry for entry in entries if isinstance(entry, GameEndReplayEntry)]
     if len(ends) > 1:
         raise ValueError("multiple terminal experiment configurations")
-    return validate_recorded_experiment_config(
+    config = validate_recorded_experiment_config(
         [
             entry.experiment_config
             for entry in entries
@@ -660,6 +698,18 @@ def recorded_experiment_config(
         terminal_config=ends[0].experiment_config if ends else None,
         terminal_present=bool(ends),
     )
+    if (
+        config is not None
+        and (
+            config.evidence_reasoning_version == 2
+            or config.public_account_version is not None
+        )
+        and recorded_temporal_observation_version(entries) != 2
+    ):
+        raise ValueError(
+            "new evidence and public accounts require temporal observations version 2"
+        )
+    return config
 
 
 def require_baseline_experiments(
@@ -703,7 +753,54 @@ def recorded_testimony_shapes(entries: Sequence[ReplayLogEntry]) -> bool:
     return versions == {True}
 
 
-def recorded_temporal_observations(entries: Sequence[ReplayLogEntry]) -> bool:
+def recorded_agent_factory_kind(
+    entries: Sequence[ReplayLogEntry],
+) -> AgentFactoryKind | None:
+    """Preserve unknown historical factories and reject conflicting current stamps."""
+    ticks = [
+        entry.agent_factory_kind for entry in entries if isinstance(entry, ReplayEntry)
+    ]
+    first = ticks[0] if ticks else None
+    if any(kind != first for kind in ticks):
+        raise ValueError("agent factory identity changes between tick rows")
+    for entry in entries:
+        if isinstance(entry, GameEndReplayEntry) and entry.agent_factory_kind != first:
+            raise ValueError("terminal agent factory identity disagrees with tick rows")
+    return first
+
+
+def recorded_substrate_flags(
+    entries: Sequence[ReplayLogEntry],
+) -> Mapping[str, bool] | None:
+    """Resolve current prefix stamps or a legacy footer without inventing missing data."""
+    ticks = [
+        entry.substrate_flags for entry in entries if isinstance(entry, ReplayEntry)
+    ]
+    first = ticks[0] if ticks else None
+
+    def comparable(flags: Mapping[str, bool] | None) -> dict[str, bool] | None:
+        if flags is None:
+            return None
+        # Historical stamps predate this default-OFF observation channel.
+        return {"temporal_observations": False, **flags}
+
+    if any(comparable(flags) != comparable(first) for flags in ticks):
+        raise ValueError("substrate configuration changes between tick rows")
+    ends = [
+        entry.substrate_flags
+        for entry in entries
+        if isinstance(entry, GameEndReplayEntry)
+    ]
+    if len(ends) > 1:
+        raise ValueError("multiple terminal substrate stamps")
+    if first is not None and ends and comparable(ends[0]) != comparable(first):
+        raise ValueError("terminal substrate configuration disagrees with tick rows")
+    return first if first is not None else (ends[0] if ends else None)
+
+
+def recorded_temporal_observation_version(
+    entries: Sequence[ReplayLogEntry],
+) -> TemporalObservationVersion | None:
     """Read and validate the evidence version, including interrupted prefixes."""
 
     versions = {
@@ -713,17 +810,18 @@ def recorded_temporal_observations(entries: Sequence[ReplayLogEntry]) -> bool:
     }
     if len(versions) > 1:
         raise ValueError("mixed temporal observation versions in one replay")
-    enabled = versions == {1}
-    for entry in entries:
-        if isinstance(entry, GameEndReplayEntry) and entry.substrate_flags is not None:
-            if (
-                bool(entry.substrate_flags.get("temporal_observations", False))
-                != enabled
-            ):
-                raise ValueError(
-                    "temporal observation version disagrees with substrate stamp"
-                )
-    return enabled
+    version = next(iter(versions)) if versions else None
+    flags = recorded_substrate_flags(entries)
+    if flags is not None and flags.get("temporal_observations", False) != (
+        version is not None
+    ):
+        raise ValueError("temporal observation version disagrees with substrate stamp")
+    return version
+
+
+def recorded_temporal_observations(entries: Sequence[ReplayLogEntry]) -> bool:
+    """Whether an instrument needs a version-aware temporal adapter."""
+    return recorded_temporal_observation_version(entries) is not None
 
 
 def require_legacy_observations(
@@ -1147,8 +1245,10 @@ class ReplayLog:
         tactical_policy_stamp: TacticalPolicyStamp | None = None,
         crew_tactical_policy_stamp: CrewTacticalPolicyStamp | None = None,
         temporal_observations: bool | None = None,
+        temporal_observation_version: TemporalObservationVersion | None = None,
         substrate_flags: Mapping[str, bool] | None = None,
         experiment_config: RecordedExperimentConfig | None = None,
+        agent_factory_kind: AgentFactoryKind | None = None,
     ) -> None:
         # ``tactical_policy_stamp`` is the recorder-supplied provenance stamp
         # (Task 15.9) written onto the ``game_over`` record by
@@ -1165,19 +1265,48 @@ class ReplayLog:
         # the pre-18.7 writer. Kept in its own DISTINCT field so a crew recording
         # can never wear the impostor champion's stamp (the conflation guard).
         self._crew_tactical_policy_stamp = crew_tactical_policy_stamp
-        self.temporal_observations = (
-            temporal_observations_enabled()
-            if temporal_observations is None
-            else temporal_observations
-        )
+        self._handle: TextIO | None = None
+        if temporal_observation_version is not None and (
+            type(temporal_observation_version) is not int
+            or temporal_observation_version not in (1, 2)
+        ):
+            raise ValueError("unsupported temporal observation version")
+        version = temporal_observation_version
+        if version is None:
+            version = (
+                resolve_temporal_observation_version()
+                if temporal_observations is None
+                else (1 if temporal_observations else None)
+            )
+        if temporal_observations is not None and (
+            type(temporal_observations) is not bool
+            or temporal_observations != (version is not None)
+        ):
+            raise ValueError("temporal observation switch disagrees with version")
+        self.temporal_observation_version = version
+        self.temporal_observations = version is not None
         self._substrate_flags = dict(
             substrate_flag_snapshot() if substrate_flags is None else substrate_flags
         )
+        if (
+            substrate_flags is not None
+            and self._substrate_flags.get("temporal_observations", False)
+            != self.temporal_observations
+        ):
+            raise ValueError(
+                "temporal observation version disagrees with supplied substrate_flags"
+            )
         self._substrate_flags["temporal_observations"] = self.temporal_observations
         self.experiment_config = normalize_experiment_config(experiment_config)
+        if agent_factory_kind is not None and agent_factory_kind not in (
+            "scripted",
+            "experimental",
+            "custom",
+        ):
+            raise ValueError("unknown agent factory kind")
+        self.agent_factory_kind = agent_factory_kind
         # Assigned first so __del__ is safe even if construction raises below
         # (e.g. AlreadyExistsError on an existing path).
-        self._handle: TextIO | None = None
         if path.exists():
             if not force:
                 raise self.AlreadyExistsError(
@@ -1234,8 +1363,11 @@ class ReplayLog:
             entry["action_dispositions"] = list(
                 classify_action_dispositions(actions, events)
             )
-        if self.temporal_observations:
-            entry["temporal_observation_version"] = 1
+        if self.temporal_observation_version is not None:
+            entry["temporal_observation_version"] = self.temporal_observation_version
+        if self.agent_factory_kind is not None:
+            entry["agent_factory_kind"] = self.agent_factory_kind
+            entry["substrate_flags"] = self._substrate_flags
         if self.experiment_config is not None:
             entry["experiment_config"] = self.experiment_config.model_dump(mode="json")
         self._append(entry)
@@ -1249,6 +1381,7 @@ class ReplayLog:
         prompt_versions: Mapping[str, str],
         state_hash_before: str,
         state_hash_after: str,
+        skip_confidence_threshold: float | None = None,
     ) -> None:
         """Persist one resolved meeting (DESIGN.md §11.4).
 
@@ -1272,6 +1405,7 @@ class ReplayLog:
             prompt_versions=dict(prompt_versions),
             state_hash_before=state_hash_before,
             state_hash_after=state_hash_after,
+            skip_confidence_threshold=skip_confidence_threshold,
         )
         self._append(entry.model_dump(mode="json"))
 
@@ -1313,12 +1447,15 @@ class ReplayLog:
             reason=reason,
             substrate_flags=self._substrate_flags,
             experiment_config=self.experiment_config,
+            agent_factory_kind=self.agent_factory_kind,
             tactical_policy=self._tactical_policy_stamp,
             crew_tactical_policy=self._crew_tactical_policy_stamp,
         )
         payload = entry.model_dump(mode="json")
         if entry.experiment_config is None:
             del payload["experiment_config"]
+        if entry.agent_factory_kind is None:
+            del payload["agent_factory_kind"]
         # Byte-identity carve-out for the tactical-policy stamp (Task 15.9): an
         # ABSENT stamp is the FSM default and MUST record byte-identically to the
         # pre-15.9 game_over row, so the optional field is OMITTED from the JSON

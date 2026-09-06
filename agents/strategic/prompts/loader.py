@@ -652,7 +652,10 @@ def crewmate_report_prompt(
     at_body: bool = False,
     testimony_shapes: bool = False,
     environment: Environment | None = None,
+    template_name: str | None = None,
     map_card: str = "",
+    public_account_version: Literal[1] | None = None,
+    attributed_testimony_version: Literal[1] | None = None,
 ) -> str:
     """Render the Phase-1 crewmate report prompt (DESIGN.md §5.3).
 
@@ -702,8 +705,11 @@ def crewmate_report_prompt(
     inputs = _render_inputs_for(render_inputs, map_card=map_card)
     return (
         (environment or _ENV)
-        .get_template(CREWMATE_REPORT_TEMPLATE)
+        .get_template(template_name or CREWMATE_REPORT_TEMPLATE)
         .render(
+            public_account_version=public_account_version,
+            attributed_testimony_version=attributed_testimony_version,
+            is_impostor=False,
             agent_id=agent_id,
             current_tick=current_tick,
             meeting_trigger=meeting_trigger,
@@ -740,6 +746,8 @@ def impostor_report_prompt(
     environment: Environment | None = None,
     template_name: str | None = None,
     map_card: str = "",
+    public_account_version: Literal[1] | None = None,
+    attributed_testimony_version: Literal[1] | None = None,
 ) -> str:
     """Render the Phase-1 impostor report prompt (DESIGN.md §4.5, §5.3).
 
@@ -802,6 +810,9 @@ def impostor_report_prompt(
         (environment or _ENV)
         .get_template(resolved_template)
         .render(
+            public_account_version=public_account_version,
+            attributed_testimony_version=attributed_testimony_version,
+            is_impostor=True,
             agent_id=agent_id,
             current_tick=current_tick,
             meeting_trigger=meeting_trigger,
@@ -842,6 +853,8 @@ def accusation_round_prompt(
     environment: Environment | None = None,
     template_name: str | None = None,
     map_card: str = "",
+    public_account_version: Literal[1] | None = None,
+    attributed_testimony_version: Literal[1] | None = None,
 ) -> str:
     """Render a reactive ``reply`` / ``opt_in`` turn prompt (DESIGN.md §5.2).
 
@@ -957,6 +970,8 @@ def accusation_round_prompt(
         (environment or _ENV)
         .get_template(resolved_template)
         .render(
+            public_account_version=public_account_version,
+            attributed_testimony_version=attributed_testimony_version,
             agent_id=agent_id,
             rendered_memory=rendered_memory,
             transcript=transcript,
@@ -997,7 +1012,10 @@ def vote_ballot_prompt(
     testimony_ledger: MeetingTestimonyLedger | None = None,
     testimony_shapes: bool = False,
     environment: Environment | None = None,
+    template_name: str | None = None,
     map_card: str = "",
+    public_account_version: Literal[1] | None = None,
+    attributed_testimony_version: Literal[1] | None = None,
 ) -> str:
     """Render a vote-ballot prompt (DESIGN.md §5.5).
 
@@ -1050,8 +1068,10 @@ def vote_ballot_prompt(
     inputs = _render_inputs_for(render_inputs, map_card=map_card)
     return (
         (environment or _ENV)
-        .get_template(VOTE_BALLOT_TEMPLATE)
+        .get_template(template_name or VOTE_BALLOT_TEMPLATE)
         .render(
+            public_account_version=public_account_version,
+            attributed_testimony_version=attributed_testimony_version,
             voter_id=voter_id,
             rendered_memory=rendered_memory,
             transcript=transcript,
@@ -1170,12 +1190,118 @@ def _require_testimony_shapes_bodies(
             )
 
 
+def public_account_prompt_versions(
+    prompt_set: str,
+    *,
+    public_account_version: Literal[1] | None = None,
+    attributed_testimony_version: Literal[1] | None = None,
+) -> dict[str, str] | None:
+    """Name the exact independent account arms; OFF keeps the existing registry."""
+
+    for value in (public_account_version, attributed_testimony_version):
+        if value is not None and (type(value) is not int or value != 1):
+            raise ValueError("unsupported public account version")
+    if public_account_version is None and attributed_testimony_version is None:
+        return None
+    if prompt_set != OPERATIONAL_BASELINE_PROMPT_SET:
+        raise ValueError("public account profiles require qwen3_6_27b prompts")
+    suffix = f"v1.accounts{public_account_version or 0}.attributed{attributed_testimony_version or 0}"
+    return {
+        key: f"{key}_accounts.{prompt_set}.{suffix}"
+        for key in (
+            "crewmate_report",
+            "impostor_report",
+            "accusation_round",
+            "vote_ballot",
+        )
+    }
+
+
+def validate_public_account_renderers(
+    *,
+    crewmate_report: ReportPromptRenderer,
+    impostor_report: ReportPromptRenderer,
+    statement: StatementPromptRenderer,
+    vote: VotePromptRenderer,
+    prompt_versions: Mapping[str, str],
+    public_account_version: Literal[1] | None = None,
+    attributed_testimony_version: Literal[1] | None = None,
+) -> None:
+    """Bind a new account profile to the actual bundled rendering callables.
+
+    A caller-supplied version label cannot certify an arbitrary renderer. New
+    account profiles require the explicit loader bindings, while OFF preserves
+    the historical custom-renderer extension point. This validates construction
+    inputs; it is not a sandbox against later monkeypatching of Python code.
+    """
+
+    expected = public_account_prompt_versions(
+        OPERATIONAL_BASELINE_PROMPT_SET,
+        public_account_version=public_account_version,
+        attributed_testimony_version=attributed_testimony_version,
+    )
+    if expected is None:
+        return
+    if dict(prompt_versions) != expected:
+        raise ValueError("public account renderer versions disagree with the profile")
+    bindings: tuple[tuple[str, object, object], ...] = (
+        ("crewmate_report", crewmate_report, crewmate_report_prompt),
+        ("impostor_report", impostor_report, impostor_report_prompt),
+        ("accusation_round", statement, accusation_round_prompt),
+        ("vote_ballot", vote, vote_ballot_prompt),
+    )
+    for key, renderer, wrapper in bindings:
+        if (
+            type(renderer) is not partial
+            or renderer.func is not wrapper
+            or renderer.args
+        ):
+            raise ValueError(f"public account {key} requires the bound loader renderer")
+        keywords = renderer.keywords
+        if (
+            set(keywords)
+            != {
+                "environment",
+                "template_name",
+                "map_card",
+                "public_account_version",
+                "attributed_testimony_version",
+            }
+            or keywords["template_name"] != f"{key}_accounts.j2"
+            or keywords["public_account_version"] != public_account_version
+            or type(keywords["public_account_version"])
+            is not type(public_account_version)
+            or keywords["attributed_testimony_version"] != attributed_testimony_version
+            or type(keywords["attributed_testimony_version"])
+            is not type(attributed_testimony_version)
+        ):
+            raise ValueError(
+                f"public account {key} renderer binding disagrees with the profile"
+            )
+        environment = keywords["environment"]
+        if (
+            type(environment) is not Environment
+            or type(environment.loader) is not FileSystemLoader
+            or environment.loader.searchpath
+            != [str(_PROMPTS_ROOT / OPERATIONAL_BASELINE_PROMPT_SET)]
+            or environment.undefined is not StrictUndefined
+            or environment.autoescape is not False
+            or not environment.trim_blocks
+            or not environment.lstrip_blocks
+        ):
+            raise ValueError(
+                f"public account {key} requires the bundled Qwen3.6 environment"
+            )
+
+
 def build_prompt_renderers(
     prompt_set: str | None = None,
     *,
     root: Path = _PROMPTS_ROOT,
     env: Mapping[str, str] | None = None,
     map_card: str = CANONICAL_MAP_CARD,
+    public_account_version: Literal[1] | None = None,
+    attributed_testimony_version: Literal[1] | None = None,
 ) -> PromptRenderers:
     """Build the four renderers bound to a single resolved prompt set.
 
@@ -1218,6 +1344,27 @@ def build_prompt_renderers(
     reproduce its recordings once the card's own format has moved.
     """
 
+    account_versions = public_account_prompt_versions(
+        resolve_prompt_set(prompt_set, env=env),
+        public_account_version=public_account_version,
+        attributed_testimony_version=attributed_testimony_version,
+    )
+    if account_versions is not None:
+        source = os.environ if env is None else env
+        for name in (
+            "AILIBI_REPORTER_REASONING",
+            "AILIBI_TESTIMONY_SHAPES",
+            "AILIBI_IMPOSTOR_ROLL_CALL",
+            "AILIBI_CORROBORATION_DISCIPLINE",
+        ):
+            if source.get(name, "").strip().lower() not in {
+                "",
+                "0",
+                "false",
+                "no",
+                "off",
+            }:
+                raise ValueError(f"public account profiles cannot overlap {name}")
     environment = build_environment(prompt_set, root=root, env=env)
     variant = impostor_roll_call_enabled(env)
     shapes = testimony_shapes_enabled(env)
@@ -1247,6 +1394,43 @@ def build_prompt_renderers(
                 CREWMATE_REPORT_TEMPLATE,
                 ACCUSATION_ROUND_TEMPLATE,
                 VOTE_BALLOT_TEMPLATE,
+            ),
+        )
+    if account_versions is not None:
+        for key in account_versions:
+            environment.get_template(f"{key}_accounts.j2")
+        return PromptRenderers(
+            crewmate_report=partial(
+                crewmate_report_prompt,
+                environment=environment,
+                template_name="crewmate_report_accounts.j2",
+                map_card=map_card,
+                public_account_version=public_account_version,
+                attributed_testimony_version=attributed_testimony_version,
+            ),
+            impostor_report=partial(
+                impostor_report_prompt,
+                environment=environment,
+                template_name="impostor_report_accounts.j2",
+                map_card=map_card,
+                public_account_version=public_account_version,
+                attributed_testimony_version=attributed_testimony_version,
+            ),
+            statement=partial(
+                accusation_round_prompt,
+                environment=environment,
+                template_name="accusation_round_accounts.j2",
+                map_card=map_card,
+                public_account_version=public_account_version,
+                attributed_testimony_version=attributed_testimony_version,
+            ),
+            vote=partial(
+                vote_ballot_prompt,
+                environment=environment,
+                template_name="vote_ballot_accounts.j2",
+                map_card=map_card,
+                public_account_version=public_account_version,
+                attributed_testimony_version=attributed_testimony_version,
             ),
         )
     return PromptRenderers(
@@ -1303,5 +1487,7 @@ __all__ = [
     "impostor_roll_call_enabled",
     "render_map_card",
     "resolve_prompt_set",
+    "public_account_prompt_versions",
+    "validate_public_account_renderers",
     "vote_ballot_prompt",
 ]

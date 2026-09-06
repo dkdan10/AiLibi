@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from api.replay_loader import ReplayLoader
 from engine.world import load_canonical_map
@@ -112,7 +113,16 @@ def test_unreadable_cost_is_explicitly_unknown(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize(
     "mutation",
-    ["none", "winner", "tick", "status", "identity", "duplicate", "missing_source"],
+    [
+        "none",
+        "winner",
+        "tick",
+        "status",
+        "identity",
+        "duplicate",
+        "duplicate_groups_mismatch",
+        "missing_source",
+    ],
 )
 def test_api_rebinds_serialized_verification_to_actual_recording(
     tmp_path: Path,
@@ -149,11 +159,19 @@ def test_api_rebinds_serialized_verification_to_actual_recording(
         game["outcome_verified"] = False
     elif mutation == "identity":
         game["replay_ref"] = "replay-seed-99.jsonl"
-    elif mutation == "duplicate":
+    elif mutation in ("duplicate", "duplicate_groups_mismatch"):
         raw["report"]["games"].append(dict(game))
+        if mutation == "duplicate":
+            # Keep the report shape consistent so this tests source identity,
+            # independently of the aggregate-membership schema guard.
+            raw["report"]["provenance_groups"][0]["game_ids"].append(game["game_id"])
     elif mutation == "missing_source":
         replay.unlink()
     (tmp_path / "tournament-eval-report.json").write_text(json.dumps(raw))
+    if mutation == "duplicate_groups_mismatch":
+        with pytest.raises(ValidationError, match="provenance groups disagree"):
+            ReplayLoader(tmp_path).tournament_report()
+        return
     served = ReplayLoader(tmp_path).tournament_report()
     assert all(
         item.outcome_verified == (mutation == "none") for item in served.report.games
@@ -162,3 +180,9 @@ def test_api_rebinds_serialized_verification_to_actual_recording(
     assert served.vote_correctness == report.vote_correctness
     if mutation == "status":
         assert served.report.games[0].completion_status == "completed"
+    if mutation == "duplicate":
+        assert served.report.provenance_groups is not None
+        assert served.report.provenance_groups[0].game_ids == (
+            game["game_id"],
+            game["game_id"],
+        )

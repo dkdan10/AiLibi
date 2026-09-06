@@ -1127,6 +1127,7 @@ def apply_observation_rules(
     observation: ObservationPacket,
     previous_visible_bodies: AbstractSet[BodyId],
     recent_co_presence: Mapping[RoomId, Sequence[tuple[int, PlayerId]]],
+    known_dead_by: Mapping[str, int] | None = None,
 ) -> BeliefState:
     """Apply DESIGN.md §6.3 rule-based belief updates (Rules 1 and 4).
 
@@ -1182,6 +1183,10 @@ def apply_observation_rules(
             for tick, player_id in recent_co_presence.get(body.room, ())
             if 0 <= observation.tick - tick <= BODY_PROXIMITY_WINDOW_TICKS
             and player_id != body.victim_id
+            and (
+                known_dead_by is None
+                or tick < known_dead_by.get(body.victim_id, observation.tick + 1)
+            )
         }
         for player_id in sorted(co_present):
             # Task 16.3: the Rule-1 proximity pin is the grounded HARD

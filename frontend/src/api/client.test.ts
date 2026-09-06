@@ -70,7 +70,7 @@ describe("highlight source freshness", () => {
 });
 
 describe("the view-model version gate", () => {
-  it.each(["2", VIEW_MODEL_VERSION])("reads compatible audio in version %s", async (version) => {
+  it.each(["2", "3", VIEW_MODEL_VERSION])("reads compatible audio in version %s", async (version) => {
     const replay = {
       ...stampedReplay(version),
       ticks: [{ agent_states: [
@@ -82,7 +82,7 @@ describe("the view-model version gate", () => {
     await expect(getReplay("headless-seed-0")).resolves.toEqual(replay);
   });
 
-  it.each(["2", VIEW_MODEL_VERSION])("rejects unsupported audio in version %s", async (version) => {
+  it.each(["2", "3", VIEW_MODEL_VERSION])("rejects unsupported audio in version %s", async (version) => {
     stubFetch(jsonResponse({
       ...stampedReplay(version),
       ticks: [{ agent_states: [{ visibility: {

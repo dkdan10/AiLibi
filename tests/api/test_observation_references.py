@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import shutil
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -133,3 +134,72 @@ def test_old_memory_payload_has_no_manufactured_references(
     )
     old = original.model_dump(exclude={"observation_references"})
     assert AgentMemoryView.model_validate(old).observation_references == ()
+
+
+def test_v2_event_order_does_not_invent_co_presence_from_later_events() -> None:
+    events = tuple(
+        EpisodicEvent(
+            tick=6,
+            type="saw_player",
+            payload={
+                "player_id": player,
+                "room": "ADMIN",
+                "action": "task",
+                "source_tick": 6,
+                "observation_phase": "event",
+                "observation_order": order,
+                "observer_room": "ADMIN",
+                "observer_in_vent": False,
+            },
+            provenance="observed",
+            observation_id=f"opaque-{999 + order}",
+        )
+        for order, player in enumerate(("p-2", "p-3"))
+    )
+    (reference,) = observation_references(
+        observer_id="p-1",
+        cited_ids=("opaque-999",),
+        events=events,
+        scene_ticks={"opaque-999": 6},
+    )
+    assert reference.text == "p-1 saw p-2 in ADMIN."
+    assert (
+        reference.source_tick,
+        reference.observation_phase,
+        reference.observation_order,
+    ) == (6, "event", 0)
+    assert (reference.observer_room, reference.observer_in_vent) == ("ADMIN", False)
+    snapshots = tuple(
+        replace(
+            event,
+            payload={
+                **event.payload,
+                "observation_phase": "snapshot",
+                "observation_order": None,
+            },
+        )
+        for event in events
+    )
+    (together,) = observation_references(
+        observer_id="p-1",
+        cited_ids=("opaque-999",),
+        events=snapshots,
+        scene_ticks={"opaque-999": 5},
+    )
+    assert together.text == "p-1 saw p-2 in ADMIN with p-3."
+
+
+def test_task_attempt_account_does_not_become_a_completion_certificate() -> None:
+    from api.replay_loader import _observation_claim_view
+    from meetings.schemas import TaskActivityAccount
+
+    claim = TaskActivityAccount(
+        type="task_activity",
+        task_id="upload_logs",
+        room="ADMIN",
+        from_tick=2,
+        to_tick=3,
+    )
+    projected = _observation_claim_view(claim)
+    assert projected.model_dump() == claim.model_dump()
+    assert projected.type != "completed_task"

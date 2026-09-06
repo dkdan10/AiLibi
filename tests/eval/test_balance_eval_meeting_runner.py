@@ -37,7 +37,7 @@ from eval.balance_eval import run_tournament_eval
 from eval.report_schema import TournamentReport
 from llm.budget import GameBudget
 from meetings.manager import MeetingTrigger
-from meetings.schemas import MeetingResult, MeetingTranscript
+from meetings.schemas import MeetingResult, MeetingTranscript, VoteBallot
 from observation.action_intent import ActionIntent
 from observation.packet import ObservationPacket
 from observation.public_map import PublicMapView
@@ -121,18 +121,31 @@ class _CannedSkipRunner:
         agents: Mapping[PlayerId, AgentInterface],
     ) -> MeetingArtifacts:
         self.received.append((meeting_id, trigger))
-        result = _skip_result(meeting_id, trigger)
+        result = _skip_result(meeting_id, trigger, state)
         return MeetingArtifacts(result=result, llm_calls=(), prompt_versions={})
 
 
-def _skip_result(meeting_id: str, trigger: MeetingTrigger) -> MeetingResult:
+def _skip_result(
+    meeting_id: str, trigger: MeetingTrigger, state: WorldState
+) -> MeetingResult:
     return MeetingResult(
         meeting_id=meeting_id,
         triggered_by=trigger.triggered_by,
         trigger_tick=trigger.trigger_tick,
         outcome="SKIPPED",
         ejected_player_id=None,
-        ballots=(),
+        ballots=tuple(
+            VoteBallot(
+                voter=pid,
+                target="SKIP",
+                confidence=1.0,
+                primary_reason_id=None,
+                considered_alternatives=(),
+                rationale_text="Scripted abstention for the runner dispatch control.",
+            )
+            for pid, player in sorted(state.players.items())
+            if player.alive
+        ),
         contradictions=(),
         transcript=MeetingTranscript(),
     )
@@ -256,6 +269,7 @@ def test_meeting_runner_factory_invoked_once_and_produced_runner_installed(
     (game,) = report.games
     (meeting,) = game.meetings
     assert meeting.outcome == "SKIPPED"
+    assert {ballot.voter for ballot in meeting.ballots} == {"p-1", "p-3", "p-4"}
 
 
 def test_meeting_runner_factory_fresh_runner_per_seed(

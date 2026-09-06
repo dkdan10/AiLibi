@@ -8,9 +8,22 @@ means the historical defaults; an enabled config must agree across a recording.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, StrictBool, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    GetJsonSchemaHandler,
+    SerializerFunctionWrapHandler,
+    StrictBool,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
+from pydantic.json_schema import JsonSchemaValue
+from pydantic_core import CoreSchema
+
+from meetings.schemas import _core_schema_without_serializer
 
 
 class RecordedExperimentConfig(BaseModel):
@@ -18,7 +31,7 @@ class RecordedExperimentConfig(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    format_version: Literal[1] = 1
+    format_version: Literal[1, 2] = 1
     redistribution_policy: Literal["lowest_id", "least_remaining_work"] = "lowest_id"
     meeting_reset: Literal["preserve", "hub_with_grace"] = "preserve"
     crew_idle_policy: Literal["hub_wait", "patrol", "accompany"] = "hub_wait"
@@ -26,13 +39,17 @@ class RecordedExperimentConfig(BaseModel):
     post_meeting_retarget: StrictBool = False
     self_report: StrictBool = False
     sabotage_threshold: Literal["six_sevenths", "two_thirds"] = "six_sevenths"
-    evidence_reasoning_version: Literal[1] | None = None
+    evidence_reasoning_version: Literal[1, 2] | None = None
     bounded_rebuttal_version: Literal[1] | None = None
+    public_account_version: Literal[1] | None = None
+    attributed_testimony_version: Literal[1] | None = None
 
     @field_validator(
         "format_version",
         "evidence_reasoning_version",
         "bounded_rebuttal_version",
+        "public_account_version",
+        "attributed_testimony_version",
         mode="before",
     )
     @classmethod
@@ -41,11 +58,42 @@ class RecordedExperimentConfig(BaseModel):
             raise ValueError("experiment versions must be integer version numbers")
         return value
 
+    @model_validator(mode="after")
+    def _new_features_require_v2(self) -> RecordedExperimentConfig:
+        if self.format_version == 1 and (
+            self.evidence_reasoning_version == 2
+            or self.public_account_version is not None
+            or self.attributed_testimony_version is not None
+        ):
+            raise ValueError(
+                "new evidence and account profiles require experiment format version 2"
+            )
+        return self
+
+    @model_serializer(mode="wrap")
+    def _preserve_version_one_bytes(
+        self, handler: SerializerFunctionWrapHandler
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = handler(self)
+        if self.format_version == 1:
+            del payload["public_account_version"]
+            del payload["attributed_testimony_version"]
+        return payload
+
+    @classmethod
+    def __get_pydantic_json_schema__(
+        cls, core_schema: CoreSchema, handler: GetJsonSchemaHandler
+    ) -> JsonSchemaValue:
+        """Retain typed fields in serialization schemas despite omitted v1 defaults."""
+        return handler(_core_schema_without_serializer(core_schema))
+
     @property
     def is_default(self) -> bool:
         """Whether a writer must omit this configuration to retain old bytes."""
 
-        return self == RecordedExperimentConfig()
+        return (
+            self.model_copy(update={"format_version": 1}) == RecordedExperimentConfig()
+        )
 
     @property
     def has_tactical_changes(self) -> bool:

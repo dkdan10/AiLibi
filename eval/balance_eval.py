@@ -76,6 +76,7 @@ from eval.report_schema import (
     GameReport,
     MeetingReport,
     TournamentReport,
+    build_provenance_groups,
 )
 from llm.budget import GameBudget
 from llm.provider import extract_parse_failure
@@ -102,7 +103,10 @@ from orchestrator.replay import (
     TacticalPolicyStamp,
     compute_cost_usd,
     read_all_entries,
+    recorded_agent_factory_kind,
     recorded_completion_status,
+    recorded_experiment_config,
+    recorded_substrate_flags,
 )
 from orchestrator.replay_integrity import ReplayIntegrityError
 from orchestrator.scheduler import TickScheduler
@@ -980,6 +984,7 @@ def build_tournament_report(
         kill_gifted_wins=kill_gifted_wins,
         instances_dropped_total=instances_dropped_total,
         mean_instances_complete_at_win=mean_complete,
+        provenance_groups=build_provenance_groups(games),
     )
 
 
@@ -1121,6 +1126,11 @@ def _game_report_from_replay(
         kill_gifted=kill_gifted,
         instances_dropped=instances_dropped,
         instances_complete_at_win=instances_complete_at_win,
+        agent_factory_kind=recorded_agent_factory_kind(entries),
+        experiment_config=recorded_experiment_config(entries),
+        substrate_flags=recorded_substrate_flags(entries),
+        tactical_policy=end.tactical_policy if end is not None else None,
+        crew_tactical_policy=end.crew_tactical_policy if end is not None else None,
     )
 
 
@@ -1196,6 +1206,7 @@ def _meeting_report_from_entry(
         ballots=entry.ballots,
         contradictions=entry.contradictions,
         llm_calls=entry.llm_calls,
+        skip_confidence_threshold=entry.skip_confidence_threshold,
     )
 
 

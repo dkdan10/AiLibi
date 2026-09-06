@@ -131,8 +131,9 @@ runs; missing means legacy, conflicts fail and unsupported instruments refuse ON
 Complete model-facing body-ID privacy remains gated: legacy OFF opening prompts
 still expose internal body IDs until adoption. Typed packet handles are repaired
 unconditionally. The current audio wire allows only global sabotage alarms.
-Spectator version 3 explicitly reads compatible version-2 audio and rejects
-unsupported cues. The historical learned-vector audio position stays reserved zero.
+Spectator version 4 adds public task-activity accounts and reads compatible
+version-2/3 bundles explicitly, rejecting unsupported audio cues. The historical
+learned-vector audio position stays reserved zero.
 
 [The observation contract](observation-contract.md) defines entitlement, clocks,
 citations and compatibility. `api/observation_references.py` projects stable
@@ -142,17 +143,33 @@ citations and exact spectator scene frames within the privileged-reader boundary
 
 `orchestrator/experiment_config.py` defines a closed immutable configuration for
 redistribution, finished-crew behavior, vent exits, meeting follow-through,
-self-report, sabotage timing, coherent reset and two meeting-evidence profiles.
+self-report, sabotage timing, coherent reset and independently selected evidence,
+reply, public-account and attributed-testimony profiles.
 Default configuration is omitted from recordings. Enabled tick and game-over stamps
 must agree; unknown versions fail. The orchestrator passes narrow engine-free
 options to engine and agent functions.
 
-`meetings/evidence_profile.py` binds context/reply versions before play.
+`meetings/evidence_profile.py` binds those versions before play. New account
+profiles use experiment format 2 and their own prompt identities, preserving
+version-1 renderings. Temporal version 2 distinguishes snapshots before actions
+from observer-local event order, records actual task attempts and bounds travel
+across explicitly public regrouping. No observation ID encodes trusted timing.
 `meetings/rebuttal.py` selects at most one additional reply.
 `agents/memory/evidence_context.py` derives public death bounds and conditional
 walking feasibility from the observer's own records and public topology.
+`meetings/public_accounts.py` checks public transcript structure and conditional
+walking feasibility without consulting other speakers' private observations.
+Attributed testimony retains its speaker and does not become first-hand proof.
 `engine/meeting_reset.py` owns the reset transition. These helpers have actual
 callers and semantic controls; their experiments remain OFF and unadopted.
+
+New recordings stamp actual agent-factory identity and configuration on prefixes
+as well as completed outcomes. Strict readers validate the living ballot roster,
+legal targets and the recorded confidence cutoff before applying an outcome.
+Historical missing identity stays unknown. Report and public-summary groups keep
+distinct recorded configurations visible; served report identity is rebound to
+the actual verified source. Outcome certification does not certify historical
+metric cells or billing completeness.
 
 ### Current model evidence
 
