@@ -44,6 +44,11 @@ payloads, loading, beliefs, and concurrent cache misses during cleanup. Each
 artifact identifies its source and measurement scope; local timings are not a
 deployment capacity claim.
 
+`review-2026-09-06/` preserves the owner's independent Claude review of the
+cleanup branch and its findings appendix, with subsequent correction notes and
+source-bound public-results measurements. Start at its
+[review index](review-2026-09-06/README.md).
+
 ## The 2026-08-26 Wave-0 audit — [`review-2026-08-26/`](review-2026-08-26/README.md)
 
 The two-track pre-phase audit that grounds Phase 21: **A** gameplay on the
