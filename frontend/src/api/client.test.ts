@@ -1,21 +1,5 @@
-// Client contract tests (Task 19.24): the runtime view-model version gate.
-//
-// WHY THIS FILE EXISTS. `getJson` ends in `data as T` — a compile-time claim
-// about bytes nobody validated. That is fine for a shape the server and this
-// build agree on, and useless the moment they do not: a server on a different
-// view-model contract answers 200 with a payload that satisfies no invariant the
-// components rely on, and the UI mis-renders it silently. The generated
-// `VIEW_MODEL_VERSION` (from `api.schemas.VIEW_MODEL_VERSION`, emitted by
-// `scripts/gen_frontend_types.py`) is what the client checks against, and a
-// mismatch must FAIL LOUDLY rather than flow into a cast.
-//
-// The gate is only worth its line count if it is executable, so these cases
-// drive the real `getJson` path through a stubbed `fetch` — a stubbed CLIENT
-// would prove nothing about the client.
-//
-// WHY NO DOM: `fetch`, `Response` and the client are all plain values; nothing
-// here renders. `vitest.config.ts` runs `environment: "node"` for exactly this
-// reason.
+// Exercise actual client reads through fetch: supported current/historical
+// contracts, refused audio, and distinct transport failures. No DOM is needed.
 
 import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
@@ -31,6 +15,7 @@ import {
   getReplay,
   getRubric,
   getSets,
+  getTick,
 } from "./client";
 
 /** A 200 carrying `body` as JSON — what a healthy API answers with. */
@@ -85,6 +70,46 @@ describe("highlight source freshness", () => {
 });
 
 describe("the view-model version gate", () => {
+  it.each(["2", VIEW_MODEL_VERSION])("reads compatible audio in version %s", async (version) => {
+    const replay = {
+      ...stampedReplay(version),
+      ticks: [{ agent_states: [
+        { visibility: null },
+        { visibility: { audible_events: [{ kind: "sabotage_alarm", room: null }] } },
+      ] }],
+    };
+    stubFetch(jsonResponse(replay));
+    await expect(getReplay("headless-seed-0")).resolves.toEqual(replay);
+  });
+
+  it.each(["2", VIEW_MODEL_VERSION])("rejects unsupported audio in version %s", async (version) => {
+    stubFetch(jsonResponse({
+      ...stampedReplay(version),
+      ticks: [{ agent_states: [{ visibility: {
+        audible_events: [{ kind: "vent_use_heard", room: "ADMIN" }],
+      } }] }],
+    }));
+    await expect(getReplay("headless-seed-0")).rejects.toThrow("Unsupported audio cue");
+  });
+
+  it.each([
+    { kind: "vent_use_heard", room: "ADMIN" },
+    { kind: "invented_alarm", room: null },
+    { kind: "sabotage_alarm", room: "ADMIN" },
+    null,
+  ])("checks direct unstamped tick audio: %j", async (cue) => {
+    stubFetch(jsonResponse({ agent_states: [{ visibility: { audible_events: [cue] } }] }));
+    await expect(getTick("headless-seed-0", 2)).rejects.toThrow("Unsupported audio cue");
+  });
+
+  it("accepts a direct tick with the real global alarm", async () => {
+    const tick = { agent_states: [{ visibility: { audible_events: [
+      { kind: "sabotage_alarm", room: null },
+    ] } }] };
+    stubFetch(jsonResponse(tick));
+    await expect(getTick("headless-seed-0", 2)).resolves.toEqual(tick);
+  });
+
   it("rejects a payload stamped with a different contract version", async () => {
     stubFetch(jsonResponse(stampedReplay("99-from-the-future")));
 

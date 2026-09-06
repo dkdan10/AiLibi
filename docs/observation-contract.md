@@ -41,7 +41,9 @@ decision; the packet repair alone does not establish complete model privacy.
 `eval/leak_scan.py` independently checks packet visibility, body identity,
 audible entitlement and source-event claims. Planted tests cover invented,
 missing, duplicated and misattributed evidence; runtime/reconstruction tests
-cover temporal ordering and exact memory parity. `vent_use_heard` remains an
-accepted schema variant for historical inputs, but the current producer emits
-only the active global alarm. Removing that dead vocabulary is a separate
-coupled-consumer task.
+cover temporal ordering and exact memory parity. Audio carries only the active
+global alarm. The duplicate vent cue and its consumers are retired; unsupported
+historical cues are refused. Spectator version 3 narrows this vocabulary and
+explicitly reads version-2 payloads with compatible audio, including direct tick
+requests. Frozen encoder versions keep the former cue's position as a reserved
+zero so their weights and dimensions remain valid.

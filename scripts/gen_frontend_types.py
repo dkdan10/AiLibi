@@ -338,10 +338,8 @@ def _render_version_constant() -> str:
     return (
         "// The view-model contract version (`api.schemas.VIEW_MODEL_VERSION`,\n"
         "// DESIGN.md §7) the server stamps on every payload that carries one.\n"
-        "// `src/api/client.ts` REJECTS a response whose `viewModelVersion`\n"
-        "// differs from this, so a drifted contract fails loudly at the seam\n"
-        "// instead of mis-rendering; client and server can only move together,\n"
-        "// through this generated line.\n"
+        "// `src/api/client.ts` rejects unsupported versions and checks the\n"
+        "// explicitly compatible historical version's audio before use.\n"
         f"export const VIEW_MODEL_VERSION = {_ts_string_literal(VIEW_MODEL_VERSION)};"
     )
 

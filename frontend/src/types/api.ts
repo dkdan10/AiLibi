@@ -15,11 +15,9 @@
 
 // The view-model contract version (`api.schemas.VIEW_MODEL_VERSION`,
 // DESIGN.md §7) the server stamps on every payload that carries one.
-// `src/api/client.ts` REJECTS a response whose `viewModelVersion`
-// differs from this, so a drifted contract fails loudly at the seam
-// instead of mis-rendering; client and server can only move together,
-// through this generated line.
-export const VIEW_MODEL_VERSION = "2";
+// `src/api/client.ts` rejects unsupported versions and checks the
+// explicitly compatible historical version's audio before use.
+export const VIEW_MODEL_VERSION = "3";
 
 export type PlayerRole = "CREWMATE" | "IMPOSTOR";
 export type CurrentAction = "IDLE" | "MOVING" | "TASK" | "KILL" | "VENT" | "REPORT" | "SABOTAGE" | "PRETEND_TASK" | "EMERGENCY" | "REPAIR" | "BLOCKED";
@@ -140,7 +138,7 @@ export interface VisibleBodyView {
 }
 
 export interface AudibleEventView {
-  kind: "vent_use_heard" | "sabotage_alarm";
+  kind: "sabotage_alarm";
   room: string | null;
 }
 

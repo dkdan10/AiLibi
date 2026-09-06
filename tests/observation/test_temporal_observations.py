@@ -136,7 +136,9 @@ def test_audible_gate_rejects_unearned_or_missing_cues(
         assert_packet_is_leak_clean(packet, context)
         audio: tuple[AudibleEvent, ...]
         if mutation == "invented_vent":
-            audio = (AudibleEvent(kind="vent_use_heard", room="ADMIN"),)
+            # Bypass schema validation to plant a forged packet at the semantic
+            # scanner; ordinary construction already refuses this retired kind.
+            audio = (AudibleEvent.model_construct(kind="vent_use_heard", room="ADMIN"),)
         elif mutation == "wrong_room":
             audio = (AudibleEvent(kind="sabotage_alarm", room="ADMIN"),)
         elif mutation == "duplicate":

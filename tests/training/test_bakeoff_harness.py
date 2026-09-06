@@ -2032,7 +2032,7 @@ _V3_GOLDEN_LAYOUT: tuple[tuple[str, int], ...] = (
 # feature computation trips this. golden pin: regenerate only on an intended
 # ENCODER_VERSION_V3 layout/value bump.
 _V3_GOLDEN_VECTOR_SHA256 = (
-    "527c3766285ddbc8f440ad67612f4c4676de085b1d953f884eb94fdd1592a682"
+    "5aca3c50ac020c93ce9e68ff423473b88adb4f5d14874fcf37201c40a4c16bef"
 )
 
 
@@ -2076,10 +2076,7 @@ def _v3_golden_fixture(
             PlayerView(id="p-8", room=r1, action=None),
         ),
         visible_bodies=(BodyView(id="body-p-4-8", room=r1, victim_id="p-4"),),
-        audible_events=(
-            AudibleEvent(kind="vent_use_heard", room=r2),
-            AudibleEvent(kind="sabotage_alarm", room=None),
-        ),
+        audible_events=(AudibleEvent(kind="sabotage_alarm", room=None),),
         global_state=GlobalView(
             tasks_completed=3,
             tasks_total=14,

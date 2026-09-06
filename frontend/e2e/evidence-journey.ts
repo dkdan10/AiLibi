@@ -38,9 +38,15 @@ export async function evidenceJourney(page: Page, origin: string): Promise<void>
   await expect(evidence).toContainText("private observation");
   await expect(evidence).not.toContainText("You witnessed");
   await expect(page).toHaveURL(/perspective=p-2/);
+  const ballots = page.getByRole("region", { name: /^Ballots/ });
+  await expect(ballots).toContainText("Private ballot reasoning. View p-5");
+  await expect(ballots.getByRole("button", { name: "Cited observation · p-5:8:1", exact: true })).toHaveCount(0);
   await evidence.getByRole("button", { name: "Switch to p-5's perspective" }).click();
   await expect(evidence).toContainText(/p-6.*ENGINEERING/i);
   await expect(page).toHaveURL(/perspective=p-5/);
+  await expect(ballots.getByRole("button", { name: "Cited observation · p-5:8:1", exact: true })).toBeVisible();
+  await expect(ballots).not.toContainText("Private ballot reasoning. View p-5");
+  await expect(ballots).toContainText("Private ballot reasoning. View p-1");
   expect(new URL(page.url()).searchParams.get("reveal")).toBeNull();
 
   await openCase("Follow an accusation across the map");

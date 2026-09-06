@@ -57,10 +57,8 @@ State derivation each tick (highest priority first):
   lab.md) instead of walking away. A co-present non-teammate witness (a
   fellow impostor never counts) makes a vent and a walk equal exposure, so
   the branch falls back to the move-away: one step to the alphabetically-
-  first neighbor to vacate the scene. ``heard_vent_use`` stays observable, so
-  a vent next to a witness would be a new catchable tell -- the witness guard
-  is the only suppression, deliberately leaving the careless-vent tell in
-  place (rubric R2, "deception sometimes fails").
+  first neighbor to vacate the scene. A witnessed vent supplies direct evidence
+  of vent use; the witness guard avoids adding that evidence while leaving.
 * ``SABOTAGE`` -- the crew is near a task win and no sabotage is active (Task
   11.7, DESIGN.md §3.4 impostor actions, §4.4 impostor FSM; mirrors the 11.1
   vent-wiring precedent, experiments/lab/report-vent-escape-lab.md). Below the
@@ -1310,8 +1308,7 @@ class ImpostorPolicy:
         guarantees the impostor is not already in a vent (the VENT_EXIT branch
         runs first). When a witness is present a vent and a walk are equal
         exposure (the witness saw the impostor regardless), so the simpler
-        move-away fallback is kept; ``heard_vent_use`` would otherwise add a NEW
-        catchable tell with no upside.
+        move-away fallback avoids supplying a new witnessed-vent observation.
         """
 
         vent_id = self._vent_in_room(public_map, own_room)

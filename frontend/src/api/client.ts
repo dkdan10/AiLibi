@@ -73,8 +73,7 @@ export class ApiError extends Error {
 }
 
 /**
- * Raised when a response carries a `viewModelVersion` this build was not
- * generated against (Task 19.24).
+ * Raised when a response carries an unsupported view-model version.
  *
  * A separate class from `ApiError` on purpose: the request SUCCEEDED — the
  * transport is fine and the status was 2xx. What failed is the contract, and the
@@ -103,18 +102,9 @@ export class ViewModelVersionError extends Error {
 }
 
 /**
- * Reject a payload stamped with a foreign contract version.
- *
- * The rule is "if it is stamped, it must match" — deliberately not "every
- * payload must be stamped". The server stamps only the payloads whose DTO
- * declares the field (`ReplayView`, `RubricView`); a `TickView`, a `MeetingView`
- * or `GET /sets` carries no stamp and never did. Keying off the field's PRESENCE
- * means this side needs no hand-maintained list of which endpoints are
- * versioned, so adding the stamp to another DTO protects that endpoint the
- * moment the types are regenerated — nothing here to forget to update.
- *
- * A stamp that is present but not a string is itself a contract break (the
- * field is `viewModelVersion: string`), so it is rejected rather than coerced.
+ * Version 3 narrows audio to the only live producer, the sabotage alarm.
+ * Version 2 remains readable with compatible audio, checked separately below.
+ * Other or non-string stamps fail; endpoints that never had a stamp still work.
  */
 function assertViewModelVersion(data: unknown, url: string): void {
   if (typeof data !== "object" || data === null || Array.isArray(data)) {
@@ -124,7 +114,7 @@ function assertViewModelVersion(data: unknown, url: string): void {
     return;
   }
   const received = (data as { viewModelVersion: unknown }).viewModelVersion;
-  if (received === VIEW_MODEL_VERSION) {
+  if (received === VIEW_MODEL_VERSION || received === "2") {
     return;
   }
   throw new ViewModelVersionError(
@@ -132,6 +122,30 @@ function assertViewModelVersion(data: unknown, url: string): void {
     VIEW_MODEL_VERSION,
     typeof received === "string" ? received : JSON.stringify(received),
   );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** Check actual tick audio without scanning model text or inventing a cue. */
+function assertCompatibleAudio(data: unknown, url: string): void {
+  if (!isRecord(data)) return;
+  const ticks = Array.isArray(data.ticks) ? data.ticks : [data];
+  for (const tick of ticks) {
+    if (!isRecord(tick) || !Array.isArray(tick.agent_states)) continue;
+    for (const agent of tick.agent_states) {
+      if (!isRecord(agent) || !isRecord(agent.visibility)) continue;
+      const cues = agent.visibility.audible_events;
+      if (!Array.isArray(cues) || cues.some((cue: unknown) =>
+        !isRecord(cue) || cue.kind !== "sabotage_alarm" || cue.room !== null
+      )) {
+        throw new Error(
+          `Unsupported audio cue from ${url}. Rebuild this replay's data with current AiLibi.`,
+        );
+      }
+    }
+  }
 }
 
 async function getJson<T>(url: string): Promise<T> {
@@ -153,11 +167,10 @@ async function getJson<T>(url: string): Promise<T> {
     const message = cause instanceof Error ? cause.message : String(cause);
     throw new ApiError(response.status, url, `invalid JSON response: ${message}`);
   }
-  // The one thing checked at runtime before the cast below. `data as T` is a
-  // compile-time claim about bytes nobody validated; asserting the contract
-  // version is what makes that claim survive a server on a different version —
-  // beyond it, the generated types and the DTO drift gate are the guarantee.
+  // These guards cover the versioned compatibility boundary, not the complete
+  // DTO schema. The server and generated-type drift check own that schema.
   assertViewModelVersion(data, url);
+  assertCompatibleAudio(data, url);
   return data as T;
 }
 

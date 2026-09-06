@@ -17,7 +17,6 @@ from agents.perception import (
     EVENT_COOLDOWN_STATUS,
     EVENT_GLOBAL_STATUS,
     EVENT_HEARD_SABOTAGE_ALARM,
-    EVENT_HEARD_VENT_USE,
     EVENT_SAW_BODY,
     EVENT_SAW_PLAYER,
     EVENT_SAW_PLAYER_MOVE,
@@ -504,23 +503,6 @@ def test_active_sabotage_tick_reaches_episodic_memory_and_renders(
 
 
 class TestIngestPacketAudibles:
-    def test_vent_use_audible_becomes_heard_vent_use_event(self) -> None:
-        store = MemoryStore()
-
-        ingest_packet(
-            packet=_packet(
-                audible_events=(AudibleEvent(kind="vent_use_heard", room="ADMIN"),),
-            ),
-            memory=store,
-        )
-
-        heard = [
-            e for e in store.recent(since_tick=0) if e.type == EVENT_HEARD_VENT_USE
-        ]
-        assert len(heard) == 1
-        assert heard[0].provenance == PROVENANCE_OBSERVED
-        assert heard[0].payload == {"kind": "vent_use_heard", "room": "ADMIN"}
-
     def test_sabotage_alarm_audible_becomes_heard_sabotage_alarm_event(self) -> None:
         store = MemoryStore()
 
@@ -537,31 +519,6 @@ class TestIngestPacketAudibles:
         assert len(heard) == 1
         assert heard[0].provenance == PROVENANCE_OBSERVED
         assert heard[0].payload == {"kind": "sabotage_alarm", "room": None}
-
-    def test_multiple_audibles_preserve_packet_order(self) -> None:
-        store = MemoryStore()
-
-        ingest_packet(
-            packet=_packet(
-                audible_events=(
-                    AudibleEvent(kind="vent_use_heard", room="STORAGE"),
-                    AudibleEvent(kind="sabotage_alarm"),
-                    AudibleEvent(kind="vent_use_heard", room="MEDBAY"),
-                ),
-            ),
-            memory=store,
-        )
-
-        audible_types = [
-            e.type
-            for e in store.recent(since_tick=0)
-            if e.type in {EVENT_HEARD_VENT_USE, EVENT_HEARD_SABOTAGE_ALARM}
-        ]
-        assert audible_types == [
-            EVENT_HEARD_VENT_USE,
-            EVENT_HEARD_SABOTAGE_ALARM,
-            EVENT_HEARD_VENT_USE,
-        ]
 
 
 class TestIngestPacketAppendOrder:

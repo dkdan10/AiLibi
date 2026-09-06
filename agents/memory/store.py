@@ -62,7 +62,6 @@ _SALIENCE_FOUND_BODY: Final[int] = 100
 _SALIENCE_OWN_KILL: Final[int] = 96
 _SALIENCE_KILL_WITNESSED: Final[int] = 95
 _SALIENCE_VENT_WITNESSED: Final[int] = 85
-_SALIENCE_VENT_HEARD: Final[int] = 75
 _SALIENCE_SABOTAGE_HEARD: Final[int] = 65
 _SALIENCE_SAW_PLAYER_ACTIVE: Final[int] = 55
 # A DIRECTLY-witnessed room→room transition (Task 13.5.4). First-hand sighting
@@ -98,7 +97,6 @@ _MAX_RENDERED_ALIBIS: Final[int] = 3
 
 _EVENT_SAW_BODY: Final[str] = "saw_body"
 _EVENT_SAW_PLAYER: Final[str] = "saw_player"
-_EVENT_HEARD_VENT_USE: Final[str] = "heard_vent_use"
 _EVENT_HEARD_SABOTAGE_ALARM: Final[str] = "heard_sabotage_alarm"
 _EVENT_SELF_STATE: Final[str] = "self_state"
 _EVENT_OWN_KILL: Final[str] = "own_kill"
@@ -1616,16 +1614,6 @@ def _build_observations(
 
         if event.type == EVENT_REPORTED_TESTIMONY:
             obs = _render_reported_testimony(event)
-            if obs is not None:
-                observations.append(obs)
-            continue
-
-        if event.type == _EVENT_HEARD_VENT_USE:
-            obs = _render_heard(
-                event,
-                salience=_SALIENCE_VENT_HEARD,
-                noun="vent use",
-            )
             if obs is not None:
                 observations.append(obs)
             continue

@@ -75,7 +75,6 @@ EVENT_SAW_PLAYER: Final[str] = "saw_player"
 # a first-hand sighting-class line and wires ``WorkingMemory.last_seen``.
 EVENT_SAW_PLAYER_MOVE: Final[str] = "saw_player_move"
 EVENT_SAW_BODY: Final[str] = "saw_body"
-EVENT_HEARD_VENT_USE: Final[str] = "heard_vent_use"
 EVENT_HEARD_SABOTAGE_ALARM: Final[str] = "heard_sabotage_alarm"
 EVENT_GLOBAL_STATUS: Final[str] = "global_status"
 # Episodic type for a reported-testimony row (Task 13.5.2). Written only by
@@ -84,7 +83,6 @@ EVENT_GLOBAL_STATUS: Final[str] = "global_status"
 EVENT_REPORTED_TESTIMONY: Final[str] = "reported_testimony"
 
 _AUDIBLE_EVENT_TYPES: Final[Mapping[str, str]] = {
-    "vent_use_heard": EVENT_HEARD_VENT_USE,
     "sabotage_alarm": EVENT_HEARD_SABOTAGE_ALARM,
 }
 
@@ -529,7 +527,6 @@ __all__ = [
     "EVENT_COOLDOWN_STATUS",
     "EVENT_GLOBAL_STATUS",
     "EVENT_HEARD_SABOTAGE_ALARM",
-    "EVENT_HEARD_VENT_USE",
     "EVENT_OWN_KILL",
     "EVENT_REPORTED_TESTIMONY",
     "EVENT_SAW_BODY",

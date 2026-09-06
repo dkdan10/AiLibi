@@ -1062,7 +1062,7 @@ def test_as_agent_fog_leaks_no_unseen_player_body_or_field(
 
                 for ae in fog.audible_events:
                     assert set(ae.model_dump().keys()) == {"kind", "room"}
-                    assert ae.kind in ("vent_use_heard", "sabotage_alarm")
+                    assert ae.kind == "sabotage_alarm"
                     audibles += 1
 
     assert games > 0, "expected committed 9p2i replays"

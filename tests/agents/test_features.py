@@ -73,7 +73,7 @@ _GOLDEN_LAYOUT: tuple[tuple[str, int], ...] = (
 # sha256 over the golden fixture's encoded vector (float-hex serialized). Pins the
 # VALUES, not just the shape — a change in any feature computation trips this.
 _GOLDEN_VECTOR_SHA256 = (
-    "4e91130e43efef34d2304691cbf19f7ef9e5de52fbd07d05db2a3ce81f4129e3"
+    "c67bd96472ee644243e9abb518c1f3b9f9ec42783e9b67e04be58610eae3b5e5"
 )
 
 
@@ -88,7 +88,7 @@ def _golden_fixture(
 
     Rooms are drawn from the map's own sorted room set so the fixture stays valid
     regardless of the exact room names. It exercises: cooldown, visible players +
-    bodies, a witnessed move, both audible-event kinds, beliefs above and below
+    bodies, a witnessed move, a sabotage alarm, beliefs above and below
     the gate (with a float-residue value), last-seen ages, and episodic events.
     """
 
@@ -110,10 +110,7 @@ def _golden_fixture(
             PlayerView(id="p-3", room=r1, action="task"),
         ),
         visible_bodies=(BodyView(id="body-p-4-8", room=r1, victim_id="p-4"),),
-        audible_events=(
-            AudibleEvent(kind="vent_use_heard", room=r2),
-            AudibleEvent(kind="sabotage_alarm", room=None),
-        ),
+        audible_events=(AudibleEvent(kind="sabotage_alarm", room=None),),
         global_state=GlobalView(
             tasks_completed=3,
             tasks_total=14,

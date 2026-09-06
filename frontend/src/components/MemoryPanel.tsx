@@ -1,27 +1,6 @@
-// The mind inspector's MEMORY tab (Task 12.8; was the standalone memory snapshot
-// rail). Renders one agent's episodic feed from `AgentMemoryView` — the
-// observations the agent actually logged (saw_player / saw_body→found_body
-// surface as the discriminated `ObservationClaimView`), the task tally, and the
-// raw rendered memory text the LLM was handed (mono, collapsible).
-//
-// Firewall (PER-FIELD, gated by the connected inspector via `revealSecrets` =
-// Omniscient OR lens-is-this-agent). The ground-truth tells are suppressed when
-// inspecting through a DIFFERENT agent's fog; the episodic observation feed stays
-// visible (it does not reveal the observer's own role). Gated fields:
-//   • the impostor extras — fellow impostors, the `own_kill` lines, and the
-//     FABRICATED cover tasks (the task-contract firewall);
-//   • the task tally — impostors carry 0 assigned tasks, so it leaks alignment;
-//   • the raw `rendered_memory_text` — the verbatim prompt memory carries the
-//     `Your role` block + the own-kill self-channel, so it rides the gate for
-//     EVERY agent, not just impostors.
-// One display-correctness guard: the killer's own victim is filtered OUT of the
-// `found_body` feed when the own-kill line is shown (`render_for_prompt`
-// suppresses that body in favour of the own-kill self-channel — no double-render).
-// Cover tasks are NOT in the episodic feed — episodic memory never mints a
-// `completed_task` for an impostor (`agents/memory/store`); they are the
-// fabricated alibi the impostor states in the meeting, projected from its turn
-// observations and passed in as `coverTasks`.
-// Presentational: the connected MindInspector owns the fetch + the gate.
+// Presentational private memory. MindInspector requires the observer’s own lens
+// or omniscient mode before mounting this panel. Keep role-bearing extras gated
+// here as well for standalone consumers.
 
 import type { ReactElement, ReactNode } from "react";
 

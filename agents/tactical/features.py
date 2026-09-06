@@ -147,13 +147,9 @@ _LASTSEEN_FEATURES_PER_SLOT: Final[int] = 2  # age, seen
 # The fixed scalar block, in order. Named here so the golden test and the module
 # both read one source of truth for the layout.
 #
-# ``heard_vent_use`` is structurally zero: the audible it reads has had no
-# producer since baseline 8, so it is 0.0 on every committed packet. It keeps
-# its index anyway, because :class:`TacticalFeatureEncoderV3` appends to this
-# vector rather than redefining it — dropping a scalar here re-shapes the v3
-# vector too, under an unchanged ``ENCODER_VERSION_V3``, which would silently
-# invalidate every committed artifact. Removing it belongs to the next encoder
-# revision, which owns both version stamps (Task 21.5 removed the producer).
+# ``heard_vent_use`` is a reserved zero, retaining the frozen v2/v3 layout and
+# committed weights. Removing the position requires a new encoder version.
+# The duplicate audible producer retired at baseline 8.
 _SCALAR_FEATURE_NAMES: Final[tuple[str, ...]] = (
     "cooldown_norm",
     "has_cooldown",
@@ -378,9 +374,6 @@ class TacticalFeatureEncoder:
             0.0 if cooldown is None else _clamp_unit(float(cooldown) / _COOLDOWN_NORM)
         )
         global_state = packet.global_state
-        heard_vent = any(
-            event.kind == "vent_use_heard" for event in packet.audible_events
-        )
         heard_sabotage = any(
             event.kind == "sabotage_alarm" for event in packet.audible_events
         )
@@ -412,7 +405,7 @@ class TacticalFeatureEncoder:
             _clamp_unit(len(packet.visible_players) / _COUNT_NORM),
             _clamp_unit(len(packet.visible_bodies) / _COUNT_NORM),
             _clamp_unit(len(packet.moved_players) / _COUNT_NORM),
-            1.0 if heard_vent else 0.0,
+            0.0,  # Reserved historical heard_vent_use position; preserve weights.
             1.0 if heard_sabotage else 0.0,
             _clamp_unit(len(roster) / self._roster_slots),
             max_susp_quantum / BELIEF_QUANT_LEVELS,

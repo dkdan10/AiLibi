@@ -152,15 +152,14 @@ def test_served_payload_carries_view_model_version(
 def test_contract_version_and_action_set_move_in_lockstep() -> None:
     # The stamp is only a contract if both halves move together: the server
     # stamps this string and `frontend/src/api/client.ts` rejects any payload
-    # carrying a different one, reading the value from the generated module. The
+    # carrying an unsupported one, reading the value from the generated module. The
     # assertions above compare each side to itself and so cannot see a Python
     # bump that never reached the generated file; these pin the literal.
-    assert VIEW_MODEL_VERSION == "2"
+    assert VIEW_MODEL_VERSION == "3"
     generated = gen_frontend_types._OUT_TYPES.read_text(encoding="utf-8")
     assert f'export const VIEW_MODEL_VERSION = "{VIEW_MODEL_VERSION}";' in generated
 
-    # Version "2" IS the widened action set, so it is pinned in the same breath:
-    # eleven values under ONE name on both sides, in one order.
+    # Version 3 preserves the eleven-value action vocabulary introduced in v2.
     assert get_args(CurrentAction) == (
         "IDLE",
         "MOVING",

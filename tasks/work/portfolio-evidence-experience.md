@@ -1,6 +1,6 @@
 # Follow a decision from claim to evidence
 
-**Status:** done
+**Status:** active
 
 ## Outcome
 
@@ -67,7 +67,11 @@ and scene facts must be checked against source bytes when published.
 - [x] API and static browser journeys exercise all three cases, citation return
   navigation, keyboard/fog/reveal behavior, compact results, and source links.
   Clean-source reproduction passes.
-- [x] The combined full project gate passes.
+- [x] All private ballot reasoning and mind-inspector tabs require the voter’s or
+  inspected agent’s own lens, or omniscient mode. Outcome reveal cannot widen
+  the lens; public statements and vote targets remain available. Already cached
+  private memory stays hidden after a lens change.
+- [ ] The combined full project gate passes.
 
 ## Constraints
 
@@ -182,3 +186,32 @@ strict typing, lint, formatting, import/document contracts and production build.
 clean-source journey preceded narrow copy and disclosure corrections; those
 corrections passed the combined gate. No deployment, paid call, fresh recording
 or experimental adoption occurred. The owner’s final branch review is pending.
+
+Reopened during final integration: ballot rationale hid only a guard-specific
+sentinel, leaving model-authored private reasoning visible through another lens.
+The inspector also treated private observations and derived beliefs as public.
+Root owns this coupled presentation follow-through; existing explicit lens
+switching is preserved. Current full-gate evidence above covers the prior batch.
+
+
+The reopened privacy repair now treats rationale, confidence, citations and
+adjustment metadata as private ballot reasoning, regardless of whether a guard
+marker exists. Public targets remain visible. Every mind-inspector tab requires
+the inspected agent's lens or omniscient mode, and cross-lens snapshots are not
+fetched eagerly. Already cached data is withheld by the render gate. Public
+speech remains in the meeting transcript, with explicit lens switching retained.
+Adjusted ballots use English explanations; a redirected ballot labels its
+rationale as the original choice preceding the adjustment.
+
+All 13 focused private-reasoning render controls pass; the isolated previous
+commit fails the two unmarked-ballot and three private-memory/belief/flag controls.
+Two additional baseline failures only reflect updated redaction copy, not newly
+found prompt/response leaks. The real API evidence journey passed in 21.9 seconds,
+including p-5 citation visibility before/after explicit lens switching. TypeScript
+and ESLint passed. Logs: /tmp/ailibi-fog-tests.log,
+/tmp/ailibi-fog-baseline.log, /tmp/ailibi-fog-browser.log.
+Independent review approved the cached-memory, rationale, fetch and explicit
+lens boundaries after 43 frontend checks and source inspection. This is a
+spectator presentation boundary, not a server authorization layer; the API
+remains a privileged local reader. Final static journey and the new combined
+gate remain pending.

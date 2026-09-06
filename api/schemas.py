@@ -51,7 +51,7 @@ from pydantic import BaseModel, ConfigDict, Field
 # value set is not an additive projection: a consumer that indexes the old seven
 # exhaustively (the map's glyph registry does) has no entry for the four new ones,
 # so a build on the old contract must fail loudly rather than render a hole.
-VIEW_MODEL_VERSION: Final[str] = "2"
+VIEW_MODEL_VERSION: Final[str] = "3"
 
 
 class _FrozenView(BaseModel):
@@ -186,19 +186,9 @@ class VisibleBodyView(_FrozenView):
 
 
 class AudibleEventView(_FrozenView):
-    """One audio cue inside an agent's field of view at a tick (Task 12.3;
-    DESIGN.md §3.2, §4.2).
+    """An observer's global sabotage alarm, without private attribution."""
 
-    Shadows ``observation.packet.AudibleEvent`` — the audio channel
-    (``observation.service.ObservationService._audible_events``), read alongside
-    the visual field rather than independently of it. ``sabotage_alarm`` is the
-    global alarm and carries ``room=None``. ``vent_use_heard`` names a vent the
-    observer WITNESSED, never one heard through a wall: it duplicates a sighting
-    the same packet already carries as a visible action, and the single-mint gate
-    decides whether it is minted at all, so a recording may carry it or not.
-    """
-
-    kind: Literal["vent_use_heard", "sabotage_alarm"]
+    kind: Literal["sabotage_alarm"]
     room: str | None
 
 

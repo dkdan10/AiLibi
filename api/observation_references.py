@@ -79,10 +79,6 @@ def observation_references(
             elif kind == "self_state" and room is not None:
                 subject = observer_id
                 text = f"{observer_id} was in {room}."
-            elif kind == "heard_vent_use":
-                text = f"{observer_id} heard a vent sound" + (
-                    f" in {room}." if room else "."
-                )
             elif kind == "heard_sabotage_alarm":
                 text = f"{observer_id} heard a sabotage alarm."
         references.append(
