@@ -40,7 +40,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict
 
 from api.replay_loader import ReplayLoader, get_replay_loader
-from api.schemas import EvalCostSummaryView, FailedCallEvalView, RubricView
+from api.public_results import build_public_results
+from api.schemas import (
+    EvalCostSummaryView,
+    FailedCallEvalView,
+    PublicResultsView,
+    RubricView,
+)
 from engine.entities import Role
 from eval.accusation_calibration import AccusationCalibrationReport
 from eval.alibi_fabrication import AlibiFabricationReport
@@ -60,6 +66,13 @@ from orchestrator.replay import CompletionStatus, WinnerSide
 router = APIRouter()
 
 _LoaderDep = Annotated[ReplayLoader, Depends(get_replay_loader)]
+
+
+@router.get("/summary", response_model=PublicResultsView)
+def get_public_results(loader: _LoaderDep) -> PublicResultsView:
+    """Return compact results derived from the selected set's verified replays."""
+    return build_public_results(loader)
+
 
 # Fields of ``FailedCallReplayEntry`` carried over verbatim onto
 # ``FailedCallEvalView``; ``error_message`` is handled separately (truncated).

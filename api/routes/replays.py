@@ -43,9 +43,11 @@ def list_replays(
 
 
 @router.get("/{game_id}", response_model=ReplayView)
-def get_replay(game_id: str, loader: _LoaderDep) -> ReplayView:
+def get_replay(
+    game_id: str, loader: _LoaderDep, include_llm_bodies: bool = True
+) -> ReplayView:
     try:
-        return loader.load_replay(game_id)
+        return loader.load_replay(game_id, include_llm_bodies=include_llm_bodies)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail=f"replay not found: {game_id}")
 

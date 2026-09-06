@@ -882,8 +882,14 @@ class ReplayLoader:
                 _log_skipped_replay(path, exc)
         return views
 
-    def load_replay(self, game_id: str) -> ReplayView:
-        """Return the full reconstructed :class:`ReplayView` (LRU-cached).
+    def load_replay(
+        self, game_id: str, *, include_llm_bodies: bool = True
+    ) -> ReplayView:
+        """Return a verified replay, optionally omitting model-call text bodies.
+
+        The cached full view serves existing callers and meeting detail. The
+        lean projection changes only the text bodies and their inclusion marker;
+        it does not alter the recording, accounting or cached full view.
 
         Raises :class:`FileNotFoundError` if no replay matches ``game_id`` and
         :class:`ReplayStateMismatchError` if engine playback diverges from the
@@ -893,12 +899,32 @@ class ReplayLoader:
         """
 
         path, seed = self._resolve(game_id)
-        return self._cached_load(
+        replay = self._cached_load(
             seed,
             path,
             _mtime_ns(path),
             self._roster_mtime(),
             self._substrate_cache_key(),
+        )
+        if include_llm_bodies:
+            return replay
+        return replay.model_copy(
+            update={
+                "llm_bodies_included": False,
+                "meetings": tuple(
+                    meeting.model_copy(
+                        update={
+                            "llm_calls": tuple(
+                                call.model_copy(
+                                    update={"prompt_text": "", "response_text": ""}
+                                )
+                                for call in meeting.llm_calls
+                            )
+                        }
+                    )
+                    for meeting in replay.meetings
+                ),
+            }
         )
 
     def cost_summary(self) -> EvalCostSummaryView:

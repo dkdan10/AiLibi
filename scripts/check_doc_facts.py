@@ -238,7 +238,13 @@ _LINKED_DOCUMENTS: Final[tuple[str, ...]] = (
 # resolution rule; the index's acted-on map is held to the phase contract.
 _LESSONS: Final = "docs/lessons.md"
 _REVIEW_INDEX: Final = "audits/review-2026-08-19/README.md"
-_PUBLISHED_DOCUMENTS: Final[tuple[str, ...]] = (_LESSONS, _REVIEW_INDEX)
+_PHASE_21_CLOSE: Final = "audits/audit-phase-21-close.md"
+_PUBLISHED_DOCUMENTS: Final[tuple[str, ...]] = (
+    _LESSONS,
+    _REVIEW_INDEX,
+    _PHASE_21_CLOSE,
+    "docs/ownership-case-study.md",
+)
 _PHASE_20_CONTRACT: Final = "tasks/phase-20.md"
 # The documents that between them must account for every phase contract.
 _PHASE_DOCUMENTS: Final[tuple[str, ...]] = (_README, _HISTORY)
@@ -729,7 +735,11 @@ _REPORTER_BAR: Final = 3
 # stated in, so the sentence has to be about that measurement to be held to it.
 _FINDING_BAR_SUBJECTS: Final[Mapping[int, str]] = {
     _ACCURACY_BAR: "accuracy",
-    _SHARE_BAR: "reporter",
+    _SHARE_BAR: (
+        r"(?:reporters?\b.{0,120}\b(?:share|innocent|wrongful|eject\w*|"
+        r"of (?:that|the) total)|(?:share|innocent|wrongful)\b.{0,120}\breporters?|"
+        r"bar\s+4\b)"
+    ),
 }
 # The verdict passage, as the front door must state it. The wrongful-ejection
 # gate admits only a count one of the two conviction partitions carries, so the
@@ -763,6 +773,9 @@ _FINDING_CLAIM_STEMS: Final[tuple[str | None, ...]] = (
 _PASS_COUNT_CLAIM: Final = re.compile(
     r"\b(\w+) bars were written down[^.]{0,60}?;\s*(\w+) passed\b", re.IGNORECASE
 )
+_MET_COUNT_CLAIM: Final = re.compile(
+    r"\bmet (\w+) of (\w+)(?: fresh)? bars\b", re.IGNORECASE
+)
 _NUMBER_WORDS: Final[tuple[str, ...]] = ("no", "one", "two", "three", "four")
 # The other half of the published decision: what the owner DID about the
 # verdict. On a FINDING nothing graduated and no override was made, so a
@@ -777,6 +790,12 @@ _OWNER_ACTION: Final = re.compile(
 )
 _NEGATION: Final = re.compile(
     r"\b(?:no|not|nothing|never|neither|without)\b", re.IGNORECASE
+)
+_NEGATED_ACTION_LIST: Final = re.compile(
+    r"\b(?:no|neither)\s+(?:adoption|override|graduation)"
+    r"(?:(?:\s*,\s*(?:(?:or|nor|and)\s+)?|\s+(?:or|nor|and)\s+)"
+    r"(?:adoption|override|graduation))+\b",
+    re.IGNORECASE,
 )
 _PREVIOUS_OVERRIDE_DATE: Final = "2026-08-26"
 # The record's own leg table, and the provenance count the front door takes
@@ -834,7 +853,7 @@ _EXAMPLE_ANCHOR: Final = "fake provider's report is empty on purpose"
 # were priced just above their counts at the ratifying contract, so the ruling
 # grants headroom rather than demanding a trim.
 _FRONT_DOOR_BUDGETS: Final[tuple[tuple[str, int | None, int], ...]] = (
-    (_README, None, 3_550),
+    (_README, None, 1_600),
     (_READING_GUIDE, None, 1_350),
     (_ML_PAGE, None, 2_150),
     (_LESSONS, 800, 1_500),
@@ -963,6 +982,8 @@ def check_facts(repo_root: Path) -> list[str]:
     check_guide_narrative(repo_root, errors)
     check_verdict_figures(repo_root, errors)
     check_finding_figures(repo_root, errors)
+    check_close_claims(repo_root, errors)
+    check_close_finding_map(repo_root, errors)
     check_featured_exhibits(repo_root, errors)
     check_relative_links(repo_root, errors)
     check_review_map(repo_root, errors)
@@ -3681,6 +3702,208 @@ def check_finding_figures(repo_root: Path, errors: list[str]) -> None:
         check_verdict_passage(document, text, bars, missed, errors)
 
 
+def check_close_claims(repo_root: Path, errors: list[str]) -> None:
+    """Bind the historical close's summary to the records it actually closed.
+
+    Check its opening verdict/ladder statements and complete four-bar table.
+    Later quoted examples, proposed future experiments and errata are historical
+    discussion, not assertions about the current record. Their links are still
+    checked through the published-document inventory.
+    """
+
+    close = read_document(repo_root, _PHASE_21_CLOSE, errors)
+    record = read_document(repo_root, _FINDING_RECORD_AUDIT, errors)
+    if close is None or record is None:
+        return
+    expected = verdict_bars(record)
+    actual = verdict_bars(close)
+    if expected is None:
+        return  # The deciding record's own check reports its malformed table.
+    if actual is None:
+        errors.append(f"{_PHASE_21_CLOSE}: missing or malformed four-bar summary")
+    else:
+
+        def normalize(value: str) -> str:
+            return " ".join(_EMPHASIS.sub("", value).split())
+
+        for number, bar in expected.items():
+            current = actual[number]
+            identifier = _CELL_IDENTIFIER.findall(bar.cell)
+            if _CELL_IDENTIFIER.findall(current.cell) != identifier or tuple(
+                map(normalize, current[1:])
+            ) != tuple(map(normalize, bar[1:])):
+                errors.append(
+                    f"{_PHASE_21_CLOSE}: bar {number} summary differs from "
+                    f"{_FINDING_RECORD_AUDIT}'s target, cells or verdict"
+                )
+    verdicts = {
+        number: recomputed_verdict(record, number, bar, [])
+        for number, bar in expected.items()
+    }
+    if any(value is None for value in verdicts.values()):
+        return
+    verdict = "FINDING" if _VERDICT_MISSED in verdicts.values() else "ADOPTED"
+    opening = close.split("\n## 1.", 1)[0]
+    prose = " ".join(block for _, block in prose_blocks(opening))
+    stated = re.findall(
+        r"pre-registered rule (?:returned|returns)\s+(\w+)", prose, re.IGNORECASE
+    )
+    if not stated or any(value.upper() != verdict for value in stated):
+        errors.append(
+            f"{_PHASE_21_CLOSE}: opening must state the rule returned {verdict}"
+        )
+    verdict_lines = [
+        match.group(1)
+        for _, block in prose_blocks(close)
+        if (match := re.match(r"VERDICT:\s*(\w+)", block, re.I)) is not None
+    ]
+    if not verdict_lines or any(value.upper() != verdict for value in verdict_lines):
+        errors.append(f"{_PHASE_21_CLOSE}: final verdict must be {verdict}")
+    for number, value in re.findall(r"\bbar\s+(\d+)\s+(met|missed)\b", prose, re.I):
+        if verdicts.get(int(number)) != value.upper():
+            errors.append(
+                f"{_PHASE_21_CLOSE}: opening misstates bar {number} as {value}"
+            )
+    tip = recorded_ladder_tip(repo_root, errors)
+    stated_tips = _AUDIT_LADDER_TIP.findall(prose)
+    if tip is not None and (not stated_tips or any(n != tip for n in stated_tips)):
+        errors.append(
+            f"{_PHASE_21_CLOSE}: opening must retain its recorded ladder tip {tip}"
+        )
+
+
+def check_close_finding_map(repo_root: Path, errors: list[str]) -> None:
+    """Check the historical outcome census and its explicit task credits.
+
+    A contract mentioning an ID proves routing, not successful repair. Preserve
+    the close's separate partial, experimental, measured and refuted categories;
+    current repair evidence belongs in the cleanup disposition ledger.
+    """
+
+    close = read_document(repo_root, _PHASE_21_CLOSE, errors)
+    contract_path = "tasks/phase-21.md"
+    contract = read_document(repo_root, contract_path, errors)
+    if close is None or contract is None:
+        return
+    finding_pattern = re.compile(r"\b[AB]-\d+\b")
+    universe: set[str] = set()
+    refuted: set[str] = set()
+    for track in ("A", "B"):
+        path = f"audits/review-2026-08-26/{track}/collated-findings.md"
+        register = read_document(repo_root, path, errors)
+        if register is None:
+            return
+        rows = labelled_table_rows(
+            register, ("id", "severity", "classification", "verdict", "title")
+        )
+        if not rows:
+            errors.append(f"{path}: missing canonical finding inventory")
+            return
+        for finding, cells in rows.items():
+            if re.fullmatch(rf"{track}-\d+", finding) is None or finding in universe:
+                errors.append(f"{path}: invalid or duplicate finding {finding!r}")
+                return
+            universe.add(finding)
+            if cells[2] == "REFUTED":
+                refuted.add(finding)
+    rows = labelled_table_rows(close, ("outcome", "count", "the findings"))
+    categories = (
+        "fixed",
+        "partly fixed",
+        "lever-ON",
+        "recorded-as-finding",
+        "triaged backlog",
+        "refuted",
+    )
+    if rows is None or len(rows) != len(categories):
+        errors.append(f"{_PHASE_21_CLOSE}: missing or malformed finding outcome map")
+        return
+    groups: dict[str, set[str]] = {}
+    seen: set[str] = set()
+    counts: dict[str, int] = {}
+    for (label, cells), category in zip(rows.items(), categories, strict=True):
+        if not label.startswith(category) or not cells[0].isdigit():
+            errors.append(f"{_PHASE_21_CLOSE}: invalid {category} outcome row")
+            return
+        counts[category] = int(cells[0])
+        ids = finding_pattern.findall(cells[1])
+        group = set(ids)
+        groups[category] = group
+        if len(ids) != len(group) or group & seen or group - universe:
+            errors.append(
+                f"{_PHASE_21_CLOSE}: duplicate or unknown finding in {category}"
+            )
+        seen.update(group)
+        if category != "triaged backlog" and counts[category] != len(group):
+            errors.append(f"{_PHASE_21_CLOSE}: {category} count differs from its IDs")
+    backlog = universe - seen
+    if groups["triaged backlog"] or counts["triaged backlog"] != len(backlog):
+        errors.append(f"{_PHASE_21_CLOSE}: backlog must count the register remainder")
+    if sum(counts.values()) != len(universe):
+        errors.append(f"{_PHASE_21_CLOSE}: outcome counts do not cover the registers")
+    backlog_text = list(rows.values())[categories.index("triaged backlog")][1]
+    track_counts = re.search(r"(\d+) on track A and (\d+) on track B", backlog_text)
+    if track_counts is None or tuple(map(int, track_counts.groups())) != tuple(
+        sum(finding.startswith(f"{track}-") for finding in backlog)
+        for track in ("A", "B")
+    ):
+        errors.append(
+            f"{_PHASE_21_CLOSE}: backlog track counts differ from the remainder"
+        )
+    if groups["refuted"] != refuted:
+        errors.append(f"{_PHASE_21_CLOSE}: refuted IDs differ from the review verdicts")
+    sections = phase_task_sections(contract)
+    sections.pop("21.26", None)  # The close cannot prove its own repair credits.
+    experiments = {
+        finding
+        for section in sections.values()
+        if "(lever `" in section.splitlines()[0]
+        for finding in finding_pattern.findall(section)
+    }
+    if groups["lever-ON"] != experiments:
+        errors.append(
+            f"{_PHASE_21_CLOSE}: experimental IDs differ from the lever contracts; "
+            "a measured unadopted repair cannot be credited as fixed"
+        )
+    referenced = {
+        finding
+        for section in sections.values()
+        for finding in finding_pattern.findall(section)
+    }
+    required = groups["fixed"] | groups["partly fixed"] | groups["lever-ON"]
+    if required - referenced or referenced - (required | groups["recorded-as-finding"]):
+        errors.append(
+            f"{_PHASE_21_CLOSE}: outcome routing differs from {contract_path}"
+        )
+    cut_line = re.search(
+        r"(?ms)^8\. \*\*The cut line\.\*\*(.*?)(?:\n\s*\n|\Z)", contract
+    )
+    if cut_line is None:
+        errors.append(f"{contract_path}: missing ratified cut line for partial repairs")
+    else:
+        partial = (
+            set(finding_pattern.findall(cut_line.group(1)))
+            & referenced - experiments - groups["recorded-as-finding"]
+        )
+        if groups["partly fixed"] != partial:
+            errors.append(
+                f"{_PHASE_21_CLOSE}: partial IDs differ from the ratified cut line; "
+                "an explicitly unexecuted half cannot be credited as fixed"
+            )
+    # Explicit finding-to-task assertions, rather than all contextual mentions
+    # elsewhere in the audit. A swapped existing task must fail as well as a typo.
+    for cells in rows.values():
+        for finding, task in re.findall(
+            r"`([AB]-\d+)`\s*[—–-]\s*(21\.\d+)\b", cells[1]
+        ):
+            section = sections.get(task, "")
+            if finding not in finding_pattern.findall(section):
+                errors.append(
+                    f"{_PHASE_21_CLOSE}: {finding} credits task {task}, which never "
+                    f"names it in {contract_path}"
+                )
+
+
 def check_pass_count(
     document: str,
     number: int,
@@ -3701,15 +3924,22 @@ def check_pass_count(
     if len(verdicts) != len(bars):
         return  # a bar nobody could recompute is reported by name already
     passed = sum(1 for verdict in verdicts.values() if verdict == _VERDICT_MET)
-    for match in _PASS_COUNT_CLAIM.finditer(prose):
+    claims = [
+        (match.group(0), match.group(1), match.group(2))
+        for match in _PASS_COUNT_CLAIM.finditer(prose)
+    ] + [
+        (match.group(0), match.group(2), match.group(1))
+        for match in _MET_COUNT_CLAIM.finditer(prose)
+    ]
+    for claim, registered, cleared in claims:
         for stated, expected, what in (
-            (match.group(1), len(bars), "bars registered"),
-            (match.group(2), passed, "of them passed"),
+            (registered, len(bars), "bars registered"),
+            (cleared, passed, "of them passed"),
         ):
             if stated.casefold() == number_word(expected):
                 continue
             errors.append(
-                f"{document}:{number}: the tally {match.group(0)!r} states "
+                f"{document}:{number}: the tally {claim!r} states "
                 f"{stated.casefold()!r} {what}, and {_FINDING_RECORD_AUDIT}'s "
                 f"own verdict column makes it {number_word(expected)!r}."
             )
@@ -3768,30 +3998,35 @@ def recording_games(audit: str) -> int | None:
     return total
 
 
-def prose_blocks(text: str) -> Iterator[tuple[int, str]]:
-    """``(first line number, collapsed prose)`` for each paragraph of ``text``.
+def prose_blocks(text: str, *, include_code: bool = True) -> Iterator[tuple[int, str]]:
+    """Yield rendered paragraph/heading text, excluding tables and fenced blocks.
 
-    Table rows are dropped — every table has a per-cell check of its own — and
-    what is left of a paragraph is joined into one line. These pages hard-wrap,
-    so a claim the author broke across two lines has to be read as the one
-    claim it is rather than slipping between two per-line scans.
+    List items are separate paragraphs. Links contribute their visible labels,
+    never destination filenames or titles. Inline identifiers remain available
+    to metric checks; action-claim checks can exclude quoted code examples.
     """
 
+    in_table = False
+    for token in MarkdownIt("commonmark").enable("table").parse(text):
+        if token.type == "table_open":
+            in_table = True
+        elif token.type == "table_close":
+            in_table = False
+        elif token.type == "inline" and token.map is not None and not in_table:
+            parts = inline_prose(token.children or (), include_code=include_code)
+            yield token.map[0] + 1, " ".join(parts.split())
+
+
+def inline_prose(tokens: Sequence[Token], *, include_code: bool) -> str:
+    """Extract visible prose without promoting Markdown metadata to a claim."""
+
     parts: list[str] = []
-    start = 0
-    for number, line in enumerate(text.splitlines(), 1):
-        if not line.strip():
-            if parts:
-                yield start, " ".join(parts)
-            parts, start = [], 0
-            continue
-        if table_cells(line) is not None:
-            continue
-        if not parts:
-            start = number
-        parts.append(line.strip())
-    if parts:
-        yield start, " ".join(parts)
+    for token in tokens:
+        if token.type == "text" or (include_code and token.type == "code_inline"):
+            parts.append(token.content)
+        elif token.type in {"softbreak", "hardbreak"}:
+            parts.append(" ")
+    return "".join(parts)
 
 
 def recomputed_verdict(
@@ -4342,16 +4577,27 @@ def check_owner_action(
 
     if not missed:
         return  # an adopting record's own adoption is not a contradiction
-    for number, prose in prose_blocks(text):
+    for number, prose in prose_blocks(text, include_code=False):
         block = strip_links(prose)
         if fall.casefold() not in " ".join(_EMPHASIS.sub("", block).split()).casefold():
             continue
         for match in _OWNER_ACTION.finditer(block):
+            if any(
+                span.start() <= match.start() and match.end() <= span.end()
+                for span in _NEGATED_ACTION_LIST.finditer(block)
+            ):
+                continue
             sentence = sentence_around(block, match.start(), match.end())
             if _PREVIOUS_OVERRIDE_DATE in sentence:
                 continue  # the previous recording's override, beside its date
             head = block[: match.start()]
-            boundaries = list(_SENTENCE_END.finditer(head))
+            # A negated earlier clause does not negate a later owner's action.
+            boundaries = list(
+                re.finditer(
+                    r"[;,]|\.(?=\s)|\b(?:and|but|however|yet|while|although|whereas|because)\b",
+                    head,
+                )
+            )
             left = head[boundaries[-1].end() :] if boundaries else head
             if _NEGATION.search(left) is not None:
                 continue

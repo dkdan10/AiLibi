@@ -1,6 +1,6 @@
 # Follow a decision from claim to evidence
 
-**Status:** ready
+**Status:** done
 
 ## Outcome
 
@@ -37,36 +37,37 @@ and scene facts must be checked against source bytes when published.
 
 ## Acceptance
 
-- [ ] Statement, observation, and contradiction references navigate by exact
+- [x] Statement, observation, and contradiction references navigate by exact
   identity to attributed evidence, the corresponding scene, and the relevant
   meeting-boundary memory. Missing references are explicit. No nearest-ID guess,
   prose parser, or automatic implication that a citation supports the claim.
-- [ ] Navigation preserves fog and outcome-reveal boundaries, distinguishes
+- [x] Navigation preserves fog and outcome-reveal boundaries, distinguishes
   observation time from replay input/frame time, supports keyboard use, and
   survives reload or shared links. A forged/missing reference and the unrelated
   p-3 citation above exercise the adverse paths.
-- [ ] A compact static results artifact, at most 50 KiB per set uncompressed,
+- [x] A compact static results artifact, at most 50 KiB per set uncompressed,
   recomputes its chosen metrics from current validated recordings. Each metric
   defines its numerator, denominator, scope, and limitation; source fingerprints
   and recording date/model/prompt provenance travel with it. Tampered outcomes
   or drifted source bytes fail publication. Recorded spending stays separate
   from verified outcomes. Every case link resolves within the baked bundle.
-- [ ] The standalone demo explains purpose, basic movement/task/meeting/win
+- [x] The standalone demo explains purpose, basic movement/task/meeting/win
   rules, recorded playback, source, and Daniel's direction versus agent-written
   code and AI review, including Codex's implementation contributions and
   agent-authored supporting material. It presents the three source-checked cases
   with spoilers withheld until requested; missing or changed evidence cannot
   retain old prose.
-- [ ] The README is a concise entry point, targeting at most 1,600 words, with
+- [x] The README is a concise entry point, targeting at most 1,600 words, with
   separate watching, offline mechanics verification, and authorized live-run
   paths. A linked case study traces one actual owner decision through options,
   evidence, tradeoff, implementation/review, and limitations. Preserve explicit
   authorship disclosure and historical experimental verdicts; update displaced
   links rather than duplicating them; coordinate lessons-page corrections with
   root.
-- [ ] API and static browser journeys exercise all three cases, citation return
+- [x] API and static browser journeys exercise all three cases, citation return
   navigation, keyboard/fog/reveal behavior, compact results, and source links.
-  Clean-source reproduction and the full project gate pass.
+  Clean-source reproduction passes.
+- [x] The combined full project gate passes.
 
 ## Constraints
 
@@ -115,3 +116,69 @@ journeys. Re-run the README's clean-source offline commands, verify all samples,
 and finish with `bash scripts/check.sh`. Record exact commands and source
 fingerprints in Results; pre-existing passing installation evidence is a starting
 point, not a substitute for checking the changed journey.
+
+## Results
+
+Implemented exact transcript/structured-artifact navigation and bounded observation
+references within the architecture's privileged-reader boundary. A citation does
+not certify its inference. Scene links use actual delivery frames; memory is
+labelled as the meeting-boundary snapshot. Private evidence requires the observer's
+lens or omniscient mode. URL state preserves the citation through reload and return
+navigation without silently widening fog or revealing an ending.
+
+The neutral `api/public_results.py` helper validates every source recording and
+rejects an inventory shortened by the picker's skip-on-error behavior. Completed
+outcomes require verification; unfinished records retain reported usage outside
+win denominators. Case prose checks exact source hashes and reconstructed facts.
+Recording dates come from manifests, not file timestamps. The static bundle
+publishes full-set summaries, restricts case links to baked games, and retains
+full model text in meeting files while using the lean bulk projection. Full
+diagnostics require an explicit live-view disclosure.
+
+The canonical 9-player set yields 50 completed games, 35 crew wins, 151 meetings,
+and 95 ejections: 82 impostors and 13 innocents. Ejectee-specific role proof
+accompanies 68/68 correct ejections; without it the count is 14/27. These are
+co-occurrence counts, not causal attribution, and stay separate from the historical
+four-set table. The roughly 1,400-word README links a case study preserving the
+failed rule, explicit owner override, later non-adoptions, and Claude/Codex
+implementation authorship. Historical media and recording/report bytes remain intact.
+
+Targeted verification:
+
+- `.venv/bin/pytest -q tests/api/test_public_results.py tests/scripts/test_build_demo_bundle.py`:
+  38 passed. Planted winner/chronology/order corruption fails publication;
+  source/projection drift, size bounds and valid partial-spend retention are covered.
+- Focused evidence/playback/store/results frontend tests: 95 passed. TypeScript,
+  ESLint, Ruff/format and strict mypy passed on owned source/tests.
+- Real API/static browser journey: 5 passed in 43.7 seconds, including all cases,
+  keyboard use, exact scenes, shared reload, explicit fog switching, unrelated and
+  missing citations, and statement/contradiction anchors. Log:
+  `/tmp/ailibi-evidence-browser-final.log`.
+- Refreshed the previously installed isolated clean source copy, without `.git`
+  or `.env`: two README fake seed-42 runs were byte-identical at tick 12 and $0;
+  all 100 canonical samples verified; static build contains 7 games, 156 JSON
+  files and approximately 4.9 MB total. Full browser suite: 13 passed and 3
+  intentional historical-media capture skips, in 1.0 minute. Copy locator:
+  `/tmp/ailibi-public-clean-copy-path`; retained log: `clean-browser-evidence.log`
+  inside that copy. This preceded the final narrow featured-label correction.
+- Final featured-label follow-through: removed the unsupported superlative,
+  engine/detector attribution error and no-flags/no-knowledge equivalences.
+  All 40 set tests passed, including six derived count/flag checks with planted
+  failures. Both affected browser journeys passed in 14.8 seconds; TypeScript,
+  ESLint, Ruff and strict mypy passed. Log: `/tmp/ailibi-featured-browser.log`.
+  Temporary results/evidence screenshots were visually inspected for layout.
+- Independent review of the public-results helper found no blocker. This owner
+  independently reviewed the coordinated API/performance changes: all 176 canonical
+  cited observations resolved to content and a scene; a genuine lean/full/lean
+  cache-and-usage control passed.
+
+Source fingerprints: 4p1i
+`sha256:8bbf89bf86072311d45338dd84a98f4fe51c42fe6709bb606926072c4e617d14`;
+9p2i `sha256:85fb119eeb09cc9b70fc8e9c7e202d41a3c3a93ff62b8ef824907c4cdec25d10`.
+Final combined verification: `bash scripts/check.sh` passed with 6,599 Python
+tests, 20 optional skips, three expected failures, and 467 frontend tests, plus
+strict typing, lint, formatting, import/document contracts and production build.
+`bash scripts/verify_samples.sh` passed all 100 canonical recordings. The final
+clean-source journey preceded narrow copy and disclosure corrections; those
+corrections passed the combined gate. No deployment, paid call, fresh recording
+or experimental adoption occurred. The owner’s final branch review is pending.

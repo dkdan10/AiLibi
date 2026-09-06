@@ -1,21 +1,9 @@
-"""How ``scripts/check.sh`` invokes pytest, pinned against silent regression.
+"""Execute the shared gate against recording, failure-injectable tool stubs.
 
-Two properties matter and neither is visible from a passing suite:
-
-* the gate runs the default tier ACROSS WORKERS — dropping the ``-n`` flags
-  would still be green, just four times slower, and nobody would notice;
-* ``AILIBI_PYTEST_SERIAL`` still buys a single-process run, and an unrecognised
-  value fails loudly instead of being read as "parallel anyway" — a typo'd
-  ``AILIBI_PYTEST_SERIAL=true`` that silently parallelised is exactly the
-  situation the operator reached for the variable to escape.
-
-The parallel flags deliberately live here and not in pyproject's ``addopts``,
-so a bare ``uv run pytest <node-id>`` stays single-process and debuggable; that
-separation is pinned too.
-
-The checks read the script's bytes and run it as a subprocess with a stub
-``uv`` on ``PATH`` — no leg of the real gate runs, so the pins cost milliseconds
-and cannot recurse into the suite that is asserting them.
+Every mandatory leg must run and its failure must stop the gate. Temporary
+script mutations prove that omitted checks and ignored failures are detected.
+Explicit frontend opt-out and serial pytest remain supported; bare pytest
+stays serial. No real check, install, or network operation runs in this harness.
 """
 
 from __future__ import annotations
@@ -25,8 +13,11 @@ import shlex
 import stat
 import subprocess
 import tomllib
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
+
+import pytest
 
 _REPO_ROOT: Final = Path(__file__).resolve().parents[2]
 _CHECK_SH: Final = _REPO_ROOT / "scripts" / "check.sh"
@@ -38,50 +29,240 @@ _PYPROJECT: Final = _REPO_ROOT / "pyproject.toml"
 _SERIAL_ENV: Final = "AILIBI_PYTEST_SERIAL"
 
 
-def _stub_uv_tree(tmp_path: Path) -> tuple[Path, Path]:
-    """A ``PATH`` holding a ``uv`` that records its argv instead of running it."""
+@dataclass(frozen=True)
+class _Invocation:
+    command: str
+    cwd: Path
+
+
+def _stub_tool_tree(tmp_path: Path) -> tuple[Path, Path]:
+    """Record both tools' invocations, failing only the selected command."""
 
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
-    log = tmp_path / "uv-argv.log"
-    stub = bin_dir / "uv"
-    stub.write_text(
-        '#!/usr/bin/env bash\nprintf "%s\\n" "$*" >> "$UV_ARGV_LOG"\nexit 0\n',
-        encoding="utf-8",
-    )
-    stub.chmod(stub.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    log = tmp_path / "gate-argv.log"
+    for program in ("uv", "npm"):
+        stub = bin_dir / program
+        stub.write_text(
+            "#!/usr/bin/env bash\n"
+            f'command="{program} $*"\n'
+            f'printf "%q " "$(pwd -P)" {program} "$@" >> "$GATE_ARGV_LOG"\n'
+            'printf "\\n" >> "$GATE_ARGV_LOG"\n'
+            'if [ "$command" = "${FAIL_GATE_COMMAND:-}" ]; then exit 73; fi\n'
+            "exit 0\n",
+            encoding="utf-8",
+        )
+        stub.chmod(stub.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
     return bin_dir, log
 
 
 def _run_check(
-    tmp_path: Path, *, serial: str | None
-) -> tuple[subprocess.CompletedProcess[str], list[str]]:
-    """Run check.sh against the stub ``uv``; return the result and its argv log."""
+    tmp_path: Path,
+    *,
+    serial: str | None,
+    skip_frontend: str | None = "1",
+    source: str | None = None,
+    fail_command: str | None = None,
+) -> tuple[subprocess.CompletedProcess[str], list[_Invocation]]:
+    """Run a temporary gate copy in a minimal workspace with both tools stubbed."""
 
-    bin_dir, log = _stub_uv_tree(tmp_path)
+    bin_dir, log = _stub_tool_tree(tmp_path)
+    workspace = tmp_path / "workspace"
+    (workspace / "frontend").mkdir(parents=True)
+    (workspace / "frontend" / "package.json").write_text("{}\n", encoding="utf-8")
+    script = workspace / "check.sh"
+    script.write_text(
+        _CHECK_SH.read_text(encoding="utf-8") if source is None else source,
+        encoding="utf-8",
+    )
     env = dict(os.environ)
     env["PATH"] = f"{bin_dir}:{env['PATH']}"
-    env["UV_ARGV_LOG"] = str(log)
-    # The frontend leg shells out to npm, which the stub does not cover.
-    env["AILIBI_SKIP_FRONTEND"] = "1"
+    env["GATE_ARGV_LOG"] = str(log)
+    env["FAIL_GATE_COMMAND"] = fail_command or ""
+    if skip_frontend is None:
+        env.pop("AILIBI_SKIP_FRONTEND", None)
+    else:
+        env["AILIBI_SKIP_FRONTEND"] = skip_frontend
     if serial is None:
         env.pop(_SERIAL_ENV, None)
     else:
         env[_SERIAL_ENV] = serial
     result = subprocess.run(
-        ["bash", str(_CHECK_SH)],
-        cwd=_REPO_ROOT,
+        ["bash", str(script)],
+        cwd=workspace,
         env=env,
         capture_output=True,
         text=True,
         check=False,
+        timeout=10,
     )
-    recorded = log.read_text(encoding="utf-8").splitlines() if log.exists() else []
+    recorded: list[_Invocation] = []
+    if log.exists():
+        for line in log.read_text(encoding="utf-8").splitlines():
+            directory, *argv = shlex.split(line)
+            recorded.append(
+                _Invocation(
+                    command=shlex.join(argv),
+                    cwd=Path(directory).resolve().relative_to(workspace.resolve()),
+                )
+            )
     return result, recorded
 
 
-def _pytest_lines(recorded: list[str]) -> list[str]:
-    return [line for line in recorded if line.startswith("run pytest")]
+def _pytest_lines(recorded: list[_Invocation]) -> list[str]:
+    return [
+        item.command.removeprefix("uv ")
+        for item in recorded
+        if item.command.startswith("uv run pytest")
+    ]
+
+
+def _required_commands(serial: str | None) -> tuple[str, ...]:
+    """The checks promised by the shared gate, in fail-fast execution order."""
+
+    return (
+        "uv run ruff check .",
+        "uv run ruff format --check .",
+        "uv run lint-imports",
+        "uv run python scripts/validate_task_docs.py",
+        "uv run python scripts/generate_prompts.py --check",
+        "uv run mypy .",
+        "uv run pytest" if serial == "1" else "uv run pytest -n auto --dist loadfile",
+        "npm run lint",
+        "npm run tsc:check",
+        "npm run test",
+        "npm run build",
+    )
+
+
+def _assert_required_gate(
+    result: subprocess.CompletedProcess[str],
+    recorded: list[_Invocation],
+    *,
+    serial: str | None,
+    fail_command: str | None = None,
+    frontend: bool = True,
+) -> None:
+    """Check observed execution and failure propagation, not script spelling."""
+
+    expected = _required_commands(serial)
+    if not frontend:
+        expected = tuple(command for command in expected if command.startswith("uv "))
+    if fail_command is None:
+        assert result.returncode == 0, result.stderr
+    else:
+        assert result.returncode != 0, f"gate ignored failure of {fail_command}"
+        expected = expected[: expected.index(fail_command) + 1]
+    expected_invocations = [
+        _Invocation(command, Path("frontend" if command.startswith("npm ") else "."))
+        for command in expected
+    ]
+    assert recorded == expected_invocations, (
+        "mandatory checks were omitted, reordered, ran in the wrong directory, "
+        "or continued after failure"
+    )
+
+
+@pytest.mark.parametrize("serial", [None, "1"])
+@pytest.mark.parametrize("skip_frontend", [None, "0"])
+def test_every_mandatory_leg_runs(
+    tmp_path: Path, serial: str | None, skip_frontend: str | None
+) -> None:
+    result, recorded = _run_check(tmp_path, serial=serial, skip_frontend=skip_frontend)
+    _assert_required_gate(result, recorded, serial=serial)
+
+
+@pytest.mark.parametrize("serial", [None, "1"])
+@pytest.mark.parametrize("command_index", range(len(_required_commands(None))))
+def test_each_mandatory_failure_stops_the_gate(
+    tmp_path: Path, serial: str | None, command_index: int
+) -> None:
+    command = _required_commands(serial)[command_index]
+    result, recorded = _run_check(
+        tmp_path, serial=serial, skip_frontend=None, fail_command=command
+    )
+    _assert_required_gate(result, recorded, serial=serial, fail_command=command)
+
+
+@pytest.mark.parametrize("serial", [None, "1"])
+@pytest.mark.parametrize("command_index", range(len(_required_commands(None))))
+@pytest.mark.parametrize("mutation", ["remove", "ignore-failure"])
+def test_gate_contract_rejects_each_omission_and_ignored_failure(
+    tmp_path: Path, serial: str | None, command_index: int, mutation: str
+) -> None:
+    command = _required_commands(serial)[command_index]
+    source = _CHECK_SH.read_text(encoding="utf-8")
+    # Match a command boundary so the serial pytest line does not also replace
+    # the parallel invocation. This spelling check applies only to the plant.
+    suffix = (
+        " &&" if command.startswith("npm ") and command != "npm run build" else "\n"
+    )
+    if command == "npm run build":
+        suffix = ")\n"
+    assert source.count(command + suffix) == 1
+    replacement = ":" if mutation == "remove" else f"({command} || true)"
+    source = source.replace(command + suffix, replacement + suffix, 1)
+    failing = command if mutation == "ignore-failure" else None
+    result, recorded = _run_check(
+        tmp_path,
+        serial=serial,
+        skip_frontend=None,
+        source=source,
+        fail_command=failing,
+    )
+
+    with pytest.raises(AssertionError, match="mandatory checks|ignored failure"):
+        _assert_required_gate(result, recorded, serial=serial, fail_command=failing)
+
+
+def test_gate_contract_preserves_argument_boundaries(tmp_path: Path) -> None:
+    source = _CHECK_SH.read_text(encoding="utf-8").replace(
+        "uv run ruff check .", 'uv "run ruff check ."', 1
+    )
+    result, recorded = _run_check(
+        tmp_path, serial=None, skip_frontend=None, source=source
+    )
+    with pytest.raises(AssertionError, match="mandatory checks"):
+        _assert_required_gate(result, recorded, serial=None)
+
+
+@pytest.mark.parametrize(
+    ("original", "replacement"),
+    [
+        ("(cd frontend && npm run lint", "(true && npm run lint"),
+        ("uv run ruff check .", "(cd frontend && uv run ruff check .)"),
+    ],
+    ids=["frontend-in-root", "python-in-frontend"],
+)
+def test_gate_contract_rejects_the_wrong_working_directory(
+    tmp_path: Path, original: str, replacement: str
+) -> None:
+    source = _CHECK_SH.read_text(encoding="utf-8")
+    assert source.count(original) == 1
+    source = source.replace(original, replacement, 1)
+    result, recorded = _run_check(
+        tmp_path, serial=None, skip_frontend=None, source=source
+    )
+    with pytest.raises(AssertionError, match="wrong directory"):
+        _assert_required_gate(result, recorded, serial=None)
+
+
+@pytest.mark.parametrize("serial", [None, "1"])
+def test_frontend_opt_out_preserves_every_python_check(
+    tmp_path: Path, serial: str | None
+) -> None:
+    result, recorded = _run_check(tmp_path, serial=serial, skip_frontend="1")
+    _assert_required_gate(result, recorded, serial=serial, frontend=False)
+    assert "Skipping frontend checks (AILIBI_SKIP_FRONTEND=1)" in result.stderr
+
+
+def test_an_unrecognised_frontend_opt_out_fails_before_any_check(
+    tmp_path: Path,
+) -> None:
+    result, recorded = _run_check(tmp_path, serial=None, skip_frontend="true")
+    assert result.returncode != 0
+    assert "AILIBI_SKIP_FRONTEND must be 0 or 1 (got 'true')" in result.stderr
+    assert recorded == []
 
 
 def test_the_default_gate_runs_pytest_across_workers(tmp_path: Path) -> None:

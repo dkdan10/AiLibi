@@ -31,7 +31,7 @@ summary (no caller), and every set the featured list does not name. The dashboar
 tab in a bundle therefore renders a "No tournament report" card written for this
 artifact — what the demo ships, and where the eval report lives, in app-authored
 words rather than a repeat of the failed request. That is the honest state, not a
-bug, and :func:`_assert_empty_state_compiled_in` proves it is the arm that
+bug, and :func:`_assert_results_compiled_in` proves it is the arm that
 compiled in.
 
 **Offline and $0.** Everything is derived from committed bytes through the SAME
@@ -79,6 +79,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
+from api.public_results import build_public_results  # noqa: E402
 from api.replay_loader import DEFAULT_SET, ReplayLoader  # noqa: E402
 from api.schemas import RubricView  # noqa: E402
 
@@ -123,29 +124,9 @@ _STATIC_MODE_MARKER = "./data"
 
 # The Tournament tab's empty state, checked from BOTH sides.
 #
-# The bundle bakes no tournament report on purpose, so that card is the whole
-# tab for a visitor, and it renders from a branch only a static build selects —
-# which is why no local run, unit test or type check would notice it breaking.
-#
-# PRESENT: a fragment of the bundle's own copy (``noReportBundle`` in
-# ``frontend/src/lib/copy.ts``). This catches DELETION. On its own it proves
-# only that the sentence is in the shipped bytes: the copy tree is one frozen
-# object literal, so every string in it survives both builds regardless of which
-# arm renders.
-#
-# ABSENT: a path literal that appears ONLY inside the local-checkout arm's JSX
-# (`<code>scripts/run_tournament.py</code>`). That arm is markup, not copy, so
-# unlike the strings it really is dropped by dead-code elimination — and only
-# when the static arm is the one that compiled in. Requiring it to be gone is
-# therefore the half that proves the SELECTED branch, and it fails the build if
-# the static arm is deleted, inverted, or its gate stops resolving to `true`.
-# A future surface that legitimately mentions that script in copy shipped by
-# both builds would fail here; the error says so, and the fix is to pick another
-# literal unique to the arm.
-#
-# Both are kept short and ASCII: rewording around them must not falsely fail,
-# and the minifier's escaping must not matter.
-_EMPTY_STATE_MARKER = "needs a tournament report"
+# The static route must carry the compact results and omit checkout-only guidance.
+# These byte markers supplement (not replace) the real static browser journey.
+_RESULTS_MARKER = "What the recordings show"
 _LOCAL_GUIDANCE_MARKER = "scripts/run_tournament.py"
 
 # An absolute filesystem path in text this script authors: POSIX (``/root``,
@@ -356,6 +337,20 @@ def _bake_set(
         source=f"{set_name}/replays",
     )
 
+    summary = build_public_results(loader)
+    available_games = {meta.game_id for meta in metas}
+    summary = summary.model_copy(
+        update={
+            "cases": tuple(
+                case for case in summary.cases if case.game_id in available_games
+            )
+        }
+    )
+    writer.write(
+        f"{prefix}/eval/summary.json",
+        summary.model_dump_json(by_alias=True),
+        source=f"{set_name}/summary",
+    )
     game_ids: list[str] = []
     for meta in metas:
         game_id = meta.game_id
@@ -364,7 +359,9 @@ def _bake_set(
         replay = loader.load_replay(game_id)
         writer.write(
             f"{prefix}/replays/{gid}.json",
-            replay.model_dump_json(by_alias=True),
+            loader.load_replay(game_id, include_llm_bodies=False).model_dump_json(
+                by_alias=True
+            ),
             source=game_id,
         )
         frames = loader.belief_frames(game_id)
@@ -569,7 +566,7 @@ def build_frontend(out_dir: Path, *, default_set: str) -> None:
         check=True,
     )
     _assert_static_mode_compiled_in(out_dir)
-    _assert_empty_state_compiled_in(out_dir)
+    _assert_results_compiled_in(out_dir)
 
 
 def _emitted_scripts(out_dir: Path) -> list[str]:
@@ -601,23 +598,15 @@ def _assert_static_mode_compiled_in(out_dir: Path) -> None:
         )
 
 
-def _assert_empty_state_compiled_in(out_dir: Path) -> None:
-    """Fail loud unless the Tournament tab's BUNDLE empty state is what compiled.
-
-    Two questions, and one marker cannot answer both: is the demo's copy still
-    there, and is it the arm that renders? So the bundle's own sentence must be
-    PRESENT (it is deletable without breaking anything else) and the
-    local-checkout arm's path literal must be ABSENT (it survives only when that
-    arm compiled in). See :data:`_EMPTY_STATE_MARKER` for why each side is the
-    one it is.
-    """
+def _assert_results_compiled_in(out_dir: Path) -> None:
+    """Reject a build missing the public summary or carrying local run guidance."""
 
     sources = _emitted_scripts(out_dir)
-    if not any(_EMPTY_STATE_MARKER in source for source in sources):
+    if not any(_RESULTS_MARKER in source for source in sources):
         raise RuntimeError(
-            f"the built bundle in {out_dir} carries no {_EMPTY_STATE_MARKER!r} — the "
-            "Tournament tab's bundle empty state was deleted or reworded. Restore "
-            "it in frontend/src/lib/copy.ts, or update this marker to the new "
+            f"the built bundle in {out_dir} carries no {_RESULTS_MARKER!r} — the "
+            "compact results surface was deleted or reworded. Restore "
+            "it in frontend/src/components/PublicResults.tsx, or update the "
             "wording."
         )
     if any(_LOCAL_GUIDANCE_MARKER in source for source in sources):
@@ -715,7 +704,8 @@ def write_bundle_readme(out_dir: Path, summary: BakeSummary) -> None:
         "corpus, not a demo), so the Dashboard tab shows its 'No tournament",
         "report' state.",
         "",
-        "The full corpus, the eval dashboard and the reproducibility commands live",
+        "Compact results cover every validated recording in each source set;",
+        "the playable replays are the featured selection. Full diagnostics and reproduction live",
         "in the repository: https://github.com/dkdan10/AiLibi",
         "",
         "Built by `scripts/build_demo_bundle.py`.",

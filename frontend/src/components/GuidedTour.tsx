@@ -163,15 +163,26 @@ interface Step {
 
 const STEPS: readonly Step[] = [
   {
-    title: "Welcome — two truths at once",
+    title: "Welcome — investigate a recorded decision",
     body: (
       <>
         <p className="mb-2 text-sm text-ink-700">
-          AiLibi replays a hidden-information game. The viewer always shows two
-          things side by side: the <strong>ground truth</strong> (who is the
-          impostor, who killed whom) and what each agent only{" "}
-          <strong>believed</strong>. Ground truth is solid; a belief is ghosted
-          and attributed.
+          AiLibi asks whether AI agents can reason from what they actually saw.
+          You are watching saved games, not making live model calls. Daniel Keinan
+          directs the project; Claude Code and Codex agents write code and supporting
+          material, with separate AI review. <a className="underline" href="https://github.com/dkdan10/AiLibi" target="_blank" rel="noreferrer">Read the source and ownership case study.</a>
+        </p>
+        <p className="mb-2 text-sm text-ink-700">
+          Players move one room edge per tick. Crew complete tasks or eject every
+          impostor; impostors kill, deceive, and sabotage, winning at parity or an
+          unresolved sabotage. Body reports and emergency calls begin discussion
+          and voting. Movement is rule-based; models deliberate at meetings.
+        </p>
+        <p className="mb-2 text-sm text-ink-700">
+          Start at <strong>Results &amp; cases</strong> for three decisions to investigate.
+          A ballot citation opens its exact source, scene, and meeting memory.
+          Missing evidence is labelled; a real citation can still be irrelevant.
+          Ground truth is solid; attributed belief is ghosted.
         </p>
         <TwoTruthLegend />
       </>

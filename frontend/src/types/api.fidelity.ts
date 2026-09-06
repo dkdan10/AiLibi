@@ -34,6 +34,7 @@ import type {
 export const _fidelityReplay: ReplayView = {
   "failed_calls": [],
   "finale": null,
+  "llm_bodies_included": true,
   "map": {
     "edges": [
       {

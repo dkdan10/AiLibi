@@ -1,3 +1,4 @@
+import { parseEvidence, type EvidenceSelection } from "./evidence";
 // Pure playback derivations (Task 12.4; design/phase-12/stage-1-design.md §4 —
 // the time model). This module is the SINGLE home for the tick↔frame mapping and
 // every navigation/seek computation, so the transport, advantage scrubber, event
@@ -387,6 +388,7 @@ export function timelineMarkers(ticks: readonly TickView[]): TimelineMarker[] {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface PlaybackUrlState {
+  readonly evidence?: EvidenceSelection | null;
   readonly set: string | null;
   readonly gameId: string | null;
   readonly tick: number | null;
@@ -443,6 +445,7 @@ export function parsePlaybackParams(search: string): PlaybackUrlState {
   const beliefRaw = params.get("beliefView");
 
   return {
+    ...(parseEvidence(params) === null ? {} : { evidence: parseEvidence(params) }),
     set: params.get("set"),
     gameId: params.get("game_id"),
     tick,
@@ -500,6 +503,12 @@ export function serializePlaybackParams(state: PlaybackUrlState): string {
   //       byproduct of having opened the page.
   if (state.reveal) {
     params.set("reveal", "1");
+  }
+  if (state.evidence != null) {
+    params.set("evidenceKind", state.evidence.kind);
+    params.set("evidenceId", state.evidence.id);
+    params.set("evidenceMeeting", state.evidence.meetingId);
+    if (state.evidence.observerId !== null) params.set("evidenceObserver", state.evidence.observerId);
   }
   const query = params.toString();
   return query === "" ? "" : `?${query}`;

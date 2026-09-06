@@ -50,12 +50,10 @@ const TOUR_SEEN_KEY = "ailibi.guidedTourSeen.v1";
 //: card PROMISES, in both directions, so a card and its game cannot drift apart.
 let headCardCopy = "";
 
-//: The head card's no-evidence promise, as its copy words it. A card carrying
-//: this phrase must open onto a meeting with nothing on the table; a card
-//: without it must open onto one that has something. Matching on the promise
-//: rather than on a pinned count is what lets a re-record move the number
-//: without touching this test — and what makes a card/bytes mismatch RED.
-const NO_EVIDENCE_PROMISE = /not one account that contradicts another/i;
+// The featured card's claim about detected contradictions, not all available
+// evidence. Its rendered flag count must agree; the planted case below proves
+// that changed copy or changed flags fail this check.
+const NO_FLAGGED_CONTRADICTIONS_PROMISE = /no flagged contradictions/i;
 
 async function openFeaturedReplay(page: Page): Promise<number> {
   await page.addInitScript((key) => {
@@ -453,23 +451,10 @@ test.describe("spectator journey", () => {
     // is how the empty meeting is COVERED rather than skipped.
     expect(declared.length === 0).toBe(grouped.length === 0);
 
-    // Non-vacuity, because everything above is satisfied by 0 = 0: deleting
-    // `EvidenceSection` outright, or dropping the meeting's flags before the
-    // render, would empty BOTH arrays and still pass.
-    //
-    // So the render is held to what the CARD PROMISES, in both directions. The
-    // head card is the first thing a visitor clicks, and its copy is a claim
-    // about the game behind it. A card promising a room with nothing to go on
-    // must open onto zero evidence; a card that promises anything else must open
-    // onto evidence that is actually there. Either mismatch is red.
-    //
-    // This replaces a pinned `> 0`. That pin encoded the OLD head — a meeting
-    // with three weak signals — and the baseline-8 record emptied it: seed 2 now
-    // holds one meeting, no contradictions, and ejects nobody. The owner ruled
-    // the card be rewritten to that truth rather than the strip re-curated, so
-    // the guard follows the exhibit instead of outliving it.
-    const promisesNothingOnTheTable = NO_EVIDENCE_PROMISE.test(headCardCopy);
-    if (promisesNothingOnTheTable) {
+    // Bind the card's detector-flag claim to the rendered count. The next test
+    // plants both mismatches; neither claim describes all the agents' evidence.
+    const promisesNoFlags = NO_FLAGGED_CONTRADICTIONS_PROMISE.test(headCardCopy);
+    if (promisesNoFlags) {
       expect(declaredTotal).toBe(0);
       expect(grouped.length).toBe(0);
     } else {
@@ -586,25 +571,25 @@ test.describe("spectator journey", () => {
       .map((text) => Number(/^Evidence \((\d+)\)$/.exec(text.trim())?.[1] ?? 0))
       .reduce((sum, n) => sum + n, 0);
 
-    // The head's real state, and the real card: nothing on the table, and copy
+    // The head's real state, and the real card: no flagged contradictions, and copy
     // that says so. This is the pairing the journey asserts.
     expect(declaredTotal).toBe(0);
     expect(grouped.length).toBe(0);
-    expect(NO_EVIDENCE_PROMISE.test(headCardCopy)).toBe(true);
+    expect(NO_FLAGGED_CONTRADICTIONS_PROMISE.test(headCardCopy)).toBe(true);
 
     // MISMATCH A — a card that PROMISES contradictions over a meeting that has
     // none. The journey would take the `else` branch and demand > 0.
     const cardClaimingEvidence = headCardCopy.replace(
-      NO_EVIDENCE_PROMISE,
+      NO_FLAGGED_CONTRADICTIONS_PROMISE,
       "three accounts that cannot all be true",
     );
-    expect(NO_EVIDENCE_PROMISE.test(cardClaimingEvidence)).toBe(false);
+    expect(NO_FLAGGED_CONTRADICTIONS_PROMISE.test(cardClaimingEvidence)).toBe(false);
     expect(declaredTotal).not.toBeGreaterThan(0); // the branch it would fail on
 
-    // MISMATCH B — the no-evidence promise over a meeting that HAS evidence.
+    // MISMATCH B — the no-flags promise over a meeting that HAS evidence.
     // The journey would take the `if` branch and demand 0.
     const pretendEvidenceTotal = 3;
-    expect(NO_EVIDENCE_PROMISE.test(headCardCopy)).toBe(true);
+    expect(NO_FLAGGED_CONTRADICTIONS_PROMISE.test(headCardCopy)).toBe(true);
     expect(pretendEvidenceTotal).not.toBe(0); // the branch it would fail on
   });
 

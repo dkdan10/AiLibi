@@ -16,6 +16,8 @@
 // perspective alone — see `isRoleDisclosingRewriteReason` below. Reveal must
 // never widen what fog hides, and it does not.
 
+import { EvidenceLink } from "./EvidencePanel";
+import { useReplayStore } from "../store/replayStore";
 import { showsBallotCorrectness } from "../lib/copy";
 import { tokens } from "../tokens";
 import type { BallotView, PlayerView } from "../types/api";
@@ -141,6 +143,7 @@ export function BallotCard({
   omniscient,
   revealOutcome,
 }: BallotCardProps) {
+  const meetingId = useReplayStore((s) => s.selectedMeetingId);
   const isSkip = ballot.target === "SKIP";
   const confidence = Math.max(0, Math.min(1, ballot.confidence));
   const pct = Math.round(confidence * 100);
@@ -219,22 +222,10 @@ export function BallotCard({
         </div>
       )}
 
-      {/* Task 16.7.1: the voter's own-episodic-observation citation
-          (`VoteBallot.primary_reason_observation_id`), display-only — the
-          manager already validated it against the voter's memory, so the chip
-          just surfaces the raw `{agent_id}:{tick}:{seq}` id (mono, role-neutral,
-          no linking logic). */}
-      {ballot.primary_reason_observation_id !== null && (
-        <div className="mb-2 flex flex-wrap items-center gap-1.5">
-          <span
-            className="inline-flex items-center gap-1 rounded-md border border-ink-200 bg-paper-2 px-1.5 py-0.5 font-mono text-[10px] font-bold text-ink-700"
-            title="the voter cited this observation from its own memory"
-          >
-            <span className="uppercase tracking-wide text-ink-400">cites</span>
-            {ballot.primary_reason_observation_id}
-          </span>
-        </div>
-      )}
+      <div className="mb-2 flex flex-wrap gap-2">
+        {ballot.primary_reason_id !== null && meetingId !== null && <EvidenceLink target={{ kind: "statement", id: ballot.primary_reason_id, meetingId, observerId: ballot.voter }}>Cited statement · {ballot.primary_reason_id}</EvidenceLink>}
+        {ballot.primary_reason_observation_id !== null && (meetingId !== null ? <EvidenceLink target={{ kind: "observation", id: ballot.primary_reason_observation_id, meetingId, observerId: ballot.voter }}>Cited observation · {ballot.primary_reason_observation_id}</EvidenceLink> : <span className="text-xs">{ballot.primary_reason_observation_id}</span>)}
+      </div>
 
       {rationale !== "" ? (
         <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-ink-900">

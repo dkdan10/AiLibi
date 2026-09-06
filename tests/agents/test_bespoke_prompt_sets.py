@@ -516,19 +516,10 @@ class TestQwen332bV5VentElicitation:
 
 
 class TestQwen3627bV5InWorldRegister:
-    """Version pin for the locked set's current lineage.
+    """Pin the locked prompt family's current, uniquely attributable versions.
 
-    Each layer is exactly one registry entry, so every prompt change is
-    separately attributable at the record that adopts it: v1 the baseline-4
-    bespoke port, v2 the 16.15 elicitation batch, v3 the 16.16 persona voice
-    layer, v4 the 20.31 evidence-honesty batch, v5 the Task-21.1 in-world
-    register (the machinery nouns out of every rendered line, the map card's
-    prose-name anchor). No two bodies can share a stamp: the committed sample
-    sets stamp *.qwen3_6_27b.v4 and re-render through the archived v4 bytes
-    until the adopting re-record. The per-ask mechanism fixtures live in
-    ``tests/meetings/test_elicitation_fixtures.py``; the persona render
-    fixtures in ``tests/meetings/test_persona_render.py``; this pin holds the
-    stamp.
+    Canonical recordings use these live bodies. Mechanism and persona rendering
+    are checked separately in the meeting fixture suites.
     """
 
     def test_registry_stamps_all_four_templates_v5(self) -> None:
@@ -541,9 +532,7 @@ class TestQwen3627bV5InWorldRegister:
         }
 
     def test_bumped_stamps_never_collide_with_prior_bodies(self) -> None:
-        # Every earlier lineage stamp is still worn by committed bytes (the
-        # sample sets and the ML corpus stamp .v4). The bumped registry must
-        # never re-mint one for the v5 bodies.
+        # Current bodies must not reuse an earlier lineage's version stamp.
         for value in prompt_versions_for_set("qwen3_6_27b").values():
             assert value.endswith(".qwen3_6_27b.v5")
             assert ".v1" not in value
@@ -596,9 +585,7 @@ class TestBespokeSetRegistration:
 class TestQwen3627bV5RenderPins:
     """Render pins for the locked set's live v5 bodies.
 
-    The committed bytes stamp v4 and re-render through the archive, so the
-    prompt-byte golden does not exercise these bodies during the bump-in-flight
-    window. These renders are what guards them instead.
+    These mechanism-level controls supplement the committed prompt-byte golden.
     """
 
     def _render(self, *, impostor_count: int) -> dict[str, str]:

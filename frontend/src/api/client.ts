@@ -18,6 +18,7 @@ import type {
   BeliefFrameView,
   EvalCostSummaryView,
   MeetingView,
+  PublicResultsView,
   ReplayMetadataView,
   ReplayView,
   RubricView,
@@ -252,7 +253,20 @@ export function listReplays(set?: string): Promise<ReplayMetadataView[]> {
 }
 
 export function getReplay(gameId: string, set?: string): Promise<ReplayView> {
-  return getJson<ReplayView>(apiUrl(`/replays/${pathSegment(gameId)}`, set));
+  const path = `/replays/${pathSegment(gameId)}`;
+  // Static bundles already choose their bulk projection at build time. Keep
+  // their filenames stable, including older bundles with complete text bodies.
+  return getJson<ReplayView>(
+    apiUrl(STATIC_DATA_MODE ? path : `${path}?include_llm_bodies=false`, set),
+  );
+}
+
+export async function getPublicResults(set?: string): Promise<PublicResultsView> {
+  const summary = await getJson<PublicResultsView>(apiUrl("/eval/summary", set));
+  if (summary.format_version !== 1) {
+    throw new Error("Unsupported results format. Rebuild the demo or use a matching API.");
+  }
+  return summary;
 }
 
 export function getTick(

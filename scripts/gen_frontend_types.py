@@ -63,6 +63,7 @@ from api.schemas import (  # noqa: E402
     AgentMemoryView,
     BeliefFrameView,
     EvalCostSummaryView,
+    PublicResultsView,
     ReplayView,
     RubricView,
     SuspicionGraphView,
@@ -81,6 +82,7 @@ _ROOTS: Final[tuple[type[BaseModel], ...]] = (
     AgentMemoryView,
     BeliefFrameView,
     EvalCostSummaryView,
+    PublicResultsView,
     SuspicionGraphView,
     RubricView,
     TournamentEvalReport,
@@ -279,6 +281,7 @@ class _Generator:
                 in {
                     ("ReplayMetadataView", "completion_status"),
                     ("ReplayMetadataView", "outcome_verified"),
+                    ("ReplayView", "llm_bodies_included"),
                     ("AgentMemoryView", "observation_references"),
                 }
                 else ""

@@ -236,7 +236,10 @@ def test_baked_bytes_are_the_bytes_the_live_api_serves(
     bdb.bake_data(tmp_path, games=_ONE_9P2I, samples_dir=_SAMPLES)
     data = tmp_path / "data" / "9p2i"
 
-    replay = api.get("/replays/headless-seed-2", params={"set": "9p2i"})
+    replay = api.get(
+        "/replays/headless-seed-2",
+        params={"set": "9p2i", "include_llm_bodies": "false"},
+    )
     assert replay.status_code == 200
     baked_replay = _read(data / "replays" / "headless-seed-2.json")
     assert baked_replay == replay.json()
@@ -373,25 +376,25 @@ def test_a_build_without_the_bundle_empty_state_is_rejected(tmp_path: Path) -> N
     emitted.write_text(
         'const c={noReportTitle:"No tournament report."}', encoding="utf-8"
     )
-    with pytest.raises(RuntimeError, match="bundle empty state"):
-        bdb._assert_empty_state_compiled_in(tmp_path)
+    with pytest.raises(RuntimeError, match="compact results surface"):
+        bdb._assert_results_compiled_in(tmp_path)
 
     # Both arms emitted — the gate stopped selecting, so the local guidance
     # survived dead-code elimination alongside the demo's copy.
     emitted.write_text(
-        'const c={noReportBundle:"The eval dashboard needs a tournament report."};'
+        'const c={noReportBundle:"What the recordings show"};'
         'const j="scripts/run_tournament.py"',
         encoding="utf-8",
     )
     with pytest.raises(RuntimeError, match="LOCAL-checkout arm"):
-        bdb._assert_empty_state_compiled_in(tmp_path)
+        bdb._assert_results_compiled_in(tmp_path)
 
     # The static arm alone: present sentence, absent local guidance.
     emitted.write_text(
-        'const c={noReportBundle:"The eval dashboard needs a tournament report."}',
+        'const c={noReportBundle:"What the recordings show"}',
         encoding="utf-8",
     )
-    bdb._assert_empty_state_compiled_in(tmp_path)
+    bdb._assert_results_compiled_in(tmp_path)
 
 
 def test_the_local_guidance_marker_is_unique_to_the_arm_it_probes() -> None:
@@ -413,27 +416,16 @@ def test_the_local_guidance_marker_is_unique_to_the_arm_it_probes() -> None:
     assert hits == [src / "components" / "TournamentDashboard.tsx"], hits
 
 
-def test_the_empty_state_marker_is_a_substring_of_the_shipped_copy() -> None:
-    """The marker tracks the real string, not a remembered one.
-
-    A marker that had drifted from `copy.ts` would fail every build (or, worse,
-    match some unrelated chunk), so the two are pinned against each other here
-    rather than trusted to stay in step.
-    """
-
-    copy_ts = (_REPO_ROOT / "frontend" / "src" / "lib" / "copy.ts").read_text(
-        encoding="utf-8"
-    )
-    value = re.search(r'noReportBundle:\s*"([^"]*)"', copy_ts)
-    assert value is not None, "noReportBundle is gone from the copy tree"
-    assert bdb._EMPTY_STATE_MARKER in value.group(1)
+def test_results_marker_tracks_the_actual_public_view() -> None:
+    source = (_REPO_ROOT / "frontend/src/components/PublicResults.tsx").read_text()
+    assert bdb._RESULTS_MARKER in source
 
 
 def test_an_empty_build_dir_fails_loud(tmp_path: Path) -> None:
     with pytest.raises(FileNotFoundError, match="no .*index.html"):
         bdb._assert_static_mode_compiled_in(tmp_path)
     with pytest.raises(FileNotFoundError, match="no .*index.html"):
-        bdb._assert_empty_state_compiled_in(tmp_path)
+        bdb._assert_results_compiled_in(tmp_path)
 
 
 # ── the --out guard ──────────────────────────────────────────────────────────
@@ -716,3 +708,25 @@ def test_the_repository_url_is_not_read_as_a_host_path() -> None:
         r"built in \\corp-server\private\replays",
     ):
         assert bdb._HOST_PATH_IN_TEXT.search(named) is not None, named
+
+
+def test_summary_covers_full_validated_set_but_links_only_baked_cases(
+    tmp_path: Path, api: TestClient
+) -> None:
+    bdb.bake_data(
+        tmp_path,
+        games=tuple(bdb.FeaturedGame(set_name="9p2i", seed=seed) for seed in (23, 46)),
+        samples_dir=_SAMPLES,
+    )
+    path = tmp_path / "data/9p2i/eval/summary.json"
+    summary = json.loads(path.read_text())
+    response = api.get("/eval/summary", params={"set": "9p2i"})
+    assert response.status_code == 200
+    assert summary == response.json()
+    assert summary["games"] == 50 and len(summary["cases"]) == 3
+    assert path.stat().st_size < 50 * 1024
+    for case in summary["cases"]:
+        base = tmp_path / "data/9p2i/replays" / case["game_id"] / "meetings"
+        mid = bdb._file_segment(case["meeting_id"])
+        assert (base / f"{mid}.json").is_file()
+        assert (base / mid / "memory" / f"{case['observer_id']}.json").is_file()

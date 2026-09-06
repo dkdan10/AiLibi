@@ -1357,6 +1357,8 @@ class ReplayView(_FrozenView):
     # and defaulted so every payload serialized before 19.10 still parses;
     # ``None`` for a partial replay with no recorded ``game_over`` row.
     finale: GameFinale | None = None
+    # Missing on older static bundles, whose replay payloads included bodies.
+    llm_bodies_included: bool = True
 
 
 # ---------------------------------------------------------------------------
@@ -1397,6 +1399,57 @@ class EvalCostSummaryView(_FrozenView):
     unreadable_replays: int = 0
     accounting_complete: bool = True
     recordings: tuple[ReplayAccountingView, ...] = ()
+
+
+class PublicCaseView(_FrozenView):
+    """A source-pinned example with a replay/meeting/evidence destination."""
+
+    case_id: str
+    title: str
+    setup: str
+    explanation: str
+    game_id: str
+    meeting_id: str
+    source_sha256: str
+    source_url: str
+    meeting_tick: int
+    observer_id: str
+    turn_id: str | None
+    observation_id: str | None
+    classification: Literal["supported", "unsupported", "unresolved"]
+
+
+class PublicResultsView(_FrozenView):
+    """Compact results derived from verified recordings, with explicit counts."""
+
+    format_version: Literal[1] = 1
+    set_name: str
+    source_fingerprint: str
+    recorded_from: str | None
+    recorded_until: str | None
+    models: tuple[str, ...]
+    prompt_versions: tuple[str, ...]
+    source_url: str | None
+    games: int
+    completed: int
+    aborted: int
+    tick_limited: int
+    unfinished: int
+    crew_wins: int
+    impostor_wins: int
+    task_wins: int
+    meetings: int
+    ejections: int
+    impostor_ejections: int
+    innocent_ejections: int
+    proof_backed_ejections: int
+    proof_backed_correct: int
+    proof_free_ejections: int
+    proof_free_correct: int
+    reported_cost_usd: float
+    input_tokens: int
+    output_tokens: int
+    cases: tuple[PublicCaseView, ...]
 
 
 class RubricGameView(_FrozenView):
@@ -1481,6 +1534,8 @@ __all__ = [
     "ObservationReferenceView",
     "PlayerView",
     "PositionView",
+    "PublicCaseView",
+    "PublicResultsView",
     "ReplayMetadataView",
     "ReplayView",
     "ReportBodyEventView",

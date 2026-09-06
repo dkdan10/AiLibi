@@ -1,3 +1,4 @@
+import { PublicResults } from "./PublicResults";
 // The Tournament view: the merged `TournamentEvalReport` rendered as balance
 // outcome, vote correctness, the conversion + gate surface, the
 // proof-vs-inference deduction instrument, calibration, alibi fabrication, an
@@ -1173,7 +1174,7 @@ export function TournamentDashboardView({
 // Connected dashboard — store (report) + the `/eval/rubric` fetch (histogram)
 // ---------------------------------------------------------------------------
 
-export function TournamentDashboard() {
+function DetailedTournamentDashboard() {
   const report = useTournamentStore((s) => s.report);
   const isLoading = useTournamentStore((s) => s.isLoading);
   const error = useTournamentStore((s) => s.error);
@@ -1265,4 +1266,18 @@ export function TournamentDashboard() {
       />
     </div>
   );
+}
+
+
+/** The compact verified summary is available in both live and static viewers. */
+export function TournamentDashboard() {
+  const seedSet = useReplayStore((s) => s.seedSet);
+  const sets = useReplayStore((s) => s.availableSets);
+  const setSeedSet = useReplayStore((s) => s.setSeedSet);
+  const loadSets = useReplayStore((s) => s.loadSets);
+  const [showDetailed, setShowDetailed] = useState(false);
+  useEffect(() => { void loadSets(); }, [loadSets]);
+  return <div className="space-y-5"><SetSelector sets={sets} value={seedSet} onChange={setSeedSet} /><PublicResults seedSet={seedSet} />
+    {!STATIC_BUNDLE_BUILD && <details onToggle={(event) => setShowDetailed(event.currentTarget.open)}><summary className="cursor-pointer text-sm underline">{DASHBOARD_COPY.detailedReport}</summary>{showDetailed && <DetailedTournamentDashboard />}</details>}
+  </div>;
 }

@@ -14,7 +14,7 @@ the next shows its predecessor.
 | What | Figure | At baseline 7 | Recorded on, and where it lives |
 |---|---|---|---|
 | Committed sample replays that reconstruct byte-identically | 100 of 100 | 100 of 100 | every commit — `bash scripts/verify_samples.sh` |
-| Observation-firewall violations, all phases | zero | zero | never breached in CI — the three mechanisms are named below |
+| Observation boundary checks | import rules and planted/recursive leak checks | import rules and planted/recursive leak checks | bounded mechanisms, described below |
 | Impostor win rate, committed samples | 36% (4p1i), 30% (9p2i) | 36% (4p1i), 24% (9p2i) | the 2026-08-31 record — [4p1i](../replays/samples/4p1i/MANIFEST.md), [9p2i](../replays/samples/9p2i/MANIFEST.md) |
 | Eject ballots carrying a valid citation, a turn or an observation id (9p2i) | 526 / 527, zero dangling | 538 / 538, zero dangling | reference recording 8, 2026-08-31 — [instrument](../tests/eval/test_vj_instruments.py) |
 | Ejection accuracy with engine-certified proof of the ejectee's role, against without | 333 / 333 = 1.0000 vs 50 / 96 = 0.5208 | 326 / 326 = 1.0000 vs 61 / 103 = 0.5922 | the 2026-08-31 record, pooled over four recorded sets — [the record](../audits/audit-phase-21-rerecord.md) §5.1, against [the one before it](../audits/audit-phase-20-baseline-7.md) §3 |
@@ -37,16 +37,14 @@ reporter, against 34 of 46 — a share of 0.5500 against a registered 0.40, so a
 **finding** again, and nothing was adopted
 ([the record](../audits/audit-phase-21-adopting-record.md)).
 
-**How the firewall claim is enforced.** Three mechanisms: the
+**What the boundary checks cover.** The
 [import-linter contracts](../.importlinter), the planted-leak test in
 [tests/test_firewall.py](../tests/test_firewall.py), and the recursive packet
-sweep in [eval/leak_scan.py](../eval/leak_scan.py). The contracts list every
-top-level package that ships or gates shipping as a root, because the graph
-builder builds nodes only for roots and a traversal stops at the first hop into
-a package it does not know — a root left out is a hole in the transitive claim.
-The planted-leak test writes its bad imports into a temporary copy of the tree,
-never the checkout, and parses the committed configuration, so a contract added
-there is exercised without editing the test.
+sweep in [eval/leak_scan.py](../eval/leak_scan.py) test imports and entitled
+packets. They do not establish complete privacy: default meeting openings still
+expose a hidden death tick through a body identifier. The implemented temporal
+repair remains default-off pending an adopting record. The
+[observation contract](observation-contract.md) states the exact boundary.
 
 ## 2. What to run, and what to watch
 
@@ -64,15 +62,19 @@ The served default is the 9-player, 2-impostor set, the one with meetings and
 suspicion arcs; the 4-player set is a fast fixture of short games. The curated
 list the guided tour opens is hand-picked, not scored, and spoiler-free.
 
-Three of them are the ones to open first, each re-read on the 2026-08-31 bytes:
-**9p2i seed 23**, twenty-six spoken turns over four meetings, carrying no trace
-of the injustice it once held — a crewmate convicted on a sighting its speaker
-could not have made — the meeting in question flagging
-nothing and ejecting nobody; **9p2i seed 46**, four meetings and exactly one flag
-in the whole game, and that one a pair of conflicting accounts rather than
-anything the engine certified; and **4p1i seed 11**, one meeting and three turns
-with nothing flagged at all, where the crew's own reading is the only thing on
-the table.
+Open **Results & cases** for three source-bound examples, with analysis hidden
+until requested. **9p2i seed 23**, meeting 0: p-5's cited vent observation is
+real and the table uses direct role evidence. Its meeting 1 shows the contrasting
+case: seven voluntary skips amid two weak alibi flags. **9p2i seed 46**, meeting
+3: p-9 calls a legal three-room route impossible; three ballots cite that claim
+and eject an innocent reporter. p-3's separate cited observation describes a
+different player. **4p1i seed 11** remains a short comparison: one meeting, three
+turns, no flags.
+
+Click an exact statement, observation, or flag source to inspect it. Observation
+time and scene-frame time are labelled separately. Private memory requires the
+observer's perspective or an omniscient view; opening a link does not silently
+widen fog. “Return to meeting and ballots” keeps the same evidence context.
 
 One qualification, the seam the project turns on: a flag is a contradiction the
 meeting layer *detected*, not a fact the engine *certified*. The ballot now says
@@ -137,5 +139,5 @@ measurement — is [ml-program.md](ml-program.md).
 
 [Architecture](architecture.md) · [glossary](glossary.md) ·
 [history](history.md) · [audits index](../audits/README.md) ·
-[workflow protocol](../AGENTS.md) · [design history](../DESIGN.md) ·
+[ownership decision](ownership-case-study.md) · [workflow protocol](../AGENTS.md) · [design history](../DESIGN.md) ·
 [deployment](deployment.md) · [artifacts](artifacts.md).

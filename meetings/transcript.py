@@ -2345,7 +2345,7 @@ def _iter_alibis(
 ) -> Iterator[_IndexedAlibi]:
     """Yield every location account: alibi claims + whereabouts self-placements.
 
-    Task 16.7: a spoken :class:`~meetings.schemas.WhereaboutsClaim` ("I was
+    A spoken :class:`~meetings.schemas.WhereaboutsClaim` ("I was
     in ``room`` at ``tick``") is indexed as a DEGENERATE SINGLE-TICK
     SELF-ALIBI (subject = the speaker, ``from_tick == to_tick == tick``) so
     the CONTRADICTION consumers of the alibi indexing -- the conflict /
@@ -2353,11 +2353,10 @@ def _iter_alibis(
     dedup -- prosecute a lying self-placement with the alibi rules they
     already have, no new flag kind and no duplicated chronology discipline (a
     single tick satisfies the :class:`~meetings.schemas.AlibiClaim` range
-    validator by construction). The synthesized claim's event id is the
-    OBSERVATION id (:func:`turn_observation_id` -- a whereabouts lives on
-    ``turn.observations``), so a flag referencing it resolves through
-    :func:`_event_speaker_index` and the spectator surface exactly like any
-    other observation. Per turn, claims index before observations -- a fixed
+    validator by construction). The synthesized claim uses the distinct
+    whereabouts id (:func:`_turn_whereabouts_id`), preserving its role as a
+    self-placement account while resolving through :func:`_event_speaker_index`
+    and the spectator surface. Per turn, claims index before observations -- a fixed
     order, so the echo dedup's first-statement-wins is deterministic.
 
     ``include_whereabouts=False`` (the :func:`detect_corroborations` caller)

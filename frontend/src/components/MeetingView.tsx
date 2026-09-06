@@ -42,6 +42,7 @@ import type {
   PlayerView,
   TurnView,
 } from "../types/api";
+import { EvidenceLink, EvidencePanel } from "./EvidencePanel";
 import { BallotCard } from "./BallotCard";
 import { TurnCard } from "./TurnCard";
 
@@ -416,6 +417,7 @@ function EvidenceSection({
   contradictions: readonly ContradictionView[];
   turns: readonly TurnView[];
 }) {
+  const meetingId = useReplayStore((s) => s.selectedMeetingId);
   if (contradictions.length === 0) {
     return null;
   }
@@ -520,6 +522,7 @@ function EvidenceSection({
                         <span className="font-mono text-2xs font-bold text-ink-900">{names}</span>
                       )}
                       <span className="min-w-0 break-words">{c.description}</span>
+                      {meetingId !== null && Array.from(new Set([c.event_a_id, c.event_b_id])).map((id, index) => <EvidenceLink key={id} target={{kind: "artifact", id, meetingId, observerId: null}}>Source {index + 1} · {endpoint(id) ?? "unresolved reference"}</EvidenceLink>)}
                     </li>
                   );
                 })}
@@ -683,6 +686,7 @@ export function MeetingView() {
           </button>
         </div>
 
+        <EvidencePanel inMeeting />
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.4fr_1fr]">
           <TranscriptPanel meeting={meeting} players={replay.players} />
           <div className="flex flex-col gap-4">

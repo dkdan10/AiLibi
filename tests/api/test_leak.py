@@ -115,6 +115,8 @@ EXPECTED_DTOS: Final[frozenset[str]] = frozenset(
         "BeliefFrameView",
         "AgentMemoryView",
         "ObservationReferenceView",
+        "PublicCaseView",
+        "PublicResultsView",
         "SuspicionEntryView",
         "SuspicionGraphView",
         "ReplayMetadataView",

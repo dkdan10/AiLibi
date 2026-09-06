@@ -30,6 +30,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from api.main import ENV_REPLAY_DIR, create_app
+from api.schemas import ReplayView
 from api.replay_loader import (
     DEFAULT_SET,
     ReplayLoader,
@@ -557,3 +558,47 @@ def test_determinism_holds_per_set(monkeypatch: pytest.MonkeyPatch) -> None:
         loader = registry.get(set_name)
         replay = loader.load_replay(f"headless-seed-{_FAST_SEED}")
         assert replay.metadata.game_id == f"headless-seed-{_FAST_SEED}"
+
+
+def _assert_featured_counts(label: str, replay: ReplayView) -> None:
+    """Check the bounded count vocabulary used by these editorial labels."""
+    words = {"one": 1, "three": 3, "four": 4, "twenty-six": 26}
+    text = label.lower()
+    meeting = re.search(r"\b(one|four) (?:short )?meetings?\b", text)
+    turns = re.search(r"\b(three|twenty-six) (?:spoken )?turns\b", text)
+    assert meeting is not None or turns is not None
+    if meeting is not None:
+        assert len(replay.meetings) == words[meeting.group(1)]
+    if turns is not None:
+        assert sum(len(item.turns) for item in replay.meetings) == words[turns.group(1)]
+    if "no flagged contradictions" in text:
+        assert not any(item.contradictions for item in replay.meetings)
+
+
+@pytest.mark.parametrize(
+    "set_name,seed",
+    [("9p2i", 2), ("9p2i", 23), ("9p2i", 46), ("4p1i", 29), ("4p1i", 2), ("4p1i", 11)],
+)
+def test_current_featured_claims_match_source_and_gate_bites(
+    set_name: str, seed: int
+) -> None:
+    label = next(
+        label
+        for pair, label in zip(
+            _parse_featured_games(), _FEATURED_LABEL.findall(_featured_block())
+        )
+        if pair == (set_name, seed)
+    )
+    replay = (
+        SetLoaderRegistry(_PARENT).get(set_name).load_replay(f"headless-seed-{seed}")
+    )
+    _assert_featured_counts(label, replay)
+    with pytest.raises(AssertionError):
+        _assert_featured_counts(label, replay.model_copy(update={"meetings": ()}))
+    for claim in (
+        "no evidence at all",
+        "everything the crew will ever know",
+        "engine flagged",
+        "most-argued",
+    ):
+        assert claim not in label

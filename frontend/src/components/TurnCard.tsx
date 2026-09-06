@@ -20,6 +20,7 @@ import {
   observationEventId,
   turnClaimEventId,
 } from "../lib/contradictions";
+import { evidenceDomId } from "../lib/evidence";
 import { TURN_COPY } from "../lib/copy";
 import { useReplayStore } from "../store/replayStore";
 import { tokens } from "../tokens";
@@ -329,6 +330,7 @@ export function TurnCard({
 
   return (
     <article
+      id={evidenceDomId(turn.turn_id)} tabIndex={-1}
       style={{ marginLeft: indent, borderLeftColor: accent }}
       className="rounded-xl border border-ink-100 border-l-4 bg-paper-1 p-3 shadow-data"
     >
@@ -395,6 +397,7 @@ export function TurnCard({
                 {observations.map(({ obs, contras }, index) => (
                   <li
                     key={`obs-${index}`}
+                    id={evidenceDomId(observationEventId(turn, obs, index))} tabIndex={-1}
                     className="flex flex-wrap items-center gap-2 text-ink-700"
                   >
                     <span className="text-ink-500">•</span>
@@ -411,6 +414,7 @@ export function TurnCard({
                 {claims.map(({ claim, contras }, index) => (
                   <li
                     key={`claim-${index}`}
+                    id={evidenceDomId(turnClaimEventId(turn, index))} tabIndex={-1}
                     className="flex flex-wrap items-center gap-2 text-ink-700"
                   >
                     <span className="text-ink-500">•</span>

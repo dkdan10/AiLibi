@@ -39,6 +39,7 @@ export interface ReplayView {
   meetings: MeetingView[];
   failed_calls: FailedCallView[];
   finale: GameFinale | null;
+  llm_bodies_included?: boolean;
 }
 
 export interface ReplayMetadataView {
@@ -474,6 +475,53 @@ export interface ReplayAccountingView {
   verified_winner: Winner | null;
   integrity_status: "verified" | "unverified" | "invalid";
   validation_error: string | null;
+}
+
+export interface PublicResultsView {
+  format_version: 1;
+  set_name: string;
+  source_fingerprint: string;
+  recorded_from: string | null;
+  recorded_until: string | null;
+  models: string[];
+  prompt_versions: string[];
+  source_url: string | null;
+  games: number;
+  completed: number;
+  aborted: number;
+  tick_limited: number;
+  unfinished: number;
+  crew_wins: number;
+  impostor_wins: number;
+  task_wins: number;
+  meetings: number;
+  ejections: number;
+  impostor_ejections: number;
+  innocent_ejections: number;
+  proof_backed_ejections: number;
+  proof_backed_correct: number;
+  proof_free_ejections: number;
+  proof_free_correct: number;
+  reported_cost_usd: number;
+  input_tokens: number;
+  output_tokens: number;
+  cases: PublicCaseView[];
+}
+
+export interface PublicCaseView {
+  case_id: string;
+  title: string;
+  setup: string;
+  explanation: string;
+  game_id: string;
+  meeting_id: string;
+  source_sha256: string;
+  source_url: string;
+  meeting_tick: number;
+  observer_id: string;
+  turn_id: string | null;
+  observation_id: string | null;
+  classification: "supported" | "unsupported" | "unresolved";
 }
 
 export interface SuspicionGraphView {

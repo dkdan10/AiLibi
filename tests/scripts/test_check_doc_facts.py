@@ -91,6 +91,7 @@ _COPIED = (
     "replays/samples/9p2i/MANIFEST.md",
     "audits/audit-phase-18-close.md",
     "audits/audit-phase-19-close.md",
+    "audits/audit-phase-21-close.md",
     # The three audits the checker actually reads: the fixture stands every
     # other audits/*.md up EMPTY, so these are copied whole. The ladder tip
     # publishes the current record's cells, the baseline-7 record the history
@@ -121,6 +122,10 @@ _COPIED = (
     # The two published pages and the phase contract the review index's
     # acted-on map is resolved against.
     "docs/lessons.md",
+    "docs/ownership-case-study.md",
+    "tasks/phase-21.md",
+    "audits/review-2026-08-26/A/collated-findings.md",
+    "audits/review-2026-08-26/B/collated-findings.md",
     "audits/review-2026-08-19/README.md",
     "tasks/phase-20.md",
 )
@@ -146,6 +151,7 @@ _ENUMERATED_GLOBS = (
 _LINK_ABOVE_BYTES = 1_000_000
 
 _README = "README.md"
+_OWNERSHIP_CASE = "docs/ownership-case-study.md"
 _ENV_EXAMPLE = ".env.example"
 _MANIFEST_4P1I = "replays/samples/4p1i/MANIFEST.md"
 _MANIFEST_9P2I = "replays/samples/9p2i/MANIFEST.md"
@@ -446,8 +452,8 @@ def test_wrong_recording_model_detected(doc_tree: Path) -> None:
     _substitute(
         doc_tree,
         _README,
-        "against `Qwen/Qwen3.6-27B`",
-        "against `Qwen/Qwen3-32B`",
+        "using `Qwen/Qwen3.6-27B`",
+        "using `Qwen/Qwen3-32B`",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
@@ -460,8 +466,8 @@ def test_wrong_prompt_set_version_detected(doc_tree: Path) -> None:
     _substitute(
         doc_tree,
         _README,
-        "`qwen3_6_27b` `v5` prompt set",
-        "`qwen3_6_27b` `v2` prompt set",
+        "`qwen3_6_27b` `v5` prompts",
+        "`qwen3_6_27b` `v2` prompts",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
@@ -1600,11 +1606,19 @@ def test_audits_index_ladder_tip_drift_detected(doc_tree: Path) -> None:
 def test_front_door_page_over_its_ceiling_detected(doc_tree: Path) -> None:
     # The budgets were Measurement-field targets nothing could fail; padding
     # the front door past its ceiling has to be an error now.
-    _write(doc_tree, _README, _read(doc_tree, _README) + "\n" + "padding " * 200)
+    text = _read(doc_tree, _README)
+    ceiling = next(
+        limit
+        for path, _, limit in check_doc_facts._FRONT_DOOR_BUDGETS
+        if path == _README
+    )
+    _write(
+        doc_tree, _README, text + "\n" + "padding " * (ceiling - len(text.split()) + 1)
+    )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert errors[0].startswith(f"{_README}: ")
-    assert "over its 3550-word ceiling" in errors[0]
+    assert f"over its {ceiling}-word ceiling" in errors[0]
 
 
 def test_lessons_under_its_floor_detected(doc_tree: Path) -> None:
@@ -2239,7 +2253,9 @@ def test_wrongful_ejection_sentence_may_state_the_previous_count(
         _READING_GUIDE,
         guide + "\nThe one before it read 42 wrongful ejections.\n",
     )
-    assert check_doc_facts.check_facts(doc_tree) == []
+    errors: list[str] = []
+    check_doc_facts.check_verdict_figures(doc_tree, errors)
+    assert errors == []
 
 
 def test_finding_accuracy_bar_reaches_the_front_door(doc_tree: Path) -> None:
@@ -2248,7 +2264,8 @@ def test_finding_accuracy_bar_reaches_the_front_door(doc_tree: Path) -> None:
     _substitute(
         doc_tree, _FINDING_AUDIT, _FINDING_ACCURACY_ROW, _FINDING_ACCURACY_DRIFTED
     )
-    errors = check_doc_facts.check_facts(doc_tree)
+    errors: list[str] = []
+    check_doc_facts.check_finding_figures(doc_tree, errors)
     assert len(errors) == 2
     assert any(
         error.startswith(f"{_HISTORY}:")
@@ -2372,7 +2389,8 @@ def test_deleting_bar_1s_per_set_clause_fails_loud(doc_tree: Path) -> None:
         "| ≥ 0.60, no powered set < 0.50 |",
         "| ≥ 0.60 |",
     )
-    errors = check_doc_facts.check_facts(doc_tree)
+    errors: list[str] = []
+    check_doc_facts.check_finding_figures(doc_tree, errors)
     assert len(errors) == 1
     assert "bar 1 registered a per-set clause beside its pooled target" in errors[0]
 
@@ -2482,7 +2500,8 @@ def test_finding_history_cell_disagreeing_with_the_ladder_tip_detected(
         "| `samples/9p2i` | 14/27 = 0.5185 |",
         "| `samples/9p2i` | 13/27 = 0.4815 |",
     )
-    errors = check_doc_facts.check_facts(doc_tree)
+    errors: list[str] = []
+    check_doc_facts.check_finding_figures(doc_tree, errors)
     assert len(errors) == 1
     assert "bar 1's history cell reads '49/96 = 0.5104'" in errors[0]
     assert f"{_LADDER_TIP_AUDIT} — the recording it is read against" in errors[0]
@@ -2683,7 +2702,8 @@ def test_per_set_floor_relaxed_after_the_measurement_detected(doc_tree: Path) ->
         "with no adequately powered set below 0.50",
         "with no adequately powered set below 0.40",
     )
-    errors = check_doc_facts.check_facts(doc_tree)
+    errors: list[str] = []
+    check_doc_facts.check_finding_figures(doc_tree, errors)
     assert len(errors) == 2
     assert all(
         "registered 'no ADEQUATELY POWERED set below" in error for error in errors
@@ -2743,7 +2763,8 @@ def test_verdict_history_cell_rate_contradicting_its_fraction_detected(
         _FINDING_ACCURACY_ROW,
         _FINDING_ACCURACY_ROW.replace("| 50/96 = 0.5208 |", "| 50/96 = 0.9999 |"),
     )
-    errors = check_doc_facts.check_facts(doc_tree)
+    errors: list[str] = []
+    check_doc_facts.check_finding_figures(doc_tree, errors)
     assert len(errors) == 1
     assert (
         "bar 1's verdict-table history cell '50/96 = 0.9999' prints a rate its "
@@ -2877,6 +2898,180 @@ def test_adoption_claim_beside_the_finding_sentence_detected(doc_tree: Path) -> 
     )
 
 
+@pytest.mark.parametrize("separator", [", but", ";", ", and then"])
+def test_unrelated_negation_does_not_license_adoption(separator: str) -> None:
+    fall = "innocent ejections fell from 46 to 20"
+    text = f"{fall}. No maps changed{separator} the owner adopted the slate."
+    errors: list[str] = []
+    check_doc_facts.check_owner_action("page.md", text, fall, True, errors)
+    assert any("'adopted'" in error for error in errors)
+
+
+def test_tight_list_and_link_filename_are_not_owner_actions() -> None:
+    fall = "innocent ejections fell from 46 to 20"
+    text = (
+        f"- {fall}; no override was made.\n"
+        '- [Record](audits/audit-phase-21-adopting-record.md "source")\n'
+        "- `audit-phase-21-adopting-record.md` is the source file.\n"
+    )
+    errors: list[str] = []
+    check_doc_facts.check_owner_action("page.md", text, fall, True, errors)
+    assert errors == []
+
+
+def test_reporter_word_does_not_reclassify_an_unrelated_rate(doc_tree: Path) -> None:
+    history = _read(doc_tree, _HISTORY)
+    _write(
+        doc_tree,
+        _HISTORY,
+        history + "\nThe reporter read 5 of 20 = 0.2500 observations aloud.\n",
+    )
+    errors: list[str] = []
+    check_doc_facts.check_finding_figures(doc_tree, errors)
+    assert errors == []
+
+
+@pytest.mark.parametrize(
+    "list_text",
+    [
+        "No adoption, override, or graduation followed.",
+        "Neither adoption, override nor graduation followed.",
+    ],
+)
+def test_negation_applies_to_an_action_noun_list(list_text: str) -> None:
+    fall = "Innocent ejections fell from 46 to 20"
+    errors: list[str] = []
+    check_doc_facts.check_owner_action(
+        "page.md", f"{fall}. {list_text}", fall, True, errors
+    )
+    assert errors == []
+
+
+@pytest.mark.parametrize(
+    "clause",
+    [
+        "No maps changed and the owner adopted the slate.",
+        "Nothing changed while the owner adopted the slate.",
+    ],
+)
+def test_unpunctuated_independent_clause_does_not_inherit_negation(clause: str) -> None:
+    fall = "Innocent ejections fell from 46 to 20"
+    errors: list[str] = []
+    check_doc_facts.check_owner_action(
+        "page.md", f"{fall}. {clause}", fall, True, errors
+    )
+    assert any("adopted" in error for error in errors), errors
+
+
+@pytest.mark.parametrize(
+    ("old", "new"),
+    [
+        ("rule returned FINDING on the second", "rule returned ADOPTED on the second"),
+        ("bar 4 missed, no lever", "bar 4 met, no lever"),
+        ("ladder tip stands at baseline 8;", "ladder tip stands at baseline 9;"),
+        ("**11/20 = 0.5500** | **MISSED**", "**10/20 = 0.5000** | **MISSED**"),
+        ("**VERDICT: FINDING.**", "**VERDICT: ADOPTED.**"),
+        (
+            "| bar | cell | target | baseline 8 |",
+            "| missing | cell | target | baseline 8 |",
+        ),
+    ],
+)
+def test_close_summary_is_bound_to_its_deciding_record(
+    doc_tree: Path, old: str, new: str
+) -> None:
+    _substitute(doc_tree, "audits/audit-phase-21-close.md", old, new)
+    errors: list[str] = []
+    check_doc_facts.check_close_claims(doc_tree, errors)
+    assert any("audit-phase-21-close.md" in error for error in errors)
+
+
+def test_close_links_ignore_examples_and_reject_a_real_broken_link(
+    doc_tree: Path,
+) -> None:
+    path = "audits/audit-phase-21-close.md"
+    close = _read(doc_tree, path)
+    _write(doc_tree, path, close + "\n`[example](does-not-exist.md)`\n")
+    errors: list[str] = []
+    check_doc_facts.check_relative_links(doc_tree, errors)
+    assert errors == []
+
+    _write(doc_tree, path, close + "\n[broken](does-not-exist.md)\n")
+    check_doc_facts.check_relative_links(doc_tree, errors)
+    assert any("does-not-exist.md" in error for error in errors)
+
+
+def test_historical_close_finding_map_preserves_complete_dispositions(
+    doc_tree: Path,
+) -> None:
+    errors: list[str] = []
+    check_doc_facts.check_close_finding_map(doc_tree, errors)
+    assert errors == []
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "reason"),
+    [
+        ("`B-26` — 21.16", "`B-26` — 21.1", "never names"),
+        ("`A-1`, `A-3`", "`A-1`, `A-1`", "duplicate"),
+        ("`A-1`, `A-3`", "`A-1`, `A-99`", "unknown"),
+        ("| 43 | `A-1`", "| 44 | `A-1`", "count differs"),
+        ("| 39 | the live remainder", "| 38 | the live remainder", "remainder"),
+        (
+            "20 on track A and 19 on track B",
+            "19 on track A and 20 on track B",
+            "track counts",
+        ),
+        ("| 1 | `B-34`", "| 1 | `B-36`", "review verdicts"),
+        (
+            "| outcome | count | the findings |",
+            "| status | count | findings |",
+            "malformed",
+        ),
+        # A real, unaddressed finding cannot be credited to a completed contract.
+        ("`A-1`, `A-3`", "`B-39`, `A-3`", "routing differs"),
+    ],
+)
+def test_close_finding_map_rejects_false_credits_and_missing_coverage(
+    doc_tree: Path, old: str, new: str, reason: str
+) -> None:
+    _substitute(doc_tree, "audits/audit-phase-21-close.md", old, new)
+    errors: list[str] = []
+    check_doc_facts.check_close_finding_map(doc_tree, errors)
+    assert any(reason in error for error in errors), errors
+
+
+def test_measured_unadopted_finding_cannot_move_into_fixed_row(doc_tree: Path) -> None:
+    path = "audits/audit-phase-21-close.md"
+    text = _read(doc_tree, path)
+    start = text.index("| outcome | count | the findings |")
+    end = text.index("\n\n", start)
+    table = text[start:end].replace("`B-1`", "`SWAP`").replace("`A-4`", "`B-1`")
+    table = table.replace("`SWAP`", "`A-4`")
+    _write(doc_tree, path, text[:start] + table + text[end:])
+    errors: list[str] = []
+    check_doc_facts.check_close_finding_map(doc_tree, errors)
+    assert any("cannot be credited as fixed" in error for error in errors), errors
+
+
+def test_partly_repaired_finding_cannot_be_credited_as_fully_fixed(
+    doc_tree: Path,
+) -> None:
+    path = "audits/audit-phase-21-close.md"
+    _substitute(doc_tree, path, "| 43 | `A-1`", "| 44 | `B-26`, `A-1`")
+    _substitute(
+        doc_tree,
+        path,
+        "| 2 | `B-26` — 21.16 took its objective half; its `world.py` half is unexecuted. ",
+        "| 1 | ",
+    )
+    errors: list[str] = []
+    check_doc_facts.check_close_finding_map(doc_tree, errors)
+    assert any(
+        "unexecuted half cannot be credited as fixed" in error for error in errors
+    ), errors
+
+
 def test_the_previous_recordings_dated_override_is_left_alone(
     doc_tree: Path,
 ) -> None:
@@ -2904,8 +3099,8 @@ def test_published_pass_count_that_the_verdicts_refute_detected(
     _substitute(
         doc_tree,
         _README,
-        "written down before the next recording; three passed",
-        "written down before the next recording; two passed",
+        "met three of four fresh bars",
+        "met two of four fresh bars",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert any(
@@ -2922,8 +3117,8 @@ def test_published_registered_bar_count_that_the_table_refutes_detected(
     _substitute(
         doc_tree,
         _README,
-        "Four bars were written down before the next recording",
-        "Three bars were written down before the next recording",
+        "met three of four fresh bars",
+        "met three of three fresh bars",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert any(
@@ -3026,7 +3221,7 @@ def test_standalone_finding_count_sentence_is_refused(doc_tree: Path) -> None:
     _substitute(
         doc_tree,
         _README,
-        "Innocent ejections fell from 46 to 20, and 11 of those 20",
+        "Innocent ejections fell from 46 to 20; 11 of those 20",
         "The recording fell to 20 innocent ejections. 11 of those 20",
     )
     errors = check_doc_facts.check_facts(doc_tree)
@@ -3242,18 +3437,18 @@ def test_unnamed_audits_subdirectory_detected(doc_tree: Path) -> None:
 
 def test_results_figure_drift_detected(doc_tree: Path) -> None:
     # The numbers are stated once: a figure edited in the README and not in the
-    # guide is two answers to the same question. The firewall row is the one
-    # with no countable source, so this exercises the agreement check alone.
+    # guide is two answers to the same question. The mechanism row exercises
+    # the agreement check without inventing a complete-privacy statistic.
     _substitute(
         doc_tree,
         _README,
-        "| Observation-firewall violations, all phases | zero |",
-        "| Observation-firewall violations, all phases | one |",
+        "| Observation boundary checks | import rules and planted/recursive leak checks |",
+        "| Observation boundary checks | imports only |",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert "'one'" in errors[0]
-    assert "'zero'" in errors[0]
+    assert "'imports only'" in errors[0]
+    assert "'import rules and planted/recursive leak checks'" in errors[0]
 
 
 def test_results_row_absent_from_the_guide_detected(doc_tree: Path) -> None:
@@ -3262,12 +3457,12 @@ def test_results_row_absent_from_the_guide_detected(doc_tree: Path) -> None:
     _substitute(
         doc_tree,
         _README,
-        "| Observation-firewall violations, all phases |",
-        "| Observation-firewall violations, ever |",
+        "| Observation boundary checks |",
+        "| Observation checks with no source |",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert "'Observation-firewall violations, ever'" in errors[0]
+    assert "'Observation checks with no source'" in errors[0]
     assert _READING_GUIDE in errors[0]
 
 
@@ -3302,17 +3497,11 @@ def test_unstamped_volatile_count_detected(doc_tree: Path) -> None:
 
 
 def test_malformed_volatile_stamp_detected(doc_tree: Path) -> None:
-    # The stamp's SHAPE is what this check owns — the value cannot be checked
-    # without reaching the network, and a stamp that is not a date is drift.
-    _substitute(
-        doc_tree,
-        _README,
-        "snapshot of `main` as of 2026-08-19",
-        "snapshot of `main` as of 2026-13-45",
-    )
+    readme = _read(doc_tree, _README)
+    _write(doc_tree, _README, readme + "\n364 merged pull requests as of 2026-13-45.\n")
     errors = check_doc_facts.check_facts(doc_tree)
-    assert len(errors) == 3
-    assert all("is not a calendar date" in error for error in errors)
+    assert len(errors) == 1
+    assert "is not a calendar date" in errors[0]
 
 
 def test_line_citation_in_the_reading_guide_detected(doc_tree: Path) -> None:
@@ -3335,8 +3524,8 @@ def test_broken_relative_link_detected(doc_tree: Path) -> None:
     _substitute(
         doc_tree,
         _README,
-        "[Architecture](docs/architecture.md)",
-        "[Architecture](docs/architecture-notes.md)",
+        "[Current architecture and enforced boundaries](docs/architecture.md)",
+        "[Current architecture and enforced boundaries](docs/architecture-notes.md)",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
@@ -3455,8 +3644,10 @@ def test_deleted_acted_on_map_fails_loud(doc_tree: Path) -> None:
 def test_missing_document_reported(doc_tree: Path) -> None:
     (doc_tree / _ENV_EXAMPLE).unlink()
     errors = check_doc_facts.check_facts(doc_tree)
-    assert len(errors) == 1
+    assert len(errors) == 2
     assert errors[0].startswith(f"{_ENV_EXAMPLE}: unreadable")
+
+    assert any("relative link" in error and ".env.example" in error for error in errors)
 
 
 def test_main_reports_every_failure_at_once(
@@ -3927,35 +4118,43 @@ def _map_pull_request_problems(
     return problems
 
 
-def _exhibit_problems(
-    readme: str, repo_root: Path, pull_requests: set[int]
-) -> list[str]:
+def _exhibit_problems(page: str, repo_root: Path, pull_requests: set[int]) -> list[str]:
     """Every way the contract -> prompt -> pull-request exhibit stops resolving."""
 
-    start = readme.find(_EXHIBIT_OPEN)
-    end = readme.find(_EXHIBIT_CLOSE)
+    start = page.find(_EXHIBIT_OPEN)
+    end = page.find(_EXHIBIT_CLOSE)
     if start < 0 or end < start:
-        return [f"{_README}: the exhibit's {_EXHIBIT_OPEN} … marker pair is gone"]
-    region = readme[start:end]
+        return [
+            f"{_OWNERSHIP_CASE}: the exhibit's {_EXHIBIT_OPEN} … marker pair is gone"
+        ]
+    region = page[start:end]
 
     problems: list[str] = []
     quoted = _FENCE.findall(region)
     if len(quoted) != len(_EXHIBIT_SOURCES):
         return [
-            f"{_README}: the exhibit quotes {len(quoted)} sources, not "
+            f"{_OWNERSHIP_CASE}: the exhibit quotes {len(quoted)} sources, not "
             f"{len(_EXHIBIT_SOURCES)} — the contract, then the prompt made from it"
         ]
 
+    targets = {
+        target
+        for _, target in check_doc_facts.relative_targets(
+            repo_root, _OWNERSHIP_CASE, page
+        )
+    }
     for source, block in zip(_EXHIBIT_SOURCES, quoted, strict=True):
-        if f"]({source})" not in readme:
-            problems.append(f"{_README}: the exhibit no longer links {source}")
+        if (repo_root / source).resolve() not in targets:
+            problems.append(f"{_OWNERSHIP_CASE}: the exhibit no longer links {source}")
         path = repo_root / source
         if not path.is_file():
-            problems.append(f"{_README}: the exhibit quotes {source}, which is gone")
+            problems.append(
+                f"{_OWNERSHIP_CASE}: the exhibit quotes {source}, which is gone"
+            )
             continue
         original = path.read_text(encoding="utf-8")
         problems.extend(
-            f"{_README}: the excerpt beginning {run.splitlines()[0]!r} is no longer "
+            f"{_OWNERSHIP_CASE}: the excerpt beginning {run.splitlines()[0]!r} is no longer "
             f"a verbatim run of {source}"
             for run in _verbatim_runs(block)
             if run not in original
@@ -3964,17 +4163,17 @@ def _exhibit_problems(
     links = _PULL_REQUEST_URL.findall(region)
     if len(links) != 1:
         problems.append(
-            f"{_README}: the exhibit names {len(links)} pull requests, not one"
+            f"{_OWNERSHIP_CASE}: the exhibit names {len(links)} pull requests, not one"
         )
     for repository, number in links:
         if repository != _EXHIBIT_REPO:
             problems.append(
-                f"{_README}: the exhibit points at a pull request in "
+                f"{_OWNERSHIP_CASE}: the exhibit points at a pull request in "
                 f"{repository}, not {_EXHIBIT_REPO}"
             )
         elif int(number) not in pull_requests:
             problems.append(
-                f"{_README}: pull request #{number} closed nothing reachable from "
+                f"{_OWNERSHIP_CASE}: pull request #{number} closed nothing reachable from "
                 "HEAD — no commit subject ends in its number"
             )
     return problems
@@ -4035,13 +4234,15 @@ def test_the_front_door_exhibit_resolves() -> None:
     pull_requests = _pull_request_numbers(_REPO_ROOT)
     if pull_requests is None:
         pytest.skip("no full git history here; the exhibit's PR cannot be resolved")
-    assert _exhibit_problems(_committed(_README), _REPO_ROOT, pull_requests) == []
+    assert (
+        _exhibit_problems(_committed(_OWNERSHIP_CASE), _REPO_ROOT, pull_requests) == []
+    )
 
 
 def test_an_exhibit_excerpt_that_drifted_from_its_source_is_rejected() -> None:
     """The point of the pin: a contract edit cannot silently falsify the quote."""
 
-    drifted = _committed(_README).replace(
+    drifted = _committed(_OWNERSHIP_CASE).replace(
         "- meetings/transcript.py; (same)", "- meetings/transcript.py; (unchanged)", 1
     )
     problems = _exhibit_problems(drifted, _REPO_ROOT, {328})
@@ -4049,16 +4250,16 @@ def test_an_exhibit_excerpt_that_drifted_from_its_source_is_rejected() -> None:
 
 
 def test_an_exhibit_pull_request_absent_from_history_is_rejected() -> None:
-    problems = _exhibit_problems(_committed(_README), _REPO_ROOT, {1})
+    problems = _exhibit_problems(_committed(_OWNERSHIP_CASE), _REPO_ROOT, {1})
     assert any("reachable from HEAD" in problem for problem in problems), problems
 
 
 def test_an_exhibit_pull_request_in_another_repository_is_rejected() -> None:
     """A number this history can reach says nothing about someone else's repo."""
 
-    elsewhere = _committed(_README).replace(
-        f"https://github.com/{_EXHIBIT_REPO}/pull/",
-        "https://github.com/someone-else/a-fork/pull/",
+    elsewhere = _committed(_OWNERSHIP_CASE).replace(
+        f"https://github.com/{_EXHIBIT_REPO}/pull/328",
+        "https://github.com/someone-else/a-fork/pull/328",
         1,
     )
     problems = _exhibit_problems(elsewhere, _REPO_ROOT, {328})
@@ -4168,13 +4369,17 @@ def test_a_text_class_missing_from_the_ground_table_is_rejected() -> None:
 
 
 def test_an_exhibit_that_stopped_linking_its_source_is_rejected() -> None:
-    unlinked = _committed(_README).replace("](tasks/phase-19.md)", "](tasks/)", 1)
+    unlinked = _committed(_OWNERSHIP_CASE).replace(
+        "](../tasks/phase-19.md)", "](../tasks/)", 1
+    )
     problems = _exhibit_problems(unlinked, _REPO_ROOT, {328})
     assert any("no longer links" in problem for problem in problems), problems
 
 
 def test_a_deleted_exhibit_is_rejected() -> None:
     problems = _exhibit_problems(
-        _committed(_README).replace(_EXHIBIT_OPEN, "<!-- gone:", 1), _REPO_ROOT, {328}
+        _committed(_OWNERSHIP_CASE).replace(_EXHIBIT_OPEN, "<!-- gone:", 1),
+        _REPO_ROOT,
+        {328},
     )
     assert any("marker pair is gone" in problem for problem in problems), problems

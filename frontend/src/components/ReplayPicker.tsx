@@ -87,46 +87,22 @@ export interface FeaturedGame {
   readonly label: string;
 }
 
-// DATA, not machinery. These are the good-tail games of the committed sets, each
-// with a why-watch line, re-curated against the baseline-7 bytes: every earlier
-// blurb described a game that no longer exists, because the record changed what
-// the meetings do (audits/audit-phase-20-baseline-7.md §4). The interestingness
-// rubric does NOT produce this order and cannot. Editing this list is an
-// editorial act — re-scoring the rubric does not update it.
-//
-// The SELECTION is unchanged at the baseline-8 record; ONE label was rewritten.
-// The head (9p2i seed 2) had promised "every contradiction on the table is
-// stamped a weak signal", and those bytes now hold no contradiction at all, so
-// the card described a game that no longer exists — the same failure this
-// comment records against the blurbs before it. The owner ruled the copy be
-// repaired to the truth rather than the strip re-curated (2026-08-31), which is
-// also an explicit supersession of 19.10's "no copy changes in this file": a
-// label that has become FALSE is not the copy-churn that rule exists to stop.
-// The spoiler rule below is unaffected and still binds — the rewritten label
-// names the setup and the question, never the meeting's outcome.
-//
-// The seed-13 label names the served game's turn counts, and tests/api/test_sets.py
-// reads them back through the set loader: a card that states a countable fact is
-// pinned to it. (Task 21.24.)
-//
-// SPOILER RULE (BINDING, PR #324 review): this strip renders BEFORE any game is
-// opened, and a static blurb is prose, not outcome-derived data — so 19.10's
-// unspoiled-mode reveal gate cannot cover it, and 19.10's contract explicitly
-// forbids copy changes in this file. Each label therefore names the SETUP and the
-// question a game poses, never its answer: no winner, no ejection, no vote tally,
-// no "who the killer turns out to be". A blurb added later must hold that line.
+// Editorial selection, independent of the pacing rubric. Labels name a setup
+// or question, never an ending, ejection or vote tally. A lack of detector flags
+// says nothing about how much evidence the agents hold. Countable claims are
+// checked against the recordings by tests/api/test_sets.py and the browser tests.
 export const FEATURED_GAMES: readonly FeaturedGame[] = [
   {
     set: "9p2i",
     seed: 2,
     label:
-      "The only meeting of the game, and nothing on the table: not one account that contradicts another. Watch a room work out what to do with no evidence at all.",
+      "One meeting, no flagged contradictions. What can the players establish from their observations and each other's accounts?",
   },
   {
     set: "9p2i",
     seed: 23,
     label:
-      "Twenty-six spoken turns across four meetings — the most-argued game in the set. Read how a claim changes as it gets repeated back.",
+      "Twenty-six spoken turns across four meetings. Read how a claim changes as it gets repeated back.",
   },
   {
     set: "9p2i",
@@ -138,25 +114,25 @@ export const FEATURED_GAMES: readonly FeaturedGame[] = [
     set: "9p2i",
     seed: 46,
     label:
-      "Four meetings on almost nothing the engine flagged. The game to read if you want to see the crew argue without help.",
+      "Four meetings to compare. Follow how the table turns sightings and statements into accusations.",
   },
   {
     set: "4p1i",
     seed: 29,
     label:
-      "One meeting, three turns, and not a single contradiction raised. The whole game is what four players can do with no evidence at all.",
+      "One meeting, three turns, and no flagged contradictions. Compare each player's observations with the claims made aloud.",
   },
   {
     set: "4p1i",
     seed: 2,
     label:
-      "The smallest table in the corpus: everything the crew will ever know is said in three turns, and then they vote.",
+      "A small table, three spoken turns, then a vote. What can each player infer from the limited conversation?",
   },
   {
     set: "4p1i",
     seed: 11,
     label:
-      "A meeting that opens with nothing flagged and has to end in a vote anyway — the crew's own reading is all there is.",
+      "One short meeting with no flagged contradictions. Compare the players' statements before they decide.",
   },
 ];
 

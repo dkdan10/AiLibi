@@ -1,3 +1,4 @@
+import type { EvidenceSelection } from "../lib/evidence";
 // The playback hook (Task 12.4; design/phase-12/stage-1-design.md §4). All
 // playback STATE lives in `replayStore`; this file is where it becomes a usable
 // transport. Two exports:
@@ -66,6 +67,7 @@ const PLAYBACK_OWNED_PARAM_KEYS = [
   // preserved forever: turning the reveal back off could never clear it, and the
   // next reload would re-spoil the ending from a URL the user thought was clean.
   "reveal",
+  "evidenceKind", "evidenceId", "evidenceMeeting", "evidenceObserver",
 ] as const;
 
 // Merge the transport's own serialized keys onto the LIVE query string (read at
@@ -293,6 +295,7 @@ export function usePlayback(): Playback {
 // Deferred URL state the hydration path applies AFTER the replay loads (because
 // `selectReplay` resets the replay-scoped fields).
 interface PendingHydration {
+  readonly evidence: EvidenceSelection | null;
   readonly gameId: string;
   readonly tick: number | null;
   readonly perspective: Perspective;
@@ -329,6 +332,7 @@ export function usePlaybackEngine(): void {
   const revealOutcome = useReplayStore((s) => s.revealOutcome);
   const selectedAgentId = useReplayStore((s) => s.selectedAgentId);
   const selectedMeetingId = useReplayStore((s) => s.selectedMeetingId);
+  const selectedEvidence = useReplayStore((s) => s.selectedEvidence);
   // The REPLAY-LOAD error, and only that one (Task 19.12's error-field split).
   // Effect 3b below drops the pending deep-link hydration when this is non-null,
   // on the reasoning "the URL's replay can never arrive". Before the split a
@@ -477,6 +481,7 @@ export function usePlaybackEngine(): void {
       // selectReplay resets perspective/tick/selection, so defer the rest of the
       // shared moment until the matching replay has loaded (effect 3b).
       pendingRef.current = {
+        evidence: parsed.evidence ?? null,
         gameId: parsed.gameId,
         tick: parsed.tick,
         perspective: parsed.perspective,
@@ -523,6 +528,7 @@ export function usePlaybackEngine(): void {
     // Re-applied AFTER selectReplay's per-replay reset, so `?game_id=…&reveal=1`
     // opens revealed while an ordinary replay switch always opens unspoiled.
     store.setRevealOutcome(pending.reveal);
+    store.selectEvidence(pending.evidence);
     if (pending.tick !== null) {
       store.setCurrentTick(frameIndexForTick(replay.ticks, pending.tick));
     }
@@ -551,6 +557,7 @@ export function usePlaybackEngine(): void {
       const gameId = replay?.metadata.game_id ?? null;
       const tick = replay === null ? null : tickNumberAt(replay.ticks, frameIndex);
       const owned = serializePlaybackParams({
+        evidence: selectedEvidence,
         set: seedSet,
         gameId,
         tick,
@@ -580,5 +587,6 @@ export function usePlaybackEngine(): void {
     revealOutcome,
     selectedAgentId,
     selectedMeetingId,
+    selectedEvidence,
   ]);
 }
