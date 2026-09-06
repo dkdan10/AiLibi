@@ -106,6 +106,7 @@ from orchestrator.replay import (
 )
 from orchestrator.replay_integrity import ReplayIntegrityError
 from orchestrator.scheduler import TickScheduler
+from orchestrator.run_limits import RunDeadline
 from orchestrator.seeder import seed_initial_state
 
 
@@ -169,7 +170,10 @@ def _max_cost_usd_from_env(env: Mapping[str, str] | None = None) -> float:
 
 
 def _resolve_game_budget(
-    *, num_players: int, env: Mapping[str, str] | None = None
+    *,
+    num_players: int,
+    env: Mapping[str, str] | None = None,
+    parent: GameBudget | None = None,
 ) -> GameBudget:
     """Build the per-game :class:`~llm.budget.GameBudget` for ``num_players``.
 
@@ -182,6 +186,7 @@ def _resolve_game_budget(
     """
 
     return GameBudget(
+        parent=parent,
         max_cost_usd=_max_cost_usd_from_env(env),
         max_input_tokens=_BASE_INPUT_TOKENS + _PER_PLAYER_INPUT_TOKENS * num_players,
         max_output_tokens=_BASE_OUTPUT_TOKENS + _PER_PLAYER_OUTPUT_TOKENS * num_players,
@@ -245,6 +250,8 @@ def run_tournament_eval(
     tactical_policy_stamp: TacticalPolicyStamp | None = None,
     crew_policy_stamp: CrewTacticalPolicyStamp | None = None,
     meeting_runner_factory: Callable[[], MeetingRunner] | None = None,
+    tournament_budget: GameBudget | None = None,
+    deadline: RunDeadline | None = None,
 ) -> TournamentReport:
     """Run one :class:`HeadlessGame` per seed and assemble a typed report.
 
@@ -329,6 +336,12 @@ def run_tournament_eval(
     (the default runner; the bake-off's reporting rule). The default (``None``)
     keeps the runner construction byte-identical to the pre-15.13 path.
 
+    ``tournament_budget`` optionally supplies the parent of each fresh per-game
+    budget. The sequential seed loop shares that cumulative allowance without
+    resetting it. ``deadline`` additionally checks tick boundaries and bounds
+    asynchronous meeting work. These limits require the default budgeted runner;
+    an opaque custom runner cannot promise to enforce provider limits.
+
     Raises ``RuntimeError`` if any game ends at ``MEETING_PHASE_REACHED`` (the
     Task 3.13 runner wire-up regressed). Re-raises any non-parse-failure
     exception from a game unchanged (AGENTS.md "no silent fallbacks").
@@ -336,6 +349,10 @@ def run_tournament_eval(
 
     if not seeds:
         raise ValueError("seeds must be non-empty")
+    if meeting_runner_factory is not None and (
+        tournament_budget is not None or deadline is not None
+    ):
+        raise ValueError("Whole-run limits require the budgeted default meeting runner")
     seeds_tuple = tuple(seeds)
     if len(set(seeds_tuple)) != len(seeds_tuple):
         raise ValueError("seeds must be unique")
@@ -350,7 +367,19 @@ def run_tournament_eval(
 
     for seed in seeds_tuple:
         replay_path = output_dir / f"replay-seed-{seed}.jsonl"
+        if meeting_runner_factory is not None:
+            meeting_runner = meeting_runner_factory()
+        else:
+            game_budget = _resolve_game_budget(
+                num_players=num_players, parent=tournament_budget
+            )
+            meeting_runner = (
+                build_default_meeting_runner(budget=game_budget)
+                if deadline is None
+                else build_default_meeting_runner(budget=game_budget, deadline=deadline)
+            )
         game = HeadlessGame(
+            deadline=deadline,
             seed=seed,
             game_map=resolved_map,
             agent_factory=resolved_factory,
@@ -359,13 +388,7 @@ def run_tournament_eval(
             num_impostors=num_impostors,
             tasks_per_crewmate=tasks_per_crewmate,
             scheduler=TickScheduler(max_ticks=max_ticks),
-            meeting_runner=(
-                meeting_runner_factory()
-                if meeting_runner_factory is not None
-                else build_default_meeting_runner(
-                    budget=_resolve_game_budget(num_players=num_players)
-                )
-            ),
+            meeting_runner=meeting_runner,
             force=force,
             tactical_policy_stamp=tactical_policy_stamp,
             crew_tactical_policy_stamp=crew_policy_stamp,

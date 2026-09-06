@@ -71,10 +71,22 @@ def preflight_report_output(path: Path, recording_paths: Sequence[Path]) -> None
 
 def atomic_write_report(path: Path, text: str) -> None:
     """Replace a report only after its complete text has been written and closed."""
+    _atomic_write(path, text)
+
+
+def atomic_write_bytes(path: Path, data: bytes) -> None:
+    """Archive exact recording bytes without newline or encoding conversion."""
+    _atomic_write(path, data)
+
+
+def _atomic_write(path: Path, content: str | bytes) -> None:
     temporary = _temporary_sibling(path)
     failure: BaseException | None = None
     try:
-        temporary.write_text(text, encoding="utf-8")
+        if isinstance(content, bytes):
+            temporary.write_bytes(content)
+        else:
+            temporary.write_text(content, encoding="utf-8")
         temporary.replace(path)
     except BaseException as error:
         failure = error

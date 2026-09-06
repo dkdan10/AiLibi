@@ -98,6 +98,8 @@ class GameBudget:
     every strategic call. Charges accumulate even when they exceed a cap;
     :class:`BudgetExceededError` reports the overrun after recording the
     incurred spend. Preflight rejects new calls without changing totals.
+    An optional parent additionally bounds the whole tournament; every incurred
+    charge reaches both budgets even when either cap has been exceeded.
     """
 
     def __init__(
@@ -106,6 +108,7 @@ class GameBudget:
         max_cost_usd: float = _DEFAULT_MAX_COST_USD,
         max_input_tokens: int = _DEFAULT_MAX_INPUT_TOKENS,
         max_output_tokens: int = _DEFAULT_MAX_OUTPUT_TOKENS,
+        parent: GameBudget | None = None,
     ) -> None:
         if math.isnan(max_cost_usd) or math.isinf(max_cost_usd):
             raise ValueError(
@@ -127,6 +130,7 @@ class GameBudget:
         self._cost_usd = 0.0
         self._input_tokens = 0
         self._output_tokens = 0
+        self._parent = parent
 
     def snapshot(self) -> BudgetSnapshot:
         return BudgetSnapshot(
@@ -185,6 +189,8 @@ class GameBudget:
                 delta=float(usage.output_tokens),
                 cap=float(self._max_output_tokens),
             )
+        if self._parent is not None:
+            self._parent.preflight(usage=usage, cost_usd=cost_usd)
 
     def charge(self, *, usage: TokenUsage, cost_usd: float) -> BudgetSnapshot:
         """Apply a charge after the LLM call returns.
@@ -201,6 +207,12 @@ class GameBudget:
         self._cost_usd += cost_usd
         self._input_tokens += usage.input_tokens
         self._output_tokens += usage.output_tokens
+        if self._parent is not None:
+            try:
+                self._parent.charge(usage=usage, cost_usd=cost_usd)
+            except BudgetExceededError as exc:
+                if overrun is None:
+                    overrun = exc
         if overrun is not None:
             raise overrun
         return self.snapshot()

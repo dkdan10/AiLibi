@@ -134,6 +134,7 @@ from orchestrator.replay import (
     _TOGGLEABLE_LEVER_RESOLVERS,
 )
 from orchestrator.scheduler import TickScheduler
+from orchestrator.run_limits import RunDeadline
 from orchestrator.seeder import seed_initial_state
 from pydantic import BaseModel
 
@@ -1057,10 +1058,12 @@ class DefaultMeetingRunner:
         prompt_versions: Mapping[str, str] = DEFAULT_PROMPT_VERSIONS,
         token_budget: int = DEFAULT_TOKEN_BUDGET,
         budget: GameBudget | None = None,
+        deadline: RunDeadline | None = None,
         reporter_reasoning: bool | None = None,
         corroboration_discipline: bool | None = None,
     ) -> None:
         self._recording_client = _RecordingLLMClient(llm_client)
+        self._deadline = deadline
         manager_client: LLMClient = (
             BudgetedLLMClient(inner=self._recording_client, budget=budget)
             if budget is not None
@@ -1121,12 +1124,15 @@ class DefaultMeetingRunner:
             1 for player in state.players.values() if player.role == "IMPOSTOR"
         )
         try:
-            result = await self._manager.run(
+            work = self._manager.run(
                 meeting_id=meeting_id,
                 trigger=trigger,
                 participants=participants,
                 dead_ids=dead_ids,
                 impostor_count=impostor_count,
+            )
+            result = (
+                await work if self._deadline is None else await self._deadline.run(work)
             )
         except BaseException as exc:
             # Transfer captures once, preserving the original exception and
@@ -1163,6 +1169,7 @@ def build_default_meeting_runner(
     config: MeetingConfig | None = None,
     prompt_versions: Mapping[str, str] | None = None,
     token_budget: int = DEFAULT_TOKEN_BUDGET,
+    deadline: RunDeadline | None = None,
 ) -> DefaultMeetingRunner:
     """Construct the production default meeting runner (DESIGN.md §5.1, §11.4).
 
@@ -1194,7 +1201,9 @@ def build_default_meeting_runner(
     Production callers construct a fresh runner + a fresh
     :class:`llm.budget.GameBudget` per game: the budget must reset
     between games and the recording client carries per-game state. Do
-    not share one runner (or one budget) across a tournament.
+    not share a runner across a tournament. A fresh per-game budget may have a
+    shared parent to enforce cumulative limits. An optional tournament deadline
+    cancels the entire meeting and retains its calls instead of defaulting a turn.
     """
 
     # Provenance must match the rendered set (DESIGN.md §11.4). Resolve the
@@ -1267,6 +1276,7 @@ def build_default_meeting_runner(
         else MeetingConfig(deadlines=HEADLESS_MEETING_DEADLINES)
     )
     return DefaultMeetingRunner(
+        deadline=deadline,
         llm_client=inner,
         budget=budget,
         crewmate_report_prompt=renderers.crewmate_report,
@@ -1807,6 +1817,7 @@ class HeadlessGame:
         crew_tactical_policy_stamp: CrewTacticalPolicyStamp | None = None,
         rng_hash_policy: RngStateHashPolicy = RngStateHashPolicy.FULL,
         initial_state: WorldState | None = None,
+        deadline: RunDeadline | None = None,
     ) -> None:
         # No-replay training mode (Task 15.8.1): ``replay_path=None`` runs the
         # game through :meth:`run_unrecorded` writing NOTHING to disk (no
@@ -1902,6 +1913,7 @@ class HeadlessGame:
                     f"the game was constructed with num_impostors={num_impostors}"
                 )
         self._initial_state = initial_state
+        self._deadline = deadline
         self._seed = seed
         self._game_map = game_map
         self._agent_factory = agent_factory
@@ -2126,6 +2138,8 @@ class HeadlessGame:
         last_events: tuple[EngineEvent, ...] = ()
         meeting_counter = 0
         while state.phase != "GAME_OVER":
+            if self._deadline is not None:
+                self._deadline.check()
             if not self._scheduler.should_continue(state.tick):
                 if replay is not None:
                     replay.record_game_stop(
