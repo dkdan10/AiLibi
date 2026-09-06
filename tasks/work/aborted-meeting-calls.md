@@ -32,6 +32,11 @@ publishes its recovery metadata.
   canonical recording; the corpus freeze rejects it.
 - [x] Adverse cases fail against the old implementation, focused and full
   project checks pass, and committed sample verification remains green.
+- [x] Review correction: historical report projection omits an absent failed-call
+  identity but retains a real identity, with all four committed reports passing
+  reconstruction checks without rewriting evidence.
+- [x] Review correction: the aborted-meeting tests collect and run independently
+  of the scripts test package; focused and full project gates pass.
 
 ## Constraints
 
@@ -50,6 +55,8 @@ The preceding accounting repair is a prerequisite; this is a separate follow-up 
 `scripts/record_ml_corpus.sh`, directly necessary replay/API/eval/script tests,
 `tasks/README.md`, and this card. Check the API's explicit failed-call field
 projection when adding attempt identity; no raw-call DTO expansion is authorized.
+The review correction also owns `scripts/build_sample_report.py`, its focused
+tests, and the isolated import regression in the aborted-meeting test module.
 
 ## Record impact
 
@@ -83,3 +90,46 @@ Validation uses injected transports. Unknown provider usage is not invented;
 process termination and filesystem-failure durability are not claimed. Existing
 completed-meeting failure deduplication remains outside this repair. Full call
 details are retained in JSONL; API summaries expose accounting and provenance.
+
+### Review correction in progress
+
+Reopened for [review findings G5-1 and C2-6](../../audits/review-2026-09-06/REVIEW_REPORT.md#5-required-before-merge).
+The 2026-09-05 results above describe the prior delivery. Independently reproduced
+the ML 9p2i report check failing on two additive `call_id: null` fields and
+isolated orchestrator collection failing with `ModuleNotFoundError` for
+`_manifest_writer`. This is a historical serialization and test-bootstrap repair;
+prompt bytes, simulation defaults and committed evidence remain unchanged.
+
+The historical JSON and comparison projection now share exclusions that remove
+only absent attempt identities. A mixed legacy/new-call control verifies that a
+real identity survives, other optional fields remain present, and serialization
+does not mutate the report. The existing stale-meeting-count plant still fails
+the consistency check. Both canonical and both ML sets now participate in that
+gate. The test module owns its script import bootstrap and a fresh isolated
+Python subprocess proves collection no longer depends on other test packages.
+
+Targeted verification on 2026-09-06:
+
+```bash
+.venv/bin/python -m pytest tests/scripts/test_build_sample_report.py tests/orchestrator/ tests/api/test_view_model.py -q
+.venv/bin/python -m pytest tests/orchestrator/ --collect-only -qq
+.venv/bin/python scripts/build_sample_report.py --sample-dir replays/samples/4p1i --check
+.venv/bin/python scripts/build_sample_report.py --sample-dir replays/samples/9p2i --check
+.venv/bin/python scripts/build_sample_report.py --sample-dir replays/ml_corpus/4p1i --check
+.venv/bin/python scripts/build_sample_report.py --sample-dir replays/ml_corpus/9p2i --check
+```
+
+The combined targeted run passed 490 tests, with one optional skip and three
+expected failures. Isolated collection and all four report checks exited zero.
+Ruff and strict mypy passed on the five changed Python files in this correction
+group. Architecture references remain Packages and Enforced boundaries: this
+changes only the historical report projection and verification, not gameplay or
+the observation firewall. The coordinator's final full-project gate is pending;
+the card remains active until it passes.
+
+The correction checkpoint passed `bash scripts/check.sh`: 6,833 Python tests,
+20 optional skips, three expected failures, 500 frontend tests, strict typing,
+lint/format, import/document contracts and the production build. All 100
+canonical recordings verified. The [durable correction record](../../audits/review-2026-09-06/correction-record.md)
+records the independent reviews, discovered rollback repair and integration
+checks. This completion is on cleanup, awaiting owner review and merge.

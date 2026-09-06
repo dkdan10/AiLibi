@@ -13,8 +13,9 @@ are firewalled out of the replay JSONL), folds the recorded replays into a
 ``run_tournament.py`` uses (:func:`eval.balance_eval.load_tournament_report` ->
 :func:`eval.meeting_quality.build_tournament_eval_report`, so the offline and
 live entry points cannot drift). The historical sample serialization profile
-omits additive completion/verification metadata to preserve the published
-record. Current tournament writers keep those fields; the API verifies outcomes
+omits additive completion/verification metadata and absent attempt identities to
+preserve the published record. Current tournament writers keep completion
+metadata; the API verifies outcomes
 against current source recordings when it serves either format.
 
 It is $0 and deterministic: no live model is called. The current report loader
@@ -195,14 +196,29 @@ def build_report(sample_dir: Path) -> TournamentEvalReport:
     )
 
 
+def _historical_report_exclusions(report: TournamentEvalReport) -> dict[str, Any]:
+    """Preserve legacy bytes without dropping identities of newly captured calls."""
+    return {
+        "report": {
+            "games": {
+                index: {
+                    "completion_status": True,
+                    "outcome_verified": True,
+                    "failed_calls": {
+                        call_index: {"call_id"}
+                        for call_index, call in enumerate(game.failed_calls)
+                        if call.call_id is None
+                    },
+                }
+                for index, game in enumerate(report.report.games)
+            }
+        }
+    }
+
+
 def historical_report_payload(report: TournamentEvalReport) -> dict[str, Any]:
-    """Project only additive completion metadata out of the historical record."""
-    return report.model_dump(
-        mode="json",
-        exclude={
-            "report": {"games": {"__all__": {"completion_status", "outcome_verified"}}}
-        },
-    )
+    """Omit additive outcome metadata and absent attempt identities."""
+    return report.model_dump(mode="json", exclude=_historical_report_exclusions(report))
 
 
 def _serialize(report: TournamentEvalReport) -> str:
@@ -214,9 +230,7 @@ def _serialize(report: TournamentEvalReport) -> str:
 
     json_text = report.model_dump_json(
         indent=2,
-        exclude={
-            "report": {"games": {"__all__": {"completion_status", "outcome_verified"}}}
-        },
+        exclude=_historical_report_exclusions(report),
     )
     TournamentEvalReport.model_validate_json(json_text)
     return json_text + "\n"

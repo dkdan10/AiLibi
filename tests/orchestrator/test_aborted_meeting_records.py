@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import asyncio
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 from pydantic import BaseModel, ValidationError
 
-from _manifest_writer import sample_provenance
 from api.replay_loader import ReplayLoader
 from agents.tactical.crewmate_policy import CrewmatePolicy
 from agents.tactical.impostor_policy import ImpostorPolicy
@@ -47,6 +48,35 @@ from orchestrator.replay import (
     read_meeting_entries,
 )
 from orchestrator.scheduler import TickScheduler
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_SCRIPTS_DIR = _REPO_ROOT / "scripts"
+if str(_SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS_DIR))
+
+from _manifest_writer import sample_provenance  # noqa: E402
+
+
+def test_module_collects_without_scripts_test_bootstrap() -> None:
+    """A fresh isolated interpreter must collect this module by itself."""
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-I",
+            "-m",
+            "pytest",
+            str(Path(__file__).resolve()),
+            "--collect-only",
+            "-qq",
+        ],
+        cwd=_REPO_ROOT,
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "test_aborted_meeting_records.py:" in result.stdout
 
 
 class _EmergencyCaller(TacticalAgent):

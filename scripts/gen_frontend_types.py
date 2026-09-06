@@ -422,6 +422,7 @@ def _real_replay_payload() -> str:
     from engine.world import load_canonical_map
     from orchestrator.replay import ReplayLog
     from orchestrator.seeder import seed_initial_state
+    from tests.api.fixtures.sample_replay import finish_replay_with_kills
 
     from api.replay_loader import ReplayLoader
 
@@ -436,6 +437,7 @@ def _real_replay_payload() -> str:
             input_tick = state.tick
             state, _events = advance_tick(state, [], game_map=game_map)
             log.record_tick(input_tick, [], state)
+        finish_replay_with_kills(log, state, game_map)
         loader = ReplayLoader(path.parent)
         replay = loader.load_replay("headless-seed-0")
     # by_alias mirrors FastAPI's response serialization (so the fixture key is

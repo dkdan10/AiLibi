@@ -1345,6 +1345,49 @@ def test_fidelity_fixture_round_trips_payload_and_narrows_unions() -> None:
         assert f"_narrow_{union}(e: {union}): {union}" in fidelity
     assert "const _exhaustive: never = e;" in fidelity
     assert 'case "vent":' in fidelity
+    payload = fidelity.split("export const _fidelityReplay: ReplayView = ", 1)[1]
+    payload = payload.split(";\nvoid _fidelityReplay;", 1)[0]
+    _assert_fidelity_terminal_subtree(json.loads(payload))
+
+
+def _assert_fidelity_terminal_subtree(payload: dict[str, Any]) -> None:
+    """Finale type coverage must come from the genuine completed replay."""
+    assert payload["metadata"]["completion_status"] == "completed"
+    assert payload["metadata"]["outcome_verified"] is True
+    finale = payload["finale"]
+    assert finale is not None
+    assert finale["winner"] == payload["metadata"]["winner"]
+    assert {row["agent_id"] for row in finale["agent_recaps"]} == {
+        player["agent_id"] for player in payload["players"]
+    }
+    assert {event["kind"] for event in finale["decisive_events"]} >= {
+        "kill",
+        "game_end",
+    }
+
+
+@pytest.mark.parametrize(
+    "missing",
+    (
+        "completion_status",
+        "outcome_verified",
+        "finale",
+        "agent_recaps",
+        "decisive_events",
+    ),
+)
+def test_fidelity_terminal_gate_rejects_incomplete_payload(missing: str) -> None:
+    payload = json.loads(gen_frontend_types._real_replay_payload())
+    if missing == "completion_status":
+        payload["metadata"][missing] = "unfinished"
+    elif missing == "outcome_verified":
+        payload["metadata"][missing] = False
+    elif missing == "finale":
+        payload["finale"] = None
+    else:
+        payload["finale"][missing] = []
+    with pytest.raises(AssertionError):
+        _assert_fidelity_terminal_subtree(payload)
 
 
 def test_skip_target_constant_round_trips_through_gate() -> None:

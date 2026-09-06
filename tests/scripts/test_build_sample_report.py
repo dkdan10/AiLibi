@@ -1,16 +1,4 @@
-"""Consistency gate for ``scripts/build_sample_report.py``.
-
-Closes the "refresh regenerates replays but not the report" gap: rebuilding the
-FROZEN flat 4p/1i set's report from its committed replays must equal the committed
-``tournament-eval-report.json``, so a stale committed report (the CI-invisible
-failure mode flagged at the Phase 7 Wave 0 close — a refresh that forgets the
-separate offline report build) fails here instead of shipping.
-
-The 7p/2i set is intentionally NOT covered yet: its committed report predates the
-Task 7.11 reporting fields and the set is about to be re-recorded (Phase 7 Wave
-0.5). It joins this gate once the re-record + ``refresh_samples.sh``'s new build
-step regenerate it.
-"""
+"""Reconstructed reports preserve all four committed sets, including failures."""
 
 from __future__ import annotations
 
@@ -21,12 +9,19 @@ import pytest
 
 import build_sample_report as bsr
 from eval.meeting_quality import TournamentEvalReport
+from orchestrator.replay import FailedCallReplayEntry
 from tests._helpers.committed import report_9p2i
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 # The flat 4p1i baseline now lives under replays/samples/4p1i/ (Task 12.12).
 _FLAT_4P1I = _REPO_ROOT / "replays" / "samples" / "4p1i"
 _COMMITTED_REPORT = _FLAT_4P1I / "tournament-eval-report.json"
+_COMMITTED_SETS = (
+    "samples/4p1i",
+    "samples/9p2i",
+    "ml_corpus/4p1i",
+    "ml_corpus/9p2i",
+)
 
 
 def _copy_flat_replays(dst: Path) -> None:
@@ -52,10 +47,43 @@ def test_rebuild_matches_committed_flat_4p1i() -> None:
     )
 
 
-def test_check_reports_consistent_on_committed_flat_4p1i() -> None:
-    """``--check`` returns 0 when the committed report matches its replays."""
+@pytest.mark.parametrize("relative_dir", _COMMITTED_SETS)
+def test_check_reports_consistent_on_committed_sets(relative_dir: str) -> None:
+    """``--check`` covers both rosters' canonical and failed-call-bearing sets."""
 
-    assert bsr.check_report(_FLAT_4P1I) == 0
+    assert bsr.check_report(_REPO_ROOT / "replays" / relative_dir) == 0
+
+
+def test_historical_serialization_preserves_real_attempt_ids() -> None:
+    report = report_9p2i()
+    original = report.report.games[0]
+    legacy_call = FailedCallReplayEntry(
+        game_id=original.game_id,
+        meeting_id=f"{original.game_id}:meeting-0",
+        tick=0,
+        model="fake",
+        prompt_length=10,
+        raw_response="invalid response",
+        input_tokens=10,
+        output_tokens=2,
+        cost_usd=0.0,
+        error_type="validation",
+        error_message="invalid response",
+    )
+    identified_call = legacy_call.model_copy(update={"call_id": "attempt-2"})
+    game = original.model_copy(update={"failed_calls": (legacy_call, identified_call)})
+    candidate = report.model_copy(
+        update={"report": report.report.model_copy(update={"games": (game,)})}
+    )
+    payload = bsr.historical_report_payload(candidate)
+    failed = payload["report"]["games"][0]["failed_calls"]
+    assert "call_id" not in failed[0]
+    assert failed[1]["call_id"] == "attempt-2"
+    # An indiscriminate exclude_none would also erase this historical field.
+    assert failed[0]["rendered_vote_max"] is None
+    assert failed[1]["rendered_vote_max"] is None
+    assert json.loads(bsr._serialize(candidate)) == payload
+    assert candidate.report.games[0].failed_calls[1].call_id == "attempt-2"
 
 
 def test_historical_serialization_omits_only_additive_outcome_metadata() -> None:

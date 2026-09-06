@@ -33,7 +33,65 @@ import type {
 
 export const _fidelityReplay: ReplayView = {
   "failed_calls": [],
-  "finale": null,
+  "finale": {
+    "agent_recaps": [
+      {
+        "agent_id": "p-1",
+        "alive_at_end": false,
+        "final_vote_named_impostor": null,
+        "final_vote_rewritten": false,
+        "final_vote_target": null,
+        "role": "CREWMATE"
+      },
+      {
+        "agent_id": "p-2",
+        "alive_at_end": false,
+        "final_vote_named_impostor": null,
+        "final_vote_rewritten": false,
+        "final_vote_target": null,
+        "role": "CREWMATE"
+      },
+      {
+        "agent_id": "p-3",
+        "alive_at_end": true,
+        "final_vote_named_impostor": null,
+        "final_vote_rewritten": false,
+        "final_vote_target": null,
+        "role": "IMPOSTOR"
+      },
+      {
+        "agent_id": "p-4",
+        "alive_at_end": true,
+        "final_vote_named_impostor": null,
+        "final_vote_rewritten": false,
+        "final_vote_target": null,
+        "role": "CREWMATE"
+      }
+    ],
+    "decisive_events": [
+      {
+        "actor_id": "p-3",
+        "kind": "kill",
+        "subject_id": "p-1",
+        "tick": 4
+      },
+      {
+        "actor_id": "p-3",
+        "kind": "kill",
+        "subject_id": "p-2",
+        "tick": 9
+      },
+      {
+        "actor_id": null,
+        "kind": "game_end",
+        "subject_id": null,
+        "tick": 9
+      }
+    ],
+    "final_tick": 9,
+    "winner": "IMPOSTORS",
+    "winner_reason": "IMPOSTOR_PARITY"
+  },
   "llm_bodies_included": true,
   "map": {
     "edges": [
@@ -268,17 +326,17 @@ export const _fidelityReplay: ReplayView = {
   },
   "meetings": [],
   "metadata": {
-    "completion_status": "unfinished",
+    "completion_status": "completed",
     "created_at": null,
     "game_id": "headless-seed-0",
     "meeting_count": 0,
-    "outcome_verified": false,
+    "outcome_verified": true,
     "prompt_versions": {},
     "seed": 0,
     "total_cost_usd": 0.0,
-    "total_ticks": 3,
-    "winner": null,
-    "winner_reason": null
+    "total_ticks": 10,
+    "winner": "IMPOSTORS",
+    "winner_reason": "IMPOSTOR_PARITY"
   },
   "players": [
     {
@@ -850,6 +908,899 @@ export const _fidelityReplay: ReplayView = {
       "tasks_completed_total": 0,
       "tasks_required_total": 3,
       "tick": 2
+    },
+    {
+      "advantage": {
+        "advantage": -0.3333333333333333,
+        "crew_alive": 3,
+        "impostors_alive": 1,
+        "tasks_completed": 0,
+        "tasks_required": 3,
+        "tasks_required_total": 3
+      },
+      "agent_states": [
+        {
+          "agent_id": "p-1",
+          "current_action": "IDLE",
+          "is_alive": true,
+          "is_venting": false,
+          "room_id": "CAFETERIA",
+          "task_progress": 0.0,
+          "visibility": {
+            "audible_events": [],
+            "visible_bodies": [],
+            "visible_players": [
+              {
+                "action": null,
+                "id": "p-2",
+                "room": "CAFETERIA"
+              },
+              {
+                "action": null,
+                "id": "p-3",
+                "room": "CAFETERIA"
+              },
+              {
+                "action": null,
+                "id": "p-4",
+                "room": "CAFETERIA"
+              }
+            ]
+          }
+        },
+        {
+          "agent_id": "p-2",
+          "current_action": "IDLE",
+          "is_alive": true,
+          "is_venting": false,
+          "room_id": "CAFETERIA",
+          "task_progress": 0.0,
+          "visibility": {
+            "audible_events": [],
+            "visible_bodies": [],
+            "visible_players": [
+              {
+                "action": null,
+                "id": "p-1",
+                "room": "CAFETERIA"
+              },
+              {
+                "action": null,
+                "id": "p-3",
+                "room": "CAFETERIA"
+              },
+              {
+                "action": null,
+                "id": "p-4",
+                "room": "CAFETERIA"
+              }
+            ]
+          }
+        },
+        {
+          "agent_id": "p-3",
+          "current_action": "IDLE",
+          "is_alive": true,
+          "is_venting": false,
+          "room_id": "CAFETERIA",
+          "task_progress": null,
+          "visibility": {
+            "audible_events": [],
+            "visible_bodies": [],
+            "visible_players": [
+              {
+                "action": null,
+                "id": "p-1",
+                "room": "CAFETERIA"
+              },
+              {
+                "action": null,
+                "id": "p-2",
+                "room": "CAFETERIA"
+              },
+              {
+                "action": null,
+                "id": "p-4",
+                "room": "CAFETERIA"
+              }
+            ]
+          }
+        },
+        {
+          "agent_id": "p-4",
+          "current_action": "IDLE",
+          "is_alive": true,
+          "is_venting": false,
+          "room_id": "CAFETERIA",
+          "task_progress": 0.0,
+          "visibility": {
+            "audible_events": [],
+            "visible_bodies": [],
+            "visible_players": [
+              {
+                "action": null,
+                "id": "p-1",
+                "room": "CAFETERIA"
+              },
+              {
+                "action": null,
+                "id": "p-2",
+                "room": "CAFETERIA"
+              },
+              {
+                "action": null,
+                "id": "p-3",
+                "room": "CAFETERIA"
+              }
+            ]
+          }
+        }
+      ],
+      "bodies": [],
+      "events": [],
+      "meeting_resolution": null,
+      "sabotage": null,
+      "sabotage_active": [],
+      "tasks_completed_total": 0,
+      "tasks_required_total": 3,
+      "tick": 3
+    },
+    {
+      "advantage": {
+        "advantage": -0.5,
+        "crew_alive": 2,
+        "impostors_alive": 1,
+        "tasks_completed": 0,
+        "tasks_required": 3,
+        "tasks_required_total": 3
+      },
+      "agent_states": [
+        {
+          "agent_id": "p-1",
+          "current_action": "IDLE",
+          "is_alive": false,
+          "is_venting": false,
+          "room_id": null,
+          "task_progress": 0.0,
+          "visibility": null
+        },
+        {
+          "agent_id": "p-2",
+          "current_action": "IDLE",
+          "is_alive": true,
+          "is_venting": false,
+          "room_id": "CAFETERIA",
+          "task_progress": 0.0,
+          "visibility": {
+            "audible_events": [],
+            "visible_bodies": [
+              {
+                "id": "body-p-1",
+                "room": "CAFETERIA",
+                "victim_id": "p-1"
+              }
+            ],
+            "visible_players": [
+              {
+                "action": "kill",
+                "id": "p-3",
+                "room": "CAFETERIA"
+              },
+              {
+                "action": null,
+                "id": "p-4",
+                "room": "CAFETERIA"
+              }
+            ]
+          }
+        },
+        {
+          "agent_id": "p-3",
+          "current_action": "KILL",
+          "is_alive": true,
+          "is_venting": false,
+          "room_id": "CAFETERIA",
+          "task_progress": null,
+          "visibility": {
+            "audible_events": [],
+            "visible_bodies": [
+              {
+                "id": "body-p-1",
+                "room": "CAFETERIA",
+                "victim_id": "p-1"
+              }
+            ],
+            "visible_players": [
+              {
+                "action": null,
+                "id": "p-2",
+                "room": "CAFETERIA"
+              },
+              {
+                "action": null,
+                "id": "p-4",
+                "room": "CAFETERIA"
+              }
+            ]
+          }
+        },
+        {
+          "agent_id": "p-4",
+          "current_action": "IDLE",
+          "is_alive": true,
+          "is_venting": false,
+          "room_id": "CAFETERIA",
+          "task_progress": 0.0,
+          "visibility": {
+            "audible_events": [],
+            "visible_bodies": [
+              {
+                "id": "body-p-1",
+                "room": "CAFETERIA",
+                "victim_id": "p-1"
+              }
+            ],
+            "visible_players": [
+              {
+                "action": null,
+                "id": "p-2",
+                "room": "CAFETERIA"
+              },
+              {
+                "action": "kill",
+                "id": "p-3",
+                "room": "CAFETERIA"
+              }
+            ]
+          }
+        }
+      ],
+      "bodies": [
+        {
+          "body_id": "body-p-1-4",
+          "killed_by": "p-3",
+          "room_id": "CAFETERIA",
+          "victim_id": "p-1"
+        }
+      ],
+      "events": [
+        {
+          "killer_id": "p-3",
+          "room_id": "CAFETERIA",
+          "tick": 4,
+          "type": "kill",
+          "victim_id": "p-1"
+        }
+      ],
+      "meeting_resolution": null,
+      "sabotage": null,
+      "sabotage_active": [],
+      "tasks_completed_total": 0,
+      "tasks_required_total": 3,
+      "tick": 4
+    },
+    {
+      "advantage": {
+        "advantage": -0.5,
+        "crew_alive": 2,
+        "impostors_alive": 1,
+        "tasks_completed": 0,
+        "tasks_required": 3,
+        "tasks_required_total": 3
+      },
+      "agent_states": [
+        {
+          "agent_id": "p-1",
+          "current_action": "IDLE",
+          "is_alive": false,
+          "is_venting": false,
+          "room_id": null,
+          "task_progress": 0.0,
+          "visibility": null
+        },
+        {
+          "agent_id": "p-2",
+          "current_action": "IDLE",
+          "is_alive": true,
+          "is_venting": false,
+          "room_id": "CAFETERIA",
+          "task_progress": 0.0,
+          "visibility": {
+            "audible_events": [],
+            "visible_bodies": [
+              {
+                "id": "body-p-1",
+                "room": "CAFETERIA",
+                "victim_id": "p-1"
+              }
+            ],
+            "visible_players": [
+              {
+                "action": null,
+                "id": "p-3",
+                "room": "CAFETERIA"
+              },
+              {
+                "action": null,
+                "id": "p-4",
+                "room": "CAFETERIA"
+              }
+            ]
+          }
+        },
+        {
+          "agent_id": "p-3",
+          "current_action": "IDLE",
+          "is_alive": true,
+          "is_venting": false,
+          "room_id": "CAFETERIA",
+          "task_progress": null,
+          "visibility": {
+            "audible_events": [],
+            "visible_bodies": [
+              {
+                "id": "body-p-1",
+                "room": "CAFETERIA",
+                "victim_id": "p-1"
+              }
+            ],
+            "visible_players": [
+              {
+                "action": null,
+                "id": "p-2",
+                "room": "CAFETERIA"
+              },
+              {
+                "action": null,
+                "id": "p-4",
+                "room": "CAFETERIA"
+              }
+            ]
+          }
+        },
+        {
+          "agent_id": "p-4",
+          "current_action": "IDLE",
+          "is_alive": true,
+          "is_venting": false,
+          "room_id": "CAFETERIA",
+          "task_progress": 0.0,
+          "visibility": {
+            "audible_events": [],
+            "visible_bodies": [
+              {
+                "id": "body-p-1",
+                "room": "CAFETERIA",
+                "victim_id": "p-1"
+              }
+            ],
+            "visible_players": [
+              {
+                "action": null,
+                "id": "p-2",
+                "room": "CAFETERIA"
+              },
+              {
+                "action": null,
+                "id": "p-3",
+                "room": "CAFETERIA"
+              }
+            ]
+          }
+        }
+      ],
+      "bodies": [
+        {
+          "body_id": "body-p-1-4",
+          "killed_by": "p-3",
+          "room_id": "CAFETERIA",
+          "victim_id": "p-1"
+        }
+      ],
+      "events": [],
+      "meeting_resolution": null,
+      "sabotage": null,
+      "sabotage_active": [],
+      "tasks_completed_total": 0,
+      "tasks_required_total": 3,
+      "tick": 5
+    },
+    {
+      "advantage": {
+        "advantage": -0.5,
+        "crew_alive": 2,
+        "impostors_alive": 1,
+        "tasks_completed": 0,
+        "tasks_required": 3,
+        "tasks_required_total": 3
+      },
+      "agent_states": [
+        {
+          "agent_id": "p-1",
+          "current_action": "IDLE",
+          "is_alive": false,
+          "is_venting": false,
+          "room_id": null,
+          "task_progress": 0.0,
+          "visibility": null
+        },
+        {
+          "agent_id": "p-2",
+          "current_action": "IDLE",
+          "is_alive": true,
+          "is_venting": false,
+          "room_id": "CAFETERIA",
+          "task_progress": 0.0,
+          "visibility": {
+            "audible_events": [],
+            "visible_bodies": [
+              {
+                "id": "body-p-1",
+                "room": "CAFETERIA",
+                "victim_id": "p-1"
+              }
+            ],
+            "visible_players": [
+              {
+                "action": null,
+                "id": "p-3",
+                "room": "CAFETERIA"
+              },
+              {
+                "action": null,
+                "id": "p-4",
+                "room": "CAFETERIA"
+              }
+            ]
+          }
+        },
+        {
+          "agent_id": "p-3",
+          "current_action": "IDLE",
+          "is_alive": true,
+          "is_venting": false,
+          "room_id": "CAFETERIA",
+          "task_progress": null,
+          "visibility": {
+            "audible_events": [],
+            "visible_bodies": [
+              {
+                "id": "body-p-1",
+                "room": "CAFETERIA",
+                "victim_id": "p-1"
+              }
+            ],
+            "visible_players": [
+              {
+                "action": null,
+                "id": "p-2",
+                "room": "CAFETERIA"
+              },
+              {
+                "action": null,
+                "id": "p-4",
+                "room": "CAFETERIA"
+              }
+            ]
+          }
+        },
+        {
+          "agent_id": "p-4",
+          "current_action": "IDLE",
+          "is_alive": true,
+          "is_venting": false,
+          "room_id": "CAFETERIA",
+          "task_progress": 0.0,
+          "visibility": {
+            "audible_events": [],
+            "visible_bodies": [
+              {
+                "id": "body-p-1",
+                "room": "CAFETERIA",
+                "victim_id": "p-1"
+              }
+            ],
+            "visible_players": [
+              {
+                "action": null,
+                "id": "p-2",
+                "room": "CAFETERIA"
+              },
+              {
+                "action": null,
+                "id": "p-3",
+                "room": "CAFETERIA"
+              }
+            ]
+          }
+        }
+      ],
+      "bodies": [
+        {
+          "body_id": "body-p-1-4",
+          "killed_by": "p-3",
+          "room_id": "CAFETERIA",
+          "victim_id": "p-1"
+        }
+      ],
+      "events": [],
+      "meeting_resolution": null,
+      "sabotage": null,
+      "sabotage_active": [],
+      "tasks_completed_total": 0,
+      "tasks_required_total": 3,
+      "tick": 6
+    },
+    {
+      "advantage": {
+        "advantage": -0.5,
+        "crew_alive": 2,
+        "impostors_alive": 1,
+        "tasks_completed": 0,
+        "tasks_required": 3,
+        "tasks_required_total": 3
+      },
+      "agent_states": [
+        {
+          "agent_id": "p-1",
+          "current_action": "IDLE",
+          "is_alive": false,
+          "is_venting": false,
+          "room_id": null,
+          "task_progress": 0.0,
+          "visibility": null
+        },
+        {
+          "agent_id": "p-2",
+          "current_action": "IDLE",
+          "is_alive": true,
+          "is_venting": false,
+          "room_id": "CAFETERIA",
+          "task_progress": 0.0,
+          "visibility": {
+            "audible_events": [],
+            "visible_bodies": [
+              {
+                "id": "body-p-1",
+                "room": "CAFETERIA",
+                "victim_id": "p-1"
+              }
+            ],
+            "visible_players": [
+              {
+                "action": null,
+                "id": "p-3",
+                "room": "CAFETERIA"
+              },
+              {
+                "action": null,
+                "id": "p-4",
+                "room": "CAFETERIA"
+              }
+            ]
+          }
+        },
+        {
+          "agent_id": "p-3",
+          "current_action": "IDLE",
+          "is_alive": true,
+          "is_venting": false,
+          "room_id": "CAFETERIA",
+          "task_progress": null,
+          "visibility": {
+            "audible_events": [],
+            "visible_bodies": [
+              {
+                "id": "body-p-1",
+                "room": "CAFETERIA",
+                "victim_id": "p-1"
+              }
+            ],
+            "visible_players": [
+              {
+                "action": null,
+                "id": "p-2",
+                "room": "CAFETERIA"
+              },
+              {
+                "action": null,
+                "id": "p-4",
+                "room": "CAFETERIA"
+              }
+            ]
+          }
+        },
+        {
+          "agent_id": "p-4",
+          "current_action": "IDLE",
+          "is_alive": true,
+          "is_venting": false,
+          "room_id": "CAFETERIA",
+          "task_progress": 0.0,
+          "visibility": {
+            "audible_events": [],
+            "visible_bodies": [
+              {
+                "id": "body-p-1",
+                "room": "CAFETERIA",
+                "victim_id": "p-1"
+              }
+            ],
+            "visible_players": [
+              {
+                "action": null,
+                "id": "p-2",
+                "room": "CAFETERIA"
+              },
+              {
+                "action": null,
+                "id": "p-3",
+                "room": "CAFETERIA"
+              }
+            ]
+          }
+        }
+      ],
+      "bodies": [
+        {
+          "body_id": "body-p-1-4",
+          "killed_by": "p-3",
+          "room_id": "CAFETERIA",
+          "victim_id": "p-1"
+        }
+      ],
+      "events": [],
+      "meeting_resolution": null,
+      "sabotage": null,
+      "sabotage_active": [],
+      "tasks_completed_total": 0,
+      "tasks_required_total": 3,
+      "tick": 7
+    },
+    {
+      "advantage": {
+        "advantage": -0.5,
+        "crew_alive": 2,
+        "impostors_alive": 1,
+        "tasks_completed": 0,
+        "tasks_required": 3,
+        "tasks_required_total": 3
+      },
+      "agent_states": [
+        {
+          "agent_id": "p-1",
+          "current_action": "IDLE",
+          "is_alive": false,
+          "is_venting": false,
+          "room_id": null,
+          "task_progress": 0.0,
+          "visibility": null
+        },
+        {
+          "agent_id": "p-2",
+          "current_action": "IDLE",
+          "is_alive": true,
+          "is_venting": false,
+          "room_id": "CAFETERIA",
+          "task_progress": 0.0,
+          "visibility": {
+            "audible_events": [],
+            "visible_bodies": [
+              {
+                "id": "body-p-1",
+                "room": "CAFETERIA",
+                "victim_id": "p-1"
+              }
+            ],
+            "visible_players": [
+              {
+                "action": null,
+                "id": "p-3",
+                "room": "CAFETERIA"
+              },
+              {
+                "action": null,
+                "id": "p-4",
+                "room": "CAFETERIA"
+              }
+            ]
+          }
+        },
+        {
+          "agent_id": "p-3",
+          "current_action": "IDLE",
+          "is_alive": true,
+          "is_venting": false,
+          "room_id": "CAFETERIA",
+          "task_progress": null,
+          "visibility": {
+            "audible_events": [],
+            "visible_bodies": [
+              {
+                "id": "body-p-1",
+                "room": "CAFETERIA",
+                "victim_id": "p-1"
+              }
+            ],
+            "visible_players": [
+              {
+                "action": null,
+                "id": "p-2",
+                "room": "CAFETERIA"
+              },
+              {
+                "action": null,
+                "id": "p-4",
+                "room": "CAFETERIA"
+              }
+            ]
+          }
+        },
+        {
+          "agent_id": "p-4",
+          "current_action": "IDLE",
+          "is_alive": true,
+          "is_venting": false,
+          "room_id": "CAFETERIA",
+          "task_progress": 0.0,
+          "visibility": {
+            "audible_events": [],
+            "visible_bodies": [
+              {
+                "id": "body-p-1",
+                "room": "CAFETERIA",
+                "victim_id": "p-1"
+              }
+            ],
+            "visible_players": [
+              {
+                "action": null,
+                "id": "p-2",
+                "room": "CAFETERIA"
+              },
+              {
+                "action": null,
+                "id": "p-3",
+                "room": "CAFETERIA"
+              }
+            ]
+          }
+        }
+      ],
+      "bodies": [
+        {
+          "body_id": "body-p-1-4",
+          "killed_by": "p-3",
+          "room_id": "CAFETERIA",
+          "victim_id": "p-1"
+        }
+      ],
+      "events": [],
+      "meeting_resolution": null,
+      "sabotage": null,
+      "sabotage_active": [],
+      "tasks_completed_total": 0,
+      "tasks_required_total": 3,
+      "tick": 8
+    },
+    {
+      "advantage": {
+        "advantage": -1.0,
+        "crew_alive": 1,
+        "impostors_alive": 1,
+        "tasks_completed": 0,
+        "tasks_required": 3,
+        "tasks_required_total": 3
+      },
+      "agent_states": [
+        {
+          "agent_id": "p-1",
+          "current_action": "IDLE",
+          "is_alive": false,
+          "is_venting": false,
+          "room_id": null,
+          "task_progress": 0.0,
+          "visibility": null
+        },
+        {
+          "agent_id": "p-2",
+          "current_action": "IDLE",
+          "is_alive": false,
+          "is_venting": false,
+          "room_id": null,
+          "task_progress": 0.0,
+          "visibility": null
+        },
+        {
+          "agent_id": "p-3",
+          "current_action": "KILL",
+          "is_alive": true,
+          "is_venting": false,
+          "room_id": "CAFETERIA",
+          "task_progress": null,
+          "visibility": {
+            "audible_events": [],
+            "visible_bodies": [
+              {
+                "id": "body-p-1",
+                "room": "CAFETERIA",
+                "victim_id": "p-1"
+              },
+              {
+                "id": "body-p-2",
+                "room": "CAFETERIA",
+                "victim_id": "p-2"
+              }
+            ],
+            "visible_players": [
+              {
+                "action": null,
+                "id": "p-4",
+                "room": "CAFETERIA"
+              }
+            ]
+          }
+        },
+        {
+          "agent_id": "p-4",
+          "current_action": "IDLE",
+          "is_alive": true,
+          "is_venting": false,
+          "room_id": "CAFETERIA",
+          "task_progress": 0.0,
+          "visibility": {
+            "audible_events": [],
+            "visible_bodies": [
+              {
+                "id": "body-p-1",
+                "room": "CAFETERIA",
+                "victim_id": "p-1"
+              },
+              {
+                "id": "body-p-2",
+                "room": "CAFETERIA",
+                "victim_id": "p-2"
+              }
+            ],
+            "visible_players": [
+              {
+                "action": "kill",
+                "id": "p-3",
+                "room": "CAFETERIA"
+              }
+            ]
+          }
+        }
+      ],
+      "bodies": [
+        {
+          "body_id": "body-p-1-4",
+          "killed_by": "p-3",
+          "room_id": "CAFETERIA",
+          "victim_id": "p-1"
+        },
+        {
+          "body_id": "body-p-2-9",
+          "killed_by": "p-3",
+          "room_id": "CAFETERIA",
+          "victim_id": "p-2"
+        }
+      ],
+      "events": [
+        {
+          "killer_id": "p-3",
+          "room_id": "CAFETERIA",
+          "tick": 9,
+          "type": "kill",
+          "victim_id": "p-2"
+        }
+      ],
+      "meeting_resolution": null,
+      "sabotage": null,
+      "sabotage_active": [],
+      "tasks_completed_total": 0,
+      "tasks_required_total": 3,
+      "tick": 9
     }
   ],
   "viewModelVersion": "3"
