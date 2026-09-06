@@ -21,6 +21,7 @@ import pytest
 
 import build_sample_report as bsr
 from eval.meeting_quality import TournamentEvalReport
+from tests._helpers.committed import report_9p2i
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 # The flat 4p1i baseline now lives under replays/samples/4p1i/ (Task 12.12).
@@ -42,7 +43,7 @@ def _copy_flat_replays(dst: Path) -> None:
 def test_rebuild_matches_committed_flat_4p1i() -> None:
     """A rebuild from the committed 4p/1i replays equals the committed report."""
 
-    rebuilt = bsr.build_report(_FLAT_4P1I).model_dump(mode="json")
+    rebuilt = bsr.historical_report_payload(bsr.build_report(_FLAT_4P1I))
     committed = json.loads(_COMMITTED_REPORT.read_text(encoding="utf-8"))
     assert rebuilt == committed, (
         "The committed flat 4p/1i tournament-eval-report.json is STALE — it does "
@@ -55,6 +56,22 @@ def test_check_reports_consistent_on_committed_flat_4p1i() -> None:
     """``--check`` returns 0 when the committed report matches its replays."""
 
     assert bsr.check_report(_FLAT_4P1I) == 0
+
+
+def test_historical_serialization_omits_only_additive_outcome_metadata() -> None:
+    report = report_9p2i()
+    current = report.model_dump(mode="json")
+    historical = bsr.historical_report_payload(report)
+    for current_game, historical_game in zip(
+        current["report"]["games"], historical["report"]["games"], strict=True
+    ):
+        assert current_game["outcome_verified"] is True
+        assert current_game["completion_status"] == "completed"
+        assert "completion_status" not in historical_game
+        assert "outcome_verified" not in historical_game
+        historical_game["completion_status"] = current_game["completion_status"]
+        historical_game["outcome_verified"] = current_game["outcome_verified"]
+    assert historical == current
 
 
 def test_check_flags_a_stale_report(tmp_path: Path) -> None:

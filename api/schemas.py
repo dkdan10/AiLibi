@@ -1251,6 +1251,10 @@ class ReplayMetadataView(_FrozenView):
     total_cost_usd: float
     prompt_versions: Mapping[str, str]
     created_at: str | None
+    completion_status: Literal["completed", "aborted", "tick_limited", "unfinished"] = (
+        "unfinished"
+    )
+    outcome_verified: bool = False
 
 
 class FailedCallView(_FrozenView):
@@ -1337,15 +1341,39 @@ class ReplayView(_FrozenView):
 # ---------------------------------------------------------------------------
 
 
+class ReplayAccountingView(_FrozenView):
+    """Recorded spending and outcome claims, with their separate validation result."""
+
+    game_id: str
+    total_cost_usd: float | None
+    completion_status: (
+        Literal["completed", "aborted", "tick_limited", "unfinished"] | None
+    )
+    recorded_winner: Literal["CREWMATES", "IMPOSTORS"] | None
+    verified_winner: Literal["CREWMATES", "IMPOSTORS"] | None
+    integrity_status: Literal["verified", "unverified", "invalid"]
+    validation_error: str | None = None
+
+
 class EvalCostSummaryView(_FrozenView):
-    """Aggregates ``orchestrator.replay.compute_cost_usd`` and game outcomes
-    across every replay in the directory."""
+    """Raw readable spending with a separate verified-outcome denominator.
+
+    Unreadable files have unknown cost and remain explicit in ``recordings``;
+    their unknown spending is never imputed as zero.
+    """
 
     total_replays: int
     total_cost_usd: float
     mean_cost_per_replay: float
     max_cost_per_replay: float
     decisive_split: dict[str, float]
+    verified_outcomes: int = 0
+    verified_replays: int = 0
+    unverified_replays: int = 0
+    invalid_replays: int = 0
+    unreadable_replays: int = 0
+    accounting_complete: bool = True
+    recordings: tuple[ReplayAccountingView, ...] = ()
 
 
 class RubricGameView(_FrozenView):
@@ -1413,6 +1441,7 @@ __all__ = [
     "CorroborationClaimView",
     "EdgeView",
     "EvalCostSummaryView",
+    "ReplayAccountingView",
     "FailedCallEvalView",
     "FailedCallView",
     "FinaleAgentRecapView",

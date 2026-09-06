@@ -16,6 +16,7 @@ from orchestrator.replay import (
     AbortedMeetingReplayEntry,
     FailedCallReplayEntry,
     GameEndReplayEntry,
+    GameStopReplayEntry,
     MeetingReplayEntry,
     ReplayEntry,
     ReplayLogEntry,
@@ -39,7 +40,7 @@ class ReplayIntegrityValidator:
     """Check one complete walk without advancing or hashing engine state twice.
 
     Call ``check_tick`` before each advance, ``check_advance`` after its hash
-    passes, and ``observe_events`` after each verified meeting application.
+    passes, and ``check_meeting_result`` after each verified meeting application.
     ``finish`` is required even for a truncated walk. It distinguishes a valid
     partial file from one whose remaining rows were silently ignored.
     """
@@ -50,6 +51,9 @@ class ReplayIntegrityValidator:
         self._meetings: dict[int, MeetingReplayEntry | AbortedMeetingReplayEntry] = {}
         self._side_ids: dict[int, str] = {}
         self._game_end: GameEndReplayEntry | None = None
+        self._game_stop: GameStopReplayEntry | None = None
+        self._next_tick = 0
+        self._pending_meeting = False
         self._consumed_ticks = 0
         self._terminal: GameOverEvent | None = None
         meeting_ids: set[str] = set()
@@ -59,14 +63,19 @@ class ReplayIntegrityValidator:
         for entry in entries:
             if entry.game_id != game_id:
                 self._fail("row_order", "row belongs to another game", entry.tick)
-            if self._game_end is not None:
-                self._fail("row_order", "record follows game_over", entry.tick)
+            if self._game_end is not None or self._game_stop is not None:
+                self._fail(
+                    "row_order", "record follows a final outcome or stop", entry.tick
+                )
             if isinstance(entry, ReplayEntry):
                 self._ticks.append(entry)
                 last_tick = entry
                 continue
             if isinstance(entry, GameEndReplayEntry):
                 self._game_end = entry
+                continue
+            if isinstance(entry, GameStopReplayEntry):
+                self._game_stop = entry
                 continue
             if last_tick is None or entry.tick != last_tick.tick:
                 self._fail(
@@ -140,8 +149,10 @@ class ReplayIntegrityValidator:
         self, entry: ReplayEntry, state: WorldState, events: Sequence[EngineEvent]
     ) -> None:
         """Match meeting metadata to the verified tick and its actual trigger."""
-        self.observe_events(events)
+        self._observe_events(events)
         meeting = self._meetings.get(entry.tick)
+        self._next_tick = state.tick
+        self._pending_meeting = state.phase == "MEETING"
         if state.phase != "MEETING":
             if entry.tick in self._side_ids:
                 self._fail(
@@ -174,7 +185,19 @@ class ReplayIntegrityValidator:
                     entry.tick,
                 )
 
-    def observe_events(self, events: Sequence[EngineEvent]) -> None:
+    def check_meeting_result(
+        self, state: WorldState, events: Sequence[EngineEvent]
+    ) -> None:
+        """Bind the next stop to the actual, hash-verified meeting result state."""
+        if not self._pending_meeting or state.phase == "MEETING":
+            self._fail(
+                "row_order", "meeting result has no pending transition", state.tick
+            )
+        self._next_tick = state.tick
+        self._pending_meeting = False
+        self._observe_events(events)
+
+    def _observe_events(self, events: Sequence[EngineEvent]) -> None:
         """Retain the engine's terminal event from a tick or meeting resolution."""
         for event in events:
             if isinstance(event, GameOverEvent):
@@ -191,6 +214,33 @@ class ReplayIntegrityValidator:
                 "row_order", "unconsumed ticks follow an interrupted or terminal game"
             )
         end = self._game_end
+        stop = self._game_stop
+        if stop is not None:
+            if self._terminal is not None:
+                self._fail(
+                    "recorded_outcome_mismatch",
+                    "stop replaces an engine terminal outcome",
+                    stop.tick,
+                )
+            if stop.tick != self._next_tick:
+                self._fail(
+                    "stop_tick_mismatch",
+                    f"recorded stop tick {stop.tick}, expected {self._next_tick}",
+                    stop.tick,
+                )
+            if (stop.reason == "MEETING_PHASE_REACHED") != self._pending_meeting:
+                self._fail(
+                    "stop_reason_mismatch",
+                    "stop reason does not match the reconstructed phase",
+                    stop.tick,
+                )
+            if any(
+                isinstance(row, AbortedMeetingReplayEntry)
+                for row in self._meetings.values()
+            ):
+                self._fail(
+                    "row_order", "normal stop follows an aborted meeting", stop.tick
+                )
         if end is None:
             return
         terminal = self._terminal

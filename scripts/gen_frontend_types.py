@@ -166,7 +166,9 @@ _STUB_BODIES: Final[dict[str, str]] = {
         "  seed: number;\n"
         "  winner: Winner | null;\n"
         "  reason: string;\n"
-        "  final_tick: number | null;"
+        "  final_tick: number | null;\n"
+        '  completion_status?: "completed" | "aborted" | "tick_limited" | "unfinished";\n'
+        "  outcome_verified?: boolean;"
     ),
     "TournamentReport": (
         "  format_version: number;\n  games: GameReport[];\n  seeds_used: number[];"
@@ -263,7 +265,14 @@ class _Generator:
             # serialization_alias when set (e.g. view_model_version ->
             # viewModelVersion, the contract name); fall back to the field name.
             wire_name = field.serialization_alias or name
-            lines.append(f"  {wire_name}: {self._ts_type(field.annotation)};")
+            # Older static recording bundles omit these additive status fields.
+            optional = (
+                "?"
+                if model.__name__ == "ReplayMetadataView"
+                and name in {"completion_status", "outcome_verified"}
+                else ""
+            )
+            lines.append(f"  {wire_name}{optional}: {self._ts_type(field.annotation)};")
         lines.append("}")
         return "\n".join(lines)
 

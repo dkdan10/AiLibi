@@ -18,10 +18,9 @@ metric that already has a home:
   :mod:`eval.vote_correctness`
 * meeting rate — :func:`eval.meeting_quality.compute_meeting_rate`
 * accusation calibration — :func:`eval.accusation_calibration`
-* win split + reason histogram — the ``GameReport.winner`` / ``.reason``
-  reduction (:func:`eval.balance_eval._balance_report_from_tournament`,
-  eval/balance_eval.py:893-894) over
-  :func:`eval.balance_eval.load_tournament_report`
+* historical win split + reason histogram — the recorded ``GameReport.winner``
+  / ``.reason`` census over :func:`eval.validity.assemble_tournament_report`;
+  these frozen metric cells do not certify outcomes under the current engine
 
 Usage::
 
@@ -94,7 +93,6 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from eval.accusation_calibration import compute_accusation_calibration  # noqa: E402
-from eval.balance_eval import _balance_report_from_tournament  # noqa: E402
 from eval.deduction_metrics import WilsonRateCell  # noqa: E402
 
 # Task-20.15 evidence-honesty fold region (disjoint from every region below): the
@@ -215,10 +213,14 @@ def _reason_histogram(report: TournamentReport) -> dict[str, int]:
 
 
 def measure_baseline(sample_dir: Path) -> BaselineMeasurementReport:
-    """Fold one replay set's committed bytes into the core R-gate measurement."""
+    """Fold committed bytes using the historical R-gate metric definitions.
+
+    The win census counts recorded claims, independently of current outcome
+    verification. Its legacy null-winner bucket is retained for historical
+    comparisons; modern completion reports distinguish those stop reasons.
+    """
 
     report = assemble_tournament_report(sample_dir)
-    balance = _balance_report_from_tournament(report)
     vote = compute_vote_correctness(report)
     genuine = compute_genuine_class_conversion(report)
     supplied_channel = compute_supplied_channel_conversion(report)
@@ -226,14 +228,17 @@ def measure_baseline(sample_dir: Path) -> BaselineMeasurementReport:
     calibration = compute_accusation_calibration(report)
     histogram = _reason_histogram(report)
 
-    games_total = balance.games
-    impostor_win_rate = balance.impostor_wins / games_total if games_total else 0.0
+    games_total = len(report.games)
+    crew_wins = sum(game.winner == "CREWMATES" for game in report.games)
+    impostor_wins = sum(game.winner == "IMPOSTORS" for game in report.games)
+    tick_budget_reached = sum(game.winner is None for game in report.games)
+    impostor_win_rate = impostor_wins / games_total if games_total else 0.0
     return BaselineMeasurementReport(
         replay_set_dir=str(sample_dir),
         games_total=games_total,
-        crew_wins=balance.crew_wins,
-        impostor_wins=balance.impostor_wins,
-        tick_budget_reached=balance.tick_budget_reached,
+        crew_wins=crew_wins,
+        impostor_wins=impostor_wins,
+        tick_budget_reached=tick_budget_reached,
         impostor_win_rate=impostor_win_rate,
         reason_histogram=histogram,
         r1_eject_decided_wins=histogram.get(_R1_EJECT_DECIDED_REASON, 0),

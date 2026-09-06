@@ -615,7 +615,7 @@ def walk_replay(
                     ),
                 )
         if integrity is not None:
-            integrity.observe_events(post_events)
+            integrity.check_meeting_result(state, post_events)
         for event in post_events:
             if isinstance(event, GameOverEvent):
                 reconstructed_winner = event.winner

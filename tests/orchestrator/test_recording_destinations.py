@@ -19,7 +19,7 @@ from orchestrator.game import (
     build_default_meeting_runner,
 )
 from orchestrator.scheduler import TickScheduler
-from orchestrator.replay import ReplayLog
+from orchestrator.replay import GameStopReplayEntry, ReplayLog, read_all_entries
 
 
 def _game(
@@ -67,7 +67,10 @@ def test_fresh_case_variants_follow_actual_filesystem_identity(
     else:
         _game(replay, audit=audit).run()
         assert not replay.samefile(audit)
-        assert len(replay.read_text(encoding="utf-8").splitlines()) == 3
+        entries = read_all_entries(replay)
+        assert len(entries) == 4
+        assert isinstance(entries[-1], GameStopReplayEntry)
+        assert entries[-1].reason == "TICK_BUDGET_REACHED"
         assert len(audit.read_text(encoding="utf-8").splitlines()) == 21
 
 
@@ -121,7 +124,6 @@ def test_backup_retirement_failure_preserves_new_recording_and_recovery_file(
     _game(replay).run()
     original_audit = audit.read_bytes()
     control = tmp_path / "control" / "recording.jsonl"
-    _game(control, seed=2, ticks=1 if runtime_failure else 2).run()
     cleanup_error = PermissionError("injected second-backup retirement failure")
     runtime_error = RuntimeError("injected interruption after the first tick")
     unlink = Path.unlink
@@ -145,6 +147,16 @@ def test_backup_retirement_failure_preserves_new_recording_and_recovery_file(
         ):
             raise cleanup_error
         unlink(path, missing_ok=missing_ok)
+
+    # Compare against the same runtime interruption without retirement failure.
+    # A normal one-tick run additionally records its deliberate stop reason.
+    with monkeypatch.context() as patch:
+        if runtime_failure:
+            patch.setattr(ReplayLog, "record_tick", record_then_fail)
+            with pytest.raises(RuntimeError, match="injected interruption"):
+                _game(control, seed=2, ticks=2).run()
+        else:
+            _game(control, seed=2, ticks=2).run()
 
     with monkeypatch.context() as patch:
         patch.setattr(Path, "unlink", fail_audit_backup)

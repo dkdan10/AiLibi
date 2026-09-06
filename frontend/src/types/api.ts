@@ -51,6 +51,8 @@ export interface ReplayMetadataView {
   total_cost_usd: number;
   prompt_versions: Record<string, string>;
   created_at: string | null;
+  completion_status?: "completed" | "aborted" | "tick_limited" | "unfinished";
+  outcome_verified?: boolean;
 }
 
 export interface MapLayoutView {
@@ -439,6 +441,23 @@ export interface EvalCostSummaryView {
   mean_cost_per_replay: number;
   max_cost_per_replay: number;
   decisive_split: Record<string, number>;
+  verified_outcomes: number;
+  verified_replays: number;
+  unverified_replays: number;
+  invalid_replays: number;
+  unreadable_replays: number;
+  accounting_complete: boolean;
+  recordings: ReplayAccountingView[];
+}
+
+export interface ReplayAccountingView {
+  game_id: string;
+  total_cost_usd: number | null;
+  completion_status: "completed" | "aborted" | "tick_limited" | "unfinished" | null;
+  recorded_winner: Winner | null;
+  verified_winner: Winner | null;
+  integrity_status: "verified" | "unverified" | "invalid";
+  validation_error: string | null;
 }
 
 export interface SuspicionGraphView {
@@ -777,6 +796,8 @@ export interface GameReport {
   winner: Winner | null;
   reason: string;
   final_tick: number | null;
+  completion_status?: "completed" | "aborted" | "tick_limited" | "unfinished";
+  outcome_verified?: boolean;
 }
 
 export interface TournamentReport {

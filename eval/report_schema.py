@@ -88,7 +88,12 @@ from meetings.schemas import (
     PlayerId,
     VoteBallot,
 )
-from orchestrator.replay import FailedCallReplayEntry, LLMCallRecord, WinnerSide
+from orchestrator.replay import (
+    CompletionStatus,
+    FailedCallReplayEntry,
+    LLMCallRecord,
+    WinnerSide,
+)
 
 # Current on-disk format of :class:`TournamentReport`. Bumped only when the
 # schema changes shape in a way older readers cannot interpret. The version is
@@ -289,9 +294,35 @@ class GameReport(_FrozenModel):
     failed_calls: tuple[FailedCallReplayEntry, ...]
     prompt_versions: Mapping[str, str]
     cost: GameCostSummary
+    completion_status: CompletionStatus = "unfinished"
+    # Serialized reports are claims. Only a current replay validator may stamp
+    # a terminal outcome as verified; historical files default to unverified.
+    outcome_verified: bool = False
     kill_gifted: bool = False
     instances_dropped: int = 0
     instances_complete_at_win: int = 0
+
+    @model_validator(mode="before")
+    @classmethod
+    def _legacy_completion_status(cls, value: Any) -> Any:
+        if isinstance(value, dict) and "completion_status" not in value:
+            status: CompletionStatus = "unfinished"
+            if value.get("winner") is not None:
+                status = "completed"
+            elif value.get("reason") == "TICK_BUDGET_REACHED":
+                status = "tick_limited"
+            elif str(value.get("reason", "")).startswith("meeting aborted"):
+                status = "aborted"
+            return {**value, "completion_status": status}
+        return value
+
+    @model_validator(mode="after")
+    def _verified_outcome_has_winner(self) -> GameReport:
+        if self.outcome_verified and (
+            self.completion_status != "completed" or self.winner is None
+        ):
+            raise ValueError("a verified outcome requires a completed game and winner")
+        return self
 
 
 class TournamentReport(_FrozenModel):
@@ -311,8 +342,8 @@ class TournamentReport(_FrozenModel):
     ``BalanceReport`` carries is representable without information loss:
     ``games`` count = ``len(self.games)``; ``crew_wins`` / ``impostor_wins`` =
     games whose ``winner`` is ``"CREWMATES"`` / ``"IMPOSTORS"``;
-    ``tick_budget_reached`` = games whose ``winner`` is ``None`` (with the
-    specific reason preserved on ``GameReport.reason``); ``seeds_used`` maps
+    nonterminal status comes from ``GameReport.completion_status`` rather than
+    the absence of a winner; ``seeds_used`` maps
     directly. The actual ``run_balance_eval`` migration is deferred to Task
     5.6, which keeps this task a pure additive schema definition.
 

@@ -27,7 +27,8 @@ without it.
 ``TICK_BUDGET_REACHED`` is a non-decisive outcome: such a game writes no
 ``game_over`` replay row, so its :class:`GameReport` carries ``winner=None`` /
 ``final_tick=None`` (the partial-run-robustness contract). ``run_balance_eval``
-maps ``winner is None`` to its ``tick_budget_reached`` bucket.
+counts explicit tick-limit evidence separately from aborted, unfinished, and
+unverified outcomes; only verified terminal outcomes enter its win buckets.
 
 A meeting that aborts under a real provider (a structured-output response that
 fails schema validation) records its already-charged spend as a
@@ -94,12 +95,14 @@ from orchestrator.replay import (
     CrewTacticalPolicyStamp,
     FailedCallReplayEntry,
     GameEndReplayEntry,
+    GameStopReplayEntry,
     MeetingReplayEntry,
     ReplayEntry,
     ReplayLogEntry,
     TacticalPolicyStamp,
     compute_cost_usd,
     read_all_entries,
+    recorded_completion_status,
 )
 from orchestrator.replay_integrity import ReplayIntegrityError
 from orchestrator.scheduler import TickScheduler
@@ -187,21 +190,10 @@ def _resolve_game_budget(
 
 @dataclass(frozen=True)
 class BalanceReport:
-    """Aggregated outcomes for one tournament run.
+    """Verified win counts plus separate reasons for nonterminal recordings.
 
-    ``games == crew_wins + impostor_wins + tick_budget_reached``. The
-    constructor verifies this invariant so a bucket can never be silently
-    dropped. There is no ``meeting_phase_reached`` bucket: meetings fire
-    end-to-end from the public tournament path (Task 3.13), so every game
-    is decisive or hits the tick budget.
-
-    This dataclass is now a *derived* view: :func:`run_balance_eval` reduces a
-    :class:`~eval.report_schema.TournamentReport` (the typed tournament
-    artifact) into these buckets. The buckets are recoverable from the report
-    without information loss — crew / impostor wins from ``GameReport.winner``
-    and non-decisive games from ``winner is None`` — so the report supersedes
-    this dataclass as the emitted artifact (Task 5.1 ``## Decisions``; proven by
-    ``tests/eval/test_report_schema.py``).
+    The mutually exclusive buckets cover every recorded game. A completed
+    historical report without replay verification belongs to ``unverified``.
     """
 
     games: int
@@ -209,14 +201,29 @@ class BalanceReport:
     impostor_wins: int
     tick_budget_reached: int
     seeds_used: tuple[int, ...]
+    aborted: int = 0
+    unfinished: int = 0
+    unverified: int = 0
+
+    @property
+    def verified_outcomes(self) -> int:
+        return self.crew_wins + self.impostor_wins
 
     def __post_init__(self) -> None:
-        bucket_total = self.crew_wins + self.impostor_wins + self.tick_budget_reached
+        bucket_total = (
+            self.crew_wins
+            + self.impostor_wins
+            + self.tick_budget_reached
+            + self.aborted
+            + self.unfinished
+            + self.unverified
+        )
         if bucket_total != self.games:
             raise ValueError(
                 "BalanceReport bucket totals must sum to games: "
                 f"crew={self.crew_wins} impostors={self.impostor_wins} "
-                f"tick_budget={self.tick_budget_reached} != games={self.games}"
+                f"tick_budget={self.tick_budget_reached} aborted={self.aborted} "
+                f"unfinished={self.unfinished} unverified={self.unverified} != games={self.games}"
             )
         if self.games != len(self.seeds_used):
             raise ValueError(
@@ -404,6 +411,7 @@ def run_tournament_eval(
                         f"meeting aborted before game_over ({failure.error_type})"
                     ),
                     replay_path=replay_path,
+                    integrity_verified=True,
                 )
             )
             continue
@@ -434,23 +442,14 @@ def run_tournament_eval(
                 roles=roles,
                 fallback_reason=result.outcome,
                 replay_path=result.replay_path,
+                integrity_verified=True,
                 kill_gifted=kill_gift.kill_gifted,
                 instances_dropped=kill_gift.instances_dropped,
                 instances_complete_at_win=kill_gift.instances_complete_at_win,
             )
         )
 
-    kill_gifted_wins, instances_dropped_total, mean_complete = _tournament_aggregates(
-        games
-    )
-    return TournamentReport(
-        format_version=CURRENT_FORMAT_VERSION,
-        games=tuple(games),
-        seeds_used=seeds_tuple,
-        kill_gifted_wins=kill_gifted_wins,
-        instances_dropped_total=instances_dropped_total,
-        mean_instances_complete_at_win=mean_complete,
-    )
+    return build_tournament_report(games=games, seeds=seeds_tuple)
 
 
 def run_balance_eval(
@@ -593,23 +592,14 @@ def _load_tournament_report(
                 roles=roles_by_seed[seed],
                 fallback_reason=_LOADED_REPLAY_FALLBACK_REASON,
                 replay_path=replay_path,
+                integrity_verified=not historical,
                 kill_gifted=kill_gift.kill_gifted,
                 instances_dropped=kill_gift.instances_dropped,
                 instances_complete_at_win=kill_gift.instances_complete_at_win,
             )
         )
 
-    kill_gifted_wins, instances_dropped_total, mean_complete = _tournament_aggregates(
-        games
-    )
-    return TournamentReport(
-        format_version=CURRENT_FORMAT_VERSION,
-        games=tuple(games),
-        seeds_used=seeds,
-        kill_gifted_wins=kill_gifted_wins,
-        instances_dropped_total=instances_dropped_total,
-        mean_instances_complete_at_win=mean_complete,
-    )
+    return build_tournament_report(games=games, seeds=seeds)
 
 
 def _seeded_roles(
@@ -951,25 +941,45 @@ def _tournament_aggregates(
     return kill_gifted_wins, instances_dropped_total, mean_complete
 
 
+def build_tournament_report(
+    *, games: Sequence[GameReport], seeds: Sequence[int]
+) -> TournamentReport:
+    """Assemble one report from retained games without re-running or reclassifying them."""
+    kill_gifted_wins, instances_dropped_total, mean_complete = _tournament_aggregates(
+        games
+    )
+    return TournamentReport(
+        format_version=CURRENT_FORMAT_VERSION,
+        games=tuple(games),
+        seeds_used=tuple(seeds),
+        kill_gifted_wins=kill_gifted_wins,
+        instances_dropped_total=instances_dropped_total,
+        mean_instances_complete_at_win=mean_complete,
+    )
+
+
 def _balance_report_from_tournament(report: TournamentReport) -> BalanceReport:
-    """Collapse a :class:`TournamentReport` into the legacy balance buckets.
-
-    Crew / impostor wins reduce out of ``GameReport.winner``; a non-decisive
-    game (``winner is None``, i.e. it hit the tick budget and wrote no
-    ``game_over`` row) maps to ``tick_budget_reached``. No information is lost —
-    every game falls into exactly one bucket — so ``BalanceReport``'s
-    sum-to-games invariant holds by construction.
-    """
-
-    crew_wins = sum(1 for game in report.games if game.winner == "CREWMATES")
-    impostor_wins = sum(1 for game in report.games if game.winner == "IMPOSTORS")
-    tick_budget_reached = sum(1 for game in report.games if game.winner is None)
+    """Count verified terminal outcomes without treating an interruption as a limit."""
     return BalanceReport(
         games=len(report.games),
-        crew_wins=crew_wins,
-        impostor_wins=impostor_wins,
-        tick_budget_reached=tick_budget_reached,
-        seeds_used=report.seeds_used,
+        crew_wins=sum(
+            game.outcome_verified and game.winner == "CREWMATES"
+            for game in report.games
+        ),
+        impostor_wins=sum(
+            game.outcome_verified and game.winner == "IMPOSTORS"
+            for game in report.games
+        ),
+        tick_budget_reached=sum(
+            game.completion_status == "tick_limited" for game in report.games
+        ),
+        aborted=sum(game.completion_status == "aborted" for game in report.games),
+        unfinished=sum(game.completion_status == "unfinished" for game in report.games),
+        unverified=sum(
+            game.completion_status == "completed" and not game.outcome_verified
+            for game in report.games
+        ),
+        seeds_used=tuple(game.seed for game in report.games),
     )
 
 
@@ -979,6 +989,7 @@ def _game_report_from_replay(
     roles: Mapping[PlayerId, Role],
     fallback_reason: str,
     replay_path: Path,
+    integrity_verified: bool = False,
     kill_gifted: bool = False,
     instances_dropped: int = 0,
     instances_complete_at_win: int = 0,
@@ -1042,6 +1053,13 @@ def _game_report_from_replay(
     )
     failed_calls = tuple(e for e in entries if isinstance(e, FailedCallReplayEntry))
     end = next((e for e in entries if isinstance(e, GameEndReplayEntry)), None)
+    stop = next((e for e in entries if isinstance(e, GameStopReplayEntry)), None)
+    status = recorded_completion_status(entries)
+    if status == "unfinished":
+        if fallback_reason == "TICK_BUDGET_REACHED":
+            status = "tick_limited"
+        elif fallback_reason.startswith("meeting aborted"):
+            status = "aborted"
 
     # An aborted opening still used the run's prompt set. Preserve its version
     # stamp even when no meeting reached a resolution.
@@ -1059,8 +1077,16 @@ def _game_report_from_replay(
         game_id=game_id,
         seed=seed,
         winner=end.winner if end is not None else None,
-        reason=end.reason if end is not None else fallback_reason,
+        reason=end.reason
+        if end is not None
+        else stop.reason
+        if stop is not None
+        else fallback_reason,
         final_tick=end.tick if end is not None else None,
+        completion_status=status,
+        outcome_verified=integrity_verified
+        and end is not None
+        and end.winner is not None,
         roles=roles,
         replay_ref=replay_path.name,
         meetings=meetings,
@@ -1188,6 +1214,7 @@ def _game_cost_summary(
 
 __all__ = [
     "BalanceReport",
+    "build_tournament_report",
     "load_tournament_report",
     "load_historical_tournament_report",
     "run_balance_eval",

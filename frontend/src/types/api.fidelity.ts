@@ -267,9 +267,11 @@ export const _fidelityReplay: ReplayView = {
   },
   "meetings": [],
   "metadata": {
+    "completion_status": "unfinished",
     "created_at": null,
     "game_id": "headless-seed-0",
     "meeting_count": 0,
+    "outcome_verified": false,
     "prompt_versions": {},
     "seed": 0,
     "total_cost_usd": 0.0,

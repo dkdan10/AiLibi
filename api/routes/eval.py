@@ -55,7 +55,7 @@ from eval.meeting_quality import (
 from eval.report_schema import GameCostSummary, MeetingReport
 from eval.vote_correctness import VoteCorrectnessReport
 from meetings.schemas import PlayerId
-from orchestrator.replay import WinnerSide
+from orchestrator.replay import CompletionStatus, WinnerSide
 
 router = APIRouter()
 
@@ -101,6 +101,8 @@ class _GameReportEvalView(BaseModel):
     failed_calls: tuple[FailedCallEvalView, ...]
     prompt_versions: Mapping[str, str]
     cost: GameCostSummary
+    completion_status: CompletionStatus = "unfinished"
+    outcome_verified: bool = False
     # Task 8.17 kill-gift facts (DESIGN.md §3.5; audit gp-4). Pure derived
     # counts/flags, mirrored one-for-one from ``GameReport`` so the redaction
     # re-validation accepts them (and the leak snapshot stays the firewall).

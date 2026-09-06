@@ -12,9 +12,10 @@ are firewalled out of the replay JSONL), folds the recorded replays into a
 :class:`~eval.meeting_quality.TournamentEvalReport` through the SAME loader
 ``run_tournament.py`` uses (:func:`eval.balance_eval.load_tournament_report` ->
 :func:`eval.meeting_quality.build_tournament_eval_report`, so the offline and
-live entry points cannot drift), and writes the report in the SAME format
-``run_tournament.py`` emits (``model_dump_json(indent=2)`` + a trailing newline,
-guarded by a ``model_validate_json`` round-trip).
+live entry points cannot drift). The historical sample serialization profile
+omits additive completion/verification metadata to preserve the published
+record. Current tournament writers keep those fields; the API verifies outcomes
+against current source recordings when it serves either format.
 
 It is $0 and deterministic: no live model is called. The current report loader
 reconstructs the recorded actions to verify chronology, state hashes, meeting
@@ -49,7 +50,7 @@ import json
 import re
 import sys
 from pathlib import Path
-from typing import Final
+from typing import Any, Final
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(_REPO_ROOT) not in sys.path:
@@ -194,14 +195,29 @@ def build_report(sample_dir: Path) -> TournamentEvalReport:
     )
 
 
+def historical_report_payload(report: TournamentEvalReport) -> dict[str, Any]:
+    """Project only additive completion metadata out of the historical record."""
+    return report.model_dump(
+        mode="json",
+        exclude={
+            "report": {"games": {"__all__": {"completion_status", "outcome_verified"}}}
+        },
+    )
+
+
 def _serialize(report: TournamentEvalReport) -> str:
-    """Serialize exactly as ``run_tournament.py``'s ``_emit_report_json`` does.
+    """Preserve the published sample report format after strict reconstruction.
 
     ``model_dump_json(indent=2)`` + a trailing newline, round-trip-gated: a report
     that cannot be read back is not a report.
     """
 
-    json_text = report.model_dump_json(indent=2)
+    json_text = report.model_dump_json(
+        indent=2,
+        exclude={
+            "report": {"games": {"__all__": {"completion_status", "outcome_verified"}}}
+        },
+    )
     TournamentEvalReport.model_validate_json(json_text)
     return json_text + "\n"
 
@@ -439,7 +455,7 @@ def check_report(sample_dir: Path) -> int:
     if not report_path.exists():
         print(f"--check: no committed report at {report_path}")
         return 1
-    rebuilt = build_report(sample_dir).model_dump(mode="json")
+    rebuilt = historical_report_payload(build_report(sample_dir))
     committed = json.loads(report_path.read_text(encoding="utf-8"))
     if rebuilt != committed:
         print(

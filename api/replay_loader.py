@@ -31,6 +31,7 @@ import json
 import logging
 import re
 import tempfile
+from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
@@ -68,6 +69,7 @@ from api.schemas import (
     CurrentAction,
     EdgeView,
     EvalCostSummaryView,
+    ReplayAccountingView,
     FailedCallView,
     FinaleAgentRecapView,
     FinaleEventView,
@@ -120,6 +122,7 @@ from engine.events import (
 from engine.tick import advance_tick
 from engine.world import Map, WorldState, load_canonical_map
 from eval.meeting_quality import TournamentEvalReport
+from eval.report_schema import GameReport
 from meetings.manager import (
     BALLOT_TARGET_REDIRECT_MARKER,
     DEFAULT_SKIP_CONFIDENCE_THRESHOLD,
@@ -169,6 +172,7 @@ from orchestrator.replay import (
     TOGGLEABLE_SUBSTRATE_FLAG_KEYS,
     AbortedMeetingReplayEntry,
     ActionDisposition,
+    CompletionStatus,
     FailedCallReplayEntry,
     GameEndReplayEntry,
     LLMCallRecord,
@@ -184,6 +188,7 @@ from orchestrator.replay import (
     fold_meeting_outcome_into_memories,
     fsm_default_tactical_policy_stamp,
     read_all_entries,
+    recorded_completion_status,
     substrate_flag_snapshot,
     substrate_stamp_mismatches,
 )
@@ -757,6 +762,7 @@ class _ReplaySummary:
     """
 
     total_ticks: int
+    completion_status: CompletionStatus
     meeting_count: int
     winner: WinnerSide | None
     winner_reason: str | None
@@ -891,52 +897,98 @@ class ReplayLoader:
         )
 
     def cost_summary(self) -> EvalCostSummaryView:
-        """Aggregate LLM cost + decisive-outcome split across every readable replay.
-
-        Reads each replay file exactly once: both the per-game cost and the
-        decisive winner come from a single memoized :class:`_ReplaySummary`
-        rather than two passes (``compute_cost_usd`` + ``read_game_outcome``).
-        Unreadable files are skipped and logged on the same terms as
-        :meth:`list_replays`, so one corrupt file cannot 500 the eval dashboard;
-        ``total_replays`` counts only the files actually reduced, keeping
-        ``mean_cost_per_replay`` a mean over real games.
-
-        A substrate-mismatched replay is deliberately KEPT here, unlike in
-        :meth:`list_replays`. Everything this summary reduces — cost, winner,
-        ticks, meeting count — is read straight off the recorded bytes and needs
-        no reconstruction, so a game recorded under another lever slate is a real
-        accounting artifact. Its recorded outcome split is unverified; this
-        endpoint does not certify game integrity. Dropping it would understate
-        the spend; only the reconstruction-dependent picker,
-        which promises a replay it can actually open, has to refuse it.
-
-        Audit G-G-2.
-        """
-
+        """Retain readable spending while certifying outcome claims separately."""
         summaries: list[_ReplaySummary] = []
-        for _seed, path in self._replay_paths():
+        recordings: list[ReplayAccountingView] = []
+        unreadable = 0
+        for seed, path in self._replay_paths():
+            game_id = _game_id_for_seed(seed)
+            summary: _ReplaySummary | None = None
+            integrity: Literal["verified", "unverified", "invalid"] = "verified"
+            error: str | None = None
             try:
-                summaries.append(self._file_summary(path))
-            except (ReplayLog.CorruptedFileError, ValueError) as exc:
-                _log_skipped_replay(path, exc)
+                summary = self._cached_validated_summary(
+                    seed,
+                    path,
+                    _mtime_ns(path),
+                    self._roster_mtime(),
+                    self._substrate_cache_key(),
+                )
+                # Analysis overrides cannot certify incompatible outcome claims.
+                _assert_recorded_substrate(game_id, summary.substrate_flags)
+            except (ReplayPolicyMismatchError, ReplaySubstrateMismatchError) as exc:
+                integrity = "unverified"
+                error = type(exc).__name__
+            except (
+                ReplayLog.CorruptedFileError,
+                ValueError,
+                ReplayStateMismatchError,
+            ) as exc:
+                integrity = "invalid"
+                error = type(exc).__name__
+            if summary is None:
+                try:
+                    summary = self._file_summary(path)
+                except (ReplayLog.CorruptedFileError, ValueError) as exc:
+                    _log_skipped_replay(path, exc)
+                    unreadable += 1
+                    recordings.append(
+                        ReplayAccountingView(
+                            game_id=game_id,
+                            total_cost_usd=None,
+                            completion_status=None,
+                            recorded_winner=None,
+                            verified_winner=None,
+                            integrity_status="invalid",
+                            validation_error=type(exc).__name__,
+                        )
+                    )
+                    continue
+            summaries.append(summary)
+            recordings.append(
+                ReplayAccountingView(
+                    game_id=game_id,
+                    total_cost_usd=summary.total_cost_usd,
+                    completion_status=summary.completion_status,
+                    recorded_winner=summary.winner,
+                    verified_winner=summary.winner if integrity == "verified" else None,
+                    integrity_status=integrity,
+                    validation_error=error,
+                )
+            )
         total_replays = len(summaries)
         costs = [summary.total_cost_usd for summary in summaries]
         total_cost = sum(costs)
-        decisive = [s.winner for s in summaries if s.winner is not None]
-
-        decisive_split: dict[str, float] = {}
-        if decisive:
-            for side in ("CREWMATES", "IMPOSTORS"):
-                decisive_split[side] = sum(1 for w in decisive if w == side) / len(
-                    decisive
-                )
-
+        decisive = [
+            row.verified_winner for row in recordings if row.verified_winner is not None
+        ]
+        decisive_split = (
+            {
+                side: sum(winner == side for winner in decisive) / len(decisive)
+                for side in ("CREWMATES", "IMPOSTORS")
+            }
+            if decisive
+            else {}
+        )
         return EvalCostSummaryView(
             total_replays=total_replays,
             total_cost_usd=total_cost,
-            mean_cost_per_replay=(total_cost / total_replays if total_replays else 0.0),
-            max_cost_per_replay=(max(costs) if costs else 0.0),
+            mean_cost_per_replay=total_cost / total_replays if total_replays else 0.0,
+            max_cost_per_replay=max(costs) if costs else 0.0,
             decisive_split=decisive_split,
+            verified_outcomes=len(decisive),
+            verified_replays=sum(
+                row.integrity_status == "verified" for row in recordings
+            ),
+            unverified_replays=sum(
+                row.integrity_status == "unverified" for row in recordings
+            ),
+            invalid_replays=sum(
+                row.integrity_status == "invalid" for row in recordings
+            ),
+            unreadable_replays=unreadable,
+            accounting_complete=unreadable == 0,
+            recordings=tuple(recordings),
         )
 
     def tournament_report(self) -> TournamentEvalReport:
@@ -956,8 +1008,70 @@ class ReplayLoader:
         path = self._replay_dir / _TOURNAMENT_REPORT_FILENAME
         if not path.is_file():
             raise FileNotFoundError(path)
-        return TournamentEvalReport.model_validate_json(
+        report = TournamentEvalReport.model_validate_json(
             path.read_text(encoding="utf-8")
+        )
+        # A persisted boolean is a claim, not a validation result. Rebind only
+        # outcome/status metadata; historical metric and cost cells remain the
+        # recorded report's values and are not certified by this flag.
+        games = report.report.games
+        game_ids = Counter(game.game_id for game in games)
+        seeds = Counter(game.seed for game in games)
+        refs = Counter(game.replay_ref for game in games)
+        rebound = tuple(
+            self._rebind_report_outcome(
+                game,
+                unique_identity=game_ids[game.game_id]
+                == seeds[game.seed]
+                == refs[game.replay_ref]
+                == 1,
+            )
+            for game in games
+        )
+        return report.model_copy(
+            update={"report": report.report.model_copy(update={"games": rebound})}
+        )
+
+    def _rebind_report_outcome(
+        self, game: GameReport, *, unique_identity: bool
+    ) -> GameReport:
+        """Verify the report's outcome against its currently served recording."""
+        verified = False
+        status = game.completion_status
+        try:
+            path, seed = self._resolve(game.game_id)
+            summary = self._cached_validated_summary(
+                seed,
+                path,
+                _mtime_ns(path),
+                self._roster_mtime(),
+                self._substrate_cache_key(),
+            )
+            _assert_recorded_substrate(game.game_id, summary.substrate_flags)
+            verified = (
+                unique_identity
+                and game.seed == seed
+                and game.replay_ref == path.name
+                and game.winner is not None
+                and game.winner == summary.winner
+                and game.reason == summary.winner_reason
+                and game.completion_status == summary.completion_status == "completed"
+                and (game.final_tick is None or game.final_tick == summary.final_tick)
+            )
+            status = summary.completion_status
+        except (
+            FileNotFoundError,
+            ReplayLog.CorruptedFileError,
+            ValueError,
+            ReplayStateMismatchError,
+            ReplayPolicyMismatchError,
+            ReplaySubstrateMismatchError,
+        ):
+            # The source can no longer support this claim. Keep the historical
+            # report readable and its recorded spending visible as unverified.
+            pass
+        return game.model_copy(
+            update={"completion_status": status, "outcome_verified": verified}
         )
 
     def get_meeting_memory(
@@ -1422,7 +1536,7 @@ class ReplayLoader:
                         expected=meeting_entry.state_hash_after,
                         actual=after,
                     )
-                integrity.observe_events(post_events)
+                integrity.check_meeting_result(state, post_events)
                 # The meeting TickView was appended from the PRE-resolution state
                 # (its agent_states / events represent the meeting itself), but
                 # the advantage frame is the win-progress trajectory, so it must
@@ -1930,6 +2044,7 @@ class ReplayLoader:
                 total_cost += entry.cost_usd
         return _ReplaySummary(
             total_ticks=tick_count,
+            completion_status=recorded_completion_status(entries),
             meeting_count=meeting_count,
             winner=winner,
             winner_reason=winner_reason,
@@ -1974,6 +2089,14 @@ class ReplayLoader:
             total_ticks=summary.total_ticks,
             winner=summary.winner,
             winner_reason=summary.winner_reason,
+            completion_status=summary.completion_status,
+            outcome_verified=summary.winner is not None
+            and (
+                summary.substrate_flags is None
+                or not substrate_stamp_mismatches(
+                    summary.substrate_flags, ambient=substrate_flag_snapshot()
+                )
+            ),
             meeting_count=summary.meeting_count,
             total_cost_usd=summary.total_cost_usd,
             prompt_versions=dict(summary.prompt_versions),

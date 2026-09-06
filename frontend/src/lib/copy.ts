@@ -217,16 +217,20 @@ export const SPECTATOR_COPY = Object.freeze({
 
     balanceTitle: "Balance outcome",
     balanceDescription:
-      "Crew / impostor / tick-budget split across the tournament's recorded games.",
+      "Verified outcomes and recorded stop reasons across the tournament.",
     balanceGames: "Games recorded",
     balanceSeedsAttempted: "{n} seeds attempted",
     balanceSeeds: "{n} seeds",
-    balanceCrewWins: "Crew wins",
-    balanceImpostorWins: "Impostor wins",
-    balanceTickBudget: "Tick budget",
-    balanceTickBudgetHint: "non-decisive",
+    balanceCrewWins: "Verified crew wins",
+    balanceImpostorWins: "Verified impostor wins",
+    balanceTickBudget: "Tick limit reached",
+    balanceTickBudgetHint: "explicit normal stop",
     balanceCrewWinRate: "Crew win rate",
-    balanceCrewWinRateHint: "of decisive games",
+    balanceCrewWinRateHint: "of {n} verified outcomes",
+    balanceAborted: "Aborted",
+    balanceUnfinished: "Unfinished",
+    balanceUnverified: "Unverified outcomes",
+    balanceUnverifiedHint: "excluded from verified win rates",
 
     voteCorrectnessTitle: "Vote correctness",
     voteCorrectnessDescription:
@@ -367,9 +371,9 @@ export const SPECTATOR_COPY = Object.freeze({
     interestingnessTitle: "Interestingness",
     interestingnessDescription:
       "Distribution of the rubric's 0–100 score — an internal pacing/structure heuristic, not a human rating. Click a bucket to open those seeds in the Highlights reel.",
-    interestingnessStaleCaveat: "scores may be stale",
+    interestingnessStaleCaveat: "scores unavailable",
     interestingnessStaleCaveatTitle:
-      "The rubric was scored against different bytes than the set now serves, so these scores may be stale. Re-score the set to refresh them.",
+      "Scores are hidden because their recording sources could not be verified. Re-extract facts and re-score the current set to refresh them.",
     interestingnessLoading: "Loading the interestingness rubric…",
     interestingnessAbsentTitle: "No interestingness rubric.",
     interestingnessAbsentLead:

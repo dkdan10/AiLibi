@@ -2127,6 +2127,10 @@ class HeadlessGame:
         meeting_counter = 0
         while state.phase != "GAME_OVER":
             if not self._scheduler.should_continue(state.tick):
+                if replay is not None:
+                    replay.record_game_stop(
+                        tick=state.tick, reason="TICK_BUDGET_REACHED"
+                    )
                 return state, "TICK_BUDGET_REACHED"
 
             packets = self._build_packets(
@@ -2163,6 +2167,10 @@ class HeadlessGame:
                     # build_default_meeting_runner and never reach this
                     # branch; only callers that explicitly pass
                     # meeting_runner=None (engine-only replay) land here.
+                    if replay is not None:
+                        replay.record_game_stop(
+                            tick=state.tick, reason="MEETING_PHASE_REACHED"
+                        )
                     return state, "MEETING_PHASE_REACHED"
                 pre_meeting_events = last_events
                 state, post_events = self._run_and_apply_meeting(

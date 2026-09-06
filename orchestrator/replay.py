@@ -497,6 +497,28 @@ class CrewTacticalPolicyStamp(BaseModel):
         return _validated_stamp_field(value)
 
 
+GameStopReason: TypeAlias = Literal["TICK_BUDGET_REACHED", "MEETING_PHASE_REACHED"]
+CompletionStatus: TypeAlias = Literal[
+    "completed", "aborted", "tick_limited", "unfinished"
+]
+
+
+class GameStopReplayEntry(BaseModel):
+    """A normal nonterminal exit, labelled with the next engine tick.
+
+    This additive row records why the runner stopped without claiming a winner.
+    Older recordings without a stop row remain unfinished; their missing footer
+    cannot distinguish a tick limit from an interruption.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    kind: Literal["game_stopped"] = "game_stopped"
+    game_id: str
+    tick: int = Field(ge=0)
+    reason: GameStopReason
+
+
 class GameEndReplayEntry(BaseModel):
     """One game-outcome replay record (DESIGN.md §11.4; Task 3.19 finding 3).
 
@@ -606,9 +628,36 @@ ReplayLogEntry: TypeAlias = Annotated[
     | MeetingReplayEntry
     | AbortedMeetingReplayEntry
     | GameEndReplayEntry
+    | GameStopReplayEntry
     | FailedCallReplayEntry,
     Field(discriminator="kind"),
 ]
+
+
+def recorded_completion_status(entries: Sequence[ReplayLogEntry]) -> CompletionStatus:
+    """Classify recorded evidence without certifying its integrity or outcome."""
+    if any(isinstance(entry, GameEndReplayEntry) for entry in entries):
+        return "completed"
+    if any(isinstance(entry, AbortedMeetingReplayEntry) for entry in entries):
+        return "aborted"
+    for entry in entries:
+        if isinstance(entry, GameStopReplayEntry):
+            return (
+                "tick_limited"
+                if entry.reason == "TICK_BUDGET_REACHED"
+                else "unfinished"
+            )
+    # Older providers retained a failed attempt without an explicit abort row.
+    # A failed attempt associated with a completed meeting is recovered, not an abort.
+    completed = {
+        entry.meeting_id for entry in entries if isinstance(entry, MeetingReplayEntry)
+    }
+    if any(
+        isinstance(entry, FailedCallReplayEntry) and entry.meeting_id not in completed
+        for entry in entries
+    ):
+        return "aborted"
+    return "unfinished"
 
 
 # The substrate levers a baseline record has ADOPTED: unconditionally ON, their
@@ -1104,6 +1153,11 @@ class ReplayLog:
         )
         self._append(entry.model_dump(mode="json"))
 
+    def record_game_stop(self, *, tick: int, reason: GameStopReason) -> None:
+        """Persist a normal nonterminal stop after the last recorded transition."""
+        entry = GameStopReplayEntry(game_id=self._game_id, tick=tick, reason=reason)
+        self._append(entry.model_dump(mode="json"))
+
     def record_game_end(
         self,
         *,
@@ -1558,6 +1612,8 @@ def _parse_entry(raw_entry: Any) -> ReplayLogEntry:
         return AbortedMeetingReplayEntry.model_validate(raw_entry)
     if kind == "game_over":
         return GameEndReplayEntry.model_validate(raw_entry)
+    if kind == "game_stopped":
+        return GameStopReplayEntry.model_validate(raw_entry)
     if kind == "failed_call":
         return FailedCallReplayEntry.model_validate(raw_entry)
     raise ValueError(f"unknown replay entry kind: {kind!r}")
@@ -1624,8 +1680,11 @@ __all__ = [
     "ActionDisposition",
     "AbortedMeetingReplayEntry",
     "CrewTacticalPolicyStamp",
+    "CompletionStatus",
     "FailedCallReplayEntry",
     "GameEndReplayEntry",
+    "GameStopReplayEntry",
+    "GameStopReason",
     "LLMCallRecord",
     "MeetingReplayEntry",
     "PolicyStamps",
@@ -1649,6 +1708,7 @@ __all__ = [
     "read_replay_entries",
     "read_substrate_flags",
     "read_tactical_policy_stamp",
+    "recorded_completion_status",
     "substrate_flag_snapshot",
     "substrate_slate_mismatches",
     "substrate_stamp_mismatches",

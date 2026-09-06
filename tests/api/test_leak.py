@@ -126,6 +126,7 @@ EXPECTED_DTOS: Final[frozenset[str]] = frozenset(
         "FinaleAgentRecapView",
         "GameFinale",
         "EvalCostSummaryView",
+        "ReplayAccountingView",
         # Phase-12 per-set rubric surface (DESIGN.md §3.1, §7):
         "RubricGameView",
         "RubricView",
@@ -552,6 +553,8 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "excluded_no_votable_target_ballots",
         "failed_calls",
         "final_tick",
+        "completion_status",
+        "outcome_verified",
         "flag_named_ejections",
         "flagged_ejections_impostor",
         "flagged_ejections_innocent",

@@ -26,6 +26,7 @@
 // pure presentational surface the Storybook story drives.
 
 import { useCallback, useEffect, useState } from "react";
+import { balanceCounts } from "../lib/completion";
 import type { ReactNode } from "react";
 
 import { ApiError, getRubric } from "../api/client";
@@ -185,12 +186,8 @@ function BalanceSummary({
   seedsAttempted: number;
 }) {
   const total = games.length;
-  // `winner === "CREWMATES" | "IMPOSTORS" | null`; null is the non-decisive
-  // tick-budget bucket (mirrors WinnerSide | None).
-  const crewWins = games.filter((g) => g.winner === "CREWMATES").length;
-  const impostorWins = games.filter((g) => g.winner === "IMPOSTORS").length;
-  const tickBudget = games.filter((g) => g.winner === null).length;
-  const decisive = crewWins + impostorWins;
+  const { crewWins, impostorWins, tickBudget, aborted, unfinished, unverified, decisive } =
+    balanceCounts(games);
   const crewShare = decisive > 0 ? crewWins / decisive : null;
 
   return (
@@ -223,9 +220,22 @@ function BalanceSummary({
           hint={DASHBOARD_COPY.balanceTickBudgetHint}
         />
         <StatTile
+          label={DASHBOARD_COPY.balanceAborted}
+          value={formatInt(aborted)}
+        />
+        <StatTile
+          label={DASHBOARD_COPY.balanceUnfinished}
+          value={formatInt(unfinished)}
+        />
+        <StatTile
+          label={DASHBOARD_COPY.balanceUnverified}
+          value={formatInt(unverified)}
+          hint={DASHBOARD_COPY.balanceUnverifiedHint}
+        />
+        <StatTile
           label={DASHBOARD_COPY.balanceCrewWinRate}
           value={formatPct(crewShare)}
-          hint={DASHBOARD_COPY.balanceCrewWinRateHint}
+          hint={fmt(DASHBOARD_COPY.balanceCrewWinRateHint, { n: formatInt(decisive) })}
         />
       </TileGrid>
     </MetricSection>
