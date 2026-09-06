@@ -1,6 +1,6 @@
 # Retire the unused vent-audio protocol coherently
 
-**Status:** active
+**Status:** done
 
 ## Outcome
 
@@ -36,7 +36,7 @@ production's full action dispatch does not make the engine API branch invalid.
 - [x] Record why passive engine task continuation is retained, with current
   controls. The current dispatcher must preserve complete live-agent actions;
   any additional guard is coordinated with its owner.
-- [ ] Independent review, focused tests, generated types, full project checks
+- [x] Independent review, focused tests, generated types, full project checks
   and canonical samples pass. Record old and current wire compatibility.
 
 ## Constraints
@@ -70,7 +70,7 @@ version-3 browser reads plus wrong/retired kinds. Recompute generated types,
 run affected inference/perception/API/client tests and passive-task controls,
 then independent review and `bash scripts/check.sh` with all canonical samples.
 
-## Results in progress
+## Results
 
 The current packet and API literals accept only sabotage_alarm. Perception,
 memory and reference rendering no longer carry the unused vent-audio path.
@@ -107,4 +107,14 @@ and private-view gates after actual consumer and planted-corruption checks.
 The isolated staged protocol/privacy snapshot passed 134 Python checks with one
 optional skip, two v3 golden/layout checks and 43 frontend client/privacy checks.
 Logs: /tmp/ailibi-final-protocol-python.log and
-/tmp/ailibi-final-protocol-browser-unit.log. The new combined gate remains pending.
+/tmp/ailibi-final-protocol-browser-unit.log. The combined gate passed, as recorded below.
+
+Final cleanup verification on 2026-09-06: `bash scripts/check.sh` passed
+6,775 Python tests (20 optional skips, three expected failures), 489 frontend
+tests, strict typing, lint/format, import/document contracts and production
+build. The entire offline campaign tier, `uv run pytest -m campaign -q`,
+passed 335 tests. All 100 canonical recordings passed
+`bash scripts/verify_samples.sh`. Independent reviews have no remaining blockers.
+The [review ledger](../review-ledger.md) records commands, integration repairs,
+source-bound measurements and compatibility limits. Main merge and experimental
+adoption remain the owner’s separate decisions.

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -175,7 +176,11 @@ class PaidProvider(FakeProvider):
 
 
 def install_paid_run(monkeypatch: pytest.MonkeyPatch, provider: PaidProvider) -> None:
-    monkeypatch.setattr("orchestrator.game.build_default_client", lambda: provider)
+    def build_paid_client(*, env: Mapping[str, str] | None = None) -> PaidProvider:
+        assert env is not None, "provider construction must receive the frozen settings"
+        return provider
+
+    monkeypatch.setattr("orchestrator.game.build_default_client", build_paid_client)
     monkeypatch.setattr(
         rt,
         "_resolve_agent_factory",

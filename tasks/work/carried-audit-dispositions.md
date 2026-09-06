@@ -1,6 +1,6 @@
 # Resolve carried audit claims and keep their dispositions checkable
 
-**Status:** active
+**Status:** done
 
 ## Outcome
 
@@ -17,7 +17,7 @@ and refuted cases; those distinctions must survive cleanup.
 
 ## Acceptance
 
-- [ ] Enumerate the close's carried items and hardening routes with a current
+- [x] Enumerate the close's carried items and hardening routes with a current
   reproduction, explicit disposition, and owning cleanup card where needed.
 - [x] Guard the close's verdict, bar readings, ladder claim, and real links
   against their historical source; quoted examples and historical comparisons
@@ -28,7 +28,7 @@ and refuted cases; those distinctions must survive cleanup.
   adverse controls; correct stale current source prose without rewriting records.
 - [x] Add the unoverridden FINDING to the ownership lessons within its word
   budget, preserving the historical verdict and final owner decision boundary.
-- [ ] All named repair cards are complete or the item has a supported explicit
+- [x] All named repair cards are complete or the item has a supported explicit
   retained/retired/experimental disposition; targeted and full checks pass.
 
 ## Constraints
@@ -58,7 +58,7 @@ Reproduce current findings with offline commands, run perturbed checker cases,
 inspect the complete routing census and its linked card evidence, then run
 bash scripts/check.sh. Historical attributions require full git history.
 
-## Results in progress
+## Results
 
 The historical close's four-bar table, verdict, opening ladder and real links
 are bound to its deciding sources. The finding-map check derives the register
@@ -102,5 +102,28 @@ deleting all ten non-pytest legs; the new adverse controls reject omission,
 ignored failures and wrong working directories. All 82 focused tests passed;
 independent review supplied the two working-directory mutations.
 
-The complete current carried-finding ledger and its remaining repair-card
-dispositions are still pending; this card is not complete.
+The [current disposition ledger](../../docs/cleanup-dispositions.md) now covers
+all 104 original IDs exactly once, the close F1–F6 and carried routes, all 42
+hardening close entries including the six second-round additions, informational
+items and refutations. Independent review confirmed coverage and required Phase C
+co-evolution resumption to remain distinct from Q1 and a conditional refit. Every
+remaining mechanism has a repaired, historical, retained or experimental
+disposition; final complete verification is recorded below.
+
+Final cleanup verification on 2026-09-06: `bash scripts/check.sh` passed
+6,775 Python tests (20 optional skips, three expected failures), 489 frontend
+tests, strict typing, lint/format, import/document contracts and production
+build. The entire offline campaign tier, `uv run pytest -m campaign -q`,
+passed 335 tests. All 100 canonical recordings passed
+`bash scripts/verify_samples.sh`. Independent reviews have no remaining blockers.
+The [review ledger](../review-ledger.md) records commands, integration repairs,
+source-bound measurements and compatibility limits. Main merge and experimental
+adoption remain the owner’s separate decisions.
+
+The final 282-test documentation selection passed. The graduated-lever plant
+uses the current env paragraph anchor; the ML page leaves enough word-budget
+room for its invented-row adverse case; the architecture note is shortened
+without raising its existing 1,300-word ceiling. Independent review retained
+all critical contracts. The audit registry now counts 10,747,049 tracked bytes
+across 180 files, including the new measurements, from `git ls-files -z audits/`
+and each listed file’s actual size.

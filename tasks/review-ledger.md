@@ -86,11 +86,86 @@ No CPU, memory, deployed-latency or model-quality improvement is inferred.
 The first combined run found 13 integration fixtures; the next found one shared
 copy assertion. All were fixed before the successful final gate. Browser
 reproduction preceded narrow final copy/disclosure changes, which passed the
-combined gate. Further carried findings remain active, and no experiment is
-adopted. Cards retain commands, source identities and exact limitations.
+combined gate. Further carried findings remained active at that batch boundary. The final
+batch below closes their dispositions without adopting experiments. Cards
+retain commands, source identities and exact limitations.
 
-## Current work
+The observation/portfolio batch also passed [GitHub CI](https://github.com/dkdan10/AiLibi/actions/runs/34006295048)
+at exact head `ee7cbe7a319ba6ede5612be4a348d8a1cec71c79`.
 
-The [task index](README.md) names the next active ownership. Add implementation
-commits only when delivered; distinguish verification and review from the
-owner's pending final review, merge, and experimental adoption.
+## Final implementation and synthesis
+
+| Slice | Implementation commit | Independent review and evidence |
+| --- | --- | --- |
+| Independent entitlement and corpus gates | `713f8163` | Portfolio-review agent approved real corpus/task/witness controls; isolated staged snapshot passed 16 tests. |
+| Audio retirement and private spectator views | `9b0735ba` | Portfolio-review agent approved version compatibility and cached-private-data controls; isolated snapshot passed 134 Python checks, two golden/layout checks and 43 frontend checks. |
+| Recorded reasoning/tactical experiments and offline measurements | `ee46d114` | Coordinator reviewed reasoning; workflow-redesign agent reviewed tactics; code-review agent reviewed shared provenance. Isolated snapshot passed strict mypy on 436 files and 235 selected tests. |
+| Current model evidence and historical compatibility | `a0285760` | Code-review agent verified current refusals, historical/synthetic distinctions and scope metadata after the additional campaign-tier repairs. |
+| Final integration, disposition ledger and completion | This ledger’s final integration commit | All three agents reviewed their independent scopes; coordinator ran the complete gates below. |
+
+Final local verification on 2026-09-06:
+
+- `bash scripts/check.sh`: **6,775 Python tests passed**, 20 optional skips,
+  three expected failures; **489 frontend tests**; strict mypy, Ruff/format,
+  four import contracts, historical task/prompt checks and production build.
+- `uv run pytest -m campaign -q`: **335 passed**. This explicitly runs the tier
+  excluded by the ordinary gate. Temporary fake-provider fits are validation,
+  not new research or published campaign evidence.
+- `bash scripts/verify_samples.sh`: **100 canonical recordings verified**.
+  The default suite also strictly scans both unchanged ML corpora through the
+  real observation service: 200 games and 26,171 packet snapshots.
+- Refreshed isolated-copy README and browser journey: **13 browser tests passed**,
+  three intentional historical-media capture skips, zero retries. Both API and
+  Vite processes were proved copy-owned. Fake seed-42 runs were byte-identical;
+  static bundle generation and the documented HTTP smoke passed.
+- `uv run python scripts/verify_ml_evidence.py`: 60 checks, **48 OK**, seven
+  explicitly absent archived-evidence checks and five informational checks;
+  zero failures. This is not the archive-restored `--complete` claim.
+- Current experiment-source equality verified: reasoning’s 152 source files
+  match its committed report; tactical fingerprint remains
+  `d93f9d096e4b23572915e0ab128ee4ad266420bbbc266231eb7d49322d09bbd8`.
+
+Retained logs: `/tmp/ailibi-cleanup-final-check-complete.log`,
+`/tmp/ailibi-cleanup-final-all-campaign-complete.log`,
+`/tmp/ailibi-cleanup-final-samples.log`, and
+`/tmp/ailibi-cleanup-final-ml-complete.log`. The isolated-copy locator is
+`/tmp/ailibi-public-clean-copy-path`; its `clean-final-verification.json` records
+commands, server ownership, source identities and browser/offline logs.
+Committed experiment artifacts and their commands live in
+[audits/reasoning-evidence](../audits/reasoning-evidence/scorecard-plan.md) and
+[audits/tactical-gameplay](../audits/tactical-gameplay/README.md).
+
+The first integrated gate exposed 16 fixture, field-inventory and documentation
+failures. Broader campaign checks exposed additional historical/current caller
+mismatches. All were repaired before the successful complete runs. Independent
+review also found typed-version forgery, misleading alive-time bounds, two
+roster fingerprint races, cached private-memory exposure and a synthetic-probe
+gate that accepted rebinding. Their positive and adverse controls now pass.
+The static shared-link test waits for the selected meeting to reach the URL;
+it does not hide failures with retries or sleeps.
+
+## Review boundary and remaining decisions
+
+All **26 cards** are done and all **49 roadmap priorities** have an implemented,
+experimental or supported retained disposition. The
+[current finding ledger](../docs/cleanup-dispositions.md) covers all 104 original
+IDs, named close residue and the hardening routes. It does not relabel every
+historical finding as a newly repaired defect.
+
+The reasoning scorecard passes **36/36 mechanics cases** over strictly verified
+inputs; it has no fresh-model correction or wrongful-ejection result. Tactical
+screens cover **432 fake games**, 100 canonical folds and 3,550 coherent identity
+interventions, including losses and the deleted inert reversal guard. All
+experimental profiles remain OFF; the default opening body-ID timing limitation
+remains until adoption. No historical recordings, weights, metrics or failed
+adoption verdicts were rewritten.
+
+The measured payload reduction remains scoped to its before/after captures.
+Cold concurrent requests still reconstruct separately; no CPU, RSS, deployed
+latency or model-quality improvement is inferred. Q1 search, Phase C co-evolution
+resumption and a corpus-triggered refit are separate retained owner decisions.
+No live provider, deployment, remote deletion or main merge occurred.
+
+The owner’s final Claude review and merge remain pending. Local `main` and
+`origin/main` remain `cfde4c8960a865eeaa39a004b2c33d302cbe4733`. Future work starts
+from a new evidence-backed card, not an unfinished cleanup implementation queue.

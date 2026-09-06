@@ -551,6 +551,8 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "event_a_id",
         "event_b_id",
         "evidence",
+        # Typed strength of public meeting evidence; no hidden engine input.
+        "evidence_band",
         "evidence_backed_impostor_ejections",
         "evidence_taxonomy",
         "excluded_no_votable_target_ballots",

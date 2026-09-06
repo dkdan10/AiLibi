@@ -696,7 +696,7 @@ def test_graduated_mention_outside_note_does_not_count(doc_tree: Path) -> None:
 # The first line of the first live-toggle paragraph in the belief-substrate
 # section — an anchor for planting an aside ABOVE the toggles, named here so a
 # reworded heading is a one-line fix rather than a hunt through the assertions.
-_TOGGLE_PARAGRAPH_HEADING = "# The Phase-18 impostor-answer template arm"
+_TOGGLE_PARAGRAPH_HEADING = "# The impostor-answer template arm"
 
 
 def test_graduated_aside_inside_section_does_not_count(doc_tree: Path) -> None:

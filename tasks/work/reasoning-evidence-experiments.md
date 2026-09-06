@@ -1,6 +1,6 @@
 # Measure and improve evidence use at meetings
 
-**Status:** active
+**Status:** done
 
 ## Outcome
 
@@ -44,7 +44,7 @@ claim on current code; historical allegations are not automatically defects.
 - [x] Current replay/live analysis uses the recorded substrate; mismatched
   environments and unsupported experimental versions raise. Coordinate this
   seam with the provenance card rather than duplicating reconstruction logic.
-- [ ] Every changed prompt/detector path stays default-OFF with an explicit
+- [x] Every changed prompt/detector path stays default-OFF with an explicit
   stamp and OFF-byte controls. Measurements, source-bound artifacts and current
   dispositions cover all seven roadmap items; targeted/full gates and samples
   pass. No fake-provider win-rate claim is presented as improved model reasoning.
@@ -81,8 +81,8 @@ commands/hashes. Root runs bash scripts/check.sh and scripts/verify_samples.sh.
 
 ## Results
 
-Implementation is locally reviewable; the coordinated full gate and final
-owner review remain pending. Architecture references: layering, structured
+Implementation, independent review and the coordinated full gate are complete.
+The owner’s final branch review and adoption decisions remain separate. Architecture references: layering, structured
 memory, the observation firewall, and determinism/substrate contracts in
 `docs/architecture.md`. Current decisions and every named carried limitation
 are in [the disposition ledger](../../audits/reasoning-evidence/dispositions.md).
@@ -141,7 +141,7 @@ The first command passed 1501 tests before the final death-bound follow-through.
 passed 191 after strict input/version/clock repairs; its subsequent B36 controls
 passed within 146 tests via `uv run pytest tests/agents/test_evidence_context.py
 tests/agents/test_memory_rendering.py -q --tb=short`. Strict mypy and Ruff passed
-on the 16 owned Python files; root will record the final combined gate. The
+on the 16 owned Python files; the final combined gate is recorded below. The
 [isolated baseline command](../../audits/reasoning-evidence/baseline-proof.md)
 reproduces the old defect and checks exact legacy JSON against `ee7cbe7a`.
 
@@ -163,4 +163,21 @@ instrument to explicit OFF/ON booleans while retaining its original arms; all
 112 instrument checks passed. Root independently reran the final precise-alive
 context controls (24 passed). The isolated runtime/measurement commit snapshot
 passed strict mypy across 436 files and all 235 selected mechanism, profile,
-reader and counterfactual tests. The combined project gate remains pending.
+reader and counterfactual tests. The combined project gate passed, as recorded below.
+
+Final cleanup verification on 2026-09-06: `bash scripts/check.sh` passed
+6,775 Python tests (20 optional skips, three expected failures), 489 frontend
+tests, strict typing, lint/format, import/document contracts and production
+build. The entire offline campaign tier, `uv run pytest -m campaign -q`,
+passed 335 tests. All 100 canonical recordings passed
+`bash scripts/verify_samples.sh`. Independent reviews have no remaining blockers.
+The [review ledger](../review-ledger.md) records commands, integration repairs,
+source-bound measurements and compatibility limits. Main merge and experimental
+adoption remain the owner’s separate decisions.
+
+Final integration inventories the public typed evidence band in the API field
+gate. The recorded-flag census separately classifies only the exact synthetic
+fixture/profile probes; real recorded reductions still require grounding
+channels. Review rejected loop rebinding and shadowing bypasses. All 31 census
+controls and 61 adjacent tests passed, with the recorded-input allowlist empty.
+No runtime or scorecard source changed during this test-only follow-through.

@@ -1,6 +1,6 @@
 # Verify event entitlement and engine outcomes independently
 
-**Status:** active
+**Status:** done
 
 ## Outcome
 
@@ -32,7 +32,7 @@ is wrong. The historical default opening-ID exposure remains separately declared
   actual per-channel counts. Check strict replay validity separately and prove
   the scanner rejects planted contamination. Describe it as observation-service
   coverage, not proof about the training feature reducer or model prompts.
-- [ ] Independently review, run focused and complete checks and canonical samples;
+- [x] Independently review, run focused and complete checks and canonical samples;
   record every retained limitation and assign findings in the current ledger.
 
 ## Constraints
@@ -61,7 +61,7 @@ Run real factory/current-corpus streams and temporary planted defects; report
 source fingerprints and separate packet channel counts. Exercise properties and
 legacy controls, strict typing/lint, `bash scripts/check.sh` and all samples.
 
-## Results in progress
+## Results
 
 Factory reconstruction now independently folds ordered movement/kill/vent
 changes from the pre-tick state, checks both vent endpoints and the exact
@@ -104,4 +104,17 @@ Logs: /tmp/ailibi-corpus-packet-4p.json, /tmp/ailibi-corpus-packet-9p.json,
 passed; the later combined targeted selection is recorded in the protocol card.
 These are observation-service checks, not certification of the training feature
 reducer, every model prompt, or default opening body-ID privacy.
-Independent review and the new full-project gate are still pending.
+Independent protocol/semantic review approved the scope after 38 Python and
+43 frontend checks plus six planted vent source/destination/union corruptions.
+The isolated semantic commit snapshot passed all 16 selected witness, corpus
+and engine-property tests. The combined full-project gate passed, as recorded below.
+
+Final cleanup verification on 2026-09-06: `bash scripts/check.sh` passed
+6,775 Python tests (20 optional skips, three expected failures), 489 frontend
+tests, strict typing, lint/format, import/document contracts and production
+build. The entire offline campaign tier, `uv run pytest -m campaign -q`,
+passed 335 tests. All 100 canonical recordings passed
+`bash scripts/verify_samples.sh`. Independent reviews have no remaining blockers.
+The [review ledger](../review-ledger.md) records commands, integration repairs,
+source-bound measurements and compatibility limits. Main merge and experimental
+adoption remain the owner’s separate decisions.

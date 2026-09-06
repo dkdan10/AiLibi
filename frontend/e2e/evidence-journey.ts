@@ -30,6 +30,11 @@ export async function evidenceJourney(page: Page, origin: string): Promise<void>
   await expect(evidence).toContainText(/p-6.*ENGINEERING/i);
   await evidence.getByRole("button", { name: "Return to meeting and ballots" }).click();
   await expect(page.getByRole("dialog", { name: "Meeting at tick 10", exact: true })).toBeVisible();
+  // Share the settled URL; the dialog renders before debounced URL write-back.
+  await expect(page).toHaveURL((url) =>
+    url.searchParams.get("tick") === "10" &&
+    url.searchParams.get("selectedMeeting") === "headless-seed-23:meeting-0",
+  );
 
   // Opening a shared citation through another lens must not expose private memory.
   const fog = new URL(page.url());

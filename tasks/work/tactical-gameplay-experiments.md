@@ -1,6 +1,6 @@
 # Compare purposeful tactics and structural gameplay rules
 
-**Status:** active
+**Status:** done
 
 ## Outcome
 
@@ -39,7 +39,7 @@ earlier roll-call studies are inputs, not authority for new conclusions.
   historical roll-call evidence; distinguish prompt eligibility, enforcement
   leaks and inherent certified proof. Coordinate any meeting-layer repair with
   the reasoning card and avoid implicit role-rule changes.
-- [ ] Explain low sabotage/task contribution by configuration and compare one
+- [x] Explain low sabotage/task contribution by configuration and compare one
   mechanism at a time. Publish candidate results including losses, costs and
   limits; provide an implemented/retained/experimental disposition for each
   roadmap item. Targeted/full gates and canonical samples pass.
@@ -150,8 +150,8 @@ The final development and held-out captures share source fingerprint
 `d93f9d096e4b23572915e0ab128ee4ad266420bbbc266231eb7d49322d09bbd8`.
 All 144 development and 288 held-out games completed without an error or limit.
 The development record also contains 100 strict canonical folds and 3,550
-coherent identity interventions. The coordinator's combined full gate remains
-pending; no default was adopted and no live provider was called.
+coherent identity interventions. The combined full gate passed; no default was adopted and no live provider
+was called.
 
 Independent review found and repaired a roster-capture ordering race: the
 fingerprint now precedes setup reads, the exact captured roster bytes are parsed
@@ -161,7 +161,7 @@ candidate work even when the surrounding aggregate fingerprints match. The
 reviewer reran all 15 harness tests and found no remaining scoped blocker in the
 policies, reset, allocation or identity intervention. The broader affected
 selection passed 258 tests with 3 existing xfails; strict mypy passed 13 selected
-files. Combined project verification remains the coordinator's pending gate.
+files. Combined project verification passed, as recorded below.
 
 Necessary shared follow-through includes the provenance owner's frozen runner
 settings and explicit HeadlessGame substrate override. A direct runner resolves
@@ -223,4 +223,14 @@ by the tactical harness; it does not alter these measured inputs.
 
 The isolated runtime/measurement commit snapshot passed strict mypy across 436
 files and 235 selected mechanism/profile/reader tests, including the tactical
-controls and harness. Final combined verification remains pending.
+controls and harness. Final combined verification passed, as recorded below.
+
+Final cleanup verification on 2026-09-06: `bash scripts/check.sh` passed
+6,775 Python tests (20 optional skips, three expected failures), 489 frontend
+tests, strict typing, lint/format, import/document contracts and production
+build. The entire offline campaign tier, `uv run pytest -m campaign -q`,
+passed 335 tests. All 100 canonical recordings passed
+`bash scripts/verify_samples.sh`. Independent reviews have no remaining blockers.
+The [review ledger](../review-ledger.md) records commands, integration repairs,
+source-bound measurements and compatibility limits. Main merge and experimental
+adoption remain the owner’s separate decisions.

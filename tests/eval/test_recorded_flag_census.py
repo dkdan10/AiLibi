@@ -34,7 +34,11 @@ allowlist. ``audits/workflows/extract_gameplay_facts.py`` re-derives on purpose
 roots, so no entry can rot into covering the sites this gate forbids.
 ``scripts/counterfactual_phase20.py`` is outside the roots too and would be
 clean anyway: it threads all three channels (only ``trigger_kind`` is left off,
-deliberately). The allowlist below is empty and is expected to stay that way.
+deliberately). The recorded-input allowlist below remains empty. The reasoning
+scorecard also contains synthetic detector probes, classified narrowly by their
+module, function, direct fixture builder, literal Boolean input and explicit
+candidate/legacy profile. This does not exempt its recorded-corpus analysis or
+any other detector call in the same function.
 
 The gate ships with planted counter-cases in a temp tree for every shape of the
 absence above, plus a fully-threaded reconstruction asserted clean by the same
@@ -47,6 +51,8 @@ import ast
 from pathlib import Path
 from typing import Final
 
+import pytest
+
 _REPO_ROOT: Final[Path] = Path(__file__).resolve().parents[2]
 
 #: The packages whose instruments must read the record. Everything outside them
@@ -57,6 +63,14 @@ _SWEPT_PACKAGES: Final[tuple[str, ...]] = ("eval", "training")
 #: ``"<path>::<line>"``. Empty: every instrument reads the record. An entry here
 #: needs a reason in the PR that adds it.
 _ALLOWED_REDERIVATIONS: Final[frozenset[str]] = frozenset()
+
+#: This offline probe constructs synthetic transcripts; it does not read a
+#: recording. Its exact call/input shape is checked below, never the whole file.
+_SYNTHETIC_PROBE_SCOPE: Final[tuple[str, str, str]] = (
+    "eval/reasoning_evidence.py",
+    "run_scorecard",
+    "marker_fixture",
+)
 
 #: The private grounding channels the recording-time call held. A caller that
 #: threads all three is reconstructing the recording; one that omits any of them
@@ -87,7 +101,102 @@ def _is_literal_none(value: ast.expr) -> bool:
     return isinstance(value, ast.Constant) and value.value is None
 
 
-def record_free_rederivations(source: str) -> list[int]:
+def _binds_name(node: ast.AST, name: str) -> bool:
+    """Conservatively recognize binding/shadowing, including non-Name targets."""
+
+    if isinstance(node, ast.Name):
+        return node.id == name and isinstance(node.ctx, ast.Store | ast.Del)
+    if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+        return node.name == name
+    if isinstance(node, ast.arg):
+        return node.arg == name
+    if isinstance(node, ast.alias):
+        return (node.asname or node.name.split(".")[0]) == name
+    if isinstance(node, ast.ExceptHandler | ast.MatchAs | ast.MatchStar):
+        return node.name == name
+    if isinstance(node, ast.MatchMapping):
+        return node.rest == name
+    if isinstance(node, ast.Global | ast.Nonlocal):
+        return name in node.names
+    return False
+
+
+def _is_synthetic_probe(
+    call: ast.Call, *, source_path: str, parents: dict[ast.AST, ast.AST]
+) -> bool:
+    """Recognize only the reviewed fixture/profile call, with no recorded input.
+
+    This is a structural scope check, not arbitrary Python value analysis. A
+    fixture supplied through a variable, a splat, or a nonliteral configuration
+    is refused. The one permitted loop binds its input directly to False/True
+    and cannot rebind it. Local shadowing of the fixture builder is also refused.
+    """
+
+    module, function, fixture_name = _SYNTHETIC_PROBE_SCOPE
+    if source_path != module or len(call.args) != 1:
+        return False
+    if call.keywords and not (
+        len(call.keywords) == 1
+        and call.keywords[0].arg == "evidence_reasoning_version"
+        and isinstance(call.keywords[0].value, ast.Constant)
+        and type(call.keywords[0].value.value) is int
+        and call.keywords[0].value.value == 1
+    ):
+        return False
+    fixture = call.args[0]
+    if not (
+        isinstance(fixture, ast.Call)
+        and isinstance(fixture.func, ast.Name)
+        and fixture.func.id == fixture_name
+        and not fixture.args
+        and len(fixture.keywords) == 1
+        and fixture.keywords[0].arg == "injected"
+    ):
+        return False
+    ancestors: list[ast.AST] = []
+    node: ast.AST = call
+    while node in parents:
+        node = parents[node]
+        ancestors.append(node)
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+            if node.name != function or any(
+                _binds_name(child, fixture_name) for child in ast.walk(node)
+            ):
+                return False
+            break
+    else:
+        return False
+    value = fixture.keywords[0].value
+    if isinstance(value, ast.Constant) and type(value.value) is bool:
+        return True
+    if not isinstance(value, ast.Name):
+        return False
+    for ancestor in ancestors:
+        if not (
+            isinstance(ancestor, ast.For)
+            and isinstance(ancestor.target, ast.Name)
+            and ancestor.target.id == value.id
+        ):
+            continue
+        # The nearest binding owns the value. An outer literal loop cannot
+        # excuse an inner record-derived loop or any rebinding in its body.
+        return (
+            isinstance(ancestor.iter, ast.Tuple)
+            and len(ancestor.iter.elts) == 2
+            and all(
+                isinstance(item, ast.Constant) and type(item.value) is bool
+                for item in ancestor.iter.elts
+            )
+            and not any(
+                _binds_name(child, value.id)
+                for statement in ancestor.body
+                for child in ast.walk(statement)
+            )
+        )
+    return False
+
+
+def record_free_rederivations(source: str, *, source_path: str = "") -> list[int]:
     """Line numbers of the record-free ``detect_contradictions`` calls in ``source``.
 
     A call whose callee resolves to ``detect_contradictions`` is reported unless
@@ -107,10 +216,18 @@ def record_free_rederivations(source: str) -> list[int]:
     gate is a structural check on the call site, not a value analysis, and the
     committed reconstructions all pass names. Only the literal ``None`` — the
     one spelling that is provably absent from the source alone — is refused.
+    Only the explicitly scoped synthetic fixture probe is classified separately;
+    recorded inputs remain subject to exactly the same channel requirement.
     """
 
     found: list[int] = []
-    for node in ast.walk(ast.parse(source)):
+    tree = ast.parse(source)
+    parents = {
+        child: parent
+        for parent in ast.walk(tree)
+        for child in ast.iter_child_nodes(parent)
+    }
+    for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
             continue
         if _callee_name(node.func) != "detect_contradictions":
@@ -120,7 +237,9 @@ def record_free_rederivations(source: str) -> list[int]:
             for keyword in node.keywords
             if keyword.arg is not None and not _is_literal_none(keyword.value)
         }
-        if not _RECORD_CHANNELS <= supplied:
+        if not _RECORD_CHANNELS <= supplied and not _is_synthetic_probe(
+            node, source_path=source_path, parents=parents
+        ):
             found.append(node.lineno)
     return found
 
@@ -132,7 +251,9 @@ def test_no_eval_or_training_module_re_derives_a_recorded_census() -> None:
         for path in sorted((_REPO_ROOT / package).rglob("*.py")):
             walked += 1
             relative = path.relative_to(_REPO_ROOT)
-            for line in record_free_rederivations(path.read_text(encoding="utf-8")):
+            for line in record_free_rederivations(
+                path.read_text(encoding="utf-8"), source_path=relative.as_posix()
+            ):
                 site = f"{relative}::{line}"
                 if site not in _ALLOWED_REDERIVATIONS:
                     offenders.append(site)
@@ -151,6 +272,104 @@ def test_the_allowlist_is_empty() -> None:
     # is prose. If an entry is ever needed it comes with a PR reason, and this
     # assertion is what forces that conversation.
     assert _ALLOWED_REDERIVATIONS == frozenset()
+
+
+def test_only_actual_synthetic_scorecard_calls_are_classified() -> None:
+    module, _, _ = _SYNTHETIC_PROBE_SCOPE
+    source = (_REPO_ROOT / module).read_text(encoding="utf-8")
+    # Both the candidate Boolean loop and legacy literal control need the exact
+    # scope. The same source in an ordinary census module gets no exemption.
+    assert len(record_free_rederivations(source)) == 2
+    assert record_free_rederivations(source, source_path=module) == []
+    assert len(record_free_rederivations(source, source_path="eval/census.py")) == 2
+
+
+@pytest.mark.parametrize("injected", ["True", "False"])
+@pytest.mark.parametrize("profile", ["", ", evidence_reasoning_version=1"])
+def test_literal_synthetic_profiles_are_classified(injected: str, profile: str) -> None:
+    source = (
+        "def run_scorecard(root):\n"
+        f"    return detect_contradictions(marker_fixture(injected={injected}){profile})\n"
+    )
+    assert (
+        record_free_rederivations(source, source_path="eval/reasoning_evidence.py")
+        == []
+    )
+
+
+@pytest.mark.parametrize(
+    "statement",
+    [
+        "detect_contradictions(meeting.transcript)",
+        "detect_contradictions(marker_fixture(injected=meeting.injected))",
+        "detect_contradictions(marker_fixture(injected=unknown))",
+        "detect_contradictions(marker_fixture(**meeting.settings))",
+        "detect_contradictions(marker_fixture(injected=True), **meeting.settings)",
+        "detect_contradictions(marker_fixture(injected=True), evidence_reasoning_version=True)",
+        "detect_contradictions(marker_fixture(injected=True), evidence_reasoning_version=version)",
+    ],
+)
+def test_synthetic_scope_still_refuses_recorded_or_unknown_inputs(
+    statement: str,
+) -> None:
+    source = f"def run_scorecard(meeting):\n    return {statement}\n"
+    assert record_free_rederivations(
+        source, source_path="eval/reasoning_evidence.py"
+    ) == [2]
+
+
+def test_other_functions_in_the_scorecard_are_not_exempt() -> None:
+    source = (
+        "def census(meeting):\n"
+        "    return detect_contradictions(marker_fixture(injected=True))\n"
+    )
+    assert record_free_rederivations(
+        source, source_path="eval/reasoning_evidence.py"
+    ) == [2]
+
+
+def test_record_derived_loop_does_not_qualify_as_a_synthetic_probe() -> None:
+    source = (
+        "def run_scorecard(meeting):\n"
+        "    for injected in (False, meeting.injected):\n"
+        "        detect_contradictions(marker_fixture(injected=injected))\n"
+    )
+    assert record_free_rederivations(
+        source, source_path="eval/reasoning_evidence.py"
+    ) == [3]
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "injected = meeting.injected\n        ",
+        "for injected in meeting.values:\n            ",
+        "with meeting as injected:\n            ",
+        "import meeting_data as injected\n        ",
+        "if (injected := meeting.injected):\n            ",
+    ],
+)
+def test_recorded_rebinding_inside_literal_loop_is_refused(body: str) -> None:
+    source = (
+        "def run_scorecard(meeting):\n"
+        "    for injected in (False, True):\n"
+        f"        {body}detect_contradictions(marker_fixture(injected=injected))\n"
+    )
+    assert (
+        len(record_free_rederivations(source, source_path="eval/reasoning_evidence.py"))
+        == 1
+    )
+
+
+def test_locally_replaced_fixture_builder_is_refused() -> None:
+    source = (
+        "def run_scorecard(meeting):\n"
+        "    marker_fixture = lambda **kwargs: meeting.transcript\n"
+        "    detect_contradictions(marker_fixture(injected=True))\n"
+    )
+    assert record_free_rederivations(
+        source, source_path="eval/reasoning_evidence.py"
+    ) == [3]
 
 
 def test_the_gate_bites_on_a_planted_rederivation(tmp_path: Path) -> None:

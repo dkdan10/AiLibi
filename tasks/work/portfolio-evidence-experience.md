@@ -1,6 +1,6 @@
 # Follow a decision from claim to evidence
 
-**Status:** active
+**Status:** done
 
 ## Outcome
 
@@ -71,7 +71,7 @@ and scene facts must be checked against source bytes when published.
   inspected agent’s own lens, or omniscient mode. Outcome reveal cannot widen
   the lens; public statements and vote targets remain available. Already cached
   private memory stays hidden after a lens change.
-- [ ] The combined full project gate passes.
+- [x] The combined full project gate passes.
 
 ## Constraints
 
@@ -213,5 +213,25 @@ and ESLint passed. Logs: /tmp/ailibi-fog-tests.log,
 Independent review approved the cached-memory, rationale, fetch and explicit
 lens boundaries after 43 frontend checks and source inspection. This is a
 spectator presentation boundary, not a server authorization layer; the API
-remains a privileged local reader. Final static journey and the new combined
-gate remain pending.
+remains a privileged local reader. The final static journey and combined
+gate passed, as recorded below.
+
+Final cleanup verification on 2026-09-06: `bash scripts/check.sh` passed
+6,775 Python tests (20 optional skips, three expected failures), 489 frontend
+tests, strict typing, lint/format, import/document contracts and production
+build. The entire offline campaign tier, `uv run pytest -m campaign -q`,
+passed 335 tests. All 100 canonical recordings passed
+`bash scripts/verify_samples.sh`. Independent reviews have no remaining blockers.
+The [review ledger](../review-ledger.md) records commands, integration repairs,
+source-bound measurements and compatibility limits. Main merge and experimental
+adoption remain the owner’s separate decisions.
+
+The final refreshed isolated copy passed 13 browser tests with three intentional
+historical-media capture skips, with retries disabled and both servers proven
+copy-owned. A static shared-link test exposed a URL write-back race in the test;
+it now waits for the selected meeting and tick before copying the URL. Independent
+review, TypeScript and ESLint approved that synchronization repair. Two README
+fake seed-42 runs were byte-identical at tick 12 and $0; all 100 samples, the
+7-game/156-JSON static bundle and documented HTTP smoke passed. The copy locator
+is `/tmp/ailibi-public-clean-copy-path`, with `clean-final-verification.json` and
+the offline/browser logs inside it. No deployment or live call occurred.

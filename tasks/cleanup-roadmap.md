@@ -12,6 +12,11 @@ outcomes, and independent work may proceed in parallel where prerequisites and
 file ownership permit. No live-provider budget or experimental adoption is
 implied by this roadmap.
 
+All 49 priorities now have completed card coverage. Completion includes explicit
+retained decisions and implemented but unadopted experiments, as the milestones
+require. See the [review ledger](review-ledger.md) for verification and the
+[current dispositions](../docs/cleanup-dispositions.md) for finding-level limits.
+
 ## Existing foundation
 
 The task index links the inherited workflow, budget, aborted-call, replay, and
@@ -130,6 +135,13 @@ Cards: [replay loading performance](work/replay-loading-performance.md) (32–33
 [audit fact gates](work/audit-fact-gates.md) (part of 38; remaining carried
 findings still require a disposition), and
 [carried audit dispositions](work/carried-audit-dispositions.md) (remaining 38).
+Coherent extraction and the retained vote/expansion decisions use
+[cleanup synthesis](work/cleanup-synthesis.md) (35, 47, 49).
+Protocol retirement uses [protocol](work/protocol-retirement.md) (37);
+independent witness/task/corpus controls use
+[semantic validation](work/semantic-validation.md) (part of 38).
+The [current disposition ledger](../docs/cleanup-dispositions.md) preserves
+every original-register and named hardening route.
 Current model/evaluation identity repairs and the next ML decision use
 [model evidence provenance](work/model-evidence-provenance.md) (36, 48).
 

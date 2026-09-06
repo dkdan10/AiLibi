@@ -5,167 +5,161 @@ This note defines current layering, enforced boundaries and determinism.
 
 ## Layering
 
-![The layering as built: engine, the observation firewall, agents and meetings with llm beside them, the orchestrator, and the privileged readers](media/architecture.svg)
-
-The same layering in text, for anywhere the picture does not render:
+![The engine, observation firewall, agents, meetings, orchestrator and privileged readers](media/architecture.svg)
 
 ```text
-  engine/             pure deterministic tick; owns ALL hidden state
+  engine/             pure deterministic tick; owns hidden state
     v
-  observation/        THE FIREWALL: packets + public map, stripped and audited
+  observation/        firewall: audited packets + public map
     v
-  agents/  meetings/  engine-free reasoning; ActionIntent out, MeetingResult back
-    ^                 llm/ sits beside them: LLMClient Protocol + 4 adapters
-  orchestrator/       wires both sides; ActionIntent -> Action; replay JSONL
+  agents/  meetings/  engine-free reasoning; ActionIntent / MeetingResult out
+    ^                 llm/ supplies provider adapters
+  orchestrator/       wires actions, meetings and recording
     v
-  eval/   api/        privileged readers; api/ -> frontend/ on GENERATED types
+  eval/   api/        privileged readers; api/ -> frontend/ on generated types
 ```
 
-Arrows are data flow; imports run the other way — `orchestrator/` is the wiring
-layer nothing behind the firewall imports.
+Arrows show data flow. The orchestrator is the privileged wiring layer; agents
+must never import it to reach engine state.
 
 ## Packages
 
-**`engine/`** — the pure simulation: `tick.py::advance_tick` is a function of
-state and actions (no wall clock, no globals, frozen dataclasses). It owns all
-hidden state — roles, kill attribution, vent occupancy — and the seeded RNG
-whose full Mersenne state serializes into every committed `state_hash`
-(`rng.py`; the default `FULL` policy is load-bearing for byte-identity).
+**`engine/`** — `tick.py::advance_tick` is a pure function of frozen state and
+actions, without wall clock or globals. It owns roles, kill attribution and vent
+occupancy. `rng.py` serializes the full Mersenne state into every committed
+`state_hash`; the default `FULL` hash policy preserves byte identity.
 
-**`observation/`** — the firewall. `service.py` builds each player's
-`ObservationPacket` from engine state through `engine/visibility.py`, strips
-every hidden field, and appends the serialized packet to an on-disk audit log
-(`audit.py`). The package defines the engine-free schemas agents consume:
-`ObservationPacket`, `PublicMapView` (`public_map.py` — one shared topology
-view, projected from the engine map by
-`orchestrator/boundary.py::public_map_from_engine_map`), and `ActionIntent` —
-the only vocabulary agents may emit. It imports none of `agents/`, `meetings/`,
-`llm/`.
+**`observation/`** — `service.py` builds `ObservationPacket` through
+`engine/visibility.py`, strips hidden fields and writes packets through
+`audit.py`. Its engine-free schemas include `PublicMapView` and `ActionIntent`.
+`orchestrator/boundary.py::public_map_from_engine_map` projects the shared public
+topology. Observation imports none of agents, meetings or llm.
 
-**`agents/`** — two-tier reasoning. `tactical/`: deterministic per-tick FSM
-policies plus the opt-in learned movers. `strategic/`: the meeting-time LLM
-surface, per-model-family Jinja prompt sets loaded strict-undefined. `memory/`:
-the typed episodic store and the derived belief state (suspicion graph, alibi
-map) those prompts render. `agents/runtime.py` is a TEST-ONLY Phase-2 harness —
-the production agent is `orchestrator/game.py::TacticalAgent`.
+**`agents/`** — tactical policies make deterministic per-tick decisions; learned
+movers remain opt-in. Strategic reasoning renders strict-undefined Jinja prompts
+at meetings. Memory holds typed episodic events and derived beliefs.
+`orchestrator/game.py::TacticalAgent` is the production agent;
+`agents/runtime.py` is a test harness.
 
-**`meetings/`** — the protocol state machine (`manager.py`): opening turn ->
-reactive accusation chain (the accused answers next; it ends on no new
-accusation, a cycle, or the living-player cap) -> opt-in info-share -> roll-call
-round (unconditional since baseline 6) -> voting -> resolution, contradictions
-recomputed over the full transcript before ballots render. It never mutates
-engine state; it returns a `MeetingResult` the orchestrator applies.
+**`meetings/`** — `manager.py` runs opening, reactive accusation chain, optional
+info-share, remaining-speaker roll-call, voting and resolution. The chain ends
+on no new accusation, a cycle or the living-player cap. Contradictions are
+recomputed over the transcript before voting. The manager returns
+`MeetingResult`; it never mutates engine state.
 
-**`llm/`** — the provider-neutral surface: `client.py`'s `LLMClient` Protocol,
-four adapters implementing it (`fake_provider.py` — deterministic, offline, CI's
-default; `provider.py` for Anthropic; `ollama_client.py`;
-`featherless_client.py`) selected by `AILIBI_LLM_PROVIDER`, and `budget.py` /
-`budgeted_client.py` layered above the Protocol. Featherless is the
-canonical eval provider since Phase 14 (`Qwen/Qwen3.6-27B`, locked 2026-07-12 at
-Task 16.2, non-thinking). A true leaf — it imports nothing else in the repo; the
-detail is in `llm/README.md`.
+**`llm/`** — `client.py` defines `LLMClient`. Fake, Anthropic, Ollama and
+Featherless adapters share budget/deadline wrappers. Featherless's locked
+`Qwen/Qwen3.6-27B` is the canonical evaluation model; ordinary checks use the
+deterministic fake. This package imports nothing else in the repository.
+Provider setup and evaluation history are in `llm/README.md`.
 
-**`orchestrator/`** — the privileged wiring layer: `game.py::HeadlessGame` runs
-the tick loop, dispatches meetings and applies the result
-(`apply_meeting_result`); `boundary.py` + `action_ordering.py` translate
-`ActionIntent` -> engine `Action` deterministically; `replay.py` writes the replay
-JSONL (per-tick actions + a SHA-256 state hash) and owns the substrate-lever registry.
+**`orchestrator/`** — `game.py::HeadlessGame` dispatches ticks and meetings;
+`apply_meeting_result` applies their results. `boundary.py` and
+`action_ordering.py` translate intents deterministically. `replay.py` records
+actions and state hashes and owns the substrate registry.
 
-**`eval/`** — the eval harness, hubbed on `report_schema.py`'s typed
-`TournamentReport`. The tournament runner
-(`balance_eval.py::run_tournament_eval`) folds each just-written replay JSONL
-into a typed `GameReport` (`_game_report_from_replay`) and collects the
-tournament report; from there the pure analyzers (vote correctness, accusation
-calibration, cost dashboard, and more) consume the typed report and never
-re-scrape the JSONL. Also home to the determinism and leak tests and the
-prompt-regression close gate. Privileged — roles come from the in-memory game
-result, never the replay.
+**`eval/`** — `balance_eval.py` strictly folds recordings into typed `GameReport`
+and `TournamentReport` data; analyzers consume these reports. Roles come from
+the privileged game result, never an agent packet. Determinism, leak and prompt
+regression checks also live here.
 
-**`api/`** — the FastAPI spectator surface (`main.py`, `routes/`) over sanitized DTOs
-(`schemas.py`). Privileged by design — a post-game GM view: role, kill attribution and
-vent usage are intentionally exposed; `tests/api/test_leak.py` pins the DTO inventory
-rather than redacting. Unauthenticated, hence loopback-only (`docs/deployment.md`).
+**`api/`** — FastAPI serves spectator DTOs from `schemas.py`. It is a privileged
+post-game reader: roles, attribution and vents are intentionally available.
+`tests/api/test_leak.py` pins that inventory. The unauthenticated API remains
+loopback-only; see `docs/deployment.md`.
 
-**`frontend/`** — the React + Vite + Tailwind + PixiJS spectator UI, running on
-`frontend/src/types/api.ts`: **generated** from the `api.schemas` DTOs by
-`scripts/gen_frontend_types.py`, committed, and pinned by `tests/api/test_view_model.py`
-— an unregenerated DTO change fails CI. It never imports Python.
+**`frontend/`** — React, Vite, Tailwind and PixiJS consume
+`src/types/api.ts`, generated from Python DTOs by `scripts/gen_frontend_types.py`.
+`tests/api/test_view_model.py` rejects stale generated types. The browser never
+imports Python. Agent-lens controls constrain presentation, not server access.
 
-**`training/`** — the ML program (Phases 15–18): rollout environment, shaped
-rewards, the shared ES core (`bakeoff/es.py`), the ballot surrogate and
-conviction models, the co-evolution driver. `numpy` is confined here by contract
-— BLAS reduction order is not bit-stable across machines, and the `agents/`
-inference path must be. Phase 18 closed NO-FLIP: the scripted FSM stays the
-default mover; learned arms stay opt-in.
+**`training/`** — rollout, ES, surrogate, conviction and co-evolution machinery.
+NumPy stays here because BLAS reduction order is not portable byte identity.
+The default mover remains the scripted FSM; historical NO-FLIP/NO-GO verdicts
+are preserved.
 
-**`experiments/`** — read-only harnesses; outputs are artifacts, not behavior.
-Only the spikes listed in `pyproject.toml`'s `[tool.mypy] exclude` skip the
-strict gate (along with `design/`, the one-off design-artifact generators).
+**`experiments/`** — offline measurement harnesses write separate artifacts.
+Only the explicit spikes listed in `pyproject.toml`'s mypy exclusion, plus
+one-off `design/` generators, bypass strict typing.
 
 ## Enforced boundaries
 
-Four `import-linter` contracts (`.importlinter`, run by `uv run lint-imports` in
-`scripts/check.sh`): **agents must not import engine** (the observation
-firewall, direct or transitive); **agents must not import training** (keeps
-`numpy` off the inference path); **agents must not import meetings.manager**
-(agents may use meeting schemas and constants, never the runner); and
-**observation must not import agents, meetings, or llm**. `meetings/` and `llm/`
-are engine-free in fact, without a contract of their own. Every root package
-that ships is on `.importlinter`'s `root_packages` list, so a route out of
-`agents/` through `orchestrator/`, `api/`, `eval/` or `scripts/` is walked to its
-end; a package left off that list is a hole in the transitive claim, not an
-exemption from it.
+Four import-linter contracts forbid agents importing engine, training or
+`meetings.manager`, and observation importing agents, meetings or llm. Agents
+may use meeting schemas. Meetings and llm are engine-free in fact, without
+separate contracts. All shipping root packages appear in `.importlinter`, so
+transitive paths through privileged packages are checked too.
 
-Backing them: `tests/test_firewall.py` copies the source tree into a throwaway
-directory, plants a bad import *there* and asserts `lint-imports` rejects it —
-nothing synthetic is ever written inside the checkout, so a concurrent run cannot
-see a planted violation; `tests/observation/test_leak_property.py` runs
-every packet from Hypothesis-generated games recursively through the
-`eval/leak_scan.py` scanners (`eval/leak_test.py` is the pytest wrapper that
-owns the scripted sweeps and the planted-leak self-tests); `mypy --strict` runs
-repo-wide; and
-`eval/determinism_test.py` replays every scripted fixture twice, byte for byte.
+`tests/test_firewall.py` plants a forbidden import in an isolated copy and
+requires rejection. `tests/observation/test_leak_property.py` and
+`eval/leak_test.py` scan real/generated factory packets, including planted leaks.
+`eval/witness_entitlement.py` independently reconstructs event-local positions,
+life and vent occupancy before checking witness lists. Factory checks also
+compare owned tasks to engine truth. Strict mypy covers the repository;
+`eval/determinism_test.py` compares scripted replays byte for byte.
 
 ## Determinism and the substrate ladder
 
-A seed, a game config (roster, map, tick budget — the run setup
-`scripts/run_game.py` builds), an agent factory, and the provider's responses
-determine the bytes.
-Under the deterministic fake provider a seed alone reproduces byte-identical
-replay JSONL, and a committed recording reconstructs byte-identically under any
-provider; fresh hosted generation is non-deterministic, so for real providers
-the recording — not the seed — is the determinism boundary (the README's
-"Three reproducibility scopes" states the exact claims). That is what makes
-every metric attributable and every regression bisectable. Behavioral changes to the belief substrate land as
-**levers**, registered in `orchestrator/replay.py`: `SUBSTRATE_FLAG_KEYS` is
-twenty-one graduated levers (`_RETIRED_ALWAYS_ON_LEVERS` — env gates deleted,
-unconditionally ON, kept in the stamp for provenance) plus five live toggles
-(`TOGGLEABLE_SUBSTRATE_FLAG_KEYS` — `impostor_roll_call`,
-`reporter_reasoning`, `corroboration_discipline`, `testimony_shapes`,
-`temporal_observations`; each its
-own `AILIBI_*` variable, default OFF; `.env.example` documents them). Every recording stamps the snapshot
-onto its `game_over` record and into the set's `MANIFEST.md` `flags` column, and
-the loader refuses a recording made under a different substrate. Graduating a
-lever also carries the prose-sweep obligation in `AGENTS.md`.
+A seed, configuration, agent factory and provider responses determine replay
+bytes within their recorded runtime scope. The fake provider is deterministic;
+fresh hosted generation is not. For hosted runs, the recording is the
+reproducibility boundary. The README distinguishes replay integrity,
+same-runtime repeatability and optimizer portability; these claims are separate.
+
+`orchestrator/replay.py` owns twenty-one graduated keys in
+`_RETIRED_ALWAYS_ON_LEVERS` and five live toggles:
+`impostor_roll_call`, `reporter_reasoning`, `corroboration_discipline`,
+`testimony_shapes` and `temporal_observations`. Each toggle has a default-OFF
+`AILIBI_*` variable. Recordings and manifests stamp the substrate; readers refuse
+incompatible settings. Graduation deletes the resolver and env mechanism while
+retaining its provenance key, following `docs/agent-procedures.md`.
+
+Baselines are adopting records. Baseline 8 is the maintenance re-record on
+corrected behavior (`audits/audit-phase-21-rerecord.md`). Baseline 7 followed an
+explicit FINDING override (`audits/audit-phase-20-baseline-7.md` §6.1), not a
+claim that its missed bars passed.
 
 ### Observation timing and public identities
 
-Observation packets use victim-derived body handles; privileged report
-translation retains engine IDs. The default-OFF `temporal_observations` version
-adds event-local movement entitlement and source-tick kill/vent/move delivery
-before meetings, including witnesses killed later that tick. Shared live/reader
-helpers preserve exact-once ingestion. Tick-row versions identify partial runs;
-missing means legacy, conflicting versions fail, and unsupported instruments
-refuse ON inputs.
+Packets use victim-derived body handles; privileged report translation retains
+engine IDs. Default-OFF `temporal_observations` adds event-local movement
+entitlement and source-tick kill/vent/move delivery before meetings, including
+witnesses killed later that tick. Shared delivery helpers preserve exact-once
+ingestion in live play and supported readers. Tick-row versions identify partial
+runs; missing means legacy, conflicts fail and unsupported instruments refuse ON.
 
-[The observation contract](observation-contract.md) defines channel entitlement,
-timing, citations and compatibility. Complete model-facing body-ID privacy is
-also gated: legacy OFF opening prompts still expose internal body IDs until an
-adopting decision; typed packet handles are repaired unconditionally.
+Complete model-facing body-ID privacy remains gated: legacy OFF opening prompts
+still expose internal body IDs until adoption. Typed packet handles are repaired
+unconditionally. The current audio wire allows only global sabotage alarms.
+Spectator version 3 explicitly reads compatible version-2 audio and rejects
+unsupported cues. The historical learned-vector audio position stays reserved zero.
 
-**Baselines are adopting records**, not tags. Baseline 8 is the maintenance
-re-record on corrected behavior (`audits/audit-phase-21-rerecord.md`); baseline 7
-was adopted by an explicit override of its FINDING ruling
-(`audits/audit-phase-20-baseline-7.md` §6.1). The README states the separate
-replay integrity, same-runtime repeatability and optimizer portability claims;
-never restate them more strongly.
+[The observation contract](observation-contract.md) defines entitlement, clocks,
+citations and compatibility. `api/observation_references.py` projects stable
+citations and exact spectator scene frames within the privileged-reader boundary.
+
+### Explicit cleanup experiments
+
+`orchestrator/experiment_config.py` defines a closed immutable configuration for
+redistribution, finished-crew behavior, vent exits, meeting follow-through,
+self-report, sabotage timing, coherent reset and two meeting-evidence profiles.
+Default configuration is omitted from recordings. Enabled tick and game-over stamps
+must agree; unknown versions fail. The orchestrator passes narrow engine-free
+options to engine and agent functions.
+
+`meetings/evidence_profile.py` binds context/reply versions before play.
+`meetings/rebuttal.py` selects at most one additional reply.
+`agents/memory/evidence_context.py` derives public death bounds and conditional
+walking feasibility from the observer's own records and public topology.
+`engine/meeting_reset.py` owns the reset transition. These helpers have actual
+callers and semantic controls; their experiments remain OFF and unadopted.
+
+### Current model evidence
+
+`training/provenance.py` binds corpus, roster, feature-derivation import closure,
+map, dependency locks and runtime. Version-1 evidence restores only through
+explicit historical diagnostics. Current scoring/installation recomputes the
+named source; an operator-supplied digest alone cannot certify it. Synthetic
+fixtures declare their scope. Current campaigns bind the fake provider and
+current prompt family to an explicit baseline environment, refusing enabled or
+unbound experimental profiles. Scope metadata stays with newly produced results.

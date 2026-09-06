@@ -1,6 +1,6 @@
 # Bind model and evaluation evidence to its actual inputs
 
-**Status:** active
+**Status:** done
 
 ## Outcome
 
@@ -35,7 +35,7 @@ definitions; comparing supplied labels is not recomputing their semantics.
   if it serves the portfolio, close obsolete current claims as historical, and
   keep refits tied to a newly adopted corpus. Do not repeat the completed fits
   or lambda-grid/campaign search without a new evidence trigger and budget.
-- [ ] Current positive/adverse tests, old artifact restoration, strict typing,
+- [x] Current positive/adverse tests, old artifact restoration, strict typing,
   targeted checks and the full project gate pass. Document current versus
   historical compatibility and what must be recomputed before a future campaign.
 
@@ -142,10 +142,22 @@ eight changed files; Ruff/format passed. Logs are
 declared-version, API error and campaign-profile follow-through above. The
 independent reviewer then repeated all three probes, ran 103 review tests and
 approved the scoped implementation; its two remaining failures were the same
-shared artifact byte inventory. The combined project gate remains pending.
+shared artifact byte inventory. The combined project gate passed, as recorded below.
 The campaign compatibility follow-through passes strict mypy and Ruff/format
 across its six changed source/test files. Independent review confirmed seventeen
 adverse refusals, seventeen provenance tests, two composed installation controls
-and the historical index byte round-trip. The local six-file campaign selection
-was still incomplete with no failures when the root took over the entire campaign
-tier and combined gate; final aggregate counts belong to that verification.
+and the historical index byte round-trip. The six-file campaign selection completed with 183 passes. Additional historical
+widened-crew and stub diagnostics passed 15 and six checks; explicit founder
+restoration/current refusal and public-body scenario selectors passed 111 checks.
+No historical evidence was rewritten. The paid-provider test factory now accepts
+and asserts the runner’s frozen environment, preserving retry-accounting checks.
+
+Final cleanup verification on 2026-09-06: `bash scripts/check.sh` passed
+6,775 Python tests (20 optional skips, three expected failures), 489 frontend
+tests, strict typing, lint/format, import/document contracts and production
+build. The entire offline campaign tier, `uv run pytest -m campaign -q`,
+passed 335 tests. All 100 canonical recordings passed
+`bash scripts/verify_samples.sh`. Independent reviews have no remaining blockers.
+The [review ledger](../review-ledger.md) records commands, integration repairs,
+source-bound measurements and compatibility limits. Main merge and experimental
+adoption remain the owner’s separate decisions.
