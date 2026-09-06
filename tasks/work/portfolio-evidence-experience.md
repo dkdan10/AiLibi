@@ -1,0 +1,117 @@
+# Follow a decision from claim to evidence
+
+**Status:** ready
+
+## Outcome
+
+A first-time visitor understands who directed AiLibi, what its recorded games
+demonstrate, and how to inspect a decision. The standalone demo connects concise
+results and three contrasting cases to the exact statement, observation, scene,
+and agent knowledge behind a ballot. The README introduces this experience and
+links a substantive ownership decision case study.
+
+## Evidence
+
+Roadmap items 26–31 form one reviewer journey. `BallotCard.tsx` displays an
+observation ID as an inert span and omits the statement citation. Structured
+meeting memory lacks stable observation IDs. `build_demo_bundle.py` deliberately
+omits tournament results; its Dashboard therefore explains an absent report.
+The tour teaches controls but does not identify the author or link the source.
+The README repeats results, history, and workflow detail. Its attribution of all
+implementation to Claude and only review to Codex must account for the cleanup
+implementation before publication. Root separately owns stale workflow prose
+in `docs/lessons.md`.
+
+Three cases verified through the current strict `ReplayLoader` already belong
+to the featured games, without new recordings:
+
+| Case | Exact current evidence |
+| --- | --- |
+| Supported role inference | 9p2i seed 23, meeting 0, tick 10. Opening by p-5 reports p-6 venting at tick 8; p-5's ballot cites `p-5:8:1`, whose memory text confirms that witness event. Other ballots cite opening turn 0; p-6 is ejected. This demonstrates use of certified role evidence, not general social deduction. |
+| Persuasive unsupported accusation | 9p2i seed 46, meeting 3, tick 31. Reply turn 1 by p-9 calls p-1's route impossible; three ballots cite that reply and eject crewmate p-1. Replay input ticks 28–30 move p-1 through East Hall, Engineering, then Storage on legal edges. p-9's citation `p-9:29:3` confirms the first move; p-3's `p-3:29:1` instead describes p-4 in Cafeteria. A resolvable citation does not establish its accompanying inference. |
+| Appropriately unresolved evidence | 9p2i seed 23, meeting 1, tick 12. All seven ballots voluntarily skip. Two flags concern crewmate p-4's overlapping adjacent-room alibi endpoints and are weak signals, with no role proof. The commentary should describe warranted uncertainty, not claim that skipping was globally optimal. |
+
+Source rows are `replay-seed-23.jsonl:12`, `:15`, and
+`replay-seed-46.jsonl:36` under `replays/samples/9p2i/`; filenames, IDs, roles,
+and scene facts must be checked against source bytes when published.
+
+## Acceptance
+
+- [ ] Statement, observation, and contradiction references navigate by exact
+  identity to attributed evidence, the corresponding scene, and the relevant
+  meeting-boundary memory. Missing references are explicit. No nearest-ID guess,
+  prose parser, or automatic implication that a citation supports the claim.
+- [ ] Navigation preserves fog and outcome-reveal boundaries, distinguishes
+  observation time from replay input/frame time, supports keyboard use, and
+  survives reload or shared links. A forged/missing reference and the unrelated
+  p-3 citation above exercise the adverse paths.
+- [ ] A compact static results artifact, at most 50 KiB per set uncompressed,
+  recomputes its chosen metrics from current validated recordings. Each metric
+  defines its numerator, denominator, scope, and limitation; source fingerprints
+  and recording date/model/prompt provenance travel with it. Tampered outcomes
+  or drifted source bytes fail publication. Recorded spending stays separate
+  from verified outcomes. Every case link resolves within the baked bundle.
+- [ ] The standalone demo explains purpose, basic movement/task/meeting/win
+  rules, recorded playback, source, and Daniel's direction versus agent-written
+  code and AI review, including Codex's implementation contributions and
+  agent-authored supporting material. It presents the three source-checked cases
+  with spoilers withheld until requested; missing or changed evidence cannot
+  retain old prose.
+- [ ] The README is a concise entry point, targeting at most 1,600 words, with
+  separate watching, offline mechanics verification, and authorized live-run
+  paths. A linked case study traces one actual owner decision through options,
+  evidence, tradeoff, implementation/review, and limitations. Preserve explicit
+  authorship disclosure and historical experimental verdicts; update displaced
+  links rather than duplicating them; coordinate lessons-page corrections with
+  root.
+- [ ] API and static browser journeys exercise all three cases, citation return
+  navigation, keyboard/fog/reveal behavior, compact results, and source links.
+  Clean-source reproduction and the full project gate pass.
+
+## Constraints
+
+Implementation starts only after root explicitly starts the next batch. Follow
+`docs/architecture.md` Packages, observation firewall, and determinism. Use the
+shared strict loader and fingerprint helper. Preserve raw historical reports,
+recordings, media, experiment rulings, and additive API compatibility. No live
+calls, model/detector/prompt changes, automatic claim-truth scorer, new training,
+dependency changes, or deployment. Summary size bounds this publication artifact;
+model-call payload delivery and performance work belong to roadmap 32–33.
+
+Do not claim hand-written production code or independent human audits. A useful
+case study is the explicit reference-recording override in the baseline-7
+decision record §6.1, including its missed criteria and later limitations;
+attribute each decision to its recorded author, not a reconstructed narrative.
+
+## Expected scope
+
+The portfolio agent owns all evidence UI (`BallotCard`, `TurnCard`, `MeetingView`,
+memory display), store/URL helpers and navigation tests, compact results
+producer/view, demo bundle, `GuidedTour`, case curation, shared presentation copy,
+README, reading guide, and the new ownership case study.
+
+The code agent remains the sole writer of API/schema/generated types/client
+while delivering roadmap 32–33. Coordinate the smallest typed observation-ID
+projection and summary DTO handoffs with that owner; do not edit shared API
+files or broaden this card into payload/performance implementation. The workflow
+agent owns observation temporal semantics in roadmap 12–13, not this UI; keep
+navigation faithful to the existing recording's observation/frame clocks and
+coordinate any shared semantics. Root owns `docs/lessons.md`, doc-fact gates,
+index/roadmap, final integration, and the full gate.
+
+## Record impact
+
+Post-record reader/presentation repair. Future published summaries and curated
+annotations bind to unchanged source recordings. No gameplay or adoption change.
+
+## Validation
+
+Read cases with `ReplayLoader.load_replay` and `get_meeting_memory`; assert exact
+IDs, observation contents, legal route, voluntary ballots, roles, and outcomes.
+Plant missing/foreign references, altered case facts, forged winners, and source
+drift in temporary copies. Run focused API/script/frontend tests, generated-type
+checks, strict mypy, ruff/format, document facts, and both real API/static browser
+journeys. Re-run the README's clean-source offline commands, verify all samples,
+and finish with `bash scripts/check.sh`. Record exact commands and source
+fingerprints in Results; pre-existing passing installation evidence is a starting
+point, not a substitute for checking the changed journey.

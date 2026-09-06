@@ -89,8 +89,7 @@ The final `bash scripts/check.sh` run passed: 6,409 Python tests (20 optional
 skips, three expected failures), 455 frontend tests, strict typing, lint,
 formatting, import boundaries, 390 historical contracts/prompts, and the build.
 `bash scripts/verify_samples.sh` verified all 100 canonical recordings. No
-canonical recording or historical report bytes changed. Logs: `/tmp/ailibi-cleanup-
-batch2-check-final.log` and `/tmp/ailibi-cleanup-batch2-samples.log`.
+canonical recording or historical report bytes changed. Logs: `/tmp/ailibi-cleanup-batch2-check-final.log` and `/tmp/ailibi-cleanup-batch2-samples.log`.
 
 Independent review: Code-review agent; dependency graph, fixed advisory ranges, and clean-install/browser evidence checked.
 Implemented and verified for cleanup; the owner's final Claude review and merge

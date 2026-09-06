@@ -50,6 +50,22 @@ material limitations. Keep cards concise; implementation detail belongs in the
 code and durable decisions belong in the appropriate architecture or decision
 document.
 
+Track delivery states separately in Results and the [review ledger](../tasks/review-ledger.md):
+
+| State | Evidence required |
+| --- | --- |
+| Implemented | A focused commit containing the change and its card. |
+| Verified | Acceptance checks and the combined project gate passed on the implementation. |
+| Independently reviewed | Another agent attempted adverse cases and resolved any blocking findings. |
+| Owner reviewed | The owner's final Claude review and any resulting fixes are recorded. |
+| Merged | The actual merge into main exists; pushing cleanup does not qualify. |
+| Adopted | A behavior experiment's decision and adopting record exist; implementation or a green test alone does not qualify. |
+
+The card's `Status` is its work state, not a compressed claim that all six
+delivery states occurred. Repairs with no experimental behavior use adoption
+"not applicable". Keep the active queue to the available workers and a small
+next set; create the next card after its dependencies and evidence are clear.
+
 ## Discover, implement, verify
 
 1. **Ready:** the outcome is understood, prerequisites are available, and the
@@ -104,6 +120,14 @@ Development cases can inform that rule; they are not independent confirmation.
 Inspect existing candidate implementations and prior findings before creating
 another variant. A later experiment never changes an earlier verdict.
 
+Write the gameplay-first assessment from viewed or reconstructed games before
+reading implementation details. A different reviewer develops the code-first
+assessment independently. Preserve both notes before writing their synthesis;
+label mechanism checks, recorded-model analysis, and fresh-model evaluation
+separately. Fake-provider games establish mechanics, not model reasoning quality.
+Freeze development and held-out inputs before evaluating a candidate. Record
+negative results and stop rules with the same care as apparent improvements.
+
 A live-provider run needs an authorized provider and explicit token, wall-time,
 and cost limits, including a cost statement for flat-rate service. Ordinary
 implementation and CI use the fake provider. Each experiment needs a decision
@@ -119,7 +143,18 @@ to run; the card check adds validation for new work. Do not rewrite old plans
 to make them look like this workflow. An explicitly resumed phase task retains
 its original contract and exact file scope.
 
-Start with the workflow pilot and budget-accounting repair linked from the task
-index. Evaluate the pilot after a few completed repairs using owner
-interventions, scope amendments, verification effort, and defects found in
-review. Adjust the process from those results before adding more tooling.
+The pilot has now run through the first parallel recording batch. Its recorded
+results justify keeping canonical cards and manual ownership; they do not
+establish a measured time-saving claim. The owner clarified the final delivery
+policy: a shared cleanup branch and Claude review after all cleanup. During
+implementation, the coordinating agent handled necessary manifest attribution
+and explicit historical-loader follow-through without another owner permission
+round. The pilot's independent reviewer found parser defects, now covered by
+adverse tests; the three recording repairs' independent reviews left no blockers.
+Their cards preserve the underlying checks and limitations.
+
+The combined recording gate passed 6,292 Python and 440 frontend tests plus
+100 canonical reconstructions. The Python leg took 133.51 seconds on that local
+run; this is a verification measurement, not total development time. Continue
+recording scope follow-through and independently found defects in Results, and
+compare future batches before changing the process again.

@@ -29,16 +29,19 @@ outcomes are verified, and incomplete runs have honest status and provenance.
 | 1 | Report destinations cannot alias any selected replay or audit; reject before provider work and publish reports atomically. | [Report destinations](work/report-destinations.md) |
 | 2 | Distinct paid failures in completed meetings are retained exactly once; all accounting consumers reconcile. | [Completed meeting attempts](work/completed-meeting-attempts.md) |
 | 3 | Current evaluation reports reject the same chronology and outcome corruption as strict playback. | [Evaluation replay integrity](work/evaluation-replay-integrity.md) |
-| 4 | Spending remains visible while verified outcomes, unverified claims, and partial artifacts are distinguished. | Pending |
-| 5 | Aborted, unfinished, and tick-limited games have distinct completion states and correct denominators. | Pending |
-| 6 | Interrupted tournaments retain inspectable progress, bind reports to their recording inputs, and support safe continuation. | Pending |
-| 7 | Whole-run token, cost, and wall limits are explicit and enforced through retries and cancellation. | Pending |
+| 4 | Spending remains visible while verified outcomes, unverified claims, and partial artifacts are distinguished. | [Completion status](work/report-completion-status.md) |
+| 5 | Aborted, unfinished, and tick-limited games have distinct completion states and correct denominators. | [Completion status](work/report-completion-status.md) |
+| 6 | Interrupted tournaments retain inspectable progress, bind reports to their recording inputs, and support safe continuation. | [Tournament lifecycle](work/tournament-lifecycle.md) |
+| 7 | Whole-run token, cost, and wall limits are explicit and enforced through retries and cancellation. | [Tournament lifecycle](work/tournament-lifecycle.md) |
 
 ## Milestone 2: accurate public facts and reproduction
 
 Exit: published facts and media identify their recordings; documented setup is
 executable with stated prerequisites. Presentation work can run alongside the
 recording repairs when it does not depend on a changed report contract.
+
+Cards: [public provenance and reproduction](work/public-recording-provenance.md)
+(8–10), [dependency advisories](work/dependency-advisories.md) (11).
 
 | Item | Outcome / acceptance direction |
 | --- | --- |
@@ -52,6 +55,8 @@ recording repairs when it does not depend on a changed report contract.
 Exit: agents receive entitled, temporally coherent evidence; basic false claims
 can be contested; adoption decisions use independent measurements. Inspect the
 three existing unadopted reasoning candidates before adding overlapping work.
+
+Card: [temporal observations](work/temporal-observation-contract.md) (12–13).
 
 | Item | Outcome / acceptance direction |
 | --- | --- |
@@ -84,6 +89,8 @@ candidate separately before testing interacting combinations.
 Exit: a visitor understands the project and can follow a claim through its
 evidence, decision, outcome, and limitations using the published recordings.
 
+Card: [portfolio evidence experience](work/portfolio-evidence-experience.md) (26–31).
+
 | Item | Outcome / acceptance direction |
 | --- | --- |
 | 26 | Make citations navigate to the observation/statement, relevant scene, and agent knowledge; disclose missing references. |
@@ -114,11 +121,19 @@ Historical inputs: [phase close](../audits/audit-phase-21-close.md) and
 automatically a current defect. Preserve fixed, refuted, and intentional cases
 as such rather than generating new tasks from their titles alone.
 
+Cards: [replay loading performance](work/replay-loading-performance.md) (32–33),
+[map traversal contract](work/map-traversal-contract.md) (34),
+[audit fact gates](work/audit-fact-gates.md) (part of 38; remaining carried
+findings still require a disposition), and
+[carried audit dispositions](work/carried-audit-dispositions.md) (remaining 38).
+
 ## Milestone 7: lightweight iteration
 
 Run these improvements alongside the implementation rather than waiting for
 every product task. Exit: task evidence and final review are easy to navigate,
 without another generated-plan or scheduling system.
+
+Card: [cleanup iteration](work/cleanup-iteration.md) (39–42).
 
 | Item | Outcome / acceptance direction |
 | --- | --- |

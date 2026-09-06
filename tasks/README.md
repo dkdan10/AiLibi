@@ -27,6 +27,9 @@ review records and remain unmerged into `main`. The cards are:
 | [Recording replacement](work/recording-replacement.md) | Replace a replay and its observation audit as one recording lifecycle. | `62ba0162`, [PR 434](https://github.com/dkdan10/AiLibi/pull/434) |
 | [Cleanup delivery](work/cleanup-delivery.md) | Keep implementation on the working branch until the owner's final review and merge. | Commit history for the card |
 
+The [review ledger](review-ledger.md) separates implementation commits, verified
+checks, independent review, and the owner's pending final review and merge.
+
 The first parallel implementation batch completed three recording-integrity
 repairs. Each passed independent implementation review and the combined project
 gate; their cards hold the evidence and remaining limitations. Milestone 1
@@ -44,21 +47,24 @@ separately. Investigation and test design may proceed in parallel; shared-file
 changes are scheduled explicitly. Each card's Results records verification and
 remaining limitations for the owner's final review.
 
-Select the next card after the active repair's local verification and independent
-implementation review. Claude's owner-arranged review follows the completed
-cleanup, not each card. The next candidates are:
+The second batch completed completion/accounting status, tournament continuation
+and cumulative limits, public provenance, dependency fixes, map validation, and
+stronger audit checks. Their commits, independent reviews, and combined
+6,409-Python / 455-frontend / 100-recording verification are in the ledger.
 
-- Separate reported spending from verified outcome claims.
-- Distinguish aborted, unfinished, and tick-limited runs.
-- Bind tournament progress and reports to their actual recording inputs.
-- Enforce whole-run token, cost, and wall-time limits.
-- Reconcile displayed highlights and results with their recording provenance.
-- Evaluate death-time reasoning and response opportunities against existing
-  experiments before adding new gameplay variants.
+The next parallel batch has one writer per shared surface:
 
-The list expresses direction, not an approved implementation plan or a live-run
-budget. Write the next compact card when its evidence, dependencies, and scope
-are understood. Schedule shared-file ownership manually; the existing
+| Card | Writer | Coordination |
+| --- | --- | --- |
+| [Temporal observations](work/temporal-observation-contract.md) | Workflow-redesign agent | Observation entitlement, body handles, orchestration; explicit compatibility and behavior decision before repair |
+| [Portfolio evidence experience](work/portfolio-evidence-experience.md) | Portfolio-review agent | Evidence UI/store/URL, compact summary/bundle, curation and README; API projections by code agent |
+| [Replay loading performance](work/replay-loading-performance.md) | Code-review agent | API/schema/generated types/client; measure before selecting further cache/extraction changes |
+| [Carried audit dispositions](work/carried-audit-dispositions.md) | Coordinator | Semantic gates, current findings ledger, lessons and source prose after handover |
+
+The owner authorized continued implementation through the cleanup roadmap.
+Write the next compact card when its evidence, dependencies, and scope are
+understood. Experimental adoption and live-provider budgets remain explicit
+separate decisions. Schedule shared-file ownership manually; the existing
 `compute_next_task.py` tool continues to serve phase contracts only.
 
 Historical `phase-*.md` files and their generated `agent_prompts/` exports remain
