@@ -60,7 +60,7 @@ export interface ReplayMetadataView {
 }
 
 export interface ExperimentConfigView {
-  format_version: 1 | 2;
+  format_version: 1 | 2 | 3;
   redistribution_policy: "lowest_id" | "least_remaining_work";
   meeting_reset: "preserve" | "hub_with_grace";
   crew_idle_policy: "hub_wait" | "patrol" | "accompany";
@@ -72,6 +72,8 @@ export interface ExperimentConfigView {
   bounded_rebuttal_version: 1 | null;
   public_account_version: 1 | null;
   attributed_testimony_version: 1 | null;
+  investigation_version?: 1 | null;
+  contextual_self_report_version?: 1 | null;
 }
 
 export interface TacticalPolicyView {
@@ -145,6 +147,7 @@ export interface AgentTickStateView {
   task_progress: number | null;
   current_action: CurrentAction;
   visibility: AgentVisibilityView | null;
+  investigation_plan?: InvestigationPlanView | null;
 }
 
 export interface AgentVisibilityView {
@@ -168,6 +171,17 @@ export interface VisibleBodyView {
 export interface AudibleEventView {
   kind: "sabotage_alarm";
   room: string | null;
+}
+
+export interface InvestigationPlanView {
+  decision_tick: number;
+  target_id: string;
+  source_observation_id: string;
+  source_tick: number;
+  last_known_room: string;
+  started_tick: number;
+  expires_tick: number;
+  visited_rooms: string[];
 }
 
 export interface KillEventView {
@@ -447,6 +461,7 @@ export interface AgentMemoryView {
   open_contradictions: ContradictionView[];
   rendered_memory_text: string;
   observation_references?: ObservationReferenceView[];
+  investigation_plan?: InvestigationPlanView | null;
 }
 
 export interface BeliefEntryView {

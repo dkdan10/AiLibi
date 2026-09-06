@@ -7,6 +7,8 @@ function BehaviorIdentity({ group }: { group: ReportProvenanceGroupView }) {
   const config = group.experiment_config;
   const mechanisms: string[] = [];
   if (config?.evidence_reasoning_version) mechanisms.push(`observation timing and travel checks v${config.evidence_reasoning_version}`);
+  if (config?.investigation_version) mechanisms.push("bounded missing-player searches");
+  if (config?.contextual_self_report_version) mechanisms.push("context-dependent self-reporting");
   if (config?.public_account_version) mechanisms.push("common public accounts");
   if (config?.attributed_testimony_version) mechanisms.push("attributed witness testimony");
   if (config?.bounded_rebuttal_version) mechanisms.push("one reply to a late accusation");

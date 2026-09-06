@@ -163,6 +163,19 @@ Attributed testimony retains its speaker and does not become first-hand proof.
 `engine/meeting_reset.py` owns the reset transition. These helpers have actual
 callers and semantic controls; their experiments remain OFF and unadopted.
 
+Experiment format 3 adds independent bounded investigation and contextual
+self-report, requiring temporal/evidence version 2. The search reducer uses owned
+sightings and public deaths; working memory retains intentions separately from
+evidence. [The investigation contract](../tasks/work/bounded-investigation.md)
+defines bounds and urgent overrides. Both candidates remain OFF.
+
+Format 3 requires exact built-in agents and policies. Shared
+`orchestrator/policy_reconstruction.py` rebuilds their FSM, pacing and plan state
+in API/eval readers, checking every submitted action before applying the original
+recording. This includes rejected/discarded actions. Version-1/2 readers retain
+memory-only reconstruction. Spectator plans name their decision tick and respect
+own-agent display; later discoveries cannot certify earlier alibis.
+
 New recordings stamp actual agent-factory identity and configuration on prefixes
 as well as completed outcomes. Strict readers validate the living ballot roster,
 legal targets and the recorded confidence cutoff before applying an outcome.

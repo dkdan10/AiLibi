@@ -31,7 +31,7 @@ class RecordedExperimentConfig(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    format_version: Literal[1, 2] = 1
+    format_version: Literal[1, 2, 3] = 1
     redistribution_policy: Literal["lowest_id", "least_remaining_work"] = "lowest_id"
     meeting_reset: Literal["preserve", "hub_with_grace"] = "preserve"
     crew_idle_policy: Literal["hub_wait", "patrol", "accompany"] = "hub_wait"
@@ -44,12 +44,17 @@ class RecordedExperimentConfig(BaseModel):
     public_account_version: Literal[1] | None = None
     attributed_testimony_version: Literal[1] | None = None
 
+    investigation_version: Literal[1] | None = None
+    contextual_self_report_version: Literal[1] | None = None
+
     @field_validator(
         "format_version",
         "evidence_reasoning_version",
         "bounded_rebuttal_version",
         "public_account_version",
         "attributed_testimony_version",
+        "investigation_version",
+        "contextual_self_report_version",
         mode="before",
     )
     @classmethod
@@ -68,6 +73,25 @@ class RecordedExperimentConfig(BaseModel):
             raise ValueError(
                 "new evidence and account profiles require experiment format version 2"
             )
+        if self.format_version == 3 and self.evidence_reasoning_version != 2:
+            raise ValueError("experiment format 3 requires evidence version 2")
+        if (
+            self.investigation_version is not None
+            or self.contextual_self_report_version is not None
+        ):
+            if self.format_version != 3 or self.evidence_reasoning_version != 2:
+                raise ValueError(
+                    "investigation and contextual self-report require format 3 and evidence version 2"
+                )
+        if (
+            self.investigation_version is not None
+            and self.crew_idle_policy != "hub_wait"
+        ):
+            raise ValueError("investigation conflicts with the old crew idle policy")
+        if self.contextual_self_report_version is not None and self.self_report:
+            raise ValueError(
+                "contextual self-report conflicts with unconditional self-report"
+            )
         return self
 
     @model_serializer(mode="wrap")
@@ -78,6 +102,9 @@ class RecordedExperimentConfig(BaseModel):
         if self.format_version == 1:
             del payload["public_account_version"]
             del payload["attributed_testimony_version"]
+        if self.format_version < 3:
+            del payload["investigation_version"]
+            del payload["contextual_self_report_version"]
         return payload
 
     @classmethod
@@ -102,6 +129,8 @@ class RecordedExperimentConfig(BaseModel):
             or self.vent_exit_policy != "target_distance"
             or self.post_meeting_retarget
             or self.self_report
+            or self.investigation_version is not None
+            or self.contextual_self_report_version is not None
             or self.sabotage_threshold != "six_sevenths"
         )
 

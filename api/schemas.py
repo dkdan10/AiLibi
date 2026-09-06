@@ -261,6 +261,19 @@ state, action row or ``state_hash`` is involved.
 """
 
 
+class InvestigationPlanView(_FrozenView):
+    """The observer's intention at a decision boundary, never witness evidence."""
+
+    decision_tick: int
+    target_id: str
+    source_observation_id: str
+    source_tick: int
+    last_known_room: str
+    started_tick: int
+    expires_tick: int
+    visited_rooms: tuple[str, ...]
+
+
 class AgentTickStateView(_FrozenView):
     """The dynamic slice of one agent's ``engine.entities.PlayerState`` at one
     tick.
@@ -287,6 +300,7 @@ class AgentTickStateView(_FrozenView):
     task_progress: float | None
     current_action: CurrentAction
     visibility: AgentVisibilityView | None = None
+    investigation_plan: InvestigationPlanView | None = None
 
 
 class KillEventView(_FrozenView):
@@ -1084,6 +1098,7 @@ class AgentMemoryView(_FrozenView):
     open_contradictions: tuple[ContradictionView, ...]
     rendered_memory_text: str
     observation_references: tuple[ObservationReferenceView, ...] = ()
+    investigation_plan: InvestigationPlanView | None = None
 
 
 class BeliefErrorView(_FrozenView):
@@ -1269,7 +1284,7 @@ class GameFinale(_FrozenView):
 class ExperimentConfigView(_FrozenView):
     """Public copy of the recorded experimental settings, without runtime imports."""
 
-    format_version: Literal[1, 2] = 1
+    format_version: Literal[1, 2, 3] = 1
     redistribution_policy: Literal["lowest_id", "least_remaining_work"] = "lowest_id"
     meeting_reset: Literal["preserve", "hub_with_grace"] = "preserve"
     crew_idle_policy: Literal["hub_wait", "patrol", "accompany"] = "hub_wait"
@@ -1281,6 +1296,8 @@ class ExperimentConfigView(_FrozenView):
     bounded_rebuttal_version: Literal[1] | None = None
     public_account_version: Literal[1] | None = None
     attributed_testimony_version: Literal[1] | None = None
+    investigation_version: Literal[1] | None = None
+    contextual_self_report_version: Literal[1] | None = None
 
 
 class TacticalPolicyView(_FrozenView):
@@ -1558,6 +1575,7 @@ __all__ = [
     "AccusationClaimView",
     "AdvantageView",
     "AgentMemoryView",
+    "InvestigationPlanView",
     "AgentTickStateView",
     "AgentVisibilityView",
     "AlibiClaimView",

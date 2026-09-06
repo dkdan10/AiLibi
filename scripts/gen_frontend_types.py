@@ -306,6 +306,10 @@ class _Generator:
                     ("ObservationReferenceView", "observer_in_vent"),
                     ("ReplayView", "llm_bodies_included"),
                     ("AgentMemoryView", "observation_references"),
+                    ("AgentMemoryView", "investigation_plan"),
+                    ("AgentTickStateView", "investigation_plan"),
+                    ("ExperimentConfigView", "investigation_version"),
+                    ("ExperimentConfigView", "contextual_self_report_version"),
                 }
                 else ""
             )

@@ -38,9 +38,9 @@ Review claims require reproduction; their original severity labels remain intact
    information gained, costs and effective changed trajectories. Adopt, revise
    or reject explicitly; offline checks do not establish model reasoning gains.
 
-## Current ownership
+## Completed implementation ownership
 
-| Worker | Current bounded scope |
+| Worker | Delivered scope |
 | --- | --- |
 | Observation worker | Versioned timing, private task receipts, real canonical scenarios and source-aware gameplay verification |
 | Meeting worker | Common public vocabulary, attributed accounts, bounded replies, public-record noninterference and next investigation design |
@@ -56,10 +56,14 @@ Maintenance corrections are committed through `144fc2e1`. Verified checkpoint ca
 cover [evaluation integrity](work/experimental-evaluation-integrity.md),
 [temporal evidence](work/temporal-evidence-v2.md),
 [public accounts](work/attributed-public-accounts.md), and the
-[scenario matrix](work/deduction-evaluation-matrix.md). The next runtime card is
-[bounded investigation](work/bounded-investigation.md); the
+[scenario matrix](work/deduction-evaluation-matrix.md). The [bounded investigation](work/bounded-investigation.md) implementation and
+[source-bound comparisons](../audits/investigation-candidate/README.md) are verified; the
 [fresh-evaluation card](work/fresh-deduction-evaluation.md) completes
-preregistration only. Live execution still needs its explicit budget.
+preregistration only. No runtime card remains active. The
+[candidate handoff](../audits/investigation-candidate/candidate-handoff.json) binds
+the offline evidence and lists live-execution prerequisites; it is not a spending
+authorization. Fresh evaluation still needs its explicit budget and frozen
+execution manifest.
 
 ## Verification and review
 

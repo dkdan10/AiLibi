@@ -208,11 +208,13 @@ def measure_capture(
         or report.experiment_config != expected
         or replay.metadata.agent_factory_kind != "custom"
         or (
-            replay.metadata.experiment_config.model_dump()
+            RecordedExperimentConfig.model_validate(
+                replay.metadata.experiment_config.model_dump()
+            )
             if replay.metadata.experiment_config
             else None
         )
-        != (expected.model_dump() if expected else None)
+        != expected
     ):
         raise ValueError(
             "scenario recording identity disagrees with its comparison arm"

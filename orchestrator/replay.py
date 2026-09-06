@@ -709,6 +709,12 @@ def recorded_experiment_config(
         raise ValueError(
             "new evidence and public accounts require temporal observations version 2"
         )
+    if config is not None and config.format_version == 3:
+        expected_kind = "experimental" if config.has_tactical_changes else "scripted"
+        if recorded_agent_factory_kind(entries) != expected_kind:
+            raise ValueError(
+                "experiment format 3 requires recorded built-in tactical policy identity"
+            )
     return config
 
 

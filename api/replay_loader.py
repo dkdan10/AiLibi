@@ -56,6 +56,7 @@ from api.schemas import (
     AccusationClaimView,
     AdvantageView,
     AgentMemoryView,
+    InvestigationPlanView,
     AgentTickStateView,
     AgentVisibilityView,
     AlibiClaimView,
@@ -220,6 +221,7 @@ from orchestrator.replay_integrity import (
     resolve_ballot_tally_threshold,
 )
 from orchestrator.experiment_config import RecordedExperimentConfig
+from orchestrator.policy_reconstruction import PolicyReconstruction
 
 _LOGGER: Final[logging.Logger] = logging.getLogger(__name__)
 
@@ -1413,6 +1415,8 @@ class ReplayLoader:
         entries = read_all_entries(path)
         integrity = ReplayIntegrityValidator(entries, game_id=game_id)
         experiment = recorded_experiment_config(entries)
+        reconstruct_policy = experiment is not None and experiment.format_version == 3
+        track_memory = collect_memory or reconstruct_policy
         testimony_shapes = recorded_testimony_shapes(entries)
         temporal_version = recorded_temporal_observation_version(entries)
         temporal = temporal_version is not None
@@ -1492,74 +1496,95 @@ class ReplayLoader:
         # Task 12.3) needs it; either way its audit log is routed to a throwaway
         # temp file. ``memories`` is only allocated for the memory walk — the
         # visibility walk reads the packet and discards it (no episodic ingest).
-        if collect_memory or collect_visibility:
-            audit_dir = tempfile.TemporaryDirectory(prefix="ailibi-replay-audit-")
-            service = ObservationService(
-                game_map=self._game_map,
-                audit_log_path=Path(audit_dir.name) / "audit.jsonl",
-                temporal_observations=temporal,
-                temporal_observation_version=temporal_version,
-            )
-        if collect_memory:
-            memories = {
-                pid: AgentMemory(
-                    evidence_reasoning_version=(
-                        experiment.evidence_reasoning_version if experiment else None
-                    ),
-                    public_map=public_map_from_engine_map(self._game_map),
-                    public_account_version=experiment.public_account_version
-                    if experiment is not None
-                    else None,
-                    attributed_testimony_version=experiment.attributed_testimony_version
-                    if experiment is not None
-                    else None,
-                )
-                for pid in initial_state.players
-            }
-
-        # Finding 1 (DESIGN.md §3.1, §11.4): ReplayLog.record_tick snapshots
-        # state AFTER advance_tick, so the recorded tick 0 already reflects the
-        # agents' first-turn moves; the pre-action spawn state is never
-        # persisted. Synthesize it here, before the entry loop, as a tick=-1
-        # "Start" frame (all players in the seeder's spawn room) so the
-        # spectator's first frame is the intuitive initial state, not agents
-        # already mid-motion. Read-side only: it is not written back to JSONL
-        # and never touches a state hash.
-        # The per-tick fog projection (Task 12.3, DESIGN.md §3.2/§7): each LIVING
-        # agent's firewall-filtered field of view, captured from the observation
-        # packet the pipeline already builds (no second visibility solve). It is
-        # built from the POST-advance state below so it matches the frame the
-        # spectator scrubs to; the Start frame uses the seeded initial state with
-        # no prior events.
-        start_visibility = (
-            self._agent_visibility_map(service, initial_state, ())
-            if collect_visibility and service is not None
-            else None
-        )
-        ticks: list[TickView] = [
-            self._tick_view(
-                -1,
-                initial_state,
-                (),
-                None,
-                start_visibility,
-                # No agent has acted yet on the synthesized frame, so every agent
-                # reads IDLE — the spawn state, not an inherited label.
-                actions=(),
-                fixed_tasks_required_total=fixed_tasks_required_total,
-            )
-        ]
-        trigger_kind_by_meeting_id: dict[str, _TriggerKind] = {}
-        memory_views: dict[tuple[str, str], AgentMemoryView] = {}
-        observation_scene_ticks: dict[str, int] = {}
-        last_events: tuple[EngineEvent, ...] = ()
-        meeting_index = 0
-
         try:
+            if track_memory or collect_visibility:
+                audit_dir = tempfile.TemporaryDirectory(prefix="ailibi-replay-audit-")
+                service = ObservationService(
+                    game_map=self._game_map,
+                    audit_log_path=Path(audit_dir.name) / "audit.jsonl",
+                    temporal_observations=temporal,
+                    temporal_observation_version=temporal_version,
+                )
+            if track_memory:
+                memories = {
+                    pid: AgentMemory(
+                        evidence_reasoning_version=(
+                            experiment.evidence_reasoning_version
+                            if experiment
+                            else None
+                        ),
+                        public_map=public_map_from_engine_map(self._game_map),
+                        public_account_version=experiment.public_account_version
+                        if experiment is not None
+                        else None,
+                        attributed_testimony_version=experiment.attributed_testimony_version
+                        if experiment is not None
+                        else None,
+                    )
+                    for pid in initial_state.players
+                }
+
+            policy_runtime = None
+            if reconstruct_policy:
+                assert experiment is not None and service is not None
+                policy_runtime = PolicyReconstruction(
+                    initial_state=initial_state,
+                    game_map=self._game_map,
+                    experiment=experiment,
+                    service=service,
+                    testimony_shapes=testimony_shapes,
+                )
+                memories = policy_runtime.memories
+
+            # Finding 1 (DESIGN.md §3.1, §11.4): ReplayLog.record_tick snapshots
+            # state AFTER advance_tick, so the recorded tick 0 already reflects the
+            # agents' first-turn moves; the pre-action spawn state is never
+            # persisted. Synthesize it here, before the entry loop, as a tick=-1
+            # "Start" frame (all players in the seeder's spawn room) so the
+            # spectator's first frame is the intuitive initial state, not agents
+            # already mid-motion. Read-side only: it is not written back to JSONL
+            # and never touches a state hash.
+            # The per-tick fog projection (Task 12.3, DESIGN.md §3.2/§7): each LIVING
+            # agent's firewall-filtered field of view, captured from the observation
+            # packet the pipeline already builds (no second visibility solve). It is
+            # built from the POST-advance state below so it matches the frame the
+            # spectator scrubs to; the Start frame uses the seeded initial state with
+            # no prior events.
+            start_visibility = (
+                self._agent_visibility_map(service, initial_state, ())
+                if collect_visibility and service is not None
+                else None
+            )
+            ticks: list[TickView] = [
+                self._tick_view(
+                    -1,
+                    initial_state,
+                    (),
+                    None,
+                    start_visibility,
+                    # No agent has acted yet on the synthesized frame, so every agent
+                    # reads IDLE — the spawn state, not an inherited label.
+                    actions=(),
+                    fixed_tasks_required_total=fixed_tasks_required_total,
+                )
+            ]
+            trigger_kind_by_meeting_id: dict[str, _TriggerKind] = {}
+            memory_views: dict[tuple[str, str], AgentMemoryView] = {}
+            observation_scene_ticks: dict[str, int] = {}
+            last_events: tuple[EngineEvent, ...] = ()
+            meeting_index = 0
+
             for entry in replay_entries:
                 integrity.check_tick(entry, state)
-                if collect_memory and service is not None:
-                    delivered = self._ingest_tick(service, memories, state, last_events)
+                actions = _deserialize_actions(entry.actions)
+                if track_memory and service is not None:
+                    delivered = (
+                        policy_runtime.before_tick(
+                            state=state, last_events=last_events, actions=actions
+                        )
+                        if policy_runtime is not None
+                        else self._ingest_tick(service, memories, state, last_events)
+                    )
                     for batch in delivered.values():
                         for observation in batch:
                             if observation.observation_id is not None:
@@ -1567,7 +1592,6 @@ class ReplayLoader:
                                     ticks[-1].tick
                                 )
 
-                actions = _deserialize_actions(entry.actions)
                 source_state = state
                 state, events = advance_tick(
                     state,
@@ -1600,7 +1624,7 @@ class ReplayLoader:
                         )
 
                 integrity.check_advance(entry, state, events)
-                if collect_memory and service is not None:
+                if track_memory and service is not None:
                     event_deliveries = ingest_event_observations_for_memories(
                         service=service,
                         state=state,
@@ -1658,6 +1682,28 @@ class ReplayLoader:
                     )
                 )
 
+                if policy_runtime is not None:
+                    frame = ticks[-1]
+                    ticks[-1] = frame.model_copy(
+                        update={
+                            "agent_states": tuple(
+                                agent_state.model_copy(
+                                    update={
+                                        "investigation_plan": _investigation_plan_view(
+                                            memories[agent_state.agent_id],
+                                            decision_tick=entry.tick,
+                                        )
+                                        if source_state.players[
+                                            agent_state.agent_id
+                                        ].alive
+                                        else None,
+                                    }
+                                )
+                                for agent_state in frame.agent_states
+                            ),
+                        }
+                    )
+
                 if state.phase != "MEETING":
                     if state.phase == "GAME_OVER":
                         break
@@ -1674,7 +1720,7 @@ class ReplayLoader:
                     # The tick timeline is intact up to here; stop the walk.
                     break
 
-                if collect_memory:
+                if track_memory:
                     # Snapshot every known player, alive or dead. The endpoint
                     # contract is agent-based (ThoughtStream selects by agent),
                     # so a player who died before this meeting must still be
@@ -1775,7 +1821,13 @@ class ReplayLoader:
                         ),
                     }
                 )
-                if collect_memory:
+                if policy_runtime is not None:
+                    policy_runtime.complete_meeting(
+                        state=state,
+                        result=result,
+                        emergency=trigger_kind == "emergency",
+                    )
+                elif track_memory:
                     # Mirror the live loop's post-meeting belief fold (Task
                     # 9.8, orchestrator.game._absorb_meeting_beliefs): the
                     # recorded meeting's evidence lands in each still-living
@@ -1860,6 +1912,8 @@ class ReplayLoader:
                     break
                 last_events = pre_meeting_events + tuple(post_events)
         finally:
+            if service is not None:
+                service.close()
             if audit_dir is not None:
                 audit_dir.cleanup()
 
@@ -2241,6 +2295,7 @@ class ReplayLoader:
             tasks_completed=sum(1 for task in owned if task.completed),
             tasks_assigned=len(owned),
             observations=observations,
+            investigation_plan=_investigation_plan_view(memory),
             beliefs=beliefs,
             open_contradictions=open_contradictions,
             rendered_memory_text=render_for_prompt(
@@ -3992,3 +4047,16 @@ __all__ = [
     "get_loader_registry",
     "get_replay_loader",
 ]
+
+
+def _investigation_plan_view(
+    memory: AgentMemory, *, decision_tick: int | None = None
+) -> InvestigationPlanView | None:
+    state = memory.working.investigation
+    if state is None or state.active_plan is None or state.last_processed_tick is None:
+        return None
+    if decision_tick is not None and decision_tick != state.last_processed_tick:
+        raise ValueError("investigation projection requires the actual decision tick")
+    return InvestigationPlanView(
+        decision_tick=state.last_processed_tick, **state.active_plan.model_dump()
+    )

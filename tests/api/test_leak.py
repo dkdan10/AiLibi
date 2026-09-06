@@ -59,6 +59,7 @@ from tests._helpers.world_state import scripted_initial_world_state
 EXPECTED_DTOS: Final[frozenset[str]] = frozenset(
     {
         "ExperimentConfigView",
+        "InvestigationPlanView",
         "TacticalPolicyView",
         "TaskActivityAccountView",
         "ReportProvenanceGroupView",
@@ -595,6 +596,9 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "flagged_meeting_accuracy",
         "flagged_meetings",
         "flags_total",
+        # Explicit candidate selections; plans are not report evidence.
+        "investigation_version",
+        "contextual_self_report_version",
         "format_version",
         "free_text",
         # A witnessed transition's two rooms (SawMoveObservation) — public

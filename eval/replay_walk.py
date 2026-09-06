@@ -197,8 +197,10 @@ and training walks are backlog by the Phase-19 cut line.
 from __future__ import annotations
 
 from collections.abc import Callable, Iterator
+from contextlib import ExitStack
 from dataclasses import dataclass
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Final, Literal, NoReturn, TypeAlias
 
 from pydantic import TypeAdapter
@@ -210,7 +212,9 @@ from engine.tick import advance_tick
 from engine.world import Map, WorldState
 from meetings.schemas import MeetingResult
 from meetings.voting import tally_ballots
+from observation.service import ObservationService
 from orchestrator.game import apply_meeting_result
+from orchestrator.policy_reconstruction import PolicyReconstruction
 from orchestrator.replay import (
     recorded_experiment_config,
     recorded_testimony_shapes,
@@ -443,6 +447,33 @@ def walk_replay(
     ``on_violation`` hook, which raises the consumer's own exception.
     """
 
+    # A suspended generator owns its reconstruction audit until exhaustion or
+    # explicit close. ExitStack also cleans up when a consumer throws into it.
+    with ExitStack() as resources:
+        yield from _walk_replay(
+            replay_path,
+            seed=seed,
+            num_players=num_players,
+            num_impostors=num_impostors,
+            tasks_per_crewmate=tasks_per_crewmate,
+            game_map=game_map,
+            config=config,
+            resources=resources,
+        )
+
+
+def _walk_replay(
+    replay_path: Path,
+    *,
+    seed: int,
+    num_players: int,
+    num_impostors: int,
+    tasks_per_crewmate: int,
+    game_map: Map,
+    config: ReplayWalkConfig,
+    resources: ExitStack,
+) -> Iterator[ReplayWalkEvent]:
+
     game_id = f"headless-seed-{seed}"
     entries = read_all_entries(replay_path)
     experiment = recorded_experiment_config(entries)
@@ -511,6 +542,24 @@ def walk_replay(
         num_impostors=num_impostors,
         tasks_per_crewmate=tasks_per_crewmate,
     )
+    policy: PolicyReconstruction | None = None
+    if experiment is not None and experiment.format_version == 3:
+        audit_directory = resources.enter_context(
+            TemporaryDirectory(prefix="ailibi-policy-reconstruction-")
+        )
+        service = ObservationService(
+            game_map=game_map,
+            audit_log_path=Path(audit_directory) / "observations.jsonl",
+            temporal_observation_version=2,
+        )
+        resources.callback(service.close)
+        policy = PolicyReconstruction(
+            initial_state=state,
+            game_map=game_map,
+            experiment=experiment,
+            service=service,
+            testimony_shapes=testimony_shapes,
+        )
 
     hash_needed = config.verify_tick_hashes or config.verify_meeting_pre_hashes
     last_events: tuple[EngineEvent, ...] = ()
@@ -525,6 +574,8 @@ def walk_replay(
 
         pre_state = state
         actions = [_ACTION_ADAPTER.validate_python(dict(raw)) for raw in entry.actions]
+        if policy is not None:
+            policy.before_tick(state=state, last_events=last_events, actions=actions)
         state, raw_events = advance_tick(
             state,
             actions,
@@ -561,6 +612,10 @@ def walk_replay(
                 )
         if integrity is not None:
             integrity.check_advance(entry, state, events)
+        if policy is not None:
+            policy.after_tick(
+                source_state=pre_state, state=state, events=events, actions=actions
+            )
         for event in events:
             if isinstance(event, GameOverEvent):
                 reconstructed_winner = event.winner
@@ -626,6 +681,8 @@ def walk_replay(
             None,
         )
         body_id = trigger.body_id if trigger is not None else None
+        if policy is not None:
+            policy.open_meeting(state)
         yield MeetingOpened(
             entry=meeting_entry,
             trigger=trigger,
@@ -661,6 +718,10 @@ def walk_replay(
                 )
         if integrity is not None:
             integrity.check_meeting_result(state, post_events)
+        if policy is not None:
+            policy.complete_meeting(
+                state=state, result=result, emergency=body_id is None
+            )
         for event in post_events:
             if isinstance(event, GameOverEvent):
                 reconstructed_winner = event.winner

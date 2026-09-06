@@ -411,6 +411,7 @@ export const _fidelityReplay: ReplayView = {
         {
           "agent_id": "p-1",
           "current_action": "IDLE",
+          "investigation_plan": null,
           "is_alive": true,
           "is_venting": false,
           "room_id": "CAFETERIA",
@@ -440,6 +441,7 @@ export const _fidelityReplay: ReplayView = {
         {
           "agent_id": "p-2",
           "current_action": "IDLE",
+          "investigation_plan": null,
           "is_alive": true,
           "is_venting": false,
           "room_id": "CAFETERIA",
@@ -469,6 +471,7 @@ export const _fidelityReplay: ReplayView = {
         {
           "agent_id": "p-3",
           "current_action": "IDLE",
+          "investigation_plan": null,
           "is_alive": true,
           "is_venting": false,
           "room_id": "CAFETERIA",
@@ -498,6 +501,7 @@ export const _fidelityReplay: ReplayView = {
         {
           "agent_id": "p-4",
           "current_action": "IDLE",
+          "investigation_plan": null,
           "is_alive": true,
           "is_venting": false,
           "room_id": "CAFETERIA",
@@ -547,6 +551,7 @@ export const _fidelityReplay: ReplayView = {
         {
           "agent_id": "p-1",
           "current_action": "IDLE",
+          "investigation_plan": null,
           "is_alive": true,
           "is_venting": false,
           "room_id": "CAFETERIA",
@@ -576,6 +581,7 @@ export const _fidelityReplay: ReplayView = {
         {
           "agent_id": "p-2",
           "current_action": "IDLE",
+          "investigation_plan": null,
           "is_alive": true,
           "is_venting": false,
           "room_id": "CAFETERIA",
@@ -605,6 +611,7 @@ export const _fidelityReplay: ReplayView = {
         {
           "agent_id": "p-3",
           "current_action": "IDLE",
+          "investigation_plan": null,
           "is_alive": true,
           "is_venting": false,
           "room_id": "CAFETERIA",
@@ -634,6 +641,7 @@ export const _fidelityReplay: ReplayView = {
         {
           "agent_id": "p-4",
           "current_action": "IDLE",
+          "investigation_plan": null,
           "is_alive": true,
           "is_venting": false,
           "room_id": "CAFETERIA",
@@ -683,6 +691,7 @@ export const _fidelityReplay: ReplayView = {
         {
           "agent_id": "p-1",
           "current_action": "IDLE",
+          "investigation_plan": null,
           "is_alive": true,
           "is_venting": false,
           "room_id": "CAFETERIA",
@@ -712,6 +721,7 @@ export const _fidelityReplay: ReplayView = {
         {
           "agent_id": "p-2",
           "current_action": "IDLE",
+          "investigation_plan": null,
           "is_alive": true,
           "is_venting": false,
           "room_id": "CAFETERIA",
@@ -741,6 +751,7 @@ export const _fidelityReplay: ReplayView = {
         {
           "agent_id": "p-3",
           "current_action": "IDLE",
+          "investigation_plan": null,
           "is_alive": true,
           "is_venting": false,
           "room_id": "CAFETERIA",
@@ -770,6 +781,7 @@ export const _fidelityReplay: ReplayView = {
         {
           "agent_id": "p-4",
           "current_action": "IDLE",
+          "investigation_plan": null,
           "is_alive": true,
           "is_venting": false,
           "room_id": "CAFETERIA",
@@ -819,6 +831,7 @@ export const _fidelityReplay: ReplayView = {
         {
           "agent_id": "p-1",
           "current_action": "IDLE",
+          "investigation_plan": null,
           "is_alive": true,
           "is_venting": false,
           "room_id": "CAFETERIA",
@@ -848,6 +861,7 @@ export const _fidelityReplay: ReplayView = {
         {
           "agent_id": "p-2",
           "current_action": "IDLE",
+          "investigation_plan": null,
           "is_alive": true,
           "is_venting": false,
           "room_id": "CAFETERIA",
@@ -877,6 +891,7 @@ export const _fidelityReplay: ReplayView = {
         {
           "agent_id": "p-3",
           "current_action": "IDLE",
+          "investigation_plan": null,
           "is_alive": true,
           "is_venting": false,
           "room_id": "CAFETERIA",
@@ -906,6 +921,7 @@ export const _fidelityReplay: ReplayView = {
         {
           "agent_id": "p-4",
           "current_action": "IDLE",
+          "investigation_plan": null,
           "is_alive": true,
           "is_venting": false,
           "room_id": "CAFETERIA",
@@ -955,6 +971,7 @@ export const _fidelityReplay: ReplayView = {
         {
           "agent_id": "p-1",
           "current_action": "IDLE",
+          "investigation_plan": null,
           "is_alive": true,
           "is_venting": false,
           "room_id": "CAFETERIA",
@@ -984,6 +1001,7 @@ export const _fidelityReplay: ReplayView = {
         {
           "agent_id": "p-2",
           "current_action": "IDLE",
+          "investigation_plan": null,
           "is_alive": true,
           "is_venting": false,
           "room_id": "CAFETERIA",
@@ -1013,6 +1031,7 @@ export const _fidelityReplay: ReplayView = {
         {
           "agent_id": "p-3",
           "current_action": "IDLE",
+          "investigation_plan": null,
           "is_alive": true,
           "is_venting": false,
           "room_id": "CAFETERIA",
@@ -1042,6 +1061,7 @@ export const _fidelityReplay: ReplayView = {
         {
           "agent_id": "p-4",
           "current_action": "IDLE",
+          "investigation_plan": null,
           "is_alive": true,
           "is_venting": false,
           "room_id": "CAFETERIA",
@@ -1091,6 +1111,7 @@ export const _fidelityReplay: ReplayView = {
         {
           "agent_id": "p-1",
           "current_action": "IDLE",
+          "investigation_plan": null,
           "is_alive": false,
           "is_venting": false,
           "room_id": null,
@@ -1100,6 +1121,7 @@ export const _fidelityReplay: ReplayView = {
         {
           "agent_id": "p-2",
           "current_action": "IDLE",
+          "investigation_plan": null,
           "is_alive": true,
           "is_venting": false,
           "room_id": "CAFETERIA",
@@ -1130,6 +1152,7 @@ export const _fidelityReplay: ReplayView = {
         {
           "agent_id": "p-3",
           "current_action": "KILL",
+          "investigation_plan": null,
           "is_alive": true,
           "is_venting": false,
           "room_id": "CAFETERIA",
@@ -1160,6 +1183,7 @@ export const _fidelityReplay: ReplayView = {
         {
           "agent_id": "p-4",
           "current_action": "IDLE",
+          "investigation_plan": null,
           "is_alive": true,
           "is_venting": false,
           "room_id": "CAFETERIA",
@@ -1225,6 +1249,7 @@ export const _fidelityReplay: ReplayView = {
         {
           "agent_id": "p-1",
           "current_action": "IDLE",
+          "investigation_plan": null,
           "is_alive": false,
           "is_venting": false,
           "room_id": null,
@@ -1234,6 +1259,7 @@ export const _fidelityReplay: ReplayView = {
         {
           "agent_id": "p-2",
           "current_action": "IDLE",
+          "investigation_plan": null,
           "is_alive": true,
           "is_venting": false,
           "room_id": "CAFETERIA",
@@ -1264,6 +1290,7 @@ export const _fidelityReplay: ReplayView = {
         {
           "agent_id": "p-3",
           "current_action": "IDLE",
+          "investigation_plan": null,
           "is_alive": true,
           "is_venting": false,
           "room_id": "CAFETERIA",
@@ -1294,6 +1321,7 @@ export const _fidelityReplay: ReplayView = {
         {
           "agent_id": "p-4",
           "current_action": "IDLE",
+          "investigation_plan": null,
           "is_alive": true,
           "is_venting": false,
           "room_id": "CAFETERIA",
@@ -1351,6 +1379,7 @@ export const _fidelityReplay: ReplayView = {
         {
           "agent_id": "p-1",
           "current_action": "IDLE",
+          "investigation_plan": null,
           "is_alive": false,
           "is_venting": false,
           "room_id": null,
@@ -1360,6 +1389,7 @@ export const _fidelityReplay: ReplayView = {
         {
           "agent_id": "p-2",
           "current_action": "IDLE",
+          "investigation_plan": null,
           "is_alive": true,
           "is_venting": false,
           "room_id": "CAFETERIA",
@@ -1390,6 +1420,7 @@ export const _fidelityReplay: ReplayView = {
         {
           "agent_id": "p-3",
           "current_action": "IDLE",
+          "investigation_plan": null,
           "is_alive": true,
           "is_venting": false,
           "room_id": "CAFETERIA",
@@ -1420,6 +1451,7 @@ export const _fidelityReplay: ReplayView = {
         {
           "agent_id": "p-4",
           "current_action": "IDLE",
+          "investigation_plan": null,
           "is_alive": true,
           "is_venting": false,
           "room_id": "CAFETERIA",
@@ -1477,6 +1509,7 @@ export const _fidelityReplay: ReplayView = {
         {
           "agent_id": "p-1",
           "current_action": "IDLE",
+          "investigation_plan": null,
           "is_alive": false,
           "is_venting": false,
           "room_id": null,
@@ -1486,6 +1519,7 @@ export const _fidelityReplay: ReplayView = {
         {
           "agent_id": "p-2",
           "current_action": "IDLE",
+          "investigation_plan": null,
           "is_alive": true,
           "is_venting": false,
           "room_id": "CAFETERIA",
@@ -1516,6 +1550,7 @@ export const _fidelityReplay: ReplayView = {
         {
           "agent_id": "p-3",
           "current_action": "IDLE",
+          "investigation_plan": null,
           "is_alive": true,
           "is_venting": false,
           "room_id": "CAFETERIA",
@@ -1546,6 +1581,7 @@ export const _fidelityReplay: ReplayView = {
         {
           "agent_id": "p-4",
           "current_action": "IDLE",
+          "investigation_plan": null,
           "is_alive": true,
           "is_venting": false,
           "room_id": "CAFETERIA",
@@ -1603,6 +1639,7 @@ export const _fidelityReplay: ReplayView = {
         {
           "agent_id": "p-1",
           "current_action": "IDLE",
+          "investigation_plan": null,
           "is_alive": false,
           "is_venting": false,
           "room_id": null,
@@ -1612,6 +1649,7 @@ export const _fidelityReplay: ReplayView = {
         {
           "agent_id": "p-2",
           "current_action": "IDLE",
+          "investigation_plan": null,
           "is_alive": true,
           "is_venting": false,
           "room_id": "CAFETERIA",
@@ -1642,6 +1680,7 @@ export const _fidelityReplay: ReplayView = {
         {
           "agent_id": "p-3",
           "current_action": "IDLE",
+          "investigation_plan": null,
           "is_alive": true,
           "is_venting": false,
           "room_id": "CAFETERIA",
@@ -1672,6 +1711,7 @@ export const _fidelityReplay: ReplayView = {
         {
           "agent_id": "p-4",
           "current_action": "IDLE",
+          "investigation_plan": null,
           "is_alive": true,
           "is_venting": false,
           "room_id": "CAFETERIA",
@@ -1729,6 +1769,7 @@ export const _fidelityReplay: ReplayView = {
         {
           "agent_id": "p-1",
           "current_action": "IDLE",
+          "investigation_plan": null,
           "is_alive": false,
           "is_venting": false,
           "room_id": null,
@@ -1738,6 +1779,7 @@ export const _fidelityReplay: ReplayView = {
         {
           "agent_id": "p-2",
           "current_action": "IDLE",
+          "investigation_plan": null,
           "is_alive": false,
           "is_venting": false,
           "room_id": null,
@@ -1747,6 +1789,7 @@ export const _fidelityReplay: ReplayView = {
         {
           "agent_id": "p-3",
           "current_action": "KILL",
+          "investigation_plan": null,
           "is_alive": true,
           "is_venting": false,
           "room_id": "CAFETERIA",
@@ -1777,6 +1820,7 @@ export const _fidelityReplay: ReplayView = {
         {
           "agent_id": "p-4",
           "current_action": "IDLE",
+          "investigation_plan": null,
           "is_alive": true,
           "is_venting": false,
           "room_id": "CAFETERIA",

@@ -39,6 +39,14 @@ from pathlib import Path
 from typing import Final, Literal, Protocol, TypeAlias, TypeVar, cast, runtime_checkable
 
 from agents.base import AgentInterface, EventObservingAgent
+from agents.memory.investigation import (
+    investigation_packet_sha256,
+    reduce_investigation_evidence,
+)
+from agents.tactical.investigation import (
+    transition_investigation,
+    has_recent_witnessed_danger,
+)
 from agents.memory.beliefs import (
     BODY_PROXIMITY_WINDOW_TICKS,
     OBSERVED_KILL_ACTION,
@@ -74,7 +82,11 @@ from agents.strategic.prompts import (
     validate_public_account_renderers,
     resolve_prompt_set,
 )
-from agents.tactical.crewmate_policy import CrewmatePolicy, EmergencyPacingTracker
+from agents.tactical.crewmate_policy import (
+    CrewmatePolicy,
+    EmergencyPacingTracker,
+    KILL_WITNESS_REASON,
+)
 from agents.tactical.impostor_policy import ImpostorPolicy
 from agents.tactical.experimental import (
     ExperimentalCrewmatePolicy,
@@ -2155,7 +2167,7 @@ class HeadlessGame:
                 or profile.public_account_version is not None
                 or profile.attributed_testimony_version is not None
             ):
-                payload["format_version"] = 2
+                payload["format_version"] = max(experiment.format_version, 2)
             experiment = RecordedExperimentConfig.model_validate(payload)
             if (
                 profile.public_account_version is not None
@@ -2739,22 +2751,7 @@ class HeadlessGame:
                     raise ValueError(
                         "agent factory does not implement the recorded tactical experiment"
                     )
-                built_agent.memory.evidence_reasoning_version = (
-                    self._experiment_config.evidence_reasoning_version
-                    if self._experiment_config is not None
-                    else None
-                )
-                built_agent.memory.public_map = self._public_map
-                built_agent.memory.public_account_version = (
-                    self._experiment_config.public_account_version
-                    if self._experiment_config is not None
-                    else None
-                )
-                built_agent.memory.attributed_testimony_version = (
-                    self._experiment_config.attributed_testimony_version
-                    if self._experiment_config is not None
-                    else None
-                )
+                built_agent.bind_experiment(self._experiment_config, self._public_map)
                 policy_class = (
                     ExperimentalImpostorPolicy
                     if expected is not None and players[player_id].role == "IMPOSTOR"
@@ -2776,6 +2773,14 @@ class HeadlessGame:
                     raise ValueError(
                         "agent factory does not implement the recorded tactical experiment"
                     )
+        if (
+            self._experiment_config is not None
+            and self._experiment_config.format_version == 3
+            and not all_builtin
+        ):
+            raise ValueError(
+                "experiment format 3 requires exact built-in tactical agents and policies"
+            )
         self._agent_factory_kind: AgentFactoryKind = (
             "custom"
             if not all_builtin
@@ -3481,6 +3486,7 @@ class TacticalAgent:
         # bookkeeping at all (impostors gain no button behavior until
         # Wave 2 decides it -- this gate is what the no-impostor-emergency
         # pin asserts against).
+        self._reproduce_decisions = False
         self._emergency_tracker: EmergencyPacingTracker | None = (
             EmergencyPacingTracker()
             if self._role == "CREWMATE" and isinstance(policy, CrewmatePolicy)
@@ -3507,6 +3513,22 @@ class TacticalAgent:
             return self._policy.options
         return None
 
+    def bind_experiment(
+        self, config: RecordedExperimentConfig | None, public_map: PublicMapView
+    ) -> None:
+        """Bind the same immutable evidence and decision profile in live play and readers."""
+        self._reproduce_decisions = config is not None and config.format_version == 3
+        self._memory.public_map = public_map
+        self._memory.evidence_reasoning_version = (
+            config.evidence_reasoning_version if config else None
+        )
+        self._memory.public_account_version = (
+            config.public_account_version if config else None
+        )
+        self._memory.attributed_testimony_version = (
+            config.attributed_testimony_version if config else None
+        )
+
     def decide(
         self,
         packet: ObservationPacket,
@@ -3517,16 +3539,31 @@ class TacticalAgent:
                 f"observation packet for agent {packet.agent_id!r} given to "
                 f"tactical agent bound to {self._agent_id!r}"
             )
+        if self._reproduce_decisions:
+            if (
+                public_map != self._memory.public_map
+                or packet.temporal_observation_version != 2
+            ):
+                raise ValueError(
+                    "version-3 decision requires its bound map and temporal version 2"
+                )
+            prior = self._memory.working.investigation
+            if prior is not None and prior.last_processed_tick is not None:
+                if packet.tick < prior.last_processed_tick:
+                    raise ValueError("version-3 decisions cannot go backwards in time")
+                if packet.tick == prior.last_processed_tick:
+                    if investigation_packet_sha256(packet) != prior.last_packet_sha256:
+                        raise ValueError(
+                            "different observation packet for an already processed tick"
+                        )
+                    assert prior.last_intent is not None
+                    return prior.last_intent
         ingest_packet(
             packet=packet,
             memory=self._memory.episodic,
             beliefs=self._memory.beliefs,
         )
-        # Crewmate path (Task 10.8): sample the emergency tracker AFTER
-        # perception (so this tick's §6.3 belief updates are visible) and
-        # hand the policy the immutable eligibility snapshot. The sample is
-        # idempotent for a given state, so repeated decide() calls stay
-        # equal (the policy-determinism contract).
+        urgent = False
         if self._emergency_tracker is not None and isinstance(
             self._policy, CrewmatePolicy
         ):
@@ -3536,10 +3573,57 @@ class TacticalAgent:
                 beliefs=self._memory.beliefs,
                 own_id=self._agent_id,
             )
-            return self._policy.decide(
+            anchor = self._policy.decide(
                 self._memory.episodic, public_map, emergency=view
             )
-        return self._policy.decide(self._memory.episodic, public_map)
+            if self._reproduce_decisions:
+                latest = self._memory.episodic.recent(since_tick=packet.tick)
+                self_state = self._policy._latest_self_state(latest)
+                assert self_state is not None
+                urgent = view.is_eligible or self._policy._kill_witnessed(
+                    latest, own_room=self._policy._room_from_self_state(self_state)
+                )
+                options = self.tactical_experiment_options
+                if (
+                    options is not None
+                    and options.investigation_version == 1
+                    and has_recent_witnessed_danger(
+                        self._memory.episodic, packet=packet
+                    )
+                ):
+                    urgent = True
+                    anchor = self._policy._walk_to_button(
+                        public_map=public_map,
+                        own_room=packet.self_state.room,
+                        reason=KILL_WITNESS_REASON,
+                    )
+        else:
+            anchor = self._policy.decide(self._memory.episodic, public_map)
+        if not self._reproduce_decisions:
+            return anchor
+        evidence = reduce_investigation_evidence(
+            self._memory,
+            observer_id=self._agent_id,
+            tick=packet.tick,
+            public_map=public_map,
+        )
+        options = self.tactical_experiment_options
+        next_state = transition_investigation(
+            self._memory.working.investigation,
+            packet=packet,
+            evidence=evidence,
+            public_map=public_map,
+            anchor_intent=anchor,
+            investigation_version=options.investigation_version
+            if options is not None
+            else None,
+            urgent=urgent,
+        )
+        self._memory.working.set_investigation_state(
+            next_state, known_player_ids=evidence.known_player_ids
+        )
+        assert next_state.last_intent is not None
+        return next_state.last_intent
 
     def observe_events(self, batch: EventObservationBatch) -> None:
         """Ingest source-time evidence without invoking tactical policy twice."""
@@ -4154,6 +4238,13 @@ class TacticalAgent:
             skip_votes=skip_votes,
             roster_impostor_count=roster_impostor_count,
         )
+        if self._reproduce_decisions:
+            investigation = self._memory.working.investigation
+            plan = investigation.active_plan if investigation is not None else None
+            if plan is not None and (
+                end_tick >= plan.expires_tick or plan.target_id in dead_ids
+            ):
+                self._memory.working.cancel_investigation_plan()
         if isinstance(self._policy, ExperimentalImpostorPolicy):
             self._policy.note_meeting_concluded(dead_ids=dead_ids)
         if self._emergency_tracker is None:
@@ -4184,6 +4275,8 @@ def _tactical_experiment_options(
         self_report=config.self_report,
         sabotage_threshold=config.sabotage_threshold,
         meeting_positions_preserved=config.meeting_reset == "preserve",
+        investigation_version=config.investigation_version,
+        contextual_self_report_version=config.contextual_self_report_version,
     )
 
 

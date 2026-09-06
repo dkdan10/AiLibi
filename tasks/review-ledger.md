@@ -186,3 +186,34 @@ journeys passed. Main, historical evidence and adoption decisions are unchanged.
 This checkpoint completes maintenance and the summary-cache slice only. The
 [remaining plan](post-review-plan.md) proceeds through experimental provenance,
 evidence v2, attributed accounts and investigation before budgeted live evaluation.
+
+## Post-review evidence and investigation checkpoint (2026-09-06)
+
+The [authorized offline implementation](post-review-plan.md) is verified on
+cleanup: actual evaluation identity and ballot entitlement; corrected temporal
+evidence; common public accounts and attributed testimony; bounded replies;
+typed missing-player search and independent contextual self-report. The new
+accompaniment option was deferred because the existing follow-versus-patrol
+comparison did not demonstrate useful later information. Existing historical
+options and failed verdicts remain intact.
+
+The [source-bound checkpoint](../audits/investigation-candidate/checkpoint.md)
+contains 35 exact normal-policy games and 42 meeting mechanism controls sharing
+the final source inventory, separate review methods, measured task costs and
+semantic controls. It distinguishes changed submitted actions from changed
+engine states, including discarded attempts. The earlier evidence/meeting
+checkpoint remains committed at `e12b6180` with its own historical capture.
+
+The final full gate passed 7,137 Python tests and 514 frontend tests, strict mypy
+on 466 sources, lint/format, four import contracts, document/generated-type
+checks and production build. Python has 20 optional skips and three expected
+failures. All 300 historical recordings, four derived report checks and both
+API/static browser journeys passed. No live provider was called.
+
+Implemented and verified are complete for the offline cards. Independent bounded
+reviews and final coordinator dispositions are preserved; external Claude review
+is pending. The fresh-evaluation card completes preregistration only. The
+[candidate handoff](../audits/investigation-candidate/candidate-handoff.json) lists
+the still-required provider, token/time/cost authorization, held-out inputs and
+decision rubric. It is not an execution manifest, adoption or merge permission.
+Local and remote main remain `cfde4c8960a865eeaa39a004b2c33d302cbe4733`.

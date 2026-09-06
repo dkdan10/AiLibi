@@ -154,6 +154,21 @@ export function MemoryPanel({
         </div>
       )}
 
+      {revealSecrets && memory.investigation_plan && (
+        <section aria-label="Search intention">
+          <SectionHeading>Search intention</SectionHeading>
+          <p className="text-xs text-ink-700">
+            At tick {memory.investigation_plan.decision_tick}, planned to look for{" "}
+            {memory.investigation_plan.target_id}, last seen in{" "}
+            {memory.investigation_plan.last_known_room} at tick{" "}
+            {memory.investigation_plan.source_tick}.
+          </p>
+          <p className="text-xs text-ink-500">
+            This is a plan, not a sighting. Finding someone later does not confirm where they were earlier.
+          </p>
+        </section>
+      )}
+
       {showImpostorExtras && fellowImpostors.length > 0 && (
         <section
           className="rounded-md border-2 border-ink-900 px-3 py-2"

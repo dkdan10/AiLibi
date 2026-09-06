@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, StrictBool
+from pydantic import BaseModel, ConfigDict, StrictBool, field_validator, model_validator
 
 from agents.memory.episodic import EpisodicEvent, MemoryStore
 from agents.perception import (
@@ -37,6 +37,30 @@ class TacticalExperimentOptions(BaseModel):
     self_report: StrictBool = False
     sabotage_threshold: Literal["six_sevenths", "two_thirds"] = "six_sevenths"
     meeting_positions_preserved: StrictBool = True
+    investigation_version: Literal[1] | None = None
+    contextual_self_report_version: Literal[1] | None = None
+
+    @field_validator(
+        "investigation_version", "contextual_self_report_version", mode="before"
+    )
+    @classmethod
+    def _strict_version(cls, value: object) -> object:
+        if value is not None and type(value) is not int:
+            raise ValueError("tactical versions must be integers")
+        return value
+
+    @model_validator(mode="after")
+    def _independent_choices(self) -> TacticalExperimentOptions:
+        if (
+            self.investigation_version is not None
+            and self.crew_idle_policy != "hub_wait"
+        ):
+            raise ValueError("investigation conflicts with the old crew idle policy")
+        if self.contextual_self_report_version is not None and self.self_report:
+            raise ValueError(
+                "contextual reporting conflicts with unconditional reporting"
+            )
+        return self
 
 
 def _visits(events: tuple[EpisodicEvent, ...]) -> dict[str, int]:
@@ -177,7 +201,17 @@ class ExperimentalImpostorPolicy(ImpostorPolicy):
                 )
             return anchor
         if own_room in bodies:
-            if self.options.self_report:
+            if self.options.self_report or (
+                self.options.contextual_self_report_version == 1
+                and self._contextual_report(
+                    anchor,
+                    latest=latest,
+                    tick=tick,
+                    own_room=own_room,
+                    teammates=teammates,
+                    public_map=public_map,
+                )
+            ):
                 body_id = CrewmatePolicy._first_visible_body(latest, own_room=own_room)
                 assert body_id is not None
                 return ReportBodyIntent.model_validate(
@@ -240,6 +274,41 @@ class ExperimentalImpostorPolicy(ImpostorPolicy):
                     public_map=public_map, own_room=own_room, goal=target.room
                 )
         return anchor
+
+    def _contextual_report(
+        self,
+        anchor: ActionIntent,
+        *,
+        latest: tuple[EpisodicEvent, ...],
+        tick: int,
+        own_room: str,
+        teammates: frozenset[str],
+        public_map: PublicMapView,
+    ) -> bool:
+        """Compare reporting with escape using current own-room observations."""
+
+        escape = (
+            anchor.type == "move"
+            and anchor.payload.to_room in public_map.room_neighbors[own_room]
+        ) or (
+            anchor.type == "vent"
+            and public_map.vent_rooms.get(anchor.payload.vent_id) == own_room
+        )
+        if not escape:
+            return True
+        cooldown = self._latest_cooldown(latest)
+        if cooldown is None:
+            raise ValueError("contextual reporting requires current own cooldown")
+        nearby = any(
+            event.type == EVENT_SAW_PLAYER
+            and event.provenance == PROVENANCE_OBSERVED
+            and event.payload.get("source_tick") == tick
+            and event.payload.get("observation_phase") == "snapshot"
+            and event.payload.get("room") == own_room
+            and event.payload.get("player_id") not in teammates | {self.agent_id}
+            for event in latest
+        )
+        return nearby and cooldown > 0
 
     @staticmethod
     def _two_thirds_complete(events: tuple[EpisodicEvent, ...]) -> bool:

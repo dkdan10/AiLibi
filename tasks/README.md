@@ -60,7 +60,8 @@ binds [evaluation identity](work/experimental-evaluation-integrity.md),
 repairs [evidence timing](work/temporal-evidence-v2.md), adds
 [attributed public accounts](work/attributed-public-accounts.md), and compares
 their mechanisms through the [finite scenario matrix](work/deduction-evaluation-matrix.md).
-The next runtime card is [bounded investigation](work/bounded-investigation.md).
+The [bounded investigation](work/bounded-investigation.md) implementation and
+[source-bound comparisons](../audits/investigation-candidate/README.md) are verified.
 The [fresh-evaluation plan](work/fresh-deduction-evaluation.md) is complete as
 planning only. New work uses [one canonical work card](../docs/workflow.md), with evidence, acceptance,
 record impact, measurement and one writer per shared file. Preserve the separate

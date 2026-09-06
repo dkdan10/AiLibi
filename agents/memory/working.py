@@ -1,8 +1,9 @@
 """Working memory (DESIGN.md §6.1).
 
-Volatile, per-tick scratch state: the agent's current goal, current path,
-and last_seen lookup. Working memory is rebuilt each tick from episodic
-events plus belief state — it does not persist across runs.
+Per-agent scratch and bounded tactical state: goal/path scaffolding, a derived
+last_seen lookup, and an optional investigation intention. These objects belong
+to one agent throughout a run; they do not persist across runs. Investigation
+state survives tick and meeting boundaries without becoming witness evidence.
 
 This module ships the write paths that perception (Task 2.4) and tactical
 policies (Tasks 2.6 / 2.7) need to set and overwrite scratch state. Higher
@@ -26,6 +27,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Literal, TypeAlias
+
+from agents.memory.investigation import InvestigationState
 
 PlayerId: TypeAlias = str
 RoomId: TypeAlias = str
@@ -104,6 +107,63 @@ class WorkingMemory:
         self._goal: Goal | None = None
         self._path: tuple[RoomId, ...] = ()
         self._last_seen: dict[PlayerId, LastSeen] = {}
+        self._investigation: InvestigationState | None = None
+
+    @property
+    def investigation(self) -> InvestigationState | None:
+        return self._investigation
+
+    def cancel_investigation_plan(self) -> None:
+        """Cancel at a public meeting boundary, preserving sources and decision cache.
+
+        This lifecycle transition cannot replace a decision or restart its
+        clock. The next gameplay packet receives an ordinary fresh decision.
+        """
+
+        if self._investigation is not None:
+            self._investigation = self._investigation.model_copy(
+                update={"active_plan": None}
+            )
+
+    def set_investigation_state(
+        self, state: InvestigationState, *, known_player_ids: tuple[str, ...]
+    ) -> None:
+        """Store one transition without losing source consumption or cached inputs."""
+
+        known = set(known_player_ids)
+        if len(known) != len(known_player_ids):
+            raise ValueError("known investigation identities must be distinct")
+        consumed = {row.target_id: row for row in state.consumed_sources}
+        if not set(consumed) <= known or (
+            state.active_plan is not None and state.active_plan.target_id not in known
+        ):
+            raise ValueError("investigation state exceeds the known player roster")
+        previous = self._investigation
+        if previous is not None:
+            if previous.last_processed_tick is not None:
+                if (
+                    state.last_processed_tick is None
+                    or state.last_processed_tick < previous.last_processed_tick
+                ):
+                    raise ValueError(
+                        "investigation decision tick cannot move backwards"
+                    )
+                if (
+                    state.last_processed_tick == previous.last_processed_tick
+                    and state != previous
+                ):
+                    raise ValueError(
+                        "conflicting investigation state for one decision tick"
+                    )
+            for prior in previous.consumed_sources:
+                current = consumed.get(prior.target_id)
+                if current is None or current.source_tick < prior.source_tick:
+                    raise ValueError("investigation cannot forget a consumed source")
+                if current.source_tick == prior.source_tick and current != prior:
+                    raise ValueError(
+                        "consumed source identity cannot change at one tick"
+                    )
+        self._investigation = state
 
     @property
     def goal(self) -> Goal | None:
