@@ -39,6 +39,11 @@ early audits were commissioned with, and `workflows/` holds the scripts that
 extracted their gameplay facts. The `baseline*-final-measure.json` files are
 recorded measurements, not prose.
 
+`replay-loading-performance/` holds reproducible offline measurements of replay
+payloads, loading, beliefs, and concurrent cache misses during cleanup. Each
+artifact identifies its source and measurement scope; local timings are not a
+deployment capacity claim.
+
 ## The 2026-08-26 Wave-0 audit — [`review-2026-08-26/`](review-2026-08-26/README.md)
 
 The two-track pre-phase audit that grounds Phase 21: **A** gameplay on the
