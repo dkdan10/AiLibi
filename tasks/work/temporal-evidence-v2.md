@@ -250,7 +250,7 @@ The coordinator should include it in the final combined verification:
 .venv/bin/pytest tests/orchestrator/test_public_regroup_evidence.py tests/observation/test_temporal_v2.py tests/orchestrator/test_temporal_evidence_v2.py -q --tb=short
 ```
 
-## Results
+### Verified checkpoint
 
 The [source-bound checkpoint](../../audits/deduction-candidate/checkpoint.md)
 records implementation decisions, separate review findings, synthesis, measured
