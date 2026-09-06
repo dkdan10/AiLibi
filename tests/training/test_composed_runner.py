@@ -119,7 +119,7 @@ from training.surrogate.runner import (
     SurrogateMeetingRunner,
     SurrogateStalenessExceededError,
     SurrogateUseCounter,
-    fit_corpus_fingerprint,
+    historical_fit_corpus_fingerprint,
     load_fit_corpus_record,
     load_surrogate_runner_factory,
 )
@@ -137,16 +137,13 @@ _COMPOSED_ARTIFACT_DIR = _REPO_ROOT / "training" / "artifacts" / "composed"
 
 
 def _composed_factory() -> object:
-    """A committed-artifact composed-runner factory (fresh use-counters).
-
-    Goes through the factory's DEFAULT adoption gate against the committed
-    composed verdict — every test driving it also exercises the gate's GO path.
-    """
+    """Read historical components for diagnostics with fresh local counters."""
 
     return load_composed_runner_factory(
         conviction_artifact_dir=_CONVICTION_ARTIFACT_DIR,
         surrogate_artifact_dir=_SURROGATE_ARTIFACT_DIR,
-        composed_artifact_dir=_COMPOSED_ARTIFACT_DIR,
+        composed_artifact_dir=None,
+        evidence_scope="historical",
     )
 
 
@@ -464,7 +461,9 @@ def test_skip_branch_passes_the_surrogate_ballots_through(
         triggered_by="p-1",
     )
     surrogate = _drive(
-        load_surrogate_runner_factory(_SURROGATE_ARTIFACT_DIR)(),
+        load_surrogate_runner_factory(
+            _SURROGATE_ARTIFACT_DIR, evidence_scope="historical"
+        )(),
         state,
         agents,
         meeting_id="headless-seed-0:meeting-0",
@@ -606,7 +605,9 @@ def test_convict_branch_reanchors_onto_the_ranked_target(
     reanchored = [b for b in result.ballots if b.rationale_text == _REANCHOR_RATIONALE]
     assert reanchored, "the SKIP-degenerate surrogate must force real re-anchoring"
     surrogate = _drive(
-        load_surrogate_runner_factory(_SURROGATE_ARTIFACT_DIR)(),
+        load_surrogate_runner_factory(
+            _SURROGATE_ARTIFACT_DIR, evidence_scope="historical"
+        )(),
         state,
         agents,
         meeting_id="headless-seed-0:meeting-0",
@@ -790,7 +791,8 @@ def test_one_meeting_meters_both_counters_cumulatively() -> None:
         surrogate_artifact_dir=_SURROGATE_ARTIFACT_DIR,
         conviction_use_counter=conviction,
         surrogate_use_counter=surrogate,
-        composed_artifact_dir=_COMPOSED_ARTIFACT_DIR,
+        composed_artifact_dir=None,
+        evidence_scope="historical",
     )
     state = _seed_state(num_players=4, num_impostors=1)
     agents = _canned_agents(state)
@@ -826,7 +828,8 @@ def test_spent_surrogate_cap_fails_loud_from_the_composed_path() -> None:
         surrogate_artifact_dir=_SURROGATE_ARTIFACT_DIR,
         conviction_use_counter=conviction,
         surrogate_use_counter=surrogate,
-        composed_artifact_dir=_COMPOSED_ARTIFACT_DIR,
+        composed_artifact_dir=None,
+        evidence_scope="historical",
     )
     state = _seed_state(num_players=4, num_impostors=1)
     agents = _canned_agents(state)
@@ -858,7 +861,8 @@ def test_spent_conviction_cap_fails_loud_after_the_entry_metering() -> None:
         surrogate_artifact_dir=_SURROGATE_ARTIFACT_DIR,
         conviction_use_counter=conviction,
         surrogate_use_counter=surrogate,
-        composed_artifact_dir=_COMPOSED_ARTIFACT_DIR,
+        composed_artifact_dir=None,
+        evidence_scope="historical",
     )
     state = _seed_state(num_players=4, num_impostors=1)
     agents = _canned_agents(state)
@@ -887,6 +891,7 @@ def test_loader_refuses_a_foreign_keyed_counter() -> None:
             conviction_artifact_dir=_CONVICTION_ARTIFACT_DIR,
             surrogate_artifact_dir=_SURROGATE_ARTIFACT_DIR,
             conviction_use_counter=foreign_conviction,
+            evidence_scope="historical",
         )
 
     foreign_surrogate = SurrogateUseCounter(
@@ -897,6 +902,7 @@ def test_loader_refuses_a_foreign_keyed_counter() -> None:
             conviction_artifact_dir=_CONVICTION_ARTIFACT_DIR,
             surrogate_artifact_dir=_SURROGATE_ARTIFACT_DIR,
             surrogate_use_counter=foreign_surrogate,
+            evidence_scope="historical",
         )
 
 
@@ -928,6 +934,7 @@ def test_corrupt_conviction_weights_fail_loud(tmp_path: Path) -> None:
         load_composed_components(
             conviction_artifact_dir=conviction_dir,
             surrogate_artifact_dir=surrogate_dir,
+            evidence_scope="historical",
         )
 
 
@@ -942,40 +949,40 @@ def test_corrupt_surrogate_weights_fail_loud(tmp_path: Path) -> None:
         load_composed_components(
             conviction_artifact_dir=conviction_dir,
             surrogate_artifact_dir=surrogate_dir,
+            evidence_scope="historical",
         )
 
 
 def test_the_conviction_corpus_fence_is_attributable_to_its_own_leg(
     tmp_path: Path,
 ) -> None:
-    """``corpus_dir`` now fences BOTH components, and the conviction half bites.
+    """Historical component reads still fence both models to the original corpus.
 
-    The surrogate leg is fenced first, so a refusal could only ever be attributed
-    to it unless the surrogate side is known-good. Both committed records are
-    current since the Task-21.17 re-ground, so every refusal below is the
-    conviction leg's own: an ABSENT record refuses and names the recipe that
-    writes it, a drifted one refuses, and the committed pair loads. With no
-    ``corpus_dir`` the load is unfenced, which is what every current caller does.
+    The surrogate leg remains valid while only the conviction sidecar is
+    removed or changed, attributing each refusal to that component.
     """
 
     conviction_dir, surrogate_dir = _copy_artifacts(tmp_path)
-    live = fit_corpus_fingerprint(_CORPUS)
+    historical = historical_fit_corpus_fingerprint(_CORPUS)
     _, conviction_sha = load_conviction_model_artifact(conviction_dir)
 
-    # Opt-out: unfenced, exactly as every current caller loads.
+    # Omitting the directory still binds to the default corpus.
     assert load_composed_components(
-        conviction_artifact_dir=conviction_dir, surrogate_artifact_dir=surrogate_dir
+        conviction_artifact_dir=conviction_dir,
+        surrogate_artifact_dir=surrogate_dir,
+        evidence_scope="historical",
     )
 
-    # Fenced, on the committed pair: both records name the live corpus.
-    assert load_fit_corpus_record(surrogate_dir).corpus_sha256 == live
+    # Both frozen records match their original version-one identity.
+    assert load_fit_corpus_record(surrogate_dir).corpus_sha256 == historical
     record = load_fit_corpus_record(conviction_dir)
-    assert record.corpus_sha256 == live
+    assert record.corpus_sha256 == historical
     assert record.weights_sha256 == conviction_sha
     assert load_composed_components(
         conviction_artifact_dir=conviction_dir,
         surrogate_artifact_dir=surrogate_dir,
         corpus_dir=_CORPUS,
+        evidence_scope="historical",
     )
 
     # The planted ABSENT case: without the conviction record the fence cannot be
@@ -986,17 +993,25 @@ def test_the_conviction_corpus_fence_is_attributable_to_its_own_leg(
             conviction_artifact_dir=conviction_dir,
             surrogate_artifact_dir=surrogate_dir,
             corpus_dir=_CORPUS,
+            evidence_scope="historical",
         )
 
     (conviction_dir / "fit-corpus.json").write_text(
         record.model_copy(update={"corpus_sha256": "c" * 64}).model_dump_json(indent=2)
         + "\n"
     )
-    with pytest.raises(ValueError, match="the substrate drifted"):
+    with pytest.raises(ValueError, match="substrate drifted"):
         load_composed_components(
             conviction_artifact_dir=conviction_dir,
             surrogate_artifact_dir=surrogate_dir,
             corpus_dir=_CORPUS,
+            evidence_scope="historical",
+        )
+    with pytest.raises(ValueError, match="substrate drifted"):
+        load_composed_components(
+            conviction_artifact_dir=conviction_dir,
+            surrogate_artifact_dir=surrogate_dir,
+            evidence_scope="historical",
         )
 
 
@@ -1015,6 +1030,7 @@ def test_no_go_conviction_verdict_makes_the_runner_unbuildable(
         load_composed_components(
             conviction_artifact_dir=conviction_dir,
             surrogate_artifact_dir=surrogate_dir,
+            evidence_scope="historical",
         )
 
 
@@ -1048,6 +1064,7 @@ def test_factory_adoption_gate_refuses_non_go_composed_verdicts(
             conviction_artifact_dir=_CONVICTION_ARTIFACT_DIR,
             surrogate_artifact_dir=_SURROGATE_ARTIFACT_DIR,
             composed_artifact_dir=composed_dir,
+            evidence_scope="historical",
         )
 
     # A composed verdict keyed to different weights refuses too (drift).
@@ -1060,6 +1077,7 @@ def test_factory_adoption_gate_refuses_non_go_composed_verdicts(
             conviction_artifact_dir=_CONVICTION_ARTIFACT_DIR,
             surrogate_artifact_dir=_SURROGATE_ARTIFACT_DIR,
             composed_artifact_dir=composed_dir,
+            evidence_scope="historical",
         )
 
     # No committed composed verdict at all -> nothing to adopt.
@@ -1068,6 +1086,7 @@ def test_factory_adoption_gate_refuses_non_go_composed_verdicts(
             conviction_artifact_dir=_CONVICTION_ARTIFACT_DIR,
             surrogate_artifact_dir=_SURROGATE_ARTIFACT_DIR,
             composed_artifact_dir=tmp_path / "empty",
+            evidence_scope="historical",
         )
 
     # The diagnostic escape builds regardless of the composed verdict's state.
@@ -1075,8 +1094,27 @@ def test_factory_adoption_gate_refuses_non_go_composed_verdicts(
         conviction_artifact_dir=_CONVICTION_ARTIFACT_DIR,
         surrogate_artifact_dir=_SURROGATE_ARTIFACT_DIR,
         composed_artifact_dir=None,
+        evidence_scope="historical",
     )
     assert isinstance(factory(), ComposedMeetingRunner)
+
+
+@pytest.mark.parametrize("evidence_scope", ["current", "historical"])
+def test_historical_composed_weights_cannot_be_installed(
+    evidence_scope: str,
+) -> None:
+    from training.provenance import EvidenceScope
+    from typing import cast
+
+    with pytest.raises(
+        ValueError, match="historical version-one|current model evidence"
+    ):
+        load_composed_runner_factory(
+            conviction_artifact_dir=_CONVICTION_ARTIFACT_DIR,
+            surrogate_artifact_dir=_SURROGATE_ARTIFACT_DIR,
+            composed_artifact_dir=_COMPOSED_ARTIFACT_DIR,
+            evidence_scope=cast(EvidenceScope, evidence_scope),
+        )
 
 
 # --------------------------------------------------------------------------- #
@@ -1092,7 +1130,8 @@ def _run_composed_game(
     factory = load_composed_runner_factory(
         conviction_artifact_dir=_CONVICTION_ARTIFACT_DIR,
         surrogate_artifact_dir=_SURROGATE_ARTIFACT_DIR,
-        composed_artifact_dir=_COMPOSED_ARTIFACT_DIR,
+        composed_artifact_dir=None,
+        evidence_scope="historical",
     )
     absorbed: list[PlayerId] = []
     base_factory = build_default_agent_factory()
@@ -1496,6 +1535,7 @@ def goodhart_leg() -> ComposedGoodhartLeg:
         tasks_per_crewmate=1,
         conviction_artifact_dir=_CONVICTION_ARTIFACT_DIR,
         surrogate_artifact_dir=_SURROGATE_ARTIFACT_DIR,
+        evidence_scope="historical",
     )
 
 

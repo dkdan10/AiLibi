@@ -370,6 +370,7 @@ def test_evaluate_candidate_full_row(tmp_path: Path) -> None:
         leak_seeds=(0, 1),
         repeat_n=2,
         surrogate_artifact_dir=SURROGATE_ARTIFACT_DIR,
+        evidence_scope="historical",
     )
     result = evaluate_candidate(candidate, protocol, artifact_root=tmp_path)
 
@@ -502,6 +503,7 @@ def test_evaluate_candidate_experiment_tier(tmp_path: Path) -> None:
         determinism_seeds=(1004,),
         repeat_n=2,
         surrogate_artifact_dir=None,
+        evidence_scope="historical",
     )
     result = evaluate_candidate(candidate, protocol, artifact_root=tmp_path)
 
@@ -570,6 +572,7 @@ def test_goodhart_surrogate_rerun_ci_budget(tmp_path: Path) -> None:
     rerun = run_goodhart_surrogate_rerun(
         config=config,
         surrogate_artifact_dir=SURROGATE_ARTIFACT_DIR,
+        evidence_scope="historical",
     )
 
     assert rerun.probe.verdict in ("HELD", "EXPLOITS_FOUND")
@@ -622,7 +625,9 @@ def test_filtered_rerun_keeps_bc_warm_start() -> None:
     # PR #242).
     from training.bakeoff.harness import _build_entrants
 
-    protocol = BakeoffProtocolConfig(eval_seeds=(1004,), surrogate_artifact_dir=None)
+    protocol = BakeoffProtocolConfig(
+        eval_seeds=(1004,), surrogate_artifact_dir=None, evidence_scope="historical"
+    )
     entrants = [
         entrant
         for entrant in _build_entrants("ci", protocol)
@@ -865,7 +870,7 @@ def _write_conviction_fixture(
             tick=10,
             features=_fixture_features([3, 0, 0.1, 0.2, 0.0, 0, 0, 0, 0, 0, 0, 0]),
             flags_minted=0,
-            rederived_flags=0,
+            recorded_non_vent_flags=0,
             persisted_vent_flags=0,
             conversion_attempted=0,
             conversion_converted=0,
@@ -881,7 +886,7 @@ def _write_conviction_fixture(
             tick=20,
             features=_fixture_features([5, 1, 0.8, 0.4, 0.3, 2, 1, 1, 0, 0, 1, 1]),
             flags_minted=2,
-            rederived_flags=2,
+            recorded_non_vent_flags=2,
             persisted_vent_flags=0,
             conversion_attempted=1,
             conversion_converted=1,
@@ -897,7 +902,7 @@ def _write_conviction_fixture(
             tick=30,
             features=_fixture_features([7, 2, 0.6, 0.5, 0.1, 3, 0, 0, 2, 1, 0, 0]),
             flags_minted=5,
-            rederived_flags=3,
+            recorded_non_vent_flags=3,
             persisted_vent_flags=2,
             conversion_attempted=2,
             conversion_converted=0,
@@ -1105,7 +1110,7 @@ def test_conviction_weight_is_conservative() -> None:
 
 def test_load_conviction_term_under_go(tmp_path: Path) -> None:
     sha = _write_conviction_fixture(tmp_path, go=True)
-    term = load_conviction_fitness_term(tmp_path)
+    term = load_conviction_fitness_term(tmp_path, evidence_scope="synthetic-test")
     assert term is not None
     assert term.weight == DEFAULT_CONVICTION_WEIGHT
     assert term.weights_sha256 == sha
@@ -1119,7 +1124,9 @@ def test_load_conviction_term_under_nogo_is_structurally_absent(
 ) -> None:
     _write_conviction_fixture(tmp_path, go=False)
     # STRUCTURAL absence: the loader returns None (no zero-weighted ghost).
-    assert load_conviction_fitness_term(tmp_path) is None
+    assert (
+        load_conviction_fitness_term(tmp_path, evidence_scope="synthetic-test") is None
+    )
 
 
 def test_conviction_term_rejects_nogo_verdict(tmp_path: Path) -> None:
@@ -1147,7 +1154,7 @@ def test_conviction_bundle_drift_fails_loud(tmp_path: Path) -> None:
     )
     write_conviction_verdict_artifact(drifted, tmp_path)
     with pytest.raises(ValueError, match="drifted"):
-        load_conviction_fitness_term(tmp_path)
+        load_conviction_fitness_term(tmp_path, evidence_scope="synthetic-test")
 
 
 # --------------------------------------------------------------------------- #
@@ -1163,7 +1170,7 @@ def test_conviction_term_in_inner_fitness(tmp_path: Path) -> None:
     assert rollout.complete  # the additive-composition identity needs a full game
     base = inner_episode_fitness(rollout, trace)
 
-    term = load_conviction_fitness_term(tmp_path)
+    term = load_conviction_fitness_term(tmp_path, evidence_scope="synthetic-test")
     assert term is not None
     uses_before = term.use_counter.uses
     for features in (_MEETING_A, _MEETING_B):
@@ -1407,14 +1414,21 @@ def test_no_committed_results_row_claims_this_objective() -> None:
 def test_shared_counter_threads_the_cumulative_cap(tmp_path: Path) -> None:
     _write_conviction_fixture(tmp_path, go=True, max_uses=3)
     counter = ConvictionUseCounter(load_conviction_staleness_cap(tmp_path))
-    term = load_conviction_fitness_term(tmp_path, use_counter=counter)
+    term = load_conviction_fitness_term(
+        tmp_path, use_counter=counter, evidence_scope="synthetic-test"
+    )
     assert term is not None
 
     # Two predicted meetings through the term, then the third use through the
     # pre-screen — the SAME counter, cumulative against the committed cap.
     term.predict_meeting(_MEETING_A)
     term.predict_meeting(_MEETING_B)
-    conviction_prescreen([_MEETING_C], artifact_dir=tmp_path, use_counter=counter)
+    conviction_prescreen(
+        [_MEETING_C],
+        artifact_dir=tmp_path,
+        use_counter=counter,
+        evidence_scope="synthetic-test",
+    )
     assert counter.uses == 3
 
     # A fourth use — either path — trips the staleness cap.
@@ -1430,14 +1444,18 @@ def test_shared_counter_rejects_wrong_sha_and_looser_cap(tmp_path: Path) -> None
         ConvictionStalenessCap(weights_sha256="0" * 64, max_uses=3, unit="meetings")
     )
     with pytest.raises(ValueError, match="never meters two artifacts"):
-        load_conviction_fitness_term(tmp_path, use_counter=wrong_sha)
+        load_conviction_fitness_term(
+            tmp_path, use_counter=wrong_sha, evidence_scope="synthetic-test"
+        )
 
     # A supplied counter may TIGHTEN the committed cap, never LOOSEN it.
     looser = ConvictionUseCounter(
         ConvictionStalenessCap(weights_sha256=sha, max_uses=4, unit="meetings")
     )
     with pytest.raises(ValueError, match="never loosen"):
-        load_conviction_fitness_term(tmp_path, use_counter=looser)
+        load_conviction_fitness_term(
+            tmp_path, use_counter=looser, evidence_scope="synthetic-test"
+        )
 
 
 # --------------------------------------------------------------------------- #
@@ -1545,7 +1563,12 @@ def test_conviction_prescreen_under_go(tmp_path: Path) -> None:
     sha = _write_conviction_fixture(tmp_path, go=True)
     counter = ConvictionUseCounter(load_conviction_staleness_cap(tmp_path))
     features = [_MEETING_A, _MEETING_B, _MEETING_C]
-    verdict = conviction_prescreen(features, artifact_dir=tmp_path, use_counter=counter)
+    verdict = conviction_prescreen(
+        features,
+        artifact_dir=tmp_path,
+        use_counter=counter,
+        evidence_scope="synthetic-test",
+    )
 
     assert verdict.weights_sha256 == sha
     assert verdict.meetings_scored == 3
@@ -1600,7 +1623,9 @@ def test_conviction_prescreen_under_go(tmp_path: Path) -> None:
 
 def test_conviction_prescreen_under_nogo_is_advisory_only(tmp_path: Path) -> None:
     _write_conviction_fixture(tmp_path, go=False)
-    verdict = conviction_prescreen([_MEETING_A], artifact_dir=tmp_path)
+    verdict = conviction_prescreen(
+        [_MEETING_A], artifact_dir=tmp_path, evidence_scope="synthetic-test"
+    )
     # Advisory-only doctrine: a driver must never gate real-path spend on it.
     assert verdict.model_verdict == "NO-GO"
     assert verdict.prescreen_role == "advisory"
@@ -1616,7 +1641,9 @@ def test_conviction_prescreen_empty_batch_is_the_starvation_fail(
     # machine-readable FAILING verdict it can cheaply reject on.
     sha = _write_conviction_fixture(tmp_path, go=True)
     counter = ConvictionUseCounter(load_conviction_staleness_cap(tmp_path))
-    verdict = conviction_prescreen([], artifact_dir=tmp_path, use_counter=counter)
+    verdict = conviction_prescreen(
+        [], artifact_dir=tmp_path, use_counter=counter, evidence_scope="synthetic-test"
+    )
 
     assert verdict.weights_sha256 == sha
     assert verdict.meetings_scored == 0
@@ -1658,6 +1685,7 @@ def test_evaluate_candidate_row_says_absent_under_nogo(tmp_path: Path) -> None:
         repeat_n=2,
         surrogate_artifact_dir=None,
         conviction_artifact_dir=conviction_dir,
+        evidence_scope="synthetic-test",
     )
     result = evaluate_candidate(candidate, protocol, artifact_root=tmp_path)
 
@@ -1679,7 +1707,9 @@ def test_conviction_uses_charge_only_delivered_predictions(tmp_path: Path) -> No
     # quota, on both the term path and the pre-screen path.
     _write_conviction_fixture(tmp_path, go=True)
     counter = ConvictionUseCounter(load_conviction_staleness_cap(tmp_path))
-    term = load_conviction_fitness_term(tmp_path, use_counter=counter)
+    term = load_conviction_fitness_term(
+        tmp_path, use_counter=counter, evidence_scope="synthetic-test"
+    )
     assert term is not None
 
     malformed = dict(_MEETING_A)
@@ -1695,7 +1725,10 @@ def test_conviction_uses_charge_only_delivered_predictions(tmp_path: Path) -> No
     # the malformed one does not, and no verdict is emitted.
     with pytest.raises(ValueError, match="CONVICTION_FEATURE_NAMES"):
         conviction_prescreen(
-            [_MEETING_B, malformed], artifact_dir=tmp_path, use_counter=counter
+            [_MEETING_B, malformed],
+            artifact_dir=tmp_path,
+            use_counter=counter,
+            evidence_scope="synthetic-test",
         )
     assert counter.uses == 2
 
@@ -1721,6 +1754,7 @@ def test_evaluate_candidate_rejects_drifted_conviction_bundle(tmp_path: Path) ->
         determinism_seeds=(1004,),
         surrogate_artifact_dir=None,
         conviction_artifact_dir=conviction_dir,
+        evidence_scope="synthetic-test",
     )
     with pytest.raises(ValueError, match="drifted"):
         evaluate_candidate(candidate, protocol, artifact_root=tmp_path)
@@ -1759,6 +1793,7 @@ def test_evaluate_candidate_go_serves_the_term_live(tmp_path: Path) -> None:
         eval_seeds=(1004,),
         determinism_seeds=(1004,),
         surrogate_artifact_dir=None,
+        evidence_scope="historical",
     )
     go_row = evaluate_candidate(candidate, go_protocol, artifact_root=tmp_path / "go")
 
@@ -1771,6 +1806,7 @@ def test_evaluate_candidate_go_serves_the_term_live(tmp_path: Path) -> None:
         determinism_seeds=(1004,),
         surrogate_artifact_dir=None,
         conviction_artifact_dir=nogo_dir,
+        evidence_scope="synthetic-test",
     )
     nogo_row = evaluate_candidate(
         candidate, nogo_protocol, artifact_root=tmp_path / "nogo"
@@ -1828,6 +1864,7 @@ def test_evaluate_candidate_multi_seed_stamps_the_composed_mean(
         eval_seeds=(1004, 1009),
         determinism_seeds=(1004,),
         surrogate_artifact_dir=None,
+        evidence_scope="historical",
     )
     go_row = evaluate_candidate(candidate, go_protocol, artifact_root=tmp_path / "go")
 
@@ -1838,6 +1875,7 @@ def test_evaluate_candidate_multi_seed_stamps_the_composed_mean(
         determinism_seeds=(1004,),
         surrogate_artifact_dir=None,
         conviction_artifact_dir=nogo_dir,
+        evidence_scope="synthetic-test",
     )
     nogo_row = evaluate_candidate(
         candidate, nogo_protocol, artifact_root=tmp_path / "nogo"
@@ -1884,6 +1922,7 @@ def test_evaluate_candidate_nogo_is_structural_absence(tmp_path: Path) -> None:
         determinism_seeds=(1004,),
         surrogate_artifact_dir=None,
         conviction_artifact_dir=nogo_dir,
+        evidence_scope="synthetic-test",
     )
     row = evaluate_candidate(candidate, protocol, artifact_root=tmp_path / "eval")
 
@@ -1914,7 +1953,9 @@ def test_prescreen_accepts_live_assembled_vectors_end_to_end(tmp_path: Path) -> 
     go_dir = tmp_path / "conviction-go"
     sha = _write_conviction_fixture(go_dir, go=True, max_uses=500)
     counter = ConvictionUseCounter(load_conviction_staleness_cap(go_dir))
-    term = load_conviction_fitness_term(go_dir, use_counter=counter)
+    term = load_conviction_fitness_term(
+        go_dir, use_counter=counter, evidence_scope="synthetic-test"
+    )
     assert term is not None
 
     collected: list[Mapping[str, float]] = []
@@ -1951,7 +1992,12 @@ def test_prescreen_accepts_live_assembled_vectors_end_to_end(tmp_path: Path) -> 
     # The pre-screen consumes the live-assembled vectors end-to-end, metering the
     # SAME cumulative counter (one delivered use per meeting scored).
     uses_before = counter.uses
-    verdict = conviction_prescreen(collected, artifact_dir=go_dir, use_counter=counter)
+    verdict = conviction_prescreen(
+        collected,
+        artifact_dir=go_dir,
+        use_counter=counter,
+        evidence_scope="synthetic-test",
+    )
     assert verdict.meetings_scored == len(collected)
     assert verdict.conviction_uses == len(collected)
     assert counter.uses == uses_before + len(collected)

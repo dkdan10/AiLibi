@@ -28,6 +28,42 @@ for the surfaces that program left behind: what it positively learned (§1), the
 keep/freeze/retire map (§2), the freeze label and its coverage registry (§3, §5),
 and the checklist for reopening it (§7).
 
+## Current model evidence boundary
+
+The ledger below is historical. Current scoring and installation require a
+version-two fit identity from `training/provenance.py`: replay, roster, split
+and manifest bytes, plus the actual feature/label builders' local import
+dependencies, canonical map, locked dependencies and installed numerical
+runtime. Changed roster or derivation bytes fail the model loaders' identity
+check. Unrelated reports are excluded.
+
+Committed fit sidecars remain version one. Use `evidence_scope="historical"`
+explicitly to restore diagnostics; that scope cannot install a training-time
+surrogate or composed runner. Current use fails until a newly adopted corpus
+supports a separately authorized fit. Synthetic unit-test weights use
+`evidence_scope="synthetic-test"`, outside the source tree and without a
+fabricated fit sidecar. `scripts/verify_ml_evidence.py` checks historical
+identities under their original definition, not as current fit certificates.
+
+A future fit must write `SurrogateFitCorpus(fingerprint_version=2, ...)` with
+`fit_corpus_fingerprint(corpus_dir)` and the actual weights digest. Current
+campaigns recompute their named `compute_substrate_sha.v2` or
+`bakeoff_substrate_sha.v2` identity before work; founder loading checks both the
+definition and its source bytes. Historical readers have separately named
+`historical_*` fingerprint functions. Old reports, weights and corpus bytes
+are never relabeled by rewriting their provenance.
+
+Current campaigns refuse enabled ambient experiments and unbound custom meeting
+factories before writing. Their recorded runtime profile uses the fake provider,
+the current prompt family and all experimental gates OFF; it is explicitly
+passed through fitness, benchmark and exploiter games. Later environment changes
+cannot select another profile. Other arms need a separately bound campaign
+definition and authorization.
+
+The current conviction row calls its persisted count
+`recorded_non_vent_flags`. Only `to_historical_json` and
+`from_historical_json` use the original `rederived_flags` spelling.
+
 ## 1. What the program POSITIVELY learned (findings, not plumbing)
 
 Recorded here so the tier map preserves results, not just machinery:

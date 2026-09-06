@@ -194,6 +194,7 @@ def _make_config(base: Path, **overrides: object) -> CoevoCampaignConfig:
 
     config = CoevoCampaignConfig(
         work_dir=base / "work",
+        evidence_scope="synthetic-test",
         hall_root=base / "halls",
         substrate_sha256=_SUBSTRATE,
         substrate_sha_kind="bakeoff_substrate_sha",
@@ -565,7 +566,7 @@ def test_scenario_terms_shift_swap_fitness_by_exactly_their_value(
 
 
 def _tightly_capped_term(max_uses: int) -> ConvictionFitnessTerm:
-    """The committed GO conviction term with OUR OWN tight counter.
+    """The historical conviction diagnostic with a test-local tight counter.
 
     Reads the committed artifact bundle (read-only) and meters exclusively a
     test-local counter (tighter than the committed cap — the loader's
@@ -573,7 +574,7 @@ def _tightly_capped_term(max_uses: int) -> ConvictionFitnessTerm:
     consumed by CI.
     """
 
-    probe = load_conviction_fitness_term()
+    probe = load_conviction_fitness_term(evidence_scope="historical")
     assert probe is not None  # the committed verdict is GO
     counter = ConvictionUseCounter(
         ConvictionStalenessCap(
@@ -582,7 +583,9 @@ def _tightly_capped_term(max_uses: int) -> ConvictionFitnessTerm:
             unit=probe.use_counter.cap.unit,
         )
     )
-    term = load_conviction_fitness_term(use_counter=counter)
+    term = load_conviction_fitness_term(
+        use_counter=counter, evidence_scope="historical"
+    )
     assert term is not None
     return term
 
@@ -775,6 +778,7 @@ def test_founders_seed_the_pool_and_exploits_join_the_hall(tmp_path: Path) -> No
     config = _make_config(
         tmp_path,
         substrate_sha256=bakeoff_substrate_sha(),
+        substrate_sha_kind="bakeoff_substrate_sha.v2",
         impostor=_impostor_side(
             population=1,
             founder_cells_dir=cells,
@@ -1293,7 +1297,7 @@ def test_misconfigurations_fail_loud_before_any_game(tmp_path: Path) -> None:
         )
     # The substrate-kind provenance label would otherwise first fail at row
     # construction — AFTER a generation's games ran.
-    with pytest.raises(ValueError, match="substrate_sha_kind must be"):
+    with pytest.raises(ValueError, match="substrate_sha_kind must"):
         run_alternating_freeze(
             _make_config(tmp_path / "h", substrate_sha_kind="bogus-kind")
         )
@@ -1352,7 +1356,7 @@ def test_stale_founder_archive_is_refused_before_any_disk_mutation(
         substrate_sha256=_SUBSTRATE,
         impostor=_impostor_side(founder_cells_dir=cells),
     )
-    with pytest.raises(ValueError, match="adopted substrate"):
+    with pytest.raises(ValueError, match="substrate"):
         run_alternating_freeze(config)
     _assert_no_disk_mutation(tmp_path)
 

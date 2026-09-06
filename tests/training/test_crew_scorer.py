@@ -33,6 +33,7 @@ import ast
 import json
 import math
 import tempfile
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -241,7 +242,7 @@ def _write_conviction_fixture(
             tick=10 + index,
             features=dict(zip(CONVICTION_FEATURE_NAMES, values, strict=True)),
             flags_minted=rederived + persisted_vent,
-            rederived_flags=rederived,
+            recorded_non_vent_flags=rederived,
             persisted_vent_flags=persisted_vent,
             conversion_attempted=attempted,
             conversion_converted=converted,
@@ -260,7 +261,7 @@ def _write_conviction_fixture(
         ) in enumerate(
             zip(
                 _CONVICTION_FIXTURE_FEATURE_VALUES,
-                (0, 2, 3),  # rederived_flags
+                (0, 2, 3),  # recorded_non_vent_flags
                 (0, 0, 2),  # persisted_vent_flags
                 (0, 1, 2),  # conversion_attempted
                 (0, 1, 0),  # conversion_converted
@@ -739,19 +740,28 @@ def test_crew_objective_profile_travels_through_the_parameter(tmp_path: Path) ->
 
 
 def test_crew_es_entrant_ci_budget_is_deterministic() -> None:
-    first = CrewEsEntrant(config=crew_es_budget("ci")).train()
-    second = CrewEsEntrant(config=crew_es_budget("ci")).train()
+    """Historical model diagnostics retain deterministic tiny ES behavior."""
+
+    config = replace(crew_es_budget("ci"), evidence_scope="historical")
+    first = CrewEsEntrant(config=config).train()
+    second = CrewEsEntrant(config=config).train()
     assert first.entrant == CREW_ENTRANT_NAME
     assert len(first.weights) == crew_genome_length()
     assert first.weights == second.weights
     assert first.train_metadata["es_digest"] == second.train_metadata["es_digest"]
     assert first.config["genome_length"] == crew_genome_length()
+    assert first.config["evidence_scope"] == "historical"
     assert isinstance(first.policy, CrewOptionScorer)
 
 
 def test_crew_es_budget_rejects_unknown_budget() -> None:
     with pytest.raises(ValueError, match="unknown budget"):
         crew_es_budget("overnight")
+
+
+def test_current_crew_training_refuses_committed_historical_model() -> None:
+    with pytest.raises(ValueError, match="historical version-one"):
+        CrewEsEntrant(config=crew_es_budget("ci")).train()
 
 
 def test_baseline_artifact_round_trips_empty_genome(tmp_path: Path) -> None:
@@ -777,8 +787,12 @@ def test_evaluate_crew_candidate_full_row(tmp_path: Path) -> None:
         determinism_seeds=(1004,),
         leak_seeds=(0, 1),
         repeat_n=2,
+        evidence_scope="historical",
     )
-    entrant = CrewEsEntrant(config=crew_es_budget("ci"), game_map=game_map)
+    entrant = CrewEsEntrant(
+        config=replace(crew_es_budget("ci"), evidence_scope="historical"),
+        game_map=game_map,
+    )
     candidate = entrant.train()
     result = evaluate_crew_candidate(
         candidate, protocol, artifact_root=tmp_path, game_map=game_map
@@ -790,6 +804,11 @@ def test_evaluate_crew_candidate_full_row(tmp_path: Path) -> None:
     assert result.repeat_spread is None
     assert result.genome_length == crew_genome_length()
     assert result.eval_seeds == (1000,)
+    assert result.evidence_scope == "historical"
+    frozen_config = json.loads(
+        (tmp_path / CREW_ENTRANT_NAME / "config.json").read_text()
+    )
+    assert frozen_config["evidence_scope"] == "historical"
 
     # The leak-test factory mode ran through the candidate's OWN crew factory.
     assert result.leak_test_passed
@@ -851,7 +870,7 @@ def test_evaluate_crew_candidate_rejects_foreign_policy(tmp_path: Path) -> None:
         weights=(),
         config={},
     )
-    protocol = CrewProtocolConfig(eval_seeds=(1000,))
+    protocol = CrewProtocolConfig(eval_seeds=(1000,), evidence_scope="historical")
     with pytest.raises(ValueError, match="crew-track policy"):
         evaluate_crew_candidate(candidate, protocol, artifact_root=tmp_path)
 
@@ -879,7 +898,7 @@ def test_crew_conviction_term_threads_the_shared_object(tmp_path: Path) -> None:
     assert rollout.complete
     base = crew_inner_episode_fitness(rollout, trace)
 
-    term = load_conviction_fitness_term(fixture_dir)
+    term = load_conviction_fitness_term(fixture_dir, evidence_scope="synthetic-test")
     assert term is not None
     start_uses = term.use_counter.uses
     for _ in range(2):
@@ -903,7 +922,10 @@ def test_crew_conviction_term_absent_under_no_go(tmp_path: Path) -> None:
 
     fixture_dir = tmp_path / "conviction"
     _write_conviction_fixture(fixture_dir, go=False)
-    assert load_conviction_fitness_term(fixture_dir) is None
+    assert (
+        load_conviction_fitness_term(fixture_dir, evidence_scope="synthetic-test")
+        is None
+    )
 
     trace = CrewDecisionTrace()
     rollout = rollout_crew_candidate(
@@ -930,7 +952,7 @@ def test_crew_trace_fold_includes_conviction_accumulators(tmp_path: Path) -> Non
 
     fixture_dir = tmp_path / "conviction"
     _write_conviction_fixture(fixture_dir, go=True)
-    term = load_conviction_fitness_term(fixture_dir)
+    term = load_conviction_fitness_term(fixture_dir, evidence_scope="synthetic-test")
     assert term is not None
 
     trace_a = CrewDecisionTrace()
@@ -969,6 +991,7 @@ def test_evaluate_crew_candidate_no_go_row(tmp_path: Path) -> None:
         determinism_seeds=(1000,),
         repeat_n=2,
         conviction_artifact_dir=fixture_dir,
+        evidence_scope="synthetic-test",
     )
     result = evaluate_crew_candidate(
         fsm_baseline_candidate(),
@@ -999,6 +1022,7 @@ def test_evaluate_crew_candidate_rejects_drifted_conviction_bundle(
         determinism_seeds=(1000,),
         repeat_n=2,
         conviction_artifact_dir=conviction_dir,
+        evidence_scope="synthetic-test",
     )
     with pytest.raises(ValueError, match="drifted"):
         evaluate_crew_candidate(

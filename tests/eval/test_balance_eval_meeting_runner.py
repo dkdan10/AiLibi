@@ -360,7 +360,7 @@ def test_surrogate_runner_factory_drives_zero_cost_diagnostic_tournament(
 
     counter = SurrogateUseCounter(load_staleness_cap(_SURROGATE_ARTIFACT_DIR))
     factory = load_surrogate_runner_factory(
-        _SURROGATE_ARTIFACT_DIR, use_counter=counter
+        _SURROGATE_ARTIFACT_DIR, use_counter=counter, evidence_scope="historical"
     )
 
     report = run_tournament_eval(

@@ -97,7 +97,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Final, Literal, Protocol, TypeAlias, runtime_checkable
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from agents.base import AgentInterface
 from agents.memory.store import AgentMemory
@@ -126,6 +126,8 @@ from orchestrator.game import (
     build_default_meeting_runner,
 )
 from orchestrator.scheduler import TickScheduler
+from training.provenance import DEFAULT_CORPUS, EvidenceScope, validate_evidence_scope
+
 from training.bakeoff.es import ESConfig
 from training.bakeoff.goodhart import (
     GoodhartProbeReport,
@@ -759,6 +761,9 @@ def rollout_candidate(
 def _load_conviction_bundle(
     artifact_dir: Path,
     use_counter: ConvictionUseCounter | None,
+    *,
+    corpus_dir: Path | None = None,
+    evidence_scope: EvidenceScope = "current",
 ) -> tuple[ConvictionEconomyModel, str, ConvictionUseCounter, ConvictionGoVerdict]:
     """Load the committed conviction bundle, sha-verified and drift-checked.
 
@@ -778,16 +783,18 @@ def _load_conviction_bundle(
     from the committed cap, so the caller always gets a counter keyed to the
     exact artifact it will meter.
 
-    ``corpus_dir`` is NOT wired, unlike the surrogate side. The conviction
-    fit-corpus fence exists and the record it needs is now committed, but this
-    loader is also the seam every SYNTHETIC conviction fixture loads through —
-    fabricated weights that were never fitted on any corpus — so demanding a
-    record here would either break those fixtures or invite a fabricated one.
-    Wiring it needs a per-call opt-out, which changes this function's signature
-    and its two public callers'. Routed rather than half-done (PR #413).
+    Current scoring verifies the fit corpus and derivation. Historical diagnostics
+    and isolated synthetic test weights must be requested explicitly.
     """
 
-    model, sha = load_conviction_model_artifact(artifact_dir)
+    validate_evidence_scope(evidence_scope, artifact_dir)
+    model, sha = load_conviction_model_artifact(
+        artifact_dir,
+        corpus_dir=None
+        if evidence_scope == "synthetic-test"
+        else (corpus_dir or DEFAULT_CORPUS),
+        evidence_scope=evidence_scope,
+    )
     cap = load_conviction_staleness_cap(artifact_dir)
     if cap.weights_sha256 != sha:
         raise ValueError(
@@ -843,6 +850,7 @@ class ConvictionFitnessTerm:
     verdict: ConvictionGoVerdict
     use_counter: ConvictionUseCounter
     weight: float = DEFAULT_CONVICTION_WEIGHT
+    evidence_scope: EvidenceScope = "current"
 
     def __post_init__(self) -> None:
         if self.verdict.fitness_term != "ships":
@@ -892,6 +900,8 @@ def load_conviction_fitness_term(
     *,
     use_counter: ConvictionUseCounter | None = None,
     weight: float = DEFAULT_CONVICTION_WEIGHT,
+    corpus_dir: Path | None = None,
+    evidence_scope: EvidenceScope = "current",
 ) -> ConvictionFitnessTerm | None:
     """Load the GO-gated conviction term, or ``None`` under the committed NO-GO.
 
@@ -911,7 +921,9 @@ def load_conviction_fitness_term(
     is cumulative across everything the run predicts.
     """
 
-    model, sha, counter, verdict = _load_conviction_bundle(artifact_dir, use_counter)
+    model, sha, counter, verdict = _load_conviction_bundle(
+        artifact_dir, use_counter, corpus_dir=corpus_dir, evidence_scope=evidence_scope
+    )
     if verdict.fitness_term == "absent":
         return None
     return ConvictionFitnessTerm(
@@ -920,10 +932,16 @@ def load_conviction_fitness_term(
         verdict=verdict,
         use_counter=counter,
         weight=weight,
+        evidence_scope=evidence_scope,
     )
 
 
-def load_conviction_row_provenance(artifact_dir: Path) -> ConvictionGoVerdict:
+def load_conviction_row_provenance(
+    artifact_dir: Path,
+    *,
+    corpus_dir: Path | None = None,
+    evidence_scope: EvidenceScope = "current",
+) -> ConvictionGoVerdict:
     """The drift-checked verdict the result rows stamp their provenance from.
 
     Row provenance must describe a bundle a trainer could actually LOAD:
@@ -938,7 +956,9 @@ def load_conviction_row_provenance(artifact_dir: Path) -> ConvictionGoVerdict:
     side effects, so a stale bundle fails the run, never a row.
     """
 
-    _, _, _, verdict = _load_conviction_bundle(artifact_dir, None)
+    _, _, _, verdict = _load_conviction_bundle(
+        artifact_dir, None, corpus_dir=corpus_dir, evidence_scope=evidence_scope
+    )
     return verdict
 
 
@@ -1155,6 +1175,8 @@ def conviction_prescreen(
     use_counter: ConvictionUseCounter | None = None,
     flags_floor: float = PRESCREEN_FLAGS_PER_MEETING_FLOOR,
     conversion_pin: float = PRESCREEN_CONVERSION_PIN,
+    corpus_dir: Path | None = None,
+    evidence_scope: EvidenceScope = "current",
 ) -> ConvictionPrescreenVerdict:
     """Predict whether a batch of meetings would clear the referee floors (18.16).
 
@@ -1191,7 +1213,9 @@ def conviction_prescreen(
     Zero uses are metered (nothing was predicted).
     """
 
-    model, sha, counter, verdict = _load_conviction_bundle(artifact_dir, use_counter)
+    model, sha, counter, verdict = _load_conviction_bundle(
+        artifact_dir, use_counter, corpus_dir=corpus_dir, evidence_scope=evidence_scope
+    )
     advisory_only = verdict.prescreen_role != "gating"
     if not meeting_features:
         # The starvation verdict: both floors FAIL by doctrine (the comparisons
@@ -1405,6 +1429,9 @@ class BakeoffResult(BaseModel):
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
+    evidence_scope: EvidenceScope = Field(
+        default="historical", exclude_if=lambda value: value == "historical"
+    )
 
     entrant: str
     tier: Literal["candidate", "experiment"]
@@ -1527,6 +1554,7 @@ class BakeoffProtocolConfig:
     surrogate_use_counter: SurrogateUseCounter | None = None
     max_ticks: int = DEFAULT_MAX_TICKS
     conviction_artifact_dir: Path = CONVICTION_ARTIFACT_DIR
+    evidence_scope: EvidenceScope = "current"
     conviction_weight: float = DEFAULT_CONVICTION_WEIGHT
     conviction_term: ConvictionFitnessTerm | None = None
     conviction_term_resolved: bool = False
@@ -1547,7 +1575,9 @@ class BakeoffProtocolConfig:
 
         if not self.conviction_term_resolved:
             term = load_conviction_fitness_term(
-                self.conviction_artifact_dir, weight=self.conviction_weight
+                self.conviction_artifact_dir,
+                weight=self.conviction_weight,
+                evidence_scope=self.evidence_scope,
             )
             # A frozen dataclass: stash via object.__setattr__ so every
             # subsequent call shares the SAME term (never a per-call reload).
@@ -1814,7 +1844,7 @@ def evaluate_candidate(
     # effects: a stale/partially-updated bundle fails the run loud, never lands
     # in a row.
     conviction_verdict = load_conviction_row_provenance(
-        protocol.conviction_artifact_dir
+        protocol.conviction_artifact_dir, evidence_scope=protocol.evidence_scope
     )
     # The ONE shared term for this run (Task 18.30): resolved once and threaded
     # through the real, surrogate, and repeat passes so the single
@@ -1858,6 +1888,7 @@ def evaluate_candidate(
             protocol.surrogate_artifact_dir,
             use_counter=counter,
             corpus_dir=CORPUS_SPLITS_PATH.parent,
+            evidence_scope=protocol.evidence_scope,
         )
         with tempfile.TemporaryDirectory(prefix="ailibi-bakeoff-surr-") as tmp:
             surrogate_pass = _score_eval_pass(
@@ -1945,6 +1976,7 @@ def evaluate_candidate(
     games_total = len(watchability.per_game)
 
     return BakeoffResult(
+        evidence_scope=protocol.evidence_scope,
         entrant=candidate.entrant,
         tier=tier,
         encoder_version=candidate.policy.encoder_version,
@@ -2149,6 +2181,7 @@ def run_goodhart_surrogate_rerun(
     tasks_per_crewmate: int = BAKEOFF_TASKS_PER_CREWMATE,
     baseline_id: str = BAKEOFF_BASELINE_ID,
     game_map: Map | None = None,
+    evidence_scope: EvidenceScope = "current",
 ) -> GoodhartSurrogateRerun:
     """Discharge the 15.14 obligation through the probe's OWN entry point.
 
@@ -2172,6 +2205,7 @@ def run_goodhart_surrogate_rerun(
         surrogate_artifact_dir,
         use_counter=counter,
         corpus_dir=CORPUS_SPLITS_PATH.parent,
+        evidence_scope=evidence_scope,
     )
     probe = run_goodhart_probe(
         config=config,

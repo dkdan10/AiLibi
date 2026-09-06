@@ -9,37 +9,27 @@ names the committed file that owns it.
 
 ## Problem
 
-AiLibi is a nine-player hidden-role game — seven crewmates, two impostors — on a
-tick-deterministic engine behind an observation firewall
-([`docs/architecture.md`](architecture.md)). Tactical play is rule-based every tick; meeting
-speech and voting call an LLM. The tactical impostor is therefore a small, **partially**
-observable decision problem under a frozen social layer: it sees the filtered packet an
-agent sees, never the world. The question — **can search improve that arbitration without
-un-making the deduction game above it?** — is two-sided on purpose: an impostor merely
-better at not being seen starves meetings of testimony, so the second side is a gate, not a
-reward.
+AiLibi has seven crewmates and two impostors on a deterministic engine behind an
+[observation firewall](architecture.md). Tactical play is rule-based; meeting speech
+and voting call an LLM. Search optimizes the partially observable tactical policy
+under a frozen social layer. The question is whether better arbitration can win
+without starving meetings of testimony; evidence supply is an adoption gate.
 
 ## Environment
 
-`training/env.py`'s `TacticalRolloutEnv` drives the **real** production loop —
-`orchestrator.game.HeadlessGame` with an injected agent factory — interposing once, at the
-factory, where a wrapper overrides the agent's chosen intent. The policy **observes** what
-an agent observes, the visibility-filtered `ObservationPacket` and `PublicMapView`, and
-cannot import the engine (an import-linter contract). The legal **action mask** comes from
-the pure predicates in `engine/rules.py` and `engine/tick.py`, mirrored agent-side from the
-packet; it splits engine-legal *resolved* actions from observation-meaningful
-*submissions*, which keeps the impostor's engine-rejected pretend `do_task` submittable as
-camouflage. The **reward** (`training/rewards.py`) reads
-side-specific terms off the typed event log — impostor: the un-witnessed share of kills,
-impostor survival, the share of meetings survived; crew: task progress, survival, the
-share of impostors routed out by a crew body report, patrol coverage — plus the terminal
-win, and adds potential-based shaping in the Ng-1999 *form*. Every dense term and the
-shaping are **bounded fractions in [0, 1]**: the potential is a progress count over the
-side's own win total (kills over the initial crew; completed tasks over the task total),
-so the shaping pays the win condition once rather than once per unit of progress, and the
-terminal weight is derived from the count of bounded channels — which is what makes every
-reachable win outrank every reachable loss (`training/rewards.py::derive_terminal_weight`,
-gated by the ordering test in `tests/training/test_rewards.py`).
+`training/env.py`'s `TacticalRolloutEnv` drives production `HeadlessGame` with an
+injected agent factory. The policy sees only `ObservationPacket` and `PublicMapView`;
+import-linter prevents engine imports. The action mask mirrors engine predicates
+and separates resolved legality from meaningful submissions, preserving impostor
+pretend-task camouflage. Rewards read the typed event log: unwitnessed kills,
+survival and meetings survived for impostors; task progress, survival,
+report-led convictions and patrol coverage for crew; plus terminal wins.
+
+Dense terms and potential-based shaping are bounded fractions in [0, 1]. Potential
+normalizes progress by the side's win total, so it pays progress share rather than
+raw count. `training/rewards.py::derive_terminal_weight` derives terminal weight
+from the number of channels; `tests/training/test_rewards.py` checks that every
+reachable win outranks every reachable loss.
 
 The shaping is still **not policy-invariant, as that module says**: the potential is a
 cumulative count, so at γ = 1 the shaping sum equals the terminal progress share.
@@ -157,16 +147,12 @@ so those edges are **upper bounds**. Nothing else moves: the referee verdicts, t
 rulings and the pre-registration ordering all stand, and the gate failures are if anything
 understated, since a stronger comparator would not have made these arms more watchable.
 
-**Erratum, and it is not closed.** Both defects are repaired in the tree as it stands: the
-kill seam and the sabotage guard now scan the whole ranking for a co-located, zero-witness
-candidate instead of testing only its head, and a target whose freshest sighting predates the
-last meeting boundary can no longer rank at all. Nothing was retrained and nothing was re-run
-against the repaired policy, so the comparator every edge in the table above was measured
-against no longer exists in that form, and those edges were never re-measured. They are stale
-by construction — upper bounds against a policy this repository no longer ships — and
-re-grounding them means a fresh campaign on the current mover, which is an owner decision and
-not a documentation edit. Until that happens the table stands as recorded, with this
-paragraph attached to it.
+**Erratum, and it is not closed.** Both defects are repaired: the kill seam and
+sabotage guard scan the whole ranking for a co-located, zero-witness candidate;
+sightings older than the last meeting cannot rank. Nothing was retrained or
+re-measured against that repaired policy. The table therefore retains historical
+upper bounds against a comparator this repository no longer ships. A fresh
+campaign requires an owner decision; documentation cannot re-price these edges.
 
 ## What the next recording changed under all of this
 
@@ -183,9 +169,10 @@ referee verdict.
 
 ## What the instruments now stand on
 
-The three committed ML instruments were re-fit on the corpus that second re-recording left
-behind, so each reads the bytes its weights were made from — `replays/ml_corpus/9p2i`,
-fingerprint `cc54d3c0…`. Every row below re-derives under
+The two models were re-fit, and their composed runner re-evaluated, on the corpus that
+second re-recording left behind — `replays/ml_corpus/9p2i`, historical fingerprint
+`cc54d3c0…`. The original fingerprint omits roster and derivation code, so it describes
+historical evidence and cannot certify a fit against current inputs. Every row below re-derives under
 `scripts/verify_ml_evidence.py --complete`.
 
 | instrument | verdict | the axes it was judged on |
@@ -198,11 +185,35 @@ Each bar is a fraction of a constant measured on the same split, so none of it t
 an absolute; the numbers live in `training/reports/` and each `verdict.json`. The
 surrogate's NO-GO keeps it diagnostic-only.
 
-Two things the re-ground did not do. It did not re-search the λ grid under the repaired
-fitness objective — those cells record a search under the prior one, which the stale-seed
-fence cannot see. And it did not re-price the arm table above: **those edges were measured
-against a comparator this repository no longer ships**, as its erratum says. Both are owner
-decisions.
+The re-ground did not re-search the λ grid under the repaired objective or re-price
+campaign edges against the current comparator. The old search and comparator remain
+historical, as the erratum records; both follow-ups need owner decisions.
+
+## Disposition before another search
+
+Keep the paired campaign comparison and its failed adoption bars as the main result.
+The committed ballot surrogate is a useful negative: on its held-out split it ranks
+47 of 57 ejected targets correctly but gets only 36 of 91 eject/skip decisions right;
+always eject gets 57 of 91. Those counts are in its
+[verdict](../training/artifacts/surrogate/verdict.json). The conviction model's GO is
+historical qualification, not evidence that the later fit improved its predecessor;
+the [model report's erratum](../training/reports/report-conviction-model.md) records
+that comparison.
+
+Current model loaders require roster and derivation binding; existing weights restore
+only under explicit historical diagnostics. Current fidelity reports also flag an
+exact all-eject prediction pattern, while the strict always-eject comparison continues
+to decide adoption. An absent diagnostic in an old report remains unmeasured.
+
+Preserve the surrogate's historical raw flag-count features. Counting independent
+evidence needs a new profile: identical accounts and a movement's repeated endpoint
+from the same witness count once, different witnesses remain separate, and unresolved
+references remain visible. Its feature schema, parity checks and train/test split
+must be fixed before a newly adopted corpus supports a refit. Do not reinterpret old
+weights through that new feature definition or repeat the completed fit/search grid
+without a new evidence trigger and run budget. The current
+[training boundary](../training/README.md#current-model-evidence-boundary) makes those
+compatibility rules executable.
 
 ## Limitations
 

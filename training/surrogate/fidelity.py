@@ -55,7 +55,7 @@ from typing import Final, Literal, Protocol, runtime_checkable
 
 import numpy as np
 from numpy.typing import NDArray
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from agents.memory.beliefs import CONTRADICTION_RENDER_CEIL
 from engine.entities import PlayerId
@@ -641,6 +641,11 @@ class SurrogateFidelityReport(BaseModel):
     # of true-ejection meetings AND does no better than the trivial always-eject
     # constant — the physical features cannot learn the SKIP/eject decision.
     degenerates_to_skip: bool
+    # Exact all-EJECT prediction census, diagnostic only. Absent in historical
+    # reports; it does not change the strict always-EJECT adoption comparator.
+    degenerates_to_eject: bool | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
     # Calibration of the model's per-candidate ejection confidence (§5.5).
     brier: float
     ece: float
@@ -949,6 +954,8 @@ def run_surrogate_fidelity(
         degenerates_to_skip=ejection_meetings > 0
         and 2 * ejection_pred_skips > ejection_meetings
         and decision_accuracy <= always_eject_baseline,
+        degenerates_to_eject=meetings_scored > 0
+        and predicted_ejections == meetings_scored,
         brier=brier,
         ece=ece,
         ballot_brier=ballot_brier,

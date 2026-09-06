@@ -104,7 +104,7 @@ from itertools import chain
 from pathlib import Path
 from typing import Final, Literal, Protocol, runtime_checkable
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from agents.base import AgentInterface
 from agents.memory.store import AgentMemory
@@ -128,6 +128,8 @@ from orchestrator.game import (
     build_default_meeting_runner,
 )
 from orchestrator.scheduler import TickScheduler
+from training.provenance import EvidenceScope
+
 from training.bakeoff.es import ESConfig, evolve, k_seed_mean
 from training.bakeoff.goodhart import MeetingRunnerFactory
 from training.bakeoff.harness import (
@@ -1068,6 +1070,7 @@ class CrewEsConfig:
     tasks_per_crewmate: int = BAKEOFF_TASKS_PER_CREWMATE
     max_ticks: int = DEFAULT_MAX_TICKS
     conviction_artifact_dir: Path = CONVICTION_ARTIFACT_DIR
+    evidence_scope: EvidenceScope = "current"
 
 
 def crew_es_budget(
@@ -1216,7 +1219,8 @@ class CrewEsEntrant:
         # ``evolve`` drives through :meth:`_seed_fitness`. Under the committed
         # NO-GO verdict the load returns None and training composes anchor-only.
         self._conviction_term = load_conviction_fitness_term(
-            self._config.conviction_artifact_dir
+            self._config.conviction_artifact_dir,
+            evidence_scope=self._config.evidence_scope,
         )
         self._conviction_meetings_train = 0
         genome_length = (
@@ -1240,6 +1244,7 @@ class CrewEsEntrant:
             weights=result.champion,
             config={
                 "entrant": self.name,
+                "evidence_scope": self._config.evidence_scope,
                 "anchor_weight": self._config.anchor_weight,
                 "es": self._config.es.model_dump(mode="json"),
                 "train_max_ticks": self._config.max_ticks,
@@ -1325,6 +1330,7 @@ class CrewProtocolConfig:
     repeat_n: int = 3
     max_ticks: int = DEFAULT_MAX_TICKS
     conviction_artifact_dir: Path = CONVICTION_ARTIFACT_DIR
+    evidence_scope: EvidenceScope = "current"
     conviction_weight: float = DEFAULT_CONVICTION_WEIGHT
     conviction_term: ConvictionFitnessTerm | None = None
     conviction_term_resolved: bool = False
@@ -1345,7 +1351,9 @@ class CrewProtocolConfig:
 
         if not self.conviction_term_resolved:
             term = load_conviction_fitness_term(
-                self.conviction_artifact_dir, weight=self.conviction_weight
+                self.conviction_artifact_dir,
+                weight=self.conviction_weight,
+                evidence_scope=self.evidence_scope,
             )
             # A frozen dataclass: stash via object.__setattr__ so every
             # subsequent call shares the SAME term (never a per-call reload).
@@ -1393,6 +1401,9 @@ class CrewTrackResult(BaseModel):
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
+    evidence_scope: EvidenceScope = Field(
+        default="historical", exclude_if=lambda value: value == "historical"
+    )
 
     entrant: str
     tier: Literal["candidate", "experiment"]
@@ -1700,7 +1711,7 @@ def evaluate_crew_candidate(
     # harness's bundle loader BEFORE any eval side effects: a stale or
     # partially-updated bundle fails the run loud, never lands in a row.
     conviction_verdict = load_conviction_row_provenance(
-        protocol.conviction_artifact_dir
+        protocol.conviction_artifact_dir, evidence_scope=protocol.evidence_scope
     )
     # The ONE shared term for this eval run (Task 18.30): resolved once and
     # threaded through the real + repeat passes so the single
@@ -1807,6 +1818,7 @@ def evaluate_crew_candidate(
     games_total = len(watchability.per_game)
 
     return CrewTrackResult(
+        evidence_scope=protocol.evidence_scope,
         entrant=candidate.entrant,
         tier=tier,
         encoder_version=policy.encoder_version,

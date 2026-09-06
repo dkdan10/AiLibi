@@ -34,6 +34,7 @@ from __future__ import annotations
 import json
 import tempfile
 from collections.abc import Mapping
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -679,9 +680,12 @@ def test_wrapper_raises_on_wrong_room_owned_task_override() -> None:
 
 
 def test_owned_entrant_ci_budget_is_deterministic() -> None:
+    """Historical conviction diagnostics preserve widened-entrant determinism."""
+
     basis = OwnedTaskOptionBasis()
-    first = CrewEsEntrant(config=crew_es_budget("ci"), basis=basis).train()
-    second = CrewEsEntrant(config=crew_es_budget("ci"), basis=basis).train()
+    config = replace(crew_es_budget("ci"), evidence_scope="historical")
+    first = CrewEsEntrant(config=config, basis=basis).train()
+    second = CrewEsEntrant(config=config, basis=basis).train()
     assert first.entrant == CREW_OWNED_TASKS_ENTRANT_NAME
     assert len(first.weights) == owned_task_genome_length() == 27
     assert first.weights == second.weights
@@ -689,7 +693,13 @@ def test_owned_entrant_ci_budget_is_deterministic() -> None:
     assert first.config["genome_length"] == 27
     assert first.config["encoder_version"] == OWNED_TASK_ENCODER_VERSION
     assert first.config["feature_names"] == list(OWNED_TASK_OPTION_FEATURE_NAMES)
+    assert first.config["evidence_scope"] == "historical"
     assert isinstance(first.policy, CrewOptionScorer)
+
+
+def test_current_owned_entrant_refuses_committed_historical_model() -> None:
+    with pytest.raises(ValueError, match="historical version-one"):
+        CrewEsEntrant(config=crew_es_budget("ci"), basis=OwnedTaskOptionBasis()).train()
 
 
 # --------------------------------------------------------------------------- #
@@ -698,15 +708,22 @@ def test_owned_entrant_ci_budget_is_deterministic() -> None:
 
 
 def test_owned_evaluate_crew_candidate_full_row(tmp_path: Path) -> None:
+    """The historical diagnostic keeps its evidence scope through publication."""
+
     game_map = load_canonical_map()
     protocol = CrewProtocolConfig(
         eval_seeds=(1000,),
         determinism_seeds=(1004,),
         leak_seeds=(0, 1),
         repeat_n=2,
+        evidence_scope="historical",
     )
     basis = OwnedTaskOptionBasis()
-    entrant = CrewEsEntrant(config=crew_es_budget("ci"), game_map=game_map, basis=basis)
+    entrant = CrewEsEntrant(
+        config=replace(crew_es_budget("ci"), evidence_scope="historical"),
+        game_map=game_map,
+        basis=basis,
+    )
     candidate = entrant.train()
     result = evaluate_crew_candidate(
         candidate, protocol, artifact_root=tmp_path, game_map=game_map
@@ -718,6 +735,11 @@ def test_owned_evaluate_crew_candidate_full_row(tmp_path: Path) -> None:
     assert result.tier == "candidate"
     assert result.determinism.deterministic
     assert result.repeat_spread is None
+    assert result.evidence_scope == "historical"
+    frozen_config = json.loads(
+        (tmp_path / CREW_OWNED_TASKS_ENTRANT_NAME / "config.json").read_text()
+    )
+    assert frozen_config["evidence_scope"] == "historical"
 
     # The leak-test factory mode ran through the candidate's OWN crew factory,
     # scanning the widened packets (the owned_task_ids discipline included).

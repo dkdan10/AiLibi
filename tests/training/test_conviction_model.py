@@ -281,7 +281,7 @@ def test_flag_labels_reproduce_the_referee_census(sample_dir: Path) -> None:
         for flag in meeting.contradictions
         if flag.kind == "vent_sighting"
     )
-    assert sum(row.rederived_flags for row in table.rows) == supply.total_flags
+    assert sum(row.recorded_non_vent_flags for row in table.rows) == supply.total_flags
     assert sum(row.persisted_vent_flags for row in table.rows) == persisted_vent
     assert table.flags_minted_total == supply.total_flags + persisted_vent
     assert table.meetings_total == supply.meetings_total
@@ -1106,6 +1106,7 @@ def test_the_conviction_corpus_fence_is_opt_in_and_bites_on_its_own_leg(
         load_conviction_model_artifact(tmp_path, corpus_dir=_CORPUS)
 
     matching = SurrogateFitCorpus(
+        fingerprint_version=2,
         corpus_set="9p2i",
         corpus_sha256=fit_corpus_fingerprint(_CORPUS),
         fit_side_meetings=345,
@@ -1117,7 +1118,7 @@ def test_the_conviction_corpus_fence_is_opt_in_and_bites_on_its_own_leg(
     # Substrate drift: the record names a corpus this one is not.
     drifted = matching.model_copy(update={"corpus_sha256": "b" * 64})
     (tmp_path / "fit-corpus.json").write_text(drifted.model_dump_json(indent=2) + "\n")
-    with pytest.raises(ValueError, match="the substrate drifted"):
+    with pytest.raises(ValueError, match="substrate drifted"):
         load_conviction_model_artifact(tmp_path, corpus_dir=_CORPUS)
 
     # Weights drift: the record is keyed to a different artifact.

@@ -234,7 +234,7 @@ def test_probe_reruns_end_to_end_on_the_regrounded_surrogate() -> None:
     # stamp must flip these pins consciously.
     counter = SurrogateUseCounter(load_staleness_cap(_SURROGATE_ARTIFACT_DIR))
     factory = load_surrogate_runner_factory(
-        _SURROGATE_ARTIFACT_DIR, use_counter=counter
+        _SURROGATE_ARTIFACT_DIR, use_counter=counter, evidence_scope="historical"
     )
     report = run_goodhart_probe(
         config=_TINY,
@@ -588,6 +588,7 @@ def conviction_report() -> ConvictionPathProbeReport:
         num_impostors=1,
         tasks_per_crewmate=1,
         materiality_bar=0.25,
+        evidence_scope="historical",
     )
 
 
@@ -1095,6 +1096,7 @@ def test_conviction_path_requires_a_go_verdict(tmp_path: Path) -> None:
             tasks_per_crewmate=1,
             materiality_bar=0.25,
             conviction_artifact_dir=tmp_path,
+            evidence_scope="synthetic-test",
         )
 
 
@@ -1106,7 +1108,9 @@ def test_conviction_reader_determinism_at_unit_level() -> None:
     # reads (the frozen dataclass equality pins predictions, labels, and the
     # pre-screen booleans together).
     def _read_emergency() -> _ConvictionSetRead:
-        term = load_conviction_fitness_term(_CONVICTION_ARTIFACT_DIR)
+        term = load_conviction_fitness_term(
+            _CONVICTION_ARTIFACT_DIR, evidence_scope="historical"
+        )
         assert term is not None  # the committed verdict is GO
         reader = _ConvictionArmReader(
             num_players=4,

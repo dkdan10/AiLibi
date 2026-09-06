@@ -69,10 +69,10 @@ import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Final
+from typing import Final, Literal
 
 import numpy as np
-from pydantic import BaseModel, ConfigDict, TypeAdapter
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 
 from agents.tactical.features import weights_to_hex_json
 from agents.tactical.impostor_policy import ImpostorPolicy
@@ -128,6 +128,7 @@ from training.bakeoff.utility_es import (
 # same private-seam import posture as ``orchestrator.replay._state_hash``
 # above: one canonical rebuild, never a drifting re-derivation).
 from training.rollout import _meeting_result_from_entry
+from training.provenance import EvidenceScope
 
 # The engine action adapter for the recorded rows (the 15.8 walk's idiom).
 _ACTION_ADAPTER: Final[TypeAdapter[Action]] = TypeAdapter(Action)
@@ -212,38 +213,17 @@ def _corpus_replays_sha256(corpus_dir: Path) -> str:
     return digest.hexdigest()
 
 
-def compute_substrate_sha(
+def historical_compute_substrate_sha(
     corpus_dir: Path = CORPUS_DIR,
     *,
     baseline_id: str = BAKEOFF_BASELINE_ID,
     high_flag_floor: float = HIGH_FLAG_FLOOR,
 ) -> str:
-    """The corpus/floor substrate identity this study's artifacts bind to.
+    """Reproduce the original anchor identity for historical artifact restoration.
 
-    No such digest existed before this task (Task 18.5 invents it; 18.6 stamps
-    the same obligation on the MAP-Elites cells, and 18.20/18.24 read it at
-    seed ingest). Following the repo's hashing idiom (sha256 over a canonical
-    ``sort_keys`` JSON payload — ``training/surrogate/ballots.py`` /
-    ``training/bakeoff/harness.py``), the payload pins:
-
-    * the baseline id the selection floors are keyed by,
-    * content digests of the corpus ``MANIFEST.md`` + ``splits.json`` (the
-      recorded substrate's provenance: model, prompt versions, lever slate,
-      git shas, and the by-game split rule) AND of the recorded game bytes
-      themselves (:func:`_corpus_replays_sha256` — the fit source; any
-      re-record or byte drift moves the sha even if the metadata files were
-      wrongly left untouched), and
-    * the ``flags_per_meeting`` floor value this study filters against — the
-      floor ACTUALLY USED (``high_flag_floor``, defaulting to
-      :data:`HIGH_FLAG_FLOOR`, which is the floor ``baseline_id``'s own block
-      commits): a re-fit at an adopted baseline passes the re-pinned floor
-      alongside its ``baseline_id`` and the sha moves with both (Codex review on
-      PR #292).
-
-    A Wave-1 substrate adoption (the 18.13 corpus re-record) changes this sha,
-    which is exactly the 18.24 stale-seed refusal firing: every artifact under
-    ``training/artifacts/anchor_study/`` is then re-fit/re-run (cheap,
-    deterministic) at the adopted substrate before it may seed the campaign.
+    This definition binds replay, manifest, split, baseline and flag floor bytes.
+    It predates roster and derivation binding and cannot authorize a current
+    campaign. The current compute_substrate_sha uses the version-two identity.
     """
 
     payload = {
@@ -257,6 +237,25 @@ def compute_substrate_sha(
         "flags_per_meeting_floor": high_flag_floor,
     }
     return _sha256_hex(json.dumps(payload, sort_keys=True).encode("utf-8"))
+
+
+def compute_substrate_sha(
+    corpus_dir: Path = CORPUS_DIR,
+    *,
+    baseline_id: str = BAKEOFF_BASELINE_ID,
+    high_flag_floor: float = HIGH_FLAG_FLOOR,
+) -> str:
+    """Version-two anchor substrate, including the actual feature derivation."""
+
+    from training.provenance import fit_corpus_fingerprint
+
+    payload = {
+        "format": "anchor-substrate-v2",
+        "baseline_id": baseline_id,
+        "flags_per_meeting_floor": high_flag_floor,
+        "fit_inputs": fit_corpus_fingerprint(corpus_dir),
+    }
+    return _sha256_hex(json.dumps(payload, sort_keys=True).encode())
 
 
 def corpus_seeds(corpus_dir: Path = CORPUS_DIR) -> tuple[int, ...]:
@@ -1154,6 +1153,8 @@ def run_lambda_sweep(
                 "entrant": _lambda_entrant_name(lambda_value),
                 "study": "anchor-study",
                 "substrate_sha": substrate_sha,
+                "substrate_sha_kind": "compute_substrate_sha.v2",
+                "evaluation_evidence_scope": resolved_protocol.evidence_scope,
                 "train_budget": budget,
             },
         )
@@ -1252,6 +1253,12 @@ class AnchorStudyReport(BaseModel):
 
     baseline_id: str
     substrate_sha: str
+    substrate_sha_kind: Literal["compute_substrate_sha.v2"] | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+    evaluation_evidence_scope: EvidenceScope | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
     corpus_set: str
     train_budget: str
     lambda_grid: tuple[float, ...]
@@ -1341,6 +1348,7 @@ def _freeze_filtered_bc_anchor(
             "learning_rate": FILTERED_BC_LEARNING_RATE,
             "study": "anchor-study",
             "substrate_sha": substrate_sha,
+            "substrate_sha_kind": "compute_substrate_sha.v2",
         },
     )
     entrant_dir, digest = write_candidate_artifact(candidate, artifact_root)
@@ -1514,6 +1522,8 @@ def run_anchor_study(
     )
 
     report = AnchorStudyReport(
+        substrate_sha_kind="compute_substrate_sha.v2",
+        evaluation_evidence_scope=resolved_protocol.evidence_scope,
         baseline_id=resolved_protocol.baseline_id,
         substrate_sha=substrate_sha,
         corpus_set=corpus_dir.name,
@@ -1734,6 +1744,11 @@ def render_report(
         if report.train_budget == "full"
         else ""
     )
+    evidence_line = (
+        f"> **Evaluation evidence scope:** {report.evaluation_evidence_scope}.\n"
+        if report.evaluation_evidence_scope is not None
+        else ""
+    )
 
     return f"""# The anchor study — λ sweep + filtered-BC anchor refinement (Task 18.5)
 
@@ -1746,7 +1761,7 @@ def render_report(
 > **Substrate:** {report.baseline_id}; substrate sha `{report.substrate_sha}`
 > (every frozen artifact under `training/artifacts/anchor_study/` carries it —
 > the 18.24 stale-seed refusal reads it).
-> **Committed artifacts:** `training/artifacts/anchor_study/<entrant>/`
+{evidence_line}> **Committed artifacts:** `training/artifacts/anchor_study/<entrant>/`
 > (float-hex `weights.json` + `weights.json.sha256` + `config.json` with the
 > substrate sha) + `training/artifacts/anchor_study/study.json` (the
 > deterministic index, the serialized `AnchorStudyReport`).

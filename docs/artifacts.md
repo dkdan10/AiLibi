@@ -116,9 +116,12 @@ than its output preserved.
 | local `replays/*.jsonl`, tournament report dirs, the firewall's `**/*.audit.jsonl` packet logs, `frontend/dist/`, the demo bundle | (d) | regenerated (`.gitignore`d) | — |
 
 **Why the other `training/artifacts/` families are class (a) and coevo mostly is
-not.** The six sibling families above are the *live* learned artifacts — the
-weights the inference path loads and the sidecars 19.23 verifies offline — and
-the test suite opens them directly, which is what class (a) means. `coevo/` is
+not.** The six sibling families above contain shipped inference weights and historical
+fitted components with explicit compatibility rules. The test suite opens them
+directly, which is what class (a) means; a frozen fit retained for diagnostics
+is not automatically eligible for current scoring. The
+[training boundary](../training/README.md#current-model-evidence-boundary)
+states which identities current loaders require. `coevo/` is
 the *record of a closed campaign*: 90 of its files are opened by a test and stay,
 and the 1,383 nobody opens are class (c). Same directory tree, two different
 classes, decided the same way in both cases — by what the consumers read.

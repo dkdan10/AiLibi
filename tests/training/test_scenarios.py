@@ -40,6 +40,7 @@ from observation.action_intent import (
     WaitIntent,
 )
 from observation.packet import ObservationPacket
+from observation.body_ids import public_body_id
 from observation.public_map import PublicMapView
 from orchestrator.game import AgentFactory
 from orchestrator.replay import _state_hash
@@ -970,6 +971,11 @@ def _staged_body_id() -> str:
     return next(iter(state.bodies))
 
 
+def _staged_public_body_id() -> str:
+    state = build_scenario_state(BODY_DISCOVERY_LATENCY, seed=7)
+    return public_body_id(next(iter(state.bodies.values())).player_id)
+
+
 def test_body_discovery_fsm_routes_the_report() -> None:
     rollout = _run(BODY_DISCOVERY_LATENCY, 7)
     staged_report = next(
@@ -995,7 +1001,7 @@ def _avoid_staged_body_selector(decision: MaskedDecision) -> ActionIntent:
         return decision.fsm_intent
     if (
         isinstance(decision.fsm_intent, ReportBodyIntent)
-        and decision.fsm_intent.payload.body_id == _staged_body_id()
+        and decision.fsm_intent.payload.body_id == _staged_public_body_id()
     ):
         return _wait(decision)
     return decision.fsm_intent
@@ -1005,6 +1011,7 @@ def test_body_discovery_gives_no_credit_for_other_bodies() -> None:
     # A fresh in-episode kill mints a new corpse; reporting IT is not the
     # staged discovery problem — without the body-id filter an easier-to-find
     # fresh body would substitute for the drill.
+    assert _staged_public_body_id() != _staged_body_id()
     rollout = _run(
         BODY_DISCOVERY_LATENCY, 7, intent_selector=_avoid_staged_body_selector
     )

@@ -628,6 +628,36 @@ def test_an_undeclared_corpus_still_fails_the_grounding_row(tmp_path: Path) -> N
     assert vme._grounding_row(root).status == "OK"
 
 
+def test_historical_verifier_refuses_relabeled_fit_version(tmp_path: Path) -> None:
+    root = tmp_path / "repo"
+    _manifests(root)
+    _link(root, vme.ARTIFACTS_DOC, vme.CORPUS_SET, _SAMPLE_SET)
+    for directory in (vme.SURROGATE_DIR, vme.CONVICTION_DIR):
+        for child in (_REPO_ROOT / directory).iterdir():
+            if child.name != "fit-corpus.json":
+                _link(root, f"{directory}/{child.name}")
+        _copy(root, f"{directory}/fit-corpus.json")
+
+    assert vme._grounding_row(root).status == "OK"
+    for directory in (vme.SURROGATE_DIR, vme.CONVICTION_DIR):
+        path = root / directory / "fit-corpus.json"
+        original = path.read_text()
+        payload = json.loads(original)
+        payload["fingerprint_version"] = 2
+        path.write_text(json.dumps(payload))
+        row = vme._grounding_row(root)
+        assert row.status == "FAIL"
+        assert "historical diagnostic requires version 1" in row.detail
+        if directory == vme.SURROGATE_DIR:
+            corpus_row = _row(
+                vme.run_corpus(_context(root)).rows, "fit-corpus identity fingerprint"
+            )
+            assert corpus_row.status == "FAIL"
+            assert "fingerprint_version" in corpus_row.detail
+        path.write_text(original)
+    assert vme._grounding_row(root).status == "OK"
+
+
 def test_a_record_keyed_to_other_weights_fails_the_grounding_row(
     tmp_path: Path,
 ) -> None:

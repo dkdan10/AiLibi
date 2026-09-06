@@ -69,6 +69,7 @@ from training.bakeoff.map_elites import (
     DescriptorConfiguration,
     MapElitesEntrant,
     bakeoff_substrate_sha,
+    historical_bakeoff_substrate_sha,
     bin_descriptors,
     load_archive_cell_genomes,
     map_elites_budget,
@@ -903,7 +904,7 @@ def test_map_elites_cell_loader_fails_loud(
     good_dir = tmp_path / "good"
     write_archive_cell_artifacts(archive, good_dir, config=map_elites_budget("ci"))
     load_archive_cell_genomes(good_dir, expected_substrate_sha=bakeoff_substrate_sha())
-    with pytest.raises(ValueError, match="adopted substrate"):
+    with pytest.raises(ValueError, match="substrate"):
         load_archive_cell_genomes(good_dir, expected_substrate_sha="deadbeef")
 
     # (b) Tamper the victim's weights with DIFFERENT but VALID float-hex JSON, so
@@ -1108,7 +1109,9 @@ def test_map_elites_default_run_config_is_byte_stable(
         )
 
 
-def test_the_committed_map_elites_pool_is_current_and_structurally_untouched() -> None:
+def test_the_committed_map_elites_pool_is_historical_and_structurally_untouched() -> (
+    None
+):
     """The pool's STAMP is current and its GENOMES are unchanged, asserted together.
 
     The MAP-Elites archive is SUBSTRATE-INDEPENDENT: the illumination runs fresh
@@ -1136,7 +1139,7 @@ def test_the_committed_map_elites_pool_is_current_and_structurally_untouched() -
     # The pool declares the adopted baseline ...
     assert index["baseline_id"] == BAKEOFF_BASELINE_ID == "baseline-8"
     # ... and its stamp is the corpus now on disk.
-    assert index["substrate"]["substrate_sha256"] == bakeoff_substrate_sha()
+    assert index["substrate"]["substrate_sha256"] == historical_bakeoff_substrate_sha()
     assert index["substrate"]["corpus_manifest"] == "replays/ml_corpus/9p2i/MANIFEST.md"
 
     # The substrate-independent structure, unchanged across the re-record.

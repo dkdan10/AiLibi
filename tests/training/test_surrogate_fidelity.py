@@ -656,6 +656,7 @@ def test_harness_is_model_agnostic_oracle_scores_perfectly() -> None:
     assert report.top2 == pytest.approx(1.0)
     assert report.skip_vs_eject_accuracy == pytest.approx(1.0)
     assert not report.degenerates_to_skip
+    assert report.degenerates_to_eject is False
     assert report.brier == pytest.approx(0.0)
 
 
@@ -720,6 +721,12 @@ def test_skip_vs_eject_is_binary_not_exact_target() -> None:
         table, _AlwaysEjectFirstModel, model_name="always-eject-first"
     )
     assert report.predicted_skips == 0
+    assert report.degenerates_to_eject is True
+    legacy = report.model_dump()
+    legacy.pop("degenerates_to_eject")
+    historical = type(report).model_validate(legacy)
+    assert historical.degenerates_to_eject is None
+    assert "degenerates_to_eject" not in historical.model_dump()
     assert report.skip_vs_eject_accuracy == pytest.approx(report.always_eject_baseline)
     assert report.top1 < report.skip_vs_eject_accuracy
 
