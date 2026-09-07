@@ -279,3 +279,22 @@ discharged here: AGENTS.md, `.github/workflows/ci.yml`, the task index,
 `docs/workflow.md` and the "unmerged" sentences are corrected in the same commit
 as this section, and delivery for new work is a `work/<card-slug>` branch and
 one pull request per card. Local `main` and `origin/main` are `8161689a`.
+
+## Owner rulings (2026-09-07)
+
+The two items deferred at the merge were assessed in
+[the owner decision memo](owner-decisions-2026-09-07.md) and ruled on the same
+day. #436 (`081aee15`) merged the branch-policy flip: delivery for new work is a
+`work/<card-slug>` branch and one pull request per card, planning and contract
+documents land on `main` directly, the `codex/cleanup` push trigger is gone from
+`ci.yml`, and the merge checkpoint above is the ledger's record of that landing.
+#437 (`0f49d8e6`) merged
+[the authorization card](work/fresh-deduction-authorization.md): the owner
+authorized the evaluation's limits — provider, model, per-call caps, token
+budget, deadline, dollar limit and cost statement — and nothing else; no run,
+pilot or retry is authorized until the renderer repair, the provenance gaps and
+the execution manifest exist, and the held-out preparer and runner are still to
+be named. PRs #432, #433 and #434 were closed on the owner's instruction after
+each head (`26386914`, `55ed6d9a`, `62ba0162`) was confirmed reachable from
+`main` through #435; they remain review records. Both merges were merge
+commits, and each push to `main` republished the demo bundle.

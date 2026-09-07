@@ -15,8 +15,8 @@ verified; include the card path in the commit body. Planning and contract
 documents — plans, indexes, ledgers, checkpoints, records — may land on `main`
 directly as `docs:` or `coordination:` commits. Preserve published commit
 identities: merge or fast-forward, never a squash that orphans a commit another
-document cites. The inherited pull requests #432-#434 remain review records: do
-not close, retarget, or merge them.
+document cites. The inherited pull requests #431-#434 are merged or closed review
+records: do not reopen, retarget, or re-merge them.
 
 A push to `main` publishes as well as merges: `.github/workflows/pages.yml`
 rebuilds the static demo bundle from the committed recordings and the featured

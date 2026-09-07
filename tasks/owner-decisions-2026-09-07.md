@@ -497,7 +497,7 @@ than no block at all:
 6. **It does not settle the held-out preparer.** B.6 is an owner action with the
    same deadline and it is not one of the eight fields.
 
-### B.12 Ruling: merge #437 as proposed / amend the card, then merge / close — ______ (owner, date)
+### B.12 Ruling: merged #437 as proposed (owner, 2026-09-07; merge commit `0f49d8e6`) — the limits in `work/fresh-deduction-authorization.md` are authorized; no run, pilot or retry is, until cards (a) and (b) and the manifest land and the preparer and runner are named
 
 If the card is amended, record the changed fields here so the memo and the card agree:
 
@@ -518,7 +518,9 @@ If the card is amended, record the changed fields here so the memo and the card 
 
 ## Not assessed here
 
-PRs #432-#434; deleting `origin/codex/cleanup`; the first review's seven
+PRs #432-#434 (closed on the owner's instruction on 2026-09-07 after each
+head — `26386914`, `55ed6d9a`, `62ba0162` — was confirmed reachable from `main`
+through #435; they remain review records); deleting `origin/codex/cleanup`; the first review's seven
 workflow recommendations; CONC-6 and the probe-descriptor lifetime in
 `orchestrator/recording.py` (`post-merge-plan.md:84`); and the adopting record
 for evidence reasoning v2 (`post-merge-plan.md:81`). Each remains outstanding

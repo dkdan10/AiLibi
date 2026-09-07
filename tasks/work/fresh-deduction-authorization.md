@@ -99,7 +99,8 @@ carries the anchors, the arithmetic and the rejected options in full.
 
 ## Constraints
 
-Authorized limits, effective only if the owner merges this card:
+Authorized limits, effective since the owner merged this card as #437 on
+2026-09-07 (merge commit `0f49d8e6`):
 
 | Field | Value |
 | --- | --- |

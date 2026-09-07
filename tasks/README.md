@@ -35,7 +35,8 @@ findings and current repairs remain distinct.
 Each card owns its acceptance criteria, decisions, measurements and limitations.
 The ledger retains original PR links for inherited work; those PRs remain review
 records and were not managed during the cleanup. #431 became merged by
-reachability when the cleanup landed; #432-#434 keep their inherited bases.
+reachability when the cleanup landed; #432-#434 were closed on 2026-09-07 once
+their commits were on `main`.
 
 | Outcome | Cards |
 | --- | --- |
