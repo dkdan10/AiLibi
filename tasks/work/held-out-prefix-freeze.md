@@ -55,6 +55,26 @@ development data by construction.
 
 ## Acceptance
 
+- [x] Review correction: `HeldOutPrefix` rejects a second step for the same
+  `(tick, actor)`, so a digest can never bind a schedule the replay would only
+  partly honour (`_PrefixAgent` keys its script by tick and would have kept the
+  last action silently). Proved by
+  `test_a_duplicate_action_for_one_actor_and_tick_is_refused`, which appends a
+  duplicate step to a valid seed-1 prefix and asserts both the constructor and
+  `model_validate` raise.
+- [x] Review correction: the card's out-of-band rejection rate is reproducible.
+  `tally_reasons` plus `python -m experiments.held_out_prefixes --tally FIRST
+  LAST` prints the seeds walked, the accepted count and the reason-code
+  histogram and nothing else, and REFUSES any range touching the preregistered
+  band. Proved by `test_the_tally_counts_an_out_of_band_range_without_opening_a_prefix`
+  and `test_the_tally_refuses_to_probe_the_preregistered_band`; the command and
+  its output are in Results.
+- [x] Review correction: Results cites the `docs/architecture.md` sections this
+  generator and filter rest on, plus the preregistration that binds the held-out
+  discipline, under the heading "Architecture and design references".
+- [x] Review correction: `_FILTER_ENV` is a `MappingProxyType`, so a same-process
+  caller cannot move the substrate flags the set was screened under. Proved by
+  `test_the_filter_environment_cannot_be_moved_by_a_same_process_caller`.
 - [x] A new module `experiments/held_out_prefixes.py` defines a `HeldOutPrefix`
   model (seed, roster, max ticks, the scripted steps up to and including the
   report that opens the meeting, the report tick, the kill tick) that does not
@@ -162,11 +182,29 @@ was not widened and 942 of its seeds were never drawn. No `witnessed_vent` skip
 occurred, because the generator scripts no vent — the vent half of the filter is
 proved by the planted case below, not by a band seed. The filter is not
 decorative on real seeds either: 8/58 band seeds and 5/50 of the out-of-band
-debugging seeds were removed for a living crewmate's firsthand kill row.
+debugging seeds were removed for a living crewmate's firsthand kill row. The
+band figures are the manifest's own `skipped_reason_counts` and
+`last_accepted_seed`; the out-of-band figure reproduces offline, aggregates
+only, from
+
+```text
+$ .venv/bin/python -m experiments.held_out_prefixes --tally 1 50
+seeds 50
+accepted 45
+witnessed_kill 5
+```
+
+`tally_reasons` evaluates each seed exactly as `generate()` does and returns
+only these three rows. It refuses any range that intersects seeds 3000–3999, so
+the same command cannot be turned on the held-out set: an aggregate count over
+band seeds is still a probe, and a narrow enough range would be a per-seed read.
 
 `audits/deduction-candidate/held-out/manifest.json` is the freeze artifact —
-**sha256 `75de872360ae06aeaa0a80f22efbdfda20b2210db66cd8f3fbec6ebfd58740f7`**,
-11,524 bytes. It records the band, the roster, the tick budget, the temporal
+**sha256 `c060f3cac7fba8546c160f634e5788a052663458ceefd51e1fd2c366cd38b78e`**,
+11,524 bytes (the review corrections below re-stamped one `source_sha256` entry;
+the digest before them was
+`75de872360ae06aeaa0a80f22efbdfda20b2210db66cd8f3fbec6ebfd58740f7` at the same
+byte count). It records the band, the roster, the tick budget, the temporal
 version, the filter's stated environment, the canonical-JSON recipe, the sha256
 of 22 generator/engine/observation source files, the fifty accepted seeds with
 their prefix digests in band order, the eight skips with reason codes, the seven
@@ -211,6 +249,45 @@ after it — but it is a real coupling, and the remedy is a decision, not a
 refresh: if regeneration still produces the same fifty digests the set is
 unchanged and the manifest's dependency digests may be restamped; if it does not,
 the set is no longer frozen and a new band belongs under a new card.
+
+### Architecture and design references
+
+The generator and its filter rest on four already-documented properties, and
+add none of their own.
+
+*Determinism and the substrate ladder* (`docs/architecture.md`) states that a
+seed, configuration, agent factory and provider responses determine replay bytes
+within their recorded runtime scope, and that recordings and manifests stamp the
+substrate while readers refuse incompatible settings. That is exactly the
+guarantee the freeze converts into a hash: every choice this generator makes is
+drawn from `random.Random` seeded from the prefix seed alone, and the filter
+stamps its own substrate rather than inheriting a shell, through the same
+`substrate_flag_snapshot` the section describes.
+
+*Enforced boundaries* and *Layering* are what let the filter read a crewmate's
+knowledge without reading engine truth. Agents may not import engine, and the
+firewall delivers audited packets; the filter therefore asks each agent's own
+episodic memory — filled through the real perception seam by `ingest_packet` —
+whether a living crewmate holds an observed `saw_player` row, instead of asking
+the engine who was in the room. A proof-free claim made from engine state would
+not be a claim about what the crew can prove.
+
+*Observation timing and public identities* is what the `body-p-\d+-\d+`
+assertion is about: it records that packets use victim-derived body handles and
+that default-OFF `temporal_observations` adds event-local movement entitlement
+and source-tick delivery before meetings, while legacy-OFF opening prompts still
+expose internal body IDs. The prefixes are generated and filtered under temporal
+version 2 for that reason, and the assertion runs over `_build_meeting_trigger`'s
+real output, so it tests the renderer of record rather than a copy of its format
+string.
+
+The held-out discipline itself is not an architecture property but a
+preregistered commitment: `audits/deduction-candidate/preregistration.md`
+("Use the known seven cases only for development/operational checks") requires a
+separate reviewer to prepare and freeze held-out schedules before the candidate
+is evaluated on them, and converts any inspected or fix-informing input into
+development data. The band, the preparer/runner split, the hashes-only manifest
+and the tally's refusal to touch the band all follow from that paragraph.
 
 ### Fail-loud evidence
 
@@ -273,3 +350,82 @@ frozen. It says nothing about whether any model can reason from these prefixes:
 no arm ran and no model saw one. The set's usefulness is exercised by the
 instrument card's run, and the owner's merge of this pull request — not this
 card's completion — is the freeze.
+
+### Review corrections (2026-09-07)
+
+Codex left four P1 inline comments on pull request #438. All four were assessed
+valid and fixed on the branch; none of them moved an accepted digest or a skip.
+
+1. **Duplicate per-tick actions were silently dropped**
+   (`experiments/held_out_prefixes.py`). `_PrefixAgent` keys its script by tick,
+   so two steps for the same actor and tick collapsed to the last one, while
+   `canonical_prefix_json` and `prefix_sha256` still bound both — `evaluate_prefix`
+   could have certified a digest for a schedule the replay only partly honoured.
+   `HeldOutPrefix` now carries a `model_validator(mode="after")` that raises on a
+   repeated `(tick, actor)` pair, and `_PrefixAgent` says in a comment that its
+   dict is safe *because* the model validated it. Planted case:
+   `test_a_duplicate_action_for_one_actor_and_tick_is_refused` appends a duplicate
+   step to a valid seed-1 prefix and asserts both `HeldOutPrefix(...)` and
+   `HeldOutPrefix.model_validate` raise. Generated prefixes never contained one —
+   each actor's scripted ticks are disjoint by construction — which is why no
+   digest moved.
+2. **The 5/50 out-of-band figure had no reproducing command** (this card). Added
+   `tally_reasons(first_seed, last_seed, roster)` and the
+   `python -m experiments.held_out_prefixes --tally FIRST LAST` subcommand, which
+   evaluate a seed range exactly as `generate()` does and print only the seeds
+   walked, the accepted count and the reason-code histogram. The command and its
+   verbatim output are in "The set" above; the figure was correct and is
+   unchanged. The tally raises `HeldOutPrefixError` on any range intersecting
+   seeds 3000–3999, so it cannot be used to probe the frozen set
+   (`test_the_tally_refuses_to_probe_the_preregistered_band` covers a
+   single-seed, a straddling-low, a straddling-high and an enclosing range, plus
+   a backwards range); `test_the_tally_counts_an_out_of_band_range_without_opening_a_prefix`
+   checks the shape of the tally on seeds 9001–9002. No band seed was walked.
+   Confirmed while implementing this: no seed in 1–50 raises out of
+   `build_prefix`, so `generate()` needs no new skip path and none was added.
+3. **Results had no architecture or design reference** (this card). Added
+   "Architecture and design references" above, naming the `docs/architecture.md`
+   sections the generator, the filter and the body-handle assertion rest on, and
+   the preregistration paragraph the held-out discipline comes from.
+4. **The filter environment was a mutable module-level dict**
+   (`experiments/held_out_prefixes.py`). `_FILTER_ENV` is now a
+   `types.MappingProxyType`, so the claim that a developer's environment cannot
+   move which prefixes pass is enforced against a same-process caller too, not
+   only against the shell. Its consumers were already Mapping-shaped
+   (`substrate_flag_snapshot(env: Mapping[str, str] | None)` and
+   `dict(_FILTER_ENV)` in `build_manifest`). Planted case:
+   `test_the_filter_environment_cannot_be_moved_by_a_same_process_caller`
+   asserts an item assignment raises `TypeError` and the two keys still read
+   `fake` and `2`.
+
+**Manifest impact.** Regenerating with
+`.venv/bin/python -m experiments.held_out_prefixes` changed exactly one line: the
+`source_sha256` entry for `experiments/held_out_prefixes.py`, from `9c6ec3ab…` to
+`0b94fec1…`. Verified field by field with `jq` — `accepted`, `skipped`,
+`skipped_reason_counts`, `last_accepted_seed`, `band`, `roster`,
+`filter_environment`, `development_definitions`, `body_handle_assertion`,
+`status`, `status_note`, `card`, `max_ticks`,
+`temporal_observation_version`, `canonical_json`, `version`, `prefix_bytes` and
+`filter` are byte-identical, and the other twenty-one `source_sha256` entries are
+unchanged. The file's byte count is unchanged at 11,524, so
+`docs/artifacts.md`'s `audits/` inventory row still reads
+`14,850,288 tracked bytes / 202 files` and was not touched. The manifest's own
+sha256 moved to
+`c060f3cac7fba8546c160f634e5788a052663458ceefd51e1fd2c366cd38b78e`.
+
+**Preparer statement, restated for this pass.** No prefix from the preregistered
+band was printed, opened or reasoned about during the corrections. The tally was
+run on seeds 1–50 and 9001–9002 only, both already recorded above as out-of-band
+development seeds; no seed outside that existing debugging set was walked, and
+no arm ran and no provider call was made.
+
+**Gate after the corrections**, run in order on this branch:
+
+| check | result |
+| --- | --- |
+| `.venv/bin/pytest tests/experiments/test_held_out_prefixes.py -q` | 18 passed in 1.98 s (4 new: the duplicate step, the frozen filter environment, and the tally's shape and its band refusal) |
+| `.venv/bin/python scripts/validate_task_docs.py` | 390 phase tasks, 390 prompts, 43 work cards |
+| `.venv/bin/python scripts/check_doc_facts.py` | doc facts, front door, ml-program and budgets verified |
+| `.venv/bin/python scripts/verify_ml_evidence.py` (offline, never `--complete`) | checks 60, OK 48, FAIL 0, ABSENT 7, INFO 5 |
+| `.venv/bin/pytest tests/scripts/test_verify_ml_evidence.py -q` | 80 passed in 80.52 s |
+| `bash scripts/check.sh` | exit 0: ruff (498 files formatted), 4 import-linter contracts kept, task docs, `generate_prompts --check` (390 in sync), mypy over 469 source files, **7,191 passed / 20 skipped / 3 xfailed** in 261.07 s, then the frontend leg — lint, three `tsc --noEmit` passes, 514 vitest tests over 19 files, and a clean production build |

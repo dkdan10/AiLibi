@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import get_args
 
 import pytest
 from pydantic import TypeAdapter, ValidationError
@@ -22,12 +23,16 @@ from experiments.held_out_prefixes import (
     MANIFEST_PATH,
     MAX_TICKS,
     PREREGISTERED_BAND,
+    TALLY_ACCEPTED_KEY,
+    TALLY_SEEDS_KEY,
     TEMPORAL_OBSERVATION_VERSION,
     HeldOutPrefix,
     HeldOutPrefixError,
     PrefixRoster,
     PrefixStep,
+    RejectionReason,
     SeedBand,
+    _FILTER_ENV,
     _replay_prefix,
     assert_no_legacy_body_handles,
     build_manifest,
@@ -39,6 +44,7 @@ from experiments.held_out_prefixes import (
     legacy_body_handles,
     prefix_sha256,
     prefix_surface_texts,
+    tally_reasons,
 )
 from observation.action_intent import ActionIntent
 from orchestrator.game import _build_meeting_trigger
@@ -50,6 +56,9 @@ _INTENTS: TypeAdapter[ActionIntent] = TypeAdapter(ActionIntent)
 #: band, so inspecting them converts nothing.
 _PLANT_SEED = 1
 _DEBUG_SEEDS = (9001, 9002)
+
+#: The two total rows ``tally_reasons`` reports before its reason histogram.
+_TALLY_TOTALS = (TALLY_SEEDS_KEY, TALLY_ACCEPTED_KEY)
 
 
 def _step(tick: int, actor: str, kind: str, payload: dict[str, object]) -> PrefixStep:
@@ -107,6 +116,80 @@ def _unwitnessed_seed_one_prefix() -> HeldOutPrefix:
         kill_tick=4,
         report_tick=7,
     )
+
+
+def test_a_duplicate_action_for_one_actor_and_tick_is_refused() -> None:
+    """The hashed schedule and the replayed schedule must be the same schedule.
+
+    ``_PrefixAgent`` keys its script by tick, so a second step for the same actor
+    and tick would be dropped at replay while ``canonical_prefix_json`` still
+    hashed it -- a digest certified for a run that never happened. The model
+    refuses the prefix instead.
+    """
+
+    valid = _unwitnessed_seed_one_prefix()
+    duplicated = (
+        *valid.steps,
+        _step(4, "p-4", "move", {"to_room": "UPPER_HALL"}),
+    )
+    with pytest.raises(ValidationError, match="one action per actor per tick"):
+        HeldOutPrefix(
+            seed=valid.seed,
+            roster=valid.roster,
+            max_ticks=valid.max_ticks,
+            steps=tuple(
+                sorted(duplicated, key=lambda step: (step.tick, step.action.actor))
+            ),
+            report_tick=valid.report_tick,
+            kill_tick=valid.kill_tick,
+        )
+    with pytest.raises(ValidationError, match="one action per actor per tick"):
+        HeldOutPrefix.model_validate(
+            {
+                **valid.model_dump(mode="json"),
+                "steps": [step.model_dump(mode="json") for step in duplicated],
+            }
+        )
+
+
+def test_the_filter_environment_cannot_be_moved_by_a_same_process_caller() -> None:
+    """A writable global would let a caller re-screen the set under other flags."""
+
+    with pytest.raises(TypeError):
+        _FILTER_ENV["AILIBI_TEMPORAL_OBSERVATIONS"] = "1"  # type: ignore[index]
+    assert dict(_FILTER_ENV) == {
+        "AILIBI_LLM_PROVIDER": "fake",
+        "AILIBI_TEMPORAL_OBSERVATIONS": str(TEMPORAL_OBSERVATION_VERSION),
+    }
+
+
+def test_the_tally_counts_an_out_of_band_range_without_opening_a_prefix() -> None:
+    """The reproducing command behind the card's out-of-band rejection rate."""
+
+    first, last = _DEBUG_SEEDS[0], _DEBUG_SEEDS[-1]
+    walked = last - first + 1
+    tally = tally_reasons(first, last)
+    assert tally["seeds"] == walked
+    reasons = {key: count for key, count in tally.items() if key not in _TALLY_TOTALS}
+    assert tally["accepted"] + sum(reasons.values()) == walked
+    assert set(reasons) <= set(get_args(RejectionReason))
+
+
+def test_the_tally_refuses_to_probe_the_preregistered_band() -> None:
+    """An aggregate count over band seeds is still a read of the held-out set."""
+
+    for first, last in (
+        (PREREGISTERED_BAND.first_seed, PREREGISTERED_BAND.first_seed),
+        (PREREGISTERED_BAND.first_seed - 1, PREREGISTERED_BAND.first_seed),
+        (PREREGISTERED_BAND.last_seed, PREREGISTERED_BAND.last_seed + 1),
+        (1, PREREGISTERED_BAND.last_seed + 1000),
+    ):
+        with pytest.raises(
+            HeldOutPrefixError, match="intersect the preregistered band"
+        ):
+            tally_reasons(first, last)
+    with pytest.raises(HeldOutPrefixError, match="must not run backwards"):
+        tally_reasons(_DEBUG_SEEDS[1], _DEBUG_SEEDS[0])
 
 
 def test_the_preregistered_band_is_the_one_the_card_froze() -> None:

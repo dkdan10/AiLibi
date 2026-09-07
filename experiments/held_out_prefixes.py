@@ -37,13 +37,15 @@ import hashlib
 import json
 import random
 import re
+import sys
 from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final, Literal
+from types import MappingProxyType
+from typing import Final, Literal, Self
 
-from pydantic import BaseModel, ConfigDict, TypeAdapter
+from pydantic import BaseModel, ConfigDict, TypeAdapter, model_validator
 
 from agents.base import AgentInterface
 from agents.memory.beliefs import OBSERVED_KILL_ACTION, OBSERVED_VENT_ACTION
@@ -90,11 +92,17 @@ _INTENT_ADAPTER: Final[TypeAdapter[ActionIntent]] = TypeAdapter(ActionIntent)
 TEMPORAL_OBSERVATION_VERSION: Final[Literal[2]] = 2
 
 #: The filter's environment, stated rather than inherited: a developer's shell
-#: must not be able to move which prefixes pass.
-_FILTER_ENV: Final[Mapping[str, str]] = {
-    "AILIBI_LLM_PROVIDER": "fake",
-    "AILIBI_TEMPORAL_OBSERVATIONS": str(TEMPORAL_OBSERVATION_VERSION),
-}
+#: must not be able to move which prefixes pass. Wrapped in a
+#: :class:`~types.MappingProxyType` rather than left a plain module-level dict:
+#: a writable global could be mutated by any same-process caller before
+#: :func:`evaluate_prefix` ran, and the filter would then silently screen under
+#: substrate flags other than the ones the manifest records.
+_FILTER_ENV: Final[Mapping[str, str]] = MappingProxyType(
+    {
+        "AILIBI_LLM_PROVIDER": "fake",
+        "AILIBI_TEMPORAL_OBSERVATIONS": str(TEMPORAL_OBSERVATION_VERSION),
+    }
+)
 
 #: Every tick budget in the set. Wide enough for the longest schedule this
 #: generator can draw (kill at tick 5, a six-hop walk to the body, report at
@@ -219,6 +227,12 @@ class HeldOutPrefix(BaseModel):
 
     ``steps`` stops at the report: nothing past the meeting boundary belongs to a
     prefix, because everything past it is what the evaluation measures.
+
+    A player submits exactly one action per tick, so at most one step may carry a
+    given ``(tick, actor)`` pair. The model refuses a second one rather than
+    letting the replay pick a winner: :func:`canonical_prefix_json` and
+    :func:`prefix_sha256` bind every step, so a schedule the replay could only
+    partly honour would have its digest certified for a run that never happened.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -230,6 +244,19 @@ class HeldOutPrefix(BaseModel):
     steps: tuple[PrefixStep, ...]
     report_tick: int
     kill_tick: int
+
+    @model_validator(mode="after")
+    def _one_action_per_actor_and_tick(self) -> Self:
+        seen: set[tuple[int, PlayerId]] = set()
+        for step in self.steps:
+            key = (step.tick, step.action.actor)
+            if key in seen:
+                raise ValueError(
+                    "a prefix carries at most one action per actor per tick; "
+                    f"duplicate step for {key[1]} at tick {key[0]}"
+                )
+            seen.add(key)
+        return self
 
 
 #: The band preregistered by ``tasks/work/held-out-prefix-freeze.md``. Seeds 3000
@@ -625,6 +652,9 @@ class _PrefixAgent(TacticalAgent):
             else CrewmatePolicy(agent_id=agent_id)
         )
         super().__init__(agent_id=agent_id, policy=policy, role=role, memory=memory)
+        # Safe to key by tick alone: ``HeldOutPrefix`` rejects a second step for
+        # the same ``(tick, actor)``, so this comprehension can never drop a
+        # hashed action the way an unvalidated schedule's later step would.
         self._scripted: dict[int, ActionIntent] = {
             step.tick: step.action
             for step in prefix.steps
@@ -881,6 +911,65 @@ def generate(
     )
 
 
+#: The keys :func:`tally_reasons` reports before the reason-code histogram.
+TALLY_SEEDS_KEY: Final[str] = "seeds"
+TALLY_ACCEPTED_KEY: Final[str] = "accepted"
+
+
+def tally_reasons(
+    first_seed: int,
+    last_seed: int,
+    roster: PrefixRoster = AUTHORIZED_ROSTER,
+) -> dict[str, int]:
+    """Count how the filter dispositions an OUT-OF-BAND seed range. Aggregates only.
+
+    This is the reproducing command behind the card's out-of-band rejection rate:
+    it evaluates every seed in ``[first_seed, last_seed]`` exactly as
+    :func:`generate` would and returns the number of seeds walked, the number
+    accepted, and the histogram of rejection reason codes. It never returns,
+    prints or otherwise exposes a prefix, a step, a room, a route or a digest.
+
+    It REFUSES any range that touches :data:`PREREGISTERED_BAND`. A count is
+    aggregate, but a per-range count over band seeds is still a probe of the
+    held-out set -- narrow the range and it becomes a per-seed read -- so the
+    band is out of reach of this function rather than merely discouraged.
+
+    A seed whose schedule cannot be built raises out of :func:`build_prefix`,
+    exactly as it would inside :func:`generate`; the tally does not soften a
+    build failure into a reason code, because a count that disagreed with the
+    generator would not be evidence about the generator.
+    """
+
+    if last_seed < first_seed:
+        raise HeldOutPrefixError("a tally range must not run backwards")
+    if (
+        first_seed <= PREREGISTERED_BAND.last_seed
+        and PREREGISTERED_BAND.first_seed <= last_seed
+    ):
+        raise HeldOutPrefixError(
+            f"seeds {first_seed}-{last_seed} intersect the preregistered band "
+            f"{PREREGISTERED_BAND.first_seed}-{PREREGISTERED_BAND.last_seed}; "
+            "the held-out set is not tallied, only regenerated and hashed"
+        )
+    game_map = load_canonical_map()
+    public_map = public_map_from_engine_map(game_map)
+    reasons: Counter[RejectionReason] = Counter()
+    accepted = 0
+    for seed in range(first_seed, last_seed + 1):
+        prefix = build_prefix(seed=seed, roster=roster, game_map=game_map)
+        evaluation = evaluate_prefix(prefix, game_map=game_map, public_map=public_map)
+        if evaluation.reason is None:
+            accepted += 1
+        else:
+            reasons[evaluation.reason] += 1
+    tally = {
+        TALLY_SEEDS_KEY: last_seed - first_seed + 1,
+        TALLY_ACCEPTED_KEY: accepted,
+    }
+    tally.update({reason: reasons[reason] for reason in sorted(reasons)})
+    return tally
+
+
 # ---------------------------------------------------------------------------
 # The freeze manifest
 # ---------------------------------------------------------------------------
@@ -1002,6 +1091,8 @@ __all__ = [
     "RejectionReason",
     "SeedBand",
     "SkippedSeed",
+    "TALLY_ACCEPTED_KEY",
+    "TALLY_SEEDS_KEY",
     "TEMPORAL_OBSERVATION_VERSION",
     "assert_no_legacy_body_handles",
     "build_manifest",
@@ -1014,13 +1105,26 @@ __all__ = [
     "prefix_sha256",
     "prefix_surface_texts",
     "source_digests",
+    "tally_reasons",
     "write_manifest",
 ]
 
 
-if __name__ == "__main__":  # pragma: no cover - the freeze command
-    written = write_manifest(
-        Path(__file__).resolve().parents[1],
-        card="tasks/work/held-out-prefix-freeze.md",
-    )
-    print(f"wrote {written}")
+_USAGE: Final[str] = (
+    "usage: python -m experiments.held_out_prefixes [--tally FIRST LAST]"
+)
+
+
+if __name__ == "__main__":  # pragma: no cover - the freeze and tally commands
+    _argv = sys.argv[1:]
+    if not _argv:
+        written = write_manifest(
+            Path(__file__).resolve().parents[1],
+            card="tasks/work/held-out-prefix-freeze.md",
+        )
+        print(f"wrote {written}")
+    elif _argv[0] == "--tally" and len(_argv) == 3:
+        for _key, _value in tally_reasons(int(_argv[1]), int(_argv[2])).items():
+            print(f"{_key} {_value}")
+    else:
+        raise SystemExit(_USAGE)
