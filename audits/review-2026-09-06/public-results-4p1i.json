@@ -1,0 +1,150 @@
+{
+  "source_hashes": {
+    "reader_implementation": "863119954d8b24947ace0fce4a4143c6d459a7103a6c705ad6396df6e29a7fea",
+    "4p1i:0": "63532363d24c7274ff429828ee3099f819a2b9b88cdfdac71565c91f4b0368cb",
+    "set:4p1i": "76f3954f095448d5092517a744a35a47664aff3ce6f7f7596d5a85073cb2218c",
+    "summary_instrument": "0a0772c563edc35baaa760e62c03fba603335bc9c63925b3ff5d0b66e187f233"
+  },
+  "substrate": {
+    "testimony_as_content": true,
+    "witnessed_kill_evidence": true,
+    "movement_perception": true,
+    "unfreeze_memory": true,
+    "evidence_quality_lift": true,
+    "reporter_exculpation": true,
+    "hard_evidence_gate": true,
+    "observation_id_rendering": true,
+    "citation_gate": true,
+    "absence_prior": true,
+    "roll_call_round": true,
+    "whereabouts_interior_flags": true,
+    "vent_placement_contradictions": true,
+    "task_completion_from_events": true,
+    "self_location_trail": true,
+    "movement_claim_shape": true,
+    "grounded_prosecution": true,
+    "map_aware_arbitration": true,
+    "structured_turn_markers": true,
+    "meeting_outcome_memory": true,
+    "coalesced_memory_render": true,
+    "impostor_roll_call": false,
+    "reporter_reasoning": false,
+    "corroboration_discipline": false,
+    "testimony_shapes": false,
+    "temporal_observations": false
+  },
+  "python": "3.11.15",
+  "platform": "macOS-15.7.3-arm64-arm-64bit",
+  "measured_at_utc": "2026-09-06T12:35:43Z",
+  "scope": "Sequential in-process summary generation, including serialization. Application-cold loaders; OS cache unchanged; no HTTP/network, RSS or concurrent-request claim. Bypass uses the same reader without whole-summary reuse.",
+  "samples": [
+    {
+      "mode": "bypass",
+      "repetition": 0,
+      "request": "cold",
+      "elapsed_ms": 841.95583302062,
+      "walks": 100,
+      "games": 50,
+      "response_bytes": 864
+    },
+    {
+      "mode": "bypass",
+      "repetition": 0,
+      "request": "warm",
+      "elapsed_ms": 522.6147919893265,
+      "walks": 50,
+      "games": 50,
+      "response_bytes": 864
+    },
+    {
+      "mode": "reuse",
+      "repetition": 0,
+      "request": "cold",
+      "elapsed_ms": 841.281040920876,
+      "walks": 100,
+      "games": 50,
+      "response_bytes": 864
+    },
+    {
+      "mode": "reuse",
+      "repetition": 0,
+      "request": "warm",
+      "elapsed_ms": 2.4717500200495124,
+      "walks": 0,
+      "games": 50,
+      "response_bytes": 864
+    },
+    {
+      "mode": "bypass",
+      "repetition": 1,
+      "request": "cold",
+      "elapsed_ms": 692.4434580141678,
+      "walks": 100,
+      "games": 50,
+      "response_bytes": 864
+    },
+    {
+      "mode": "bypass",
+      "repetition": 1,
+      "request": "warm",
+      "elapsed_ms": 506.47045799996704,
+      "walks": 50,
+      "games": 50,
+      "response_bytes": 864
+    },
+    {
+      "mode": "reuse",
+      "repetition": 1,
+      "request": "cold",
+      "elapsed_ms": 738.662333926186,
+      "walks": 100,
+      "games": 50,
+      "response_bytes": 864
+    },
+    {
+      "mode": "reuse",
+      "repetition": 1,
+      "request": "warm",
+      "elapsed_ms": 6.511625018902123,
+      "walks": 0,
+      "games": 50,
+      "response_bytes": 864
+    },
+    {
+      "mode": "bypass",
+      "repetition": 2,
+      "request": "cold",
+      "elapsed_ms": 797.8187080007046,
+      "walks": 100,
+      "games": 50,
+      "response_bytes": 864
+    },
+    {
+      "mode": "bypass",
+      "repetition": 2,
+      "request": "warm",
+      "elapsed_ms": 520.124499918893,
+      "walks": 50,
+      "games": 50,
+      "response_bytes": 864
+    },
+    {
+      "mode": "reuse",
+      "repetition": 2,
+      "request": "cold",
+      "elapsed_ms": 826.4828330138698,
+      "walks": 100,
+      "games": 50,
+      "response_bytes": 864
+    },
+    {
+      "mode": "reuse",
+      "repetition": 2,
+      "request": "warm",
+      "elapsed_ms": 2.556040999479592,
+      "walks": 0,
+      "games": 50,
+      "response_bytes": 864
+    }
+  ]
+}

@@ -32,6 +32,7 @@ from orchestrator.replay import (
     fsm_default_tactical_policy_stamp,
 )
 from orchestrator.seeder import seed_initial_state
+from tests.api.fixtures.sample_replay import finish_replay_with_kills
 
 _CHAMPION = TacticalPolicyStamp(
     policy_id="wave2-champion-7",
@@ -72,9 +73,7 @@ def _write_stamped_replay(
         state, _events = advance_tick(state, [], game_map=game_map)
         log.record_tick(input_tick, [], state)
     if game_over:
-        log.record_game_end(
-            winner="CREWMATES", reason="all_tasks_complete", tick=ticks - 1
-        )
+        finish_replay_with_kills(log, state, game_map)
     log.close()
 
 

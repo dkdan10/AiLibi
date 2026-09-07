@@ -1,0 +1,16 @@
+## What players said
+{% for turn in transcript.turns %}
+[{{ turn.turn_id }}] {{ turn.speaker }} said: {{ turn.free_text }}
+{% for obs in turn.observations %}
+- [turn:{{ turn.turn_id }}:{% if obs.type == "whereabouts" %}whereabouts{% else %}obs{% endif %}:{{ loop.index0 }}] {{ turn.speaker }} stated {{ obs.model_dump_json() }}
+{% endfor %}
+{% for claim in turn.claims %}
+- [turn:{{ turn.turn_id }}:claim:{{ loop.index0 }}] {{ turn.speaker }} stated {{ claim.model_dump_json() }}
+{% endfor %}
+{% endfor %}
+## Account comparisons
+{% for flag in account_flags %}
+- {{ flag.description }}
+{% else %}
+No account conflict was identified. That does not establish anyone's innocence.
+{% endfor %}

@@ -52,7 +52,7 @@ from meetings.transcript import (
     is_weak_contradiction,
     self_refuted_alibi_claim_ids,
 )
-from observation.packet import ObservationPacket
+from observation.packet import ObservationPacket, PlayerView
 
 PlayerId: TypeAlias = str
 RoomId: TypeAlias = str
@@ -530,8 +530,7 @@ evidence outlives weak evidence."""
 # The action label the observation layer stamps on a ``PlayerView`` when the
 # observer *witnesses* a player using a vent (observation/service.py
 # ``_vent_observation_for_agent``). Seeing the vent is the player-attributed
-# signal Rule 4 keys on; the room-only ``vent_use_heard`` AudibleEvent carries
-# no subject and is deliberately not used.
+# signal Rule 4 keys on; unattributed sounds supply no such evidence.
 OBSERVED_VENT_ACTION: Final[str] = "vent"
 
 # The action label the observation layer stamps on a ``PlayerView`` when the
@@ -1089,12 +1088,46 @@ class BeliefState:
         return belief
 
 
+def apply_witnessed_action_rules(
+    beliefs: BeliefState,
+    *,
+    witnessed_actions: Sequence[PlayerView],
+    fellow_impostor_ids: AbstractSet[PlayerId] | Sequence[PlayerId] = (),
+) -> BeliefState:
+    """Apply each first-hand kill/vent lift without replaying body proximity."""
+
+    result = beliefs.copy()
+
+    fellow_impostor_ids = frozenset(fellow_impostor_ids)
+
+    for player in witnessed_actions:
+        # Task 16.3: the witnessed vent and kill pins are the grounded HARD
+        # kill-or-vent-pin channel (perception-time, persists into the stored
+        # BeliefState the meeting graph reads).
+        if player.action == OBSERVED_VENT_ACTION:
+            result.adjust_suspicion(
+                player.id, delta=VENTING_SUSPICION_DELTA, source="kill_or_vent_pin"
+            )
+        elif (
+            player.action == OBSERVED_KILL_ACTION
+            and player.id not in fellow_impostor_ids
+        ):
+            result.adjust_suspicion(
+                player.id,
+                delta=WITNESSED_KILL_SUSPICION_DELTA,
+                source="kill_or_vent_pin",
+            )
+
+    return result
+
+
 def apply_observation_rules(
     beliefs: BeliefState,
     *,
     observation: ObservationPacket,
     previous_visible_bodies: AbstractSet[BodyId],
     recent_co_presence: Mapping[RoomId, Sequence[tuple[int, PlayerId]]],
+    known_dead_by: Mapping[str, int] | None = None,
 ) -> BeliefState:
     """Apply DESIGN.md §6.3 rule-based belief updates (Rules 1 and 4).
 
@@ -1103,9 +1136,8 @@ def apply_observation_rules(
     Rule 4 -- observed venting (``VENTING_SUSPICION_DELTA``). Venting is
     impostor-exclusive, so a *witnessed* vent is the strongest signal an agent
     can hold ("almost certain"). The witness lands as a ``PlayerView`` carrying
-    ``action == "vent"`` in ``visible_players``; the room-only
-    ``vent_use_heard`` AudibleEvent is deliberately ignored because it has no
-    player attribution and would smear suspicion across the whole room.
+    ``action == "vent"`` in ``visible_players``. Only attributed witnessing
+    supports this update; an unattributed sound supplies no subject.
 
     Witnessed kill (``WITNESSED_KILL_SUSPICION_DELTA``, Task 13.5.3 -- the
     2026-06-25 eyewitness-strength decision). A kill is even more conclusive
@@ -1137,27 +1169,11 @@ def apply_observation_rules(
     which preserves both the observation firewall and its own purity.
     """
 
-    result = beliefs.copy()
-
-    fellow_impostor_ids = frozenset(observation.self_state.fellow_impostor_ids)
-
-    for player in observation.visible_players:
-        # Task 16.3: the witnessed vent and kill pins are the grounded HARD
-        # kill-or-vent-pin channel (perception-time, persists into the stored
-        # BeliefState the meeting graph reads).
-        if player.action == OBSERVED_VENT_ACTION:
-            result.adjust_suspicion(
-                player.id, delta=VENTING_SUSPICION_DELTA, source="kill_or_vent_pin"
-            )
-        elif (
-            player.action == OBSERVED_KILL_ACTION
-            and player.id not in fellow_impostor_ids
-        ):
-            result.adjust_suspicion(
-                player.id,
-                delta=WITNESSED_KILL_SUSPICION_DELTA,
-                source="kill_or_vent_pin",
-            )
+    result = apply_witnessed_action_rules(
+        beliefs,
+        witnessed_actions=observation.visible_players,
+        fellow_impostor_ids=observation.self_state.fellow_impostor_ids,
+    )
 
     for body in observation.visible_bodies:
         if body.id in previous_visible_bodies:
@@ -1167,6 +1183,10 @@ def apply_observation_rules(
             for tick, player_id in recent_co_presence.get(body.room, ())
             if 0 <= observation.tick - tick <= BODY_PROXIMITY_WINDOW_TICKS
             and player_id != body.victim_id
+            and (
+                known_dead_by is None
+                or tick < known_dead_by.get(body.victim_id, observation.tick + 1)
+            )
         }
         for player_id in sorted(co_present):
             # Task 16.3: the Rule-1 proximity pin is the grounded HARD

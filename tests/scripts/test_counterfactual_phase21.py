@@ -1565,13 +1565,10 @@ def test_a_spoken_kill_offers_the_impostor_no_block_through_the_whole_walk(
 def test_the_off_reduction_stays_off_inside_a_lever_on_shell(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The seam the bare-shell guard used to cover and this mode gives up.
+    """The historical OFF column stays independent of the recording's shell.
 
-    ``derive_reported_testimony`` defaults to the ambient environment, and the
-    lever-ON mode runs in a shell that exports the arm on purpose. An unqualified
-    call would return the ON reduction and label it OFF — so the planted case is
-    a spoken shape that MUST be absent from the OFF column while the shell says
-    otherwise.
+    A spoken shape must remain absent from the explicitly disabled reduction
+    while the surrounding recording and shell enable it.
     """
 
     _export_the_slate(monkeypatch)
@@ -1827,7 +1824,7 @@ def _one_meeting_with_a_location_account(directory: Path) -> tuple[Any, Any]:
         ):
             spoken = derive_reported_testimony(
                 meeting.result,
-                env={env_var_for_lever("testimony_shapes"): "1"},
+                testimony_shapes=True,
             )
             for statement in spoken:
                 if (

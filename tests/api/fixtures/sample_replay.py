@@ -18,11 +18,11 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
 
 from engine.actions import Action, KillAction, ReportBodyAction, WaitAction
+from engine.events import GameOverEvent
 from engine.tick import advance_tick
-from engine.world import load_canonical_map
+from engine.world import Map, WorldState, load_canonical_map
 from meetings.schemas import (
     ContradictionRef,
     FoundBodyObservation,
@@ -87,19 +87,8 @@ def write_sample_replay(
     *,
     seed: int = 0,
     ticks: int = 3,
-    game_end_tick: int | None | Literal["last"] = "last",
 ) -> None:
-    """Write a minimal no-op game that ends with a CREWMATES win record.
-
-    ``game_end_tick`` controls the ``tick`` recorded on the game-end row: the
-    default ``"last"`` records the final advanced tick (``ticks - 1``, what the
-    orchestrator does), an ``int`` records that value verbatim even when it
-    disagrees with the tick stream, and ``None`` omits it (a direct-``ReplayLog``
-    writer that only cares about the winner). The last two exist so Task 19.10's
-    finale tests can tell the recorded ``GameEndReplayEntry.tick`` apart from the
-    loader's walk-position fallback — on every orchestrator-shaped recording the
-    two coincide, which would leave the recorded-tick path unobserved.
-    """
+    """Write a short no-op prefix with no invented outcome."""
 
     game_map = load_canonical_map()
     log = ReplayLog(path=path, game_id=f"headless-seed-{seed}")
@@ -113,11 +102,56 @@ def write_sample_replay(
         input_tick = state.tick
         state, _events = advance_tick(state, [], game_map=game_map)
         log.record_tick(input_tick, [], state)
-    log.record_game_end(
-        winner="CREWMATES",
-        reason="all_tasks_complete",
-        tick=ticks - 1 if game_end_tick == "last" else game_end_tick,
+
+
+def finish_replay_with_kills(
+    log: ReplayLog, state: WorldState, game_map: Map
+) -> WorldState:
+    """Finish a co-located fixture through legal kills and record engine truth."""
+    impostor = next(
+        pid
+        for pid, player in state.players.items()
+        if player.alive and player.role == "IMPOSTOR"
     )
+    while state.phase == "PLAY":
+        actions: list[Action] = [
+            _wait(pid) for pid, player in state.players.items() if player.alive
+        ]
+        if state.cooldowns[impostor] == 0:
+            victim = next(
+                pid
+                for pid, player in state.players.items()
+                if player.alive and player.role == "CREWMATE"
+            )
+            actions = [action for action in actions if action.actor != impostor]
+            actions.append(
+                KillAction.model_validate(
+                    {"actor": impostor, "type": "kill", "payload": {"target": victim}}
+                )
+            )
+        input_tick = state.tick
+        state, events = advance_tick(state, actions, game_map=game_map)
+        log.record_tick(input_tick, actions, state)
+        for event in events:
+            if isinstance(event, GameOverEvent):
+                log.record_game_end(
+                    winner=event.winner, reason=event.reason, tick=event.tick
+                )
+    assert state.phase == "GAME_OVER"
+    return state
+
+
+def write_completed_replay(path: Path, *, seed: int = 0) -> None:
+    """Write a real meeting-free parity win for outcome-specific tests."""
+    game_map = load_canonical_map()
+    log = ReplayLog(path=path, game_id=f"headless-seed-{seed}")
+    state = seed_initial_state(
+        seed=seed,
+        game_map=game_map,
+        num_players=_NUM_PLAYERS,
+        num_impostors=_NUM_IMPOSTORS,
+    )
+    finish_replay_with_kills(log, state, game_map)
 
 
 def write_partial_replay(path: Path, *, seed: int = 0, ticks: int = 3) -> None:
@@ -144,12 +178,11 @@ def write_meeting_replay(
     seed: int = 0,
     llm_calls: tuple[LLMCallRecord, ...] | None = None,
 ) -> MeetingReplayExpectations:
-    """Write a 3-tick game with one body-report meeting; return expectations.
+    """Write one skipped body-report meeting followed by a real parity win.
 
-    Tick 0: the impostor (``p-3``) kills ``p-1`` in CAFETERIA. Tick 1: ``p-2``
-    reports the body, opening a meeting that resolves SKIPPED. Tick 2: a no-op
-    tick after the meeting resumes play. Returns a dict of the values tests
-    assert against (meeting id, reporter, costs, ...).
+    The impostor waits for its initial cooldown, kills, and lets a crewmate
+    report the body. After the skipped meeting, it waits for its reset cooldown
+    and kills again. Expected labels and counts come from those engine steps.
 
     ``llm_calls`` overrides the synthetic LLM-call records written into the
     meeting entry; callers use it to pin specific ``agent_id`` values for
@@ -230,13 +263,10 @@ def write_meeting_replay(
     )
 
     # Quiet tick after the meeting resumes play.
-    quiet_tick = state.tick
     input_tick = state.tick
     state, _events = advance_tick(state, [], game_map=game_map)
     log.record_tick(input_tick, [], state)
-    log.record_game_end(
-        winner="CREWMATES", reason="all_tasks_complete", tick=quiet_tick
-    )
+    state = finish_replay_with_kills(log, state, game_map)
 
     return MeetingReplayExpectations(
         game_id=game_id,
@@ -247,10 +277,9 @@ def write_meeting_replay(
         impostor=impostor,
         living_agents=living,
         total_cost_usd=sum(call.cost_usd for call in llm_calls),
-        # Recorded ticks are 0..quiet_tick inclusive: the cooldown waits, the
-        # kill, the meeting/report tick, then this quiet tick.
-        total_ticks=quiet_tick + 1,
-        winner="CREWMATES",
+        # A terminal advance retains the input tick instead of incrementing it.
+        total_ticks=state.tick + 1,
+        winner="IMPOSTORS",
     )
 
 
@@ -277,7 +306,6 @@ def write_roster_replay(
         input_tick = state.tick
         state, _events = advance_tick(state, actions, game_map=game_map)
         log.record_tick(input_tick, actions, state)
-    log.record_game_end(winner="CREWMATES", reason="all_tasks_complete", tick=ticks - 1)
 
 
 def write_unresolved_meeting_replay(path: Path, *, seed: int = 0) -> str:

@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import TextIO
 
-from observation.packet import ObservationPacket
+from observation.packet import EventObservationBatch, ObservationPacket
 
 
 class ObservationAuditLog:
@@ -20,7 +20,7 @@ class ObservationAuditLog:
     def path(self) -> Path:
         return self._path
 
-    def record_packet(self, packet: ObservationPacket) -> None:
+    def record_packet(self, packet: ObservationPacket | EventObservationBatch) -> None:
         handle = self._handle
         if handle is None:
             # Lazy open + reuse: one open per audit log instead of one per

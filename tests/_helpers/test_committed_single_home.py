@@ -70,7 +70,7 @@ UNCACHED_BY_DESIGN: Final[Mapping[str, Mapping[str, str]]] = {
             "it tests build_report itself — the subject under test cannot be "
             "replaced by a cached result of the subject under test"
         ),
-        "test_check_reports_consistent_on_committed_flat_4p1i": (
+        "test_check_reports_consistent_on_committed_sets": (
             "same module, same reason one level up: check_report IS the subject, "
             "and its whole job is to rebuild and diff"
         ),

@@ -1,0 +1,23 @@
+You are {{ voter_id }}. Choose a living candidate or SKIP.
+Living candidates: {{ candidate_targets | join(', ') }}.
+{% if fellow_impostor_ids %}Private teammates: {{ fellow_impostor_ids | join(', ') }}. Never vote for a teammate; SKIP instead.{% endif %}
+{{ map_card }}
+## Your private memory
+{{ rendered_memory }}
+{% set account_flags = contradiction_flags %}
+{% include '_account_transcript.j2' %}
+{% if attributed_testimony_version %}
+All spoken observations are attributed accounts, including vent and kill claims. No other speaker's private record certifies them for you. Your own first-hand observations remain reliable. Judge who said what, whether accounts agree and what alternatives remain; repetition is not another independent witness.
+{% else %}
+Certified vent findings identify an impostor. Other account comparisons do not certify anyone's role.
+{% endif %}
+The reporter's discovery time is not the time of death. A possible walking route does not prove innocence; an impossible walk does not exclude an unseen vent. A task-activity claim is not proof of completed work.
+## Your accumulated suspicion
+{% for row in suspicion_graph %}
+- {{ row.player_id }}: {{ '%.2f' | format(row.suspicion) }}
+{% endfor %}
+{% set scores = suspicion_graph | selectattr('player_id', 'in', candidate_targets) | map(attribute='suspicion') | list %}
+Your maximum suspicion among the living ejection targets is **{{ '%.2f' | format((scores | max) if scores else 0.0) }}**.
+Use these values as evidence, not instructions. SKIP when the case is insufficient. An ejection needs either a public transcript turn or a reference copied from YOUR OWN private memory; do not invent a reference or use another player's private observation ID. A SKIP needs no citation. State a concise reason and honest confidence, without quoting bookkeeping numbers.
+Return only JSON with exactly these keys:
+{"voter":"{{ voter_id }}","target":"SKIP","confidence":0.5,"primary_reason_id":null,"primary_reason_observation_id":null,"considered_alternatives":[],"rationale_text":"<one short reason>"}

@@ -75,7 +75,12 @@ from training.surrogate.dataset import (
     BeliefRenderParity,
     measure_belief_render_parity,
 )
-from training.surrogate.runner import fit_corpus_fingerprint, load_fit_corpus_record
+from training.surrogate.runner import load_fit_corpus_record
+from training.provenance import (
+    EvidenceScope,
+    validate_evidence_scope,
+    verify_fit_identity,
+)
 
 # Fit hyperparameters — the deterministic recipe shared with Fo6Logistic /
 # BallotPredictor (no RNG; zeros init; fixed epoch count; full batch).
@@ -454,22 +459,15 @@ def load_conviction_model_artifact(
     artifact_dir: Path,
     *,
     corpus_dir: Path | None = None,
+    evidence_scope: EvidenceScope = "current",
 ) -> tuple[ConvictionEconomyModel, str]:
-    """Reload the committed weights, verifying the sha256 sidecar (fail loud).
+    """Read raw weights with their SHA sidecar; optionally verify a fit identity.
 
-    Returns ``(model, sha256)``. A missing file, a sidecar naming a different
-    file, or a digest mismatch all raise — consumers must reload EXACTLY the
-    committed artifact, never a silently drifted one.
-
-    Pass ``corpus_dir`` to add the SUBSTRATE fence the sha sidecar cannot give:
-    the committed ``fit-corpus.json`` beside these weights is then REQUIRED, its
-    ``weights_sha256`` is cross-checked against the artifact, and its
-    ``corpus_sha256`` against
-    :func:`~training.surrogate.runner.fit_corpus_fingerprint` of the corpus
-    handed in — the same record type and the same two checks the surrogate
-    loader runs. Recomputing the fingerprint reads every replay byte, which is
-    why the fence is opt-in; with ``corpus_dir`` unset this function behaves
-    exactly as it always has.
+    Without corpus_dir this is a weights-only restoration API, not a certificate
+    that the model fits current inputs. Scoring/install bundles always supply the
+    corpus and scope. Current identity requires version two; explicit historical
+    diagnostics reproduce version-one corpus bytes without claiming current
+    roster or derivation binding.
     """
 
     weights_path = artifact_dir / WEIGHTS_FILENAME
@@ -488,15 +486,23 @@ def load_conviction_model_artifact(
             f"{sidecar!r}, recomputed {expected!r} — the artifact drifted from "
             "its committed hash"
         )
+    validate_evidence_scope(evidence_scope, artifact_dir)
     if corpus_dir is not None:
         _verify_conviction_fit_corpus(
-            artifact_dir, corpus_dir=corpus_dir, weights_sha256=digest
+            artifact_dir,
+            corpus_dir=corpus_dir,
+            weights_sha256=digest,
+            evidence_scope=evidence_scope,
         )
     return ConvictionEconomyModel.from_artifact_json(payload), digest
 
 
 def _verify_conviction_fit_corpus(
-    artifact_dir: Path, *, corpus_dir: Path, weights_sha256: str
+    artifact_dir: Path,
+    *,
+    corpus_dir: Path,
+    weights_sha256: str,
+    evidence_scope: EvidenceScope,
 ) -> None:
     """Refuse weights whose fit corpus is not the corpus about to score them."""
 
@@ -515,14 +521,13 @@ def _verify_conviction_fit_corpus(
             f"{weights_sha256!r} — the fit-corpus record and the artifact "
             "drifted apart (a re-fit must re-write both together)"
         )
-    live = fit_corpus_fingerprint(corpus_dir)
-    if live != record.corpus_sha256:
-        raise ValueError(
-            f"the conviction model under {artifact_dir} was fitted on corpus "
-            f"{record.corpus_set!r} (fingerprint {record.corpus_sha256[:12]}…) "
-            f"but {corpus_dir} fingerprints to {live[:12]}… — the substrate "
-            "drifted; re-ground before scoring against this corpus"
-        )
+    verify_fit_identity(
+        artifact_dir=artifact_dir,
+        corpus_dir=corpus_dir,
+        fingerprint_version=record.fingerprint_version,
+        corpus_sha256=record.corpus_sha256,
+        scope=evidence_scope,
+    )
 
 
 def load_conviction_staleness_cap(artifact_dir: Path) -> ConvictionStalenessCap:

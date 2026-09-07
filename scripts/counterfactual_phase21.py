@@ -179,6 +179,7 @@ from orchestrator.replay import (  # noqa: E402
     _TOGGLEABLE_LEVER_RESOLVERS,
     env_var_for_lever,
     read_all_entries,
+    require_legacy_observations,
     read_substrate_flags,
     retired_levers_stamped_off,
     substrate_flag_snapshot,
@@ -2152,13 +2153,10 @@ def _fold_testimony(
     bound and are printed as one.
     """
 
-    # BOTH sides pass an explicit env. The reduction's default is the ambient
-    # process environment, and the lever-ON mode runs in a shell that exports the
-    # arm on purpose -- so an unqualified call would return the ON reduction and
-    # label it OFF, which is precisely the seam the committed mode's bare-shell
-    # guard protects and the ON mode necessarily gives up.
-    off = derive_reported_testimony(meeting.result, env={})
-    on = derive_reported_testimony(meeting.result, env=_TESTIMONY_SHAPES_ENV)
+    # Compare explicit historical arms of the pure reducer. Shell exports affect
+    # neither column; the newer evidence-reasoning profile remains disabled.
+    off = derive_reported_testimony(meeting.result, testimony_shapes=False)
+    on = derive_reported_testimony(meeting.result, testimony_shapes=True)
     census.off_kinds.update(statement.kind for statement in off)
     census.on_kinds.update(statement.kind for statement in on)
     listeners = frozenset(ballot.voter for ballot in meeting.result.ballots)
@@ -2635,11 +2633,9 @@ def _walk(
         walk.games += 1
         seed = int(seed_path.stem.rsplit("-", 1)[-1])
         roles = per_seed_roles[seed]
-        ticks = [
-            entry
-            for entry in read_all_entries(seed_path)
-            if isinstance(entry, ReplayEntry)
-        ]
+        entries = read_all_entries(seed_path)
+        require_legacy_observations(entries, consumer="phase21 counterfactual")
+        ticks = [entry for entry in entries if isinstance(entry, ReplayEntry)]
         venters = venters_in_game(ticks)
         sink.clear()
         for meeting in walk_replay_meetings(
@@ -4565,7 +4561,9 @@ def _arm_serving_set(recording_dir: Path) -> str:
     """
 
     for seed in seeds_on_disk(recording_dir):
-        for entry in read_all_entries(recording_dir / f"replay-seed-{seed}.jsonl"):
+        entries = read_all_entries(recording_dir / f"replay-seed-{seed}.jsonl")
+        require_legacy_observations(entries, consumer="phase21 counterfactual")
+        for entry in entries:
             if isinstance(entry, MeetingReplayEntry):
                 return resolve_prompt_set(entry.prompt_versions)
     raise SystemExit(

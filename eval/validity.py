@@ -10,7 +10,7 @@ metric that already has a tested home:
 
 * meeting rate — :func:`eval.meeting_quality.compute_meeting_rate`
 * win-condition self-check — :mod:`eval.win_condition_selfcheck`
-* tournament assembly — :func:`eval.balance_eval.load_tournament_report`
+* tournament assembly — :func:`eval.balance_eval.load_historical_tournament_report`
 * byte-identity walk — ``scripts/_verify_samples.py`` (the machinery behind it)
 
 Every check is PURE and OFFLINE: the whole gate runs on a fresh clone with no
@@ -98,7 +98,7 @@ from api import replay_loader
 from engine.entities import PlayerId, Role
 from engine.events import GameOverEvent, KilledEvent
 from engine.world import Map, WorldState, load_canonical_map
-from eval.balance_eval import load_tournament_report
+from eval.balance_eval import load_historical_tournament_report
 from eval.meeting_quality import compute_meeting_rate
 from eval.replay_walk import (
     MeetingApplied,
@@ -349,10 +349,10 @@ def assemble_tournament_report(sample_dir: Path) -> TournamentReport:
     """Fold a replay set's committed bytes into a typed :class:`TournamentReport`.
 
     The shared loader for both CLIs: resolve the roster, recover roles by
-    re-seeding, then call :func:`eval.balance_eval.load_tournament_report` with
-    ``derive_kill_gift=False`` (the R-gate folds and the report-based validity
-    checks never consume the kill-gift fields, so this does NO engine re-run — it
-    folds the frozen recorded outcomes). Pure and offline.
+    re-seeding, then use the explicitly historical recorded-outcome fold. This
+    assembly does not certify an outcome: the full validity gate separately
+    owns reconstruction and sample-integrity checks. Kill-gift fields are not
+    consumed here. Pure and offline.
     """
 
     num_players, num_impostors, tasks_per_crewmate = resolve_roster_knobs(sample_dir)
@@ -364,11 +364,9 @@ def assemble_tournament_report(sample_dir: Path) -> TournamentReport:
     )
     if not per_seed_roles:
         raise ValueError(f"no replay-seed-*.jsonl found under {sample_dir}")
-    return load_tournament_report(
+    return load_historical_tournament_report(
         sample_dir,
         roles_by_seed=per_seed_roles,
-        tasks_per_crewmate=tasks_per_crewmate,
-        derive_kill_gift=False,
     )
 
 
@@ -678,12 +676,10 @@ def check_meeting_rate_and_resolution(report: TournamentReport) -> ValidityCheck
 def check_no_duplicate_meeting_rows(report: TournamentReport) -> ValidityCheck:
     """No game records two meeting rows for the same meeting id or tick.
 
-    ``api.replay_loader.ReplayLoader`` collapses duplicate meeting rows by tick,
-    so the byte-identity check reports clean while
-    :func:`eval.balance_eval.load_tournament_report` counts BOTH — double-counting
-    resolved meetings, ballots, and cost. This structural check catches the
-    duplication byte-identity cannot (each ``meeting_id`` is unique per game and
-    at most one meeting resolves per tick).
+    The historical report fold retains duplicate meeting rows, so counting it
+    unchecked would double-count resolved meetings, ballots, and cost. This
+    report-based check rejects duplicate identities and trigger ticks alongside
+    the full gate's independent strict replay validation.
     """
 
     violations: list[str] = []

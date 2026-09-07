@@ -215,8 +215,8 @@ class SawMoveObservation(_FrozenModel):
     ``to_room``, arriving at ``tick``".
 
     The sayable form of what a witness's memory already holds. A witnessed
-    transition asserts two placements — the subject stood in ``from_room`` at
-    ``tick - 1`` and in ``to_room`` at ``tick`` — and until this shape existed a
+    transition names its origin and destination at the witnessed tick. It does
+    not assert an observation of the origin at ``tick - 1``. Before this shape, a
     witness had to re-encode it as one static
     :class:`SawPlayerObservation`, where naming the origin room places the
     subject at a tick they had already left.
@@ -234,10 +234,11 @@ class SawMoveObservation(_FrozenModel):
     speaker who can emit one.
 
     Under the ``testimony_shapes`` lever it reduces to a ``saw_move``
-    :class:`ReportedStatement` carrying that SAME single destination placement
-    (``room == to_room``, ``from_tick == to_tick == tick``), for the same
-    reason: the reduction may not mint an origin placement the detector
-    refuses to make. With the lever OFF the reduction drops the shape whole.
+    :class:`ReportedStatement` carrying that single destination placement
+    (``room == to_room``, ``from_tick == to_tick == tick``). Evidence reasoning
+    version 1 also retains the stated origin and transcript source identity,
+    without inventing an earlier observation. With the lever OFF the reduction
+    drops the shape whole.
     """
 
     type: Literal["saw_move"]
@@ -247,6 +248,22 @@ class SawMoveObservation(_FrozenModel):
     to_room: RoomId
 
 
+class TaskActivityAccount(_FrozenModel):
+    """A speaker's account of task activity, never a completion certificate."""
+
+    type: Literal["task_activity"]
+    task_id: TaskId
+    room: RoomId
+    from_tick: int = Field(ge=0)
+    to_tick: int = Field(ge=0)
+
+    @model_validator(mode="after")
+    def _ordered_interval(self) -> TaskActivityAccount:
+        if self.to_tick < self.from_tick:
+            raise ValueError("task activity must have an ordered tick interval")
+        return self
+
+
 ObservationClaim: TypeAlias = Annotated[
     SawPlayerObservation
     | CompletedTaskObservation
@@ -254,7 +271,8 @@ ObservationClaim: TypeAlias = Annotated[
     | SawVentObservation
     | SawKillObservation
     | WhereaboutsClaim
-    | SawMoveObservation,
+    | SawMoveObservation
+    | TaskActivityAccount,
     Field(discriminator="type"),
 ]
 
@@ -331,11 +349,9 @@ class MoveWitnessRecord(_FrozenModel):
     The vent and sighting channels' third sibling: the speaker's first-hand
     ``saw_player_move`` episodic rows, projected into the shape
     :func:`meetings.transcript.detect_contradictions` grounds a movement claim
-    against. ``tick`` is the agent-clock tick the transition RESOLVED at — the
-    subject stood in ``from_room`` at ``tick - 1`` and in ``to_room`` at
-    ``tick``, which is exactly what the rendered "You saw p-3 move from X to Y"
-    line asserts, so the typed channel and the prose the model speaks from
-    cannot drift.
+    against. ``tick`` uses the recorded observation profile's clock. The origin
+    and destination describe one transition; neither grants a separate origin
+    observation at ``tick - 1``.
 
     Grounding is the whole firewall for the movement lever: a spoken placement
     with no matching record in the SPEAKER's own channel is never re-read, so
@@ -623,15 +639,20 @@ ReportedStatementKind: TypeAlias = Literal[
     "alibi",
     "accusation",
     "corroboration",
+    "task_activity",
+    "completed_task",
+    "found_body",
 ]
 """Discriminator for the STRUCTURED testimony shapes carried as content.
 
 The structured claim/observation kinds that survive the reduction -- a
 :class:`SawPlayerObservation` sighting, a :class:`SawVentObservation` sighting,
 an :class:`AlibiClaim`, an :class:`AccusationClaim`, a
-:class:`CorroborationClaim`, and under the ``testimony_shapes`` lever a
+:class:`CorroborationClaim`, and under ``testimony_shapes`` or an account profile a
 :class:`SawKillObservation`, a :class:`WhereaboutsClaim` self-placement and a
-:class:`SawMoveObservation` transition. Free-text is excluded by construction
+:class:`SawMoveObservation` transition. Public-account version 1 also retains
+task activity, claimed completion and body discovery as attributed statements.
+Free-text is excluded by construction
 (it never produces a :class:`ReportedStatement`).
 """
 
@@ -660,11 +681,14 @@ class ReportedStatement(_FrozenModel):
       not carried, because the witness's own record does not hold one).
     * ``whereabouts`` -- ``from_tick == to_tick`` (the placed tick) and
       ``room``; the subject IS the speaker, a self-placement.
-    * ``saw_move`` -- ``from_tick == to_tick`` (the arrival tick) and ``room``,
-      which is the DESTINATION; the origin half is not carried.
+    * ``saw_move`` -- ``from_tick == to_tick`` (the spoken tick) and ``room``,
+      the destination; versioned provenance also retains ``from_room``.
     * ``alibi`` -- the inclusive ``from_tick``/``to_tick`` window and ``room``.
     * ``accusation`` -- ``subject`` only (no tick, no room).
     * ``corroboration`` -- ``from_tick == to_tick`` (the corroborated tick); no room.
+    * ``task_activity`` -- speaker as subject, task, room and claimed interval.
+    * ``completed_task`` -- speaker as subject, task, room and claimed tick.
+    * ``found_body`` -- victim as subject, room and discovery tick, never death time.
 
     Frozen and ``extra='forbid'`` like every meeting DTO, so the reduction is a
     pure, replay-deterministic function of the recorded ``MeetingResult``.
@@ -677,6 +701,22 @@ class ReportedStatement(_FrozenModel):
     to_tick: int | None = None
     room: RoomId | None = None
     co_present: tuple[PlayerId, ...] = ()
+    from_room: RoomId | None = None
+    source_event_id: str | None = None
+    task_id: TaskId | None = None
+
+    @model_serializer(mode="wrap")
+    def _serialize(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        """Keep historical reductions byte-identical when provenance is absent."""
+
+        data: dict[str, Any] = handler(self)
+        if self.from_room is None:
+            data.pop("from_room", None)
+        if self.source_event_id is None:
+            data.pop("source_event_id", None)
+        if self.task_id is None:
+            data.pop("task_id", None)
+        return data
 
 
 # ---------------------------------------------------------------------------
@@ -875,6 +915,24 @@ class ContradictionRef(_FrozenModel):
     event_b_id: str
     subjects: tuple[PlayerId, ...]
     description: str
+    evidence_band: Literal["weak", "strong"] | None = None
+
+    @model_serializer(mode="wrap")
+    def _serialize(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        """Omit the candidate's explicit band from legacy recording shapes."""
+
+        data: dict[str, Any] = handler(self)
+        if self.evidence_band is None:
+            data.pop("evidence_band", None)
+        return data
+
+    @classmethod
+    def __get_pydantic_json_schema__(
+        cls, core_schema: CoreSchema, handler: GetJsonSchemaHandler
+    ) -> JsonSchemaValue:
+        """Keep typed fields discoverable despite conditional serialization."""
+
+        return handler(_core_schema_without_serializer(core_schema))
 
 
 # ---------------------------------------------------------------------------

@@ -196,6 +196,7 @@ function asNumber(value: unknown, where: string): number {
  * reader quietly drops; the payload fields are filler and never read.
  */
 const OBSERVATION_BY_TYPE: Record<ObservationClaimView["type"], ObservationClaimView> = {
+  task_activity: { type: "task_activity", task_id: "task", room: "room", from_tick: 0, to_tick: 1 },
   saw_player: { type: "saw_player", tick: 0, subject: "p-0", room: "room", co_present: [] },
   completed_task: { type: "completed_task", tick: 0, task_id: "task", room: "room" },
   found_body: { type: "found_body", tick: 0, body_of: "p-0", room: "room" },

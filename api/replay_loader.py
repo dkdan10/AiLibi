@@ -31,6 +31,7 @@ import json
 import logging
 import re
 import tempfile
+from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
@@ -41,6 +42,7 @@ from typing import Any, Final, Literal, get_args
 from fastapi import HTTPException, Query, Request
 from pydantic import TypeAdapter
 
+from agents.memory.episodic import EpisodicEvent
 from agents.memory.store import (
     DEFAULT_TOKEN_BUDGET,
     AgentMemory,
@@ -49,10 +51,12 @@ from agents.memory.store import (
     render_for_prompt,
 )
 from agents.perception import EVENT_SAW_BODY, EVENT_SAW_PLAYER, ingest_packet
+from api.observation_references import observation_references
 from api.schemas import (
     AccusationClaimView,
     AdvantageView,
     AgentMemoryView,
+    InvestigationPlanView,
     AgentTickStateView,
     AgentVisibilityView,
     AlibiClaimView,
@@ -68,12 +72,16 @@ from api.schemas import (
     CurrentAction,
     EdgeView,
     EvalCostSummaryView,
+    ReplayAccountingView,
     FailedCallView,
     FinaleAgentRecapView,
     FinaleEventView,
     FoundBodyObsView,
     GameFinale,
     GateView,
+    TaskActivityAccountView,
+    ExperimentConfigView,
+    TacticalPolicyView,
     KillEventView,
     LLMCallView,
     MapLayoutView,
@@ -82,6 +90,7 @@ from api.schemas import (
     MeetingView,
     PlayerView,
     PositionView,
+    PublicResultsView,
     ReplayMetadataView,
     ReplayView,
     ReportBodyEventView,
@@ -120,9 +129,9 @@ from engine.events import (
 from engine.tick import advance_tick
 from engine.world import Map, WorldState, load_canonical_map
 from eval.meeting_quality import TournamentEvalReport
+from eval.report_schema import GameReport, build_provenance_groups
 from meetings.manager import (
     BALLOT_TARGET_REDIRECT_MARKER,
-    DEFAULT_SKIP_CONFIDENCE_THRESHOLD,
     EMERGENCY_BODY_STRIP_MARKER,
     INVALID_ACCUSATION_TARGET_MARKER,
     INVALID_ALIBI_SUBJECT_MARKER,
@@ -137,6 +146,7 @@ from meetings.manager import (
     extract_belief_evidence,
 )
 from meetings.schemas import (
+    TaskActivityAccount,
     AccusationClaim,
     AlibiClaim,
     BallotTargetRewriteReason,
@@ -165,15 +175,31 @@ from orchestrator.game import (
     DEFAULT_NUM_PLAYERS,
     apply_meeting_result,
 )
+from orchestrator.observation_delivery import ingest_event_observations_for_memories
+from orchestrator.recording_fingerprint import (
+    REPLAY_FILENAME_GLOB,
+    recording_fingerprint,
+    replay_seed_from_filename,
+)
 from orchestrator.replay import (
+    AgentFactoryKind,
+    CrewTacticalPolicyStamp,
+    recorded_agent_factory_kind,
+    recorded_substrate_flags,
+    recorded_temporal_observation_version,
+    recorded_experiment_config,
+    recorded_testimony_shapes,
     TOGGLEABLE_SUBSTRATE_FLAG_KEYS,
+    AbortedMeetingReplayEntry,
     ActionDisposition,
+    CompletionStatus,
     FailedCallReplayEntry,
     GameEndReplayEntry,
     LLMCallRecord,
     MeetingReplayEntry,
     ReplayEntry,
     ReplayLog,
+    ReplayLogEntry,
     TacticalPolicyStamp,
     WinnerSide,
     _state_hash,
@@ -182,10 +208,24 @@ from orchestrator.replay import (
     fold_meeting_outcome_into_memories,
     fsm_default_tactical_policy_stamp,
     read_all_entries,
+    recorded_completion_status,
     substrate_flag_snapshot,
     substrate_stamp_mismatches,
 )
+from agents.memory.evidence_context import (
+    ingest_public_meeting_roster,
+    ingest_public_regroup,
+)
+from orchestrator.boundary import public_map_from_engine_map
 from orchestrator.seeder import seed_initial_state
+from orchestrator.replay_integrity import (
+    LEGACY_SKIP_CONFIDENCE_THRESHOLD,
+    ReplayIntegrityError,
+    ReplayIntegrityValidator,
+    resolve_ballot_tally_threshold,
+)
+from orchestrator.experiment_config import RecordedExperimentConfig
+from orchestrator.policy_reconstruction import PolicyReconstruction
 
 _LOGGER: Final[logging.Logger] = logging.getLogger(__name__)
 
@@ -271,7 +311,6 @@ _TARGET_REWRITE_LABELS: Final[frozenset[str]] = frozenset(
 _ROSTER_FILENAME: Final[str] = "roster.json"
 
 _GAME_ID_PATTERN: Final[re.Pattern[str]] = re.compile(r"headless-seed-(-?\d+)")
-_FILENAME_PATTERN: Final[re.Pattern[str]] = re.compile(r"replay-seed-(-?\d+)\.jsonl")
 _PLAYER_ID_PATTERN: Final[re.Pattern[str]] = re.compile(r"p-(\d+)")
 
 # Deterministic render palette assigned to players by their ``p-N`` index so
@@ -388,8 +427,9 @@ class ReplaySubstrateMismatchError(RuntimeError):
     """A stamped replay is being reconstructed under a DIFFERENT substrate (Task 14.7).
 
     A replay recorded with the corrected Phase-13.5 substrate stamps its lever
-    config onto its ``game_over`` record (``orchestrator.replay.GameEndReplayEntry
-    .substrate_flags``). The loader HONORS that stamp: reconstruction re-derives
+    config onto its first tick row and its ``game_over`` record (resolved by
+    ``orchestrator.replay.recorded_substrate_flags``). The loader HONORS that
+    stamp: reconstruction re-derives
     agent memory / testimony / movement / belief under the active substrate
     (:func:`orchestrator.replay.substrate_flag_snapshot`), so playing back a
     recording stamped with a different lever config would silently reconstruct
@@ -492,27 +532,30 @@ class ReplayPolicyMismatchError(RuntimeError):
         self,
         *,
         game_id: str,
-        recorded: TacticalPolicyStamp,
+        recorded: TacticalPolicyStamp | None,
         expected: TacticalPolicyStamp,
     ) -> None:
         self.game_id = game_id
         self.recorded = recorded
         self.expected = expected
         #: Stamp fields whose recorded value contradicts the served claim.
-        self.differing: list[str] = sorted(
-            field
-            for field in TacticalPolicyStamp.model_fields
-            if getattr(recorded, field) != getattr(expected, field)
+        self.differing: list[str] = (
+            ["unrecorded_policy"]
+            if recorded is None
+            else sorted(
+                field
+                for field in TacticalPolicyStamp.model_fields
+                if getattr(recorded, field) != getattr(expected, field)
+            )
         )
         super().__init__(
             f"replay tactical-policy mismatch for {game_id!r}: recorded "
-            f"{recorded.model_dump()!r} but the loader is serving under a "
+            f"{recorded.model_dump() if recorded is not None else 'unknown'!r} but the loader is serving under a "
             f"conflicting policy claim {expected.model_dump()!r} (differing "
             f"fields: {self.differing}). Replay reconstruction re-feeds the recorded "
             "actions and never re-invokes a policy, so the stamp is provenance, "
             "not a replay input; this guard refuses to SERVE a stamped replay "
-            "under a conflicting policy claim (an unstamped replay reads as the "
-            "scripted FSM default). This is not a determinism break — the "
+            "under a conflicting or unsupported policy claim. This is not a determinism break — the "
             "per-tick state hash is policy-independent."
         )
 
@@ -556,6 +599,10 @@ def _log_skipped_replay(path: Path, exc: Exception) -> None:
         reason = "doubled write"
     elif isinstance(exc, ReplaySubstrateMismatchError):
         reason = "substrate mismatch"
+    elif isinstance(exc, ReplayIntegrityError):
+        reason = "timeline integrity mismatch"
+    elif isinstance(exc, (ReplayStateMismatchError, ReplayPolicyMismatchError)):
+        reason = "reconstruction mismatch"
     else:
         reason = "unparseable row"
     _LOGGER.warning("Skipping unreadable replay file %s (%s): %s", path, reason, exc)
@@ -586,32 +633,28 @@ def _assert_policy_matches(
     *,
     expected_tactical_policy: TacticalPolicyStamp | None,
 ) -> None:
-    """Fail loud if a replay is served under a conflicting tactical-policy claim.
+    """Validate an explicit policy claim without certifying known custom agents.
 
-    The honoring half of the Task-15.9 stamp. When the loader is constructed with
-    an ``expected_tactical_policy`` (a caller asserting which policy's output it
-    intends to serve), a recording whose stamp conflicts with that claim is
-    refused via :class:`ReplayPolicyMismatchError`. A COMPLETED but UNSTAMPED
-    replay reads as the scripted FSM default
-    (:func:`orchestrator.replay.fsm_default_tactical_policy_stamp`), so it matches
-    an ``fsm-default`` claim and conflicts with a learned-policy claim. When
-    ``expected_tactical_policy`` is ``None`` (the default), the guard is inert —
-    the committed canonical sets, and every ordinary serve, are unaffected.
-    Unlike the substrate guard there is no ambient policy and no reconstruction
-    difference: this is a provenance assertion, so it neither reads env nor
-    participates in the reconstruction cache key.
-
-    A PARTIAL replay — one with no ``game_over`` row — is a crashed / aborted
-    recording whose provenance footer (the stamp lives on the ``game_over`` entry
-    beside ``substrate_flags``) was never written, so its policy is UNKNOWN, not
-    the FSM default: the claim is NOT enforced against it, mirroring
-    :func:`_assert_substrate_matches`, which likewise skips an unstamped replay.
-    Only a COMPLETED replay (``game_over`` present) with no stamp is definitively
-    the FSM default (absent = FSM default), so only then is the claim enforced.
+    Current custom/experimental factories require a matching recorded policy
+    stamp. Ordinary readers make no policy claim. Historical completed recordings
+    retain the explicit legacy absent-stamp/FSM compatibility rule; historical
+    partials without a factory identity remain unknown and do not certify it.
     """
 
     if expected_tactical_policy is None:
         return
+    known_factory = recorded_agent_factory_kind(
+        tuple(
+            entry
+            for entry in entries
+            if isinstance(entry, (ReplayEntry, GameEndReplayEntry))
+        )
+    )
+    recorded = _recorded_tactical_policy(entries)
+    if known_factory in ("custom", "experimental") and recorded is None:
+        raise ReplayPolicyMismatchError(
+            game_id=game_id, recorded=None, expected=expected_tactical_policy
+        )
     # A replay with no game_over footer never wrote its provenance stamp — the
     # policy is UNKNOWN, not the FSM default — so skip the claim (see docstring):
     # the tournament harness intentionally keeps such partials (a seed that
@@ -621,7 +664,6 @@ def _assert_policy_matches(
     # likewise skips an unstamped replay.
     if not any(isinstance(entry, GameEndReplayEntry) for entry in entries):
         return
-    recorded = _recorded_tactical_policy(entries)
     effective = (
         recorded if recorded is not None else fsm_default_tactical_policy_stamp()
     )
@@ -645,11 +687,14 @@ def _recorded_substrate_flags(
     substrate check entirely for unstamped replays.
     """
 
-    flags: dict[str, bool] | None = None
-    for entry in entries:
-        if isinstance(entry, GameEndReplayEntry) and entry.substrate_flags is not None:
-            flags = dict(entry.substrate_flags)
-    return flags
+    flags = recorded_substrate_flags(
+        tuple(
+            entry
+            for entry in entries
+            if isinstance(entry, (ReplayEntry, GameEndReplayEntry))
+        )
+    )
+    return dict(flags) if flags is not None else None
 
 
 def _assert_substrate_matches(
@@ -680,6 +725,13 @@ def _assert_substrate_matches(
         game_id,
         _recorded_substrate_flags(entries),
         allow_substrate_mismatch=allow_substrate_mismatch,
+        temporal_version=recorded_temporal_observation_version(
+            tuple(
+                entry
+                for entry in entries
+                if isinstance(entry, (ReplayEntry, GameEndReplayEntry))
+            )
+        ),
     )
 
 
@@ -688,6 +740,7 @@ def _assert_recorded_substrate(
     recorded: Mapping[str, bool] | None,
     *,
     allow_substrate_mismatch: bool = False,
+    temporal_version: Literal[1, 2] | None = None,
 ) -> None:
     """Compare one already-extracted stamp against the live substrate.
 
@@ -701,7 +754,7 @@ def _assert_recorded_substrate(
 
     if recorded is None:
         return
-    ambient = substrate_flag_snapshot()
+    ambient = _reader_substrate(temporal_version)
     mismatch = substrate_stamp_mismatches(recorded, ambient=ambient)
     if not mismatch:
         return
@@ -722,6 +775,14 @@ def _assert_recorded_substrate(
     )
 
 
+def _reader_substrate(temporal_version: Literal[1, 2] | None) -> dict[str, bool]:
+    """Versioned delivery is explicit; unversioned legacy levers retain their guard."""
+    flags = substrate_flag_snapshot()
+    if temporal_version is not None:
+        flags["temporal_observations"] = True
+    return flags
+
+
 @dataclass(frozen=True)
 class _WalkResult:
     """Internal result of one engine-playback pass over a replay file."""
@@ -732,6 +793,7 @@ class _WalkResult:
     failed_calls: tuple[FailedCallReplayEntry, ...]
     trigger_kind_by_meeting_id: Mapping[str, _TriggerKind]
     memories: Mapping[tuple[str, str], AgentMemoryView]
+    summary: _ReplaySummary
 
 
 @dataclass(frozen=True)
@@ -749,6 +811,7 @@ class _ReplaySummary:
     """
 
     total_ticks: int
+    completion_status: CompletionStatus
     meeting_count: int
     winner: WinnerSide | None
     winner_reason: str | None
@@ -767,6 +830,11 @@ class _ReplaySummary:
     # reconstruct without a second read. ``None`` for an unstamped (legacy)
     # recording, which is never checked.
     substrate_flags: Mapping[str, bool] | None
+    agent_factory_kind: AgentFactoryKind | None = None
+    experiment_config: RecordedExperimentConfig | None = None
+    tactical_policy: TacticalPolicyStamp | None = None
+    crew_tactical_policy: CrewTacticalPolicyStamp | None = None
+    temporal_version: Literal[1, 2] | None = None
 
 
 class ReplayLoader:
@@ -795,17 +863,16 @@ class ReplayLoader:
         # otherwise correctly refuses. Default False — the serving/verify paths
         # keep failing loud; the ablation harness passes True explicitly and a
         # permitted mismatched (re)construction is logged at WARNING, never
-        # silent. An override loader additionally folds the ambient substrate
-        # snapshot into its reconstruction cache keys (``_substrate_cache_key``)
-        # so flipping the ``AILIBI_*`` levers between loads re-derives instead
-        # of silently serving the previous substrate's cached reconstruction.
+        # silent. Every loader folds the ambient substrate snapshot into its
+        # reconstruction cache keys (``_substrate_cache_key``), so changing a
+        # live lever rechecks compatibility before any cached view is served.
         # ``expected_tactical_policy`` is the Task-15.9 policy claim: when set, the
         # walk refuses to serve a replay whose tactical-policy stamp conflicts with
         # it (:func:`_assert_policy_matches`). Default ``None`` leaves the guard
         # inert, so the committed canonical sets and every ordinary serve are
         # unaffected. It is fixed per loader instance (not env-derived) and changes
         # nothing about the reconstruction output — only whether the walk raises —
-        # so, unlike ``allow_substrate_mismatch``, it does NOT fold into the
+        # so, unlike the ambient substrate, it does NOT fold into the
         # reconstruction cache key.
         self._replay_dir = replay_dir
         self._allow_substrate_mismatch = allow_substrate_mismatch
@@ -822,6 +889,12 @@ class ReplayLoader:
         self._cached_summary = lru_cache(maxsize=metadata_cache_size)(
             self._read_summary
         )
+        self._cached_validated_summary = lru_cache(maxsize=metadata_cache_size)(
+            self._validated_summary
+        )
+        self._public_results_cache: (
+            tuple[str, tuple[tuple[str, bool], ...], PublicResultsView] | None
+        ) = None
 
     # -- public API -------------------------------------------------------
 
@@ -835,26 +908,14 @@ class ReplayLoader:
         rather than the whole directory; absent params (``limit=None,
         offset=0``) list every replay.
 
-        A file the picker cannot honestly advertise is excluded from the listing
-        and logged once at WARNING with its path and failure class, so no single
-        bad file can 500 the whole picker. Four classes are skipped here: the
-        doubled-write :class:`ReplayLog.CorruptedFileError`, any unparseable or
-        schema-invalid row (a ``ValueError``, which pydantic's
-        ``ValidationError`` subclasses — the shape an interrupted tournament
-        write leaves behind), :class:`EmptyReplayError` (a file holding no
-        replay records), and :class:`ReplaySubstrateMismatchError` — a perfectly
-        readable recording of a substrate this build cannot reconstruct, which
-        the picker would otherwise advertise and then 500 on when opened. The
-        stamp comes from the same memoized summary pass the metadata view reads,
-        so the guard adds no second parse. The degradation stops at this
-        collection view: :meth:`load_replay` of a skipped game id still raises,
-        so a half-written or off-substrate game is never served as if it were
-        whole.
+        Each advertised timeline is reconstructed and validated, including its
+        recorded winner. Bad files are skipped and logged individually: parse,
+        chronology, state-hash, policy, and substrate failures cannot advertise
+        an unusable game or break the rest of the picker. Compact validated
+        metadata is cached separately from visibility and memory playback.
 
-        :meth:`cost_summary` deliberately does NOT skip the substrate class —
-        see its docstring for why a mismatched game's cost is still real.
-
-        Audits G-G-3, K-K-8.
+        :meth:`cost_summary` remains raw accounting, so refusing an artifact for
+        playback never erases its recorded spend.
         """
 
         paths = self._replay_paths()
@@ -862,22 +923,25 @@ class ReplayLoader:
         views: list[ReplayMetadataView] = []
         for seed, path in window:
             try:
-                _assert_recorded_substrate(
-                    _game_id_for_seed(seed),
-                    self._file_summary(path).substrate_flags,
-                    allow_substrate_mismatch=self._allow_substrate_mismatch,
-                )
                 views.append(self._metadata_view(path, seed))
             except (
                 ReplayLog.CorruptedFileError,
                 ValueError,
+                ReplayStateMismatchError,
+                ReplayPolicyMismatchError,
                 ReplaySubstrateMismatchError,
             ) as exc:
                 _log_skipped_replay(path, exc)
         return views
 
-    def load_replay(self, game_id: str) -> ReplayView:
-        """Return the full reconstructed :class:`ReplayView` (LRU-cached).
+    def load_replay(
+        self, game_id: str, *, include_llm_bodies: bool = True
+    ) -> ReplayView:
+        """Return a verified replay, optionally omitting model-call text bodies.
+
+        The cached full view serves existing callers and meeting detail. The
+        lean projection changes only the text bodies and their inclusion marker;
+        it does not alter the recording, accounting or cached full view.
 
         Raises :class:`FileNotFoundError` if no replay matches ``game_id`` and
         :class:`ReplayStateMismatchError` if engine playback diverges from the
@@ -887,60 +951,131 @@ class ReplayLoader:
         """
 
         path, seed = self._resolve(game_id)
-        return self._cached_load(
+        replay = self._cached_load(
             seed,
             path,
             _mtime_ns(path),
             self._roster_mtime(),
             self._substrate_cache_key(),
         )
+        if include_llm_bodies:
+            return replay
+        return replay.model_copy(
+            update={
+                "llm_bodies_included": False,
+                "meetings": tuple(
+                    meeting.model_copy(
+                        update={
+                            "llm_calls": tuple(
+                                call.model_copy(
+                                    update={"prompt_text": "", "response_text": ""}
+                                )
+                                for call in meeting.llm_calls
+                            )
+                        }
+                    )
+                    for meeting in replay.meetings
+                ),
+            }
+        )
 
     def cost_summary(self) -> EvalCostSummaryView:
-        """Aggregate LLM cost + decisive-outcome split across every readable replay.
-
-        Reads each replay file exactly once: both the per-game cost and the
-        decisive winner come from a single memoized :class:`_ReplaySummary`
-        rather than two passes (``compute_cost_usd`` + ``read_game_outcome``).
-        Unreadable files are skipped and logged on the same terms as
-        :meth:`list_replays`, so one corrupt file cannot 500 the eval dashboard;
-        ``total_replays`` counts only the files actually reduced, keeping
-        ``mean_cost_per_replay`` a mean over real games.
-
-        A substrate-mismatched replay is deliberately KEPT here, unlike in
-        :meth:`list_replays`. Everything this summary reduces — cost, winner,
-        ticks, meeting count — is read straight off the recorded bytes and needs
-        no reconstruction, so a game recorded under another lever slate is a real
-        game that really cost that much and really ended that way. Dropping it
-        would understate the spend; only the reconstruction-dependent picker,
-        which promises a replay it can actually open, has to refuse it.
-
-        Audit G-G-2.
-        """
-
+        """Retain readable spending while certifying outcome claims separately."""
         summaries: list[_ReplaySummary] = []
-        for _seed, path in self._replay_paths():
+        recordings: list[ReplayAccountingView] = []
+        unreadable = 0
+        for seed, path in self._replay_paths():
+            game_id = _game_id_for_seed(seed)
+            summary: _ReplaySummary | None = None
+            integrity: Literal["verified", "unverified", "invalid"] = "verified"
+            error: str | None = None
             try:
-                summaries.append(self._file_summary(path))
-            except (ReplayLog.CorruptedFileError, ValueError) as exc:
-                _log_skipped_replay(path, exc)
+                summary = self._cached_validated_summary(
+                    seed,
+                    path,
+                    _mtime_ns(path),
+                    self._roster_mtime(),
+                    self._substrate_cache_key(),
+                )
+                # Analysis overrides cannot certify incompatible outcome claims.
+                _assert_recorded_substrate(
+                    game_id,
+                    summary.substrate_flags,
+                    temporal_version=summary.temporal_version,
+                )
+            except (ReplayPolicyMismatchError, ReplaySubstrateMismatchError) as exc:
+                integrity = "unverified"
+                error = type(exc).__name__
+            except (
+                ReplayLog.CorruptedFileError,
+                ValueError,
+                ReplayStateMismatchError,
+            ) as exc:
+                integrity = "invalid"
+                error = type(exc).__name__
+            if summary is None:
+                try:
+                    summary = self._file_summary(path)
+                except (ReplayLog.CorruptedFileError, ValueError) as exc:
+                    _log_skipped_replay(path, exc)
+                    unreadable += 1
+                    recordings.append(
+                        ReplayAccountingView(
+                            game_id=game_id,
+                            total_cost_usd=None,
+                            completion_status=None,
+                            recorded_winner=None,
+                            verified_winner=None,
+                            integrity_status="invalid",
+                            validation_error=type(exc).__name__,
+                        )
+                    )
+                    continue
+            summaries.append(summary)
+            recordings.append(
+                ReplayAccountingView(
+                    game_id=game_id,
+                    total_cost_usd=summary.total_cost_usd,
+                    completion_status=summary.completion_status,
+                    recorded_winner=summary.winner,
+                    verified_winner=summary.winner if integrity == "verified" else None,
+                    integrity_status=integrity,
+                    validation_error=error,
+                )
+            )
         total_replays = len(summaries)
         costs = [summary.total_cost_usd for summary in summaries]
         total_cost = sum(costs)
-        decisive = [s.winner for s in summaries if s.winner is not None]
-
-        decisive_split: dict[str, float] = {}
-        if decisive:
-            for side in ("CREWMATES", "IMPOSTORS"):
-                decisive_split[side] = sum(1 for w in decisive if w == side) / len(
-                    decisive
-                )
-
+        decisive = [
+            row.verified_winner for row in recordings if row.verified_winner is not None
+        ]
+        decisive_split = (
+            {
+                side: sum(winner == side for winner in decisive) / len(decisive)
+                for side in ("CREWMATES", "IMPOSTORS")
+            }
+            if decisive
+            else {}
+        )
         return EvalCostSummaryView(
             total_replays=total_replays,
             total_cost_usd=total_cost,
-            mean_cost_per_replay=(total_cost / total_replays if total_replays else 0.0),
-            max_cost_per_replay=(max(costs) if costs else 0.0),
+            mean_cost_per_replay=total_cost / total_replays if total_replays else 0.0,
+            max_cost_per_replay=max(costs) if costs else 0.0,
             decisive_split=decisive_split,
+            verified_outcomes=len(decisive),
+            verified_replays=sum(
+                row.integrity_status == "verified" for row in recordings
+            ),
+            unverified_replays=sum(
+                row.integrity_status == "unverified" for row in recordings
+            ),
+            invalid_replays=sum(
+                row.integrity_status == "invalid" for row in recordings
+            ),
+            unreadable_replays=unreadable,
+            accounting_complete=unreadable == 0,
+            recordings=tuple(recordings),
         )
 
     def tournament_report(self) -> TournamentEvalReport:
@@ -960,8 +1095,98 @@ class ReplayLoader:
         path = self._replay_dir / _TOURNAMENT_REPORT_FILENAME
         if not path.is_file():
             raise FileNotFoundError(path)
-        return TournamentEvalReport.model_validate_json(
+        report = TournamentEvalReport.model_validate_json(
             path.read_text(encoding="utf-8")
+        )
+        # Rebind outcomes and behavior identity to the served source. Historical
+        # metric and cost cells remain report values, without certification.
+        games = report.report.games
+        game_ids = Counter(game.game_id for game in games)
+        seeds = Counter(game.seed for game in games)
+        refs = Counter(game.replay_ref for game in games)
+        rebound = tuple(
+            self._rebind_report_outcome(
+                game,
+                unique_identity=game_ids[game.game_id]
+                == seeds[game.seed]
+                == refs[game.replay_ref]
+                == 1,
+            )
+            for game in games
+        )
+        return report.model_copy(
+            update={
+                "report": report.report.model_copy(
+                    update={
+                        "games": rebound,
+                        "provenance_groups": build_provenance_groups(rebound),
+                    }
+                )
+            }
+        )
+
+    def _rebind_report_outcome(
+        self, game: GameReport, *, unique_identity: bool
+    ) -> GameReport:
+        """Verify the report's outcome against its currently served recording."""
+        verified = False
+        status = game.completion_status
+        identity: dict[str, Any] = {
+            "agent_factory_kind": None,
+            "experiment_config": None,
+            "substrate_flags": None,
+            "tactical_policy": None,
+            "crew_tactical_policy": None,
+        }
+        try:
+            path, seed = self._resolve(game.game_id)
+            summary = self._cached_validated_summary(
+                seed,
+                path,
+                _mtime_ns(path),
+                self._roster_mtime(),
+                self._substrate_cache_key(),
+            )
+            _assert_recorded_substrate(
+                game.game_id,
+                summary.substrate_flags,
+                temporal_version=summary.temporal_version,
+            )
+            identity = {
+                "agent_factory_kind": summary.agent_factory_kind,
+                "experiment_config": summary.experiment_config,
+                "substrate_flags": summary.substrate_flags,
+                "tactical_policy": summary.tactical_policy,
+                "crew_tactical_policy": summary.crew_tactical_policy,
+            }
+            verified = (
+                unique_identity
+                and game.seed == seed
+                and game.replay_ref == path.name
+                and game.winner is not None
+                and game.winner == summary.winner
+                and game.reason == summary.winner_reason
+                and game.completion_status == summary.completion_status == "completed"
+                and (game.final_tick is None or game.final_tick == summary.final_tick)
+            )
+            status = summary.completion_status
+        except (
+            FileNotFoundError,
+            ReplayLog.CorruptedFileError,
+            ValueError,
+            ReplayStateMismatchError,
+            ReplayPolicyMismatchError,
+            ReplaySubstrateMismatchError,
+        ):
+            # The source can no longer support this claim. Keep the historical
+            # report readable and its recorded spending visible as unverified.
+            pass
+        return game.model_copy(
+            update={
+                **identity,
+                "completion_status": status,
+                "outcome_verified": verified,
+            }
         )
 
     def get_meeting_memory(
@@ -1055,6 +1280,8 @@ class ReplayLoader:
                 f"invalid rubric file {path}: 'interestingness.per_game' must be a list"
             )
         per_game = tuple(RubricGameView.model_validate(g) for g in per_game_raw)
+        # A content fingerprint binds scores to replay, roster and manifest bytes;
+        # stale sources suppress score rows instead of serving them as evidence.
         manifest_sha = _manifest_git_sha(self._replay_dir)
         # Staleness is BOTH a sha mismatch (rubric scored vs replays recorded)
         # AND a SET mismatch (DESIGN.md §7: "fail-loud/banner on set or sha
@@ -1064,12 +1291,19 @@ class ReplayLoader:
         expected_seedset = _expected_seedset(self._replay_dir)
         sha_stale = _rubric_is_stale(git_head, manifest_sha)
         set_stale = expected_seedset is not None and seedset != expected_seedset
+        try:
+            source_stale = raw.get("source_fingerprint") != recording_fingerprint(
+                self._replay_dir
+            )
+        except ValueError:
+            source_stale = True
+        stale = sha_stale or set_stale or source_stale
         return RubricView(
             seedset=seedset,
             git_head=git_head,
             manifest_sha=manifest_sha,
-            stale=sha_stale or set_stale,
-            per_game=per_game,
+            stale=stale,
+            per_game=() if stale else per_game,
         )
 
     def clear_cache(self) -> None:
@@ -1079,24 +1313,20 @@ class ReplayLoader:
         self._cached_memories.cache_clear()
         self._cached_belief_frames.cache_clear()
         self._cached_summary.cache_clear()
+        self._cached_validated_summary.cache_clear()
+        self._public_results_cache = None
 
     # -- cached implementations ------------------------------------------
 
-    def _substrate_cache_key(self) -> tuple[tuple[str, bool], ...] | None:
-        """The ambient substrate's contribution to the reconstruction cache key.
+    def _substrate_cache_key(self) -> tuple[tuple[str, bool], ...]:
+        """Invalidate cached views when the ambient substrate changes.
 
-        ``None`` (a constant) for a default loader — its guard raises on any
-        mismatch before a wrong-substrate reconstruction could be cached, so the
-        key stays byte-identical to the pre-14.8 shape. An ANALYSIS-ONLY
-        override loader (``allow_substrate_mismatch=True``) deliberately walks
-        under whatever ``AILIBI_*`` levers are ambient, so the snapshot must
-        participate in the key: flipping levers between loads on the same
-        instance re-derives (a cache miss) instead of silently serving the
-        previous substrate's reconstruction (AGENTS.md "no silent fallbacks").
+        A default loader must recheck its compatibility guard after a live
+        lever changes. An analysis override must rederive the requested view.
+        Both checks sit inside cached walks, so every loader keys its playback,
+        memory, and validated metadata by the current substrate snapshot.
         """
 
-        if not self._allow_substrate_mismatch:
-            return None
         return tuple(sorted(substrate_flag_snapshot().items()))
 
     def _load_replay(
@@ -1121,7 +1351,7 @@ class ReplayLoader:
         # never recomputed per request.
         walk = self._walk(path, seed, collect_memory=False, collect_visibility=True)
         return ReplayView(
-            metadata=self._metadata_view(path, seed),
+            metadata=self._metadata_from_summary(path, seed, walk.summary),
             map=self._map_view,
             players=self._players_view(walk.initial_state),
             ticks=walk.ticks,
@@ -1130,10 +1360,8 @@ class ReplayLoader:
                 for entry in walk.meeting_entries
             ),
             failed_calls=tuple(_failed_call_view(entry) for entry in walk.failed_calls),
-            # Task 19.10. ``_file_summary`` is separately memoized per
-            # ``(path, mtime)`` and was already parsed by ``_metadata_view``
-            # above, so the finale costs no extra file read.
-            finale=self._finale_view(walk, self._file_summary(path)),
+            # The verified walk reduced these same parsed rows; no second read.
+            finale=self._finale_view(walk, walk.summary),
         )
 
     def _reconstruct_meeting_memories(
@@ -1189,6 +1417,13 @@ class ReplayLoader:
 
         game_id = _game_id_for_seed(seed)
         entries = read_all_entries(path)
+        integrity = ReplayIntegrityValidator(entries, game_id=game_id)
+        experiment = recorded_experiment_config(entries)
+        reconstruct_policy = experiment is not None and experiment.format_version == 3
+        track_memory = collect_memory or reconstruct_policy
+        testimony_shapes = recorded_testimony_shapes(entries)
+        temporal_version = recorded_temporal_observation_version(entries)
+        temporal = temporal_version is not None
         # Honor the stamped substrate (Task 14.7): the memory reconstruction
         # below re-derives under the active substrate (the four 13.5 levers
         # unconditionally ON since Task 14.9), so refuse to reconstruct a
@@ -1265,59 +1500,111 @@ class ReplayLoader:
         # Task 12.3) needs it; either way its audit log is routed to a throwaway
         # temp file. ``memories`` is only allocated for the memory walk — the
         # visibility walk reads the packet and discards it (no episodic ingest).
-        if collect_memory or collect_visibility:
-            audit_dir = tempfile.TemporaryDirectory(prefix="ailibi-replay-audit-")
-            service = ObservationService(
-                game_map=self._game_map,
-                audit_log_path=Path(audit_dir.name) / "audit.jsonl",
-            )
-        if collect_memory:
-            memories = {pid: AgentMemory() for pid in initial_state.players}
-
-        # Finding 1 (DESIGN.md §3.1, §11.4): ReplayLog.record_tick snapshots
-        # state AFTER advance_tick, so the recorded tick 0 already reflects the
-        # agents' first-turn moves; the pre-action spawn state is never
-        # persisted. Synthesize it here, before the entry loop, as a tick=-1
-        # "Start" frame (all players in the seeder's spawn room) so the
-        # spectator's first frame is the intuitive initial state, not agents
-        # already mid-motion. Read-side only: it is not written back to JSONL
-        # and never touches a state hash.
-        # The per-tick fog projection (Task 12.3, DESIGN.md §3.2/§7): each LIVING
-        # agent's firewall-filtered field of view, captured from the observation
-        # packet the pipeline already builds (no second visibility solve). It is
-        # built from the POST-advance state below so it matches the frame the
-        # spectator scrubs to; the Start frame uses the seeded initial state with
-        # no prior events.
-        start_visibility = (
-            self._agent_visibility_map(service, initial_state, ())
-            if collect_visibility and service is not None
-            else None
-        )
-        ticks: list[TickView] = [
-            self._tick_view(
-                -1,
-                initial_state,
-                (),
-                None,
-                start_visibility,
-                # No agent has acted yet on the synthesized frame, so every agent
-                # reads IDLE — the spawn state, not an inherited label.
-                actions=(),
-                fixed_tasks_required_total=fixed_tasks_required_total,
-            )
-        ]
-        trigger_kind_by_meeting_id: dict[str, _TriggerKind] = {}
-        memory_views: dict[tuple[str, str], AgentMemoryView] = {}
-        last_events: tuple[EngineEvent, ...] = ()
-        meeting_index = 0
-
         try:
-            for entry in replay_entries:
-                if collect_memory and service is not None:
-                    self._ingest_tick(service, memories, state, last_events)
+            if track_memory or collect_visibility:
+                audit_dir = tempfile.TemporaryDirectory(prefix="ailibi-replay-audit-")
+                service = ObservationService(
+                    game_map=self._game_map,
+                    audit_log_path=Path(audit_dir.name) / "audit.jsonl",
+                    temporal_observations=temporal,
+                    temporal_observation_version=temporal_version,
+                )
+            if track_memory:
+                memories = {
+                    pid: AgentMemory(
+                        evidence_reasoning_version=(
+                            experiment.evidence_reasoning_version
+                            if experiment
+                            else None
+                        ),
+                        public_map=public_map_from_engine_map(self._game_map),
+                        public_account_version=experiment.public_account_version
+                        if experiment is not None
+                        else None,
+                        attributed_testimony_version=experiment.attributed_testimony_version
+                        if experiment is not None
+                        else None,
+                    )
+                    for pid in initial_state.players
+                }
 
+            policy_runtime = None
+            if reconstruct_policy:
+                assert experiment is not None and service is not None
+                policy_runtime = PolicyReconstruction(
+                    initial_state=initial_state,
+                    game_map=self._game_map,
+                    experiment=experiment,
+                    service=service,
+                    testimony_shapes=testimony_shapes,
+                )
+                memories = policy_runtime.memories
+
+            # Finding 1 (DESIGN.md §3.1, §11.4): ReplayLog.record_tick snapshots
+            # state AFTER advance_tick, so the recorded tick 0 already reflects the
+            # agents' first-turn moves; the pre-action spawn state is never
+            # persisted. Synthesize it here, before the entry loop, as a tick=-1
+            # "Start" frame (all players in the seeder's spawn room) so the
+            # spectator's first frame is the intuitive initial state, not agents
+            # already mid-motion. Read-side only: it is not written back to JSONL
+            # and never touches a state hash.
+            # The per-tick fog projection (Task 12.3, DESIGN.md §3.2/§7): each LIVING
+            # agent's firewall-filtered field of view, captured from the observation
+            # packet the pipeline already builds (no second visibility solve). It is
+            # built from the POST-advance state below so it matches the frame the
+            # spectator scrubs to; the Start frame uses the seeded initial state with
+            # no prior events.
+            start_visibility = (
+                self._agent_visibility_map(service, initial_state, ())
+                if collect_visibility and service is not None
+                else None
+            )
+            ticks: list[TickView] = [
+                self._tick_view(
+                    -1,
+                    initial_state,
+                    (),
+                    None,
+                    start_visibility,
+                    # No agent has acted yet on the synthesized frame, so every agent
+                    # reads IDLE — the spawn state, not an inherited label.
+                    actions=(),
+                    fixed_tasks_required_total=fixed_tasks_required_total,
+                )
+            ]
+            trigger_kind_by_meeting_id: dict[str, _TriggerKind] = {}
+            memory_views: dict[tuple[str, str], AgentMemoryView] = {}
+            observation_scene_ticks: dict[str, int] = {}
+            last_events: tuple[EngineEvent, ...] = ()
+            meeting_index = 0
+
+            for entry in replay_entries:
+                integrity.check_tick(entry, state)
                 actions = _deserialize_actions(entry.actions)
-                state, events = advance_tick(state, actions, game_map=self._game_map)
+                if track_memory and service is not None:
+                    delivered = (
+                        policy_runtime.before_tick(
+                            state=state, last_events=last_events, actions=actions
+                        )
+                        if policy_runtime is not None
+                        else self._ingest_tick(service, memories, state, last_events)
+                    )
+                    for batch in delivered.values():
+                        for observation in batch:
+                            if observation.observation_id is not None:
+                                observation_scene_ticks[observation.observation_id] = (
+                                    ticks[-1].tick
+                                )
+
+                source_state = state
+                state, events = advance_tick(
+                    state,
+                    actions,
+                    game_map=self._game_map,
+                    redistribution_policy=experiment.redistribution_policy
+                    if experiment
+                    else "lowest_id",
+                )
                 actual = _state_hash(state)
                 if actual != entry.state_hash:
                     raise ReplayStateMismatchError(
@@ -1340,6 +1627,22 @@ class ReplayLoader:
                             actual=",".join(reconstructed),
                         )
 
+                integrity.check_advance(entry, state, events)
+                if track_memory and service is not None:
+                    event_deliveries = ingest_event_observations_for_memories(
+                        service=service,
+                        state=state,
+                        events=events,
+                        memories=memories,
+                        source_state=source_state,
+                        submitted_actions=actions,
+                    )
+                    for batch in event_deliveries.values():
+                        for observation in batch:
+                            if observation.observation_id is not None:
+                                observation_scene_ticks[observation.observation_id] = (
+                                    entry.tick
+                                )
                 meeting_entry: MeetingReplayEntry | None = None
                 meeting_id: str | None = None
                 trigger_kind: _TriggerKind | None = None
@@ -1350,7 +1653,8 @@ class ReplayLoader:
                     meeting_id = (
                         meeting_entry.meeting_id
                         if meeting_entry is not None
-                        else _meeting_id_for(game_id, meeting_index)
+                        else integrity.meeting_id_for_tick(entry.tick)
+                        or _meeting_id_for(game_id, meeting_index)
                     )
                     trigger_kind_by_meeting_id[meeting_id] = trigger_kind
 
@@ -1382,6 +1686,28 @@ class ReplayLoader:
                     )
                 )
 
+                if policy_runtime is not None:
+                    frame = ticks[-1]
+                    ticks[-1] = frame.model_copy(
+                        update={
+                            "agent_states": tuple(
+                                agent_state.model_copy(
+                                    update={
+                                        "investigation_plan": _investigation_plan_view(
+                                            memories[agent_state.agent_id],
+                                            decision_tick=entry.tick,
+                                        )
+                                        if source_state.players[
+                                            agent_state.agent_id
+                                        ].alive
+                                        else None,
+                                    }
+                                )
+                                for agent_state in frame.agent_states
+                            ),
+                        }
+                    )
+
                 if state.phase != "MEETING":
                     if state.phase == "GAME_OVER":
                         break
@@ -1398,19 +1724,39 @@ class ReplayLoader:
                     # The tick timeline is intact up to here; stop the walk.
                     break
 
-                if collect_memory:
+                if track_memory:
                     # Snapshot every known player, alive or dead. The endpoint
                     # contract is agent-based (ThoughtStream selects by agent),
                     # so a player who died before this meeting must still be
                     # retrievable; their memory is frozen at death (perception
                     # stops ingesting once they are dead).
                     for pid in sorted(state.players):
+                        if state.players[pid].alive:
+                            ingest_public_meeting_roster(
+                                memories[pid],
+                                tick=state.tick,
+                                living_ids=tuple(
+                                    sorted(
+                                        p
+                                        for p, player in state.players.items()
+                                        if player.alive
+                                    )
+                                ),
+                                dead_ids=tuple(
+                                    sorted(
+                                        p
+                                        for p, player in state.players.items()
+                                        if not player.alive
+                                    )
+                                ),
+                            )
                         memory_views[(meeting_id, pid)] = self._agent_memory_view(
                             agent_id=pid,
                             tick=entry.tick,
                             meeting_state=state,
                             memory=memories[pid],
                             meeting_entry=meeting_entry,
+                            observation_scene_ticks=observation_scene_ticks,
                         )
 
                 pre_meeting_events = tuple(events)
@@ -1420,6 +1766,12 @@ class ReplayLoader:
                     result,
                     game_map=self._game_map,
                     triggering_body_id=body_id,
+                    redistribution_policy=experiment.redistribution_policy
+                    if experiment
+                    else "lowest_id",
+                    meeting_reset=experiment.meeting_reset
+                    if experiment
+                    else "preserve",
                 )
                 after = _state_hash(state)
                 if after != meeting_entry.state_hash_after:
@@ -1429,6 +1781,7 @@ class ReplayLoader:
                         expected=meeting_entry.state_hash_after,
                         actual=after,
                     )
+                integrity.check_meeting_result(state, post_events)
                 # The meeting TickView was appended from the PRE-resolution state
                 # (its agent_states / events represent the meeting itself), but
                 # the advantage frame is the win-progress trajectory, so it must
@@ -1472,7 +1825,13 @@ class ReplayLoader:
                         ),
                     }
                 )
-                if collect_memory:
+                if policy_runtime is not None:
+                    policy_runtime.complete_meeting(
+                        state=state,
+                        result=result,
+                        emergency=trigger_kind == "emergency",
+                    )
+                elif track_memory:
                     # Mirror the live loop's post-meeting belief fold (Task
                     # 9.8, orchestrator.game._absorb_meeting_beliefs): the
                     # recorded meeting's evidence lands in each still-living
@@ -1480,7 +1839,18 @@ class ReplayLoader:
                     # memory snapshot shows the same accumulated/decayed
                     # suspicion the live agents held. Memory-side only --
                     # engine state and its hash checks are untouched.
-                    evidence = extract_belief_evidence(result)
+                    evidence = extract_belief_evidence(
+                        result,
+                        trigger_kind="report"
+                        if trigger_kind == "body"
+                        else trigger_kind,
+                        public_account_version=experiment.public_account_version
+                        if experiment is not None
+                        else None,
+                        attributed_testimony_version=experiment.attributed_testimony_version
+                        if experiment is not None
+                        else None,
+                    )
                     # Task 13.5.2: mirror the live loop's reported-testimony
                     # content fold in the SAME per-living-agent loop,
                     # unconditionally since Task 14.9 (the adopted lever is the
@@ -1489,7 +1859,19 @@ class ReplayLoader:
                     # uses, so the live and replay reconstructions are
                     # identical. Memory-side only -- engine state and its hash
                     # checks are untouched.
-                    statements = derive_reported_testimony(result)
+                    statements = derive_reported_testimony(
+                        result,
+                        testimony_shapes=testimony_shapes,
+                        evidence_reasoning_version=experiment.evidence_reasoning_version
+                        if experiment is not None
+                        else None,
+                        public_account_version=experiment.public_account_version
+                        if experiment is not None
+                        else None,
+                        attributed_testimony_version=experiment.attributed_testimony_version
+                        if experiment is not None
+                        else None,
+                    )
                     for pid in sorted(state.players):
                         if not state.players[pid].alive:
                             continue
@@ -1510,14 +1892,36 @@ class ReplayLoader:
                     fold_meeting_outcome_into_memories(
                         result, state=state, memories=memories
                     )
+                    if (
+                        experiment is not None
+                        and experiment.meeting_reset == "hub_with_grace"
+                        and state.phase == "PLAY"
+                    ):
+                        living_ids = tuple(
+                            sorted(
+                                pid
+                                for pid, player in state.players.items()
+                                if player.alive
+                            )
+                        )
+                        for pid in living_ids:
+                            ingest_public_regroup(
+                                memories[pid],
+                                tick=state.tick,
+                                room=self._game_map.meeting.room,
+                                player_ids=living_ids,
+                            )
                 meeting_index += 1
                 if state.phase == "GAME_OVER":
                     break
                 last_events = pre_meeting_events + tuple(post_events)
         finally:
+            if service is not None:
+                service.close()
             if audit_dir is not None:
                 audit_dir.cleanup()
 
+        integrity.finish()
         return _WalkResult(
             initial_state=initial_state,
             ticks=tuple(ticks),
@@ -1525,6 +1929,7 @@ class ReplayLoader:
             failed_calls=failed_calls,
             trigger_kind_by_meeting_id=trigger_kind_by_meeting_id,
             memories=memory_views,
+            summary=self._summarize_entries(path, entries),
         )
 
     def _ingest_tick(
@@ -1533,7 +1938,7 @@ class ReplayLoader:
         memories: Mapping[str, AgentMemory],
         state: WorldState,
         last_events: Sequence[EngineEvent],
-    ) -> None:
+    ) -> dict[str, tuple[EpisodicEvent, ...]]:
         """Re-run perception for every alive agent (mirrors the game loop).
 
         Matches :meth:`orchestrator.game.TacticalAgent.decide`: a packet is
@@ -1543,17 +1948,23 @@ class ReplayLoader:
         side effect matters.
         """
 
+        delivered: dict[str, tuple[EpisodicEvent, ...]] = {}
         for pid in sorted(state.players):
             if not state.players[pid].alive:
                 continue
             packet = service.build_packet(
                 world_state=state, agent_id=pid, engine_events=last_events
             )
+            before = len(memories[pid].episodic.recent(since_tick=packet.tick))
             ingest_packet(
                 packet=packet,
                 memory=memories[pid].episodic,
                 beliefs=memories[pid].beliefs,
             )
+            delivered[pid] = memories[pid].episodic.recent(since_tick=packet.tick)[
+                before:
+            ]
+        return delivered
 
     def _agent_visibility_map(
         self,
@@ -1832,7 +2243,13 @@ class ReplayLoader:
             ),
             prompt_versions=dict(entry.prompt_versions),
             total_cost_usd=sum((call.cost_usd for call in entry.llm_calls), 0.0),
-            gate=_gate_view(entry.ballots),
+            gate=_gate_view(
+                entry.ballots,
+                threshold=resolve_ballot_tally_threshold(entry),
+                threshold_source="recorded"
+                if entry.skip_confidence_threshold is not None
+                else "legacy_compatibility",
+            ),
         )
 
     def _agent_memory_view(
@@ -1843,6 +2260,7 @@ class ReplayLoader:
         meeting_state: WorldState,
         memory: AgentMemory,
         meeting_entry: MeetingReplayEntry | None,
+        observation_scene_ticks: Mapping[str, int] | None = None,
     ) -> AgentMemoryView:
         role = meeting_state.players[agent_id].role
         # Per-agent task counts are this agent's OWN instances only (owner-scoped
@@ -1881,10 +2299,24 @@ class ReplayLoader:
             tasks_completed=sum(1 for task in owned if task.completed),
             tasks_assigned=len(owned),
             observations=observations,
+            investigation_plan=_investigation_plan_view(memory),
             beliefs=beliefs,
             open_contradictions=open_contradictions,
             rendered_memory_text=render_for_prompt(
                 memory, token_budget=DEFAULT_TOKEN_BUDGET
+            ),
+            observation_references=observation_references(
+                observer_id=agent_id,
+                cited_ids=tuple(
+                    ballot.primary_reason_observation_id
+                    for ballot in meeting_entry.ballots
+                    if ballot.voter == agent_id
+                    and ballot.primary_reason_observation_id is not None
+                )
+                if meeting_entry is not None
+                else (),
+                events=memory.episodic.recent(since_tick=0),
+                scene_ticks=observation_scene_ticks or {},
             ),
         )
 
@@ -1894,11 +2326,12 @@ class ReplayLoader:
         return self._cached_summary(path, _mtime_ns(path))
 
     def _read_summary(self, path: Path, _mtime_key: int) -> _ReplaySummary:
-        # Walk the file once and derive every listing/cost field from the single
-        # entry list (Audit G-G-2): cost folds each meeting's ``llm_calls`` plus
-        # every failed-call row (mirrors ``compute_cost_usd``); ``winner`` is the
-        # game-end record (mirrors ``read_game_outcome``). ``_mtime_key`` keys the
-        # cache only (Audit H-H-2).
+        return self._summarize_entries(path, read_all_entries(path))
+
+    def _summarize_entries(
+        self, path: Path, entries: Sequence[ReplayLogEntry]
+    ) -> _ReplaySummary:
+        """Reduce parsed rows without claiming they form a playable timeline."""
         tick_count = 0
         meeting_count = 0
         winner: WinnerSide | None = None
@@ -1906,8 +2339,9 @@ class ReplayLoader:
         final_tick: int | None = None
         total_cost = 0.0
         prompt_versions: dict[str, str] = {}
-        substrate_flags: dict[str, bool] | None = None
-        entries = read_all_entries(path)
+        substrate_flags = recorded_substrate_flags(entries)
+        tactical_policy: TacticalPolicyStamp | None = None
+        crew_tactical_policy: CrewTacticalPolicyStamp | None = None
         if not entries:
             # A file that contributes no records is an unusable artifact, not a
             # 0-tick game; reducing it would advertise it in the picker and
@@ -1916,8 +2350,9 @@ class ReplayLoader:
         for entry in entries:
             if isinstance(entry, ReplayEntry):
                 tick_count += 1
-            elif isinstance(entry, MeetingReplayEntry):
-                meeting_count += 1
+            elif isinstance(entry, (MeetingReplayEntry, AbortedMeetingReplayEntry)):
+                if isinstance(entry, MeetingReplayEntry):
+                    meeting_count += 1
                 total_cost += sum((call.cost_usd for call in entry.llm_calls), 0.0)
                 prompt_versions.update(entry.prompt_versions)
             elif isinstance(entry, GameEndReplayEntry):
@@ -1929,10 +2364,13 @@ class ReplayLoader:
                 final_tick = entry.tick
                 if entry.substrate_flags is not None:
                     substrate_flags = dict(entry.substrate_flags)
+                tactical_policy = entry.tactical_policy
+                crew_tactical_policy = entry.crew_tactical_policy
             elif isinstance(entry, FailedCallReplayEntry):
                 total_cost += entry.cost_usd
         return _ReplaySummary(
             total_ticks=tick_count,
+            completion_status=recorded_completion_status(entries),
             meeting_count=meeting_count,
             winner=winner,
             winner_reason=winner_reason,
@@ -1940,20 +2378,78 @@ class ReplayLoader:
             total_cost_usd=total_cost,
             prompt_versions=prompt_versions,
             substrate_flags=substrate_flags,
+            agent_factory_kind=recorded_agent_factory_kind(entries),
+            experiment_config=recorded_experiment_config(entries),
+            tactical_policy=tactical_policy,
+            crew_tactical_policy=crew_tactical_policy,
+            temporal_version=recorded_temporal_observation_version(entries),
         )
 
     def _metadata_view(self, path: Path, seed: int) -> ReplayMetadataView:
-        summary = self._file_summary(path)
+        summary = self._cached_validated_summary(
+            seed,
+            path,
+            _mtime_ns(path),
+            self._roster_mtime(),
+            self._substrate_cache_key(),
+        )
+        return self._metadata_from_summary(path, seed, summary)
+
+    def _validated_summary(
+        self,
+        seed: int,
+        path: Path,
+        _mtime_key: int,
+        _roster_mtime_key: int,
+        _substrate_key: tuple[tuple[str, bool], ...] | None,
+    ) -> _ReplaySummary:
+        """Advertise only a verified timeline, caching its compact metadata.
+
+        The roster and substrate affect reconstruction, so they invalidate this
+        cache along with the replay. Visibility and memory are unnecessary for
+        the picker; their larger playback results have separate bounded caches.
+        """
+        return self._walk(path, seed, collect_memory=False).summary
+
+    def _metadata_from_summary(
+        self, path: Path, seed: int, summary: _ReplaySummary
+    ) -> ReplayMetadataView:
         return ReplayMetadataView(
             game_id=_game_id_for_seed(seed),
             seed=seed,
             total_ticks=summary.total_ticks,
             winner=summary.winner,
             winner_reason=summary.winner_reason,
+            completion_status=summary.completion_status,
+            outcome_verified=summary.winner is not None
+            and (
+                summary.substrate_flags is None
+                or not substrate_stamp_mismatches(
+                    summary.substrate_flags,
+                    ambient=_reader_substrate(summary.temporal_version),
+                )
+            ),
             meeting_count=summary.meeting_count,
             total_cost_usd=summary.total_cost_usd,
             prompt_versions=dict(summary.prompt_versions),
             created_at=_iso_mtime(path),
+            agent_factory_kind=summary.agent_factory_kind,
+            experiment_config=ExperimentConfigView.model_validate(
+                summary.experiment_config.model_dump()
+            )
+            if summary.experiment_config is not None
+            else None,
+            substrate_flags=summary.substrate_flags,
+            tactical_policy=TacticalPolicyView.model_validate(
+                summary.tactical_policy.model_dump()
+            )
+            if summary.tactical_policy is not None
+            else None,
+            crew_tactical_policy=TacticalPolicyView.model_validate(
+                summary.crew_tactical_policy.model_dump()
+            )
+            if summary.crew_tactical_policy is not None
+            else None,
         )
 
     def _players_view(self, initial_state: WorldState) -> tuple[PlayerView, ...]:
@@ -1972,18 +2468,9 @@ class ReplayLoader:
     ) -> GameFinale | None:
         """Compose the recorded outcome into one :class:`GameFinale` (Task 19.10).
 
-        The finale is built from RECORDED bytes only — the ``game_over`` row
-        (via ``summary``), the recorded meeting records, and the kill events the
-        walk already re-derived — and is never cross-validated against re-walked
-        state. That is deliberate: a direct-``ReplayLog`` writer may legitimately
-        stamp a winner onto a non-terminal state (the codegen fidelity fixture in
-        ``scripts/gen_frontend_types.py`` records ``CREWMATES`` on a 3-tick game
-        with zero tasks completed), and re-validating would turn that into a
-        raise on a path that only wants to *show* what was recorded.
-
-        Pure function of ``walk`` + ``summary``: it reads NO set-level sidecar
-        (``roster.json`` / ``MANIFEST.md`` / the rubric), because the fidelity
-        generator runs it inside a bare temp dir holding a single ``.jsonl``.
+        The recorded outcome has already been checked against the engine's
+        terminal event by the walk. The finale combines that verified record
+        with its meeting records and reconstructed decisive events.
 
         ``None`` when no winner was recorded — a partial replay (crash /
         tick-budget / meeting-phase exit) has no outcome to show.
@@ -2163,7 +2650,7 @@ class ReplayLoader:
         if not self._replay_dir.exists():
             return []
         pairs: list[tuple[int, Path]] = []
-        for path in self._replay_dir.glob("replay-seed-*.jsonl"):
+        for path in self._replay_dir.glob(REPLAY_FILENAME_GLOB):
             if not path.is_file():
                 continue
             seed = _parse_seed_from_filename(path.name)
@@ -2247,8 +2734,9 @@ def _parse_seed_from_game_id(game_id: str) -> int | None:
 
 
 def _parse_seed_from_filename(name: str) -> int | None:
-    match = _FILENAME_PATTERN.fullmatch(name)
-    return int(match.group(1)) if match is not None else None
+    # One shared recording-filename contract: the loader serves exactly the
+    # files orchestrator.recording_fingerprint hashes as source bytes.
+    return replay_seed_from_filename(name)
 
 
 def _display_name(agent_id: str) -> str:
@@ -2614,7 +3102,16 @@ def _observation_claim_view(
     | SawKillObservationView
     | WhereaboutsClaimView
     | SawMoveObservationView
+    | TaskActivityAccountView
 ):
+    if isinstance(claim, TaskActivityAccount):
+        return TaskActivityAccountView(
+            type="task_activity",
+            task_id=claim.task_id,
+            room=claim.room,
+            from_tick=claim.from_tick,
+            to_tick=claim.to_tick,
+        )
     if isinstance(claim, SawPlayerObservation):
         return SawPlayerView(
             type="saw_player",
@@ -2727,28 +3224,9 @@ def _turn_view(turn: MeetingTurn) -> TurnView:
 
 
 def _contradiction_view(contradiction: ContradictionRef) -> ContradictionView:
-    # Lift the weak/strong class out of the free-text ``description`` marker via
-    # the canonical predicate (imported, never re-implemented) so the meeting
-    # view can draw weak=dashed / strong=solid without re-parsing client-side.
-    # ``kind`` passes through verbatim -- the Task 13.4 ``alibi_vs_physical`` kind
-    # a recorded ``MeetingResult`` carries (the manager persists
-    # ``detect_contradictions`` at close) renders like the other alibi kinds.
-    # Task 15.4.1 teaches the view layer the fourth kind: the Task 15.4
-    # ``vent_sighting`` role-proving flag mirrors through here like the others.
-    # It is always STRONG (the grounding chokepoint is the precision gate, so it
-    # carries no weak marker), which ``is_weak_contradiction`` resolves below
-    # (no ``vent_sighting`` special-case is needed -- the predicate is
-    # marker-based). Committed v4 replays predate the kind and never carry it.
-    # What the kind no longer shares with the others is how it RENDERS -- see
-    # the taxonomy below.
-    #
-    # Task 19.11: the evidence TAXONOMY derives here too, from the same recorded
-    # fields -- ``classify_evidence`` is the one place the rules live, and it is
-    # fail-loud (an unknown kind raises ``UnclassifiableEvidenceError`` rather
-    # than defaulting to "contradiction", which is exactly how a grounded vent
-    # proof came to render as ``p-X ↔ p-X``). ``weak`` is passed in rather than
-    # re-derived inside the classifier so the marker predicate stays
-    # single-sourced beside the marker writer in ``meetings.transcript``.
+    # The canonical predicate reads typed evidence_band on current recordings
+    # and the historical description marker only when that field is absent.
+    # Project its decision once; the browser never reparses evidence prose.
     weak = is_weak_contradiction(contradiction)
     return ContradictionView(
         contradiction_id=contradiction.contradiction_id,
@@ -2980,30 +3458,45 @@ def _advantage_view(
     )
 
 
-def _gate_view(ballots: Sequence[VoteBallot]) -> GateView:
+def _gate_view(
+    ballots: Sequence[VoteBallot],
+    *,
+    threshold: float = LEGACY_SKIP_CONFIDENCE_THRESHOLD,
+    threshold_source: Literal[
+        "recorded", "legacy_compatibility"
+    ] = "legacy_compatibility",
+) -> GateView:
     """Recompute the per-meeting §4.6 verdict from the persisted ballots.
 
     Mirrors :func:`meetings.voting.tally_ballots` exactly — plurality + at least
-    one leader ballot ``confidence >= threshold`` (0.6); a SKIP plurality or a
+    one leader ballot ``confidence >= threshold``; the caller supplies the recorded
+    cutoff or the explicit legacy compatibility cutoff. A SKIP plurality or a
     tie of non-SKIP targets → no leader / not passed — so ``passed`` matches the
     recorded outcome and ``leader`` the recorded ``ejected_player_id``. The
     template-time ``rendered_max`` is intentionally dropped (it is transient and
     only persisted on failed calls).
     """
 
-    threshold = DEFAULT_SKIP_CONFIDENCE_THRESHOLD
     tallies: dict[str, int] = {}
     for ballot in ballots:
         tallies[ballot.target] = tallies.get(ballot.target, 0) + 1
     if not tallies:
         return GateView(
-            leader=None, leader_max_confidence=0.0, threshold=threshold, passed=False
+            leader=None,
+            leader_max_confidence=0.0,
+            threshold=threshold,
+            threshold_source=threshold_source,
+            passed=False,
         )
     max_votes = max(tallies.values())
     leaders = sorted(target for target, count in tallies.items() if count == max_votes)
     if SKIP_TARGET in leaders or len(leaders) > 1:
         return GateView(
-            leader=None, leader_max_confidence=0.0, threshold=threshold, passed=False
+            leader=None,
+            leader_max_confidence=0.0,
+            threshold=threshold,
+            threshold_source=threshold_source,
+            passed=False,
         )
     leader = leaders[0]
     leader_max_confidence = max(b.confidence for b in ballots if b.target == leader)
@@ -3011,6 +3504,7 @@ def _gate_view(ballots: Sequence[VoteBallot]) -> GateView:
         leader=leader,
         leader_max_confidence=leader_max_confidence,
         threshold=threshold,
+        threshold_source=threshold_source,
         passed=leader_max_confidence >= threshold,
     )
 
@@ -3359,7 +3853,7 @@ def _expected_seedset(replay_dir: Path) -> str | None:
 # ``AILIBI_REPLAY_DIR`` is the PARENT of per-set subdirs (``replays/samples/`` ->
 # ``4p1i/``, ``9p2i/``, + future). ``get_replay_loader`` takes a ``set`` query
 # param resolving ``<parent>/<set>/`` to a per-set loader.
-_REPLAY_GLOB: Final[str] = "replay-seed-*.jsonl"
+_REPLAY_GLOB: Final[str] = REPLAY_FILENAME_GLOB
 
 # The default set served when a request carries no ``set`` query param — the
 # CURATED spectator default (Task 19.9; audits/audit-phase-19-triage.md §7 item 10).
@@ -3558,3 +4052,16 @@ __all__ = [
     "get_loader_registry",
     "get_replay_loader",
 ]
+
+
+def _investigation_plan_view(
+    memory: AgentMemory, *, decision_tick: int | None = None
+) -> InvestigationPlanView | None:
+    state = memory.working.investigation
+    if state is None or state.active_plan is None or state.last_processed_tick is None:
+        return None
+    if decision_tick is not None and decision_tick != state.last_processed_tick:
+        raise ValueError("investigation projection requires the actual decision tick")
+    return InvestigationPlanView(
+        decision_tick=state.last_processed_tick, **state.active_plan.model_dump()
+    )

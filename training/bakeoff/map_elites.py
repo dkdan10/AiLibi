@@ -708,24 +708,27 @@ _CELL_INDEX_FILENAME: Final = "index.json"
 _CELL_WEIGHTS_FILENAME: Final = "weights.json"
 
 
-def bakeoff_substrate_sha() -> str:
-    """The sha256 hex digest of the committed 9p2i corpus MANIFEST bytes.
+def historical_bakeoff_substrate_sha() -> str:
+    """Reproduce the original manifest-only cell identity for historical readers.
 
-    Load-bearing for Tasks 18.20/18.24: the persisted cells were scored on fresh
-    fake-path games seeded from the corpus TRAIN split at the corpus' RECORDED
-    baseline substrate, and the MANIFEST is that substrate's committed identity
-    card — its ``FROZEN`` line names the recording git sha and is re-frozen on
-    every re-record (the repo's established staleness primitive, cf. the
-    rubric-score manifest-sha doctrine). So this digest moves EXACTLY when a
-    Wave-1 substrate adoption re-records the corpus, and any downstream consumer
-    recomputes it from committed bytes alone. Deliberately NOT
-    ``sha256(splits.json)``: the splits file's bytes are pinned structurally
-    identical across re-records (replays/ml_corpus/README), so hashing them would
-    never trip the 18.24 stale-seed fence.
+    This definition cannot authorize current campaign seeds. New cell artifacts
+    use the version-two bakeoff_substrate_sha and record its definition name.
     """
 
     manifest = (CORPUS_SPLITS_PATH.parent / "MANIFEST.md").read_bytes()
     return _sha256_hex(manifest)
+
+
+def bakeoff_substrate_sha() -> str:
+    """Version-two cell substrate over recorded inputs and their derivation."""
+
+    from training.provenance import fit_corpus_fingerprint
+
+    return _sha256_hex(
+        (
+            "cell-substrate-v2:" + fit_corpus_fingerprint(CORPUS_SPLITS_PATH.parent)
+        ).encode()
+    )
 
 
 def write_archive_cell_artifacts(
@@ -878,6 +881,7 @@ def write_archive_cell_artifacts(
         "substrate": {
             "corpus_manifest": str(CORPUS_SPLITS_PATH.parent / "MANIFEST.md"),
             "substrate_sha256": bakeoff_substrate_sha(),
+            "substrate_sha_kind": "bakeoff_substrate_sha.v2",
         },
     }
     (cells_dir / _CELL_INDEX_FILENAME).write_text(
@@ -890,6 +894,7 @@ def load_archive_cell_genomes(
     artifact_dir: Path,
     *,
     expected_substrate_sha: str | None = None,
+    expected_substrate_kind: str | None = None,
 ) -> dict[tuple[int, int, int], ArchiveCell]:
     """Reload the persisted cell pool, verifying every integrity invariant.
 
@@ -921,6 +926,25 @@ def load_archive_cell_genomes(
     index = json.loads(index_path.read_text())
 
     recorded_substrate = index["substrate"]["substrate_sha256"]
+    recorded_kind = index["substrate"].get(
+        "substrate_sha_kind", "bakeoff_substrate_sha"
+    )
+    if expected_substrate_sha is not None:
+        expected_kind = expected_substrate_kind or "bakeoff_substrate_sha.v2"
+        if recorded_kind != expected_kind:
+            raise ValueError("MAP-Elites substrate kind mismatch")
+        source_sha = (
+            bakeoff_substrate_sha()
+            if expected_kind == "bakeoff_substrate_sha.v2"
+            else historical_bakeoff_substrate_sha()
+            if expected_kind == "bakeoff_substrate_sha"
+            else None
+        )
+        if source_sha != expected_substrate_sha:
+            raise ValueError(
+                "MAP-Elites requested substrate does not match its named source definition"
+            )
+
     if (
         expected_substrate_sha is not None
         and expected_substrate_sha != recorded_substrate

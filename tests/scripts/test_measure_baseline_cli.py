@@ -20,6 +20,7 @@ from eval.evidence_honesty import (
     RATIFIED_BASELINE,
     RATIFIED_I11_CELLS,
 )
+from tests._helpers.committed import report_9p2i
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _NINE = _REPO_ROOT / "replays" / "samples" / "9p2i"
@@ -84,6 +85,29 @@ def test_4p1i_reproduces_baseline_8_exactly() -> None:
     # Meeting rate 0.78 / 39 resolved.
     assert report.meeting_rate == pytest.approx(0.78)  # was 0.8
     assert report.resolved_meetings == 39  # was 40
+
+
+def test_historical_win_census_does_not_certify_recorded_outcomes(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    source = report_9p2i().report
+    historical = source.model_copy(
+        update={
+            "games": tuple(
+                game.model_copy(update={"outcome_verified": False})
+                for game in source.games
+            )
+        }
+    )
+    monkeypatch.setattr(
+        measure_baseline, "assemble_tournament_report", lambda _path: historical
+    )
+
+    measured = measure_baseline.measure_baseline(tmp_path)
+
+    assert (measured.crew_wins, measured.impostor_wins) == (35, 15)
+    assert measured.impostor_win_rate == pytest.approx(15 / 50)
+    assert all(not game.outcome_verified for game in historical.games)
 
 
 def test_default_measures_both_canonical_sets(

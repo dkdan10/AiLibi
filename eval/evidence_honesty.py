@@ -1362,7 +1362,9 @@ def _fold_meeting_into_memories(
     """
 
     evidence = extract_belief_evidence(walk_event.result)
-    statements = derive_reported_testimony(walk_event.result)
+    statements = derive_reported_testimony(
+        walk_event.result, testimony_shapes=walk_event.testimony_shapes
+    )
     for pid in sorted(walk_event.state.players):
         if not walk_event.state.players[pid].alive:
             continue
@@ -1548,9 +1550,9 @@ def _fold_impostor_decisions(
         if player.in_vent:
             tallies.in_vent_decisions += 1
         intent = policies[pid].decide(memories[pid], public_map)
-        reproduced = translate_action_intent(intent).model_dump(mode="python") == dict(
-            raw_action
-        )
+        reproduced = translate_action_intent(intent, world_state=state).model_dump(
+            mode="python"
+        ) == dict(raw_action)
         if not reproduced:
             tallies.mismatches += 1
             if assert_recorded_action_fidelity:

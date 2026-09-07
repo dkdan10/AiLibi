@@ -982,10 +982,12 @@ class HallOfFame:
         substrate_sha256: str,
         members: tuple[HallOfFameMember, ...],
         artifact_metadata: LoadableArtifactMetadata | None = None,
+        substrate_sha_kind: str | None = None,
     ) -> None:
         self._side = side
         self._side_dir = side_dir
         self._substrate_sha256 = substrate_sha256
+        self._substrate_sha_kind = substrate_sha_kind
         self._artifact_metadata = artifact_metadata
         # The canonical order everywhere: sorted by the member identity sha, so
         # the index bytes and every drift check are insertion-order-independent.
@@ -1044,6 +1046,7 @@ class HallOfFame:
         *,
         substrate_sha256: str,
         artifact_metadata: LoadableArtifactMetadata | None = None,
+        substrate_sha_kind: str | None = None,
     ) -> HallOfFame:
         """Initialise a FRESH empty pool at the given campaign substrate.
 
@@ -1100,6 +1103,7 @@ class HallOfFame:
             side_dir=side_dir,
             substrate_sha256=substrate_sha256,
             members=(),
+            substrate_sha_kind=substrate_sha_kind,
             artifact_metadata=artifact_metadata,
         )
         hall._write_index()
@@ -1299,6 +1303,7 @@ class HallOfFame:
             side_dir=side_dir,
             substrate_sha256=substrate_sha256,
             members=tuple(members),
+            substrate_sha_kind=index.get("substrate_sha_kind"),
             artifact_metadata=resolved_metadata,
         )
 
@@ -1455,7 +1460,9 @@ class HallOfFame:
         """
 
         archive = load_archive_cell_genomes(
-            cell_artifact_dir, expected_substrate_sha=self._substrate_sha256
+            cell_artifact_dir,
+            expected_substrate_sha=self._substrate_sha256,
+            expected_substrate_kind=self._substrate_sha_kind,
         )
         # Preflight the whole batch before the first write (all-or-nothing): the
         # digest is a pure function of the genome bytes, so computing it here is
@@ -1745,6 +1752,8 @@ class HallOfFame:
             "side": self._side,
             "substrate_sha256": self._substrate_sha256,
         }
+        if self._substrate_sha_kind is not None:
+            index["substrate_sha_kind"] = self._substrate_sha_kind
         if self._artifact_metadata is not None:
             index["artifact_metadata"] = self._artifact_metadata.model_dump(mode="json")
         self._index_path.write_text(json.dumps(index, indent=2, sort_keys=True) + "\n")

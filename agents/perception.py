@@ -33,12 +33,14 @@ from agents.memory.beliefs import (
     BODY_PROXIMITY_WINDOW_TICKS,
     BeliefState,
     apply_observation_rules,
+    apply_witnessed_action_rules,
 )
 from agents.memory.episodic import EpisodicEvent, MemoryStore, derive_observation_id
 from observation.packet import (
     AudibleEvent,
     BodyId,
     BodyView,
+    EventObservationBatch,
     GlobalView,
     MovedPlayerView,
     ObservationPacket,
@@ -47,6 +49,11 @@ from observation.packet import (
     PlayerView,
     RoomId,
     SelfView,
+    OwnKillEvent,
+    OwnTaskAttemptEvent,
+    OwnTransitionEvent,
+    WitnessedActionEvent,
+    WitnessedMoveEvent,
 )
 
 PROVENANCE_OBSERVED: Final[str] = "observed"
@@ -73,7 +80,6 @@ EVENT_SAW_PLAYER: Final[str] = "saw_player"
 # a first-hand sighting-class line and wires ``WorkingMemory.last_seen``.
 EVENT_SAW_PLAYER_MOVE: Final[str] = "saw_player_move"
 EVENT_SAW_BODY: Final[str] = "saw_body"
-EVENT_HEARD_VENT_USE: Final[str] = "heard_vent_use"
 EVENT_HEARD_SABOTAGE_ALARM: Final[str] = "heard_sabotage_alarm"
 EVENT_GLOBAL_STATUS: Final[str] = "global_status"
 # Episodic type for a reported-testimony row (Task 13.5.2). Written only by
@@ -82,9 +88,163 @@ EVENT_GLOBAL_STATUS: Final[str] = "global_status"
 EVENT_REPORTED_TESTIMONY: Final[str] = "reported_testimony"
 
 _AUDIBLE_EVENT_TYPES: Final[Mapping[str, str]] = {
-    "vent_use_heard": EVENT_HEARD_VENT_USE,
     "sabotage_alarm": EVENT_HEARD_SABOTAGE_ALARM,
 }
+
+
+def ingest_event_observations(
+    *,
+    batch: EventObservationBatch,
+    memory: MemoryStore,
+    beliefs: BeliefState | None = None,
+) -> tuple[EpisodicEvent, ...]:
+    """Append only new source-time evidence, preserving exact-once belief lifts."""
+
+    if batch.temporal_observation_version == 2:
+        return _ingest_ordered_events(batch=batch, memory=memory, beliefs=beliefs)
+
+    candidates: list[tuple[str, str, Mapping[str, Any]]] = []
+    if batch.own_kill is not None:
+        candidates.append(
+            (
+                EVENT_OWN_KILL,
+                batch.own_kill.victim_id,
+                _own_kill_payload(batch.own_kill),
+            )
+        )
+    for player in batch.witnessed_actions:
+        if player.action not in ("kill", "vent"):
+            raise ValueError("event batches only contain witnessed kill/vent actions")
+        candidates.append(
+            (EVENT_SAW_PLAYER, player.id, _visible_player_payload(player))
+        )
+    for moved in batch.moved_players:
+        candidates.append(
+            (EVENT_SAW_PLAYER_MOVE, moved.id, _moved_player_payload(moved))
+        )
+    existing = memory.recent(since_tick=batch.tick)
+    source_rows = {
+        event.payload["source_event_id"]: event
+        for event in existing
+        if "source_event_id" in event.payload
+    }
+    seq = sum(
+        event.tick == batch.tick and event.observation_id is not None
+        for event in existing
+    )
+    appended: list[EpisodicEvent] = []
+    new_action_ids: set[str] = set()
+    for kind, subject, payload in candidates:
+        # Every component is already entitled; no hidden global event ordinal
+        # or engine identifier crosses this boundary.
+        source_id = f"{batch.agent_id}:{batch.tick}:{kind}:{subject}"
+        data = {**payload, "source_event_id": source_id}
+        prior = source_rows.get(source_id)
+        if prior is not None:
+            if prior.type != kind or dict(prior.payload) != data:
+                raise ValueError("conflicting content for a delivered source event")
+            continue
+        event = EpisodicEvent(
+            tick=batch.tick,
+            type=kind,
+            payload=data,
+            provenance=PROVENANCE_OBSERVED,
+            observation_id=derive_observation_id(
+                agent_id=batch.agent_id, tick=batch.tick, seq=seq
+            ),
+        )
+        memory.append(event)
+        source_rows[source_id] = event
+        appended.append(event)
+        seq += 1
+        if kind == EVENT_SAW_PLAYER:
+            new_action_ids.add(subject)
+    if beliefs is not None and new_action_ids:
+        beliefs.load_from(
+            apply_witnessed_action_rules(
+                beliefs,
+                witnessed_actions=tuple(
+                    action
+                    for action in batch.witnessed_actions
+                    if action.id in new_action_ids
+                ),
+                fellow_impostor_ids=batch.fellow_impostor_ids,
+            )
+        )
+    return tuple(appended)
+
+
+def _ingest_ordered_events(
+    *,
+    batch: EventObservationBatch,
+    memory: MemoryStore,
+    beliefs: BeliefState | None,
+) -> tuple[EpisodicEvent, ...]:
+    existing = memory.recent(since_tick=batch.tick)
+    sources = {row.payload.get("source_event_id"): row for row in existing}
+    seq = sum(
+        row.tick == batch.tick and row.observation_id is not None for row in existing
+    )
+    appended: list[EpisodicEvent] = []
+    new_actions: list[PlayerView] = []
+    for row in batch.ordered_events:
+        event = row.event
+        payload: dict[str, Any]
+        if isinstance(event, WitnessedActionEvent):
+            kind, payload = (
+                EVENT_SAW_PLAYER,
+                dict(_visible_player_payload(event.player)),
+            )
+        elif isinstance(event, WitnessedMoveEvent):
+            kind, payload = (
+                EVENT_SAW_PLAYER_MOVE,
+                dict(_moved_player_payload(event.movement)),
+            )
+        elif isinstance(event, OwnKillEvent):
+            kind, payload = EVENT_OWN_KILL, dict(_own_kill_payload(event.kill))
+        elif isinstance(event, OwnTransitionEvent):
+            kind, payload = "own_transition", event.model_dump(exclude={"kind"})
+        elif isinstance(event, OwnTaskAttemptEvent):
+            kind, payload = "own_task_attempt", event.attempt.model_dump()
+        else:
+            raise ValueError("unsupported temporal event payload")
+        source_id = f"{batch.agent_id}:{batch.tick}:event:{row.observation_order}"
+        payload.update(
+            source_event_id=source_id,
+            source_tick=batch.tick,
+            observation_phase="event",
+            observation_order=row.observation_order,
+            observer_room=row.observer_before_event.room,
+            observer_in_vent=row.observer_before_event.in_vent,
+        )
+        prior = sources.get(source_id)
+        if prior is not None:
+            if prior.type != kind or dict(prior.payload) != payload:
+                raise ValueError("conflicting content for a delivered source event")
+            continue
+        stored = EpisodicEvent(
+            tick=batch.tick,
+            type=kind,
+            payload=payload,
+            provenance=PROVENANCE_OBSERVED,
+            observation_id=derive_observation_id(
+                agent_id=batch.agent_id, tick=batch.tick, seq=seq
+            ),
+        )
+        memory.append(stored)
+        appended.append(stored)
+        seq += 1
+        if isinstance(event, WitnessedActionEvent):
+            new_actions.append(event.player)
+    if beliefs is not None and new_actions:
+        beliefs.load_from(
+            apply_witnessed_action_rules(
+                beliefs,
+                witnessed_actions=tuple(new_actions),
+                fellow_impostor_ids=batch.fellow_impostor_ids,
+            )
+        )
+    return tuple(appended)
 
 
 def ingest_packet(
@@ -144,11 +304,26 @@ def ingest_packet(
         if event.tick == tick and event.observation_id is not None
     )
 
+    def snapshot(payload: Mapping[str, Any]) -> dict[str, Any]:
+        if packet.temporal_observation_version != 2:
+            return dict(payload)
+        return {
+            **payload,
+            "source_tick": tick,
+            "observation_phase": "snapshot",
+            "observation_order": None,
+            "observer_room": packet.self_state.room,
+            "observer_in_vent": packet.self_state.in_vent,
+            "source_event_id": f"{packet.agent_id}:{tick}:snapshot:{seq}",
+        }
+
     memory.append(
         EpisodicEvent(
             tick=tick,
             type=EVENT_SELF_STATE,
-            payload=_self_state_payload(packet.self_state, agent_id=packet.agent_id),
+            payload=snapshot(
+                _self_state_payload(packet.self_state, agent_id=packet.agent_id)
+            ),
             provenance=PROVENANCE_OBSERVED,
             observation_id=derive_observation_id(
                 agent_id=packet.agent_id, tick=tick, seq=seq
@@ -163,7 +338,7 @@ def ingest_packet(
             EpisodicEvent(
                 tick=tick,
                 type=EVENT_OWN_KILL,
-                payload=_own_kill_payload(own_kill),
+                payload=snapshot(_own_kill_payload(own_kill)),
                 provenance=PROVENANCE_OBSERVED,
                 observation_id=derive_observation_id(
                     agent_id=packet.agent_id, tick=tick, seq=seq
@@ -177,7 +352,7 @@ def ingest_packet(
             EpisodicEvent(
                 tick=tick,
                 type=EVENT_COOLDOWN_STATUS,
-                payload={"cooldown": packet.cooldown},
+                payload=snapshot({"cooldown": packet.cooldown}),
                 provenance=PROVENANCE_OBSERVED,
                 observation_id=derive_observation_id(
                     agent_id=packet.agent_id, tick=tick, seq=seq
@@ -191,7 +366,7 @@ def ingest_packet(
             EpisodicEvent(
                 tick=tick,
                 type=EVENT_SAW_PLAYER,
-                payload=_visible_player_payload(player),
+                payload=snapshot(_visible_player_payload(player)),
                 provenance=PROVENANCE_OBSERVED,
                 observation_id=derive_observation_id(
                     agent_id=packet.agent_id, tick=tick, seq=seq
@@ -205,7 +380,7 @@ def ingest_packet(
             EpisodicEvent(
                 tick=tick,
                 type=EVENT_SAW_PLAYER_MOVE,
-                payload=_moved_player_payload(moved),
+                payload=snapshot(_moved_player_payload(moved)),
                 provenance=PROVENANCE_OBSERVED,
                 observation_id=derive_observation_id(
                     agent_id=packet.agent_id, tick=tick, seq=seq
@@ -219,7 +394,7 @@ def ingest_packet(
             EpisodicEvent(
                 tick=tick,
                 type=EVENT_SAW_BODY,
-                payload=_visible_body_payload(body),
+                payload=snapshot(_visible_body_payload(body)),
                 provenance=PROVENANCE_OBSERVED,
                 observation_id=derive_observation_id(
                     agent_id=packet.agent_id, tick=tick, seq=seq
@@ -233,7 +408,7 @@ def ingest_packet(
             EpisodicEvent(
                 tick=tick,
                 type=_audible_event_type(audible),
-                payload=_audible_event_payload(audible),
+                payload=snapshot(_audible_event_payload(audible)),
                 provenance=PROVENANCE_OBSERVED,
                 observation_id=derive_observation_id(
                     agent_id=packet.agent_id, tick=tick, seq=seq
@@ -258,6 +433,11 @@ def ingest_packet(
             apply_observation_rules(
                 beliefs,
                 observation=packet,
+                known_dead_by=(
+                    _known_dead_by(memory)
+                    if packet.temporal_observation_version == 2
+                    else None
+                ),
                 previous_visible_bodies=_previously_seen_body_ids(
                     memory, before_tick=tick
                 ),
@@ -448,7 +628,6 @@ __all__ = [
     "EVENT_COOLDOWN_STATUS",
     "EVENT_GLOBAL_STATUS",
     "EVENT_HEARD_SABOTAGE_ALARM",
-    "EVENT_HEARD_VENT_USE",
     "EVENT_OWN_KILL",
     "EVENT_REPORTED_TESTIMONY",
     "EVENT_SAW_BODY",
@@ -460,3 +639,12 @@ __all__ = [
     "PROVENANCE_REPORTED",
     "ingest_packet",
 ]
+
+
+def _known_dead_by(memory: MemoryStore) -> dict[str, int]:
+    known: dict[str, int] = {}
+    for event in memory.recent(since_tick=0):
+        if event.type == "public_meeting_roster":
+            for victim in event.payload["dead_ids"]:
+                known.setdefault(str(victim), event.tick)
+    return known

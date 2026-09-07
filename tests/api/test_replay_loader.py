@@ -80,6 +80,7 @@ from orchestrator.game import (
     build_default_meeting_runner,
 )
 from orchestrator.replay import (
+    AbortedMeetingReplayEntry,
     GameEndReplayEntry,
     LLMCallRecord,
     MeetingReplayEntry,
@@ -92,6 +93,7 @@ from orchestrator.replay import (
 )
 from orchestrator.scheduler import TickScheduler
 from orchestrator.seeder import seed_initial_state
+from orchestrator.replay_integrity import ReplayIntegrityError
 from tests.api.fixtures.sample_replay import (
     MeetingReplayExpectations,
     corrupt_tick_hash,
@@ -135,7 +137,7 @@ def test_load_replay_reconstructs_ticks_meetings_and_winner(
     assert [turn.speaker for turn in meeting.turns] == [expected.reporter]
     assert meeting.turns[0].turn_kind == "opening"
     assert {ballot.voter for ballot in meeting.ballots} == set(expected.living_agents)
-    assert replay.metadata.winner == "CREWMATES"
+    assert replay.metadata.winner == expected.winner
     # total_ticks counts only recorded ReplayEntrys; the synthesized initial
     # entry is extra, so ticks has exactly one more element than total_ticks.
     assert replay.metadata.total_ticks == expected.total_ticks
@@ -289,6 +291,51 @@ def test_unknown_game_raises_file_not_found(loader: ReplayLoader) -> None:
         loader.load_replay("headless-seed-404")
 
 
+def test_aborted_call_summary_preserves_spend_without_resolving_meeting(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "replay-seed-0.jsonl"
+    meeting_id = write_unresolved_meeting_replay(path, seed=0)
+    entry = AbortedMeetingReplayEntry(
+        game_id="headless-seed-0",
+        meeting_id=meeting_id,
+        tick=load_canonical_map().kill_cooldown_ticks + 1,
+        llm_calls=(
+            LLMCallRecord(
+                call_kind="meeting",
+                model="paid-model",
+                prompt="saved prompt",
+                response_text="saved response",
+                input_tokens=10,
+                output_tokens=2,
+                cost_usd=0.06,
+                agent_id="p-2",
+            ),
+        ),
+        prompt_versions={"opening": "opening.v1"},
+        error_type="RuntimeError",
+        error_message="transport stopped",
+    )
+    with path.open("a", encoding="utf-8") as stream:
+        stream.write(entry.model_dump_json() + "\n")
+    loader = ReplayLoader(replay_dir=tmp_path)
+
+    replay = loader.load_replay("headless-seed-0")
+
+    assert replay.metadata.total_cost_usd == pytest.approx(0.06)
+    assert replay.metadata.prompt_versions == {"opening": "opening.v1"}
+    assert replay.metadata.meeting_count == 0
+    assert replay.metadata.winner is None
+    assert replay.finale is None
+    assert replay.meetings == ()
+    assert replay.failed_calls == ()
+    assert loader.list_replays()[0].total_cost_usd == pytest.approx(0.06)
+    assert loader.cost_summary().total_cost_usd == pytest.approx(0.06)
+    assert "saved prompt" not in replay.model_dump_json()
+    with pytest.raises(KeyError):
+        loader.get_meeting_memory("headless-seed-0", meeting_id, "p-2")
+
+
 def test_lru_cache_returns_same_instance_until_cleared(tmp_path: Path) -> None:
     write_sample_replay(tmp_path / "replay-seed-0.jsonl", seed=0)
     loader = ReplayLoader(replay_dir=tmp_path)
@@ -409,8 +456,8 @@ def test_cost_summary_aggregates_across_replays(tmp_path: Path) -> None:
     assert summary.total_cost_usd == pytest.approx(meeting.total_cost_usd)
     assert summary.max_cost_per_replay == pytest.approx(meeting.total_cost_usd)
     assert summary.mean_cost_per_replay == pytest.approx(meeting.total_cost_usd / 2)
-    # Both replays record a CREWMATES win.
-    assert summary.decisive_split == {"CREWMATES": 1.0, "IMPOSTORS": 0.0}
+    # The completed meeting replay records a parity win; the other is partial.
+    assert summary.decisive_split == {"CREWMATES": 0.0, "IMPOSTORS": 1.0}
 
 
 def test_cost_summary_empty_dir_is_zeroed(tmp_path: Path) -> None:
@@ -701,7 +748,7 @@ def test_cost_summary_survives_and_excludes_broken_files(tmp_path: Path) -> None
     assert summary.total_cost_usd == pytest.approx(expected.total_cost_usd)
     assert summary.max_cost_per_replay == pytest.approx(expected.total_cost_usd)
     assert summary.mean_cost_per_replay == pytest.approx(expected.total_cost_usd / 2)
-    assert summary.decisive_split == {"CREWMATES": 1.0, "IMPOSTORS": 0.0}
+    assert summary.decisive_split == {"CREWMATES": 0.0, "IMPOSTORS": 1.0}
 
 
 def test_broken_replay_dir_still_serves_200_over_http(tmp_path: Path) -> None:
@@ -2353,3 +2400,76 @@ def test_the_analysis_override_still_lists_a_mismatched_replay(
     listed = loader.list_replays()
 
     assert "headless-seed-0" in {view.game_id for view in listed}
+
+
+@pytest.mark.parametrize("invalidation", ["mtime", "clear"])
+@pytest.mark.parametrize("corruption", ["tick", "winner", "terminal_tick"])
+def test_listing_revalidates_corrupt_timeline_after_cache_invalidation(
+    tmp_path: Path, invalidation: str, corruption: str
+) -> None:
+    path = tmp_path / "replay-seed-0.jsonl"
+    expected = write_meeting_replay(path)
+    loader = ReplayLoader(replay_dir=tmp_path)
+    assert loader.list_replays()[0].winner == expected.winner
+    stat = path.stat()
+    rows = [json.loads(line) for line in path.read_text().splitlines()]
+    if corruption == "tick":
+        rows[0]["tick"] = 100
+    elif corruption == "winner":
+        rows[-1]["winner"] = "CREWMATES"
+    else:
+        rows[-1]["tick"] += 100
+    path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+    if invalidation == "mtime":
+        _bump_mtime(path)
+    else:
+        os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns))
+        loader.clear_cache()
+    assert loader.list_replays() == []
+    with pytest.raises(ReplayIntegrityError):
+        loader.load_replay(expected.game_id)
+    # Raw accounting deliberately retains paid calls from an unplayable artifact.
+    assert loader.cost_summary().total_cost_usd == pytest.approx(
+        expected.total_cost_usd
+    )
+
+
+def test_listing_validation_cache_tracks_roster_changes(tmp_path: Path) -> None:
+    write_sample_replay(tmp_path / "replay-seed-0.jsonl")
+    roster = tmp_path / "roster.json"
+    config = {"num_players": 4, "num_impostors": 1, "tasks_per_crewmate": 1}
+    roster.write_text(json.dumps(config))
+    loader = ReplayLoader(replay_dir=tmp_path)
+    assert len(loader.list_replays()) == 1
+    config["num_players"] = 5
+    roster.write_text(json.dumps(config))
+    _bump_mtime(roster)
+    assert loader.list_replays() == []
+    with pytest.raises(ReplayStateMismatchError):
+        loader.load_replay("headless-seed-0")
+
+
+def test_default_loader_cache_revalidates_after_live_substrate_change(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _delete_ailibi_env(monkeypatch)
+    expected = write_meeting_replay(tmp_path / "replay-seed-0.jsonl")
+    loader = ReplayLoader(replay_dir=tmp_path)
+    assert len(loader.list_replays()) == 1
+    assert loader.load_replay(expected.game_id).metadata.winner == expected.winner
+    assert loader.get_meeting_memory(
+        expected.game_id, expected.meeting_id, expected.reporter
+    )
+
+    monkeypatch.setenv("AILIBI_IMPOSTOR_ROLL_CALL", "1")
+    assert loader.list_replays() == []
+    with pytest.raises(ReplaySubstrateMismatchError):
+        loader.load_replay(expected.game_id)
+    with pytest.raises(ReplaySubstrateMismatchError):
+        loader.get_meeting_memory(
+            expected.game_id, expected.meeting_id, expected.reporter
+        )
+
+    monkeypatch.delenv("AILIBI_IMPOSTOR_ROLL_CALL")
+    assert len(loader.list_replays()) == 1
+    assert loader.load_replay(expected.game_id).metadata.winner == expected.winner

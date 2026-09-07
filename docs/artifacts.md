@@ -106,8 +106,8 @@ than its output preserved.
 | `training/artifacts/coevo/EVIDENCE-MANIFEST.md` — the pin + the digests + the consumer enumeration | (b) | in git | 283 KiB |
 | `training/reports/` — the reports and their flattened `results-*.jsonl` rows | (b) | in git | 2.5 MB / 21 files |
 | `training/reports/_finalist_eval_raw/MANIFEST.md` — the slate's per-file digests (Task 19.21) | (b) | in git | 1,569 digests |
-| `audits/` — the audit record, with `audits/README.md` as its index | (b) | in git | 8,644,243 tracked bytes / 167 files |
-| `docs/media/` — the README captures + the as-built architecture picture | (a) | in git | 1.4 MB / 6 files |
+| `audits/` — the audit record, with `audits/README.md` as its index | (b) | in git | 14,838,764 tracked bytes / 201 files |
+| `docs/media/` — the README captures, their provenance, and the as-built architecture picture | (a) | in git | 1.4 MB / 7 files |
 | `design/phase-12/` — the design-artifact record (map reference renders + briefs) | (b) | in git | 1.9 MB / 18 files |
 | `experiments/lab/`, `experiments/model_probe/` — recorded read-only harness outputs and their syntheses (`experiments/` outputs are artifacts, not behavior — `docs/architecture.md`) | (b) | in git | 7.3 MB / 164 files |
 | **`coevo/` on `evidence/phase-18-coevo`** — every unpinned Phase-18 co-evolution byte | **(c)** | pinned sha | **101.097 MiB / 1,383 files** |
@@ -116,9 +116,12 @@ than its output preserved.
 | local `replays/*.jsonl`, tournament report dirs, the firewall's `**/*.audit.jsonl` packet logs, `frontend/dist/`, the demo bundle | (d) | regenerated (`.gitignore`d) | — |
 
 **Why the other `training/artifacts/` families are class (a) and coevo mostly is
-not.** The six sibling families above are the *live* learned artifacts — the
-weights the inference path loads and the sidecars 19.23 verifies offline — and
-the test suite opens them directly, which is what class (a) means. `coevo/` is
+not.** The six sibling families above contain shipped inference weights and historical
+fitted components with explicit compatibility rules. The test suite opens them
+directly, which is what class (a) means; a frozen fit retained for diagnostics
+is not automatically eligible for current scoring. The
+[training boundary](../training/README.md#current-model-evidence-boundary)
+states which identities current loaders require. `coevo/` is
 the *record of a closed campaign*: 90 of its files are opened by a test and stay,
 and the 1,383 nobody opens are class (c). Same directory tree, two different
 classes, decided the same way in both cases — by what the consumers read.

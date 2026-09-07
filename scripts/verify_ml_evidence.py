@@ -1714,13 +1714,16 @@ def run_corpus(ctx: Context) -> LegResult:
     # artifact. Certifying an artifact the product will not use is the same
     # defect the composed manifest had (Codex review, PR #348).
     from training.surrogate.ballots import load_ballot_predictor_artifact
-    from training.surrogate.runner import fit_corpus_fingerprint, load_fit_corpus_record
+    from training.surrogate.runner import (
+        historical_fit_corpus_fingerprint,
+        load_fit_corpus_record,
+    )
 
     fit_corpus = load_fit_corpus_record(ctx.repo_root / SURROGATE_DIR)
     _predictor, weights_sha = load_ballot_predictor_artifact(
         ctx.repo_root / SURROGATE_DIR
     )
-    measured_sha = fit_corpus_fingerprint(ctx.repo_root / CORPUS_SET)
+    measured_sha = historical_fit_corpus_fingerprint(ctx.repo_root / CORPUS_SET)
     stated_set = CORPUS_SET.rsplit("/", 1)[-1]
     # Two kinds of disagreement live in this one record, and the detail names
     # which one fired: a corpus FINGERPRINT that has moved means the corpus was
@@ -1738,6 +1741,10 @@ def run_corpus(ctx: Context) -> LegResult:
     keying_drift = [
         problem
         for problem in (
+            "fingerprint_version: this historical diagnostic requires version 1; "
+            f"the record declares {fit_corpus.fingerprint_version}"
+            if fit_corpus.fingerprint_version != 1
+            else "",
             f"weights_sha256: the record is keyed on "
             f"{fit_corpus.weights_sha256[:16]}… but the committed weights hash "
             f"to {weights_sha[:16]}… — the substrate fence "
@@ -1760,12 +1767,17 @@ def run_corpus(ctx: Context) -> LegResult:
                 f"sha256 {fit_corpus.corpus_sha256[:16]}… keyed to weights "
                 f"{fit_corpus.weights_sha256[:16]}…"
             ),
-            source=f"{SURROGATE_DIR}/fit-corpus.json (SurrogateFitCorpus)",
+            source=f"{SURROGATE_DIR}/fit-corpus.json (historical v1; does not certify current derivation)",
             status=fingerprint_status,
             detail="\n".join(
                 [*keying_drift, corpus_drift] if corpus_drift else keying_drift
             ),
         )
+    )
+    notes.append(
+        "Fit sidecars here are historical version-one evidence. Their original "
+        "digest is checked exactly; current scoring refuses them because they "
+        "do not bind roster and derivation inputs. No historical fit is promoted."
     )
     return LegResult(leg="corpus", rows=tuple(rows), notes=tuple(notes))
 
@@ -1958,7 +1970,7 @@ def _grounding_row(repo_root: Path) -> CheckRow:
     weights, so one question decides how to read all of it: were those weights
     fitted on these bytes? Each instrument that ships a ``fit-corpus.json``
     answers it directly — the record stores the fingerprint of the corpus it was
-    fitted on, and ``fit_corpus_fingerprint`` recomputes that fingerprint from
+    fitted on, and ``historical_fit_corpus_fingerprint`` recomputes that fingerprint from
     the corpus now on disk. Disagreement FAILS: a number re-derived from weights
     fitted on other games is not a check of anything.
 
@@ -1980,11 +1992,11 @@ def _grounding_row(repo_root: Path) -> CheckRow:
     from training.surrogate.ballots import load_ballot_predictor_artifact
     from training.surrogate.runner import (
         FIT_CORPUS_FILENAME,
-        fit_corpus_fingerprint,
+        historical_fit_corpus_fingerprint,
         load_fit_corpus_record,
     )
 
-    live = fit_corpus_fingerprint(repo_root / CORPUS_SET)
+    live = historical_fit_corpus_fingerprint(repo_root / CORPUS_SET)
     stated_set = CORPUS_SET.rsplit("/", 1)[-1]
     weights_of = {
         SURROGATE_DIR: lambda path: load_ballot_predictor_artifact(path)[1],
@@ -1995,6 +2007,11 @@ def _grounding_row(repo_root: Path) -> CheckRow:
     for directory in (SURROGATE_DIR, CONVICTION_DIR):
         record = load_fit_corpus_record(repo_root / directory)
         measured[directory] = record.corpus_sha256
+        if record.fingerprint_version != 1:
+            drifted.append(
+                f"{directory}: fingerprint_version {record.fingerprint_version}; "
+                "this historical diagnostic requires version 1"
+            )
         # Three ways a record can fail to describe the fit beside it, and the
         # product's own loaders refuse all three. Checking only the corpus
         # fingerprint would certify a bundle `load_*_model_artifact(...,
@@ -2174,7 +2191,12 @@ def run_recompute(ctx: Context) -> LegResult:
     rows.append(
         _verdict_identity_row(
             "surrogate verdict.json reproduces",
-            rederived=surrogate_verdict_rederived.model_dump(),
+            rederived=surrogate_verdict_rederived.model_dump(
+                exclude={
+                    "surrogate": {"degenerates_to_eject"},
+                    "prior_baseline": {"degenerates_to_eject"},
+                }
+            ),
             committed=surrogate_verdict_committed.model_dump(),
             repo_root=ctx.repo_root,
             path_fields=("replay_set_dir",),
@@ -2829,22 +2851,19 @@ _IN_TREE_INVENTORY: Final[dict[str, tuple[tuple[str, ...], tuple[str, ...]]]] = 
 #: matters: the slate row reads "1,569 digests", which is a digest count and not
 #: an inventory of files on this checkout.
 _STATED_FILES: Final = re.compile(r"([\d,]+) files")
+_STATED_BYTES: Final = re.compile(r"\b([\d,]+) tracked bytes\b")
 
 
 def inventory_problems(
-    repo_root: Path, inventories: Sequence[tuple[str, list[str], int | None]]
+    repo_root: Path,
+    inventories: Sequence[tuple[str, list[str], int | None]],
+    *,
+    stated_sizes: Mapping[str, str] | None = None,
 ) -> list[str]:
-    """Every disagreement between the registry, the git index, and the disk.
+    """Compare promised counts and exact byte sizes with tracked files on disk.
 
-    Two independent questions, because one of them cannot answer the other:
-
-    * is every tracked file actually on disk? — catches a working-tree deletion;
-    * does the index hold as many files as `docs/artifacts.md` PROMISES? —
-      catches a COMMITTED deletion, which removes the path from the index too,
-      so a check that used the index count as its own expectation watched both
-      sides shrink together and still read OK (Codex review, PR #348). This is
-      round 1's finding in a second place: an inventory derived from the thing
-      it is checking cannot notice a deletion.
+    Missing files, changed index counts, and changed content are independent
+    failures. Approximate sizes are not interpreted as exact promises.
     """
 
     problems: list[str] = []
@@ -2860,6 +2879,15 @@ def inventory_problems(
                 f"{key}: {ARTIFACTS_DOC} promises {stated_count} files, "
                 f"the index tracks {len(tracked)}"
             )
+        exact_bytes = _STATED_BYTES.search((stated_sizes or {}).get(key, ""))
+        if exact_bytes is not None and not gone:
+            promised = int(exact_bytes.group(1).replace(",", ""))
+            actual = sum((repo_root / path).stat().st_size for path in tracked)
+            if actual != promised:
+                problems.append(
+                    f"{key}: {ARTIFACTS_DOC} promises {promised:,} tracked bytes, "
+                    f"the tracked files contain {actual:,} bytes"
+                )
     return problems
 
 
@@ -3229,7 +3257,11 @@ def run_availability(ctx: Context) -> LegResult:
         # together and the row still read OK while the registry went on
         # promising the file (Codex review, PR #348). The document's stated
         # count is the independent side — it does not move when the index does.
-        problems = inventory_problems(ctx.repo_root, inventories)
+        problems = inventory_problems(
+            ctx.repo_root,
+            inventories,
+            stated_sizes={key: size for key, _cls, _where, size in doc_rows},
+        )
         tracked_total = sum(len(tracked) for _key, tracked, _stated in inventories)
         pinned = sum(1 for _key, _tracked, stated in inventories if stated is not None)
         rows.append(

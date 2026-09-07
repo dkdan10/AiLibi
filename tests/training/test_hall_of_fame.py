@@ -43,6 +43,7 @@ from training.bakeoff.map_elites import (
     BEHAVIOR_DESCRIPTOR_CONFIGURATION,
     ArchiveCell,
     bakeoff_substrate_sha,
+    historical_bakeoff_substrate_sha,
     load_archive_cell_genomes,
     map_elites_budget,
     write_archive_cell_artifacts,
@@ -476,14 +477,7 @@ def test_founder_ingestion_from_map_elites_cells(tmp_path: Path) -> None:
 
 
 def test_founder_ingestion_substrate_mismatch_refused(tmp_path: Path) -> None:
-    """A mismatched substrate refuses ingestion before any write (18.20).
-
-    A hall created at a mismatched ``substrate_sha256`` refuses ingestion with
-    :class:`ValueError` matching ``adopted substrate`` (raised inside
-    :func:`load_archive_cell_genomes`), and NO member dir / gen-0 tree is written
-    (the fence trips before pool build). A hall at the matching sha ingests
-    cleanly — proving the fence trips only on genuine drift.
-    """
+    """Both a false requested identity and drifted recorded identity refuse."""
 
     archive = _synthetic_archive()
     _persist_archive(archive, tmp_path / "me")
@@ -493,7 +487,7 @@ def test_founder_ingestion_substrate_mismatch_refused(tmp_path: Path) -> None:
     stale_hall = HallOfFame.create(
         tmp_path / "stale", "impostor", substrate_sha256=mismatched
     )
-    with pytest.raises(ValueError, match="adopted substrate"):
+    with pytest.raises(ValueError, match="named source definition"):
         stale_hall.ingest_map_elites_founders(tmp_path / "me")
     # No genome was frozen: the side dir holds only the (empty) index.
     stale_side = tmp_path / "stale" / "impostor"
@@ -506,23 +500,26 @@ def test_founder_ingestion_substrate_mismatch_refused(tmp_path: Path) -> None:
     founders = fresh_hall.ingest_map_elites_founders(tmp_path / "me")
     assert len(founders) == len(archive)
 
+    # A truthful requested identity cannot certify a changed archive stamp.
+    index_path = tmp_path / "me" / "cells" / "index.json"
+    index = json.loads(index_path.read_text())
+    index["substrate"]["substrate_sha256"] = mismatched
+    index_path.write_text(json.dumps(index))
+    drift_hall = HallOfFame.create(
+        tmp_path / "recorded-drift",
+        "impostor",
+        substrate_sha256=bakeoff_substrate_sha(),
+    )
+    with pytest.raises(ValueError, match="adopted substrate"):
+        drift_hall.ingest_map_elites_founders(tmp_path / "me")
+    assert drift_hall.member_shas == ()
+    assert not any((tmp_path / "recorded-drift" / "impostor").glob("gen-*"))
 
-def test_the_committed_pool_ingests_cleanly_at_the_adopted_substrate(
+
+def test_committed_pool_restores_only_with_explicit_historical_identity(
     tmp_path: Path,
 ) -> None:
-    """The COMMITTED MAP-Elites pool passes the fence it is stamped for.
-
-    The test above proves the fence on a synthetic archive. This proves it on
-    the artifact the campaign actually seeds from — the committed pool under
-    ``training/artifacts/impostor/map-elites`` — which is what the co-evolution
-    campaign-row pins stopped covering when they became provenance pins
-    (``tests/training/test_coevo_driver.py``): those rows are a recording, so a
-    live digest can no longer be asserted against them, and this is where the
-    live digest is asserted instead.
-
-    A pool whose stamp drifts from ``bakeoff_substrate_sha()`` fails here rather
-    than at the next campaign's ingest.
-    """
+    """The frozen pool restores under its original definition, never current v2."""
 
     committed_pool = (
         Path(__file__).resolve().parents[2]
@@ -532,10 +529,26 @@ def test_the_committed_pool_ingests_cleanly_at_the_adopted_substrate(
         / "map-elites"
     )
     index = json.loads((committed_pool / "cells" / "index.json").read_text())
-    assert index["substrate"]["substrate_sha256"] == bakeoff_substrate_sha()
+    historical = historical_bakeoff_substrate_sha()
+    assert index["substrate"]["substrate_sha256"] == historical
+
+    for label, digest in (
+        ("current", bakeoff_substrate_sha()),
+        ("untyped", historical),
+    ):
+        refused = HallOfFame.create(
+            tmp_path / label, "impostor", substrate_sha256=digest
+        )
+        with pytest.raises(ValueError, match="substrate kind mismatch"):
+            refused.ingest_map_elites_founders(committed_pool)
+        assert refused.member_shas == ()
+        assert not any((tmp_path / label / "impostor").glob("gen-*"))
 
     hall = HallOfFame.create(
-        tmp_path / "adopted", "impostor", substrate_sha256=bakeoff_substrate_sha()
+        tmp_path / "historical",
+        "impostor",
+        substrate_sha256=historical,
+        substrate_sha_kind="bakeoff_substrate_sha",
     )
     founders = hall.ingest_map_elites_founders(committed_pool)
     assert len(founders) == index["filled_cells"] == 30

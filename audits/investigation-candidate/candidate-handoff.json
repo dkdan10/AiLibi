@@ -1,0 +1,279 @@
+{
+  "development_inputs": {
+    "all_inspected": true,
+    "meeting_input_sha256": "6d879696c082cbf647d6cb180dd4c438e3fa30e89499d4eb075ba7ffb62b1dc9",
+    "normal_policy_input_sha256": "d5c1d3d7756806762345fa2c208df63c8537ebb7809aa124b97d21d1bb193ee4"
+  },
+  "execution_status": "NOT_AUTHORIZED",
+  "format_version": 1,
+  "kind": "offline_candidate_handoff",
+  "limits": [
+    "This binds the offline candidate and known development evidence only. It is not a frozen execution manifest.",
+    "Fresh decisions, external Claude review, main merge and experimental adoption have not occurred."
+  ],
+  "next_decision": "Prepare a separately frozen fresh meeting-decision evaluation before adopting any behavior. Keep search task-delay costs visible and test its independent contribution.",
+  "preregistration": "../deduction-candidate/preregistration.md",
+  "records": {
+    "2026-09-06-meetings.json": "5afd2e7bd2abe978b5972b62efff14086540fe7bf6434a7f70fa7e20f1f4b204",
+    "2026-09-06-normal-policies.json": "e412cb7f23743fa455c6c78ebbde7a3de1cbff65e440b3eea3e1051a4c9411c0"
+  },
+  "required_before_live_execution": {
+    "cost_budget_usd": null,
+    "grading_rubric": null,
+    "held_out_inputs": null,
+    "model": null,
+    "numeric_decision_bars": null,
+    "owner_authorization": null,
+    "provider": null,
+    "sampling": null,
+    "token_budget": null,
+    "wall_time_budget_seconds": null
+  },
+  "source_inventory": {
+    "field": "source_hashes",
+    "path": "2026-09-06-normal-policies.json",
+    "sha256": "27eb6c95687bfb1ced293d9bb104107092aec1070380a388c1a20a31a186850d"
+  },
+  "unadopted_meeting_arms": [
+    {
+      "experiment_config": {
+        "bounded_rebuttal_version": null,
+        "crew_idle_policy": "hub_wait",
+        "evidence_reasoning_version": null,
+        "format_version": 1,
+        "meeting_reset": "preserve",
+        "post_meeting_retarget": false,
+        "redistribution_policy": "lowest_id",
+        "sabotage_threshold": "six_sevenths",
+        "self_report": false,
+        "vent_exit_policy": "target_distance"
+      },
+      "name": "legacy_reference",
+      "temporal_version": null
+    },
+    {
+      "experiment_config": {
+        "attributed_testimony_version": null,
+        "bounded_rebuttal_version": null,
+        "crew_idle_policy": "hub_wait",
+        "evidence_reasoning_version": 2,
+        "format_version": 2,
+        "meeting_reset": "preserve",
+        "post_meeting_retarget": false,
+        "public_account_version": null,
+        "redistribution_policy": "lowest_id",
+        "sabotage_threshold": "six_sevenths",
+        "self_report": false,
+        "vent_exit_policy": "target_distance"
+      },
+      "name": "repaired_clock",
+      "temporal_version": 2
+    },
+    {
+      "experiment_config": {
+        "attributed_testimony_version": null,
+        "bounded_rebuttal_version": null,
+        "crew_idle_policy": "hub_wait",
+        "evidence_reasoning_version": 2,
+        "format_version": 2,
+        "meeting_reset": "preserve",
+        "post_meeting_retarget": false,
+        "public_account_version": 1,
+        "redistribution_policy": "lowest_id",
+        "sabotage_threshold": "six_sevenths",
+        "self_report": false,
+        "vent_exit_policy": "target_distance"
+      },
+      "name": "common_accounts",
+      "temporal_version": 2
+    },
+    {
+      "experiment_config": {
+        "attributed_testimony_version": 1,
+        "bounded_rebuttal_version": null,
+        "crew_idle_policy": "hub_wait",
+        "evidence_reasoning_version": 2,
+        "format_version": 2,
+        "meeting_reset": "preserve",
+        "post_meeting_retarget": false,
+        "public_account_version": null,
+        "redistribution_policy": "lowest_id",
+        "sabotage_threshold": "six_sevenths",
+        "self_report": false,
+        "vent_exit_policy": "target_distance"
+      },
+      "name": "attributed_testimony",
+      "temporal_version": 2
+    },
+    {
+      "experiment_config": {
+        "attributed_testimony_version": 1,
+        "bounded_rebuttal_version": null,
+        "crew_idle_policy": "hub_wait",
+        "evidence_reasoning_version": 2,
+        "format_version": 2,
+        "meeting_reset": "preserve",
+        "post_meeting_retarget": false,
+        "public_account_version": 1,
+        "redistribution_policy": "lowest_id",
+        "sabotage_threshold": "six_sevenths",
+        "self_report": false,
+        "vent_exit_policy": "target_distance"
+      },
+      "name": "combined_accounts",
+      "temporal_version": 2
+    },
+    {
+      "experiment_config": {
+        "attributed_testimony_version": 1,
+        "bounded_rebuttal_version": 1,
+        "crew_idle_policy": "hub_wait",
+        "evidence_reasoning_version": 2,
+        "format_version": 2,
+        "meeting_reset": "preserve",
+        "post_meeting_retarget": false,
+        "public_account_version": 1,
+        "redistribution_policy": "lowest_id",
+        "sabotage_threshold": "six_sevenths",
+        "self_report": false,
+        "vent_exit_policy": "target_distance"
+      },
+      "name": "combined_with_reply",
+      "temporal_version": 2
+    }
+  ],
+  "unadopted_normal_policy_arms": [
+    {
+      "experiment_config": {
+        "attributed_testimony_version": 1,
+        "bounded_rebuttal_version": null,
+        "crew_idle_policy": "hub_wait",
+        "evidence_reasoning_version": 2,
+        "format_version": 2,
+        "meeting_reset": "preserve",
+        "post_meeting_retarget": false,
+        "public_account_version": 1,
+        "redistribution_policy": "lowest_id",
+        "sabotage_threshold": "six_sevenths",
+        "self_report": false,
+        "vent_exit_policy": "target_distance"
+      },
+      "name": "off",
+      "temporal_version": 2
+    },
+    {
+      "experiment_config": {
+        "attributed_testimony_version": 1,
+        "bounded_rebuttal_version": null,
+        "contextual_self_report_version": null,
+        "crew_idle_policy": "hub_wait",
+        "evidence_reasoning_version": 2,
+        "format_version": 3,
+        "investigation_version": 1,
+        "meeting_reset": "preserve",
+        "post_meeting_retarget": false,
+        "public_account_version": 1,
+        "redistribution_policy": "lowest_id",
+        "sabotage_threshold": "six_sevenths",
+        "self_report": false,
+        "vent_exit_policy": "target_distance"
+      },
+      "name": "search",
+      "temporal_version": 2
+    },
+    {
+      "experiment_config": {
+        "attributed_testimony_version": 1,
+        "bounded_rebuttal_version": null,
+        "contextual_self_report_version": 1,
+        "crew_idle_policy": "hub_wait",
+        "evidence_reasoning_version": 2,
+        "format_version": 3,
+        "investigation_version": null,
+        "meeting_reset": "preserve",
+        "post_meeting_retarget": false,
+        "public_account_version": 1,
+        "redistribution_policy": "lowest_id",
+        "sabotage_threshold": "six_sevenths",
+        "self_report": false,
+        "vent_exit_policy": "target_distance"
+      },
+      "name": "contextual_self_report",
+      "temporal_version": 2
+    },
+    {
+      "experiment_config": {
+        "attributed_testimony_version": 1,
+        "bounded_rebuttal_version": null,
+        "crew_idle_policy": "hub_wait",
+        "evidence_reasoning_version": 2,
+        "format_version": 2,
+        "meeting_reset": "preserve",
+        "post_meeting_retarget": false,
+        "public_account_version": 1,
+        "redistribution_policy": "lowest_id",
+        "sabotage_threshold": "six_sevenths",
+        "self_report": true,
+        "vent_exit_policy": "target_distance"
+      },
+      "name": "unconditional_self_report",
+      "temporal_version": 2
+    },
+    {
+      "experiment_config": {
+        "attributed_testimony_version": 1,
+        "bounded_rebuttal_version": null,
+        "crew_idle_policy": "patrol",
+        "evidence_reasoning_version": 2,
+        "format_version": 2,
+        "meeting_reset": "preserve",
+        "post_meeting_retarget": false,
+        "public_account_version": 1,
+        "redistribution_policy": "lowest_id",
+        "sabotage_threshold": "six_sevenths",
+        "self_report": false,
+        "vent_exit_policy": "target_distance"
+      },
+      "name": "old_patrol",
+      "temporal_version": 2
+    },
+    {
+      "experiment_config": {
+        "attributed_testimony_version": 1,
+        "bounded_rebuttal_version": null,
+        "crew_idle_policy": "accompany",
+        "evidence_reasoning_version": 2,
+        "format_version": 2,
+        "meeting_reset": "preserve",
+        "post_meeting_retarget": false,
+        "public_account_version": 1,
+        "redistribution_policy": "lowest_id",
+        "sabotage_threshold": "six_sevenths",
+        "self_report": false,
+        "vent_exit_policy": "target_distance"
+      },
+      "name": "old_accompany",
+      "temporal_version": 2
+    },
+    {
+      "experiment_config": {
+        "attributed_testimony_version": 1,
+        "bounded_rebuttal_version": null,
+        "contextual_self_report_version": 1,
+        "crew_idle_policy": "hub_wait",
+        "evidence_reasoning_version": 2,
+        "format_version": 3,
+        "investigation_version": 1,
+        "meeting_reset": "preserve",
+        "post_meeting_retarget": false,
+        "public_account_version": 1,
+        "redistribution_policy": "lowest_id",
+        "sabotage_threshold": "six_sevenths",
+        "self_report": false,
+        "vent_exit_policy": "target_distance"
+      },
+      "name": "combined_search_report",
+      "temporal_version": 2
+    }
+  ]
+}

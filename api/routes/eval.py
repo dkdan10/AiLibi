@@ -40,7 +40,14 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict
 
 from api.replay_loader import ReplayLoader, get_replay_loader
-from api.schemas import EvalCostSummaryView, FailedCallEvalView, RubricView
+from api.public_results import build_public_results
+from api.schemas import (
+    EvalCostSummaryView,
+    FailedCallEvalView,
+    PublicResultsView,
+    ReportProvenanceGroupView,
+    RubricView,
+)
 from engine.entities import Role
 from eval.accusation_calibration import AccusationCalibrationReport
 from eval.alibi_fabrication import AlibiFabricationReport
@@ -55,11 +62,25 @@ from eval.meeting_quality import (
 from eval.report_schema import GameCostSummary, MeetingReport
 from eval.vote_correctness import VoteCorrectnessReport
 from meetings.schemas import PlayerId
-from orchestrator.replay import WinnerSide
+from orchestrator.replay import (
+    AgentFactoryKind,
+    CompletionStatus,
+    CrewTacticalPolicyStamp,
+    TacticalPolicyStamp,
+    WinnerSide,
+)
+from orchestrator.experiment_config import RecordedExperimentConfig
 
 router = APIRouter()
 
 _LoaderDep = Annotated[ReplayLoader, Depends(get_replay_loader)]
+
+
+@router.get("/summary", response_model=PublicResultsView)
+def get_public_results(loader: _LoaderDep) -> PublicResultsView:
+    """Return compact results derived from the selected set's verified replays."""
+    return build_public_results(loader)
+
 
 # Fields of ``FailedCallReplayEntry`` carried over verbatim onto
 # ``FailedCallEvalView``; ``error_message`` is handled separately (truncated).
@@ -101,12 +122,19 @@ class _GameReportEvalView(BaseModel):
     failed_calls: tuple[FailedCallEvalView, ...]
     prompt_versions: Mapping[str, str]
     cost: GameCostSummary
+    completion_status: CompletionStatus = "unfinished"
+    outcome_verified: bool = False
     # Task 8.17 kill-gift facts (DESIGN.md §3.5; audit gp-4). Pure derived
     # counts/flags, mirrored one-for-one from ``GameReport`` so the redaction
     # re-validation accepts them (and the leak snapshot stays the firewall).
     kill_gifted: bool = False
     instances_dropped: int = 0
     instances_complete_at_win: int = 0
+    agent_factory_kind: AgentFactoryKind | None = None
+    experiment_config: RecordedExperimentConfig | None = None
+    substrate_flags: Mapping[str, bool] | None = None
+    tactical_policy: TacticalPolicyStamp | None = None
+    crew_tactical_policy: CrewTacticalPolicyStamp | None = None
 
 
 class _TournamentReportEvalView(BaseModel):
@@ -122,6 +150,7 @@ class _TournamentReportEvalView(BaseModel):
     kill_gifted_wins: int = 0
     instances_dropped_total: int = 0
     mean_instances_complete_at_win: float | None = None
+    provenance_groups: tuple[ReportProvenanceGroupView, ...] | None = None
 
 
 class _TournamentEvalReportView(BaseModel):

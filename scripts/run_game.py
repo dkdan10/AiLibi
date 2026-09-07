@@ -27,7 +27,7 @@ from orchestrator.game import (  # noqa: E402
     build_default_agent_factory,
     build_default_meeting_runner,
 )
-from orchestrator.replay import compute_cost_usd  # noqa: E402
+from orchestrator.replay import compute_cost_usd, read_all_entries  # noqa: E402
 from orchestrator.scheduler import TickScheduler  # noqa: E402
 
 
@@ -46,7 +46,18 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         "--audit-log-path",
         type=Path,
         default=None,
-        help="output path for the observation audit log (default: alongside replay)",
+        help=(
+            "observation audit output (default: alongside replay); /dev/null "
+            "discards audit packets and is never replaced"
+        ),
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help=(
+            "replace an existing replay and its observation audit together; "
+            "without it, either existing output is refused"
+        ),
     )
     parser.add_argument(
         "--num-players",
@@ -95,6 +106,7 @@ def main(argv: list[str] | None = None) -> int:
         agent_factory=build_default_agent_factory(),
         replay_path=args.replay_path,
         audit_log_path=args.audit_log_path,
+        force=args.force,
         num_players=args.num_players,
         num_impostors=args.num_impostors,
         tasks_per_crewmate=args.tasks_per_crewmate,
@@ -102,6 +114,29 @@ def main(argv: list[str] | None = None) -> int:
         meeting_runner=runner,
     )
     result = game.run()
+    # Everything printed below is a READ-BACK of bytes on disk, not of the
+    # object this process holds: a concurrent writer against the same
+    # --replay-path would make us report another game's outcome and spend under
+    # this seed. read_all_entries already refuses a CONCATENATION (duplicate
+    # ticks, two game_over rows); a clean REPLACEMENT parses fine and differs
+    # only in identity, so bind the read-back to the identity we recorded. This
+    # DETECTS, it does not exclude -- two runs of the SAME seed against the same
+    # path are indistinguishable, and file locking is out of scope.
+    foreign = sorted(
+        {
+            entry.game_id
+            for entry in read_all_entries(result.replay_path)
+            if entry.game_id != game.game_id
+        }
+    )
+    if foreign:
+        print(
+            f"error: {result.replay_path} holds rows for {', '.join(foreign)}, "
+            f"not {game.game_id}; another writer replaced or shared this replay "
+            "path. Refusing to report its outcome or cost.",
+            file=sys.stderr,
+        )
+        return 1
     print(f"outcome: {result.outcome}")
     print(f"final_tick: {result.final_state.tick}")
     print(f"replay_path: {result.replay_path}")

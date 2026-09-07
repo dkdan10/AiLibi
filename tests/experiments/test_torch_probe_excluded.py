@@ -31,9 +31,12 @@ import json
 import re
 import sys
 import tomllib
+from dataclasses import replace
 from pathlib import Path
 from types import ModuleType
 from typing import TYPE_CHECKING, Any
+
+import pytest
 
 from agents.tactical.features import TacticalFeatureEncoder
 from engine.world import load_canonical_map
@@ -293,18 +296,28 @@ def test_stub_entrant_trains_through_env_and_lands_experiment_tier(
     # (b) The frozen candidate is ACCEPTED by the harness's experiment-tier
     # (determinism-FAIL-tolerant) row path: the drifting scorer fails the
     # double-run digest, the row survives with tier="experiment" and the
-    # N-repeat metric spread attached — the seam the torch champion reports
-    # through.
+    # N-repeat metric spread attached. Scoring explicitly uses the historical
+    # conviction diagnostic; the stub proves adapter plumbing, not a current fit.
     protocol = BakeoffProtocolConfig(
         eval_seeds=(1004,),
         determinism_seeds=(1004,),
         leak_seeds=(0,),
         repeat_n=2,
         surrogate_artifact_dir=None,
+        evidence_scope="historical",
     )
+    refused_dir = tmp_path / "refused-current"
+    with pytest.raises(ValueError, match="historical version-one"):
+        evaluate_candidate(
+            candidate,
+            replace(protocol, evidence_scope="current"),
+            artifact_root=refused_dir,
+        )
+    assert not refused_dir.exists()
     result = evaluate_candidate(candidate, protocol, artifact_root=tmp_path)
     assert isinstance(result, BakeoffResult)
     assert result.tier == "experiment"
+    assert result.evidence_scope == "historical"
     assert result.determinism.deterministic is False
     spread = result.repeat_spread
     assert spread is not None
@@ -318,4 +331,5 @@ def test_stub_entrant_trains_through_env_and_lands_experiment_tier(
     # The row round-trips through the committed jsonl serialization.
     restored = BakeoffResult.model_validate(json.loads(result.to_json_line()))
     assert restored.tier == "experiment"
+    assert restored.evidence_scope == "historical"
     assert restored.entrant == candidate.entrant

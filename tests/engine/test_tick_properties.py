@@ -1,34 +1,19 @@
-"""Property-based totality tests for ``engine.tick.advance_tick``.
-
-DESIGN.md §11.1 mandates that for any sequence of valid actions,
-``advance_tick`` is total and never produces invalid state.
-
-The original ``_safe_actions`` strategy below intentionally scopes its
-vocabulary to ``move`` and ``wait`` — the verbs Phase 2 tactical agents
-emit en masse. The point of that property is to prove the engine never
-crashes on weird movement sequences, not to model every kill scenario.
-
-R-12 (audits/audit-2026-05-15-0225-reconciled.md §R-12) adds a second,
-role-aware strategy alongside it that draws batches mixing ``kill``,
-``vent``, ``report``, and ``wait`` actions. Engine-level rejections
-(`ActionRejectedError`) are caught in ``advance_tick`` and turned into
-``ActionRejectedEvent``s, so the new property remains narrow:
-``advance_tick`` must never raise on a drawn batch. Deeper invariants
-(role-correct event emission, witness sets, etc.) stay in dedicated unit
-tests.
-"""
+"""Engine totality, life/role consistency and terminal-state properties."""
 
 from __future__ import annotations
 
 from dataclasses import replace
 
+import pytest
 from hypothesis import given, settings, strategies as st
 from pydantic import TypeAdapter
 
 from engine.actions import Action
 from engine.entities import PlayerState
+from engine.events import EngineEvent, GameOverEvent
 from engine.rng import EngineRng
 from engine.tick import advance_tick
+from engine.win_conditions import evaluate_win_conditions
 from engine.world import WorldState, load_canonical_map
 
 _ACTION_ADAPTER: TypeAdapter[Action] = TypeAdapter(Action)
@@ -69,6 +54,32 @@ def _initial_state(seed: int) -> WorldState:
 
 
 _VALID_PHASES = frozenset({"PLAY", "MEETING", "GAME_OVER"})
+
+
+def _assert_state_invariants(
+    before: WorldState, after: WorldState, events: list[EngineEvent]
+) -> None:
+    assert set(after.players) == set(before.players)
+    for pid, player in after.players.items():
+        assert player.role == before.players[pid].role, "role changed during a tick"
+        assert before.players[pid].alive or not player.alive, "dead player revived"
+    assert all(
+        not after.players[body.player_id].alive for body in after.bodies.values()
+    ), "body belongs to a living player"
+    terminal = [event for event in events if isinstance(event, GameOverEvent)]
+    outcome = evaluate_win_conditions(after)
+    if after.phase == "GAME_OVER":
+        assert len(terminal) == 1 and outcome is not None, (
+            "terminal state lacks a winner"
+        )
+        assert (terminal[0].winner, terminal[0].reason) == (
+            outcome.winner,
+            outcome.reason,
+        )
+    else:
+        assert not terminal, "nonterminal state carries a terminal event"
+        assert outcome is None, "a decided game continued into play or a meeting"
+
 
 _safe_actions = st.one_of(
     st.builds(
@@ -125,6 +136,7 @@ def test_advance_tick_is_total_under_arbitrary_safe_actions(
         assert next_state.phase in _VALID_PHASES
         assert next_state.tick >= state.tick
         assert isinstance(events, list)
+        _assert_state_invariants(state, next_state, events)
 
         # Engine state remains structurally well-formed.
         assert set(next_state.players) == set(state.players)
@@ -236,8 +248,37 @@ def test_advance_tick_does_not_raise_under_role_aware_actions(
     for batch in action_batches:
         if state.phase != "PLAY":
             break
-        state, _ = advance_tick(
+        next_state, events = advance_tick(
             state,
             _unique_actions_per_actor(batch),
             game_map=game_map,
         )
+        _assert_state_invariants(state, next_state, events)
+        state = next_state
+
+
+def test_properties_reject_a_meeting_that_suppresses_parity() -> None:
+    before = _initial_state(seed=0)
+    poisoned = replace(
+        before,
+        phase="MEETING",
+        players={
+            **before.players,
+            "p-1": replace(before.players["p-1"], alive=False),
+        },
+    )
+    with pytest.raises(AssertionError, match="a decided game continued"):
+        _assert_state_invariants(before, poisoned, [])
+
+
+def test_properties_reject_reviving_a_dead_player() -> None:
+    alive = _initial_state(seed=0)
+    before = replace(
+        alive,
+        players={
+            **alive.players,
+            "p-1": replace(alive.players["p-1"], alive=False),
+        },
+    )
+    with pytest.raises(AssertionError, match="dead player revived"):
+        _assert_state_invariants(before, alive, [])

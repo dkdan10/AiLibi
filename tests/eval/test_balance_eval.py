@@ -15,6 +15,7 @@ from engine.world import Map, load_canonical_map
 from eval.balance_eval import (
     _DEFAULT_MAX_COST_USD,
     BalanceReport,
+    _game_report_from_replay,
     _max_cost_usd_from_env,
     _resolve_game_budget,
     _seeded_roles,
@@ -32,6 +33,7 @@ from orchestrator.game import (
     build_default_meeting_runner,
 )
 from orchestrator.scheduler import TickScheduler
+from orchestrator.replay import LLMCallRecord, ReplayLog, compute_cost_usd
 
 _INTENT_ADAPTER: TypeAdapter[ActionIntent] = TypeAdapter(ActionIntent)
 
@@ -601,3 +603,63 @@ def test_resolve_game_budget_rejects_negative_cap() -> None:
     # negative cap fail-loud.
     with pytest.raises(ValueError, match="non-negative"):
         _resolve_game_budget(num_players=4, env={"AILIBI_MAX_COST_USD": "-1"})
+
+
+def test_aborted_calls_contribute_cost_and_versions_without_a_meeting(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "replay-seed-0.jsonl"
+    call = LLMCallRecord(
+        call_kind="meeting",
+        model="accepted-model",
+        prompt="prompt",
+        response_text="response",
+        input_tokens=10,
+        output_tokens=2,
+        cost_usd=0.03,
+        agent_id="p-1",
+    )
+    log = ReplayLog(path, game_id="headless-seed-0")
+    log.record_aborted_meeting(
+        meeting_id="headless-seed-0:meeting-0",
+        tick=0,
+        llm_calls=(call, call),
+        prompt_versions={"opening": "opening.v1"},
+        error_type="ValidationError",
+        error_message="invalid response",
+    )
+    log.record_failed_call(
+        meeting_id="headless-seed-0:meeting-0",
+        tick=0,
+        model="failed-model",
+        prompt_length=6,
+        raw_response="invalid",
+        input_tokens=7,
+        output_tokens=1,
+        cost_usd=0.04,
+        error_type="ValidationError",
+        error_message="invalid response",
+        call_id="attempt-2",
+    )
+    log.close()
+
+    game = _game_report_from_replay(
+        seed=0,
+        roles={"p-1": "CREWMATE"},
+        fallback_reason="MEETING_ABORTED",
+        replay_path=path,
+    )
+
+    assert game.cost.total_cost_usd == pytest.approx(0.10)
+    assert game.cost.total_cost_usd == pytest.approx(compute_cost_usd(path))
+    assert game.cost.total_input_tokens == 27
+    assert game.cost.total_output_tokens == 5
+    assert game.cost.by_model == pytest.approx(
+        {"accepted-model": 0.06, "failed-model": 0.04}
+    )
+    assert game.prompt_versions == {"opening": "opening.v1"}
+    assert game.meetings == ()
+    assert len(game.failed_calls) == 1
+    assert game.winner is None
+    assert game.final_tick is None
+    assert game.reason == "MEETING_ABORTED"

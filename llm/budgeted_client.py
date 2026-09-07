@@ -1,8 +1,6 @@
-"""Budget-enforcing :class:`~llm.client.LLMClient` adapter (Task 3.9 C-5).
+"""Budget-enforcing :class:`~llm.client.LLMClient` adapter.
 
-``MeetingManager`` (Task 3.8) accepts an :class:`~llm.client.LLMClient`
-Protocol implementation. This module adds a provider-neutral adapter that
-wraps any :class:`~llm.client.LLMClient` plus a
+This provider-neutral adapter wraps any :class:`~llm.client.LLMClient` plus a
 :class:`~llm.budget.GameBudget` and enforces :meth:`GameBudget.preflight` +
 :meth:`GameBudget.charge` around every :meth:`complete` call.
 
@@ -12,10 +10,12 @@ Failure semantics
 Pre-flight is fail-loud: if the estimated cost would push the running
 total past any cap, :class:`~llm.budget.BudgetExceededError` propagates
 *before* the underlying client is invoked. No silent truncation, no
-partial spend on a doomed call. After a successful inner call the
-actual cost (the provider-reported ``LLMResponse.cost_usd`` and
-``usage`` totals) is charged. Estimates may over-charge slightly
-relative to actuals; that is the desired direction (conservative).
+partial spend on a rejected call. Reported usage and cost are charged
+afterward, including metadata attached to schema-validation failures.
+Incurred spend remains recorded even if it exceeds the estimate or cap.
+Validation failures retain their original error and metadata; a budget
+overrun is added as an exception note. Failures without usage metadata
+release their reservation without inventing a charge.
 
 Cost estimation
 ===============
@@ -26,9 +26,9 @@ estimation therefore uses two engine-free knobs the constructor
 accepts:
 
 * A token estimator that converts ``prompt`` + ``max_tokens`` into a
-  conservative :class:`~llm.client.TokenUsage` upper bound (input is
-  estimated from prompt length using the standard four-chars-per-token
-  heuristic; output is the full ``max_tokens``).
+  :class:`~llm.client.TokenUsage` estimate (input uses the four-chars-per-token
+  heuristic; output is the full ``max_tokens``). This is an admission
+  heuristic, not an upper bound on the provider's reported usage.
 * A USD-per-token rate pair (``cost_per_input_token``,
   ``cost_per_output_token``) used to derive the estimated USD cost
   from the token estimate. Defaults are calibrated to a generous tier
@@ -60,17 +60,13 @@ from typing import Final, Protocol, runtime_checkable
 
 from pydantic import BaseModel
 
-from llm.budget import GameBudget
+from llm.budget import BudgetExceededError, GameBudget
 from llm.client import CallKind, LLMClient, LLMResponse, TokenUsage
+from llm.provider import extract_parse_failure
 
-# Conservative defaults. These are intentionally on the high end of
-# realistic frontier-model pricing so the pre-flight estimate cannot
-# silently undercount and let a doomed call through. Values are in
-# USD per single token (not per million); rates calibrated to be
-# roughly twice typical premium-tier pricing so a tight budget tripped
-# in pre-flight is a true ceiling, not a false ceiling that a real
-# call would slip past. Call sites that want tighter estimates pass
-# explicit rates via the constructor.
+# Generous default rates in USD per token. These reduce underestimation
+# but cannot guarantee a ceiling on actual cost. Callers can supply rates
+# appropriate to their provider.
 _DEFAULT_COST_PER_INPUT_TOKEN_USD: Final[float] = 6e-6
 _DEFAULT_COST_PER_OUTPUT_TOKEN_USD: Final[float] = 30e-6
 
@@ -82,10 +78,10 @@ _CHARS_PER_TOKEN: Final[int] = 4
 
 
 def _estimate_input_tokens(prompt: str) -> int:
-    """Conservative input-token estimate from prompt length.
+    """Input-token estimate from prompt length.
 
-    Uses ceiling division on the four-chars-per-token heuristic so the
-    estimator never undercounts the true token cost of a string.
+    Uses ceiling division on a four-chars-per-token heuristic; the actual
+    count depends on the provider's tokenizer and can exceed this estimate.
     Returns at least 1 to avoid a zero estimate slipping through a
     zero-token cap as "below the cap by definition".
     """
@@ -148,8 +144,8 @@ class BudgetedLLMClient:
        underlying call. On pass, the estimate is added to the
        in-flight reservation pool.
     3. Invoke the wrapped client's ``complete`` (no lock held).
-    4. Atomically release the in-flight reservation and charge the
-       actual response cost via :meth:`GameBudget.charge_response`.
+    4. Atomically charge any reported usage and cost, then release the
+       in-flight reservation, including on failure or cancellation.
 
     The adapter conforms to :class:`LLMClient` structurally so it slots
     into :class:`meetings.manager.MeetingManager` and the strategic
@@ -158,10 +154,8 @@ class BudgetedLLMClient:
     Concurrency
     -----------
 
-    :class:`meetings.manager.MeetingManager` runs Phase-1 reports and
-    Phase-3 votes through :func:`asyncio.TaskGroup` so multiple agents'
-    :meth:`complete` calls are in flight at once, each under its own
-    :func:`asyncio.wait_for` deadline. The adapter must therefore (a)
+    Concurrent callers can have multiple :meth:`complete` calls in flight,
+    each under its own :func:`asyncio.wait_for` deadline. The adapter must (a)
     prevent the "all preflights pass against the same stale snapshot"
     race, AND (b) allow the actual provider awaits to overlap so a
     late caller does not eat its own deadline waiting in a queue.
@@ -171,9 +165,9 @@ class BudgetedLLMClient:
     is held ONLY for the brief synchronous budget mutations
     (preflight + reserve, then release-reserve + charge) — never
     across the ``await self._inner.complete(...)``. Concurrent callers
-    therefore (1) see each other's reservations during preflight so
-    no overrun slips through, and (2) overlap their provider awaits
-    so deadlines are not artificially serialized.
+    therefore (1) see each other's estimated reservations during preflight,
+    and (2) overlap their provider awaits so deadlines are not artificially
+    serialized. Calls already in flight can still exceed their estimates.
     """
 
     def __init__(
@@ -331,14 +325,27 @@ class BudgetedLLMClient:
                 model=model,
                 agent_id=agent_id,
             )
-        except BaseException:
-            # The provider failed; release the in-flight reservation
-            # so future calls and retries against a fresh ceiling see
-            # the correct headroom.
+        except BaseException as exc:
+            # Validation can fail after the provider has spent tokens.
+            # Retain its original error for recovery and audit consumers.
+            failure = extract_parse_failure(exc)
             async with self._ensure_lock():
-                self._in_flight_cost_usd -= estimated_cost_usd
-                self._in_flight_input_tokens -= estimated_usage.input_tokens
-                self._in_flight_output_tokens -= estimated_usage.output_tokens
+                try:
+                    if failure is not None:
+                        try:
+                            self._budget.charge(
+                                usage=TokenUsage(
+                                    input_tokens=failure.input_tokens,
+                                    output_tokens=failure.output_tokens,
+                                ),
+                                cost_usd=failure.cost_usd,
+                            )
+                        except BudgetExceededError as overrun:
+                            exc.add_note(str(overrun))
+                finally:
+                    self._in_flight_cost_usd -= estimated_cost_usd
+                    self._in_flight_input_tokens -= estimated_usage.input_tokens
+                    self._in_flight_output_tokens -= estimated_usage.output_tokens
             raise
 
         # Step 3: brief locked region -- settle up. Charge the actual

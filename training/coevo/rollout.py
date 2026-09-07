@@ -39,6 +39,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from collections.abc import Mapping
 
 from engine.world import Map, load_canonical_map
 from llm.provider import ENV_PROVIDER, PROVIDER_FAKE, build_default_client
@@ -48,6 +49,7 @@ from orchestrator.game import (
     build_default_meeting_runner,
 )
 from orchestrator.scheduler import TickScheduler
+from orchestrator.replay import substrate_flag_snapshot
 from training.bakeoff.goodhart import MeetingRunnerFactory
 from training.bakeoff.harness import (
     BAKEOFF_NUM_IMPOSTORS,
@@ -129,6 +131,7 @@ def rollout_coevo(
     conviction: ConvictionFitnessTerm | None = None,
     impostor_trace: DecisionTrace | None = None,
     crew_trace: CrewDecisionTrace | None = None,
+    environment: Mapping[str, str] | None = None,
 ) -> CoevoRolloutResult:
     """Run ONE full production game with both sides and score both (Task 18.19).
 
@@ -192,7 +195,8 @@ def rollout_coevo(
         meeting_runner = meeting_runner_factory()
     else:
         meeting_runner = build_default_meeting_runner(
-            llm_client=build_default_client(env={ENV_PROVIDER: PROVIDER_FAKE})
+            llm_client=build_default_client(env={ENV_PROVIDER: PROVIDER_FAKE}),
+            env=environment,
         )
     game = HeadlessGame(
         seed=seed,
@@ -205,6 +209,9 @@ def rollout_coevo(
         scheduler=TickScheduler(max_ticks=max_ticks),
         meeting_runner=meeting_runner,
         force=True,
+        substrate_flags=(
+            substrate_flag_snapshot(environment) if environment is not None else None
+        ),
     )
     game.run()
     rollout = reconstruct_episode(

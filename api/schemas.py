@@ -51,7 +51,9 @@ from pydantic import BaseModel, ConfigDict, Field
 # value set is not an additive projection: a consumer that indexes the old seven
 # exhaustively (the map's glyph registry does) has no entry for the four new ones,
 # so a build on the old contract must fail loudly rather than render a hole.
-VIEW_MODEL_VERSION: Final[str] = "2"
+# "4" adds the public task-activity account to the spoken observation union.
+# Current clients explicitly retain version-2/3 reads with the same audio guard.
+VIEW_MODEL_VERSION: Final[str] = "4"
 
 
 class _FrozenView(BaseModel):
@@ -186,19 +188,9 @@ class VisibleBodyView(_FrozenView):
 
 
 class AudibleEventView(_FrozenView):
-    """One audio cue inside an agent's field of view at a tick (Task 12.3;
-    DESIGN.md §3.2, §4.2).
+    """An observer's global sabotage alarm, without private attribution."""
 
-    Shadows ``observation.packet.AudibleEvent`` — the audio channel
-    (``observation.service.ObservationService._audible_events``), read alongside
-    the visual field rather than independently of it. ``sabotage_alarm`` is the
-    global alarm and carries ``room=None``. ``vent_use_heard`` names a vent the
-    observer WITNESSED, never one heard through a wall: it duplicates a sighting
-    the same packet already carries as a visible action, and the single-mint gate
-    decides whether it is minted at all, so a recording may carry it or not.
-    """
-
-    kind: Literal["vent_use_heard", "sabotage_alarm"]
+    kind: Literal["sabotage_alarm"]
     room: str | None
 
 
@@ -269,6 +261,19 @@ state, action row or ``state_hash`` is involved.
 """
 
 
+class InvestigationPlanView(_FrozenView):
+    """The observer's intention at a decision boundary, never witness evidence."""
+
+    decision_tick: int
+    target_id: str
+    source_observation_id: str
+    source_tick: int
+    last_known_room: str
+    started_tick: int
+    expires_tick: int
+    visited_rooms: tuple[str, ...]
+
+
 class AgentTickStateView(_FrozenView):
     """The dynamic slice of one agent's ``engine.entities.PlayerState`` at one
     tick.
@@ -295,6 +300,7 @@ class AgentTickStateView(_FrozenView):
     task_progress: float | None
     current_action: CurrentAction
     visibility: AgentVisibilityView | None = None
+    investigation_plan: InvestigationPlanView | None = None
 
 
 class KillEventView(_FrozenView):
@@ -536,6 +542,16 @@ class CompletedTaskObsView(_FrozenView):
     room: str
 
 
+class TaskActivityAccountView(_FrozenView):
+    """A speaker's task-activity account, without certifying completion or role."""
+
+    type: Literal["task_activity"]
+    task_id: str
+    room: str
+    from_tick: int
+    to_tick: int
+
+
 class FoundBodyObsView(_FrozenView):
     """Shadows ``meetings.schemas.FoundBodyObservation``."""
 
@@ -621,7 +637,8 @@ ObservationClaimView: TypeAlias = Annotated[
     | SawVentObservationView
     | SawKillObservationView
     | WhereaboutsClaimView
-    | SawMoveObservationView,
+    | SawMoveObservationView
+    | TaskActivityAccountView,
     Field(discriminator="type"),
 ]
 
@@ -976,6 +993,9 @@ class GateView(_FrozenView):
     leader_max_confidence: float
     threshold: float
     passed: bool
+    threshold_source: Literal["recorded", "legacy_compatibility"] = (
+        "legacy_compatibility"
+    )
 
 
 class MeetingView(_FrozenView):
@@ -1026,6 +1046,33 @@ class BeliefEntryView(_FrozenView):
     snapshot_tick: int
 
 
+class ObservationReferenceView(_FrozenView):
+    """One cited ID resolved only against its observer's meeting memory.
+
+    Unknown IDs remain explicit unresolved rows. Observation time and scene
+    time are separate: a scene is linked only when the replay walk knows the
+    frame at which that observation was delivered.
+    """
+
+    observation_id: str
+    source_tick: int | None = None
+    observation_phase: Literal["snapshot", "event"] | None = None
+    observation_order: int | None = None
+    observer_room: str | None = None
+    observer_in_vent: bool | None = None
+    observer_id: str
+    resolved: bool
+    observation_tick: int | None
+    scene_tick: int | None
+    provenance: str | None
+    kind: str | None
+    text: str | None
+    subject_id: str | None
+    room: str | None
+    from_room: str | None
+    to_room: str | None
+
+
 class AgentMemoryView(_FrozenView):
     """Shadows the ``agents.memory.store`` surface at a meeting boundary.
 
@@ -1050,6 +1097,8 @@ class AgentMemoryView(_FrozenView):
     beliefs: tuple[BeliefEntryView, ...]
     open_contradictions: tuple[ContradictionView, ...]
     rendered_memory_text: str
+    observation_references: tuple[ObservationReferenceView, ...] = ()
+    investigation_plan: InvestigationPlanView | None = None
 
 
 class BeliefErrorView(_FrozenView):
@@ -1209,15 +1258,11 @@ class GameFinale(_FrozenView):
     Winner, win reason, the recorded final tick, the decisive events, and the
     per-agent recap — everything the finale card renders, composed once
     server-side. Built from the recorded ``game_over`` row and the recorded
-    meeting records (shadowing ``orchestrator.replay.GameEndReplayEntry``) and
-    NEVER re-validated against re-walked state: recorded bytes are authoritative
-    (a direct-``ReplayLog`` writer may legitimately stamp a winner onto a
-    non-terminal state, as the codegen fidelity fixture does).
+    meeting records after their chronology and terminal outcome have been
+    validated against the reconstructed engine transitions.
 
-    ``winner_reason`` stays a plain ``str`` rather than the four-value
-    ``engine.win_conditions.WinResultType`` literal: fixtures and pre-Phase-14
-    recordings carry other strings (e.g. ``"all_tasks_complete"``), and this DTO
-    shadows what was recorded, not what the current engine would emit.
+    ``winner_reason`` remains a string on the wire; the replay loader verifies
+    that a served reason matches the engine's terminal event.
 
     ``None`` on :class:`ReplayView` for a partial replay with no ``game_over`` row
     (a crashed / tick-budget-exhausted run) — the game has no recorded outcome, so
@@ -1234,6 +1279,46 @@ class GameFinale(_FrozenView):
 # ---------------------------------------------------------------------------
 # Replay-level DTOs
 # ---------------------------------------------------------------------------
+
+
+class ExperimentConfigView(_FrozenView):
+    """Public copy of the recorded experimental settings, without runtime imports."""
+
+    format_version: Literal[1, 2, 3] = 1
+    redistribution_policy: Literal["lowest_id", "least_remaining_work"] = "lowest_id"
+    meeting_reset: Literal["preserve", "hub_with_grace"] = "preserve"
+    crew_idle_policy: Literal["hub_wait", "patrol", "accompany"] = "hub_wait"
+    vent_exit_policy: Literal["target_distance", "observed_risk"] = "target_distance"
+    post_meeting_retarget: bool = False
+    self_report: bool = False
+    sabotage_threshold: Literal["six_sevenths", "two_thirds"] = "six_sevenths"
+    evidence_reasoning_version: Literal[1, 2] | None = None
+    bounded_rebuttal_version: Literal[1] | None = None
+    public_account_version: Literal[1] | None = None
+    attributed_testimony_version: Literal[1] | None = None
+    investigation_version: Literal[1] | None = None
+    contextual_self_report_version: Literal[1] | None = None
+
+
+class TacticalPolicyView(_FrozenView):
+    """Recorded policy identity, used separately for crew and impostor policies."""
+
+    policy_id: str
+    method: str
+    encoder_version: str
+    weights_sha256: str
+    anchor_policy: str
+
+
+class ReportProvenanceGroupView(_FrozenView):
+    """Recorded behavior identities kept distinct in public aggregate results."""
+
+    agent_factory_kind: Literal["scripted", "experimental", "custom"] | None = None
+    experiment_config: ExperimentConfigView | None = None
+    substrate_flags: Mapping[str, bool] | None = None
+    tactical_policy: TacticalPolicyView | None = None
+    crew_tactical_policy: TacticalPolicyView | None = None
+    game_ids: tuple[str, ...]
 
 
 class ReplayMetadataView(_FrozenView):
@@ -1255,6 +1340,15 @@ class ReplayMetadataView(_FrozenView):
     total_cost_usd: float
     prompt_versions: Mapping[str, str]
     created_at: str | None
+    completion_status: Literal["completed", "aborted", "tick_limited", "unfinished"] = (
+        "unfinished"
+    )
+    outcome_verified: bool = False
+    agent_factory_kind: Literal["scripted", "experimental", "custom"] | None = None
+    experiment_config: ExperimentConfigView | None = None
+    substrate_flags: Mapping[str, bool] | None = None
+    tactical_policy: TacticalPolicyView | None = None
+    crew_tactical_policy: TacticalPolicyView | None = None
 
 
 class FailedCallView(_FrozenView):
@@ -1334,6 +1428,8 @@ class ReplayView(_FrozenView):
     # and defaulted so every payload serialized before 19.10 still parses;
     # ``None`` for a partial replay with no recorded ``game_over`` row.
     finale: GameFinale | None = None
+    # Missing on older static bundles, whose replay payloads included bodies.
+    llm_bodies_included: bool = True
 
 
 # ---------------------------------------------------------------------------
@@ -1341,15 +1437,91 @@ class ReplayView(_FrozenView):
 # ---------------------------------------------------------------------------
 
 
+class ReplayAccountingView(_FrozenView):
+    """Recorded spending and outcome claims, with their separate validation result."""
+
+    game_id: str
+    total_cost_usd: float | None
+    completion_status: (
+        Literal["completed", "aborted", "tick_limited", "unfinished"] | None
+    )
+    recorded_winner: Literal["CREWMATES", "IMPOSTORS"] | None
+    verified_winner: Literal["CREWMATES", "IMPOSTORS"] | None
+    integrity_status: Literal["verified", "unverified", "invalid"]
+    validation_error: str | None = None
+
+
 class EvalCostSummaryView(_FrozenView):
-    """Aggregates ``orchestrator.replay.compute_cost_usd`` and game outcomes
-    across every replay in the directory."""
+    """Raw readable spending with a separate verified-outcome denominator.
+
+    Unreadable files have unknown cost and remain explicit in ``recordings``;
+    their unknown spending is never imputed as zero.
+    """
 
     total_replays: int
     total_cost_usd: float
     mean_cost_per_replay: float
     max_cost_per_replay: float
     decisive_split: dict[str, float]
+    verified_outcomes: int = 0
+    verified_replays: int = 0
+    unverified_replays: int = 0
+    invalid_replays: int = 0
+    unreadable_replays: int = 0
+    accounting_complete: bool = True
+    recordings: tuple[ReplayAccountingView, ...] = ()
+
+
+class PublicCaseView(_FrozenView):
+    """A source-pinned example with a replay/meeting/evidence destination."""
+
+    case_id: str
+    title: str
+    setup: str
+    explanation: str
+    game_id: str
+    meeting_id: str
+    source_sha256: str
+    source_url: str
+    meeting_tick: int
+    observer_id: str
+    turn_id: str | None
+    observation_id: str | None
+    classification: Literal["supported", "unsupported", "unresolved"]
+
+
+class PublicResultsView(_FrozenView):
+    """Compact results derived from verified recordings, with explicit counts."""
+
+    format_version: Literal[1] = 1
+    provenance_groups: tuple[ReportProvenanceGroupView, ...] | None = None
+    set_name: str
+    source_fingerprint: str
+    recorded_from: str | None
+    recorded_until: str | None
+    models: tuple[str, ...]
+    prompt_versions: tuple[str, ...]
+    source_url: str | None
+    games: int
+    completed: int
+    aborted: int
+    tick_limited: int
+    unfinished: int
+    crew_wins: int
+    impostor_wins: int
+    task_wins: int
+    meetings: int
+    ejections: int
+    impostor_ejections: int
+    innocent_ejections: int
+    proof_backed_ejections: int
+    proof_backed_correct: int
+    proof_free_ejections: int
+    proof_free_correct: int
+    reported_cost_usd: float
+    input_tokens: int
+    output_tokens: int
+    cases: tuple[PublicCaseView, ...]
 
 
 class RubricGameView(_FrozenView):
@@ -1403,6 +1575,7 @@ __all__ = [
     "AccusationClaimView",
     "AdvantageView",
     "AgentMemoryView",
+    "InvestigationPlanView",
     "AgentTickStateView",
     "AgentVisibilityView",
     "AlibiClaimView",
@@ -1417,6 +1590,8 @@ __all__ = [
     "CorroborationClaimView",
     "EdgeView",
     "EvalCostSummaryView",
+    "ExperimentConfigView",
+    "ReplayAccountingView",
     "FailedCallEvalView",
     "FailedCallView",
     "FinaleAgentRecapView",
@@ -1430,11 +1605,15 @@ __all__ = [
     "MeetingResolutionView",
     "MeetingTriggeredEventView",
     "MeetingView",
+    "ObservationReferenceView",
     "PlayerView",
     "PositionView",
+    "PublicCaseView",
+    "PublicResultsView",
     "ReplayMetadataView",
     "ReplayView",
     "ReportBodyEventView",
+    "ReportProvenanceGroupView",
     "RoomView",
     "RubricGameView",
     "RubricView",
@@ -1448,6 +1627,8 @@ __all__ = [
     "SuspicionEntryView",
     "SuspicionGraphView",
     "TaskCompletedEventView",
+    "TaskActivityAccountView",
+    "TacticalPolicyView",
     "TickView",
     "TurnView",
     "VentEventView",

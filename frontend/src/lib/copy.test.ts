@@ -54,7 +54,7 @@ const IN_SCOPE_SOURCES: readonly { readonly file: string; readonly rendered: str
     { file: "MeetingView.tsx", rendered: "Resolution" },
     { file: "BallotCard.tsx", rendered: "no rationale recorded" },
     { file: "ReplayPicker.tsx", rendered: "Clear filters" },
-    { file: "HighlightCard.tsx", rendered: "Not scored" },
+    { file: "HighlightCard.tsx", rendered: "No score available for this recording" },
     { file: "ReplayControls.tsx", rendered: "Next key moment" },
     { file: "MetricCaveat.tsx", rendered: "note" },
     { file: "TurnCard.tsx", rendered: "accuses" },

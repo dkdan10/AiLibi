@@ -1298,7 +1298,9 @@ def _walk_game_vj(
                 evidence = extract_belief_evidence(
                     walk_event.result, trigger_kind=trigger_kind
                 )
-                statements = derive_reported_testimony(walk_event.result)
+                statements = derive_reported_testimony(
+                    walk_event.result, testimony_shapes=walk_event.testimony_shapes
+                )
                 for pid in sorted(state.players):
                     if not state.players[pid].alive:
                         continue

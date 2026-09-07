@@ -28,6 +28,7 @@ from training.anchor_study import (
     CorpusGameFacts,
     CorpusWalkError,
     compute_substrate_sha,
+    historical_compute_substrate_sha,
     corpus_seeds,
     evaluate_anchor_offline,
     fit_filtered_bc_anchor,
@@ -68,8 +69,8 @@ def test_substrate_sha_is_stable_and_moves_with_the_corpus_bytes(
     # A re-recorded corpus (different MANIFEST bytes) must move the sha — the
     # 18.24 stale-seed refusal's trigger.
     drifted_dir = tmp_path / "9p2i"
-    drifted_dir.mkdir()
-    shutil.copy(CORPUS_DIR / "splits.json", drifted_dir / "splits.json")
+    shutil.copytree(CORPUS_DIR, drifted_dir)
+    assert compute_substrate_sha(drifted_dir) == committed
     manifest = (CORPUS_DIR / "MANIFEST.md").read_text()
     (drifted_dir / "MANIFEST.md").write_text(manifest + "\ndrifted\n")
     assert compute_substrate_sha(drifted_dir) != committed
@@ -89,6 +90,7 @@ def test_substrate_sha_moves_with_the_replay_bytes_alone(tmp_path: Path) -> None
         corpus.mkdir(parents=True)
         shutil.copy(CORPUS_DIR / "MANIFEST.md", corpus / "MANIFEST.md")
         shutil.copy(CORPUS_DIR / "splits.json", corpus / "splits.json")
+        shutil.copy(CORPUS_DIR / "roster.json", corpus / "roster.json")
         replay = _SEED_1000_REPLAY.read_text() + replay_suffix
         (corpus / "replay-seed-1000.jsonl").write_text(replay)
         return corpus
@@ -542,6 +544,8 @@ def test_evaluate_anchor_offline_validation() -> None:
 
 
 def test_run_anchor_study_ci_budget(tmp_path: Path) -> None:
+    """Exercise the tiny study with explicitly historical conviction scoring."""
+
     artifact_root = tmp_path / "artifacts"
     report_path = tmp_path / "report.md"
     report = run_anchor_study(
@@ -554,12 +558,14 @@ def test_run_anchor_study_ci_budget(tmp_path: Path) -> None:
             determinism_seeds=(1004,),
             leak_seeds=(0,),
             surrogate_artifact_dir=None,
+            evidence_scope="historical",
         ),
         report_path=report_path,
     )
 
     # The sweep row carries every definition-of-done metric.
     assert len(report.sweep_rows) == 1
+    assert report.evaluation_evidence_scope == "historical"
     row = report.sweep_rows[0]
     assert row.entrant == "lambda-1.0"
     assert math.isfinite(row.inner_fitness_real)
@@ -604,6 +610,12 @@ def test_run_anchor_study_ci_budget(tmp_path: Path) -> None:
         ]
         == "utility-es"
     )
+    assert (
+        json.loads((artifact_root / "lambda-1.0" / "config.json").read_text())[
+            "evaluation_evidence_scope"
+        ]
+        == "historical"
+    )
     index = json.loads((artifact_root / "study.json").read_text())
     round_trip = AnchorStudyReport.model_validate(index)
     assert round_trip == report
@@ -616,6 +628,7 @@ def test_run_anchor_study_ci_budget(tmp_path: Path) -> None:
     assert row.weights_sha256[:12] in rendered
     assert FILTERED_BC_ENTRANT in rendered
     assert substrate_sha in rendered
+    assert "Evaluation evidence scope:** historical" in rendered
     # The render names the budget the run ACTUALLY used, never "full" prose
     # over a ci run.
     assert "--budget ci" in rendered
@@ -736,21 +749,23 @@ def test_committed_study_artifacts_are_the_baseline8_fit() -> None:
     reproduce unchanged; only the corpus-derived filtered-BC anchor is re-fit on
     the live replay bytes, and every cell's ``config.json`` substrate sha plus the
     study index's ``substrate_sha`` are re-stamped to the live substrate. So the
-    committed artifact's recorded substrate MATCHES ``compute_substrate_sha()``
+    committed artifact's recorded substrate MATCHES ``historical_compute_substrate_sha()``
     and reads the adopted baseline id.
 
     The λ grid itself is deliberately NOT re-searched: those rows are a recording
     of a search made under the pre-Task-21.16 fitness objective, and
-    ``compute_substrate_sha``'s payload covers the corpus and the flag floor but
+    ``historical_compute_substrate_sha``'s payload covers the corpus and the flag floor but
     not the objective — so the fence below cannot see that difference, and the
     report says so in §1.1 rather than leaving it to be inferred.
     """
 
     index = json.loads((ANCHOR_STUDY_ARTIFACT_ROOT / "study.json").read_text())
     report = AnchorStudyReport.model_validate(index)
+    assert report.evaluation_evidence_scope is None
+    assert "evaluation_evidence_scope" not in json.loads(report.to_json())
     # Re-grounded: the recorded substrate MATCHES the live substrate and reads
     # the adopted baseline id.
-    assert report.substrate_sha == compute_substrate_sha()
+    assert report.substrate_sha == historical_compute_substrate_sha()
     assert report.baseline_id == BAKEOFF_BASELINE_ID == "baseline-8"
     # The substrate-independent structure holds (not what the re-ground moved): the
     # full λ grid and the λ=1.0 champion byte-identity cross-check.
@@ -765,7 +780,7 @@ def test_committed_study_artifacts_are_the_baseline8_fit() -> None:
         weights = load_candidate_weights(entrant_dir)  # sha-verified reload
         assert len(weights) == utility_genome_length()
         config = json.loads((entrant_dir / "config.json").read_text())
-        # Every cell agrees with the study index's (now-live) substrate sha.
+        # Every cell agrees with the study index's (historical) substrate sha.
         assert config["substrate_sha"] == report.substrate_sha
         assert config["entrant"] == entrant
         if entrant != FILTERED_BC_ENTRANT:

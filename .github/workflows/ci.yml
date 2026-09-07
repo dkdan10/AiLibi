@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - codex/cleanup
 
 # Least privilege for the whole workflow: every job here only reads the
 # repository. Nothing publishes, comments, or writes back, so no job needs a

@@ -74,13 +74,9 @@ DEFAULT_OLLAMA_MODEL: Final[str] = "qwen3.5:9b"
 # constructor is what folds into generation, so distinct games stay
 # distinct. See :func:`llm.provider.build_default_client`.
 DEFAULT_OLLAMA_SEED: Final[int] = 0
-# Default context window (``num_ctx``). Ollama's own default is small and bounds
-# prompt + output TOGETHER, so the largest 7p/2i meeting prompts (~4040 tokens,
-# measured) plus their ~150-token report/vote output overflow it and trigger
-# output truncation / context-shift that silently drops the prompt head. 8192
-# clears the measured max with headroom; prefill cost scales with the actual
-# prompt length (~2.4k median), NOT this cap, so normal calls are unaffected.
-# Overridable via ``AILIBI_OLLAMA_NUM_CTX`` (see build_default_client).
+# The context window includes prompt and output. Set it for the chosen model
+# and workload with AILIBI_OLLAMA_NUM_CTX; this default is not a claim that every
+# recorded or future prompt fits. max_tokens independently bounds output.
 DEFAULT_OLLAMA_NUM_CTX: Final[int] = 8192
 
 

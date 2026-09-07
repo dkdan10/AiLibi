@@ -1,27 +1,5 @@
-// MindInspector — the per-agent mind inspector (Task 12.8;
-// design/phase-12/stage-1-design.md §3.5, slice 6). Rebuilds the mind slot the
-// App.tsx workspace mounts via <ThoughtStream/>: pick an agent, then read their
-// reasoning across five tabs —
-//   • Belief    — this agent's suspicion / trust of each other player, plus the
-//                 Thought → Action → Observation reasoning trail for the meeting
-//                 (the per-agent DETAIL, complementary to 12.6's cross-agent
-//                 matrix, not a duplicate);
-//   • Prompt    — `LLMCallView.prompt_text`, the exact text the LLM saw (mono);
-//   • Response  — `LLMCallView.response_text` (mono);
-//   • Memory    — the `AgentMemoryView` episodic feed (MemoryPanel);
-//   • Flags     — the contradictions / markers affecting this agent.
-//
-// "Show what they saw" drives the store (`setPerspective(agent)` + `selectAgent`)
-// so the 12.5 map fogs to that agent — no map edit, the map already reacts.
-//
-// FIREWALL (the brief's Omniscient-gating rule). The impostor extras —
-// `fellow_impostor_ids`, the `own_kill` line, the fabricated cover-task label —
-// derive from the omniscient ground truth (roster roles → fellow impostors;
-// `KillEventView` → own kills) and are gated on **Omniscient OR when the
-// perspective lens IS the inspected agent itself**. An impostor viewing its own
-// mind is its own knowledge, not a leak; the secrets disappear ONLY when
-// inspecting an impostor through a DIFFERENT agent's eyes (the real leak). The
-// ground-truth ROLE reveal rides the same gate.
+// Inspect one agent’s private meeting-boundary knowledge. All tabs require
+// that agent’s perspective or omniscient mode; public speech lives in the transcript.
 
 import { useEffect, useRef, useState } from "react";
 import type { KeyboardEvent, ReactNode } from "react";
@@ -614,17 +592,6 @@ function InspectedAgent({
         </EmptyState>
       ) : (
         <>
-          {/* FIREWALL — PER-FIELD, not whole-body (the inspector and the map lens
-              are separate controls; a spectator may inspect one agent's mind while
-              the map stays fogged to another for comparison). The task contract
-              gates only the ground-truth tells that leak alignment/secrets through
-              a DIFFERENT agent's fog: the role chip + dead chip (header), the
-              impostor extras + the task tally (Memory), and the VERBATIM prompt /
-              response / raw rendered-memory (which embed the `Your role` block +
-              the impostor self-channel). The PUBLIC / non-role-revealing tabs stay
-              inspectable: Belief (suspicion + the reasoning trail, both derived
-              from meeting speech everyone heard), the episodic observation feed,
-              and Flags. */}
           <div
             role="tablist"
             aria-label="Mind inspector tabs"
@@ -670,6 +637,7 @@ function InspectedAgent({
             tabIndex={0}
             className="min-h-[6rem] focus-visible:outline focus-visible:outline-2 focus-visible:outline-ink-900"
           >
+            {!revealSecrets ? <RedactedMind /> : <>
             {tab === "belief" && (
               <MemoryGate memory={memory} memoryError={memoryError}>
                 {(m) => <BeliefTab memory={m} trail={trail} />}
@@ -677,7 +645,7 @@ function InspectedAgent({
             )}
 
             {tab === "prompt" &&
-              (revealSecrets ? (
+              (
                 <VerbatimGate error={meetingError}>
                   <LLMCallList
                     calls={calls}
@@ -685,12 +653,10 @@ function InspectedAgent({
                     field="prompt"
                   />
                 </VerbatimGate>
-              ) : (
-                <RedactedVerbatim field="prompt" />
-              ))}
+              )}
 
             {tab === "response" &&
-              (revealSecrets ? (
+              (
                 <VerbatimGate error={meetingError}>
                   <LLMCallList
                     calls={calls}
@@ -698,9 +664,7 @@ function InspectedAgent({
                     field="response"
                   />
                 </VerbatimGate>
-              ) : (
-                <RedactedVerbatim field="response" />
-              ))}
+              )}
 
             {tab === "memory" && (
               <MemoryGate memory={memory} memoryError={memoryError}>
@@ -722,6 +686,7 @@ function InspectedAgent({
                 {(m) => <FlagsTab memory={m} />}
               </MemoryGate>
             )}
+            </>}
           </div>
         </>
       )}
@@ -729,19 +694,11 @@ function InspectedAgent({
   );
 }
 
-// Shown in place of the VERBATIM prompt / response when the inspected agent is
-// viewed through a DIFFERENT agent's fog. The raw LLM I/O carries the agent's
-// `Your role` memory block + (for an impostor) the fellow-impostor / own-kill
-// self-channel, so it rides the same Omniscient-or-self gate as the other tells.
-function RedactedVerbatim({ field }: { field: "prompt" | "response" }) {
+function RedactedMind() {
   return (
-    <p
-      className="rounded-md border-2 border-dashed border-ink-300 px-3 py-3 text-xs text-ink-500"
-      style={{ background: tokens.paper[2] }}
-    >
-      The raw {field} is hidden through another agent's fog — it embeds this
-      agent's role and private rendered memory. Switch to Omniscient, or view this
-      agent through its own lens (“Show what they saw”), to read it verbatim.
+    <p className="rounded-md border-2 border-dashed border-ink-300 px-3 py-3 text-xs text-ink-500">
+      This agent’s memory and reasoning are private. Use “Show what they saw”
+      or switch to Omniscient to inspect them. Public statements remain in the meeting transcript.
     </p>
   );
 }
@@ -839,17 +796,12 @@ export function MindInspector({ meetingId }: { meetingId: string | null }) {
     }
   }, [bodiesNeeded, meetingId, fetchMeeting]);
 
-  // Hydrate the selected agent's meeting-boundary memory snapshot whenever an
-  // agent is picked — the Belief / observation / Flags tabs render through fog
-  // too (they don't reveal the observer's own role), so memory is always needed.
-  // The memory snapshot is small; only the per-meeting LLM BODIES are windowed.
-  // No fetch before the agent's first meeting (`meetingId === null`): there is no
-  // snapshot, and the panel shows the honest "no deliberation yet" state instead.
+  // Private snapshots are fetched only when the selected lens may inspect them.
   useEffect(() => {
-    if (selectedAgentId !== null && meetingId !== null) {
+    if (revealSecrets && selectedAgentId !== null && meetingId !== null) {
       void fetchMemoryView(meetingId, selectedAgentId);
     }
-  }, [meetingId, selectedAgentId, fetchMemoryView]);
+  }, [meetingId, selectedAgentId, revealSecrets, fetchMemoryView]);
 
   if (replay === null) {
     return null;

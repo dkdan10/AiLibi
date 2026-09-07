@@ -3,8 +3,9 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final
+from typing import Final, Literal
 
+from engine.actions import Action
 from engine.entities import PlayerId
 from engine.events import (
     ActionRejectedEvent,
@@ -19,9 +20,13 @@ from engine.events import (
 from engine.visibility import VisibilityResult, compute_visibility_for_player
 from engine.world import Map, RoomId, TaskId, WorldState
 from observation.audit import ObservationAuditLog
+from observation.body_ids import public_body_id
+from observation.temporal import project_temporal_events
+from observation.version import validate_temporal_version
 from observation.packet import (
     AudibleEvent,
     BodyView,
+    EventObservationBatch,
     GlobalView,
     MovedPlayerView,
     ObservationPacket,
@@ -197,9 +202,123 @@ class _ObservedAction:
 class ObservationService:
     """Single boundary object that exposes engine truth as ObservationPackets."""
 
-    def __init__(self, *, game_map: Map, audit_log_path: Path) -> None:
+    def __init__(
+        self,
+        *,
+        game_map: Map,
+        audit_log_path: Path,
+        legacy_body_ids: bool = False,
+        temporal_observations: bool | None = None,
+        temporal_observation_version: Literal[1, 2] | None = None,
+    ) -> None:
         self._game_map = game_map
         self._audit_log = ObservationAuditLog(audit_log_path)
+        self._legacy_body_ids = legacy_body_ids
+        temporal_observation_version = validate_temporal_version(
+            temporal_observation_version
+        )
+        if (
+            temporal_observations is not None
+            and type(temporal_observations) is not bool
+        ):
+            raise ValueError("temporal enabled status must be boolean")
+        if (
+            temporal_observations is not None
+            and temporal_observation_version is not None
+            and (not temporal_observations)
+        ):
+            raise ValueError("conflicting temporal boolean and explicit version")
+        self.temporal_observation_version: Literal[1, 2] | None = (
+            temporal_observation_version
+            if temporal_observation_version is not None
+            else (1 if temporal_observations else None)
+        )
+        if self.temporal_observation_version == 2 and legacy_body_ids:
+            raise ValueError("v2 observations cannot expose legacy body identifiers")
+        self.temporal_observations = self.temporal_observation_version is not None
+
+    def build_event_observations(
+        self,
+        *,
+        world_state: WorldState,
+        agent_id: PlayerId,
+        engine_events: Sequence[EngineEvent],
+        source_state: WorldState | None = None,
+        submitted_actions: Sequence[Action] | None = None,
+    ) -> EventObservationBatch | None:
+        """Project resolved events once, including witnesses killed later that tick."""
+
+        if not self.temporal_observations:
+            return None
+        if self.temporal_observation_version == 2:
+            if source_state is None or submitted_actions is None:
+                raise ValueError(
+                    "v2 event observations require source_state and submitted_actions"
+                )
+            batch = project_temporal_events(
+                source_state=source_state,
+                submitted_actions=submitted_actions,
+                engine_events=engine_events,
+                agent_id=agent_id,
+                game_map=self._game_map,
+            )
+            if batch is not None:
+                self._audit_log.record_packet(batch)
+            return batch
+        player = world_state.players[agent_id]
+        actions: dict[str, PlayerView] = {}
+        moves: dict[str, MovedPlayerView] = {}
+        own_kill: OwnKillView | None = None
+        source_ticks: set[int] = set()
+        for event in engine_events:
+            if isinstance(event, MovedEvent):
+                if event.witnesses is None:
+                    raise ValueError("temporal movement requires event-local witnesses")
+                if agent_id in event.witnesses and event.from_room != event.to_room:
+                    moves[event.actor] = MovedPlayerView(
+                        id=event.actor, from_room=event.from_room, to_room=event.to_room
+                    )
+                    source_ticks.add(event.tick)
+            elif isinstance(event, KilledEvent):
+                if event.actor == agent_id:
+                    own_kill = OwnKillView(victim_id=event.target, room=event.room)
+                    source_ticks.add(event.tick)
+                if agent_id in event.witnesses:
+                    actions[event.actor] = PlayerView(
+                        id=event.actor, room=event.room, action="kill"
+                    )
+                    source_ticks.add(event.tick)
+            elif isinstance(event, (VentEnteredEvent, VentExitedEvent)):
+                observed = self._vent_observation_for_agent(
+                    event=event, agent_id=agent_id
+                )
+                if observed is not None:
+                    actions[event.actor] = PlayerView(
+                        id=event.actor, room=observed.room, action="vent"
+                    )
+                    source_ticks.add(event.tick)
+        if not source_ticks:
+            return None
+        if len(source_ticks) != 1:
+            raise ValueError("an event observation batch must contain one source tick")
+        batch = EventObservationBatch(
+            tick=next(iter(source_ticks)),
+            agent_id=agent_id,
+            own_kill=own_kill,
+            witnessed_actions=tuple(actions[pid] for pid in sorted(actions)),
+            moved_players=tuple(moves[pid] for pid in sorted(moves)),
+            fellow_impostor_ids=tuple(
+                sorted(
+                    pid
+                    for pid, other in world_state.players.items()
+                    if player.role == "IMPOSTOR"
+                    and other.role == "IMPOSTOR"
+                    and pid != agent_id
+                )
+            ),
+        )
+        self._audit_log.record_packet(batch)
+        return batch
 
     def close(self) -> None:
         """Release the audit log's append handle (idempotent).
@@ -240,6 +359,19 @@ class ObservationService:
         visibility: VisibilityResult,
         engine_events: Sequence[EngineEvent],
     ) -> ObservationPacket:
+        if self.temporal_observations:
+            # Source-time batches own these event channels. Current-state task
+            # activity remains part of the ordinary snapshot.
+            engine_events = tuple(
+                event
+                for event in engine_events
+                if not isinstance(
+                    event, (KilledEvent, VentEnteredEvent, VentExitedEvent, MovedEvent)
+                )
+            )
+        if self.temporal_observation_version == 2:
+            # All action evidence has an event-local channel in v2.
+            engine_events = ()
         player = world_state.players.get(agent_id)
         if player is None:
             raise ValueError(f"unknown agent id: {agent_id}")
@@ -292,7 +424,9 @@ class ObservationService:
         )
         visible_bodies = tuple(
             BodyView(
-                id=body_id,
+                id=body_id
+                if self._legacy_body_ids
+                else public_body_id(world_state.bodies[body_id].player_id),
                 room=world_state.bodies[body_id].room,
                 victim_id=world_state.bodies[body_id].player_id,
             )
@@ -316,6 +450,9 @@ class ObservationService:
             global_state=self._global_view(world_state=world_state),
             cooldown=cooldown,
             moved_players=moved_players,
+            temporal_observation_version=2
+            if self.temporal_observation_version == 2
+            else None,
         )
         return packet
 

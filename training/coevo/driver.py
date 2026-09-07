@@ -179,6 +179,13 @@ from orchestrator.game import (
     MeetingRunner,
     build_default_meeting_runner,
 )
+from training.provenance import (
+    EvidenceScope,
+    current_campaign_environment,
+    require_baseline_campaign_environment,
+    validate_evidence_scope,
+)
+
 from training.bakeoff.es import (
     ESConfig,
     ESResult,
@@ -379,7 +386,12 @@ _SHA256_HEX_RE: Final[re.Pattern[str]] = re.compile(r"[0-9a-f]{64}")
 #: Which committed substrate-sha definition the campaign passed to
 #: ``HallOfFame.create`` (the 18.24 block: two definitions exist and the
 #: driver must name the one it uses, in the row schema).
-SubstrateShaKind: TypeAlias = Literal["compute_substrate_sha", "bakeoff_substrate_sha"]
+SubstrateShaKind: TypeAlias = Literal[
+    "compute_substrate_sha",
+    "bakeoff_substrate_sha",
+    "compute_substrate_sha.v2",
+    "bakeoff_substrate_sha.v2",
+]
 
 #: Which meeting runner served the swap's TRAINING games (benchmark/exploiter
 #: games are always ``fake-provider`` — champion numbers are never
@@ -563,6 +575,7 @@ class CoevoCampaignConfig:
     game_ceiling: int = DEFAULT_GAME_CEILING
     allow_over_ceiling: bool = False
     run_label: str = DEFAULT_RUN_LABEL
+    evidence_scope: EvidenceScope = "current"
 
     @property
     def resolved_hall_root(self) -> Path:
@@ -612,6 +625,9 @@ class CoevoCampaignRow(BaseModel):
     frozen_encoder_version: str
     substrate_sha256: str = Field(min_length=64, max_length=64)
     substrate_sha_kind: SubstrateShaKind
+    evidence_scope: EvidenceScope = Field(
+        default="historical", exclude_if=lambda value: value == "historical"
+    )
     meeting_runner: MeetingRunnerKind
     scenario_labels: tuple[str, ...]
     opponent_pool_size: int = Field(ge=0)
@@ -1116,14 +1132,16 @@ def _validate_config(
     if config.substrate_sha_kind not in (
         "compute_substrate_sha",
         "bakeoff_substrate_sha",
+        "compute_substrate_sha.v2",
+        "bakeoff_substrate_sha.v2",
     ):
         # Same deserialized-config shape as first_side: without this check the
         # first validation would be CoevoCampaignRow's Literal — AFTER a whole
         # generation's games ran and halls were written (Codex review on
         # PR #311).
         raise ValueError(
-            "substrate_sha_kind must be 'compute_substrate_sha' or "
-            f"'bakeoff_substrate_sha'; got {config.substrate_sha_kind!r}"
+            "substrate_sha_kind must name a supported historical or v2 definition; "
+            f"got {config.substrate_sha_kind!r}"
         )
     # The roster/tick knobs reach the seeder/scheduler only inside the first
     # rollout — after the work dir, plan, halls, and rows file exist, whose
@@ -1158,6 +1176,40 @@ def _validate_config(
             "substrate_sha256 must be exactly 64 lowercase hex chars; got "
             f"{config.substrate_sha256!r}"
         )
+    validate_evidence_scope(config.evidence_scope, config.work_dir)
+    if config.evidence_scope == "historical":
+        raise ValueError(
+            "historical campaign records can be restored, not rerun as current evidence"
+        )
+    if config.evidence_scope == "current":
+        require_baseline_campaign_environment()
+        if config.meeting_runner_factory is not None:
+            raise ValueError(
+                "current campaigns cannot certify an unbound custom meeting factory"
+            )
+        if (
+            config.conviction is not None
+            and config.conviction.evidence_scope != "current"
+        ):
+            raise ValueError(
+                "current campaigns cannot use historical or synthetic model evidence"
+            )
+        from training.anchor_study import compute_substrate_sha
+        from training.bakeoff.map_elites import bakeoff_substrate_sha
+
+        sources = {
+            "compute_substrate_sha.v2": compute_substrate_sha,
+            "bakeoff_substrate_sha.v2": bakeoff_substrate_sha,
+        }
+        source = sources.get(config.substrate_sha_kind)
+        if source is None:
+            raise ValueError(
+                "current campaigns require a version-two substrate_sha_kind"
+            )
+        if source() != config.substrate_sha256:
+            raise ValueError(
+                "campaign substrate SHA does not match its named source definition"
+            )
     if config.meeting_runner_factory is not None and config.composed is not None:
         raise ValueError(
             "meeting_runner_factory and composed are mutually exclusive: the "
@@ -1354,6 +1406,11 @@ class _CampaignEngine:
     def __init__(self, config: CoevoCampaignConfig) -> None:
         impostor_initial, crew_initial = _validate_config(config)
         self._config = config
+        self._environment = (
+            current_campaign_environment()
+            if config.evidence_scope == "current"
+            else None
+        )
         self._bound = projected_game_bound(config)
         if self._bound > config.game_ceiling and not config.allow_over_ceiling:
             raise ValueError(
@@ -1408,6 +1465,7 @@ class _CampaignEngine:
                 load_archive_cell_genomes(
                     side_config.founder_cells_dir,
                     expected_substrate_sha=config.substrate_sha256,
+                    expected_substrate_kind=config.substrate_sha_kind,
                 )
         _preflight_fresh_hall_root(hall_root)
         config.work_dir.mkdir(parents=True, exist_ok=True)
@@ -1423,6 +1481,7 @@ class _CampaignEngine:
                 hall_root,
                 cast(Side, side),
                 substrate_sha256=config.substrate_sha256,
+                substrate_sha_kind=config.substrate_sha_kind,
                 artifact_metadata=self._artifact_metadata(side_config),
             )
             if side_config.founder_cells_dir is not None:
@@ -1525,7 +1584,10 @@ class _CampaignEngine:
             "schema_version": COEVO_CAMPAIGN_ROW_SCHEMA_VERSION,
             "substrate_sha256": self._config.substrate_sha256,
             "substrate_sha_kind": self._config.substrate_sha_kind,
+            "evidence_scope": self._config.evidence_scope,
         }
+        if self._environment is not None:
+            plan["runtime_profile"] = self._environment
         # Phase-18 ledger, labeled in place (Phase 19 tier map,
         # training/README.md §6; audit-phase-18-close.md §7 item 11): this
         # write_text is the silently-overwritable ``campaign-plan.json`` — the
@@ -1648,7 +1710,8 @@ class _CampaignEngine:
                     inner = build_default_meeting_runner(
                         llm_client=build_default_client(
                             env={ENV_PROVIDER: PROVIDER_FAKE}
-                        )
+                        ),
+                        env=self._environment,
                     )
                 return ConvictionServingMeetingRunner(
                     inner=inner,
@@ -1673,6 +1736,7 @@ class _CampaignEngine:
             conviction=conviction,
             impostor_trace=impostor_trace,
             crew_trace=crew_trace,
+            environment=self._environment,
         )
         if conviction is None or not predictions:
             return result
@@ -2183,6 +2247,7 @@ class _CampaignEngine:
             frozen_encoder_version=frozen.config.encoder_version,
             substrate_sha256=config.substrate_sha256,
             substrate_sha_kind=config.substrate_sha_kind,
+            evidence_scope=config.evidence_scope,
             meeting_runner=runner_kind,
             scenario_labels=tuple(term.label for term in scenario_terms),
             opponent_pool_size=len(active),

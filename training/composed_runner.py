@@ -96,6 +96,8 @@ from meetings.manager import MeetingTrigger
 from meetings.schemas import MeetingResult, MeetingTranscript, VoteBallot
 from meetings.voting import SKIP_TARGET, tally_ballots
 from orchestrator.game import MeetingArtifacts, MeetingAwareAgent
+from training.provenance import DEFAULT_CORPUS, EvidenceScope
+
 from training.bakeoff.es import ESConfig
 from training.bakeoff.goodhart import (
     ConvictionPathProbeReport,
@@ -243,6 +245,7 @@ def load_composed_components(
     conviction_use_counter: ConvictionUseCounter | None = None,
     surrogate_use_counter: SurrogateUseCounter | None = None,
     corpus_dir: Path | None = None,
+    evidence_scope: EvidenceScope = "current",
 ) -> ComposedComponents:
     """Load + fence both committed components (fail loud before any use).
 
@@ -286,6 +289,7 @@ def load_composed_components(
         surrogate_artifact_dir,
         use_counter=surrogate_counter,
         corpus_dir=corpus_dir,
+        evidence_scope=evidence_scope,
     )
     ballot_predictor, surrogate_sha = load_ballot_predictor_artifact(
         surrogate_artifact_dir
@@ -293,7 +297,11 @@ def load_composed_components(
 
     # -- Conviction side: sha-verified model + cap + GO verdict. ----------------
     conviction_model, conviction_sha = load_conviction_model_artifact(
-        conviction_artifact_dir, corpus_dir=corpus_dir
+        conviction_artifact_dir,
+        corpus_dir=None
+        if evidence_scope == "synthetic-test"
+        else (corpus_dir or DEFAULT_CORPUS),
+        evidence_scope=evidence_scope,
     )
     conviction_cap = load_conviction_staleness_cap(conviction_artifact_dir)
     if conviction_cap.weights_sha256 != conviction_sha:
@@ -359,6 +367,7 @@ def load_composed_runner_factory(
     surrogate_use_counter: SurrogateUseCounter | None = None,
     corpus_dir: Path | None = None,
     composed_artifact_dir: Path | None = _COMPOSED_ARTIFACT_DIR,
+    evidence_scope: EvidenceScope = "current",
 ) -> Callable[[], ComposedMeetingRunner]:
     """Build a per-game composed-runner factory (18.21's ``Callable[[], MeetingRunner]``).
 
@@ -390,6 +399,7 @@ def load_composed_runner_factory(
         conviction_use_counter=conviction_use_counter,
         surrogate_use_counter=surrogate_use_counter,
         corpus_dir=corpus_dir,
+        evidence_scope=evidence_scope,
     )
     if composed_artifact_dir is not None:
         composed_verdict = load_composed_verdict(composed_artifact_dir)
@@ -419,6 +429,11 @@ def load_composed_runner_factory(
                 "Goodhart leg / re-evaluation machinery), never for campaign "
                 "wiring (no silent fallbacks)"
             )
+
+    if composed_artifact_dir is not None and evidence_scope != "current":
+        raise ValueError(
+            "composed training-time installation requires current model evidence"
+        )
 
     def factory() -> ComposedMeetingRunner:
         return ComposedMeetingRunner(components=components)
@@ -1233,6 +1248,7 @@ def run_composed_goodhart_leg(
     materiality_bar: float = 0.25,
     conviction_artifact_dir: Path = _CONVICTION_ARTIFACT_DIR,
     surrogate_artifact_dir: Path = _SURROGATE_ARTIFACT_DIR,
+    evidence_scope: EvidenceScope = "current",
 ) -> ComposedGoodhartLeg:
     """Run 18.18's conviction-path probe over the composed runner as the meeting path.
 
@@ -1263,6 +1279,7 @@ def run_composed_goodhart_leg(
         conviction_use_counter=conviction_counter,
         surrogate_use_counter=surrogate_counter,
         composed_artifact_dir=None,
+        evidence_scope=evidence_scope,
     )
 
     surrogate_before = surrogate_counter.uses
@@ -1276,6 +1293,7 @@ def run_composed_goodhart_leg(
         conviction_artifact_dir=conviction_artifact_dir,
         use_counter=conviction_counter,
         meeting_runner_factory=factory,
+        evidence_scope=evidence_scope,
     )
 
     # One surrogate use per composed meeting; the composed runner meters the

@@ -1,0 +1,23 @@
+Public accounts are statements made by a player. Tell the table what you claim happened, and distinguish what you personally observed from what somebody told you. A repeated account is not an additional witness. Discovery time is not death time. A legal route shows possibility, not innocence.
+{% if attributed_testimony_version %}
+Nobody at the table receives a certificate from another player's private memory. Even a spoken vent or kill is that speaker's account. Your own first-hand observation is reliable; hearing the same words from somebody else is testimony. Compare sources, contradictions and alternative explanations before deciding whom to believe.
+{% else %}
+The game's certified vent findings remain available: a finding that certifies a witnessed vent identifies an impostor. Other accounts do not acquire that guarantee.
+{% endif %}
+{% if public_account_version or not is_impostor %}
+Use only the few relevant structured accounts. {% if public_account_version %}The same public shapes are available to every player:{% else %}Your available public shapes:{% endif %}
+- {"type":"whereabouts","tick":<int>,"room":"<room id>"}: where you claim to have been.
+- {"type":"saw_player","tick":<int>,"subject":"<player id>","room":"<room id>","co_present":[]}: whom you claim to have seen.
+- {"type":"saw_move","tick":<int>,"subject":"<player id>","from_room":"<room id>","to_room":"<room id>"}: a claimed arrival at the stated tick; do not invent an earlier origin time.
+- {"type":"found_body","tick":<int>,"body_of":"<player id>","room":"<room id>"}: a claimed discovery, not a time of death.
+- {"type":"completed_task","tick":<int>,"task_id":"<task id>","room":"<room id>"}: a claim of completion, not public proof of completed work.
+- {"type":"saw_vent","tick":<int>,"subject":"<player id>","room":"<room id>"}: a claimed vent sighting.
+{% if public_account_version %}
+- {"type":"saw_kill","tick":<int>,"subject":"<killer id>","room":"<room id>"}: a claimed kill sighting. Name the killer, not the victim.
+- {"type":"task_activity","task_id":"<task id>","room":"<room id>","from_tick":<int>,"to_tick":<int>}: your account of working on a task. An attempt is not completion.
+{% endif %}
+Claims may be {"type":"alibi","subject":"<player id>","from_tick":<int>,"to_tick":<int>,"room":"<room id>","evidence":[]}, {"type":"accusation","against":"<living player id>","confidence":0.6,"reason":"<reason>"}, or {"type":"corroboration","supports":"<living player id>","on_tick":<int>,"reason":"<reason>"}.
+{% else %}
+Keep observations empty. Make an accusation claim or stay unsure; do not invent a structured self-alibi.
+{% endif %}
+Use real public player, room and task identifiers. Tick intervals must be ordered and must not name the future. Keep your spoken account consistent with your structured account. Never put a private role, teammate identity or a bookkeeping score in public speech.

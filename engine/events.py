@@ -40,6 +40,9 @@ class MovedEvent:
     actor: PlayerId
     from_room: RoomId
     to_room: RoomId
+    # Captured before this action resolves; omitted by the historical event
+    # serialization so the additional entitlement metadata changes no hashes.
+    witnesses: tuple[PlayerId, ...] | None = None
 
 
 @dataclass(frozen=True)

@@ -21,13 +21,14 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import time
 from collections.abc import Mapping
 from pathlib import Path
 
 import pytest
 
-from orchestrator.replay import substrate_flag_snapshot
+from orchestrator.replay import AbortedMeetingReplayEntry, substrate_flag_snapshot
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _RECORD_SH = _REPO_ROOT / "scripts" / "record_ml_corpus.sh"
@@ -1174,6 +1175,52 @@ def test_an_audit_sidecar_is_refused_by_range_not_misread_as_a_stampless_replay(
     # The provenance scan does NOT: it skipped the sidecar rather than judging it.
     assert "check_replay_provenance" not in out
     assert "no tactical_policy stamp" not in out
+
+
+@pytest.mark.parametrize("aborted", [False, True])
+def test_provenance_guard_rejects_aborted_meeting_even_with_terminal_stamp(
+    tmp_path: Path,
+    aborted: bool,
+) -> None:
+    # Execute only the committed guard's Python body: even if the planted abort
+    # slips through, this test cannot start a provider run.
+    source = _RECORD_SH.read_text(encoding="utf-8")
+    match = re.search(
+        r"(?ms)^check_replay_provenance\(\) \{\n.*?<<'PYINNER'\n(.*?)\nPYINNER\n\}",
+        source,
+    )
+    assert match is not None
+    lines = _baseline6_corpus_replay_text().splitlines()
+    if aborted:
+        entry = AbortedMeetingReplayEntry(
+            game_id="headless-seed-1000",
+            meeting_id="headless-seed-1000:meeting-aborted",
+            tick=0,
+            llm_calls=(),
+            prompt_versions={},
+            error_type="RuntimeError",
+            error_message="interrupted",
+        )
+        lines.insert(-1, entry.model_dump_json())
+    (tmp_path / "replay-seed-1000.jsonl").write_text(
+        "\n".join(lines) + "\n", encoding="utf-8"
+    )
+
+    proc = subprocess.run(
+        [sys.executable, "-", str(_REPO_ROOT), str(tmp_path), _BASELINE_MODEL, ""],
+        input=match.group(1),
+        cwd=_REPO_ROOT,
+        capture_output=True,
+        text=True,
+        env=_clean_env(),
+        check=False,
+    )
+
+    if aborted:
+        assert proc.returncode != 0
+        assert "meeting headless-seed-1000:meeting-aborted aborted" in proc.stderr
+    else:
+        assert proc.returncode == 0, proc.stdout + proc.stderr
 
 
 def test_record_path_refuses_non_canonical_stamp_fields(tmp_path: Path) -> None:

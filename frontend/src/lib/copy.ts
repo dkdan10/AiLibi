@@ -204,29 +204,30 @@ export const SPECTATOR_COPY = Object.freeze({
     refresh: "Refresh",
     refreshBusy: "Loading…",
     loadingReport: "Loading tournament report…",
+    detailedReport: "Full diagnostic report (larger download)",
     noReportTitle: "No tournament report.",
     noReportLead: "A 404 means no",
     noReportMiddle: "exists in the configured eval directory yet — run a tournament with",
     noReportTail: "to produce one.",
-    // The same panel in the hosted demo, where there is no eval directory to
-    // point anyone at. `scripts/build_demo_bundle.py` pins the fragment "needs a
-    // tournament report" against the built bundle's emitted JS, so rewording
-    // this line means updating that marker too.
     noReportBundle:
-      "This demo ships the featured games only. The eval dashboard needs a tournament report, and that report is far larger than a demo should carry — the repository has it, along with the command that rebuilds it.",
+      "This bundle omits the full diagnostic report. Compact verified results are available separately.",
 
     balanceTitle: "Balance outcome",
     balanceDescription:
-      "Crew / impostor / tick-budget split across the tournament's recorded games.",
+      "Verified outcomes and recorded stop reasons across the tournament.",
     balanceGames: "Games recorded",
     balanceSeedsAttempted: "{n} seeds attempted",
     balanceSeeds: "{n} seeds",
-    balanceCrewWins: "Crew wins",
-    balanceImpostorWins: "Impostor wins",
-    balanceTickBudget: "Tick budget",
-    balanceTickBudgetHint: "non-decisive",
+    balanceCrewWins: "Verified crew wins",
+    balanceImpostorWins: "Verified impostor wins",
+    balanceTickBudget: "Tick limit reached",
+    balanceTickBudgetHint: "explicit normal stop",
     balanceCrewWinRate: "Crew win rate",
-    balanceCrewWinRateHint: "of decisive games",
+    balanceCrewWinRateHint: "of {n} verified outcomes",
+    balanceAborted: "Aborted",
+    balanceUnfinished: "Unfinished",
+    balanceUnverified: "Unverified outcomes",
+    balanceUnverifiedHint: "excluded from verified win rates",
 
     voteCorrectnessTitle: "Vote correctness",
     voteCorrectnessDescription:
@@ -367,9 +368,9 @@ export const SPECTATOR_COPY = Object.freeze({
     interestingnessTitle: "Interestingness",
     interestingnessDescription:
       "Distribution of the rubric's 0–100 score — an internal pacing/structure heuristic, not a human rating. Click a bucket to open those seeds in the Highlights reel.",
-    interestingnessStaleCaveat: "scores may be stale",
+    interestingnessStaleCaveat: "scores unavailable",
     interestingnessStaleCaveatTitle:
-      "The rubric was scored against different bytes than the set now serves, so these scores may be stale. Re-score the set to refresh them.",
+      "Scores are hidden because their recording sources could not be verified. Re-extract facts and re-score the current set to refresh them.",
     interestingnessLoading: "Loading the interestingness rubric…",
     interestingnessAbsentTitle: "No interestingness rubric.",
     interestingnessAbsentLead:

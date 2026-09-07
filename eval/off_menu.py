@@ -129,7 +129,7 @@ from engine.actions import Action
 from engine.entities import PlayerId, Role
 from engine.events import EngineEvent, MeetingTriggeredEvent
 from engine.tick import advance_tick
-from engine.world import Map, load_canonical_map
+from engine.world import Map, WorldState, load_canonical_map
 from eval.validity import resolve_roster_knobs, roles_by_seed, seeds_on_disk
 from meetings.manager import derive_reported_testimony, extract_belief_evidence
 from meetings.schemas import MeetingResult
@@ -144,10 +144,13 @@ from orchestrator.game import (
     build_default_agent_factory,
 )
 from orchestrator.replay import (
+    recorded_experiment_config,
+    recorded_testimony_shapes,
     MeetingReplayEntry,
     ReplayEntry,
     _state_hash,
     read_all_entries,
+    require_legacy_observations,
 )
 from orchestrator.seeder import seed_initial_state
 
@@ -272,6 +275,7 @@ def _classify_decision(
     actor: PlayerId,
     recorded_action: Action,
     menu: tuple[ImpostorOption, ...],
+    world_state: WorldState | None = None,
 ) -> _Decision:
     """Test one recorded impostor action for menu membership and classify it.
 
@@ -290,7 +294,9 @@ def _classify_decision(
 
     recorded_dump = recorded_action.model_dump(mode="python")
     menu_dumps = [
-        translate_action_intent(option.intent).model_dump(mode="python")
+        translate_action_intent(option.intent, world_state=world_state).model_dump(
+            mode="python"
+        )
         for option in menu
     ]
     on_menu = recorded_dump in menu_dumps
@@ -348,6 +354,13 @@ def _walk_game(
 
     game_id = f"headless-seed-{seed}"
     entries = read_all_entries(replay_path)
+    experiment = recorded_experiment_config(entries)
+    testimony_shapes = recorded_testimony_shapes(entries)
+    if experiment is not None:
+        raise ValueError(
+            "historical feature reconstruction does not support experimental recordings"
+        )
+    require_legacy_observations(entries, consumer="off-menu")
     tick_entries = [e for e in entries if isinstance(e, ReplayEntry)]
     meeting_by_tick: dict[int, MeetingReplayEntry] = {
         e.tick: e for e in entries if isinstance(e, MeetingReplayEntry)
@@ -425,6 +438,7 @@ def _walk_game(
                             actor=pid,
                             recorded_action=recorded_action,
                             menu=menu,
+                            world_state=state,
                         )
                     )
 
@@ -506,7 +520,13 @@ def _walk_game(
             evidence = extract_belief_evidence(
                 result, trigger_kind=trigger_event.trigger
             )
-            statements = derive_reported_testimony(result)
+            statements = derive_reported_testimony(
+                result,
+                testimony_shapes=testimony_shapes,
+                evidence_reasoning_version=experiment.evidence_reasoning_version
+                if experiment is not None
+                else None,
+            )
             for pid in impostor_ids:
                 if not state.players[pid].alive:
                     continue

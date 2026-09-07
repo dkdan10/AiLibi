@@ -142,6 +142,10 @@ class Edge(_FrozenModel):
     def validate_edge(self) -> Edge:
         if self.traversal_ticks < 1:
             raise MapValidationError("edge traversal_ticks must be at least 1")
+        if self.traversal_ticks != 1:
+            raise MapValidationError(
+                "edge traversal_ticks must be 1; multi-tick traversal is unsupported"
+            )
         if self.from_room == self.to_room:
             raise MapValidationError(
                 f"edge cannot connect a room to itself: {self.from_room}"
@@ -168,6 +172,10 @@ class Vent(_FrozenModel):
     def validate_vent(self) -> Vent:
         if self.traversal_ticks < 1:
             raise MapValidationError("vent traversal_ticks must be at least 1")
+        if self.traversal_ticks != 1:
+            raise MapValidationError(
+                "vent traversal_ticks must be 1; multi-tick traversal is unsupported"
+            )
         if self.id in self.connects_to:
             raise MapValidationError(f"vent cannot connect to itself: {self.id}")
         return self

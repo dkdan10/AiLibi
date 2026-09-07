@@ -43,6 +43,7 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
+import json
 import sys
 import tempfile
 import types as _pytypes
@@ -62,6 +63,7 @@ from api.schemas import (  # noqa: E402
     AgentMemoryView,
     BeliefFrameView,
     EvalCostSummaryView,
+    PublicResultsView,
     ReplayView,
     RubricView,
     SuspicionGraphView,
@@ -80,6 +82,7 @@ _ROOTS: Final[tuple[type[BaseModel], ...]] = (
     AgentMemoryView,
     BeliefFrameView,
     EvalCostSummaryView,
+    PublicResultsView,
     SuspicionGraphView,
     RubricView,
     TournamentEvalReport,
@@ -146,6 +149,7 @@ _UNION_ALIASES: Final[dict[str, tuple[str, ...]]] = {
         "SawKillObservationView",
         "WhereaboutsClaimView",
         "SawMoveObservationView",
+        "TaskActivityAccountView",
     ),
     "StatementClaimView": (
         "AlibiClaimView",
@@ -160,17 +164,29 @@ _UNION_BY_MEMBERS: Final[dict[frozenset[str], str]] = {
 # Eval report sub-tree cut points: emitted as fixed stubs instead of expanding
 # the full internal meeting graph (see module docstring). Bodies match the prior
 # hand-authored contract; ``Winner`` is the only enum they reference.
+_PROVENANCE_STUB_FIELDS: Final[str] = (
+    '  agent_factory_kind?: "scripted" | "experimental" | "custom" | null;\n'
+    "  experiment_config?: ExperimentConfigView | null;\n"
+    "  substrate_flags?: Record<string, boolean> | null;\n"
+    "  tactical_policy?: TacticalPolicyView | null;\n"
+    "  crew_tactical_policy?: TacticalPolicyView | null;"
+)
+
 _STUB_BODIES: Final[dict[str, str]] = {
     "GameReport": (
         "  game_id: string;\n"
         "  seed: number;\n"
         "  winner: Winner | null;\n"
         "  reason: string;\n"
-        "  final_tick: number | null;"
+        "  final_tick: number | null;\n"
+        '  completion_status?: "completed" | "aborted" | "tick_limited" | "unfinished";\n'
+        "  outcome_verified?: boolean;\n" + _PROVENANCE_STUB_FIELDS
     ),
     "TournamentReport": (
-        "  format_version: number;\n  games: GameReport[];\n  seeds_used: number[];"
+        "  format_version: number;\n  games: GameReport[];\n  seeds_used: number[];\n"
+        "  provenance_groups?: ReportProvenanceGroup[] | null;"
     ),
+    "ReportProvenanceGroup": _PROVENANCE_STUB_FIELDS + "\n  game_ids: string[];",
 }
 
 
@@ -224,12 +240,18 @@ class _Generator:
         raise TypeError(f"unsupported annotation for TS codegen: {annotation!r}")
 
     def _ts_literal(self, values: tuple[Any, ...]) -> str:
-        str_values = tuple(str(v) for v in values)
-        alias = _ENUM_BY_VALUES.get(frozenset(str_values))
+        alias = (
+            _ENUM_BY_VALUES.get(frozenset(values))
+            if all(isinstance(value, str) for value in values)
+            else None
+        )
         if alias is not None:
             self.used_enums.add(alias)
             return alias
-        return " | ".join(_ts_string_literal(v) for v in str_values)
+        return " | ".join(
+            _ts_string_literal(value) if isinstance(value, str) else json.dumps(value)
+            for value in values
+        )
 
     def _ts_union(self, args: tuple[Any, ...]) -> str:
         model_members = [
@@ -263,7 +285,35 @@ class _Generator:
             # serialization_alias when set (e.g. view_model_version ->
             # viewModelVersion, the contract name); fall back to the field name.
             wire_name = field.serialization_alias or name
-            lines.append(f"  {wire_name}: {self._ts_type(field.annotation)};")
+            # Older static bundles omit these additive reader fields.
+            optional = (
+                "?"
+                if (model.__name__, name)
+                in {
+                    ("ReplayMetadataView", "completion_status"),
+                    ("ReplayMetadataView", "outcome_verified"),
+                    ("ReplayMetadataView", "agent_factory_kind"),
+                    ("ReplayMetadataView", "experiment_config"),
+                    ("ReplayMetadataView", "substrate_flags"),
+                    ("ReplayMetadataView", "tactical_policy"),
+                    ("ReplayMetadataView", "crew_tactical_policy"),
+                    ("GateView", "threshold_source"),
+                    ("PublicResultsView", "provenance_groups"),
+                    ("ObservationReferenceView", "source_tick"),
+                    ("ObservationReferenceView", "observation_phase"),
+                    ("ObservationReferenceView", "observation_order"),
+                    ("ObservationReferenceView", "observer_room"),
+                    ("ObservationReferenceView", "observer_in_vent"),
+                    ("ReplayView", "llm_bodies_included"),
+                    ("AgentMemoryView", "observation_references"),
+                    ("AgentMemoryView", "investigation_plan"),
+                    ("AgentTickStateView", "investigation_plan"),
+                    ("ExperimentConfigView", "investigation_version"),
+                    ("ExperimentConfigView", "contextual_self_report_version"),
+                }
+                else ""
+            )
+            lines.append(f"  {wire_name}{optional}: {self._ts_type(field.annotation)};")
         lines.append("}")
         return "\n".join(lines)
 
@@ -315,10 +365,8 @@ def _render_version_constant() -> str:
     return (
         "// The view-model contract version (`api.schemas.VIEW_MODEL_VERSION`,\n"
         "// DESIGN.md §7) the server stamps on every payload that carries one.\n"
-        "// `src/api/client.ts` REJECTS a response whose `viewModelVersion`\n"
-        "// differs from this, so a drifted contract fails loudly at the seam\n"
-        "// instead of mis-rendering; client and server can only move together,\n"
-        "// through this generated line.\n"
+        "// `src/api/client.ts` rejects unsupported versions and checks the\n"
+        "// explicitly compatible historical version's audio before use.\n"
         f"export const VIEW_MODEL_VERSION = {_ts_string_literal(VIEW_MODEL_VERSION)};"
     )
 
@@ -401,6 +449,7 @@ def _real_replay_payload() -> str:
     from engine.world import load_canonical_map
     from orchestrator.replay import ReplayLog
     from orchestrator.seeder import seed_initial_state
+    from tests.api.fixtures.sample_replay import finish_replay_with_kills
 
     from api.replay_loader import ReplayLoader
 
@@ -415,7 +464,7 @@ def _real_replay_payload() -> str:
             input_tick = state.tick
             state, _events = advance_tick(state, [], game_map=game_map)
             log.record_tick(input_tick, [], state)
-        log.record_game_end(winner="CREWMATES", reason="all_tasks_complete", tick=2)
+        finish_replay_with_kills(log, state, game_map)
         loader = ReplayLoader(path.parent)
         replay = loader.load_replay("headless-seed-0")
     # by_alias mirrors FastAPI's response serialization (so the fixture key is

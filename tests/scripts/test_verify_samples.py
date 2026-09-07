@@ -18,6 +18,7 @@ import pytest
 
 import _verify_samples as vs
 from api.replay_loader import ReplayLoader
+from orchestrator.replay_integrity import ReplayIntegrityError
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 # The flat 4p1i baseline now lives under replays/samples/4p1i/ (Task 12.12).
@@ -248,16 +249,14 @@ def test_meeting_state_hash_before_corruption_detected(
 ) -> None:
     path = _copy_seed(tmp_path, _MEETING_SEED)
     tick = _corrupt_meeting_before_hash(path)
-    # load_replay alone does NOT inspect state_hash_before, so it still passes —
-    # this is the gap the cross-check closes.
-    ReplayLoader(tmp_path).load_replay(f"headless-seed-{_MEETING_SEED}")
+    with pytest.raises(ReplayIntegrityError, match="meeting_pre_hash_mismatch"):
+        ReplayLoader(tmp_path).load_replay(f"headless-seed-{_MEETING_SEED}")
     failures = vs.verify_samples(tmp_path)
     assert len(failures) == 1
     failure = failures[0]
     assert failure.game_id == f"headless-seed-{_MEETING_SEED}"
     assert failure.tick == tick
-    assert "state_hash_before" in failure.reason
-    assert failure.expected != failure.actual
+    assert "meeting_pre_hash_mismatch" in failure.reason
 
 
 def test_duplicate_seed_alias_rejected(tmp_path: Path) -> None:
@@ -345,12 +344,10 @@ def test_orphaned_meeting_tick_detected(
 ) -> None:
     path = _copy_seed(tmp_path, _MEETING_SEED)
     _corrupt_meeting_tick(path, 9999)  # no tick row exists at 9999
-    # load_replay only attaches a meeting when a *reconstructed* tick enters
-    # MEETING phase, so it silently drops the orphaned meeting and still
-    # "succeeds" — this is the gap the tick-presence check closes.
-    ReplayLoader(tmp_path).load_replay(f"headless-seed-{_MEETING_SEED}")
+    with pytest.raises(ReplayIntegrityError, match="row_order"):
+        ReplayLoader(tmp_path).load_replay(f"headless-seed-{_MEETING_SEED}")
     failures = vs.verify_samples(tmp_path)
     assert len(failures) == 1
     assert failures[0].game_id == f"headless-seed-{_MEETING_SEED}"
     assert "9999" in failures[0].reason
-    assert "orphaned" in failures[0].reason
+    assert "row_order" in failures[0].reason

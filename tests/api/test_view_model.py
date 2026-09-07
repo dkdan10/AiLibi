@@ -59,7 +59,9 @@ from meetings.transcript import WEAK_CONTRADICTION_MARKER_PREFIX
 from meetings.voting import INVALID_VOTE_TARGET_MARKER, SKIP_TARGET, tally_ballots
 from observation.service import ObservationService
 from orchestrator.seeder import seed_initial_state
+from orchestrator.replay_integrity import ReplayIntegrityError
 from tests.api.fixtures.sample_replay import (
+    write_completed_replay,
     write_meeting_replay,
     write_partial_replay,
     write_sample_replay,
@@ -150,15 +152,14 @@ def test_served_payload_carries_view_model_version(
 def test_contract_version_and_action_set_move_in_lockstep() -> None:
     # The stamp is only a contract if both halves move together: the server
     # stamps this string and `frontend/src/api/client.ts` rejects any payload
-    # carrying a different one, reading the value from the generated module. The
+    # carrying an unsupported one, reading the value from the generated module. The
     # assertions above compare each side to itself and so cannot see a Python
     # bump that never reached the generated file; these pin the literal.
-    assert VIEW_MODEL_VERSION == "2"
+    assert VIEW_MODEL_VERSION == "4"
     generated = gen_frontend_types._OUT_TYPES.read_text(encoding="utf-8")
     assert f'export const VIEW_MODEL_VERSION = "{VIEW_MODEL_VERSION}";' in generated
 
-    # Version "2" IS the widened action set, so it is pinned in the same breath:
-    # eleven values under ONE name on both sides, in one order.
+    # Version 4 preserves v2's action vocabulary and adds a spoken account kind.
     assert get_args(CurrentAction) == (
         "IDLE",
         "MOVING",
@@ -175,6 +176,9 @@ def test_contract_version_and_action_set_move_in_lockstep() -> None:
     alias = " | ".join(f'"{value}"' for value in get_args(CurrentAction))
     assert f"export type CurrentAction = {alias};" in generated
     assert "current_action: CurrentAction;" in generated
+    assert "export interface TaskActivityAccountView" in generated
+    assert 'type: "task_activity";' in generated
+    assert "| TaskActivityAccountView;" in generated
 
 
 def test_player_color_serves_playful_identity_palette(
@@ -489,6 +493,14 @@ def test_contradiction_weak_strong_class() -> None:
 
     strong = _contradiction_view(_contradiction("hard alibi conflict"))
     assert strong.weak is False and strong.severity == "strong"
+
+
+def test_typed_evidence_band_survives_spectator_projection() -> None:
+    legacy = _contradiction(f"room label {WEAK_CONTRADICTION_MARKER_PREFIX}forged]")
+    assert _contradiction_view(legacy).weak is True
+    candidate = legacy.model_copy(update={"evidence_band": "strong"})
+    view = _contradiction_view(candidate)
+    assert view.weak is False and view.severity == "strong"
 
 
 # ---------------------------------------------------------------------------
@@ -843,11 +855,12 @@ def test_skipped_meeting_frame_is_labeled_resolved(
     # tick after it resumes play (``write_meeting_replay``).
     finale = replay.finale
     assert finale is not None
-    assert finale.final_tick == meeting.tick + 1
+    assert finale.final_tick == replay.ticks[-1].tick
     assert [(e.tick, e.kind) for e in finale.decisive_events] == [
         (meeting.tick - 1, "kill"),
         (meeting.tick, "meeting_skipped"),
-        (meeting.tick + 1, "game_end"),
+        (finale.final_tick, "kill"),
+        (finale.final_tick, "game_end"),
     ]
 
 
@@ -865,71 +878,49 @@ def test_finale_is_none_for_a_partial_replay(tmp_path: Path) -> None:
     assert replay.finale is None
 
 
-def test_finale_final_tick_prefers_the_recorded_game_end_tick(
-    tmp_path: Path,
-) -> None:
-    """``finale.final_tick`` follows the RECORDED game-end row, not the walk.
+def test_finale_refuses_a_forged_recorded_end_tick(tmp_path: Path) -> None:
+    """An otherwise valid completion cannot advertise a different terminal tick."""
+    path = tmp_path / "replay-seed-0.jsonl"
+    write_completed_replay(path)
+    rows = [json.loads(line) for line in path.read_text().splitlines()]
+    rows[-1]["tick"] += 41
+    path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+    with pytest.raises(ReplayIntegrityError, match="terminal_tick_mismatch"):
+        ReplayLoader(replay_dir=tmp_path).load_replay("headless-seed-0")
 
-    On every orchestrator-shaped recording the two coincide (``GameOverEvent.tick``
-    is the emitting tick), so a fixture must force them apart or the
-    recorded-tick path in ``_finale_view`` is unobserved — deleting the
-    ``_ReplaySummary.final_tick`` threading would leave every other finale pin
-    green (Task 19.10 review). The writer permits the disagreement: ``tick`` is a
-    free argument on ``ReplayLog.record_game_end``.
-    """
 
-    write_sample_replay(
-        tmp_path / "replay-seed-0.jsonl", seed=0, ticks=3, game_end_tick=41
-    )
+def test_finale_final_tick_falls_back_without_a_recorded_tick(tmp_path: Path) -> None:
+    """Legacy omission is compatible when the outcome itself is engine-backed."""
+    path = tmp_path / "replay-seed-0.jsonl"
+    write_completed_replay(path)
+    rows = [json.loads(line) for line in path.read_text().splitlines()]
+    terminal_tick = rows[-1].pop("tick")
+    path.write_text("".join(json.dumps(row) + "\n" for row in rows))
     replay = ReplayLoader(replay_dir=tmp_path).load_replay("headless-seed-0")
-    finale = replay.finale
-    assert finale is not None
-    assert replay.ticks[-1].tick == 2, "the walk position the fallback would pick"
-    assert finale.final_tick == 41, "the recorded row wins over the walk position"
-    assert [(e.tick, e.kind) for e in finale.decisive_events] == [(41, "game_end")]
+    assert replay.finale is not None
+    assert replay.finale.final_tick == replay.ticks[-1].tick == terminal_tick
 
 
-def test_finale_final_tick_falls_back_to_the_walk_without_a_recorded_tick(
-    tmp_path: Path,
-) -> None:
-    """A game-end row with no ``tick`` (a direct-``ReplayLog`` writer) falls back
-    to where the walk stopped — the documented ``_finale_view`` fallback."""
-
-    write_sample_replay(
-        tmp_path / "replay-seed-0.jsonl", seed=0, ticks=3, game_end_tick=None
-    )
+def test_finale_without_meetings_has_no_ballot_recaps(tmp_path: Path) -> None:
+    """A meeting-free parity win has kill/end beats and no attributed votes."""
+    write_completed_replay(tmp_path / "replay-seed-0.jsonl")
     replay = ReplayLoader(replay_dir=tmp_path).load_replay("headless-seed-0")
-    finale = replay.finale
-    assert finale is not None
-    assert finale.final_tick == replay.ticks[-1].tick == 2
-
-
-def test_finale_degrades_to_the_terminal_beat_without_meetings(
-    meeting_loader: ReplayLoader,
-) -> None:
-    """A meeting-less game still gets a finale — one ``game_end`` beat, no votes.
-
-    This is the shape the codegen fidelity fixture records
-    (``scripts/gen_frontend_types.py``), so it must never raise: no meetings
-    means no ballots, hence ``final_vote_target is None`` on every recap, and the
-    decisive-events list degrades to the terminal beat alone rather than being
-    empty (the card still has a tick to name).
-    """
-
-    replay = meeting_loader.load_replay("headless-seed-0")
     assert replay.meetings == ()
     finale = replay.finale
     assert finale is not None
-    assert finale.winner == "CREWMATES"
-    assert finale.final_tick == 2
-    assert [(e.tick, e.kind) for e in finale.decisive_events] == [(2, "game_end")]
-    assert {r.agent_id for r in finale.agent_recaps} == {
-        p.agent_id for p in replay.players
+    assert finale.winner == "IMPOSTORS"
+    assert [event.kind for event in finale.decisive_events] == [
+        "kill",
+        "kill",
+        "game_end",
+    ]
+    assert finale.final_tick == replay.ticks[-1].tick
+    assert {recap.agent_id for recap in finale.agent_recaps} == {
+        player.agent_id for player in replay.players
     }
-    for recap in finale.agent_recaps:
-        assert recap.final_vote_target is None
-        assert recap.final_vote_named_impostor is None
-    assert all(t.meeting_resolution is None for t in replay.ticks)
+    assert all(recap.final_vote_target is None for recap in finale.agent_recaps)
+    assert all(recap.final_vote_named_impostor is None for recap in finale.agent_recaps)
+    assert all(tick.meeting_resolution is None for tick in replay.ticks)
 
 
 # ---------------------------------------------------------------------------
@@ -1177,8 +1168,12 @@ def _write_manifest_flags(
     )
 
 
-def _facts() -> dict[str, object]:
+def _facts(replay_dir: Path) -> dict[str, object]:
+    from orchestrator.recording_fingerprint import recording_fingerprint
+
+    (replay_dir / "replay-seed-5.jsonl").write_text("synthetic scorer input\n")
     return {
+        "source_fingerprint": recording_fingerprint(replay_dir),
         "seedset": "9p2i",
         "git_head": "ignored-rest-stamped",
         "games": [
@@ -1228,7 +1223,9 @@ def test_rubric_stamps_git_sha_from_8col_flags_manifest(tmp_path: Path) -> None:
     # The rubric producer's _set_manifest_sha must likewise read git_sha (not the
     # date) from the 8-column manifest, so the freshness guard stays meaningful.
     _write_manifest_flags(tmp_path, "1e48c40", refreshed_at="2026-06-30")
-    _rubric_score.regen_for_set(_facts(), tmp_path)  # no git_head -> stamps set sha
+    _rubric_score.regen_for_set(
+        _facts(tmp_path), tmp_path
+    )  # no git_head -> stamps set sha
     view = ReplayLoader(replay_dir=tmp_path).rubric()
     assert view.git_head == "1e48c40"
     assert view.manifest_sha == "1e48c40"
@@ -1246,7 +1243,8 @@ def test_rubric_is_stale_prefix_logic() -> None:
 def test_rubric_regen_producer_and_staleness(tmp_path: Path) -> None:
     # The PRODUCER co-locates the rubric, stamped with a chosen git_head.
     fresh_head = "1e48c40aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-    dest = _rubric_score.regen_for_set(_facts(), tmp_path, git_head=fresh_head)
+    _write_manifest(tmp_path, "1e48c40")
+    dest = _rubric_score.regen_for_set(_facts(tmp_path), tmp_path, git_head=fresh_head)
     assert dest == tmp_path / "results-rubric-score.json"
 
     # The loader SERVES it and reports FRESH when the rubric commit prefixes the
@@ -1262,7 +1260,7 @@ def test_rubric_regen_producer_and_staleness(tmp_path: Path) -> None:
     assert view.per_game[0].win_shape == "eject-decided"
 
     # A rubric scored at a different commit reads STALE.
-    _rubric_score.regen_for_set(_facts(), tmp_path, git_head="deadbeefdeadbeef")
+    _rubric_score.regen_for_set(_facts(tmp_path), tmp_path, git_head="deadbeefdeadbeef")
     assert ReplayLoader(replay_dir=tmp_path).rubric().stale is True
 
 
@@ -1272,7 +1270,7 @@ def test_rubric_regen_defaults_to_set_manifest_sha(tmp_path: Path) -> None:
     # and the stamp is independent of cwd / git HEAD (review fixes for the
     # refresh-path + committed-artifact staleness).
     _write_manifest(tmp_path, "1e48c40")
-    _rubric_score.regen_for_set(_facts(), tmp_path)
+    _rubric_score.regen_for_set(_facts(tmp_path), tmp_path)
     view = ReplayLoader(replay_dir=tmp_path).rubric()
     assert view.git_head == "1e48c40"
     assert view.stale is False
@@ -1306,14 +1304,14 @@ def test_rubric_set_mismatch_is_stale(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     _write_manifest(tmp_path, "1e48c40")
-    facts = {**_facts(), "seedset": "4p1i"}
+    facts = {**_facts(tmp_path), "seedset": "4p1i"}
     _rubric_score.regen_for_set(facts, tmp_path, git_head="1e48c40")
     view = ReplayLoader(replay_dir=tmp_path).rubric()
     assert view.seedset == "4p1i"
     assert view.stale is True  # set mismatch, despite the matching sha
 
     # The right-set rubric (seedset 9p2i) over the same roster reads FRESH.
-    _rubric_score.regen_for_set(_facts(), tmp_path, git_head="1e48c40")
+    _rubric_score.regen_for_set(_facts(tmp_path), tmp_path, git_head="1e48c40")
     assert ReplayLoader(replay_dir=tmp_path).rubric().stale is False
 
 
@@ -1350,6 +1348,49 @@ def test_fidelity_fixture_round_trips_payload_and_narrows_unions() -> None:
         assert f"_narrow_{union}(e: {union}): {union}" in fidelity
     assert "const _exhaustive: never = e;" in fidelity
     assert 'case "vent":' in fidelity
+    payload = fidelity.split("export const _fidelityReplay: ReplayView = ", 1)[1]
+    payload = payload.split(";\nvoid _fidelityReplay;", 1)[0]
+    _assert_fidelity_terminal_subtree(json.loads(payload))
+
+
+def _assert_fidelity_terminal_subtree(payload: dict[str, Any]) -> None:
+    """Finale type coverage must come from the genuine completed replay."""
+    assert payload["metadata"]["completion_status"] == "completed"
+    assert payload["metadata"]["outcome_verified"] is True
+    finale = payload["finale"]
+    assert finale is not None
+    assert finale["winner"] == payload["metadata"]["winner"]
+    assert {row["agent_id"] for row in finale["agent_recaps"]} == {
+        player["agent_id"] for player in payload["players"]
+    }
+    assert {event["kind"] for event in finale["decisive_events"]} >= {
+        "kill",
+        "game_end",
+    }
+
+
+@pytest.mark.parametrize(
+    "missing",
+    (
+        "completion_status",
+        "outcome_verified",
+        "finale",
+        "agent_recaps",
+        "decisive_events",
+    ),
+)
+def test_fidelity_terminal_gate_rejects_incomplete_payload(missing: str) -> None:
+    payload = json.loads(gen_frontend_types._real_replay_payload())
+    if missing == "completion_status":
+        payload["metadata"][missing] = "unfinished"
+    elif missing == "outcome_verified":
+        payload["metadata"][missing] = False
+    elif missing == "finale":
+        payload["finale"] = None
+    else:
+        payload["finale"][missing] = []
+    with pytest.raises(AssertionError):
+        _assert_fidelity_terminal_subtree(payload)
 
 
 def test_skip_target_constant_round_trips_through_gate() -> None:

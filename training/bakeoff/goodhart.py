@@ -103,6 +103,8 @@ from observation.action_intent import (
     WaitIntent,
 )
 from orchestrator.game import MeetingRunner
+from training.provenance import EvidenceScope
+
 from training.bakeoff.es import ESConfig, ESResult, evolve
 from training.conviction.dataset import build_conviction_table
 from training.conviction.fidelity import CONVICTION_CONVERSION_DECISION_THRESHOLD
@@ -1530,6 +1532,7 @@ class _ConvictionArmReader:
         term: "ConvictionFitnessTerm",
         conviction_artifact_dir: Path,
         meeting_runner_factory: MeetingRunnerFactory | None = None,
+        evidence_scope: EvidenceScope | None = None,
     ) -> None:
         self._num_players = num_players
         self._num_impostors = num_impostors
@@ -1538,6 +1541,7 @@ class _ConvictionArmReader:
         self._baseline_id = baseline_id
         self._term = term
         self._artifact_dir = conviction_artifact_dir
+        self._evidence_scope = evidence_scope or term.evidence_scope
         self._meeting_runner_factory = meeting_runner_factory
 
     def read(
@@ -1590,6 +1594,7 @@ class _ConvictionArmReader:
             prescreen = conviction_prescreen(
                 [row.features for row in rows],
                 artifact_dir=self._artifact_dir,
+                evidence_scope=self._evidence_scope,
                 use_counter=self._term.use_counter,
             )
 
@@ -1987,6 +1992,7 @@ def run_conviction_path_probe(
     conviction_weight: float | None = None,
     use_counter: ConvictionUseCounter | None = None,
     meeting_runner_factory: MeetingRunnerFactory | None = None,
+    evidence_scope: EvidenceScope = "current",
 ) -> ConvictionPathProbeReport:
     """Run the 18.18 re-probe: the standing probe + the conviction-path arms.
 
@@ -2028,7 +2034,10 @@ def run_conviction_path_probe(
         DEFAULT_CONVICTION_WEIGHT if conviction_weight is None else conviction_weight
     )
     term = load_conviction_fitness_term(
-        artifact_dir, use_counter=use_counter, weight=weight
+        artifact_dir,
+        use_counter=use_counter,
+        weight=weight,
+        evidence_scope=evidence_scope,
     )
     if term is None:
         raise ValueError(
@@ -2064,6 +2073,7 @@ def run_conviction_path_probe(
         term=term,
         conviction_artifact_dir=artifact_dir,
         meeting_runner_factory=meeting_runner_factory,
+        evidence_scope=evidence_scope,
     )
     raws = [reader.read(None, label="scripted-FSM baseline", tactic=_BASELINE_TACTIC)]
     for tactic in _SWEEP_TACTICS:

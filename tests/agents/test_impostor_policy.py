@@ -1055,7 +1055,7 @@ class TestImpostorVentCover:
 
     def test_vent_enter_suppressed_when_witness_co_present(self) -> None:
         # A non-teammate witness shares the body room: a vent and a walk are equal
-        # exposure (and a vent would add a heard_vent_use tell), so the impostor
+        # exposure (and a vent would add a witnessed-vent observation), so the impostor
         # falls back to the move-away. MEDBAY's only neighbor is CAFETERIA.
         store = _store_with(
             _self_state_event(tick=10, room="MEDBAY"),

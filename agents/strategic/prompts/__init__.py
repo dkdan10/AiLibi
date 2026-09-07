@@ -21,6 +21,8 @@ from agents.strategic.prompts.loader import (
     crewmate_report_prompt,
     impostor_report_prompt,
     resolve_prompt_set,
+    public_account_prompt_versions,
+    validate_public_account_renderers,
     vote_ballot_prompt,
 )
 
@@ -38,5 +40,7 @@ __all__ = [
     "crewmate_report_prompt",
     "impostor_report_prompt",
     "resolve_prompt_set",
+    "public_account_prompt_versions",
+    "validate_public_account_renderers",
     "vote_ballot_prompt",
 ]

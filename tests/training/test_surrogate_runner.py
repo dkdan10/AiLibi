@@ -107,7 +107,7 @@ from training.surrogate.runner import (
     SurrogateStalenessExceededError,
     SurrogateUseCounter,
     _meeting_index_from_id,  # noqa: PLC2701 - the id-parse fence is under test
-    fit_corpus_fingerprint,
+    historical_fit_corpus_fingerprint,
     load_fit_corpus_record,
     load_surrogate_runner_factory,
     load_surrogate_verdict,
@@ -374,7 +374,7 @@ def _run_surrogate_game(seed: int, out_dir: Path) -> _SurrogateGameRun:
 
     out_dir.mkdir(parents=True, exist_ok=True)
     replay_path = out_dir / f"replay-seed-{seed}.jsonl"
-    factory = load_surrogate_runner_factory(_ARTIFACT_DIR)
+    factory = load_surrogate_runner_factory(_ARTIFACT_DIR, evidence_scope="historical")
     recording_runner = _RecordingRunner(factory())
     absorbed: list[PlayerId] = []
     base_factory = build_default_agent_factory()
@@ -422,7 +422,7 @@ def surrogate_game(tmp_path_factory: pytest.TempPathFactory) -> _SurrogateGameRu
 def test_runner_satisfies_meeting_runner_protocol() -> None:
     """A :class:`SurrogateMeetingRunner` IS a runtime-checkable MeetingRunner."""
 
-    runner = load_surrogate_runner_factory(_ARTIFACT_DIR)()
+    runner = load_surrogate_runner_factory(_ARTIFACT_DIR, evidence_scope="historical")()
     assert isinstance(runner, SurrogateMeetingRunner)
     assert isinstance(runner, MeetingRunner)
 
@@ -550,7 +550,7 @@ def test_the_committed_surrogate_is_a_baseline8_fit_on_the_baseline8_corpus(
     live_fit_meetings = sum(1 for v in views if v.seed not in test_seeds)
     assert live_fit_meetings == record.fit_side_meetings
     assert derive_max_uses(live_fit_meetings) == cap.max_uses
-    assert record.corpus_sha256 == fit_corpus_fingerprint(_CORPUS)
+    assert record.corpus_sha256 == historical_fit_corpus_fingerprint(_CORPUS)
 
 
 def test_fit_corpus_fence_fails_loud_on_substrate_and_key_drift(
@@ -574,11 +574,17 @@ def test_fit_corpus_fence_fails_loud_on_substrate_and_key_drift(
     # Loading against the WRONG corpus (the 4p1i set) fingerprints differently.
     with pytest.raises(ValueError, match="substrate drifted"):
         load_surrogate_runner_factory(
-            _ARTIFACT_DIR, corpus_dir=_REPO_ROOT / "replays" / "ml_corpus" / "4p1i"
+            _ARTIFACT_DIR,
+            corpus_dir=_REPO_ROOT / "replays" / "ml_corpus" / "4p1i",
+            evidence_scope="historical",
         )
     # The gate is a gate, not a wall: the committed artifact against the corpus it
     # was actually fitted on loads clean, fingerprint check and all.
-    assert callable(load_surrogate_runner_factory(_ARTIFACT_DIR, corpus_dir=_CORPUS))
+    assert callable(
+        load_surrogate_runner_factory(
+            _ARTIFACT_DIR, corpus_dir=_CORPUS, evidence_scope="historical"
+        )
+    )
 
     # The planted refusal: a copied artifact whose record names a corpus digest
     # nothing on disk produces. One flipped nibble is enough — the fence compares
@@ -590,7 +596,7 @@ def test_fit_corpus_fence_fails_loud_on_substrate_and_key_drift(
     ):
         (tmp_path / name).write_text((_ARTIFACT_DIR / name).read_text())
     committed_record = load_fit_corpus_record(_ARTIFACT_DIR)
-    live_fingerprint = fit_corpus_fingerprint(_CORPUS)
+    live_fingerprint = historical_fit_corpus_fingerprint(_CORPUS)
     assert committed_record.corpus_sha256 == live_fingerprint
     perturbed = committed_record.model_copy(
         update={
@@ -602,7 +608,9 @@ def test_fit_corpus_fence_fails_loud_on_substrate_and_key_drift(
         perturbed.model_dump_json(indent=2) + "\n"
     )
     with pytest.raises(ValueError, match="substrate drifted"):
-        load_surrogate_runner_factory(tmp_path, corpus_dir=_CORPUS)
+        load_surrogate_runner_factory(
+            tmp_path, corpus_dir=_CORPUS, evidence_scope="historical"
+        )
 
     # A copied artifact whose fit-corpus record is keyed to DIFFERENT weights
     # (a botched re-fit that moved the weights but not the corpus record).
@@ -617,12 +625,12 @@ def test_fit_corpus_fence_fails_loud_on_substrate_and_key_drift(
     )
     (tmp_path / "fit-corpus.json").write_text(drifted.model_dump_json(indent=2) + "\n")
     with pytest.raises(ValueError, match="fit-corpus record and the artifact"):
-        load_surrogate_runner_factory(tmp_path)
+        load_surrogate_runner_factory(tmp_path, evidence_scope="historical")
 
     # An artifact with weights + cap but NO fit-corpus record fails loud.
     (tmp_path / "fit-corpus.json").unlink()
     with pytest.raises(FileNotFoundError, match="fit-corpus provenance"):
-        load_surrogate_runner_factory(tmp_path)
+        load_surrogate_runner_factory(tmp_path, evidence_scope="historical")
 
 
 # --------------------------------------------------------------------------- #
@@ -744,21 +752,21 @@ def test_the_install_gate_refuses_the_committed_no_go_as_a_training_runner(
     fidelity and probe runner, and a gate that blocked it would have retired a
     live capability instead of guarding one.
 
-    The planted GO case proves the refusal is keyed on the COMPOSED ``verdict``
-    field: the same artifact with a GO composed field installs, and — with the
-    reporting halves left NO-GO to make the point — the gate neither reads them
-    nor re-conjoins them. A GO verdict keyed to OTHER weights is refused before
-    the verdict is even consulted, so a stale or copied verdict cannot authorize
-    an artifact nobody judged.
+    A planted GO verdict remains blocked by the independent current-fit fence.
+    A verdict naming other weights fails its own earlier identity check.
     """
 
     with pytest.raises(ValueError, match="DIAGNOSTIC-ONLY"):
         load_surrogate_runner_factory(
             _ARTIFACT_DIR, install_role="training-time-runner"
         )
-    assert callable(load_surrogate_runner_factory(_ARTIFACT_DIR))
     assert callable(
-        load_surrogate_runner_factory(_ARTIFACT_DIR, install_role="diagnostic")
+        load_surrogate_runner_factory(_ARTIFACT_DIR, evidence_scope="historical")
+    )
+    assert callable(
+        load_surrogate_runner_factory(
+            _ARTIFACT_DIR, install_role="diagnostic", evidence_scope="historical"
+        )
     )
 
     for name in (
@@ -773,9 +781,9 @@ def test_the_install_gate_refuses_the_committed_no_go_as_a_training_runner(
     )
     assert (promoted.ranking_verdict, promoted.decision_verdict) == ("GO", "NO-GO")
     write_surrogate_verdict_artifact(promoted, tmp_path)
-    assert callable(
+    # A verdict change cannot relabel an old fit as current evidence.
+    with pytest.raises(ValueError, match="historical version-one"):
         load_surrogate_runner_factory(tmp_path, install_role="training-time-runner")
-    )
 
     # A GO verdict that judged OTHER weights authorizes nothing here — checked
     # BEFORE the verdict value, so a stale copied GO cannot seat new weights.
@@ -784,14 +792,18 @@ def test_the_install_gate_refuses_the_committed_no_go_as_a_training_runner(
     )
     with pytest.raises(ValueError, match="a verdict that judged other weights"):
         load_surrogate_runner_factory(tmp_path, install_role="training-time-runner")
-    assert callable(load_surrogate_runner_factory(tmp_path))
+    assert callable(
+        load_surrogate_runner_factory(tmp_path, evidence_scope="historical")
+    )
 
     # And an artifact with no verdict at all cannot be installed as the runner,
     # while it still loads for the diagnostic paths.
     (tmp_path / SURROGATE_VERDICT_FILENAME).unlink()
     with pytest.raises(FileNotFoundError, match="no committed surrogate verdict"):
         load_surrogate_runner_factory(tmp_path, install_role="training-time-runner")
-    assert callable(load_surrogate_runner_factory(tmp_path))
+    assert callable(
+        load_surrogate_runner_factory(tmp_path, evidence_scope="historical")
+    )
 
 
 def test_committed_artifact_round_trips_and_the_refit_no_longer_matches(
@@ -1412,7 +1424,9 @@ def test_fallback_a_trains_today_regardless_of_verdict() -> None:
 
     # The diagnostic surrogate path also completes when opted into.
     surrogate_env = TacticalRolloutEnv(
-        meeting_runner_factory=load_surrogate_runner_factory(_ARTIFACT_DIR),
+        meeting_runner_factory=load_surrogate_runner_factory(
+            _ARTIFACT_DIR, evidence_scope="historical"
+        ),
         no_replay=True,
     )
     surrogate_episode = surrogate_env.rollout(2)
@@ -1462,18 +1476,26 @@ def test_factory_rejects_a_loosened_or_foreign_shared_counter() -> None:
         )
     )
     with pytest.raises(ValueError, match="never.*loosen"):
-        load_surrogate_runner_factory(_ARTIFACT_DIR, use_counter=loosened)
+        load_surrogate_runner_factory(
+            _ARTIFACT_DIR, use_counter=loosened, evidence_scope="historical"
+        )
 
     foreign = SurrogateUseCounter(
         SurrogateStalenessCap(weights_sha256="a" * 64, max_uses=1, unit="meetings")
     )
     with pytest.raises(ValueError, match="never meters two artifacts"):
-        load_surrogate_runner_factory(_ARTIFACT_DIR, use_counter=foreign)
+        load_surrogate_runner_factory(
+            _ARTIFACT_DIR, use_counter=foreign, evidence_scope="historical"
+        )
 
     # A TIGHTER shared counter is accepted (the cumulative-metering test relies
     # on exactly this), and an equal one trivially so.
     equal = SurrogateUseCounter(committed_cap)
-    assert callable(load_surrogate_runner_factory(_ARTIFACT_DIR, use_counter=equal))
+    assert callable(
+        load_surrogate_runner_factory(
+            _ARTIFACT_DIR, use_counter=equal, evidence_scope="historical"
+        )
+    )
 
 
 def _canned_agents(state: WorldState) -> dict[PlayerId, AgentInterface]:
@@ -1492,7 +1514,9 @@ def test_cap_is_cumulative_across_fresh_runner_instances() -> None:
     counter = SurrogateUseCounter(
         SurrogateStalenessCap(weights_sha256=committed_sha, max_uses=2, unit="meetings")
     )
-    factory = load_surrogate_runner_factory(_ARTIFACT_DIR, use_counter=counter)
+    factory = load_surrogate_runner_factory(
+        _ARTIFACT_DIR, use_counter=counter, evidence_scope="historical"
+    )
 
     game_map = load_canonical_map()
     state = seed_initial_state(
@@ -1536,9 +1560,9 @@ def test_missing_artifact_and_malformed_meeting_id_fail_loud(tmp_path: Path) -> 
     """An artifact-less dir raises FileNotFoundError; a bad meeting_id raises ValueError."""
 
     with pytest.raises(FileNotFoundError):
-        load_surrogate_runner_factory(tmp_path)
+        load_surrogate_runner_factory(tmp_path, evidence_scope="historical")
 
-    runner = load_surrogate_runner_factory(_ARTIFACT_DIR)()
+    runner = load_surrogate_runner_factory(_ARTIFACT_DIR, evidence_scope="historical")()
     game_map = load_canonical_map()
     state = seed_initial_state(
         seed=0,
@@ -1575,7 +1599,7 @@ def test_impostor_ballot_never_names_a_fellow_impostor() -> None:
     teammates lands on SKIP (the guard chain's terminal shape).
     """
 
-    runner = load_surrogate_runner_factory(_ARTIFACT_DIR)()
+    runner = load_surrogate_runner_factory(_ARTIFACT_DIR, evidence_scope="historical")()
     game_map = load_canonical_map()
     state = seed_initial_state(
         seed=0,

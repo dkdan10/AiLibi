@@ -1,29 +1,31 @@
 <!-- OWNER: confirm wording — first person, the author's own account; every figure is quoted from a committed source. -->
 # What I learned
 
-I built AiLibi between May and August 2026 without writing production code by hand. I wrote
-the task contracts and the standing rules; coding agents wrote the code; a second model
-reviewed it and, in August, audited the whole thing in three blind tracks. Here is what that
-taught me, including the parts that do not flatter the method.
+I directed AiLibi's initial build from May through August 2026 without writing
+production code by hand. Coding agents implemented the system and a second model
+reviewed it; the August review used independent gameplay, code, and portfolio
+tracks. September's cleanup adds Codex implementation and agent-drafted task
+cards under my direction. The distinction matters: directing and reviewing work
+is an ownership claim, not a claim to have personally written every artifact.
 <!-- OWNER: end. -->
 
 ## Directing coding agents at scale
 
-The unit of work is a written contract, not a conversation. Each one names a branch, its
-dependencies, the files in scope, the files explicitly *out* of scope, and a definition of
-done that ends in a command anyone can run. A generator copies that contract into the
-agent's prompt verbatim, and the gate fails the moment the two disagree, so the prompt cannot
-quietly become a different task than the one I reviewed. Each agent runs in a fresh checkout
-of its own, which is what makes a dozen of them safe to run at the same time.
+The original phase workflow used written contracts with separate branches,
+explicit scope, and executable acceptance criteria. Generated prompts and
+fresh checkouts supported that build. The [cleanup workflow](workflow.md) now
+uses one canonical card per change, explicit shared-file ownership, independent
+review, and focused commits on one working branch. Historical contracts keep
+their checks; new work does not need a second generated copy of its instructions.
 
 Three habits did more for throughput than any amount of prompt wording. The first is
 re-anchoring. A contract written weeks earlier cites files and line numbers that have since
 moved, and a competent agent follows a stale pointer to the wrong place — so before
 dispatching I re-read every anchor and commit the corrections as their own change. The second
 is refusing outside patches: this repository
-[takes issues, not pull requests](../CONTRIBUTING.md), because the claim it makes is that
-every line arrived through a contract I wrote and a gate I can re-run, and a merged drive-by
-would make that claim false. The third is contracting for both answers before a measurement
+[takes issues, not pull requests](../CONTRIBUTING.md), to keep project direction, agent contributions,
+and acceptance evidence attributable. A contract may be agent-drafted; the
+important ownership decision is what work to authorize and accept. The third is contracting for both answers before a measurement
 runs, so a rule that says no is prose, not a redesign.
 
 ## The code was right and the game was wrong
@@ -93,14 +95,17 @@ two bars: convictions reached without engine-certified proof came up short by le
 single wrongful ejection, and wrongful ejections came in over the ceiling I had set. Under the
 rule as written that is a finding, not an adoption. I recorded the miss, put it on the front
 page, and adopted the recording anyway — by an explicit override carrying my name and date,
-stated as an override rather than a pass. Two earlier phases of learned-policy search ended
-the same way: policies that won more games all failed an evidence bar written down *before*
+stated as an override rather than a pass. Two earlier phases of learned-policy search made a different adoption decision: policies that won more games all failed an evidence bar written down *before*
 the measurement, and both closed having adopted nothing. The discipline is worth nothing
 unless the bar can say no, and the only proof that it can is a published miss.
 
-The recording after it missed a bar built for one case only: the class I set out to fix,
-fixed, and still the majority of the smaller total left behind. A bar aimed at the failure you
-would most want to excuse beats one on the headline number.
+The [next reasoning experiment](../audits/audit-phase-21-adopting-record.md)
+also returned FINDING, and this time there was no override. Three of four
+pre-registered checks passed; the reporter's share of innocent ejections missed.
+The default recording stayed unchanged and the candidate changes stayed off.
+A decrease in total errors did not excuse the remaining concentration of harm.
+The published miss and the decision to retain the default are both part of the
+result; implementing a candidate was not enough to adopt it.
 
 ## The critique I am keeping
 
@@ -112,15 +117,14 @@ over the measurement that makes it concrete: **95,824 lines of process narration
 generated prompts, audits — against **57,776 lines of core product Python**, a ratio of 1.66
 to 1, against **3,358 lines of durable engineering documentation**.
 
-Half of that ratio I would defend. The contracts are not commentary on the work; they *are* the
-work, in the sense that they are what the agents executed, and a project built this way has to
-write down more than one built by hand. The third number is the indictment. The durable half —
-the pages someone else could read to understand the system — is the smallest of the three, and
-it stayed smallest for nineteen phases for one reason: no gate required it. When the critique
-arrived my instinct was to answer it with another instrument, which is precisely the behaviour
-it names. The honest answer is that some of the apparatus should have stopped being built two
-phases before it did, that I could not have seen that from the inside, and that an outside read
-was the cheapest way to find out. This page is the answer, not a tool.
+Some extra process is necessary when agents execute the implementation: a reader
+needs to know what they were asked to do and how it was checked. The smaller
+investment in durable documentation is harder to defend. Adding another
+instrument does not answer a criticism about too many instruments. The cleanup
+therefore keeps the historical evidence but shortens the active instructions,
+uses one task card, and puts the visitor's questions before the build history.
+Whether that helps should be judged by the resulting experience and the defects
+independent review still finds, not by another count of documents produced.
 
 ---
 

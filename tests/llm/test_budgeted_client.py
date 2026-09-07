@@ -28,13 +28,20 @@ from pathlib import Path
 from typing import TypeVar
 
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from engine.world import load_canonical_map
 from llm.budget import BudgetExceededError, GameBudget
 from llm.budgeted_client import BudgetedLLMClient
 from llm.client import CallKind, LLMClient, LLMResponse, TokenUsage
 from llm.fake_provider import FakeProvider
+from llm.featherless_client import FeatherlessClient, FeatherlessRawResponse
+from llm.provider import (
+    DEFAULT_MEETING_MODEL,
+    AnthropicClient,
+    AnthropicRawResponse,
+    extract_parse_failure,
+)
 from orchestrator.game import (
     HeadlessGame,
     build_default_agent_factory,
@@ -223,6 +230,192 @@ class TestDelegation:
         assert snapshot.cost_usd == pytest.approx(0.012)
         assert snapshot.input_tokens == 100
         assert snapshot.output_tokens == 20
+
+    def test_successful_response_overrun_stays_charged_and_blocks_retry(self) -> None:
+        inner = _RecordingClient(
+            response_cost_usd=0.02,
+            response_input_tokens=100,
+            response_output_tokens=20,
+        )
+        budget = GameBudget(max_cost_usd=0.01)
+        adapter = BudgetedLLMClient(inner=inner, budget=budget)
+
+        with pytest.raises(BudgetExceededError):
+            _run(
+                adapter.complete(prompt="hi", schema=None, max_tokens=10, temperature=0)
+            )
+
+        snapshot = budget.snapshot()
+        assert snapshot.cost_usd == pytest.approx(0.02)
+        assert snapshot.input_tokens == 100
+        assert snapshot.output_tokens == 20
+        assert adapter._in_flight_cost_usd == 0.0  # noqa: SLF001
+        assert adapter._in_flight_input_tokens == 0  # noqa: SLF001
+        assert adapter._in_flight_output_tokens == 0  # noqa: SLF001
+        with pytest.raises(BudgetExceededError):
+            _run(
+                adapter.complete(prompt="hi", schema=None, max_tokens=10, temperature=0)
+            )
+        assert len(inner.calls) == 1
+        assert budget.snapshot() == snapshot
+
+
+class _RequiredField(BaseModel):
+    required: str
+
+
+class TestFailedResponseAccounting:
+    def test_invalid_featherless_responses_consume_tokens_and_preserve_error(
+        self,
+    ) -> None:
+        calls = 0
+
+        async def send(**kwargs: object) -> FeatherlessRawResponse:
+            nonlocal calls
+            calls += 1
+            return FeatherlessRawResponse(
+                text="{}",
+                model="Qwen/Qwen3.6-27B",
+                prompt_tokens=80,
+                completion_tokens=10,
+            )
+
+        budget = GameBudget(max_input_tokens=100, max_output_tokens=100)
+        adapter = BudgetedLLMClient(
+            inner=FeatherlessClient(api_key="injected-test", send=send), budget=budget
+        )
+
+        for count in (1, 2):
+            with pytest.raises(ValidationError) as excinfo:
+                _run(
+                    adapter.complete(
+                        prompt="Return the required field as JSON.",
+                        schema=_RequiredField,
+                        max_tokens=10,
+                        temperature=0,
+                    )
+                )
+            failure = extract_parse_failure(excinfo.value)
+            assert failure is not None
+            assert failure.raw_response == "{}"
+            assert failure.input_tokens == 80
+            assert failure.output_tokens == 10
+            assert failure.error_type == "ValidationError"
+            assert excinfo.value.errors()[0]["loc"] == ("required",)
+            assert budget.snapshot().input_tokens == 80 * count
+            assert budget.snapshot().output_tokens == 10 * count
+            assert budget.snapshot().cost_usd == 0.0
+            if count == 2:
+                assert any(
+                    "LLM budget exceeded on input_tokens" in note
+                    for note in excinfo.value.__notes__
+                )
+            assert adapter._in_flight_input_tokens == 0  # noqa: SLF001
+            assert adapter._in_flight_output_tokens == 0  # noqa: SLF001
+            assert adapter._in_flight_cost_usd == 0.0  # noqa: SLF001
+
+        with pytest.raises(BudgetExceededError):
+            _run(
+                adapter.complete(
+                    prompt="Retry", schema=_RequiredField, max_tokens=10, temperature=0
+                )
+            )
+        assert calls == 2
+        assert budget.snapshot().input_tokens == 160
+        assert budget.snapshot().output_tokens == 20
+
+    def test_invalid_anthropic_response_consumes_reported_cost_once(self) -> None:
+        calls = 0
+
+        async def send(**kwargs: object) -> AnthropicRawResponse:
+            nonlocal calls
+            calls += 1
+            return AnthropicRawResponse(
+                text="{}",
+                model=DEFAULT_MEETING_MODEL,
+                input_tokens=80,
+                output_tokens=10,
+            )
+
+        budget = GameBudget(max_cost_usd=0.0005)
+        adapter = BudgetedLLMClient(
+            inner=AnthropicClient(api_key="injected-test", send=send), budget=budget
+        )
+
+        with pytest.raises(ValidationError) as excinfo:
+            _run(
+                adapter.complete(
+                    prompt="{}", schema=_RequiredField, max_tokens=10, temperature=0
+                )
+            )
+        failure = extract_parse_failure(excinfo.value)
+        assert failure is not None
+        assert failure.cost_usd > 0.0
+        assert budget.snapshot().cost_usd == pytest.approx(failure.cost_usd)
+        assert budget.snapshot().input_tokens == 80
+        assert budget.snapshot().output_tokens == 10
+
+        with pytest.raises(BudgetExceededError) as budget_error:
+            _run(
+                adapter.complete(
+                    prompt="{}", schema=_RequiredField, max_tokens=10, temperature=0
+                )
+            )
+        assert budget_error.value.dimension == "cost_usd"
+        assert calls == 1
+        assert budget.snapshot().cost_usd == pytest.approx(failure.cost_usd)
+
+    def test_concurrent_validation_failures_settle_each_call_once(self) -> None:
+        async def drive() -> None:
+            release = asyncio.Event()
+            calls = 0
+
+            async def send(**kwargs: object) -> FeatherlessRawResponse:
+                nonlocal calls
+                calls += 1
+                await release.wait()
+                return FeatherlessRawResponse(
+                    text="{}",
+                    model="Qwen/Qwen3.6-27B",
+                    prompt_tokens=80,
+                    completion_tokens=10,
+                )
+
+            budget = GameBudget(max_input_tokens=100)
+            adapter = BudgetedLLMClient(
+                inner=FeatherlessClient(api_key="injected-test", send=send),
+                budget=budget,
+            )
+            pending = [
+                asyncio.create_task(
+                    adapter.complete(
+                        prompt=prompt,
+                        schema=_RequiredField,
+                        max_tokens=10,
+                        temperature=0,
+                    )
+                )
+                for prompt in ("a", "b")
+            ]
+            await asyncio.sleep(0)
+            assert calls == 2
+            assert budget.snapshot().input_tokens == 0
+            release.set()
+            failures = await asyncio.gather(*pending, return_exceptions=True)
+
+            assert all(isinstance(failure, ValidationError) for failure in failures)
+            assert budget.snapshot().input_tokens == 160
+            assert budget.snapshot().output_tokens == 20
+            assert adapter._in_flight_input_tokens == 0  # noqa: SLF001
+            assert adapter._in_flight_output_tokens == 0  # noqa: SLF001
+            assert adapter._in_flight_cost_usd == 0.0  # noqa: SLF001
+            with pytest.raises(BudgetExceededError):
+                await adapter.complete(
+                    prompt="retry", schema=_RequiredField, max_tokens=10, temperature=0
+                )
+            assert calls == 2
+
+        _run(drive())
 
 
 # ---------------------------------------------------------------------------
@@ -808,6 +1001,44 @@ class TestProviderAwaitNotSerialized:
         assert adapter._in_flight_cost_usd == 0.0  # noqa: SLF001
         assert adapter._in_flight_input_tokens == 0  # noqa: SLF001
         assert adapter._in_flight_output_tokens == 0  # noqa: SLF001
+
+    def test_cancellation_releases_reservation_without_inventing_spend(self) -> None:
+        async def drive() -> None:
+            release = asyncio.Event()
+            inner = _ControllableInnerClient(response_cost_usd=0.05, release=release)
+            budget = GameBudget(max_cost_usd=0.05)
+            adapter = BudgetedLLMClient(
+                inner=inner,
+                budget=budget,
+                cost_per_input_token_usd=0.0,
+                cost_per_output_token_usd=0.05,
+            )
+            pending = asyncio.create_task(
+                adapter.complete(
+                    prompt="cancel", schema=None, max_tokens=1, temperature=0
+                )
+            )
+            await asyncio.sleep(0)
+            assert inner.calls == ["cancel"]
+            assert not pending.done()
+            pending.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await pending
+
+            assert budget.snapshot().cost_usd == 0.0
+            assert budget.snapshot().input_tokens == 0
+            assert budget.snapshot().output_tokens == 0
+            assert adapter._in_flight_cost_usd == 0.0  # noqa: SLF001
+            assert adapter._in_flight_input_tokens == 0  # noqa: SLF001
+            assert adapter._in_flight_output_tokens == 0  # noqa: SLF001
+            release.set()
+            await adapter.complete(
+                prompt="retry", schema=None, max_tokens=1, temperature=0
+            )
+            assert inner.calls == ["cancel", "retry"]
+            assert budget.snapshot().cost_usd == pytest.approx(0.05)
+
+        _run(drive())
 
 
 @dataclass

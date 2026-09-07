@@ -39,6 +39,24 @@ early audits were commissioned with, and `workflows/` holds the scripts that
 extracted their gameplay facts. The `baseline*-final-measure.json` files are
 recorded measurements, not prose.
 
+`replay-loading-performance/` holds reproducible offline measurements of replay
+payloads, loading, beliefs, and concurrent cache misses during cleanup. Each
+artifact identifies its source and measurement scope; local timings are not a
+deployment capacity claim.
+
+`review-2026-09-06/` preserves the owner's independent Claude review of the
+cleanup branch and its findings appendix, the later follow-up report and its
+own appendix, with subsequent correction notes and source-bound public-results
+measurements. Start at its [review index](review-2026-09-06/README.md).
+
+`deduction-candidate/` holds the unadopted evidence-timing, public-account and
+investigation follow-through, separate code and scenario reviews, and the next
+evaluation's prerequisites. Start at its [evidence index](deduction-candidate/README.md).
+
+`investigation-candidate/` holds the bounded-search implementation review and source-bound
+normal-policy measurements. Its [index](investigation-candidate/README.md) links the
+separate review notes, synthesis and candidate handoff. Candidates remain unadopted.
+
 ## The 2026-08-26 Wave-0 audit — [`review-2026-08-26/`](review-2026-08-26/README.md)
 
 The two-track pre-phase audit that grounds Phase 21: **A** gameplay on the
@@ -351,3 +369,11 @@ directory's `README.md`, which carries the tallies and the proposed routing.
   is that this document is itself held by no gate, and one of the five is a
   narration the previous close had already caught once, re-staled by the
   intervening re-record.
+
+## Cleanup measurements
+
+- [reasoning-evidence/](reasoning-evidence/) — source-bound offline engineering
+  scorecard, historical population diagnostics and explicit non-adoption limits.
+- [tactical-gameplay/](tactical-gameplay/) — independently selected tactical
+  comparisons, held-out mechanics, identity interventions and retained negative
+  controls. Scripted-provider results do not measure new model judgment.

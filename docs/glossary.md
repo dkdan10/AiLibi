@@ -27,8 +27,8 @@ owner ([`audits/audit-phase-19-close.md`](../audits/audit-phase-19-close.md)).
 
 ### agent
 
-An AI coding agent (Claude Code, or Codex for review) working one task contract
-in a fresh checkout — not a player in the simulated game. Where both senses are
+An AI coding agent (Claude or Codex) implementing or reviewing a scoped work
+card. The same word also describes players in the simulated game. Where both senses are
 in play, the game's are **crewmate** and **impostor**.
 
 ---
@@ -63,11 +63,14 @@ can quietly name a different one.
 A behavioural change ships behind an `AILIBI_*` environment gate, then
 *graduates* at a reference recording: the gate is deleted, the behaviour becomes
 unconditional, and the key survives only in the recording stamp for provenance.
-Twenty-one have graduated; four live toggles remain — `impostor_roll_call`,
-`reporter_reasoning`, `corroboration_discipline`, `testimony_shapes`
+Twenty-one have graduated; five live substrate toggles remain — `impostor_roll_call`,
+`reporter_reasoning`, `corroboration_discipline`, `testimony_shapes`,
+`temporal_observations`
 ([`orchestrator/replay.py`](../orchestrator/replay.py));
-graduating obliges a prose sweep ([AGENTS.md](../AGENTS.md), "Graduation
-sweeps").
+graduating requires deleting the mechanism and updating current prose
+([retirement procedure](agent-procedures.md#retiring-substrate-levers)).
+Separately versioned cleanup experiments use the closed recording configuration
+described in [architecture](architecture.md); they do not inflate this registry.
 
 A *repair* gate is not a lever and graduates differently: it records no arm and
 nothing is decided on it, so at its record it is deleted outright and promoted
@@ -92,7 +95,7 @@ default and the learned one stays opt-in. Ruled twice, in the titles of
 
 The largest same-substrate, validity-gated recording set that monitoring metrics
 are judged on — today [`replays/ml_corpus/`](../replays/ml_corpus/README.md),
-about three times the sample sets. Using a bigger denominator than the sets a
+200 games against the 100 sample games. Using a bigger denominator than the sets a
 change was tuned on is the point.
 
 ### findings, not failures
@@ -148,9 +151,18 @@ learned movers exist and are opt-in.
 
 The meeting layer, not the engine, detects contradictions across the transcript
 and *mints* a flag the voters can see
-([`meetings/transcript.py`](../meetings/transcript.py)). A `vent_sighting` flag
-is the one class only an impostor can produce, because it rests on an
-engine-certified observation.
+([`meetings/transcript.py`](../meetings/transcript.py)). A `vent_sighting` flag identifies an impostor subject when a speaker’s vent
+claim matches their witnessed record. The speaker need not be an impostor.
+
+### hard evidence (certified role evidence)
+
+In this game's rules, an attributed witnessed vent or kill establishes an
+impostor role. The meeting layer grounds a spoken vent claim against the
+speaker's actual observation before publishing its proof flag. Other spoken
+placements, contradictions and agreement are different evidence classes; a
+citation alone does not certify their inference
+([observation contract](observation-contract.md),
+[meeting detector](../meetings/transcript.py)).
 
 ### conviction economy (what a meeting does with evidence)
 
@@ -177,8 +189,9 @@ reproduced on a co-adapted slate in
 
 ### roll-call round (the whereabouts round)
 
-A meeting round in which every living player states where they were, before
-anyone is accused, so alibis exist to be checked against
+After the opening, reply chain and information-sharing rounds, the remaining
+silent living players receive a whereabouts turn before voting. This gives
+otherwise unheard players an opportunity to state an account
 ([`meetings/manager.py`](../meetings/manager.py)).
 
 ### endpoint-band whereabouts exemption

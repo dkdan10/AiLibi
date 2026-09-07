@@ -7,13 +7,13 @@ pull requests are not the workflow.**
 
 AiLibi is an experiment in agentic software workflow as much as it is a
 social-deduction simulator. Every coding change is written by an AI coding agent
-working against a task contract authored by the owner, in a fresh checkout, with
+working against a task contract authorized by the owner, in a fresh checkout, with
 CI and a human review as the gates. The contract — not this file, and not a
 conversation on a PR — is the specification the agent sees.
 
 That has a direct consequence for outside contributions: there is no review lane
 for unsolicited code. A drive-by pull request has no contract behind it, no
-place in the phase dependency graph, and no reviewer budget. It will not be
+authorized scope, and no reviewer budget. It will not be
 merged, and saying so up front is fairer than leaving one open.
 
 ## What is welcome
@@ -42,13 +42,21 @@ contract in this repository — the authoritative reading order is:
 1. [AGENTS.md](AGENTS.md) — the standing rules for any agent working here: the
    three load-bearing architectural decisions, the observation firewall, the
    coding conventions, and the definition of done.
-2. `tasks/phase-N.md` — the task contracts. Each names its branch,
-   dependencies, files in and out of scope, definition of done, and section
-   refs. This is the spec.
-3. `agent_prompts/task-*.md` — generated from those contracts by
-   `scripts/generate_prompts.py`. **Never hand-edit a prompt**; edit the
-   contract and regenerate.
-4. [DESIGN.md](DESIGN.md) — the architecture document the contracts reference.
+2. [docs/architecture.md](docs/architecture.md) — the current architecture and
+   enforced boundaries.
+3. [docs/workflow.md](docs/workflow.md) — the task lifecycle, scope rules,
+   verification, and treatment of records and experiments.
+4. The assigned `tasks/work/<slug>.md` card — its outcome, evidence, acceptance,
+   constraints, expected scope, record impact, and validation. The
+   [task index](tasks/README.md) names current work. Dispatch by card path;
+   new cards have no generated prompt copies.
+
+`tasks/phase-*.md` and `agent_prompts/task-*.md` remain historical contracts and
+generated exports. Their checks continue to run. When explicitly resuming a
+phase task, follow its original contract; **never hand-edit its prompt** — edit
+the contract and regenerate. [DESIGN.md](DESIGN.md) and
+[AGENT_IMPLEMENTATION.md](AGENT_IMPLEMENTATION.md) provide design and workflow
+history, not the current reading route.
 
 ## Working on a change locally
 
@@ -58,7 +66,7 @@ bash scripts/check.sh       # the full gate: ruff, import-linter, mypy, pytest, 
 ```
 
 `scripts/check.sh` is the required gate and the one-command local truth: ruff,
-import-linter, mypy, the task-doc and prompt generators, pytest, and the
+import-linter, mypy, task-card and historical-prompt checks, pytest, and the
 frontend lint, typecheck, unit-test and build legs.
 
 CI runs those same checks and one more the script deliberately leaves out: a

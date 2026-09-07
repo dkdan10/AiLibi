@@ -29,20 +29,18 @@ if str(_REPO_ROOT) not in sys.path:
 from pydantic import ValidationError  # noqa: E402
 
 from api.replay_loader import ReplayLoader, ReplayStateMismatchError  # noqa: E402
-from orchestrator.replay import (  # noqa: E402
-    MeetingReplayEntry,
-    ReplayEntry,
-    ReplayLog,
-    read_all_entries,
+from orchestrator.recording_fingerprint import (  # noqa: E402
+    REPLAY_FILENAME_GLOB,
+    replay_seed_from_filename,
 )
+from orchestrator.replay import ReplayLog  # noqa: E402
+from orchestrator.replay_integrity import ReplayIntegrityError  # noqa: E402
 
 # Per-set sample dirs now live under ``replays/samples/<set>/`` (Task 12.12); the
 # verifier walks ONE set dir. Default to the flat 4p1i baseline's new home so a
 # bare ``scripts/verify_samples.sh`` still verifies a real set, and pass an
 # explicit dir (e.g. ``replays/samples/9p2i``) to verify another.
 _DEFAULT_SAMPLE_DIR = _REPO_ROOT / "replays" / "samples" / "4p1i"
-_FILENAME_PREFIX = "replay-seed-"
-_FILENAME_SUFFIX = ".jsonl"
 _MANIFEST_NAME = "MANIFEST.md"
 
 
@@ -66,17 +64,16 @@ class VerifyFailure:
 
 
 def _seed_from_filename(name: str) -> int | None:
-    if not (name.startswith(_FILENAME_PREFIX) and name.endswith(_FILENAME_SUFFIX)):
-        return None
-    core = name[len(_FILENAME_PREFIX) : -len(_FILENAME_SUFFIX)]
-    return int(core) if core.isdigit() else None
+    # One shared recording-filename contract: the verifier walks exactly the
+    # files orchestrator.recording_fingerprint hashes and the loader serves.
+    return replay_seed_from_filename(name)
 
 
 def sample_paths(sample_dir: Path) -> list[Path]:
     """Every ``replay-seed-<seed>.jsonl`` in ``sample_dir``, sorted by seed."""
 
     paths: list[tuple[int, Path]] = []
-    for path in sample_dir.glob(f"{_FILENAME_PREFIX}*{_FILENAME_SUFFIX}"):
+    for path in sample_dir.glob(REPLAY_FILENAME_GLOB):
         seed = _seed_from_filename(path.name)
         if seed is not None:
             paths.append((seed, path))
@@ -113,52 +110,6 @@ def _paths_by_seed(sample_dir: Path) -> dict[int, list[Path]]:
         assert seed is not None  # sample_paths only returns matching names
         by_seed.setdefault(seed, []).append(path)
     return by_seed
-
-
-def _check_meeting_pre_hashes(game_id: str, path: Path) -> VerifyFailure | None:
-    """Cross-check each meeting's recorded ``state_hash_before``.
-
-    ``ReplayLoader.load_replay`` verifies every tick hash and each meeting's
-    ``state_hash_after`` against engine playback, but not ``state_hash_before``.
-    That field equals the trigger-tick state, i.e. the tick hash at the meeting
-    tick — which load_replay *does* verify against reconstruction — so checking
-    ``state_hash_before == tick_hash[tick]`` pins it to a verified value and
-    catches a corrupted pre-hash the loader would otherwise accept.
-
-    A meeting whose ``tick`` matches no recorded tick row is also rejected:
-    load_replay only consults a meeting entry when a *reconstructed* tick enters
-    MEETING phase, so a meeting pointing past the end of the replay is silently
-    dropped there and would otherwise pass as clean.
-    """
-
-    entries = read_all_entries(path)
-    tick_hash = {e.tick: e.state_hash for e in entries if isinstance(e, ReplayEntry)}
-    for entry in entries:
-        if isinstance(entry, MeetingReplayEntry):
-            expected = tick_hash.get(entry.tick)
-            if expected is None:
-                # No tick row at the meeting's tick (e.g. a tick corrupted beyond
-                # the replay). load_replay never attaches such a meeting, leaving
-                # orphaned meeting/transcript metadata Phase 5 might still read.
-                return VerifyFailure(
-                    game_id=game_id,
-                    tick=None,
-                    expected=None,
-                    actual=None,
-                    reason=(
-                        f"meeting references tick {entry.tick}, which has no "
-                        "recorded tick row (orphaned meeting metadata)"
-                    ),
-                )
-            if entry.state_hash_before != expected:
-                return VerifyFailure(
-                    game_id=game_id,
-                    tick=entry.tick,
-                    expected=expected,
-                    actual=entry.state_hash_before,
-                    reason="meeting state_hash_before diverged from the tick hash",
-                )
-    return None
 
 
 def verify_samples(sample_dir: Path) -> list[VerifyFailure]:
@@ -200,6 +151,17 @@ def verify_samples(sample_dir: Path) -> list[VerifyFailure]:
                 )
             )
             continue
+        except ReplayIntegrityError as exc:
+            failures.append(
+                VerifyFailure(
+                    game_id=game_id,
+                    tick=exc.tick,
+                    expected=None,
+                    actual=None,
+                    reason=str(exc),
+                )
+            )
+            continue
         except ReplayLog.CorruptedFileError as exc:
             failures.append(
                 VerifyFailure(
@@ -222,9 +184,6 @@ def verify_samples(sample_dir: Path) -> list[VerifyFailure]:
                 )
             )
             continue
-        pre_hash_failure = _check_meeting_pre_hashes(game_id, paths[0])
-        if pre_hash_failure is not None:
-            failures.append(pre_hash_failure)
 
     # Completeness: the manifest is the provenance source of truth, so the seeds
     # it declares must match the replay files on disk exactly. A bundled sample

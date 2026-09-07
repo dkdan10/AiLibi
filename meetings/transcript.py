@@ -333,6 +333,7 @@ from meetings.schemas import (
     RoomId,
     SawKillObservation,
     SawMoveObservation,
+    TaskActivityAccount,
     SawPlayerObservation,
     SawVentObservation,
     SightingRecord,
@@ -904,24 +905,16 @@ def canonical_rooms(room: str) -> frozenset[str]:
 
 
 def is_weak_contradiction(flag: ContradictionRef) -> bool:
-    """Whether ``flag`` is a detector-flagged weak signal (Tasks 9.7, 10.1).
+    """Read candidate strength from typed detector output, with legacy fallback.
 
-    True iff the flag's description carries the
-    :data:`WEAK_CONTRADICTION_MARKER_PREFIX` audit marker the detector
-    appended -- for an ``alibi_vs_sighting``: a self-stated or
-    narrow-window alibi (9.7) or an endpoint-tick sighting (10.1); for an
-    ``alibi_conflict``: a self-pair, adversarial testimony, a narrow
-    window, or a boundary-tick-only overlap (10.1 -- the conflict path
-    previously never received the 9.7 classification, so self-pairs
-    carried the full Rule-2 delta and drove 5 wrong ejections). Belief
-    Rule 2 (:func:`agents.memory.beliefs.apply_contradiction_rule`) keys
-    its graduated down-weight on this predicate; keeping the predicate
-    beside the marker writer means the two cannot drift. Re-derivable:
-    re-running the pure detector on the same transcript re-produces the
-    same marker, so the classification survives any record/replay
-    round-trip without a schema field.
+    Candidate producers assign the band from their semantic checks. Quoted
+    description text cannot override it. Historical flags have no typed band
+    and retain their recorded marker-based interpretation. Belief updates and
+    public projections share this predicate.
     """
 
+    if flag.evidence_band is not None:
+        return flag.evidence_band == "weak"
     return WEAK_CONTRADICTION_MARKER_PREFIX in flag.description
 
 
@@ -1582,6 +1575,7 @@ def detect_contradictions(
     move_witness_records: Mapping[PlayerId, tuple[MoveWitnessRecord, ...]]
     | None = None,
     sighting_records: Mapping[PlayerId, tuple[SightingRecord, ...]] | None = None,
+    evidence_reasoning_version: Literal[1, 2] | None = None,
 ) -> tuple[ContradictionRef, ...]:
     """Flag incompatible alibi and saw-player claims (DESIGN.md §5.4, §6.4).
 
@@ -1747,6 +1741,9 @@ def detect_contradictions(
     side effects.
     """
 
+    if evidence_reasoning_version is not None:
+        transcript = _escape_untrusted_band_markers(transcript)
+
     # The three grounded-prosecution rules need the records to ground against:
     # a caller with no mapping keeps the pre-grounding rules, which is what makes
     # the record-free re-derivers safe.
@@ -1775,7 +1772,13 @@ def detect_contradictions(
 
     accusation_pairs = _accusation_pairs(transcript)
     flags: list[ContradictionRef] = []
-    flags.extend(_detect_alibi_conflicts(alibis, accusation_pairs=accusation_pairs))
+    flags.extend(
+        _detect_alibi_conflicts(
+            alibis,
+            accusation_pairs=accusation_pairs,
+            evidence_reasoning_version=evidence_reasoning_version,
+        )
+    )
     flags.extend(
         _detect_alibi_vs_sightings(
             alibis=alibis,
@@ -1784,6 +1787,7 @@ def detect_contradictions(
                 alibis=indexed_alibis, sightings=sightings
             ),
             grounded_prosecution=grounded_prosecution,
+            evidence_reasoning_version=evidence_reasoning_version,
         )
     )
     # Task 13.4 (B3/B4): the inferential physical path.
@@ -1834,6 +1838,7 @@ def detect_contradictions(
             accusation_pairs=accusation_pairs,
             kill_scene_paths=kill_scene_paths,
             body_rooms=body_rooms,
+            evidence_reasoning_version=evidence_reasoning_version,
         )
     )
     event_speakers = _event_speaker_index(transcript)
@@ -1851,6 +1856,7 @@ def detect_contradictions(
                 transcript,
                 vent_witness_records=vent_witness_records,
                 roster=effective_roster,
+                evidence_reasoning_version=evidence_reasoning_version,
             )
         )
         # The vent-placement variant joins AFTER the grounded vent flags -- and,
@@ -1864,6 +1870,7 @@ def detect_contradictions(
                 self_alibis=self_alibis,
                 vent_witness_records=vent_witness_records,
                 roster=effective_roster,
+                evidence_reasoning_version=evidence_reasoning_version,
             )
         )
     if grounded_prosecution:
@@ -1876,7 +1883,49 @@ def detect_contradictions(
             sighting_records=sighting_records or {},
             event_speakers=event_speakers,
         )
+    if evidence_reasoning_version == 1 and any(
+        flag.evidence_band is None for flag in guarded
+    ):
+        raise ValueError("candidate detector emitted a flag without typed strength")
     return tuple(sorted(guarded, key=lambda flag: flag.contradiction_id))
+
+
+def _escape_untrusted_band_markers(transcript: MeetingTranscript) -> MeetingTranscript:
+    """Quote marker-like room text before the detector appends its own markers.
+
+    Only the detector's local copy changes. Transcript artifacts and their IDs
+    stay intact; a room spelling cannot author an internal strength annotation.
+    """
+
+    turns: list[MeetingTurn] = []
+    for turn in transcript.turns:
+        observations = []
+        for observation in turn.observations:
+            update = {}
+            for field in ("room", "from_room", "to_room"):
+                value = getattr(observation, field, None)
+                if isinstance(value, str) and WEAK_CONTRADICTION_MARKER_PREFIX in value:
+                    update[field] = value.replace(
+                        WEAK_CONTRADICTION_MARKER_PREFIX, "[quoted weak signal:"
+                    )
+            observations.append(observation.model_copy(update=update))
+        claims = []
+        for claim in turn.claims:
+            if isinstance(claim, AlibiClaim):
+                claim = claim.model_copy(
+                    update={
+                        "room": claim.room.replace(
+                            WEAK_CONTRADICTION_MARKER_PREFIX, "[quoted weak signal:"
+                        )
+                    }
+                )
+            claims.append(claim)
+        turns.append(
+            turn.model_copy(
+                update={"observations": tuple(observations), "claims": tuple(claims)}
+            )
+        )
+    return transcript.model_copy(update={"turns": tuple(turns)})
 
 
 @dataclass(frozen=True)
@@ -2206,7 +2255,13 @@ def _carries_relevant_observation(
         # :func:`_iter_move_placements`), and a spoken kill is ungrounded
         # content that must move no suspicion. None backs an accusation here.
         if isinstance(
-            observation, (WhereaboutsClaim, SawMoveObservation, SawKillObservation)
+            observation,
+            (
+                WhereaboutsClaim,
+                SawMoveObservation,
+                SawKillObservation,
+                TaskActivityAccount,
+            ),
         ):
             continue
         rooms = canonical_rooms(observation.room)
@@ -2345,7 +2400,7 @@ def _iter_alibis(
 ) -> Iterator[_IndexedAlibi]:
     """Yield every location account: alibi claims + whereabouts self-placements.
 
-    Task 16.7: a spoken :class:`~meetings.schemas.WhereaboutsClaim` ("I was
+    A spoken :class:`~meetings.schemas.WhereaboutsClaim` ("I was
     in ``room`` at ``tick``") is indexed as a DEGENERATE SINGLE-TICK
     SELF-ALIBI (subject = the speaker, ``from_tick == to_tick == tick``) so
     the CONTRADICTION consumers of the alibi indexing -- the conflict /
@@ -2353,11 +2408,10 @@ def _iter_alibis(
     dedup -- prosecute a lying self-placement with the alibi rules they
     already have, no new flag kind and no duplicated chronology discipline (a
     single tick satisfies the :class:`~meetings.schemas.AlibiClaim` range
-    validator by construction). The synthesized claim's event id is the
-    OBSERVATION id (:func:`turn_observation_id` -- a whereabouts lives on
-    ``turn.observations``), so a flag referencing it resolves through
-    :func:`_event_speaker_index` and the spectator surface exactly like any
-    other observation. Per turn, claims index before observations -- a fixed
+    validator by construction). The synthesized claim uses the distinct
+    whereabouts id (:func:`_turn_whereabouts_id`), preserving its role as a
+    self-placement account while resolving through :func:`_event_speaker_index`
+    and the spectator surface. Per turn, claims index before observations -- a fixed
     order, so the echo dedup's first-statement-wins is deterministic.
 
     ``include_whereabouts=False`` (the :func:`detect_corroborations` caller)
@@ -2820,6 +2874,7 @@ def _detect_alibi_conflicts(
     alibis: tuple[_IndexedAlibi, ...],
     *,
     accusation_pairs: frozenset[tuple[PlayerId, PlayerId]],
+    evidence_reasoning_version: Literal[1, 2] | None = None,
 ) -> Iterator[ContradictionRef]:
     for i, left in enumerate(alibis):
         for right in alibis[i + 1 :]:
@@ -2859,9 +2914,24 @@ def _detect_alibi_conflicts(
                     left.claim,
                     right.claim,
                     weak_reasons=_conflict_weak_reasons(
-                        left, right, accusation_pairs=accusation_pairs
+                        left,
+                        right,
+                        accusation_pairs=accusation_pairs,
+                        evidence_reasoning_version=evidence_reasoning_version,
                     ),
                 ),
+                evidence_band=(
+                    "weak"
+                    if _conflict_weak_reasons(
+                        left,
+                        right,
+                        accusation_pairs=accusation_pairs,
+                        evidence_reasoning_version=evidence_reasoning_version,
+                    )
+                    else "strong"
+                )
+                if evidence_reasoning_version == 1
+                else None,
             )
 
 
@@ -2871,6 +2941,7 @@ def _detect_alibi_vs_sightings(
     sightings: tuple[_IndexedSighting, ...],
     subject_accounts: Mapping[PlayerId, tuple[_SubjectAccount, ...]],
     grounded_prosecution: bool = False,
+    evidence_reasoning_version: Literal[1, 2] | None = None,
 ) -> Iterator[ContradictionRef]:
     for alibi in alibis:
         if not alibi.rooms:
@@ -2957,6 +3028,7 @@ def _detect_alibi_vs_sightings(
                         alibi=alibi.claim,
                         sighting=sighting.observation,
                     ),
+                    evidence_band=("weak") if evidence_reasoning_version == 1 else None,
                 )
                 continue
             weak_reasons = base_reasons
@@ -2989,6 +3061,9 @@ def _detect_alibi_vs_sightings(
                     sighting=sighting.observation,
                     weak_reasons=weak_reasons,
                 ),
+                evidence_band=("weak" if weak_reasons else "strong")
+                if evidence_reasoning_version == 1
+                else None,
             )
 
 
@@ -3079,6 +3154,7 @@ def _detect_alibi_vs_physical(
     accusation_pairs: frozenset[tuple[PlayerId, PlayerId]],
     kill_scene_paths: Mapping[PlayerId, tuple[StatedPlacement, ...]] | None = None,
     body_rooms: frozenset[str] = frozenset(),
+    evidence_reasoning_version: Literal[1, 2] | None = None,
 ) -> Iterator[ContradictionRef]:
     """The Task 13.4 inferential ``alibi_vs_physical`` flags (B3/B4).
 
@@ -3246,6 +3322,9 @@ def _detect_alibi_vs_physical(
                     weak_reasons=weak_reasons,
                     kill_scene=is_kill_scene,
                 ),
+                evidence_band=("weak" if weak_reasons else "strong")
+                if evidence_reasoning_version == 1
+                else None,
             )
 
 
@@ -3414,6 +3493,7 @@ def _detect_grounded_vent_flags(
     *,
     vent_witness_records: Mapping[PlayerId, tuple[VentWitnessRecord, ...]],
     roster: frozenset[PlayerId],
+    evidence_reasoning_version: Literal[1, 2] | None = None,
 ) -> Iterator[ContradictionRef]:
     """Yield one STRONG ``vent_sighting`` flag per grounded vent observation.
 
@@ -3467,6 +3547,7 @@ def _detect_grounded_vent_flags(
                 description=_describe_vent_sighting(
                     speaker=turn.speaker, record=matched
                 ),
+                evidence_band=("strong") if evidence_reasoning_version == 1 else None,
             )
 
 
@@ -3476,6 +3557,7 @@ def _detect_vent_placement_contradictions(
     self_alibis: tuple[_IndexedAlibi, ...],
     vent_witness_records: Mapping[PlayerId, tuple[VentWitnessRecord, ...]],
     roster: frozenset[PlayerId],
+    evidence_reasoning_version: Literal[1, 2] | None = None,
 ) -> Iterator[ContradictionRef]:
     """Yield STRONG ``alibi_vs_physical`` flags for grounded vent placements.
 
@@ -3562,6 +3644,9 @@ def _detect_vent_placement_contradictions(
                     description=_describe_vent_placement(
                         speaker=turn.speaker, record=matched, alibi=alibi.claim
                     ),
+                    evidence_band=("strong")
+                    if evidence_reasoning_version == 1
+                    else None,
                 )
 
 
@@ -3652,6 +3737,7 @@ def _conflict_weak_reasons(
     right: _IndexedAlibi,
     *,
     accusation_pairs: frozenset[tuple[PlayerId, PlayerId]],
+    evidence_reasoning_version: Literal[1, 2] | None = None,
 ) -> tuple[str, ...]:
     """The Task 10.1 weak patterns an alibi-conflict pair matches, if any.
 
@@ -3701,7 +3787,11 @@ def _conflict_weak_reasons(
         for speaker in (left.speaker, right.speaker)
     ):
         reasons.append(WEAK_REASON_ADVERSARIAL)
-    if (
+    if not (
+        evidence_reasoning_version == 1
+        and left.claim.from_tick == left.claim.to_tick
+        and right.claim.from_tick == right.claim.to_tick
+    ) and (
         left.claim.to_tick == right.claim.from_tick
         or right.claim.to_tick == left.claim.from_tick
     ):
@@ -3719,6 +3809,7 @@ def _build_contradiction(
     event_b_id: str,
     subjects: tuple[PlayerId, ...],
     description: str,
+    evidence_band: Literal["weak", "strong"] | None = None,
 ) -> ContradictionRef:
     # Canonicalise the event-id pair so the same logical contradiction
     # produces the same :attr:`ContradictionRef.contradiction_id`
@@ -3734,6 +3825,7 @@ def _build_contradiction(
         event_b_id=b_id,
         subjects=subjects,
         description=description,
+        evidence_band=evidence_band,
     )
 
 
@@ -3972,6 +4064,7 @@ def _retarget_proxy_intra_turn(
         event_b_id=flag.event_b_id,
         subjects=(speaker,),
         description=description,
+        evidence_band="weak" if flag.evidence_band is not None else None,
     )
 
 
@@ -3995,6 +4088,7 @@ def _fold_proxy_intra_turn(flag: ContradictionRef) -> ContradictionRef:
         event_b_id=flag.event_b_id,
         subjects=flag.subjects,
         description=description,
+        evidence_band="weak" if flag.evidence_band is not None else None,
     )
 
 
@@ -4172,6 +4266,7 @@ def _demote_prosecution(
         event_b_id=flag.event_b_id,
         subjects=flag.subjects,
         description=(f"{base} {WEAK_CONTRADICTION_MARKER_PREFIX}{'; '.join(merged)}]"),
+        evidence_band="weak" if flag.evidence_band is not None else None,
     )
 
 

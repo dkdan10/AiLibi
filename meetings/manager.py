@@ -112,13 +112,20 @@ from llm.client import LLMClient, LLMResponse
 from llm.provider import LLMCallFailure, extract_parse_failure
 from meetings.constants import (
     DEFAULT_SKIP_CONFIDENCE_THRESHOLD,
-    testimony_shapes_enabled,
 )
 from meetings.corroboration import (
     MeetingTestimonyLedger,
     build_testimony_ledger,
     corroboration_discipline_enabled,
 )
+from meetings.evidence_profile import MeetingEvidenceProfile
+from meetings.public_accounts import (
+    PublicAccountValidationError,
+    detect_public_account_conflicts,
+    validate_public_accounts,
+)
+from observation.public_map import PublicMapView
+from meetings.rebuttal import select_bounded_rebuttal
 from meetings.render_contract import (
     BodyDiscoveryRecord,
     PromptRenderInputs,
@@ -134,6 +141,8 @@ from meetings.schemas import (
     AccusationClaim,
     AlibiClaim,
     Claim,
+    CompletedTaskObservation,
+    TaskActivityAccount,
     ContradictionRef,
     CorroborationClaim,
     FoundBodyObservation,
@@ -979,6 +988,8 @@ class MeetingManager:
         config: MeetingConfig | None = None,
         reporter_reasoning: bool | None = None,
         corroboration_discipline: bool | None = None,
+        evidence_profile: MeetingEvidenceProfile | None = None,
+        public_map: PublicMapView | None = None,
     ) -> None:
         if config is None:
             config = MeetingConfig()
@@ -1010,6 +1021,16 @@ class MeetingManager:
         self._statement_prompt = statement_prompt
         self._vote_prompt = vote_prompt
         self._config = config
+        self._evidence_profile = evidence_profile or MeetingEvidenceProfile()
+        self._public_map = (
+            public_map.model_copy(deep=True) if public_map is not None else None
+        )
+        self._accounts_enabled = (
+            self._evidence_profile.public_account_version is not None
+            or self._evidence_profile.attributed_testimony_version is not None
+        )
+        if self._accounts_enabled and self._public_map is None:
+            raise ValueError("public account profiles require the game's public map")
         # The reporter-voice lever, BOUND AT CONSTRUCTION when the caller
         # resolves it (``build_default_meeting_runner`` does, from the same
         # ``env`` that picks the recorded ``prompt_versions``). Binding here is
@@ -1040,6 +1061,35 @@ class MeetingManager:
         # would otherwise swallow, so the orchestrator records them too -- the
         # burned spend stays visible even when the turn ultimately parses.
         self._recovered_call_failures: list[LLMCallFailure] = []
+
+    def _detect_contradictions(
+        self,
+        transcript: MeetingTranscript,
+        *,
+        roster: frozenset[PlayerId],
+        vent_witness_records: Mapping[PlayerId, tuple[VentWitnessRecord, ...]],
+        move_witness_records: Mapping[PlayerId, tuple[MoveWitnessRecord, ...]],
+        sighting_records: Mapping[PlayerId, tuple[SightingRecord, ...]],
+        evidence_reasoning_version: Literal[1, 2] | None,
+        trigger_kind: MeetingTriggerKind | None = None,
+    ) -> tuple[ContradictionRef, ...]:
+        if self._evidence_profile.attributed_testimony_version == 1:
+            if self._public_map is None:
+                raise ValueError("attributed testimony requires public topology")
+            return detect_public_account_conflicts(
+                transcript,
+                roster=roster,
+                room_neighbors=self._public_map.room_neighbors,
+            )
+        return detect_contradictions(
+            transcript,
+            roster=roster,
+            vent_witness_records=vent_witness_records,
+            move_witness_records=move_witness_records,
+            sighting_records=sighting_records,
+            evidence_reasoning_version=evidence_reasoning_version,
+            trigger_kind=trigger_kind,
+        )
 
     @property
     def defaulted_calls(self) -> tuple[DefaultedCall, ...]:
@@ -1162,6 +1212,11 @@ class MeetingManager:
             else corroboration_discipline_enabled()
         )
 
+        if self._accounts_enabled and (reporter_reasoning or corroboration_discipline):
+            raise ValueError(
+                "public account profiles cannot overlap legacy evidence renderers"
+            )
+
         # Canonicalise participant order at entry. Real callers may iterate
         # over a set/dict whose order is hash-seeded and not
         # determinism-preserving; sorting by ``agent_id`` is deterministic
@@ -1261,12 +1316,13 @@ class MeetingManager:
             if guarded_next is None:
                 break
             transcript_so_far = MeetingTranscript(turns=tuple(turns))
-            contradictions_so_far = detect_contradictions(
+            contradictions_so_far = self._detect_contradictions(
                 transcript_so_far,
                 roster=roster,
                 vent_witness_records=vent_witness_records,
                 move_witness_records=move_witness_records,
                 sighting_records=sighting_records,
+                evidence_reasoning_version=self._evidence_profile.evidence_reasoning_version,
             )
             reply_turn = await self._collect_turn(
                 meeting_id=meeting_id,
@@ -1297,12 +1353,13 @@ class MeetingManager:
             living_ids=roster,
         ):
             transcript_so_far = MeetingTranscript(turns=tuple(turns))
-            contradictions_so_far = detect_contradictions(
+            contradictions_so_far = self._detect_contradictions(
                 transcript_so_far,
                 roster=roster,
                 vent_witness_records=vent_witness_records,
                 move_witness_records=move_witness_records,
                 sighting_records=sighting_records,
+                evidence_reasoning_version=self._evidence_profile.evidence_reasoning_version,
             )
             opt_in_turn = await self._collect_turn(
                 meeting_id=meeting_id,
@@ -1335,12 +1392,13 @@ class MeetingManager:
         # ``_opt_in_eligible_ids`` is deliberately not reused here.
         for roll_call_id in sorted(roster - spoken):
             transcript_so_far = MeetingTranscript(turns=tuple(turns))
-            contradictions_so_far = detect_contradictions(
+            contradictions_so_far = self._detect_contradictions(
                 transcript_so_far,
                 roster=roster,
                 vent_witness_records=vent_witness_records,
                 move_witness_records=move_witness_records,
                 sighting_records=sighting_records,
+                evidence_reasoning_version=self._evidence_profile.evidence_reasoning_version,
             )
             roll_call_turn = await self._collect_turn(
                 meeting_id=meeting_id,
@@ -1359,6 +1417,38 @@ class MeetingManager:
             )
             turns.append(roll_call_turn)
             spoken.add(roll_call_id)
+
+        if self._evidence_profile.bounded_rebuttal_version == 1:
+            transcript_so_far = MeetingTranscript(turns=tuple(turns))
+            opportunity = select_bounded_rebuttal(transcript_so_far, living_ids=roster)
+            if opportunity is not None:
+                prior = next(
+                    turn for turn in turns if turn.turn_id == opportunity.reply_to
+                )
+                contradictions_so_far = self._detect_contradictions(
+                    transcript_so_far,
+                    roster=roster,
+                    vent_witness_records=vent_witness_records,
+                    move_witness_records=move_witness_records,
+                    sighting_records=sighting_records,
+                    evidence_reasoning_version=self._evidence_profile.evidence_reasoning_version,
+                )
+                response = await self._collect_turn(
+                    meeting_id=meeting_id,
+                    trigger=trigger,
+                    participant=by_id[opportunity.speaker],
+                    living_ids=roster,
+                    dead_ids=dead_ids,
+                    render_inputs=render_inputs,
+                    render_reporter_id=render_reporter_id,
+                    turn_index=len(turns),
+                    turn_kind="reply",
+                    reply_to=prior.turn_id,
+                    prior_turn=prior,
+                    transcript_so_far=transcript_so_far,
+                    contradictions=contradictions_so_far,
+                )
+                turns.append(response)
 
         transcript = MeetingTranscript(turns=tuple(turns))
 
@@ -1380,13 +1470,14 @@ class MeetingManager:
         meeting_trigger_kind: MeetingTriggerKind = (
             "emergency" if _trigger_is_emergency(trigger) else "report"
         )
-        contradictions = detect_contradictions(
+        contradictions = self._detect_contradictions(
             transcript,
             roster=roster,
             trigger_kind=meeting_trigger_kind,
             vent_witness_records=vent_witness_records,
             move_witness_records=move_witness_records,
             sighting_records=sighting_records,
+            evidence_reasoning_version=self._evidence_profile.evidence_reasoning_version,
         )
         # The VOUCH half of the sighting channel is still not threaded here.
         # Detection above receives the per-speaker mapping (grounding a spoken
@@ -1397,7 +1488,11 @@ class MeetingManager:
         # meeting-0: p-5/p-6 mutual grounded vouches). Task 16.7's mechanism is
         # complete and fixture-pinned behind the parameter, unfed.
         evidence = derive_belief_evidence(
-            transcript, contradictions=contradictions, roster=roster
+            transcript,
+            contradictions=contradictions,
+            roster=roster,
+            public_account_version=self._evidence_profile.public_account_version,
+            attributed_testimony_version=self._evidence_profile.attributed_testimony_version,
         )
         # Task 16.8 (PR #264 review): re-derive the ABSENT set with the
         # ENGINE-derived trigger kind. The sibling folds above keep their
@@ -1575,7 +1670,27 @@ class MeetingManager:
                 parsed = MeetingTurn.model_validate_json(response.text).model_copy(
                     update={"annotations": ()}
                 )
-            except (asyncio.TimeoutError, ValidationError) as exc:
+                if self._accounts_enabled:
+                    if self._public_map is None:
+                        raise ValueError("public accounts require public topology")
+                    validate_public_accounts(
+                        parsed,
+                        roster=living_ids | frozenset(dead_ids),
+                        current_tick=trigger.trigger_tick,
+                        room_ids=frozenset(self._public_map.room_ids),
+                        task_ids=frozenset(self._public_map.task_locations),
+                    )
+                if self._evidence_profile.public_account_version is None and any(
+                    isinstance(row, TaskActivityAccount) for row in parsed.observations
+                ):
+                    raise PublicAccountValidationError(
+                        "task activity accounts require their recorded profile"
+                    )
+            except (
+                asyncio.TimeoutError,
+                ValidationError,
+                PublicAccountValidationError,
+            ) as exc:
                 # Fail-soft on a single turn (Task 7.10): a missed deadline
                 # (``TimeoutError``) and a malformed turn that still fails
                 # schema validation after the provider's parse-tolerance
@@ -3803,6 +3918,8 @@ def derive_belief_evidence(
     roster: frozenset[PlayerId],
     trigger_kind: MeetingTriggerKind | None = None,
     sighting_records: Mapping[PlayerId, tuple[SightingRecord, ...]] | None = None,
+    public_account_version: Literal[1] | None = None,
+    attributed_testimony_version: Literal[1] | None = None,
 ) -> MeetingBeliefEvidence:
     """Derive a meeting's public belief evidence (Tasks 9.8, 10.7).
 
@@ -3849,6 +3966,16 @@ def derive_belief_evidence(
     evidence from the public record alone (DESIGN.md §0 rule 1).
     """
 
+    if attributed_testimony_version == 1:
+        if sighting_records is not None:
+            raise ValueError("attributed testimony cannot consume private grounding")
+        if any(
+            flag.kind == "vent_sighting" or flag.evidence_band != "weak"
+            for flag in contradictions
+        ):
+            raise ValueError(
+                "attributed testimony cannot fold certified evidence from other speakers"
+            )
     accused: set[PlayerId] = set()
     corroborated: set[PlayerId] = set()
     # Rule-3 relevance gate (Task 10.6; audit gp-2 C-C-3): a claim-stated
@@ -3965,6 +4092,8 @@ def extract_belief_evidence(
     result: MeetingResult,
     *,
     trigger_kind: MeetingTriggerKind | None = None,
+    public_account_version: Literal[1] | None = None,
+    attributed_testimony_version: Literal[1] | None = None,
 ) -> MeetingBeliefEvidence:
     """Reduce a resolved meeting to its public belief evidence (Task 9.8).
 
@@ -3990,12 +4119,14 @@ def extract_belief_evidence(
         contradictions=result.contradictions,
         roster=frozenset(ballot.voter for ballot in result.ballots),
         trigger_kind=trigger_kind,
+        public_account_version=public_account_version,
+        attributed_testimony_version=attributed_testimony_version,
     )
 
 
 def _reported_statement_sort_key(
     statement: ReportedStatement,
-) -> tuple[PlayerId, str, PlayerId, int, int, str]:
+) -> tuple[PlayerId, str, PlayerId, int, int, str, str, str]:
     """Total order over reported statements for replay-deterministic output.
 
     Every component is concrete (``None`` ticks/room collapse to a sentinel),
@@ -4010,6 +4141,8 @@ def _reported_statement_sort_key(
         statement.from_tick if statement.from_tick is not None else -1,
         statement.to_tick if statement.to_tick is not None else -1,
         statement.room if statement.room is not None else "",
+        statement.from_room or "",
+        statement.source_event_id or "",
     )
 
 
@@ -4060,77 +4193,47 @@ def derive_meeting_outcome_summary(result: MeetingResult) -> MeetingOutcomeSumma
 def derive_reported_testimony(
     result: MeetingResult,
     *,
-    env: Mapping[str, str] | None = None,
+    testimony_shapes: bool = False,
+    evidence_reasoning_version: Literal[1, 2] | None = None,
+    public_account_version: Literal[1] | None = None,
+    attributed_testimony_version: Literal[1] | None = None,
 ) -> tuple[ReportedStatement, ...]:
-    """Reduce a resolved meeting to its public reported testimony (Task 13.5.2).
+    """Retain structured public speech as attributed, replayable content.
 
-    The content twin of :func:`extract_belief_evidence` -- where that reduction
-    collapses a meeting to scalar suspicion subject-sets, this one preserves the
-    WHAT of public speech as :class:`~meetings.schemas.ReportedStatement` rows
-    (the 2026-06-25 memory diagnosis, workflow ``wg54kfoxy``: "social info is a
-    scalar, not content"). A pure, replay-deterministic function of the recorded
-    ``MeetingResult``: it imports no engine and no perception, reads only the
-    recorded ``transcript.turns`` (NEVER ``free_text``), and returns the same
-    sorted tuple every time.
+    Read only recorded transcript fields, never free text or engine facts.
+    The baseline retains sightings, vent claims, alibis, accusations and
+    corroboration. ``testimony_shapes`` or either account profile additionally
+    retains whereabouts, movement and kill claims. Public-account version 1
+    also retains task activity, claimed completion and body discovery. These
+    remain statements: none creates completed work or first-hand evidence.
 
-    Scope: the STRUCTURED kinds only --
-    :class:`~meetings.schemas.SawPlayerObservation` and
-    :class:`~meetings.schemas.SawVentObservation` sightings,
-    :class:`~meetings.schemas.AlibiClaim`,
-    :class:`~meetings.schemas.AccusationClaim`, and
-    :class:`~meetings.schemas.CorroborationClaim`. ``completed_task`` /
-    ``found_body`` observations and all free-text are dropped. A vent sighting
-    reduces to ``saw_vent`` so the listener keeps its room and tick as content;
-    whether it RENDERS is the ingest side's call
-    (:func:`agents.memory.store.absorb_reported_testimony`), and the reduction
-    mints no evidence -- the STRONG ``vent_sighting`` flag is a separate,
-    grounded channel.
+    Evidence reasoning or account profiles retain source transcript identities
+    and movement origins. The spoken tick is not an authoritative event phase;
+    absent versions preserve the historical reduction bytes. Certified baseline
+    vent flags are a separate channel and are disabled in attributed mode.
 
-    Under the ``testimony_shapes`` lever (default OFF,
-    :func:`meetings.constants.testimony_shapes_enabled`, resolved ONCE here from
-    ``env``) three more spoken shapes survive:
-    :class:`~meetings.schemas.WhereaboutsClaim` as a ``whereabouts``
-    self-placement, :class:`~meetings.schemas.SawMoveObservation` as a
-    ``saw_move`` carrying its DESTINATION placement alone, and
-    :class:`~meetings.schemas.SawKillObservation` as a ``saw_kill``. They mint no
-    evidence either. With the lever OFF the returned tuple is produced by
-    exactly the code that produced it before the lever existed, which is what
-    lets every committed recording re-derive byte-identically -- and why a
-    recording's substrate stamp carries the lever's state
-    (``orchestrator.replay.SUBSTRATE_FLAG_KEYS``), so a load-time re-derivation
-    can never run a slate the recording did not.
-
-    Speaker-gated; subject gating deferred to ingest (Codex P2, Task 13.5.2):
-    ``roster`` is the meeting's living-participant set read off the recorded
-    ballots (identical to :func:`extract_belief_evidence`). Only the SPEAKER is
-    gated here -- only a living participant takes a turn. The SUBJECT is NOT gated
-    against this living set, because a ``saw_player`` observation about a player
-    DEAD before this meeting (the body victim, an earlier ejection) is real public
-    testimony yet is absent from the ballots; gating it here would silently drop
-    the kill-scene sightings the prompts explicitly elicit. Subject validity is
-    enforced per-agent at ingest against
-    :func:`agents.memory.store._known_roster_ids` (the engine-witnessed set, which
-    covers dead-but-seen players via co-spawn), so a hallucinated structural id
-    still never reaches an episodic row. Claims (alibi/accusation/corroboration)
-    are already living-subject by the per-turn chokepoint
-    (:func:`_drop_non_roster_claims`); observations are NOT chokepoint-validated,
-    which is why the ingest gate is load-bearing for them.
-
-    NOT teammate-firewalled: reported content is PUBLIC speech, so an impostor's
-    derivation carries a statement that publicly incriminates its own team
-    exactly as a crewmate's does. Only the SCALAR suspicion path keeps the
-    teammate firewall (unchanged, :func:`extract_belief_evidence` ->
-    :func:`apply_meeting_evidence_rules`).
+    Speakers must be living meeting participants. Subjects may include known
+    dead players; their identity is checked by the per-agent ingest boundary.
+    Account profiles additionally validate public identities and clocks before
+    recording a turn. Public speech is retained even when it incriminates an
+    impostor teammate; the separate scalar-belief fold owns teammate filtering.
     """
 
-    shapes_on = testimony_shapes_enabled(env)
+    accounts_on = public_account_version == 1
+    provenance_on = (
+        evidence_reasoning_version is not None
+        or accounts_on
+        or attributed_testimony_version == 1
+    )
+    shapes_on = testimony_shapes or accounts_on or attributed_testimony_version == 1
     roster = frozenset(ballot.voter for ballot in result.ballots)
     statements: list[ReportedStatement] = []
     for turn in result.transcript.turns:
         speaker = turn.speaker
         if speaker not in roster:
             continue
-        for observation in turn.observations:
+        for index, observation in enumerate(turn.observations):
+            before = len(statements)
             if isinstance(observation, SawPlayerObservation):
                 statements.append(
                     ReportedStatement(
@@ -4192,7 +4295,46 @@ def derive_reported_testimony(
                         room=observation.to_room,
                     )
                 )
-        for claim in turn.claims:
+            elif accounts_on and isinstance(
+                observation, (TaskActivityAccount, CompletedTaskObservation)
+            ):
+                statements.append(
+                    ReportedStatement(
+                        speaker=speaker,
+                        kind=observation.type,
+                        subject=speaker,
+                        from_tick=observation.from_tick
+                        if isinstance(observation, TaskActivityAccount)
+                        else observation.tick,
+                        to_tick=observation.to_tick
+                        if isinstance(observation, TaskActivityAccount)
+                        else observation.tick,
+                        room=observation.room,
+                        task_id=observation.task_id,
+                    )
+                )
+            elif accounts_on and isinstance(observation, FoundBodyObservation):
+                statements.append(
+                    ReportedStatement(
+                        speaker=speaker,
+                        kind="found_body",
+                        subject=observation.body_of,
+                        from_tick=observation.tick,
+                        to_tick=observation.tick,
+                        room=observation.room,
+                    )
+                )
+            if provenance_on and len(statements) > before:
+                statements[-1] = statements[-1].model_copy(
+                    update={
+                        "source_event_id": f"turn:{turn.turn_id}:{'whereabouts' if (accounts_on or attributed_testimony_version == 1) and isinstance(observation, WhereaboutsClaim) else 'obs'}:{index}",
+                        "from_room": observation.from_room
+                        if isinstance(observation, SawMoveObservation)
+                        else None,
+                    }
+                )
+        for index, claim in enumerate(turn.claims):
+            before = len(statements)
             if isinstance(claim, AlibiClaim):
                 statements.append(
                     ReportedStatement(
@@ -4221,6 +4363,12 @@ def derive_reported_testimony(
                         from_tick=claim.on_tick,
                         to_tick=claim.on_tick,
                     )
+                )
+            if provenance_on and len(statements) > before:
+                statements[-1] = statements[-1].model_copy(
+                    update={
+                        "source_event_id": f"turn:{turn.turn_id}:claim:{index}",
+                    }
                 )
     return tuple(sorted(statements, key=_reported_statement_sort_key))
 

@@ -77,7 +77,7 @@ firewall test enforces it):
 
 * ``flags_minted`` — the meeting's RECORDED contradictions, exactly
   ``len(entry.contradictions)``, split into the non-vent census and the
-  ``vent_sighting`` subset by the ``rederived_flags`` / ``persisted_vent_flags``
+  ``vent_sighting`` subset by the ``recorded_non_vent_flags`` / ``persisted_vent_flags``
   columns. The recording-time detector held the meeting's trigger kind and its
   three private grounding channels; a transcript-only re-derivation holds none
   of them and labels a different game. Mirrors
@@ -115,6 +115,8 @@ Public surface (stable — downstream tasks import these):
 """
 
 from __future__ import annotations
+
+import json
 
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
@@ -264,11 +266,10 @@ class ConvictionMeetingRow(BaseModel):
     ``features`` maps exactly :data:`CONVICTION_FEATURE_NAMES` (order preserved
     for byte-stable dumps) — the run_meeting-reconstructable evidence supply.
     ``flags_minted`` / ``conversion_*`` are the mirrored referee labels (module
-    docstring); ``rederived_flags`` + ``persisted_vent_flags`` decompose the
+    docstring); ``recorded_non_vent_flags`` + ``persisted_vent_flags`` decompose the
     flag label's two disjoint sources — the recorded non-vent flags and the
-    recorded ``vent_sighting`` ones. ``rederived_flags`` keeps its name because
-    the column layout is the frozen 18.15 artifact contract, not because it
-    still re-derives anything. ``ceiling_reachable`` is the label-side
+    recorded ``vent_sighting`` ones. Historical JSON uses its original column
+    name through the explicit historical serialization methods. ``ceiling_reachable`` is the label-side
     ceiling channel: whether the ejected target is the strict argmax of the
     best-case reconstructed physical+belief suspicion (always ``False`` on a
     SKIP meeting), so ``voice_driven_share`` re-measures on any row population.
@@ -286,7 +287,7 @@ class ConvictionMeetingRow(BaseModel):
     features: Mapping[str, float]
     # Labels (the referee's quantities, mirrored — never features).
     flags_minted: int
-    rederived_flags: int
+    recorded_non_vent_flags: int
     persisted_vent_flags: int
     conversion_attempted: int
     conversion_converted: int
@@ -294,6 +295,23 @@ class ConvictionMeetingRow(BaseModel):
     # The ceiling channel (label-side; the conversion bar's denominator).
     is_ejection: bool
     ceiling_reachable: bool
+
+    def to_historical_json(self) -> str:
+        """Serialize the original column name for exact historical row exchanges."""
+
+        return self.model_dump_json().replace(
+            '"recorded_non_vent_flags":', '"rederived_flags":', 1
+        )
+
+    @classmethod
+    def from_historical_json(cls, payload: str) -> ConvictionMeetingRow:
+        """Read only the historical column layout; current construction is explicit."""
+
+        raw = json.loads(payload)
+        if "recorded_non_vent_flags" in raw or "rederived_flags" not in raw:
+            raise ValueError("historical conviction row requires rederived_flags only")
+        raw["recorded_non_vent_flags"] = raw.pop("rederived_flags")
+        return cls.model_validate(raw)
 
     @model_validator(mode="after")
     def _feature_layout_matches(self) -> "ConvictionMeetingRow":
@@ -304,10 +322,13 @@ class ConvictionMeetingRow(BaseModel):
                 f"{CONVICTION_FEATURE_NAMES} (order included — the layout is "
                 "the artifact contract)"
             )
-        if self.flags_minted != self.rederived_flags + self.persisted_vent_flags:
+        if (
+            self.flags_minted
+            != self.recorded_non_vent_flags + self.persisted_vent_flags
+        ):
             raise ValueError(
                 f"flags_minted {self.flags_minted} != rederived "
-                f"{self.rederived_flags} + persisted vent "
+                f"{self.recorded_non_vent_flags} + persisted vent "
                 f"{self.persisted_vent_flags} — the two sources are disjoint "
                 "by construction"
             )
@@ -494,7 +515,7 @@ def _observation_backed_impostor_subjects(
 def _meeting_labels(
     entry: MeetingReplayEntry, roles: Mapping[PlayerId, Role]
 ) -> tuple[int, int, int, int]:
-    """One meeting's ``(rederived_flags, persisted_vent_flags, attempted, converted)``.
+    """One meeting's ``(recorded_non_vent_flags, persisted_vent_flags, attempted, converted)``.
 
     Both flag terms come off the RECORDED contradictions, split on the
     ``vent_sighting`` kind: the first term is the non-vent census, the second
@@ -504,13 +525,15 @@ def _meeting_labels(
     imported because the committed firewall test forbids an ``eval.*`` import
     from this package, the convention this module already follows for the
     labels. The split is what keeps the two sources disjoint, so the row's
-    ``flags_minted == rederived + persisted_vent`` validator holds by
+    ``flags_minted == recorded_nonvent + persisted_vent`` validator holds by
     construction. Conversion follows
     :func:`_observation_backed_impostor_subjects`; a meeting ejects at most one
     player, so ``converted`` is 0 or 1.
     """
 
-    rederived = sum(1 for flag in entry.contradictions if flag.kind != "vent_sighting")
+    recorded_nonvent = sum(
+        1 for flag in entry.contradictions if flag.kind != "vent_sighting"
+    )
     persisted_vent = sum(
         1 for flag in entry.contradictions if flag.kind == "vent_sighting"
     )
@@ -519,7 +542,7 @@ def _meeting_labels(
     converted = int(
         entry.ejected_player_id is not None and entry.ejected_player_id in backed
     )
-    return rederived, persisted_vent, attempted, converted
+    return recorded_nonvent, persisted_vent, attempted, converted
 
 
 def _meeting_features(rows: Sequence[MeetingTableRow]) -> dict[str, float]:
@@ -665,7 +688,7 @@ def build_conviction_table(
                     f"{seed} has no reconstructed table rows — the two sources "
                     "must join 1:1"
                 )
-            rederived, persisted_vent, attempted, converted = _meeting_labels(
+            recorded_nonvent, persisted_vent, attempted, converted = _meeting_labels(
                 entry, roles
             )
             sample = meeting_rows[0]
@@ -677,8 +700,8 @@ def build_conviction_table(
                     meeting_index=sample.meeting_index,
                     tick=sample.tick,
                     features=_meeting_features(meeting_rows),
-                    flags_minted=rederived + persisted_vent,
-                    rederived_flags=rederived,
+                    flags_minted=recorded_nonvent + persisted_vent,
+                    recorded_non_vent_flags=recorded_nonvent,
                     persisted_vent_flags=persisted_vent,
                     conversion_attempted=attempted,
                     conversion_converted=converted,

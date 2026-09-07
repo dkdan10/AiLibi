@@ -1,0 +1,312 @@
+# Preserve tournament progress and enforce run limits
+
+**Status:** done
+
+## Outcome
+
+Interrupted CLI tournaments retain inspectable progress and bind published
+reports to their recording inputs. Explicit continuation verifies the same
+configuration and input bytes, skips completed seeds, and retains earlier
+attempts when an interrupted seed is explicitly retried. Optional whole-run
+cost, token, and wall limits cover all attempts, including resumed work.
+
+## Evidence
+
+Injecting KeyboardInterrupt into the second HeadlessGame.run call of a two-seed,
+two-tick CLI tournament leaves the first replay/audit pair, but no report or
+progress artifact. The existing evaluator creates a fresh budget per seed and
+the CLI exposes no cumulative token, cost, or wall limit. Existing report
+destination and recording-pair protections must survive the follow-through.
+
+## Acceptance
+
+- [x] Review correction: a recording its own rollback correctly removed no longer
+  strands the ledger. Continuation still refuses by default and now names the
+  explicit route; `--attest-unknown-usage SEED` retains the attempt with its
+  usage recorded as unknown rather than as zero, and retries it.
+- [x] Review correction: attested unknown usage never reaches a cumulative cap.
+  The attestation flag and the `--max-total-*` caps are mutually exclusive, and
+  cumulative totals refuse over an attested attempt.
+
+- [x] Review correction: first-seed failure preserves an existing report and
+  never publishes an empty replacement; progress binds its previous bytes.
+- [x] Review correction: missing/empty attempt recordings leave usage unresolved,
+  preserve known counters, and block retry and cumulative-budget calculations.
+  Restoring genuine evidence permits inspection without inventing zero spend.
+- [x] Review correction: targeted adverse controls and the combined project gate
+  pass on the corrected implementation.
+
+- [x] Atomic progress and report snapshots survive a later-seed interruption;
+  progress identifies pending, running, finished, and interrupted attempts.
+- [x] Explicit continuation verifies configuration and recording/report hashes,
+  skips finished seeds, and rejects mismatched or stale inputs before calls.
+- [x] Explicit retry retains prior replay/audit bytes and reported spend; no
+  completed seed is silently replayed and no retry restores budget headroom.
+- [x] Optional cumulative cost, input/output token, and elapsed wall limits
+  reject new work at the limit and cancel awaited provider work safely.
+- [x] Adverse regression cases, targeted tests, type/lint checks, full project
+  validation, and committed-sample verification pass.
+
+## Constraints
+
+Work directly on codex/cleanup. Follow docs/architecture.md Packages and
+Determinism and the substrate ladder. No live calls, dependencies, provider
+protocol changes, engine clock, or historical record edits. Keep existing report
+DTO compatibility. The completion-classification task owns eval/balance_eval.py
+and replay schemas until explicit handover; coordinate additive hooks. Root
+owns final card status and the full gate. Whole wall enforcement is cooperative
+between synchronous ticks and cancels asynchronous meeting calls; it cannot
+preempt blocked synchronous Python or recover usage a provider never reports.
+
+## Expected scope
+
+scripts/run_tournament.py, focused progress/publication helpers, llm/budget.py,
+orchestrator/run_limits.py, orchestrator/game.py, coordinated eval/balance_eval.py
+hooks, scripts/_report_output.py, focused scripts/LLM/orchestrator tests, and this card. Retain atomic report
+publication and preflight alias protections for progress and archived attempts.
+
+## Record impact
+
+Post-record operational repair. CLI sidecars add configuration/input provenance;
+existing report DTOs and committed replay bytes remain unchanged. Normal stop
+record production belongs to the coordinated completion-classification card.
+Opt-in run limits can end future runs early without inventing outcomes or spend.
+
+## Validation
+
+Inject second-seed failure, cancellation, retries, changed configuration/bytes,
+destination aliases, and cumulative cap overruns using offline providers. Run
+the affected script, budget, and game suites, ruff, strict mypy,
+bash scripts/check.sh, and bash scripts/verify_samples.sh.
+
+## Results
+
+The CLI checkpoints an atomic tournament-progress.json sidecar before each seed
+and publishes an input-bound report snapshot after each attempt. The sidecar
+records configuration, completed and interrupted attempts, exact replay/audit
+hashes, cumulative usage, elapsed time, and the report hash. Pending seeds are
+the selected seeds without an attempt. Publication records both sides of its
+two-file transition so interruption between report and progress writes remains
+recoverable. A second checkpoint failure adds diagnostics without hiding the
+original interruption.
+
+`--resume` verifies configuration and input bytes and reconstructs saved reports
+before skipping finished seeds. A killed process that already wrote a verified
+terminal/normal-stop record is recovered as finished. Interrupted work requires
+`--resume --retry-incomplete`: its exact recording pair is archived and that
+ownership checkpointed before canonical names are cleared for another attempt.
+Identical retry bytes still represent another paid attempt. Partial archive-copy
+and pair-clear failures preserve a recoverable prior pair. Untracked files for
+pending seeds are refused; continuation never implicitly overwrites unrelated
+recordings, including later files left by an interrupted fresh `--force` run.
+
+Independent review found and corrected two concrete defects before acceptance:
+YAML map bytes were missing from the fingerprint, and text-mode archival could
+normalize CRLF. Fingerprints now bind map/templates/source, dependency locks,
+CLI helpers, registered factory implementations, and selected external policy
+config/stamp/weight files. SDK routing, proxy/TLS, credential, and AILIBI settings
+are hashed without persisting secret values. The CLI supports its registered
+factory choices and explicit artifacts; arbitrary in-process injected factories
+are outside this continuation contract. Archives use the existing atomic writer
+with a byte-preserving path; its text API and cleanup-error semantics remain.
+
+Optional `--max-total-cost-usd`, `--max-total-input-tokens`,
+`--max-total-output-tokens`, and `--max-wall-seconds` apply across seeds and
+resumed attempts. Fresh per-game budgets retain their existing caps and charge a
+shared parent. Preflight prevents new calls that exceed the estimate-based
+allowance; a returned response can still report more usage than estimated, and
+its entire incurred charge is retained before an overrun raises. The external
+wall clock checks synchronous boundaries and cancels awaited meeting work,
+retaining reported responses/failures. It cannot preempt blocked synchronous
+Python or recover usage never reported by a provider. After a hard kill, the
+unobserved interval conservatively includes downtime in the wall allowance.
+
+The report evaluates each seed's latest attempt. Sidecar totals and the CLI's
+all-attempts line additionally include archived attempts; they are the cumulative
+budget authority. Corrupt/uninspectable inputs remain fail-loud, with incomplete
+accounting marked explicitly. Source/input hashes detect drift, not malicious
+rewriting of both data and hashes. Concurrent writers remain unsupported.
+
+Validation on 2026-09-05 passed 305 affected tests:
+
+```sh
+UV_CACHE_DIR=/private/tmp/ailibi-consumer-uv-cache uv run pytest \
+  tests/scripts/test_tournament_progress.py \
+  tests/scripts/test_report_destinations.py \
+  tests/scripts/test_run_tournament.py \
+  tests/scripts/test_run_tournament_agent_factory.py \
+  tests/scripts/test_run_tournament_candidate_artifact.py \
+  tests/scripts/test_build_sample_report.py \
+  tests/llm/test_budget.py tests/llm/test_budgeted_client.py \
+  tests/llm/test_parent_budget.py tests/orchestrator/test_run_limits.py \
+  tests/orchestrator/test_game.py \
+  tests/orchestrator/test_aborted_meeting_records.py \
+  tests/eval/test_balance_eval.py \
+  tests/eval/test_balance_eval_meeting_runner.py \
+  tests/eval/test_tournament_report.py -q --tb=short
+```
+
+Ruff, formatting, strict mypy, and diff whitespace checks pass on the ten
+changed/new Python files. Six adverse selections fail against the previous CLI:
+write `git show 6d3c56e9:scripts/run_tournament.py` into a temporary directory,
+prepend that directory and repository scripts/ to sys.path, assert
+run_tournament.__file__ selects the temporary copy, then invoke pytest.main on
+test_tournament_progress.py with `-k 'second_seed_interruption or shared_cap or
+zero_cap or zero_wall_limit'`. The result is six failures; the repaired selections
+pass. No shared source was replaced for this baseline probe.
+
+The evaluator hooks were added after explicit file handover. Normal-stop record
+production follows the separate completion-status contract. This implementation
+keeps clock and budget control in orchestration/LLM layers, as required by
+docs/architecture.md Packages and Determinism and the substrate ladder. No live
+provider, commit, historical artifact edit, or full-project run occurred in this
+subtask; the combined full gate and final acceptance are recorded below.
+
+### Combined verification and review
+
+The final `bash scripts/check.sh` run passed: 6,409 Python tests (20 optional
+skips, three expected failures), 455 frontend tests, strict typing, lint,
+formatting, import boundaries, 390 historical contracts/prompts, and the build.
+`bash scripts/verify_samples.sh` verified all 100 canonical recordings. No
+canonical recording or historical report bytes changed. Logs: `/tmp/ailibi-cleanup-batch2-check-final.log` and `/tmp/ailibi-cleanup-batch2-samples.log`.
+
+Independent review: Portfolio-review agent; source fingerprint coverage and byte-preserving archival findings were repaired and independently rechecked.
+Implemented and verified for cleanup; the owner's final Claude review and merge
+remain pending. This work does not adopt an experimental behavior.
+
+### Independent review corrections (2026-09-06)
+
+Reopened for C7b-2 and GC-2 in the
+[owner review](../../audits/review-2026-09-06/REVIEW_REPORT.md).
+The earlier verification missed zero-row failures: the CLI published an empty
+report before its first seed, and capture declared a missing or empty replay to
+have completely accounted zero usage. Reproductions now exercise both paths.
+
+The initial checkpoint binds the existing report hash without replacing its
+bytes. Publication waits for at least one inspectable game. A first-seed failure
+therefore preserves an earlier report, including failure after forced recording
+replacement restores the earlier pair. Starting identities distinguish unchanged
+prior files from new attempt evidence on a failed forced run; ambiguous identical
+bytes fail closed rather than attributing old work to the new attempt.
+
+Capture stages validated usage and source hashes before replacing known counters.
+Missing/empty inputs, a valid prefix with less usage than its checkpoint, and
+bytes changed during inspection leave accounting unresolved. Resume, retry and
+cumulative allowance calculations refuse unresolved attempts before provider
+work or archival. Existing known charges and evidence identities remain intact;
+restoring genuine partial recording bytes lets the same checkpoint reconcile.
+This deliberately refuses a zero-row retry whose incurred usage cannot be
+established. It does not claim to recover unreported provider usage, or silently
+certify zero after a process kill. Complete prior attempts, normal partial retry,
+identical paid attempts and interrupted publication retain their existing tests.
+
+The second-seed continuation test now interrupts after a genuine first tick,
+so its interrupted attempt has inspectable evidence; assuming a missing file
+means zero would recreate the defect. Its report truthfully includes the
+unfinished game alongside the completed first seed. A separate missing/empty
+crash test verifies refusal without provider calls.
+
+Focused reproduction and positive controls:
+
+```sh
+.venv/bin/pytest tests/scripts/test_tournament_progress.py tests/scripts/test_report_destinations.py tests/orchestrator/test_recording_replacement.py -q --tb=short
+```
+
+The broader lifecycle/CLI/observation selection passed 235 tests. The shared
+[correction verification](recording-replacement.md#independent-review-correction-2026-09-06)
+records the exact command, strict typing/lint result and the 24-failure,
+two-positive-control comparison against `9b333a76`.
+
+Record impact remains operational and post-record: no report DTO, prompt,
+engine behavior, historical evidence or adopted experiment changes. Sidecar
+fields are unchanged. Scope follows architecture Packages and Determinism.
+Combined project verification and independent review are pending coordination.
+
+The correction checkpoint at `144fc2e1` passed `bash scripts/check.sh`: 6,833 Python tests,
+20 optional skips, three expected failures, 500 frontend tests, strict typing,
+lint/format, import/document contracts and the production build. All 100
+canonical recordings verified. The [durable correction record](../../audits/review-2026-09-06/correction-record.md)
+records the independent reviews, discovered rollback repair and integration
+checks. This completion is on cleanup, awaiting owner review and merge.
+
+### Unresolved-usage attestation (2026-09-07)
+
+Reopened for NC4-1, also filed as FU-01 and NC5-04, in the follow-up review
+archived beside the [owner review](../../audits/review-2026-09-06/REVIEW_REPORT.md).
+The earlier verification checked that an unmeasurable attempt is refused, but
+never checked that the operator can get past the refusal. Reproduction: a paid
+seed is killed after its provider calls but before `capture` completes, so the
+attempt stays `running` with unresolved accounting and its known counters; the
+recording rollback then correctly removes the zero-byte replay it had prepared.
+The constructor's resume loop calls `capture` for exactly that attempt, so both
+`--resume` and `--resume --retry-incomplete` died inside `TournamentProgress`
+before any seed could be retried. Only `--force` escaped, and it discards the
+whole ledger, including other seeds' measured spend.
+
+`orchestrator/recording.py` is deliberately unchanged: removing a zero-byte
+output is its rollback contract, not a defect, and the repair is in the
+continuation ledger that must survive it.
+
+`UnresolvedUsageError`, a `ValueError` subclass, now marks exactly the refusals
+that mean "this attempt's usage cannot be established". Integrity signals
+(recording bytes changed during inspection, a saved report or usage that does
+not match its recording) stay plain `ValueError` and remain unattestable.
+`--attest-unknown-usage SEED` retains that attempt with `usage_unknown` set, a
+generated attestation string naming the flag and stating that the retained
+counters are the attempt's last checkpoint rather than a measured total, and an
+error quoting the absorbed refusal; it then retries the seed. Continuing still
+refuses by default, and the default refusal now names the route.
+
+The flag carries two refusals of its own. It requires `--resume
+--retry-incomplete`, and it is mutually exclusive with every `--max-total-*`
+cap, both checked before any file is read. A seed whose latest attempt still has
+readable evidence is refused with "resolvable recording evidence": attestation
+cannot discard measurable usage. Cumulative totals keep the strict bar --
+`totals()` refuses over an attested attempt -- while starting new work uses the
+weaker "measured or attested" bar, so an attested attempt can be retried but
+never summed. The CLI's closing all-attempts line names the unmeasured attempts
+instead of printing a total that silently omits them.
+
+Attestation writes only `usage_unknown`, `attestation`, `status` and `error`.
+Known cost and token counters, recording hashes and any saved game are left
+exactly as checkpointed, and `accounting_complete` stays false. The two new
+`Attempt` fields are additive and default to "no attestation", so `format_version`
+stays 1 and sidecars written before this correction still parse. Publication is
+unaffected: the report still describes each seed's latest attempt, and the
+attested attempt is archived by the retry like any other superseded attempt.
+
+Focused reproduction and positive controls:
+
+```sh
+.venv/bin/pytest tests/scripts/test_tournament_progress.py tests/scripts/test_run_tournament.py tests/scripts/test_report_destinations.py -q --tb=short
+```
+
+That selection passed 104 tests in 6.28 seconds, 9 of them the new attestation
+cases. Ruff check and format, strict mypy and `git diff --check` pass on the
+three changed Python files.
+
+Three-way negative control, using the isolated module-copy recipe in
+[recording-replacement.md](recording-replacement.md): write `git show
+<rev>:scripts/_tournament_progress.py` and `git show <rev>:scripts/run_tournament.py`
+into a temporary directory, prepend it plus the repository root and `scripts/`
+to `sys.path`, assert both modules resolve to the temporary copies, then run
+`tests/scripts/test_tournament_progress.py` with `-k 'attested_unknown or
+attestation_requires or attestation_refuses or saved_attestation'`. At
+`9b333a76` all 9 cases fail: the flag does not exist, and the same selector's
+`-k 'crashed_attempt or unresolved_capture'` companion shows 5 further failures
+where a deleted recording is charged as zero and continuation proceeds. At
+`fd1f923c` the same 9 cases fail because no continuation is reachable at all,
+while its `crashed_attempt or unresolved_capture` companion passes 5 -- the
+refusal exists there with no route past it. All 9 pass only on the corrected
+tree. No tracked source was replaced for either probe.
+
+Record impact remains operational and post-record: no report DTO, prompt, engine
+behavior, historical evidence or adopted experiment changes, and no committed
+recording bytes were read or rewritten.
+
+Limitations. Sidecars written before this correction carry a configuration
+fingerprint that includes the CLI helper sources; the flag cannot rescue them,
+and `--force` remains their only path. Attestation records that usage is
+unknown; it does not recover unreported provider usage.
+
+The follow-up correction gate ran on the tree at `93bf7d54`, the last commit before this record; the only edits after that gate are the checkpoint records in the commit that carries this paragraph. `bash scripts/check.sh` passed 7,173 Python tests, 20 optional skips and three expected failures; 514 frontend tests; strict typing on 467 sources; lint/format; four import contracts; document and generated-type checks; and the production build. `bash scripts/verify_samples.sh` verified all 300 canonical recordings (100 under `replays/samples/`, 200 under `replays/ml_corpus/`); all four `scripts/build_sample_report.py --check` runs are consistent; `pytest tests/orchestrator/ --collect-only` collects in a fresh interpreter; the API and static browser journeys passed (13 passed, 3 skipped). No committed recording, report, metric, weight or adoption verdict was rewritten, and every experiment candidate remains default-OFF.

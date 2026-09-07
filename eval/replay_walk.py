@@ -1,5 +1,10 @@
 """The parameterized replay walker — shared MECHANICS, per-consumer PROFILES.
 
+Current outcome-certifying reports additionally select
+``verify_chronology_and_outcome``. This delegates ordered-row, meeting-trigger,
+and terminal-metadata checks to the same validator as spectator playback. The
+historical profiles below retain their explicit compatibility contracts.
+
 Task 19.25 (audits/audit-phase-19-triage.md §7 item 25 + C3, closing §7 items
 1–2): eight eval modules carried nine independent ``advance_tick`` /
 ``apply_meeting_result`` reconstruction loop bodies. This module is their one
@@ -192,8 +197,10 @@ and training walks are backlog by the Phase-19 cut line.
 from __future__ import annotations
 
 from collections.abc import Callable, Iterator
+from contextlib import ExitStack
 from dataclasses import dataclass
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Final, Literal, NoReturn, TypeAlias
 
 from pydantic import TypeAdapter
@@ -205,8 +212,12 @@ from engine.tick import advance_tick
 from engine.world import Map, WorldState
 from meetings.schemas import MeetingResult
 from meetings.voting import tally_ballots
+from observation.service import ObservationService
 from orchestrator.game import apply_meeting_result
+from orchestrator.policy_reconstruction import PolicyReconstruction
 from orchestrator.replay import (
+    recorded_experiment_config,
+    recorded_testimony_shapes,
     TOGGLEABLE_SUBSTRATE_FLAG_KEYS,
     GameEndReplayEntry,
     MeetingReplayEntry,
@@ -215,9 +226,12 @@ from orchestrator.replay import (
     _state_hash,
     classify_action_dispositions,
     read_all_entries,
+    recorded_substrate_flags,
+    recorded_temporal_observation_version,
     substrate_stamp_mismatches,
 )
 from orchestrator.seeder import seed_initial_state
+from orchestrator.replay_integrity import ReplayIntegrityValidator
 
 _ACTION_ADAPTER: Final[TypeAdapter[Action]] = TypeAdapter(Action)
 
@@ -274,7 +288,8 @@ class ReplayWalkConfig:
     Every check is an OPTION (module docstring: no check is core-mandatory).
     ``on_violation`` MUST raise; the walker raises ``RuntimeError`` if it
     returns. ``ballot_tally_threshold`` non-``None`` enables the recorded
-    ballots-tally-to-outcome check under that skip-confidence threshold
+    ballots-tally-to-outcome check. A recorded cutoff takes precedence; the
+    profile's threshold is the explicit compatibility rule for older records
     (:func:`meetings.voting.tally_ballots`). ``verify_meeting_pre_hashes``
     compares each meeting row's ``state_hash_before`` against the
     reconstructed post-advance hash of its trigger tick (equal to the recorded
@@ -292,6 +307,10 @@ class ReplayWalkConfig:
     they never ran. An UNSTAMPED recording is skipped, its substrate being
     unknown rather than OFF
     (:func:`orchestrator.replay.substrate_stamp_mismatches`).
+    ``verify_chronology_and_outcome`` delegates original-row and terminal-event
+    checks to the shared spectator validator, which raises
+    :class:`orchestrator.replay_integrity.ReplayIntegrityError` directly. Select
+    tick and meeting-post hash checks alongside it to certify current reports.
     """
 
     profile: str
@@ -309,6 +328,9 @@ class ReplayWalkConfig:
     reject_trailing_rows: bool = False
     require_game_end_row: bool = False
     verify_recorded_outcome: bool = False
+    verify_chronology_and_outcome: bool = False
+    supports_temporal_observations: bool = False
+    supports_experiments: bool = False
 
 
 @dataclass(frozen=True)
@@ -333,6 +355,7 @@ class TickAdvanced:
     pre_state: WorldState
     state: WorldState
     events: tuple[EngineEvent, ...]
+    actions: tuple[Action, ...]
 
 
 @dataclass(frozen=True)
@@ -362,6 +385,7 @@ class MeetingApplied:
     body_id: BodyId | None
     state: WorldState
     post_events: tuple[EngineEvent, ...]
+    testimony_shapes: bool = False
 
 
 @dataclass(frozen=True)
@@ -424,8 +448,53 @@ def walk_replay(
     ``on_violation`` hook, which raises the consumer's own exception.
     """
 
+    # A suspended generator owns its reconstruction audit until exhaustion or
+    # explicit close. ExitStack also cleans up when a consumer throws into it.
+    with ExitStack() as resources:
+        yield from _walk_replay(
+            replay_path,
+            seed=seed,
+            num_players=num_players,
+            num_impostors=num_impostors,
+            tasks_per_crewmate=tasks_per_crewmate,
+            game_map=game_map,
+            config=config,
+            resources=resources,
+        )
+
+
+def _walk_replay(
+    replay_path: Path,
+    *,
+    seed: int,
+    num_players: int,
+    num_impostors: int,
+    tasks_per_crewmate: int,
+    game_map: Map,
+    config: ReplayWalkConfig,
+    resources: ExitStack,
+) -> Iterator[ReplayWalkEvent]:
+
     game_id = f"headless-seed-{seed}"
     entries = read_all_entries(replay_path)
+    experiment = recorded_experiment_config(entries)
+    testimony_shapes = recorded_testimony_shapes(entries)
+    if experiment is not None and not config.supports_experiments:
+        raise ValueError(
+            f"replay profile {config.profile!r} does not support experimental recordings"
+        )
+    if (
+        recorded_temporal_observation_version(entries) is not None
+        and not config.supports_temporal_observations
+    ):
+        raise ValueError(
+            f"replay profile {config.profile!r} does not support temporal observations"
+        )
+    integrity = (
+        ReplayIntegrityValidator(entries, game_id=game_id)
+        if config.verify_chronology_and_outcome
+        else None
+    )
     tick_entries = [entry for entry in entries if isinstance(entry, ReplayEntry)]
     meeting_entries = [
         entry for entry in entries if isinstance(entry, MeetingReplayEntry)
@@ -450,10 +519,16 @@ def walk_replay(
         # audits/workflows/extract_gameplay_facts.py applies: a live toggle
         # recorded the other way is a substrate this build can still reach, a
         # graduated lever recorded OFF is not.
+        # Resolved, not terminal-only: the identity pair rides the first tick
+        # row as well as ``game_over``, so an INTERRUPTED prefix stamped with a
+        # retired lever OFF describes the same unreproducible substrate a
+        # completed recording would and is refused the same way. A stamp that
+        # contradicts itself across rows raises ValueError out of this walk, as
+        # ``recorded_temporal_observation_version`` above already does.
         stamped_off = tuple(
             key
             for key in substrate_stamp_mismatches(
-                game_end.substrate_flags if game_end is not None else None
+                recorded_substrate_flags(entries)
             ).differing
             if key not in TOGGLEABLE_SUBSTRATE_FLAG_KEYS
         )
@@ -474,6 +549,24 @@ def walk_replay(
         num_impostors=num_impostors,
         tasks_per_crewmate=tasks_per_crewmate,
     )
+    policy: PolicyReconstruction | None = None
+    if experiment is not None and experiment.format_version == 3:
+        audit_directory = resources.enter_context(
+            TemporaryDirectory(prefix="ailibi-policy-reconstruction-")
+        )
+        service = ObservationService(
+            game_map=game_map,
+            audit_log_path=Path(audit_directory) / "observations.jsonl",
+            temporal_observation_version=2,
+        )
+        resources.callback(service.close)
+        policy = PolicyReconstruction(
+            initial_state=state,
+            game_map=game_map,
+            experiment=experiment,
+            service=service,
+            testimony_shapes=testimony_shapes,
+        )
 
     hash_needed = config.verify_tick_hashes or config.verify_meeting_pre_hashes
     last_events: tuple[EngineEvent, ...] = ()
@@ -482,11 +575,22 @@ def walk_replay(
     reconstructed_reason: str | None = None
 
     for entry in tick_entries:
+        if integrity is not None:
+            integrity.check_tick(entry, state)
         yield TickOpened(entry=entry, state=state, last_events=last_events)
 
         pre_state = state
         actions = [_ACTION_ADAPTER.validate_python(dict(raw)) for raw in entry.actions]
-        state, raw_events = advance_tick(state, actions, game_map=game_map)
+        if policy is not None:
+            policy.before_tick(state=state, last_events=last_events, actions=actions)
+        state, raw_events = advance_tick(
+            state,
+            actions,
+            game_map=game_map,
+            redistribution_policy=experiment.redistribution_policy
+            if experiment
+            else "lowest_id",
+        )
         events = tuple(raw_events)
         actual = _state_hash(state) if hash_needed else None
         if config.verify_tick_hashes and actual != entry.state_hash:
@@ -513,11 +617,23 @@ def walk_replay(
                         actual=",".join(reconstructed),
                     ),
                 )
+        if integrity is not None:
+            integrity.check_advance(entry, state, events)
+        if policy is not None:
+            policy.after_tick(
+                source_state=pre_state, state=state, events=events, actions=actions
+            )
         for event in events:
             if isinstance(event, GameOverEvent):
                 reconstructed_winner = event.winner
                 reconstructed_reason = event.reason
-        yield TickAdvanced(entry=entry, pre_state=pre_state, state=state, events=events)
+        yield TickAdvanced(
+            entry=entry,
+            pre_state=pre_state,
+            state=state,
+            events=events,
+            actions=tuple(actions),
+        )
 
         if state.phase == "GAME_OVER":
             terminal_tick = entry.tick
@@ -554,7 +670,11 @@ def walk_replay(
             )
         if config.ballot_tally_threshold is not None and tally_ballots(
             meeting_entry.ballots,
-            skip_confidence_threshold=config.ballot_tally_threshold,
+            skip_confidence_threshold=(
+                meeting_entry.skip_confidence_threshold
+                if meeting_entry.skip_confidence_threshold is not None
+                else config.ballot_tally_threshold
+            ),
         ) != (meeting_entry.outcome, meeting_entry.ejected_player_id):
             _violate(
                 config,
@@ -568,6 +688,8 @@ def walk_replay(
             None,
         )
         body_id = trigger.body_id if trigger is not None else None
+        if policy is not None:
+            policy.open_meeting(state)
         yield MeetingOpened(
             entry=meeting_entry,
             trigger=trigger,
@@ -578,7 +700,14 @@ def walk_replay(
 
         result = _meeting_result_from_entry(meeting_entry)
         state, raw_post_events = apply_meeting_result(
-            state, result, game_map=game_map, triggering_body_id=body_id
+            state,
+            result,
+            game_map=game_map,
+            triggering_body_id=body_id,
+            redistribution_policy=experiment.redistribution_policy
+            if experiment
+            else "lowest_id",
+            meeting_reset=experiment.meeting_reset if experiment else "preserve",
         )
         post_events = tuple(raw_post_events)
         if config.verify_meeting_post_hashes:
@@ -594,6 +723,12 @@ def walk_replay(
                         actual=after,
                     ),
                 )
+        if integrity is not None:
+            integrity.check_meeting_result(state, post_events)
+        if policy is not None:
+            policy.complete_meeting(
+                state=state, result=result, emergency=body_id is None
+            )
         for event in post_events:
             if isinstance(event, GameOverEvent):
                 reconstructed_winner = event.winner
@@ -604,12 +739,16 @@ def walk_replay(
             body_id=body_id,
             state=state,
             post_events=post_events,
+            testimony_shapes=testimony_shapes,
         )
 
         last_events = events + post_events
         if state.phase == "GAME_OVER":
             terminal_tick = entry.tick
             break
+
+    if integrity is not None:
+        integrity.finish()
 
     if config.require_terminal_tick and terminal_tick is None:
         _violate(

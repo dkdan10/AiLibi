@@ -1,27 +1,6 @@
-// The mind inspector's MEMORY tab (Task 12.8; was the standalone memory snapshot
-// rail). Renders one agent's episodic feed from `AgentMemoryView` — the
-// observations the agent actually logged (saw_player / saw_body→found_body
-// surface as the discriminated `ObservationClaimView`), the task tally, and the
-// raw rendered memory text the LLM was handed (mono, collapsible).
-//
-// Firewall (PER-FIELD, gated by the connected inspector via `revealSecrets` =
-// Omniscient OR lens-is-this-agent). The ground-truth tells are suppressed when
-// inspecting through a DIFFERENT agent's fog; the episodic observation feed stays
-// visible (it does not reveal the observer's own role). Gated fields:
-//   • the impostor extras — fellow impostors, the `own_kill` lines, and the
-//     FABRICATED cover tasks (the task-contract firewall);
-//   • the task tally — impostors carry 0 assigned tasks, so it leaks alignment;
-//   • the raw `rendered_memory_text` — the verbatim prompt memory carries the
-//     `Your role` block + the own-kill self-channel, so it rides the gate for
-//     EVERY agent, not just impostors.
-// One display-correctness guard: the killer's own victim is filtered OUT of the
-// `found_body` feed when the own-kill line is shown (`render_for_prompt`
-// suppresses that body in favour of the own-kill self-channel — no double-render).
-// Cover tasks are NOT in the episodic feed — episodic memory never mints a
-// `completed_task` for an impostor (`agents/memory/store`); they are the
-// fabricated alibi the impostor states in the meeting, projected from its turn
-// observations and passed in as `coverTasks`.
-// Presentational: the connected MindInspector owns the fetch + the gate.
+// Presentational private memory. MindInspector requires the observer’s own lens
+// or omniscient mode before mounting this panel. Keep role-bearing extras gated
+// here as well for standalone consumers.
 
 import type { ReactElement, ReactNode } from "react";
 
@@ -46,15 +25,8 @@ function Empty({ children }: { children: ReactNode }) {
   return <p className="text-xs italic text-ink-400">{children}</p>;
 }
 
-// Task 16.7.1: this local switch renders the FULL `ObservationClaimView` union
-// even though the runtime producer here (`api.replay_loader._observations_from_memory`)
-// only ever emits saw_player / completed_task / found_body. The explicit
-// `ReactElement` return type + a case for every union member means a future
-// producer widening can never SILENTLY blank a memory line (the 15-midwave
-// dormant trap, closed): saw_vent was the 15.4.1 gap, whereabouts is 16.7.1,
-// and saw_kill is the witnessed-murder shape.
-// The wording mirrors `ui/ObservationLine.tsx`; the styling keeps this file's
-// local convention (`text-ink-900` on the root span).
+// Exhaustive rendering keeps additive account kinds visible. Reported task
+// activity is a claim, and never becomes a completed task in this panel.
 function ObservationLine({ obs }: { obs: ObservationClaimView }): ReactElement {
   switch (obs.type) {
     case "saw_player":
@@ -72,6 +44,13 @@ function ObservationLine({ obs }: { obs: ObservationClaimView }): ReactElement {
         <span className="min-w-0 break-words text-ink-900">
           <span className="font-semibold">completed</span> {obs.task_id} in {obs.room}{" "}
           at tick {obs.tick}
+        </span>
+      );
+    case "task_activity":
+      return (
+        <span className="min-w-0 break-words text-ink-900">
+          <span className="font-semibold">claimed task activity</span>{" "}
+          {obs.task_id} in {obs.room}, ticks {obs.from_tick}–{obs.to_tick}
         </span>
       );
     case "found_body":
@@ -150,7 +129,11 @@ export function MemoryPanel({
         ),
     )
     // The DTO arrives salience-ordered; show the episodic feed newest-first.
-    .sort((a, b) => b.tick - a.tick);
+    .sort((a, b) => {
+      const aTick = a.type === "task_activity" ? a.to_tick : a.tick;
+      const bTick = b.type === "task_activity" ? b.to_tick : b.tick;
+      return bTick - aTick;
+    });
 
   // The raw rendered memory IS the verbatim prompt memory — it carries the
   // agent's `Your role` block + (for an impostor) the own-kill self-channel — so
@@ -169,6 +152,21 @@ export function MemoryPanel({
             {memory.tasks_completed} / {memory.tasks_assigned}
           </span>
         </div>
+      )}
+
+      {revealSecrets && memory.investigation_plan && (
+        <section aria-label="Search intention">
+          <SectionHeading>Search intention</SectionHeading>
+          <p className="text-xs text-ink-700">
+            At tick {memory.investigation_plan.decision_tick}, planned to look for{" "}
+            {memory.investigation_plan.target_id}, last seen in{" "}
+            {memory.investigation_plan.last_known_room} at tick{" "}
+            {memory.investigation_plan.source_tick}.
+          </p>
+          <p className="text-xs text-ink-500">
+            This is a plan, not a sighting. Finding someone later does not confirm where they were earlier.
+          </p>
+        </section>
       )}
 
       {showImpostorExtras && fellowImpostors.length > 0 && (

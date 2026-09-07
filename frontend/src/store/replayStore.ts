@@ -15,6 +15,7 @@
 // windowing intact.
 
 import { create } from "zustand";
+import type { EvidenceSelection } from "../lib/evidence";
 
 import * as api from "../api/client";
 import type {
@@ -118,6 +119,7 @@ export interface ReplayStoreState {
 
   // Selected meeting (for MeetingView overlay).
   selectedMeetingId: string | null;
+  selectedEvidence: EvidenceSelection | null;
 
   // Selected agent (for ThoughtStream).
   selectedAgentId: string | null;
@@ -206,6 +208,7 @@ export interface ReplayStoreActions {
   setIsPlaying(playing: boolean): void;
   setPlaybackSpeed(speed: PlaybackSpeed): void;
   selectMeeting(meetingId: string | null): void;
+  selectEvidence(evidence: EvidenceSelection | null): void;
   selectAgent(agentId: string | null): void;
   setBeliefOpen(open: boolean): void;
   fetchMemoryView(meetingId: string, agentId: string): Promise<void>;
@@ -284,6 +287,7 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
       isPlaying: false,
       playbackSpeed: 1,
       selectedMeetingId: null,
+            selectedEvidence: null,
       selectedAgentId: null,
       beliefOpen: false,
       memoryCache: {},
@@ -392,6 +396,7 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
             currentTick: 0,
             isPlaying: false,
             selectedMeetingId: null,
+            selectedEvidence: null,
             selectedAgentId: null,
             beliefOpen: false,
             memoryCache: {},
@@ -437,6 +442,7 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
             currentTick: 0,
             isPlaying: false,
             selectedMeetingId: null,
+            selectedEvidence: null,
             selectedAgentId: null,
             beliefOpen: false,
             memoryCache: {},
@@ -460,6 +466,10 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
 
       setPlaybackSpeed(speed) {
         set({ playbackSpeed: speed });
+      },
+
+      selectEvidence(evidence) {
+        set({ selectedEvidence: evidence, isPlaying: false });
       },
 
       selectMeeting(meetingId) {

@@ -76,12 +76,16 @@ game states all nine roles, the impostors' included. Treat it exactly as the
 unauthenticated API above: hidden-information ground truth, safe only on the
 machine that produced it.
 
-One caveat before reading a sidecar as one game's record: the log **appends**.
-`ObservationAuditLog` opens its path in append mode, so an explicit
-`--audit-log-path` reused across runs accumulates all of them in one file
-(`tests/observation/test_service.py::test_audit_log_appends_across_two_instances`
-pins that). The default path is the one that holds a single run in practice,
-because it is derived from a replay path the recorder refuses to overwrite.
+The game CLI treats the replay and audit as one recording. If either output
+already exists, it refuses to start unless `--force` is supplied. With `--force`,
+it replaces both together; a failed setup restores the previous pair, while a
+failure after the run starts keeps the new partial evidence. This applies to an
+explicit `--audit-log-path` as well as the default. `/dev/null` explicitly
+suppresses the audit and is never replaced.
+
+The standalone `ObservationAuditLog` class still appends when used directly
+(`tests/observation/test_service.py::test_audit_log_appends_across_two_instances`).
+That lower-level behavior is separate from the CLI's recording lifecycle.
 
 Nothing publishes it, by mechanism rather than by intention. `.gitignore`'s
 `**/*.audit.jsonl` line keeps every sidecar out of the repository, and the bundle
@@ -102,7 +106,7 @@ removing the API rather than by protecting it:
 
 ```bash
 uv run python scripts/build_demo_bundle.py            # → frontend/dist/demo-bundle
-python -m http.server -d frontend/dist/demo-bundle 8080
+uv run --offline python -m http.server --bind 127.0.0.1 -d frontend/dist/demo-bundle 8080
 ```
 
 The output is one directory — `index.html`, its asset chunks, and a `data/`
@@ -118,7 +122,8 @@ pre-rendered ANSWERS, not a query surface. It ships:
 
 * the hand-curated featured replays only (`FEATURED_GAMES` in
   `frontend/src/components/ReplayPicker.tsx`), not the 100-replay corpus;
-* the per-set rubric rows for exactly those games;
+* verified, current rubric rows for those games when available; obsolete or
+  unverified scores are suppressed, while the curated games remain playable;
 * no `tournament-eval-report.json` (the 9p2i one is 29 MB — that is the corpus,
   not a demo), so the Dashboard tab renders a card written for this artifact:
   what the demo ships, and where the eval report lives. That card renders no

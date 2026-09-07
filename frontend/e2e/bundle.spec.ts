@@ -1,3 +1,4 @@
+import { evidenceJourney } from "./evidence-journey";
 // THE ARTIFACT journey (Task 19.13) — the same featured walk as `journey.spec.ts`,
 // but driven against the BUILT static demo bundle instead of the dev server, with
 // every `/api` request blocked at the network layer.
@@ -326,7 +327,7 @@ test.describe("static demo bundle", () => {
     expect(apiAttempts).toEqual([]);
   });
 
-  test("the bundle ships no aggregate report, and says so", async ({
+  test("the bundle ships compact verified results", async ({
     page,
     bundle,
   }) => {
@@ -339,9 +340,16 @@ test.describe("static demo bundle", () => {
     }, TOUR_SEEN_KEY);
     await page.goto(`${bundle.origin}/`);
 
-    await page.getByRole("button", { name: "Tournament" }).click();
-    await expect(page.getByText("No tournament report.")).toBeVisible();
+    await page.getByRole("button", { name: "Results & cases" }).click();
+    await expect(page.getByRole("heading", { name: "What the recordings show" })).toBeVisible();
 
     expect(apiAttempts).toEqual([]);
   });
+});
+
+
+test("static: exact evidence, results, cases, fog and shared links", async ({ page, bundle }) => {
+  const attempts = await forbidApi(page);
+  await evidenceJourney(page, bundle.origin);
+  expect(attempts).toEqual([]);
 });

@@ -204,6 +204,9 @@ def _turn_fields(turn: MeetingTurn) -> list[str]:
 
     fields: list[str] = [turn.turn_id, turn.speaker, turn.free_text]
     for obs in turn.observations:
+        if obs.type == "task_activity":
+            fields += [str(obs.from_tick), str(obs.to_tick), obs.task_id, obs.room]
+            continue
         fields.append(str(obs.tick))
         if obs.type == "saw_player":
             fields += [obs.subject, obs.room, *obs.co_present]

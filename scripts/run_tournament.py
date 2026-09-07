@@ -112,9 +112,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
+import os
 import sys
+import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING, Any, Final
 
 # Allow `uv run python scripts/run_tournament.py ...` to find top-level packages.
 _REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -132,8 +135,8 @@ from agents.tactical.learned.factory import (  # noqa: E402
 from eval.balance_eval import run_tournament_eval  # noqa: E402
 from eval.meeting_quality import (  # noqa: E402
     TournamentEvalReport,
-    build_tournament_eval_report,
 )
+from eval.report_schema import TournamentReport  # noqa: E402
 from observation.packet import PlayerId, Role  # noqa: E402
 from orchestrator.game import (  # noqa: E402
     AgentFactory,
@@ -150,6 +153,15 @@ from orchestrator.replay import (  # noqa: E402
     TacticalPolicyStamp,
     fsm_default_tactical_policy_stamp,
 )
+from _report_output import atomic_write_report, preflight_report_output  # noqa: E402
+from _tournament_progress import (  # noqa: E402
+    TournamentProgress,
+    configuration_fingerprint,
+    artifact_fingerprint,
+)
+from llm.budget import GameBudget  # noqa: E402
+from llm.client import TokenUsage  # noqa: E402
+from orchestrator.run_limits import RunDeadline  # noqa: E402
 
 if TYPE_CHECKING:
     # Type-only imports for the artifact-arm resolvers' policy annotations. Kept
@@ -206,7 +218,8 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         default=None,
         help=(
             "path for the JSON TournamentEvalReport "
-            f"(default: <output-dir>/{_DEFAULT_REPORT_FILENAME})"
+            f"(default: <output-dir>/{_DEFAULT_REPORT_FILENAME}); must be separate "
+            "from every selected replay and observation audit"
         ),
     )
     # The roster flags default to None (not their constants) so main() can tell
@@ -255,11 +268,9 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         "--force",
         action="store_true",
         help=(
-            "overwrite existing per-seed replay files in --output-dir. "
-            "Without it, re-using an --output-dir whose replay files already "
-            "exist raises ReplayLog.AlreadyExistsError and exits non-zero, "
-            "guarding against the silent doubled-file corruption that broke "
-            "replay reads in Phase 4 (DESIGN.md §11.4)."
+            "replace each seed's replay and observation audit together in "
+            "--output-dir. Without it, either existing output is refused. "
+            "Outputs for seeds not reached by this run are left intact."
         ),
     )
     parser.add_argument(
@@ -338,6 +349,64 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
             "identities); mutually exclusive with --agent-factory learned-champion "
             "/ learned-crew. A dir without stamp.json fails loud."
         ),
+    )
+    parser.add_argument(
+        "--progress-output",
+        type=Path,
+        default=None,
+        help="progress sidecar (default: OUTPUT_DIR/tournament-progress.json)",
+    )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="verify saved inputs and continue without replaying finished seeds",
+    )
+    parser.add_argument(
+        "--retry-incomplete",
+        action="store_true",
+        help="with --resume, archive interrupted attempts and explicitly retry them",
+    )
+    parser.add_argument(
+        "--attest-unknown-usage",
+        type=int,
+        action="append",
+        metavar="SEED",
+        default=None,
+        help=(
+            "with --resume --retry-incomplete, retain SEED's unmeasurable attempt "
+            "with its usage recorded as UNKNOWN (never as zero) and retry it. Use "
+            "it only when the attempt's recording is genuinely gone — a process "
+            "killed before its first replay row, whose zero-byte file the "
+            "recording rollback correctly removed — so continuation would "
+            "otherwise strand the whole ledger. Repeatable. Refused for a seed "
+            "whose evidence is still readable, and mutually exclusive with every "
+            "--max-total-* cap: a cumulative allowance cannot be enforced over "
+            "unmeasured usage"
+        ),
+    )
+    parser.add_argument(
+        "--max-total-cost-usd",
+        type=float,
+        default=None,
+        help="whole-run reported USD cap, including archived retry attempts",
+    )
+    parser.add_argument(
+        "--max-total-input-tokens",
+        type=int,
+        default=None,
+        help="whole-run input-token cap, including archived retry attempts",
+    )
+    parser.add_argument(
+        "--max-total-output-tokens",
+        type=int,
+        default=None,
+        help="whole-run output-token cap, including archived retry attempts",
+    )
+    parser.add_argument(
+        "--max-wall-seconds",
+        type=float,
+        default=None,
+        help="whole-run elapsed wall limit; interrupts awaited meeting work",
     )
     return parser.parse_args(argv)
 
@@ -994,9 +1063,8 @@ def _resolve_recorded_stamp(
 def _format_summary(eval_report: TournamentEvalReport) -> str:
     """Human-readable balance + meeting-rate + cost summary from the eval report.
 
-    The crew / impostor / tick-budget buckets reduce out of
-    ``GameReport.winner`` (``winner is None`` is the non-decisive tick-budget
-    bucket); the meeting numbers come from the Phase 7 W0.3
+    Verified winners and explicit completion states determine the outcome
+    buckets; an interrupted game is not a tick-limit result. Meeting numbers use
     :class:`~eval.meeting_quality.MeetingRateReport` (``meeting_rate`` is
     rendered as a percentage and guards the ``None``/no-games case the way
     ``decisive_split`` guards the no-decisive-games case); the cost numbers come
@@ -1005,9 +1073,28 @@ def _format_summary(eval_report: TournamentEvalReport) -> str:
 
     report = eval_report.report
     games = len(report.games)
-    crew_wins = sum(1 for game in report.games if game.winner == "CREWMATES")
-    impostor_wins = sum(1 for game in report.games if game.winner == "IMPOSTORS")
-    tick_budget_reached = sum(1 for game in report.games if game.winner is None)
+    crew_wins = sum(
+        1
+        for game in report.games
+        if game.outcome_verified and game.winner == "CREWMATES"
+    )
+    impostor_wins = sum(
+        1
+        for game in report.games
+        if game.outcome_verified and game.winner == "IMPOSTORS"
+    )
+    tick_budget_reached = sum(
+        1 for game in report.games if game.completion_status == "tick_limited"
+    )
+    aborted = sum(1 for game in report.games if game.completion_status == "aborted")
+    unfinished = sum(
+        1 for game in report.games if game.completion_status == "unfinished"
+    )
+    unverified = sum(
+        1
+        for game in report.games
+        if game.winner is not None and not game.outcome_verified
+    )
     meeting = eval_report.meeting_rate
     dashboard = eval_report.cost_dashboard
 
@@ -1016,6 +1103,9 @@ def _format_summary(eval_report: TournamentEvalReport) -> str:
         f"crew_wins:            {crew_wins}",
         f"impostor_wins:        {impostor_wins}",
         f"tick_budget_reached:  {tick_budget_reached}",
+        f"aborted:              {aborted}",
+        f"unfinished:           {unfinished}",
+        f"unverified_outcomes:  {unverified}",
     ]
     decisive = crew_wins + impostor_wins
     if decisive > 0:
@@ -1101,13 +1191,71 @@ def _emit_report_json(eval_report: TournamentEvalReport, report_output: Path) ->
     json_text = eval_report.model_dump_json(indent=2)
     TournamentEvalReport.model_validate_json(json_text)
     report_output.parent.mkdir(parents=True, exist_ok=True)
-    report_output.write_text(json_text + "\n", encoding="utf-8")
+    atomic_write_report(report_output, json_text + "\n")
 
 
 def main(argv: list[str] | None = None) -> int:
+    started = time.monotonic()
     args = _parse_args(argv)
     if args.num_games < 1:
         raise SystemExit(f"--num-games must be at least 1, got {args.num_games}")
+    if args.resume and args.force:
+        raise SystemExit("--resume and --force are mutually exclusive")
+    if args.retry_incomplete and not args.resume:
+        raise SystemExit("--retry-incomplete requires --resume")
+    # Attestation is checked before any file is read: naming a seed with the
+    # wrong flag combination, or beside a cap it can never satisfy, must not
+    # touch the sidecar it would otherwise rewrite.
+    if args.attest_unknown_usage is not None:
+        if not (args.resume and args.retry_incomplete):
+            raise SystemExit(
+                "--attest-unknown-usage requires --resume --retry-incomplete"
+            )
+        if any(
+            getattr(args, name) is not None
+            for name in (
+                "max_total_cost_usd",
+                "max_total_input_tokens",
+                "max_total_output_tokens",
+            )
+        ):
+            raise SystemExit(
+                "--attest-unknown-usage and the --max-total-* caps are mutually "
+                "exclusive: a cumulative cap cannot be enforced over unmeasured usage"
+            )
+    for name in (
+        "max_total_cost_usd",
+        "max_total_input_tokens",
+        "max_total_output_tokens",
+        "max_wall_seconds",
+    ):
+        value = getattr(args, name)
+        if value is not None and (not math.isfinite(value) or value < 0):
+            raise SystemExit(
+                f"--{name.replace('_', '-')} must be finite and non-negative"
+            )
+    seeds = range(args.start_seed, args.start_seed + args.num_games)
+    report_output: Path = (
+        args.report_output
+        if args.report_output is not None
+        else args.output_dir / _DEFAULT_REPORT_FILENAME
+    )
+    recording_paths = tuple(
+        args.output_dir / f"replay-seed-{seed}{suffix}.jsonl"
+        for seed in seeds
+        for suffix in ("", ".audit")
+    )
+    protected_paths = (
+        *recording_paths,
+        *args.output_dir.glob("replay-seed-*.jsonl"),
+        args.output_dir / ".tournament-attempts",
+    )
+    preflight_report_output(report_output, protected_paths)
+    progress_output = (
+        args.progress_output or args.output_dir / "tournament-progress.json"
+    )
+    preflight_report_output(progress_output, (*protected_paths, report_output))
+    preflight_report_output(report_output, (*protected_paths, progress_output))
     num_players, num_impostors, tasks_per_crewmate = _resolve_roster(args)
     explicit_stamp = _resolve_tactical_policy_stamp(args.tactical_policy_stamp)
     # Arm selection (Task 18.19 puts the dual-role co-evo arm FIRST, leaving the
@@ -1167,73 +1315,189 @@ def main(argv: list[str] | None = None) -> int:
         auto_stamp=auto_stamp,
         explicit_stamp=explicit_stamp,
     )
-    seeds = range(args.start_seed, args.start_seed + args.num_games)
-    # ``force`` is threaded into each per-seed ReplayLog construction inside
-    # run_tournament_eval, so a conflicting replay-seed-{seed}.jsonl is truncated
-    # immediately before that game writes it. A crash partway through a re-run
-    # therefore never deletes a later seed's replay that was never reached;
-    # without --force, the first existing file raises and exits non-zero
-    # (DESIGN.md §11.4; Task 4.16).
-    #
-    # Three-branch call (Task 18.7, extending the Task-15.21 two-branch seam;
-    # Task 18.19 reuses the crew_auto_stamp branch for dual-role recordings):
-    # the two pre-18.7 call sites stay BYTE-IDENTICAL for their spies — the
-    # fsm-default path passes NO agent_factory kwarg (run_tournament_eval's
-    # omitted-kwarg default already is build_default_agent_factory(), so any
-    # 15.9/15.21/17.14-era caller/spy of this seam keeps pinning it) and the
-    # learned-champion / candidate path threads the opt-in factory unchanged.
-    # The crew_auto_stamp branch threads the additive crew_policy_stamp beside the
-    # impostor tactical stamp — absent (scripted FSM) on the learned-crew and
-    # crew-only --crew-artifact arms, present on a dual-role co-evo recording;
-    # crew_auto_stamp is None on every other path, so they fall through to the
-    # unchanged branches.
-    if crew_auto_stamp is not None:
-        report = run_tournament_eval(
-            seeds=seeds,
-            output_dir=args.output_dir,
-            agent_factory=agent_factory,
-            num_players=num_players,
-            num_impostors=num_impostors,
-            tasks_per_crewmate=tasks_per_crewmate,
-            max_ticks=args.max_ticks,
-            force=args.force,
-            tactical_policy_stamp=tactical_policy_stamp,
-            crew_policy_stamp=crew_auto_stamp,
+    if not args.resume and not args.force:
+        existing = next((path for path in recording_paths if path.exists()), None)
+        if existing is not None:
+            raise FileExistsError(
+                f"Recording already exists: {existing}; use --force for a new run"
+            )
+    configuration: dict[str, Any] = {
+        "num_players": num_players,
+        "num_impostors": num_impostors,
+        "tasks_per_crewmate": tasks_per_crewmate,
+        "max_ticks": args.max_ticks,
+        "output_dir": str(args.output_dir.resolve()),
+        "report_output": str(report_output.resolve()),
+        "progress_output": str(progress_output.resolve()),
+        "agent_factory": args.agent_factory,
+        "provider": os.environ.get("AILIBI_LLM_PROVIDER", "fake").strip().lower(),
+        "meeting_model_override": os.environ.get("AILIBI_LLM_MEETING_MODEL"),
+        "prompt_family_override": os.environ.get("AILIBI_PROMPT_SET"),
+        "candidate_artifact": artifact_fingerprint(args.candidate_artifact),
+        "crew_artifact": artifact_fingerprint(args.crew_artifact),
+        "tactical_policy_stamp": None
+        if tactical_policy_stamp is None
+        else tactical_policy_stamp.model_dump(),
+        "crew_policy_stamp": None
+        if crew_auto_stamp is None
+        else crew_auto_stamp.model_dump(),
+        "max_total_cost_usd": args.max_total_cost_usd,
+        "max_total_input_tokens": args.max_total_input_tokens,
+        "max_total_output_tokens": args.max_total_output_tokens,
+        "max_wall_seconds": args.max_wall_seconds,
+    }
+    progress = TournamentProgress(
+        path=progress_output,
+        report_path=report_output,
+        output_dir=args.output_dir,
+        configuration=configuration,
+        fingerprint=configuration_fingerprint(configuration, _REPO_ROOT),
+        started=started,
+        seeds=list(seeds),
+        resume=args.resume,
+        force=args.force,
+        attested_unknown_seeds=frozenset(args.attest_unknown_usage or ()),
+    )
+    if args.resume and not args.retry_incomplete:
+        unfinished = next(
+            (
+                a
+                for a in progress.record.attempts
+                if a.status != "finished" and progress.latest(a.seed) is a
+            ),
+            None,
         )
-    elif agent_factory is None:
-        report = run_tournament_eval(
-            seeds=seeds,
-            output_dir=args.output_dir,
-            num_players=num_players,
-            num_impostors=num_impostors,
-            tasks_per_crewmate=tasks_per_crewmate,
-            max_ticks=args.max_ticks,
-            force=args.force,
-            tactical_policy_stamp=tactical_policy_stamp,
+        if unfinished is not None:
+            raise ValueError(
+                f"Seed {unfinished.seed} was interrupted; use --retry-incomplete with --resume"
+            )
+    run_options: dict[str, Any] = {}
+    if any(
+        value is not None
+        for value in (
+            args.max_total_cost_usd,
+            args.max_total_input_tokens,
+            args.max_total_output_tokens,
+        )
+    ):
+        budget = GameBudget(
+            max_cost_usd=1e300
+            if args.max_total_cost_usd is None
+            else args.max_total_cost_usd,
+            max_input_tokens=sys.maxsize
+            if args.max_total_input_tokens is None
+            else args.max_total_input_tokens,
+            max_output_tokens=sys.maxsize
+            if args.max_total_output_tokens is None
+            else args.max_total_output_tokens,
+        )
+        cost, input_tokens, output_tokens = progress.totals()
+        budget.charge(
+            usage=TokenUsage(input_tokens=input_tokens, output_tokens=output_tokens),
+            cost_usd=cost,
+        )
+        run_options["tournament_budget"] = budget
+    deadline = None
+    if args.max_wall_seconds is not None:
+        deadline = RunDeadline(
+            max(0.0, args.max_wall_seconds - progress.elapsed_seconds)
+        )
+        run_options["deadline"] = deadline
+
+    def run_seed(seed: int) -> TournamentReport:
+        if crew_auto_stamp is not None:
+            return run_tournament_eval(
+                seeds=[seed],
+                output_dir=args.output_dir,
+                agent_factory=agent_factory,
+                num_players=num_players,
+                num_impostors=num_impostors,
+                tasks_per_crewmate=tasks_per_crewmate,
+                max_ticks=args.max_ticks,
+                force=args.force,
+                **run_options,
+                tactical_policy_stamp=tactical_policy_stamp,
+                crew_policy_stamp=crew_auto_stamp,
+            )
+        elif agent_factory is None:
+            return run_tournament_eval(
+                seeds=[seed],
+                output_dir=args.output_dir,
+                num_players=num_players,
+                num_impostors=num_impostors,
+                tasks_per_crewmate=tasks_per_crewmate,
+                max_ticks=args.max_ticks,
+                force=args.force,
+                **run_options,
+                tactical_policy_stamp=tactical_policy_stamp,
+            )
+        else:
+            return run_tournament_eval(
+                seeds=[seed],
+                output_dir=args.output_dir,
+                agent_factory=agent_factory,
+                num_players=num_players,
+                num_impostors=num_impostors,
+                tasks_per_crewmate=tasks_per_crewmate,
+                max_ticks=args.max_ticks,
+                force=args.force,
+                **run_options,
+                tactical_policy_stamp=tactical_policy_stamp,
+            )
+
+    progress.save()
+    for seed in seeds:
+        previous = progress.latest(seed)
+        if previous is not None and previous.status == "finished":
+            continue
+        if deadline is not None:
+            deadline.check()
+        attempt = progress.start(seed, retry=args.retry_incomplete)
+        try:
+            run_seed(seed)
+            progress.capture(attempt)
+        except BaseException as error:
+            try:
+                progress.capture(attempt, error=f"{type(error).__name__}: {error}")
+                progress.publish()
+            except BaseException as checkpoint_error:
+                error.add_note(
+                    f"Progress inspection/publication also failed: {checkpoint_error}"
+                )
+                attempt.status = "interrupted"
+                attempt.error = (
+                    f"{type(error).__name__}; inspection failed: {checkpoint_error}"
+                )
+                progress.record.status = "interrupted"
+                try:
+                    progress.save()
+                except BaseException as save_error:
+                    error.add_note(
+                        f"Emergency progress checkpoint also failed: {save_error}"
+                    )
+            raise
+        progress.publish()
+        if deadline is not None:
+            deadline.check()
+    progress.publish(finished=True)
+    eval_report = TournamentEvalReport.model_validate_json(report_output.read_text())
+    print(_format_summary(eval_report))
+    # An attested attempt has no measured usage to sum, so the cumulative line
+    # names what is unknown instead of printing a total that silently omits it.
+    unknown = [a for a in progress.record.attempts if a.usage_unknown]
+    if unknown:
+        named = ", ".join(f"seed {a.seed} attempt {a.number}" for a in unknown)
+        print(
+            "all attempts:         not summable; usage for "
+            f"{named} is recorded as unknown by operator attestation"
         )
     else:
-        report = run_tournament_eval(
-            seeds=seeds,
-            output_dir=args.output_dir,
-            agent_factory=agent_factory,
-            num_players=num_players,
-            num_impostors=num_impostors,
-            tasks_per_crewmate=tasks_per_crewmate,
-            max_ticks=args.max_ticks,
-            force=args.force,
-            tactical_policy_stamp=tactical_policy_stamp,
+        cost, input_tokens, output_tokens = progress.totals()
+        print(
+            f"all attempts:         ${cost:.6f}; input={input_tokens}; output={output_tokens}"
         )
-    eval_report = build_tournament_eval_report(report)
-
-    report_output: Path = (
-        args.report_output
-        if args.report_output is not None
-        else args.output_dir / _DEFAULT_REPORT_FILENAME
-    )
-    _emit_report_json(eval_report, report_output)
-
-    print(_format_summary(eval_report))
     print(f"report:               {report_output}")
+    print(f"progress:             {progress_output}")
     return 0
 
 

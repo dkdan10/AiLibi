@@ -1,0 +1,2282 @@
+{
+  "format_version": 1,
+  "measured_at_utc": "2026-09-06T01:02:08Z",
+  "platform": "macOS-15.7.3-arm64-arm-64bit",
+  "python": "3.11.15",
+  "clock": "perf_counter; application-cold caches; OS cache unchanged",
+  "transport": "in-process ASGI; no network; gzip is diagnostic only",
+  "memory": "process peak RSS including temporary objects, not retained-cache size",
+  "repetitions": 3,
+  "concurrency": 4,
+  "source_hashes": {
+    "reader_implementation": "4076c846d74c777b9310f528704f5496f570b34cd7f0f9771c10db672372a167",
+    "4p1i:31": "a75b556bf317bd2db968b3d04b552844620409e21f49623c1c6e52240b5e08d8",
+    "4p1i:29": "4597832a61a30289e73129491d18fc19410d7a5576e92a16b664648b1502379e",
+    "9p2i:31": "183e60d2ee41a090a418e8fa9ec4dba48e2e2536ee46b44cb091b9a61283d400",
+    "9p2i:23": "e493a2f64cc6a8e5cfbfa5c92d034b65575f0cbcf062acfb42d89dd3670c086d",
+    "set:4p1i": "76f3954f095448d5092517a744a35a47664aff3ce6f7f7596d5a85073cb2218c",
+    "set:9p2i": "1fcee434f1d0bd3a3cd6db55876936b583190bd900cefccaf68259d9a5c73d22"
+  },
+  "substrate": {
+    "testimony_as_content": true,
+    "witnessed_kill_evidence": true,
+    "movement_perception": true,
+    "unfreeze_memory": true,
+    "evidence_quality_lift": true,
+    "reporter_exculpation": true,
+    "hard_evidence_gate": true,
+    "observation_id_rendering": true,
+    "citation_gate": true,
+    "absence_prior": true,
+    "roll_call_round": true,
+    "whereabouts_interior_flags": true,
+    "vent_placement_contradictions": true,
+    "task_completion_from_events": true,
+    "self_location_trail": true,
+    "movement_claim_shape": true,
+    "grounded_prosecution": true,
+    "map_aware_arbitration": true,
+    "structured_turn_markers": true,
+    "meeting_outcome_memory": true,
+    "coalesced_memory_render": true,
+    "impostor_roll_call": false,
+    "reporter_reasoning": false,
+    "corroboration_discipline": false,
+    "testimony_shapes": false
+  },
+  "static_payload_bytes": {
+    "4p1i:31": 11992,
+    "4p1i:29": 91717,
+    "9p2i:31": 635998,
+    "9p2i:23": 966404
+  },
+  "samples": [
+    {
+      "selection": {
+        "set_name": "4p1i",
+        "seed": 31
+      },
+      "timings_ms": {
+        "load_cold": 4.4060839572921395,
+        "load_warm": 0.29541703406721354,
+        "serialize_full": 0.10841700714081526,
+        "beliefs_cold": 3.52591706905514,
+        "beliefs_warm": 0.32591703347861767,
+        "http_warm_full": 5.415874999016523,
+        "http_cold_requested_lean": 4.414958064444363,
+        "http_warm_requested_lean": 0.9449999779462814
+      },
+      "payload_bytes": {
+        "serialized_full": 11992,
+        "http_full": 11992,
+        "http_requested_lean": 11992,
+        "http_full_gzip": 1521,
+        "http_requested_lean_gzip": 1521,
+        "beliefs": 2
+      },
+      "peak_rss_bytes": {
+        "imports": 66453504,
+        "replay": 66715648,
+        "beliefs": 66764800,
+        "concurrent": 68468736
+      },
+      "sequential_walks": [
+        {
+          "memory": false,
+          "visibility": true,
+          "elapsed_ms": 3.842499922029674
+        },
+        {
+          "memory": true,
+          "visibility": false,
+          "elapsed_ms": 3.2848339760676026
+        }
+      ],
+      "concurrent": {
+        "replay_cold": {
+          "requests": [
+            {
+              "elapsed_ms": 15.385875012725592,
+              "bytes": 11992,
+              "gzip_bytes": 1521
+            },
+            {
+              "elapsed_ms": 15.525833005085588,
+              "bytes": 11992,
+              "gzip_bytes": 1521
+            },
+            {
+              "elapsed_ms": 15.66966692917049,
+              "bytes": 11992,
+              "gzip_bytes": 1521
+            },
+            {
+              "elapsed_ms": 14.69779189210385,
+              "bytes": 11992,
+              "gzip_bytes": 1521
+            }
+          ],
+          "walks": [
+            {
+              "memory": false,
+              "visibility": true,
+              "elapsed_ms": 11.326458072289824
+            },
+            {
+              "memory": false,
+              "visibility": true,
+              "elapsed_ms": 11.537332902662456
+            },
+            {
+              "memory": false,
+              "visibility": true,
+              "elapsed_ms": 11.441207956522703
+            },
+            {
+              "memory": false,
+              "visibility": true,
+              "elapsed_ms": 11.555375065654516
+            }
+          ]
+        },
+        "replay_warm": {
+          "requests": [
+            {
+              "elapsed_ms": 3.257458913139999,
+              "bytes": 11992,
+              "gzip_bytes": 1521
+            },
+            {
+              "elapsed_ms": 3.382249968126416,
+              "bytes": 11992,
+              "gzip_bytes": 1521
+            },
+            {
+              "elapsed_ms": 2.4664580123499036,
+              "bytes": 11992,
+              "gzip_bytes": 1521
+            },
+            {
+              "elapsed_ms": 3.4170409198850393,
+              "bytes": 11992,
+              "gzip_bytes": 1521
+            }
+          ],
+          "walks": []
+        },
+        "beliefs_cold": {
+          "requests": [
+            {
+              "elapsed_ms": 12.190500041469932,
+              "bytes": 2,
+              "gzip_bytes": 22
+            },
+            {
+              "elapsed_ms": 15.285458997823298,
+              "bytes": 2,
+              "gzip_bytes": 22
+            },
+            {
+              "elapsed_ms": 14.486624975688756,
+              "bytes": 2,
+              "gzip_bytes": 22
+            },
+            {
+              "elapsed_ms": 14.84745810739696,
+              "bytes": 2,
+              "gzip_bytes": 22
+            }
+          ],
+          "walks": [
+            {
+              "memory": true,
+              "visibility": false,
+              "elapsed_ms": 7.5475419871509075
+            },
+            {
+              "memory": true,
+              "visibility": false,
+              "elapsed_ms": 10.787833016365767
+            },
+            {
+              "memory": true,
+              "visibility": false,
+              "elapsed_ms": 10.406583081930876
+            },
+            {
+              "memory": true,
+              "visibility": false,
+              "elapsed_ms": 9.738957975059748
+            }
+          ]
+        },
+        "beliefs_warm": {
+          "requests": [
+            {
+              "elapsed_ms": 2.787916921079159,
+              "bytes": 2,
+              "gzip_bytes": 22
+            },
+            {
+              "elapsed_ms": 3.0756249325349927,
+              "bytes": 2,
+              "gzip_bytes": 22
+            },
+            {
+              "elapsed_ms": 2.713165944442153,
+              "bytes": 2,
+              "gzip_bytes": 22
+            },
+            {
+              "elapsed_ms": 2.541333087719977,
+              "bytes": 2,
+              "gzip_bytes": 22
+            }
+          ],
+          "walks": []
+        }
+      }
+    },
+    {
+      "selection": {
+        "set_name": "4p1i",
+        "seed": 29
+      },
+      "timings_ms": {
+        "load_cold": 7.528416928835213,
+        "load_warm": 0.32166694290935993,
+        "serialize_full": 0.35800004843622446,
+        "beliefs_cold": 7.28441693354398,
+        "beliefs_warm": 0.3297909861430526,
+        "http_warm_full": 4.153958056122065,
+        "http_cold_requested_lean": 7.241916959173977,
+        "http_warm_requested_lean": 0.9658329654484987
+      },
+      "payload_bytes": {
+        "serialized_full": 91717,
+        "http_full": 91717,
+        "http_requested_lean": 91717,
+        "http_full_gzip": 12929,
+        "http_requested_lean_gzip": 12929,
+        "beliefs": 2099
+      },
+      "peak_rss_bytes": {
+        "imports": 65175552,
+        "replay": 66682880,
+        "beliefs": 67223552,
+        "concurrent": 70844416
+      },
+      "sequential_walks": [
+        {
+          "memory": false,
+          "visibility": true,
+          "elapsed_ms": 6.688041030429304
+        },
+        {
+          "memory": true,
+          "visibility": false,
+          "elapsed_ms": 6.968292058445513
+        }
+      ],
+      "concurrent": {
+        "replay_cold": {
+          "requests": [
+            {
+              "elapsed_ms": 27.075374964624643,
+              "bytes": 91717,
+              "gzip_bytes": 12929
+            },
+            {
+              "elapsed_ms": 28.44487503170967,
+              "bytes": 91717,
+              "gzip_bytes": 12929
+            },
+            {
+              "elapsed_ms": 29.900207999162376,
+              "bytes": 91717,
+              "gzip_bytes": 12929
+            },
+            {
+              "elapsed_ms": 25.167749961838126,
+              "bytes": 91717,
+              "gzip_bytes": 12929
+            }
+          ],
+          "walks": [
+            {
+              "memory": false,
+              "visibility": true,
+              "elapsed_ms": 21.54570899438113
+            },
+            {
+              "memory": false,
+              "visibility": true,
+              "elapsed_ms": 21.107624983415008
+            },
+            {
+              "memory": false,
+              "visibility": true,
+              "elapsed_ms": 22.230791044421494
+            },
+            {
+              "memory": false,
+              "visibility": true,
+              "elapsed_ms": 20.30391595326364
+            }
+          ]
+        },
+        "replay_warm": {
+          "requests": [
+            {
+              "elapsed_ms": 7.5625000754371285,
+              "bytes": 91717,
+              "gzip_bytes": 12929
+            },
+            {
+              "elapsed_ms": 2.6310000102967024,
+              "bytes": 91717,
+              "gzip_bytes": 12929
+            },
+            {
+              "elapsed_ms": 4.063333035446703,
+              "bytes": 91717,
+              "gzip_bytes": 12929
+            },
+            {
+              "elapsed_ms": 5.67370792850852,
+              "bytes": 91717,
+              "gzip_bytes": 12929
+            }
+          ],
+          "walks": []
+        },
+        "beliefs_cold": {
+          "requests": [
+            {
+              "elapsed_ms": 28.34558393806219,
+              "bytes": 2099,
+              "gzip_bytes": 216
+            },
+            {
+              "elapsed_ms": 28.20712502580136,
+              "bytes": 2099,
+              "gzip_bytes": 216
+            },
+            {
+              "elapsed_ms": 28.30745792016387,
+              "bytes": 2099,
+              "gzip_bytes": 216
+            },
+            {
+              "elapsed_ms": 27.931541902944446,
+              "bytes": 2099,
+              "gzip_bytes": 216
+            }
+          ],
+          "walks": [
+            {
+              "memory": true,
+              "visibility": false,
+              "elapsed_ms": 24.94779205881059
+            },
+            {
+              "memory": true,
+              "visibility": false,
+              "elapsed_ms": 24.355457979254425
+            },
+            {
+              "memory": true,
+              "visibility": false,
+              "elapsed_ms": 25.82174993585795
+            },
+            {
+              "memory": true,
+              "visibility": false,
+              "elapsed_ms": 24.899750016629696
+            }
+          ]
+        },
+        "beliefs_warm": {
+          "requests": [
+            {
+              "elapsed_ms": 2.6907079154625535,
+              "bytes": 2099,
+              "gzip_bytes": 216
+            },
+            {
+              "elapsed_ms": 2.7387089794501662,
+              "bytes": 2099,
+              "gzip_bytes": 216
+            },
+            {
+              "elapsed_ms": 2.1591660333797336,
+              "bytes": 2099,
+              "gzip_bytes": 216
+            },
+            {
+              "elapsed_ms": 2.4655420565977693,
+              "bytes": 2099,
+              "gzip_bytes": 216
+            }
+          ],
+          "walks": []
+        }
+      }
+    },
+    {
+      "selection": {
+        "set_name": "9p2i",
+        "seed": 31
+      },
+      "timings_ms": {
+        "load_cold": 20.095249987207353,
+        "load_warm": 0.29920798260718584,
+        "serialize_full": 1.6797080170363188,
+        "beliefs_cold": 30.595125048421323,
+        "beliefs_warm": 0.3435410326346755,
+        "http_warm_full": 5.243499996140599,
+        "http_cold_requested_lean": 20.51545900758356,
+        "http_warm_requested_lean": 1.7739160684868693
+      },
+      "payload_bytes": {
+        "serialized_full": 635998,
+        "http_full": 635998,
+        "http_requested_lean": 635998,
+        "http_full_gzip": 56313,
+        "http_requested_lean_gzip": 56313,
+        "beliefs": 31758
+      },
+      "peak_rss_bytes": {
+        "imports": 65142784,
+        "replay": 73924608,
+        "beliefs": 78413824,
+        "concurrent": 101810176
+      },
+      "sequential_walks": [
+        {
+          "memory": false,
+          "visibility": true,
+          "elapsed_ms": 18.41108303051442
+        },
+        {
+          "memory": true,
+          "visibility": false,
+          "elapsed_ms": 29.99370906036347
+        }
+      ],
+      "concurrent": {
+        "replay_cold": {
+          "requests": [
+            {
+              "elapsed_ms": 95.91920906677842,
+              "bytes": 635998,
+              "gzip_bytes": 56313
+            },
+            {
+              "elapsed_ms": 87.40095898974687,
+              "bytes": 635998,
+              "gzip_bytes": 56313
+            },
+            {
+              "elapsed_ms": 103.97591697983444,
+              "bytes": 635998,
+              "gzip_bytes": 56313
+            },
+            {
+              "elapsed_ms": 78.86579202022403,
+              "bytes": 635998,
+              "gzip_bytes": 56313
+            }
+          ],
+          "walks": [
+            {
+              "memory": false,
+              "visibility": true,
+              "elapsed_ms": 68.13041702844203
+            },
+            {
+              "memory": false,
+              "visibility": true,
+              "elapsed_ms": 72.2402500687167
+            },
+            {
+              "memory": false,
+              "visibility": true,
+              "elapsed_ms": 73.28645896632224
+            },
+            {
+              "memory": false,
+              "visibility": true,
+              "elapsed_ms": 71.70570804737508
+            }
+          ]
+        },
+        "replay_warm": {
+          "requests": [
+            {
+              "elapsed_ms": 12.069083051756024,
+              "bytes": 635998,
+              "gzip_bytes": 56313
+            },
+            {
+              "elapsed_ms": 19.758083042688668,
+              "bytes": 635998,
+              "gzip_bytes": 56313
+            },
+            {
+              "elapsed_ms": 27.614291990175843,
+              "bytes": 635998,
+              "gzip_bytes": 56313
+            },
+            {
+              "elapsed_ms": 3.583375015296042,
+              "bytes": 635998,
+              "gzip_bytes": 56313
+            }
+          ],
+          "walks": []
+        },
+        "beliefs_cold": {
+          "requests": [
+            {
+              "elapsed_ms": 139.31225007399917,
+              "bytes": 31758,
+              "gzip_bytes": 899
+            },
+            {
+              "elapsed_ms": 137.61579210404307,
+              "bytes": 31758,
+              "gzip_bytes": 899
+            },
+            {
+              "elapsed_ms": 138.4366670390591,
+              "bytes": 31758,
+              "gzip_bytes": 899
+            },
+            {
+              "elapsed_ms": 137.88329099770635,
+              "bytes": 31758,
+              "gzip_bytes": 899
+            }
+          ],
+          "walks": [
+            {
+              "memory": true,
+              "visibility": false,
+              "elapsed_ms": 128.81558306980878
+            },
+            {
+              "memory": true,
+              "visibility": false,
+              "elapsed_ms": 129.33637504465878
+            },
+            {
+              "memory": true,
+              "visibility": false,
+              "elapsed_ms": 134.52820805832744
+            },
+            {
+              "memory": true,
+              "visibility": false,
+              "elapsed_ms": 135.18854207359254
+            }
+          ]
+        },
+        "beliefs_warm": {
+          "requests": [
+            {
+              "elapsed_ms": 3.8972089532762766,
+              "bytes": 31758,
+              "gzip_bytes": 899
+            },
+            {
+              "elapsed_ms": 3.3241669880226254,
+              "bytes": 31758,
+              "gzip_bytes": 899
+            },
+            {
+              "elapsed_ms": 2.7896659448742867,
+              "bytes": 31758,
+              "gzip_bytes": 899
+            },
+            {
+              "elapsed_ms": 2.278667059727013,
+              "bytes": 31758,
+              "gzip_bytes": 899
+            }
+          ],
+          "walks": []
+        }
+      }
+    },
+    {
+      "selection": {
+        "set_name": "9p2i",
+        "seed": 23
+      },
+      "timings_ms": {
+        "load_cold": 25.945291970856488,
+        "load_warm": 0.33125001937150955,
+        "serialize_full": 2.3749590618535876,
+        "beliefs_cold": 43.261957936920226,
+        "beliefs_warm": 0.3553329734131694,
+        "http_warm_full": 5.469958996400237,
+        "http_cold_requested_lean": 26.906208018772304,
+        "http_warm_requested_lean": 2.092582988552749
+      },
+      "payload_bytes": {
+        "serialized_full": 966404,
+        "http_full": 966404,
+        "http_requested_lean": 966404,
+        "http_full_gzip": 77476,
+        "http_requested_lean_gzip": 77476,
+        "beliefs": 43580
+      },
+      "peak_rss_bytes": {
+        "imports": 64585728,
+        "replay": 75218944,
+        "beliefs": 80936960,
+        "concurrent": 114900992
+      },
+      "sequential_walks": [
+        {
+          "memory": false,
+          "visibility": true,
+          "elapsed_ms": 23.742916993796825
+        },
+        {
+          "memory": true,
+          "visibility": false,
+          "elapsed_ms": 42.43225010577589
+        }
+      ],
+      "concurrent": {
+        "replay_cold": {
+          "requests": [
+            {
+              "elapsed_ms": 155.03541694488376,
+              "bytes": 966404,
+              "gzip_bytes": 77476
+            },
+            {
+              "elapsed_ms": 141.39945805072784,
+              "bytes": 966404,
+              "gzip_bytes": 77476
+            },
+            {
+              "elapsed_ms": 128.53812496177852,
+              "bytes": 966404,
+              "gzip_bytes": 77476
+            },
+            {
+              "elapsed_ms": 115.12633296661079,
+              "bytes": 966404,
+              "gzip_bytes": 77476
+            }
+          ],
+          "walks": [
+            {
+              "memory": false,
+              "visibility": true,
+              "elapsed_ms": 103.69208303745836
+            },
+            {
+              "memory": false,
+              "visibility": true,
+              "elapsed_ms": 100.27237504255027
+            },
+            {
+              "memory": false,
+              "visibility": true,
+              "elapsed_ms": 102.44533291552216
+            },
+            {
+              "memory": false,
+              "visibility": true,
+              "elapsed_ms": 117.9334579501301
+            }
+          ]
+        },
+        "replay_warm": {
+          "requests": [
+            {
+              "elapsed_ms": 16.010125051252544,
+              "bytes": 966404,
+              "gzip_bytes": 77476
+            },
+            {
+              "elapsed_ms": 27.06679201219231,
+              "bytes": 966404,
+              "gzip_bytes": 77476
+            },
+            {
+              "elapsed_ms": 38.22999994736165,
+              "bytes": 966404,
+              "gzip_bytes": 77476
+            },
+            {
+              "elapsed_ms": 4.120333003811538,
+              "bytes": 966404,
+              "gzip_bytes": 77476
+            }
+          ],
+          "walks": []
+        },
+        "beliefs_cold": {
+          "requests": [
+            {
+              "elapsed_ms": 174.24495797604322,
+              "bytes": 43580,
+              "gzip_bytes": 1183
+            },
+            {
+              "elapsed_ms": 175.4208339843899,
+              "bytes": 43580,
+              "gzip_bytes": 1183
+            },
+            {
+              "elapsed_ms": 175.9287090972066,
+              "bytes": 43580,
+              "gzip_bytes": 1183
+            },
+            {
+              "elapsed_ms": 174.54954201821238,
+              "bytes": 43580,
+              "gzip_bytes": 1183
+            }
+          ],
+          "walks": [
+            {
+              "memory": true,
+              "visibility": false,
+              "elapsed_ms": 167.62829199433327
+            },
+            {
+              "memory": true,
+              "visibility": false,
+              "elapsed_ms": 162.3544170288369
+            },
+            {
+              "memory": true,
+              "visibility": false,
+              "elapsed_ms": 170.2983749564737
+            },
+            {
+              "memory": true,
+              "visibility": false,
+              "elapsed_ms": 171.51387501507998
+            }
+          ]
+        },
+        "beliefs_warm": {
+          "requests": [
+            {
+              "elapsed_ms": 4.3333329958841205,
+              "bytes": 43580,
+              "gzip_bytes": 1183
+            },
+            {
+              "elapsed_ms": 2.7228330727666616,
+              "bytes": 43580,
+              "gzip_bytes": 1183
+            },
+            {
+              "elapsed_ms": 4.626540932804346,
+              "bytes": 43580,
+              "gzip_bytes": 1183
+            },
+            {
+              "elapsed_ms": 3.221167018637061,
+              "bytes": 43580,
+              "gzip_bytes": 1183
+            }
+          ],
+          "walks": []
+        }
+      }
+    },
+    {
+      "selection": {
+        "set_name": "4p1i",
+        "seed": 31
+      },
+      "timings_ms": {
+        "load_cold": 4.34920797124505,
+        "load_warm": 0.26291701942682266,
+        "serialize_full": 0.09204191155731678,
+        "beliefs_cold": 3.2459170324727893,
+        "beliefs_warm": 0.2546670148149133,
+        "http_warm_full": 3.979459055699408,
+        "http_cold_requested_lean": 4.03237494174391,
+        "http_warm_requested_lean": 0.8221660973504186
+      },
+      "payload_bytes": {
+        "serialized_full": 11992,
+        "http_full": 11992,
+        "http_requested_lean": 11992,
+        "http_full_gzip": 1521,
+        "http_requested_lean_gzip": 1521,
+        "beliefs": 2
+      },
+      "peak_rss_bytes": {
+        "imports": 64438272,
+        "replay": 64700416,
+        "beliefs": 64765952,
+        "concurrent": 67125248
+      },
+      "sequential_walks": [
+        {
+          "memory": false,
+          "visibility": true,
+          "elapsed_ms": 3.911333973519504
+        },
+        {
+          "memory": true,
+          "visibility": false,
+          "elapsed_ms": 2.9846670804545283
+        }
+      ],
+      "concurrent": {
+        "replay_cold": {
+          "requests": [
+            {
+              "elapsed_ms": 14.925041934475303,
+              "bytes": 11992,
+              "gzip_bytes": 1521
+            },
+            {
+              "elapsed_ms": 14.325500000268221,
+              "bytes": 11992,
+              "gzip_bytes": 1521
+            },
+            {
+              "elapsed_ms": 13.947166968137026,
+              "bytes": 11992,
+              "gzip_bytes": 1521
+            },
+            {
+              "elapsed_ms": 14.87629092298448,
+              "bytes": 11992,
+              "gzip_bytes": 1521
+            }
+          ],
+          "walks": [
+            {
+              "memory": false,
+              "visibility": true,
+              "elapsed_ms": 11.111374944448471
+            },
+            {
+              "memory": false,
+              "visibility": true,
+              "elapsed_ms": 10.585166048258543
+            },
+            {
+              "memory": false,
+              "visibility": true,
+              "elapsed_ms": 11.766875046305358
+            },
+            {
+              "memory": false,
+              "visibility": true,
+              "elapsed_ms": 12.050457997247577
+            }
+          ]
+        },
+        "replay_warm": {
+          "requests": [
+            {
+              "elapsed_ms": 3.2190419733524323,
+              "bytes": 11992,
+              "gzip_bytes": 1521
+            },
+            {
+              "elapsed_ms": 3.2940420787781477,
+              "bytes": 11992,
+              "gzip_bytes": 1521
+            },
+            {
+              "elapsed_ms": 2.564875059761107,
+              "bytes": 11992,
+              "gzip_bytes": 1521
+            },
+            {
+              "elapsed_ms": 2.169292070902884,
+              "bytes": 11992,
+              "gzip_bytes": 1521
+            }
+          ],
+          "walks": []
+        },
+        "beliefs_cold": {
+          "requests": [
+            {
+              "elapsed_ms": 13.4967080084607,
+              "bytes": 2,
+              "gzip_bytes": 22
+            },
+            {
+              "elapsed_ms": 13.382334029302001,
+              "bytes": 2,
+              "gzip_bytes": 22
+            },
+            {
+              "elapsed_ms": 13.428125064820051,
+              "bytes": 2,
+              "gzip_bytes": 22
+            },
+            {
+              "elapsed_ms": 13.268833048641682,
+              "bytes": 2,
+              "gzip_bytes": 22
+            }
+          ],
+          "walks": [
+            {
+              "memory": true,
+              "visibility": false,
+              "elapsed_ms": 10.50974999088794
+            },
+            {
+              "memory": true,
+              "visibility": false,
+              "elapsed_ms": 11.189875076524913
+            },
+            {
+              "memory": true,
+              "visibility": false,
+              "elapsed_ms": 10.559041984379292
+            },
+            {
+              "memory": true,
+              "visibility": false,
+              "elapsed_ms": 10.524499928578734
+            }
+          ]
+        },
+        "beliefs_warm": {
+          "requests": [
+            {
+              "elapsed_ms": 2.923417021520436,
+              "bytes": 2,
+              "gzip_bytes": 22
+            },
+            {
+              "elapsed_ms": 2.471499959938228,
+              "bytes": 2,
+              "gzip_bytes": 22
+            },
+            {
+              "elapsed_ms": 2.5387919740751386,
+              "bytes": 2,
+              "gzip_bytes": 22
+            },
+            {
+              "elapsed_ms": 1.8515830161049962,
+              "bytes": 2,
+              "gzip_bytes": 22
+            }
+          ],
+          "walks": []
+        }
+      }
+    },
+    {
+      "selection": {
+        "set_name": "4p1i",
+        "seed": 29
+      },
+      "timings_ms": {
+        "load_cold": 7.366166915744543,
+        "load_warm": 0.28537504840642214,
+        "serialize_full": 0.3587499959394336,
+        "beliefs_cold": 6.9622499868273735,
+        "beliefs_warm": 0.2762499498203397,
+        "http_warm_full": 4.138499964028597,
+        "http_cold_requested_lean": 7.169500109739602,
+        "http_warm_requested_lean": 1.0123340180143714
+      },
+      "payload_bytes": {
+        "serialized_full": 91717,
+        "http_full": 91717,
+        "http_requested_lean": 91717,
+        "http_full_gzip": 12929,
+        "http_requested_lean_gzip": 12929,
+        "beliefs": 2099
+      },
+      "peak_rss_bytes": {
+        "imports": 64389120,
+        "replay": 65748992,
+        "beliefs": 66306048,
+        "concurrent": 69795840
+      },
+      "sequential_walks": [
+        {
+          "memory": false,
+          "visibility": true,
+          "elapsed_ms": 6.642375024966896
+        },
+        {
+          "memory": true,
+          "visibility": false,
+          "elapsed_ms": 6.684082909487188
+        }
+      ],
+      "concurrent": {
+        "replay_cold": {
+          "requests": [
+            {
+              "elapsed_ms": 26.792916003614664,
+              "bytes": 91717,
+              "gzip_bytes": 12929
+            },
+            {
+              "elapsed_ms": 25.13870899565518,
+              "bytes": 91717,
+              "gzip_bytes": 12929
+            },
+            {
+              "elapsed_ms": 29.535084031522274,
+              "bytes": 91717,
+              "gzip_bytes": 12929
+            },
+            {
+              "elapsed_ms": 27.939375024288893,
+              "bytes": 91717,
+              "gzip_bytes": 12929
+            }
+          ],
+          "walks": [
+            {
+              "memory": false,
+              "visibility": true,
+              "elapsed_ms": 21.255958010442555
+            },
+            {
+              "memory": false,
+              "visibility": true,
+              "elapsed_ms": 21.460874937474728
+            },
+            {
+              "memory": false,
+              "visibility": true,
+              "elapsed_ms": 19.85287491697818
+            },
+            {
+              "memory": false,
+              "visibility": true,
+              "elapsed_ms": 21.981374942697585
+            }
+          ]
+        },
+        "replay_warm": {
+          "requests": [
+            {
+              "elapsed_ms": 2.8715000953525305,
+              "bytes": 91717,
+              "gzip_bytes": 12929
+            },
+            {
+              "elapsed_ms": 5.547250038944185,
+              "bytes": 91717,
+              "gzip_bytes": 12929
+            },
+            {
+              "elapsed_ms": 6.8757920525968075,
+              "bytes": 91717,
+              "gzip_bytes": 12929
+            },
+            {
+              "elapsed_ms": 3.947292105294764,
+              "bytes": 91717,
+              "gzip_bytes": 12929
+            }
+          ],
+          "walks": []
+        },
+        "beliefs_cold": {
+          "requests": [
+            {
+              "elapsed_ms": 29.260708019137383,
+              "bytes": 2099,
+              "gzip_bytes": 216
+            },
+            {
+              "elapsed_ms": 21.51858399156481,
+              "bytes": 2099,
+              "gzip_bytes": 216
+            },
+            {
+              "elapsed_ms": 20.677375025115907,
+              "bytes": 2099,
+              "gzip_bytes": 216
+            },
+            {
+              "elapsed_ms": 28.438500012271106,
+              "bytes": 2099,
+              "gzip_bytes": 216
+            }
+          ],
+          "walks": [
+            {
+              "memory": true,
+              "visibility": false,
+              "elapsed_ms": 16.78579207509756
+            },
+            {
+              "memory": true,
+              "visibility": false,
+              "elapsed_ms": 18.18545802962035
+            },
+            {
+              "memory": true,
+              "visibility": false,
+              "elapsed_ms": 23.792499909177423
+            },
+            {
+              "memory": true,
+              "visibility": false,
+              "elapsed_ms": 22.656833054497838
+            }
+          ]
+        },
+        "beliefs_warm": {
+          "requests": [
+            {
+              "elapsed_ms": 3.0324580147862434,
+              "bytes": 2099,
+              "gzip_bytes": 216
+            },
+            {
+              "elapsed_ms": 2.3265830241143703,
+              "bytes": 2099,
+              "gzip_bytes": 216
+            },
+            {
+              "elapsed_ms": 2.5933750439435244,
+              "bytes": 2099,
+              "gzip_bytes": 216
+            },
+            {
+              "elapsed_ms": 2.587166032753885,
+              "bytes": 2099,
+              "gzip_bytes": 216
+            }
+          ],
+          "walks": []
+        }
+      }
+    },
+    {
+      "selection": {
+        "set_name": "9p2i",
+        "seed": 31
+      },
+      "timings_ms": {
+        "load_cold": 20.035875029861927,
+        "load_warm": 0.2923329593613744,
+        "serialize_full": 1.7048330046236515,
+        "beliefs_cold": 30.47358407638967,
+        "beliefs_warm": 0.31987507827579975,
+        "http_warm_full": 5.11991698294878,
+        "http_cold_requested_lean": 21.102917031385005,
+        "http_warm_requested_lean": 1.7839580541476607
+      },
+      "payload_bytes": {
+        "serialized_full": 635998,
+        "http_full": 635998,
+        "http_requested_lean": 635998,
+        "http_full_gzip": 56313,
+        "http_requested_lean_gzip": 56313,
+        "beliefs": 31758
+      },
+      "peak_rss_bytes": {
+        "imports": 64995328,
+        "replay": 74022912,
+        "beliefs": 78561280,
+        "concurrent": 97026048
+      },
+      "sequential_walks": [
+        {
+          "memory": false,
+          "visibility": true,
+          "elapsed_ms": 18.407125025987625
+        },
+        {
+          "memory": true,
+          "visibility": false,
+          "elapsed_ms": 29.881375026889145
+        }
+      ],
+      "concurrent": {
+        "replay_cold": {
+          "requests": [
+            {
+              "elapsed_ms": 93.13579194713384,
+              "bytes": 635998,
+              "gzip_bytes": 56313
+            },
+            {
+              "elapsed_ms": 63.45487502403557,
+              "bytes": 635998,
+              "gzip_bytes": 56313
+            },
+            {
+              "elapsed_ms": 75.83204191178083,
+              "bytes": 635998,
+              "gzip_bytes": 56313
+            },
+            {
+              "elapsed_ms": 84.5719170756638,
+              "bytes": 635998,
+              "gzip_bytes": 56313
+            }
+          ],
+          "walks": [
+            {
+              "memory": false,
+              "visibility": true,
+              "elapsed_ms": 52.75487503968179
+            },
+            {
+              "memory": false,
+              "visibility": true,
+              "elapsed_ms": 57.07883392460644
+            },
+            {
+              "memory": false,
+              "visibility": true,
+              "elapsed_ms": 75.62324998434633
+            },
+            {
+              "memory": false,
+              "visibility": true,
+              "elapsed_ms": 72.14287505485117
+            }
+          ]
+        },
+        "replay_warm": {
+          "requests": [
+            {
+              "elapsed_ms": 27.405541972257197,
+              "bytes": 635998,
+              "gzip_bytes": 56313
+            },
+            {
+              "elapsed_ms": 3.262125072069466,
+              "bytes": 635998,
+              "gzip_bytes": 56313
+            },
+            {
+              "elapsed_ms": 11.17837498895824,
+              "bytes": 635998,
+              "gzip_bytes": 56313
+            },
+            {
+              "elapsed_ms": 18.98445899132639,
+              "bytes": 635998,
+              "gzip_bytes": 56313
+            }
+          ],
+          "walks": []
+        },
+        "beliefs_cold": {
+          "requests": [
+            {
+              "elapsed_ms": 149.81850003823638,
+              "bytes": 31758,
+              "gzip_bytes": 899
+            },
+            {
+              "elapsed_ms": 128.52745794225484,
+              "bytes": 31758,
+              "gzip_bytes": 899
+            },
+            {
+              "elapsed_ms": 127.56766704842448,
+              "bytes": 31758,
+              "gzip_bytes": 899
+            },
+            {
+              "elapsed_ms": 133.46862490288913,
+              "bytes": 31758,
+              "gzip_bytes": 899
+            }
+          ],
+          "walks": [
+            {
+              "memory": true,
+              "visibility": false,
+              "elapsed_ms": 114.53745898324996
+            },
+            {
+              "memory": true,
+              "visibility": false,
+              "elapsed_ms": 120.28112506959587
+            },
+            {
+              "memory": true,
+              "visibility": false,
+              "elapsed_ms": 124.4036250282079
+            },
+            {
+              "memory": true,
+              "visibility": false,
+              "elapsed_ms": 139.6597079001367
+            }
+          ]
+        },
+        "beliefs_warm": {
+          "requests": [
+            {
+              "elapsed_ms": 4.471166990697384,
+              "bytes": 31758,
+              "gzip_bytes": 899
+            },
+            {
+              "elapsed_ms": 2.709332969971001,
+              "bytes": 31758,
+              "gzip_bytes": 899
+            },
+            {
+              "elapsed_ms": 3.6408340092748404,
+              "bytes": 31758,
+              "gzip_bytes": 899
+            },
+            {
+              "elapsed_ms": 2.966958098113537,
+              "bytes": 31758,
+              "gzip_bytes": 899
+            }
+          ],
+          "walks": []
+        }
+      }
+    },
+    {
+      "selection": {
+        "set_name": "9p2i",
+        "seed": 23
+      },
+      "timings_ms": {
+        "load_cold": 25.929833063855767,
+        "load_warm": 0.29541703406721354,
+        "serialize_full": 2.485290984623134,
+        "beliefs_cold": 43.21162507403642,
+        "beliefs_warm": 0.3247079439461231,
+        "http_warm_full": 5.266333930194378,
+        "http_cold_requested_lean": 27.059540967456996,
+        "http_warm_requested_lean": 2.1795829525217414
+      },
+      "payload_bytes": {
+        "serialized_full": 966404,
+        "http_full": 966404,
+        "http_requested_lean": 966404,
+        "http_full_gzip": 77476,
+        "http_requested_lean_gzip": 77476,
+        "beliefs": 43580
+      },
+      "peak_rss_bytes": {
+        "imports": 65847296,
+        "replay": 78462976,
+        "beliefs": 84279296,
+        "concurrent": 110067712
+      },
+      "sequential_walks": [
+        {
+          "memory": false,
+          "visibility": true,
+          "elapsed_ms": 23.78237503580749
+        },
+        {
+          "memory": true,
+          "visibility": false,
+          "elapsed_ms": 42.396292090415955
+        }
+      ],
+      "concurrent": {
+        "replay_cold": {
+          "requests": [
+            {
+              "elapsed_ms": 145.0660830596462,
+              "bytes": 966404,
+              "gzip_bytes": 77476
+            },
+            {
+              "elapsed_ms": 121.4320829603821,
+              "bytes": 966404,
+              "gzip_bytes": 77476
+            },
+            {
+              "elapsed_ms": 106.38666688464582,
+              "bytes": 966404,
+              "gzip_bytes": 77476
+            },
+            {
+              "elapsed_ms": 132.89462495595217,
+              "bytes": 966404,
+              "gzip_bytes": 77476
+            }
+          ],
+          "walks": [
+            {
+              "memory": false,
+              "visibility": true,
+              "elapsed_ms": 87.88862498477101
+            },
+            {
+              "memory": false,
+              "visibility": true,
+              "elapsed_ms": 99.10279198084027
+            },
+            {
+              "memory": false,
+              "visibility": true,
+              "elapsed_ms": 100.59358295984566
+            },
+            {
+              "memory": false,
+              "visibility": true,
+              "elapsed_ms": 112.25125007331371
+            }
+          ]
+        },
+        "replay_warm": {
+          "requests": [
+            {
+              "elapsed_ms": 15.625666943378747,
+              "bytes": 966404,
+              "gzip_bytes": 77476
+            },
+            {
+              "elapsed_ms": 3.4650000743567944,
+              "bytes": 966404,
+              "gzip_bytes": 77476
+            },
+            {
+              "elapsed_ms": 26.67720802128315,
+              "bytes": 966404,
+              "gzip_bytes": 77476
+            },
+            {
+              "elapsed_ms": 37.827542051672935,
+              "bytes": 966404,
+              "gzip_bytes": 77476
+            }
+          ],
+          "walks": []
+        },
+        "beliefs_cold": {
+          "requests": [
+            {
+              "elapsed_ms": 136.7950839921832,
+              "bytes": 43580,
+              "gzip_bytes": 1183
+            },
+            {
+              "elapsed_ms": 137.86716700997204,
+              "bytes": 43580,
+              "gzip_bytes": 1183
+            },
+            {
+              "elapsed_ms": 174.32150000240654,
+              "bytes": 43580,
+              "gzip_bytes": 1183
+            },
+            {
+              "elapsed_ms": 138.49854096770287,
+              "bytes": 43580,
+              "gzip_bytes": 1183
+            }
+          ],
+          "walks": [
+            {
+              "memory": true,
+              "visibility": false,
+              "elapsed_ms": 130.87883300613612
+            },
+            {
+              "memory": true,
+              "visibility": false,
+              "elapsed_ms": 128.38145799469203
+            },
+            {
+              "memory": true,
+              "visibility": false,
+              "elapsed_ms": 129.0706250583753
+            },
+            {
+              "memory": true,
+              "visibility": false,
+              "elapsed_ms": 171.38574994169176
+            }
+          ]
+        },
+        "beliefs_warm": {
+          "requests": [
+            {
+              "elapsed_ms": 2.785332966595888,
+              "bytes": 43580,
+              "gzip_bytes": 1183
+            },
+            {
+              "elapsed_ms": 3.321415977552533,
+              "bytes": 43580,
+              "gzip_bytes": 1183
+            },
+            {
+              "elapsed_ms": 3.9592090761289,
+              "bytes": 43580,
+              "gzip_bytes": 1183
+            },
+            {
+              "elapsed_ms": 4.468750092200935,
+              "bytes": 43580,
+              "gzip_bytes": 1183
+            }
+          ],
+          "walks": []
+        }
+      }
+    },
+    {
+      "selection": {
+        "set_name": "4p1i",
+        "seed": 31
+      },
+      "timings_ms": {
+        "load_cold": 4.572082892991602,
+        "load_warm": 0.28254196513444185,
+        "serialize_full": 0.09691598825156689,
+        "beliefs_cold": 3.1975830206647515,
+        "beliefs_warm": 0.26779097970575094,
+        "http_warm_full": 4.048625007271767,
+        "http_cold_requested_lean": 4.013166064396501,
+        "http_warm_requested_lean": 0.8527090540155768
+      },
+      "payload_bytes": {
+        "serialized_full": 11992,
+        "http_full": 11992,
+        "http_requested_lean": 11992,
+        "http_full_gzip": 1521,
+        "http_requested_lean_gzip": 1521,
+        "beliefs": 2
+      },
+      "peak_rss_bytes": {
+        "imports": 65683456,
+        "replay": 66043904,
+        "beliefs": 66125824,
+        "concurrent": 67977216
+      },
+      "sequential_walks": [
+        {
+          "memory": false,
+          "visibility": true,
+          "elapsed_ms": 4.094459000043571
+        },
+        {
+          "memory": true,
+          "visibility": false,
+          "elapsed_ms": 2.949667046777904
+        }
+      ],
+      "concurrent": {
+        "replay_cold": {
+          "requests": [
+            {
+              "elapsed_ms": 13.69987498037517,
+              "bytes": 11992,
+              "gzip_bytes": 1521
+            },
+            {
+              "elapsed_ms": 14.152750023640692,
+              "bytes": 11992,
+              "gzip_bytes": 1521
+            },
+            {
+              "elapsed_ms": 14.320499962195754,
+              "bytes": 11992,
+              "gzip_bytes": 1521
+            },
+            {
+              "elapsed_ms": 14.561124960891902,
+              "bytes": 11992,
+              "gzip_bytes": 1521
+            }
+          ],
+          "walks": [
+            {
+              "memory": false,
+              "visibility": true,
+              "elapsed_ms": 10.862624971196055
+            },
+            {
+              "memory": false,
+              "visibility": true,
+              "elapsed_ms": 10.504042031243443
+            },
+            {
+              "memory": false,
+              "visibility": true,
+              "elapsed_ms": 11.378750088624656
+            },
+            {
+              "memory": false,
+              "visibility": true,
+              "elapsed_ms": 11.449291021563113
+            }
+          ]
+        },
+        "replay_warm": {
+          "requests": [
+            {
+              "elapsed_ms": 2.99466704018414,
+              "bytes": 11992,
+              "gzip_bytes": 1521
+            },
+            {
+              "elapsed_ms": 3.281832905486226,
+              "bytes": 11992,
+              "gzip_bytes": 1521
+            },
+            {
+              "elapsed_ms": 2.337666926905513,
+              "bytes": 11992,
+              "gzip_bytes": 1521
+            },
+            {
+              "elapsed_ms": 2.8886660002171993,
+              "bytes": 11992,
+              "gzip_bytes": 1521
+            }
+          ],
+          "walks": []
+        },
+        "beliefs_cold": {
+          "requests": [
+            {
+              "elapsed_ms": 13.615624979138374,
+              "bytes": 2,
+              "gzip_bytes": 22
+            },
+            {
+              "elapsed_ms": 13.640417018905282,
+              "bytes": 2,
+              "gzip_bytes": 22
+            },
+            {
+              "elapsed_ms": 13.454124913550913,
+              "bytes": 2,
+              "gzip_bytes": 22
+            },
+            {
+              "elapsed_ms": 13.024625019170344,
+              "bytes": 2,
+              "gzip_bytes": 22
+            }
+          ],
+          "walks": [
+            {
+              "memory": true,
+              "visibility": false,
+              "elapsed_ms": 10.914917103946209
+            },
+            {
+              "memory": true,
+              "visibility": false,
+              "elapsed_ms": 10.123959043994546
+            },
+            {
+              "memory": true,
+              "visibility": false,
+              "elapsed_ms": 10.54358296096325
+            },
+            {
+              "memory": true,
+              "visibility": false,
+              "elapsed_ms": 11.44566701259464
+            }
+          ]
+        },
+        "beliefs_warm": {
+          "requests": [
+            {
+              "elapsed_ms": 2.3562080459669232,
+              "bytes": 2,
+              "gzip_bytes": 22
+            },
+            {
+              "elapsed_ms": 2.052875002846122,
+              "bytes": 2,
+              "gzip_bytes": 22
+            },
+            {
+              "elapsed_ms": 1.8271669978275895,
+              "bytes": 2,
+              "gzip_bytes": 22
+            },
+            {
+              "elapsed_ms": 2.330334042198956,
+              "bytes": 2,
+              "gzip_bytes": 22
+            }
+          ],
+          "walks": []
+        }
+      }
+    },
+    {
+      "selection": {
+        "set_name": "4p1i",
+        "seed": 29
+      },
+      "timings_ms": {
+        "load_cold": 7.454124977812171,
+        "load_warm": 0.2768749836832285,
+        "serialize_full": 0.3290000604465604,
+        "beliefs_cold": 6.919833016581833,
+        "beliefs_warm": 0.3007500199601054,
+        "http_warm_full": 4.141999990679324,
+        "http_cold_requested_lean": 7.21208390314132,
+        "http_warm_requested_lean": 1.0233749635517597
+      },
+      "payload_bytes": {
+        "serialized_full": 91717,
+        "http_full": 91717,
+        "http_requested_lean": 91717,
+        "http_full_gzip": 12929,
+        "http_requested_lean_gzip": 12929,
+        "beliefs": 2099
+      },
+      "peak_rss_bytes": {
+        "imports": 64045056,
+        "replay": 65421312,
+        "beliefs": 65961984,
+        "concurrent": 69582848
+      },
+      "sequential_walks": [
+        {
+          "memory": false,
+          "visibility": true,
+          "elapsed_ms": 6.759166019037366
+        },
+        {
+          "memory": true,
+          "visibility": false,
+          "elapsed_ms": 6.642374908551574
+        }
+      ],
+      "concurrent": {
+        "replay_cold": {
+          "requests": [
+            {
+              "elapsed_ms": 26.832749950699508,
+              "bytes": 91717,
+              "gzip_bytes": 12929
+            },
+            {
+              "elapsed_ms": 23.027040995657444,
+              "bytes": 91717,
+              "gzip_bytes": 12929
+            },
+            {
+              "elapsed_ms": 24.79366702027619,
+              "bytes": 91717,
+              "gzip_bytes": 12929
+            },
+            {
+              "elapsed_ms": 28.083125012926757,
+              "bytes": 91717,
+              "gzip_bytes": 12929
+            }
+          ],
+          "walks": [
+            {
+              "memory": false,
+              "visibility": true,
+              "elapsed_ms": 17.43520889431238
+            },
+            {
+              "memory": false,
+              "visibility": true,
+              "elapsed_ms": 19.267083960585296
+            },
+            {
+              "memory": false,
+              "visibility": true,
+              "elapsed_ms": 19.593207980506122
+            },
+            {
+              "memory": false,
+              "visibility": true,
+              "elapsed_ms": 15.423749922774732
+            }
+          ]
+        },
+        "replay_warm": {
+          "requests": [
+            {
+              "elapsed_ms": 7.259292062371969,
+              "bytes": 91717,
+              "gzip_bytes": 12929
+            },
+            {
+              "elapsed_ms": 5.670874961651862,
+              "bytes": 91717,
+              "gzip_bytes": 12929
+            },
+            {
+              "elapsed_ms": 2.492832951247692,
+              "bytes": 91717,
+              "gzip_bytes": 12929
+            },
+            {
+              "elapsed_ms": 3.9064170559868217,
+              "bytes": 91717,
+              "gzip_bytes": 12929
+            }
+          ],
+          "walks": []
+        },
+        "beliefs_cold": {
+          "requests": [
+            {
+              "elapsed_ms": 18.640958005562425,
+              "bytes": 2099,
+              "gzip_bytes": 216
+            },
+            {
+              "elapsed_ms": 22.65033300500363,
+              "bytes": 2099,
+              "gzip_bytes": 216
+            },
+            {
+              "elapsed_ms": 17.04149995930493,
+              "bytes": 2099,
+              "gzip_bytes": 216
+            },
+            {
+              "elapsed_ms": 18.85724999010563,
+              "bytes": 2099,
+              "gzip_bytes": 216
+            }
+          ],
+          "walks": [
+            {
+              "memory": true,
+              "visibility": false,
+              "elapsed_ms": 12.500957935117185
+            },
+            {
+              "memory": true,
+              "visibility": false,
+              "elapsed_ms": 15.83529100753367
+            },
+            {
+              "memory": true,
+              "visibility": false,
+              "elapsed_ms": 20.486125024035573
+            }
+          ]
+        },
+        "beliefs_warm": {
+          "requests": [
+            {
+              "elapsed_ms": 2.5942909996956587,
+              "bytes": 2099,
+              "gzip_bytes": 216
+            },
+            {
+              "elapsed_ms": 2.7380839455872774,
+              "bytes": 2099,
+              "gzip_bytes": 216
+            },
+            {
+              "elapsed_ms": 2.4800000246614218,
+              "bytes": 2099,
+              "gzip_bytes": 216
+            },
+            {
+              "elapsed_ms": 2.6549590984359384,
+              "bytes": 2099,
+              "gzip_bytes": 216
+            }
+          ],
+          "walks": []
+        }
+      }
+    },
+    {
+      "selection": {
+        "set_name": "9p2i",
+        "seed": 31
+      },
+      "timings_ms": {
+        "load_cold": 20.517917000688612,
+        "load_warm": 0.3023750614374876,
+        "serialize_full": 1.6720839776098728,
+        "beliefs_cold": 31.99895902071148,
+        "beliefs_warm": 0.5999580025672913,
+        "http_warm_full": 5.969541962258518,
+        "http_cold_requested_lean": 22.12350000627339,
+        "http_warm_requested_lean": 1.7702080076560378
+      },
+      "payload_bytes": {
+        "serialized_full": 635998,
+        "http_full": 635998,
+        "http_requested_lean": 635998,
+        "http_full_gzip": 56313,
+        "http_requested_lean_gzip": 56313,
+        "beliefs": 31758
+      },
+      "peak_rss_bytes": {
+        "imports": 64323584,
+        "replay": 71270400,
+        "beliefs": 75726848,
+        "concurrent": 94928896
+      },
+      "sequential_walks": [
+        {
+          "memory": false,
+          "visibility": true,
+          "elapsed_ms": 18.82349990773946
+        },
+        {
+          "memory": true,
+          "visibility": false,
+          "elapsed_ms": 31.275541987270117
+        }
+      ],
+      "concurrent": {
+        "replay_cold": {
+          "requests": [
+            {
+              "elapsed_ms": 105.18700000829995,
+              "bytes": 635998,
+              "gzip_bytes": 56313
+            },
+            {
+              "elapsed_ms": 96.7254169518128,
+              "bytes": 635998,
+              "gzip_bytes": 56313
+            },
+            {
+              "elapsed_ms": 88.28950009774417,
+              "bytes": 635998,
+              "gzip_bytes": 56313
+            },
+            {
+              "elapsed_ms": 79.84637492336333,
+              "bytes": 635998,
+              "gzip_bytes": 56313
+            }
+          ],
+          "walks": [
+            {
+              "memory": false,
+              "visibility": true,
+              "elapsed_ms": 69.2797499941662
+            },
+            {
+              "memory": false,
+              "visibility": true,
+              "elapsed_ms": 68.27320798765868
+            },
+            {
+              "memory": false,
+              "visibility": true,
+              "elapsed_ms": 73.98795790504664
+            },
+            {
+              "memory": false,
+              "visibility": true,
+              "elapsed_ms": 75.10258303955197
+            }
+          ]
+        },
+        "replay_warm": {
+          "requests": [
+            {
+              "elapsed_ms": 3.5970000317320228,
+              "bytes": 635998,
+              "gzip_bytes": 56313
+            },
+            {
+              "elapsed_ms": 27.319167042151093,
+              "bytes": 635998,
+              "gzip_bytes": 56313
+            },
+            {
+              "elapsed_ms": 11.366041959263384,
+              "bytes": 635998,
+              "gzip_bytes": 56313
+            },
+            {
+              "elapsed_ms": 19.208166981115937,
+              "bytes": 635998,
+              "gzip_bytes": 56313
+            }
+          ],
+          "walks": []
+        },
+        "beliefs_cold": {
+          "requests": [
+            {
+              "elapsed_ms": 86.4642079686746,
+              "bytes": 31758,
+              "gzip_bytes": 899
+            },
+            {
+              "elapsed_ms": 89.7097080014646,
+              "bytes": 31758,
+              "gzip_bytes": 899
+            },
+            {
+              "elapsed_ms": 139.9802080122754,
+              "bytes": 31758,
+              "gzip_bytes": 899
+            },
+            {
+              "elapsed_ms": 139.41029098350555,
+              "bytes": 31758,
+              "gzip_bytes": 899
+            }
+          ],
+          "walks": [
+            {
+              "memory": true,
+              "visibility": false,
+              "elapsed_ms": 80.5245420197025
+            },
+            {
+              "memory": true,
+              "visibility": false,
+              "elapsed_ms": 80.91862499713898
+            },
+            {
+              "memory": true,
+              "visibility": false,
+              "elapsed_ms": 121.68908293824643
+            },
+            {
+              "memory": true,
+              "visibility": false,
+              "elapsed_ms": 60.25337497703731
+            }
+          ]
+        },
+        "beliefs_warm": {
+          "requests": [
+            {
+              "elapsed_ms": 2.925833920016885,
+              "bytes": 31758,
+              "gzip_bytes": 899
+            },
+            {
+              "elapsed_ms": 3.1687499722465873,
+              "bytes": 31758,
+              "gzip_bytes": 899
+            },
+            {
+              "elapsed_ms": 3.5500829108059406,
+              "bytes": 31758,
+              "gzip_bytes": 899
+            },
+            {
+              "elapsed_ms": 2.1468340419232845,
+              "bytes": 31758,
+              "gzip_bytes": 899
+            }
+          ],
+          "walks": []
+        }
+      }
+    },
+    {
+      "selection": {
+        "set_name": "9p2i",
+        "seed": 23
+      },
+      "timings_ms": {
+        "load_cold": 25.79062490258366,
+        "load_warm": 0.29037497006356716,
+        "serialize_full": 2.4157079169526696,
+        "beliefs_cold": 43.142959009855986,
+        "beliefs_warm": 0.34679193049669266,
+        "http_warm_full": 5.440666922368109,
+        "http_cold_requested_lean": 26.937542017549276,
+        "http_warm_requested_lean": 2.1446250611916184
+      },
+      "payload_bytes": {
+        "serialized_full": 966404,
+        "http_full": 966404,
+        "http_requested_lean": 966404,
+        "http_full_gzip": 77476,
+        "http_requested_lean_gzip": 77476,
+        "beliefs": 43580
+      },
+      "peak_rss_bytes": {
+        "imports": 65060864,
+        "replay": 75808768,
+        "beliefs": 81494016,
+        "concurrent": 115834880
+      },
+      "sequential_walks": [
+        {
+          "memory": false,
+          "visibility": true,
+          "elapsed_ms": 23.641166975721717
+        },
+        {
+          "memory": true,
+          "visibility": false,
+          "elapsed_ms": 42.33579197898507
+        }
+      ],
+      "concurrent": {
+        "replay_cold": {
+          "requests": [
+            {
+              "elapsed_ms": 141.5185829391703,
+              "bytes": 966404,
+              "gzip_bytes": 77476
+            },
+            {
+              "elapsed_ms": 103.53312501683831,
+              "bytes": 966404,
+              "gzip_bytes": 77476
+            },
+            {
+              "elapsed_ms": 117.2284580534324,
+              "bytes": 966404,
+              "gzip_bytes": 77476
+            },
+            {
+              "elapsed_ms": 129.15812502615154,
+              "bytes": 966404,
+              "gzip_bytes": 77476
+            }
+          ],
+          "walks": [
+            {
+              "memory": false,
+              "visibility": true,
+              "elapsed_ms": 64.5787080284208
+            },
+            {
+              "memory": false,
+              "visibility": true,
+              "elapsed_ms": 96.45908290985972
+            },
+            {
+              "memory": false,
+              "visibility": true,
+              "elapsed_ms": 106.1031250283122
+            },
+            {
+              "memory": false,
+              "visibility": true,
+              "elapsed_ms": 103.42583304736763
+            }
+          ]
+        },
+        "replay_warm": {
+          "requests": [
+            {
+              "elapsed_ms": 3.917749971151352,
+              "bytes": 966404,
+              "gzip_bytes": 77476
+            },
+            {
+              "elapsed_ms": 26.393375010229647,
+              "bytes": 966404,
+              "gzip_bytes": 77476
+            },
+            {
+              "elapsed_ms": 14.888709061779082,
+              "bytes": 966404,
+              "gzip_bytes": 77476
+            },
+            {
+              "elapsed_ms": 37.561916979029775,
+              "bytes": 966404,
+              "gzip_bytes": 77476
+            }
+          ],
+          "walks": []
+        },
+        "beliefs_cold": {
+          "requests": [
+            {
+              "elapsed_ms": 174.52775000128895,
+              "bytes": 43580,
+              "gzip_bytes": 1183
+            },
+            {
+              "elapsed_ms": 176.10337503720075,
+              "bytes": 43580,
+              "gzip_bytes": 1183
+            },
+            {
+              "elapsed_ms": 175.38124998100102,
+              "bytes": 43580,
+              "gzip_bytes": 1183
+            },
+            {
+              "elapsed_ms": 174.67795894481242,
+              "bytes": 43580,
+              "gzip_bytes": 1183
+            }
+          ],
+          "walks": [
+            {
+              "memory": true,
+              "visibility": false,
+              "elapsed_ms": 169.1480000736192
+            },
+            {
+              "memory": true,
+              "visibility": false,
+              "elapsed_ms": 163.0687079159543
+            },
+            {
+              "memory": true,
+              "visibility": false,
+              "elapsed_ms": 170.8252920070663
+            },
+            {
+              "memory": true,
+              "visibility": false,
+              "elapsed_ms": 164.3435830483213
+            }
+          ]
+        },
+        "beliefs_warm": {
+          "requests": [
+            {
+              "elapsed_ms": 3.5556249786168337,
+              "bytes": 43580,
+              "gzip_bytes": 1183
+            },
+            {
+              "elapsed_ms": 2.774833934381604,
+              "bytes": 43580,
+              "gzip_bytes": 1183
+            },
+            {
+              "elapsed_ms": 3.8835000013932586,
+              "bytes": 43580,
+              "gzip_bytes": 1183
+            },
+            {
+              "elapsed_ms": 4.362249979749322,
+              "bytes": 43580,
+              "gzip_bytes": 1183
+            }
+          ],
+          "walks": []
+        }
+      }
+    }
+  ]
+}

@@ -58,6 +58,11 @@ from tests._helpers.world_state import scripted_initial_world_state
 # DTOs.
 EXPECTED_DTOS: Final[frozenset[str]] = frozenset(
     {
+        "ExperimentConfigView",
+        "InvestigationPlanView",
+        "TacticalPolicyView",
+        "TaskActivityAccountView",
+        "ReportProvenanceGroupView",
         "PositionView",
         "SizeView",
         "RoomView",
@@ -114,6 +119,9 @@ EXPECTED_DTOS: Final[frozenset[str]] = frozenset(
         "BeliefErrorView",
         "BeliefFrameView",
         "AgentMemoryView",
+        "ObservationReferenceView",
+        "PublicCaseView",
+        "PublicResultsView",
         "SuspicionEntryView",
         "SuspicionGraphView",
         "ReplayMetadataView",
@@ -126,6 +134,7 @@ EXPECTED_DTOS: Final[frozenset[str]] = frozenset(
         "FinaleAgentRecapView",
         "GameFinale",
         "EvalCostSummaryView",
+        "ReplayAccountingView",
         # Phase-12 per-set rubric surface (DESIGN.md §3.1, §7):
         "RubricGameView",
         "RubricView",
@@ -303,6 +312,8 @@ FORBIDDEN_EVAL_ENGINE_FIELDS: Final[frozenset[str]] = frozenset(
 # ROUTE redacts them on the served payload via ``api.schemas.FailedCallEvalView``
 # (covered end-to-end in ``test_eval_routes.py``); this structural snapshot is
 # over the report TYPE, which still carries them, so they are listed.
+# ``call_id`` identifies a provider attempt, contains no engine state, and is
+# also omitted by the served failed-call projection.
 #
 # ``rendered_vote_max`` (Task 10.12) is the rendered §4.6 max suspicion a
 # DEFAULTED vote prompt computed over the voter's living ejection candidates,
@@ -462,6 +473,31 @@ FORBIDDEN_EVAL_ENGINE_FIELDS: Final[frozenset[str]] = frozenset(
 # player id crosses the model boundary.
 EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
     {
+        # Recorded behavior identity and configured tally; no new hidden state.
+        "agent_factory_kind",
+        "experiment_config",
+        "substrate_flags",
+        "tactical_policy",
+        "crew_tactical_policy",
+        "policy_id",
+        "method",
+        "encoder_version",
+        "weights_sha256",
+        "anchor_policy",
+        "redistribution_policy",
+        "meeting_reset",
+        "crew_idle_policy",
+        "vent_exit_policy",
+        "post_meeting_retarget",
+        "self_report",
+        "sabotage_threshold",
+        "evidence_reasoning_version",
+        "bounded_rebuttal_version",
+        "public_account_version",
+        "attributed_testimony_version",
+        "provenance_groups",
+        "game_ids",
+        "skip_confidence_threshold",
         "accusation_calibration",
         "accusation_claim_bins",
         "accusation_claim_crew_accuser",
@@ -492,6 +528,7 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "body_of",
         "body_report_meetings",
         "by_model",
+        "call_id",
         "call_kind",
         "cap_defaulted_turns",
         "citation_coerced_skip_ballots",
@@ -544,17 +581,24 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "event_a_id",
         "event_b_id",
         "evidence",
+        # Typed strength of public meeting evidence; no hidden engine input.
+        "evidence_band",
         "evidence_backed_impostor_ejections",
         "evidence_taxonomy",
         "excluded_no_votable_target_ballots",
         "failed_calls",
         "final_tick",
+        "completion_status",
+        "outcome_verified",
         "flag_named_ejections",
         "flagged_ejections_impostor",
         "flagged_ejections_innocent",
         "flagged_meeting_accuracy",
         "flagged_meetings",
         "flags_total",
+        # Explicit candidate selections; plans are not report evidence.
+        "investigation_version",
+        "contextual_self_report_version",
         "format_version",
         "free_text",
         # A witnessed transition's two rooms (SawMoveObservation) — public
@@ -1053,7 +1097,7 @@ def test_as_agent_fog_leaks_no_unseen_player_body_or_field(
 
                 for ae in fog.audible_events:
                     assert set(ae.model_dump().keys()) == {"kind", "room"}
-                    assert ae.kind in ("vent_use_heard", "sabotage_alarm")
+                    assert ae.kind == "sabotage_alarm"
                     audibles += 1
 
     assert games > 0, "expected committed 9p2i replays"

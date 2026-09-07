@@ -36,6 +36,7 @@ import type { RefObject } from "react";
 
 import { BeliefMatrix } from "./components/BeliefMatrix";
 import { CostChips } from "./components/CostChips";
+import { EvidencePanel } from "./components/EvidencePanel";
 import { EventTicker } from "./components/EventTicker";
 import { GuidedTour, openGuidedTour } from "./components/GuidedTour";
 import { MeetingPill } from "./components/MeetingPill";
@@ -200,7 +201,7 @@ function KeyboardTransport() {
 const TABS: ReadonlyArray<{ id: Exclude<ViewId, "workspace">; label: string }> = [
   { id: "replays", label: "Replays" },
   { id: "highlights", label: "Highlights" },
-  { id: "tournament", label: "Tournament" },
+  { id: "tournament", label: "Results & cases" },
 ];
 
 function TopNav() {
@@ -1100,6 +1101,7 @@ function Workspace() {
         style={{ paddingBottom: "var(--transport-h, 16rem)" }}
       >
         <PerspectiveBanner />
+        <EvidencePanel />
         <div className="flex flex-col gap-4 lg:flex-row">
           <RosterRail />
           {/* Stage slot — the map (12.5). The meeting morph (12.7) is the
@@ -1196,7 +1198,7 @@ export default function App() {
       <GuidedTour />
       {!meetingOpen && (
         <header className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-2xl">AiLibi</h1>
+          <div><h1 className="text-2xl">AiLibi</h1><p className="text-xs text-ink-500">Recorded AI social deduction · directed by Daniel Keinan</p><p className="text-xs text-ink-500">Code and supporting material by Claude Code and Codex · AI-reviewed · <a href="https://github.com/dkdan10/AiLibi" target="_blank" rel="noreferrer" className="underline">Source & ownership</a></p></div>
           <TopNav />
         </header>
       )}

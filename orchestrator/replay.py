@@ -42,7 +42,7 @@ eval **report** (:data:`eval.report_schema.CURRENT_FORMAT_VERSION`), whose
 shape is a fresh artifact; the replay bytes rely on the hash + sidecar
 instead.
 
-Provenance stamps on the ``game_over`` record (Task 15.9; audit
+Provenance stamps on the FIRST tick row and the ``game_over`` record (Task 15.9; audit
 post-phase-14-ML-planning.md §7.2-7.3). Two ADDITIVE, OPTIONAL blocks
 self-describe what generated a recording, so a replay answers *which* substrate
 and *which* tactical policy produced its bytes without the operator remembering
@@ -68,6 +68,21 @@ default. Task 18.19 recordings carry BOTH stamps on one ``game_over`` row (a
 dual-role co-evo game); :func:`read_policy_stamps` reads the pair back in one walk
 into a :class:`PolicyStamps` named-slot tuple, each identity in its own typed slot
 so the two can never be positionally conflated.
+
+Where the stamps sit. The COUPLED pair ``agent_factory_kind`` +
+``substrate_flags`` is written onto the FIRST tick row and onto the ``game_over``
+row, and onto NO other tick row. Row 0 is authoritative: rows 1..N-1 carry
+neither key and INHERIT it, so a recording self-describes from its very first row
+and an interrupted prefix that never reached ``game_over`` still names the
+factory and the substrate that produced it. A later tick row or a terminal row
+that CONTRADICTS row 0 is refused, and so is a stamp that first appears after an
+UNSTAMPED row 0 — inheriting backwards would let a re-stamped suffix claim
+provenance the recorded prefix never carried. Writing it once rather than on
+every row is what keeps the guarantee affordable: the repeated slate measures
++3.5% over the committed 9p2i sample set, +13-15% over the 4p1i sets and up to
++166% on the smallest committed 4p1i file. The remaining stamps
+(``tactical_policy``, ``crew_tactical_policy``, ``experiment_config``) are
+unchanged; ``experiment_config`` still rides every tick row.
 """
 
 from __future__ import annotations
@@ -78,10 +93,31 @@ import hashlib
 import json
 import os
 from pathlib import Path
-from typing import Annotated, Any, Final, Literal, NamedTuple, TextIO, TypeAlias
+from typing import (
+    Annotated,
+    Any,
+    Final,
+    Literal,
+    NamedTuple,
+    TextIO,
+    TypeAlias,
+    TypeVar,
+)
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictBool,
+    field_validator,
+    model_validator,
+)
 
+from orchestrator.experiment_config import (
+    RecordedExperimentConfig,
+    normalize_experiment_config,
+    validate_recorded_experiment_config,
+)
 from agents.memory.store import (
     AgentMemory,
     record_meeting_outcome,
@@ -102,6 +138,10 @@ from meetings.schemas import (
     MeetingTranscript,
     PlayerId,
     VoteBallot,
+)
+from observation.version import (
+    temporal_observations_enabled,
+    temporal_observation_version as resolve_temporal_observation_version,
 )
 
 # The Task-18.10 impostor-answer lever, resolved LOCALLY instead of importing
@@ -223,6 +263,13 @@ def classify_action_dispositions(
     return tuple(dispositions)
 
 
+AgentFactoryKind: TypeAlias = Literal["scripted", "experimental", "custom"]
+TemporalObservationVersion: TypeAlias = Literal[1, 2]
+# The stamp value a once-per-recording tick-row read resolves; see
+# :func:`_first_tick_stamp`.
+_StampT = TypeVar("_StampT")
+
+
 class ReplayEntry(BaseModel):
     """One per-tick replay record written by :meth:`ReplayLog.record_tick`.
 
@@ -242,6 +289,25 @@ class ReplayEntry(BaseModel):
     actions: tuple[dict[str, Any], ...]
     action_dispositions: tuple[ActionDisposition, ...] | None = None
     state_hash: str
+    temporal_observation_version: TemporalObservationVersion | None = None
+    experiment_config: RecordedExperimentConfig | None = None
+    # The recording-identity pair, written onto the FIRST tick row ONLY (and,
+    # by :meth:`ReplayLog.record_game_end`, onto the ``game_over`` row) —
+    # together or not at all, since a factory identity without its substrate
+    # slate would name the agents but not the world they ran in. ``None`` on
+    # rows 1..N means "INHERITS the first tick row", not "unknown"; ``None`` on
+    # the FIRST tick row means unknown / legacy, and then no later row may
+    # supply it. :func:`recorded_agent_factory_kind` and
+    # :func:`recorded_substrate_flags` are the readers that apply that rule.
+    agent_factory_kind: AgentFactoryKind | None = None
+    substrate_flags: Mapping[str, StrictBool] | None = None
+
+    @field_validator("temporal_observation_version", mode="before")
+    @classmethod
+    def _temporal_version_is_integer(cls, value: object) -> object:
+        if value is not None and type(value) is not int:
+            raise ValueError("temporal observation versions must be integers")
+        return value
 
     @model_validator(mode="after")
     def _dispositions_cover_every_action(self) -> ReplayEntry:
@@ -288,6 +354,35 @@ class MeetingReplayEntry(BaseModel):
     prompt_versions: Mapping[str, str]
     state_hash_before: str
     state_hash_after: str
+    skip_confidence_threshold: float | None = Field(
+        default=None,
+        ge=0,
+        le=1,
+        allow_inf_nan=False,
+        exclude_if=lambda value: value is None,
+    )
+
+    @field_validator("skip_confidence_threshold", mode="before")
+    @classmethod
+    def _threshold_is_numeric(cls, value: object) -> object:
+        if value is not None and type(value) not in (int, float):
+            raise ValueError("skip confidence threshold must be numeric")
+        return value
+
+
+class AbortedMeetingReplayEntry(BaseModel):
+    """Captured calls from an unresolved meeting, without an engine transition."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    kind: Literal["meeting_aborted"] = "meeting_aborted"
+    game_id: str
+    meeting_id: str
+    tick: int
+    llm_calls: tuple[LLMCallRecord, ...]
+    prompt_versions: Mapping[str, str]
+    error_type: str
+    error_message: str
 
 
 WinnerSide: TypeAlias = Literal["CREWMATES", "IMPOSTORS"]
@@ -482,6 +577,28 @@ class CrewTacticalPolicyStamp(BaseModel):
         return _validated_stamp_field(value)
 
 
+GameStopReason: TypeAlias = Literal["TICK_BUDGET_REACHED", "MEETING_PHASE_REACHED"]
+CompletionStatus: TypeAlias = Literal[
+    "completed", "aborted", "tick_limited", "unfinished"
+]
+
+
+class GameStopReplayEntry(BaseModel):
+    """A normal nonterminal exit, labelled with the next engine tick.
+
+    This additive row records why the runner stopped without claiming a winner.
+    Older recordings without a stop row remain unfinished; their missing footer
+    cannot distinguish a tick limit from an interruption.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    kind: Literal["game_stopped"] = "game_stopped"
+    game_id: str
+    tick: int = Field(ge=0)
+    reason: GameStopReason
+
+
 class GameEndReplayEntry(BaseModel):
     """One game-outcome replay record (DESIGN.md §11.4; Task 3.19 finding 3).
 
@@ -516,8 +633,13 @@ class GameEndReplayEntry(BaseModel):
     # unchanged; every post-14.9 recording stamps the full snapshot. The loader
     # honors it (``api.replay_loader``) by refusing to reconstruct a stamped
     # replay under a DIFFERENT ambient substrate — no silent cross-substrate
-    # replay.
-    substrate_flags: Mapping[str, bool] | None = None
+    # replay. Its twin on the FIRST tick row (``ReplayEntry.substrate_flags``,
+    # written with ``agent_factory_kind`` beside it) carries the same slate, and
+    # :func:`recorded_substrate_flags` refuses a terminal stamp that disagrees
+    # with it.
+    substrate_flags: Mapping[str, StrictBool] | None = None
+    experiment_config: RecordedExperimentConfig | None = None
+    agent_factory_kind: AgentFactoryKind | None = None
     # The tactical-policy provenance stamp (Task 15.9; DESIGN.md §11.4; audit
     # post-phase-14-ML-planning.md §7.2-7.3). Answers "which tactical policy
     # produced these bytes" the same way ``substrate_flags`` answers "which
@@ -548,17 +670,11 @@ class GameEndReplayEntry(BaseModel):
 
 
 class FailedCallReplayEntry(BaseModel):
-    """One failed-LLM-call replay record (DESIGN.md §11.4; Task 3.19 finding 2).
+    """A reported provider failure or a meeting-default visibility marker.
 
-    Written by :meth:`ReplayLog.record_failed_call` when a meeting aborts
-    because a structured-output response failed schema validation. The
-    ``ValidationError`` fires inside the provider before an
-    :class:`~llm.client.LLMResponse` exists, so the tokens the model
-    already burned would otherwise be invisible to both the budget layer
-    and :meth:`ReplayLog.record_meeting` (which never runs for the crashed
-    meeting). This row captures that spend — plus enough of the raw
-    response and the error to reconstruct what broke — so per-meeting cost
-    is auditable even for the meeting that crashed the run.
+    Reported failures carry their actual usage and partial response. A default
+    without separate usage is a zero-spend marker. Newly captured attempts carry
+    ``call_id`` so identical paid responses are not collapsed by content.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -587,12 +703,252 @@ class FailedCallReplayEntry(BaseModel):
     # the reader tolerates its absence and existing bytes reconstruct
     # unchanged.
     rendered_vote_max: float | None = None
+    # Present on newly captured attempts so identical responses from
+    # distinct paid calls remain distinct. Legacy rows retain content dedup.
+    call_id: str | None = None
 
 
 ReplayLogEntry: TypeAlias = Annotated[
-    ReplayEntry | MeetingReplayEntry | GameEndReplayEntry | FailedCallReplayEntry,
+    ReplayEntry
+    | MeetingReplayEntry
+    | AbortedMeetingReplayEntry
+    | GameEndReplayEntry
+    | GameStopReplayEntry
+    | FailedCallReplayEntry,
     Field(discriminator="kind"),
 ]
+
+
+def recorded_experiment_config(
+    entries: Sequence[ReplayLogEntry],
+) -> RecordedExperimentConfig | None:
+    """Resolve one immutable experimental profile, including partial recordings."""
+
+    ends = [entry for entry in entries if isinstance(entry, GameEndReplayEntry)]
+    if len(ends) > 1:
+        raise ValueError("multiple terminal experiment configurations")
+    config = validate_recorded_experiment_config(
+        [
+            entry.experiment_config
+            for entry in entries
+            if isinstance(entry, ReplayEntry)
+        ],
+        terminal_config=ends[0].experiment_config if ends else None,
+        terminal_present=bool(ends),
+    )
+    if (
+        config is not None
+        and (
+            config.evidence_reasoning_version == 2
+            or config.public_account_version is not None
+        )
+        and recorded_temporal_observation_version(entries) != 2
+    ):
+        raise ValueError(
+            "new evidence and public accounts require temporal observations version 2"
+        )
+    if config is not None and config.format_version == 3:
+        expected_kind = "experimental" if config.has_tactical_changes else "scripted"
+        if recorded_agent_factory_kind(entries) != expected_kind:
+            raise ValueError(
+                "experiment format 3 requires recorded built-in tactical policy identity"
+            )
+    return config
+
+
+def require_baseline_experiments(
+    entries: Sequence[ReplayLogEntry], *, consumer: str
+) -> None:
+    """Refuse experimental runs in an instrument that implements baseline rules."""
+
+    if recorded_experiment_config(entries) is not None:
+        raise ValueError(f"{consumer} does not support experimental recordings")
+
+
+def recorded_testimony_shapes(entries: Sequence[ReplayLogEntry]) -> bool:
+    """Bind testimony reconstruction to recorded versions, never the shell.
+
+    Resolved meetings carry prompt versions even in interrupted recordings.
+    Pre-version custom/legacy meetings use the historical OFF fold. A terminal
+    stamp may identify a custom runner, but cannot contradict versioned speech.
+    """
+
+    versions = {
+        any(
+            part.endswith(".testimony_shapes")
+            for value in entry.prompt_versions.values()
+            for part in value.split("+")
+        )
+        for entry in entries
+        if isinstance(entry, MeetingReplayEntry) and entry.prompt_versions
+    }
+    if len(versions) > 1:
+        raise ValueError("testimony shape version changes between meetings")
+    flags = [
+        entry.substrate_flags
+        for entry in entries
+        if isinstance(entry, GameEndReplayEntry) and entry.substrate_flags is not None
+    ]
+    if flags:
+        stamped = flags[0].get("testimony_shapes", False)
+        if versions and stamped not in versions:
+            raise ValueError("testimony shape version disagrees with substrate stamp")
+        return stamped
+    return versions == {True}
+
+
+def _stamp_as_written(value: _StampT) -> _StampT:
+    """Compare a tick-row stamp exactly as recorded (the default normaliser)."""
+
+    return value
+
+
+def _first_tick_stamp(
+    values: Sequence[_StampT | None],
+    *,
+    subject: str,
+    key: Callable[[_StampT], object],
+) -> _StampT | None:
+    """Resolve a once-per-recording tick-row stamp from the tick rows that carry it.
+
+    The recorder writes the identity pair onto the FIRST tick row only (see
+    :meth:`ReplayLog.record_tick`), so the four clauses here are the whole read
+    contract:
+
+    * the first tick row is AUTHORITATIVE — its value is the recording's;
+    * a later tick row that OMITS the stamp INHERITS the first row's, which is
+      the ordinary shape of every once-stamped recording and not a violation;
+    * a later tick row CARRYING a DIFFERENT stamp is refused, because two rows
+      of one recording cannot describe two substrates or two factories;
+    * a stamp that appears only AFTER an unstamped first tick row is refused
+      too. Inheriting it backwards would let a re-stamped SUFFIX claim
+      provenance the recorded PREFIX never carried, which is the one thing the
+      first-row rule exists to prevent.
+
+    ``key`` normalises a value before comparison (the substrate reader folds
+    missing keys to ``False``); it is never called on ``None``.
+    """
+
+    first = values[0] if values else None
+    if first is None:
+        if any(value is not None for value in values):
+            raise ValueError(
+                f"{subject} appears after an unstamped first tick row; the first "
+                "tick row is the authoritative stamp, so a stamp that only shows "
+                "up later would let a re-stamped suffix claim provenance the "
+                "recorded prefix never carried"
+            )
+        return None
+    if any(value is not None and key(value) != key(first) for value in values):
+        raise ValueError(f"{subject} changes between tick rows")
+    return first
+
+
+def recorded_agent_factory_kind(
+    entries: Sequence[ReplayLogEntry],
+) -> AgentFactoryKind | None:
+    """Preserve unknown historical factories and reject conflicting current stamps."""
+    ticks: list[AgentFactoryKind | None] = [
+        entry.agent_factory_kind for entry in entries if isinstance(entry, ReplayEntry)
+    ]
+    first: AgentFactoryKind | None = _first_tick_stamp(
+        ticks,
+        subject="agent factory identity",
+        key=_stamp_as_written,
+    )
+    for entry in entries:
+        if isinstance(entry, GameEndReplayEntry) and entry.agent_factory_kind != first:
+            raise ValueError("terminal agent factory identity disagrees with tick rows")
+    return first
+
+
+def recorded_substrate_flags(
+    entries: Sequence[ReplayLogEntry],
+) -> Mapping[str, bool] | None:
+    """Resolve current prefix stamps or a legacy footer without inventing missing data."""
+
+    def comparable(flags: Mapping[str, bool] | None) -> dict[str, bool] | None:
+        if flags is None:
+            return None
+        # Historical stamps predate this default-OFF observation channel.
+        return {"temporal_observations": False, **flags}
+
+    first = _first_tick_stamp(
+        [entry.substrate_flags for entry in entries if isinstance(entry, ReplayEntry)],
+        subject="substrate configuration",
+        key=comparable,
+    )
+    ends = [
+        entry.substrate_flags
+        for entry in entries
+        if isinstance(entry, GameEndReplayEntry)
+    ]
+    if len(ends) > 1:
+        raise ValueError("multiple terminal substrate stamps")
+    if first is not None and ends and comparable(ends[0]) != comparable(first):
+        raise ValueError("terminal substrate configuration disagrees with tick rows")
+    return first if first is not None else (ends[0] if ends else None)
+
+
+def recorded_temporal_observation_version(
+    entries: Sequence[ReplayLogEntry],
+) -> TemporalObservationVersion | None:
+    """Read and validate the evidence version, including interrupted prefixes."""
+
+    versions = {
+        entry.temporal_observation_version
+        for entry in entries
+        if isinstance(entry, ReplayEntry)
+    }
+    if len(versions) > 1:
+        raise ValueError("mixed temporal observation versions in one replay")
+    version = next(iter(versions)) if versions else None
+    flags = recorded_substrate_flags(entries)
+    if flags is not None and flags.get("temporal_observations", False) != (
+        version is not None
+    ):
+        raise ValueError("temporal observation version disagrees with substrate stamp")
+    return version
+
+
+def recorded_temporal_observations(entries: Sequence[ReplayLogEntry]) -> bool:
+    """Whether an instrument needs a version-aware temporal adapter."""
+    return recorded_temporal_observation_version(entries) is not None
+
+
+def require_legacy_observations(
+    entries: Sequence[ReplayLogEntry], *, consumer: str
+) -> None:
+    """Refuse new evidence in a frozen instrument that has no temporal adapter."""
+
+    if recorded_temporal_observations(entries):
+        raise ValueError(f"{consumer} does not support temporal observations")
+
+
+def recorded_completion_status(entries: Sequence[ReplayLogEntry]) -> CompletionStatus:
+    """Classify recorded evidence without certifying its integrity or outcome."""
+    if any(isinstance(entry, GameEndReplayEntry) for entry in entries):
+        return "completed"
+    if any(isinstance(entry, AbortedMeetingReplayEntry) for entry in entries):
+        return "aborted"
+    for entry in entries:
+        if isinstance(entry, GameStopReplayEntry):
+            return (
+                "tick_limited"
+                if entry.reason == "TICK_BUDGET_REACHED"
+                else "unfinished"
+            )
+    # Older providers retained a failed attempt without an explicit abort row.
+    # A failed attempt associated with a completed meeting is recovered, not an abort.
+    completed = {
+        entry.meeting_id for entry in entries if isinstance(entry, MeetingReplayEntry)
+    }
+    if any(
+        isinstance(entry, FailedCallReplayEntry) and entry.meeting_id not in completed
+        for entry in entries
+    ):
+        return "aborted"
+    return "unfinished"
 
 
 # The substrate levers a baseline record has ADOPTED: unconditionally ON, their
@@ -660,10 +1016,13 @@ _RETIRED_ALWAYS_ON_LEVERS: Final[tuple[str, ...]] = (
 #   reduction and the prompt loader must read ONE lever and the ``agents ↛
 #   meetings.manager`` contract forbids the manager as its home.
 #
-# All four are LEVERS: an arm a future gate may decide to ship, which would
+# * ``temporal_observations`` — source-time evidence delivery, bound to the
+#   stdlib-only observation version resolver.
+#
+# All five are LEVERS: an arm a future gate may decide to ship, which would
 # graduate it into ``_RETIRED_ALWAYS_ON_LEVERS`` at its adopting record.
 #
-# A bare environment stamps all four ``False``, which IS the committed substrate: the
+# A bare environment stamps all five ``False``, which IS the committed substrate: the
 # missing-key-reads-False rule makes a stamp recorded before a key existed agree
 # with a build that has it. A lever graduates by moving into
 # ``_RETIRED_ALWAYS_ON_LEVERS`` at the record that adopts it — which appends it
@@ -679,6 +1038,7 @@ _TOGGLEABLE_LEVER_RESOLVERS: Final[
     ("reporter_reasoning", reporter_reasoning_enabled),
     ("corroboration_discipline", corroboration_discipline_enabled),
     ("testimony_shapes", testimony_shapes_enabled),
+    ("temporal_observations", temporal_observations_enabled),
 )
 
 # The still-toggleable subset of ``SUBSTRATE_FLAG_KEYS`` (Task 14.10):
@@ -976,6 +1336,11 @@ class ReplayLog:
         force: bool = False,
         tactical_policy_stamp: TacticalPolicyStamp | None = None,
         crew_tactical_policy_stamp: CrewTacticalPolicyStamp | None = None,
+        temporal_observations: bool | None = None,
+        temporal_observation_version: TemporalObservationVersion | None = None,
+        substrate_flags: Mapping[str, bool] | None = None,
+        experiment_config: RecordedExperimentConfig | None = None,
+        agent_factory_kind: AgentFactoryKind | None = None,
     ) -> None:
         # ``tactical_policy_stamp`` is the recorder-supplied provenance stamp
         # (Task 15.9) written onto the ``game_over`` record by
@@ -992,9 +1357,51 @@ class ReplayLog:
         # the pre-18.7 writer. Kept in its own DISTINCT field so a crew recording
         # can never wear the impostor champion's stamp (the conflation guard).
         self._crew_tactical_policy_stamp = crew_tactical_policy_stamp
+        # The identity pair rides the FIRST tick row only (see
+        # :meth:`record_tick`); this latch is what makes "first" mean first.
+        self._tick_identity_stamped = False
+        self._handle: TextIO | None = None
+        if temporal_observation_version is not None and (
+            type(temporal_observation_version) is not int
+            or temporal_observation_version not in (1, 2)
+        ):
+            raise ValueError("unsupported temporal observation version")
+        version = temporal_observation_version
+        if version is None:
+            version = (
+                resolve_temporal_observation_version()
+                if temporal_observations is None
+                else (1 if temporal_observations else None)
+            )
+        if temporal_observations is not None and (
+            type(temporal_observations) is not bool
+            or temporal_observations != (version is not None)
+        ):
+            raise ValueError("temporal observation switch disagrees with version")
+        self.temporal_observation_version = version
+        self.temporal_observations = version is not None
+        self._substrate_flags = dict(
+            substrate_flag_snapshot() if substrate_flags is None else substrate_flags
+        )
+        if (
+            substrate_flags is not None
+            and self._substrate_flags.get("temporal_observations", False)
+            != self.temporal_observations
+        ):
+            raise ValueError(
+                "temporal observation version disagrees with supplied substrate_flags"
+            )
+        self._substrate_flags["temporal_observations"] = self.temporal_observations
+        self.experiment_config = normalize_experiment_config(experiment_config)
+        if agent_factory_kind is not None and agent_factory_kind not in (
+            "scripted",
+            "experimental",
+            "custom",
+        ):
+            raise ValueError("unknown agent factory kind")
+        self.agent_factory_kind = agent_factory_kind
         # Assigned first so __del__ is safe even if construction raises below
         # (e.g. AlreadyExistsError on an existing path).
-        self._handle: TextIO | None = None
         if path.exists():
             if not force:
                 raise self.AlreadyExistsError(
@@ -1051,6 +1458,29 @@ class ReplayLog:
             entry["action_dispositions"] = list(
                 classify_action_dispositions(actions, events)
             )
+        if self.temporal_observation_version is not None:
+            entry["temporal_observation_version"] = self.temporal_observation_version
+        # The recording's identity pair rides the FIRST tick row ONLY (and the
+        # ``game_over`` row, written by :meth:`record_game_end`). Writing it once
+        # buys the prefix guarantee the every-row version bought — an interrupted
+        # recording that never reached ``game_over`` still self-describes, from
+        # tick 0, because the very first row it wrote carries the pair — at a
+        # fraction of the bytes: stamping EVERY tick row measures +3.5% over the
+        # committed 9p2i sample set, +13-15% over the two 4p1i sets, and up to
+        # +166% on the smallest committed 4p1i file, where a dozen 794-byte
+        # repetitions of one unchanging slate dwarf the game. Rows 1..N-1 stay
+        # silent and INHERIT row 0 (``recorded_agent_factory_kind`` /
+        # ``recorded_substrate_flags``); a later row that CONTRADICTS row 0, or a
+        # stamp that first appears after an unstamped row 0, is still refused.
+        # The two keys are written together or not at all: a factory identity
+        # without its substrate slate would name the agents but not the world
+        # they ran in, so the readers may treat either key as evidence of both.
+        if self.agent_factory_kind is not None and not self._tick_identity_stamped:
+            entry["agent_factory_kind"] = self.agent_factory_kind
+            entry["substrate_flags"] = self._substrate_flags
+            self._tick_identity_stamped = True
+        if self.experiment_config is not None:
+            entry["experiment_config"] = self.experiment_config.model_dump(mode="json")
         self._append(entry)
 
     def record_meeting(
@@ -1062,6 +1492,7 @@ class ReplayLog:
         prompt_versions: Mapping[str, str],
         state_hash_before: str,
         state_hash_after: str,
+        skip_confidence_threshold: float | None = None,
     ) -> None:
         """Persist one resolved meeting (DESIGN.md §11.4).
 
@@ -1085,7 +1516,13 @@ class ReplayLog:
             prompt_versions=dict(prompt_versions),
             state_hash_before=state_hash_before,
             state_hash_after=state_hash_after,
+            skip_confidence_threshold=skip_confidence_threshold,
         )
+        self._append(entry.model_dump(mode="json"))
+
+    def record_game_stop(self, *, tick: int, reason: GameStopReason) -> None:
+        """Persist a normal nonterminal stop after the last recorded transition."""
+        entry = GameStopReplayEntry(game_id=self._game_id, tick=tick, reason=reason)
         self._append(entry.model_dump(mode="json"))
 
     def record_game_end(
@@ -1119,11 +1556,17 @@ class ReplayLog:
             tick=tick,
             winner=winner,
             reason=reason,
-            substrate_flags=substrate_flag_snapshot(),
+            substrate_flags=self._substrate_flags,
+            experiment_config=self.experiment_config,
+            agent_factory_kind=self.agent_factory_kind,
             tactical_policy=self._tactical_policy_stamp,
             crew_tactical_policy=self._crew_tactical_policy_stamp,
         )
         payload = entry.model_dump(mode="json")
+        if entry.experiment_config is None:
+            del payload["experiment_config"]
+        if entry.agent_factory_kind is None:
+            del payload["agent_factory_kind"]
         # Byte-identity carve-out for the tactical-policy stamp (Task 15.9): an
         # ABSENT stamp is the FSM default and MUST record byte-identically to the
         # pre-15.9 game_over row, so the optional field is OMITTED from the JSON
@@ -1144,6 +1587,33 @@ class ReplayLog:
             del payload["crew_tactical_policy"]
         self._append(payload)
 
+    def record_aborted_meeting(
+        self,
+        *,
+        meeting_id: str,
+        tick: int,
+        llm_calls: Sequence[LLMCallRecord],
+        prompt_versions: Mapping[str, str],
+        error_type: str,
+        error_message: str,
+    ) -> None:
+        """Persist a drained attempt's calls without claiming a resolution.
+
+        Each call in the tuple is a distinct response, even if two responses
+        have identical content. The runner transfers the buffer once.
+        """
+
+        entry = AbortedMeetingReplayEntry(
+            game_id=self._game_id,
+            meeting_id=meeting_id,
+            tick=tick,
+            llm_calls=tuple(llm_calls),
+            prompt_versions=prompt_versions,
+            error_type=error_type,
+            error_message=error_message[:200],
+        )
+        self._append(entry.model_dump(mode="json"))
+
     def record_failed_call(
         self,
         *,
@@ -1158,30 +1628,14 @@ class ReplayLog:
         error_type: str,
         error_message: str,
         rendered_vote_max: float | None = None,
+        call_id: str | None = None,
     ) -> None:
-        """Persist a meeting-aborting failed LLM call (DESIGN.md §11.4; Task 3.19).
+        """Persist reported failure usage or a zero-spend default marker.
 
-        Called by the orchestrator on the meeting-failure path when a
-        structured-output response failed schema validation (the metadata
-        rides the propagating ``ValidationError`` and is recovered via
-        :func:`llm.provider.extract_parse_failure`). Captures the spend
-        and partial response for the rejected call so per-meeting cost is
-        reconstructable even though the meeting crashed and
-        :meth:`record_meeting` never ran.
-
-        Single-write guard (Task 9.10, audit gp-4 / MECH-B-1): a row that is
-        byte-identical to one already written by this log is dropped instead
-        of appended. A deterministic provider (seeded local model, fixed
-        prompt) regenerates the SAME failing response on the in-turn retry,
-        so a single defaulted opening surfaced the same burned generation
-        twice — seeds 8/36/39 each persisted a duplicate ``failed_call`` row,
-        double-counting 5,969 input / 6,144 output tokens. De-duplication is
-        on the FULL frozen entry — the audit's byte-identity tuple
-        ``(model, raw_response, input_tokens, output_tokens)`` scoped by
-        ``meeting_id`` / ``tick`` / error fields — so two zero-spend
-        ``deadline_default`` visibility markers from DIFFERENT participants
-        (which share the zero tuple but differ in ``error_message``) and any
-        genuinely distinct failures in one meeting still each record once.
+        Identical rows are written once. Callers recording distinct paid
+        attempts supply distinct ``call_id`` values even when response content
+        matches. Calls without an identity retain the legacy content-based
+        deduplication and omit the new field from serialized bytes.
         """
 
         entry = FailedCallReplayEntry(
@@ -1197,11 +1651,15 @@ class ReplayLog:
             error_type=error_type,
             error_message=error_message,
             rendered_vote_max=rendered_vote_max,
+            call_id=call_id,
         )
         if entry in self._recorded_failed_calls:
             return
         self._recorded_failed_calls.add(entry)
-        self._append(entry.model_dump(mode="json"))
+        payload = entry.model_dump(mode="json")
+        if call_id is None:
+            del payload["call_id"]
+        self._append(payload)
 
     def read_entries(self) -> tuple[ReplayEntry, ...]:
         return read_replay_entries(self._path)
@@ -1339,6 +1797,13 @@ def read_substrate_flags(path: Path) -> dict[str, bool] | None:
     substrate guard) treat an unstamped replay as "substrate unspecified"
     rather than misreporting it as all-OFF. A stamped replay returns its full
     snapshot.
+
+    Deliberately TERMINAL-only: this reads the ``game_over`` row and nothing
+    else, so an interrupted prefix that never reached ``game_over`` returns
+    ``None`` here even when its first tick row carries the stamp.
+    :func:`recorded_substrate_flags` is the prefix-tolerant resolution — it
+    reads the first tick row and falls back to the terminal row — and is what
+    callers that must not lose provenance on a truncated recording use.
     """
 
     flags: dict[str, bool] | None = None
@@ -1440,28 +1905,17 @@ def read_policy_stamps(path: Path) -> PolicyStamps:
 
 
 def compute_cost_usd(path: Path) -> float:
-    """Sum LLM cost (USD) across a replay log (DESIGN.md §11.4; Task 3.19).
+    """Sum reported USD spend from resolved meetings, aborted meetings and failures.
 
-    Reads every record once and sums :attr:`LLMCallRecord.cost_usd` over
-    each ``kind == "meeting"`` record's captured calls *plus* each
-    ``kind == "failed_call"`` record's cost. This is the canonical
-    per-game cost reduction: future eval code (including the real-provider
-    50-game eval that checks the ``<= $0.30`` merge criterion) consumes it
-    rather than re-deriving the sum inline. Folding in the failed-call
-    rows means a meeting that aborted on a rejected response still
-    contributes the tokens the model already burned, so a crashed run's
-    spend is not silently undercounted (Task 3.19 finding 2).
-
-    Returns ``0.0`` for replay logs with no meeting or failed-call entries
-    (e.g. games that ended before any meeting fired) and for meetings
-    whose ``llm_calls`` list is empty. The sum is seeded with a float so
-    the return value is always a finite, non-negative float (fake-provider
-    runs report ``cost_usd == 0.0`` per call).
+    Each captured response contributes once, regardless of whether its meeting
+    resolved. Separate failed-call rows contribute their own reported spend;
+    zero-spend default markers add nothing. An unfinished run can have cost
+    without a winner or any resolved meeting.
     """
 
     total = 0.0
     for entry in read_all_entries(path):
-        if isinstance(entry, MeetingReplayEntry):
+        if isinstance(entry, (MeetingReplayEntry, AbortedMeetingReplayEntry)):
             total += sum((call.cost_usd for call in entry.llm_calls), 0.0)
         elif isinstance(entry, FailedCallReplayEntry):
             total += entry.cost_usd
@@ -1534,8 +1988,12 @@ def _parse_entry(raw_entry: Any) -> ReplayLogEntry:
         return ReplayEntry.model_validate({**raw_entry, "kind": "tick"})
     if kind == "meeting":
         return MeetingReplayEntry.model_validate(raw_entry)
+    if kind == "meeting_aborted":
+        return AbortedMeetingReplayEntry.model_validate(raw_entry)
     if kind == "game_over":
         return GameEndReplayEntry.model_validate(raw_entry)
+    if kind == "game_stopped":
+        return GameStopReplayEntry.model_validate(raw_entry)
     if kind == "failed_call":
         return FailedCallReplayEntry.model_validate(raw_entry)
     raise ValueError(f"unknown replay entry kind: {kind!r}")
@@ -1600,9 +2058,13 @@ __all__ = [
     "SUBSTRATE_FLAG_KEYS",
     "TOGGLEABLE_SUBSTRATE_FLAG_KEYS",
     "ActionDisposition",
+    "AbortedMeetingReplayEntry",
     "CrewTacticalPolicyStamp",
+    "CompletionStatus",
     "FailedCallReplayEntry",
     "GameEndReplayEntry",
+    "GameStopReplayEntry",
+    "GameStopReason",
     "LLMCallRecord",
     "MeetingReplayEntry",
     "PolicyStamps",
@@ -1618,6 +2080,8 @@ __all__ = [
     "fold_meeting_outcome_into_memories",
     "fsm_default_tactical_policy_stamp",
     "read_all_entries",
+    "recorded_temporal_observations",
+    "require_legacy_observations",
     "read_crew_tactical_policy_stamp",
     "read_failed_call_entries",
     "read_game_outcome",
@@ -1626,6 +2090,7 @@ __all__ = [
     "read_replay_entries",
     "read_substrate_flags",
     "read_tactical_policy_stamp",
+    "recorded_completion_status",
     "substrate_flag_snapshot",
     "substrate_slate_mismatches",
     "substrate_stamp_mismatches",

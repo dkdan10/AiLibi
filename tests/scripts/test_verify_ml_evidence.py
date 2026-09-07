@@ -628,6 +628,36 @@ def test_an_undeclared_corpus_still_fails_the_grounding_row(tmp_path: Path) -> N
     assert vme._grounding_row(root).status == "OK"
 
 
+def test_historical_verifier_refuses_relabeled_fit_version(tmp_path: Path) -> None:
+    root = tmp_path / "repo"
+    _manifests(root)
+    _link(root, vme.ARTIFACTS_DOC, vme.CORPUS_SET, _SAMPLE_SET)
+    for directory in (vme.SURROGATE_DIR, vme.CONVICTION_DIR):
+        for child in (_REPO_ROOT / directory).iterdir():
+            if child.name != "fit-corpus.json":
+                _link(root, f"{directory}/{child.name}")
+        _copy(root, f"{directory}/fit-corpus.json")
+
+    assert vme._grounding_row(root).status == "OK"
+    for directory in (vme.SURROGATE_DIR, vme.CONVICTION_DIR):
+        path = root / directory / "fit-corpus.json"
+        original = path.read_text()
+        payload = json.loads(original)
+        payload["fingerprint_version"] = 2
+        path.write_text(json.dumps(payload))
+        row = vme._grounding_row(root)
+        assert row.status == "FAIL"
+        assert "historical diagnostic requires version 1" in row.detail
+        if directory == vme.SURROGATE_DIR:
+            corpus_row = _row(
+                vme.run_corpus(_context(root)).rows, "fit-corpus identity fingerprint"
+            )
+            assert corpus_row.status == "FAIL"
+            assert "fingerprint_version" in corpus_row.detail
+        path.write_text(original)
+    assert vme._grounding_row(root).status == "OK"
+
+
 def test_a_record_keyed_to_other_weights_fails_the_grounding_row(
     tmp_path: Path,
 ) -> None:
@@ -1886,6 +1916,40 @@ def test_every_counted_registry_row_matches_the_index() -> None:
     for key, _cls, where, _size in vme.registry_rows(_REPO_ROOT):
         if vme._WHERE_TO_CLASS[where] == "IN-TREE":
             assert vme.in_tree_inventory(_REPO_ROOT, key) is not None
+
+
+def test_availability_rejects_exact_byte_drift_without_count_change(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    rows = vme.registry_rows(_REPO_ROOT)
+    changed: list[tuple[str, str, str, str]] = []
+    for key, category, where, size in rows:
+        if key == "data/personas.json":
+            actual = (_REPO_ROOT / key).stat().st_size
+            size = f"{actual + 1:,} tracked bytes / 1 file"
+        changed.append((key, category, where, size))
+    monkeypatch.setattr(vme, "registry_rows", lambda _root: changed)
+    result = _row(
+        vme.run_availability(_context(_REPO_ROOT)).rows, "in-tree family inventory"
+    )
+    assert result.status == "FAIL", result.detail
+    assert "data/personas.json" in result.detail
+    assert "bytes" in result.detail
+
+
+def test_exact_inventory_detects_changed_bytes_with_same_paths(tmp_path: Path) -> None:
+    artifact = tmp_path / "artifact.json"
+    artifact.write_bytes(b"{}\n")
+    inventory = [("fixture/", [artifact.name], 1)]
+    sizes = {"fixture/": "3 tracked bytes / 1 file"}
+    assert not vme.inventory_problems(tmp_path, inventory, stated_sizes=sizes)
+    artifact.write_bytes(b"{}\n\n")
+    failures = vme.inventory_problems(tmp_path, inventory, stated_sizes=sizes)
+    assert len(failures) == 1
+    assert "contain 4 bytes" in failures[0]
+    assert not vme.inventory_problems(
+        tmp_path, inventory, stated_sizes={"fixture/": "approximately 1 KB / 1 file"}
+    )
 
 
 def test_the_finding_records_registry_row_is_inventoried_and_its_count_bites() -> None:

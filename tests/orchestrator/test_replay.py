@@ -44,9 +44,11 @@ from meetings.schemas import MeetingResult, MeetingTranscript, VoteBallot
 from orchestrator.replay import (
     ENV_IMPOSTOR_ROLL_CALL,
     SUBSTRATE_FLAG_KEYS,
+    AgentFactoryKind,
     TOGGLEABLE_SUBSTRATE_FLAG_KEYS,
     _impostor_roll_call_enabled,
     _TOGGLEABLE_LEVER_RESOLVERS,
+    AbortedMeetingReplayEntry,
     FailedCallReplayEntry,
     GameEndReplayEntry,
     LLMCallRecord,
@@ -59,12 +61,16 @@ from orchestrator.replay import (
     read_all_entries,
     read_failed_call_entries,
     read_game_outcome,
+    read_meeting_entries,
     read_replay_entries,
     read_substrate_flags,
+    recorded_agent_factory_kind,
+    recorded_substrate_flags,
     substrate_flag_snapshot,
     substrate_slate_mismatches,
     substrate_stamp_mismatches,
 )
+from observation.version import temporal_observations_enabled
 from engine.actions import Action
 from engine.events import EngineEvent
 from engine.tick import advance_tick
@@ -101,6 +107,7 @@ ENV_IMPOSTOR_ROLL_CALL_KEY = "impostor_roll_call"
 ENV_REPORTER_REASONING_KEY = "reporter_reasoning"
 ENV_CORROBORATION_DISCIPLINE_KEY = "corroboration_discipline"
 ENV_TESTIMONY_SHAPES_KEY = "testimony_shapes"
+ENV_TEMPORAL_OBSERVATIONS_KEY = "temporal_observations"
 
 # Every RETIRED lever: snapshot key and the ``AILIBI_*`` variable its key
 # derives, in graduation order. Written out as literals rather than derived from
@@ -179,6 +186,7 @@ _BARE_STAMP: dict[str, bool] = {
     "reporter_reasoning": False,
     "corroboration_discipline": False,
     "testimony_shapes": False,
+    "temporal_observations": False,
 }
 
 # The eight keys the baseline-7 record appended: the Phase-20 belief-substrate
@@ -374,6 +382,7 @@ class TestSubstrateFlagStamp:
             ENV_REPORTER_REASONING_KEY,
             ENV_CORROBORATION_DISCIPLINE_KEY,
             ENV_TESTIMONY_SHAPES_KEY,
+            ENV_TEMPORAL_OBSERVATIONS_KEY,
         )
 
     def test_the_retired_stamp_pin_bites(self) -> None:
@@ -387,14 +396,14 @@ class TestSubstrateFlagStamp:
         assert substrate_flag_snapshot({}) != broken
 
     def test_live_toggle_registrations(self) -> None:
-        # Registration pin: FOUR live toggles, all DEFAULT-OFF -- the
+        # Registration pin: FIVE live toggles, all DEFAULT-OFF -- the
         # impostor-answer arm, the reporter-voice arm, the ballot's
         # source-count arm and the testimony-shapes arm. The graduated levers
         # are not here: they moved into ``_RETIRED_ALWAYS_ON_LEVERS`` at the
         # records that adopted them and their env gates are gone. Neither are the
         # two Wave-1a repair gates: a repair records no arm, so the baseline-8
         # record deleted them outright and promoted them nowhere.
-        assert len(_TOGGLEABLE_LEVER_RESOLVERS) == 4
+        assert len(_TOGGLEABLE_LEVER_RESOLVERS) == 5
         registry = dict(_TOGGLEABLE_LEVER_RESOLVERS)
         assert registry[ENV_IMPOSTOR_ROLL_CALL_KEY] is _impostor_roll_call_enabled
         # Bound BY IDENTITY, not by a mirror: this module already imports
@@ -411,6 +420,7 @@ class TestSubstrateFlagStamp:
         # the stdlib-only leaf BOTH sides of the firewall read, so the stamp and
         # the reduction's read-site are one function.
         assert registry[ENV_TESTIMONY_SHAPES_KEY] is resolve_testimony_shapes
+        assert registry[ENV_TEMPORAL_OBSERVATIONS_KEY] is temporal_observations_enabled
         for key, _env_var in _RETIRED_LEVERS:
             assert key not in registry, key
         assert TOGGLEABLE_SUBSTRATE_FLAG_KEYS == (
@@ -418,6 +428,7 @@ class TestSubstrateFlagStamp:
             ENV_REPORTER_REASONING_KEY,
             ENV_CORROBORATION_DISCIPLINE_KEY,
             ENV_TESTIMONY_SHAPES_KEY,
+            ENV_TEMPORAL_OBSERVATIONS_KEY,
         )
         # The full stamp key order: twenty-one graduated levers in graduation
         # order, then the live toggles in registration order. Each half grows only
@@ -452,6 +463,7 @@ class TestSubstrateFlagStamp:
             "reporter_reasoning",
             "corroboration_discipline",
             "testimony_shapes",
+            "temporal_observations",
         )
 
     def test_env_var_for_lever_derives_the_documented_variable(self) -> None:
@@ -489,16 +501,19 @@ class TestSubstrateFlagStamp:
             "reporter_reasoning",
             "corroboration_discipline",
             "testimony_shapes",
+            "temporal_observations",
         }
         assert _BARE_STAMP["reporter_reasoning"] is False
         assert _BARE_STAMP["corroboration_discipline"] is False
         assert _BARE_STAMP["testimony_shapes"] is False
+        assert _BARE_STAMP["temporal_observations"] is False
         assert all(_BARE_STAMP[key] == value for key, value in _BASELINE7_STAMP.items())
         # And the committed literal must not have grown them: the committed bytes
         # carry twenty-two keys and never named any of the three.
         assert "reporter_reasoning" not in _BASELINE7_STAMP
         assert "corroboration_discipline" not in _BASELINE7_STAMP
         assert "testimony_shapes" not in _BASELINE7_STAMP
+        assert "temporal_observations" not in _BASELINE7_STAMP
 
     def test_every_recording_stamps_the_full_snapshot(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -698,6 +713,238 @@ class TestSubstrateFlagStamp:
         )
         assert entry.substrate_flags is None
 
+    def test_the_identity_pair_rides_only_the_first_tick_row(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The recording-envelope rule: the coupled ``agent_factory_kind`` +
+        # ``substrate_flags`` pair is written on the FIRST tick row and on the
+        # ``game_over`` row, and on NO other tick row. Row 0 carries the whole
+        # bare slate; row 1 is the bare five-key timeline row. Both readers still
+        # resolve the recording's identity, because row 0 is authoritative and
+        # the silent rows inherit it.
+        _clear_lever_env(monkeypatch)
+        path = tmp_path / "once.jsonl"
+        log = ReplayLog(path, game_id="g-1", agent_factory_kind="scripted")
+        state = scripted_initial_world_state(seed=1)
+        log.record_tick(0, [], state)
+        log.record_tick(1, [], state)
+        log.record_game_end(winner="CREWMATES", reason="TASKS", tick=2)
+
+        rows = [json.loads(line) for line in path.read_text().splitlines()]
+        assert [row["kind"] for row in rows] == ["tick", "tick", "game_over"]
+        assert set(rows[0]) == {
+            "kind",
+            "game_id",
+            "tick",
+            "actions",
+            "state_hash",
+            "agent_factory_kind",
+            "substrate_flags",
+        }
+        assert set(rows[1]) == {"kind", "game_id", "tick", "actions", "state_hash"}
+        assert rows[0]["substrate_flags"] == _BARE_STAMP
+        assert set(rows[0]["substrate_flags"]) == set(SUBSTRATE_FLAG_KEYS)
+        # Coupled on every row that carries either key, never one without the
+        # other: an identity without its slate would name the agents but not the
+        # world they ran in.
+        for row in rows:
+            assert ("agent_factory_kind" in row) == ("substrate_flags" in row), row
+        assert rows[2]["agent_factory_kind"] == "scripted"
+        assert rows[2]["substrate_flags"] == _BARE_STAMP
+
+        entries = read_all_entries(path)
+        assert recorded_substrate_flags(entries) == _BARE_STAMP
+        assert recorded_agent_factory_kind(entries) == "scripted"
+
+    def test_an_unstamped_recorder_writes_the_bare_timeline_on_every_tick_row(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The other half of the coupling: a recorder given no factory identity
+        # stamps NEITHER key, so every tick row -- row 0 included -- is the bare
+        # five-key timeline row the pre-stamp writer produced, and the prefix
+        # reader reports "unknown" rather than inventing the ambient slate.
+        _clear_lever_env(monkeypatch)
+        path = tmp_path / "unstamped.jsonl"
+        log = ReplayLog(path, game_id="g-2")
+        state = scripted_initial_world_state(seed=1)
+        log.record_tick(0, [], state)
+        log.record_tick(1, [], state)
+
+        rows = [json.loads(line) for line in path.read_text().splitlines()]
+        for row in rows:
+            assert set(row) == {"kind", "game_id", "tick", "actions", "state_hash"}
+        entries = read_all_entries(path)
+        assert recorded_substrate_flags(entries) is None
+        assert recorded_agent_factory_kind(entries) is None
+
+    def test_an_interrupted_prefix_still_names_its_factory_and_substrate(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The guarantee writing row 0 buys: a recording killed before it could
+        # write ``game_over`` still self-describes, from its very first row. The
+        # terminal-only ``read_substrate_flags`` sees nothing here -- that is the
+        # documented split, and why the prefix-tolerant reader exists.
+        _clear_lever_env(monkeypatch)
+        path = tmp_path / "prefix.jsonl"
+        log = ReplayLog(path, game_id="g-3", agent_factory_kind="scripted")
+        state = scripted_initial_world_state(seed=1)
+        for tick in range(3):
+            log.record_tick(tick, [], state)
+
+        rows = [json.loads(line) for line in path.read_text().splitlines()]
+        assert [row["kind"] for row in rows] == ["tick", "tick", "tick"]
+        entries = read_all_entries(path)
+        assert recorded_substrate_flags(entries) == _BARE_STAMP
+        assert recorded_agent_factory_kind(entries) == "scripted"
+        assert read_substrate_flags(path) is None
+
+
+class TestOnceStampedTickIdentity:
+    """The four read clauses of the once-per-recording tick-row stamp.
+
+    Built from entry objects rather than a recorder, so each clause is stated
+    against the reader directly: what row 0 says goes; a silent later row
+    inherits it; a later row that contradicts it is refused; and a stamp that
+    only shows up after an unstamped row 0 is refused too, because inheriting it
+    backwards would let a re-stamped suffix claim provenance the recorded prefix
+    never carried.
+    """
+
+    _ON: Final[dict[str, bool]] = {**_BARE_STAMP, "impostor_roll_call": True}
+
+    @staticmethod
+    def _tick(
+        tick: int,
+        *,
+        kind: AgentFactoryKind | None = None,
+        flags: dict[str, bool] | None = None,
+    ) -> ReplayEntry:
+        return ReplayEntry(
+            game_id="g",
+            tick=tick,
+            actions=(),
+            state_hash=f"h{tick}",
+            agent_factory_kind=kind,
+            substrate_flags=flags,
+        )
+
+    def test_the_first_tick_row_is_authoritative(self) -> None:
+        entries = [self._tick(0, kind="scripted", flags=_BARE_STAMP), self._tick(1)]
+        assert recorded_agent_factory_kind(entries) == "scripted"
+        assert recorded_substrate_flags(entries) == _BARE_STAMP
+
+    def test_a_silent_later_row_inherits_rather_than_conflicting(self) -> None:
+        entries = [
+            self._tick(0, kind="scripted", flags=_BARE_STAMP),
+            self._tick(1),
+            self._tick(2),
+        ]
+        assert recorded_agent_factory_kind(entries) == "scripted"
+        assert recorded_substrate_flags(entries) == _BARE_STAMP
+
+    def test_a_contradicting_later_row_is_refused(self) -> None:
+        kinds = [self._tick(0, kind="scripted"), self._tick(1, kind="custom")]
+        with pytest.raises(ValueError, match="changes between tick rows"):
+            recorded_agent_factory_kind(kinds)
+        flags = [self._tick(0, flags=_BARE_STAMP), self._tick(1, flags=self._ON)]
+        with pytest.raises(ValueError, match="changes between tick rows"):
+            recorded_substrate_flags(flags)
+
+    def test_a_stamp_that_appears_after_an_unstamped_first_row_is_refused(
+        self,
+    ) -> None:
+        kinds = [self._tick(0), self._tick(1, kind="scripted")]
+        with pytest.raises(
+            ValueError, match="after an unstamped first tick row"
+        ) as kind_error:
+            recorded_agent_factory_kind(kinds)
+        assert "agent factory identity appears" in str(kind_error.value)
+        flags = [self._tick(0), self._tick(1, flags=_BARE_STAMP)]
+        with pytest.raises(
+            ValueError, match="after an unstamped first tick row"
+        ) as flag_error:
+            recorded_substrate_flags(flags)
+        assert "substrate configuration appears" in str(flag_error.value)
+
+    def test_a_wholly_unstamped_prefix_stays_unknown(self) -> None:
+        entries = [self._tick(0), self._tick(1)]
+        assert recorded_agent_factory_kind(entries) is None
+        assert recorded_substrate_flags(entries) is None
+
+    def test_a_terminal_stamp_may_not_contradict_the_first_tick_row(self) -> None:
+        end = GameEndReplayEntry(
+            game_id="g",
+            tick=2,
+            winner="CREWMATES",
+            reason="TASKS",
+            agent_factory_kind="custom",
+            substrate_flags=self._ON,
+        )
+        with pytest.raises(ValueError, match="disagrees with tick rows"):
+            recorded_agent_factory_kind([self._tick(0, kind="scripted"), end])
+        with pytest.raises(ValueError, match="disagrees with tick rows"):
+            recorded_substrate_flags([self._tick(0, flags=_BARE_STAMP), end])
+
+
+class TestAbortedMeetingRecording:
+    def test_identical_paid_responses_round_trip_without_a_resolution(
+        self, tmp_path: Path
+    ) -> None:
+        path = tmp_path / "aborted.jsonl"
+        call = LLMCallRecord(
+            call_kind="meeting",
+            model="injected",
+            prompt="A recorded prompt",
+            response_text="A recorded response",
+            input_tokens=13,
+            output_tokens=7,
+            cost_usd=0.02,
+            agent_id="p-1",
+        )
+        with ReplayLog(path, game_id="game") as log:
+            log.record_aborted_meeting(
+                meeting_id="game:meeting-0",
+                tick=10,
+                llm_calls=(call, call),
+                prompt_versions={"crewmate_report": "fixture"},
+                error_type="RuntimeError",
+                error_message="failure" * 100,
+            )
+        entries = read_all_entries(path)
+        assert len(entries) == 1
+        entry = entries[0]
+        assert isinstance(entry, AbortedMeetingReplayEntry)
+        assert entry.llm_calls == (call, call)
+        assert entry.prompt_versions == {"crewmate_report": "fixture"}
+        assert len(entry.error_message) == 200
+        assert compute_cost_usd(path) == pytest.approx(0.04)
+        assert read_meeting_entries(path) == ()
+        assert read_game_outcome(path) is None
+        assert "outcome" not in entry.model_dump()
+
+    def test_identified_failed_attempts_do_not_collapse_equal_responses(
+        self, tmp_path: Path
+    ) -> None:
+        path = tmp_path / "failed.jsonl"
+        with ReplayLog(path, game_id="game") as log:
+            for call_id in ("call-0", "call-1", "call-1"):
+                log.record_failed_call(
+                    meeting_id="game:meeting-0",
+                    tick=10,
+                    model="injected",
+                    prompt_length=30,
+                    raw_response="{}",
+                    input_tokens=13,
+                    output_tokens=7,
+                    cost_usd=0.02,
+                    error_type="ValidationError",
+                    error_message="Missing field",
+                    call_id=call_id,
+                )
+        failures = read_failed_call_entries(path)
+        assert [item.call_id for item in failures] == ["call-0", "call-1"]
+        assert compute_cost_usd(path) == pytest.approx(0.04)
+
 
 class TestFailedCallRecording:
     def test_record_failed_call_round_trips(self, tmp_path: Path) -> None:
@@ -735,6 +982,8 @@ class TestFailedCallRecording:
         assert entry.error_message == "1 validation error for ReportDocument"
         # A non-vote failed call carries no §4.6 verdict (Task 10.12).
         assert entry.rendered_vote_max is None
+        assert entry.call_id is None
+        assert "call_id" not in json.loads(path.read_text())
 
     def test_defaulted_vote_persists_rendered_max(self, tmp_path: Path) -> None:
         # Task 10.12 (audit H-H-2): a defaulted VOTE row carries the rendered

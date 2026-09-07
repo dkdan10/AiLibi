@@ -42,6 +42,7 @@ import type {
   PlayerView,
   TurnView,
 } from "../types/api";
+import { EvidenceLink, EvidencePanel } from "./EvidencePanel";
 import { BallotCard } from "./BallotCard";
 import { TurnCard } from "./TurnCard";
 
@@ -189,12 +190,24 @@ function tallyBallots(ballots: readonly BallotView[]): { target: string; count: 
 // The REAL vote-gate readout from `GateView` (NEVER the mock's "simple
 // majority"):
 // plurality + at least one leader ballot ≥ threshold; tie / SKIP-plurality → SKIP.
-function gateReadout(gate: GateView): string {
-  const conf = gate.leader_max_confidence.toFixed(2);
-  const thr = gate.threshold.toFixed(2);
+function gateReadout(
+  gate: GateView,
+  ballots: readonly BallotView[],
+  omniscient: boolean,
+  observerId: string | null,
+): string {
   if (gate.leader === null) {
     return `no plurality leader (tie or SKIP led) → SKIPPED`;
   }
+  // The aggregate can expose another voter even when that voter's card is hidden.
+  // An agent lens may name its own ballot, never the table's private maximum.
+  if (!omniscient) {
+    const ownBallot = ballots.find((ballot) => ballot.voter === observerId && ballot.target === gate.leader);
+    const ownReadout = ownBallot ? `, your ballot ${ownBallot.confidence.toFixed(2)}` : "";
+    return `plurality leader ${gate.leader}${ownReadout}, threshold ${gate.passed ? "met" : "not met"} → ${gate.passed ? "EJECTED" : "SKIPPED"}`;
+  }
+  const conf = gate.leader_max_confidence.toFixed(2);
+  const thr = gate.threshold.toFixed(2);
   if (gate.passed) {
     return `plurality leader ${gate.leader}, top ballot ${conf} ≥ ${thr} threshold → EJECTED`;
   }
@@ -207,10 +220,12 @@ function VerdictPanel({
   meeting,
   players,
   omniscient,
+  observerId,
 }: {
   meeting: MeetingViewDTO;
   players: PlayerView[];
   omniscient: boolean;
+  observerId: string | null;
 }) {
   const tally = tallyBallots(meeting.ballots)
     .filter((row) => row.count > 0 || row.target === "SKIP")
@@ -238,7 +253,7 @@ function VerdictPanel({
         </div>
 
         <p className="font-mono text-2xs leading-relaxed text-ink-300">
-          {MEETING_COPY.resolutionGateLead} — {gateReadout(meeting.gate)}
+          {MEETING_COPY.resolutionGateLead} — {gateReadout(meeting.gate, meeting.ballots, omniscient, observerId)}
         </p>
 
         {/* Role-neutral outcome banner: never coloured by guilt. */}
@@ -416,6 +431,7 @@ function EvidenceSection({
   contradictions: readonly ContradictionView[];
   turns: readonly TurnView[];
 }) {
+  const meetingId = useReplayStore((s) => s.selectedMeetingId);
   if (contradictions.length === 0) {
     return null;
   }
@@ -520,6 +536,7 @@ function EvidenceSection({
                         <span className="font-mono text-2xs font-bold text-ink-900">{names}</span>
                       )}
                       <span className="min-w-0 break-words">{c.description}</span>
+                      {meetingId !== null && Array.from(new Set([c.event_a_id, c.event_b_id])).map((id, index) => <EvidenceLink key={id} target={{kind: "artifact", id, meetingId, observerId: null}}>Source {index + 1} · {endpoint(id) ?? "unresolved reference"}</EvidenceLink>)}
                     </li>
                   );
                 })}
@@ -683,6 +700,7 @@ export function MeetingView() {
           </button>
         </div>
 
+        <EvidencePanel inMeeting />
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.4fr_1fr]">
           <TranscriptPanel meeting={meeting} players={replay.players} />
           <div className="flex flex-col gap-4">
@@ -696,6 +714,7 @@ export function MeetingView() {
               meeting={meeting}
               players={replay.players}
               omniscient={omniscient}
+              observerId={perspective.mode === "agent" ? perspective.agentId : null}
             />
           </div>
         </div>

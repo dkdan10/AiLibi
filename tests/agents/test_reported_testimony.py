@@ -1030,7 +1030,10 @@ class TestTestimonyShapesIngest:
         # episodic row, no belief row, no alibi.
         memory = _memory_for(agent_id="p-1", self_tick=20)
         absorb_reported_testimony(
-            memory, statements=derive_reported_testimony(_shapes_meeting(), env={})
+            memory,
+            statements=derive_reported_testimony(
+                _shapes_meeting(), testimony_shapes=False
+            ),
         )
 
         assert _reported_rows(memory) == ()
@@ -1040,7 +1043,9 @@ class TestTestimonyShapesIngest:
         memory = _memory_for(agent_id="p-1", self_tick=20)
         absorb_reported_testimony(
             memory,
-            statements=derive_reported_testimony(_shapes_meeting(), env=_SHAPES_ON),
+            statements=derive_reported_testimony(
+                _shapes_meeting(), testimony_shapes=True
+            ),
         )
 
         belief = memory.beliefs.view("p-2")
@@ -1062,7 +1067,9 @@ class TestTestimonyShapesIngest:
         memory = _memory_for(agent_id="p-1", self_tick=20)
         absorb_reported_testimony(
             memory,
-            statements=derive_reported_testimony(_shapes_meeting(), env=_SHAPES_ON),
+            statements=derive_reported_testimony(
+                _shapes_meeting(), testimony_shapes=True
+            ),
         )
 
         rows = _reported_rows(memory)
@@ -1078,7 +1085,9 @@ class TestTestimonyShapesIngest:
         memory = _memory_for(agent_id="p-1", self_tick=20)
         absorb_reported_testimony(
             memory,
-            statements=derive_reported_testimony(_shapes_meeting(), env=_SHAPES_ON),
+            statements=derive_reported_testimony(
+                _shapes_meeting(), testimony_shapes=True
+            ),
         )
 
         view = render_for_prompt(memory)
@@ -1105,7 +1114,9 @@ class TestTestimonyShapesIngest:
         memory = _memory_for(agent_id="p-2", self_tick=20)
         absorb_reported_testimony(
             memory,
-            statements=derive_reported_testimony(_shapes_meeting(), env=_SHAPES_ON),
+            statements=derive_reported_testimony(
+                _shapes_meeting(), testimony_shapes=True
+            ),
         )
 
         assert _reported_rows(memory) == ()
@@ -1117,7 +1128,9 @@ class TestTestimonyShapesIngest:
         )
         absorb_reported_testimony(
             memory,
-            statements=derive_reported_testimony(_shapes_meeting(), env=_SHAPES_ON),
+            statements=derive_reported_testimony(
+                _shapes_meeting(), testimony_shapes=True
+            ),
         )
 
         # p-2 was never engine-witnessed by this agent, so neither its
