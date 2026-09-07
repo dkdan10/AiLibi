@@ -111,6 +111,16 @@ arms are not distinguishable in provenance, and the reconstructed memories are
 not provably the ones the model saw. The death-tick body handle is either left
 as-is and stated in the manifest, or masked identically in both arms.
 
+
+The held-out set is the one frozen by the owner's merge of the
+[freeze card](held-out-prefix-freeze.md)'s pull request: before any arm runs,
+the instrument regenerates it with `experiments.held_out_prefixes.generate()`
+from the band in `audits/deduction-candidate/held-out/manifest.json`, checks
+every prefix digest and the skip list against that manifest, and stops on any
+mismatch. The runner opens no prefix, prints none, and consumes them only
+through the `HeldOutPrefix` model; the prefixes are archived with the results
+after the run, when they are no longer held out.
+
 ## Expected scope
 
 A new instrument module under `experiments/`, its tests, the frozen prefix

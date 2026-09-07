@@ -55,7 +55,16 @@ measured with its own evidence evicted. Outcome 5 runs in parallel with 3 and 4 
 its instrument is new code — but its held-out arms may not be exercised until 2
 and 3 have landed, which its Constraints state as preconditions. The freeze card
 starts immediately and in parallel, shares no source file with any other card,
-and must be merged before outcome 5's arms run. Outcome 6 fills
+and must be merged before outcome 5's arms run. Its manifest hashes the engine,
+observation and memory sources the filter depends on, and its regeneration
+test asserts those digests, so outcomes 2 and 3 will turn that test red when
+they edit a hashed file. The rule for that case: the card's worker regenerates
+the set inside its own pull request; if all fifty prefix digests and the skip
+list are unchanged, the dependency digests are restamped in the manifest with
+a dated note naming the commit, the `docs/artifacts.md` audits row is
+recomputed, and no prefix is printed or opened; if any prefix digest or skip
+moves, the worker stops and reports, the set is marked development, and a new
+band is frozen under a new card. Outcome 6 fills
 the gaps around the others and takes its `meetings/`, `api/` items after 4 and 3
 release those files. Outcome 7 does not start before an adopting record for
 evidence v2 exists; that record is not part of this plan.
