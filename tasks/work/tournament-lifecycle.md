@@ -20,6 +20,14 @@ destination and recording-pair protections must survive the follow-through.
 
 ## Acceptance
 
+- [x] Review correction: a recording its own rollback correctly removed no longer
+  strands the ledger. Continuation still refuses by default and now names the
+  explicit route; `--attest-unknown-usage SEED` retains the attempt with its
+  usage recorded as unknown rather than as zero, and retries it.
+- [x] Review correction: attested unknown usage never reaches a cumulative cap.
+  The attestation flag and the `--max-total-*` caps are mutually exclusive, and
+  cumulative totals refuse over an attested attempt.
+
 - [x] Review correction: first-seed failure preserves an existing report and
   never publishes an empty replacement; progress binds its previous bytes.
 - [x] Review correction: missing/empty attempt recordings leave usage unresolved,
@@ -220,3 +228,85 @@ lint/format, import/document contracts and the production build. All 100
 canonical recordings verified. The [durable correction record](../../audits/review-2026-09-06/correction-record.md)
 records the independent reviews, discovered rollback repair and integration
 checks. This completion is on cleanup, awaiting owner review and merge.
+
+### Unresolved-usage attestation (2026-09-07)
+
+Reopened for NC4-1, also filed as FU-01 and NC5-04, in the follow-up review
+archived beside the [owner review](../../audits/review-2026-09-06/REVIEW_REPORT.md).
+The earlier verification checked that an unmeasurable attempt is refused, but
+never checked that the operator can get past the refusal. Reproduction: a paid
+seed is killed after its provider calls but before `capture` completes, so the
+attempt stays `running` with unresolved accounting and its known counters; the
+recording rollback then correctly removes the zero-byte replay it had prepared.
+The constructor's resume loop calls `capture` for exactly that attempt, so both
+`--resume` and `--resume --retry-incomplete` died inside `TournamentProgress`
+before any seed could be retried. Only `--force` escaped, and it discards the
+whole ledger, including other seeds' measured spend.
+
+`orchestrator/recording.py` is deliberately unchanged: removing a zero-byte
+output is its rollback contract, not a defect, and the repair is in the
+continuation ledger that must survive it.
+
+`UnresolvedUsageError`, a `ValueError` subclass, now marks exactly the refusals
+that mean "this attempt's usage cannot be established". Integrity signals
+(recording bytes changed during inspection, a saved report or usage that does
+not match its recording) stay plain `ValueError` and remain unattestable.
+`--attest-unknown-usage SEED` retains that attempt with `usage_unknown` set, a
+generated attestation string naming the flag and stating that the retained
+counters are the attempt's last checkpoint rather than a measured total, and an
+error quoting the absorbed refusal; it then retries the seed. Continuing still
+refuses by default, and the default refusal now names the route.
+
+The flag carries two refusals of its own. It requires `--resume
+--retry-incomplete`, and it is mutually exclusive with every `--max-total-*`
+cap, both checked before any file is read. A seed whose latest attempt still has
+readable evidence is refused with "resolvable recording evidence": attestation
+cannot discard measurable usage. Cumulative totals keep the strict bar --
+`totals()` refuses over an attested attempt -- while starting new work uses the
+weaker "measured or attested" bar, so an attested attempt can be retried but
+never summed. The CLI's closing all-attempts line names the unmeasured attempts
+instead of printing a total that silently omits them.
+
+Attestation writes only `usage_unknown`, `attestation`, `status` and `error`.
+Known cost and token counters, recording hashes and any saved game are left
+exactly as checkpointed, and `accounting_complete` stays false. The two new
+`Attempt` fields are additive and default to "no attestation", so `format_version`
+stays 1 and sidecars written before this correction still parse. Publication is
+unaffected: the report still describes each seed's latest attempt, and the
+attested attempt is archived by the retry like any other superseded attempt.
+
+Focused reproduction and positive controls:
+
+```sh
+.venv/bin/pytest tests/scripts/test_tournament_progress.py tests/scripts/test_run_tournament.py tests/scripts/test_report_destinations.py -q --tb=short
+```
+
+That selection passed 104 tests in 6.28 seconds, 9 of them the new attestation
+cases. Ruff check and format, strict mypy and `git diff --check` pass on the
+three changed Python files.
+
+Three-way negative control, using the isolated module-copy recipe in
+[recording-replacement.md](recording-replacement.md): write `git show
+<rev>:scripts/_tournament_progress.py` and `git show <rev>:scripts/run_tournament.py`
+into a temporary directory, prepend it plus the repository root and `scripts/`
+to `sys.path`, assert both modules resolve to the temporary copies, then run
+`tests/scripts/test_tournament_progress.py` with `-k 'attested_unknown or
+attestation_requires or attestation_refuses or saved_attestation'`. At
+`9b333a76` all 9 cases fail: the flag does not exist, and the same selector's
+`-k 'crashed_attempt or unresolved_capture'` companion shows 5 further failures
+where a deleted recording is charged as zero and continuation proceeds. At
+`fd1f923c` the same 9 cases fail because no continuation is reachable at all,
+while its `crashed_attempt or unresolved_capture` companion passes 5 -- the
+refusal exists there with no route past it. All 9 pass only on the corrected
+tree. No tracked source was replaced for either probe.
+
+Record impact remains operational and post-record: no report DTO, prompt, engine
+behavior, historical evidence or adopted experiment changes, and no committed
+recording bytes were read or rewritten.
+
+Limitations. Sidecars written before this correction carry a configuration
+fingerprint that includes the CLI helper sources; the flag cannot rescue them,
+and `--force` remains their only path. Attestation records that usage is
+unknown; it does not recover unreported provider usage.
+
+<!-- gate paragraph added by the checkpoint commit -->

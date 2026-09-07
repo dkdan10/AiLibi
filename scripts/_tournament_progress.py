@@ -8,6 +8,7 @@ import math
 import os
 import time
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
 
@@ -111,6 +112,17 @@ def artifact_fingerprint(directory: Path | None) -> dict[str, str] | None:
     }
 
 
+class UnresolvedUsageError(ValueError):
+    """One attempt's usage cannot be established from its surviving evidence.
+
+    A ``ValueError`` subclass so every existing caller and test that catches or
+    matches ``ValueError`` is unaffected. It exists so the operator-attestation
+    path can absorb exactly this refusal and nothing else: integrity signals
+    (recording bytes changed, saved report/usage does not match the recording)
+    stay plain ``ValueError`` and are never attestable.
+    """
+
+
 class Attempt(BaseModel):
     model_config = ConfigDict(extra="forbid")
     seed: int
@@ -124,6 +136,11 @@ class Attempt(BaseModel):
     input_tokens: int = Field(default=0, ge=0)
     output_tokens: int = Field(default=0, ge=0)
     accounting_complete: bool = False
+    # Additive: an operator attested that this attempt's usage cannot be
+    # measured. Sidecars written before the attestation route parse unchanged
+    # (both fields default to "no attestation"), so format_version stays 1.
+    usage_unknown: bool = False
+    attestation: str | None = None
     error: str | None = None
 
 
@@ -162,6 +179,7 @@ class TournamentProgress:
         resume: bool,
         force: bool,
         started: float | None = None,
+        attested_unknown_seeds: frozenset[int] = frozenset(),
     ) -> None:
         self.path = path
         self.report_path = report_path
@@ -172,7 +190,9 @@ class TournamentProgress:
             self.record = ProgressRecord.model_validate_json(path.read_text())
             if self.record.fingerprint != fingerprint or self.record.seeds != seeds:
                 raise ValueError(
-                    "Continuation configuration differs from saved tournament"
+                    "Continuation configuration differs from saved tournament; "
+                    "the CLI helper sources are part of the fingerprint, so a "
+                    "tournament started before a helper change cannot be continued"
                 )
             if self.record.configuration != configuration:
                 raise ValueError(
@@ -192,18 +212,42 @@ class TournamentProgress:
                 # A killed process cannot checkpoint its final monotonic time.
                 # Count the unobserved interval conservatively, including downtime.
                 self._elapsed_before += max(0.0, time.time() - self.record.updated_at)
+            attested: set[int] = set()
             for attempt in self.record.attempts:
+                # An attempt already carrying an attestation keeps the exact
+                # words it was retained with; re-capturing it would either fail
+                # again or rewrite a record the operator signed.
+                if attempt.usage_unknown:
+                    continue
                 if attempt.status == "running" or not attempt.accounting_complete:
-                    self.capture(
-                        attempt, error="Previous process stopped before checkpoint"
-                    )
+                    try:
+                        self.capture(
+                            attempt, error="Previous process stopped before checkpoint"
+                        )
+                    except UnresolvedUsageError as exc:
+                        if (
+                            attempt.seed not in attested_unknown_seeds
+                            or self.latest(attempt.seed) is not attempt
+                        ):
+                            raise
+                        self._attest_unknown_usage(attempt, reason=str(exc))
+                        attested.add(attempt.seed)
+                        continue
                     if attempt.game is not None and attempt.game.completion_status in {
                         "completed",
                         "tick_limited",
                     }:
                         attempt.status = "finished"
                         attempt.error = None
-            self._require_accounting_complete()
+            unused = sorted(attested_unknown_seeds - attested)
+            if unused:
+                raise ValueError(
+                    "--attest-unknown-usage names "
+                    f"{', '.join(str(seed) for seed in unused)}, whose latest "
+                    "attempt has resolvable recording evidence; attestation "
+                    "cannot discard measurable usage"
+                )
+            self._require_resolved()
         else:
             if path.exists() and not force:
                 raise FileExistsError(
@@ -318,14 +362,64 @@ class TournamentProgress:
             sum(a.output_tokens for a in self.record.attempts),
         )
 
+    def _unresolved_route(self, attempt: Attempt) -> str:
+        return (
+            "restore its recording evidence before continuing, or retain the "
+            "attempt with its usage recorded as unknown (never as zero) with "
+            f"--resume --retry-incomplete --attest-unknown-usage {attempt.seed}"
+        )
+
     def _require_accounting_complete(self) -> None:
+        """Every attempt's usage is measured; the strict cumulative-total bar."""
         for attempt in self.record.attempts:
-            if not attempt.accounting_complete:
-                raise ValueError(
+            if attempt.usage_unknown:
+                raise UnresolvedUsageError(
                     f"Usage accounting is unresolved for seed {attempt.seed} "
-                    f"attempt {attempt.number}; restore its recording evidence "
-                    "before continuing or calculating cumulative allowance"
+                    f"attempt {attempt.number}: it is recorded as unknown by "
+                    "operator attestation; a cumulative allowance cannot be "
+                    "computed over unmeasured usage"
                 )
+            if not attempt.accounting_complete:
+                raise UnresolvedUsageError(
+                    f"Usage accounting is unresolved for seed {attempt.seed} "
+                    f"attempt {attempt.number}; "
+                    f"{self._unresolved_route(attempt)}"
+                )
+
+    def _require_resolved(self) -> None:
+        """Every attempt is either measured or explicitly attested as unknown.
+
+        The bar for continuing to record. It is deliberately weaker than
+        :meth:`_require_accounting_complete`, which stays the bar for computing
+        a cumulative allowance: an attested attempt can be retried but can never
+        be summed.
+        """
+        for attempt in self.record.attempts:
+            if not attempt.accounting_complete and not attempt.usage_unknown:
+                raise UnresolvedUsageError(
+                    f"Usage accounting is unresolved for seed {attempt.seed} "
+                    f"attempt {attempt.number}; "
+                    f"{self._unresolved_route(attempt)}"
+                )
+
+    def _attest_unknown_usage(self, attempt: Attempt, *, reason: str) -> None:
+        """Retain an unmeasurable attempt with its usage recorded as unknown.
+
+        Known counters, recording hashes and any saved game are left exactly as
+        checkpointed; nothing is invented and nothing measured is discarded.
+        ``accounting_complete`` stays False, so cumulative totals keep refusing.
+        """
+        stamped = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        attempt.usage_unknown = True
+        attempt.status = "interrupted"
+        attempt.attestation = (
+            f"Operator attested unknown usage at {stamped} via "
+            "--attest-unknown-usage. The retained counters are this attempt's "
+            "last checkpoint, not a measured total; its true usage cannot be "
+            "established from the surviving evidence."
+        )
+        attempt.error = f"Usage unknown by attestation: {reason}"
+        self.save()
 
     def capture(self, attempt: Attempt, *, error: str | None = None) -> None:
         replay, _ = self.paths(attempt)
@@ -334,9 +428,13 @@ class TournamentProgress:
         attempt.accounting_complete = False
         if not replay.exists() or not replay.stat().st_size:
             attempt.status = "interrupted"
-            raise ValueError(
+            raise UnresolvedUsageError(
                 f"Usage accounting is unresolved for seed {attempt.seed}: "
-                "recording is missing or empty; restore its evidence before retrying"
+                "recording is missing or empty; restore its evidence before "
+                "retrying, or retain this attempt with its usage recorded as "
+                "unknown (never as zero) with --resume --retry-incomplete "
+                f"--attest-unknown-usage {attempt.seed}, after which cumulative "
+                "--max-total-* caps are refused for this tournament"
             )
         hashes = self._hashes(attempt)
         if (
@@ -346,7 +444,7 @@ class TournamentProgress:
             and hashes == attempt.hashes
         ):
             attempt.status = "interrupted"
-            raise ValueError(
+            raise UnresolvedUsageError(
                 f"Usage accounting is unresolved for seed {attempt.seed}: "
                 "recording still matches the prior files; no new attempt evidence "
                 "can be distinguished"
@@ -379,7 +477,7 @@ class TournamentProgress:
             or output_tokens < attempt.output_tokens
         ):
             attempt.status = "interrupted"
-            raise ValueError(
+            raise UnresolvedUsageError(
                 f"Usage accounting is unresolved for seed {attempt.seed}: "
                 "recording accounts for less usage than its previous checkpoint"
             )
@@ -401,7 +499,7 @@ class TournamentProgress:
             attempt.status = "finished"
 
     def start(self, seed: int, *, retry: bool) -> Attempt:
-        self._require_accounting_complete()
+        self._require_resolved()
         previous = self.latest(seed)
         if previous is not None:
             if previous.status == "finished":

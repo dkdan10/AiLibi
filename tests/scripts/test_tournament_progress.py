@@ -715,3 +715,171 @@ def test_resume_cannot_overwrite_untracked_pending_recordings(
         rt.main([*args, "--resume", "--retry-incomplete"])
     assert calls == 1
     assert foreign.read_bytes() == b"independent recording"
+
+
+def _interrupted_paid_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> PaidProvider:
+    """One paid seed aborts mid-meeting; its counters reach the sidecar."""
+    provider = PaidProvider()
+    install_paid_run(monkeypatch, provider)
+    with pytest.raises(RuntimeError, match="provider interruption"):
+        rt.main(arguments(tmp_path, games=1))
+    return provider
+
+
+def _strand_the_ledger(tmp_path: Path) -> None:
+    """Reproduce a kill before the checkpoint, then the rollback's own cleanup.
+
+    The process died after paid calls but before ``capture`` completed, so the
+    attempt is still ``running`` with unresolved accounting and its known
+    counters. ``orchestrator/recording.py`` then correctly removed the zero-byte
+    replay it had prepared, leaving no evidence to measure.
+    """
+    saved = progress(tmp_path)
+    attempt = saved.attempts[0]
+    attempt.status = "running"
+    attempt.accounting_complete = False
+    attempt.game = None
+    attempt.hashes = {}
+    (tmp_path / "tournament-progress.json").write_text(saved.model_dump_json())
+    (tmp_path / attempt.replay).unlink()
+
+
+def test_attested_unknown_usage_retries_a_removed_recording_without_inventing_zero(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    provider = _interrupted_paid_run(tmp_path, monkeypatch)
+    paid = progress(tmp_path).attempts[0].cost_usd
+    assert paid == 0.01
+    _strand_the_ledger(tmp_path)
+    args = arguments(tmp_path, games=1)
+    with pytest.raises(ValueError, match="[Uu]sage.*unresolved") as refusal:
+        rt.main([*args, "--resume", "--retry-incomplete"])
+    assert "--attest-unknown-usage" in str(refusal.value)
+    provider.abort_at = None
+    assert (
+        rt.main(
+            [*args, "--resume", "--retry-incomplete", "--attest-unknown-usage", "0"]
+        )
+        == 0
+    )
+    saved = progress(tmp_path)
+    assert [a.seed for a in saved.attempts] == [0, 0]
+    attested = saved.attempts[0]
+    assert attested.usage_unknown is True
+    assert "--attest-unknown-usage" in (attested.attestation or "")
+    assert attested.cost_usd == paid
+    assert not attested.accounting_complete
+    assert saved.attempts[1].status == "finished"
+    report = json.loads((tmp_path / "tournament-eval-report.json").read_text())
+    assert [game["seed"] for game in report["report"]["games"]] == [0]
+
+
+@pytest.mark.parametrize(
+    "flag",
+    ["--max-total-cost-usd", "--max-total-input-tokens", "--max-total-output-tokens"],
+)
+def test_attested_unknown_usage_refuses_every_cumulative_cap(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, flag: str
+) -> None:
+    provider = _interrupted_paid_run(tmp_path, monkeypatch)
+    _strand_the_ledger(tmp_path)
+    sidecar = tmp_path / "tournament-progress.json"
+    before = sidecar.read_bytes()
+    prior_calls = provider.calls
+    with pytest.raises(SystemExit, match="mutually exclusive"):
+        rt.main(
+            [
+                *arguments(tmp_path, games=1),
+                "--resume",
+                "--retry-incomplete",
+                "--attest-unknown-usage",
+                "0",
+                flag,
+                "1",
+            ]
+        )
+    assert provider.calls == prior_calls
+    assert sidecar.read_bytes() == before
+    # The attestation itself never yields a cumulative allowance either.
+    saved = progress(tmp_path)
+    ledger = TournamentProgress(
+        path=sidecar,
+        report_path=tmp_path / "tournament-eval-report.json",
+        output_dir=tmp_path,
+        configuration=saved.configuration,
+        fingerprint=saved.fingerprint,
+        seeds=saved.seeds,
+        resume=True,
+        force=False,
+        attested_unknown_seeds=frozenset({0}),
+    )
+    assert ledger.record.attempts[0].usage_unknown
+    with pytest.raises(ValueError, match="unknown"):
+        ledger.totals()
+
+
+@pytest.mark.parametrize("flags", [[], ["--resume"], ["--force"]])
+def test_attestation_requires_resume_and_retry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, flags: list[str]
+) -> None:
+    def forbidden(**kwargs: Any) -> Any:
+        raise AssertionError("Rejected attestation invoked evaluator")
+
+    monkeypatch.setattr(rt, "run_tournament_eval", forbidden)
+    with pytest.raises(SystemExit, match="attest-unknown-usage"):
+        rt.main(
+            [
+                *arguments(tmp_path, games=1),
+                *flags,
+                "--attest-unknown-usage",
+                "0",
+            ]
+        )
+    assert not (tmp_path / "tournament-progress.json").exists()
+
+
+def test_attestation_refuses_a_seed_whose_evidence_is_readable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    provider = _interrupted_paid_run(tmp_path, monkeypatch)
+    provider.abort_at = None
+    prior_calls = provider.calls
+    with pytest.raises(ValueError, match="resolvable recording evidence"):
+        rt.main(
+            [
+                *arguments(tmp_path, games=1),
+                "--resume",
+                "--retry-incomplete",
+                "--attest-unknown-usage",
+                "0",
+            ]
+        )
+    assert provider.calls == prior_calls
+    assert not (tmp_path / ".tournament-attempts").exists()
+    assert not progress(tmp_path).attempts[0].usage_unknown
+
+
+def test_saved_attestation_survives_another_continuation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    provider = _interrupted_paid_run(tmp_path, monkeypatch)
+    _strand_the_ledger(tmp_path)
+    args = arguments(tmp_path, games=1)
+    provider.abort_at = None
+    assert (
+        rt.main(
+            [*args, "--resume", "--retry-incomplete", "--attest-unknown-usage", "0"]
+        )
+        == 0
+    )
+    attested = progress(tmp_path).attempts[0]
+    calls = provider.calls
+    assert rt.main([*args, "--resume"]) == 0
+    assert provider.calls == calls
+    again = progress(tmp_path).attempts[0]
+    assert again.usage_unknown is True
+    assert again.attestation == attested.attestation
+    assert again.error == attested.error
+    assert again.cost_usd == attested.cost_usd

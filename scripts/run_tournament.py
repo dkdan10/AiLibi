@@ -367,6 +367,24 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         help="with --resume, archive interrupted attempts and explicitly retry them",
     )
     parser.add_argument(
+        "--attest-unknown-usage",
+        type=int,
+        action="append",
+        metavar="SEED",
+        default=None,
+        help=(
+            "with --resume --retry-incomplete, retain SEED's unmeasurable attempt "
+            "with its usage recorded as UNKNOWN (never as zero) and retry it. Use "
+            "it only when the attempt's recording is genuinely gone — a process "
+            "killed before its first replay row, whose zero-byte file the "
+            "recording rollback correctly removed — so continuation would "
+            "otherwise strand the whole ledger. Repeatable. Refused for a seed "
+            "whose evidence is still readable, and mutually exclusive with every "
+            "--max-total-* cap: a cumulative allowance cannot be enforced over "
+            "unmeasured usage"
+        ),
+    )
+    parser.add_argument(
         "--max-total-cost-usd",
         type=float,
         default=None,
@@ -1185,6 +1203,26 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit("--resume and --force are mutually exclusive")
     if args.retry_incomplete and not args.resume:
         raise SystemExit("--retry-incomplete requires --resume")
+    # Attestation is checked before any file is read: naming a seed with the
+    # wrong flag combination, or beside a cap it can never satisfy, must not
+    # touch the sidecar it would otherwise rewrite.
+    if args.attest_unknown_usage is not None:
+        if not (args.resume and args.retry_incomplete):
+            raise SystemExit(
+                "--attest-unknown-usage requires --resume --retry-incomplete"
+            )
+        if any(
+            getattr(args, name) is not None
+            for name in (
+                "max_total_cost_usd",
+                "max_total_input_tokens",
+                "max_total_output_tokens",
+            )
+        ):
+            raise SystemExit(
+                "--attest-unknown-usage and the --max-total-* caps are mutually "
+                "exclusive: a cumulative cap cannot be enforced over unmeasured usage"
+            )
     for name in (
         "max_total_cost_usd",
         "max_total_input_tokens",
@@ -1318,6 +1356,7 @@ def main(argv: list[str] | None = None) -> int:
         seeds=list(seeds),
         resume=args.resume,
         force=args.force,
+        attested_unknown_seeds=frozenset(args.attest_unknown_usage or ()),
     )
     if args.resume and not args.retry_incomplete:
         unfinished = next(
@@ -1443,10 +1482,20 @@ def main(argv: list[str] | None = None) -> int:
     progress.publish(finished=True)
     eval_report = TournamentEvalReport.model_validate_json(report_output.read_text())
     print(_format_summary(eval_report))
-    cost, input_tokens, output_tokens = progress.totals()
-    print(
-        f"all attempts:         ${cost:.6f}; input={input_tokens}; output={output_tokens}"
-    )
+    # An attested attempt has no measured usage to sum, so the cumulative line
+    # names what is unknown instead of printing a total that silently omits it.
+    unknown = [a for a in progress.record.attempts if a.usage_unknown]
+    if unknown:
+        named = ", ".join(f"seed {a.seed} attempt {a.number}" for a in unknown)
+        print(
+            "all attempts:         not summable; usage for "
+            f"{named} is recorded as unknown by operator attestation"
+        )
+    else:
+        cost, input_tokens, output_tokens = progress.totals()
+        print(
+            f"all attempts:         ${cost:.6f}; input={input_tokens}; output={output_tokens}"
+        )
     print(f"report:               {report_output}")
     print(f"progress:             {progress_output}")
     return 0
