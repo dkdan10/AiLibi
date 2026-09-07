@@ -228,21 +228,69 @@ def test_current_serialization_cannot_hide_recorded_identity_as_legacy(
     assert bsr.check_report(tmp_path) == 1
 
 
-def test_write_report_emits_a_loadable_consistent_file(tmp_path: Path) -> None:
-    """``write_report`` writes a model-valid report matching the committed one."""
+@pytest.mark.parametrize("shape", ["legacy", "stamped"])
+def test_write_report_emits_the_shape_check_compares(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, shape: str
+) -> None:
+    """The writer emits what ``--check`` compares, for both report shapes.
 
-    _copy_flat_replays(tmp_path)
+    ``--check``'s staleness message instructs the operator to re-run this writer
+    and commit the result. A projection-eligible legacy set must therefore come
+    back out byte-for-byte as its committed self, while a set that records a
+    candidate identity must still be written complete.
+    """
+
+    if shape == "legacy":
+        _copy_flat_replays(tmp_path)
+        bsr.write_report(tmp_path)
+        written = (tmp_path / "tournament-eval-report.json").read_text(encoding="utf-8")
+        assert json.loads(written) == json.loads(
+            _COMMITTED_REPORT.read_text(encoding="utf-8")
+        )
+        restored = TournamentEvalReport.model_validate_json(written)
+        assert restored.report.provenance_groups is None
+        assert all(game.agent_factory_kind is None for game in restored.report.games)
+        assert written.endswith("\n")
+        assert bsr.check_report(tmp_path) == 0
+        return
+
+    game = next(game for game in report_9p2i().report.games if game.meetings)
+    game = game.model_copy(update={"agent_factory_kind": "scripted"})
+    candidate = build_tournament_eval_report(
+        build_tournament_report(games=(game,), seeds=(game.seed,))
+    )
+    monkeypatch.setattr(bsr, "build_report", lambda directory: candidate)
     bsr.write_report(tmp_path)
     written = (tmp_path / "tournament-eval-report.json").read_text(encoding="utf-8")
-    # New reports expose unknown historical identity; the compatibility
-    # projection still preserves every committed metric and recorded cell.
-    restored = TournamentEvalReport.model_validate_json(written)
-    assert restored.report.provenance_groups is not None
-    assert all(game.agent_factory_kind is None for game in restored.report.games)
-    assert bsr.historical_report_payload(restored) == json.loads(
-        _COMMITTED_REPORT.read_text(encoding="utf-8")
-    )
+    payload = json.loads(written)
+    assert payload["report"]["provenance_groups"]
+    assert "agent_factory_kind" in payload["report"]["games"][0]
+    assert written.endswith("\n")
     assert bsr.check_report(tmp_path) == 0
+
+
+@pytest.mark.parametrize("relative_dir", _COMMITTED_SETS)
+def test_write_report_does_not_rewrite_a_committed_legacy_report_into_the_current_shape(
+    tmp_path: Path, relative_dir: str
+) -> None:
+    """Following ``--check``'s remediation reproduces each committed report.
+
+    The message names ``build_sample_report.py --sample-dir <dir>`` as the fix for
+    a stale report. Run over an untouched copy of a committed set's replays, that
+    remediation must reproduce the committed report rather than convert it.
+    """
+
+    source = _REPO_ROOT / "replays" / relative_dir
+    for jsonl in source.glob("replay-seed-*.jsonl"):
+        (tmp_path / jsonl.name).write_bytes(jsonl.read_bytes())
+    roster = source / "roster.json"
+    if roster.exists():
+        (tmp_path / roster.name).write_bytes(roster.read_bytes())
+
+    bsr.write_report(tmp_path)
+    written = (tmp_path / "tournament-eval-report.json").read_text(encoding="utf-8")
+    committed = (source / "tournament-eval-report.json").read_text(encoding="utf-8")
+    assert json.loads(written) == json.loads(committed)
 
 
 def test_seeds_on_disk_skips_an_audit_sidecar(tmp_path: Path) -> None:

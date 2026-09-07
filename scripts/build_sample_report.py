@@ -437,12 +437,18 @@ def _summary(report: TournamentEvalReport, sample_dir: Path) -> str:
 
 
 def write_report(sample_dir: Path) -> TournamentEvalReport:
-    """Write a current report, retaining known and unknown recorded provenance."""
+    """Write the report in the shape ``--check`` compares.
+
+    ``--check``'s remediation message tells the operator to re-run this writer and
+    commit the result, so the two must agree: ``_serialize`` projects the legacy
+    format for a projection-eligible unstamped set and writes the complete payload
+    for anything that records a candidate identity. Writing the full payload
+    unconditionally would rewrite every committed legacy report into the current
+    shape the moment the documented remediation is followed.
+    """
 
     report = build_report(sample_dir)
-    json_text = report.model_dump_json(indent=2)
-    TournamentEvalReport.model_validate_json(json_text)
-    (sample_dir / _REPORT_FILENAME).write_text(json_text + "\n", encoding="utf-8")
+    (sample_dir / _REPORT_FILENAME).write_text(_serialize(report), encoding="utf-8")
     return report
 
 

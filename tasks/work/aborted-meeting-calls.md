@@ -19,6 +19,11 @@ publishes its recovery metadata.
 
 ## Acceptance
 
+- [x] Review correction: the writer emits the same shape `--check` compares.
+  Re-running the remediation the check prints reproduces a committed legacy
+  report instead of rewriting it into the current payload; a set that records a
+  candidate identity is still written complete.
+
 - [x] Successful prefixes survive transport errors and cancellation with their
   exact prompt, response, usage, cost, and provenance; the original error propagates.
 - [x] Returned responses that overrun the budget and parse failures pending a
@@ -133,3 +138,85 @@ lint/format, import/document contracts and the production build. All 100
 canonical recordings verified. The [durable correction record](../../audits/review-2026-09-06/correction-record.md)
 records the independent reviews, discovered rollback repair and integration
 checks. This completion is on cleanup, awaiting owner review and merge.
+
+### Projection write-path correction (2026-09-07)
+
+Reopened for follow-up review finding FU-2, archived beside the
+[review report](../../audits/review-2026-09-06/REVIEW_REPORT.md) as
+`REVIEW_REPORT_FOLLOWUP.md`. The earlier verification above checked
+`historical_report_payload` and `--check` directly, and it checked the writer
+only through `historical_report_payload(restored)`, so it never compared the
+bytes the writer actually emits against the bytes `--check` compares. That gap
+hid a divergence introduced by `e12b6180`: that commit made `_serialize`
+projection-conditional but simultaneously moved `write_report` off it onto an
+unconditional `model_dump_json(indent=2)`, leaving `_serialize` with no
+production caller. The effect was that `--check`'s own remediation message —
+"Re-run `python scripts/build_sample_report.py --sample-dir <dir>` and commit
+the result" — would have rewritten all four committed legacy reports
+(`replays/samples/{4p1i,9p2i}` and `replays/ml_corpus/{4p1i,9p2i}`, every one of
+them projection-eligible) into the current payload, and would have broken
+`test_rebuild_matches_committed_flat_4p1i` in the same step.
+
+`write_report` is back on `_serialize`, which projects the legacy format only
+for a projection-eligible unstamped set and writes the complete payload for
+anything recording a candidate identity. `check_report` and its message are
+untouched. Every `HeadlessGame` recording is stamped — `agent_factory_kind` is
+never `None` — so `_can_project_historical` is false for new recordings and they
+still receive the full payload; only the unstamped legacy sets project.
+
+The replaced test asserted `provenance_groups is not None` for a legacy set,
+which is the behaviour being removed. Its successor is two-legged: the legacy
+leg asserts the written text parses equal to the committed report, restores with
+`provenance_groups is None` and every `agent_factory_kind is None`, ends with a
+newline and passes `--check`; the stamped leg builds a `agent_factory_kind:
+"scripted"` candidate, monkeypatches `build_report`, and asserts the written
+payload keeps `provenance_groups` and `agent_factory_kind` and still passes
+`--check`. A four-set control walks each committed set, copies its
+`replay-seed-*.jsonl` (plus `roster.json` where present) into a scratch
+directory, runs the documented remediation there and asserts the result parses
+equal to that set's committed report.
+
+```sh
+.venv/bin/pytest tests/scripts/test_build_sample_report.py tests/eval/test_report_replay_integrity.py -q --tb=short
+```
+
+That focused selection passed 68 tests in 25.31 seconds. Ruff check, ruff format
+and strict mypy passed on the two changed Python files.
+
+Negative control, by the isolated module-copy recipe in
+[recording-replacement](recording-replacement.md): load a
+`git show <sha>:scripts/build_sample_report.py` copy under the module name
+`build_sample_report`, assert the loaded module resolves to the temporary copy,
+then run the corrected tests with the selector
+`write_report_emits_the_shape or does_not_rewrite_a_committed_legacy`. Against
+the pre-correction module at `fd1f923c` the run produced 5 failures and 1 pass —
+the legacy leg and all four committed-set legs fail, the stamped leg passes.
+Against an unconditional-projection variant (the corrected module with the
+`_can_project_historical` guard removed from `_serialize`) the run produced 1
+failure and 5 passes — only the stamped leg fails. The corrected module passes
+all 6. The historical `9b333a76` copy named in the finding also produced 5
+failures and 1 pass, but that copy predates the exclusion set entirely, so its
+legacy failures are model drift rather than the write path; the two runs above
+are the controls that isolate this change. No tracked source was replaced during
+any adverse run.
+
+Byte check outside the test: the committed `replays/samples/4p1i`
+`replay-seed-*.jsonl` were copied to a scratch directory,
+`scripts/build_sample_report.py --sample-dir <tmp>` was run there, and `cmp`
+against `replays/samples/4p1i/tournament-eval-report.json` reported the files
+byte-identical.
+
+Record impact: none. No committed replay, report, weight or audit byte changed;
+this repair only restores the writer to the shape `--check` already compares, so
+the four committed reports stay exactly as recorded.
+
+Limitations: the four-set control proves the remediation is a no-op on the
+committed legacy sets as they stand today; it does not prove the writer is
+correct for a future set that mixes stamped and unstamped games within one
+directory, which `_can_project_historical` treats as fully current. The stamped
+leg exercises a monkeypatched `build_report` rather than a recorded stamped
+sample dir, because no stamped sample set is committed. Byte identity was
+measured for `samples/4p1i` only; the other three sets were verified by parsed
+equality.
+
+<!-- gate paragraph added by the checkpoint commit -->
