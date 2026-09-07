@@ -176,8 +176,8 @@ recording. This includes rejected/discarded actions. Version-1/2 readers retain
 memory-only reconstruction. Spectator plans name their decision tick and respect
 own-agent display; later discoveries cannot certify earlier alibis.
 
-New recordings stamp actual agent-factory identity and configuration on prefixes
-as well as completed outcomes. Strict readers validate the living ballot roster,
+New recordings stamp actual agent-factory identity and configuration on the
+first tick as well as completed outcomes. Strict readers validate the living ballot roster,
 legal targets and the recorded confidence cutoff before applying an outcome.
 Historical missing identity stays unknown. Report and public-summary groups keep
 distinct recorded configurations visible; served report identity is rebound to

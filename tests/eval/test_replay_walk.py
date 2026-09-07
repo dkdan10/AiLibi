@@ -452,6 +452,51 @@ def test_funnel_profile_bites_a_retired_lever_stamped_off(
         )
 
 
+def test_a_prefix_stamped_with_a_retired_lever_off_is_refused(
+    tmp_path: Path, knobs: tuple[int, int, int], game_map: Map
+) -> None:
+    """An INTERRUPTED recording is checked on the stamp it does carry.
+
+    The identity pair rides the first tick row as well as ``game_over``, so a
+    prefix that never reached ``game_over`` still names its substrate. Reading
+    the RESOLVED stamp rather than the terminal row is what makes a truncated
+    recording of an unreproducible substrate refuse like a completed one --
+    reading the terminal row alone would wave it through as "unstamped".
+    """
+
+    seed = _seeds()[0]
+    lines = _game_lines(seed)
+    end = json.loads(lines[-1])
+    assert end["kind"] == "game_over"
+    retired = next(
+        key
+        for key in end["substrate_flags"]
+        if key not in TOGGLEABLE_SUBSTRATE_FLAG_KEYS
+    )
+    first = json.loads(lines[0])
+    assert first["kind"] == "tick"
+    assert "substrate_flags" not in first  # committed bytes stamp only the footer
+    first["agent_factory_kind"] = "scripted"
+    first["substrate_flags"] = {**end["substrate_flags"], retired: False}
+    # Drop the terminal row: this is the interrupted prefix, whose only stamp
+    # is the one on row 0.
+    path = _write_game(tmp_path, seed, [json.dumps(first), *lines[1:-1]])
+
+    on = ReplayWalkConfig(
+        profile="test-on",
+        on_violation=_raise_violation,
+        reject_retired_levers_stamped_off=True,
+    )
+    with pytest.raises(_Violation) as info:
+        _drain(path, seed=seed, knobs=knobs, game_map=game_map, config=on)
+    assert info.value.violation.kind == "retired_levers_stamped_off"
+    assert info.value.violation.levers == (retired,)
+
+    off = ReplayWalkConfig(profile="test-off", on_violation=_raise_violation)
+    events = _drain(path, seed=seed, knobs=knobs, game_map=game_map, config=off)
+    assert isinstance(events[-1], WalkComplete)  # only the asking profile sees it
+
+
 def test_meeting_pre_and_post_hash_checks_are_options(
     tmp_path: Path, knobs: tuple[int, int, int], game_map: Map
 ) -> None:

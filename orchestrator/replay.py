@@ -42,7 +42,7 @@ eval **report** (:data:`eval.report_schema.CURRENT_FORMAT_VERSION`), whose
 shape is a fresh artifact; the replay bytes rely on the hash + sidecar
 instead.
 
-Provenance stamps on the ``game_over`` record (Task 15.9; audit
+Provenance stamps on the FIRST tick row and the ``game_over`` record (Task 15.9; audit
 post-phase-14-ML-planning.md §7.2-7.3). Two ADDITIVE, OPTIONAL blocks
 self-describe what generated a recording, so a replay answers *which* substrate
 and *which* tactical policy produced its bytes without the operator remembering
@@ -68,6 +68,21 @@ default. Task 18.19 recordings carry BOTH stamps on one ``game_over`` row (a
 dual-role co-evo game); :func:`read_policy_stamps` reads the pair back in one walk
 into a :class:`PolicyStamps` named-slot tuple, each identity in its own typed slot
 so the two can never be positionally conflated.
+
+Where the stamps sit. The COUPLED pair ``agent_factory_kind`` +
+``substrate_flags`` is written onto the FIRST tick row and onto the ``game_over``
+row, and onto NO other tick row. Row 0 is authoritative: rows 1..N-1 carry
+neither key and INHERIT it, so a recording self-describes from its very first row
+and an interrupted prefix that never reached ``game_over`` still names the
+factory and the substrate that produced it. A later tick row or a terminal row
+that CONTRADICTS row 0 is refused, and so is a stamp that first appears after an
+UNSTAMPED row 0 — inheriting backwards would let a re-stamped suffix claim
+provenance the recorded prefix never carried. Writing it once rather than on
+every row is what keeps the guarantee affordable: the repeated slate measures
++3.5% over the committed 9p2i sample set, +13-15% over the 4p1i sets and up to
++166% on the smallest committed 4p1i file. The remaining stamps
+(``tactical_policy``, ``crew_tactical_policy``, ``experiment_config``) are
+unchanged; ``experiment_config`` still rides every tick row.
 """
 
 from __future__ import annotations
@@ -78,7 +93,16 @@ import hashlib
 import json
 import os
 from pathlib import Path
-from typing import Annotated, Any, Final, Literal, NamedTuple, TextIO, TypeAlias
+from typing import (
+    Annotated,
+    Any,
+    Final,
+    Literal,
+    NamedTuple,
+    TextIO,
+    TypeAlias,
+    TypeVar,
+)
 
 from pydantic import (
     BaseModel,
@@ -241,6 +265,9 @@ def classify_action_dispositions(
 
 AgentFactoryKind: TypeAlias = Literal["scripted", "experimental", "custom"]
 TemporalObservationVersion: TypeAlias = Literal[1, 2]
+# The stamp value a once-per-recording tick-row read resolves; see
+# :func:`_first_tick_stamp`.
+_StampT = TypeVar("_StampT")
 
 
 class ReplayEntry(BaseModel):
@@ -264,6 +291,14 @@ class ReplayEntry(BaseModel):
     state_hash: str
     temporal_observation_version: TemporalObservationVersion | None = None
     experiment_config: RecordedExperimentConfig | None = None
+    # The recording-identity pair, written onto the FIRST tick row ONLY (and,
+    # by :meth:`ReplayLog.record_game_end`, onto the ``game_over`` row) —
+    # together or not at all, since a factory identity without its substrate
+    # slate would name the agents but not the world they ran in. ``None`` on
+    # rows 1..N means "INHERITS the first tick row", not "unknown"; ``None`` on
+    # the FIRST tick row means unknown / legacy, and then no later row may
+    # supply it. :func:`recorded_agent_factory_kind` and
+    # :func:`recorded_substrate_flags` are the readers that apply that rule.
     agent_factory_kind: AgentFactoryKind | None = None
     substrate_flags: Mapping[str, StrictBool] | None = None
 
@@ -598,7 +633,10 @@ class GameEndReplayEntry(BaseModel):
     # unchanged; every post-14.9 recording stamps the full snapshot. The loader
     # honors it (``api.replay_loader``) by refusing to reconstruct a stamped
     # replay under a DIFFERENT ambient substrate — no silent cross-substrate
-    # replay.
+    # replay. Its twin on the FIRST tick row (``ReplayEntry.substrate_flags``,
+    # written with ``agent_factory_kind`` beside it) carries the same slate, and
+    # :func:`recorded_substrate_flags` refuses a terminal stamp that disagrees
+    # with it.
     substrate_flags: Mapping[str, StrictBool] | None = None
     experiment_config: RecordedExperimentConfig | None = None
     agent_factory_kind: AgentFactoryKind | None = None
@@ -759,16 +797,65 @@ def recorded_testimony_shapes(entries: Sequence[ReplayLogEntry]) -> bool:
     return versions == {True}
 
 
+def _stamp_as_written(value: _StampT) -> _StampT:
+    """Compare a tick-row stamp exactly as recorded (the default normaliser)."""
+
+    return value
+
+
+def _first_tick_stamp(
+    values: Sequence[_StampT | None],
+    *,
+    subject: str,
+    key: Callable[[_StampT], object],
+) -> _StampT | None:
+    """Resolve a once-per-recording tick-row stamp from the tick rows that carry it.
+
+    The recorder writes the identity pair onto the FIRST tick row only (see
+    :meth:`ReplayLog.record_tick`), so the four clauses here are the whole read
+    contract:
+
+    * the first tick row is AUTHORITATIVE — its value is the recording's;
+    * a later tick row that OMITS the stamp INHERITS the first row's, which is
+      the ordinary shape of every once-stamped recording and not a violation;
+    * a later tick row CARRYING a DIFFERENT stamp is refused, because two rows
+      of one recording cannot describe two substrates or two factories;
+    * a stamp that appears only AFTER an unstamped first tick row is refused
+      too. Inheriting it backwards would let a re-stamped SUFFIX claim
+      provenance the recorded PREFIX never carried, which is the one thing the
+      first-row rule exists to prevent.
+
+    ``key`` normalises a value before comparison (the substrate reader folds
+    missing keys to ``False``); it is never called on ``None``.
+    """
+
+    first = values[0] if values else None
+    if first is None:
+        if any(value is not None for value in values):
+            raise ValueError(
+                f"{subject} appears after an unstamped first tick row; the first "
+                "tick row is the authoritative stamp, so a stamp that only shows "
+                "up later would let a re-stamped suffix claim provenance the "
+                "recorded prefix never carried"
+            )
+        return None
+    if any(value is not None and key(value) != key(first) for value in values):
+        raise ValueError(f"{subject} changes between tick rows")
+    return first
+
+
 def recorded_agent_factory_kind(
     entries: Sequence[ReplayLogEntry],
 ) -> AgentFactoryKind | None:
     """Preserve unknown historical factories and reject conflicting current stamps."""
-    ticks = [
+    ticks: list[AgentFactoryKind | None] = [
         entry.agent_factory_kind for entry in entries if isinstance(entry, ReplayEntry)
     ]
-    first = ticks[0] if ticks else None
-    if any(kind != first for kind in ticks):
-        raise ValueError("agent factory identity changes between tick rows")
+    first: AgentFactoryKind | None = _first_tick_stamp(
+        ticks,
+        subject="agent factory identity",
+        key=_stamp_as_written,
+    )
     for entry in entries:
         if isinstance(entry, GameEndReplayEntry) and entry.agent_factory_kind != first:
             raise ValueError("terminal agent factory identity disagrees with tick rows")
@@ -779,10 +866,6 @@ def recorded_substrate_flags(
     entries: Sequence[ReplayLogEntry],
 ) -> Mapping[str, bool] | None:
     """Resolve current prefix stamps or a legacy footer without inventing missing data."""
-    ticks = [
-        entry.substrate_flags for entry in entries if isinstance(entry, ReplayEntry)
-    ]
-    first = ticks[0] if ticks else None
 
     def comparable(flags: Mapping[str, bool] | None) -> dict[str, bool] | None:
         if flags is None:
@@ -790,8 +873,11 @@ def recorded_substrate_flags(
         # Historical stamps predate this default-OFF observation channel.
         return {"temporal_observations": False, **flags}
 
-    if any(comparable(flags) != comparable(first) for flags in ticks):
-        raise ValueError("substrate configuration changes between tick rows")
+    first = _first_tick_stamp(
+        [entry.substrate_flags for entry in entries if isinstance(entry, ReplayEntry)],
+        subject="substrate configuration",
+        key=comparable,
+    )
     ends = [
         entry.substrate_flags
         for entry in entries
@@ -1271,6 +1357,9 @@ class ReplayLog:
         # the pre-18.7 writer. Kept in its own DISTINCT field so a crew recording
         # can never wear the impostor champion's stamp (the conflation guard).
         self._crew_tactical_policy_stamp = crew_tactical_policy_stamp
+        # The identity pair rides the FIRST tick row only (see
+        # :meth:`record_tick`); this latch is what makes "first" mean first.
+        self._tick_identity_stamped = False
         self._handle: TextIO | None = None
         if temporal_observation_version is not None and (
             type(temporal_observation_version) is not int
@@ -1371,9 +1460,25 @@ class ReplayLog:
             )
         if self.temporal_observation_version is not None:
             entry["temporal_observation_version"] = self.temporal_observation_version
-        if self.agent_factory_kind is not None:
+        # The recording's identity pair rides the FIRST tick row ONLY (and the
+        # ``game_over`` row, written by :meth:`record_game_end`). Writing it once
+        # buys the prefix guarantee the every-row version bought — an interrupted
+        # recording that never reached ``game_over`` still self-describes, from
+        # tick 0, because the very first row it wrote carries the pair — at a
+        # fraction of the bytes: stamping EVERY tick row measures +3.5% over the
+        # committed 9p2i sample set, +13-15% over the two 4p1i sets, and up to
+        # +166% on the smallest committed 4p1i file, where a dozen 794-byte
+        # repetitions of one unchanging slate dwarf the game. Rows 1..N-1 stay
+        # silent and INHERIT row 0 (``recorded_agent_factory_kind`` /
+        # ``recorded_substrate_flags``); a later row that CONTRADICTS row 0, or a
+        # stamp that first appears after an unstamped row 0, is still refused.
+        # The two keys are written together or not at all: a factory identity
+        # without its substrate slate would name the agents but not the world
+        # they ran in, so the readers may treat either key as evidence of both.
+        if self.agent_factory_kind is not None and not self._tick_identity_stamped:
             entry["agent_factory_kind"] = self.agent_factory_kind
             entry["substrate_flags"] = self._substrate_flags
+            self._tick_identity_stamped = True
         if self.experiment_config is not None:
             entry["experiment_config"] = self.experiment_config.model_dump(mode="json")
         self._append(entry)
@@ -1692,6 +1797,13 @@ def read_substrate_flags(path: Path) -> dict[str, bool] | None:
     substrate guard) treat an unstamped replay as "substrate unspecified"
     rather than misreporting it as all-OFF. A stamped replay returns its full
     snapshot.
+
+    Deliberately TERMINAL-only: this reads the ``game_over`` row and nothing
+    else, so an interrupted prefix that never reached ``game_over`` returns
+    ``None`` here even when its first tick row carries the stamp.
+    :func:`recorded_substrate_flags` is the prefix-tolerant resolution — it
+    reads the first tick row and falls back to the terminal row — and is what
+    callers that must not lose provenance on a truncated recording use.
     """
 
     flags: dict[str, bool] | None = None

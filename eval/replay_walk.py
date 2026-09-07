@@ -226,6 +226,7 @@ from orchestrator.replay import (
     _state_hash,
     classify_action_dispositions,
     read_all_entries,
+    recorded_substrate_flags,
     recorded_temporal_observation_version,
     substrate_stamp_mismatches,
 )
@@ -518,10 +519,16 @@ def _walk_replay(
         # audits/workflows/extract_gameplay_facts.py applies: a live toggle
         # recorded the other way is a substrate this build can still reach, a
         # graduated lever recorded OFF is not.
+        # Resolved, not terminal-only: the identity pair rides the first tick
+        # row as well as ``game_over``, so an INTERRUPTED prefix stamped with a
+        # retired lever OFF describes the same unreproducible substrate a
+        # completed recording would and is refused the same way. A stamp that
+        # contradicts itself across rows raises ValueError out of this walk, as
+        # ``recorded_temporal_observation_version`` above already does.
         stamped_off = tuple(
             key
             for key in substrate_stamp_mismatches(
-                game_end.substrate_flags if game_end is not None else None
+                recorded_substrate_flags(entries)
             ).differing
             if key not in TOGGLEABLE_SUBSTRATE_FLAG_KEYS
         )

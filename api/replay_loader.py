@@ -427,8 +427,9 @@ class ReplaySubstrateMismatchError(RuntimeError):
     """A stamped replay is being reconstructed under a DIFFERENT substrate (Task 14.7).
 
     A replay recorded with the corrected Phase-13.5 substrate stamps its lever
-    config onto its ``game_over`` record (``orchestrator.replay.GameEndReplayEntry
-    .substrate_flags``). The loader HONORS that stamp: reconstruction re-derives
+    config onto its first tick row and its ``game_over`` record (resolved by
+    ``orchestrator.replay.recorded_substrate_flags``). The loader HONORS that
+    stamp: reconstruction re-derives
     agent memory / testimony / movement / belief under the active substrate
     (:func:`orchestrator.replay.substrate_flag_snapshot`), so playing back a
     recording stamped with a different lever config would silently reconstruct

@@ -238,20 +238,105 @@ def test_historical_absence_is_unknown_and_mixed_arms_stay_separate(
         TournamentReport.model_validate(corrupted)
 
 
+def _rows(path: Path) -> list[dict[str, Any]]:
+    return [json.loads(line) for line in path.read_text().splitlines()]
+
+
+def _write_rows(path: Path, rows: list[dict[str, Any]]) -> None:
+    path.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+
+
+def _diverge(row: Mapping[str, Any], field: str) -> Any:
+    """A value of ``field`` that contradicts ``row``'s recorded one.
+
+    ``impostor_roll_call`` and NOT ``testimony_shapes`` is the lever flipped
+    here: ``recorded_testimony_shapes`` cross-checks the terminal
+    ``testimony_shapes`` value against the meeting rows' prompt versions and
+    would raise its OWN message first, hiding the envelope rule under test.
+    """
+
+    if field == "agent_factory_kind":
+        return "custom"
+    return {**row[field], "impostor_roll_call": True}
+
+
 @pytest.mark.parametrize("field", ["agent_factory_kind", "substrate_flags"])
-def test_conflicting_prefix_identity_is_refused(tmp_path: Path, field: str) -> None:
+@pytest.mark.parametrize(
+    ("case", "message"),
+    [
+        ("later_tick", "changes between tick rows"),
+        ("terminal", "disagrees with tick rows"),
+        ("stamp_appears_late", "after an unstamped first tick row"),
+    ],
+)
+def test_conflicting_prefix_identity_is_refused(
+    tmp_path: Path, field: str, case: str, message: str
+) -> None:
+    """The recording identity is stamped once, on row 0, and row 0 rules.
+
+    Three ways to break that, all refused: a LATER tick row carrying a
+    different stamp, a TERMINAL row disagreeing with row 0, and a stamp that
+    only APPEARS after an unstamped row 0 -- the last of which would let a
+    re-stamped suffix claim provenance the recorded prefix never carried.
+    """
+
     _game(tmp_path).run()
     path = tmp_path / "replay-seed-1.jsonl"
-    rows = [json.loads(line) for line in path.read_text().splitlines()]
-    if field == "agent_factory_kind":
-        rows[1][field] = "custom"
+    rows = _rows(path)
+    ticks = [index for index, row in enumerate(rows) if row["kind"] == "tick"]
+    assert len(ticks) >= 2, "this case needs a recording with a silent second row"
+    first, second = ticks[0], ticks[1]
+    # The envelope this test is about: the pair rides row 0 and nowhere else.
+    assert field in rows[first]
+    assert field not in rows[second]
+
+    if case == "later_tick":
+        rows[second][field] = _diverge(rows[first], field)
+    elif case == "terminal":
+        # The three-tick recording stops rather than finishing, so the
+        # contradicting TERMINAL row is appended here rather than edited in
+        # place -- the disagreement under test is between row 0 and the
+        # ``game_over`` stamp, whatever wrote it.
+        rows.append(
+            {
+                "kind": "game_over",
+                "game_id": rows[first]["game_id"],
+                "tick": rows[-1]["tick"],
+                "winner": "CREWMATES",
+                "reason": "TASKS",
+                field: _diverge(rows[first], field),
+            }
+        )
     else:
-        rows[1][field]["testimony_shapes"] = True
-    path.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
-    with pytest.raises(ValueError, match="changes between tick rows"):
+        rows[second][field] = rows[first].pop(field)
+    _write_rows(path, rows)
+
+    with pytest.raises(ValueError, match=message):
         _report(tmp_path)
-    with pytest.raises(ValueError, match="changes between tick rows"):
+    with pytest.raises(ValueError, match=message):
         ReplayLoader(tmp_path).load_replay("headless-seed-1")
+
+
+def test_a_silent_later_tick_row_inherits_the_first_rows_identity(
+    tmp_path: Path,
+) -> None:
+    """Rows 1..N carry neither key and INHERIT row 0 -- not a violation."""
+
+    _game(tmp_path).run()
+    path = tmp_path / "replay-seed-1.jsonl"
+    rows = _rows(path)
+    ticks = [row for row in rows if row["kind"] == "tick"]
+    assert len(ticks) >= 2
+    assert "agent_factory_kind" in ticks[0]
+    assert all("agent_factory_kind" not in row for row in ticks[1:])
+    assert all("substrate_flags" not in row for row in ticks[1:])
+    # The pair is coupled on every row: both keys or neither, never one.
+    for row in rows:
+        assert ("agent_factory_kind" in row) == ("substrate_flags" in row), row
+
+    game = _report(tmp_path).games[0]
+    assert game.agent_factory_kind == "scripted"
+    assert game.substrate_flags is not None
 
 
 class _CutoffRunner:
