@@ -1,0 +1,307 @@
+{
+  "accepted": [
+    {
+      "seed": 3000,
+      "sha256": "ab053eef792fd67ff7a10d3cae9a8593e38e5e70a14192f85815ea97ee385efd"
+    },
+    {
+      "seed": 3001,
+      "sha256": "be0831eb651bc9de3eca663584171de8fbf345c9fd4c24de91cb9ebc6ff098ad"
+    },
+    {
+      "seed": 3002,
+      "sha256": "442fb2d4204340745e073fe0f79473f695bd3214e6bbe4449de7b46937f022d0"
+    },
+    {
+      "seed": 3003,
+      "sha256": "733acaed129600304ffe0fcc8dca6a9b20bec6fc5d8b3b9d9aaa1aea042a82b2"
+    },
+    {
+      "seed": 3004,
+      "sha256": "40b98400b5662d8572801e1d590950203569555f55d84d6c79c2f8ce3f4dc1a2"
+    },
+    {
+      "seed": 3005,
+      "sha256": "1bd434dc1c6f14145112b8a8e4fb892dc84850555d6b51aa62d2d3311e9a27cb"
+    },
+    {
+      "seed": 3006,
+      "sha256": "b11a1951f26e17ba627b84fc45801f395417478b4c63ed8e55f0f76d82a06d83"
+    },
+    {
+      "seed": 3007,
+      "sha256": "44445c9744471f0a071d121c8914ee59064f50eb631062cb9f39824628eedd37"
+    },
+    {
+      "seed": 3008,
+      "sha256": "3d18ba80b9589012ec02afe62a39392569d2fdbc08c4b0708aa0eb7f80db4c93"
+    },
+    {
+      "seed": 3010,
+      "sha256": "1fd2ff0c00bfecd46a368066a05c28f8d15753fe100e5b7ef0c74fd2274730b3"
+    },
+    {
+      "seed": 3011,
+      "sha256": "24f27f83d7a30128aa8ea78ee2913e458d334d7a4da8a84b47975e5c6c0f9447"
+    },
+    {
+      "seed": 3012,
+      "sha256": "6b01ab54eca20262d895e4e15ab362dcc1c4a0745cebdac7affc3c1685dc4f72"
+    },
+    {
+      "seed": 3015,
+      "sha256": "84b7f9fb6eda44cf5cc600cc9c13063a78367ef3141437721ca9af0dd1520dcf"
+    },
+    {
+      "seed": 3016,
+      "sha256": "49ac602943549be21adc018eaa27641e45e993982780c62913e9a257f2514388"
+    },
+    {
+      "seed": 3017,
+      "sha256": "13d840a964abf8fdea8d213f8d602d934bac7a28d4c0569fc2518ed12ea92e58"
+    },
+    {
+      "seed": 3018,
+      "sha256": "d1f561a897f96b525fc75c61724b16f15da30b9c338b71383fa33e5cd985d5da"
+    },
+    {
+      "seed": 3019,
+      "sha256": "cea5ea61c2e1db4eb904bafa489d863bf9fa98303f54a055b43db153325c85de"
+    },
+    {
+      "seed": 3021,
+      "sha256": "50f5756e06ce10c558a8515c062ace7cc5b861de623fa7a2200d555f0a8816d6"
+    },
+    {
+      "seed": 3022,
+      "sha256": "384dfb31e72d8b2f338d4efc1cccf99cd0bde9608b15334932bfb20a2ac2778a"
+    },
+    {
+      "seed": 3023,
+      "sha256": "a165ba91f2337727ea6536e566fe38606708c1ddf4721f9c8f80cff75a27ca98"
+    },
+    {
+      "seed": 3025,
+      "sha256": "cb8c8af115a50abe4bcbd5845a19c95567db14be1ce3f16e25afeb0bf176a18c"
+    },
+    {
+      "seed": 3026,
+      "sha256": "d6a5037c7dd0901e5af4b68a2138805d9af663badd1359e3ab0fe822b14e8e4d"
+    },
+    {
+      "seed": 3028,
+      "sha256": "34a0583132d1c8e1b2e09d1112e74f86fc07d9ae02fc90cbd273c7f3250dcfe8"
+    },
+    {
+      "seed": 3030,
+      "sha256": "b7e35cfa4011a6833ec70f355c378e426ba0aa3b7cfc05193ce919c8ce04d3bb"
+    },
+    {
+      "seed": 3031,
+      "sha256": "593d33a09c9c4a56208619608a8d371f21abc639971be23a4b62ef21a6635fdc"
+    },
+    {
+      "seed": 3032,
+      "sha256": "95b321f1c6e5d1b2b0674972c59df25abfa5ecdc394a7a36847e145917d58da9"
+    },
+    {
+      "seed": 3033,
+      "sha256": "5ee8dce9e571d457594f52e1b4f4f41567bda8013230546c3e3650059329342a"
+    },
+    {
+      "seed": 3034,
+      "sha256": "09224189e2455f4e9fcd32474b6261277812480d92ccf98154a8de4b1aaf053e"
+    },
+    {
+      "seed": 3035,
+      "sha256": "77076487bd1ad5e25e62b2e97deb4013a474172afc6edb1829811cfd025c7cf4"
+    },
+    {
+      "seed": 3036,
+      "sha256": "bee602e0c4fa7c1c995602aaedc429f6ab8bde52cea89e79ac97f10885345089"
+    },
+    {
+      "seed": 3037,
+      "sha256": "30af0d992f21fea198766992e9048eaec4cb2a4b2b28e7d266c901a01105b02d"
+    },
+    {
+      "seed": 3038,
+      "sha256": "f5b188d8de568824a827882eb9be3e49cb50f15434fc81dfd44a5a71a003eb03"
+    },
+    {
+      "seed": 3039,
+      "sha256": "19abbeb02ff1eeaeac3e15108da18de1b8d49d328704a7e9fc53e876a5efea68"
+    },
+    {
+      "seed": 3040,
+      "sha256": "b1f7946ae79921a52ac790b2672f1b7deeb655eeed2648b32fdd206efa11e149"
+    },
+    {
+      "seed": 3042,
+      "sha256": "bf0adb3d363b91696bf0fecfb6ea3981b53525df64766e92d0ac3e2ca58ee897"
+    },
+    {
+      "seed": 3043,
+      "sha256": "869f0c22801308b38629aa4f60a2f1e5c9779fdcd791a4f950c02654b688a80c"
+    },
+    {
+      "seed": 3044,
+      "sha256": "4d50aa5be59a38f863a0490e9ce5dc34210378534d7378f45f13f6f478702a51"
+    },
+    {
+      "seed": 3045,
+      "sha256": "b40cb65ed9c93218f0ec15fdacc3df89feaef8a72a23a42991a14e01386afa57"
+    },
+    {
+      "seed": 3046,
+      "sha256": "179b37f34b278e52d870689881b9ae46ece6da12cc492468d2621533a8819e2c"
+    },
+    {
+      "seed": 3047,
+      "sha256": "1f010e048a9f2620a55512a0f6f81400532b1746dd623d507020f419a3b31067"
+    },
+    {
+      "seed": 3048,
+      "sha256": "1c2e6eef1d5f8ac92e3970ac0ea686c40864f532832365c33b7631aed22f44b3"
+    },
+    {
+      "seed": 3049,
+      "sha256": "0242675796c6e6624ae62d503a5348a772cbdf85c20a0cd5fa9010681b0437aa"
+    },
+    {
+      "seed": 3050,
+      "sha256": "002d1735044d1fa12f16ac7ec6588907264747761721d4d6760c0cd4a79758f5"
+    },
+    {
+      "seed": 3051,
+      "sha256": "876bef487bd1fadab42f3b0d7fe03673a5dcb9939906aa57215df28ff007fede"
+    },
+    {
+      "seed": 3052,
+      "sha256": "192be318e9337f37d0c4f8bc15c12ccd406b9e83ceeb0d1c86d102332a989d4e"
+    },
+    {
+      "seed": 3053,
+      "sha256": "52905001b548356f04a0a28b9575e298edb6f1f94dcdab7ea6485c8b54288755"
+    },
+    {
+      "seed": 3054,
+      "sha256": "e61d37d11951efea02d6d7f78e67987e597e528c74b88d019876e4a6788cf2d3"
+    },
+    {
+      "seed": 3055,
+      "sha256": "f06f205f4f460aee96026247a1aac83e59bd410d1900118349ed5251c0c31646"
+    },
+    {
+      "seed": 3056,
+      "sha256": "e1d7bf73e013a7f772d3bfc5c9204619fac99b4713eed66302c46cc4ecc65aae"
+    },
+    {
+      "seed": 3057,
+      "sha256": "4f80690ff07c7482b9c8d1e026c7f38a834eafddc63bb9e788f16c853a6c71fb"
+    }
+  ],
+  "band": {
+    "draw_order": "ascending",
+    "first_seed": 3000,
+    "last_seed": 3999,
+    "size": 50
+  },
+  "body_handle_assertion": {
+    "note": "Under temporal version 2 neither the rendered meeting trigger line nor any prefix step text matches this pattern; the death tick stays out of the listener-visible handle.",
+    "pattern": "body-p-\\d+-\\d+"
+  },
+  "canonical_json": "json.dumps(prefix.model_dump(mode='json'), sort_keys=True, separators=(',', ':')) encoded as UTF-8, hashed with sha256",
+  "card": "tasks/work/held-out-prefix-freeze.md",
+  "development_definitions": {
+    "absent_from_accepted": true,
+    "note": "The seven hand-authored development cases in experiments/deduction_scenarios.py are seed 1 by construction, so the band excludes them; their digests are recorded here and asserted absent from accepted[].sha256.",
+    "sha256": {
+      "already_known_dead": "99984c2f4399f145ec8741d38fba9a36bbe9326893d2d1f8e01ad6af59e7bda2",
+      "honest": "0fe63ad364d581933184e0a0576771c70810553a5769203e1fcd89ec589a47ad",
+      "impossible_account": "73e5421eeafc1570cfca64a74424f0ff455b137fb140e05d62383d1f77a98d1f",
+      "insufficient_evidence": "bc3c42338fa06994df099e132b983b0ad8529428f9c1bc92ee3e1c0a48a482fc",
+      "late_accusation": "86001089f4652c7ebff5da71bc34c5485cd74893367d0f2b46137acc5b49e634",
+      "witnessed_kill": "11b932877cf596536bd296370928880ea72dec278f870dd2a295ffa1baaebfa1",
+      "witnessed_vent": "fabf19d2a64de67018d92ee140225b41eb1a90d1c4b801a06f51071eb43b18cb"
+    }
+  },
+  "filter": "A prefix is kept only when no LIVING CREWMATE's episodic memory holds an observed saw_player row carrying a kill or vent action at meeting open. The impostor's own kill record is NOT counted: it is the killer's private knowledge, never crew evidence, and experiments/deduction_evaluation.py's validate_channels already excludes it (follow-up review NG2-6). The filter replays each prefix through HeadlessGame with no meeting runner, so it halts at MEETING_PHASE_REACHED and makes no provider call.",
+  "filter_environment": {
+    "AILIBI_LLM_PROVIDER": "fake",
+    "AILIBI_TEMPORAL_OBSERVATIONS": "2"
+  },
+  "last_accepted_seed": 3057,
+  "max_ticks": 14,
+  "prefix_bytes": "No prefix bytes are committed. The runner regenerates the set from experiments/held_out_prefixes.py and the band below and refuses to proceed if any digest differs from accepted[].sha256.",
+  "roster": {
+    "num_impostors": 1,
+    "num_players": 4,
+    "tasks_per_crewmate": 1
+  },
+  "skipped": [
+    {
+      "reason": "witnessed_kill",
+      "seed": 3009
+    },
+    {
+      "reason": "witnessed_kill",
+      "seed": 3013
+    },
+    {
+      "reason": "witnessed_kill",
+      "seed": 3014
+    },
+    {
+      "reason": "witnessed_kill",
+      "seed": 3020
+    },
+    {
+      "reason": "witnessed_kill",
+      "seed": 3024
+    },
+    {
+      "reason": "witnessed_kill",
+      "seed": 3027
+    },
+    {
+      "reason": "witnessed_kill",
+      "seed": 3029
+    },
+    {
+      "reason": "witnessed_kill",
+      "seed": 3041
+    }
+  ],
+  "skipped_reason_counts": {
+    "witnessed_kill": 8
+  },
+  "source_sha256": {
+    "agents/memory/beliefs.py": "d9c946867abf74152b332b9331bdec000f20069703c6ef67c2c7c1d8956e63ce",
+    "agents/memory/store.py": "ddc0538517875377a253689cab707322d6393b9eff60713700c9f1d6b7ed0791",
+    "agents/perception.py": "5c0b064eacefe3a2f412e48be4c0c110e283b75a0374c2cddd112c2d7c96bb16",
+    "agents/tactical/crewmate_policy.py": "cd190d211c343b121c6ff4d3fb471de2150830fb6f3adf8f1ff8aba475861a53",
+    "agents/tactical/impostor_policy.py": "4cd16044c9f24cfd5ab615faeecedfb730c424009ed5cb7123a802e739e0b727",
+    "engine/actions.py": "a1e142bc9d574539355190af1ac85ff33b5433c0e0893a0ac5b4b1c2a6c2cbef",
+    "engine/entities.py": "55434fd22d0d4e12a2cb966e655da9d0961d4fd5d5b706e50976054d8a7ac24e",
+    "engine/maps/canonical_1.yaml": "070346ceabc353d84101038ed8d281c02c74cc7879423d925f13895a75af6b3e",
+    "engine/rules.py": "b97962a4eb9cdd0b13088ab1991ac7640ab386eb570297b45fd9cd93000df85e",
+    "engine/tick.py": "655d29d07724c984b32681b00756ee6b759b34469dfc4483addf5b61f3b49459",
+    "engine/visibility.py": "90773592a071c60767ba18933315f0aed96c21716996e74649a6fbc4fd7833f3",
+    "engine/world.py": "8367cd422ffb9503e91c3a90931efc21803f47307f6f6b61f7a62fe6ae8bd4bb",
+    "experiments/held_out_prefixes.py": "be204a0d61c667eefdfcb629ef8548b11c0a30da612d52dc4ca946ebcb9a815b",
+    "observation/action_intent.py": "4b0b9893a52597b96054c982acf9b17d16f3f631bc06058efdf0d62e09b564f3",
+    "observation/body_ids.py": "6287e915e7538080f21ae053b92ca78089235dab2642aa14a3288aa948504ab3",
+    "observation/service.py": "58e0a2b816287a7de154ea735fc4fe974b7976e8fb9291de883cc8fc10dac326",
+    "observation/temporal.py": "23262ec60d8a30e974d5e5cb6e997fd049891347f9a2f07fb68676cc61898b5f",
+    "orchestrator/action_ordering.py": "698d8e0b6c809925967c390f52c2fa94258318fba26c4a538fc2569822432963",
+    "orchestrator/boundary.py": "ab5a8b2397c71256e3895e16cec1687d346140f00e3719360608447b96f1817b",
+    "orchestrator/game.py": "a05072e17843c3f59e8c3c3a6e84bab34b291786c62771184de3fe5203b6a1af",
+    "orchestrator/observation_delivery.py": "8b6734d40634b235b36fece522f444c4083d56d0853afe8824afa9abf119bda2",
+    "orchestrator/seeder.py": "8e9e594d911478755d1fbf22cb78e46f60840bbfad7ba5297143e47033d8bf35"
+  },
+  "status": "held_out",
+  "status_note": "held_out until a held-out result informs a fix. That flip is recorded HERE, by setting status to \"development\" and stating the record that converted the set -- never by deleting this file. Confirming a generalization claim after such a flip needs a new band frozen under a new card.",
+  "temporal_observation_version": 2,
+  "version": 1
+}
