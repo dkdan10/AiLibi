@@ -42,6 +42,17 @@ client. The committed token figures are `len//4` heuristics; calibrated against
 the real usage rows in `replays/samples/`, real input runs about 1.27x and real
 output about 3.7x those figures.
 
+The owner's spending authorization for this instrument is assessed in
+[the 2026-09-07 decision memo](../owner-decisions-2026-09-07.md) item B, whose
+decision-input sheet (B.1) and ruling (B.12) supply the exact owner-field list,
+the recommended values and their anchors; the manifest copies the owner's
+ruled values verbatim. That memo
+corrects the output calibration stated above: real output is about **1.51x** the
+`len//4` heuristic, not 3.7x — the 3.7x figure compares real output per call
+against the scripted capture's per-call output, a different denominator, on
+which the honest ratio is 3.05x. Any ratio the manifest quotes must name its
+denominator.
+
 ## Acceptance
 
 - [ ] A new instrument, separate from the two committed MECHANICS_ONLY
