@@ -91,18 +91,40 @@ _INTENT_ADAPTER: Final[TypeAdapter[ActionIntent]] = TypeAdapter(ActionIntent)
 #: prefix screened under any other clock would not be the input the run uses.
 TEMPORAL_OBSERVATION_VERSION: Final[Literal[2]] = 2
 
-#: The filter's environment, stated rather than inherited: a developer's shell
-#: must not be able to move which prefixes pass. Wrapped in a
-#: :class:`~types.MappingProxyType` rather than left a plain module-level dict:
-#: a writable global could be mutated by any same-process caller before
-#: :func:`evaluate_prefix` ran, and the filter would then silently screen under
-#: substrate flags other than the ones the manifest records.
-_FILTER_ENV: Final[Mapping[str, str]] = MappingProxyType(
-    {
-        "AILIBI_LLM_PROVIDER": "fake",
-        "AILIBI_TEMPORAL_OBSERVATIONS": str(TEMPORAL_OBSERVATION_VERSION),
-    }
-)
+#: The provider the filter states rather than inherits. The replay halts at
+#: ``MEETING_PHASE_REACHED`` and constructs no provider at all, so this is the
+#: flag the manifest records, not a runtime dependency.
+_FILTER_PROVIDER: Final[Literal["fake"]] = "fake"
+
+
+def filter_environment() -> Mapping[str, str]:
+    """The filter's environment, stated rather than inherited and built per use.
+
+    A developer's shell must not be able to move which prefixes pass, so the two
+    flags the filter screens under are written here instead of read from
+    ``os.environ``. They are BUILT on each call from this module's pinned
+    constants rather than stored in a module-level mapping: a stored mapping is
+    state a same-process caller can reach, and prefix selection must not depend
+    on any state a caller can reach. The returned mapping is a
+    :class:`~types.MappingProxyType`, so a caller holding one cannot mutate it
+    either -- and because the next call builds a fresh one, mutating a copy could
+    not have moved the next replay's flags in any case.
+
+    What this does NOT claim: a caller that rebinds a module attribute is
+    rewriting this module, and no in-module mechanism prevents that. The freeze's
+    guard against a rewritten module is the manifest, which records both this
+    environment (``filter_environment``) and the module's own bytes
+    (``source_sha256``); ``test_the_committed_manifest_regenerates_from_its_own_band``
+    compares both against the committed record.
+    """
+
+    return MappingProxyType(
+        {
+            "AILIBI_LLM_PROVIDER": _FILTER_PROVIDER,
+            "AILIBI_TEMPORAL_OBSERVATIONS": str(TEMPORAL_OBSERVATION_VERSION),
+        }
+    )
+
 
 #: Every tick budget in the set. Wide enough for the longest schedule this
 #: generator can draw (kill at tick 5, a six-hop walk to the body, report at
@@ -228,11 +250,22 @@ class HeldOutPrefix(BaseModel):
     ``steps`` stops at the report: nothing past the meeting boundary belongs to a
     prefix, because everything past it is what the evaluation measures.
 
-    A player submits exactly one action per tick, so at most one step may carry a
-    given ``(tick, actor)`` pair. The model refuses a second one rather than
-    letting the replay pick a winner: :func:`canonical_prefix_json` and
-    :func:`prefix_sha256` bind every step, so a schedule the replay could only
-    partly honour would have its digest certified for a run that never happened.
+    :func:`canonical_prefix_json` and :func:`prefix_sha256` bind EVERY step, so a
+    digest is only honest if the replay executes every step it binds. Two of the
+    three ways a schedule can bind an action the replay would never run are
+    refused here, before a prefix object exists:
+
+    * a second step for a ``(tick, actor)`` pair already used -- a player submits
+      exactly one action per tick, and :class:`_PrefixAgent` keys its script by
+      tick, so a duplicate would be silently overwritten at replay;
+    * a step outside the replayed window -- the loop halts at
+      ``MEETING_PHASE_REACHED`` on ``report_tick`` and the scheduler stops at
+      ``max_ticks``, so a step past either is hashed and never asked for.
+
+    The third way -- a step for a player the roster never seats, or for one the
+    replay stops asking because it is dead -- cannot be judged from the schedule
+    alone, so :func:`_replay_prefix` closes it by counting the steps the replay
+    actually executed against the steps the digest binds.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -256,6 +289,21 @@ class HeldOutPrefix(BaseModel):
                     f"duplicate step for {key[1]} at tick {key[0]}"
                 )
             seen.add(key)
+        return self
+
+    @model_validator(mode="after")
+    def _every_step_falls_inside_the_replayed_window(self) -> Self:
+        if not 0 <= self.report_tick < self.max_ticks:
+            raise ValueError(
+                "a prefix's report tick must fall inside its tick budget; "
+                f"report_tick {self.report_tick} against max_ticks {self.max_ticks}"
+            )
+        for step in self.steps:
+            if not 0 <= step.tick <= self.report_tick:
+                raise ValueError(
+                    "a prefix step must fall inside the replayed window "
+                    f"0-{self.report_tick}; step at tick {step.tick}"
+                )
         return self
 
 
@@ -652,14 +700,25 @@ class _PrefixAgent(TacticalAgent):
             else CrewmatePolicy(agent_id=agent_id)
         )
         super().__init__(agent_id=agent_id, policy=policy, role=role, memory=memory)
-        # Safe to key by tick alone: ``HeldOutPrefix`` rejects a second step for
-        # the same ``(tick, actor)``, so this comprehension can never drop a
-        # hashed action the way an unvalidated schedule's later step would.
+        # Keying by tick alone loses nothing: ``HeldOutPrefix`` rejects a second
+        # step for the same ``(tick, actor)``, so no hashed action is overwritten
+        # here. That is all the model can guarantee -- whether the loop ever ASKS
+        # for a scripted tick depends on the run (a dead player is not asked, and
+        # a step for a player this roster never seats reaches no agent at all), so
+        # the agent counts what it actually served and ``_replay_prefix`` compares
+        # that count against the schedule the digest binds.
         self._scripted: dict[int, ActionIntent] = {
             step.tick: step.action
             for step in prefix.steps
             if step.action.actor == agent_id
         }
+        self._served: set[int] = set()
+
+    @property
+    def served_step_count(self) -> int:
+        """How many of this actor's scripted steps the replay actually executed."""
+
+        return len(self._served)
 
     def decide(
         self, packet: ObservationPacket, public_map: PublicMapView
@@ -670,9 +729,11 @@ class _PrefixAgent(TacticalAgent):
         ingest_packet(
             packet=packet, memory=self.memory.episodic, beliefs=self.memory.beliefs
         )
-        return self._scripted.get(
-            packet.tick, WaitIntent(type="wait", actor=self.agent_id)
-        )
+        scripted = self._scripted.get(packet.tick)
+        if scripted is None:
+            return WaitIntent(type="wait", actor=self.agent_id)
+        self._served.add(packet.tick)
+        return scripted
 
 
 @dataclass(frozen=True)
@@ -781,9 +842,27 @@ def _replay_prefix(
         replay_path=None,
         scheduler=TickScheduler(max_ticks=prefix.max_ticks),
         meeting_runner=None,
-        substrate_flags=substrate_flag_snapshot(_FILTER_ENV),
+        substrate_flags=substrate_flag_snapshot(filter_environment()),
         temporal_observation_version=TEMPORAL_OBSERVATION_VERSION,
     ).run_unrecorded()
+    # The certifying seam. ``prefix_sha256`` binds every step, so a digest may
+    # only be computed for a schedule this replay honoured IN FULL. The model
+    # already refuses a duplicate ``(tick, actor)`` and a step outside
+    # ``0..report_tick``; what it cannot see from the schedule alone is a step
+    # addressed to a player this roster never seats -- no agent exists for that
+    # id, so the step reaches nothing -- or one addressed to a player the loop
+    # stopped asking because it was dead. Both leave the executed count short,
+    # and both are invalid input rather than a rejection reason: a
+    # ``PrefixEvaluation`` for a schedule the run only partly executed would be a
+    # verdict about a run that never happened. Counts only, never steps: this
+    # message is allowed to name how many actions went unserved, never which.
+    served = sum(agent.served_step_count for agent in agents.values())
+    if served != len(prefix.steps):
+        raise HeldOutPrefixError(
+            f"the replay executed {served} of the prefix's {len(prefix.steps)} "
+            "hashed steps; a digest may only certify a schedule the replay "
+            "honoured in full"
+        )
     return _Replay(result=result, agents=agents)
 
 
@@ -1027,7 +1106,7 @@ def build_manifest(
         "max_ticks": MAX_TICKS,
         "temporal_observation_version": TEMPORAL_OBSERVATION_VERSION,
         "filter": _FILTER_NOTE,
-        "filter_environment": dict(_FILTER_ENV),
+        "filter_environment": dict(filter_environment()),
         "canonical_json": (
             "json.dumps(prefix.model_dump(mode='json'), sort_keys=True, "
             "separators=(',', ':')) encoded as UTF-8, hashed with sha256"
@@ -1100,6 +1179,7 @@ __all__ = [
     "canonical_prefix_json",
     "development_definition_digests",
     "evaluate_prefix",
+    "filter_environment",
     "generate",
     "legacy_body_handles",
     "prefix_sha256",

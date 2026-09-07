@@ -32,7 +32,6 @@ from experiments.held_out_prefixes import (
     PrefixStep,
     RejectionReason,
     SeedBand,
-    _FILTER_ENV,
     _replay_prefix,
     assert_no_legacy_body_handles,
     build_manifest,
@@ -40,6 +39,7 @@ from experiments.held_out_prefixes import (
     canonical_prefix_json,
     development_definition_digests,
     evaluate_prefix,
+    filter_environment,
     generate,
     legacy_body_handles,
     prefix_sha256,
@@ -152,15 +152,101 @@ def test_a_duplicate_action_for_one_actor_and_tick_is_refused() -> None:
         )
 
 
-def test_the_filter_environment_cannot_be_moved_by_a_same_process_caller() -> None:
-    """A writable global would let a caller re-screen the set under other flags."""
+def test_a_step_outside_the_replayed_window_is_refused() -> None:
+    """A hashed step the loop never reaches is a digest for a run that never happened.
 
-    with pytest.raises(TypeError):
-        _FILTER_ENV["AILIBI_TEMPORAL_OBSERVATIONS"] = "1"  # type: ignore[index]
-    assert dict(_FILTER_ENV) == {
+    The loop halts at ``MEETING_PHASE_REACHED`` on ``report_tick`` and the
+    scheduler stops at ``max_ticks``, so a step past either is bound by
+    ``prefix_sha256`` and never asked for. Both shapes are refused before a
+    prefix object exists.
+    """
+
+    valid = _unwitnessed_seed_one_prefix()
+    for late in (
+        _step(valid.report_tick + 1, "p-2", "move", {"to_room": "UPPER_HALL"}),
+        _step(99, "p-2", "move", {"to_room": "UPPER_HALL"}),
+    ):
+        with pytest.raises(ValidationError, match="inside the replayed window"):
+            HeldOutPrefix(
+                seed=valid.seed,
+                roster=valid.roster,
+                max_ticks=valid.max_ticks,
+                steps=(*valid.steps, late),
+                report_tick=valid.report_tick,
+                kill_tick=valid.kill_tick,
+            )
+        with pytest.raises(ValidationError, match="inside the replayed window"):
+            HeldOutPrefix.model_validate(
+                {
+                    **valid.model_dump(mode="json"),
+                    "steps": [
+                        step.model_dump(mode="json") for step in (*valid.steps, late)
+                    ],
+                }
+            )
+    with pytest.raises(ValidationError, match="inside its tick budget"):
+        HeldOutPrefix(
+            seed=valid.seed,
+            roster=valid.roster,
+            max_ticks=valid.report_tick,
+            steps=valid.steps,
+            report_tick=valid.report_tick,
+            kill_tick=valid.kill_tick,
+        )
+
+
+def test_a_step_the_replay_never_executes_never_reaches_a_digest() -> None:
+    """The certifying seam: ``evaluate_prefix`` refuses a partly honoured schedule.
+
+    Neither shape is visible in the schedule alone, so the model cannot refuse
+    them: a step addressed to a player the roster never seats reaches no agent,
+    and a step addressed to a player the loop stopped asking because it was dead
+    is never requested. Both move ``prefix_sha256`` while leaving the replay
+    short, which is the defect the duplicate gate closed for one route only.
+    """
+
+    valid = _unwitnessed_seed_one_prefix()
+    unseated = _planted(
+        steps=(*valid.steps, _step(5, "p-9", "move", {"to_room": "UPPER_HALL"})),
+        kill_tick=valid.kill_tick,
+        report_tick=valid.report_tick,
+    )
+    # p-1 is killed on tick 4, so the loop stops asking it for actions.
+    after_death = _planted(
+        steps=(*valid.steps, _step(6, "p-1", "move", {"to_room": "UPPER_HALL"})),
+        kill_tick=valid.kill_tick,
+        report_tick=valid.report_tick,
+    )
+    for planted in (unseated, after_death):
+        assert prefix_sha256(planted) != prefix_sha256(valid)
+        with pytest.raises(HeldOutPrefixError, match="honoured in full"):
+            evaluate_prefix(planted)
+    assert evaluate_prefix(valid).reason is None
+
+
+def test_the_filter_environment_is_built_per_use_and_refuses_mutation() -> None:
+    """Prefix selection must not depend on state a same-process caller can reach.
+
+    ``filter_environment`` builds its mapping from this module's pinned constants
+    on every call, so there is no stored mapping to mutate; the returned proxy
+    refuses item assignment as well, so a caller holding one cannot move it
+    either. A caller that rebinds the module attribute is rewriting the module,
+    which no in-module mechanism prevents -- the manifest's ``filter_environment``
+    and ``source_sha256`` are what catch that, through
+    ``test_the_committed_manifest_regenerates_from_its_own_band``.
+    """
+
+    expected = {
         "AILIBI_LLM_PROVIDER": "fake",
         "AILIBI_TEMPORAL_OBSERVATIONS": str(TEMPORAL_OBSERVATION_VERSION),
     }
+    held = filter_environment()
+    assert dict(held) == expected
+    with pytest.raises(TypeError):
+        held["AILIBI_TEMPORAL_OBSERVATIONS"] = "1"  # type: ignore[index]
+    fresh = filter_environment()
+    assert fresh is not held, "a stored mapping would be reachable state"
+    assert dict(fresh) == expected
 
 
 def test_the_tally_counts_an_out_of_band_range_without_opening_a_prefix() -> None:

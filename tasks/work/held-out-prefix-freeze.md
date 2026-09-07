@@ -55,6 +55,26 @@ development data by construction.
 
 ## Acceptance
 
+- [x] Verification-round correction: `evaluate_prefix` certifies a digest only
+  for a schedule the replay honoured IN FULL. The duplicate gate below closed
+  one route to that defect; three more stayed open — a step past `report_tick`,
+  a step past `max_ticks`, and a step addressed to a player the roster never
+  seats or that the loop stopped asking because it was dead. The first two are
+  refused by a second `model_validator`; the third cannot be judged from the
+  schedule alone, so `_replay_prefix` counts the steps the replay actually
+  executed against the steps the digest binds and raises `HeldOutPrefixError`
+  on a shortfall. Proved by
+  `test_a_step_outside_the_replayed_window_is_refused` and
+  `test_a_step_the_replay_never_executes_never_reaches_a_digest`.
+- [x] Verification-round correction: the filter environment claim names the
+  mechanism that actually enforces it. `filter_environment()` BUILDS its mapping
+  from this module's pinned constants on every call, so prefix selection depends
+  on no stored state a same-process caller can reach, and the returned
+  `MappingProxyType` refuses mutation; the card, the module and the pull request
+  all state plainly that a caller which REBINDS a module attribute is rewriting
+  the module, which the manifest's `filter_environment` and `source_sha256`
+  catch rather than any in-module guard. Proved by
+  `test_the_filter_environment_is_built_per_use_and_refuses_mutation`.
 - [x] Review correction: `HeldOutPrefix` rejects a second step for the same
   `(tick, actor)`, so a digest can never bind a schedule the replay would only
   partly honour (`_PrefixAgent` keys its script by tick and would have kept the
@@ -72,9 +92,12 @@ development data by construction.
 - [x] Review correction: Results cites the `docs/architecture.md` sections this
   generator and filter rest on, plus the preregistration that binds the held-out
   discipline, under the heading "Architecture and design references".
-- [x] Review correction: `_FILTER_ENV` is a `MappingProxyType`, so a same-process
-  caller cannot move the substrate flags the set was screened under. Proved by
-  `test_the_filter_environment_cannot_be_moved_by_a_same_process_caller`.
+- [x] Review correction: the filter's environment is stated rather than
+  inherited from the shell, and is not a mutable module-level dict. Superseded
+  in wording and mechanism by the verification-round correction above: the
+  `MappingProxyType` this pass introduced blocks in-place mutation only, which
+  is less than the "a same-process caller cannot move it" the item first
+  claimed.
 - [x] A new module `experiments/held_out_prefixes.py` defines a `HeldOutPrefix`
   model (seed, roster, max ticks, the scripted steps up to and including the
   report that opens the meeting, the report tick, the kill tick) that does not
@@ -302,7 +325,9 @@ committed.
 2. **A non-behavioural generator edit.** Appending a comment line left every
    prefix digest identical but moved the module's own digest, and the same test
    went red on `rebuilt["source_sha256"] != manifest["source_sha256"]`
-   (`experiments/held_out_prefixes.py`: `8ab1186e…` vs the frozen `9c6ec3ab…`).
+   (`experiments/held_out_prefixes.py`: `8ab1186e…` vs `9c6ec3ab…`, the entry
+   frozen at the time of this plant — two later correction passes have
+   re-stamped that one entry, and the frozen value now reads `9e467dd1…`).
    Reverted; `14 passed`.
 
 The planted adverse cases that live in the suite: a witnessed kill (a second
@@ -388,15 +413,14 @@ valid and fixed on the branch; none of them moved an accepted digest or a skip.
    sections the generator, the filter and the body-handle assertion rest on, and
    the preregistration paragraph the held-out discipline comes from.
 4. **The filter environment was a mutable module-level dict**
-   (`experiments/held_out_prefixes.py`). `_FILTER_ENV` is now a
-   `types.MappingProxyType`, so the claim that a developer's environment cannot
-   move which prefixes pass is enforced against a same-process caller too, not
-   only against the shell. Its consumers were already Mapping-shaped
-   (`substrate_flag_snapshot(env: Mapping[str, str] | None)` and
-   `dict(_FILTER_ENV)` in `build_manifest`). Planted case:
-   `test_the_filter_environment_cannot_be_moved_by_a_same_process_caller`
-   asserts an item assignment raises `TypeError` and the two keys still read
-   `fake` and `2`.
+   (`experiments/held_out_prefixes.py`). `_FILTER_ENV` was wrapped in a
+   `types.MappingProxyType`. **This pass overstated what that buys** — the
+   accompanying claim, "a same-process caller cannot move the substrate flags
+   the set was screened under", is false: a proxy blocks item assignment on the
+   object, not a rebinding of the module attribute both consumers read at call
+   time. The verification round refuted it in four lines and the wording, the
+   mechanism and the planted case were all replaced; see "Verification-round
+   corrections" below.
 
 **Manifest impact.** Regenerating with
 `.venv/bin/python -m experiments.held_out_prefixes` changed exactly one line: the
@@ -429,3 +453,129 @@ no arm ran and no provider call was made.
 | `.venv/bin/python scripts/verify_ml_evidence.py` (offline, never `--complete`) | checks 60, OK 48, FAIL 0, ABSENT 7, INFO 5 |
 | `.venv/bin/pytest tests/scripts/test_verify_ml_evidence.py -q` | 80 passed in 80.52 s |
 | `bash scripts/check.sh` | exit 0: ruff (498 files formatted), 4 import-linter contracts kept, task docs, `generate_prompts --check` (390 in sync), mypy over 469 source files, **7,191 passed / 20 skipped / 3 xfailed** in 261.07 s, then the frontend leg — lint, three `tsc --noEmit` passes, 514 vitest tests over 19 files, and a clean production build |
+
+### Verification-round corrections (2026-09-07)
+
+A verification round over the corrections above found two of them incomplete.
+Both are repaired here; neither repair moved an accepted digest or a skip.
+
+1. **The duplicate gate closed one route to the defect, not the defect**
+   (`experiments/held_out_prefixes.py`). Codex's comment named the semantic
+   failure — "`evaluate_prefix` can therefore certify a digest whose replay omits
+   part of the hashed schedule" — and the duplicate `(tick, actor)` gate closed
+   only the route Codex happened to point at. Three others stayed open through
+   the public API: a step past `report_tick` (the loop halts at
+   `MEETING_PHASE_REACHED`, so `decide` is never asked for that tick), a step
+   past `max_ticks` (the scheduler stops first), and a step addressed to a player
+   the roster never seats (no `_PrefixAgent` exists for that id, so
+   `_PrefixAgent`'s comprehension filters it out) or to a player the loop stopped
+   asking because it was dead. In every case `prefix_sha256` moved while the
+   replay executed less than the digest bound, and `evaluate_prefix` returned
+   `reason=None`. The comment added in the previous pass — that keying the script
+   by tick "can never drop a hashed action" — was therefore false as written for
+   the unseated-actor case, and it has been narrowed to what the model actually
+   guarantees.
+
+   The repair is at both seams. `HeldOutPrefix` gained a second
+   `model_validator(mode="after")`, `_every_step_falls_inside_the_replayed_window`,
+   which refuses `report_tick` outside `0..max_ticks-1` and any step outside
+   `0..report_tick`; those two shapes are visible in the schedule alone.
+   Membership and liveness are not, so `_PrefixAgent` now records the scripted
+   ticks it actually served and `_replay_prefix` raises `HeldOutPrefixError` when
+   the served total falls short of `len(prefix.steps)` — before a
+   `PrefixEvaluation` exists, so no partly executed schedule can reach a digest.
+   The error message carries counts only, never a step. Planted cases:
+   `test_a_step_outside_the_replayed_window_is_refused` (a step at
+   `report_tick + 1`, a step at tick 99, and a `report_tick` equal to
+   `max_ticks`, each through both the constructor and `model_validate`) and
+   `test_a_step_the_replay_never_executes_never_reaches_a_digest` (an unseated
+   `p-9` and a step for the victim two ticks after its death, each asserted to
+   move `prefix_sha256` and then to raise). Both plants are built on seed 1.
+
+2. **The `MappingProxyType` claim was stronger than the mechanism**
+   (`experiments/held_out_prefixes.py`, and Acceptance and Results here). A proxy
+   blocks item assignment on the object; it does not stop
+   `m._FILTER_ENV = {...}`, and both consumers read the module global at call
+   time, so a four-line same-process rebinding moved the four live meeting
+   toggles the set was screened under and `build_manifest` would have stamped the
+   moved dict into the manifest as the frozen environment. The previous pass's
+   planted case asserted only the `TypeError`, so it did not cover the defect its
+   own name claimed.
+
+   Codex's other sanctioned option is taken instead: the environment is
+   CONSTRUCTED inside the owning operation. `_FILTER_ENV` is gone; a
+   `filter_environment()` function builds the mapping from this module's pinned
+   constants (`_FILTER_PROVIDER`, `TEMPORAL_OBSERVATION_VERSION`) on every call,
+   and `_replay_prefix` and `build_manifest` call it. Prefix selection therefore
+   depends on no stored state a same-process caller can reach, and the returned
+   proxy still refuses mutation. The limitation is now stated rather than
+   overclaimed, in the function's own docstring, in Acceptance and here: a caller
+   that REBINDS a module attribute is rewriting the module, and no in-module
+   mechanism prevents that — what catches it is the manifest, which records both
+   `filter_environment` and the module's own bytes in `source_sha256`, and
+   `test_the_committed_manifest_regenerates_from_its_own_band`, which compares
+   both against the committed record. Planted case:
+   `test_the_filter_environment_is_built_per_use_and_refuses_mutation` asserts
+   the mapping refuses item assignment AND that a second call returns a different
+   object, which is what makes a held reference useless to a caller.
+
+**Fail-loud for the three new gates.** Each was neutered in turn and the suite
+run; each neuter turned exactly its own planted case red, and each was reverted
+(`shasum -a 256 experiments/held_out_prefixes.py` back to
+`89d0220e15d491210b58a1f4231afeddc05a3323f76732eb782ea7bc2f09af94`, `git status
+--porcelain` clean for the module):
+
+| neutered | red |
+| --- | --- |
+| the `_replay_prefix` served-count comparison (`if False:`) | `test_a_step_the_replay_never_executes_never_reaches_a_digest` |
+| `_every_step_falls_inside_the_replayed_window` (early `return self`) | `test_a_step_outside_the_replayed_window_is_refused` |
+| `filter_environment` returning a stored module mapping | `test_the_filter_environment_is_built_per_use_and_refuses_mutation` |
+
+**Manifest impact of this pass.** Regenerating with
+`.venv/bin/python -m experiments.held_out_prefixes` again changed exactly one
+line — the `source_sha256` entry for `experiments/held_out_prefixes.py`, from
+`0b94fec1…` to `89d0220e…`. `git diff` on the manifest reports one insertion and
+one deletion; `accepted`, `skipped`, `skipped_reason_counts`,
+`last_accepted_seed`, `band`, `roster`, `filter_environment`,
+`development_definitions`, `body_handle_assertion`, `status`, `status_note`,
+`card`, `max_ticks`, `temporal_observation_version`, `canonical_json`, `version`,
+`prefix_bytes` and `filter` are untouched, as are the other twenty-one
+`source_sha256` entries. `test_the_committed_manifest_regenerates_from_its_own_band`
+asserted `accepted` and `skipped` equal BEFORE the regeneration and failed on
+`source_sha256` alone, which is the direct evidence that the new gates moved
+neither the set nor a skip: `generate()` walked the band under them and produced
+the same fifty digests and the same eight skips. The file's byte count is
+unchanged at 11,524 (a sha256 entry is 64 hex characters either way), so
+`docs/artifacts.md`'s `audits/` inventory row still reads
+`14,850,288 tracked bytes / 202 files` and was not touched. The manifest's own
+sha256 moved from `c060f3ca…` to
+`3089c2d7361c70e6fb49981b374e0b9d167111bbf98b4b901055251b77964e9b`.
+
+**Out-of-band tally, re-run under the new gates** — unchanged, which is the check
+that the certifying seam does not reject legal generated schedules:
+
+```text
+$ .venv/bin/python -m experiments.held_out_prefixes --tally 1 50
+seeds 50
+accepted 45
+witnessed_kill 5
+```
+
+**Preparer statement, restated for this pass.** No prefix from the preregistered
+band was printed, opened or reasoned about during these corrections. Every
+planted case and every probe used seed 1 or seeds 9001–9002; the tally used
+seeds 1–50. All are outside the band and were already recorded above as
+development seeds. No arm ran, no provider call was made, and the only band
+values that appear anywhere are the seeds, reason codes and digests the manifest
+already records.
+
+**Gate after the verification-round corrections**, run in order on this branch:
+
+| check | result |
+| --- | --- |
+| `.venv/bin/pytest tests/experiments/test_held_out_prefixes.py -q` | 20 passed in 1.99 s (2 new: the replayed-window refusal and the unexecuted-step refusal; the filter-environment case was rewritten, not added) |
+| `.venv/bin/python scripts/validate_task_docs.py` | 390 phase tasks, 390 prompts, 43 work cards |
+| `.venv/bin/python scripts/check_doc_facts.py` | doc facts, front door, ml-program and budgets verified |
+| `.venv/bin/python scripts/verify_ml_evidence.py` (offline, never `--complete`) | checks 60, OK 48, FAIL 0, ABSENT 7, INFO 5 |
+| `.venv/bin/pytest tests/scripts/test_verify_ml_evidence.py -q` | 80 passed |
+| `bash scripts/check.sh` | exit 0: ruff (498 files formatted), 4 import-linter contracts kept, task docs, `generate_prompts --check` (390 in sync), mypy over 469 source files, **7,193 passed / 20 skipped / 3 xfailed** in 207.96 s, then the frontend leg — lint, three `tsc --noEmit` passes, 514 vitest tests over 19 files, and a clean production build |
