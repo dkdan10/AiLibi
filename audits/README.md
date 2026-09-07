@@ -45,9 +45,9 @@ artifact identifies its source and measurement scope; local timings are not a
 deployment capacity claim.
 
 `review-2026-09-06/` preserves the owner's independent Claude review of the
-cleanup branch and its findings appendix, with subsequent correction notes and
-source-bound public-results measurements. Start at its
-[review index](review-2026-09-06/README.md).
+cleanup branch and its findings appendix, the later follow-up report and its
+own appendix, with subsequent correction notes and source-bound public-results
+measurements. Start at its [review index](review-2026-09-06/README.md).
 
 `deduction-candidate/` holds the unadopted evidence-timing, public-account and
 investigation follow-through, separate code and scenario reviews, and the next

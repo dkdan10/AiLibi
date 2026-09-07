@@ -10,6 +10,8 @@ The [post-review plan](post-review-plan.md) orders corrections, trustworthy
 evaluation, one playable deduction case, meeting replies, investigation and a
 separately budgeted fresh-model decision. The supplied
 [review and findings](../audits/review-2026-09-06/README.md) are preserved verbatim.
+The owner's later follow-up report and appendix are archived beside them by the
+[follow-up review archive](work/followup-review-archive.md).
 
 ## Active ownership
 

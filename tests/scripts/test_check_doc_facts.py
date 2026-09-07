@@ -128,6 +128,12 @@ _COPIED = (
     "audits/review-2026-08-26/B/collated-findings.md",
     "audits/review-2026-08-19/README.md",
     "tasks/phase-20.md",
+    # The 2026-09-06 review's index and correction record: published pages under
+    # the link rule, so the fixture needs their real bytes. The non-recursive
+    # ("audits", "*.md") glob below reaches top-level audit files only, never a
+    # document one directory down.
+    "audits/review-2026-09-06/README.md",
+    "audits/review-2026-09-06/correction-record.md",
 )
 
 # The front-door checks also ENUMERATE paths whose contents they never open:
@@ -176,6 +182,8 @@ _COVERAGE_BLOCK = {
     "impostor_turns_with_whereabouts": 0,
 }
 _REVIEW_INDEX = "audits/review-2026-08-19/README.md"
+_CORRECTION_INDEX = "audits/review-2026-09-06/README.md"
+_CORRECTION_RECORD = "audits/review-2026-09-06/correction-record.md"
 # One acted-on map row, cell by cell: the finding, the task credited with
 # closing it, and the pull request that carries the change.
 _MAP_FINDING = "`C-31`"
@@ -3559,6 +3567,37 @@ def test_broken_relative_link_on_the_review_index_detected(doc_tree: Path) -> No
     errors = check_doc_facts.check_facts(doc_tree)
     assert errors and all(error.startswith(f"{_REVIEW_INDEX}: ") for error in errors)
     assert all("'A/verdict.md'" in error for error in errors)
+
+
+def test_broken_relative_link_on_the_correction_record_detected(doc_tree: Path) -> None:
+    # The correction record's whole value is the card each repair is owned by:
+    # a link to a card that does not exist is a repair nobody can follow.
+    _substitute(
+        doc_tree,
+        _CORRECTION_RECORD,
+        "(../../tasks/work/aborted-meeting-calls.md)",
+        "(../../tasks/work/aborted-calls.md)",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert errors and all(
+        error.startswith(f"{_CORRECTION_RECORD}: ") for error in errors
+    )
+    assert all("'../../tasks/work/aborted-calls.md'" in error for error in errors)
+
+
+def test_broken_relative_link_on_the_correction_index_detected(doc_tree: Path) -> None:
+    # The index's job is to hand a reader the supplied documents it preserves.
+    _substitute(
+        doc_tree,
+        _CORRECTION_INDEX,
+        "(REVIEW_APPENDIX_findings.md)",
+        "(REVIEW_APPENDIX_findings.markdown)",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert errors and all(
+        error.startswith(f"{_CORRECTION_INDEX}: ") for error in errors
+    )
+    assert all("'REVIEW_APPENDIX_findings.markdown'" in error for error in errors)
 
 
 def test_mapped_task_with_no_contract_detected(doc_tree: Path) -> None:

@@ -117,10 +117,11 @@ together, so one run names every drifted fact rather than the first.
     and shape are checked, never its value: no doc check may reach the network.
 12. **The reading guide carries no ``file.ext:NN`` citations.** Line numbers rot
     on the next edit; the guide cites heading anchors and symbols instead.
-13. **Every relative link resolves.** Across README.md, docs/history.md,
-    docs/glossary.md, audits/README.md, docs/reading-guide.md, docs/lessons.md
-    and audits/review-2026-08-19/README.md, each relative markdown target
-    (fragment stripped) must name a path that exists.
+13. **Every relative link resolves.** Across the front-door documents and the
+    published pages (the lessons essay, the ownership case study, the phase-21
+    close, the 2026-08-19 review index, and the 2026-09-06 review index and its
+    correction record) each relative markdown target (fragment stripped) must
+    name a path that exists.
 14. **The ML page's results table is re-derived from the finalist-eval JSONL.**
     docs/ml-program.md publishes the program's headline table — per arm, its
     wins, the same-seed comparator's wins, the paired exact-McNemar p, and the
@@ -239,11 +240,18 @@ _LINKED_DOCUMENTS: Final[tuple[str, ...]] = (
 _LESSONS: Final = "docs/lessons.md"
 _REVIEW_INDEX: Final = "audits/review-2026-08-19/README.md"
 _PHASE_21_CLOSE: Final = "audits/audit-phase-21-close.md"
+# The 2026-09-06 review's own index and the correction record it points at. Both
+# link cards by relative path, and a correction record naming a card that does
+# not exist is the failure this rule is cheapest at catching.
+_CORRECTION_INDEX: Final = "audits/review-2026-09-06/README.md"
+_CORRECTION_RECORD: Final = "audits/review-2026-09-06/correction-record.md"
 _PUBLISHED_DOCUMENTS: Final[tuple[str, ...]] = (
     _LESSONS,
     _REVIEW_INDEX,
     _PHASE_21_CLOSE,
     "docs/ownership-case-study.md",
+    _CORRECTION_INDEX,
+    _CORRECTION_RECORD,
 )
 _PHASE_20_CONTRACT: Final = "tasks/phase-20.md"
 # The documents that between them must account for every phase contract.
