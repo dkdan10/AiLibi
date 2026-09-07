@@ -18,6 +18,12 @@ destroy an existing replay before recording starts.
 
 ## Acceptance
 
+- [x] Review correction: a single-game run reports only the outcome and cost of
+  the recording it wrote. The post-run read-back is bound to the recorded game
+  identity, so a replay path replaced or shared by another writer is refused
+  with a non-zero exit instead of printing another game's numbers; this detects,
+  it does not exclude.
+
 - [x] Review correction: a forced run failing before either output contains
   bytes restores its previous pair; an audit-only partial write is retained.
 - [x] Review correction: focused adverse controls and the combined project gate
@@ -172,3 +178,73 @@ lint/format, import/document contracts and the production build. All 100
 canonical recordings verified. The [durable correction record](../../audits/review-2026-09-06/correction-record.md)
 records the independent reviews, discovered rollback repair and integration
 checks. This completion is on cleanup, awaiting owner review and merge.
+
+### Read-back identity binding (2026-09-07)
+
+Reopened for CONC-1, raised by the round-2 probes of the
+[owner review](../../audits/review-2026-09-06/REVIEW_REPORT.md) and archived
+beside it as `REVIEW_REPORT_FOLLOWUP.md`. The review ran two concurrent
+`run_game.py --force` writers against a single `--replay-path` forty times: in
+four trials both processes exited 0 while only one recording survived on disk,
+and the loser printed the winner's cost. That reproduction is the review's, not
+this card's.
+
+The verification above checked that a forced replacement writes clean bytes; it
+never checked which game those bytes belong to. Every line the single-game CLI
+prints after `game.run()` is a READ-BACK of the file rather than of the object
+this process holds, so a surviving foreign recording is reported under the
+losing process's seed. `read_all_entries` already refuses a CONCATENATION
+(duplicate ticks, two `game_over` rows), but a clean REPLACEMENT parses without
+complaint and differs only in `game_id`.
+
+`HeadlessGame` now exposes the identity every recorded row carries as a
+read-only `game_id` property, beside `replay_path` and unchanged in how it is
+derived. `scripts/run_game.py` reads the replay back once and compares each
+row's `game_id` against it; any foreign identity is named on stderr and the run
+exits 1 without printing an outcome, a replay path or a cost. `scripts/run_game.py`
+is not among the paths `scripts/_tournament_progress.py`'s
+`configuration_fingerprint` hashes, so no tournament sidecar is invalidated by
+the CLI half of this change.
+
+Focused command:
+
+```sh
+.venv/bin/pytest tests/scripts/test_run_game.py tests/orchestrator/test_recording_replacement.py -q --tb=short
+```
+
+That selection passed 42 tests in 2.88 seconds, one of them the new
+`test_a_replaced_replay_is_refused_instead_of_reporting_another_games_cost`,
+which stands a subclassed writer in for the concurrent one by overwriting the
+just-written replay with a seed-1 recording. The existing
+`test_force_replaces_replay_and_audit_without_accumulating_packets` is the
+positive control and still exits 0 and still prints a cost. Ruff check, Ruff
+format and strict mypy passed on `orchestrator/game.py`, `scripts/run_game.py`
+and `tests/scripts/test_run_game.py`.
+
+For the negative control, follow the preceding-module isolation recipe above:
+write `git show fd1f923c:scripts/run_game.py` into a temporary directory, load
+it under the module name `run_game`, assert `sys.modules["run_game"].__file__`
+resolves to that temporary copy, then run the current CLI tests with this
+selector:
+
+```text
+replaced_replay_is_refused
+```
+
+Against the preceding CLI that produced one failure: `main` returned 0 and
+printed a `cost_usd` line computed from the foreign recording's bytes. The same
+case passes with the repair. No tracked source was replaced during the negative
+run.
+
+Record impact: detection only on a path that previously reported silently. No
+replay schema, engine rule, prompt byte, recorded identity or canonical
+recording changed, and an uncontested single-game run prints exactly what it
+printed before.
+
+Limitations: this DETECTS, it does not exclude. Two runs of the SAME seed
+against the same path record the same `game_id` and remain indistinguishable to
+this check. File locking is out of scope, and concurrent writers and process
+termination stay outside the exception-safety contract the Constraints section
+already draws.
+
+<!-- gate paragraph added by the checkpoint commit -->

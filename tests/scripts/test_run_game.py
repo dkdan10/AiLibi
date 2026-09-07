@@ -8,6 +8,8 @@ from pathlib import Path
 
 import pytest
 
+from orchestrator.game import HeadlessGame, HeadlessGameResult
+
 import run_game
 
 
@@ -61,3 +63,51 @@ def test_force_preserves_explicit_null_audit_sink(
     assert stat.S_ISCHR(after.st_mode)
     assert (after.st_dev, after.st_ino) == (before.st_dev, before.st_ino)
     assert not (tmp_path / "game.audit.jsonl").exists()
+
+
+def test_a_replaced_replay_is_refused_instead_of_reporting_another_games_cost(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A replay path another writer replaced is refused, not reported on.
+
+    The CLI reads outcome and cost back off disk, so a second
+    ``run_game.py --force`` against the same ``--replay-path`` can leave this
+    process printing the winner's numbers under its own seed. The read-back is
+    bound to the identity this game recorded, so foreign rows exit non-zero.
+    """
+
+    monkeypatch.setenv("AILIBI_LLM_PROVIDER", "fake")
+    foreign_replay = tmp_path / "foreign.jsonl"
+    assert (
+        run_game.main(
+            ["--replay-path", str(foreign_replay), "--seed", "1", "--max-ticks", "2"]
+        )
+        == 0
+    )
+    foreign_bytes = foreign_replay.read_bytes()
+
+    class ReplacedByAConcurrentWriter(HeadlessGame):
+        """Stand in for a second forced writer finishing against the same path.
+
+        Subclasses the same class ``run_game`` holds; imported directly so the
+        type checker can see it, then substituted for the CLI's own reference.
+        """
+
+        def run(self) -> HeadlessGameResult:
+            result = super().run()
+            result.replay_path.write_bytes(foreign_bytes)
+            return result
+
+    monkeypatch.setattr(run_game, "HeadlessGame", ReplacedByAConcurrentWriter)
+    replay = tmp_path / "game.jsonl"
+    capsys.readouterr()
+    assert (
+        run_game.main(["--replay-path", str(replay), "--seed", "0", "--max-ticks", "2"])
+        == 1
+    )
+    captured = capsys.readouterr()
+    assert "headless-seed-1" in captured.err
+    assert "headless-seed-0" in captured.err
+    assert "cost_usd" not in captured.out

@@ -27,7 +27,7 @@ from orchestrator.game import (  # noqa: E402
     build_default_agent_factory,
     build_default_meeting_runner,
 )
-from orchestrator.replay import compute_cost_usd  # noqa: E402
+from orchestrator.replay import compute_cost_usd, read_all_entries  # noqa: E402
 from orchestrator.scheduler import TickScheduler  # noqa: E402
 
 
@@ -114,6 +114,29 @@ def main(argv: list[str] | None = None) -> int:
         meeting_runner=runner,
     )
     result = game.run()
+    # Everything printed below is a READ-BACK of bytes on disk, not of the
+    # object this process holds: a concurrent writer against the same
+    # --replay-path would make us report another game's outcome and spend under
+    # this seed. read_all_entries already refuses a CONCATENATION (duplicate
+    # ticks, two game_over rows); a clean REPLACEMENT parses fine and differs
+    # only in identity, so bind the read-back to the identity we recorded. This
+    # DETECTS, it does not exclude -- two runs of the SAME seed against the same
+    # path are indistinguishable, and file locking is out of scope.
+    foreign = sorted(
+        {
+            entry.game_id
+            for entry in read_all_entries(result.replay_path)
+            if entry.game_id != game.game_id
+        }
+    )
+    if foreign:
+        print(
+            f"error: {result.replay_path} holds rows for {', '.join(foreign)}, "
+            f"not {game.game_id}; another writer replaced or shared this replay "
+            "path. Refusing to report its outcome or cost.",
+            file=sys.stderr,
+        )
+        return 1
     print(f"outcome: {result.outcome}")
     print(f"final_tick: {result.final_state.tick}")
     print(f"replay_path: {result.replay_path}")

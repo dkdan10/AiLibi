@@ -2256,6 +2256,18 @@ class HeadlessGame:
 
         return self._replay_path
 
+    @property
+    def game_id(self) -> str:
+        """The identity every row this game records carries.
+
+        Exposed so a caller that reads its own recording back off disk can bind
+        that read-back to the game it just ran, instead of trusting whatever
+        bytes now sit at the path. Same value as the rows themselves; how it is
+        derived is unchanged.
+        """
+
+        return self._game_id()
+
     def run(self) -> HeadlessGameResult:
         """Run the headless tick loop until terminate, meeting, or tick budget.
 
