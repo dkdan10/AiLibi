@@ -2,8 +2,9 @@
 
 This ledger locates focused implementation commits and their evidence for the
 owner's final Claude review. Cards own acceptance and current work status.
-All rows remain **unmerged into main**. The owner supplied an independent Claude
-review of `9b333a76`; the [original report and appendix](../audits/review-2026-09-06/README.md)
+All rows are **merged into main** at `8161689a` (PR 435, 2026-09-07); the merge
+checkpoint at the end of this file records that landing. The owner supplied an
+independent Claude review of `9b333a76`; the [original report and appendix](../audits/review-2026-09-06/README.md)
 are preserved verbatim. Reproduced findings reopen the affected cards under the
 [post-review plan](post-review-plan.md). Earlier verification and reviewer
 attributions below are historical claims, not certification that the newly
@@ -169,8 +170,8 @@ latency or model-quality improvement is inferred. Q1 search, Phase C co-evolutio
 resumption and a corpus-triggered refit are separate retained owner decisions.
 No live provider, deployment, remote deletion or main merge occurred.
 
-The subsequent Claude review required corrections; final merge remains pending. Local `main` and
-`origin/main` remain `cfde4c8960a865eeaa39a004b2c33d302cbe4733`. Future work starts
+The subsequent Claude review required corrections; at that boundary the final merge was still pending. Local `main` and
+`origin/main` were `cfde4c8960a865eeaa39a004b2c33d302cbe4733` then. Future work starts
 from a new evidence-backed card or reopens an existing card whose acceptance
 the review disproves. The current queue is in the task index.
 
@@ -216,7 +217,8 @@ is pending. The fresh-evaluation card completes preregistration only. The
 [candidate handoff](../audits/investigation-candidate/candidate-handoff.json) lists
 the still-required provider, token/time/cost authorization, held-out inputs and
 decision rubric. It is not an execution manifest, adoption or merge permission.
-Local and remote main remain `cfde4c8960a865eeaa39a004b2c33d302cbe4733`.
+Local and remote main were `cfde4c8960a865eeaa39a004b2c33d302cbe4733` at that
+checkpoint.
 
 ## Follow-up correction checkpoint (2026-09-07)
 
@@ -250,3 +252,30 @@ at this checkpoint. No live provider was called. The branch-policy documents
 (AGENTS.md, the ci.yml push trigger, tasks/README.md, docs/workflow.md and the
 "unmerged" sentences above) are deliberately left for the merge's own
 coordination record.
+
+## Merge checkpoint (2026-09-07)
+
+The cleanup branch merged into `main` as `8161689a`, a merge of
+`cfde4c8960a865eeaa39a004b2c33d302cbe4733` and
+`5fea577b89dacdbe66170769333a4d00e6296392` through PR 435. A merge commit rather
+than a squash, so every branch SHA this ledger cites — including the public
+source pin `5006a32f` the merge message names — stays reachable from `main`. The
+last recorded full gate is the follow-up checkpoint's, run at `93bf7d54`: 7,173
+Python tests, 514 frontend tests, 300 canonical reconstructions, 20 optional
+skips and three expected failures. On the merge commit itself GitHub ran CI
+(`34087394033`) and the Pages demo build (`34087394040`); both passed, and the
+Pages run republished the demo bundle from the merged bytes.
+
+Every row above advances to **Merged**; none advances to **Adopted**. The
+delivery states are defined in [the workflow](../docs/workflow.md): the merge
+establishes that the implementation is on `main`, not that any experimental
+candidate is on. Every candidate remains default-OFF and the merge created no
+adopting record. PR 431 became merged by reachability when its head landed in
+`main`; PRs 432, 433 and 434 keep their inherited bases and were not closed,
+retargeted or merged. `origin/codex/cleanup` is retained.
+
+The branch-policy deferral recorded at the follow-up checkpoint above is
+discharged here: AGENTS.md, `.github/workflows/ci.yml`, the task index,
+`docs/workflow.md` and the "unmerged" sentences are corrected in the same commit
+as this section, and delivery for new work is a `work/<card-slug>` branch and
+one pull request per card. Local `main` and `origin/main` are `8161689a`.

@@ -1,8 +1,9 @@
 # Review corrections and deduction gameplay
 
 The owner authorized this sequence after the independent review of `9b333a76`.
-Implementation stays on `codex/cleanup`; main merge, live-provider spending and
-experimental adoption remain separate decisions. The supplied review is
+It was implemented on `codex/cleanup` and merged into `main` at `8161689a` on
+2026-09-07; live-provider spending and experimental adoption remain separate
+decisions. The supplied review is
 preserved verbatim in [the review archive](../audits/review-2026-09-06/REVIEW_REPORT.md).
 Review claims require reproduction; their original severity labels remain intact.
 

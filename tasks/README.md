@@ -1,10 +1,11 @@
 # Cleanup corrections and gameplay work
 
-Implementation continues on **`codex/cleanup`** after the owner's independent
-Claude review. The earlier 26-card handoff covered 49 priorities through repairs,
-experiments and retained decisions; the review reproduced incomplete acceptance
-items, so affected cards are reopened. Main remains unchanged. The owner decides
-the final merge and any experimental adoption separately.
+The cleanup merged into **`main`** on 2026-09-07 (`8161689a`, PR #435). The
+earlier 26-card handoff covered 49 priorities through repairs, experiments and
+retained decisions; the owner's independent Claude review reproduced incomplete
+acceptance items, and the cards it reopened were corrected before that merge.
+New implementation goes on a `work/<card-slug>` branch and reaches `main` by
+pull request. Experimental adoption remains a separate owner decision.
 
 The [post-review plan](post-review-plan.md) orders corrections, trustworthy
 evaluation, one playable deduction case, meeting replies, investigation and a
@@ -15,15 +16,13 @@ The owner's later follow-up report and appendix are archived beside them by the
 
 ## Active ownership
 
-| Worker | Current scope |
-| --- | --- |
-| Recording worker | Replacement, publication, output protection, unresolved accounting |
-| Viewer worker | Private confidence, stale-result copy, media and public claims |
-| Report worker | Historical projection, isolated collection, terminal type fixture |
-| Coordinator | Source-bound summary cache, review archive, integration and scenario plan |
+No card is active. The [post-merge plan](post-merge-plan.md#ownership) holds the
+writer-to-file table for the seven queued cards; it takes effect when the owner
+dispatches one.
 
-Cards own precise acceptance and file boundaries. The coordinator serializes
-shared-file handovers and commits; implementation workers do not commit.
+Cards own precise acceptance and file boundaries. Each card's worker commits on
+that card's branch; the coordinator serializes shared-file handovers and owns
+the planning commits on `main`.
 
 Start with the [review ledger](review-ledger.md) for commits, independent reviews
 and verification. The [roadmap](cleanup-roadmap.md) preserves priority numbers;
@@ -35,7 +34,8 @@ findings and current repairs remain distinct.
 
 Each card owns its acceptance criteria, decisions, measurements and limitations.
 The ledger retains original PR links for inherited work; those PRs remain review
-records and have not been merged or otherwise managed during cleanup.
+records and were not managed during the cleanup. #431 became merged by
+reachability when the cleanup landed; #432-#434 keep their inherited bases.
 
 | Outcome | Cards |
 | --- | --- |

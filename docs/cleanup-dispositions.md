@@ -1,7 +1,8 @@
 # Cleanup finding dispositions
 
-This is the current routing and decision ledger for the cleanup branch. The
-[roadmap](../tasks/cleanup-roadmap.md) owns priorities; each linked work card
+This is the routing and decision ledger for the cleanup that merged into `main`
+at `8161689a`. The [roadmap](../tasks/cleanup-roadmap.md) owns priorities; each
+linked work card
 owns implementation and verification. Historical findings describe the bytes
 reviewed then. Their counts are not silently republished as measurements of the
 cleanup implementation. A retained limitation is not a repaired defect, and an
@@ -145,8 +146,8 @@ maintainability, vote-rule and expansion decisions. Reliable records, bounded
 privacy claims and inspectable evidence are the release foundation. Measured
 negative results and withheld adoptions belong in the portfolio story alongside
 successful repairs. New provider runs, campaigns, maps and deployment need a
-concrete purpose and explicit scope; they are not prerequisites for reviewing
-this cleanup branch.
+concrete purpose and explicit scope; they were not prerequisites for reviewing
+this cleanup.
 
 All linked cleanup cards are complete. The [review ledger](../tasks/review-ledger.md)
 records independent approval, the final full/default and campaign gates, canonical

@@ -1,8 +1,9 @@
 # Cleanup roadmap
 
-Implement on `codex/cleanup`. The owner will arrange Claude's review of the
-completed work by commit or PR, then the final merge into `main`. Preserve
-published task commits and keep main unchanged until that review and decision.
+This backlog is complete and merged into `main` (`8161689a`, 2026-09-07). It is
+kept as the priority record for that cleanup; new work follows
+[the workflow](../docs/workflow.md) on a `work/<card-slug>` branch and one pull
+request per card.
 
 This is the prioritized backlog from the 2026-09-05 review and owner discussion,
 not a set of detailed implementation contracts. Each item receives one canonical
@@ -22,7 +23,7 @@ require. See the [review ledger](review-ledger.md) for verification and the
 The task index links the inherited workflow, budget, aborted-call, replay, and
 recording-replacement cards to their original commits and PRs. The cleanup
 delivery card records direct branch commits, final owner review, and CI on
-cleanup pushes. These are implemented on this branch, not merged into main.
+cleanup pushes. These were implemented on that branch and merged at `8161689a`.
 
 ## Milestone 1: accurate recording and reporting
 

@@ -8,15 +8,22 @@ prompt copies.
 
 ## Delivery
 
-Work directly on **`codex/cleanup`**. Deliver focused, verified commits and push
-them to `origin/codex/cleanup`; include the card path in the commit body.
-Preserve published commit identities. Do not create routine implementation
-branches or require a per-task PR. Existing PRs remain review records: do not
-close, retarget, or merge them as part of cleanup.
+Implement a card on a short-lived branch named `work/<card-slug>` and deliver it
+into **`main`** through one pull request per card, populating
+[the PR template](.github/pull_request_template.md). Commits stay focused and
+verified; include the card path in the commit body. Planning and contract
+documents — plans, indexes, ledgers, checkpoints, records — may land on `main`
+directly as `docs:` or `coordination:` commits. Preserve published commit
+identities: merge or fast-forward, never a squash that orphans a commit another
+document cites. The inherited pull requests #432-#434 remain review records: do
+not close, retarget, or merge them.
 
-Keep **`main` unchanged**. After the entire cleanup, the owner arranges Claude's
-review by commit or PR and the final merge. Task completion never authorizes an
-intermediate merge, deployment, or experimental adoption.
+A push to `main` publishes as well as merges: `.github/workflows/pages.yml`
+rebuilds the static demo bundle from the committed recordings and the featured
+list on every push, so a change to the viewer, the featured games, or the
+public-results payload is a publication decision
+([deployment](docs/deployment.md)). Task completion never authorizes a
+deployment or an experimental adoption.
 
 ## Sources and scope
 
@@ -84,7 +91,8 @@ explicit provider plus token, wall-time, and cost budget, including on flat-rate
 service. Provider details are in [llm/README.md](llm/README.md) and `.env.example`;
 recording provenance is in each set's `MANIFEST.md`.
 
-For optional PRs, use [GitHub procedures](docs/agent-procedures.md#github-operations)
-and populate `.github/pull_request_template.md`. For cleanup commits without a
-PR, the task card's Results carries equivalent review evidence. Explain concrete
-blocking decisions there and ask the owner; do not guess or claim completion.
+Use [GitHub procedures](docs/agent-procedures.md#github-operations) for the pull
+request and populate every section of `.github/pull_request_template.md`; a
+planning commit that lands without one carries the same evidence in the card's
+Results. Explain concrete blocking decisions there and ask the owner; do not
+guess or claim completion.
