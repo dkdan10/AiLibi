@@ -98,7 +98,7 @@ lessons at 1,444 inside its 800–1,500 band. Verification is `bash
 scripts/check.sh` plus `scripts/check_doc_facts.py`, and CI on the pull request
 is the same gate again. Reverting is one revert commit.
 
-### Ruling: ______ (owner, date)
+### Ruling: merged #436 as proposed (owner, 2026-09-07; merge commit `081aee15`)
 
 ## B. Authorization for the fresh-model deduction evaluation
 
