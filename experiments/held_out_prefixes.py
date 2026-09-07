@@ -59,7 +59,18 @@ from agents.perception import (
 from agents.tactical.crewmate_policy import CrewmatePolicy
 from agents.tactical.impostor_policy import ImpostorPolicy
 from engine.entities import PlayerId, Role
-from engine.events import ActionRejectedEvent, KilledEvent, MeetingTriggeredEvent
+from engine.events import (
+    ActionRejectedEvent,
+    KilledEvent,
+    MeetingTriggeredEvent,
+    MovedEvent,
+    SabotageRepairedEvent,
+    SabotageRepairProgressedEvent,
+    SabotageStartedEvent,
+    VentEnteredEvent,
+    VentExitedEvent,
+    WaitedEvent,
+)
 from engine.world import Map, RoomId, WorldState, load_canonical_map
 from experiments.deduction_scenarios import ScenarioCase, scenario_definition
 from observation.action_intent import ActionIntent, WaitIntent
@@ -196,6 +207,7 @@ _RNG_DOMAIN: Final[str] = "ailibi/held-out-prefix/v1"
 RejectionReason = Literal[
     "engine_rejected_action",
     "meeting_did_not_open",
+    "schedule_exceeds_tick_budget",
     "wrong_living_count",
     "unexpected_kill_shape",
     "witnessed_kill",
@@ -206,6 +218,18 @@ RejectionReason = Literal[
 
 class HeldOutPrefixError(RuntimeError):
     """Raised when the preregistered band cannot produce the requested set."""
+
+
+class ScheduleTickBudgetError(HeldOutPrefixError):
+    """Raised when one seed's drawn schedule does not fit its tick budget.
+
+    A distinct class because the disposition differs: this is a property of the
+    seed's own draw, so :func:`generate` and :func:`tally_reasons` record it as a
+    ``schedule_exceeds_tick_budget`` skip and walk on. Every other
+    :class:`HeldOutPrefixError` out of :func:`build_prefix` -- an unauthorized
+    roster, a map with no route at all -- is invalid input to the generator
+    rather than a seed the band may drop, and keeps raising.
+    """
 
 
 class SeedBand(BaseModel):
@@ -262,10 +286,12 @@ class HeldOutPrefix(BaseModel):
       ``MEETING_PHASE_REACHED`` on ``report_tick`` and the scheduler stops at
       ``max_ticks``, so a step past either is hashed and never asked for.
 
-    The third way -- a step for a player the roster never seats, or for one the
-    replay stops asking because it is dead -- cannot be judged from the schedule
-    alone, so :func:`_replay_prefix` closes it by counting the steps the replay
-    actually executed against the steps the digest binds.
+    Every other way -- a step for a player the roster never seats, for one the
+    replay stops asking because it is dead, or for the report tick, whose meeting
+    interrupts the tick before the actions ordered after the reporter's are
+    reached -- cannot be judged from the schedule alone, so :func:`_replay_prefix`
+    closes them by requiring the ENGINE to have resolved an action for every
+    hashed ``(tick, actor)`` pair.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -519,7 +545,9 @@ def _routed_walk(
     route = routes[rng.randrange(len(routes))]
     slack = latest_arrival - (first_tick + len(route) - 1)
     if slack < 0:
-        raise HeldOutPrefixError(f"route {start}->{goal} does not fit the tick budget")
+        raise ScheduleTickBudgetError(
+            f"route {start}->{goal} does not fit the tick budget"
+        )
     delay = rng.randint(0, slack)
     return tuple(
         (first_tick + delay + offset, room) for offset, room in enumerate(route)
@@ -620,7 +648,7 @@ def build_prefix(
     approach = _shortest_routes(game_map, start=staged_room, goal=kill_room)[0]
     report_tick = kill_tick + len(approach) + 1
     if report_tick > _LATEST_REPORT_TICK or report_tick >= max_ticks:
-        raise HeldOutPrefixError(
+        raise ScheduleTickBudgetError(
             f"seed {seed} staged the reporter beyond the tick budget"
         )
     for tick, room in reporter_walk.steps:
@@ -664,9 +692,17 @@ def build_prefix(
         ).steps:
             steps.append((tick, _move(bystander, room)))
 
+    # Nobody but the reporter acts on the report tick. The meeting interrupts
+    # that tick: ``advance_tick`` returns the instant the report puts the world
+    # in ``MEETING``, so every action ordered after the reporter's is discarded
+    # without even a rejection, and a move drawn for that tick would be hashed
+    # into a digest the engine never executed. The walks above are drawn exactly
+    # as before -- the draws are untouched and only the drawn step is discarded --
+    # so a seed's world up to the report is the same world it always was.
     ordered = tuple(
         PrefixStep(tick=tick, action=action)
         for tick, action in sorted(steps, key=lambda row: (row[0], row[1].actor))
+        if tick != report_tick or action.actor == reporter
     )
     return HeldOutPrefix(
         seed=seed,
@@ -702,23 +738,15 @@ class _PrefixAgent(TacticalAgent):
         super().__init__(agent_id=agent_id, policy=policy, role=role, memory=memory)
         # Keying by tick alone loses nothing: ``HeldOutPrefix`` rejects a second
         # step for the same ``(tick, actor)``, so no hashed action is overwritten
-        # here. That is all the model can guarantee -- whether the loop ever ASKS
-        # for a scripted tick depends on the run (a dead player is not asked, and
-        # a step for a player this roster never seats reaches no agent at all), so
-        # the agent counts what it actually served and ``_replay_prefix`` compares
-        # that count against the schedule the digest binds.
+        # here. That is all the model can guarantee. Whether the loop ever ASKS
+        # for a scripted tick depends on the run, and whether the ENGINE resolves
+        # what this agent hands back depends on the tick, so neither is counted
+        # here: ``_replay_prefix`` reads that off the engine's own events.
         self._scripted: dict[int, ActionIntent] = {
             step.tick: step.action
             for step in prefix.steps
             if step.action.actor == agent_id
         }
-        self._served: set[int] = set()
-
-    @property
-    def served_step_count(self) -> int:
-        """How many of this actor's scripted steps the replay actually executed."""
-
-        return len(self._served)
 
     def decide(
         self, packet: ObservationPacket, public_map: PublicMapView
@@ -732,7 +760,6 @@ class _PrefixAgent(TacticalAgent):
         scripted = self._scripted.get(packet.tick)
         if scripted is None:
             return WaitIntent(type="wait", actor=self.agent_id)
-        self._served.add(packet.tick)
         return scripted
 
 
@@ -799,6 +826,45 @@ class _Replay:
     agents: Mapping[PlayerId, _PrefixAgent]
 
 
+def _resolved_action_pairs(
+    result: UnrecordedGameResult,
+) -> set[tuple[int, PlayerId]]:
+    """Every ``(tick, actor)`` the ENGINE resolved an action for during the run.
+
+    One event per resolved action is the tick function's own contract
+    (``engine/tick.py``, step 1): ``_apply_action`` returns the event for an
+    action it executes and the loop appends an ``ActionRejected`` for one it
+    refuses, so the union of those events is the record of what the engine
+    answered for. ``TaskProgressed`` and ``TaskCompleted`` are deliberately
+    absent: ``advance_tick`` also emits them from its PASSIVE task step, for
+    actors that submitted nothing, so their presence would not prove an action
+    was resolved. A schedule that ever scripts a task action must therefore bring
+    its own proof rather than borrow theirs -- it would be refused here, which is
+    the safe direction.
+    """
+
+    pairs: set[tuple[int, PlayerId]] = set()
+    for step in result.tick_steps:
+        for event in step.events:
+            if isinstance(
+                event,
+                (
+                    ActionRejectedEvent,
+                    KilledEvent,
+                    MeetingTriggeredEvent,
+                    MovedEvent,
+                    SabotageRepairedEvent,
+                    SabotageRepairProgressedEvent,
+                    SabotageStartedEvent,
+                    VentEnteredEvent,
+                    VentExitedEvent,
+                    WaitedEvent,
+                ),
+            ):
+                pairs.add((event.tick, event.actor))
+    return pairs
+
+
 def _replay_prefix(
     prefix: HeldOutPrefix,
     *,
@@ -846,22 +912,31 @@ def _replay_prefix(
         temporal_observation_version=TEMPORAL_OBSERVATION_VERSION,
     ).run_unrecorded()
     # The certifying seam. ``prefix_sha256`` binds every step, so a digest may
-    # only be computed for a schedule this replay honoured IN FULL. The model
-    # already refuses a duplicate ``(tick, actor)`` and a step outside
-    # ``0..report_tick``; what it cannot see from the schedule alone is a step
-    # addressed to a player this roster never seats -- no agent exists for that
-    # id, so the step reaches nothing -- or one addressed to a player the loop
-    # stopped asking because it was dead. Both leave the executed count short,
-    # and both are invalid input rather than a rejection reason: a
+    # only be computed for a schedule the ENGINE resolved step for step. What the
+    # agent HANDED the loop is not that measure: ``decide`` returning an action
+    # says only that the agent was asked, and the loop can still drop what it
+    # gets back -- ``advance_tick`` returns the instant a report puts the world in
+    # ``MEETING``, so every action ordered after the reporter's on the report tick
+    # is discarded without even a rejection. So the comparison runs against the
+    # engine's own events instead. The model already refuses a duplicate
+    # ``(tick, actor)`` and a step outside ``0..report_tick``; what it cannot see
+    # from the schedule alone is a step addressed to a player this roster never
+    # seats -- no agent exists for that id, so the step reaches nothing -- one
+    # addressed to a player the loop stopped asking because it was dead, and one
+    # the meeting tick discarded. None of the three leaves an event behind, and
+    # all three are invalid input rather than a rejection reason: a
     # ``PrefixEvaluation`` for a schedule the run only partly executed would be a
     # verdict about a run that never happened. Counts only, never steps: this
-    # message is allowed to name how many actions went unserved, never which.
-    served = sum(agent.served_step_count for agent in agents.values())
-    if served != len(prefix.steps):
+    # message is allowed to name how many pairs went unresolved, never which.
+    resolved = _resolved_action_pairs(result)
+    unresolved = sum(
+        1 for step in prefix.steps if (step.tick, step.action.actor) not in resolved
+    )
+    if unresolved:
         raise HeldOutPrefixError(
-            f"the replay executed {served} of the prefix's {len(prefix.steps)} "
-            "hashed steps; a digest may only certify a schedule the replay "
-            "honoured in full"
+            f"the engine resolved no action for {unresolved} of the prefix's "
+            f"{len(prefix.steps)} hashed steps; a digest may only certify a "
+            "schedule the engine executed step for step"
         )
     return _Replay(result=result, agents=agents)
 
@@ -957,7 +1032,10 @@ def generate(
     """Draw ``band`` ascending and keep the first ``band.size`` prefixes that pass.
 
     Stops -- it does not widen the band -- when the band runs out before the set
-    is full. Every skipped seed is recorded with its reason code.
+    is full. Every skipped seed is recorded with its reason code, including the
+    seed whose own draw does not fit the tick budget: a schedule that cannot be
+    built is a seed the band drops, exactly like one the filter refuses, and
+    aborting the whole draw on it would make one unlucky seed a stop.
     """
 
     game_map = load_canonical_map()
@@ -968,7 +1046,13 @@ def generate(
     for seed in band.seeds():
         if len(prefixes) == band.size:
             break
-        prefix = build_prefix(seed=seed, roster=roster, game_map=game_map)
+        try:
+            prefix = build_prefix(seed=seed, roster=roster, game_map=game_map)
+        except ScheduleTickBudgetError:
+            skipped.append(
+                SkippedSeed(seed=seed, reason="schedule_exceeds_tick_budget")
+            )
+            continue
         evaluation = evaluate_prefix(prefix, game_map=game_map, public_map=public_map)
         if evaluation.reason is not None:
             skipped.append(SkippedSeed(seed=seed, reason=evaluation.reason))
@@ -990,16 +1074,26 @@ def generate(
     )
 
 
-#: The keys :func:`tally_reasons` reports before the reason-code histogram.
-TALLY_SEEDS_KEY: Final[str] = "seeds"
-TALLY_ACCEPTED_KEY: Final[str] = "accepted"
+@dataclass(frozen=True)
+class ReasonTally:
+    """How :func:`tally_reasons` dispositioned a seed range. Aggregates only.
+
+    The totals are FIELDS, not entries beside the histogram. A single flat dict
+    would let a future reason code named ``seeds`` or ``accepted`` overwrite a
+    total silently and make the tally under-report itself; the reason codes live
+    in ``reasons`` where no name of theirs can collide with a total.
+    """
+
+    seeds: int
+    accepted: int
+    reasons: Mapping[RejectionReason, int]
 
 
 def tally_reasons(
     first_seed: int,
     last_seed: int,
     roster: PrefixRoster = AUTHORIZED_ROSTER,
-) -> dict[str, int]:
+) -> ReasonTally:
     """Count how the filter dispositions an OUT-OF-BAND seed range. Aggregates only.
 
     This is the reproducing command behind the card's out-of-band rejection rate:
@@ -1013,10 +1107,12 @@ def tally_reasons(
     held-out set -- narrow the range and it becomes a per-seed read -- so the
     band is out of reach of this function rather than merely discouraged.
 
-    A seed whose schedule cannot be built raises out of :func:`build_prefix`,
-    exactly as it would inside :func:`generate`; the tally does not soften a
-    build failure into a reason code, because a count that disagreed with the
-    generator would not be evidence about the generator.
+    A seed whose own draw does not fit the tick budget is counted as a
+    ``schedule_exceeds_tick_budget`` skip, exactly as :func:`generate` records
+    it, so the tally stays a count of what the generator would do rather than a
+    different disposition of the same seed. Every other build failure still
+    raises: an unauthorized roster is invalid input to both, not a seed either
+    of them drops.
     """
 
     if last_seed < first_seed:
@@ -1035,18 +1131,21 @@ def tally_reasons(
     reasons: Counter[RejectionReason] = Counter()
     accepted = 0
     for seed in range(first_seed, last_seed + 1):
-        prefix = build_prefix(seed=seed, roster=roster, game_map=game_map)
+        try:
+            prefix = build_prefix(seed=seed, roster=roster, game_map=game_map)
+        except ScheduleTickBudgetError:
+            reasons["schedule_exceeds_tick_budget"] += 1
+            continue
         evaluation = evaluate_prefix(prefix, game_map=game_map, public_map=public_map)
         if evaluation.reason is None:
             accepted += 1
         else:
             reasons[evaluation.reason] += 1
-    tally = {
-        TALLY_SEEDS_KEY: last_seed - first_seed + 1,
-        TALLY_ACCEPTED_KEY: accepted,
-    }
-    tally.update({reason: reasons[reason] for reason in sorted(reasons)})
-    return tally
+    return ReasonTally(
+        seeds=last_seed - first_seed + 1,
+        accepted=accepted,
+        reasons={reason: reasons[reason] for reason in sorted(reasons)},
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1167,11 +1266,11 @@ __all__ = [
     "PrefixEvaluation",
     "PrefixRoster",
     "PrefixStep",
+    "ReasonTally",
     "RejectionReason",
+    "ScheduleTickBudgetError",
     "SeedBand",
     "SkippedSeed",
-    "TALLY_ACCEPTED_KEY",
-    "TALLY_SEEDS_KEY",
     "TEMPORAL_OBSERVATION_VERSION",
     "assert_no_legacy_body_handles",
     "build_manifest",
@@ -1204,7 +1303,10 @@ if __name__ == "__main__":  # pragma: no cover - the freeze and tally commands
         )
         print(f"wrote {written}")
     elif _argv[0] == "--tally" and len(_argv) == 3:
-        for _key, _value in tally_reasons(int(_argv[1]), int(_argv[2])).items():
-            print(f"{_key} {_value}")
+        _tally = tally_reasons(int(_argv[1]), int(_argv[2]))
+        print(f"seeds {_tally.seeds}")
+        print(f"accepted {_tally.accepted}")
+        for _reason, _count in _tally.reasons.items():
+            print(f"{_reason} {_count}")
     else:
         raise SystemExit(_USAGE)

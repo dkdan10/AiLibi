@@ -1,10 +1,11 @@
 """The freeze's gates: determinism, proof-freedom, the body handle, and the manifest.
 
 Every planted prefix here is built on seed 1 -- the seed the seven committed
-development cases already use, and therefore development data by construction.
-None of these tests reads a prefix drawn from the preregistered held-out band;
-the only band prefixes they touch are the digests they compare against the
-committed manifest.
+development cases already use, and therefore development data by construction --
+or on the debugging seeds 9001 and 9002, which the card records as inspected
+outside the band. None of these tests reads a prefix drawn from the preregistered
+held-out band; the only band prefixes they touch are the digests they compare
+against the committed manifest.
 """
 
 from __future__ import annotations
@@ -16,22 +17,23 @@ from typing import get_args
 import pytest
 from pydantic import TypeAdapter, ValidationError
 
-from engine.world import load_canonical_map
+from engine.world import Map, load_canonical_map
+from experiments import held_out_prefixes
 from experiments.deduction_scenarios import ScenarioDefinition
 from experiments.held_out_prefixes import (
     AUTHORIZED_ROSTER,
     MANIFEST_PATH,
     MAX_TICKS,
     PREREGISTERED_BAND,
-    TALLY_ACCEPTED_KEY,
-    TALLY_SEEDS_KEY,
     TEMPORAL_OBSERVATION_VERSION,
     HeldOutPrefix,
     HeldOutPrefixError,
     PrefixRoster,
     PrefixStep,
     RejectionReason,
+    ScheduleTickBudgetError,
     SeedBand,
+    SkippedSeed,
     _replay_prefix,
     assert_no_legacy_body_handles,
     build_manifest,
@@ -56,9 +58,6 @@ _INTENTS: TypeAdapter[ActionIntent] = TypeAdapter(ActionIntent)
 #: band, so inspecting them converts nothing.
 _PLANT_SEED = 1
 _DEBUG_SEEDS = (9001, 9002)
-
-#: The two total rows ``tally_reasons`` reports before its reason histogram.
-_TALLY_TOTALS = (TALLY_SEEDS_KEY, TALLY_ACCEPTED_KEY)
 
 
 def _step(tick: int, actor: str, kind: str, payload: dict[str, object]) -> PrefixStep:
@@ -195,14 +194,15 @@ def test_a_step_outside_the_replayed_window_is_refused() -> None:
         )
 
 
-def test_a_step_the_replay_never_executes_never_reaches_a_digest() -> None:
-    """The certifying seam: ``evaluate_prefix`` refuses a partly honoured schedule.
+def test_a_step_the_engine_never_resolves_never_reaches_a_digest() -> None:
+    """The certifying seam: ``evaluate_prefix`` refuses a partly executed schedule.
 
     Neither shape is visible in the schedule alone, so the model cannot refuse
     them: a step addressed to a player the roster never seats reaches no agent,
     and a step addressed to a player the loop stopped asking because it was dead
-    is never requested. Both move ``prefix_sha256`` while leaving the replay
-    short, which is the defect the duplicate gate closed for one route only.
+    is never requested. Both move ``prefix_sha256`` while the engine resolves no
+    action for the hashed ``(tick, actor)`` pair, which is the defect the
+    duplicate gate closed for one route only.
     """
 
     valid = _unwitnessed_seed_one_prefix()
@@ -219,9 +219,113 @@ def test_a_step_the_replay_never_executes_never_reaches_a_digest() -> None:
     )
     for planted in (unseated, after_death):
         assert prefix_sha256(planted) != prefix_sha256(valid)
-        with pytest.raises(HeldOutPrefixError, match="honoured in full"):
+        with pytest.raises(HeldOutPrefixError, match="executed step for step"):
             evaluate_prefix(planted)
     assert evaluate_prefix(valid).reason is None
+
+
+def _with_extra_move(
+    prefix: HeldOutPrefix, *, actor: str, to_room: str
+) -> HeldOutPrefix:
+    """``prefix`` plus one move for ``actor`` on its report tick."""
+
+    steps = (
+        *prefix.steps,
+        _step(prefix.report_tick, actor, "move", {"to_room": to_room}),
+    )
+    return HeldOutPrefix(
+        seed=prefix.seed,
+        roster=prefix.roster,
+        max_ticks=prefix.max_ticks,
+        steps=tuple(sorted(steps, key=lambda step: (step.tick, step.action.actor))),
+        report_tick=prefix.report_tick,
+        kill_tick=prefix.kill_tick,
+    )
+
+
+def _report_tick_neighbour(
+    seed: int, *, after_reporter: bool
+) -> tuple[HeldOutPrefix, str, str]:
+    """A generated prefix, an actor ordered against its reporter, and a legal room.
+
+    The room is read from the state at meeting open, which — because no actor but
+    the reporter is scheduled on the report tick — is the room that actor stands
+    in when the report tick opens, so the added move is a legal one door away.
+    """
+
+    prefix = build_prefix(
+        seed=seed, roster=AUTHORIZED_ROSTER, game_map=load_canonical_map()
+    )
+    reporter = next(
+        step.action.actor for step in prefix.steps if step.action.type == "report"
+    )
+    final = _replay_prefix(prefix).result.final_state
+    candidates = sorted(
+        pid
+        for pid, player in final.players.items()
+        if player.alive
+        and pid != reporter
+        and ((pid > reporter) if after_reporter else (pid < reporter))
+    )
+    assert candidates, f"seed {seed} seats no such actor beside {reporter}"
+    actor = candidates[0]
+    return (
+        prefix,
+        actor,
+        load_canonical_map().room_neighbors(final.players[actor].room)[0],
+    )
+
+
+def test_a_step_the_meeting_tick_discards_never_reaches_a_digest() -> None:
+    """The seam counts what the ENGINE resolved, not what the agent served.
+
+    ``advance_tick`` returns the instant the report puts the world in ``MEETING``,
+    and the tick's actions are ordered by actor, so an action from an actor whose
+    id sorts AFTER the reporter's is discarded with no event at all — not even a
+    rejection. The agent still handed it to the loop, so a served-action count
+    reads "honoured in full" while the digest binds a step the engine never ran.
+    Seed 9001 is an out-of-band debugging seed whose reporter is not the
+    last-sorting living player.
+    """
+
+    prefix, actor, to_room = _report_tick_neighbour(
+        _DEBUG_SEEDS[0], after_reporter=True
+    )
+    planted = _with_extra_move(prefix, actor=actor, to_room=to_room)
+    assert prefix_sha256(planted) != prefix_sha256(prefix)
+    with pytest.raises(HeldOutPrefixError, match="executed step for step"):
+        evaluate_prefix(planted)
+    assert evaluate_prefix(prefix).reason is None
+
+
+def test_a_report_tick_step_the_engine_does_resolve_passes_the_seam() -> None:
+    """The seam tracks the engine rather than banning the report tick outright.
+
+    The same shape on seed 9002, whose reporter sorts last among the living: the
+    added move is ordered BEFORE the report, so the engine executes it and emits
+    its ``Moved`` event. The generator still refuses to script it — which actor
+    sorts where is not a property a hashed schedule should depend on — but the
+    seam's business is what the engine resolved, and here it resolved this.
+    """
+
+    prefix, actor, to_room = _report_tick_neighbour(
+        _DEBUG_SEEDS[1], after_reporter=False
+    )
+    planted = _with_extra_move(prefix, actor=actor, to_room=to_room)
+    assert prefix_sha256(planted) != prefix_sha256(prefix)
+    _replay_prefix(planted)
+
+
+def test_the_generator_scripts_nobody_but_the_reporter_on_the_report_tick() -> None:
+    """The generated schedules stay clear of the tick the meeting interrupts."""
+
+    game_map = load_canonical_map()
+    for seed in _DEBUG_SEEDS:
+        prefix = build_prefix(seed=seed, roster=AUTHORIZED_ROSTER, game_map=game_map)
+        on_report_tick = [
+            step for step in prefix.steps if step.tick == prefix.report_tick
+        ]
+        assert [step.action.type for step in on_report_tick] == ["report"]
 
 
 def test_the_filter_environment_is_built_per_use_and_refuses_mutation() -> None:
@@ -250,15 +354,19 @@ def test_the_filter_environment_is_built_per_use_and_refuses_mutation() -> None:
 
 
 def test_the_tally_counts_an_out_of_band_range_without_opening_a_prefix() -> None:
-    """The reproducing command behind the card's out-of-band rejection rate."""
+    """The reproducing command behind the card's out-of-band rejection rate.
+
+    The totals are fields rather than entries in the histogram, so a future
+    reason code named ``seeds`` or ``accepted`` cannot overwrite one.
+    """
 
     first, last = _DEBUG_SEEDS[0], _DEBUG_SEEDS[-1]
     walked = last - first + 1
     tally = tally_reasons(first, last)
-    assert tally["seeds"] == walked
-    reasons = {key: count for key, count in tally.items() if key not in _TALLY_TOTALS}
-    assert tally["accepted"] + sum(reasons.values()) == walked
-    assert set(reasons) <= set(get_args(RejectionReason))
+    assert tally.seeds == walked
+    assert tally.accepted + sum(tally.reasons.values()) == walked
+    assert set(tally.reasons) <= set(get_args(RejectionReason))
+    assert {"seeds", "accepted"}.isdisjoint(tally.reasons)
 
 
 def test_the_tally_refuses_to_probe_the_preregistered_band() -> None:
@@ -435,6 +543,58 @@ def test_every_accepted_prefix_and_its_trigger_stay_free_of_the_legacy_handle() 
 def test_a_band_that_cannot_fill_the_set_stops_instead_of_widening() -> None:
     with pytest.raises(HeldOutPrefixError, match="not a reason to widen"):
         generate(SeedBand(first_seed=1, last_seed=3, size=50), AUTHORIZED_ROSTER)
+
+
+def test_a_seed_whose_schedule_overruns_the_budget_is_skipped_not_a_stop(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A seed the generator cannot SCHEDULE is a skip with a reason code.
+
+    No seed walked so far draws a schedule that overruns the budget, so the path
+    is planted: ``build_prefix`` is made to raise ``ScheduleTickBudgetError`` for
+    the first of two out-of-band debugging seeds. Before this, the exception
+    escaped ``generate`` and ``tally_reasons`` and one unlucky seed would have
+    aborted the whole draw instead of being recorded and walked past.
+    """
+
+    doomed, healthy = _DEBUG_SEEDS
+    real = held_out_prefixes.build_prefix
+
+    def stub(
+        *,
+        seed: int,
+        roster: PrefixRoster,
+        game_map: Map,
+        max_ticks: int = MAX_TICKS,
+    ) -> HeldOutPrefix:
+        if seed == doomed:
+            raise ScheduleTickBudgetError(
+                f"seed {seed} staged the reporter beyond the tick budget"
+            )
+        return real(seed=seed, roster=roster, game_map=game_map, max_ticks=max_ticks)
+
+    monkeypatch.setattr(held_out_prefixes, "build_prefix", stub)
+    generated = generate(
+        SeedBand(first_seed=doomed, last_seed=healthy, size=1), AUTHORIZED_ROSTER
+    )
+    assert generated.skipped == (
+        SkippedSeed(seed=doomed, reason="schedule_exceeds_tick_budget"),
+    )
+    assert [prefix.seed for prefix in generated.prefixes] == [healthy]
+
+    tally = tally_reasons(doomed, healthy)
+    assert tally.reasons["schedule_exceeds_tick_budget"] == 1
+    assert tally.accepted + sum(tally.reasons.values()) == tally.seeds
+
+
+def test_an_unauthorized_roster_still_raises_rather_than_becoming_a_skip() -> None:
+    """The skip path is for a seed's own draw, not for invalid input."""
+
+    with pytest.raises(HeldOutPrefixError, match="authorized held-out roster"):
+        generate(
+            SeedBand(first_seed=_DEBUG_SEEDS[0], last_seed=_DEBUG_SEEDS[1], size=1),
+            PrefixRoster(num_players=3, num_impostors=1, tasks_per_crewmate=1),
+        )
 
 
 def _committed_manifest() -> dict[str, object]:

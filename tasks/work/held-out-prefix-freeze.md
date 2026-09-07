@@ -55,18 +55,45 @@ development data by construction.
 
 ## Acceptance
 
-- [x] Verification-round correction: `evaluate_prefix` certifies a digest only
+- [x] Review correction: the certifying seam compares the hashed schedule with
+  what the ENGINE resolved, not with what the scripted agent served. Every hashed
+  `(tick, actor)` pair must appear among the events the tick function emitted for
+  a resolved action — the executed action's own event, or the
+  `ActionRejectedEvent` the loop appends when the engine refuses one — and
+  `_replay_prefix` raises `HeldOutPrefixError` with counts only otherwise. Proved
+  by `test_a_step_the_engine_never_resolves_never_reaches_a_digest` and by
+  `test_a_step_the_meeting_tick_discards_never_reaches_a_digest`, whose planted
+  move is discarded by the opening meeting rather than rejected, and bounded from
+  the other side by
+  `test_a_report_tick_step_the_engine_does_resolve_passes_the_seam`.
+- [x] Review correction: nobody but the reporter is scheduled on the report tick.
+  The meeting interrupts that tick, so a move drawn for it is never executed;
+  `build_prefix` draws the walks exactly as before and DROPS the drawn step, so
+  every seed's world up to the report is the world it always was while no phantom
+  step reaches a digest. Proved by
+  `test_the_generator_scripts_nobody_but_the_reporter_on_the_report_tick`; the
+  set kept the same fifty seeds, the same eight skips and the same last accepted
+  seed.
+- [x] Review correction: a seed whose own draw overruns the tick budget is a
+  recorded `schedule_exceeds_tick_budget` skip rather than an abort of the whole
+  draw, and `tally_reasons` returns its totals as fields of a `ReasonTally`
+  beside the reason histogram, so no future reason code can overwrite a total.
+  Proved by `test_a_seed_whose_schedule_overruns_the_budget_is_skipped_not_a_stop`,
+  `test_an_unauthorized_roster_still_raises_rather_than_becoming_a_skip` and
+  `test_the_tally_counts_an_out_of_band_range_without_opening_a_prefix`.
+- [x] Review correction: `evaluate_prefix` certifies a digest only
   for a schedule the replay honoured IN FULL. The duplicate gate below closed
   one route to that defect; three more stayed open — a step past `report_tick`,
   a step past `max_ticks`, and a step addressed to a player the roster never
   seats or that the loop stopped asking because it was dead. The first two are
   refused by a second `model_validator`; the third cannot be judged from the
-  schedule alone, so `_replay_prefix` counts the steps the replay actually
-  executed against the steps the digest binds and raises `HeldOutPrefixError`
-  on a shortfall. Proved by
+  schedule alone, so `_replay_prefix` compares the schedule against the replay
+  and raises `HeldOutPrefixError` on a shortfall. Proved by
   `test_a_step_outside_the_replayed_window_is_refused` and
-  `test_a_step_the_replay_never_executes_never_reaches_a_digest`.
-- [x] Verification-round correction: the filter environment claim names the
+  `test_a_step_the_engine_never_resolves_never_reaches_a_digest`. The comparison
+  this pass wrote counted what the agent SERVED, which the round-3 item above
+  replaced with what the engine resolved.
+- [x] Review correction: the filter environment claim names the
   mechanism that actually enforces it. `filter_environment()` BUILDS its mapping
   from this module's pinned constants on every call, so prefix selection depends
   on no stored state a same-process caller can reach, and the returned
@@ -211,23 +238,25 @@ band figures are the manifest's own `skipped_reason_counts` and
 only, from
 
 ```text
-$ .venv/bin/python -m experiments.held_out_prefixes --tally 1 50
+$ uv run python -m experiments.held_out_prefixes --tally 1 50
 seeds 50
 accepted 45
 witnessed_kill 5
 ```
 
-`tally_reasons` evaluates each seed exactly as `generate()` does and returns
-only these three rows. It refuses any range that intersects seeds 3000–3999, so
-the same command cannot be turned on the held-out set: an aggregate count over
-band seeds is still a probe, and a narrow enough range would be a per-seed read.
+`tally_reasons` evaluates each seed exactly as `generate()` does and returns a
+`ReasonTally` whose `seeds` and `accepted` totals are fields beside the reason
+histogram, which is what the command prints. It refuses any range that intersects
+seeds 3000–3999, so the same command cannot be turned on the held-out set: an
+aggregate count over band seeds is still a probe, and a narrow enough range would
+be a per-seed read.
 
 `audits/deduction-candidate/held-out/manifest.json` is the freeze artifact —
-**sha256 `c060f3cac7fba8546c160f634e5788a052663458ceefd51e1fd2c366cd38b78e`**,
-11,524 bytes (the review corrections below re-stamped one `source_sha256` entry;
-the digest before them was
-`75de872360ae06aeaa0a80f22efbdfda20b2210db66cd8f3fbec6ebfd58740f7` at the same
-byte count). It records the band, the roster, the tick budget, the temporal
+**sha256 `c5fb806e7b115cd168227ec89f02c5624d02e19ee49b650d6035ef09debebad9`**,
+11,524 bytes. The set is not frozen until the owner merges this pull request, and
+three correction rounds moved the file before then; each dated subsection below
+names the digest it left behind, and only the value above describes the file as
+it now stands. It records the band, the roster, the tick budget, the temporal
 version, the filter's stated environment, the canonical-JSON recipe, the sha256
 of 22 generator/engine/observation source files, the fifty accepted seeds with
 their prefix digests in band order, the eight skips with reason codes, the seven
@@ -261,7 +290,14 @@ fires.
 Both uninvolved crewmates wander on seeded legal random walks that may take them
 into the kill room on the kill tick. That is what makes the proof-free filter
 load-bearing rather than a formality, and it is where all eight band skips came
-from.
+from. Their wander, and the impostor's, stop being HASHED at the report tick: the
+meeting interrupts that tick, so whether an action ordered there runs at all
+depends on how the actor's id sorts against the reporter's, and a schedule that
+depended on that would bind steps the engine never executes. The walks are still
+drawn to the report tick — the draws are what the seed determines — and the drawn
+step for that one tick is discarded, so the generator remains a pure function of
+the seed and the reporter is the only actor scheduled on the tick that ends the
+prefix.
 
 The manifest's `source_sha256` covers `orchestrator/game.py`, the engine and the
 observation layer as well as the generator, and the regeneration test asserts
@@ -321,14 +357,20 @@ committed.
    from `kill_tick + 1` to `kill_tick + 2` — one step in every schedule — turned
    `test_the_committed_manifest_regenerates_from_its_own_band` red at the first
    accepted seed: `{'seed': 3000, 'sha256': '1482ce81…'} != {'seed': 3000,
-   'sha256': 'ab053eef…'}`. Reverted; `14 passed`.
+   'sha256': 'ab053eef…'}`. Reverted; `14 passed`. `1482ce81…` is the planted
+   digest and is committed nowhere, by design; `ab053eef…` was seed 3000's frozen
+   digest at the time of the plant and stayed so through `3eb49dfc`. The round-3
+   correction below rebuilt every schedule that carried a phantom report-tick
+   step, so seed 3000's digest now reads `ab8db76d…`.
 2. **A non-behavioural generator edit.** Appending a comment line left every
    prefix digest identical but moved the module's own digest, and the same test
    went red on `rebuilt["source_sha256"] != manifest["source_sha256"]`
-   (`experiments/held_out_prefixes.py`: `8ab1186e…` vs `9c6ec3ab…`, the entry
-   frozen at the time of this plant — two later correction passes have
-   re-stamped that one entry, and the frozen value now reads `9e467dd1…`).
-   Reverted; `14 passed`.
+   (`experiments/held_out_prefixes.py`: `8ab1186e…`, the planted value, committed
+   nowhere, versus `9c6ec3ab…`, the entry frozen at the time of this plant).
+   Reverted; `14 passed`. Three correction passes have since re-stamped that one
+   entry, and the chain of committed values is `9c6ec3ab…` at `f9d02ad2` and
+   `2daa5612`, then `0b94fec1…` at `92bec106`, then `89d0220e…` at `3eb49dfc`,
+   then `1c8ce570…` at the head of this branch.
 
 The planted adverse cases that live in the suite: a witnessed kill (a second
 crewmate standing in ADMIN when the kill lands) is rejected `witnessed_kill`; a
@@ -434,8 +476,12 @@ valid and fixed on the branch; none of them moved an accepted digest or a skip.
 unchanged. The file's byte count is unchanged at 11,524, so
 `docs/artifacts.md`'s `audits/` inventory row still reads
 `14,850,288 tracked bytes / 202 files` and was not touched. The manifest's own
-sha256 moved to
-`c060f3cac7fba8546c160f634e5788a052663458ceefd51e1fd2c366cd38b78e`.
+sha256 moved from
+`75de872360ae06aeaa0a80f22efbdfda20b2210db66cd8f3fbec6ebfd58740f7` — the digest
+at the first push, commit `f9d02ad2`, unchanged by the docs-only `2daa5612` — to
+`c060f3cac7fba8546c160f634e5788a052663458ceefd51e1fd2c366cd38b78e` at commit
+`92bec106`. Both are superseded pre-freeze revisions; the digest of the file as
+it now stands is in "The set" above.
 
 **Preparer statement, restated for this pass.** No prefix from the preregistered
 band was printed, opened or reasoned about during the corrections. The tally was
@@ -480,17 +526,22 @@ Both are repaired here; neither repair moved an accepted digest or a skip.
    `model_validator(mode="after")`, `_every_step_falls_inside_the_replayed_window`,
    which refuses `report_tick` outside `0..max_ticks-1` and any step outside
    `0..report_tick`; those two shapes are visible in the schedule alone.
-   Membership and liveness are not, so `_PrefixAgent` now records the scripted
-   ticks it actually served and `_replay_prefix` raises `HeldOutPrefixError` when
-   the served total falls short of `len(prefix.steps)` — before a
-   `PrefixEvaluation` exists, so no partly executed schedule can reach a digest.
-   The error message carries counts only, never a step. Planted cases:
+   Membership and liveness are not, so `_PrefixAgent` recorded the scripted ticks
+   it actually served and `_replay_prefix` raised `HeldOutPrefixError` when the
+   served total fell short of `len(prefix.steps)` — before a `PrefixEvaluation`
+   exists, so no partly executed schedule can reach a digest. The error message
+   carries counts only, never a step. Planted cases:
    `test_a_step_outside_the_replayed_window_is_refused` (a step at
    `report_tick + 1`, a step at tick 99, and a `report_tick` equal to
    `max_ticks`, each through both the constructor and `model_validate`) and
    `test_a_step_the_replay_never_executes_never_reaches_a_digest` (an unseated
    `p-9` and a step for the victim two ticks after its death, each asserted to
    move `prefix_sha256` and then to raise). Both plants are built on seed 1.
+   **Superseded in mechanism by round 3 below**: a served count says the agent
+   handed the loop an action, not that the engine ran it, and the report tick's
+   opening meeting discards what is ordered after the reporter. The comparison
+   now runs against the engine's own events, and that test is renamed
+   `test_a_step_the_engine_never_resolves_never_reaches_a_digest`.
 
 2. **The `MappingProxyType` claim was stronger than the mechanism**
    (`experiments/held_out_prefixes.py`, and Acceptance and Results here). A proxy
@@ -520,16 +571,20 @@ Both are repaired here; neither repair moved an accepted digest or a skip.
    object, which is what makes a held reference useless to a caller.
 
 **Fail-loud for the three new gates.** Each was neutered in turn and the suite
-run; each neuter turned exactly its own planted case red, and each was reverted
-(`shasum -a 256 experiments/held_out_prefixes.py` back to
+run; each was reverted (`shasum -a 256 experiments/held_out_prefixes.py` back to
 `89d0220e15d491210b58a1f4231afeddc05a3323f76732eb782ea7bc2f09af94`, `git status
---porcelain` clean for the module):
+--porcelain` clean for the module). This pass first wrote that each neuter turned
+"exactly its own planted case" red, which does not reproduce: every edit to the
+module also moves its `source_sha256` entry, so
+`test_the_committed_manifest_regenerates_from_its_own_band` goes red beside the
+planted case, by design. The table below is the reproducible result, re-run at
+the head of this branch against the round-3 gates:
 
 | neutered | red |
 | --- | --- |
-| the `_replay_prefix` served-count comparison (`if False:`) | `test_a_step_the_replay_never_executes_never_reaches_a_digest` |
-| `_every_step_falls_inside_the_replayed_window` (early `return self`) | `test_a_step_outside_the_replayed_window_is_refused` |
-| `filter_environment` returning a stored module mapping | `test_the_filter_environment_is_built_per_use_and_refuses_mutation` |
+| the `_replay_prefix` engine-resolved comparison (`if False:`) | `test_a_step_the_engine_never_resolves_never_reaches_a_digest`, `test_a_step_the_meeting_tick_discards_never_reaches_a_digest`, and `test_the_committed_manifest_regenerates_from_its_own_band` through `source_sha256` |
+| `_every_step_falls_inside_the_replayed_window` (early `return self`) | `test_a_step_outside_the_replayed_window_is_refused`, and `test_the_committed_manifest_regenerates_from_its_own_band` through `source_sha256` |
+| `filter_environment` returning a stored module mapping | `test_the_filter_environment_is_built_per_use_and_refuses_mutation`, and `test_the_committed_manifest_regenerates_from_its_own_band` through `source_sha256` |
 
 **Manifest impact of this pass.** Regenerating with
 `.venv/bin/python -m experiments.held_out_prefixes` again changed exactly one
@@ -549,13 +604,14 @@ unchanged at 11,524 (a sha256 entry is 64 hex characters either way), so
 `docs/artifacts.md`'s `audits/` inventory row still reads
 `14,850,288 tracked bytes / 202 files` and was not touched. The manifest's own
 sha256 moved from `c060f3ca…` to
-`3089c2d7361c70e6fb49981b374e0b9d167111bbf98b4b901055251b77964e9b`.
+`3089c2d7361c70e6fb49981b374e0b9d167111bbf98b4b901055251b77964e9b` at commit
+`3eb49dfc` — a superseded pre-freeze revision; round 3 below moved it again.
 
 **Out-of-band tally, re-run under the new gates** — unchanged, which is the check
 that the certifying seam does not reject legal generated schedules:
 
 ```text
-$ .venv/bin/python -m experiments.held_out_prefixes --tally 1 50
+$ uv run python -m experiments.held_out_prefixes --tally 1 50
 seeds 50
 accepted 45
 witnessed_kill 5
@@ -579,3 +635,153 @@ already records.
 | `.venv/bin/python scripts/verify_ml_evidence.py` (offline, never `--complete`) | checks 60, OK 48, FAIL 0, ABSENT 7, INFO 5 |
 | `.venv/bin/pytest tests/scripts/test_verify_ml_evidence.py -q` | 80 passed |
 | `bash scripts/check.sh` | exit 0: ruff (498 files formatted), 4 import-linter contracts kept, task docs, `generate_prompts --check` (390 in sync), mypy over 469 source files, **7,193 passed / 20 skipped / 3 xfailed** in 207.96 s, then the frontend leg — lint, three `tsc --noEmit` passes, 514 vitest tests over 19 files, and a clean production build |
+
+### Review corrections, round 3 (2026-09-07)
+
+A second verification round over the corrections above found the certifying seam
+still open, and four documentation statements that do not reproduce. This is the
+first pass that MOVED the set: the schedules changed, so forty-five of the fifty
+accepted digests changed with them. The set is not frozen until the owner merges
+this pull request, so a pre-freeze digest move is a correction, not a break of
+the freeze.
+
+1. **The seam counted what the agent SERVED, not what the engine EXECUTED**
+   (`experiments/held_out_prefixes.py`). `_PrefixAgent.decide` returning an
+   action says only that the loop asked and the agent answered.
+   `advance_tick` returns the instant a report puts the world in `MEETING`
+   (`engine/tick.py`, step 1), and the tick's actions are ordered by actor
+   (`orchestrator/action_ordering.py`), so an action from an actor whose id sorts
+   AFTER the reporter's is discarded on the report tick with no event at all —
+   not even an `ActionRejectedEvent`. The served count read "honoured in full"
+   for exactly that shape. Measured on the committed set at `3eb49dfc`: **23 of
+   the 50 accepted prefixes carried at least one hashed step the engine never
+   resolved** — 26 such steps in total. The repair compares against the engine's
+   own events instead: `_resolved_action_pairs` collects every `(tick, actor)`
+   the tick function emitted a resolved-action event for, and `_replay_prefix`
+   raises `HeldOutPrefixError` — counts only, never a step — when a hashed pair
+   is missing from it. `_PrefixAgent`'s served counter is gone rather than
+   renamed: nothing needs it now, and a number that measured the wrong thing is
+   not worth keeping for its diagnostic value. Planted case on the out-of-band
+   debugging seed 9001, whose reporter `p-2` does not sort last among the living:
+   `test_a_step_the_meeting_tick_discards_never_reaches_a_digest` adds one legal
+   move for the later-sorting actor on the report tick, and the seam refuses the
+   prefix. `test_a_report_tick_step_the_engine_does_resolve_passes_the_seam`
+   bounds it from the other side on seed 9002, whose reporter sorts last: there
+   the same shape IS executed, emits its `Moved` event, and passes. The two
+   earlier plants (an unseated `p-9`, a step for the victim after its death) are
+   kept and now assert the new message; that test is renamed
+   `test_a_step_the_engine_never_resolves_never_reaches_a_digest`.
+
+2. **Nobody but the reporter is scheduled on the report tick**
+   (`experiments/held_out_prefixes.py`). A true seam alone would have turned
+   twenty-three band seeds into hard errors, so the generator stops drawing the
+   phantom step as well. `build_prefix` draws the impostor's post-kill wander and
+   both bystanders' wanders EXACTLY as before — same calls, same `last_tick`,
+   same RNG consumption — and then discards the drawn step whose tick is the
+   report tick and whose actor is not the reporter. Because no draw moved, every
+   seed's roles, kill room, kill tick, routes and walk are the ones they always
+   were, and the world up to the report is unchanged; only the hashed schedule
+   is. Proved by
+   `test_the_generator_scripts_nobody_but_the_reporter_on_the_report_tick`, and
+   by the set comparison below.
+
+3. **A build failure aborted the draw, and the tally flattened its totals**
+   (`experiments/held_out_prefixes.py`). `build_prefix` can raise "staged the
+   reporter beyond the tick budget" for a seed whose own draw overruns the
+   budget; neither `generate` nor `tally_reasons` converted it, so one unlucky
+   seed would have stopped the whole band instead of being recorded and walked
+   past. That failure now raises the narrower `ScheduleTickBudgetError` and both
+   callers record it as a `schedule_exceeds_tick_budget` skip; every other
+   `HeldOutPrefixError` out of `build_prefix` — an unauthorized roster, a map
+   with no route — is invalid input and still raises.
+   `tally_reasons` returns a frozen `ReasonTally` whose `seeds` and `accepted`
+   are FIELDS beside a `reasons` histogram, so a future reason code named `seeds`
+   or `accepted` can no longer overwrite a total; the command prints the same
+   rows as before. No seed walked so far draws an overrunning schedule, so the
+   path is planted:
+   `test_a_seed_whose_schedule_overruns_the_budget_is_skipped_not_a_stop` makes
+   `build_prefix` raise for seed 9001 and asserts the skip is recorded, the draw
+   continues to 9002 and the tally counts it, while
+   `test_an_unauthorized_roster_still_raises_rather_than_becoming_a_skip` holds
+   the other side.
+
+4. **Four documentation statements did not reproduce** (this card). The headline
+   freeze digest named `c060f3ca…`, which is the manifest at `92bec106`, not the
+   committed file; "The set" now states the digest of the file at the head of
+   this branch and every earlier value is named as a superseded pre-freeze
+   revision inside its own dated subsection. The fail-loud narrative cited a
+   frozen `source_sha256` of `9e467dd1…`, which matches no object on this branch
+   and no revision of it — it was fabricated; the true chain is `9c6ec3ab…` at
+   `f9d02ad2` and `2daa5612`, `0b94fec1…` at `92bec106`, `89d0220e…` at
+   `3eb49dfc`, `1c8ce570…` at this head, and every other elided digest in this
+   card was re-verified against committed bytes in the same pass. "Each neuter
+   turned exactly its own planted case red" does not reproduce — every module
+   edit also moves `source_sha256`, so
+   `test_the_committed_manifest_regenerates_from_its_own_band` goes red beside
+   the planted case — and the table above now says so. The tally command was
+   written with a repo-relative `.venv/bin/python` that does not run in a fresh
+   clone; it is `uv run python` throughout. Two Acceptance items carried a
+   `Verification-round correction:` prefix instead of the documented
+   `Review correction:`.
+
+**Set impact.** `test_the_committed_manifest_regenerates_from_its_own_band` was
+run BEFORE regenerating and failed on `accepted` alone, at seed 3000's digest.
+Compared field by field against the manifest at `3eb49dfc`: `accepted[].seed` is
+identical for all fifty, `skipped` and `skipped_reason_counts` are identical
+(eight seeds, all `witnessed_kill`), `last_accepted_seed` is identical at 3057,
+and `band`, `roster`, `filter_environment`, `development_definitions`,
+`body_handle_assertion`, `status`, `status_note`, `card`, `max_ticks`,
+`temporal_observation_version`, `canonical_json`, `version`, `prefix_bytes` and
+`filter` are untouched. **Forty-five of the fifty accepted digests moved** —
+exactly the forty-five schedules that carried a non-reporter step on the report
+tick; the other five drew none and are byte-identical. Seed 3000's digest moved
+from `ab053eef…` to `ab8db76d…`. Regenerating with
+`uv run python -m experiments.held_out_prefixes` produced 46 insertions and 46
+deletions in the manifest: the forty-five digests plus the `source_sha256` entry
+for `experiments/held_out_prefixes.py`, which moved from `89d0220e…` to
+`1c8ce570…`; the other twenty-one source entries are unchanged. The file's byte
+count is unchanged at 11,524, so `docs/artifacts.md`'s `audits/` inventory row
+still reads `14,850,288 tracked bytes / 202 files` and was not touched. The
+manifest's own sha256 moved from `3089c2d7…` to
+`c5fb806e7b115cd168227ec89f02c5624d02e19ee49b650d6035ef09debebad9`.
+
+**Fail-loud for the round-3 gates.** Each was neutered in turn, the module's
+suite run, and the module restored byte-for-byte
+(`shasum -a 256 experiments/held_out_prefixes.py` back to
+`1c8ce5700f61b3d920a1057b50788c209fed5fe7e12788db19901fccaba476d3`):
+
+| neutered | red |
+| --- | --- |
+| the `_replay_prefix` engine-resolved comparison (`if False:`) | `test_a_step_the_engine_never_resolves_never_reaches_a_digest`, `test_a_step_the_meeting_tick_discards_never_reaches_a_digest`, `test_the_committed_manifest_regenerates_from_its_own_band` (3 failed, 22 passed) |
+| the report-tick drop in `build_prefix` | 8 failed, 17 passed — the generator's own assertion, both report-tick seam cases, and every test that calls `generate()` or `tally_reasons`, because the seam then refuses the phantom-carrying schedules outright |
+| the `schedule_exceeds_tick_budget` conversion in `generate` | `test_a_seed_whose_schedule_overruns_the_budget_is_skipped_not_a_stop`, `test_the_committed_manifest_regenerates_from_its_own_band` (2 failed, 23 passed) |
+
+**Out-of-band tally, re-run at this head** — unchanged from both earlier rounds,
+which is the check that removing the report-tick steps moved no filter verdict:
+
+```text
+$ uv run python -m experiments.held_out_prefixes --tally 1 50
+seeds 50
+accepted 45
+witnessed_kill 5
+```
+
+**Preparer statement, restated for this pass.** No prefix from the preregistered
+band was printed, opened or reasoned about during these corrections. The only
+band values that left the generator are the ones the manifest already records —
+seeds, reason codes and digests — plus the two aggregate counts stated above (23
+of 50 prefixes affected, 45 of 50 digests moved). Every planted case and every
+probe used seed 1 or seeds 9001–9002, and the tally used seeds 1–50; all are
+outside the band and were already recorded as development seeds. No arm ran and
+no provider call was made.
+
+**Gate after the round-3 corrections**, run in order on this branch:
+
+| check | result |
+| --- | --- |
+| `.venv/bin/pytest tests/experiments/test_held_out_prefixes.py -q` | 25 passed in 2.33 s (5 new: the meeting-tick plant, its executed counterpart, the generator's report-tick assertion, the schedule-overrun skip and the unauthorized-roster raise; the unexecuted-step case was renamed, not added) |
+| `.venv/bin/python scripts/validate_task_docs.py` | 390 phase tasks, 390 prompts, 43 work cards |
+| `.venv/bin/python scripts/check_doc_facts.py` | doc facts, front door, ml-program and budgets verified |
+| `.venv/bin/python scripts/verify_ml_evidence.py` (offline, never `--complete`) | checks 60, OK 48, FAIL 0, ABSENT 7, INFO 5 |
+| `.venv/bin/pytest tests/scripts/test_verify_ml_evidence.py -q` | 80 passed in 87.99 s |
+| `bash scripts/check.sh` | exit 0: ruff (498 files formatted), 4 import-linter contracts kept, task docs, `generate_prompts --check` (390 in sync), mypy over 469 source files, **7,198 passed / 20 skipped / 3 xfailed** in 240.21 s, then the frontend leg — lint, three `tsc --noEmit` passes, 514 vitest tests over 19 files, and a clean production build |
