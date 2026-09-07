@@ -75,6 +75,20 @@ decision; fake outcomes do not establish model quality. Live provider use needs
 an explicit budget. Q1 search, Phase C co-evolution resumption and a corpus refit
 remain distinct decisions, with no new research campaign chartered here.
 
+The [post-merge plan](post-merge-plan.md) queues the next seven cards against the
+archived follow-up review, with candidates still OFF: id-level
+[review dispositions](work/followup-review-dispositions.md), the
+[renderer salience repair](work/evidence-renderer-salience.md), the
+[recorded-provenance gaps](work/recorded-provenance-gaps.md),
+[accounts-channel hardening](work/accounts-channel-hardening.md), the
+[fresh-model deduction instrument](work/fresh-deduction-instrument.md), the
+[nonblocking improvements](work/nonblocking-followup-improvements.md), and
+[retiring temporal v1 and evidence v1](work/retire-temporal-evidence-v1.md).
+These are planning documents; none is implemented, and none authorizes a live
+provider call or an experimental adoption. The instrument card's provider,
+token, wall-clock and cost limits remain the owner's outstanding decision, and
+the retirement card is blocked until an adopting record for evidence v2 exists.
+
 Historical `phase-*.md` contracts and their generated `agent_prompts/` exports
 remain unchanged and validated. Use them when resuming that historical work;
 new cards do not generate duplicate prompts. `compute_next_task.py` continues
