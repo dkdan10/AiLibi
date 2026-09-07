@@ -51,6 +51,9 @@ if str(_REPO_ROOT) not in sys.path:
 
 from llm.provider import DEFAULT_MEETING_MODEL  # noqa: E402
 from orchestrator.game import _DEADLINE_DEFAULT_MODEL  # noqa: E402
+from orchestrator.recording_fingerprint import (  # noqa: E402
+    replay_seed_from_filename,
+)
 from orchestrator.replay import (  # noqa: E402
     FSM_DEFAULT_POLICY_ID,
     AbortedMeetingReplayEntry,
@@ -196,10 +199,9 @@ class ManifestRow:
 
 
 def _seed_from_filename(name: str) -> int | None:
-    if not (name.startswith(_FILENAME_PREFIX) and name.endswith(_FILENAME_SUFFIX)):
-        return None
-    core = name[len(_FILENAME_PREFIX) : -len(_FILENAME_SUFFIX)]
-    return int(core) if core.isdigit() else None
+    # One shared recording-filename contract: the manifest catalogues exactly
+    # the files orchestrator.recording_fingerprint hashes and the loader serves.
+    return replay_seed_from_filename(name)
 
 
 def _sample_path(sample_dir: Path, seed: int) -> Path:
@@ -536,14 +538,17 @@ def remove_noncanonical_replays(
       every API/eval consumer.
 
     Both are non-canonical and removed here, so a full refresh leaves exactly one
-    canonical file per seed. A file whose seed core is non-numeric (e.g. a
-    hand-named ``replay-seed-debug.jsonl``) declares no seed and is ignored by
-    ReplayLoader, so it is left untouched. Returns the deleted paths (sorted).
+    canonical file per seed. A file whose seed core this pruner does not
+    recognise (e.g. a hand-named ``replay-seed-debug.jsonl``) is left untouched.
+    Returns the deleted paths (sorted).
     """
 
     canonical = set(canonical_seeds)
     removed: list[Path] = []
     for path in sorted(sample_dir.glob(f"{_FILENAME_PREFIX}*{_FILENAME_SUFFIX}")):
+        # Deliberately NOT widened to ``replay_seed_from_filename``: this is a
+        # delete predicate, and widening what a deleter claims is not a
+        # fingerprint fix. A name this pruner does not recognise stays on disk.
         core = path.name[len(_FILENAME_PREFIX) : -len(_FILENAME_SUFFIX)]
         if not core.isdigit():
             continue  # non-numeric core declares no seed; not ours to remove

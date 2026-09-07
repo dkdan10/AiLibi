@@ -18,6 +18,12 @@ and assumes a bare `python` executable for serving the bundle.
 
 ## Acceptance
 
+- [x] Review correction: one filename pattern decides what a recording is. The
+  source fingerprint, the public completeness check, the loader, the sample
+  verifier and the manifest reader share it, so a recording the loader will
+  serve cannot be invisible to the fingerprint. Every committed set keeps its
+  exact published fingerprint.
+
 - [x] Missing or mismatched actual recording fingerprints suppress obsolete
   enrichment in API and static viewing without hiding valid replay metadata.
 - [x] Fact production and score publication bind to replay, roster, and manifest
@@ -40,6 +46,12 @@ the narrow `ReplayLoader.rubric()` handover with the API owner. Broader portfoli
 presentation and compact tournament results remain separate work.
 
 ## Expected scope
+
+The review correction additionally owns the shared filename contract in
+`orchestrator/recording_fingerprint.py` and its four readers
+(`api/public_results.py`, `api/replay_loader.py`, `scripts/_verify_samples.py`,
+`scripts/_manifest_writer.py`) plus the new
+`tests/orchestrator/test_recording_fingerprint.py`.
 
 A neutral recording-fingerprint helper; rubric producer/extractor stamping;
 rubric freshness and bundle/highlight consumers; focused provenance, API, bundle,
@@ -112,3 +124,85 @@ canonical recording or historical report bytes changed. Logs: `/tmp/ailibi-clean
 Independent review: Coordinator; source and asset identity, stale-score mutations, and clean-source results checked.
 Implemented and verified for cleanup; the owner's final Claude review and merge
 remain pending. This work does not adopt an experimental behavior.
+
+### Shared recording-filename contract (2026-09-07)
+
+Reopened for FU-B-01, the follow-up to pre-existing finding M2-F1 in the
+[owner review](../../audits/review-2026-09-06/REVIEW_REPORT.md).
+
+The earlier verification perturbed recordings whose names the fingerprint
+already matched, so it never asked whether the fingerprint and the loader agree
+on what a recording *is*. They did not. The fingerprint and the public
+completeness check matched a numeric-only `replay-seed-<n>.jsonl`, while
+`api/replay_loader.py` parsed, validated and served the signed spelling
+`replay-seed--1.jsonl` as `headless-seed--1`. A negative-seed recording that the
+loader publishes therefore left the digest unchanged, so a warm public summary
+kept serving the previous view while a cold rebuild refused the same directory.
+`scripts/_verify_samples.py` and `scripts/_manifest_writer.py` carried a third
+numeric-only parser of their own.
+
+`orchestrator/recording_fingerprint.py` now exports the single contract --
+`REPLAY_FILENAME_GLOB`, `REPLAY_FILENAME_PATTERN` and
+`replay_seed_from_filename` -- and the fingerprint, the public completeness
+check, the loader's `_parse_seed_from_filename`, the sample verifier and the
+manifest reader all resolve a name through it. The pattern is deliberately
+permissive rather than strict: the loader already serves the signed spelling, so
+a fingerprint of the published inputs that ignored a file the loader publishes
+would not be a fingerprint of what is published. Narrowing the loader instead
+would have withdrawn recordings already served. Numeric-only names match both
+spellings identically, so both committed sets keep their exact published
+fingerprints, pinned in the new test against the two constants
+`api/public_results.py` maps to a source URL.
+
+One deliberate exception: `remove_noncanonical_replays` in
+`scripts/_manifest_writer.py` stays numeric-only, with a comment naming
+`replay_seed_from_filename` and saying so. Widening a delete predicate is not a
+fingerprint fix. Its docstring no longer claims such files are ignored by
+`ReplayLoader`; it now says a file whose seed core the pruner does not recognise
+is left untouched.
+
+Focused command:
+
+```sh
+.venv/bin/pytest tests/orchestrator/test_recording_fingerprint.py tests/api/test_public_results.py tests/scripts/test_public_recording_provenance.py tests/scripts/test_verify_samples.py tests/scripts/test_manifest_writer.py tests/api/test_view_model.py -q --tb=short
+```
+
+That selection passed 172 tests with one optional skip. `.venv/bin/pytest
+tests/orchestrator/ --collect-only -qq` exits 0 over 30 modules. Ruff check and
+format, strict mypy over the five changed modules and the two changed test
+modules, and `lint-imports` (four contracts kept) all pass; `api/` already
+imported `orchestrator.recording_fingerprint`, so no import contract moved.
+
+Negative control: load an isolated `git show 9b333a76:orchestrator/recording_fingerprint.py`
+copy under the module name `orchestrator.recording_fingerprint`, assert the
+module resolves to the temporary copy, and run the two test files with the
+selector `committed_sets_keep or negative_seed or parsed_the_same_way`. The
+baseline copy carries the two new module-level names appended verbatim so the
+readers still import -- the only difference under test is the fingerprint's own
+numeric-only predicate. That adverse run produced 2 failures and 2 passes: the
+negative-seed fingerprint case fails (the digest is unchanged) and the
+warm-summary case fails with `DID NOT RAISE` (the warm cache serves the stale
+view), while the committed-set fingerprint positive control and the
+parser-agreement case pass unchanged. All four pass with the repair. No tracked
+source was replaced during the negative run; the copies live only under a
+temporary directory.
+
+The two baselines differ in what they can show. The fingerprint module is
+byte-identical at `9b333a76` and at this branch's `fd1f923c`, but the warm
+per-loader summary cache did not exist at `9b333a76` -- it was added at
+`8dd0576c` -- so the stale-warm-view leg is only observable against the current
+`api/public_results.py`. Running the old fingerprint predicate inside the
+current tree exhibits both legs in one control.
+
+Record impact: post-record reader repair only. No replay, roster, manifest,
+prompt, model or report bytes changed, and both committed sets fingerprint to
+the values they already published.
+
+Limitations: this settles which names count as recordings, not whether their
+contents are trustworthy -- a name the shared pattern accepts still has to pass
+the loader's own validation before it is served or counted. Non-canonical
+duplicate pruning stays numeric-only by design, so a signed-spelling duplicate
+is reported by the completeness check rather than deleted. Concurrent writers
+and later filesystem changes remain outside the contract.
+
+<!-- gate paragraph added by the checkpoint commit -->

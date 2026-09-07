@@ -176,7 +176,11 @@ from orchestrator.game import (
     apply_meeting_result,
 )
 from orchestrator.observation_delivery import ingest_event_observations_for_memories
-from orchestrator.recording_fingerprint import recording_fingerprint
+from orchestrator.recording_fingerprint import (
+    REPLAY_FILENAME_GLOB,
+    recording_fingerprint,
+    replay_seed_from_filename,
+)
 from orchestrator.replay import (
     AgentFactoryKind,
     CrewTacticalPolicyStamp,
@@ -307,7 +311,6 @@ _TARGET_REWRITE_LABELS: Final[frozenset[str]] = frozenset(
 _ROSTER_FILENAME: Final[str] = "roster.json"
 
 _GAME_ID_PATTERN: Final[re.Pattern[str]] = re.compile(r"headless-seed-(-?\d+)")
-_FILENAME_PATTERN: Final[re.Pattern[str]] = re.compile(r"replay-seed-(-?\d+)\.jsonl")
 _PLAYER_ID_PATTERN: Final[re.Pattern[str]] = re.compile(r"p-(\d+)")
 
 # Deterministic render palette assigned to players by their ``p-N`` index so
@@ -2646,7 +2649,7 @@ class ReplayLoader:
         if not self._replay_dir.exists():
             return []
         pairs: list[tuple[int, Path]] = []
-        for path in self._replay_dir.glob("replay-seed-*.jsonl"):
+        for path in self._replay_dir.glob(REPLAY_FILENAME_GLOB):
             if not path.is_file():
                 continue
             seed = _parse_seed_from_filename(path.name)
@@ -2730,8 +2733,9 @@ def _parse_seed_from_game_id(game_id: str) -> int | None:
 
 
 def _parse_seed_from_filename(name: str) -> int | None:
-    match = _FILENAME_PATTERN.fullmatch(name)
-    return int(match.group(1)) if match is not None else None
+    # One shared recording-filename contract: the loader serves exactly the
+    # files orchestrator.recording_fingerprint hashes as source bytes.
+    return replay_seed_from_filename(name)
 
 
 def _display_name(agent_id: str) -> str:
@@ -3848,7 +3852,7 @@ def _expected_seedset(replay_dir: Path) -> str | None:
 # ``AILIBI_REPLAY_DIR`` is the PARENT of per-set subdirs (``replays/samples/`` ->
 # ``4p1i/``, ``9p2i/``, + future). ``get_replay_loader`` takes a ``set`` query
 # param resolving ``<parent>/<set>/`` to a per-set loader.
-_REPLAY_GLOB: Final[str] = "replay-seed-*.jsonl"
+_REPLAY_GLOB: Final[str] = REPLAY_FILENAME_GLOB
 
 # The default set served when a request carries no ``set`` query param — the
 # CURATED spectator default (Task 19.9; audits/audit-phase-19-triage.md §7 item 10).

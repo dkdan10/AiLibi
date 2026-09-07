@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import re
 from datetime import date
 from collections import Counter
 from pathlib import Path
@@ -16,7 +15,11 @@ from api.schemas import (
     ReplayView,
     ReportProvenanceGroupView,
 )
-from orchestrator.recording_fingerprint import recording_fingerprint
+from orchestrator.recording_fingerprint import (
+    REPLAY_FILENAME_GLOB,
+    recording_fingerprint,
+    replay_seed_from_filename,
+)
 from orchestrator.replay import (
     AbortedMeetingReplayEntry,
     FailedCallReplayEntry,
@@ -244,8 +247,8 @@ def _build_public_results(loader: ReplayLoader, fingerprint: str) -> PublicResul
     metadata = loader.list_replays()
     source_names = {
         path.name
-        for path in directory.glob("replay-seed-*.jsonl")
-        if re.fullmatch(r"replay-seed-\d+\.jsonl", path.name)
+        for path in directory.glob(REPLAY_FILENAME_GLOB)
+        if replay_seed_from_filename(path.name) is not None
     }
     if source_names != {f"replay-seed-{meta.seed}.jsonl" for meta in metadata}:
         raise ValueError("Public results cannot omit invalid or unverified recordings")

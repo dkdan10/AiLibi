@@ -29,6 +29,10 @@ if str(_REPO_ROOT) not in sys.path:
 from pydantic import ValidationError  # noqa: E402
 
 from api.replay_loader import ReplayLoader, ReplayStateMismatchError  # noqa: E402
+from orchestrator.recording_fingerprint import (  # noqa: E402
+    REPLAY_FILENAME_GLOB,
+    replay_seed_from_filename,
+)
 from orchestrator.replay import ReplayLog  # noqa: E402
 from orchestrator.replay_integrity import ReplayIntegrityError  # noqa: E402
 
@@ -37,8 +41,6 @@ from orchestrator.replay_integrity import ReplayIntegrityError  # noqa: E402
 # bare ``scripts/verify_samples.sh`` still verifies a real set, and pass an
 # explicit dir (e.g. ``replays/samples/9p2i``) to verify another.
 _DEFAULT_SAMPLE_DIR = _REPO_ROOT / "replays" / "samples" / "4p1i"
-_FILENAME_PREFIX = "replay-seed-"
-_FILENAME_SUFFIX = ".jsonl"
 _MANIFEST_NAME = "MANIFEST.md"
 
 
@@ -62,17 +64,16 @@ class VerifyFailure:
 
 
 def _seed_from_filename(name: str) -> int | None:
-    if not (name.startswith(_FILENAME_PREFIX) and name.endswith(_FILENAME_SUFFIX)):
-        return None
-    core = name[len(_FILENAME_PREFIX) : -len(_FILENAME_SUFFIX)]
-    return int(core) if core.isdigit() else None
+    # One shared recording-filename contract: the verifier walks exactly the
+    # files orchestrator.recording_fingerprint hashes and the loader serves.
+    return replay_seed_from_filename(name)
 
 
 def sample_paths(sample_dir: Path) -> list[Path]:
     """Every ``replay-seed-<seed>.jsonl`` in ``sample_dir``, sorted by seed."""
 
     paths: list[tuple[int, Path]] = []
-    for path in sample_dir.glob(f"{_FILENAME_PREFIX}*{_FILENAME_SUFFIX}"):
+    for path in sample_dir.glob(REPLAY_FILENAME_GLOB):
         seed = _seed_from_filename(path.name)
         if seed is not None:
             paths.append((seed, path))

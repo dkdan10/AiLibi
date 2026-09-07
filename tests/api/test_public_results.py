@@ -202,6 +202,23 @@ def test_warm_summary_refuses_same_mtime_corruption_and_recovers(
     assert public.build_public_results(loader) == first
 
 
+def test_warm_summary_refuses_after_a_negative_seed_recording_appears(
+    summary_recording: Path,
+) -> None:
+    """A recording the loader would serve cannot stay invisible to the cache key."""
+
+    loader = ReplayLoader(summary_recording.parent)
+    first = public.build_public_results(loader)
+    appeared = summary_recording.parent / "replay-seed--1.jsonl"
+    appeared.write_bytes(b"not a recording\n")
+    with pytest.raises(ValueError, match="invalid or unverified"):
+        public.build_public_results(loader)
+    with pytest.raises(ValueError, match="invalid or unverified"):
+        public.build_public_results(ReplayLoader(summary_recording.parent))
+    appeared.unlink()
+    assert public.build_public_results(loader) == first
+
+
 def test_warm_summary_refreshes_manifest_provenance(summary_recording: Path) -> None:
     completed_recording = summary_recording
     loader = ReplayLoader(completed_recording.parent)
