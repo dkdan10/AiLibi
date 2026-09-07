@@ -111,7 +111,6 @@ arms are not distinguishable in provenance, and the reconstructed memories are
 not provably the ones the model saw. The death-tick body handle is either left
 as-is and stated in the manifest, or masked identically in both arms.
 
-
 The held-out set is the one frozen by the owner's merge of the
 [freeze card](held-out-prefix-freeze.md)'s pull request: before any arm runs,
 the instrument regenerates it with `experiments.held_out_prefixes.generate()`
