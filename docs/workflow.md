@@ -6,25 +6,31 @@ what follows. [AGENTS.md](../AGENTS.md) carries the standing rules and
 [task index](../tasks/README.md) describes the current outcome and candidate
 work; only work ready to start receives a detailed card.
 
-## Cleanup delivery
+## Branch and delivery
 
-`codex/cleanup` is the working branch for the cleanup backlog. Implement tasks
-there and push verified, focused commits. Keep the original commits from the
-existing repair PRs; their links remain useful review records.
-The existing CI workflow also runs on pushes to this branch.
+Implementation for a card happens on a short-lived branch named
+`work/<card-slug>` and reaches `main` through one pull request per card. CI runs
+on every pull request and on pushes to `main`, so a new working branch needs no
+workflow change. Delete the branch after the merge; its commits stay reachable
+from `main`.
 
-The owner will have Claude review the completed cleanup by commit or PR before
-the final merge into `main`. There are no intermediate releases into `main`
-during this work. Completion of a card means implemented and verified on the
-cleanup branch, still awaiting that final review and merge.
+Planning and contract documents — plans, indexes, ledgers, checkpoints and
+records — may land on `main` directly as `docs:` or `coordination:` commits.
+They change no behavior, and routing them through a review branch would only
+delay the record the next card reads.
 
-A per-task PR is optional for this cleanup. When delivering by commit, the
-card's Results carries the validation evidence, referenced contract/architecture
-sections, material decisions, and limitations that would otherwise go in the PR.
-Include the card path in the commit body so a reviewer can locate the contract
-from the commit and locate its implementation with `git log -- <card-path>`.
-Preserve task boundaries and published history; do not squash unrelated tasks
-or amend published task commits while the cleanup is accumulating.
+The pull request carries what the cleanup's commit-only route put in Results:
+the validation evidence, the referenced contract and architecture sections,
+material decisions, and limitations. Include the card path in the commit body so
+a reviewer can locate the contract from the commit and its implementation with
+`git log -- <card-path>`. Preserve task boundaries and published history: merge
+or fast-forward, never a squash that orphans a commit another document cites,
+and do not amend a published commit.
+
+A merge into `main` also publishes. `.github/workflows/pages.yml` rebuilds the
+demo bundle on every push to `main`, so a viewer, featured-list or
+public-results change is a publication decision as well as a merge; see
+[deployment.md](deployment.md).
 
 ## One card per change
 
@@ -94,9 +100,10 @@ or review reveals unfinished work.
 Keep the next few candidates in the task index and schedule them manually.
 Declare semantic prerequisites in Constraints. Shared-file ownership is a
 scheduling concern: assign one writer per file at a time, with isolated
-worktrees where useful for independent investigation and review; cleanup
-implementation stays on `codex/cleanup`. Independent investigation, test design,
-and review can run alongside implementation. `scripts/compute_next_task.py` remains the
+worktrees where useful for independent investigation and review; each card's
+implementation stays on its own `work/<card-slug>` branch. Independent
+investigation, test design, and review can run alongside implementation.
+`scripts/compute_next_task.py` remains the
 historical phase scheduler; it does not dispatch these cards.
 
 A reviewer should attempt the adverse case and inspect relevant failure paths,
@@ -145,8 +152,8 @@ its original contract and exact file scope.
 
 The pilot has now run through the first parallel recording batch. Its recorded
 results justify keeping canonical cards and manual ownership; they do not
-establish a measured time-saving claim. The owner clarified the final delivery
-policy: a shared cleanup branch and Claude review after all cleanup. During
+establish a measured time-saving claim. The owner's delivery policy for that
+cleanup was a shared branch and Claude review after all cleanup. During
 implementation, the coordinating agent handled necessary manifest attribution
 and explicit historical-loader follow-through without another owner permission
 round. The pilot's independent reviewer found parser defects, now covered by
@@ -158,3 +165,12 @@ The combined recording gate passed 6,292 Python and 440 frontend tests plus
 run; this is a verification measurement, not total development time. Continue
 recording scope follow-through and independently found defects in Results, and
 compare future batches before changing the process again.
+
+**Merged into main (2026-09-07).** The cleanup branch merged into `main` as
+`8161689a` through PR #435 — a merge commit rather than a squash, so the branch
+SHAs the ledger cites stay reachable. Its last recorded full gate ran at
+`93bf7d54`: 7,173 Python tests, 514 frontend tests and 300 canonical
+reconstructions, with 20 optional skips and three expected failures; CI and the
+Pages build then passed on the merge commit itself. The shared-branch policy
+above ended with that cleanup; delivery for new work is the `work/<card-slug>`
+branch and pull request described at the top of this document.
