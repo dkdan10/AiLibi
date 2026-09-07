@@ -299,7 +299,7 @@ against another voter’s maximum, outcome-reveal independence, all three score
 states, the proof caption and media mutation controls. The coordinator’s combined
 gate remains pending.
 
-The correction checkpoint passed `bash scripts/check.sh`: 6,833 Python tests,
+The correction checkpoint at `144fc2e1` passed `bash scripts/check.sh`: 6,833 Python tests,
 20 optional skips, three expected failures, 500 frontend tests, strict typing,
 lint/format, import/document contracts and the production build. All 100
 canonical recordings verified. The [durable correction record](../../audits/review-2026-09-06/correction-record.md)

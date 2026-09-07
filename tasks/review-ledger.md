@@ -180,7 +180,7 @@ The nine required review corrections, output-directory-wide recording
 protection, unresolved usage accounting and source-bound summary caching are
 verified on cleanup. The [correction record](../audits/review-2026-09-06/correction-record.md)
 contains finding-to-card links, independent adverse reviews and verification.
-The full gate passed 6,833 Python and 500 frontend tests, with 20 optional skips
+The full gate at `144fc2e1` passed 6,833 Python and 500 frontend tests, with 20 optional skips
 and three expected failures; 100 canonical recordings and two API/static browser
 journeys passed. Main, historical evidence and adoption decisions are unchanged.
 This checkpoint completes maintenance and the summary-cache slice only. The
@@ -217,3 +217,36 @@ is pending. The fresh-evaluation card completes preregistration only. The
 the still-required provider, token/time/cost authorization, held-out inputs and
 decision rubric. It is not an execution manifest, adoption or merge permission.
 Local and remote main remain `cfde4c8960a865eeaa39a004b2c33d302cbe4733`.
+
+## Follow-up correction checkpoint (2026-09-07)
+
+The owner's follow-up review of `fd1f923c` (archived verbatim as
+[`REVIEW_REPORT_FOLLOWUP.md`](../audits/review-2026-09-06/REVIEW_REPORT_FOLLOWUP.md)
+and its appendix beside the first review) named four merge items and one
+envelope decision. Each is repaired on cleanup with its own adverse control:
+`14249a79` attests unresolved tournament usage instead of stranding the ledger
+(NC4-1; `--attest-unknown-usage SEED`, refused with any cumulative cap, never
+counts unknown usage as zero); `29b7bb4a` writes each sample report in the shape
+`--check` compares (FU-2); `46e74f6d` shares one recording-filename pattern between
+the fingerprint, the public completeness check, the loader, the verifier and the
+manifest reader (FU-B-01; every committed fingerprint unchanged); `24a0fe6a` stamps
+the agent-factory/substrate identity pair on the first tick row and the terminal
+row only (FU-D2; state hashes identical to main on the checked seeds, tick rows
+1..N byte-identical to main's, new recordings about 15% smaller than at
+`fd1f923c`); `ad0f9b5a` binds the single-game cost read-back to the recorded game
+identity (CONC-1). `241a5ca9` commit-qualifies the correction record's gate figures
+to `144fc2e1`, archives the follow-up review, adds the review directory's index
+and correction record to the checked link set, and recomputes the audit
+inventory; `93bf7d54` queues the seven post-merge cards and
+[`tasks/post-merge-plan.md`](post-merge-plan.md) as planning documents only.
+The `6,833 Python tests` paragraphs the earlier checkpoint pasted into seven
+cards now name the commit they describe.
+
+The follow-up correction gate ran on the tree at `93bf7d54`, the last commit before this record; the only edits after that gate are the checkpoint records in the commit that carries this paragraph. `bash scripts/check.sh` passed 7,173 Python tests, 20 optional skips and three expected failures; 514 frontend tests; strict typing on 467 sources; lint/format; four import contracts; document and generated-type checks; and the production build. `bash scripts/verify_samples.sh` verified all 300 canonical recordings (100 under `replays/samples/`, 200 under `replays/ml_corpus/`); all four `scripts/build_sample_report.py --check` runs are consistent; `pytest tests/orchestrator/ --collect-only` collects in a fresh interpreter; the API and static browser journeys passed (13 passed, 3 skipped). No committed recording, report, metric, weight or adoption verdict was rewritten, and every experiment candidate remains default-OFF.
+
+Local `main` and `origin/main` remain
+`cfde4c8960a865eeaa39a004b2c33d302cbe4733`; all rows remain unmerged into main
+at this checkpoint. No live provider was called. The branch-policy documents
+(AGENTS.md, the ci.yml push trigger, tasks/README.md, docs/workflow.md and the
+"unmerged" sentences above) are deliberately left for the merge's own
+coordination record.

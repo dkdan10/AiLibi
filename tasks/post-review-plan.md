@@ -52,7 +52,7 @@ coordinator preserves focused commit boundaries and published identities.
 Only ready work receives a detailed card. No new maps, roles, providers, training,
 historical re-recording or automatic adoption is part of the offline work.
 
-Maintenance corrections are committed through `144fc2e1`. Verified checkpoint cards
+Maintenance corrections are committed through `144fc2e1`. Five follow-up corrections found while re-reviewing that work — an unresolvable-usage attestation route, the sample-report write/compare shape, one shared recording-filename pattern, the once-per-recording identity stamp and the identity-bound single-game read-back — are committed on cleanup as of 2026-09-07 with their own adverse controls and gate; see the [correction record](../audits/review-2026-09-06/correction-record.md) and the [follow-up correction checkpoint](review-ledger.md). The post-merge queue is planned in [tasks/post-merge-plan.md](post-merge-plan.md); outcomes 2–6 below are unchanged and none is authorized to spend. Verified checkpoint cards
 cover [evaluation integrity](work/experimental-evaluation-integrity.md),
 [temporal evidence](work/temporal-evidence-v2.md),
 [public accounts](work/attributed-public-accounts.md), and the

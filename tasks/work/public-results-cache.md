@@ -96,8 +96,8 @@ The full check was running on the machine during capture: hardware timings are
 local diagnostics, not CI targets. Cold reconstruction remains; no HTTP, RSS,
 concurrent throughput or browser performance improvement is claimed.
 
-`bash scripts/check.sh` passed 6,833 Python tests, 20 optional skips, three
-expected failures and 500 frontend tests plus all static/build gates.
+At `144fc2e1`, `bash scripts/check.sh` passed 6,833 Python tests, 20 optional
+skips, three expected failures and 500 frontend tests plus all static/build gates.
 `bash scripts/verify_samples.sh` verified 100 canonical recordings. Existing
 recordings, reports and DTO bytes were not rewritten. Owner review remains
 pending; experimental adoption is not applicable to this reader optimization.
@@ -145,4 +145,4 @@ Limitations: the correction widens what invalidates the cache, not how quickly a
 cold rebuild runs. Concurrent cold requests may still each reconstruct, and
 crash durability and concurrent writers stay outside the contract.
 
-<!-- gate paragraph added by the checkpoint commit -->
+The follow-up correction gate ran on the tree at `93bf7d54`, the last commit before this record; the only edits after that gate are the checkpoint records in the commit that carries this paragraph. `bash scripts/check.sh` passed 7,173 Python tests, 20 optional skips and three expected failures; 514 frontend tests; strict typing on 467 sources; lint/format; four import contracts; document and generated-type checks; and the production build. `bash scripts/verify_samples.sh` verified all 300 canonical recordings (100 under `replays/samples/`, 200 under `replays/ml_corpus/`); all four `scripts/build_sample_report.py --check` runs are consistent; `pytest tests/orchestrator/ --collect-only` collects in a fresh interpreter; the API and static browser journeys passed (13 passed, 3 skipped). No committed recording, report, metric, weight or adoption verdict was rewritten, and every experiment candidate remains default-OFF.
