@@ -113,7 +113,7 @@ Authorized limits, effective since the owner merged this card as #437 on
 | Cost statement | The paragraph quoted below, verbatim |
 | Roster | 4p1i with 3 living voters at meeting open. A change of roster invalidates the token budget above and requires a new authorization |
 | Execution mode | sequential |
-| Held-out preparer | `____` · runner `____` — two different people, filled by the owner. Inspecting a held-out input converts it to development data |
+| Held-out preparer | Ruled 2026-09-07 (mechanical generation from a preregistered band; two separate sessions). The preparer is a fresh session dispatched on [the freeze card](held-out-prefix-freeze.md): it builds a deterministic generator, draws from the band preregistered there, commits the hashes and opens the pull request whose owner merge is the freeze. The runner is a separate session started after that merge, dispatched on [the instrument card](fresh-deduction-instrument.md): it regenerates the set from the frozen band, verifies the committed hashes and opens no prefix before the run. The coordinator dispatches both and runs neither. Inspecting a held-out input converts it to development data; a held-out result that informs a fix marks the set development, and a new band is frozen under a new card |
 | Death-tick body handle | Left as temporal v2 renders it in both arms, stated in the manifest, and asserted by the regex over the rendered prompts and the frozen prefixes |
 
 The cost statement the manifest carries, verbatim:

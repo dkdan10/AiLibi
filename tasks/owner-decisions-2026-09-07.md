@@ -497,7 +497,7 @@ than no block at all:
 6. **It does not settle the held-out preparer.** B.6 is an owner action with the
    same deadline and it is not one of the eight fields.
 
-### B.12 Ruling: merged #437 as proposed (owner, 2026-09-07; merge commit `0f49d8e6`) — the limits in `work/fresh-deduction-authorization.md` are authorized; no run, pilot or retry is, until cards (a) and (b) and the manifest land and the preparer and runner are named
+### B.12 Ruling: merged #437 as proposed (owner, 2026-09-07; merge commit `0f49d8e6`) — the limits in `work/fresh-deduction-authorization.md` are authorized; no run, pilot or retry is, until cards (a) and (b), the manifest and the frozen held-out set land; the preparer and runner roles were ruled later the same day (B.13)
 
 If the card is amended, record the changed fields here so the memo and the card agree:
 
@@ -512,9 +512,30 @@ If the card is amended, record the changed fields here so the memo and the card 
 - **death-tick body handle:** leave as-is and state it / mask equally in both arms — ____
 - **roster shape and living voter count:** ____
 - **execution mode:** sequential / 2 workers — ____
-- **held-out preparer:** ____  · **runner:** ____
+- **held-out preparer:** a fresh preparer session on `work/held-out-prefix-freeze.md` · **runner:** a separate session on `work/fresh-deduction-instrument.md`, started after the freeze (B.13)
 - **Ruling:** ____
 - **Date:** ____
+
+### B.13 Ruling on the two roles (owner, 2026-09-07): mechanical generation, two sessions
+
+Four options were put to the owner for B.6: (1) the owner prepares by hand and
+a session runs, which converts the owner's inspection into development data;
+(2) one agent session prepares and a second runs; (3) one session does both
+with an inspection ban, which no record can prove; (4) a deterministic
+generator draws from a band preregistered before it is written, so no person
+or session chooses or reads a prefix. The owner chose 4 for generation and 2
+for the roles. The preparer is a fresh session dispatched on
+[the freeze card](work/held-out-prefix-freeze.md) alone: it builds the
+generator, draws the first fifty proof-free prefixes from seeds 3000 to 3999
+ascending, commits the band and the per-prefix hashes but no prefix bytes, and
+opens the pull request whose owner merge is the freeze. The runner is a
+separate session started after that merge and dispatched on the instrument
+card; it regenerates the set from the committed generator, refuses to proceed
+on any hash mismatch, and opens no prefix before the run. Neither the owner
+nor the coordinator reads a prefix. If a held-out result later informs a fix,
+the manifest marks the set development and a new band is frozen under a new
+card. The blanks in the authorization card and in the B.12 field list carry
+this ruling.
 
 ## Not assessed here
 

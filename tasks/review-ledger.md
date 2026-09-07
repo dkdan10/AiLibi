@@ -293,8 +293,18 @@ documents land on `main` directly, the `codex/cleanup` push trigger is gone from
 authorized the evaluation's limits — provider, model, per-call caps, token
 budget, deadline, dollar limit and cost statement — and nothing else; no run,
 pilot or retry is authorized until the renderer repair, the provenance gaps and
-the execution manifest exist, and the held-out preparer and runner are still to
-be named. PRs #432, #433 and #434 were closed on the owner's instruction after
+the execution manifest exist. The held-out preparer and runner roles were ruled
+later the same day and are recorded below. PRs #432, #433 and #434 were closed on the owner's instruction after
 each head (`26386914`, `55ed6d9a`, `62ba0162`) was confirmed reachable from
 `main` through #435; they remain review records. Both merges were merge
 commits, and each push to `main` republished the demo bundle.
+
+Later on 2026-09-07 the owner ruled the two held-out roles (decision memo
+B.13): a fresh preparer session, dispatched on
+[the freeze card](work/held-out-prefix-freeze.md), builds a deterministic
+generator, draws the first fifty proof-free prefixes from the band
+preregistered in that card (seeds 3000 to 3999), commits the hashes without the
+prefix bytes, and opens the pull request whose owner merge is the freeze; a
+separate runner session, started after that merge, regenerates the set,
+verifies the hashes and opens no prefix before the run. No run is authorized
+by this ruling.

@@ -35,7 +35,11 @@ original severity labels and refuter votes stay intact.
    held-out design, an offline instrument on the public API, and an execution
    manifest whose owner-authorization fields stay empty.
    [Card](work/fresh-deduction-instrument.md). Planning and offline mechanics
-   only; no live call is authorized by it.
+   only; no live call is authorized by it. Its held-out inputs are frozen by a
+   separate [freeze card](work/held-out-prefix-freeze.md): a preparer session
+   that never runs an arm generates fifty proof-free prefixes from a
+   preregistered seed band and commits their hashes, and the owner's merge of
+   that pull request is the freeze.
 6. **Close the nonblocking improvements.** Operator paths, two untested guards,
    derived doc counts, ledger rows and the concurrency window left open in the
    public-results cache. [Card](work/nonblocking-followup-improvements.md).
@@ -49,7 +53,9 @@ because 2 and 4 both reach `agents/memory/store.py` and its meeting-layer
 consumers, and because a channel hardened before its renderer is repaired is
 measured with its own evidence evicted. Outcome 5 runs in parallel with 3 and 4 —
 its instrument is new code — but its held-out arms may not be exercised until 2
-and 3 have landed, which its Constraints state as preconditions. Outcome 6 fills
+and 3 have landed, which its Constraints state as preconditions. The freeze card
+starts immediately and in parallel, shares no source file with any other card,
+and must be merged before outcome 5's arms run. Outcome 6 fills
 the gaps around the others and takes its `meetings/`, `api/` items after 4 and 3
 release those files. Outcome 7 does not start before an adopting record for
 evidence v2 exists; that record is not part of this plan.
@@ -65,6 +71,7 @@ outcome finishes and hands over before the later one begins.
 | Provenance worker (3) | `eval/report_schema.py`, `eval/replay_walk.py`, `eval/balance_eval.py`, `api/schemas.py`, `api/replay_loader.py`, `api/public_results.py`, `scripts/build_sample_report.py`, `experiments/*_evaluation.py` |
 | Meeting worker (4) | `meetings/public_accounts.py`, `meetings/manager.py`, `agents/strategic/prompts/qwen3_6_27b/`, the two candidate checkpoints under `audits/` |
 | Evaluation worker (5) | the new instrument under `experiments/` and its tests, `audits/deduction-candidate/execution-manifest.md` |
+| Preparer session (5, freeze) | `experiments/held_out_prefixes.py`, `tests/experiments/test_held_out_prefixes.py`, `audits/deduction-candidate/held-out/manifest.json`, and the `docs/artifacts.md` audits row inside its own pull request |
 | Maintenance worker (6) | `scripts/run_tournament.py`, `scripts/_verify_samples.py`, `scripts/check_doc_facts.py`, `orchestrator/recording.py`, `tasks/README.md`, `tasks/review-ledger.md` |
 | Documentation worker (1) | `docs/cleanup-dispositions.md`, `audits/review-2026-09-06/followup-correction-record.md` |
 | Coordinator | `docs/artifacts.md` audits row, commits, cross-card handovers, this plan |
@@ -77,7 +84,7 @@ that total against disk.
 
 | Decision | State |
 | --- | --- |
-| **Spending authorization for outcome 5** — provider, exact model, per-call token cap, total token budget (about 2.5 M projected), wall-clock deadline, dollar limit, and a cost statement even on flat-rate service | **Authorized by the owner's merge of #437 on 2026-09-07 (limits only)** — `featherless` / `Qwen/Qwen3.6-27B`, 2,048 output per turn and 1,024 per vote, 2,400,000 input / 200,000 output tokens hard stop, 4 h of model work within a 6 h elapsed deadline, $0.00 marginal against the flat-rate subscription with its fee stated, 4p1i with 3 living voters, sequential. [The authorization card](work/fresh-deduction-authorization.md) carries the values and the conditions; the manifest copies these values verbatim when the instrument card creates it, and no live call, pilot or retry is authorized until that manifest and the preconditions exist. |
+| **Spending authorization for outcome 5** — provider, exact model, per-call token cap, total token budget (about 2.5 M projected), wall-clock deadline, dollar limit, and a cost statement even on flat-rate service | **Authorized by the owner's merge of #437 on 2026-09-07 (limits only)** — `featherless` / `Qwen/Qwen3.6-27B`, 2,048 output per turn and 1,024 per vote, 2,400,000 input / 200,000 output tokens hard stop, 4 h of model work within a 6 h elapsed deadline, $0.00 marginal against the flat-rate subscription with its fee stated, 4p1i with 3 living voters, sequential. [The authorization card](work/fresh-deduction-authorization.md) carries the values and the conditions; the manifest copies these values verbatim when the instrument card creates it, and no live call, pilot or retry is authorized until that manifest, the preconditions and the frozen held-out set exist. The held-out preparer and runner roles were ruled on 2026-09-07 (memo B.13): a preparer session on [the freeze card](work/held-out-prefix-freeze.md), a separate runner session on the instrument card, and the owner's merge of the freeze pull request as the freeze. |
 | Adopting record for evidence reasoning v2 | Outstanding. Outcome 7 is blocked on it and does not create it. |
 | Adoption of public accounts or attributed testimony, weighing the deliberate loss of the shared vent certificate | Outstanding. Outcome 4 hardens the channel; hardening is not evidence of better play. |
 | The death-tick body handle on the default path — leave as-is and state it, or mask it equally in both arms | **Ruled with the authorization card (#437, 2026-09-07):** left as temporal v2 renders it in both arms, stated in the manifest, and asserted by a regex over the rendered prompts and the frozen prefixes (`body-p-\d+-\d+` absent); the prefix generator is bound to the same temporal version. Outcome 5's manifest records the outcome either way. |

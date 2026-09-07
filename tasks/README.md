@@ -76,19 +76,23 @@ decision; fake outcomes do not establish model quality. Live provider use needs
 an explicit budget. Q1 search, Phase C co-evolution resumption and a corpus refit
 remain distinct decisions, with no new research campaign chartered here.
 
-The [post-merge plan](post-merge-plan.md) queues the next seven cards against the
+The [post-merge plan](post-merge-plan.md) queues eight cards against the
 archived follow-up review, with candidates still OFF: id-level
 [review dispositions](work/followup-review-dispositions.md), the
 [renderer salience repair](work/evidence-renderer-salience.md), the
 [recorded-provenance gaps](work/recorded-provenance-gaps.md),
 [accounts-channel hardening](work/accounts-channel-hardening.md), the
 [fresh-model deduction instrument](work/fresh-deduction-instrument.md), the
-[nonblocking improvements](work/nonblocking-followup-improvements.md), and
+[held-out prefix freeze](work/held-out-prefix-freeze.md) that prepares its
+inputs, the [nonblocking improvements](work/nonblocking-followup-improvements.md), and
 [retiring temporal v1 and evidence v1](work/retire-temporal-evidence-v1.md).
 These are planning documents; none is implemented, and none authorizes a live
-provider call or an experimental adoption. The instrument card's provider,
-token, wall-clock and cost limits remain the owner's outstanding decision, and
-the retirement card is blocked until an adopting record for evidence v2 exists.
+provider call or an experimental adoption. The instrument's provider, token,
+wall-clock and cost limits were authorized by the owner's merge of #437 on
+2026-09-07 through [the authorization card](work/fresh-deduction-authorization.md);
+no run is authorized until the renderer and provenance cards, the execution
+manifest and the held-out freeze land. The retirement card is blocked until an
+adopting record for evidence v2 exists.
 
 Historical `phase-*.md` contracts and their generated `agent_prompts/` exports
 remain unchanged and validated. Use them when resuming that historical work;
