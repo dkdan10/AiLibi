@@ -80,12 +80,14 @@ class EvidenceContextRow(BaseModel):
 def account_uncertainty_notice_line(withheld: int) -> str:
     """State how many claim subjects the rendered caveat block leaves out.
 
-    The one copy of this sentence. It closes a caveat list the reader can see, so
-    the prompt renderer recomputes it after the token budget has chosen the rows
-    that ship: the number a model reads then counts every subject missing from
-    the rendered list -- the ones :data:`MAX_ACCOUNT_UNCERTAINTY_SUBJECTS`
-    dropped and the ones the budget shed -- rather than only the ones the bound
-    dropped.
+    The one copy of this sentence, so no two surfaces can word it differently.
+    Each surface states what THAT surface withholds, which is why the number
+    differs between them: this unbudgeted list sheds nothing, so its count is the
+    per-subject bound's alone, while the prompt renderer recomputes it after the
+    token budget has chosen the rows that ship, counting every subject missing
+    from those bytes -- the ones :data:`MAX_ACCOUNT_UNCERTAINTY_SUBJECTS` dropped
+    AND the ones the budget shed, up to and including a render that keeps no
+    caveat at all and carries this sentence alone.
     """
 
     if withheld < 1:
@@ -352,7 +354,9 @@ def v2_evidence_context_rows(
     prompt renderer sheds caveats under the token budget, so it recomputes the
     sentence against the rows that ship (:func:`account_uncertainty_notice_line`
     is the one copy of it, and :func:`~agents.memory.store._select_within_budget`
-    reserves its cost). A subject named by several distinct claims states that
+    reserves its cost before selecting any caveat so it always fits, which is why
+    a prompt can carry the sentence with no caveats under it while this surface
+    never does). A subject named by several distinct claims states that
     count rather than one arbitrary claim, so collapsing hides no speaker.
     """
     rows = memory.episodic.recent(since_tick=0)

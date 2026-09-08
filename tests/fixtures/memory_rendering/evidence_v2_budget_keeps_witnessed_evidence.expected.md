@@ -39,6 +39,7 @@ Time guide: your route lists locations at the START of each tick, before actions
 - [obs p-1:13:0] [during tick 13, your observation 0] You moved from STORAGE to ENGINEERING. You were in STORAGE immediately before this event.
 - [obs p-1:13:1] [during tick 13, your observation 1] You attempted prime_shields in ENGINEERING: the attempt was rejected; no progress or completion occurred. You were in ENGINEERING immediately before this event.
 - [obs p-1:12:0] [during tick 12, your observation 0] You moved from ENGINEERING to STORAGE. You were in ENGINEERING immediately before this event.
+- Account uncertainty: 7 further subjects not shown.
 
 ## Your current beliefs:
 - p-3: suspicion 0.40 (last seen in WEST_HALL at tick 2)

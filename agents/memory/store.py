@@ -132,9 +132,11 @@ _SALIENCE_EVIDENCE_TRAVEL_CONTRADICTED: Final[int] = 83
 _SALIENCE_EVIDENCE_TRAVEL: Final[int] = 45
 # The withheld-subjects notice, one row at most, minted by
 # ``_select_within_budget`` once the budget is spent so its number counts what
-# the render actually left out. This band places it one step above the caveats it
-# closes; the budget cannot shed it out from under them, because keeping a caveat
-# reserves it.
+# the render actually left out. This band only decides WHERE the minted line is
+# inserted, one step above the caveats it closes. Whether it renders is not a
+# ranking question: the budget cannot shed it at all, because its cost is
+# reserved from the first row selected and stays reserved until every subject is
+# shown, so a render withholding subjects always says so -- caveats or none.
 _SALIENCE_EVIDENCE_ACCOUNT_NOTICE: Final[int] = 16
 # "Route feasibility alone cannot establish ..." -- a caveat about a claim, with
 # no placement of its own. Bounded per subject in ``evidence_context`` and ranked
@@ -170,6 +172,20 @@ _EVENT_COOLDOWN_STATUS: Final[str] = "cooldown_status"
 _EVENT_MEETING_BOUNDARY: Final[str] = "meeting_boundary"
 
 _ACTIVE_PLAYER_ACTIONS: Final[frozenset[str]] = frozenset({"report", "task"})
+
+
+class UnreservedAccountNoticeError(RuntimeError):
+    """The withheld-subjects notice did not fit the budget left for it.
+
+    :func:`_select_within_budget` reserves that sentence's cost from the first
+    row it accepts and keeps it reserved until every account-uncertainty subject
+    is shown, so a render that withholds a subject can always state it. Reaching
+    this error means the reserve no longer covers the line the selection went on
+    to mint, which would ship a prompt over its token budget. It is a wiring bug
+    in the reserve, not a possible input, so it fails loud (AGENTS.md "no silent
+    fallbacks") rather than trimming the render or dropping the notice -- and it
+    is an explicit raise rather than an assertion, which ``python -O`` strips.
+    """
 
 
 @dataclass
@@ -475,11 +491,13 @@ def render_for_prompt(
     account-uncertainty caveat ranks last, below the observer's own routine rows.
     A caveat's volume is chosen by the speaker who made the claims, so it can no
     longer displace first-hand evidence; the caveat block is additionally bounded
-    per subject in :mod:`agents.memory.evidence_context`, and a caveat list this
-    render truncates -- by that bound, by the token budget, or by both -- closes
-    with one line counting the subjects missing from THESE bytes, whose cost
-    :func:`_select_within_budget` reserves as soon as the first caveat is kept.
-    Evidence v1 keeps its single
+    per subject in :mod:`agents.memory.evidence_context`, and whenever this
+    render shows fewer caveat subjects than the block covers -- because of that
+    bound, because the token budget shed caveat rows, or both, up to and
+    including a render that keeps no caveat at all -- it carries one line
+    counting the subjects missing from THESE bytes, whose cost
+    :func:`_select_within_budget` reserves before it selects any caveat so the
+    line always fits. Evidence v1 keeps its single
     :data:`_SALIENCE_EVIDENCE_V1_CONTEXT` band and lever-OFF renders no context
     line at all, so both arms stay byte-identical to what they shipped.
 
@@ -2851,15 +2869,28 @@ def _select_within_budget(
     why the notice that states it is minted here instead of being ranked in with
     the candidates, where its number would describe the pre-budget list.
 
-    The invariant is that a PARTIAL caveat list never passes for a whole one:
-    once a caveat is kept, the notice its list will need is reserved, exactly as
-    :func:`_select_trail_within_budget` reserves the route's truncation line. The
-    reserve is charged only while accepting a caveat, so it competes with further
-    caveats and never with the evidence above them -- a speaker's claim volume
-    must not cost a witnessed row. A budget that keeps NO caveat renders none of
-    this class and says nothing about it, like every other class the budget
-    sheds: the sentence marks the end of a list the reader can see, and standing
-    alone it would name a quantity with nothing to count against.
+    The invariant is that withholding a subject is never silent: whenever this
+    render shows fewer than ``account_uncertainty_subjects`` caveats -- because
+    the per-subject bound dropped subjects, because the budget shed caveat rows,
+    or because it shed the whole class -- the notice saying how many are missing
+    is emitted. Its cost is therefore reserved BEFORE any caveat is selected,
+    from the very first row, and stays reserved until every subject is shown, so
+    the sentence always fits. The reserve is exact rather than pessimistic: it
+    is recomputed against the count that would be withheld if selection stopped
+    at each row, which is the count the minted line ends up stating.
+
+    The reserve costs at most one row, only a render that goes on to carry the
+    notice can pay it, and only when the budget happens to cut inside the
+    reserved margin: while any subject is still unshown the notice is due, and
+    once the last subject is shown the reserve drops to nothing. What it can cost
+    is the LOWEST-ranked row the budget would otherwise have reached, which under
+    a tight enough budget is a witnessed row -- a speaker's claim volume buying a
+    line from first-hand evidence. That trade is deliberate: a render that hides
+    speaker-supplied subjects must say so, and hiding them silently is the worse
+    failure because the reader cannot know they existed. Its price is measured
+    both ways by
+    ``test_the_production_budget_keeps_the_witnessed_evidence_beside_the_notice``
+    -- nothing at the production budget, the witnessed vent at 290 tokens.
     """
 
     kept: list[_Observation] = []
@@ -2869,25 +2900,33 @@ def _select_within_budget(
         line_with_separator = "\n- " + obs.line
         cost = _estimate_tokens(line_with_separator)
         shown_after = shown + (1 if obs.account_uncertainty_subject else 0)
-        reserved = (
-            _account_notice_cost(account_uncertainty_subjects - shown_after)
-            if shown_after
-            else 0
-        )
+        reserved = _account_notice_cost(account_uncertainty_subjects - shown_after)
         if cost + reserved > remaining:
             break
         kept.append(obs)
         remaining -= cost
         shown = shown_after
     withheld = account_uncertainty_subjects - shown
-    # Accepting a caveat required its cost PLUS the notice due once it was in, so
-    # a kept caveat leaves that notice affordable and the assertion holds by
-    # construction rather than by luck.
-    if shown < 1 or withheld < 1:
+    if withheld < 1:
         return kept
-    assert _account_notice_cost(withheld) <= remaining, (
-        "the withheld-subjects notice was not reserved while caveats were selected"
-    )
+    notice_cost = _account_notice_cost(withheld)
+    if not kept:
+        # No row was accepted, so no row reserved the notice's place. Nothing is
+        # owed to a list that is not there; the sentence still renders when the
+        # budget holds it alone, and is dropped when even that does not fit.
+        if notice_cost > remaining:
+            return kept
+        return _with_account_notice(kept, withheld=withheld)
+    # Every accepted row was accepted only with the notice due after it already
+    # reserved, and the last one reserved exactly ``notice_cost``, so this holds
+    # by construction. It is checked rather than assumed because a future edit to
+    # the reserve above would otherwise ship a notice the budget cannot pay for.
+    if notice_cost > remaining:
+        raise UnreservedAccountNoticeError(
+            "the withheld-subjects notice was not reserved while rows were "
+            f"selected: {notice_cost} tokens due for {withheld} withheld "
+            f"subjects, {remaining} left of a {budget}-token budget"
+        )
     return _with_account_notice(kept, withheld=withheld)
 
 
@@ -2906,6 +2945,7 @@ __all__ = [
     "RoomId",
     "SELF_LOCATION_TRAIL_MAX_SPANS",
     "TaskId",
+    "UnreservedAccountNoticeError",
     "WorkingMemory",
     "absorb_meeting_evidence",
     "absorb_reported_testimony",
