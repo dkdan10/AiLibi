@@ -6,15 +6,19 @@
 
 Under the production prompt budget the evidence-v2 render stops shedding
 witnessed evidence for the observer's own routine. A witnessed vent (band 85)
-now outranks everything the renderer emits except the observer's own kill (96),
-and a sighting of another player (50) outranks the observer's own transitions
-and task attempts (20) and the account-uncertainty caveats (15), so neither the
-observer's own movement log nor a speaker's claim volume can shed them. A
-sighting does NOT outrank reported testimony, which stays at 60 and is not this
-card's to move: a large enough claim volume still evicts sightings, and the
-limitation below carries the probe. The caveat block is bounded per subject, and
-a render that withholds any caveat subject — by that bound, by the token budget,
-or by shedding the class outright — always states how many it withheld.
+now outranks every derived evidence-context class, every sighting, all of the
+observer's own routine and the reported testimony at 60; the only bands left
+above it are the three first-hand ones this card does not move — a body
+discovery (100), the observer's own kill (96) and a witnessed kill (95). A
+sighting of another player (50) outranks the observer's own transitions and task
+attempts (20), the non-contesting walking verdicts derived from it (45) and the
+account-uncertainty caveats (15), so the observer's own movement log can no
+longer shed it. A sighting does NOT outrank reported testimony, which stays at
+60 and is not this card's to move: a large enough claim volume still evicts
+sightings, and the limitation below carries the probe. The caveat block is
+bounded per subject, and a render that withholds any caveat subject — by that
+bound, by the token budget, or by shedding the class outright — always states
+how many it withheld.
 Lever-OFF and evidence-v1 rendered bytes stay identical.
 
 ## Evidence
@@ -42,6 +46,31 @@ the pin, not the discovery.
 
 ## Acceptance
 
+- [x] Review correction (closeout round 2): the Outcome rewritten in closeout
+  round 1 said a witnessed vent "outranks everything the renderer emits except
+  the observer's own kill (96)". Two further bands the v2 renderer emits sit
+  above it — a body discovery at 100 and a witnessed kill at 95 — and at 200
+  tokens both render while the vent is shed. The Outcome now names all three,
+  and the two the card had not pinned anywhere are gated by
+  `test_only_the_body_and_the_witnessed_kill_outrank_the_witnessed_vent`, which
+  fails when either band is demoted below the vent.
+- [x] Review correction (closeout round 2): the same sentence said neither the
+  observer's own movement log "nor a speaker's claim volume" can shed a
+  sighting, contradicting its own next sentence and the card's committed probe,
+  where 42 claims evict the p-3 sighting at 1,500 tokens through reported
+  testimony at 60. The claim-volume half is deleted; what stays is what the
+  ranking enforces — a sighting outranks the observer's own routine (20), the
+  non-contesting walking verdicts (45) and the caveats (15) — with the testimony
+  ceiling kept as the limitation it already was. Reproduced by the probe quoted
+  in "Review corrections, closeout round 1".
+- [x] Review correction (closeout round 2): the Results opening paragraph named
+  five of the branch's twelve commits, said the branch was "not re-reviewed"
+  after two completed review rounds, and pointed a reader at "sections dated
+  before 2026-09-08" — a discriminator selecting nothing, because every review
+  subsection is dated 2026-09-08. The ledger now runs through this commit, the
+  delivery state names both completed rounds and the commits they were run on,
+  and the pointer names all three dated subsections. Checked against
+  `git log --oneline 201849fc..HEAD`.
 - [x] Review correction (closeout round 1): acceptance item 3 held only on the
   unbudgeted `evidence_context_lines` surface — at the default 1,500-token
   budget the committed fixture withheld all seven of its subjects and the
@@ -64,7 +93,11 @@ the pin, not the discovery.
   the ranks it enforces, the reported-testimony ceiling is a limitation with a
   reproduced probe, every stale `store.py` line reference in the round-1
   subsection is corrected to this head, and the round-0 planted-failure counts
-  carry the head's values beside the commit they were measured on.
+  carry the head's values beside the commit they were measured on. *Amended
+  2026-09-08, closeout round 2: the rewritten sentence was still wider than the
+  code — it named one band above the vent where three sit — and it contradicted
+  itself on sightings. Both are corrected by the first two items in this list;
+  the stale-anchor and round-0-count halves of this item stand as written.*
 - [x] Review correction: the demotion's stated justification was false. The
   `## Where you were:` route is capped at `SELF_LOCATION_TRAIL_MAX_SPANS` = 12
   spans and charged against the same budget, not "rendered in full and
@@ -166,16 +199,37 @@ uv run python scripts/build_sample_report.py --sample-dir replays/ml_corpus/9p2i
 
 ## Results
 
-Implemented on `work/evidence-renderer-salience` from `201849fc`: `7bcc79ed`
-(the renderer), `af150ce0` (the held-out restamp), `0c5355a3` (a format fix the
-gate asked for), then round 1 of review — `56d3e5fd` (the corrections and their
-gates) and `73b7f53f` (the second restamp and the artifacts row). Delivery
-state: round-1 findings answered and verified locally; not re-reviewed, not
-owner reviewed, not merged. Adoption: not applicable — evidence reasoning v2
-stays default-OFF and this repairs a candidate renderer rather than proposing
-one. Sections below dated before 2026-09-08 record the first round as it stood;
-where a statement there was found false it is marked superseded in place and
-corrected in "Review corrections, round 1 (2026-09-08)".
+Implemented on `work/evidence-renderer-salience` from `201849fc` in twelve
+commits before this one (`git log --oneline 201849fc..HEAD` lists them, this
+commit last). Round 0:
+`7bcc79ed` (the renderer), `af150ce0` (the first held-out restamp), `0c5355a3`
+(a format fix the gate asked for) and `9cacd3fc` (the card's first close) — the
+commit all five round-1 findings and both Codex comments were raised on. Round 1
+of review: `56d3e5fd` (the corrections and their gates), `73b7f53f` (the second
+restamp and the `audits/` row) and `bd6f05dc` (the round-1 record in this card).
+Closeout round 1: `00ac7fbb` (the unconditional notice reserve, its gates and
+the regenerated golden), `0815333d` (the third restamp and both artifacts rows),
+`59df8a9e` (the closeout record), `86e133e3` (the round-1 text that record
+reverses, superseded in place) and `864b18a1` (naming the commit the closeout
+gate was re-run on). Closeout round 2 is the single commit this paragraph ships
+with, carrying both the ranking gate and this record, so that every number below
+was measured on exactly the bytes it commits.
+
+Delivery state: closeout round-2 findings answered and verified locally. Round 1
+was re-reviewed on `bd6f05dc` — three verifiers, no blocking findings — and
+closeout round 1 was re-reviewed on `864b18a1`, which returned three blocking
+findings (two lenses on the same rewritten Outcome sentence, plus this
+paragraph's own staleness), all answered below. Not owner reviewed, not merged.
+Adoption: not applicable — evidence reasoning v2 stays default-OFF and this
+repairs a candidate renderer rather than proposing one.
+
+Where a statement in an earlier section was later found false it keeps its text,
+is marked superseded or corrected in place with the date, and the correction
+lives in one of the three dated subsections that close this Results: "Review
+corrections, round 1 (2026-09-08)", "Review corrections, closeout round 1
+(2026-09-08)" and "Review corrections, closeout round 2 (2026-09-08)". All three
+carry the same date; the round each belongs to is in its heading, not in the
+date.
 
 Architecture and contract sections this follows: `docs/architecture.md`
 "Layering" (`agents/` reasons from typed memory and never imports `engine/`;
@@ -234,7 +288,12 @@ revert below; the "after" column is the committed
    verdicts 45, own transitions and task attempts 20, the bound notice 16 and the
    account caveat 15. An exhaustive `match` on a `Literal` kind means a new class
    is a type error rather than an unranked line; the mapping is a function, not a
-   module-level table, because AGENTS forbids module-level mutable state.
+   module-level table, because AGENTS forbids module-level mutable state. These
+   are the bands this card sets. Above them the ladder keeps three first-hand
+   bands this card does not touch — a body discovery at 100, the observer's own
+   kill at 96 and a witnessed kill at 95 — so the witnessed vent leads everything
+   except those three; the whole ladder is printed by the command in "Review
+   corrections, closeout round 2 (2026-09-08)".
 2. **Own routine below every sighting.** The observer's route is already
    rendered in full by the unbudgeted `## Where you were:` block, so an
    own-transition row duplicates something the prompt states anyway.
@@ -338,11 +397,15 @@ run.
 Each new gate was shown to fail on the defect it claims to detect, by editing
 the source, running, and restoring. The counts below were measured on
 `0c5355a3` and reproduce there; later rounds added gates to the same `-k`
-selections, so the same commands give larger counts at the head. Re-run at the
-head they give `7 failed, 15 passed, 116 deselected` (1), `3 failed, 8 passed,
-127 deselected` (2) and `1 failed, 10 passed, 127 deselected` (3) — every
-originally named test still red, plus the round-1 and closeout gates. The
-head-side detail is in "Review corrections, closeout round 1 (2026-09-08)".
+selections, so the same commands give larger counts at the head. Re-run at
+`864b18a1` they gave `7 failed, 15 passed, 116 deselected` (1), `3 failed, 8
+passed, 127 deselected` (2) and `1 failed, 10 passed, 127 deselected` (3); at
+this head, where closeout round 2 adds one more case to both selections, they
+give `8 failed, 15 passed, 116 deselected` (1), `3 failed, 9 passed, 127
+deselected` (2) and `1 failed, 11 passed, 127 deselected` (3) — every originally
+named test still red, plus the round-1 and closeout gates. The head-side detail
+is in "Review corrections, closeout round 1 (2026-09-08)" and, for the deltas
+this round adds, in "Review corrections, closeout round 2 (2026-09-08)".
 
 1. **The ordering.** Setting the six new v2 constants back to 90 in
    `agents/memory/store.py` (`_SALIENCE_OWN_ROUTINE`, `…_DEATH`,
@@ -993,7 +1056,11 @@ No live provider call of any kind was made in this round: the fake provider is
 the only one these paths construct.
 
 **Planted failures (closeout round 1).** Each edit was applied to the source,
-run, and restored; the working tree is clean of all of them.
+run, and restored; the working tree is clean of all of them. The counts are the
+tree at `0815333d`. Closeout round 2 adds one case to both `-k` selections, so
+each of the seven gains exactly one pass or one fail at this head; the
+re-measured values are listed in "Review corrections, closeout round 2
+(2026-09-08)".
 
 1. **The conditional reserve** (the round-1 behaviour this round reverses):
    restoring `if shown_after else 0` around the reserve gives `4 failed, 18
@@ -1085,3 +1152,241 @@ is untouched.
 - Every number in this subsection was produced by a command run on the committed
   tree at `00ac7fbb` or `0815333d`; the two commands worth re-running are quoted
   above in full.
+
+### Review corrections, closeout round 2 (2026-09-08)
+
+The verification round on `864b18a1` returned three blocking findings from two
+lenses: two on the Outcome sentence closeout round 1 had just rewritten, one on
+the opening paragraph of this Results. All three are documentation defects — no
+shipped behaviour was found wrong this round — so the only source change is one
+new gate, which turns the corrected headline into an assertion on rendered rows
+instead of a claim about eighteen constants.
+
+**Findings 1 and 2 (two lenses, one sentence) — the rewritten ranking claim was
+false.** Closeout round 1 replaced one over-wide Outcome with another: "A
+witnessed vent (band 85) now outranks everything the renderer emits except the
+observer's own kill (96)". Three bands sit above 85, and the v2 path emits all
+three. The ladder, read from the constants the renderer sorts by:
+
+```sh
+uv run python -c "
+import agents.memory.store as s
+names = [n for n in dir(s) if n.startswith('_SALIENCE_') and n != '_SALIENCE_EVIDENCE_V1_CONTEXT']
+bands = sorted(((getattr(s, n), n) for n in names), reverse=True)
+print(' '.join(f'{v}:{n[10:].lower()}' for v, n in bands))
+print('above the vent:', [(v, n) for v, n in bands if v > s._SALIENCE_VENT_WITNESSED])
+"
+```
+
+→ `100:found_body 96:own_kill 95:kill_witnessed 85:vent_witnessed
+84:evidence_death 83:evidence_travel_contradicted 65:sabotage_heard
+60:reported_testimony 55:saw_player_active 52:saw_player_move 50:saw_player
+48:transition 45:evidence_travel 30:completed_task 20:own_routine
+16:evidence_account_notice 15:evidence_account_uncertainty 10:cooldown_status`,
+and `above the vent: [(100, '_SALIENCE_FOUND_BODY'), (96,
+'_SALIENCE_OWN_KILL'), (95, '_SALIENCE_KILL_WITNESSED')]` — three bands, not
+one. The same three lead in the render, on a crewmate memory carrying a body
+discovery, a witnessed kill of another player and the fixture's witnessed vent:
+
+```sh
+uv run python -c "
+import importlib.util as u
+from agents.memory.episodic import EpisodicEvent
+from agents.memory.store import render_for_prompt
+spec = u.spec_from_file_location('t', 'tests/agents/test_memory_rendering.py')
+t = u.module_from_spec(spec); spec.loader.exec_module(t)
+memory = t._v2_memory()
+memory.episodic.append(t._saw_body_event(tick=6, body_id='b-2', victim_id='p-2', room='ADMIN'))
+memory.episodic.append(EpisodicEvent(tick=6, type='saw_player', payload={'player_id': 'p-4', 'room': 'MEDBAY', 'action': 'kill', 'observation_phase': 'event', 'observation_order': 4, 'observer_room': 'MEDBAY', 'observer_in_vent': False}, provenance='observed'))
+for budget in (200, 220, 1500):
+    rows = t._observation_rows(render_for_prompt(memory, token_budget=budget))
+    print('budget', budget, 'rows', len(rows),
+          'body', [i for i, r in enumerate(rows) if \"discovered p-2's body\" in r],
+          'kill', [i for i, r in enumerate(rows) if 'You witnessed p-4 kill' in r],
+          'vent', [i for i, r in enumerate(rows) if t._VENT_LINE_FRAGMENT in r])
+"
+```
+
+→ `budget 200 rows 2 body [0] kill [1] vent []`, `budget 220 rows 3 body [0]
+kill [1] vent [2]`, `budget 1500 rows 14 body [0] kill [1] vent [2]`. A budget
+with room for two observations spends both above the vent and sheds it; every
+wider budget puts the vent third, behind exactly those two. The card already
+contradicted its own sentence in two places — the composition table lists a
+surviving body-discovery row, and
+`test_the_production_budget_keeps_the_witnessed_evidence_beside_the_notice`
+asserts `You discovered p-2's body in ADMIN.` is the first row at 290 tokens —
+so the body half was pinned and only the prose was wrong about it. The witnessed
+kill was pinned nowhere, which is how the sentence survived two review rounds.
+
+Fixed by stating what the ladder enforces. The Outcome now says the vent
+outranks every derived evidence-context class, every sighting, all of the
+observer's own routine and the reported testimony at 60, and is itself outranked
+only by the body discovery (100), the observer's own kill (96) and the witnessed
+kill (95) — three bands this card does not move. Decision 1 gained the same
+clause, because it lists only the bands this card sets and a reader could take
+that list for the whole ladder. The claim is now enforced by
+`test_only_the_body_and_the_witnessed_kill_outrank_the_witnessed_vent`, which
+asserts the 200-token and the production render of the probe above — the two
+that carry the claim, one where the vent is shed under both bands and one where
+it sits directly behind them; the own-kill band keeps the gate it
+already had (`test_an_own_kill_row_outranks_every_re_ranked_evidence_line`). The
+gate's memory carries no spoken claim, so it does not depend on the caveat block
+or its reserve: of the seven plants re-run below, only the two that promote a
+band above the vent redden it.
+
+The second half of finding 2 was the same sentence contradicting itself: "so
+neither the observer's own movement log nor a speaker's claim volume can shed
+them", two lines above "a large enough claim volume still evicts sightings". The
+claim-volume half is deleted rather than qualified — it is false, and the
+sentence after it was already the true one. What the ranking does enforce for a
+sighting at 50 is stated in its place: it outranks the observer's own transitions
+and task attempts (20), the non-contesting walking verdicts derived from it (45)
+and the account-uncertainty caveats (15). The eviction route is
+`_SALIENCE_REPORTED_TESTIMONY` = 60, and the probe recorded under finding C of
+the previous subsection re-runs unchanged at this head: `budget 1500 rows 41
+vent 1 p-3 sighting 0 contradicted 9 testimony 30`.
+
+**Finding 3 — the Results ledger was a round behind and read as current.** Its
+opening paragraph named five of the branch's twelve commits, said "round-1
+findings answered … not re-reviewed" after two completed review rounds, and
+pointed a reader at "sections below dated before 2026-09-08" — a discriminator
+that selects nothing, because all three review subsections carry that same date.
+Nothing in the paragraph was marked as history, so it read as the head's state.
+Rewritten: the ledger now runs through this round, grouped by the round each
+commit belongs to, and names `9cacd3fc` — the commit the five round-1 findings
+and both Codex comments were raised on, which the old ledger omitted entirely;
+the delivery state names both completed re-reviews and the commits they ran on
+(`bd6f05dc`, three verifiers, no blocking findings; `864b18a1`, three blocking
+findings, answered here); and the pointer names all three dated subsections and
+says outright that the shared date does not discriminate between them. Checked
+against `git log --oneline 201849fc..HEAD`, which lists this commit and the
+twelve before it.
+
+**Codex review.** Both comments re-fetched at `864b18a1`
+(`gh api repos/dkdan10/AiLibi/pulls/440/comments`): still exactly two, both with
+`original_commit_id` `9cacd3fc`, and the only review on the PR is still the
+single `COMMENTED` one on that commit — `00ac7fbb`, `0815333d`, `59df8a9e`,
+`86e133e3` and `864b18a1` triggered no new review. GitHub has re-anchored P1's
+`commit_id` to `864b18a1` because the manifest line it sits on still exists; its
+text is unchanged from what was written against `9cacd3fc`.
+
+- **P1, "Preserve the commit named by the restamp record" — REFUTED again at
+  this head, no change.** Re-run here: `git cat-file -t 029aaab` →
+  `fatal: Not a valid object name 029aaab`, so the sibling commit Codex describes
+  is not an object in this repository; `git rev-parse 7bcc79ed^` → `201849fc`;
+  and `git merge-base --is-ancestor <commit> HEAD` exits 0 for each of the three
+  commits `dependency_restamps` names (`7bcc79ed`, `56d3e5fd`, `00ac7fbb`). The
+  branch is one linear chain. Under the post-#436 delivery policy (merge commit
+  or fast-forward, never squash, never amend) all three stay retrievable in main.
+- **P2, "Keep the truncation notice through the prompt budget" — VALID on
+  `9cacd3fc`, fully addressed.** Its count half and its "assert on
+  `render_for_prompt`, not on `evidence_context_lines`" half were repaired by
+  `56d3e5fd`; its remaining recommendation, that the notice always ship, was
+  declined in round 1 and implemented by `00ac7fbb`. Nothing this round changes
+  it, and the committed golden still carries
+  `- Account uncertainty: 7 further subjects not shown.` at the production
+  budget.
+
+**Nonblocking items left standing.** None were raised this round. The two
+carried from closeout round 1 stand with their reasons: a render of 120-220
+tokens on the committed fixture carries no observation block and therefore no
+notice, because nothing was selected to reserve it from; and the `audits/`
+inventory row is contended with `origin/work/followup-review-dispositions`, so
+whichever card merges second must recompute that row from its own tree rather
+than take either side. This round touches neither row.
+
+**Verification (closeout round 2).** Every command below was run on the working
+tree this commit records byte for byte — the new gate plus this card's final
+Markdown — with exit codes captured directly, never through a pipe.
+`bash scripts/check.sh` was run repeatedly across this round's edits — first
+before this subsection was written, last on the bytes this commit records — with
+identical counts every time. Only Markdown changed between those runs, so only
+wall time moved (222 s to 429 s on a shared machine); the durations are not part
+of the claim. Each pytest log was checked for its own `rootdir`
+(`.claude/worktrees/wf_be58e68f-39e-8`), because a concurrent session on this
+machine shares the scratch directory. `uv sync --frozen` and `npm ci` were run
+first in this worktree.
+
+- `.venv/bin/python -m pytest tests/agents/test_memory_rendering.py
+  tests/agents/test_evidence_context.py -q` → `163 passed` (139 in the rendering
+  module, one more than round 1: the new gate).
+- `bash scripts/check.sh` → exit 0. `ruff check` "All checks passed!",
+  `ruff format --check` "498 files already formatted", `lint-imports`
+  "Contracts: 4 kept, 0 broken", `validate_task_docs` "390 historical phase
+  tasks and 390 prompts; 43 work cards", `generate_prompts --check` "All 390
+  prompts are in sync", `mypy` "no issues found in 469 source files", pytest
+  `7216 passed, 20 skipped, 3 xfailed` (the one added case is the whole
+  difference from round 1's 7,215), and the frontend leg: lint,
+  `tsc:check`, `19` test files / `514` tests passed, and the production build.
+- `bash scripts/verify_samples.sh` → exit 0, "All 50 samples verified clean."
+  for `replays/samples/4p1i` and again for `replays/samples/9p2i` (100 canonical
+  reconstructions).
+- The four derived report checks → exit 0 each, "… is consistent with its
+  replays." for `replays/samples/4p1i`, `replays/samples/9p2i`,
+  `replays/ml_corpus/4p1i` and `replays/ml_corpus/9p2i`.
+- `.venv/bin/python -m pytest tests/orchestrator --collect-only -q` in isolation
+  → `583 tests collected`.
+- `.venv/bin/python scripts/verify_ml_evidence.py` (offline half) →
+  `checks: 60 | OK 48 | FAIL 0 | ABSENT 7 | INFO 5`, "every check passed", exit
+  0. The seven absent rows are the evidence-branch bytes a fresh clone lacks;
+  `--complete` was not run and is not claimed.
+
+No live provider call of any kind was made in this round: the fake provider is
+the only one these paths construct.
+
+**Planted failures (closeout round 2).** The new gate was shown to fail on each
+defect it claims to detect, and the seven plants the earlier rounds recorded were
+re-run so their counts are current at this head. Every plant was applied to the
+source, run, and restored by one script; `git status` is clean of all of them.
+Selections: `-k "EvidenceV2Salience or Golden"` except where noted.
+
+A method note that matters for anyone re-running these: a band edit such as
+`20` → `90` leaves the file size unchanged, and CPython invalidates a `.pyc` on
+`(mtime, size)`, so a same-second rewrite can leave a stale bytecode cache and
+make the plant a silent no-op — one such run reported a plant as `23 passed`.
+Every count below was taken with `python -B`, `-p no:cacheprovider` and every
+`__pycache__/*.pyc` deleted immediately before the run.
+
+1. **The witnessed kill demoted below the vent** (`_SALIENCE_KILL_WITNESSED`
+   95 → 80): `1 failed, 22 passed, 116 deselected`, and the one red is
+   `test_only_the_body_and_the_witnessed_kill_outrank_the_witnessed_vent` on
+   `assert 'You witnessed p-4 kill in MEDBAY.' in tight[1]`, where the vent has
+   taken that row. Run against the whole module rather than the selection, the
+   same plant gives `1 failed, 138 passed` — no other case anywhere in the
+   module covers that band.
+2. **The body discovery demoted below the vent** (`_SALIENCE_FOUND_BODY`
+   100 → 80): `6 failed, 17 passed, 116 deselected` — the new gate, the
+   production-budget gate whose `tight[0]` assertion this breaks, and all four
+   goldens, since the body row moves in every arm. The second plant is the wider
+   one on purpose: it shows the band was already pinned by the goldens and the
+   290-token gate, so only the prose was ever wrong about it.
+
+Re-measured at this head, the seven plants of closeout round 1, in that
+subsection's own order — the new gate is the extra red in 3 and 4, the two that
+promote a band above the vent, and an extra pass in the other five:
+
+| plant | at `0815333d` | at this head |
+| --- | --- | --- |
+| 1 the conditional reserve | 4 failed, 18 passed, 116 deselected | 4 failed, 19 passed, 116 deselected |
+| 2 the pre-budget count | 3 failed, 19 passed, 116 deselected | 3 failed, 20 passed, 116 deselected |
+| 3 the ordering (six constants → 90) | 7 failed, 15 passed, 116 deselected | 8 failed, 15 passed, 116 deselected |
+| 4 the demotion (own routine → 90) | 5 failed, 17 passed, 116 deselected | 6 failed, 17 passed, 116 deselected |
+| 5 the bound (`-k EvidenceV2Salience`) | 3 failed, 8 passed, 127 deselected | 3 failed, 9 passed, 127 deselected |
+| 6 the per-subject collapse (`-k EvidenceV2Salience`) | 1 failed, 10 passed, 127 deselected | 1 failed, 11 passed, 127 deselected |
+| 7 the row's own count | 9 failed, 13 passed, 116 deselected | 9 failed, 14 passed, 116 deselected |
+
+Every test each round named as red is still red, and the deselected counts are
+unchanged because the added case falls inside both selections.
+
+**Scope this round.** `tests/agents/test_memory_rendering.py` (one added test)
+and this card. No production source changed, so the frozen held-out manifest is
+untouched and needs no restamp — `git diff 864b18a1 HEAD -- agents docs audits
+experiments tests/fixtures` is empty — and neither `docs/artifacts.md` inventory
+row moves, because no `audits/` or `tests/fixtures/` byte changed. No fixture, no
+new lever, env switch or profile field, no committed recording, report, DTO or
+schema byte, and the default path is untouched.
+
+**Limitations this round adds.** None. The two the corrected Outcome now states
+in the card's own voice were already recorded here: a sighting at 50 is not
+protected against reported testimony at 60, and the three first-hand bands above
+the witnessed vent are outside this card's scope and unchanged by it.

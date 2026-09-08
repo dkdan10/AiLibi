@@ -3647,6 +3647,59 @@ class TestEvidenceV2Salience:
         assert not any("Death evidence for" in row for row in rows)
         assert not any("Travel check for" in row for row in rows)
 
+    def test_only_the_body_and_the_witnessed_kill_outrank_the_witnessed_vent(
+        self,
+    ) -> None:
+        """The card's ranking headline, asserted on rendered rows.
+
+        The re-ranking lifts the witnessed vent above every class this card
+        moves, but three first-hand bands it does NOT move still lead it: a body
+        discovery (100), the observer's own kill (96, pinned by the case above)
+        and a witnessed kill (95). On a crewmate's memory the first and third
+        apply, and both are measured here rather than read off the constants: a
+        budget with room for two observations spends both on the body and the
+        kill and sheds the vent, and the production budget puts the vent
+        immediately after those two, ahead of every other row. This memory
+        carries no spoken claim, so nothing here depends on the caveat block or
+        its reserve -- a plant that moves either band is the only way to redden
+        it.
+        """
+
+        memory = _v2_memory()
+        memory.episodic.append(
+            _saw_body_event(tick=6, body_id="b-2", victim_id="p-2", room="ADMIN")
+        )
+        memory.episodic.append(
+            EpisodicEvent(
+                tick=6,
+                type="saw_player",
+                payload={
+                    "player_id": "p-4",
+                    "room": "MEDBAY",
+                    "action": "kill",
+                    "observation_phase": "event",
+                    "observation_order": 4,
+                    "observer_room": "MEDBAY",
+                    "observer_in_vent": False,
+                },
+                provenance="observed",
+            )
+        )
+
+        tight = _observation_rows(render_for_prompt(memory, token_budget=200))
+
+        assert len(tight) == 2
+        assert "You discovered p-2's body in ADMIN." in tight[0]
+        assert "You witnessed p-4 kill in MEDBAY." in tight[1]
+
+        rows = _observation_rows(
+            render_for_prompt(memory, token_budget=DEFAULT_TOKEN_BUDGET)
+        )
+
+        assert "You discovered p-2's body in ADMIN." in rows[0]
+        assert "You witnessed p-4 kill in MEDBAY." in rows[1]
+        assert next(i for i, row in enumerate(rows) if _VENT_LINE_FRAGMENT in row) == 2
+
     def test_a_truncated_caveat_list_states_the_subjects_the_budget_dropped(
         self,
     ) -> None:
