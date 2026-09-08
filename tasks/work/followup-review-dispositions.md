@@ -31,12 +31,46 @@ not an adopted behaviour.
 
 ## Acceptance
 
+- [x] Review correction: the branch-string figure published as a fact about this
+  head is the one the quoted command prints on the committed tree — 28 files, not
+  the 27 round 1 wrote — and the enumeration names all three files this pass adds
+  (the ledger, the record and this card, which carries the literal in the
+  commands it quotes). Proved by `git grep -l "codex/cleanup" | wc -l` on the
+  committed tree, quoted with its output in the round-2 subsection beside the
+  same command at `201849fc`, `7cbf9786` and `ab467228`.
+- [x] Review correction: the sibling `/tmp` figure is the one its quoted command
+  prints here — `grep -rno '/tmp/' tasks/work/ | wc -l` = 72 — with 64 scoped to
+  `fd1f923c`, the commit the follow-up read, and the follow-up's wider `tasks/` +
+  `docs/` headline (82 → 89) named as the different scope it is. "Unchanged from
+  the follow-up's reading" is gone from both documents. Proved by the same
+  command run at `fd1f923c`, `201849fc`, `ab467228` and this head, quoted below.
+- [x] Review correction: the second check quoted for the pipe fix is one that can
+  fail on the defect. The `<td>`-against-`<th>` render is withdrawn — GFM
+  truncates a long row and pads a short one, so it is 3 against 3 either side of
+  the fix — and is replaced by a link-survival scan that asserts every markdown
+  link in a table row survives the GFM render. Planted proof: it prints the
+  dropped `#section-11-workflow-recommendations` target and exits 1 on the
+  `7cbf9786` documents, and exits 0 here.
+- [x] Review correction: recommendation 2's reason states what the tree holds.
+  `fresh-deduction-authorization.md` carries zero card-specific Validation
+  commands, so the universal claim is replaced by the measured one — eight of the
+  nine linked cards carry two to eight each — with that card named as a
+  document-only exception. Proved by the per-card script quoted below, whose
+  count for `accounts-channel-hardening.md` (8) matches the reviewer's own
+  independent count.
+- [x] Review correction: no id carries a fifth disposition word. The nine ids
+  recorded as not reproducible at `fd1f923c` are labelled **Refuted** in that
+  form, and the ledger's rule paragraph says not-reproducible is a form of
+  refuted rather than a fifth word. Proved by a disposition-word scan over both
+  documents' own sections, which prints the offending row and exits 1 on the
+  committed bytes and exits 0 now.
 - [x] Review correction: the unescaped `|` inside the code span of the retained
   `P-03` row no longer splits that row into four cells, so its Evidence link is
-  rendered again. Proved by a cell-count scan and by a GFM render of both changed
-  documents, both quoted in the round-1 subsection below — the cell-count scan is
-  quoted in full and fails on the committed defect (`:93 header=3 row=4`, exit 1)
-  where it passes now.
+  rendered again. Proved by the cell-count scan quoted in full in the round-1
+  subsection below, which fails on the committed defect (`:93 header=3 row=4`,
+  exit 1) and passes now, and by the round-2 link-survival scan that replaces
+  round 1's second check. (Round 2 rewrote this item's second half; the
+  superseded sentence is quoted there.)
 - [x] Review correction: the follow-up record's claim that
   `recorded-provenance-gaps` "names all six" is replaced by what that card holds
   at `origin/main` — five ids by name, `NG1-7` by mechanism. Proved by
@@ -52,11 +86,12 @@ not an adopted behaviour.
   bullet is replaced by the same corrected rule, so the head and the PR agree.
 - [x] Review correction: the cleanup-branch-string count in
   `docs/cleanup-dispositions.md` is no longer the pre-write count published as a
-  fact about the tree the write produces. Both places now carry the `git grep -l`
-  command and both figures — 25 at `201849fc`, 27 at this head — and this card
-  states neither number without naming the tree it belongs to. The literal string
-  is deliberately kept out of this card so the published count stays exactly the
-  two documents that carry it plus the 25 inherited files.
+  fact about the tree the write produces. Both places carry the `git grep -l`
+  command and both figures, and neither number is stated without the tree it
+  belongs to. (Round 1 wrote "25 at `201849fc`, 27 at this head" and claimed the
+  literal string was kept out of this card. Round 2 supersedes both halves: the
+  head figure is 28 and this card is the third file. The superseded sentences are
+  quoted in the round-2 subsection.)
 - [x] Review correction: the same count in the follow-up record's retained
   `P-03` row carries the same command and both figures.
 - [x] Review correction: `CARD-02`'s two filings are no longer collapsed into one
@@ -423,18 +458,11 @@ rows whose cell count differs from their header: 1 ; exit=1
 rows whose cell count differs from their header: 0 ; exit=0                # at this head
 ```
 
-The second renders each row with `markdown_it` in `gfm-like` mode and counts
-`<td>` against `<th>`, which is the property that actually matters — the row that
-had four cells against a three-column header lost its third cell in the render,
-and now keeps it:
-
-```text
-audits/review-2026-09-06/followup-correction-record.md:103 th=3 td=3
-     P-03, P-09, FU-DISP-3, FU-DISP-4, NC5-07
-     Retained. Process observations about the correction batch itself: ...
-     <a href="../../docs/cleanup-dispositions.md#section-11-workflow-recommendations">The ledger's section 11 table</a>. ...
-mismatched rows: 0
-```
+The second check round 1 quoted here — a `markdown_it` `gfm-like` render counting
+`<td>` against `<th>` — is **withdrawn by round 2**, which found it could not
+fail on the defect it was quoted as catching. Its replacement, a link-survival
+scan that does fail on the committed bytes, is in the round-2 subsection below,
+together with round 1's withdrawn wording and output block quoted verbatim.
 
 **2. "which names all six" was false, and so was the routing rule.** Three
 lenses filed this. The record said
@@ -485,13 +513,18 @@ nor covered — no card carries an adverse-suite item for the destination-only
 movement rule or the overlap guard — while the accounts card is only the adjacent
 writer in those modules.
 
-**3. The branch-string count was the pre-write count.** Both documents said "25
+**3. The branch-string count was the pre-write count.** *(**Superseded by round
+2, item 1 below.** Quoting the two commands here put their literals into this
+card, which moved both counts again: this item's head figures 27 and 64 are wrong
+— they are 28 and 72 — and its closing claim that the literal string is absent
+from this card is false of the bytes round 1 committed. Kept as filed, marked,
+because the round-2 correction is a correction of it.)* Both documents said "25
 files" in the present tense about a tree their own bytes were part of. At this
 head there are 27, the two extra being the two documents themselves:
 
 ```text
-$ git grep -l "codex/cleanup" | wc -l          #   27  (this head)
-$ git grep -l "codex/cleanup" 201849fc | wc -l #   25  (the tree the pass was written against)
+$ git grep -l "codex/cleanup" | wc -l          #   27  (claimed for the round-1 head; superseded — it is 28)
+$ git grep -l "codex/cleanup" 201849fc | wc -l #   25  (the tree the pass was written against; still 25)
 ```
 
 Both places now carry the command and both figures with the tree each belongs to.
@@ -570,3 +603,337 @@ failure above re-run at this head. No recording, report, metric or adoption
 verdict changed; no provider was called; the frozen held-out manifest is
 untouched, and this round edits no file in `GENERATOR_SOURCES`, so no restamp was
 due.
+
+### Review corrections, round 2 (2026-09-08)
+
+Nine blocking findings from three independent lenses, converging on five defects
+in what round 1 wrote: two counts that round 1's own repair falsified, a quoted
+proof that could not fail, a recommendation reason a linked card contradicts, and
+one row carrying a fifth disposition word. Documentation only again. No id
+changed document, no routing was redone, the only disposition word that moved is
+the not-reproducible row's label, and the four review inputs stay byte-identical.
+
+**1. Round 1's repair of the branch-string count re-introduced the defect, and
+took the sibling `/tmp` figure with it.** Round 1 quoted both commands in this
+card so the proofs would be reproducible from the card alone; that put both
+literals into a tracked file inside both counted sets, which moved both counts.
+The superseded sentences, quoted as round 1 wrote them:
+
+- this card: "At this head there are 27, the two extra being the two documents
+  themselves"; "The literal string is deliberately kept out of this card so the
+  published count stays exactly the two documents that carry it plus the 25
+  inherited files"; "still prints 64 lines at this head, as the follow-up read
+  it";
+- `docs/cleanup-dispositions.md` and the follow-up record: "27 on this branch —
+  the two added files being this document and the follow-up correction record",
+  and "prints 64, unchanged from the follow-up's reading";
+- `ab467228`'s pushed commit body: "it is 27 at this head", which was already 28
+  at that commit. A pushed commit is not amended; this subsection is the
+  correction of record.
+
+Measured on the committed tree, `git status --porcelain` empty:
+
+```text
+$ git grep -l "codex/cleanup" | wc -l                       28   this head
+$ git grep -l "codex/cleanup" 1aaae43e | wc -l              28   the round-2 base, where 27 was published
+$ git grep -l "codex/cleanup" ab467228 | wc -l              28   the round-1 correction commit
+$ git grep -l "codex/cleanup" 7cbf9786 | wc -l              27   round 0, the only tree where 27 held
+$ git grep -l "codex/cleanup" 201849fc | wc -l              25   the tree the pass was written against
+$ grep -rno '/tmp/' tasks/work/ | wc -l                     72   this head
+$ git grep -o '/tmp/' 1aaae43e -- tasks/work/ | wc -l       66   the round-2 base, where 64 was published
+$ git grep -o '/tmp/' ab467228 -- tasks/work/ | wc -l       66   the round-1 correction commit
+$ git grep -o '/tmp/' fd1f923c -- tasks/work/ | wc -l       64   the commit the follow-up read
+$ git grep -o '/tmp/' 201849fc -- tasks/work/ | wc -l       64   the tree the pass was written against
+```
+
+The three files carrying the branch string that the 25 at `201849fc` do not
+include are named rather than counted, with a command that proves both halves:
+
+```text
+$ git grep -l "codex/cleanup" -- audits/review-2026-09-06/followup-correction-record.md \
+    docs/cleanup-dispositions.md tasks/work/followup-review-dispositions.md
+audits/review-2026-09-06/followup-correction-record.md
+docs/cleanup-dispositions.md
+tasks/work/followup-review-dispositions.md
+$ git grep -l "codex/cleanup" 201849fc -- audits/review-2026-09-06/followup-correction-record.md \
+    docs/cleanup-dispositions.md tasks/work/followup-review-dispositions.md
+(no output) ; exit=1
+```
+
+Both published documents now name the tree each figure belongs to, enumerate
+three added files, and drop "unchanged from the follow-up's reading". The
+follow-up did read 64 for this scope — its appendix records
+`57 (fu-prev), 64 (fu-head)` for the `tasks/work/` count at
+`REVIEW_APPENDIX_FOLLOWUP.md:1337`, and `fu-head` is `fd1f923c`, which reproduces
+above — while its report headline, "`/tmp` citations in cards and the ledger rose
+from 82 to 89" (`REVIEW_REPORT_FOLLOWUP.md:82`), is the wider scope its own
+appendix states as "tasks/ + docs/ /tmp citations rose 82 -> 89"
+(`REVIEW_APPENDIX_FOLLOWUP.md:176`, row `M7-2`). Both documents now say which
+scope they mean, so neither figure is attributed to a reading the review did not
+publish.
+
+The file count is stable from here: this card already carries the string, and
+this round adds it to no fourth file. The occurrence count is not
+self-stabilising in the same way, so it was measured on the final committed bytes
+rather than predicted, and both documents say what the increase is — quoted grep
+patterns inside a proof, not evidence cited from a host-local path, which is what
+`P2-7` and the row carrying it are about.
+
+**2. The `<td>`-against-`<th>` render check could not fail on the defect it was
+quoted as catching.** Round 1 wrote, and this round withdraws: "The second
+renders each row with `markdown_it` in `gfm-like` mode and counts `<td>` against
+`<th>`, which is the property that actually matters — the row that had four cells
+against a three-column header lost its third cell in the render, and now keeps
+it", with the output block
+
+```text
+audits/review-2026-09-06/followup-correction-record.md:103 th=3 td=3
+     P-03, P-09, FU-DISP-3, FU-DISP-4, NC5-07
+     Retained. Process observations about the correction batch itself: ...
+     <a href="../../docs/cleanup-dispositions.md#section-11-workflow-recommendations">The ledger's section 11 table</a>. ...
+mismatched rows: 0
+```
+
+Both halves are wrong. GFM truncates a row with too many cells and pads one with
+too few, so `<td>` equals `<th>` for every row on either side of the fix; and the
+quoted line number matches no commit on this branch — the `P-03` row is at `:93`
+at `7cbf9786` and at `:105` after round 1. With markdown-it-py 4.0.0 from this
+checkout's `.venv`, a three-column header against one row each:
+
+```python
+# gfm_probe.py
+import re
+from markdown_it import MarkdownIt
+MD = MarkdownIt("gfm-like").disable("linkify")
+HDR = "| A | B | C |\n| --- | --- | --- |\n"
+for name, row in {
+    "3 cells (exact)": "| x | y | z |",
+    "4 cells (the P-03 defect)": "| x | y | z | w |",
+    "2 cells (short row)": "| x | y |",
+}.items():
+    html = MD.render(HDR + row + "\n")
+    th = len(re.findall(r"<th[ >]", html))
+    td = len(re.findall(r"<td[ >]", html))
+    print(f"{name:28s} th={th} td={td}")
+```
+
+```text
+$ .venv/bin/python gfm_probe.py
+3 cells (exact)              th=3 td=3
+4 cells (the P-03 defect)    th=3 td=3
+2 cells (short row)          th=3 td=3
+```
+
+Its replacement asserts the property the defect actually destroyed: every
+markdown link written in a table row must still be an `<a href>` after the GFM
+render. Links inside a code span are excluded, so a documented pipeline cannot be
+mistaken for one.
+
+```python
+# linkscan.py — .venv/bin/python linkscan.py <file> ... ; exits 1 on a lost link
+import pathlib, re, sys
+from markdown_it import MarkdownIt
+MD = MarkdownIt("gfm-like").disable("linkify")
+CODE = re.compile(r"`[^`]*`")
+LINK = re.compile(r"\]\(([^)]+)\)")
+HREF = re.compile(r'<a href="([^"]+)"')
+bad = 0
+for path in sys.argv[1:]:
+    header = None
+    for n, line in enumerate(pathlib.Path(path).read_text().splitlines(), 1):
+        row = line.strip()
+        if not row.startswith("|"):
+            header = None
+            continue
+        if header is None:
+            header = row
+            continue
+        if set(row.replace("|", "").replace("\\", "").strip()) <= set("-: "):
+            continue
+        want = LINK.findall(CODE.sub("`x`", row))
+        if not want:
+            continue
+        dashes = "| " + " | ".join("---" for _ in header.split("|")[1:-1]) + " |"
+        got = set(HREF.findall(MD.render(f"{header}\n{dashes}\n{row}\n")))
+        lost = [t for t in want if t not in got]
+        if lost:
+            bad += 1
+            print(f"{path}:{n} link dropped by the GFM render: {lost}")
+print(f"rows whose links do not survive the render: {bad}")
+sys.exit(1 if bad else 0)
+```
+
+Planted failure, against the two documents exactly as they stood at `7cbf9786`
+written out to a scratch directory, then the same scan at this head:
+
+```text
+$ .venv/bin/python linkscan.py <the 7cbf9786 copies of both documents>
+.../followup-correction-record.md:93 link dropped by the GFM render: ['../../docs/cleanup-dispositions.md#section-11-workflow-recommendations']
+rows whose links do not survive the render: 1 ; exit=1
+
+$ .venv/bin/python linkscan.py docs/cleanup-dispositions.md \
+    audits/review-2026-09-06/followup-correction-record.md
+rows whose links do not survive the render: 0 ; exit=0
+```
+
+The cell-count scan round 1 quoted in full is unaffected and was re-run
+unchanged: `:93 header=3 row=4` and exit 1 on the `7cbf9786` documents,
+`rows whose cell count differs from their header: 0` and exit 0 here.
+
+**3. Recommendation 2's stated reason was falsified by a card the plan links.**
+Round 1 wrote: "Every card the post-merge plan links already satisfies the
+Validation half — the smallest carries one card-specific command and the largest
+ten — so the practice is in force." Neither half reproduces.
+`tasks/work/fresh-deduction-authorization.md`, linked at
+`tasks/post-merge-plan.md:97`, has a Validation section that is the two global
+gates and nothing else, and no card carries ten. Counted per card at
+`origin/main`, where a command is a backticked span or a fenced-block line that
+names a runner and is neither global gate:
+
+```python
+# valcmds.py — .venv/bin/python valcmds.py <repo-root> origin/main
+import pathlib, re, subprocess, sys
+ROOT, REF = pathlib.Path(sys.argv[1]), sys.argv[2]
+GLOBAL = ("validate_task_docs.py", "scripts/check.sh")
+SPAN = re.compile(r"`([^`]+)`")
+RUNNER = re.compile(r"\b(uv run|\.venv/bin|bash |pytest|npm |python -m|scripts/)")
+def text(rel):
+    return subprocess.run(["git", "-C", str(ROOT), "show", f"{REF}:{rel}"],
+                          capture_output=True, text=True, check=True).stdout
+def commands(section):
+    fenced = re.findall(r"^```[a-z]*\n(.*?)^```", section, re.S | re.M)
+    body = re.sub(r"^```[a-z]*\n.*?^```", "", section, flags=re.S | re.M)
+    found = []
+    for cand in SPAN.findall(body) + [
+        line.strip() for block in fenced for line in block.splitlines() if line.strip()
+    ]:
+        if any(g in cand for g in GLOBAL) or not RUNNER.search(cand) or cand in found:
+            continue
+        found.append(cand)
+    return found
+plan = text("tasks/post-merge-plan.md")
+for card in sorted(set(re.findall(r"work/[a-z0-9-]+\.md", plan))):
+    section = re.search(r"^## Validation\n(.*?)(?=^## |\Z)", text(f"tasks/{card}"), re.S | re.M)
+    print(f"{len(commands(section.group(1)) if section else []):2d}  {card}")
+```
+
+```text
+$ .venv/bin/python valcmds.py . origin/main
+ 8  work/accounts-channel-hardening.md
+ 6  work/evidence-renderer-salience.md
+ 2  work/followup-review-dispositions.md
+ 0  work/fresh-deduction-authorization.md
+ 3  work/fresh-deduction-instrument.md
+ 4  work/held-out-prefix-freeze.md
+ 2  work/nonblocking-followup-improvements.md
+ 7  work/recorded-provenance-gaps.md
+ 6  work/retire-temporal-evidence-v1.md
+```
+
+The counter is calibrated against an independent reading: the lens that filed
+this counted eight card-specific commands in `accounts-channel-hardening.md` by
+hand, which is what the script prints. The row now states the measured property —
+eight of the nine linked cards carry two to eight each — and names the ninth as a
+document-only authorization whose Validation is the two global gates because the
+limits it authorizes are exercised by the instrument card, not by itself. That is
+an exception stated, not a universal claim one card falsifies.
+
+**4. Nine ids carried a fifth disposition word.** The row
+`G2-11, G3-2, CMP-06, M3-04, M3-05, M7-3, P1-5, P1-8, P2-4` opened "Not
+reproducible at `fd1f923c` ...", which is none of the four words both documents
+declare, while the acceptance item requiring exactly one of the four was checked.
+The row now opens **Refuted**, in the not-reproducible form, matching its own
+section heading; and the ledger's rule paragraph now states that not reproducible
+is a form of refuted rather than a fifth word — it says the trigger did not fire
+for the lens that looked, never that the behaviour was repaired. No id moved, and
+the row's evidence and reasoning are unchanged.
+
+The property is now checked rather than asserted. The scan reads each id row of
+this pass's own sections and requires its disposition cell to open with one of
+the four words:
+
+```python
+# words.py — .venv/bin/python words.py <file>[::<anchor heading>] ... ; exits 1 on a fifth word
+import pathlib, re, sys
+WORDS = ("Repaired", "Routed", "Retained", "Refuted")
+SPLIT = re.compile(r"(?<!\\)\|")
+ID = re.compile(r"^[A-Z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)+")
+bad = 0
+for arg in sys.argv[1:]:
+    path, _, anchor = arg.partition("::")
+    started = not anchor
+    for n, line in enumerate(pathlib.Path(path).read_text().splitlines(), 1):
+        started = started or line.strip() == anchor
+        row = line.strip()
+        if not started or not row.startswith("|"):
+            continue
+        cells = [c.strip() for c in SPLIT.split(row)[1:-1]]
+        if len(cells) != 3 or not ID.match(cells[0].replace("`", "")):
+            continue
+        if not cells[1].startswith(WORDS):
+            bad += 1
+            print(f"{path}:{n} disposition opens {cells[1][:44]!r}")
+print(f"rows whose disposition is not one of the four words: {bad}")
+sys.exit(1 if bad else 0)
+```
+
+```text
+$ .venv/bin/python words.py \
+    '<the 1aaae43e ledger>::## The 2026-09-06 review: first-pass findings' \
+    <the 1aaae43e record>
+.../docs/cleanup-dispositions.md:247 disposition opens 'Not reproducible at `fd1f923c` by the dispos'
+rows whose disposition is not one of the four words: 1 ; exit=1
+
+$ .venv/bin/python words.py \
+    'docs/cleanup-dispositions.md::## The 2026-09-06 review: first-pass findings' \
+    audits/review-2026-09-06/followup-correction-record.md     # at this head
+rows whose disposition is not one of the four words: 0 ; exit=0
+```
+
+The anchor argument scopes the ledger to this pass's own sections: the register
+sections above that heading were written under an earlier convention and are not
+this card's to relabel. The record needs no anchor because every id row in it
+belongs to this pass.
+
+**What did not change.** No id changed document, and the inventory script prints
+what it printed in round 1 — 416 / 416, `missing: []`, `dispositioned twice: []`,
+`dispositioned but in no register: []`. No routing was redone and no routed row's
+card moved. `CARD-02` keeps the word round 1 gave it. The two reports, the two
+appendices and `correction-record.md` stay byte-identical:
+`git diff --stat 201849fc -- audits/review-2026-09-06/` lists exactly two files
+across the whole pass — the new `followup-correction-record.md` and the eight
+lines round 0 added to `README.md` so the index reaches it.
+
+**Gates, re-run in full at this head.** `uv run python scripts/check_doc_facts.py`
+— exit 0, including "every relative link in 11 front-door and published documents
+resolves", which covers the record's new corrections section and its link back to
+the pre-merge correction record.
+`uv run python scripts/validate_task_docs.py` — exit 0: "390 historical phase
+tasks and 390 prompts; 43 work cards". `uv run pytest
+tests/scripts/test_check_doc_facts.py tests/scripts/test_verify_ml_evidence.py
+-q` — 364 passed in 250.02s. `bash scripts/check.sh` — exit 0 on the committed
+tree: ruff and format "All checks passed!", "Contracts: 4 kept, 0 broken",
+"Success: no issues found in 469 source files", "7201 passed, 20 skipped, 3
+xfailed", 514 frontend tests in 19 files, and the production build. Same counts
+as rounds 0 and 1, which is the expected result of a documentation-only round.
+Also re-run because the post-merge plan requires them of every card:
+`bash scripts/verify_samples.sh` — "All 50 samples verified clean" twice, exit 0;
+the four `scripts/build_sample_report.py --check` runs — four "is consistent with
+its replays", four exit 0; `pytest tests/orchestrator/ --collect-only` in a fresh
+interpreter — 583 collected, exit 0; `uv run python scripts/verify_ml_evidence.py`
+— 60 checks, 48 OK, 0 FAIL, 7 ABSENT, 5 INFO, exit 0. `npm run e2e` was not run:
+no served DTO, schema or component byte changed. No live provider was called in
+this round, by any path.
+
+**Record impact of this round.** `audits/` bytes moved again — the record's
+`P-03` row and its new corrections section — so the `docs/artifacts.md` row moved
+with them, recomputed with the change staged: `git ls-files audits | wc -l`
+prints 203 and `git ls-files -z audits | xargs -0 wc -c | tail -1` prints
+14880929, against round 1's 14,879,136. The planted failure for that row was
+re-run at this head: reverting the row to `14,879,136 tracked bytes / 203 files`
+makes `uv run python scripts/verify_ml_evidence.py` print `[ FAIL ] in-tree
+family inventory` with the note "audits/: docs/artifacts.md promises 14,879,136
+tracked bytes, the tracked files contain 14,880,929 bytes"; restoring the
+recomputed row returns exit 0. No recording, report, metric or adoption verdict
+changed; no provider was called; the frozen held-out manifest is untouched, and
+this round edits no file in `GENERATOR_SOURCES`, so no restamp was due.
