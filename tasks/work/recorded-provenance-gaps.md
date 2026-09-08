@@ -45,6 +45,15 @@ NC4-3, NC6-1, NC6-2, NC3-1 and FU-ORA-2) on this checkout before implementing.
 
 ## Acceptance
 
+- [x] Review correction: the merge-tree conflict count in "Review corrections,
+  round 1" (`grep -c '<<<<<<<'` → 1) reproduced on no committed tree — the
+  sentence stating it puts the literal marker into the card, and the merge-tree
+  output diffs the card too, so the unanchored pattern matches twice at
+  `17e929f4`. The count is now anchored to the diff's added lines and paired with
+  the structural count it summarises: on the committed tree
+  `git merge-tree 201849fc origin/work/evidence-renderer-salience HEAD` piped
+  through `grep -c '^+<<<<<<<'` → 1 and `grep -c '^changed in both'` → 1, both
+  recorded in "Review corrections, round 2".
 - [x] Review correction: the Verification table's standalone `tests/api` +
   `tests/scripts` figure (`1721 passed, 2 skipped`) reproduces on no tree. The
   row now states the trio run this round made on the committed tree —
@@ -414,6 +423,12 @@ both" path — `docs/artifacts.md` — with one conflict hunk (`grep -c '<<<<<<<
 "shares no file with the renderer card" was false about that one line and has
 been corrected there.
 
+*(Superseded in "Review corrections, round 2" below, in that one parenthetical
+only: the unanchored `grep` count was measurable only before this sentence was
+committed, because the sentence itself carries the literal marker. The claim it
+summarises — one `changed in both` path, one conflict hunk — is unchanged, and
+is re-measured there with anchored patterns.)*
+
 | Tree | `tests/fixtures/` |
 | --- | --- |
 | `201849fc`, the shared base | 23 files / 2,054,135 bytes |
@@ -490,3 +505,83 @@ ran once more on the exact bytes committed.
 | `bash scripts/verify_samples.sh` | exit 0 — "All 50 samples verified clean." twice |
 | `build_sample_report.py --check` × 4 | all four exit 0, "consistent with its replays." each |
 | `cd frontend && npm run e2e` | exit 0 — `13 passed (1.3m)`, 3 skipped |
+
+### Review corrections, round 2 (2026-09-08)
+
+One finding, from the documentation and evidence-claims lens, and it is the same
+defect class round 1 reopened this card for: a number in Results that reproduces
+on no committed tree. It is confined to one parenthetical, and this round moved
+nothing else — the diff against `17e929f4` touches
+`tasks/work/recorded-provenance-gaps.md` alone, no source file, no test, no
+committed artifact.
+
+**The conflict count counted the sentence that stated it.** Item 2 of "Review
+corrections, round 1" reads, verbatim:
+
+> Reproduced locally: `git merge-tree 201849fc
+> origin/work/evidence-renderer-salience HEAD` reports exactly one "changed in
+> both" path — `docs/artifacts.md` — with one conflict hunk (`grep -c '<<<<<<<'` →
+> 1); every other file merges.
+
+That parenthetical is superseded. `git merge-tree` emits a unified diff for every
+path that differs between the two tips; this card is one of those paths; and the
+sentence above spells the conflict marker out. So on the tree that ships the
+sentence, the unanchored pattern matches twice — the real marker inside the
+`docs/artifacts.md` hunk, and the card's own prose being added by this branch. At
+`17e929f4`, the commit the finding was raised against, those are output lines 89
+and 917; the second number moves with every edit to this card, which is the
+point. The figure `1` was measurable only before the sentence was committed —
+the same defect class round 1 reopened this card for. At `17e929f4`:
+
+```sh
+git merge-tree 201849fc origin/work/evidence-renderer-salience HEAD > mt.txt
+grep -c '<<<<<<<' mt.txt            # 2 — the marker, and this card quoting it
+grep -c '^+<<<<<<<' mt.txt          # 1 — added lines only: the marker
+grep -c '^changed in both' mt.txt   # 1 — docs/artifacts.md, and nothing else
+```
+
+Both replacements are anchored, and they have to be. `^changed in both` can only
+match `git merge-tree`'s own path headers, which sit at column 0, while every
+line of file content it prints is a diff line carrying a `+`, `-` or space
+prefix. `^+<<<<<<<` can only match an added line whose content *begins* with the
+marker. Prose quoting either pattern cannot satisfy them: it appears in the
+output as an added line, and the quoted token sits mid-line behind a backtick.
+That is not an argument taken on trust — both anchored counts were re-measured
+after this subsection was written, on the exact bytes this round commits, and
+both are still `1` on a card that now spells the marker out seven times rather
+than the one time that broke the count.
+
+The claim the parenthetical summarised is unchanged, and was re-measured rather
+than restated. The single `changed in both` entry is `docs/artifacts.md` — base
+`33a39860`, `.our` `7c19f025` (`work/evidence-renderer-salience`, the first tip
+argument), `.their` `a615e3fe` (this branch) — and its one hunk is the
+`tests/fixtures/` inventory row, `2,085,311 tracked bytes / 27 files` on their
+side against `2,067,334 / 25` on ours. The round-1 sentence keeps its words and
+now carries an explicit supersession marker naming this subsection. The
+inventory table above it was re-run this round as well and is unchanged:
+`git ls-tree -r -l <tree> tests/fixtures` summed with `awk` gives 23 files /
+2,054,135 bytes at `201849fc`, 25 / 2,067,334 at this head, 27 / 2,085,311 on
+the renderer branch, and the union `awk` prints `29 files / 2098510 bytes`.
+
+Nothing else in Results needed changing: the lens reported that every other
+number and command in it reproduced. The pull request body does not repeat the
+conflict count, so it carries no copy of the defect; it is refreshed only to
+match this head.
+
+**Gates re-run on the corrected tree.** As in round 1, the card text is the only
+thing that moved, so these run the same suites on the same code. That the counts
+do not depend on the text was checked rather than assumed: `check.sh` ran once
+before these numbers were written into the table and once after, on the bytes
+this round commits, with identical counts both times — the duration is the only
+figure that moved, and it is not recorded here for that reason. The three gates
+that read the card — `validate_task_docs.py`,
+`tests/scripts/test_work_cards.py` and `tests/scripts/test_check_doc_facts.py` —
+ran last of all, inside that second `check.sh`.
+
+| Command | Result |
+| --- | --- |
+| `bash scripts/check.sh` | exit 0 — `7216 passed, 20 skipped, 3 xfailed`, mypy "no issues found in 471 source files", `390 historical phase tasks and 390 prompts; 43 work cards`, `All 390 prompts are in sync.`, frontend `19 files / 514 tests` and build; identical on both runs |
+| `uv run pytest tests/eval tests/api tests/scripts -q` | exit 0 — `2825 passed, 3 skipped, 1 warning in 1003.39s` |
+| `bash scripts/verify_samples.sh` | exit 0 — "All 50 samples verified clean." twice |
+| `build_sample_report.py --check` × 4 | all four exit 0, "consistent with its replays." each |
+| `cd frontend && npm run e2e` | exit 0 — `13 passed (1.1m)`, 3 skipped |
