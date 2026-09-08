@@ -55,6 +55,25 @@ development data by construction.
 
 ## Acceptance
 
+- [x] Review correction: the card, the module and the pull request state the
+  roster's bystander count, and where the band's skips actually came from is now
+  counted rather than assumed. The authorized 4p1i roster seats THREE crewmates —
+  the victim, the reporter and exactly ONE uninvolved crewmate — so "both
+  uninvolved crewmates", "both bystanders' wanders" and "the two uninvolved
+  crewmates' wandering" named a player the roster does not seat. And the claim
+  that that wander "is where all eight band skips came from" does not reproduce:
+  counted over the eight skips the manifest already publishes, six of the eight
+  proof rows are the REPORTER's own pre-kill wander and two are the bystander's.
+  `skip_witness_roles` attributes each disqualifying row to the role the seed's
+  draw gave the crewmate holding it and returns role counts and nothing else;
+  `uv run python -m experiments.held_out_prefixes --skip-roles manifest` takes
+  its seed list from the manifest's `skipped[]`, and `--skip-roles FIRST LAST`
+  refuses any range touching seeds 3000–3999 exactly as `--tally` does. Both
+  commands and their verbatim output are in Results beside the corrected
+  sentence. Proved by
+  `test_a_skip_is_attributed_to_the_reporter_when_its_own_wander_witnessed`,
+  `test_a_skip_is_attributed_to_the_bystander_when_its_wander_witnessed` and
+  `test_the_skip_role_split_reaches_the_band_only_through_the_published_skips`.
 - [x] Review correction: the card, the module comment and the pull request
   describe what the report-tick drop actually did to the set. It is NOT true that
   a move drawn for the report tick is never executed, nor that only the hashed
@@ -271,9 +290,9 @@ aggregate count over band seeds is still a probe, and a narrow enough range woul
 be a per-seed read.
 
 `audits/deduction-candidate/held-out/manifest.json` is the freeze artifact —
-**sha256 `21190ab58f940a4d0085aa6a72118a1b5f8a14e2b62aa45323246fd3adc65946`**,
+**sha256 `292365c19b46e99a7b5b8795268a00863f933b51dc74cd6f2f53665650e220df`**,
 11,524 bytes. The set is not frozen until the owner merges this pull request, and
-four correction rounds moved the file before then; each dated subsection below
+five correction rounds moved the file before then; each dated subsection below
 names the digest it left behind, and only the value above describes the file as
 it now stands. It records the band, the roster, the tick budget, the temporal
 version, the filter's stated environment, the canonical-JSON recipe, the sha256
@@ -306,11 +325,44 @@ action on its own death tick is exempt; every other `ActionRejectedEvent` is a
 `engine_rejected_action` skip, and a planted two-room move proves that gate
 fires.
 
-Both uninvolved crewmates wander on seeded legal random walks that may take them
-into the kill room on the kill tick. That is what makes the proof-free filter
-load-bearing rather than a formality, and it is where all eight band skips came
-from. Their wander, and the impostor's, stop being HASHED at the report tick: the
-meeting interrupts that tick, so whether an action ordered there runs at all
+The uninvolved crewmate wanders on a seeded legal random walk that may take it
+into the kill room on the kill tick — ONE bystander on the authorized 4p1i
+roster, whose three crewmates are the victim, the reporter and exactly one
+uninvolved player; larger rosters the generator permits would seat more. That
+wander is what makes the proof-free filter load-bearing rather than a formality.
+It is not, however, where the band's skips came from. The REPORTER wanders before
+the kill on exactly the same terms, so its own walk can leave it standing in the
+kill room when the kill lands — and counted over the eight `witnessed_kill` skips
+the manifest publishes, six of the eight disqualifying proof rows are the
+reporter's and two are the bystander's:
+
+```text
+$ uv run python -m experiments.held_out_prefixes --skip-roles manifest
+seeds 8
+bystander 2
+reporter 6
+```
+
+Out of band the split is even: three rows each across the five skips in seeds
+1–50, one of which carries a row from both wanders.
+
+```text
+$ uv run python -m experiments.held_out_prefixes --skip-roles 1 50
+seeds 50
+bystander 3
+reporter 3
+```
+
+`skip_witness_roles` attributes each disqualifying row to the role the seed's own
+draw gave the crewmate holding it, and returns role counts and nothing else — no
+step, room, route, tick or per-seed row. The range form refuses any range
+touching seeds 3000–3999 exactly as `--tally` does; the band's own skips are
+reachable only through `--skip-roles manifest`, which takes its seed list from the
+`skipped[]` the manifest already publishes rather than choosing a range of its
+own.
+
+The bystander's wander, and the impostor's, stop being HASHED at the report tick:
+the meeting interrupts that tick, so whether an action ordered there runs at all
 depends on how the actor's id sorts against the reporter's, and a hashed schedule
 must not depend on that tiebreak. The walks are still drawn to the report tick —
 the draws are what the seed determines — and the drawn step for that one tick is
@@ -381,17 +433,19 @@ committed.
    'sha256': 'ab053eef…'}`. Reverted; `14 passed`. `1482ce81…` is the planted
    digest and is committed nowhere, by design; `ab053eef…` was seed 3000's frozen
    digest at the time of the plant and stayed so through `3eb49dfc`. The round-3
-   correction below rebuilt every schedule that carried a phantom report-tick
-   step, so seed 3000's digest now reads `ab8db76d…`.
+   correction below rebuilt the 45 schedules that carried any non-reporter
+   report-tick step (23 of them a phantom the engine never resolved), so seed
+   3000's digest now reads `ab8db76d…`.
 2. **A non-behavioural generator edit.** Appending a comment line left every
    prefix digest identical but moved the module's own digest, and the same test
    went red on `rebuilt["source_sha256"] != manifest["source_sha256"]`
    (`experiments/held_out_prefixes.py`: `8ab1186e…`, the planted value, committed
    nowhere, versus `9c6ec3ab…`, the entry frozen at the time of this plant).
-   Reverted; `14 passed`. Four correction passes have since re-stamped that one
+   Reverted; `14 passed`. Five correction passes have since re-stamped that one
    entry, and the chain of committed values is `9c6ec3ab…` at `f9d02ad2` and
    `2daa5612`, then `0b94fec1…` at `92bec106`, then `89d0220e…` at `3eb49dfc`,
-   then `1c8ce570…` at `27e6d952`, then `9bc18db8…` at the head of this branch.
+   then `1c8ce570…` at `27e6d952`, then `9bc18db8…` at `b6a4c3d6`, then
+   `968273bf…` at the head of this branch.
 
 The planted adverse cases that live in the suite: a witnessed kill (a second
 crewmate standing in ADMIN when the kill lands) is rejected `witnessed_kill`; a
@@ -414,9 +468,9 @@ cases already use and every planted case in the test module is built on it, so
 it was development data before this card. No seed in the band was ever printed,
 opened or reasoned about beyond its reason code and digest.
 
-### Gate
+### Gate (first push, commit `2daa5612`; superseded by the correction rounds below)
 
-Run in order on this branch:
+Run in order at the first push:
 
 | check | result |
 | --- | --- |
@@ -700,9 +754,11 @@ this card, the module and the pull request now says that instead.
    (`experiments/held_out_prefixes.py`). A true seam alone would have turned
    twenty-three band seeds into hard errors, so the generator stops drawing the
    phantom step as well. `build_prefix` draws the impostor's post-kill wander and
-   both bystanders' wanders EXACTLY as before — same calls, same `last_tick`,
-   same RNG consumption — and then discards the drawn step whose tick is the
-   report tick and whose actor is not the reporter. Because no draw moved, every
+   the bystander's wander EXACTLY as before — same calls, same `last_tick`, same
+   RNG consumption — and then discards the drawn step whose tick is the report
+   tick and whose actor is not the reporter. (**This pass wrote "both bystanders'
+   wanders"**; the authorized 4p1i roster seats one uninvolved crewmate, and
+   round 5 below corrects the count here and everywhere else it was written.) Because no draw moved, every
    seed's roles, kill room, kill tick, routes and walk are the ones they always
    were. **This pass wrote here that "the world up to the report is unchanged;
    only the hashed schedule is", which is false and is corrected in round 4
@@ -911,19 +967,20 @@ this head) and was not touched. The manifest's own sha256 moved from
 `c5fb806e…` at `27e6d952` to
 `21190ab58f940a4d0085aa6a72118a1b5f8a14e2b62aa45323246fd3adc65946`.
 
-**Digest audit.** Every elided digest in this card was re-verified against a
-committed object at this head. `9c6ec3ab…`, `0b94fec1…`, `89d0220e…`,
-`1c8ce570…` and `9bc18db8…` are the sha256 of
-`experiments/held_out_prefixes.py` at `f9d02ad2`/`2daa5612`, `92bec106`,
-`3eb49dfc`, `27e6d952` and this head respectively, and each equals that
-revision's own `source_sha256` entry. `75de8723…`, `c060f3ca…`, `3089c2d7…`,
-`c5fb806e…` and `21190ab5…` are the sha256 of the manifest file at the same five
-points. `ab053eef…` is seed 3000's prefix digest in the manifest from `f9d02ad2`
-through `3eb49dfc`; `ab8db76d…` is seed 3000's digest at `27e6d952` and here.
-`1482ce81…` and `8ab1186e…` are planted values from the two fail-loud plants and
-appear in no committed object, by design; `9e467dd1…` appears only in round 3's
-record of the fabricated value it replaced. No other elided digest occurs in this
-card.
+**Digest audit** (written in round 4, re-run and extended to six points in round
+5). Every elided digest in this card was re-verified against a committed object.
+`9c6ec3ab…`, `0b94fec1…`, `89d0220e…`, `1c8ce570…`, `9bc18db8…` and `968273bf…`
+are the sha256 of `experiments/held_out_prefixes.py` at `f9d02ad2`/`2daa5612`,
+`92bec106`, `3eb49dfc`, `27e6d952`, `b6a4c3d6` and the round-5 head respectively,
+and each equals that revision's own `source_sha256` entry. `75de8723…`,
+`c060f3ca…`, `3089c2d7…`, `c5fb806e…`, `21190ab5…` and `292365c1…` are the sha256
+of the manifest file at the same six points. `ab053eef…` is seed 3000's prefix
+digest in the manifest from `f9d02ad2` through `3eb49dfc`; `ab8db76d…` is seed
+3000's digest at `27e6d952` and at every head since. `1482ce81…` and `8ab1186e…`
+are planted values from the two fail-loud plants and appear in no committed
+object, by design; `9e467dd1…` appears only in round 3's record of the fabricated
+value it replaced and in this audit sentence. No other elided digest occurs in
+this card.
 
 **No new gate.** This pass adds no invariant and no test: the behaviour it
 describes is already held by
@@ -963,3 +1020,136 @@ arm ran and no provider call was made.
 | `.venv/bin/python scripts/verify_ml_evidence.py` (offline, never `--complete`) | checks 60, OK 48, FAIL 0, ABSENT 7, INFO 5 |
 | `.venv/bin/pytest tests/scripts/test_verify_ml_evidence.py -q` | 80 passed in 88.92 s |
 | `bash scripts/check.sh` | exit 0: ruff (498 files formatted), 4 import-linter contracts kept, task docs, `generate_prompts --check` (390 in sync), mypy over 469 source files, **7,198 passed / 20 skipped / 3 xfailed** in 226.63 s, then the frontend leg — lint, three `tsc --noEmit` passes, 514 vitest tests over 19 files, and a clean production build |
+
+### Review corrections, round 5 (2026-09-07)
+
+A fourth verification round found two statements about the roster and the band's
+skips that do not hold. Both are corrected here, and the second is now backed by
+a command instead of an assumption. The filter, the generator's drawing logic and
+every accepted digest are untouched; the manifest moved by one line, the module's
+own `source_sha256`.
+
+**What was wrong.**
+
+1. **The roster seats ONE uninvolved crewmate, not two.** 4p1i seats four
+   players: the impostor and three crewmates — the victim, the reporter and
+   exactly one bystander. The card said "Both uninvolved crewmates wander…" and
+   "both bystanders' wanders", and `build_prefix`'s docstring said "the two
+   uninvolved crewmates' wandering"; the pull request said the same in two
+   places. `bystanders` is a LIST in the code because the generator accepts any
+   roster of at least four players with one impostor, and a larger roster would
+   seat more — but the authorized roster this card froze the set for seats one,
+   and that is what the prose describes. The loop variable is unchanged; the
+   sentences now say "the uninvolved crewmate's wandering (one crewmate on the
+   authorized 4p1i roster; larger rosters the generator permits would have
+   more)".
+2. **"It is where all eight band skips came from" does not reproduce.** The
+   reporter wanders before the kill on exactly the same terms as the bystander —
+   `build_prefix` draws `_random_walk(... first_tick=0, last_tick=kill_tick)` for
+   it and the module's own comment says that walk "may leave it standing in the
+   kill room when the kill lands, which the filter rejects" — so the reporter's
+   own wander is a witness route too, and over the band it is the DOMINANT one.
+   Counted over the eight `witnessed_kill` skips the manifest publishes: **six of
+   the eight disqualifying proof rows are the reporter's own and two are the
+   bystander's.**
+
+**The reproducing command.** `skip_witness_roles(seeds, roster)` evaluates each
+seed exactly as `generate()` does and, for every seed whose verdict is a
+`witnessed_kill` or `witnessed_vent` skip, attributes each living crewmate's
+disqualifying proof row to the role that seed's own draw gave it — `reporter` for
+the crewmate the engine recorded as triggering the meeting, `bystander` for any
+other living crewmate. It returns that histogram summed, and nothing else: no
+step, room, route, tick, digest or per-seed row. Two command forms, and the band
+is reachable through one of them only:
+
+```text
+$ uv run python -m experiments.held_out_prefixes --skip-roles manifest
+seeds 8
+bystander 2
+reporter 6
+```
+
+```text
+$ uv run python -m experiments.held_out_prefixes --skip-roles 1 50
+seeds 50
+bystander 3
+reporter 3
+```
+
+`--skip-roles manifest` takes its seed list from the committed manifest's
+`skipped[]` — those eight seeds and their reason codes are already published in a
+committed file, and what the count adds is a role label per row. `--skip-roles
+FIRST LAST` walks an explicit range and REFUSES any range intersecting seeds
+3000–3999, through the same guard `--tally` now shares
+(`_refuse_a_seed_range_that_touches_the_band`), because a per-range count over
+band seeds is still a probe of the held-out set. Out of band the split is even:
+three rows each across the five skips in seeds 1–50, one of which carries a row
+from both wanders.
+
+**Planted cases.** Both attributions are proved on seed 1's hand-authored shapes,
+served to the walk through an out-of-band debugging seed, so no band seed is
+touched: `test_a_skip_is_attributed_to_the_reporter_when_its_own_wander_witnessed`
+(the reporter p-2's pre-kill walk leaves it in ADMIN when p-4 kills p-1 there, and
+the row attributes `reporter 1 / bystander 0`),
+`test_a_skip_is_attributed_to_the_bystander_when_its_wander_witnessed` (the
+uninvolved p-3 stands in ADMIN instead, the reporter walks in afterwards, and the
+row attributes `bystander 1 / reporter 0`), and
+`test_the_skip_role_split_reaches_the_band_only_through_the_published_skips`
+(a single band seed, a straddling-low, a straddling-high and an enclosing range
+are all refused, as is a backwards range, and `manifest_skipped_seeds` returns
+exactly the manifest's own `skipped[]` seeds, all inside the band). The suite
+count moves from 25 to 28.
+
+**Where it is corrected.** `experiments/held_out_prefixes.py` (the `build_prefix`
+docstring, plus the new `WITNESS_ROLE_LABELS`, `skip_witness_roles`,
+`skip_witness_roles_over_range` and `manifest_skipped_seeds`, and the
+`proof_rows_by_role` histogram `_scan_for_proof` now fills), a new Acceptance
+item, the design-decisions paragraph on the wanderers (which now carries both
+commands), round 3's item 2 — marked in place rather than rewritten in silence —
+and the pull-request body. Three tidy-ups came with the same review: the undated
+`### Gate` table is retitled as the FIRST PUSH's gate, superseded by the rounds
+below; fail-loud item 1 now says the round-3 correction rebuilt the 45 schedules
+that carried any non-reporter report-tick step (23 of them a phantom the engine
+never resolved) rather than "every schedule that carried a phantom"; and the
+digest audit now names the six points of the chain and accounts for `9e467dd1…`
+appearing in its own sentence.
+
+**Manifest impact of this pass.** Running
+`.venv/bin/pytest tests/experiments/test_held_out_prefixes.py -q -k regenerates`
+BEFORE regenerating failed on `source_sha256` alone — `rebuilt["accepted"] ==
+manifest["accepted"]` and `rebuilt["skipped"] == manifest["skipped"]` both held,
+with 21 of the 22 source entries identical — which is the direct evidence that a
+histogram the filter fills but never reads back moved no prefix. Regenerating with
+`.venv/bin/python -m experiments.held_out_prefixes` produced one insertion and one
+deletion: the `source_sha256` entry for `experiments/held_out_prefixes.py`, from
+`9bc18db8…` to `968273bf…`. All fifty accepted seeds and digests (seed 3000 still
+`ab8db76d…`), the eight skips, `skipped_reason_counts`, `last_accepted_seed`
+(3057), the other twenty-one source entries, `band`, `roster`,
+`filter_environment`, `development_definitions`, `body_handle_assertion`,
+`status`, `status_note`, `card`, `max_ticks`, `temporal_observation_version`,
+`canonical_json`, `version`, `prefix_bytes` and `filter` are untouched. The file's
+byte count is unchanged at 11,524, so `docs/artifacts.md`'s `audits/` inventory
+row still reads `14,850,288 tracked bytes / 202 files` (recomputed from `git
+ls-files audits/` at this head) and was not touched. The manifest's own sha256
+moved from `21190ab5…` at `b6a4c3d6` to
+`292365c19b46e99a7b5b8795268a00863f933b51dc74cd6f2f53665650e220df`.
+
+**Preparer statement, restated for this pass.** No prefix from the preregistered
+band was printed, opened or reasoned about during these corrections. The only band
+values that left the generator are the ones the manifest already records — seeds,
+reason codes and digests — plus the two aggregate role counts above (6 reporter, 2
+bystander over the eight published skips), which name a role and a number and no
+step, room or tick. Every planted case used seed 1 and the out-of-band debugging
+seed 9001; the tally and the role split were run on seeds 1–50. No arm ran and no
+provider call was made.
+
+**Gate after the round-5 corrections**, run in order on this branch:
+
+| check | result |
+| --- | --- |
+| `.venv/bin/pytest tests/experiments/test_held_out_prefixes.py -q` | 28 passed in 2.46 s (3 new: the reporter attribution, the bystander attribution and the band refusal) |
+| `.venv/bin/python scripts/validate_task_docs.py` | 390 phase tasks, 390 prompts, 43 work cards |
+| `.venv/bin/python scripts/check_doc_facts.py` | doc facts, front door, ml-program and budgets verified |
+| `.venv/bin/python scripts/verify_ml_evidence.py` (offline, never `--complete`) | checks 60, OK 48, FAIL 0, ABSENT 7, INFO 5 |
+| `.venv/bin/pytest tests/scripts/test_verify_ml_evidence.py -q` | 80 passed in 88.52 s |
+| `bash scripts/check.sh` | exit 0: ruff (498 files formatted), 4 import-linter contracts kept, task docs, `generate_prompts --check` (390 in sync), mypy over 469 source files, **7,201 passed / 20 skipped / 3 xfailed** in 253.52 s, then the frontend leg — lint, three `tsc --noEmit` passes, 514 vitest tests over 19 files, and a clean production build |

@@ -11,6 +11,7 @@ against the committed manifest.
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from pathlib import Path
 from typing import get_args
 
@@ -44,8 +45,11 @@ from experiments.held_out_prefixes import (
     filter_environment,
     generate,
     legacy_body_handles,
+    manifest_skipped_seeds,
     prefix_sha256,
     prefix_surface_texts,
+    skip_witness_roles,
+    skip_witness_roles_over_range,
     tally_reasons,
 )
 from observation.action_intent import ActionIntent
@@ -106,6 +110,54 @@ def _unwitnessed_seed_one_prefix() -> HeldOutPrefix:
             *_walk_to_admin("p-1"),
             *_walk_to_admin("p-4"),
             *_walk_to_medbay("p-3"),
+            _step(4, "p-4", "kill", {"target": "p-1"}),
+            _step(5, "p-4", "move", {"to_room": "EAST_HALL"}),
+            _step(5, "p-2", "move", {"to_room": "UPPER_HALL"}),
+            _step(6, "p-2", "move", {"to_room": "ADMIN"}),
+            _step(7, "p-2", "report", {"body_id": "body-p-1"}),
+        ),
+        kill_tick=4,
+        report_tick=7,
+    )
+
+
+def _reporter_witnessed_seed_one_prefix() -> HeldOutPrefix:
+    """The REPORTER's own wander left it in ADMIN when p-4 killed p-1 there.
+
+    p-2 is the reporter in both witnessed plants. Here its pre-kill walk put it
+    in the kill room, so the row the filter refuses the prefix for is the
+    reporter's own -- the shape that produced six of the frozen band's eight
+    skips.
+    """
+
+    return _planted(
+        steps=(
+            *_walk_to_admin("p-1"),
+            *_walk_to_admin("p-2"),
+            *_walk_to_admin("p-4"),
+            *_walk_to_medbay("p-3"),
+            _step(4, "p-4", "kill", {"target": "p-1"}),
+            _step(5, "p-2", "report", {"body_id": "body-p-1"}),
+        ),
+        kill_tick=4,
+        report_tick=5,
+    )
+
+
+def _bystander_witnessed_seed_one_prefix() -> HeldOutPrefix:
+    """The uninvolved crewmate p-3 stood in ADMIN; the reporter p-2 walked in after.
+
+    The same kill and the same reporter as the unwitnessed prefix above, with the
+    ONE uninvolved crewmate the authorized 4p1i roster seats walking into the
+    kill room instead of MEDBAY. The row the filter refuses the prefix for is
+    that bystander's.
+    """
+
+    return _planted(
+        steps=(
+            *_walk_to_admin("p-1"),
+            *_walk_to_admin("p-3"),
+            *_walk_to_admin("p-4"),
             _step(4, "p-4", "kill", {"target": "p-1"}),
             _step(5, "p-4", "move", {"to_room": "EAST_HALL"}),
             _step(5, "p-2", "move", {"to_room": "UPPER_HALL"}),
@@ -386,6 +438,98 @@ def test_the_tally_refuses_to_probe_the_preregistered_band() -> None:
         tally_reasons(_DEBUG_SEEDS[1], _DEBUG_SEEDS[0])
 
 
+def _skip_roles_over_one_planted_seed(
+    monkeypatch: pytest.MonkeyPatch, prefix: HeldOutPrefix
+) -> Mapping[str, int]:
+    """``skip_witness_roles`` over one out-of-band seed whose draw is ``prefix``.
+
+    The attribution is a property of the drawn schedule, not of the seed, so the
+    plant is served through ``build_prefix`` for an out-of-band debugging seed:
+    the count is then produced by the same walk the manifest command runs, with
+    no band seed touched.
+    """
+
+    def stub(
+        *,
+        seed: int,
+        roster: PrefixRoster,
+        game_map: Map,
+        max_ticks: int = MAX_TICKS,
+    ) -> HeldOutPrefix:
+        assert seed == _DEBUG_SEEDS[0]
+        return prefix
+
+    monkeypatch.setattr(held_out_prefixes, "build_prefix", stub)
+    return skip_witness_roles([_DEBUG_SEEDS[0]])
+
+
+def test_a_skip_is_attributed_to_the_reporter_when_its_own_wander_witnessed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A reporter standing in the kill room is a reporter row, not a bystander one.
+
+    The card claimed the uninvolved crewmate's wander was where every band skip
+    came from. The reporter wanders before the kill exactly as a bystander does,
+    so its own walk can leave it in the kill room -- and counted over the frozen
+    band's published skips it is the more common witness. Without this split the
+    claim cannot be checked at all, because a skip records only its reason code.
+    """
+
+    evaluation = evaluate_prefix(_reporter_witnessed_seed_one_prefix())
+    assert evaluation.reason == "witnessed_kill"
+    assert evaluation.proof_rows_by_role == {"bystander": 0, "reporter": 1}
+    assert _skip_roles_over_one_planted_seed(
+        monkeypatch, _reporter_witnessed_seed_one_prefix()
+    ) == {"bystander": 0, "reporter": 1}
+
+
+def test_a_skip_is_attributed_to_the_bystander_when_its_wander_witnessed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The other side: the one uninvolved crewmate walks in and the reporter does not."""
+
+    evaluation = evaluate_prefix(_bystander_witnessed_seed_one_prefix())
+    assert evaluation.reason == "witnessed_kill"
+    assert evaluation.proof_rows_by_role == {"bystander": 1, "reporter": 0}
+    assert _skip_roles_over_one_planted_seed(
+        monkeypatch, _bystander_witnessed_seed_one_prefix()
+    ) == {"bystander": 1, "reporter": 0}
+
+
+def test_the_skip_role_split_reaches_the_band_only_through_the_published_skips() -> (
+    None
+):
+    """A per-range role count over band seeds is still a read of the held-out set.
+
+    The range form refuses the band exactly as the tally does. The band's own
+    skips are reachable only through ``manifest_skipped_seeds``, which reads the
+    seeds the committed manifest already publishes rather than choosing a range,
+    and the count it feeds names a role, never a step, a room or a tick.
+    """
+
+    for first, last in (
+        (PREREGISTERED_BAND.first_seed, PREREGISTERED_BAND.first_seed),
+        (PREREGISTERED_BAND.first_seed - 1, PREREGISTERED_BAND.first_seed),
+        (PREREGISTERED_BAND.last_seed, PREREGISTERED_BAND.last_seed + 1),
+        (1, PREREGISTERED_BAND.last_seed + 1000),
+    ):
+        with pytest.raises(
+            HeldOutPrefixError, match="intersect the preregistered band"
+        ):
+            skip_witness_roles_over_range(first, last)
+    with pytest.raises(HeldOutPrefixError, match="must not run backwards"):
+        skip_witness_roles_over_range(_DEBUG_SEEDS[1], _DEBUG_SEEDS[0])
+
+    published = manifest_skipped_seeds(REPO_ROOT)
+    skipped = _committed_manifest()["skipped"]
+    assert isinstance(skipped, list)
+    assert published == tuple(int(row["seed"]) for row in skipped)
+    assert all(
+        PREREGISTERED_BAND.first_seed <= seed <= PREREGISTERED_BAND.last_seed
+        for seed in published
+    )
+
+
 def test_the_preregistered_band_is_the_one_the_card_froze() -> None:
     assert (
         PREREGISTERED_BAND.first_seed,
@@ -444,19 +588,7 @@ def test_an_unwitnessed_planted_prefix_passes_and_keeps_the_killer_record() -> N
 def test_a_planted_witnessed_kill_fails_the_filter() -> None:
     """p-2 stands in ADMIN when p-4 kills p-1, so the crew can prove it outright."""
 
-    planted = _planted(
-        steps=(
-            *_walk_to_admin("p-1"),
-            *_walk_to_admin("p-2"),
-            *_walk_to_admin("p-4"),
-            *_walk_to_medbay("p-3"),
-            _step(4, "p-4", "kill", {"target": "p-1"}),
-            _step(5, "p-2", "report", {"body_id": "body-p-1"}),
-        ),
-        kill_tick=4,
-        report_tick=5,
-    )
-    evaluation = evaluate_prefix(planted)
+    evaluation = evaluate_prefix(_reporter_witnessed_seed_one_prefix())
     assert evaluation.reason == "witnessed_kill"
     assert evaluation.living_crew_proof_rows == 1
 

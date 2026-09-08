@@ -40,7 +40,7 @@ import re
 import sys
 from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
 from typing import Final, Literal, Self
@@ -203,6 +203,15 @@ _LATEST_REPORT_TICK: Final[int] = 12
 #: domain-separated stream keeps the schedule from correlating with which player
 #: the seeder made the impostor, while staying a pure function of the seed.
 _RNG_DOMAIN: Final[str] = "ailibi/held-out-prefix/v1"
+
+#: The role labels :func:`skip_witness_roles` attributes a witness proof row to.
+#: On the authorized 4p1i roster the three crewmates are the victim, the reporter
+#: and exactly ONE uninvolved crewmate, so a LIVING crewmate holding a proof row
+#: at meeting open is either the reporter -- whose own pre-kill wander can leave
+#: it standing in the kill room when the kill lands -- or that one bystander.
+#: Larger rosters the generator permits seat more bystanders; the two labels do
+#: not change, because the split the count is about is reporter versus not.
+WITNESS_ROLE_LABELS: Final[tuple[str, ...]] = ("bystander", "reporter")
 
 RejectionReason = Literal[
     "engine_rejected_action",
@@ -369,6 +378,11 @@ class PrefixEvaluation:
     trigger_line: str | None
     living_crew_proof_rows: int = 0
     killer_own_kill_records: int = 0
+    #: ``living_crew_proof_rows`` split by the role the seed's draw assigned the
+    #: player holding the row (:data:`WITNESS_ROLE_LABELS`). Empty when the run
+    #: failed before the memories were scanned; every label present otherwise,
+    #: zeros included, so the shape does not depend on the outcome.
+    proof_rows_by_role: Mapping[str, int] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -584,10 +598,13 @@ def build_prefix(
 
     The shape is fixed -- one kill before the meeting, a crewmate body report as
     the trigger -- while the roles, the kill room, the kill tick, the routes and
-    the two uninvolved crewmates' wandering are all drawn from the seed. The
-    wandering is what makes the proof-free filter load-bearing rather than
-    decorative: a bystander is free to walk into the kill room on the kill tick,
-    and the filter is what removes that seed from the set.
+    the uninvolved crewmate's wandering (one crewmate on the authorized 4p1i
+    roster; larger rosters the generator permits would have more) are all drawn
+    from the seed. The wandering is what makes the proof-free filter load-bearing
+    rather than decorative: a bystander is free to walk into the kill room on the
+    kill tick, and the filter is what removes that seed from the set. The
+    REPORTER's own pre-kill wander can do the same, and over the band it did so
+    more often; :func:`skip_witness_roles` counts that split by role.
     """
 
     if roster.num_players < 4 or roster.num_impostors != 1:
@@ -778,10 +795,14 @@ class _ProofScan:
     reason: RejectionReason | None
     living_crew_proof_rows: int
     killer_own_kill_records: int
+    proof_rows_by_role: Mapping[str, int]
 
 
 def _scan_for_proof(
-    *, agents: Mapping[PlayerId, _PrefixAgent], state: WorldState
+    *,
+    agents: Mapping[PlayerId, _PrefixAgent],
+    state: WorldState,
+    reporter: PlayerId,
 ) -> _ProofScan:
     """Reject a prefix any LIVING CREWMATE could win the meeting with outright.
 
@@ -792,11 +813,20 @@ def _scan_for_proof(
     rows carrying a ``kill`` or ``vent`` action can disqualify a prefix; the
     killer's rows are counted separately so the exclusion is visible rather than
     inferred from an absence.
+
+    Each counted row is ALSO attributed to the role the seed's draw gave the
+    player holding it: ``reporter`` for the crewmate the engine recorded as
+    triggering the meeting, ``bystander`` for any other living crewmate. The
+    reporter wanders before the kill exactly as a bystander does, so its own
+    walk can leave it standing in the kill room when the kill lands; without the
+    split, a skip cannot be told from a bystander's wander and the card cannot
+    say which wander the filter is load-bearing against.
     """
 
     reason: RejectionReason | None = None
     crew_rows = 0
     own_kills = 0
+    by_role: Counter[str] = Counter()
     for player_id in sorted(agents):
         player = state.players[player_id]
         if not player.alive:
@@ -813,6 +843,7 @@ def _scan_for_proof(
             action = event.payload.get("action")
             if action in (OBSERVED_KILL_ACTION, OBSERVED_VENT_ACTION):
                 crew_rows += 1
+                by_role["reporter" if player_id == reporter else "bystander"] += 1
                 if reason is None:
                     reason = (
                         "witnessed_kill"
@@ -823,6 +854,7 @@ def _scan_for_proof(
         reason=reason,
         living_crew_proof_rows=crew_rows,
         killer_own_kill_records=own_kills,
+        proof_rows_by_role={label: by_role[label] for label in WITNESS_ROLE_LABELS},
     )
 
 
@@ -1003,7 +1035,9 @@ def evaluate_prefix(
             seed=prefix.seed, reason="unexpected_kill_shape", trigger_line=None
         )
 
-    scan = _scan_for_proof(agents=agents, state=result.final_state)
+    scan = _scan_for_proof(
+        agents=agents, state=result.final_state, reporter=triggers[0].actor
+    )
     if scan.reason is not None:
         return PrefixEvaluation(
             seed=prefix.seed,
@@ -1011,6 +1045,7 @@ def evaluate_prefix(
             trigger_line=None,
             living_crew_proof_rows=scan.living_crew_proof_rows,
             killer_own_kill_records=scan.killer_own_kill_records,
+            proof_rows_by_role=scan.proof_rows_by_role,
         )
 
     trigger, _, _ = _build_meeting_trigger(
@@ -1031,6 +1066,7 @@ def evaluate_prefix(
         trigger_line=trigger.description,
         living_crew_proof_rows=scan.living_crew_proof_rows,
         killer_own_kill_records=scan.killer_own_kill_records,
+        proof_rows_by_role=scan.proof_rows_by_role,
     )
 
 
@@ -1097,6 +1133,35 @@ class ReasonTally:
     reasons: Mapping[RejectionReason, int]
 
 
+def _refuse_a_seed_range_that_touches_the_band(
+    first_seed: int, last_seed: int, *, walked: str
+) -> None:
+    """Guard every EXPLICIT seed range this module walks. Never the band.
+
+    A count is aggregate, but a per-range count over band seeds is still a probe
+    of the held-out set -- narrow the range and it becomes a per-seed read -- so
+    the band is out of reach of a range walk rather than merely discouraged.
+    ``walked`` names what the caller would have done, so each command's refusal
+    says what it will not do to the set.
+
+    The one path that may name band seeds is :func:`manifest_skipped_seeds`,
+    which reads the seeds the committed manifest already publishes rather than
+    choosing a range of its own.
+    """
+
+    if last_seed < first_seed:
+        raise HeldOutPrefixError("a seed range must not run backwards")
+    if (
+        first_seed <= PREREGISTERED_BAND.last_seed
+        and PREREGISTERED_BAND.first_seed <= last_seed
+    ):
+        raise HeldOutPrefixError(
+            f"seeds {first_seed}-{last_seed} intersect the preregistered band "
+            f"{PREREGISTERED_BAND.first_seed}-{PREREGISTERED_BAND.last_seed}; "
+            f"the held-out set is not {walked}, only regenerated and hashed"
+        )
+
+
 def tally_reasons(
     first_seed: int,
     last_seed: int,
@@ -1123,17 +1188,7 @@ def tally_reasons(
     of them drops.
     """
 
-    if last_seed < first_seed:
-        raise HeldOutPrefixError("a tally range must not run backwards")
-    if (
-        first_seed <= PREREGISTERED_BAND.last_seed
-        and PREREGISTERED_BAND.first_seed <= last_seed
-    ):
-        raise HeldOutPrefixError(
-            f"seeds {first_seed}-{last_seed} intersect the preregistered band "
-            f"{PREREGISTERED_BAND.first_seed}-{PREREGISTERED_BAND.last_seed}; "
-            "the held-out set is not tallied, only regenerated and hashed"
-        )
+    _refuse_a_seed_range_that_touches_the_band(first_seed, last_seed, walked="tallied")
     game_map = load_canonical_map()
     public_map = public_map_from_engine_map(game_map)
     reasons: Counter[RejectionReason] = Counter()
@@ -1154,6 +1209,88 @@ def tally_reasons(
         accepted=accepted,
         reasons={reason: reasons[reason] for reason in sorted(reasons)},
     )
+
+
+#: The reason codes a living crewmate's proof row produces. A skip for any other
+#: code was decided before the memories were scanned, so it attributes to no role.
+_WITNESS_SKIP_REASONS: Final[frozenset[str]] = frozenset(
+    {"witnessed_kill", "witnessed_vent"}
+)
+
+
+def skip_witness_roles(
+    seeds: Iterable[int], roster: PrefixRoster = AUTHORIZED_ROSTER
+) -> Mapping[str, int]:
+    """Whose wander witnessed the kill, per proof row, over ``seeds``. Counts only.
+
+    For every seed whose evaluation is a ``witnessed_kill`` or ``witnessed_vent``
+    skip, each disqualifying proof row is attributed to the role the seed's own
+    draw gave the crewmate holding it: ``reporter`` or ``bystander``
+    (:data:`WITNESS_ROLE_LABELS`). The result is that histogram summed over the
+    seeds, with every label present and zeros included. Seeds that pass, and
+    seeds skipped for any other reason, contribute nothing; a seed whose own draw
+    overruns the tick budget is walked past exactly as :func:`generate` walks
+    past it.
+
+    It returns nothing else. No step, room, route, tick, digest or per-seed row
+    leaves this function -- a role name and a count are all a caller gets, which
+    is why the manifest's own skipped band seeds may be passed to it (see
+    :func:`manifest_skipped_seeds`) while an arbitrary range may not
+    (:func:`skip_witness_roles_over_range`).
+
+    Why the split is worth a function: the card claims the uninvolved crewmate's
+    wander is what makes the proof-free filter load-bearing. It is not the only
+    thing that does. The reporter wanders before the kill exactly as a bystander
+    does, so its own walk can leave it standing in the kill room when the kill
+    lands -- and over the frozen band that is the MORE common witness. A claim
+    about which wander the filter catches has to be counted, not assumed.
+    """
+
+    game_map = load_canonical_map()
+    public_map = public_map_from_engine_map(game_map)
+    counts: Counter[str] = Counter()
+    for seed in seeds:
+        try:
+            prefix = build_prefix(seed=seed, roster=roster, game_map=game_map)
+        except ScheduleTickBudgetError:
+            continue
+        evaluation = evaluate_prefix(prefix, game_map=game_map, public_map=public_map)
+        if evaluation.reason not in _WITNESS_SKIP_REASONS:
+            continue
+        counts.update(evaluation.proof_rows_by_role)
+    return {label: counts[label] for label in WITNESS_ROLE_LABELS}
+
+
+def skip_witness_roles_over_range(
+    first_seed: int, last_seed: int, roster: PrefixRoster = AUTHORIZED_ROSTER
+) -> Mapping[str, int]:
+    """:func:`skip_witness_roles` over an explicit range. REFUSES the band.
+
+    The range form is the out-of-band reproduction of the split; the band's own
+    skips are reached through :func:`manifest_skipped_seeds` instead, because
+    those seeds are published rather than chosen.
+    """
+
+    _refuse_a_seed_range_that_touches_the_band(
+        first_seed, last_seed, walked="walked seed by seed"
+    )
+    return skip_witness_roles(range(first_seed, last_seed + 1), roster)
+
+
+def manifest_skipped_seeds(repo_root: Path) -> tuple[int, ...]:
+    """The skipped band seeds the committed manifest already publishes, in order.
+
+    The ONE path by which a role count may be taken over band seeds, and it is
+    allowed because it reads nothing new: ``skipped[]`` already names those seeds
+    and their reason codes in a committed file. What the count adds is a role
+    label per proof row, which names no step, room or tick. Any other reach for
+    the band goes through :func:`skip_witness_roles_over_range` and is refused.
+    """
+
+    manifest = json.loads((repo_root / MANIFEST_PATH).read_text(encoding="utf-8"))
+    if not isinstance(manifest, dict):
+        raise HeldOutPrefixError(f"{MANIFEST_PATH} does not hold a JSON object")
+    return tuple(int(row["seed"]) for row in manifest["skipped"])
 
 
 # ---------------------------------------------------------------------------
@@ -1280,6 +1417,7 @@ __all__ = [
     "SeedBand",
     "SkippedSeed",
     "TEMPORAL_OBSERVATION_VERSION",
+    "WITNESS_ROLE_LABELS",
     "assert_no_legacy_body_handles",
     "build_manifest",
     "build_prefix",
@@ -1289,8 +1427,11 @@ __all__ = [
     "filter_environment",
     "generate",
     "legacy_body_handles",
+    "manifest_skipped_seeds",
     "prefix_sha256",
     "prefix_surface_texts",
+    "skip_witness_roles",
+    "skip_witness_roles_over_range",
     "source_digests",
     "tally_reasons",
     "write_manifest",
@@ -1298,11 +1439,20 @@ __all__ = [
 
 
 _USAGE: Final[str] = (
-    "usage: python -m experiments.held_out_prefixes [--tally FIRST LAST]"
+    "usage: python -m experiments.held_out_prefixes "
+    "[--tally FIRST LAST | --skip-roles (manifest | FIRST LAST)]"
 )
 
 
 if __name__ == "__main__":  # pragma: no cover - the freeze and tally commands
+
+    def _print_witness_roles(seeds: Sequence[int], roles: Mapping[str, int]) -> None:
+        """Print the seeds walked and a role histogram. Nothing else."""
+
+        print(f"seeds {len(seeds)}")
+        for label, count in roles.items():
+            print(f"{label} {count}")
+
     _argv = sys.argv[1:]
     if not _argv:
         written = write_manifest(
@@ -1316,5 +1466,14 @@ if __name__ == "__main__":  # pragma: no cover - the freeze and tally commands
         print(f"accepted {_tally.accepted}")
         for _reason, _count in _tally.reasons.items():
             print(f"{_reason} {_count}")
+    elif _argv == ["--skip-roles", "manifest"]:
+        # The band's own skips, read from the seeds the manifest publishes.
+        _skipped = manifest_skipped_seeds(Path(__file__).resolve().parents[1])
+        _print_witness_roles(_skipped, skip_witness_roles(_skipped))
+    elif _argv[0] == "--skip-roles" and len(_argv) == 3:
+        _first, _last = int(_argv[1]), int(_argv[2])
+        _print_witness_roles(
+            range(_first, _last + 1), skip_witness_roles_over_range(_first, _last)
+        )
     else:
         raise SystemExit(_USAGE)
